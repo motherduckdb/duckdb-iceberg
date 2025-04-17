@@ -156,13 +156,6 @@ unique_ptr<OAuth2Authorization> OAuth2Authorization::FromAttachOptions(ClientCon
 
 unique_ptr<BaseSecret> OAuth2Authorization::CreateCatalogSecretFunction(ClientContext &context,
                                                                         CreateSecretInput &input) {
-
-	if (!__AVRO_LOADED__) {
-		auto &db_instance = context.db;
-		ExtensionHelper::AutoLoadExtension(*db_instance, "avro");
-		__AVRO_LOADED__ = true;
-	}
-
 	// apply any overridden settings
 	vector<string> prefix_paths;
 	auto result = make_uniq<KeyValueSecret>(prefix_paths, "iceberg", "config", input.name);
