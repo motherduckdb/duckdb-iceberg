@@ -125,6 +125,7 @@ TableFunction ICTableEntry::GetScanFunction(ClientContext &context, unique_ptr<F
 
 TableStorageInfo ICTableEntry::GetStorageInfo(ClientContext &context) {
 	TableStorageInfo result;
+	result.cardinality = 1;
 	// TODO fill info
 	return result;
 }
