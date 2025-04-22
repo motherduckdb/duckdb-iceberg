@@ -19,11 +19,13 @@ namespace duckdb {
 ICTableEntry::ICTableEntry(Catalog &catalog, SchemaCatalogEntry &schema, CreateTableInfo &info)
     : TableCatalogEntry(catalog, schema, info) {
 	this->internal = false;
+	this->timestamp = 1;
 }
 
 ICTableEntry::ICTableEntry(Catalog &catalog, SchemaCatalogEntry &schema, ICTableInfo &info)
     : TableCatalogEntry(catalog, schema, *info.create_info) {
 	this->internal = false;
+	this->timestamp = 1;
 }
 
 unique_ptr<BaseStatistics> ICTableEntry::GetStatistics(ClientContext &context, column_t column_id) {
