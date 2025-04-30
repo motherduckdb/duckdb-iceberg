@@ -18,10 +18,10 @@ install_requirements:
 
 # Custom makefile targets
 data: data_clean start-rest-catalog
-	python3 scripts/data_generators/generate_data.py spark-rest local
+	python3 -m scripts.data_generators.generate_data spark-rest local
 
 data_large: data data_clean
-	python3 scripts/data_generators/generate_data.py spark-rest local
+	python3 -m scripts.data_generators.generate_data spark-rest local
 
 data_clean:
 	rm -rf data/generated

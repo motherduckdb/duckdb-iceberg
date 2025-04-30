@@ -12,7 +12,7 @@ require-env DUCKDB_ICEBERG_HAVE_GENERATED_DATA
 
 # Check count matches
 query I nosort count_iceberg_scan
-SELECT count(*) FROM ICEBERG_SCAN('data/generated/iceberg/spark-local/pyspark_iceberg_table_v1');
+SELECT count(*) FROM ICEBERG_SCAN('data/generated/iceberg/spark-local/default/pyspark_iceberg_table_v1');
 
 
 query I nosort count_iceberg_scan
@@ -20,7 +20,7 @@ select count(*) from read_parquet('data/generated/intermediates/spark-local/pysp
 
 # Check data is identical, sorting by uuid to guarantee unique order.
 query I nosort q1
-SELECT COUNT(*) FROM ICEBERG_SCAN('data/generated/iceberg/spark-local/pyspark_iceberg_table_v1');
+SELECT COUNT(*) FROM ICEBERG_SCAN('data/generated/iceberg/spark-local/default/pyspark_iceberg_table_v1');
 ----
 
 query I nosort q1
@@ -28,7 +28,7 @@ SELECT COUNT(*) FROM PARQUET_SCAN('data/generated/intermediates/spark-local/pysp
 ----
 
 query I nosort q2
-SELECT COUNT(*), MIN(l_suppkey_long), MAX(l_suppkey_long), SUM(l_suppkey_long) FROM ICEBERG_SCAN('data/generated/iceberg/spark-local/pyspark_iceberg_table_v1');
+SELECT COUNT(*), MIN(l_suppkey_long), MAX(l_suppkey_long), SUM(l_suppkey_long) FROM ICEBERG_SCAN('data/generated/iceberg/spark-local/default/pyspark_iceberg_table_v1');
 ----
 
 query I nosort q2
@@ -37,7 +37,7 @@ SELECT COUNT(*), MIN(l_suppkey_long), MAX(l_suppkey_long), SUM(l_suppkey_long) F
 
 # Full table compare: very slow
 query I nosort q3
-SELECT * FROM ICEBERG_SCAN('data/generated/iceberg/spark-local/pyspark_iceberg_table_v1') WHERE uuid NOT NULL ORDER BY uuid;
+SELECT * FROM ICEBERG_SCAN('data/generated/iceberg/spark-local/default/pyspark_iceberg_table_v1') WHERE uuid NOT NULL ORDER BY uuid;
 ----
 
 query I nosort q3

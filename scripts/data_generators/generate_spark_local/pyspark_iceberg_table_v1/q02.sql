@@ -1,3 +1,0 @@
-insert into iceberg_catalog.pyspark_iceberg_table_v1
-select * FROM iceberg_catalog.pyspark_iceberg_table_v1
-where l_extendedprice_double < 30000

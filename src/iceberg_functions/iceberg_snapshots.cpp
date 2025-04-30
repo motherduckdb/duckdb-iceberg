@@ -31,7 +31,6 @@ public:
 
 		auto &info = *global_state->metadata;
 		auto root = yyjson_doc_get_root(info.doc);
-		global_state->iceberg_format_version = IcebergUtils::TryGetNumFromObject(root, "format-version");
 		auto snapshots = yyjson_obj_get(root, "snapshots");
 		yyjson_arr_iter_init(snapshots, &global_state->snapshot_it);
 		return std::move(global_state);
@@ -39,7 +38,6 @@ public:
 
 	unique_ptr<IcebergMetadata> metadata;
 	yyjson_arr_iter snapshot_it;
-	idx_t iceberg_format_version;
 };
 
 static unique_ptr<FunctionData> IcebergSnapshotsBind(ClientContext &context, TableFunctionBindInput &input,
@@ -62,7 +60,7 @@ static unique_ptr<FunctionData> IcebergSnapshotsBind(ClientContext &context, Tab
 			}
 			bind_data->options.version_name_format = value;
 		} else if (loption == "skip_schema_inference") {
-			bind_data->options.skip_schema_inference = BooleanValue::Get(kv.second);
+			bind_data->options.infer_schema = !BooleanValue::Get(kv.second);
 		}
 	}
 	bind_data->filename = input.inputs[0].ToString();
@@ -93,8 +91,7 @@ static void IcebergSnapshotsFunction(ClientContext &context, TableFunctionInput 
 		}
 
 		auto &metadata = *global_state.metadata;
-		auto snapshot = IcebergSnapshot::ParseSnapShot(next_snapshot, global_state.iceberg_format_version,
-		                                               metadata.schema_id, metadata.schemas, bind_data.options);
+		auto snapshot = IcebergSnapshot::ParseSnapShot(next_snapshot, metadata, bind_data.options);
 
 		FlatVector::GetData<int64_t>(output.data[0])[i] = snapshot.sequence_number;
 		FlatVector::GetData<int64_t>(output.data[1])[i] = snapshot.snapshot_id;

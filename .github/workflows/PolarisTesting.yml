@@ -120,7 +120,7 @@ jobs:
           python3 scripts/polaris/get_polaris_client_creds.py
           export POLARIS_CLIENT_ID=$(cat polaris_client_id.txt)
           export POLARIS_CLIENT_SECRET=$(cat polaris_client_secret.txt)
-          python3 scripts/data_generators/generate_data.py polaris
+          python3 -m scripts.data_generators.generate_data polaris
 
       - name: Test with rest catalog
         env:

@@ -11,9 +11,12 @@
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
+#include "duckdb/common/types/value.hpp"
 #include "duckdb/common/printer.hpp"
 
 namespace duckdb {
+
+using sequence_number_t = int64_t;
 
 enum class IcebergManifestContentType : uint8_t {
 	DATA = 0,
@@ -67,9 +70,11 @@ public:
 	//! Path to the manifest AVRO file
 	string manifest_path;
 	//! sequence_number when manifest was added to table (0 for Iceberg v1)
-	int64_t sequence_number;
+	sequence_number_t sequence_number;
 	//! either data or deletes
 	IcebergManifestContentType content;
+	//! The id of the partition spec referenced by this manifest (and the data files that are part of it)
+	int32_t partition_spec_id;
 
 public:
 	void Print() {
@@ -98,7 +103,13 @@ public:
 	IcebergManifestEntryContentType content;
 	string file_path;
 	string file_format;
+	vector<int32_t> equality_ids;
 	int64_t record_count;
+	Value partition;
+	//! Inherited from the 'manifest_file' if NULL and 'status == EXISTING'
+	sequence_number_t sequence_number;
+	//! Inherited from the 'manifest_file'
+	int32_t partition_spec_id;
 
 public:
 	void Print() {

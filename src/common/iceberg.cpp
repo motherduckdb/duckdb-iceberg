@@ -4,6 +4,7 @@
 #include "iceberg_utils.hpp"
 #include "iceberg_types.hpp"
 #include "manifest_reader.hpp"
+#include "catalog_utils.hpp"
 
 namespace duckdb {
 
@@ -46,6 +47,42 @@ IcebergTable IcebergTable::Load(const string &iceberg_path, IcebergSnapshot &sna
 	return ret;
 }
 
+static void ParseFieldMappings(yyjson_val *obj, case_insensitive_map_t<idx_t> &name_to_mapping_index,
+                               vector<IcebergFieldMapping> &mappings, idx_t &mapping_index) {
+	case_insensitive_map_t<IcebergFieldMapping> result;
+	size_t idx, max;
+	yyjson_val *val;
+	yyjson_arr_foreach(obj, idx, max, val) {
+		auto names = yyjson_obj_get(val, "names");
+		auto field_id = yyjson_obj_get(val, "field-id");
+		auto fields = yyjson_obj_get(val, "fields");
+
+		//! Create a new mapping entry
+		mappings.push_back(IcebergFieldMapping());
+		auto &mapping = mappings.back();
+
+		if (!names) {
+			throw InvalidInputException("Corrupt metadata.json file, field-mapping is missing names!");
+		}
+
+		//! Map every entry in the 'names' list to the entry we created above
+		size_t names_idx, names_max;
+		yyjson_val *names_val;
+		yyjson_arr_foreach(names, names_idx, names_max, names_val) {
+			name_to_mapping_index[yyjson_get_str(names_val)] = mapping_index;
+		}
+		mapping_index++;
+
+		if (field_id) {
+			mapping.field_id = yyjson_get_sint(field_id);
+		}
+		//! Create mappings for the the nested fields
+		if (fields) {
+			ParseFieldMappings(fields, mapping.field_mapping_indexes, mappings, mapping_index);
+		}
+	}
+}
+
 unique_ptr<IcebergMetadata> IcebergMetadata::Parse(const string &path, FileSystem &fs,
                                                    const string &metadata_compression_codec) {
 	auto metadata = unique_ptr<IcebergMetadata>(new IcebergMetadata);
@@ -83,12 +120,30 @@ unique_ptr<IcebergMetadata> IcebergMetadata::Parse(const string &path, FileSyste
 		info.schemas.push_back(schema);
 		info.schema_id = found_schema_id;
 	}
+
+	auto properties = yyjson_obj_get(root, "properties");
+	if (properties) {
+		auto name_mapping_defaults_p = yyjson_obj_get(properties, "schema.name-mapping.default");
+		if (name_mapping_defaults_p) {
+			string name_mapping_default = yyjson_get_str(name_mapping_defaults_p);
+			auto doc = std::unique_ptr<yyjson_doc, YyjsonDocDeleter>(
+			    yyjson_read(name_mapping_default.c_str(), name_mapping_default.size(), 0));
+			if (doc == nullptr) {
+				throw InvalidInputException(
+				    "Fails to parse iceberg metadata 'schema.name-mapping.default' property from %s", path);
+			}
+			auto root = yyjson_doc_get_root(doc.get());
+			idx_t mapping_index = 0;
+			ParseFieldMappings(root, metadata->root_field_mapping.field_mapping_indexes, metadata->mappings,
+			                   mapping_index);
+		}
+	}
 	return metadata;
 }
 
 IcebergSnapshot IcebergSnapshot::GetLatestSnapshot(IcebergMetadata &info, const IcebergOptions &options) {
 	auto latest_snapshot = FindLatestSnapshotInternal(info.snapshots);
-	return ParseSnapShot(latest_snapshot, info.iceberg_version, info.schema_id, info.schemas, options);
+	return ParseSnapShot(latest_snapshot, info, options);
 }
 
 IcebergSnapshot IcebergSnapshot::GetSnapshotById(IcebergMetadata &info, idx_t snapshot_id,
@@ -99,7 +154,7 @@ IcebergSnapshot IcebergSnapshot::GetSnapshotById(IcebergMetadata &info, idx_t sn
 		throw InvalidConfigurationException("Could not find snapshot with id " + to_string(snapshot_id));
 	}
 
-	return ParseSnapShot(snapshot, info.iceberg_version, info.schema_id, info.schemas, options);
+	return ParseSnapShot(snapshot, info, options);
 }
 
 IcebergSnapshot IcebergSnapshot::GetSnapshotByTimestamp(IcebergMetadata &info, timestamp_t timestamp,
@@ -111,7 +166,7 @@ IcebergSnapshot IcebergSnapshot::GetSnapshotByTimestamp(IcebergMetadata &info, t
 		                                    Timestamp::ToString(timestamp));
 	}
 
-	return ParseSnapShot(snapshot, info.iceberg_version, info.schema_id, info.schemas, options);
+	return ParseSnapShot(snapshot, info, options);
 }
 
 // Function to generate a metadata file url from version and format string
@@ -175,8 +230,8 @@ string IcebergSnapshot::GetMetaDataPath(ClientContext &context, const string &pa
 	return GuessTableVersion(meta_path, fs, options);
 }
 
-IcebergSnapshot IcebergSnapshot::ParseSnapShot(yyjson_val *snapshot, idx_t iceberg_format_version, idx_t schema_id,
-                                               vector<yyjson_val *> &schemas, const IcebergOptions &options) {
+IcebergSnapshot IcebergSnapshot::ParseSnapShot(yyjson_val *snapshot, IcebergMetadata &metadata,
+                                               const IcebergOptions &options) {
 	IcebergSnapshot ret;
 	if (snapshot) {
 		auto snapshot_tag = yyjson_get_type(snapshot);
@@ -184,22 +239,32 @@ IcebergSnapshot IcebergSnapshot::ParseSnapShot(yyjson_val *snapshot, idx_t icebe
 			throw InvalidConfigurationException("Invalid snapshot field found parsing iceberg metadata.json");
 		}
 		ret.metadata_compression_codec = options.metadata_compression_codec;
-		if (iceberg_format_version == 1) {
+		if (metadata.iceberg_version == 1) {
 			ret.sequence_number = 0;
-		} else if (iceberg_format_version == 2) {
+		} else if (metadata.iceberg_version == 2) {
 			ret.sequence_number = IcebergUtils::TryGetNumFromObject(snapshot, "sequence-number");
 		}
 		ret.snapshot_id = IcebergUtils::TryGetNumFromObject(snapshot, "snapshot-id");
 		ret.timestamp_ms = Timestamp::FromEpochMs(IcebergUtils::TryGetNumFromObject(snapshot, "timestamp-ms"));
+		auto schema_id = yyjson_obj_get(snapshot, "schema-id");
+		if (options.snapshot_source == SnapshotSource::LATEST) {
+			ret.schema_id = metadata.schema_id;
+		} else if (schema_id && yyjson_get_type(schema_id) == YYJSON_TYPE_NUM) {
+			ret.schema_id = yyjson_get_uint(schema_id);
+		} else {
+			//! 'schema-id' is optional in the V1 iceberg format.
+			D_ASSERT(metadata.iceberg_version == 1);
+			ret.schema_id = metadata.schema_id;
+		}
 		ret.manifest_list = IcebergUtils::TryGetStrFromObject(snapshot, "manifest-list");
 	} else {
 		ret.snapshot_id = DConstants::INVALID_INDEX;
+		ret.schema_id = metadata.schema_id;
 	}
 
-	ret.iceberg_format_version = iceberg_format_version;
-	ret.schema_id = schema_id;
-	if (!options.skip_schema_inference) {
-		ret.schema = ParseSchema(schemas, ret.schema_id);
+	ret.iceberg_format_version = metadata.iceberg_version;
+	if (options.infer_schema) {
+		ret.schema = ParseSchema(metadata.schemas, ret.schema_id);
 	}
 	return ret;
 }

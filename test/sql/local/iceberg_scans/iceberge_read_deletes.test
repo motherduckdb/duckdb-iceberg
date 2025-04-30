@@ -12,14 +12,14 @@ require iceberg
 
 # TODO verify the catalog has deletes (rest catalog stores data differently from local catalog)
 query I nosort results_1
-select sum(l_suppkey), min(l_suppkey), max(l_suppkey) from ICEBERG_SCAN('data/generated/iceberg/spark-local/table_with_deletes');
+select sum(l_suppkey), min(l_suppkey), max(l_suppkey) from ICEBERG_SCAN('data/generated/iceberg/spark-local/default/table_with_deletes');
 
 query I nosort results_1
 select sum(l_suppkey), min(l_suppkey), max(l_suppkey) from read_parquet('data/generated/intermediates/spark-local/table_with_deletes/last/data.parquet/*.parquet');
 
 # Verify parquet scans on tables with delete vectors do not mess with results.
 query I nosort table_filter_result
-select l_partkey from ICEBERG_SCAN('data/generated/iceberg/spark-local/lineitem_001_deletes') where l_partkey > 5 and l_partkey < 20000;
+select l_partkey from ICEBERG_SCAN('data/generated/iceberg/spark-local/default/lineitem_001_deletes') where l_partkey > 5 and l_partkey < 20000;
 ----
 
 query I nosort table_filter_result
@@ -31,8 +31,8 @@ select l_partkey from read_parquet('data/generated/intermediates/spark-local/lin
 # Projecting l_orderkey, joining on l_partkey
 query I nosort join_results
 select l1_deletes.l_partkey, count(*) count from
-  ICEBERG_SCAN('data/generated/iceberg/spark-local/lineitem_sf1_deletes') l1_deletes,
-  ICEBERG_SCAN('data/generated/iceberg/spark-local/lineitem_sf_01_no_deletes') l2_no_deletes
+  ICEBERG_SCAN('data/generated/iceberg/spark-local/default/lineitem_sf1_deletes') l1_deletes,
+  ICEBERG_SCAN('data/generated/iceberg/spark-local/default/lineitem_sf_01_no_deletes') l2_no_deletes
 where l1_deletes.l_partkey = l2_no_deletes.l_partkey
 group by l1_deletes.l_partkey
 order by l1_deletes.l_partkey, count
@@ -40,8 +40,8 @@ order by l1_deletes.l_partkey, count
 
 query I nosort join_results
 select l1_deletes.l_partkey, count(*) count from
-ICEBERG_SCAN('data/generated/iceberg/spark-local/lineitem_sf1_deletes') l1_deletes,
-ICEBERG_SCAN('data/generated/iceberg/spark-local/lineitem_sf_01_no_deletes') l2_no_deletes
+ICEBERG_SCAN('data/generated/iceberg/spark-local/default/lineitem_sf1_deletes') l1_deletes,
+ICEBERG_SCAN('data/generated/iceberg/spark-local/default/lineitem_sf_01_no_deletes') l2_no_deletes
 where l1_deletes.l_partkey = l2_no_deletes.l_partkey
 group by l1_deletes.l_partkey
 order by l1_deletes.l_partkey, count
@@ -53,8 +53,8 @@ order by l1_deletes.l_partkey, count
 # Projecting l_orderkey, joining on l_partkey
 query I nosort join_results_2_orderkey
 select l1_deletes.l_orderkey, count(*) count from
-  ICEBERG_SCAN('data/generated/iceberg/spark-local/lineitem_sf1_deletes') l1_deletes,
-  ICEBERG_SCAN('data/generated/iceberg/spark-local/lineitem_sf_01_no_deletes') l2_no_deletes
+  ICEBERG_SCAN('data/generated/iceberg/spark-local/default/lineitem_sf1_deletes') l1_deletes,
+  ICEBERG_SCAN('data/generated/iceberg/spark-local/default/lineitem_sf_01_no_deletes') l2_no_deletes
 where l1_deletes.l_partkey = l2_no_deletes.l_partkey
 group by l1_deletes.l_orderkey
 order by l1_deletes.l_orderkey, count
@@ -63,8 +63,8 @@ order by l1_deletes.l_orderkey, count
 
 query I nosort join_results_2_orderkey
 select l1_deletes.l_orderkey, count(*) count from
-ICEBERG_SCAN('data/generated/iceberg/spark-local/lineitem_sf1_deletes') l1_deletes,
-ICEBERG_SCAN('data/generated/iceberg/spark-local/lineitem_sf_01_no_deletes') l2_no_deletes
+ICEBERG_SCAN('data/generated/iceberg/spark-local/default/lineitem_sf1_deletes') l1_deletes,
+ICEBERG_SCAN('data/generated/iceberg/spark-local/default/lineitem_sf_01_no_deletes') l2_no_deletes
 where l1_deletes.l_partkey = l2_no_deletes.l_partkey
 group by l1_deletes.l_orderkey
 order by l1_deletes.l_orderkey, count
@@ -77,7 +77,7 @@ select l_orderkey,
     l_partkey,
     l_suppkey,
     l_quantity
-from ICEBERG_SCAN('data/generated/iceberg/spark-local/lineitem_sf_01_1_delete')
+from ICEBERG_SCAN('data/generated/iceberg/spark-local/default/lineitem_sf_01_1_delete')
 order by l_partkey, l_orderkey limit 10;
 ----
 
@@ -92,7 +92,7 @@ order by l_partkey, l_orderkey limit 10;
 
 query I
 select count(*)
-from ICEBERG_SCAN('data/generated/iceberg/spark-local/lineitem_sf_01_1_delete')
+from ICEBERG_SCAN('data/generated/iceberg/spark-local/default/lineitem_sf_01_1_delete')
 where l_orderkey=10053 and l_partkey = 77;
 ----
 0
@@ -109,7 +109,7 @@ where l_orderkey=10053 and l_partkey = 77;
 # add tests for partitioned tables.
 query II nosort result_4_partitioned
 select l_shipmode, count(*) count
-from ICEBERG_SCAN('data/generated/iceberg/spark-local/lineitem_partitioned_l_shipmode')
+from ICEBERG_SCAN('data/generated/iceberg/spark-local/default/lineitem_partitioned_l_shipmode')
 group by l_shipmode order by count;
 ----
 
@@ -123,7 +123,7 @@ group by l_shipmode order by count;
 # add tests for partitioned tables.
 query II nosort result_4_partitioned_table_filters
 select l_shipmode, count(*) count
-from ICEBERG_SCAN('data/generated/iceberg/spark-local/lineitem_partitioned_l_shipmode')
+from ICEBERG_SCAN('data/generated/iceberg/spark-local/default/lineitem_partitioned_l_shipmode')
 where l_partkey > 50
 group by l_shipmode order by count;
 ----
@@ -141,7 +141,7 @@ group by l_shipmode order by count;
 # add tests for partitioned tables.
 query II nosort result_5
 select l_shipmode, count(*) count
-from ICEBERG_SCAN('data/generated/iceberg/spark-local/lineitem_partitioned_l_shipmode_deletes')
+from ICEBERG_SCAN('data/generated/iceberg/spark-local/default/lineitem_partitioned_l_shipmode_deletes')
 group by l_shipmode order by count;
 ----
 
@@ -154,7 +154,7 @@ group by l_shipmode order by count;
 # verify select on partitioned table deletes with table_filters
 query II nosort result_5_table_filter
 select l_shipmode, count(*) count
-from ICEBERG_SCAN('data/generated/iceberg/spark-local/lineitem_partitioned_l_shipmode_deletes')
+from ICEBERG_SCAN('data/generated/iceberg/spark-local/default/lineitem_partitioned_l_shipmode_deletes')
 where l_partkey > 100
 group by l_shipmode order by count;
 ----

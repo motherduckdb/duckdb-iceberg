@@ -1,0 +1,33 @@
+# name: test/sql/local/equality_deletes.test
+# description: Test equaltiy deletes in an iceberg scan
+# group: [local]
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# First snapshot:
+# add (id=1, name=a), (id=2, name=b), (id=3, name=b)
+# Result: [(id=1, name=a), (id=2, name=b), (id=3, name=b)]
+
+# Second snapshot:
+# delete where name=b
+# Result: [(id=1, name=a)]
+
+# Third snapshot:
+# add (id=1, name=a), (id=2, name=b), (id=3, name=b)
+# Result: [(id=1, name=a), (id=2, name=b), (id=1, name=b), (id=1, name=a)]
+
+# Fourth snapshot:
+# delete where id=1 AND name=a
+# Result: [(id=2, name=b), (id=1, name=b)]
+
+query II
+SELECT * FROM ICEBERG_SCAN('data/persistent/equality_deletes/warehouse/mydb/mytable');
+----
+2	b
+1	b

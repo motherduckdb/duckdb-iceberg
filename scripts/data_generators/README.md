@@ -1,37 +1,47 @@
-# README
-Script used to generate test data for this repo. Don't use directly, but use makefile recipe `make data`
+## README
+Script used to generate test data for this repo.
+Can be used directly with `python3 -m scripts.data_generators.generate_data [target]+`, but prefer to use `make data`
 
-The script uses PySpark with the iceberg extension to generate datasets based on a starting
-parquet file (tpch lineitem) and a series of updates/deletes/appends (see `./updates`). 
-The script will output the table as a parquet file after every updates/deletes/appends along with the total count.
-The base parquet file is also stored in the output dir.
+The script uses PySpark with the Iceberg Extension to generate a dataset in the targeted catalog, for every IcebergTest defined.
+Intermediates for every step of an IcebergTest are saved to `data/generated/intermediates/{target}/{table}/{step}`
 
-# Valdation
+### Validation
 - count(*) after each step
 - full table copy to parquet file after each step
 
-# Idea behind script:
-- generated data easily within this repo
+### Idea behind script:
+- generate data easily within this repo
 - contains all iceberg datatypes (currently WIP)
 - contains nulls
-- configurable scale factor
+- configurable scale factor (currently WIP)
 - verify behaviour matches spark
 
-# Update queries
-Should be portable between DuckDB, Spark and Snowflake
-
-# Todo's:
+### Todo's:
 - Arbitrary precision Decimals?
 - Time not yet working
 - PySpark does not support UUID
 - Generate similar data from snowflake's iceberg implementation
 - value deletes?
 
+### To add a test (generate an iceberg table):
+- Create a new folder in `scripts/data_generators/tests`
+- Write the `__init__.py`, which is usually as simple as:
+```py
+from scripts.data_generators.tests.base import IcebergTest
+import pathlib
 
-# How it works now
+@IcebergTest.register()
+class Test(IcebergTest):
+    def __init__(self):
+        path = pathlib.PurePath(__file__)
+        super().__init__(path.parent.name)
+```
+- Add the `.sql` files to the folder (one statement per file)
 
-We have data generators, like spark-local, and spark-rest. Eventually we should have generators like DuckDB and more.
-
-Each generate has a directory, in the directory are sub-directories with queries that create and modify a table, which should be defined in q00.
-If some more setup is needed to generate the data, then you need to add it as a {setup.*} file in the directory with the other sql queries. 
-A python script is the best bet for this.
+### To add a new connection (new iceberg catalog type to test against):
+- Add an option to the choices for `targets`, in `generate_data.py`
+- Create a new folder in `scripts/data_generators/connections`
+- Create an `__init__.py` file in the folder
+- Add a new derived class of `IcebergConnection`
+- Add the `@IcebergConnection.register(CONNECTION_KEY)` decorator to it, where `CONNECTION_KEY` is the choice added in step 1
+- Define the `get_connection` method for the new class

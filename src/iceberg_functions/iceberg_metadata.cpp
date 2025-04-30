@@ -64,7 +64,7 @@ static unique_ptr<FunctionData> IcebergMetaDataBind(ClientContext &context, Tabl
 		} else if (loption == "metadata_compression_codec") {
 			options.metadata_compression_codec = StringValue::Get(kv.second);
 		} else if (loption == "skip_schema_inference") {
-			options.skip_schema_inference = BooleanValue::Get(kv.second);
+			options.infer_schema = !BooleanValue::Get(kv.second);
 		} else if (loption == "version") {
 			options.table_version = StringValue::Get(kv.second);
 		} else if (loption == "version_name_format") {
@@ -80,20 +80,20 @@ static unique_ptr<FunctionData> IcebergMetaDataBind(ClientContext &context, Tabl
 	}
 
 	auto iceberg_meta_path = IcebergSnapshot::GetMetaDataPath(context, iceberg_path, fs, options);
-	auto parse_info = IcebergMetadata::Parse(iceberg_meta_path, fs, options.metadata_compression_codec);
+	auto metadata = IcebergMetadata::Parse(iceberg_meta_path, fs, options.metadata_compression_codec);
 
 	IcebergSnapshot snapshot_to_scan;
 	switch (options.snapshot_source) {
 	case SnapshotSource::LATEST: {
-		snapshot_to_scan = IcebergSnapshot::GetLatestSnapshot(*parse_info, options);
+		snapshot_to_scan = IcebergSnapshot::GetLatestSnapshot(*metadata, options);
 		break;
 	}
 	case SnapshotSource::FROM_ID: {
-		snapshot_to_scan = IcebergSnapshot::GetSnapshotById(*parse_info, options.snapshot_id, options);
+		snapshot_to_scan = IcebergSnapshot::GetSnapshotById(*metadata, options.snapshot_id, options);
 		break;
 	}
 	case SnapshotSource::FROM_TIMESTAMP: {
-		snapshot_to_scan = IcebergSnapshot::GetSnapshotByTimestamp(*parse_info, options.snapshot_timestamp, options);
+		snapshot_to_scan = IcebergSnapshot::GetSnapshotByTimestamp(*metadata, options.snapshot_timestamp, options);
 		break;
 	}
 	default:
@@ -115,6 +115,10 @@ static unique_ptr<FunctionData> IcebergMetaDataBind(ClientContext &context, Tabl
 	return std::move(ret);
 }
 
+static void AddString(Vector &vec, idx_t index, string_t &&str) {
+	FlatVector::GetData<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
+}
+
 static void IcebergMetaDataFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
 	auto &bind_data = data.bind_data->Cast<IcebergMetaDataBindData>();
 	auto &global_state = data.global_state->Cast<IcebergMetaDataGlobalTableFunctionState>();
@@ -132,21 +136,22 @@ static void IcebergMetaDataFunction(ClientContext &context, TableFunctionInput &
 			auto manifest = manifests[global_state.current_manifest_idx];
 			auto manifest_entry = manifest_entries[global_state.current_manifest_entry_idx];
 
-			FlatVector::GetData<string_t>(output.data[0])[out] =
-			    StringVector::AddString(output.data[0], string_t(manifest.manifest.manifest_path));
-			;
+			//! manifest_path
+			AddString(output.data[0], out, string_t(manifest.manifest.manifest_path));
+			//! manifest_sequence_number
 			FlatVector::GetData<int64_t>(output.data[1])[out] = manifest.manifest.sequence_number;
-			FlatVector::GetData<string_t>(output.data[2])[out] = StringVector::AddString(
-			    output.data[2], string_t(IcebergManifestContentTypeToString(manifest.manifest.content)));
+			//! manifest_content
+			AddString(output.data[2], out, string_t(IcebergManifestContentTypeToString(manifest.manifest.content)));
 
-			FlatVector::GetData<string_t>(output.data[3])[out] = StringVector::AddString(
-			    output.data[3], string_t(IcebergManifestEntryStatusTypeToString(manifest_entry.status)));
-			FlatVector::GetData<string_t>(output.data[4])[out] = StringVector::AddString(
-			    output.data[4], string_t(IcebergManifestEntryContentTypeToString(manifest_entry.content)));
-			FlatVector::GetData<string_t>(output.data[5])[out] =
-			    StringVector::AddString(output.data[5], string_t(manifest_entry.file_path));
-			FlatVector::GetData<string_t>(output.data[6])[out] =
-			    StringVector::AddString(output.data[6], string_t(manifest_entry.file_format));
+			//! status
+			AddString(output.data[3], out, string_t(IcebergManifestEntryStatusTypeToString(manifest_entry.status)));
+			//! content
+			AddString(output.data[4], out, string_t(IcebergManifestEntryContentTypeToString(manifest_entry.content)));
+			//! file_path
+			AddString(output.data[5], out, string_t(manifest_entry.file_path));
+			//! file_format
+			AddString(output.data[6], out, string_t(manifest_entry.file_format));
+			//! record_count
 			FlatVector::GetData<int64_t>(output.data[7])[out] = manifest_entry.record_count;
 			out++;
 		}

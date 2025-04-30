@@ -27,7 +27,7 @@ CREATE SECRET (
 
 
 statement ok
-ATTACH '' AS my_datalake (
+ATTACH 'demo' AS my_datalake (
 	TYPE ICEBERG,
 	CLIENT_ID 'admin',
 	CLIENT_SECRET 'password',

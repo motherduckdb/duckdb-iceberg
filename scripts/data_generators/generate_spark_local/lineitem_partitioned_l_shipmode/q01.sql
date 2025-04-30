@@ -1,1 +1,0 @@
-delete from iceberg_catalog.lineitem_partitioned_l_shipmode where l_shipmode = 'TRUCK';

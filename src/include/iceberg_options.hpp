@@ -29,7 +29,7 @@ enum class SnapshotSource : uint8_t { LATEST, FROM_TIMESTAMP, FROM_ID };
 struct IcebergOptions {
 	bool allow_moved_paths = false;
 	string metadata_compression_codec = "none";
-	bool skip_schema_inference = false;
+	bool infer_schema = true;
 	string table_version = DEFAULT_TABLE_VERSION;
 	string version_name_format = DEFAULT_TABLE_VERSION_FORMAT;
 

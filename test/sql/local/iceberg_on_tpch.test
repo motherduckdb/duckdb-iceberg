@@ -35,28 +35,28 @@ ATTACH '' AS my_datalake (
 );
 
 statement ok
-create view customer as select * from my_datalake.default.customer_sf1;
+create view customer as select * from my_datalake.default.customer;
 
 statement ok
-create view lineitem as select * from my_datalake.default.lineitem_sf1;
+create view lineitem as select * from my_datalake.default.lineitem;
 
 statement ok
-create view nation as select * from my_datalake.default.nation_sf1;
+create view nation as select * from my_datalake.default.nation;
 
 statement ok
-create view orders as select * from my_datalake.default.orders_sf1;
+create view orders as select * from my_datalake.default.orders;
 
 statement ok
-create view part as select * from my_datalake.default.part_sf1;
+create view part as select * from my_datalake.default.part;
 
 statement ok
-create view partsupp as select * from my_datalake.default.partsupp_sf1;
+create view partsupp as select * from my_datalake.default.partsupp;
 
 statement ok
-create view region as select * from my_datalake.default.region_sf1;
+create view region as select * from my_datalake.default.region;
 
 statement ok
-create view supplier as select * from my_datalake.default.supplier_sf1;
+create view supplier as select * from my_datalake.default.supplier;
 
 
 loop i 1 9

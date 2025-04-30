@@ -268,7 +268,7 @@ jobs:
           python3 -m pip install pandas
           python3 -m pip install setuptools
           python3 scripts/lakekeeper/setup_lakekeeper_catalog.py
-          python3 scripts/data_generators/generate_data.py lakekeeper
+          python3 -m scripts.data_generators.generate_data lakekeeper
 
       - name: Test with rest catalog
         env:

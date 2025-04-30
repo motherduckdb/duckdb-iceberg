@@ -1,1 +1,0 @@
-CREATE or REPLACE TABLE iceberg_catalog.pyspark_iceberg_table_v1 TBLPROPERTIES ('format-version'='1') AS SELECT * FROM parquet_file_view;

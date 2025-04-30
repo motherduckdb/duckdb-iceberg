@@ -23,12 +23,18 @@ using manifest_reader_read =
 
 struct ManifestReaderInput {
 public:
-	ManifestReaderInput(const case_insensitive_map_t<ColumnIndex> &name_to_vec, bool skip_deleted = false);
+	ManifestReaderInput(const case_insensitive_map_t<ColumnIndex> &name_to_vec,
+	                    sequence_number_t sequence_number_to_inherit = NumericLimits<sequence_number_t>::Maximum(),
+	                    int32_t partition_spec_id = NumericLimits<int32_t>::Maximum(), bool skip_deleted = false);
 
 public:
 	const case_insensitive_map_t<ColumnIndex> &name_to_vec;
 	//! Whether the deleted entries should be skipped outright
 	bool skip_deleted = false;
+	//! The sequence number to inherit when the condition to do so is met
+	sequence_number_t sequence_number;
+	//! The inherited partition spec id (from the 'manifest_file')
+	int32_t partition_spec_id;
 };
 
 class ManifestReader {
@@ -37,6 +43,8 @@ public:
 
 public:
 	void Initialize(unique_ptr<AvroScan> scan_p);
+	void SetSequenceNumber(sequence_number_t sequence_number);
+	void SetPartitionSpecID(int32_t partition_spec_id);
 
 public:
 	bool Finished() const;
@@ -54,6 +62,8 @@ private:
 
 public:
 	bool skip_deleted = false;
+	sequence_number_t sequence_number = NumericLimits<sequence_number_t>::Maximum();
+	int32_t partition_spec_id = NumericLimits<int32_t>::Maximum();
 };
 
 template <class OP>
