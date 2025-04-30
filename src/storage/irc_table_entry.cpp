@@ -20,11 +20,13 @@ namespace duckdb {
 ICTableEntry::ICTableEntry(Catalog &catalog, SchemaCatalogEntry &schema, CreateTableInfo &info)
     : TableCatalogEntry(catalog, schema, info) {
 	this->internal = false;
+	this->timestamp = 1;
 }
 
 ICTableEntry::ICTableEntry(Catalog &catalog, SchemaCatalogEntry &schema, ICTableInfo &info)
     : TableCatalogEntry(catalog, schema, *info.create_info) {
 	this->internal = false;
+	this->timestamp = 1;
 }
 
 unique_ptr<BaseStatistics> ICTableEntry::GetStatistics(ClientContext &context, column_t column_id) {
@@ -145,6 +147,7 @@ vector<column_t> ICTableEntry::GetRowIdColumns() const {
 
 TableStorageInfo ICTableEntry::GetStorageInfo(ClientContext &context) {
 	TableStorageInfo result;
+	result.cardinality = 1'000'000;
 	// TODO fill info
 	return result;
 }

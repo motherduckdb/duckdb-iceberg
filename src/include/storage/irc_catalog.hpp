@@ -58,6 +58,11 @@ public:
 		return "iceberg";
 	}
 
+	optional_idx GetCatalogVersion(ClientContext &context) override {
+		// Get it from the version string, I guess??
+		return 1;
+	}
+
 	static unique_ptr<SecretEntry> GetStorageSecret(ClientContext &context, const string &secret_name);
 	static unique_ptr<SecretEntry> GetIcebergSecret(ClientContext &context, const string &secret_name);
 
