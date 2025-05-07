@@ -1,9 +1,9 @@
 {
   "format-version" : 2,
-  "table-uuid" : "dd728527-7b2f-4c00-87a3-821d21679852",
+  "table-uuid" : "7c269e29-15d2-48a6-bc83-4919d38e3041",
   "location" : "data/persistent/equality_deletes/warehouse/mydb/mytable",
   "last-sequence-number" : 1,
-  "last-updated-ms" : 1745834912321,
+  "last-updated-ms" : 1746122109975,
   "last-column-id" : 2,
   "current-schema-id" : 0,
   "schemas" : [ {
@@ -24,31 +24,26 @@
   "default-spec-id" : 0,
   "partition-specs" : [ {
     "spec-id" : 0,
-    "fields" : [ {
-      "name" : "name",
-      "transform" : "identity",
-      "source-id" : 2,
-      "field-id" : 1000
-    } ]
+    "fields" : [ ]
   } ],
-  "last-partition-id" : 1000,
+  "last-partition-id" : 999,
   "default-sort-order-id" : 0,
   "sort-orders" : [ {
     "order-id" : 0,
     "fields" : [ ]
   } ],
   "properties" : { },
-  "current-snapshot-id" : 3084845371944127108,
+  "current-snapshot-id" : 1046545856685507949,
   "refs" : {
     "main" : {
-      "snapshot-id" : 3084845371944127108,
+      "snapshot-id" : 1046545856685507949,
       "type" : "branch"
     }
   },
   "snapshots" : [ {
     "sequence-number" : 1,
-    "snapshot-id" : 3084845371944127108,
-    "timestamp-ms" : 1745834912321,
+    "snapshot-id" : 1046545856685507949,
+    "timestamp-ms" : 1746122109975,
     "summary" : {
       "operation" : "append",
       "added-data-files" : "1",
@@ -62,16 +57,16 @@
       "total-position-deletes" : "0",
       "total-equality-deletes" : "0"
     },
-    "manifest-list" : "data/persistent/equality_deletes/warehouse/mydb/mytable/metadata/snap-3084845371944127108-1-71133e94-48c0-4100-8126-5af6089cf4ab.avro",
+    "manifest-list" : "data/persistent/equality_deletes/warehouse/mydb/mytable/metadata/snap-1046545856685507949-1-ee85b137-904a-4591-8054-6b5d4993c9bd.avro",
     "schema-id" : 0
   } ],
   "statistics" : [ ],
   "snapshot-log" : [ {
-    "timestamp-ms" : 1745834912321,
-    "snapshot-id" : 3084845371944127108
+    "timestamp-ms" : 1746122109975,
+    "snapshot-id" : 1046545856685507949
   } ],
   "metadata-log" : [ {
-    "timestamp-ms" : 1745834911796,
+    "timestamp-ms" : 1746122109432,
     "metadata-file" : "data/persistent/equality_deletes/warehouse/mydb/mytable/metadata/v1.metadata.json"
   } ]
 }

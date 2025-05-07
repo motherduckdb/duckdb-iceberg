@@ -18,3 +18,10 @@ The result for Q06 of TPC-H on this table according to pyspark is now:
 
 Note: it appears that there are no deletes present in this iceberg table, the whole thing was rewritten.
 this is likely due to the fact that the table is so small?
+
+### Regeneration
+
+To regenerate the data, use the `scripts/persistent/lineitem_iceberg.py` script.
+This generates the data into `./lineitem_iceberg/...`
+Move this into `data/persistent/iceberg/lineitem_iceberg`
+Finally update all the tests that refer to the internals of the rewritten metadata.

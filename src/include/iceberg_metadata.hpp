@@ -12,6 +12,7 @@
 #include "yyjson.hpp"
 #include "iceberg_types.hpp"
 #include "iceberg_options.hpp"
+#include "rest_catalog/objects/struct_field.hpp"
 #include "duckdb/common/open_file_info.hpp"
 
 using namespace duckdb_yyjson;
@@ -20,12 +21,12 @@ namespace duckdb {
 
 struct IcebergColumnDefinition {
 public:
-	static IcebergColumnDefinition ParseFromJson(yyjson_val *val);
-
+	static IcebergColumnDefinition ParseFromJson(rest_api_objects::StructField &field);
 	LogicalType ToDuckDBType() {
 		return type;
 	}
 
+public:
 	int32_t id;
 	string name;
 	LogicalType type;
@@ -33,23 +34,43 @@ public:
 	bool required;
 };
 
+struct IcebergPartitionSpecField {
+public:
+	static IcebergPartitionSpecField ParseFromJson(yyjson_val *val);
+
+public:
+	string name;
+	//! FIXME: parse this, there are a set amount of valid transforms
+	//! See: https://iceberg.apache.org/spec/#partition-specs
+	//! "Applied to the source column(s) to produce a partition value"
+	string transform;
+	//! NOTE: v3 replaces 'source-id' with 'source-ids'
+	//! "A source column id or a list of source column ids from the table’s schema"
+	uint64_t source_id;
+	//! "Used to identify a partition field and is unique within a partition spec"
+	uint64_t partition_field_id;
+};
+
+struct IcebergPartitionSpec {
+public:
+	static IcebergPartitionSpec ParseFromJson(yyjson_val *val);
+
+public:
+	bool IsUnpartitioned() const;
+	bool IsPartitioned() const;
+
+public:
+	uint64_t spec_id;
+	vector<IcebergPartitionSpecField> fields;
+};
+
 struct IcebergFieldMapping {
 public:
 	//! field-id can be omitted for the root of a struct
+	//! "Fields that exist in imported files but not in the Iceberg schema may omit field-id."
 	int32_t field_id = NumericLimits<int32_t>::Maximum();
+	//! "Fields which exist only in the Iceberg schema and not in imported data files may use an empty names list."
 	case_insensitive_map_t<idx_t> field_mapping_indexes;
-
-public:
-public:
-	void Verify() {
-		if (field_id != NumericLimits<int32_t>::Maximum()) {
-			return;
-		}
-		if (field_mapping_indexes.empty()) {
-			throw InvalidInputException(
-			    "Parsed 'schema.name-mapping.default' field mapping is invalid, has no 'field-id' and no 'fields'");
-		}
-	}
 };
 
 struct IcebergMetadata {
@@ -72,11 +93,10 @@ public:
 
 	//! Parsed info
 	yyjson_val *snapshots;
+	unordered_map<int64_t, IcebergPartitionSpec> partition_specs;
 	vector<yyjson_val *> schemas;
 	uint64_t iceberg_version;
 	uint64_t schema_id;
-
-	IcebergFieldMapping root_field_mapping;
 	vector<IcebergFieldMapping> mappings;
 };
 

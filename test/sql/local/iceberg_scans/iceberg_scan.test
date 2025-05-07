@@ -22,13 +22,13 @@ SELECT count(*) FROM ICEBERG_SCAN('data/persistent/iceberg/lineitem_iceberg', AL
 
 # Scanning 1st snapshot
 query I
-SELECT count(*) FROM ICEBERG_SCAN('data/persistent/iceberg/lineitem_iceberg', snapshot_from_id=3776207205136740581::UBIGINT, ALLOW_MOVED_PATHS=TRUE);
+SELECT count(*) FROM ICEBERG_SCAN('data/persistent/iceberg/lineitem_iceberg', snapshot_from_id=7817332053627255703::UBIGINT, ALLOW_MOVED_PATHS=TRUE);
 ----
 60175
 
 # Scanning 2nd snapshot
 query I
-SELECT count(*) FROM ICEBERG_SCAN('data/persistent/iceberg/lineitem_iceberg', snapshot_from_id=7635660646343998149::UBIGINT, ALLOW_MOVED_PATHS=TRUE);
+SELECT count(*) FROM ICEBERG_SCAN('data/persistent/iceberg/lineitem_iceberg', snapshot_from_id=2354745328521181395::UBIGINT, ALLOW_MOVED_PATHS=TRUE);
 ----
 51793
 
@@ -39,21 +39,21 @@ SELECT count(*) FROM ICEBERG_SCAN('data/persistent/iceberg/lineitem_iceberg', ve
 51793
 
 # Scanning latest snapshot at specific moment in time
-# note in the data we have:
-#   1 = 2023-02-15 15:07:54.504
-#	2 = 2023-02-15 15:08:14.73
+# note in the data we have (in UTC):
+#   1 = 2025-05-02 12:21:19.060
+#	2 = 2025-05-02 12:21:20.005
 query I
-SELECT count(*) FROM ICEBERG_SCAN('data/persistent/iceberg/lineitem_iceberg', snapshot_from_timestamp='2023-02-15 15:07:54.504'::TIMESTAMP, ALLOW_MOVED_PATHS=TRUE);
+SELECT count(*) FROM ICEBERG_SCAN('data/persistent/iceberg/lineitem_iceberg', snapshot_from_timestamp='2025-05-02 12:21:19.060'::TIMESTAMP, ALLOW_MOVED_PATHS=TRUE);
 ----
 60175
 
 query I
-SELECT count(*) FROM ICEBERG_SCAN('data/persistent/iceberg/lineitem_iceberg', snapshot_from_timestamp='2023-02-15 15:07:54.729'::TIMESTAMP, ALLOW_MOVED_PATHS=TRUE);
+SELECT count(*) FROM ICEBERG_SCAN('data/persistent/iceberg/lineitem_iceberg', snapshot_from_timestamp='2025-05-02 12:21:19.729'::TIMESTAMP, ALLOW_MOVED_PATHS=TRUE);
 ----
 60175
 
 query I
-SELECT count(*) FROM ICEBERG_SCAN('data/persistent/iceberg/lineitem_iceberg', snapshot_from_timestamp='2023-02-15 15:08:14.73'::TIMESTAMP, ALLOW_MOVED_PATHS=TRUE);
+SELECT count(*) FROM ICEBERG_SCAN('data/persistent/iceberg/lineitem_iceberg', snapshot_from_timestamp='2025-05-02 12:21:20.005'::TIMESTAMP, ALLOW_MOVED_PATHS=TRUE);
 ----
 51793
 
@@ -92,17 +92,17 @@ statement ok
 SET unsafe_enable_version_guessing=true;
 
 query I
-SELECT count(*) FROM ICEBERG_SCAN('data/persistent/iceberg/lineitem_iceberg_no_hint', snapshot_from_timestamp='2023-02-15 15:07:54.504'::TIMESTAMP, ALLOW_MOVED_PATHS=TRUE);
+SELECT count(*) FROM ICEBERG_SCAN('data/persistent/iceberg/lineitem_iceberg_no_hint', snapshot_from_timestamp='2025-05-02 12:21:19.060'::TIMESTAMP, ALLOW_MOVED_PATHS=TRUE);
 ----
 60175
 
 query I
-SELECT count(*) FROM ICEBERG_SCAN('data/persistent/iceberg/lineitem_iceberg_no_hint', snapshot_from_timestamp='2023-02-15 15:07:54.729'::TIMESTAMP, ALLOW_MOVED_PATHS=TRUE);
+SELECT count(*) FROM ICEBERG_SCAN('data/persistent/iceberg/lineitem_iceberg_no_hint', snapshot_from_timestamp='2025-05-02 12:21:19.729'::TIMESTAMP, ALLOW_MOVED_PATHS=TRUE);
 ----
 60175
 
 query I
-SELECT count(*) FROM ICEBERG_SCAN('data/persistent/iceberg/lineitem_iceberg_no_hint', snapshot_from_timestamp='2023-02-15 15:08:14.73'::TIMESTAMP, ALLOW_MOVED_PATHS=TRUE);
+SELECT count(*) FROM ICEBERG_SCAN('data/persistent/iceberg/lineitem_iceberg_no_hint', snapshot_from_timestamp='2025-05-02 12:21:20.005'::TIMESTAMP, ALLOW_MOVED_PATHS=TRUE);
 ----
 51793
 

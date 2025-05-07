@@ -59,14 +59,15 @@ static unique_ptr<FunctionData> IcebergMetaDataBind(ClientContext &context, Tabl
 
 	for (auto &kv : input.named_parameters) {
 		auto loption = StringUtil::Lower(kv.first);
+		auto &val = kv.second;
 		if (loption == "allow_moved_paths") {
-			options.allow_moved_paths = BooleanValue::Get(kv.second);
+			options.allow_moved_paths = BooleanValue::Get(val);
 		} else if (loption == "metadata_compression_codec") {
-			options.metadata_compression_codec = StringValue::Get(kv.second);
+			options.metadata_compression_codec = StringValue::Get(val);
 		} else if (loption == "skip_schema_inference") {
 			options.infer_schema = !BooleanValue::Get(kv.second);
 		} else if (loption == "version") {
-			options.table_version = StringValue::Get(kv.second);
+			options.table_version = StringValue::Get(val);
 		} else if (loption == "version_name_format") {
 			auto value = StringValue::Get(kv.second);
 			auto string_substitutions = IcebergUtils::CountOccurrences(value, "%s");
@@ -76,6 +77,20 @@ static unique_ptr<FunctionData> IcebergMetaDataBind(ClientContext &context, Tabl
 				    string_substitutions);
 			}
 			options.version_name_format = value;
+		} else if (loption == "snapshot_from_id") {
+			if (options.snapshot_source != SnapshotSource::LATEST) {
+				throw InvalidInputException(
+				    "Can't use 'snapshot_from_id' in combination with 'snapshot_from_timestamp'");
+			}
+			options.snapshot_source = SnapshotSource::FROM_ID;
+			options.snapshot_id = val.GetValue<uint64_t>();
+		} else if (loption == "snapshot_from_timestamp") {
+			if (options.snapshot_source != SnapshotSource::LATEST) {
+				throw InvalidInputException(
+				    "Can't use 'snapshot_from_id' in combination with 'snapshot_from_timestamp'");
+			}
+			options.snapshot_source = SnapshotSource::FROM_TIMESTAMP;
+			options.snapshot_timestamp = val.GetValue<timestamp_t>();
 		}
 	}
 

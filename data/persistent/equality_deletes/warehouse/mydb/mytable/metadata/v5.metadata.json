@@ -1,9 +1,9 @@
 {
   "format-version" : 2,
-  "table-uuid" : "dd728527-7b2f-4c00-87a3-821d21679852",
+  "table-uuid" : "7c269e29-15d2-48a6-bc83-4919d38e3041",
   "location" : "data/persistent/equality_deletes/warehouse/mydb/mytable",
   "last-sequence-number" : 4,
-  "last-updated-ms" : 1745834912677,
+  "last-updated-ms" : 1746122110333,
   "last-column-id" : 2,
   "current-schema-id" : 0,
   "schemas" : [ {
@@ -24,31 +24,26 @@
   "default-spec-id" : 0,
   "partition-specs" : [ {
     "spec-id" : 0,
-    "fields" : [ {
-      "name" : "name",
-      "transform" : "identity",
-      "source-id" : 2,
-      "field-id" : 1000
-    } ]
+    "fields" : [ ]
   } ],
-  "last-partition-id" : 1000,
+  "last-partition-id" : 999,
   "default-sort-order-id" : 0,
   "sort-orders" : [ {
     "order-id" : 0,
     "fields" : [ ]
   } ],
   "properties" : { },
-  "current-snapshot-id" : 2341399605399610945,
+  "current-snapshot-id" : 2894602912036338632,
   "refs" : {
     "main" : {
-      "snapshot-id" : 2341399605399610945,
+      "snapshot-id" : 2894602912036338632,
       "type" : "branch"
     }
   },
   "snapshots" : [ {
     "sequence-number" : 1,
-    "snapshot-id" : 3084845371944127108,
-    "timestamp-ms" : 1745834912321,
+    "snapshot-id" : 1046545856685507949,
+    "timestamp-ms" : 1746122109975,
     "summary" : {
       "operation" : "append",
       "added-data-files" : "1",
@@ -62,13 +57,13 @@
       "total-position-deletes" : "0",
       "total-equality-deletes" : "0"
     },
-    "manifest-list" : "data/persistent/equality_deletes/warehouse/mydb/mytable/metadata/snap-3084845371944127108-1-71133e94-48c0-4100-8126-5af6089cf4ab.avro",
+    "manifest-list" : "data/persistent/equality_deletes/warehouse/mydb/mytable/metadata/snap-1046545856685507949-1-ee85b137-904a-4591-8054-6b5d4993c9bd.avro",
     "schema-id" : 0
   }, {
     "sequence-number" : 2,
-    "snapshot-id" : 3014616911429748037,
-    "parent-snapshot-id" : 3084845371944127108,
-    "timestamp-ms" : 1745834912451,
+    "snapshot-id" : 3512576891615857142,
+    "parent-snapshot-id" : 1046545856685507949,
+    "timestamp-ms" : 1746122110110,
     "summary" : {
       "operation" : "overwrite",
       "added-equality-delete-files" : "1",
@@ -83,13 +78,13 @@
       "total-position-deletes" : "0",
       "total-equality-deletes" : "1"
     },
-    "manifest-list" : "data/persistent/equality_deletes/warehouse/mydb/mytable/metadata/snap-3014616911429748037-1-1a3263f9-bd9f-4b23-97e8-a61f23b5cf56.avro",
+    "manifest-list" : "data/persistent/equality_deletes/warehouse/mydb/mytable/metadata/snap-3512576891615857142-1-6afce3c7-c302-42aa-91ab-bcbe4f01cb97.avro",
     "schema-id" : 0
   }, {
     "sequence-number" : 3,
-    "snapshot-id" : 2866366616481169160,
-    "parent-snapshot-id" : 3014616911429748037,
-    "timestamp-ms" : 1745834912562,
+    "snapshot-id" : 8985322175058482040,
+    "parent-snapshot-id" : 3512576891615857142,
+    "timestamp-ms" : 1746122110222,
     "summary" : {
       "operation" : "append",
       "added-data-files" : "1",
@@ -103,13 +98,13 @@
       "total-position-deletes" : "0",
       "total-equality-deletes" : "1"
     },
-    "manifest-list" : "data/persistent/equality_deletes/warehouse/mydb/mytable/metadata/snap-2866366616481169160-1-f120a8f8-2612-44fd-ab0f-849985fb66f1.avro",
+    "manifest-list" : "data/persistent/equality_deletes/warehouse/mydb/mytable/metadata/snap-8985322175058482040-1-44f48ecd-dd48-42c0-8639-76cc51702031.avro",
     "schema-id" : 0
   }, {
     "sequence-number" : 4,
-    "snapshot-id" : 2341399605399610945,
-    "parent-snapshot-id" : 2866366616481169160,
-    "timestamp-ms" : 1745834912677,
+    "snapshot-id" : 2894602912036338632,
+    "parent-snapshot-id" : 8985322175058482040,
+    "timestamp-ms" : 1746122110333,
     "summary" : {
       "operation" : "overwrite",
       "added-equality-delete-files" : "1",
@@ -124,34 +119,34 @@
       "total-position-deletes" : "0",
       "total-equality-deletes" : "2"
     },
-    "manifest-list" : "data/persistent/equality_deletes/warehouse/mydb/mytable/metadata/snap-2341399605399610945-1-d9fb2935-1a2d-46b2-9f44-6499e66470c1.avro",
+    "manifest-list" : "data/persistent/equality_deletes/warehouse/mydb/mytable/metadata/snap-2894602912036338632-1-e08e7f38-46b9-40b7-9f1d-bd0fe9e77386.avro",
     "schema-id" : 0
   } ],
   "statistics" : [ ],
   "snapshot-log" : [ {
-    "timestamp-ms" : 1745834912321,
-    "snapshot-id" : 3084845371944127108
+    "timestamp-ms" : 1746122109975,
+    "snapshot-id" : 1046545856685507949
   }, {
-    "timestamp-ms" : 1745834912451,
-    "snapshot-id" : 3014616911429748037
+    "timestamp-ms" : 1746122110110,
+    "snapshot-id" : 3512576891615857142
   }, {
-    "timestamp-ms" : 1745834912562,
-    "snapshot-id" : 2866366616481169160
+    "timestamp-ms" : 1746122110222,
+    "snapshot-id" : 8985322175058482040
   }, {
-    "timestamp-ms" : 1745834912677,
-    "snapshot-id" : 2341399605399610945
+    "timestamp-ms" : 1746122110333,
+    "snapshot-id" : 2894602912036338632
   } ],
   "metadata-log" : [ {
-    "timestamp-ms" : 1745834911796,
+    "timestamp-ms" : 1746122109432,
     "metadata-file" : "data/persistent/equality_deletes/warehouse/mydb/mytable/metadata/v1.metadata.json"
   }, {
-    "timestamp-ms" : 1745834912321,
+    "timestamp-ms" : 1746122109975,
     "metadata-file" : "data/persistent/equality_deletes/warehouse/mydb/mytable/metadata/v2.metadata.json"
   }, {
-    "timestamp-ms" : 1745834912451,
+    "timestamp-ms" : 1746122110110,
     "metadata-file" : "data/persistent/equality_deletes/warehouse/mydb/mytable/metadata/v3.metadata.json"
   }, {
-    "timestamp-ms" : 1745834912562,
+    "timestamp-ms" : 1746122110222,
     "metadata-file" : "data/persistent/equality_deletes/warehouse/mydb/mytable/metadata/v4.metadata.json"
   } ]
 }

@@ -9,6 +9,7 @@
 #include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/parser/parsed_data/create_schema_info.hpp"
 #include "duckdb/main/attached_database.hpp"
+#include "rest_catalog/objects/catalog_config.hpp"
 #include "storage/irc_catalog.hpp"
 #include "curl.hpp"
 
@@ -41,42 +42,30 @@ void IRCatalog::GetConfig(ClientContext &context) {
 	auto response = auth_handler->GetRequest(context, url, request_input);
 	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(response));
 	auto *root = yyjson_doc_get_root(doc.get());
-	auto *overrides_json = yyjson_obj_get(root, "overrides");
-	auto *defaults_json = yyjson_obj_get(root, "defaults");
+	auto catalog_config = rest_api_objects::CatalogConfig::FromJSON(root);
+
+	overrides = catalog_config.overrides;
+	defaults = catalog_config.defaults;
 	// save overrides and defaults.
 	// See https://iceberg.apache.org/docs/latest/configuration/#catalog-properties for sometimes used catalog
 	// properties
-	if (defaults_json && yyjson_obj_size(defaults_json) > 0) {
-		yyjson_val *key, *val;
-		yyjson_obj_iter iter = yyjson_obj_iter_with(defaults_json);
-		while ((key = yyjson_obj_iter_next(&iter))) {
-			val = yyjson_obj_iter_get_val(key);
-			auto key_str = yyjson_get_str(key);
-			auto val_str = yyjson_get_str(val);
-			defaults[key_str] = val_str;
-			// sometimes there is a prefix in the defaults
-			if (std::strcmp(key_str, "prefix") == 0) {
-				prefix = StringUtil::URLDecode(val_str);
-			}
-		}
+
+	auto default_prefix_it = defaults.find("prefix");
+	auto override_prefix_it = overrides.find("prefix");
+
+	if (default_prefix_it != defaults.end()) {
+		// sometimes there is a prefix in the defaults
+		prefix = StringUtil::URLDecode(default_prefix_it->second);
+		defaults.erase(default_prefix_it);
 	}
-	if (overrides_json && yyjson_obj_size(overrides_json) > 0) {
-		yyjson_val *key, *val;
-		yyjson_obj_iter iter = yyjson_obj_iter_with(overrides_json);
-		while ((key = yyjson_obj_iter_next(&iter))) {
-			val = yyjson_obj_iter_get_val(key);
-			auto key_str = yyjson_get_str(key);
-			auto val_str = yyjson_get_str(val);
-			// sometimes the prefix in the overrides. Prefer the override prefix
-			if (std::strcmp(key_str, "prefix") == 0) {
-				prefix = StringUtil::URLDecode(val_str);
-			}
-			// save the rest of the overrides
-			overrides[key_str] = val_str;
-		}
+	if (override_prefix_it != overrides.end()) {
+		// sometimes the prefix in the overrides. Prefer the override prefix
+		prefix = StringUtil::URLDecode(override_prefix_it->second);
+		overrides.erase(override_prefix_it);
 	}
+
 	if (prefix.empty()) {
-		DUCKDB_LOG_DEBUG(context, "iceberg.Catalog.HttpReqeust", "No prefix found for catalog with warehouse value %s",
+		DUCKDB_LOG_DEBUG(context, "iceberg.Catalog.HttpRequest", "No prefix found for catalog with warehouse value %s",
 		                 warehouse);
 	}
 	// TODO: store optional endpoints param as well. We can enforce per catalog the endpoints that
@@ -251,21 +240,23 @@ string IRCatalog::GetCachedValue(string url) const {
 	throw InternalException("Cached value does not exist");
 }
 
-bool IRCatalog::SetCachedValue(string url, string value) {
-	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(value));
-	auto *root = yyjson_doc_get_root(doc.get());
-	auto *credentials = yyjson_obj_get(root, "config");
-	auto credential_size = yyjson_obj_size(credentials);
-	if (credentials && credential_size > 0) {
-		auto expires_at = IcebergUtils::TryGetStrFromObject(credentials, "s3.session-token-expires-at-ms", false);
-		if (expires_at == "") {
-			return false;
-		}
-		auto epochMillis = std::stoll(expires_at);
-		auto expired_time = std::chrono::system_clock::time_point(std::chrono::milliseconds(epochMillis));
-		auto val = make_uniq<MetadataCacheValue>(value, expired_time);
-		metadata_cache[url] = std::move(val);
+//! FIXME: this always returns false???
+bool IRCatalog::SetCachedValue(string url, const string &value, const rest_api_objects::LoadTableResult &result) {
+	//! FIXME: shouldn't this also store the 'storage-credentials' ??
+	if (!result.has_config) {
+		return false;
 	}
+	auto &credentials = result.config;
+	auto expires_at_it = credentials.find("s3.session-token-expires-at-ms");
+	if (expires_at_it == credentials.end()) {
+		return false;
+	}
+
+	auto &expires_at = expires_at_it->second;
+	auto epochMillis = std::stoll(expires_at.c_str());
+	auto expired_time = std::chrono::system_clock::time_point(std::chrono::milliseconds(epochMillis));
+	auto val = make_uniq<MetadataCacheValue>(value, expired_time);
+	metadata_cache[url] = std::move(val);
 	return false;
 }
 

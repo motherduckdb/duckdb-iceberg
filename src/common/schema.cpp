@@ -1,88 +1,51 @@
 #include "iceberg_metadata.hpp"
 #include "iceberg_utils.hpp"
+#include "rest_catalog/objects/list.hpp"
 
 namespace duckdb {
 
 // https://iceberg.apache.org/spec/#schemas
 
 // forward declaration
-static LogicalType ParseTypeValue(yyjson_val *type);
+static LogicalType ParseTypeValue(rest_api_objects::Type &type);
 
-static LogicalType ParseStruct(yyjson_val *struct_type) {
-	D_ASSERT(yyjson_get_type(struct_type) == YYJSON_TYPE_OBJ);
-	D_ASSERT(IcebergUtils::TryGetStrFromObject(struct_type, "type") == "struct");
-
+static LogicalType ParseStruct(rest_api_objects::StructType &type) {
 	child_list_t<LogicalType> children;
-	yyjson_val *field;
-	size_t max, idx;
-
-	auto fields = yyjson_obj_get(struct_type, "fields");
-	yyjson_arr_foreach(fields, idx, max, field) {
+	for (auto &field : type.fields) {
 		// NOTE: 'id', 'required', 'doc', 'initial_default', 'write_default' are ignored for now
-		auto name = IcebergUtils::TryGetStrFromObject(field, "name");
-		auto type_item = yyjson_obj_get(field, "type");
-		auto type = ParseTypeValue(type_item);
+		auto name = field->name;
+		auto type = ParseTypeValue(*field->type);
 		children.push_back(std::make_pair(name, type));
 	}
 	return LogicalType::STRUCT(std::move(children));
 }
 
-static LogicalType ParseList(yyjson_val *list_type) {
-	D_ASSERT(yyjson_get_type(list_type) == YYJSON_TYPE_OBJ);
-	D_ASSERT(IcebergUtils::TryGetStrFromObject(list_type, "type") == "list");
-
+static LogicalType ParseList(rest_api_objects::ListType &type) {
 	// NOTE: 'element-id', 'element-required' are ignored for now
-	auto element = yyjson_obj_get(list_type, "element");
-	auto child_type = ParseTypeValue(element);
+	auto child_type = ParseTypeValue(*type.element);
 	return LogicalType::LIST(child_type);
 }
 
-static LogicalType ParseMap(yyjson_val *map_type) {
-	D_ASSERT(yyjson_get_type(map_type) == YYJSON_TYPE_OBJ);
-	D_ASSERT(IcebergUtils::TryGetStrFromObject(map_type, "type") == "map");
-
+static LogicalType ParseMap(rest_api_objects::MapType &type) {
 	// NOTE: 'key-id', 'value-id', 'value-required' are ignored for now
-	auto key = yyjson_obj_get(map_type, "key");
-	auto value = yyjson_obj_get(map_type, "value");
-
-	auto key_type = ParseTypeValue(key);
-	auto value_type = ParseTypeValue(value);
+	auto key_type = ParseTypeValue(*type.key);
+	auto value_type = ParseTypeValue(*type.value);
 	return LogicalType::MAP(key_type, value_type);
 }
 
-static LogicalType ParseComplexType(yyjson_val *type) {
-	D_ASSERT(yyjson_get_type(type) == YYJSON_TYPE_OBJ);
-	auto type_str = IcebergUtils::TryGetStrFromObject(type, "type");
+static LogicalType ParseTypeValue(rest_api_objects::Type &type) {
+	if (type.has_struct_type) {
+		return ParseStruct(type.struct_type);
+	} else if (type.has_list_type) {
+		return ParseList(type.list_type);
+	} else if (type.has_map_type) {
+		return ParseMap(type.map_type);
+	}
 
-	if (type_str == "struct") {
-		return ParseStruct(type);
+	if (!type.has_primitive_type) {
+		throw InternalException("Invalid type encountered!");
 	}
-	if (type_str == "list") {
-		return ParseList(type);
-	}
-	if (type_str == "map") {
-		return ParseMap(type);
-	}
-	throw InvalidConfigurationException("Unrecognized value found for 'type' (%s)", type_str);
-}
-
-static LogicalType ParseType(yyjson_val *type) {
-	auto val = yyjson_obj_get(type, "type");
-	if (!val) {
-		throw InvalidConfigurationException("Missing required property 'type'");
-	}
-	return ParseTypeValue(val);
-}
-
-static LogicalType ParseTypeValue(yyjson_val *val) {
-	if (yyjson_get_type(val) == YYJSON_TYPE_OBJ) {
-		return ParseComplexType(val);
-	}
-	if (yyjson_get_type(val) != YYJSON_TYPE_STR) {
-		throw InvalidConfigurationException("Expected 'type' to be of json type 'string', found (%s) instead",
-		                                    yyjson_get_type_desc(val));
-	}
-	string type_str = yyjson_get_str(val);
+	auto &type_str = type.primitive_type.value;
 
 	if (type_str == "boolean") {
 		return LogicalType::BOOLEAN;
@@ -140,35 +103,27 @@ static LogicalType ParseTypeValue(yyjson_val *val) {
 	throw InvalidConfigurationException("Encountered an unrecognized type in JSON schema: \"%s\"", type_str);
 }
 
-IcebergColumnDefinition IcebergColumnDefinition::ParseFromJson(yyjson_val *val) {
+IcebergColumnDefinition IcebergColumnDefinition::ParseFromJson(rest_api_objects::StructField &field) {
 	IcebergColumnDefinition ret;
 
-	ret.id = IcebergUtils::TryGetNumFromObject(val, "id");
-	ret.name = IcebergUtils::TryGetStrFromObject(val, "name");
-	ret.type = ParseType(val);
+	ret.id = field.id;
+	ret.name = field.name;
+	ret.type = ParseTypeValue(*field.type);
+	//! FIXME: use 'initial_default' instead
 	ret.default_value = Value(ret.type);
-	ret.required = IcebergUtils::TryGetBoolFromObject(val, "required");
+	ret.required = field.required;
 
 	return ret;
 }
 
 static vector<IcebergColumnDefinition> ParseSchemaFromJson(yyjson_val *schema_json) {
-	// Assert that the top level 'type' is a struct
-	auto type_str = IcebergUtils::TryGetStrFromObject(schema_json, "type");
-	if (type_str != "struct") {
-		throw InvalidConfigurationException("Schema in JSON Metadata is invalid");
-	}
-	D_ASSERT(yyjson_get_type(schema_json) == YYJSON_TYPE_OBJ);
-	D_ASSERT(IcebergUtils::TryGetStrFromObject(schema_json, "type") == "struct");
-	yyjson_val *field;
-	size_t max, idx;
+	auto parsed_schema = rest_api_objects::Schema::FromJSON(schema_json);
+	auto &struct_type = parsed_schema.struct_type;
+
 	vector<IcebergColumnDefinition> ret;
-
-	auto fields = yyjson_obj_get(schema_json, "fields");
-	yyjson_arr_foreach(fields, idx, max, field) {
-		ret.push_back(IcebergColumnDefinition::ParseFromJson(field));
+	for (auto &field : struct_type.fields) {
+		ret.push_back(IcebergColumnDefinition::ParseFromJson(*field));
 	}
-
 	return ret;
 }
 

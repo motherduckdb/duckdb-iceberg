@@ -12,6 +12,8 @@
 #include "storage/authorization/oauth2.hpp"
 #include "curl.hpp"
 
+#include "rest_catalog/objects/list.hpp"
+
 using namespace duckdb_yyjson;
 namespace duckdb {
 
@@ -28,7 +30,10 @@ static string GetTableMetadata(ClientContext &context, IRCatalog &catalog, const
 	request_input.AddHeader("X-Iceberg-Access-Delegation: vended-credentials");
 	string api_result = catalog.auth_handler->GetRequest(context, url, request_input);
 
-	catalog.SetCachedValue(url.GetURL(), api_result);
+	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(api_result));
+	auto *root = yyjson_doc_get_root(doc.get());
+	auto load_table_result = rest_api_objects::LoadTableResult::FromJSON(root);
+	catalog.SetCachedValue(url.GetURL(), api_result, load_table_result);
 	return api_result;
 }
 
@@ -50,18 +55,7 @@ vector<string> IRCAPI::GetCatalogs(ClientContext &context, IRCatalog &catalog) {
 	throw NotImplementedException("ICAPI::GetCatalogs");
 }
 
-static IRCAPIColumnDefinition ParseColumnDefinition(yyjson_val *column_def) {
-	IRCAPIColumnDefinition result;
-	result.name = IcebergUtils::TryGetStrFromObject(column_def, "name");
-	result.type_text = IcebergUtils::TryGetStrFromObject(column_def, "type");
-	result.precision =
-	    (result.type_text == "decimal") ? IcebergUtils::TryGetNumFromObject(column_def, "type_precision") : -1;
-	result.scale = (result.type_text == "decimal") ? IcebergUtils::TryGetNumFromObject(column_def, "type_scale") : -1;
-	result.position = IcebergUtils::TryGetNumFromObject(column_def, "id") - 1;
-	return result;
-}
-
-static void ParseConfigOptions(yyjson_val *config, case_insensitive_map_t<Value> &options) {
+static void ParseConfigOptions(const case_insensitive_map_t<string> &config, case_insensitive_map_t<Value> &options) {
 	//! Set of recognized config parameters and the duckdb secret option that matches it.
 	static const case_insensitive_map_t<string> config_to_option = {{"s3.access-key-id", "key_id"},
 	                                                                {"s3.secret-access-key", "secret"},
@@ -71,31 +65,28 @@ static void ParseConfigOptions(yyjson_val *config, case_insensitive_map_t<Value>
 	                                                                {"client.region", "region"},
 	                                                                {"s3.endpoint", "endpoint"}};
 
-	auto config_size = yyjson_obj_size(config);
-	if (!config || config_size == 0) {
+	if (config.empty()) {
 		return;
 	}
-	for (auto &it : config_to_option) {
-		auto &key = it.first;
-		auto &option = it.second;
-
-		auto *item = yyjson_obj_get(config, key.c_str());
-		if (item) {
-			options[option] = yyjson_get_str(item);
+	for (auto &entry : config) {
+		auto it = config_to_option.find(entry.first);
+		if (it != config_to_option.end()) {
+			options[it->second] = entry.second;
 		}
 	}
-	auto *access_style = yyjson_obj_get(config, "s3.path-style-access");
-	if (access_style) {
-		string value = yyjson_get_str(access_style);
+
+	auto it = config.find("s3.path-style-access");
+	if (it != config.end()) {
 		bool path_style;
-		if (value == "true") {
+		if (it->second == "true") {
 			path_style = true;
-		} else if (value == "false") {
+		} else if (it->second == "false") {
 			path_style = false;
 		} else {
 			throw InvalidInputException("Unexpected value ('%s') for 's3.path-style-access' in 'config' property",
-			                            value);
+			                            it->second);
 		}
+
 		options["use_ssl"] = Value(!path_style);
 		if (path_style) {
 			options["url_style"] = "path";
@@ -125,6 +116,7 @@ IRCAPITableCredentials IRCAPI::GetTableCredentials(ClientContext &context, IRCat
 	string api_result = GetTableMetadataCached(context, catalog, schema, table);
 	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(api_result));
 	auto *root = yyjson_doc_get_root(doc.get());
+	auto load_table_result = rest_api_objects::LoadTableResult::FromJSON(root);
 
 	case_insensitive_map_t<Value> user_defaults;
 	if (catalog.auth_handler->type == IRCAuthorizationType::SIGV4) {
@@ -156,37 +148,27 @@ IRCAPITableCredentials IRCAPI::GetTableCredentials(ClientContext &context, IRCat
 	//! TODO: apply the 'defaults' retrieved from the /v1/config endpoint
 	config_options.insert(user_defaults.begin(), user_defaults.end());
 
-	auto *config_val = yyjson_obj_get(root, "config");
-	ParseConfigOptions(config_val, config_options);
+	if (load_table_result.has_config) {
+		auto &config = load_table_result.config;
+		ParseConfigOptions(config, config_options);
+	}
 
-	auto *storage_credentials = yyjson_obj_get(root, "storage-credentials");
-	auto storage_credentials_size = yyjson_arr_size(storage_credentials);
-	if (storage_credentials && storage_credentials_size > 0) {
-		yyjson_val *storage_credential;
-		size_t index, max;
-		yyjson_arr_foreach(storage_credentials, index, max, storage_credential) {
-			auto *sc_prefix = yyjson_obj_get(storage_credential, "prefix");
-			if (!sc_prefix) {
-				throw InvalidInputException("required property 'prefix' is missing from the StorageCredential schema");
-			}
-
+	if (load_table_result.has_storage_credentials) {
+		auto &storage_credentials = load_table_result.storage_credentials;
+		for (idx_t index = 0; index < storage_credentials.size(); index++) {
+			auto &credential = storage_credentials[index];
 			CreateSecretInput create_secret_input;
 			create_secret_input.on_conflict = OnCreateConflict::REPLACE_ON_CONFLICT;
 			create_secret_input.persist_type = SecretPersistType::TEMPORARY;
 
-			auto prefix_string = yyjson_get_str(sc_prefix);
-			if (!prefix_string) {
-				throw InvalidInputException("property 'prefix' of StorageCredential is NULL");
-			}
-			create_secret_input.scope.push_back(string(prefix_string));
-			create_secret_input.name = StringUtil::Format("%s_%d_%s", secret_base_name, index, prefix_string);
+			create_secret_input.scope.push_back(credential.prefix);
+			create_secret_input.name = StringUtil::Format("%s_%d_%s", secret_base_name, index, credential.prefix);
 			create_secret_input.type = "s3";
 			create_secret_input.provider = "config";
 			create_secret_input.storage_type = "memory";
 			create_secret_input.options = config_options;
 
-			auto *sc_config = yyjson_obj_get(storage_credential, "config");
-			ParseConfigOptions(sc_config, create_secret_input.options);
+			ParseConfigOptions(credential.config, create_secret_input.options);
 			//! TODO: apply the 'overrides' retrieved from the /v1/config endpoint
 			result.storage_credentials.push_back(create_secret_input);
 		}
@@ -210,26 +192,40 @@ IRCAPITableCredentials IRCAPI::GetTableCredentials(ClientContext &context, IRCat
 	return result;
 }
 
-static void populateTableMetadata(IRCAPITable &table, yyjson_val *metadata_root) {
-	table.storage_location = IcebergUtils::TryGetStrFromObject(metadata_root, "metadata-location");
-	auto *metadata = yyjson_obj_get(metadata_root, "metadata");
-	// table_result.table_id = IcebergUtils::TryGetStrFromObject(metadata, "table-uuid");
+static void populateTableMetadata(IRCAPITable &table, const rest_api_objects::LoadTableResult &load_table_result) {
+	if (!load_table_result.has_metadata_location) {
+		throw NotImplementedException(
+		    "metadata-location is expected to be populated, likely missing support for V1 Iceberg");
+	}
+	table.storage_location = load_table_result.metadata_location;
+	auto &metadata = load_table_result.metadata;
+	// table_result.table_id = load_table_result.metadata.table_uuid;
 
-	uint64_t current_schema_id = IcebergUtils::TryGetNumFromObject(metadata, "current-schema-id");
-	auto *schemas = yyjson_obj_get(metadata, "schemas");
-	yyjson_val *schema;
-	size_t schema_idx, schema_max;
+	//! NOTE: these (schema-id and current-schema-id) are saved as int64_t in the parsed structure,
+	//! the spec lists them as 'int', so I think they are really int32_t. (?)
+	//! We parsed them as uint64_t before using the generated JSON->CPP parsing logic.
 	bool found = false;
-	yyjson_arr_foreach(schemas, schema_idx, schema_max, schema) {
-		uint64_t schema_id = IcebergUtils::TryGetNumFromObject(schema, "schema-id");
+	if (!metadata.has_current_schema_id) {
+		//! It's required since v2, but we want to support reading v1 as well, no?
+		throw NotImplementedException("FIXME: We require the 'current-schema-id' always, the spec says it's optional?");
+		//! FIXME: for v1 we should check if `schema` is set and use that instead
+	}
+	int64_t current_schema_id = metadata.current_schema_id;
+	if (!metadata.has_schemas) {
+		throw NotImplementedException("'schemas' is not present! V1 not supported currently");
+		//! FIXME: for v1 we should check if `schema` is set and use that instead (see above)
+	}
+	for (auto &schema : metadata.schemas) {
+		auto &schema_internals = schema.object_1;
+		if (!schema_internals.has_schema_id) {
+			throw NotImplementedException("'schema-id' not present! V1 not supported currently!");
+		}
+		int64_t schema_id = schema_internals.schema_id;
 		if (schema_id == current_schema_id) {
 			found = true;
-			auto *columns = yyjson_obj_get(schema, "fields");
-			yyjson_val *col;
-			size_t col_idx, col_max;
-			yyjson_arr_foreach(columns, col_idx, col_max, col) {
-				auto column_definition = ParseColumnDefinition(col);
-				table.columns.push_back(column_definition);
+			auto &columns = schema.struct_type.fields;
+			for (auto &col : columns) {
+				table.columns.push_back(IcebergColumnDefinition::ParseFromJson(*col));
 			}
 		}
 	}
@@ -258,7 +254,8 @@ IRCAPITable IRCAPI::GetTable(ClientContext &context, IRCatalog &catalog, const s
 	string result = GetTableMetadata(context, catalog, schema, table_result.name);
 	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(result));
 	auto *metadata_root = yyjson_doc_get_root(doc.get());
-	populateTableMetadata(table_result, metadata_root);
+	auto load_table_result = rest_api_objects::LoadTableResult::FromJSON(metadata_root);
+	populateTableMetadata(table_result, load_table_result);
 	return table_result;
 }
 
@@ -274,14 +271,15 @@ vector<IRCAPITable> IRCAPI::GetTables(ClientContext &context, IRCatalog &catalog
 	string api_result = catalog.auth_handler->GetRequest(context, url, request_input);
 	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(api_result));
 	auto *root = yyjson_doc_get_root(doc.get());
-	auto *tables = yyjson_obj_get(root, "identifiers");
-	size_t idx, max;
-	yyjson_val *table;
-	yyjson_arr_foreach(tables, idx, max, table) {
-		auto table_result = GetTable(context, catalog, schema, IcebergUtils::TryGetStrFromObject(table, "name"));
+	auto list_tables_response = rest_api_objects::ListTablesResponse::FromJSON(root);
+
+	if (!list_tables_response.has_identifiers) {
+		throw NotImplementedException("List of 'identifiers' is missing, missing support for Iceberg V1");
+	}
+	for (auto &table : list_tables_response.identifiers) {
+		auto table_result = GetTable(context, catalog, schema, table.name);
 		result.push_back(table_result);
 	}
-
 	return result;
 }
 
@@ -294,15 +292,22 @@ vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IRCatalog &catal
 	string api_result = catalog.auth_handler->GetRequest(context, endpoint_builder, request_input);
 	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(api_result));
 	auto *root = yyjson_doc_get_root(doc.get());
-	//! 'ListNamespacesResponse'
-	auto *schemas = yyjson_obj_get(root, "namespaces");
-	size_t idx, max;
-	yyjson_val *schema;
-	yyjson_arr_foreach(schemas, idx, max, schema) {
+	auto list_namespaces_response = rest_api_objects::ListNamespacesResponse::FromJSON(root);
+	if (!list_namespaces_response.has_namespaces) {
+		//! FIXME: old code expected 'namespaces' to always be present, but it's not a required property
+		return result;
+	}
+	auto &schemas = list_namespaces_response.namespaces;
+	for (auto &schema : schemas) {
 		IRCAPISchema schema_result;
 		schema_result.catalog_name = catalog.GetName();
-		yyjson_val *value = yyjson_arr_get(schema, 0);
-		schema_result.schema_name = yyjson_get_str(value);
+		auto &value = schema.value;
+		if (value.size() != 1) {
+			//! FIXME: we likely want to fix this by concatenating the components with a `.` ?
+			throw NotImplementedException("Only a namespace with a single component is supported currently, found %d",
+			                              value.size());
+		}
+		schema_result.schema_name = value[0];
 		result.push_back(schema_result);
 	}
 

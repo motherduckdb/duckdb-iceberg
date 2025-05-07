@@ -66,23 +66,4 @@ public:
 	int32_t partition_spec_id = NumericLimits<int32_t>::Maximum();
 };
 
-template <class OP>
-vector<typename OP::entry_type> ScanAvroMetadata(const string &scan_name, ClientContext &context, const string &path) {
-	auto scan = make_uniq<AvroScan>(scan_name, context, path);
-
-	ManifestReader manifest_reader(OP::PopulateNameMapping, OP::VerifySchema);
-	manifest_reader.Initialize(std::move(scan));
-	auto manifest_producer = OP::ProduceEntries;
-
-	vector<typename OP::entry_type> ret;
-	while (!manifest_reader.Finished()) {
-		manifest_reader.ReadEntries(
-		    STANDARD_VECTOR_SIZE,
-		    [&ret, manifest_producer](DataChunk &chunk, idx_t offset, idx_t count, const ManifestReaderInput &input) {
-			    return manifest_producer(chunk, offset, count, input, ret);
-		    });
-	}
-	return ret;
-}
-
 } // namespace duckdb

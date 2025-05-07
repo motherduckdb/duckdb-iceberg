@@ -20,8 +20,8 @@ namespace duckdb {
 ICTableSet::ICTableSet(IRCSchemaEntry &schema) : ICInSchemaSet(schema) {
 }
 
-static ColumnDefinition CreateColumnDefinition(ClientContext &context, IRCAPIColumnDefinition &coldef) {
-	return {coldef.name, ICUtils::TypeToLogicalType(context, coldef.type_text)};
+static ColumnDefinition CreateColumnDefinition(ClientContext &context, IcebergColumnDefinition &coldef) {
+	return {coldef.name, coldef.type};
 }
 
 unique_ptr<CatalogEntry> ICTableSet::_CreateCatalogEntry(ClientContext &context, IRCAPITable table) {

@@ -19,13 +19,13 @@ require iceberg
 query IIII
 SELECT * FROM ICEBERG_SNAPSHOTS('data/persistent/iceberg/lineitem_iceberg');
 ----
-1	3776207205136740581	2023-02-15 15:07:54.504	lineitem_iceberg/metadata/snap-3776207205136740581-1-cf3d0be5-cf70-453d-ad8f-48fdc412e608.avro
-2	7635660646343998149	2023-02-15 15:08:14.73	lineitem_iceberg/metadata/snap-7635660646343998149-1-10eaca8a-1e1c-421e-ad6d-b232e5ee23d3.avro
+1	7817332053627255703	2025-05-02 12:21:19.06	lineitem_iceberg/metadata/snap-7817332053627255703-1-787a5996-87e9-4d93-b258-066d524e82cc.avro
+2	2354745328521181395	2025-05-02 12:21:20.005	lineitem_iceberg/metadata/snap-2354745328521181395-1-179b4fb1-0366-4f7d-ad35-99ee8da0abf5.avro
 
 query IIII
 SELECT * FROM ICEBERG_SNAPSHOTS('data/persistent/iceberg/lineitem_iceberg', version='1');
 ----
-1	3776207205136740581	2023-02-15 15:07:54.504	lineitem_iceberg/metadata/snap-3776207205136740581-1-cf3d0be5-cf70-453d-ad8f-48fdc412e608.avro
+1	7817332053627255703	2025-05-02 12:21:19.06	lineitem_iceberg/metadata/snap-7817332053627255703-1-787a5996-87e9-4d93-b258-066d524e82cc.avro
 
 statement error
 SELECT * FROM ICEBERG_SNAPSHOTS('data/persistent/iceberg/lineitem_iceberg', version="1", version_name_format='v%s%s.metadata.gz');
@@ -35,12 +35,12 @@ Invalid Configuration Error: Iceberg metadata file not found for table version '
 query IIII
 SELECT * FROM ICEBERG_SNAPSHOTS('data/persistent/iceberg/lineitem_iceberg', version="1", version_name_format='v%s%s.metadata.json');
 ----
-1	3776207205136740581	2023-02-15 15:07:54.504	lineitem_iceberg/metadata/snap-3776207205136740581-1-cf3d0be5-cf70-453d-ad8f-48fdc412e608.avro
+1	7817332053627255703	2025-05-02 12:21:19.06	lineitem_iceberg/metadata/snap-7817332053627255703-1-787a5996-87e9-4d93-b258-066d524e82cc.avro
 
 query IIII
 SELECT * FROM ICEBERG_SNAPSHOTS('data/persistent/iceberg/lineitem_iceberg', version='1');
 ----
-1	3776207205136740581	2023-02-15 15:07:54.504	lineitem_iceberg/metadata/snap-3776207205136740581-1-cf3d0be5-cf70-453d-ad8f-48fdc412e608.avro
+1	7817332053627255703	2025-05-02 12:21:19.06	lineitem_iceberg/metadata/snap-7817332053627255703-1-787a5996-87e9-4d93-b258-066d524e82cc.avro
 
 statement error
 SELECT * FROM ICEBERG_SNAPSHOTS('data/persistent/iceberg/lineitem_iceberg_nonexistent');
@@ -68,19 +68,19 @@ SET unsafe_enable_version_guessing=true;
 query IIII
 SELECT * FROM ICEBERG_SNAPSHOTS('data/persistent/iceberg/lineitem_iceberg_no_hint');
 ----
-1	3776207205136740581	2023-02-15 15:07:54.504	lineitem_iceberg/metadata/snap-3776207205136740581-1-cf3d0be5-cf70-453d-ad8f-48fdc412e608.avro
-2	7635660646343998149	2023-02-15 15:08:14.73	lineitem_iceberg/metadata/snap-7635660646343998149-1-10eaca8a-1e1c-421e-ad6d-b232e5ee23d3.avro
+1	7817332053627255703	2025-05-02 12:21:19.06	lineitem_iceberg/metadata/snap-7817332053627255703-1-787a5996-87e9-4d93-b258-066d524e82cc.avro
+2	2354745328521181395	2025-05-02 12:21:20.005	lineitem_iceberg/metadata/snap-2354745328521181395-1-179b4fb1-0366-4f7d-ad35-99ee8da0abf5.avro
 
 query IIII
 SELECT * FROM ICEBERG_SNAPSHOTS('data/persistent/iceberg/lineitem_iceberg_no_hint', version='1');
 ----
-1	3776207205136740581	2023-02-15 15:07:54.504	lineitem_iceberg/metadata/snap-3776207205136740581-1-cf3d0be5-cf70-453d-ad8f-48fdc412e608.avro
+1	7817332053627255703	2025-05-02 12:21:19.06	lineitem_iceberg/metadata/snap-7817332053627255703-1-787a5996-87e9-4d93-b258-066d524e82cc.avro
 
 query IIII
 SELECT * FROM ICEBERG_SNAPSHOTS('data/persistent/iceberg/lineitem_iceberg_no_hint', version="?");
 ----
-1	3776207205136740581	2023-02-15 15:07:54.504	lineitem_iceberg/metadata/snap-3776207205136740581-1-cf3d0be5-cf70-453d-ad8f-48fdc412e608.avro
-2	7635660646343998149	2023-02-15 15:08:14.73	lineitem_iceberg/metadata/snap-7635660646343998149-1-10eaca8a-1e1c-421e-ad6d-b232e5ee23d3.avro
+1	7817332053627255703	2025-05-02 12:21:19.06	lineitem_iceberg/metadata/snap-7817332053627255703-1-787a5996-87e9-4d93-b258-066d524e82cc.avro
+2	2354745328521181395	2025-05-02 12:21:20.005	lineitem_iceberg/metadata/snap-2354745328521181395-1-179b4fb1-0366-4f7d-ad35-99ee8da0abf5.avro
 
 query IIII
 SELECT * FROM ICEBERG_SNAPSHOTS('data/persistent/iceberg/lineitem_iceberg_gz_no_hint', metadata_compression_codec="gzip");

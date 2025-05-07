@@ -16,3 +16,7 @@ scripts/data_generators/__pycache__/
 scripts/data_generators/*/__pycache__/
 scripts/data_generators/*/*/*.parquet
 data/generated/*
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]

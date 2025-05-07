@@ -13,29 +13,128 @@ static void ManifestNameMapping(idx_t column_id, const LogicalType &type, const 
 	name_to_vec[name] = ColumnIndex(column_id);
 }
 
-idx_t IcebergManifestV1::ProduceEntries(DataChunk &chunk, idx_t offset, idx_t count, const ManifestReaderInput &input,
-                                        vector<entry_type> &result) {
+template <idx_t ICEBERG_VERSION>
+idx_t ProduceManifests(DataChunk &chunk, idx_t offset, idx_t count, const ManifestReaderInput &input,
+                       vector<IcebergManifest> &result) {
 	auto &name_to_vec = input.name_to_vec;
 	auto manifest_path = FlatVector::GetData<string_t>(chunk.data[name_to_vec.at("manifest_path").GetPrimaryIndex()]);
 	auto partition_spec_id =
 	    FlatVector::GetData<int32_t>(chunk.data[name_to_vec.at("partition_spec_id").GetPrimaryIndex()]);
+
+	int32_t *content = nullptr;
+	int64_t *sequence_number = nullptr;
+	int64_t *added_rows_count = nullptr;
+	int64_t *existing_rows_count = nullptr;
+
+	if (ICEBERG_VERSION > 1) {
+		//! 'content'
+		content = FlatVector::GetData<int32_t>(chunk.data[name_to_vec.at("content").GetPrimaryIndex()]);
+		//! 'sequence_number'
+		sequence_number = FlatVector::GetData<int64_t>(chunk.data[name_to_vec.at("sequence_number").GetPrimaryIndex()]);
+		//! 'added_rows_count'
+		added_rows_count =
+		    FlatVector::GetData<int64_t>(chunk.data[name_to_vec.at("added_rows_count").GetPrimaryIndex()]);
+		//! 'existing_rows_count'
+		existing_rows_count =
+		    FlatVector::GetData<int64_t>(chunk.data[name_to_vec.at("existing_rows_count").GetPrimaryIndex()]);
+	}
+
+	//! 'partitions'
+	list_entry_t *field_summary;
+	optional_ptr<Vector> contains_null = nullptr;
+	optional_ptr<Vector> contains_nan = nullptr;
+	optional_ptr<Vector> lower_bound = nullptr;
+	optional_ptr<Vector> upper_bound = nullptr;
+
+	bool *contains_null_data = nullptr;
+	bool *contains_nan_data = nullptr;
+	string_t *lower_bound_data = nullptr;
+	string_t *upper_bound_data = nullptr;
+
+	auto partitions_it = name_to_vec.find("partitions");
+	if (partitions_it != name_to_vec.end()) {
+		auto &partitions = chunk.data[name_to_vec.at("partitions").GetPrimaryIndex()];
+
+		auto &field_summary_vec = ListVector::GetEntry(partitions);
+		field_summary = FlatVector::GetData<list_entry_t>(partitions);
+		auto &child_vectors = StructVector::GetEntries(field_summary_vec);
+		auto &child_types = StructType::GetChildTypes(ListType::GetChildType(partitions.GetType()));
+		for (idx_t i = 0; i < child_types.size(); i++) {
+			auto &kv = child_types[i];
+			auto &name = kv.first;
+
+			if (StringUtil::CIEquals(name, "contains_null")) {
+				contains_null = child_vectors[i].get();
+				contains_null_data = FlatVector::GetData<bool>(*child_vectors[i]);
+			} else if (StringUtil::CIEquals(name, "contains_nan")) {
+				contains_nan = child_vectors[i].get();
+				contains_nan_data = FlatVector::GetData<bool>(*child_vectors[i]);
+			} else if (StringUtil::CIEquals(name, "lower_bound")) {
+				lower_bound = child_vectors[i].get();
+				lower_bound_data = FlatVector::GetData<string_t>(*child_vectors[i]);
+			} else if (StringUtil::CIEquals(name, "upper_bound")) {
+				upper_bound = child_vectors[i].get();
+				upper_bound_data = FlatVector::GetData<string_t>(*child_vectors[i]);
+			}
+		}
+	}
 
 	for (idx_t i = 0; i < count; i++) {
 		idx_t index = i + offset;
 
 		IcebergManifest manifest;
 		manifest.manifest_path = manifest_path[index].GetString();
-		manifest.content = IcebergManifestContentType::DATA;
-		manifest.sequence_number = 0;
 		manifest.partition_spec_id = partition_spec_id[index];
+		manifest.sequence_number = 0;
+
+		if (ICEBERG_VERSION > 1) {
+			manifest.content = IcebergManifestContentType(content[index]);
+			manifest.sequence_number = sequence_number[index];
+			manifest.added_rows_count = added_rows_count[index];
+			manifest.existing_rows_count = existing_rows_count[index];
+		} else {
+			manifest.content = IcebergManifestContentType::DATA;
+			manifest.sequence_number = 0;
+			manifest.added_rows_count = 0;
+			manifest.existing_rows_count = 0;
+		}
+
+		if (field_summary) {
+			auto list_entry = field_summary[index];
+			for (idx_t j = 0; j < list_entry.length; j++) {
+				FieldSummary summary;
+				auto list_idx = list_entry.offset + j;
+				if (contains_null && FlatVector::Validity(*contains_null).RowIsValid(list_idx)) {
+					summary.contains_null = contains_null_data[list_idx];
+				}
+				if (contains_nan && FlatVector::Validity(*contains_nan).RowIsValid(list_idx)) {
+					summary.contains_nan = contains_nan_data[list_idx];
+				}
+				if (lower_bound && FlatVector::Validity(*lower_bound).RowIsValid(list_idx)) {
+					summary.lower_bound = lower_bound_data[list_idx].GetString();
+				}
+				if (upper_bound && FlatVector::Validity(*upper_bound).RowIsValid(list_idx)) {
+					summary.upper_bound = upper_bound_data[list_idx].GetString();
+				}
+				manifest.field_summary.push_back(summary);
+			}
+		}
 
 		result.push_back(manifest);
 	}
 	return count;
 }
 
+idx_t IcebergManifestV1::ProduceEntries(DataChunk &chunk, idx_t offset, idx_t count, const ManifestReaderInput &input,
+                                        vector<entry_type> &result) {
+	return ProduceManifests<IcebergManifestV1::FORMAT_VERSION>(chunk, offset, count, input, result);
+}
+
 bool IcebergManifestV1::VerifySchema(const case_insensitive_map_t<ColumnIndex> &name_to_vec) {
 	if (!name_to_vec.count("manifest_path")) {
+		return false;
+	}
+	if (!name_to_vec.count("partition_spec_id")) {
 		return false;
 	}
 	return true;
@@ -48,26 +147,7 @@ void IcebergManifestV1::PopulateNameMapping(idx_t column_id, const LogicalType &
 
 idx_t IcebergManifestV2::ProduceEntries(DataChunk &chunk, idx_t offset, idx_t count, const ManifestReaderInput &input,
                                         vector<entry_type> &result) {
-	auto &name_to_vec = input.name_to_vec;
-	auto manifest_path = FlatVector::GetData<string_t>(chunk.data[name_to_vec.at("manifest_path").GetPrimaryIndex()]);
-	auto content = FlatVector::GetData<int32_t>(chunk.data[name_to_vec.at("content").GetPrimaryIndex()]);
-	auto sequence_number =
-	    FlatVector::GetData<int64_t>(chunk.data[name_to_vec.at("sequence_number").GetPrimaryIndex()]);
-	auto partition_spec_id =
-	    FlatVector::GetData<int32_t>(chunk.data[name_to_vec.at("partition_spec_id").GetPrimaryIndex()]);
-
-	for (idx_t i = 0; i < count; i++) {
-		idx_t index = i + offset;
-
-		IcebergManifest manifest;
-		manifest.manifest_path = manifest_path[index].GetString();
-		manifest.content = IcebergManifestContentType(content[index]);
-		manifest.sequence_number = sequence_number[index];
-		manifest.partition_spec_id = partition_spec_id[index];
-
-		result.push_back(manifest);
-	}
-	return count;
+	return ProduceManifests<IcebergManifestV2::FORMAT_VERSION>(chunk, offset, count, input, result);
 }
 
 bool IcebergManifestV2::VerifySchema(const case_insensitive_map_t<ColumnIndex> &name_to_vec) {
@@ -107,25 +187,97 @@ static void EntryNameMapping(idx_t column_id, const LogicalType &type, const str
 	}
 }
 
-idx_t IcebergManifestEntryV1::ProduceEntries(DataChunk &chunk, idx_t offset, idx_t count,
-                                             const ManifestReaderInput &input, vector<entry_type> &result) {
+static unordered_map<int32_t, string> GetBounds(Vector &bounds, idx_t index) {
+	auto &bounds_child = ListVector::GetEntry(bounds);
+	auto keys = FlatVector::GetData<int32_t>(*StructVector::GetEntries(bounds_child)[0]);
+	auto values = FlatVector::GetData<string_t>(*StructVector::GetEntries(bounds_child)[1]);
+	auto bounds_list = FlatVector::GetData<list_entry_t>(bounds);
+
+	unordered_map<int32_t, string> parsed_bounds;
+
+	auto &validity = FlatVector::Validity(bounds);
+	if (!validity.RowIsValid(index)) {
+		return parsed_bounds;
+	}
+
+	auto list_entry = bounds_list[index];
+	for (idx_t j = 0; j < list_entry.length; j++) {
+		auto list_idx = list_entry.offset + j;
+		parsed_bounds[keys[list_idx]] = values[list_idx].GetString();
+	}
+	return parsed_bounds;
+}
+
+static vector<int32_t> GetEqualityIds(Vector &equality_ids, idx_t index) {
+	vector<int32_t> result;
+
+	if (!FlatVector::Validity(equality_ids).RowIsValid(index)) {
+		return result;
+	}
+	auto &equality_ids_child = ListVector::GetEntry(equality_ids);
+	auto equality_ids_data = FlatVector::GetData<int32_t>(equality_ids_child);
+	auto equality_ids_list = FlatVector::GetData<list_entry_t>(equality_ids);
+	auto list_entry = equality_ids_list[index];
+
+	for (idx_t j = 0; j < list_entry.length; j++) {
+		auto list_idx = list_entry.offset + j;
+		result.push_back(equality_ids_data[list_idx]);
+	}
+
+	return result;
+}
+
+template <idx_t ICEBERG_VERSION>
+idx_t ProduceManifestEntries(DataChunk &chunk, idx_t offset, idx_t count, const ManifestReaderInput &input,
+                             vector<IcebergManifestEntry> &result) {
 	auto &name_to_vec = input.name_to_vec;
 	auto status = FlatVector::GetData<int32_t>(chunk.data[name_to_vec.at("status").GetPrimaryIndex()]);
 
 	auto file_path_idx = name_to_vec.at("file_path");
 	auto data_file_idx = file_path_idx.GetPrimaryIndex();
 	auto &child_entries = StructVector::GetEntries(chunk.data[data_file_idx]);
-	D_ASSERT(name_to_vec.at("file_format").GetPrimaryIndex());
-	D_ASSERT(name_to_vec.at("record_count").GetPrimaryIndex());
+	D_ASSERT(name_to_vec.at("file_format").GetPrimaryIndex() == data_file_idx);
+	D_ASSERT(name_to_vec.at("record_count").GetPrimaryIndex() == data_file_idx);
+	if (ICEBERG_VERSION > 1) {
+		D_ASSERT(name_to_vec.at("content").GetPrimaryIndex() == data_file_idx);
+	}
+	optional_ptr<Vector> equality_ids;
+	optional_ptr<Vector> sequence_number;
+	int32_t *content;
 
 	auto partition_idx = name_to_vec.at("partition");
+	if (ICEBERG_VERSION > 1) {
+		auto equality_ids_it = name_to_vec.find("equality_ids");
+		if (equality_ids_it != name_to_vec.end()) {
+			equality_ids = *child_entries[equality_ids_it->second.GetChildIndex(0).GetPrimaryIndex()];
+		}
+		auto sequence_number_it = name_to_vec.find("sequence_number");
+		if (sequence_number_it != name_to_vec.end()) {
+			sequence_number = chunk.data[sequence_number_it->second.GetPrimaryIndex()];
+		}
+		content =
+		    FlatVector::GetData<int32_t>(*child_entries[name_to_vec.at("content").GetChildIndex(0).GetPrimaryIndex()]);
+	}
 
 	auto file_path = FlatVector::GetData<string_t>(*child_entries[file_path_idx.GetChildIndex(0).GetPrimaryIndex()]);
 	auto file_format =
 	    FlatVector::GetData<string_t>(*child_entries[name_to_vec.at("file_format").GetChildIndex(0).GetPrimaryIndex()]);
 	auto record_count =
 	    FlatVector::GetData<int64_t>(*child_entries[name_to_vec.at("record_count").GetChildIndex(0).GetPrimaryIndex()]);
-	auto &partition_vec = *child_entries[partition_idx.GetChildIndex(0).GetPrimaryIndex()];
+	auto file_size_in_bytes = FlatVector::GetData<int64_t>(
+	    *child_entries[name_to_vec.at("file_size_in_bytes").GetChildIndex(0).GetPrimaryIndex()]);
+	optional_ptr<Vector> lower_bounds;
+	optional_ptr<Vector> upper_bounds;
+
+	auto lower_bounds_it = name_to_vec.find("lower_bounds");
+	if (lower_bounds_it != name_to_vec.end()) {
+		lower_bounds = *child_entries[lower_bounds_it->second.GetChildIndex(0).GetPrimaryIndex()];
+	}
+	auto upper_bounds_it = name_to_vec.find("upper_bounds");
+	if (upper_bounds_it != name_to_vec.end()) {
+		upper_bounds = *child_entries[upper_bounds_it->second.GetChildIndex(0).GetPrimaryIndex()];
+	}
+	auto &partition_vec = child_entries[partition_idx.GetChildIndex(0).GetPrimaryIndex()];
 
 	idx_t produced = 0;
 	for (idx_t i = 0; i < count; i++) {
@@ -134,22 +286,58 @@ idx_t IcebergManifestEntryV1::ProduceEntries(DataChunk &chunk, idx_t offset, idx
 		IcebergManifestEntry entry;
 
 		entry.status = (IcebergManifestEntryStatusType)status[index];
-		entry.content = IcebergManifestEntryContentType::DATA;
-		entry.file_path = file_path[index].GetString();
-		entry.file_format = file_format[index].GetString();
-		entry.record_count = record_count[index];
-		entry.sequence_number = input.sequence_number;
-		entry.partition = partition_vec.GetValue(index);
-		entry.partition_spec_id = input.partition_spec_id;
-
 		if (input.skip_deleted && entry.status == IcebergManifestEntryStatusType::DELETED) {
 			//! Skip this entry, we don't care about deleted entries
 			continue;
 		}
+
+		entry.file_path = file_path[index].GetString();
+		entry.file_format = file_format[index].GetString();
+		entry.record_count = record_count[index];
+		entry.file_size_in_bytes = file_size_in_bytes[index];
+
+		if (lower_bounds && upper_bounds) {
+			entry.lower_bounds = GetBounds(*lower_bounds, index);
+			entry.upper_bounds = GetBounds(*upper_bounds, index);
+		}
+
+		if (ICEBERG_VERSION > 1) {
+			entry.content = (IcebergManifestEntryContentType)content[index];
+			if (equality_ids) {
+				entry.equality_ids = GetEqualityIds(*equality_ids, index);
+			}
+
+			if (sequence_number) {
+				auto sequence_numbers = FlatVector::GetData<int64_t>(*sequence_number);
+				if (FlatVector::Validity(*sequence_number).RowIsValid(index)) {
+					entry.sequence_number = sequence_numbers[index];
+				} else {
+					//! Value should only be NULL for ADDED manifest entries, to support inheritance
+					D_ASSERT(entry.status == IcebergManifestEntryStatusType::ADDED);
+					entry.sequence_number = input.sequence_number;
+				}
+			} else {
+				//! Default to sequence number 0
+				//! (The 'manifest_file' should also have defaulted to 0)
+				D_ASSERT(input.sequence_number == 0);
+				entry.sequence_number = 0;
+			}
+		} else {
+			entry.sequence_number = input.sequence_number;
+			entry.content = IcebergManifestEntryContentType::DATA;
+		}
+
+		entry.partition_spec_id = input.partition_spec_id;
+		entry.partition = partition_vec->GetValue(index);
 		produced++;
 		result.push_back(entry);
 	}
 	return produced;
+}
+
+idx_t IcebergManifestEntryV1::ProduceEntries(DataChunk &chunk, idx_t offset, idx_t count,
+                                             const ManifestReaderInput &input, vector<entry_type> &result) {
+	return ProduceManifestEntries<IcebergManifestEntryV1::FORMAT_VERSION>(chunk, offset, count, input, result);
 }
 
 bool IcebergManifestEntryV1::VerifySchema(const case_insensitive_map_t<ColumnIndex> &name_to_vec) {
@@ -173,101 +361,9 @@ void IcebergManifestEntryV1::PopulateNameMapping(idx_t column_id, const LogicalT
 	EntryNameMapping(column_id, type, name, name_to_vec);
 }
 
-static vector<int32_t> GetEqualityIds(Vector &equality_ids, idx_t index) {
-	vector<int32_t> result;
-
-	if (!FlatVector::Validity(equality_ids).RowIsValid(index)) {
-		return result;
-	}
-	auto &equality_ids_child = ListVector::GetEntry(equality_ids);
-	auto equality_ids_data = FlatVector::GetData<int32_t>(equality_ids_child);
-	auto equality_ids_list = FlatVector::GetData<list_entry_t>(equality_ids);
-	auto list_entry = equality_ids_list[index];
-
-	for (idx_t j = 0; j < list_entry.length; j++) {
-		auto list_idx = list_entry.offset + j;
-		result.push_back(equality_ids_data[list_idx]);
-	}
-
-	return result;
-}
-
 idx_t IcebergManifestEntryV2::ProduceEntries(DataChunk &chunk, idx_t offset, idx_t count,
                                              const ManifestReaderInput &input, vector<entry_type> &result) {
-	auto &name_to_vec = input.name_to_vec;
-	auto status = FlatVector::GetData<int32_t>(chunk.data[name_to_vec.at("status").GetPrimaryIndex()]);
-
-	auto file_path_idx = name_to_vec.at("file_path");
-	auto data_file_idx = file_path_idx.GetPrimaryIndex();
-	auto &child_entries = StructVector::GetEntries(chunk.data[data_file_idx]);
-	D_ASSERT(name_to_vec.at("file_format").GetPrimaryIndex() == data_file_idx);
-	D_ASSERT(name_to_vec.at("record_count").GetPrimaryIndex() == data_file_idx);
-	D_ASSERT(name_to_vec.at("content").GetPrimaryIndex() == data_file_idx);
-	optional_ptr<Vector> equality_ids;
-	optional_ptr<Vector> sequence_number;
-
-	auto equality_ids_it = name_to_vec.find("equality_ids");
-	if (equality_ids_it != name_to_vec.end()) {
-		equality_ids = *child_entries[equality_ids_it->second.GetChildIndex(0).GetPrimaryIndex()];
-	}
-	auto partition_idx = name_to_vec.at("partition");
-
-	auto sequence_number_it = name_to_vec.find("sequence_number");
-	if (sequence_number_it != name_to_vec.end()) {
-		sequence_number = chunk.data[sequence_number_it->second.GetPrimaryIndex()];
-	}
-
-	auto content =
-	    FlatVector::GetData<int32_t>(*child_entries[name_to_vec.at("content").GetChildIndex(0).GetPrimaryIndex()]);
-	auto file_path = FlatVector::GetData<string_t>(*child_entries[file_path_idx.GetChildIndex(0).GetPrimaryIndex()]);
-	auto file_format =
-	    FlatVector::GetData<string_t>(*child_entries[name_to_vec.at("file_format").GetChildIndex(0).GetPrimaryIndex()]);
-	auto record_count =
-	    FlatVector::GetData<int64_t>(*child_entries[name_to_vec.at("record_count").GetChildIndex(0).GetPrimaryIndex()]);
-	auto &partition_vec = child_entries[partition_idx.GetChildIndex(0).GetPrimaryIndex()];
-
-	idx_t produced = 0;
-	for (idx_t i = 0; i < count; i++) {
-		idx_t index = i + offset;
-
-		IcebergManifestEntry entry;
-
-		entry.status = (IcebergManifestEntryStatusType)status[index];
-		entry.content = (IcebergManifestEntryContentType)content[index];
-		entry.file_path = file_path[index].GetString();
-		entry.file_format = file_format[index].GetString();
-		entry.record_count = record_count[index];
-
-		if (input.skip_deleted && entry.status == IcebergManifestEntryStatusType::DELETED) {
-			//! Skip this entry, we don't care about deleted entries
-			continue;
-		}
-		if (equality_ids) {
-			entry.equality_ids = GetEqualityIds(*equality_ids, index);
-		}
-
-		if (sequence_number) {
-			auto sequence_numbers = FlatVector::GetData<int64_t>(*sequence_number);
-			if (FlatVector::Validity(*sequence_number).RowIsValid(index)) {
-				entry.sequence_number = sequence_numbers[index];
-			} else {
-				//! Value should only be NULL for ADDED manifest entries, to support inheritance
-				D_ASSERT(entry.status == IcebergManifestEntryStatusType::ADDED);
-				entry.sequence_number = input.sequence_number;
-			}
-		} else {
-			//! Default to sequence number 0
-			//! (The 'manifest_file' should also have defaulted to 0)
-			D_ASSERT(input.sequence_number == 0);
-			entry.sequence_number = 0;
-		}
-		entry.partition_spec_id = input.partition_spec_id;
-
-		entry.partition = partition_vec->GetValue(index);
-		produced++;
-		result.push_back(entry);
-	}
-	return produced;
+	return ProduceManifestEntries<IcebergManifestEntryV2::FORMAT_VERSION>(chunk, offset, count, input, result);
 }
 
 bool IcebergManifestEntryV2::VerifySchema(const case_insensitive_map_t<ColumnIndex> &name_to_vec) {

@@ -1,0 +1,59 @@
+# name: test/sql/local/iceberg_scans/iceberg_cardinality_estimates.test
+# description: test iceberg snapshots function
+# group: [iceberg_scans]
+
+require avro
+
+require parquet
+
+require iceberg
+
+require-env DUCKDB_ICEBERG_HAVE_GENERATED_DATA
+
+# only 2 data files
+query I
+select count(*) from ICEBERG_METADATA('data/generated/iceberg/spark-local/default/lineitem_001_deletes') where manifest_content = 'DATA';
+----
+2
+
+# only 1 delete files
+query I
+select count(*) from ICEBERG_METADATA('data/generated/iceberg/spark-local/default/lineitem_001_deletes') where manifest_content = 'DELETE';
+----
+1
+
+query II
+explain select * from ICEBERG_SCAN('data/generated/iceberg/spark-local/default/lineitem_001_deletes');
+----
+physical_plan	<REGEX>:.*~60175.*
+
+
+# check we estimated it correctlry
+query I
+select count(*) from ICEBERG_SCAN('data/generated/iceberg/spark-local/default/lineitem_001_deletes');
+----
+60175
+
+
+query I
+select count(*) from ICEBERG_METADATA('data/generated/iceberg/spark-local/default/many_adds_deletes') where manifest_content = 'DATA';
+----
+8
+
+# only 4 delete files
+query I
+select count(*) from ICEBERG_METADATA('data/generated/iceberg/spark-local/default/many_adds_deletes') where manifest_content = 'DELETE';
+----
+4
+
+query II
+explain select count(*) from ICEBERG_SCAN('data/generated/iceberg/spark-local/default/many_adds_deletes');
+----
+physical_plan	<REGEX>:.*~40000.*
+
+
+query I
+select count(*) from ICEBERG_SCAN('data/generated/iceberg/spark-local/default/many_adds_deletes');
+----
+40000
+

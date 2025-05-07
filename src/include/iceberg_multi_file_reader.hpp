@@ -102,6 +102,11 @@ public:
 public:
 	//! MultiFileList API
 	void Bind(vector<LogicalType> &return_types, vector<string> &names);
+	unique_ptr<IcebergMultiFileList> PushdownInternal(ClientContext &context, TableFilterSet &new_filters) const;
+	unique_ptr<MultiFileList> DynamicFilterPushdown(ClientContext &context, const MultiFileOptions &options,
+	                                                const vector<string> &names, const vector<LogicalType> &types,
+	                                                const vector<column_t> &column_ids,
+	                                                TableFilterSet &filters) const override;
 	unique_ptr<MultiFileList> ComplexFilterPushdown(ClientContext &context, const MultiFileOptions &options,
 	                                                MultiFilePushdownInfo &info,
 	                                                vector<unique_ptr<Expression>> &filters) override;
@@ -121,18 +126,22 @@ public:
 	void ProcessDeletes(const vector<MultiFileColumnDefinition> &global_columns) const;
 
 protected:
+	bool ManifestMatchesFilter(IcebergManifest &manifest);
+	bool FileMatchesFilter(IcebergManifestEntry &file);
 	//! Get the i-th expanded file
 	OpenFileInfo GetFile(idx_t i) override;
 
 	// TODO: How to guarantee we only call this after the filter pushdown?
-	void InitializeFiles();
+	void InitializeFiles(lock_guard<mutex> &guard);
 
 public:
-	mutex lock;
+	mutable mutex lock;
 	// idx_t version;
 
 	//! ComplexFilterPushdown results
+	bool have_bound = false;
 	vector<string> names;
+	vector<LogicalType> types;
 	TableFilterSet table_filters;
 
 	unique_ptr<ManifestReader> manifest_reader;

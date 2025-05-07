@@ -64,6 +64,16 @@ static string IcebergManifestEntryContentTypeToString(IcebergManifestEntryConten
 	}
 }
 
+struct FieldSummary {
+	bool contains_null = false;
+	//! Optional
+	bool contains_nan = false;
+	//! Optional
+	string lower_bound;
+	//! Optional
+	string upper_bound;
+};
+
 //! An entry in the manifest list file (top level AVRO file)
 struct IcebergManifest {
 public:
@@ -73,8 +83,14 @@ public:
 	sequence_number_t sequence_number;
 	//! either data or deletes
 	IcebergManifestContentType content;
+	//! added rows in the manifest
+	idx_t added_rows_count = 0;
+	//! existing rows in the manifest
+	idx_t existing_rows_count = 0;
 	//! The id of the partition spec referenced by this manifest (and the data files that are part of it)
 	int32_t partition_spec_id;
+
+	vector<FieldSummary> field_summary;
 
 public:
 	void Print() {
@@ -105,11 +121,14 @@ public:
 	string file_format;
 	vector<int32_t> equality_ids;
 	int64_t record_count;
+	unordered_map<int32_t, string> lower_bounds;
+	unordered_map<int32_t, string> upper_bounds;
 	Value partition;
 	//! Inherited from the 'manifest_file' if NULL and 'status == EXISTING'
 	sequence_number_t sequence_number;
 	//! Inherited from the 'manifest_file'
 	int32_t partition_spec_id;
+	int64_t file_size_in_bytes;
 
 public:
 	void Print() {

@@ -13,6 +13,7 @@ parser.add_argument(
     choices=["polaris", "lakekeeper", "local", "spark-rest"],
     help="Specify one or more targets to generate data for",
 )
+parser.add_argument("--test", help='Generate only a specific test (for debugging)', action='store')
 
 args = parser.parse_args()
 
@@ -20,6 +21,9 @@ test_classes = IcebergTest.registry
 tests = []
 for test_class in test_classes:
     tests.append(test_class())
+
+if args.test:
+    tests = [x for x in tests if x.table == args.test]
 
 for target in args.targets:
     connection_class = IcebergConnection.get_class(target)

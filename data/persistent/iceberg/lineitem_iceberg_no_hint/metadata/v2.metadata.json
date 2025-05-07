@@ -1,9 +1,9 @@
 {
   "format-version" : 2,
-  "table-uuid" : "a319422b-6f8c-44d0-90ba-96242d9a1d7b",
+  "table-uuid" : "cc2317c6-1937-45fc-b29f-935ff34bcf22",
   "location" : "./lineitem_iceberg",
   "last-sequence-number" : 2,
-  "last-updated-ms" : 1676473694730,
+  "last-updated-ms" : 1746188480005,
   "last-column-id" : 16,
   "current-schema-id" : 0,
   "schemas" : [ {
@@ -13,27 +13,27 @@
       "id" : 1,
       "name" : "l_orderkey",
       "required" : false,
-      "type" : "int"
+      "type" : "long"
     }, {
       "id" : 2,
       "name" : "l_partkey",
       "required" : false,
-      "type" : "int"
+      "type" : "long"
     }, {
       "id" : 3,
       "name" : "l_suppkey",
       "required" : false,
-      "type" : "int"
+      "type" : "long"
     }, {
       "id" : 4,
       "name" : "l_linenumber",
       "required" : false,
-      "type" : "int"
+      "type" : "long"
     }, {
       "id" : 5,
       "name" : "l_quantity",
       "required" : false,
-      "type" : "int"
+      "type" : "decimal(15, 2)"
     }, {
       "id" : 6,
       "name" : "l_extendedprice",
@@ -103,70 +103,72 @@
     "fields" : [ ]
   } ],
   "properties" : {
-    "owner" : "root",
+    "owner" : "thijs",
+    "write.parquet.compression-codec" : "zstd",
     "write.update.mode" : "merge-on-read"
   },
-  "current-snapshot-id" : 7635660646343998149,
+  "current-snapshot-id" : 2354745328521181395,
   "refs" : {
     "main" : {
-      "snapshot-id" : 7635660646343998149,
+      "snapshot-id" : 2354745328521181395,
       "type" : "branch"
     }
   },
   "snapshots" : [ {
     "sequence-number" : 1,
-    "snapshot-id" : 3776207205136740581,
-    "timestamp-ms" : 1676473674504,
+    "snapshot-id" : 7817332053627255703,
+    "timestamp-ms" : 1746188479060,
     "summary" : {
       "operation" : "append",
-      "spark.app.id" : "local-1676472783435",
+      "spark.app.id" : "local-1746188475876",
       "added-data-files" : "1",
       "added-records" : "60175",
-      "added-files-size" : "1390176",
+      "added-files-size" : "1406875",
       "changed-partition-count" : "1",
       "total-records" : "60175",
-      "total-files-size" : "1390176",
+      "total-files-size" : "1406875",
       "total-data-files" : "1",
       "total-delete-files" : "0",
       "total-position-deletes" : "0",
       "total-equality-deletes" : "0"
     },
-    "manifest-list" : "lineitem_iceberg/metadata/snap-3776207205136740581-1-cf3d0be5-cf70-453d-ad8f-48fdc412e608.avro",
+    "manifest-list" : "lineitem_iceberg/metadata/snap-7817332053627255703-1-787a5996-87e9-4d93-b258-066d524e82cc.avro",
     "schema-id" : 0
   }, {
     "sequence-number" : 2,
-    "snapshot-id" : 7635660646343998149,
-    "parent-snapshot-id" : 3776207205136740581,
-    "timestamp-ms" : 1676473694730,
+    "snapshot-id" : 2354745328521181395,
+    "parent-snapshot-id" : 7817332053627255703,
+    "timestamp-ms" : 1746188480005,
     "summary" : {
       "operation" : "overwrite",
-      "spark.app.id" : "local-1676472783435",
+      "spark.app.id" : "local-1746188475876",
       "added-data-files" : "1",
       "deleted-data-files" : "1",
       "added-records" : "51793",
       "deleted-records" : "60175",
-      "added-files-size" : "1208539",
-      "removed-files-size" : "1390176",
+      "added-files-size" : "1225526",
+      "removed-files-size" : "1406875",
       "changed-partition-count" : "1",
       "total-records" : "51793",
-      "total-files-size" : "1208539",
+      "total-files-size" : "1225526",
       "total-data-files" : "1",
       "total-delete-files" : "0",
       "total-position-deletes" : "0",
       "total-equality-deletes" : "0"
     },
-    "manifest-list" : "lineitem_iceberg/metadata/snap-7635660646343998149-1-10eaca8a-1e1c-421e-ad6d-b232e5ee23d3.avro",
+    "manifest-list" : "lineitem_iceberg/metadata/snap-2354745328521181395-1-179b4fb1-0366-4f7d-ad35-99ee8da0abf5.avro",
     "schema-id" : 0
   } ],
+  "statistics" : [ ],
   "snapshot-log" : [ {
-    "timestamp-ms" : 1676473674504,
-    "snapshot-id" : 3776207205136740581
+    "timestamp-ms" : 1746188479060,
+    "snapshot-id" : 7817332053627255703
   }, {
-    "timestamp-ms" : 1676473694730,
-    "snapshot-id" : 7635660646343998149
+    "timestamp-ms" : 1746188480005,
+    "snapshot-id" : 2354745328521181395
   } ],
   "metadata-log" : [ {
-    "timestamp-ms" : 1676473674504,
+    "timestamp-ms" : 1746188479060,
     "metadata-file" : "lineitem_iceberg/metadata/v1.metadata.json"
   } ]
 }

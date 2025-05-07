@@ -4,19 +4,12 @@
 #include "duckdb/common/types.hpp"
 #include "duckdb/parser/parsed_data/create_table_info.hpp"
 #include "duckdb/parser/parsed_data/create_secret_info.hpp"
+#include "iceberg_metadata.hpp"
 //#include "storage/irc_catalog.hpp"
 
 namespace duckdb {
 
 class IRCatalog;
-
-struct IRCAPIColumnDefinition {
-	string name;
-	string type_text;
-	idx_t precision;
-	idx_t scale;
-	idx_t position;
-};
 
 struct IRCAPITable {
 	string table_id;
@@ -28,7 +21,7 @@ struct IRCAPITable {
 	string data_source_format;
 	string storage_location;
 
-	vector<IRCAPIColumnDefinition> columns;
+	vector<IcebergColumnDefinition> columns;
 };
 
 struct IRCAPISchema {

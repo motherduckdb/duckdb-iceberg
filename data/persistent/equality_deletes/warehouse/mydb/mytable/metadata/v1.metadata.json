@@ -1,9 +1,9 @@
 {
   "format-version" : 2,
-  "table-uuid" : "dd728527-7b2f-4c00-87a3-821d21679852",
+  "table-uuid" : "7c269e29-15d2-48a6-bc83-4919d38e3041",
   "location" : "data/persistent/equality_deletes/warehouse/mydb/mytable",
   "last-sequence-number" : 0,
-  "last-updated-ms" : 1745834911796,
+  "last-updated-ms" : 1746122109432,
   "last-column-id" : 2,
   "current-schema-id" : 0,
   "schemas" : [ {
@@ -24,14 +24,9 @@
   "default-spec-id" : 0,
   "partition-specs" : [ {
     "spec-id" : 0,
-    "fields" : [ {
-      "name" : "name",
-      "transform" : "identity",
-      "source-id" : 2,
-      "field-id" : 1000
-    } ]
+    "fields" : [ ]
   } ],
-  "last-partition-id" : 1000,
+  "last-partition-id" : 999,
   "default-sort-order-id" : 0,
   "sort-orders" : [ {
     "order-id" : 0,
