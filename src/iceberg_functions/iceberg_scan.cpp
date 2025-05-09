@@ -46,10 +46,10 @@ TableFunctionSet IcebergFunctions::GetIcebergScanFunction(DatabaseInstance &inst
 	// The iceberg_scan function is constructed by grabbing the parquet scan from the Catalog, then injecting the
 	// IcebergMultiFileReader into it to create a Iceberg-based multi file read
 
-	auto &parquet_scan = ExtensionUtil::GetTableFunction(instance, "parquet_scan");
-	auto parquet_scan_copy = parquet_scan.functions;
+	TableFunctionSet function_set("iceberg_scan");
 
-	for (auto &function : parquet_scan_copy.functions) {
+	auto &parquet_scan = ExtensionUtil::GetTableFunction(instance, "parquet_scan");
+	for (auto &function : parquet_scan.functions.functions) {
 		// Register the MultiFileReader as the driver for reads
 		function.get_multi_file_reader = IcebergMultiFileReader::CreateInstance;
 
@@ -66,10 +66,31 @@ TableFunctionSet IcebergFunctions::GetIcebergScanFunction(DatabaseInstance &inst
 		AddNamedParameters(function);
 
 		function.name = "iceberg_scan";
+
+		function_set.AddFunction(function);
 	}
 
-	parquet_scan_copy.name = "iceberg_scan";
-	return parquet_scan_copy;
+	// todo: may not work, need checking; may need to fiddle with parsed arguments/named params
+	//  old function overloads
+	TableFunction fun = TableFunction({LogicalType::VARCHAR, LogicalType::UBIGINT}, nullptr, nullptr);
+	fun.named_parameters["skip_schema_inference"] = LogicalType::BOOLEAN;
+	fun.named_parameters["allow_moved_paths"] = LogicalType::BOOLEAN;
+	fun.named_parameters["mode"] = LogicalType::VARCHAR;
+	fun.named_parameters["metadata_compression_codec"] = LogicalType::VARCHAR;
+	fun.named_parameters["version"] = LogicalType::VARCHAR;
+	fun.named_parameters["version_name_format"] = LogicalType::VARCHAR;
+	function_set.AddFunction(fun);
+
+	fun = TableFunction({LogicalType::VARCHAR, LogicalType::TIMESTAMP}, nullptr, nullptr);
+	fun.named_parameters["skip_schema_inference"] = LogicalType::BOOLEAN;
+	fun.named_parameters["allow_moved_paths"] = LogicalType::BOOLEAN;
+	fun.named_parameters["mode"] = LogicalType::VARCHAR;
+	fun.named_parameters["metadata_compression_codec"] = LogicalType::VARCHAR;
+	fun.named_parameters["version"] = LogicalType::VARCHAR;
+	fun.named_parameters["version_name_format"] = LogicalType::VARCHAR;
+	function_set.AddFunction(fun);
+
+	return function_set;
 }
 
 } // namespace duckdb
