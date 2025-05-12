@@ -70,25 +70,30 @@ TableFunctionSet IcebergFunctions::GetIcebergScanFunction(DatabaseInstance &inst
 		function_set.AddFunction(function);
 	}
 
+	D_ASSERT(function_set.functions.empty() == false);
+	auto model_function = function_set.functions[0];
+
 	// todo: may not work, need checking; may need to fiddle with parsed arguments/named params
 	//  old function overloads
-	TableFunction fun = TableFunction({LogicalType::VARCHAR, LogicalType::UBIGINT}, nullptr, nullptr);
-	fun.named_parameters["skip_schema_inference"] = LogicalType::BOOLEAN;
-	fun.named_parameters["allow_moved_paths"] = LogicalType::BOOLEAN;
-	fun.named_parameters["mode"] = LogicalType::VARCHAR;
-	fun.named_parameters["metadata_compression_codec"] = LogicalType::VARCHAR;
-	fun.named_parameters["version"] = LogicalType::VARCHAR;
-	fun.named_parameters["version_name_format"] = LogicalType::VARCHAR;
-	function_set.AddFunction(fun);
+	auto tf1 = model_function;
+	tf1.arguments = {LogicalType::VARCHAR, LogicalType::UBIGINT};
+	tf1.named_parameters["skip_schema_inference"] = LogicalType::BOOLEAN;
+	tf1.named_parameters["allow_moved_paths"] = LogicalType::BOOLEAN;
+	tf1.named_parameters["mode"] = LogicalType::VARCHAR;
+	tf1.named_parameters["metadata_compression_codec"] = LogicalType::VARCHAR;
+	tf1.named_parameters["version"] = LogicalType::VARCHAR;
+	tf1.named_parameters["version_name_format"] = LogicalType::VARCHAR;
+	function_set.AddFunction(tf1);
 
-	fun = TableFunction({LogicalType::VARCHAR, LogicalType::TIMESTAMP}, nullptr, nullptr);
-	fun.named_parameters["skip_schema_inference"] = LogicalType::BOOLEAN;
-	fun.named_parameters["allow_moved_paths"] = LogicalType::BOOLEAN;
-	fun.named_parameters["mode"] = LogicalType::VARCHAR;
-	fun.named_parameters["metadata_compression_codec"] = LogicalType::VARCHAR;
-	fun.named_parameters["version"] = LogicalType::VARCHAR;
-	fun.named_parameters["version_name_format"] = LogicalType::VARCHAR;
-	function_set.AddFunction(fun);
+	auto tf2 = model_function;
+	tf2.arguments = {LogicalType::VARCHAR, LogicalType::TIMESTAMP};
+	tf2.named_parameters["skip_schema_inference"] = LogicalType::BOOLEAN;
+	tf2.named_parameters["allow_moved_paths"] = LogicalType::BOOLEAN;
+	tf2.named_parameters["mode"] = LogicalType::VARCHAR;
+	tf2.named_parameters["metadata_compression_codec"] = LogicalType::VARCHAR;
+	tf2.named_parameters["version"] = LogicalType::VARCHAR;
+	tf2.named_parameters["version_name_format"] = LogicalType::VARCHAR;
+	function_set.AddFunction(tf2);
 
 	return function_set;
 }
