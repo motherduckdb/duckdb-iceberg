@@ -49,7 +49,9 @@ TableFunctionSet IcebergFunctions::GetIcebergScanFunction(DatabaseInstance &inst
 	TableFunctionSet function_set("iceberg_scan");
 
 	auto &parquet_scan = ExtensionUtil::GetTableFunction(instance, "parquet_scan");
-	for (auto &function : parquet_scan.functions.functions) {
+	auto parquet_scan_copy = parquet_scan.functions;
+
+	for (auto &function : parquet_scan_copy.functions) {
 		// Register the MultiFileReader as the driver for reads
 		function.get_multi_file_reader = IcebergMultiFileReader::CreateInstance;
 
@@ -74,6 +76,7 @@ TableFunctionSet IcebergFunctions::GetIcebergScanFunction(DatabaseInstance &inst
 	auto model_function = function_set.functions[0];
 
 	// todo: may not work, need checking; may need to fiddle with parsed arguments/named params
+	// todo: do we need this at all?
 	//  old function overloads
 	auto tf1 = model_function;
 	tf1.arguments = {LogicalType::VARCHAR, LogicalType::UBIGINT};
