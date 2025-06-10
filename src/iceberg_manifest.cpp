@@ -40,7 +40,7 @@ idx_t ProduceManifests(DataChunk &chunk, idx_t offset, idx_t count, const Manife
 	}
 
 	//! 'partitions'
-	list_entry_t *field_summary;
+	list_entry_t *field_summary = nullptr;
 	optional_ptr<Vector> contains_null = nullptr;
 	optional_ptr<Vector> contains_nan = nullptr;
 	optional_ptr<Vector> lower_bound = nullptr;
