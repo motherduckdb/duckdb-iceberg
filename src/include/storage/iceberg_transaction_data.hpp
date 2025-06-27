@@ -17,7 +17,7 @@ struct IcebergTableInformation;
 struct IcebergTransactionData {
 public:
 	IcebergTransactionData(ClientContext &context, IcebergTableInformation &table_info)
-	    : context(context), table_info(table_info) {
+	    : context(context), table_info(table_info), create(nullptr) {
 	}
 
 public:
@@ -26,6 +26,7 @@ public:
 public:
 	ClientContext &context;
 	IcebergTableInformation &table_info;
+	unique_ptr<IcebergTableCreate> create;
 	vector<unique_ptr<IcebergTableUpdate>> updates;
 
 	//! Every insert/update/delete creates an alter of the table data

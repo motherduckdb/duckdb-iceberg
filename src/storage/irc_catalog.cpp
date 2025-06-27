@@ -12,6 +12,7 @@
 #include "duckdb/parser/parsed_data/create_schema_info.hpp"
 #include "duckdb/main/attached_database.hpp"
 #include "rest_catalog/objects/catalog_config.hpp"
+#include "duckdb/planner/operator/logical_create_table.hpp"
 #include "storage/irc_catalog.hpp"
 
 #include <regex>
@@ -73,7 +74,34 @@ void IRCatalog::DropSchema(ClientContext &context, DropInfo &info) {
 
 PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalPlanGenerator &planner,
                                                LogicalCreateTable &op, PhysicalOperator &plan) {
-	throw NotImplementedException("IRCatalog PlanCreateTableAs");
+	auto &create_info = op.info->Base();
+	// TODO: check if create_info contains partitioned information, if yes, error
+	// if (create_info.partition_info) {
+	// 		return InvalidInputException("creating partitioned tables not yet supported");
+	// }
+
+	auto &transaction = IRCTransaction::Get(context, *this);
+
+	// create the table within the transaction?
+	// might as well, the IRCSchemaSet/IRCTableSet only exist per transaction, so
+	// creating a local table and adding the create info in the transaction is fine
+
+	// or create it when things execute? Eventuall you need IcebergTableCreates
+	schemas.CreateTable();
+
+	auto &columns = create_info.columns;
+	// FIXME: if table already exists and we are doing CREATE IF NOT EXISTS - skip
+
+	reference<PhysicalOperator> root = plan;
+	optional_ptr<DuckLakeInlineData> inline_data;
+
+	// TODO: Check supported types
+	for (auto &col : op.info->Base().columns.Logical()) {
+//		DuckLakeTypes::CheckSupportedType(col.Type());
+	}
+
+	// basically just
+	return planner.Make<IcebergInsert>(context, planner, op, plan);
 }
 PhysicalOperator &IRCatalog::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,
                                         PhysicalOperator &plan) {

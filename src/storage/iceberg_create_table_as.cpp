@@ -22,13 +22,13 @@
 
 namespace duckdb {
 
-IcebergInsert::IcebergInsert(LogicalOperator &op, TableCatalogEntry &table,
+IcebergCreateTableAs::IcebergCreateTableAs(LogicalOperator &op, TableCatalogEntry &table,
                              physical_index_vector_t<idx_t> column_index_map_p)
     : PhysicalOperator(PhysicalOperatorType::EXTENSION, op.types, 1), table(&table), schema(nullptr),
       column_index_map(std::move(column_index_map_p)) {
 }
 
-IcebergInsert::IcebergInsert(LogicalOperator &op, SchemaCatalogEntry &schema, unique_ptr<BoundCreateTableInfo> info)
+IcebergCreateTableAs::IcebergCreateTableAs(LogicalOperator &op, SchemaCatalogEntry &schema, unique_ptr<BoundCreateTableInfo> info)
     : PhysicalOperator(PhysicalOperatorType::EXTENSION, op.types, 1), table(nullptr), schema(&schema),
       info(std::move(info)) {
 }
@@ -36,16 +36,16 @@ IcebergInsert::IcebergInsert(LogicalOperator &op, SchemaCatalogEntry &schema, un
 //===--------------------------------------------------------------------===//
 // States
 //===--------------------------------------------------------------------===//
-class IcebergInsertGlobalState : public GlobalSinkState {
+class IcebergCreateTableAsGlobalState : public GlobalSinkState {
 public:
-	explicit IcebergInsertGlobalState() = default;
+	explicit IcebergCreateTableAsGlobalState() = default;
+	// does a create table need any manifest files?
 	vector<IcebergManifestEntry> written_files;
 
-	idx_t insert_count;
 };
 
-unique_ptr<GlobalSinkState> IcebergInsert::GetGlobalSinkState(ClientContext &context) const {
-	return make_uniq<IcebergInsertGlobalState>();
+unique_ptr<GlobalSinkState> IcebergCreateTableAs::GetGlobalSinkState(ClientContext &context) const {
+	return make_uniq<IcebergCreateTableAsGlobalState>();
 }
 
 //===--------------------------------------------------------------------===//
@@ -137,7 +137,7 @@ static IcebergColumnStats ParseColumnStats(const vector<Value> col_stats) {
 	return column_stats;
 }
 
-static void AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &chunk, optional_idx partition_id) {
+static void AddWrittenFiles(IcebergCreateTableAsGlobalState &global_state, DataChunk &chunk, optional_idx partition_id) {
 	for (idx_t r = 0; r < chunk.size(); r++) {
 		IcebergManifestEntry data_file;
 		data_file.file_path = chunk.GetValue(0, r).GetValue<string>();
@@ -193,8 +193,8 @@ static void AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &c
 	}
 }
 
-SinkResultType IcebergInsert::Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const {
-	auto &global_state = input.global_state.Cast<IcebergInsertGlobalState>();
+SinkResultType IcebergCreateTableAs::Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const {
+	auto &global_state = input.global_state.Cast<IcebergCreateTableAsGlobalState>();
 
 	// TODO: pass through the partition id?
 	AddWrittenFiles(global_state, chunk, {});
@@ -205,8 +205,8 @@ SinkResultType IcebergInsert::Sink(ExecutionContext &context, DataChunk &chunk, 
 //===--------------------------------------------------------------------===//
 // GetData
 //===--------------------------------------------------------------------===//
-SourceResultType IcebergInsert::GetData(ExecutionContext &context, DataChunk &chunk, OperatorSourceInput &input) const {
-	auto &global_state = sink_state->Cast<IcebergInsertGlobalState>();
+SourceResultType IcebergCreateTableAs::GetData(ExecutionContext &context, DataChunk &chunk, OperatorSourceInput &input) const {
+	auto &global_state = sink_state->Cast<IcebergCreateTableAsGlobalState>();
 	auto value = Value::BIGINT(global_state.insert_count);
 	chunk.SetCardinality(1);
 	chunk.SetValue(0, 0, value);
@@ -216,10 +216,13 @@ SourceResultType IcebergInsert::GetData(ExecutionContext &context, DataChunk &ch
 //===--------------------------------------------------------------------===//
 // Finalize
 //===--------------------------------------------------------------------===//
-SinkFinalizeType IcebergInsert::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
+SinkFinalizeType IcebergCreateTableAs::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
                                          OperatorSinkFinalizeInput &input) const {
-	auto &global_state = input.global_state.Cast<IcebergInsertGlobalState>();
+	auto &global_state = input.global_state.Cast<IcebergCreateTableAsGlobalState>();
 
+	// create the table entry in the catalog
+	// call table_info.AddSnapshot
+	// mark the table as dirty in the transaction.
 	auto &irc_table = table->Cast<ICTableEntry>();
 	auto &table_info = irc_table.table_info;
 	auto &transaction = IRCTransaction::Get(context, table->catalog);
@@ -232,11 +235,11 @@ SinkFinalizeType IcebergInsert::Finalize(Pipeline &pipeline, Event &event, Clien
 //===--------------------------------------------------------------------===//
 // Helpers
 //===--------------------------------------------------------------------===//
-string IcebergInsert::GetName() const {
+string IcebergCreateTableAs::GetName() const {
 	return table ? "ICEBERG_INSERT" : "ICEBERG_CREATE_TABLE_AS";
 }
 
-InsertionOrderPreservingMap<string> IcebergInsert::ParamsToString() const {
+InsertionOrderPreservingMap<string> IcebergCreateTableAs::ParamsToString() const {
 	InsertionOrderPreservingMap<string> result;
 	result["Table Name"] = table ? table->name : info->Base().table;
 	return result;
@@ -344,7 +347,7 @@ PhysicalOperator &IRCatalog::PlanInsert(ClientContext &context, PhysicalPlanGene
 
 	auto function_data = copy_fun->function.copy_to_bind(context, bind_input, names_to_write, types_to_write);
 
-	auto &insert = planner.Make<IcebergInsert>(op, op.table, op.column_index_map);
+	auto &insert = planner.Make<IcebergCreateTableAs>(op, op.table, op.column_index_map);
 
 	auto &physical_copy = planner.Make<PhysicalCopyToFile>(
 	    GetCopyFunctionReturnLogicalTypes(CopyFunctionReturnType::WRITTEN_FILE_STATISTICS), copy_fun->function,
