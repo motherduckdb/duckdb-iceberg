@@ -11,11 +11,6 @@
 #include "duckdb/main/extension_util.hpp"
 #include "duckdb/parser/tableref/table_function_ref.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
-#include "duckdb/planner/expression/bound_comparison_expression.hpp"
-#include "duckdb/planner/expression/bound_constant_expression.hpp"
-#include "duckdb/planner/expression/bound_operator_expression.hpp"
-#include "duckdb/planner/expression/bound_reference_expression.hpp"
-#include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 #include "duckdb/planner/filter/struct_filter.hpp"
 
 #include "metadata/iceberg_predicate_stats.hpp"
@@ -663,154 +658,19 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 		current_delete_manifest++;
 
 		for (auto &entry : manifest_file.data_files) {
-			if (!StringUtil::CIEquals(entry.file_format, "parquet")) {
+			if (StringUtil::CIEquals(entry.file_format, "parquet")) {
+				ScanDeleteFile(entry, global_columns, column_indexes);
+			} else if (StringUtil::CIEquals(entry.file_format, "puffin")) {
+				ScanPuffinFile(entry);
+			} else {
 				throw NotImplementedException(
-				    "File format '%s' not supported for deletes, only supports 'parquet' currently", entry.file_format);
+				    "File format '%s' not supported for deletes, only supports 'parquet' and 'puffin' currently",
+				    entry.file_format);
 			}
-			ScanDeleteFile(entry, global_columns, column_indexes);
 		}
 	}
 
 	D_ASSERT(current_delete_manifest == delete_manifests.end());
-}
-
-void IcebergMultiFileList::ScanPositionalDeleteFile(DataChunk &result) const {
-	//! FIXME: might want to check the 'columns' of the 'reader' to check, field-ids are:
-	auto names = FlatVector::GetData<string_t>(result.data[0]);  //! 2147483546
-	auto row_ids = FlatVector::GetData<int64_t>(result.data[1]); //! 2147483545
-
-	auto count = result.size();
-	if (count == 0) {
-		return;
-	}
-	reference<string_t> current_file_path = names[0];
-
-	auto initial_key = current_file_path.get().GetString();
-	auto it = positional_delete_data.find(initial_key);
-	if (it == positional_delete_data.end()) {
-		it = positional_delete_data.emplace(initial_key, make_uniq<IcebergPositionalDeleteData>()).first;
-	}
-	reference<IcebergPositionalDeleteData> deletes = *it->second;
-
-	for (idx_t i = 0; i < count; i++) {
-		auto &name = names[i];
-		auto &row_id = row_ids[i];
-
-		if (name != current_file_path.get()) {
-			current_file_path = name;
-			auto key = current_file_path.get().GetString();
-			auto it = positional_delete_data.find(key);
-			if (it == positional_delete_data.end()) {
-				it = positional_delete_data.emplace(key, make_uniq<IcebergPositionalDeleteData>()).first;
-			}
-			deletes = *it->second;
-		}
-
-		deletes.get().AddRow(row_id);
-	}
-}
-
-static void InitializeFromOtherChunk(DataChunk &target, DataChunk &other, const vector<column_t> &column_ids) {
-	vector<LogicalType> types;
-	for (auto &id : column_ids) {
-		types.push_back(other.data[id].GetType());
-	}
-	target.InitializeEmpty(types);
-}
-
-void IcebergMultiFileList::ScanEqualityDeleteFile(const IcebergManifestEntry &entry, DataChunk &result_p,
-                                                  vector<MultiFileColumnDefinition> &local_columns,
-                                                  const vector<MultiFileColumnDefinition> &global_columns,
-                                                  const vector<ColumnIndex> &column_indexes) const {
-	D_ASSERT(!entry.equality_ids.empty());
-	D_ASSERT(result_p.ColumnCount() == local_columns.size());
-
-	auto count = result_p.size();
-	if (count == 0) {
-		return;
-	}
-
-	//! Map from column_id to 'local_columns' index, to figure out which columns from the 'result_p' are relevant here
-	unordered_map<int32_t, column_t> id_to_column;
-	for (column_t i = 0; i < local_columns.size(); i++) {
-		auto &col = local_columns[i];
-		D_ASSERT(!col.identifier.IsNull());
-		id_to_column[col.identifier.GetValue<int32_t>()] = i;
-	}
-
-	vector<column_t> column_ids;
-	DataChunk result;
-	for (auto id : entry.equality_ids) {
-		D_ASSERT(id_to_column.count(id));
-		column_ids.push_back(id_to_column[id]);
-	}
-
-	//! Get or create the equality delete data for this sequence number
-	auto it = equality_delete_data.find(entry.sequence_number);
-	if (it == equality_delete_data.end()) {
-		it = equality_delete_data
-		         .emplace(entry.sequence_number, make_uniq<IcebergEqualityDeleteData>(entry.sequence_number))
-		         .first;
-	}
-	auto &deletes = *it->second;
-
-	//! Map from column_id to 'global_columns' index, so we can create a reference to the correct global index
-	unordered_map<int32_t, column_t> id_to_global_column;
-	for (column_t i = 0; i < global_columns.size(); i++) {
-		auto &col = global_columns[i];
-		D_ASSERT(!col.identifier.IsNull());
-		id_to_global_column[col.identifier.GetValue<int32_t>()] = i;
-	}
-
-	unordered_map<idx_t, idx_t> global_id_to_result_id;
-	for (idx_t i = 0; i < column_indexes.size(); i++) {
-		auto &column_index = column_indexes[i];
-		if (column_index.IsVirtualColumn()) {
-			continue;
-		}
-		auto global_id = column_index.GetPrimaryIndex();
-		global_id_to_result_id[global_id] = i;
-	}
-
-	//! Take only the relevant columns from the result
-	InitializeFromOtherChunk(result, result_p, column_ids);
-	result.ReferenceColumns(result_p, column_ids);
-	deletes.files.emplace_back(entry.partition, entry.partition_spec_id);
-	auto &rows = deletes.files.back().rows;
-	rows.resize(count);
-	D_ASSERT(result.ColumnCount() == entry.equality_ids.size());
-	for (idx_t col_idx = 0; col_idx < result.ColumnCount(); col_idx++) {
-		auto &field_id = entry.equality_ids[col_idx];
-		auto global_column_id = id_to_global_column[field_id];
-		auto &col = global_columns[global_column_id];
-		auto &vec = result.data[col_idx];
-
-		auto it = global_id_to_result_id.find(global_column_id);
-		if (it == global_id_to_result_id.end()) {
-			throw NotImplementedException("Equality deletes need the relevant columns to be selected");
-		}
-		global_column_id = it->second;
-
-		for (idx_t i = 0; i < count; i++) {
-			auto &row = rows[i];
-			auto constant = vec.GetValue(i);
-			unique_ptr<Expression> equality_filter;
-			auto bound_ref = make_uniq<BoundReferenceExpression>(col.type, global_column_id);
-			if (!constant.IsNull()) {
-				//! Create a COMPARE_NOT_EQUAL expression
-				equality_filter =
-				    make_uniq<BoundComparisonExpression>(ExpressionType::COMPARE_NOTEQUAL, std::move(bound_ref),
-				                                         make_uniq<BoundConstantExpression>(constant));
-			} else {
-				//! Construct an OPERATOR_IS_NOT_NULL expression instead
-				auto is_not_null =
-				    make_uniq<BoundOperatorExpression>(ExpressionType::OPERATOR_IS_NOT_NULL, LogicalType::BOOLEAN);
-				is_not_null->children.push_back(std::move(bound_ref));
-				equality_filter = std::move(is_not_null);
-			}
-			row.filters.emplace(std::make_pair(field_id, std::move(equality_filter)));
-		}
-	}
 }
 
 void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &entry,
@@ -878,8 +738,8 @@ void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &entry,
 	}
 }
 
-unique_ptr<IcebergPositionalDeleteData>
-IcebergMultiFileList::GetPositionalDeletesForFile(const string &file_path) const {
+//! FIXME: isn't this problematic if we need to scan the same delete file multiple times??
+unique_ptr<DeleteFilter> IcebergMultiFileList::GetPositionalDeletesForFile(const string &file_path) const {
 	auto it = positional_delete_data.find(file_path);
 	if (it != positional_delete_data.end()) {
 		// There is delete data for this file, return it

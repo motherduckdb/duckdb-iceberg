@@ -97,7 +97,12 @@ const string &IcebergTableInformation::BaseFilePath() const {
 IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientContext &context) {
 	IRCAPITableCredentials result;
 
-	auto secret_base_name = StringUtil::Format("__internal_ic_%s__%s__%s", table_id, schema.name, name);
+	auto transaction_id = MetaTransaction::Get(context).global_transaction_id;
+	auto &transaction = IRCTransaction::Get(context, catalog);
+
+	auto secret_base_name =
+	    StringUtil::Format("__internal_ic_%s__%s__%s__%s", table_id, schema.name, name, to_string(transaction_id));
+	transaction.created_secrets.insert(secret_base_name);
 	case_insensitive_map_t<Value> user_defaults;
 	if (catalog.auth_handler->type == IRCAuthorizationType::SIGV4) {
 		auto &sigv4_auth = catalog.auth_handler->Cast<SIGV4Authorization>();

@@ -11,7 +11,8 @@ public:
 	}
 
 public:
-	string GetRequest(ClientContext &context);
+	unique_ptr<HTTPResponse> GetRequest(ClientContext &context);
+	unique_ptr<HTTPResponse> PostRequest(ClientContext &context, string post_body);
 
 public:
 	//! NOTE: 'scheme' is assumed to be HTTPS!

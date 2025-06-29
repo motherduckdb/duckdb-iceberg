@@ -12,6 +12,7 @@
 
 #include "duckdb/parser/parsed_data/attach_info.hpp"
 #include "duckdb/storage/storage_extension.hpp"
+#include "duckdb/common/http_util.hpp"
 
 namespace duckdb {
 
@@ -41,7 +42,7 @@ public:
 public:
 	static unique_ptr<SecretEntry> GetStorageSecret(ClientContext &context, const string &secret_name);
 	static unique_ptr<SecretEntry> GetIcebergSecret(ClientContext &context, const string &secret_name);
-	void GetConfig(ClientContext &context);
+	void GetConfig(ClientContext &context, IcebergEndpointType &endpoint_type);
 	IRCEndpointBuilder GetBaseUrl() const;
 	string OptionalGetCachedValue(const string &url);
 	bool SetCachedValue(const string &url, const string &value, const rest_api_objects::LoadTableResult &result);
@@ -74,6 +75,8 @@ public:
 	unique_ptr<LogicalOperator> BindCreateIndex(Binder &binder, CreateStatement &stmt, TableCatalogEntry &table,
 	                                            unique_ptr<LogicalOperator> plan) override;
 	DatabaseSize GetDatabaseSize(ClientContext &context) override;
+	void AddDefaultSupportedEndpoints();
+	void AddS3TablesEndpoints();
 	//! Whether or not this is an in-memory Iceberg database
 	bool InMemory() override;
 	string GetDBPath() override;
@@ -90,12 +93,18 @@ public:
 	const string version;
 	//! optional prefix
 	string prefix;
+	//! attach options
+	IcebergAttachOptions attach_options;
 
 private:
 	// defaults and overrides provided by a catalog.
 	case_insensitive_map_t<string> defaults;
 	case_insensitive_map_t<string> overrides;
 
+public:
+	unordered_set<string> supported_urls;
+
+private:
 	std::mutex metadata_cache_mutex;
 	unordered_map<string, unique_ptr<MetadataCacheValue>> metadata_cache;
 };

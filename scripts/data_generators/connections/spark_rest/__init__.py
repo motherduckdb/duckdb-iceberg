@@ -29,7 +29,7 @@ import os
 
 CONNECTION_KEY = 'spark-rest'
 
-SPARK_RUNTIME_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'iceberg-spark-runtime-3.5_2.12-1.9.0.jar')
+SPARK_RUNTIME_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'iceberg-spark-runtime-3.5_2.12-1.9.1.jar')
 
 
 @IcebergConnection.register(CONNECTION_KEY)
@@ -40,7 +40,7 @@ class IcebergSparkRest(IcebergConnection):
 
     def get_connection(self):
         os.environ["PYSPARK_SUBMIT_ARGS"] = (
-            "--packages org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.9.0,org.apache.iceberg:iceberg-aws-bundle:1.9.0 pyspark-shell"
+            "--packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.9.1,org.apache.iceberg:iceberg-aws-bundle:1.9.1 pyspark-shell"
         )
         os.environ["AWS_REGION"] = "us-east-1"
         os.environ["AWS_ACCESS_KEY_ID"] = "admin"

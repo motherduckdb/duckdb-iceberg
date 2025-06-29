@@ -120,6 +120,14 @@ insert into my_datalake.default.insert_test select
 statement ok con1
 commit
 
+# con2 should not see con1 data
+query III con2
+select * from my_datalake.default.insert_test;
+----
+2010-06-11	42	test
+2020-08-12	45345	inserted by con2
+
+
 # The second commit failed because both transactions tried to add sequence number: 2
 statement error con2
 commit
@@ -184,7 +192,7 @@ insert into my_datalake.default.insert_test select
 
 statement ok
 INSERT INTO my_datalake.default.insert_all_types
-SELECT 
+SELECT
 	127::TINYINT, -- byte_col (max for TINYINT)
 	1340::SMALLINT, -- short_col (min for SMALLINT)
 	2147483647::INT, -- int_col (max for INT)

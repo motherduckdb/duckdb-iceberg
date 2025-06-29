@@ -66,7 +66,40 @@ static string GetAwsService(const string &host) {
 unique_ptr<HTTPResponse> SIGV4Authorization::PostRequest(ClientContext &context,
                                                          const IRCEndpointBuilder &endpoint_builder,
                                                          const string &body) {
-	throw NotImplementedException("POST request for SIGV4 Authorization");
+	AWSInput aws_input;
+	aws_input.cert_path = APIUtils::GetCURLCertPath();
+
+	// Set the user Agent.
+	auto &config = DBConfig::GetConfig(context);
+	aws_input.user_agent = config.UserAgent();
+
+	aws_input.service = GetAwsService(endpoint_builder.GetHost());
+	aws_input.region = GetAwsRegion(endpoint_builder.GetHost());
+
+	auto decomposed_host = DecomposeHost(endpoint_builder.GetHost());
+
+	aws_input.authority = decomposed_host.authority;
+	for (auto &component : decomposed_host.path_components) {
+		aws_input.path_segments.push_back(component);
+	}
+	for (auto &component : endpoint_builder.path_components) {
+		aws_input.path_segments.push_back(component);
+	}
+
+	for (auto &param : endpoint_builder.GetParams()) {
+		aws_input.query_string_parameters.emplace_back(param);
+	}
+
+	// Will error if no secret can be found for AWS services
+	auto secret_entry = IRCatalog::GetStorageSecret(context, secret);
+	auto kv_secret = dynamic_cast<const KeyValueSecret &>(*secret_entry->secret);
+
+	aws_input.key_id = kv_secret.secret_map["key_id"].GetValue<string>();
+	aws_input.secret = kv_secret.secret_map["secret"].GetValue<string>();
+	aws_input.session_token =
+	    kv_secret.secret_map["session_token"].IsNull() ? "" : kv_secret.secret_map["session_token"].GetValue<string>();
+
+	return aws_input.PostRequest(context, body);
 }
 
 unique_ptr<HTTPResponse> SIGV4Authorization::GetRequest(ClientContext &context,
@@ -103,10 +136,7 @@ unique_ptr<HTTPResponse> SIGV4Authorization::GetRequest(ClientContext &context,
 	aws_input.session_token =
 	    kv_secret.secret_map["session_token"].IsNull() ? "" : kv_secret.secret_map["session_token"].GetValue<string>();
 
-	auto body = aws_input.GetRequest(context);
-	auto response = make_uniq<HTTPResponse>(HTTPStatusCode::OK_200);
-	response->body = body;
-	return response;
+	return aws_input.GetRequest(context);
 }
 
 } // namespace duckdb

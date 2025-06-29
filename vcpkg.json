@@ -4,6 +4,7 @@
 		"avro-c",
 		"curl",
 		"openssl",
+		"roaring",
 		{
 			"name": "aws-sdk-cpp",
 			"features": [

@@ -29,6 +29,8 @@ public:
 	void AddCreateTableRequest(unique_ptr<IcebergCreateTableRequest> creat_table_request);
 	IRCatalog &GetCatalog();
 	void CreateEntry(unique_ptr<ICTableEntry> entry);
+	void DropSecrets(ClientContext &context);
+	rest_api_objects::CommitTransactionRequest GetTransactionRequest(ClientContext &context);
 
 private:
 	void CleanupFiles();
@@ -43,6 +45,7 @@ public:
 	//! Tables marked dirty in this transaction, to be rewritten on commit
 	unordered_set<const ICTableEntry *> dirty_tables;
 	vector<unique_ptr<ICTableEntry>> new_tables;
+	case_insensitive_set_t created_secrets;
 };
 
 } // namespace duckdb

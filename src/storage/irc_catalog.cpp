@@ -30,7 +30,8 @@ namespace duckdb {
 IRCatalog::IRCatalog(AttachedDatabase &db_p, AccessMode access_mode, unique_ptr<IRCAuthorization> auth_handler,
                      IcebergAttachOptions &attach_options, const string &version)
     : Catalog(db_p), access_mode(access_mode), auth_handler(std::move(auth_handler)),
-      warehouse(attach_options.warehouse), uri(attach_options.endpoint), version(version) {
+      warehouse(attach_options.warehouse), uri(attach_options.endpoint), version(version),
+      attach_options(attach_options) {
 	if (version.empty()) {
 		throw InternalException("version can not be empty");
 	}
@@ -166,7 +167,67 @@ unique_ptr<SecretEntry> IRCatalog::GetIcebergSecret(ClientContext &context, cons
 	return secret_entry;
 }
 
-void IRCatalog::GetConfig(ClientContext &context) {
+void IRCatalog::AddDefaultSupportedEndpoints() {
+	// insert namespaces based on REST API spec.
+	// List namespaces
+	supported_urls.insert("GET /v1/{prefix}/namespaces");
+	// create namespace
+	supported_urls.insert("POST /v1/{prefix}/namespaces");
+	// Load metadata for a Namespace
+	supported_urls.insert("GET /v1/{prefix}/namespaces/{namespace}");
+	// Drop a namespace
+	supported_urls.insert("DELETE /v1/{prefix}/namespaces/{namespace}");
+	// set or remove properties on a namespace
+	supported_urls.insert("POST /v1/{prefix}/namespaces/{namespace}/properties");
+	// list all table identifiers
+	supported_urls.insert("GET /v1/{prefix}/namespaces/{namespace}/tables");
+	// create table in the namespace
+	supported_urls.insert("POST /v1/{prefix}/namespaces/{namespace}/tables");
+	// get table from the catalog
+	supported_urls.insert("GET /v1/{prefix}/namespaces/{namespace}/tables/{table}");
+	// commit updates to a tbale
+	supported_urls.insert("POST /v1/{prefix}/namespaces/{namespace}/tables/{table}");
+	// drop table from a catalog
+	supported_urls.insert("DELETE /v1/{prefix}/namespaces/{namespace}/tables/{table}");
+	// Register a table using given metadata file location.
+	supported_urls.insert("POST /v1/{prefix}/namespaces/{namespace}/register");
+	// send metrics report to this endpoint to be processed by the backend
+	supported_urls.insert("POST /v1/{prefix}/namespaces/{namespace}/tables/{table}/metrics");
+	// Rename a table from one identifier to another.
+	supported_urls.insert("POST /v1/{prefix}/tables/rename");
+	// commit updates to multiple tables in an atomic transaction
+	supported_urls.insert("POST /v1/{prefix}/transactions/commit)");
+}
+
+void IRCatalog::AddS3TablesEndpoints() {
+	// insert namespaces based on REST API spec.
+	// List namespaces
+	supported_urls.insert("GET /v1/{prefix}/namespaces");
+	// create namespace
+	supported_urls.insert("POST /v1/{prefix}/namespaces");
+	// Load metadata for a Namespace
+	supported_urls.insert("GET /v1/{prefix}/namespaces/{namespace}");
+	// Drop a namespace
+	supported_urls.insert("DELETE /v1/{prefix}/namespaces/{namespace}");
+	// list all table identifiers
+	supported_urls.insert("GET /v1/{prefix}/namespaces/{namespace}/tables");
+	// create table in the namespace
+	supported_urls.insert("POST /v1/{prefix}/namespaces/{namespace}/tables");
+	// get table from the catalog
+	supported_urls.insert("GET /v1/{prefix}/namespaces/{namespace}/tables/{table}");
+	// commit updates to a table
+	supported_urls.insert("POST /v1/{prefix}/namespaces/{namespace}/tables/{table}");
+	// drop table from a catalog
+	supported_urls.insert("DELETE /v1/{prefix}/namespaces/{namespace}/tables/{table}");
+	// table exists
+	supported_urls.insert("HEAD /v1/{prefix}/namespaces/{namespace}/tables/{table}");
+	// Rename a table from one identifier to another.
+	supported_urls.insert("POST /v1/{prefix}/tables/rename");
+	// commit updates to multiple tables in an atomic transaction
+	supported_urls.insert("POST /v1/{prefix}/transactions/commit)");
+}
+
+void IRCatalog::GetConfig(ClientContext &context, IcebergEndpointType &endpoint_type) {
 	auto url = GetBaseUrl();
 	// set the prefix to be empty. To get the config endpoint,
 	// we cannot add a default prefix.
@@ -187,7 +248,6 @@ void IRCatalog::GetConfig(ClientContext &context) {
 	// save overrides and defaults.
 	// See https://iceberg.apache.org/docs/latest/configuration/#catalog-properties for sometimes used catalog
 	// properties
-
 	auto default_prefix_it = defaults.find("prefix");
 	auto override_prefix_it = overrides.find("prefix");
 
@@ -202,11 +262,22 @@ void IRCatalog::GetConfig(ClientContext &context) {
 		overrides.erase(override_prefix_it);
 	}
 
+	if (catalog_config.has_endpoints) {
+		for (auto &endpoint : catalog_config.endpoints) {
+			supported_urls.insert(endpoint);
+		}
+	}
+	// should be if s3tables
+	if (!catalog_config.has_endpoints && endpoint_type == IcebergEndpointType::AWS_S3TABLES) {
+		supported_urls.clear();
+		AddS3TablesEndpoints();
+	} else if (!catalog_config.has_endpoints) {
+		AddDefaultSupportedEndpoints();
+	}
+
 	if (prefix.empty()) {
 		DUCKDB_LOG(context, IcebergLogType, "No prefix found for catalog with warehouse value %s", warehouse);
 	}
-	// TODO: store optional endpoints param as well. We can enforce per catalog the endpoints that
-	//  are allowed to be hit
 }
 
 string IRCatalog::OptionalGetCachedValue(const string &url) {
@@ -250,8 +321,6 @@ bool IRCatalog::SetCachedValue(const string &url, const string &value,
 
 // namespace
 namespace {
-
-enum class IcebergEndpointType : uint8_t { AWS_S3TABLES, AWS_GLUE, INVALID };
 
 static IcebergEndpointType EndpointTypeFromString(const string &input) {
 	D_ASSERT(StringUtil::Lower(input) == input);
@@ -372,17 +441,20 @@ unique_ptr<Catalog> IRCatalog::Attach(StorageExtensionInfo *storage_info, Client
 			attach_options.options.emplace(std::move(entry));
 		}
 	}
-
+	IcebergEndpointType endpoint_type = IcebergEndpointType::INVALID;
 	//! Then check any if the 'endpoint_type' is set, for any well known catalogs
 	if (!endpoint_type_string.empty()) {
-		auto endpoint_type = EndpointTypeFromString(endpoint_type_string);
+		endpoint_type = EndpointTypeFromString(endpoint_type_string);
 		switch (endpoint_type) {
 		case IcebergEndpointType::AWS_GLUE: {
 			GlueAttach(context, attach_options);
+			endpoint_type = IcebergEndpointType::AWS_GLUE;
 			break;
 		}
 		case IcebergEndpointType::AWS_S3TABLES: {
 			S3TablesAttach(attach_options);
+			endpoint_type = IcebergEndpointType::AWS_S3TABLES;
+			attach_options.allows_deletes = false;
 			break;
 		}
 		default:
@@ -436,7 +508,7 @@ unique_ptr<Catalog> IRCatalog::Attach(StorageExtensionInfo *storage_info, Client
 
 	D_ASSERT(auth_handler);
 	auto catalog = make_uniq<IRCatalog>(db, access_mode, std::move(auth_handler), attach_options);
-	catalog->GetConfig(context);
+	catalog->GetConfig(context, endpoint_type);
 	return std::move(catalog);
 }
 

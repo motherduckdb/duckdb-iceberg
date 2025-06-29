@@ -16,9 +16,6 @@ namespace duckdb {
 class BaseManifestReader {
 public:
 	BaseManifestReader(idx_t iceberg_version) : iceberg_version(iceberg_version) {
-		if (iceberg_version > 2) {
-			throw InvalidConfigurationException("Iceberg version > 2 is not supported yet");
-		}
 	}
 	virtual ~BaseManifestReader() {
 	}

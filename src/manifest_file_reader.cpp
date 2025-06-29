@@ -214,6 +214,23 @@ idx_t ManifestFileReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergMan
 	}
 	auto &partition_vec = child_entries[partition_idx.GetChildIndex(0).GetPrimaryIndex()];
 
+	optional_ptr<Vector> referenced_data_file;
+	optional_ptr<Vector> content_offset;
+	optional_ptr<Vector> content_size_in_bytes;
+
+	auto referenced_data_file_it = vector_mapping.find(REFERENCED_DATA_FILE);
+	if (referenced_data_file_it != vector_mapping.end()) {
+		referenced_data_file = *child_entries[referenced_data_file_it->second.GetChildIndex(0).GetPrimaryIndex()];
+	}
+	auto content_offset_it = vector_mapping.find(CONTENT_OFFSET);
+	if (content_offset_it != vector_mapping.end()) {
+		content_offset = *child_entries[content_offset_it->second.GetChildIndex(0).GetPrimaryIndex()];
+	}
+	auto content_size_in_bytes_it = vector_mapping.find(CONTENT_SIZE_IN_BYTES);
+	if (content_size_in_bytes_it != vector_mapping.end()) {
+		content_size_in_bytes = *child_entries[content_size_in_bytes_it->second.GetChildIndex(0).GetPrimaryIndex()];
+	}
+
 	idx_t produced = 0;
 	for (idx_t i = 0; i < count; i++) {
 		idx_t index = i + offset;
@@ -243,6 +260,16 @@ idx_t ManifestFileReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergMan
 		}
 		if (nan_value_counts) {
 			entry.nan_value_counts = GetCounts(*nan_value_counts, index);
+		}
+
+		if (referenced_data_file && FlatVector::Validity(*referenced_data_file).RowIsValid(index)) {
+			entry.referenced_data_file = FlatVector::GetData<string_t>(*referenced_data_file)[index].GetString();
+		}
+		if (content_offset && FlatVector::Validity(*content_offset).RowIsValid(index)) {
+			entry.content_offset = content_offset->GetValue(index);
+		}
+		if (content_size_in_bytes && FlatVector::Validity(*content_size_in_bytes).RowIsValid(index)) {
+			entry.content_size_in_bytes = content_size_in_bytes->GetValue(index);
 		}
 
 		if (iceberg_version > 1) {
