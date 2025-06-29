@@ -26,6 +26,9 @@ public:
 		return schemas;
 	}
 	void MarkTableAsDirty(const ICTableEntry &table);
+	void AddCreateTableRequest(unique_ptr<IcebergCreateTableRequest> creat_table_request);
+	IRCatalog &GetCatalog();
+	void CreateEntry(unique_ptr<ICTableEntry> entry);
 
 private:
 	void CleanupFiles();
@@ -39,6 +42,7 @@ public:
 	IRCSchemaSet schemas;
 	//! Tables marked dirty in this transaction, to be rewritten on commit
 	unordered_set<const ICTableEntry *> dirty_tables;
+	vector<unique_ptr<ICTableEntry>> new_tables;
 };
 
 } // namespace duckdb

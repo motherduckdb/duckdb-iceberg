@@ -233,7 +233,8 @@ SinkFinalizeType IcebergInsert::Finalize(Pipeline &pipeline, Event &event, Clien
 // Helpers
 //===--------------------------------------------------------------------===//
 string IcebergInsert::GetName() const {
-	return table ? "ICEBERG_INSERT" : "ICEBERG_CREATE_TABLE_AS";
+	D_ASSERT(table);
+	return "ICEBERG_INSERT";
 }
 
 InsertionOrderPreservingMap<string> IcebergInsert::ParamsToString() const {

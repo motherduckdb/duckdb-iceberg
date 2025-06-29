@@ -35,8 +35,6 @@ public:
 public:
 	// // Source interface
 	SourceResultType GetData(ExecutionContext &context, DataChunk &chunk, OperatorSourceInput &input) const override;
-	//
-//	LogicalOperator PlanCopyForInsert();
 
 	bool IsSource() const override {
 		return true;

@@ -27,8 +27,26 @@ IRCTransaction &GetUCTransaction(CatalogTransaction transaction) {
 	return transaction.transaction->Cast<IRCTransaction>();
 }
 
+
+
 optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(CatalogTransaction transaction, BoundCreateTableInfo &info) {
-	throw NotImplementedException("Create Table");
+	auto &base_info = info.Base();
+	auto &irc_transaction = transaction.transaction->Cast<IRCTransaction>();
+
+	// TODO:
+	// check if we have an existing entry with this name
+
+	auto &catalog = irc_transaction.GetCatalog();
+	// generate field ids based on the column ids
+	idx_t column_id = 1;
+	// auto field_data = DuckLakeFieldData::FromColumns(base_info.columns, column_id);
+	// vector<DuckLakeInlinedTableInfo> inlined_tables;
+	IcebergTableInformation table_info(catalog, *this, "new_table_whatever");
+	auto table_entry = make_uniq<ICTableEntry>(table_info, catalog, *this, base_info);
+
+	auto result = table_entry.get();
+	irc_transaction.CreateEntry(std::move(table_entry));
+	return result;
 }
 
 void IRCSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {

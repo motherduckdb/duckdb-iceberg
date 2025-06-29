@@ -7,6 +7,7 @@
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_authorization.hpp"
 #include "storage/table_update/iceberg_add_snapshot.hpp"
+#include "storage/table_create/iceberg_create_table_request.hpp"
 #include "catalog_utils.hpp"
 
 namespace duckdb {
@@ -22,7 +23,18 @@ void IRCTransaction::MarkTableAsDirty(const ICTableEntry &table) {
 	dirty_tables.insert(&table);
 }
 
+void IRCTransaction::AddCreateTableRequest(unique_ptr<IcebergCreateTableRequest> creat_table_request) {
+}
+
 void IRCTransaction::Start() {
+}
+
+void IRCTransaction::CreateEntry(unique_ptr<ICTableEntry> entry) {
+	new_tables.push_back(std::move(entry));
+}
+
+IRCatalog &IRCTransaction::GetCatalog() {
+	return catalog;
 }
 
 void CommitTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
@@ -125,10 +137,18 @@ static rest_api_objects::TableRequirement CreateAssertRefSnapshotIdRequirement(I
 	return req;
 }
 
+void IRCTransaction::CommitNewTables() {
+	for (auto table : new_tables) {
+	}
+}
+
 void IRCTransaction::Commit() {
-	if (dirty_tables.empty()) {
+
+	if (dirty_tables.empty() && new_tables.empty()) {
 		return;
 	}
+
+	CommitNewTables();
 
 	Connection temp_con(db);
 	temp_con.BeginTransaction();

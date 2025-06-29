@@ -16,10 +16,8 @@ namespace duckdb {
 
 class IcebergCreateTableAs : public PhysicalOperator {
 public:
-	//! INSERT INTO
-	IcebergCreateTableAs(LogicalOperator &op, TableCatalogEntry &table, physical_index_vector_t<idx_t> column_index_map);
 	//! CREATE TABLE AS
-	IcebergCreateTableAs(LogicalOperator &op, SchemaCatalogEntry &schema, unique_ptr<BoundCreateTableInfo> info);
+	IcebergCreateTableAs(LogicalOperator &op, unique_ptr<BoundCreateTableInfo> info, Catalog &catalog);
 
 	//! Table schema, in case of CREATE TABLE AS
 	optional_ptr<SchemaCatalogEntry> schema;
@@ -27,6 +25,8 @@ public:
 	unique_ptr<BoundCreateTableInfo> info;
 	//! column_index_map
 	physical_index_vector_t<idx_t> column_index_map;
+	//! Catalog
+	Catalog &catalog;
 
 public:
 	// // Source interface

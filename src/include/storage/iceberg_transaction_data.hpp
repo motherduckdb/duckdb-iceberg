@@ -9,6 +9,7 @@
 #include "duckdb/function/copy_function.hpp"
 #include "storage/iceberg_table_update.hpp"
 #include "storage/table_update/iceberg_add_snapshot.hpp"
+#include "storage/table_create/iceberg_create_table_request.hpp"
 
 namespace duckdb {
 
@@ -26,7 +27,7 @@ public:
 public:
 	ClientContext &context;
 	IcebergTableInformation &table_info;
-	unique_ptr<IcebergTableCreate> create;
+	unique_ptr<IcebergCreateTableRequest> create;
 	vector<unique_ptr<IcebergTableUpdate>> updates;
 
 	//! Every insert/update/delete creates an alter of the table data
