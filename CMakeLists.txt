@@ -62,6 +62,7 @@ set(EXTENSION_SOURCES
     src/storage/irc_authorization.cpp
     src/storage/irc_transaction_manager.cpp
     src/storage/table_update/iceberg_add_snapshot.cpp
+    src/storage/create_table/iceberg_create_table_request.cpp
 )
 
 add_subdirectory(src/rest_catalog/objects)

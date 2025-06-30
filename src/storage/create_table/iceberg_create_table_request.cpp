@@ -1,6 +1,8 @@
 #include "storage/table_update/iceberg_add_snapshot.hpp"
+#include "storage/table_create/iceberg_create_table_request.hpp"
 #include "storage/irc_table_set.hpp"
 
+#include "catalog_utils.hpp"
 #include "duckdb/common/enums/catalog_type.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
 #include "duckdb/parser/parsed_data/copy_info.hpp"
@@ -9,13 +11,10 @@
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/storage/caching_file_system.hpp"
 
+
 namespace duckdb {
 
-IcebergCreateTableRequest::IcebergCreateTableRequest(IcebergTableInformation &table_info, IcebergManifestFile &&manifest_file,
-                                       const string &manifest_list_path, IcebergSnapshot &&snapshot)
-    : IcebergTableUpdate(IcebergTableUpdateType::ADD_SNAPSHOT, table_info), manifest_file(std::move(manifest_file)),
-      manifest_list(manifest_list_path), snapshot(std::move(snapshot)) {
-}
+IcebergCreateTableRequest::IcebergCreateTableRequest(ClientContext &context, IcebergTableInformation &table_info) {}
 
 rest_api_objects::CreateTableRequest CreateUpdateCreateTableRequest() {
 	rest_api_objects::CreateTableRequest create_table_request;
@@ -48,23 +47,88 @@ rest_api_objects::CreateTableRequest CreateUpdateCreateTableRequest() {
 //}
 
 void IcebergCreateTableRequest::CreateCreateTableRequest(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state) {
-	auto &system_catalog = Catalog::GetSystemCatalog(db);
-	auto data = CatalogTransaction::GetSystemTransaction(db);
-	auto &schema = system_catalog.GetSchema(data, DEFAULT_SCHEMA);
-	auto avro_copy_p = schema.GetEntry(data, CatalogType::COPY_FUNCTION_ENTRY, "avro");
-	D_ASSERT(avro_copy_p);
-	auto &avro_copy = avro_copy_p->Cast<CopyFunctionCatalogEntry>().function;
-
-	auto manifest_length = manifest_file::WriteToFile(table_info, manifest_file, avro_copy, db, context);
-	manifest.manifest_length = manifest_length;
-
-	D_ASSERT(manifest_list.manifests.empty());
-	manifest_list.manifests = std::move(commit_state.manifests);
-	manifest_list.manifests.push_back(std::move(manifest));
-	manifest_list::WriteToFile(manifest_list, avro_copy, db, context);
-	commit_state.manifests = std::move(manifest_list.manifests);
-
-	commit_state.table_change.updates.push_back(CreateAddSnapshotUpdate());
+//	auto &system_catalog = Catalog::GetSystemCatalog(db);
+//	auto data = CatalogTransaction::GetSystemTransaction(db);
+//	auto &schema = system_catalog.GetSchema(data, DEFAULT_SCHEMA);
+//	auto avro_copy_p = schema.GetEntry(data, CatalogType::COPY_FUNCTION_ENTRY, "avro");
+//	D_ASSERT(avro_copy_p);
+//	auto &avro_copy = avro_copy_p->Cast<CopyFunctionCatalogEntry>().function;
+//
+//	auto manifest_length = manifest_file::WriteToFile(table_info, manifest_file, avro_copy, db, context);
+//	manifest.manifest_length = manifest_length;
+//
+//	D_ASSERT(manifest_list.manifests.empty());
+//	manifest_list.manifests = std::move(commit_state.manifests);
+//	manifest_list.manifests.push_back(std::move(manifest));
+//	manifest_list::WriteToFile(manifest_list, avro_copy, db, context);
+//	commit_state.manifests = std::move(manifest_list.manifests);
+//
+//	commit_state.table_change.updates.push_back(CreateAddSnapshotUpdate());
 }
+
+string JsonDocToString(yyjson_mut_doc* doc) {
+	auto root_object = yyjson_mut_doc_get_root(doc);
+
+	//! Write the result to a string
+	auto data = yyjson_mut_val_write_opts(root_object, YYJSON_WRITE_ALLOW_INF_AND_NAN, nullptr, nullptr, nullptr);
+	if (!data) {
+		throw InvalidInputException("Could not create a JSON representation of the table schema, yyjson failed");
+	}
+	auto res = string(data);
+	free(data);
+	return res;
+}
+
+string IcebergCreateTableRequest::CreateTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object) {
+//                       const rest_api_objects::CreateTableRequest &create_table_request) {
+
+	//! name
+	yyjson_mut_obj_add_strcpy(doc, root_object, "name", "new_table_from_duckdb_iceberg_2");
+	//! location (apparently not needed)
+//	yyjson_mut_obj_add_strcpy(doc, root_object, "location", "s3://warehouse/default/this_is_a_new_table");
+	//! stage create
+
+
+	//! schema
+	auto schema_json = yyjson_mut_obj_add_obj(doc, root_object, "schema");
+	//! schema.type
+	yyjson_mut_obj_add_strcpy(doc, schema_json, "type", "struct");
+
+
+//	if (create_table_request.has_schema) {
+	auto fields_arr = yyjson_mut_obj_add_arr(doc, schema_json, "fields");
+//		for (auto &field : create_table_request.fields) {
+
+	auto field_obj = yyjson_mut_arr_add_obj(doc, fields_arr);
+	yyjson_mut_obj_add_uint(doc, field_obj, "id", 1);
+	yyjson_mut_obj_add_strcpy(doc, field_obj, "name", "field_1");
+	yyjson_mut_obj_add_strcpy(doc, field_obj, "type", "string");
+	yyjson_mut_obj_add_bool(doc, field_obj, "required", false);
+//	yyjson_mut_obj_add_strcpy(doc, field_obj, "doc", "string");
+//	yyjson_mut_obj_add_bool(doc, field_obj, "initial_default", true);
+//	yyjson_mut_obj_add_bool(doc, field_obj, "write_default", true);
+
+	// add the fields
+
+	// for (auto &types : field.types) {
+
+//	}
+	yyjson_mut_obj_add_uint(doc, schema_json, "schema-id", 0);
+	auto identifier_fields_arr = yyjson_mut_obj_add_arr(doc, schema_json, "identifier-field-ids");
+
+	auto partition_spec = yyjson_mut_obj_add_obj(doc, root_object, "partition-spec");
+	yyjson_mut_obj_add_uint(doc, partition_spec, "spec-id", 0);
+	auto partition_spec_fields = yyjson_mut_obj_add_arr(doc, partition_spec, "fields");
+
+	auto write_order = yyjson_mut_obj_add_obj(doc, root_object, "write-order");
+	yyjson_mut_obj_add_uint(doc, write_order, "order-id", 0);
+	auto write_order_fields = yyjson_mut_obj_add_arr(doc, write_order, "fields");
+
+	yyjson_mut_obj_add_bool(doc, root_object, "stage-create", false);
+	auto properties = yyjson_mut_obj_add_obj(doc, root_object, "properties");
+
+	return JsonDocToString(doc);
+}
+
 
 } // namespace duckdb

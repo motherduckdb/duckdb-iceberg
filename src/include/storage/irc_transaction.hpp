@@ -29,6 +29,7 @@ public:
 	void AddCreateTableRequest(unique_ptr<IcebergCreateTableRequest> creat_table_request);
 	IRCatalog &GetCatalog();
 	void CreateEntry(unique_ptr<ICTableEntry> entry);
+	void CommitNewTables(ClientContext &context);
 	void DropSecrets(ClientContext &context);
 	rest_api_objects::CommitTransactionRequest GetTransactionRequest(ClientContext &context);
 

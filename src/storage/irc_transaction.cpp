@@ -1,3 +1,4 @@
+#include "duckdb/common/assert.hpp"
 #include "duckdb/parser/parsed_data/create_view_info.hpp"
 #include "duckdb/catalog/catalog_entry/index_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
@@ -152,8 +153,36 @@ static rest_api_objects::TableRequirement CreateAssertRefSnapshotIdRequirement(I
 	return req;
 }
 
-void IRCTransaction::CommitNewTables() {
-	for (auto table : new_tables) {
+void IRCTransaction::CommitNewTables(ClientContext &context) {
+	for (auto &table : new_tables) {
+		auto &table_info = table->table_info;
+		// create empty manifest list and manifest path?
+		// create a snapshot?
+		// post to the endpoint?
+		// TODO: add D_ASSERT for the URL
+
+		auto table_namespace = "default";
+		auto url_builder = catalog.GetBaseUrl();
+		url_builder.AddPathComponent(catalog.prefix);
+		url_builder.AddPathComponent("namespaces");
+		url_builder.AddPathComponent(table_namespace);
+		url_builder.AddPathComponent("tables");
+
+		std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
+		yyjson_mut_doc *doc = doc_p.get();
+		auto root_object = yyjson_mut_obj(doc);
+		yyjson_mut_doc_set_root(doc, root_object);
+
+		// todo, get the new table commit info?
+		auto create_table_json = IcebergCreateTableRequest::CreateTableToJSON(doc, root_object);
+
+
+		auto response = catalog.auth_handler->PostRequest(context, url_builder, create_table_json);
+		if (response->status != HTTPStatusCode::OK_200) {
+			throw InvalidConfigurationException(
+			    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s", url_builder.GetURL(),
+			    EnumUtil::ToString(response->status), response->reason, response->body);
+		}
 	}
 }
 
@@ -214,11 +243,20 @@ void IRCTransaction::Commit() {
 		return;
 	}
 
-	CommitNewTables();
-
 	Connection temp_con(db);
 	temp_con.BeginTransaction();
 	auto &context = temp_con.context;
+
+	if (!new_tables.empty()) {
+		CommitNewTables(*context);
+	}
+
+	if (dirty_tables.empty()) {
+		// we don't need to do anything here.
+		temp_con.Rollback();
+		return;
+	}
+
 	try {
 		auto transaction = GetTransactionRequest(*context);
 		auto &authentication = *catalog.auth_handler;
