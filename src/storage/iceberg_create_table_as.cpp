@@ -21,11 +21,12 @@
 namespace duckdb {
 
 IcebergCreateTableAs::IcebergCreateTableAs(LogicalOperator &op, unique_ptr<BoundCreateTableInfo> info, Catalog &catalog)
-    : PhysicalOperator(PhysicalOperatorType::EXTENSION, op.types, 1), schema(nullptr),
-      info(std::move(info)), catalog(catalog) {
+    : PhysicalOperator(PhysicalOperatorType::EXTENSION, op.types, 1), schema(nullptr), info(std::move(info)),
+      catalog(catalog) {
 }
 
-//IcebergCreateTableAs::IcebergCreateTableAs(LogicalOperator &op, SchemaCatalogEntry &schema, unique_ptr<BoundCreateTableInfo> info)
+// IcebergCreateTableAs::IcebergCreateTableAs(LogicalOperator &op, SchemaCatalogEntry &schema,
+// unique_ptr<BoundCreateTableInfo> info)
 //    : PhysicalOperator(PhysicalOperatorType::EXTENSION, op.types, 1), table(nullptr), schema(&schema),
 //      info(std::move(info)) {
 //}
@@ -38,7 +39,6 @@ public:
 	explicit IcebergCreateTableAsGlobalState() = default;
 	// does a create table need any manifest files?
 	vector<IcebergManifestEntry> written_files;
-
 };
 
 unique_ptr<GlobalSinkState> IcebergCreateTableAs::GetGlobalSinkState(ClientContext &context) const {
@@ -61,7 +61,8 @@ SinkResultType IcebergCreateTableAs::Sink(ExecutionContext &context, DataChunk &
 //===--------------------------------------------------------------------===//
 // GetData
 //===--------------------------------------------------------------------===//
-SourceResultType IcebergCreateTableAs::GetData(ExecutionContext &context, DataChunk &chunk, OperatorSourceInput &input) const {
+SourceResultType IcebergCreateTableAs::GetData(ExecutionContext &context, DataChunk &chunk,
+                                               OperatorSourceInput &input) const {
 	auto &global_state = sink_state->Cast<IcebergCreateTableAsGlobalState>();
 	auto value = Value::BIGINT(1);
 	chunk.SetCardinality(1);
@@ -73,17 +74,17 @@ SourceResultType IcebergCreateTableAs::GetData(ExecutionContext &context, DataCh
 // Finalize
 //===--------------------------------------------------------------------===//
 SinkFinalizeType IcebergCreateTableAs::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
-                                         OperatorSinkFinalizeInput &input) const {
+                                                OperatorSinkFinalizeInput &input) const {
 	auto &global_state = input.global_state.Cast<IcebergCreateTableAsGlobalState>();
 
 	// create the create table request in the transaction
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
 	auto &transaction = IRCTransaction::Get(context, ic_catalog);
 
-//	table_info.AddSnapshot(transaction, std::move(global_state.written_files));
+	//	table_info.AddSnapshot(transaction, std::move(global_state.written_files));
 	// here I need to figure out a way to add the proper information to the transaction
-//	auto createTableRequest = make_uniq<IcebergCreateTableRequest>(context, *info);
-//	transaction.AddCreateTableRequest(irc_table);
+	//	auto createTableRequest = make_uniq<IcebergCreateTableRequest>(context, *info);
+	//	transaction.AddCreateTableRequest(irc_table);
 	return SinkFinalizeType::READY;
 }
 
@@ -147,7 +148,7 @@ PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalP
 
 	auto &transaction = IRCTransaction::Get(context, *this);
 	auto &schemas = transaction.GetSchemas();
-//	auto the_schema = schemas.GetEntry(context, "default")->Cast<SchemaCatalogEntry>();
+	//	auto the_schema = schemas.GetEntry(context, "default")->Cast<SchemaCatalogEntry>();
 
 	// create the table within the transaction?
 	// might as well, the IRCSchemaSet/IRCTableSet only exist per transaction, so

@@ -39,8 +39,9 @@ string IcebergTypeRenamer::GetIcebergTypeString(LogicalType &type) {
 	case LogicalTypeId::STRUCT:
 		return "struct";
 	case LogicalTypeId::LIST:
-	case LogicalTypeId::MAP:
 	case LogicalTypeId::ARRAY:
+		return "list";
+	case LogicalTypeId::MAP:
 	default:
 		throw NotImplementedException("Type not supported in Duckdb-Iceberg");
 	}
@@ -108,14 +109,14 @@ rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(LogicalType &typ
 		}
 		return rest_type;
 	}
-	case LogicalTypeId::ARRAY: {
+	case LogicalTypeId::LIST: {
+		rest_type.has_primitive_type = false;
 		rest_type.has_list_type = true;
 		rest_type.list_type = rest_api_objects::ListType();
-		auto array_aux = type.AuxInfo()->Cast<ArrayTypeInfo>();
-		rest_type.list_type.type = IcebergTypeRenamer::GetIcebergTypeString(array_aux.child_type);
-		rest_type.list_type.element = nullptr;
-		rest_type.list_type.element = make_uniq<rest_api_objects::Type>(
-		    IcebergTypeHelper::CreateIcebergRestType(array_aux.child_type, column_id));
+		auto list_aux = type.AuxInfo()->Cast<ListTypeInfo>();
+		rest_type.list_type.type = IcebergTypeRenamer::GetIcebergTypeString(list_aux.child_type);
+		rest_type.list_type.element =
+		    make_uniq<rest_api_objects::Type>(IcebergTypeHelper::CreateIcebergRestType(list_aux.child_type, column_id));
 		rest_type.list_type.element_required = false;
 		// TODO: what is the element id for? Is it the field id?
 		rest_type.list_type.element_id = column_id;

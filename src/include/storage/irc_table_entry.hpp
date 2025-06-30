@@ -32,7 +32,7 @@ public:
 	ICTableEntry(IcebergTableInformation &table_info, Catalog &catalog, SchemaCatalogEntry &schema,
 	             CreateTableInfo &info);
 	ICTableEntry(IcebergTableInformation &table_info, IRCatalog &catalog, SchemaCatalogEntry &schema,
-		     CreateTableInfo &info);
+	             CreateTableInfo &info);
 
 	virtual_column_map_t GetVirtualColumns() const override;
 	vector<column_t> GetRowIdColumns() const override;

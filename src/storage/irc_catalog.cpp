@@ -75,7 +75,6 @@ void IRCatalog::DropSchema(ClientContext &context, DropInfo &info) {
 	throw NotImplementedException("IRCatalog::DropSchema not implemented");
 }
 
-
 PhysicalOperator &IRCatalog::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,
                                         PhysicalOperator &plan) {
 	throw NotImplementedException("IRCatalog PlanDelete");

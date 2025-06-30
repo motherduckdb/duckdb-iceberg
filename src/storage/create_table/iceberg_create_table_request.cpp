@@ -75,13 +75,22 @@ static void PopulateYYJSONfields(yyjson_mut_doc *doc, yyjson_mut_val *fields_arr
 	yyjson_mut_obj_add_strcpy(doc, field_obj, "name", column.name.c_str());
 	if (column.type.IsNested()) {
 		auto nested_type = yyjson_mut_obj_add_obj(doc, field_obj, "type");
-		yyjson_mut_obj_add_strcpy(doc, nested_type, "type", "struct");
-		auto nested_fields_arr = yyjson_mut_obj_add_arr(doc, nested_type, "fields");
 		switch (column.type.id()) {
 		case LogicalTypeId::STRUCT: {
+			yyjson_mut_obj_add_strcpy(doc, nested_type, "type", "struct");
+			auto nested_fields_arr = yyjson_mut_obj_add_arr(doc, nested_type, "fields");
 			for (auto &field : column.children) {
 				PopulateYYJSONfields(doc, nested_fields_arr, *field);
 			}
+			break;
+		}
+		case LogicalTypeId::LIST: {
+			yyjson_mut_obj_add_strcpy(doc, nested_type, "type", "list");
+			D_ASSERT(column.children.size() == 1);
+			yyjson_mut_obj_add_uint(doc, nested_type, "element-id", column.children[0]->id);
+			yyjson_mut_obj_add_strcpy(doc, nested_type, "element",
+			                          IcebergTypeRenamer::GetIcebergTypeString(column.children[0]->type).c_str());
+			yyjson_mut_obj_add_bool(doc, nested_type, "element-required", false);
 			break;
 		}
 		default:
@@ -104,6 +113,7 @@ string IcebergCreateTableRequest::CreateTableToJSON(yyjson_mut_doc *doc, yyjson_
 	// should this be a different schema id?
 	schema->schema_id = 0;
 
+	// TODO: this can all be refactored
 	auto column_iterator = table_entry.GetColumns().Logical();
 	idx_t column_id = 0;
 	for (auto column = column_iterator.begin(); column != column_iterator.end(); ++column) {
