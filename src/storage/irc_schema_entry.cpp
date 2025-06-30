@@ -1,6 +1,8 @@
 #include "storage/irc_schema_entry.hpp"
 #include "storage/irc_table_entry.hpp"
 #include "storage/irc_transaction.hpp"
+#include "storage/iceberg_type.hpp"
+#include "duckdb/parser/column_list.hpp"
 #include "duckdb/parser/parsed_data/create_view_info.hpp"
 #include "duckdb/parser/parsed_data/create_index_info.hpp"
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
@@ -27,21 +29,16 @@ IRCTransaction &GetUCTransaction(CatalogTransaction transaction) {
 	return transaction.transaction->Cast<IRCTransaction>();
 }
 
-
-
 optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(CatalogTransaction transaction, BoundCreateTableInfo &info) {
 	auto &base_info = info.Base();
 	auto &irc_transaction = transaction.transaction->Cast<IRCTransaction>();
 
-	// TODO:
-	// check if we have an existing entry with this name
-
 	auto &catalog = irc_transaction.GetCatalog();
 	// generate field ids based on the column ids
-	idx_t column_id = 1;
 	// auto field_data = DuckLakeFieldData::FromColumns(base_info.columns, column_id);
 	// vector<DuckLakeInlinedTableInfo> inlined_tables;
-	IcebergTableInformation table_info(catalog, *this, "new_table_whatever");
+	IcebergTableInformation table_info(catalog, *this, base_info.table);
+
 	auto table_entry = make_uniq<ICTableEntry>(table_info, catalog, *this, base_info);
 
 	auto result = table_entry.get();

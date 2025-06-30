@@ -174,8 +174,7 @@ void IRCTransaction::CommitNewTables(ClientContext &context) {
 		yyjson_mut_doc_set_root(doc, root_object);
 
 		// todo, get the new table commit info?
-		auto create_table_json = IcebergCreateTableRequest::CreateTableToJSON(doc, root_object);
-
+		auto create_table_json = IcebergCreateTableRequest::CreateTableToJSON(doc, root_object, *table);
 
 		auto response = catalog.auth_handler->PostRequest(context, url_builder, create_table_json);
 		if (response->status != HTTPStatusCode::OK_200) {
