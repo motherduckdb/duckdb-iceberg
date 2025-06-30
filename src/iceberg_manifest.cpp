@@ -426,8 +426,16 @@ AvroScan::AvroScan(const string &scan_name, ClientContext &context, const string
 	auto &instance = DatabaseInstance::GetDatabase(context);
 	ExtensionHelper::AutoLoadExtension(instance, "avro");
 
-	auto &avro_scan_entry = ExtensionUtil::GetTableFunction(instance, "read_avro");
+	auto &system_catalog = Catalog::GetSystemCatalog(instance);
+	auto data = CatalogTransaction::GetSystemTransaction(instance);
+	auto &schema = system_catalog.GetSchema(data, DEFAULT_SCHEMA);
+	auto catalog_entry = schema.GetEntry(data, CatalogType::TABLE_FUNCTION_ENTRY, "read_avro");
+	if (!catalog_entry) {
+		throw InvalidInputException("Function with name \"read_avro\" not found!");
+	}
+	auto &avro_scan_entry = catalog_entry->Cast<TableFunctionCatalogEntry>();
 	avro_scan = avro_scan_entry.functions.functions[0];
+
 
 	// Prepare the inputs for the bind
 	vector<Value> children;
