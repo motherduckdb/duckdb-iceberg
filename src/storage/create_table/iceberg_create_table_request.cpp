@@ -69,6 +69,35 @@ void IcebergCreateTableRequest::CreateCreateTableRequest(DatabaseInstance &db, C
 	//	commit_state.table_change.updates.push_back(CreateAddSnapshotUpdate());
 }
 
+static void PopulateYYJSONfields(yyjson_mut_doc *doc, yyjson_mut_val *fields_array, IcebergColumnDefinition &column) {
+	auto field_obj = yyjson_mut_arr_add_obj(doc, fields_array);
+	yyjson_mut_obj_add_uint(doc, field_obj, "id", column.id);
+	yyjson_mut_obj_add_strcpy(doc, field_obj, "name", column.name.c_str());
+	if (column.type.IsNested()) {
+		auto nested_type = yyjson_mut_obj_add_obj(doc, field_obj, "type");
+		yyjson_mut_obj_add_strcpy(doc, nested_type, "type", "struct");
+		auto nested_fields_arr = yyjson_mut_obj_add_arr(doc, nested_type, "fields");
+		switch (column.type.id()) {
+		case LogicalTypeId::STRUCT: {
+			for (auto &field : column.children) {
+				PopulateYYJSONfields(doc, nested_fields_arr, *field);
+			}
+			break;
+		}
+		default:
+			throw NotImplementedException("Not implemented");
+		}
+	} else {
+		yyjson_mut_obj_add_strcpy(doc, field_obj, "type",
+		                          IcebergTypeRenamer::GetIcebergTypeString(column.type).c_str());
+	}
+	yyjson_mut_obj_add_bool(doc, field_obj, "required", column.required);
+	// skip doc, initial_default, and write_default for now.
+	//	yyjson_mut_obj_add_strcpy(doc, field_obj, "doc", "string");
+	//	yyjson_mut_obj_add_bool(doc, field_obj, "initial_default", true);
+	//	yyjson_mut_obj_add_bool(doc, field_obj, "write_default", true);
+}
+
 string IcebergCreateTableRequest::CreateTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
                                                     ICTableEntry &table_entry) {
 	auto schema = make_shared_ptr<IcebergTableSchema>();
@@ -80,26 +109,13 @@ string IcebergCreateTableRequest::CreateTableToJSON(yyjson_mut_doc *doc, yyjson_
 	for (auto column = column_iterator.begin(); column != column_iterator.end(); ++column) {
 		auto name = (*column).Name();
 		auto field_id = column_id;
+		column_id++;
 		bool required = false;
-		rest_api_objects::Type type;
-		type.primitive_type = rest_api_objects::PrimitiveType();
 		auto logical_type = (*column).GetType();
-		switch (logical_type.id()) {
-		case LogicalTypeId::MAP:
-		case LogicalTypeId::STRUCT:
-		case LogicalTypeId::ARRAY:
-		case LogicalTypeId::ANY:
-			type.has_primitive_type = false;
-			break;
-		default:
-			type.has_primitive_type = true;
-		}
-		type.has_primitive_type = true;
-		type.primitive_type.value = IcebergTypeRenamer::GetIcebergTypeString(logical_type);
+		auto type = IcebergTypeHelper::CreateIcebergRestType(logical_type, column_id);
 		auto column_def = IcebergColumnDefinition::ParseType(name, field_id, required, type, nullptr);
 
 		schema->columns.push_back(std::move(column_def));
-		column_id++;
 	}
 
 	auto table_name = table_entry.name;
@@ -114,18 +130,11 @@ string IcebergCreateTableRequest::CreateTableToJSON(yyjson_mut_doc *doc, yyjson_
 
 	auto fields_arr = yyjson_mut_obj_add_arr(doc, schema_json, "fields");
 
+	// populate the fields
 	for (auto &field : schema->columns) {
-		auto field_obj = yyjson_mut_arr_add_obj(doc, fields_arr);
-		yyjson_mut_obj_add_uint(doc, field_obj, "id", field->id);
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "name", field->name.c_str());
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "type",
-		                          IcebergTypeRenamer::GetIcebergTypeString(field->type).c_str());
-		yyjson_mut_obj_add_bool(doc, field_obj, "required", field->required);
-		// skip doc, initial_default, and write_default for now.
-		//	yyjson_mut_obj_add_strcpy(doc, field_obj, "doc", "string");
-		//	yyjson_mut_obj_add_bool(doc, field_obj, "initial_default", true);
-		//	yyjson_mut_obj_add_bool(doc, field_obj, "write_default", true);
+		PopulateYYJSONfields(doc, fields_arr, *field);
 	}
+
 	yyjson_mut_obj_add_uint(doc, schema_json, "schema-id", schema->schema_id);
 	auto identifier_fields_arr = yyjson_mut_obj_add_arr(doc, schema_json, "identifier-field-ids");
 

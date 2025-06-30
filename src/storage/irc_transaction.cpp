@@ -155,13 +155,8 @@ static rest_api_objects::TableRequirement CreateAssertRefSnapshotIdRequirement(I
 
 void IRCTransaction::CommitNewTables(ClientContext &context) {
 	for (auto &table : new_tables) {
-		auto &table_info = table->table_info;
-		// create empty manifest list and manifest path?
-		// create a snapshot?
-		// post to the endpoint?
 		// TODO: add D_ASSERT for the URL
-
-		auto table_namespace = "default";
+		auto table_namespace = table->schema.name;
 		auto url_builder = catalog.GetBaseUrl();
 		url_builder.AddPathComponent(catalog.prefix);
 		url_builder.AddPathComponent("namespaces");
@@ -184,9 +179,8 @@ void IRCTransaction::CommitNewTables(ClientContext &context) {
 				    url_builder.GetURL(), EnumUtil::ToString(response->status), response->reason, response->body);
 			}
 		} catch (const std::exception &e) {
-			Printer::Print("create table json");
-			Printer::Print(create_table_json);
-			std::cerr << e.what() << std::endl;
+			throw InvalidConfigurationException("Request to '%s' returned a non-200 status code body: %s",
+			                                    url_builder.GetURL(), e.what());
 		}
 	}
 }
