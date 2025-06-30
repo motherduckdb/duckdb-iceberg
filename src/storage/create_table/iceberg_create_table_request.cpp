@@ -2,7 +2,7 @@
 #include "storage/table_create/iceberg_create_table_request.hpp"
 #include "storage/irc_table_set.hpp"
 #include "storage/iceberg_type.hpp"
-
+#include "utils/json_utils.hpp"
 #include "catalog_utils.hpp"
 #include "duckdb/common/enums/catalog_type.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
@@ -69,19 +69,6 @@ void IcebergCreateTableRequest::CreateCreateTableRequest(DatabaseInstance &db, C
 	//	commit_state.table_change.updates.push_back(CreateAddSnapshotUpdate());
 }
 
-string JsonDocToString(yyjson_mut_doc *doc) {
-	auto root_object = yyjson_mut_doc_get_root(doc);
-
-	//! Write the result to a string
-	auto data = yyjson_mut_val_write_opts(root_object, YYJSON_WRITE_ALLOW_INF_AND_NAN, nullptr, nullptr, nullptr);
-	if (!data) {
-		throw InvalidInputException("Could not create a JSON representation of the table schema, yyjson failed");
-	}
-	auto res = string(data);
-	free(data);
-	return res;
-}
-
 string IcebergCreateTableRequest::CreateTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
                                                     ICTableEntry &table_entry) {
 	auto schema = make_shared_ptr<IcebergTableSchema>();
@@ -116,19 +103,13 @@ string IcebergCreateTableRequest::CreateTableToJSON(yyjson_mut_doc *doc, yyjson_
 	}
 
 	auto table_name = table_entry.name;
-	//	D_ASSERT(table_info.schema_versions.size() == 1);
-	//	D_ASSERT(metadata.schemas.size() == 1);
 
 	//! name
 	yyjson_mut_obj_add_strcpy(doc, root_object, "name", table_name.c_str());
 	//! location (apparently not needed)
 	// yyjson_mut_obj_add_strcpy(doc, root_object, "location", "s3://warehouse/default/this_is_a_new_table");
-	//! stage create
-
-	//! schema
 
 	auto schema_json = yyjson_mut_obj_add_obj(doc, root_object, "schema");
-	//! schema.type
 	yyjson_mut_obj_add_strcpy(doc, schema_json, "type", "struct");
 
 	auto fields_arr = yyjson_mut_obj_add_arr(doc, schema_json, "fields");
@@ -140,13 +121,13 @@ string IcebergCreateTableRequest::CreateTableToJSON(yyjson_mut_doc *doc, yyjson_
 		yyjson_mut_obj_add_strcpy(doc, field_obj, "type",
 		                          IcebergTypeRenamer::GetIcebergTypeString(field->type).c_str());
 		yyjson_mut_obj_add_bool(doc, field_obj, "required", field->required);
+		// skip doc, initial_default, and write_default for now.
+		//	yyjson_mut_obj_add_strcpy(doc, field_obj, "doc", "string");
+		//	yyjson_mut_obj_add_bool(doc, field_obj, "initial_default", true);
+		//	yyjson_mut_obj_add_bool(doc, field_obj, "write_default", true);
 	}
 	yyjson_mut_obj_add_uint(doc, schema_json, "schema-id", schema->schema_id);
 	auto identifier_fields_arr = yyjson_mut_obj_add_arr(doc, schema_json, "identifier-field-ids");
-
-	//	yyjson_mut_obj_add_strcpy(doc, field_obj, "doc", "string");
-	//	yyjson_mut_obj_add_bool(doc, field_obj, "initial_default", true);
-	//	yyjson_mut_obj_add_bool(doc, field_obj, "write_default", true);
 
 	auto partition_spec = yyjson_mut_obj_add_obj(doc, root_object, "partition-spec");
 	yyjson_mut_obj_add_uint(doc, partition_spec, "spec-id", 0);
@@ -159,7 +140,7 @@ string IcebergCreateTableRequest::CreateTableToJSON(yyjson_mut_doc *doc, yyjson_
 	yyjson_mut_obj_add_bool(doc, root_object, "stage-create", false);
 	auto properties = yyjson_mut_obj_add_obj(doc, root_object, "properties");
 
-	return JsonDocToString(doc);
+	return JSONUtils::JsonDocToString(doc);
 }
 
 } // namespace duckdb
