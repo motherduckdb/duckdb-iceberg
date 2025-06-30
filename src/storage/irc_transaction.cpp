@@ -176,11 +176,17 @@ void IRCTransaction::CommitNewTables(ClientContext &context) {
 		// todo, get the new table commit info?
 		auto create_table_json = IcebergCreateTableRequest::CreateTableToJSON(doc, root_object, *table);
 
-		auto response = catalog.auth_handler->PostRequest(context, url_builder, create_table_json);
-		if (response->status != HTTPStatusCode::OK_200) {
-			throw InvalidConfigurationException(
-			    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s", url_builder.GetURL(),
-			    EnumUtil::ToString(response->status), response->reason, response->body);
+		try {
+			auto response = catalog.auth_handler->PostRequest(context, url_builder, create_table_json);
+			if (response->status != HTTPStatusCode::OK_200) {
+				throw InvalidConfigurationException(
+				    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s",
+				    url_builder.GetURL(), EnumUtil::ToString(response->status), response->reason, response->body);
+			}
+		} catch (const std::exception &e) {
+			Printer::Print("create table json");
+			Printer::Print(create_table_json);
+			std::cerr << e.what() << std::endl;
 		}
 	}
 }
@@ -297,6 +303,7 @@ void IRCTransaction::Commit() {
 				url_builder.AddPathComponent(table_change.identifier.name);
 
 				auto transaction_json = ConstructTableUpdateJSON(table_change);
+				Printer::Print(transaction_json);
 
 				auto response = authentication.PostRequest(*context, url_builder, transaction_json);
 				if (response->status != HTTPStatusCode::OK_200) {

@@ -115,8 +115,7 @@ string IcebergCreateTableRequest::CreateTableToJSON(yyjson_mut_doc *doc, yyjson_
 		column_id++;
 	}
 
-	auto &table_info = table_entry.GetInfo()->Cast<CreateTableInfo>();
-	auto table_name = table_info.table;
+	auto table_name = table_entry.name;
 	//	D_ASSERT(table_info.schema_versions.size() == 1);
 	//	D_ASSERT(metadata.schemas.size() == 1);
 

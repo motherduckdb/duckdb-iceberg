@@ -1,8 +1,8 @@
 # name: test/sql/local/irc/create/test_create_table.test
 # description: test create table
-# group: [irc]
+# group: [create]
 
-require-env ICEBERG_SERVER_AVAILABLE
+# require-env ICEBERG_SERVER_AVAILABLE
 
 require avro
 
@@ -45,4 +45,7 @@ statement ok
 use my_datalake.default
 
 statement ok
-create table t1 (a int);
+create table t9 (a int);
+
+statement ok
+insert into t6 (select range a from range(100));
