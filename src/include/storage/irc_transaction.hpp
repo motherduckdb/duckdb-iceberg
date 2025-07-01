@@ -26,9 +26,9 @@ public:
 		return schemas;
 	}
 	void MarkTableAsDirty(const ICTableEntry &table);
+	void MarkTableAsNew(const ICTableEntry &table);
 	void AddCreateTableRequest(unique_ptr<IcebergCreateTableRequest> creat_table_request);
 	IRCatalog &GetCatalog();
-	void CreateEntry(unique_ptr<ICTableEntry> entry);
 	void CommitNewTables(ClientContext &context);
 	void DropSecrets(ClientContext &context);
 	rest_api_objects::CommitTransactionRequest GetTransactionRequest(ClientContext &context);
@@ -45,7 +45,7 @@ public:
 	IRCSchemaSet schemas;
 	//! Tables marked dirty in this transaction, to be rewritten on commit
 	unordered_set<const ICTableEntry *> dirty_tables;
-	vector<unique_ptr<ICTableEntry>> new_tables;
+	unordered_set<const ICTableEntry *> new_tables;
 	case_insensitive_set_t created_secrets;
 };
 

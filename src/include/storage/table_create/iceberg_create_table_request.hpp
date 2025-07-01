@@ -2,6 +2,7 @@
 #include "storage/iceberg_table_update.hpp"
 
 #include "metadata/iceberg_manifest.hpp"
+#include "metadata/iceberg_table_schema.hpp"
 #include "metadata/iceberg_manifest_list.hpp"
 #include "metadata/iceberg_snapshot.hpp"
 #include "duckdb/common/vector.hpp"
@@ -21,9 +22,10 @@ struct IcebergCreateTableRequest {
 
 public:
 	void CreateManifest(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state);
+	static shared_ptr<IcebergTableSchema> CreateIcebergSchema(const ICTableEntry *table_entry);
 	rest_api_objects::CreateTableRequest CreateUpdateCreateTableRequest();
 	void CreateCreateTableRequest(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state);
-	static string CreateTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object, ICTableEntry &table_entry);
+	static string CreateTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object, const ICTableEntry *table_entry);
 };
 
 } // namespace duckdb

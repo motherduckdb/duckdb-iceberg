@@ -4,6 +4,7 @@
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_table_set.hpp"
 #include "storage/irc_transaction.hpp"
+#include "metadata/iceberg_partition_spec.hpp"
 #include "duckdb/parser/constraints/not_null_constraint.hpp"
 #include "duckdb/parser/constraints/unique_constraint.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
@@ -91,7 +92,10 @@ static void ParseConfigOptions(const case_insensitive_map_t<string> &config, cas
 }
 
 const string &IcebergTableInformation::BaseFilePath() const {
-	return load_table_result.metadata.location;
+	if (load_table_result.metadata.has_location) {
+		return load_table_result.metadata.location;
+	}
+	return "";
 }
 
 IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientContext &context) {
@@ -191,7 +195,8 @@ optional_ptr<CatalogEntry> IcebergTableInformation::CreateSchemaVersion(IcebergT
 		info.columns.AddColumn(ColumnDefinition(col->name, col->type));
 	}
 
-	auto table_entry = make_uniq<ICTableEntry>(*this, catalog, schema, info);
+	auto new_iceberg_info = make_uniq<IcebergTableInformation>(catalog, schema, name);
+	auto table_entry = make_uniq<ICTableEntry>(std::move(new_iceberg_info), catalog, schema, info);
 	if (!table_entry->internal) {
 		table_entry->internal = schema.internal;
 	}
@@ -244,9 +249,9 @@ void ICTableSet::Scan(ClientContext &context, const std::function<void(CatalogEn
 	LoadEntries(context);
 	for (auto &entry : entries) {
 		auto &table_info = entry.second;
-		FillEntry(context, table_info);
-		auto schema_id = table_info.table_metadata.current_schema_id;
-		callback(*table_info.schema_versions[schema_id]);
+		FillEntry(context, *table_info);
+		auto schema_id = table_info->table_metadata.current_schema_id;
+		callback(*table_info->schema_versions[schema_id]);
 	}
 }
 
@@ -260,8 +265,40 @@ void ICTableSet::LoadEntries(ClientContext &context) {
 	auto tables = IRCAPI::GetTables(context, ic_catalog, schema.name);
 
 	for (auto &table : tables) {
-		entries.emplace(table.name, IcebergTableInformation(ic_catalog, schema, table.name));
+		entries.emplace(table.name, make_uniq<IcebergTableInformation>(ic_catalog, schema, table.name));
 	}
+}
+
+void ICTableSet::CreateNewEntry(ClientContext &context, shared_ptr<IcebergTableInformation> new_table,
+                                CreateTableInfo &info) {
+	if (entries.find(new_table->name) != entries.end()) {
+		throw CatalogException("Table %s already exists", new_table->name.c_str());
+	}
+	auto table_name = new_table->name;
+	auto &irc_catalog = new_table->catalog.Cast<IRCatalog>();
+	auto new_location = "s3://" + irc_catalog.warehouse + "/" + new_table->schema.name + "/" + new_table->name;
+
+	auto table_entry = make_uniq<ICTableEntry>(new_table, new_table->catalog, schema, info);
+	auto optional_entry = table_entry.get();
+	// Schema versions start at 1 I guess?
+	optional_entry->table_info->schema_versions[0] = std::move(table_entry);
+	optional_entry->table_info->table_metadata.schemas[0] =
+	    IcebergCreateTableRequest::CreateIcebergSchema(optional_entry);
+	optional_entry->table_info->table_metadata.partition_specs[0] = IcebergPartitionSpec();
+	optional_entry->table_info->table_metadata.default_spec_id = 0;
+	optional_entry->table_info->table_metadata.current_schema_id = 0;
+	optional_entry->table_info->table_metadata.has_current_snapshot = false;
+	optional_entry->table_info->table_metadata.current_snapshot_id = 0;
+	optional_entry->table_info->name = table_name;
+	// need to set the has_location to false
+	optional_entry->table_info->load_table_result.metadata.has_location = false;
+	// optional_entry->table_info->load_table_result.metadata.location = optional_entry.
+	optional_entry->table_info->table_metadata.iceberg_version = 0;
+	optional_entry->table_info->table_metadata.last_sequence_number = 0;
+	optional_entry->table_info = 0;
+
+	entries.emplace(table_name, optional_entry->table_info);
+	auto check_table_entry_table_info_here = 0;
 }
 
 unique_ptr<ICTableInfo> ICTableSet::GetTableInfo(ClientContext &context, IRCSchemaEntry &schema,
@@ -276,8 +313,8 @@ optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const En
 	if (entry == entries.end()) {
 		return nullptr;
 	}
-	FillEntry(context, entry->second);
-	return entry->second.GetSchemaVersion(lookup.GetAtClause());
+	FillEntry(context, *entry->second);
+	return entry->second.get()->GetSchemaVersion(lookup.GetAtClause());
 }
 
 } // namespace duckdb

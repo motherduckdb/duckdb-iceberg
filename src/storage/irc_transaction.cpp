@@ -24,14 +24,14 @@ void IRCTransaction::MarkTableAsDirty(const ICTableEntry &table) {
 	dirty_tables.insert(&table);
 }
 
+void IRCTransaction::MarkTableAsNew(const ICTableEntry &table) {
+	new_tables.insert(&table);
+}
+
 void IRCTransaction::AddCreateTableRequest(unique_ptr<IcebergCreateTableRequest> creat_table_request) {
 }
 
 void IRCTransaction::Start() {
-}
-
-void IRCTransaction::CreateEntry(unique_ptr<ICTableEntry> entry) {
-	new_tables.push_back(std::move(entry));
 }
 
 IRCatalog &IRCTransaction::GetCatalog() {
@@ -155,7 +155,7 @@ static rest_api_objects::TableRequirement CreateAssertRefSnapshotIdRequirement(I
 
 void IRCTransaction::CommitNewTables(ClientContext &context) {
 	for (auto &table : new_tables) {
-		// TODO: add D_ASSERT for the URL
+		// TODO: add D_ASSERT for the post table url
 		auto table_namespace = table->schema.name;
 		auto url_builder = catalog.GetBaseUrl();
 		url_builder.AddPathComponent(catalog.prefix);
@@ -169,7 +169,7 @@ void IRCTransaction::CommitNewTables(ClientContext &context) {
 		yyjson_mut_doc_set_root(doc, root_object);
 
 		// todo, get the new table commit info?
-		auto create_table_json = IcebergCreateTableRequest::CreateTableToJSON(doc, root_object, *table);
+		auto create_table_json = IcebergCreateTableRequest::CreateTableToJSON(doc, root_object, table);
 
 		try {
 			auto response = catalog.auth_handler->PostRequest(context, url_builder, create_table_json);
@@ -201,7 +201,7 @@ rest_api_objects::CommitTransactionRequest IRCTransaction::GetTransactionRequest
 		table_change.identifier.name = table->name;
 		table_change.has_identifier = true;
 
-		auto &metadata = table->table_info.table_metadata;
+		auto &metadata = table->table_info->table_metadata;
 		auto current_snapshot = metadata.GetLatestSnapshot();
 		if (current_snapshot) {
 			auto &manifest_list_path = current_snapshot->manifest_list;
@@ -214,7 +214,7 @@ rest_api_objects::CommitTransactionRequest IRCTransaction::GetTransactionRequest
 			}
 		}
 
-		auto &transaction_data = *table->table_info.transaction_data;
+		auto &transaction_data = *table->table_info->transaction_data;
 		for (auto &update : transaction_data.updates) {
 			update->CreateUpdate(db, context, commit_state);
 		}
@@ -329,7 +329,7 @@ void IRCTransaction::CleanupFiles() {
 	}
 	auto &fs = FileSystem::GetFileSystem(db);
 	for (auto &table : dirty_tables) {
-		auto &transaction_data = *table->table_info.transaction_data;
+		auto &transaction_data = *table->table_info->transaction_data;
 		for (auto &update : transaction_data.updates) {
 			if (update->type != IcebergTableUpdateType::ADD_SNAPSHOT) {
 				continue;

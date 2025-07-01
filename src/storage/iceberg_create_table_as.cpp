@@ -53,6 +53,7 @@ SinkResultType IcebergCreateTableAs::Sink(ExecutionContext &context, DataChunk &
 	auto &global_state = input.global_state.Cast<IcebergCreateTableAsGlobalState>();
 
 	// TODO: pass through the partition id?
+	// here we copy the files yea?
 	// ?? Not sure, this could honestly be a NOP.
 
 	return SinkResultType::NEED_MORE_INPUT;
@@ -161,7 +162,7 @@ PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalP
 	// FIXME: if table already exists and we are doing CREATE IF NOT EXISTS - skip
 
 	reference<PhysicalOperator> root = plan;
-
+	// TODO: maybe here we create the schema entry?
 	// TODO: Check supported types
 	for (auto &col : op.info->Base().columns.Logical()) {
 		//		DuckLakeTypes::CheckSupportedType(col.Type());

@@ -107,14 +107,15 @@ static void PopulateYYJSONfields(yyjson_mut_doc *doc, yyjson_mut_val *fields_arr
 	//	yyjson_mut_obj_add_bool(doc, field_obj, "write_default", true);
 }
 
-string IcebergCreateTableRequest::CreateTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
-                                                    ICTableEntry &table_entry) {
+shared_ptr<IcebergTableSchema> IcebergCreateTableRequest::CreateIcebergSchema(const ICTableEntry *table_entry) {
 	auto schema = make_shared_ptr<IcebergTableSchema>();
 	// should this be a different schema id?
-	schema->schema_id = 0;
+	schema->schema_id = table_entry->table_info->table_metadata.current_schema_id;
 
-	// TODO: this can all be refactored
-	auto column_iterator = table_entry.GetColumns().Logical();
+	// TODO: this can all be refactored out
+	//  this makes the IcebergTableSchema, and we use that to dump data to JSON.
+	//  we can just directly dump it to json.
+	auto column_iterator = table_entry->GetColumns().Logical();
 	idx_t column_id = 0;
 	for (auto column = column_iterator.begin(); column != column_iterator.end(); ++column) {
 		auto name = (*column).Name();
@@ -127,8 +128,14 @@ string IcebergCreateTableRequest::CreateTableToJSON(yyjson_mut_doc *doc, yyjson_
 
 		schema->columns.push_back(std::move(column_def));
 	}
+	return schema;
+}
 
-	auto table_name = table_entry.name;
+string IcebergCreateTableRequest::CreateTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
+                                                    const ICTableEntry *table_entry) {
+
+	auto schema = CreateIcebergSchema(table_entry);
+	auto table_name = table_entry->name;
 
 	//! name
 	yyjson_mut_obj_add_strcpy(doc, root_object, "name", table_name.c_str());

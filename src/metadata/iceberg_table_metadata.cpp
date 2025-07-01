@@ -53,6 +53,7 @@ optional_ptr<IcebergSnapshot> IcebergTableMetadata::GetLatestSnapshot() {
 }
 
 const IcebergTableSchema &IcebergTableMetadata::GetLatestSchema() const {
+	// if ()
 	auto res = GetSchemaFromId(current_schema_id);
 	D_ASSERT(res);
 	return *res;

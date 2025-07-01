@@ -1,4 +1,5 @@
 #include "storage/irc_schema_entry.hpp"
+
 #include "storage/irc_table_entry.hpp"
 #include "storage/irc_transaction.hpp"
 #include "storage/iceberg_type.hpp"
@@ -32,18 +33,29 @@ IRCTransaction &GetUCTransaction(CatalogTransaction transaction) {
 optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(CatalogTransaction transaction, BoundCreateTableInfo &info) {
 	auto &base_info = info.Base();
 	auto &irc_transaction = transaction.transaction->Cast<IRCTransaction>();
+	auto &context = transaction.context;
 
 	auto &catalog = irc_transaction.GetCatalog();
-	// generate field ids based on the column ids
-	// auto field_data = DuckLakeFieldData::FromColumns(base_info.columns, column_id);
-	// vector<DuckLakeInlinedTableInfo> inlined_tables;
-	IcebergTableInformation table_info(catalog, *this, base_info.table);
 
-	auto table_entry = make_uniq<ICTableEntry>(table_info, catalog, *this, base_info);
+	// create a table entry in our local catalog
+	auto iceberg_table_info = make_uniq<IcebergTableInformation>(catalog, *this, base_info.table);
 
-	auto result = table_entry.get();
-	irc_transaction.CreateEntry(std::move(table_entry));
-	return result;
+	tables.CreateNewEntry(*context, std::move(iceberg_table_info), base_info);
+	auto lookup_info = EntryLookupInfo(CatalogType::TABLE_ENTRY, base_info.table);
+	auto entry = tables.GetEntry(*context, lookup_info);
+
+	// get the entry from the catalog.
+	D_ASSERT(entry);
+	D_ASSERT(entry->type == CatalogType::TABLE_ENTRY);
+	auto &ic_table = entry->Cast<ICTableEntry>();
+
+	// set iceberg create transaction data and mark the table as dirty
+	// iceberg_table_info.transaction_data->create = IcebergCreateTableRequest::CreateCreateTableRequest(catalog, *this,
+	// base_info.table);
+
+	irc_transaction.MarkTableAsNew(ic_table);
+
+	return entry;
 }
 
 void IRCSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {

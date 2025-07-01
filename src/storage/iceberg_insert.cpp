@@ -224,7 +224,7 @@ SinkFinalizeType IcebergInsert::Finalize(Pipeline &pipeline, Event &event, Clien
 	auto &table_info = irc_table.table_info;
 	auto &transaction = IRCTransaction::Get(context, table->catalog);
 
-	table_info.AddSnapshot(transaction, std::move(global_state.written_files));
+	table_info->AddSnapshot(transaction, std::move(global_state.written_files));
 	transaction.MarkTableAsDirty(irc_table);
 	return SinkFinalizeType::READY;
 }
@@ -289,12 +289,15 @@ PhysicalOperator &IRCatalog::PlanInsert(ClientContext &context, PhysicalPlanGene
 		throw BinderException("ON CONFLICT clause not yet supported for insertion into Iceberg table");
 	}
 
+	auto &transaction = IRCTransaction::Get(context, *this);
+	auto &schemas = transaction.GetSchemas();
+
 	auto &table_entry = op.table.Cast<ICTableEntry>();
 	auto &table_info = table_entry.table_info;
-	auto iceberg_path = table_info.BaseFilePath();
-	auto &schema = table_info.table_metadata.GetLatestSchema();
+	auto iceberg_path = table_info->BaseFilePath();
+	auto &schema = table_info->table_metadata.GetLatestSchema();
 
-	auto &partition_spec = table_info.table_metadata.GetLatestPartitionSpec();
+	auto &partition_spec = table_info->table_metadata.GetLatestPartitionSpec();
 	if (!partition_spec.IsUnpartitioned()) {
 		throw NotImplementedException("INSERT into a partitioned table is not supported yet");
 	}
