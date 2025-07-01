@@ -16,6 +16,8 @@ struct IcebergAttachOptions {
 	string warehouse;
 	string secret;
 	string name;
+	bool has_warehouse_location = false;
+	string warehouse_location;
 	bool allows_deletes = true;
 	IRCAuthorizationType authorization_type = IRCAuthorizationType::INVALID;
 	unordered_map<string, Value> options;

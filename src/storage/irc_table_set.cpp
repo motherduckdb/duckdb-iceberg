@@ -276,7 +276,12 @@ void ICTableSet::CreateNewEntry(ClientContext &context, shared_ptr<IcebergTableI
 	}
 	auto table_name = new_table->name;
 	auto &irc_catalog = new_table->catalog.Cast<IRCatalog>();
-	auto new_location = "s3://" + irc_catalog.warehouse + "/" + new_table->schema.name + "/" + new_table->name;
+
+	string new_location = "s3://" + irc_catalog.warehouse + "/" + new_table->schema.name + "/" + new_table->name;
+	if (irc_catalog.attach_options.has_warehouse_location) {
+		new_location =
+		    irc_catalog.attach_options.warehouse_location + "/" + new_table->schema.name + "/" + new_table->name;
+	}
 
 	auto table_entry = make_uniq<ICTableEntry>(new_table, new_table->catalog, schema, info);
 	auto optional_entry = table_entry.get();
@@ -290,12 +295,12 @@ void ICTableSet::CreateNewEntry(ClientContext &context, shared_ptr<IcebergTableI
 	optional_entry->table_info->table_metadata.has_current_snapshot = false;
 	optional_entry->table_info->table_metadata.current_snapshot_id = 0;
 	optional_entry->table_info->name = table_name;
-	// need to set the has_location to false
-	optional_entry->table_info->load_table_result.metadata.has_location = false;
-	// optional_entry->table_info->load_table_result.metadata.location = optional_entry.
+
+	optional_entry->table_info->load_table_result.metadata.has_location = true;
+	optional_entry->table_info->load_table_result.metadata.location = new_location;
+
 	optional_entry->table_info->table_metadata.iceberg_version = 0;
 	optional_entry->table_info->table_metadata.last_sequence_number = 0;
-	optional_entry->table_info = 0;
 
 	entries.emplace(table_name, optional_entry->table_info);
 	auto check_table_entry_table_info_here = 0;
