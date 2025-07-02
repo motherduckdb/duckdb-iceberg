@@ -117,9 +117,11 @@ shared_ptr<IcebergTableSchema> IcebergCreateTableRequest::CreateIcebergSchema(co
 	//  this makes the IcebergTableSchema, and we use that to dump data to JSON.
 	//  we can just directly dump it to json.
 	auto column_iterator = table_entry->GetColumns().Logical();
-	idx_t column_id = 0;
+	// TODO: should this start at 1?
+	idx_t column_id = 1;
 	for (auto column = column_iterator.begin(); column != column_iterator.end(); ++column) {
 		auto name = (*column).Name();
+		// TODO: is this correct?
 		auto field_id = column_id;
 		column_id++;
 		bool required = false;
