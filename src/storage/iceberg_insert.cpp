@@ -33,6 +33,16 @@ IcebergInsert::IcebergInsert(LogicalOperator &op, SchemaCatalogEntry &schema, un
       info(std::move(info)) {
 }
 
+IcebergCopyInput::IcebergCopyInput(ClientContext &context, ICTableEntry &table)
+    : catalog(table.catalog.Cast<IRCatalog>()), columns(table.GetColumns()),
+      data_path(table.table_info->BaseFilePath()) {
+}
+
+IcebergCopyInput::IcebergCopyInput(ClientContext &context, IRCSchemaEntry &schema, const ColumnList &columns,
+                                   const string &data_path_p)
+    : catalog(schema.catalog.Cast<IRCatalog>()), columns(columns), data_path(data_path_p) {
+}
+
 //===--------------------------------------------------------------------===//
 // States
 //===--------------------------------------------------------------------===//
@@ -280,45 +290,38 @@ static Value WrittenFieldIds(const IcebergTableSchema &schema) {
 	return Value::STRUCT(std::move(values));
 }
 
-PhysicalOperator &IRCatalog::PlanInsert(ClientContext &context, PhysicalPlanGenerator &planner, LogicalInsert &op,
-                                        optional_ptr<PhysicalOperator> plan) {
-	if (op.return_chunk) {
-		throw BinderException("RETURNING clause not yet supported for insertion into Iceberg table");
-	}
-	if (op.action_type != OnConflictAction::THROW) {
-		throw BinderException("ON CONFLICT clause not yet supported for insertion into Iceberg table");
-	}
-
-	auto &transaction = IRCTransaction::Get(context, *this);
-	auto &schemas = transaction.GetSchemas();
-
-	auto &table_entry = op.table.Cast<ICTableEntry>();
-	auto &table_info = table_entry.table_info;
-	auto iceberg_path = table_info->BaseFilePath();
-	auto &schema = table_info->table_metadata.GetLatestSchema();
-
-	auto &partition_spec = table_info->table_metadata.GetLatestPartitionSpec();
-	if (!partition_spec.IsUnpartitioned()) {
-		throw NotImplementedException("INSERT into a partitioned table is not supported yet");
-	}
-
+unique_ptr<CopyInfo> GetBindInput(IcebergCopyInput &input) {
 	// Create Copy Info
 	auto info = make_uniq<CopyInfo>();
-
-	auto data_path = iceberg_path + "/data";
-	info->file_path = data_path;
+	info->file_path = input.data_path;
 	info->format = "parquet";
 	info->is_from = false;
+	for (auto &option : input.options) {
+		info->options[option.first] = option.second;
+	}
+	return info;
+}
 
-	vector<Value> field_input;
-	field_input.push_back(WrittenFieldIds(schema));
-	info->options["field_ids"] = std::move(field_input);
-
+PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, PhysicalPlanGenerator &planner,
+                                                   IcebergCopyInput &copy_input, optional_ptr<PhysicalOperator> plan) {
 	// Get Parquet Copy function
 	auto copy_fun = TryGetCopyFunction(*context.db, "parquet");
 	if (!copy_fun) {
 		throw MissingExtensionException("Did not find parquet copy function required to write to iceberg table");
 	}
+
+	auto names_to_write = copy_input.columns.GetColumnNames();
+	auto types_to_write = copy_input.columns.GetColumnTypes();
+
+	auto wat = GetBindInput(copy_input);
+	auto bind_input = CopyFunctionBindInput(*wat);
+
+	auto function_data = copy_fun->function.copy_to_bind(context, bind_input, names_to_write, types_to_write);
+
+	auto &physical_copy = planner.Make<PhysicalCopyToFile>(
+	    GetCopyFunctionReturnLogicalTypes(CopyFunctionReturnType::WRITTEN_FILE_STATISTICS), copy_fun->function,
+	    std::move(function_data), 1);
+	auto &physical_copy_ref = physical_copy.Cast<PhysicalCopyToFile>();
 
 	vector<idx_t> partition_columns;
 	//! TODO: support partitions
@@ -335,37 +338,17 @@ PhysicalOperator &IRCatalog::PlanInsert(ClientContext &context, PhysicalPlanGene
 	//	}
 	//}
 
-	// Bind Copy Function
-	auto &columns = op.table.Cast<ICTableEntry>().GetColumns();
-	CopyFunctionBindInput bind_input(*info);
-
-	// auto names_to_write = LogicalCopyToFile::GetNamesWithoutPartitions(columns.GetColumnNames(), partition_columns,
-	// false); auto types_to_write = LogicalCopyToFile::GetTypesWithoutPartitions(columns.GetColumnTypes(),
-	// partition_columns, false);
-
-	auto names_to_write = columns.GetColumnNames();
-	auto types_to_write = columns.GetColumnTypes();
-
-	auto function_data = copy_fun->function.copy_to_bind(context, bind_input, names_to_write, types_to_write);
-
-	auto &insert = planner.Make<IcebergInsert>(op, op.table, op.column_index_map);
-
-	auto &physical_copy = planner.Make<PhysicalCopyToFile>(
-	    GetCopyFunctionReturnLogicalTypes(CopyFunctionReturnType::WRITTEN_FILE_STATISTICS), copy_fun->function,
-	    std::move(function_data), op.estimated_cardinality);
-	auto &physical_copy_ref = physical_copy.Cast<PhysicalCopyToFile>();
-
 	physical_copy_ref.use_tmp_file = false;
 	if (!partition_columns.empty()) {
 		physical_copy_ref.filename_pattern.SetFilenamePattern("{uuidv7}");
-		physical_copy_ref.file_path = data_path;
+		physical_copy_ref.file_path = copy_input.data_path;
 		physical_copy_ref.partition_output = true;
 		physical_copy_ref.partition_columns = partition_columns;
 		physical_copy_ref.write_empty_file = true;
 		physical_copy_ref.rotate = false;
 	} else {
 		physical_copy_ref.filename_pattern.SetFilenamePattern("{uuidv7}");
-		physical_copy_ref.file_path = data_path;
+		physical_copy_ref.file_path = copy_input.data_path;
 		physical_copy_ref.partition_output = false;
 		physical_copy_ref.write_empty_file = false;
 		physical_copy_ref.file_size_bytes = IRCatalog::DEFAULT_TARGET_FILE_SIZE;
@@ -381,6 +364,37 @@ PhysicalOperator &IRCatalog::PlanInsert(ClientContext &context, PhysicalPlanGene
 	physical_copy_ref.names = names_to_write;
 	physical_copy_ref.expected_types = types_to_write;
 	physical_copy_ref.hive_file_pattern = true;
+	return physical_copy;
+}
+
+PhysicalOperator &IRCatalog::PlanInsert(ClientContext &context, PhysicalPlanGenerator &planner, LogicalInsert &op,
+                                        optional_ptr<PhysicalOperator> plan) {
+	if (op.return_chunk) {
+		throw BinderException("RETURNING clause not yet supported for insertion into Iceberg table");
+	}
+	if (op.action_type != OnConflictAction::THROW) {
+		throw BinderException("ON CONFLICT clause not yet supported for insertion into Iceberg table");
+	}
+
+	auto &table_entry = op.table.Cast<ICTableEntry>();
+	auto &table_info = table_entry.table_info;
+	auto &schema = table_info->table_metadata.GetLatestSchema();
+
+	auto &partition_spec = table_info->table_metadata.GetLatestPartitionSpec();
+	if (!partition_spec.IsUnpartitioned()) {
+		throw NotImplementedException("INSERT into a partitioned table is not supported yet");
+	}
+
+	// Create Copy Info
+	auto info = make_uniq<IcebergCopyInput>(context, table_entry);
+
+	vector<Value> field_input;
+	field_input.push_back(WrittenFieldIds(schema));
+	info->options["field_ids"] = std::move(field_input);
+
+	auto &insert = planner.Make<IcebergInsert>(op, op.table, op.column_index_map);
+
+	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, *info, plan);
 
 	insert.children.push_back(physical_copy);
 

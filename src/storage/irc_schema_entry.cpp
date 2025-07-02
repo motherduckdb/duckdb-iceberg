@@ -30,19 +30,18 @@ IRCTransaction &GetUCTransaction(CatalogTransaction transaction) {
 	return transaction.transaction->Cast<IRCTransaction>();
 }
 
-optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(CatalogTransaction transaction, BoundCreateTableInfo &info) {
+optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(IRCTransaction &irc_transaction, ClientContext &context,
+                                                       BoundCreateTableInfo &info) {
 	auto &base_info = info.Base();
-	auto &irc_transaction = transaction.transaction->Cast<IRCTransaction>();
-	auto &context = transaction.context;
 
 	auto &catalog = irc_transaction.GetCatalog();
 
 	// create a table entry in our local catalog
 	auto iceberg_table_info = make_uniq<IcebergTableInformation>(catalog, *this, base_info.table);
 
-	tables.CreateNewEntry(*context, std::move(iceberg_table_info), base_info);
+	tables.CreateNewEntry(context, std::move(iceberg_table_info), base_info);
 	auto lookup_info = EntryLookupInfo(CatalogType::TABLE_ENTRY, base_info.table);
-	auto entry = tables.GetEntry(*context, lookup_info);
+	auto entry = tables.GetEntry(context, lookup_info);
 
 	// get the entry from the catalog.
 	D_ASSERT(entry);
@@ -52,17 +51,19 @@ optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(CatalogTransaction transa
 	    ic_table.table_info->table_metadata.schemas[ic_table.table_info->table_metadata.current_schema_id];
 	auto create_transaction = make_uniq<IcebergCreateTableRequest>(initial_schema, ic_table.table_info->name);
 	if (!ic_table.table_info->transaction_data) {
-		ic_table.table_info->transaction_data = make_uniq<IcebergTransactionData>(*context, *ic_table.table_info);
+		ic_table.table_info->transaction_data = make_uniq<IcebergTransactionData>(context, *ic_table.table_info);
 	}
 	ic_table.table_info->transaction_data->create = std::move(create_transaction);
-
-	// set iceberg create transaction data and mark the table as dirty
-	// iceberg_table_info.transaction_data->create = IcebergCreateTableRequest::CreateCreateTableRequest(catalog, *this,
-	// base_info.table);
 
 	irc_transaction.MarkTableAsNew(ic_table);
 
 	return entry;
+}
+
+optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(CatalogTransaction transaction, BoundCreateTableInfo &info) {
+	auto &irc_transaction = transaction.transaction->Cast<IRCTransaction>();
+	auto &context = transaction.context;
+	return CreateTable(irc_transaction, *context, info);
 }
 
 void IRCSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {

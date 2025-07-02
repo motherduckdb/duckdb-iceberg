@@ -1,6 +1,7 @@
 #include "storage/iceberg_create_table_as.hpp"
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_transaction.hpp"
+#include "storage/iceberg_insert.hpp"
 #include "storage/irc_table_entry.hpp"
 #include "iceberg_multi_file_list.hpp"
 #include "duckdb/common/sort/partition_state.hpp"
@@ -142,34 +143,37 @@ static Value WrittenFieldIds(const IcebergTableSchema &schema) {
 PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalPlanGenerator &planner,
                                                LogicalCreateTable &op, PhysicalOperator &plan) {
 	auto &create_info = op.info->Base();
+
 	// TODO: check if create_info contains partitioned information, if yes, error
 	// if (create_info.partition_info) {
 	// 		return InvalidInputException("creating partitioned tables not yet supported");
 	// }
 
-	auto &transaction = IRCTransaction::Get(context, *this);
-	auto &schemas = transaction.GetSchemas();
-	//	auto the_schema = schemas.GetEntry(context, "default")->Cast<SchemaCatalogEntry>();
+	auto transaction = CatalogTransaction::GetSystemTransaction(*context.db);
+	auto &schema = op.schema;
 
-	// create the table within the transaction?
-	// might as well, the IRCSchemaSet/IRCTableSet only exist per transaction, so
-	// creating a local table and adding the create info in the transaction is fine
+	auto &ic_schema_entry = schema.Cast<IRCSchemaEntry>();
+	auto &catalog = ic_schema_entry.catalog;
+	auto &irc_transaction = IRCTransaction::Get(context, catalog);
 
-	// or create it when things execute? Eventuall you need IcebergTableCreates
-	//	schemas.CreateTable();
+	// create the table
+	auto table = ic_schema_entry.CreateTable(irc_transaction, context, *op.info);
+	auto &ic_table = table->Cast<ICTableEntry>();
+	auto &table_schema = ic_table.table_info->table_metadata.GetLatestSchema();
 
-	auto &columns = create_info.columns;
-	// FIXME: if table already exists and we are doing CREATE IF NOT EXISTS - skip
+	// Create Copy Info
+	IcebergCopyInput copy_input(context, ic_table);
+	vector<Value> field_input;
+	field_input.push_back(WrittenFieldIds(table_schema));
+	copy_input.options["field_ids"] = std::move(field_input);
 
-	reference<PhysicalOperator> root = plan;
-	// TODO: maybe here we create the schema entry?
-	// TODO: Check supported types
-	for (auto &col : op.info->Base().columns.Logical()) {
-		//		DuckLakeTypes::CheckSupportedType(col.Type());
-	}
+	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, plan);
+	physical_index_vector_t<idx_t> column_index_map;
+	auto &insert = planner.Make<IcebergInsert>(op, ic_table, column_index_map);
 
 	//	return planner.Make<IcebergInsert>(op, the_schema.get(), std::move(create_info));
-	return planner.Make<IcebergCreateTableAs>(op, std::move(op.info), *this);
+	insert.children.push_back(physical_copy);
+	return insert;
 }
 
 } // namespace duckdb
