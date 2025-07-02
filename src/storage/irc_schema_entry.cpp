@@ -48,6 +48,13 @@ optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(CatalogTransaction transa
 	D_ASSERT(entry);
 	D_ASSERT(entry->type == CatalogType::TABLE_ENTRY);
 	auto &ic_table = entry->Cast<ICTableEntry>();
+	auto initial_schema =
+	    ic_table.table_info->table_metadata.schemas[ic_table.table_info->table_metadata.current_schema_id];
+	auto create_transaction = make_uniq<IcebergCreateTableRequest>(initial_schema, ic_table.table_info->name);
+	if (!ic_table.table_info->transaction_data) {
+		ic_table.table_info->transaction_data = make_uniq<IcebergTransactionData>(*context, *ic_table.table_info);
+	}
+	ic_table.table_info->transaction_data->create = std::move(create_transaction);
 
 	// set iceberg create transaction data and mark the table as dirty
 	// iceberg_table_info.transaction_data->create = IcebergCreateTableRequest::CreateCreateTableRequest(catalog, *this,

@@ -18,14 +18,18 @@ class ICTableEntry;
 // TODO: can this just be an addsnapshot?
 struct IcebergCreateTableRequest {
 
-	IcebergCreateTableRequest(ClientContext &context, IcebergTableInformation &table_info);
+	IcebergCreateTableRequest(shared_ptr<IcebergTableSchema> schema, string table_name);
 
 public:
 	void CreateManifest(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state);
 	static shared_ptr<IcebergTableSchema> CreateIcebergSchema(const ICTableEntry *table_entry);
 	rest_api_objects::CreateTableRequest CreateUpdateCreateTableRequest();
 	void CreateCreateTableRequest(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state);
-	static string CreateTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object, const ICTableEntry *table_entry);
+	string CreateTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object);
+
+private:
+	string table_name;
+	shared_ptr<IcebergTableSchema> initial_schema;
 };
 
 } // namespace duckdb

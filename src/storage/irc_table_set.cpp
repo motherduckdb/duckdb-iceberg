@@ -3,6 +3,7 @@
 
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_table_set.hpp"
+
 #include "storage/irc_transaction.hpp"
 #include "metadata/iceberg_partition_spec.hpp"
 #include "duckdb/parser/constraints/not_null_constraint.hpp"
@@ -188,23 +189,25 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 	return result;
 }
 
-optional_ptr<CatalogEntry> IcebergTableInformation::CreateSchemaVersion(IcebergTableSchema &table_schema) {
+optional_ptr<CatalogEntry> IcebergTableInformation::CreateSchemaVersion(shared_ptr<IcebergTableInformation> table_info,
+                                                                        IcebergTableSchema &table_schema) {
 	CreateTableInfo info;
-	info.table = name;
+	info.table = table_info->name;
 	for (auto &col : table_schema.columns) {
 		info.columns.AddColumn(ColumnDefinition(col->name, col->type));
 	}
 
-	auto new_iceberg_info = make_uniq<IcebergTableInformation>(catalog, schema, name);
-	auto table_entry = make_uniq<ICTableEntry>(std::move(new_iceberg_info), catalog, schema, info);
-	if (!table_entry->internal) {
-		table_entry->internal = schema.internal;
-	}
+	// auto new_iceberg_info = make_uniq<IcebergTableInformation>(catalog, schema, name);
+	auto table_entry = make_uniq<ICTableEntry>(table_info, table_info->catalog, table_info->schema, info);
+	// TODO: fix this. for some reason table_info ine
+	// if (!table_entry->internal) {
+	// 	table_entry->internal = table_info;
+	// }
 	auto result = table_entry.get();
 	if (result->name.empty()) {
 		throw InternalException("ICTableSet::CreateEntry called with empty name");
 	}
-	schema_versions.emplace(table_schema.schema_id, std::move(table_entry));
+	table_info->schema_versions.emplace(table_schema.schema_id, std::move(table_entry));
 	return result;
 }
 
@@ -226,21 +229,21 @@ optional_ptr<CatalogEntry> IcebergTableInformation::GetSchemaVersion(optional_pt
 ICTableSet::ICTableSet(IRCSchemaEntry &schema) : schema(schema), catalog(schema.ParentCatalog()) {
 }
 
-void ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &table) {
-	if (!table.schema_versions.empty()) {
+void ICTableSet::FillEntry(ClientContext &context, shared_ptr<IcebergTableInformation> table) {
+	if (!table->schema_versions.empty()) {
 		//! Already filled
 		return;
 	}
 
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
-	table.load_table_result = IRCAPI::GetTable(context, ic_catalog, schema.name, table.name);
-	table.table_metadata = IcebergTableMetadata::FromTableMetadata(table.load_table_result.metadata);
-	auto &schemas = table.table_metadata.schemas;
+	table->load_table_result = IRCAPI::GetTable(context, ic_catalog, schema.name, table->name);
+	table->table_metadata = IcebergTableMetadata::FromTableMetadata(table->load_table_result.metadata);
+	auto &schemas = table->table_metadata.schemas;
 
 	//! It should be impossible to have a metadata file without any schema
 	D_ASSERT(!schemas.empty());
 	for (auto &table_schema : schemas) {
-		table.CreateSchemaVersion(*table_schema.second);
+		table->CreateSchemaVersion(table, *table_schema.second);
 	}
 }
 
@@ -248,8 +251,8 @@ void ICTableSet::Scan(ClientContext &context, const std::function<void(CatalogEn
 	lock_guard<mutex> l(entry_lock);
 	LoadEntries(context);
 	for (auto &entry : entries) {
-		auto &table_info = entry.second;
-		FillEntry(context, *table_info);
+		auto table_info = entry.second;
+		FillEntry(context, table_info);
 		auto schema_id = table_info->table_metadata.current_schema_id;
 		callback(*table_info->schema_versions[schema_id]);
 	}
@@ -289,6 +292,7 @@ void ICTableSet::CreateNewEntry(ClientContext &context, shared_ptr<IcebergTableI
 	optional_entry->table_info->schema_versions[0] = std::move(table_entry);
 	optional_entry->table_info->table_metadata.schemas[0] =
 	    IcebergCreateTableRequest::CreateIcebergSchema(optional_entry);
+	optional_entry->table_info->table_metadata.schemas[0]->schema_id = 0;
 	optional_entry->table_info->table_metadata.partition_specs[0] = IcebergPartitionSpec();
 	optional_entry->table_info->table_metadata.default_spec_id = 0;
 	optional_entry->table_info->table_metadata.current_schema_id = 0;
@@ -318,7 +322,7 @@ optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const En
 	if (entry == entries.end()) {
 		return nullptr;
 	}
-	FillEntry(context, *entry->second);
+	FillEntry(context, entry->second);
 	return entry->second.get()->GetSchemaVersion(lookup.GetAtClause());
 }
 

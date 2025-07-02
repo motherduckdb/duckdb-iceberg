@@ -21,7 +21,8 @@ public:
 
 public:
 	optional_ptr<CatalogEntry> GetSchemaVersion(optional_ptr<BoundAtClause> at);
-	optional_ptr<CatalogEntry> CreateSchemaVersion(IcebergTableSchema &table_schema);
+	static optional_ptr<CatalogEntry> CreateSchemaVersion(shared_ptr<IcebergTableInformation> table_info,
+	                                                      IcebergTableSchema &table_schema);
 	IRCAPITableCredentials GetVendedCredentials(ClientContext &context);
 	const string &BaseFilePath() const;
 
@@ -54,7 +55,7 @@ public:
 
 protected:
 	void LoadEntries(ClientContext &context);
-	void FillEntry(ClientContext &context, IcebergTableInformation &table);
+	void FillEntry(ClientContext &context, shared_ptr<IcebergTableInformation> table);
 
 protected:
 	IRCSchemaEntry &schema;

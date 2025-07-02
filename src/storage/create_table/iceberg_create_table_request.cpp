@@ -15,7 +15,8 @@
 
 namespace duckdb {
 
-IcebergCreateTableRequest::IcebergCreateTableRequest(ClientContext &context, IcebergTableInformation &table_info) {
+IcebergCreateTableRequest::IcebergCreateTableRequest(shared_ptr<IcebergTableSchema> schema, string table_name)
+    : initial_schema(schema), table_name(table_name) {
 }
 
 rest_api_objects::CreateTableRequest CreateUpdateCreateTableRequest() {
@@ -131,11 +132,9 @@ shared_ptr<IcebergTableSchema> IcebergCreateTableRequest::CreateIcebergSchema(co
 	return schema;
 }
 
-string IcebergCreateTableRequest::CreateTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
-                                                    const ICTableEntry *table_entry) {
+string IcebergCreateTableRequest::CreateTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object) {
 
-	auto schema = CreateIcebergSchema(table_entry);
-	auto table_name = table_entry->name;
+	auto schema = initial_schema;
 
 	//! name
 	yyjson_mut_obj_add_strcpy(doc, root_object, "name", table_name.c_str());
