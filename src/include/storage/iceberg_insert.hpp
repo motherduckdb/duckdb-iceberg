@@ -25,7 +25,7 @@ struct IcebergCopyInput {
 	// optional_ptr<DuckLakePartition> partition_data;
 	// optional_ptr<DuckLakeFieldData> field_data;
 	const ColumnList &columns;
-	const string &data_path;
+	string data_path;
 	//! Set of (key, value) options
 	case_insensitive_map_t<vector<Value>> options;
 };

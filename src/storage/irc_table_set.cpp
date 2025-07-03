@@ -280,10 +280,9 @@ void ICTableSet::CreateNewEntry(ClientContext &context, shared_ptr<IcebergTableI
 	auto table_name = new_table->name;
 	auto &irc_catalog = new_table->catalog.Cast<IRCatalog>();
 
-	string new_location = "s3://" + irc_catalog.warehouse + "/" + new_table->schema.name + "/" + new_table->name;
+	string new_location = "s3://" + irc_catalog.warehouse + "/" + new_table->schema.name + "/" + table_name;
 	if (irc_catalog.attach_options.has_warehouse_location) {
-		new_location =
-		    irc_catalog.attach_options.warehouse_location + "/" + new_table->schema.name + "/" + new_table->name;
+		new_location = irc_catalog.attach_options.warehouse_location + "/" + new_table->schema.name + "/" + table_name;
 	}
 
 	auto table_entry = make_uniq<ICTableEntry>(new_table, new_table->catalog, schema, info);

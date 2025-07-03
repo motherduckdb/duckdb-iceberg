@@ -16,7 +16,7 @@
 namespace duckdb {
 
 IcebergCreateTableRequest::IcebergCreateTableRequest(shared_ptr<IcebergTableSchema> schema, string table_name)
-    : initial_schema(schema), table_name(table_name) {
+    : table_name(table_name), initial_schema(schema) {
 }
 
 rest_api_objects::CreateTableRequest CreateUpdateCreateTableRequest() {

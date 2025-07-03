@@ -34,13 +34,14 @@ IcebergInsert::IcebergInsert(LogicalOperator &op, SchemaCatalogEntry &schema, un
 }
 
 IcebergCopyInput::IcebergCopyInput(ClientContext &context, ICTableEntry &table)
-    : catalog(table.catalog.Cast<IRCatalog>()), columns(table.GetColumns()),
-      data_path(table.table_info->BaseFilePath()) {
+    : catalog(table.catalog.Cast<IRCatalog>()), columns(table.GetColumns()) {
+	data_path = table.table_info->BaseFilePath() + "/data/";
 }
 
 IcebergCopyInput::IcebergCopyInput(ClientContext &context, IRCSchemaEntry &schema, const ColumnList &columns,
                                    const string &data_path_p)
-    : catalog(schema.catalog.Cast<IRCatalog>()), columns(columns), data_path(data_path_p) {
+    : catalog(schema.catalog.Cast<IRCatalog>()), columns(columns) {
+	data_path = data_path_p + "/data/";
 }
 
 //===--------------------------------------------------------------------===//
