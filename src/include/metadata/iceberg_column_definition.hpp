@@ -21,9 +21,6 @@ public:
 	ParseType(const string &name, int32_t field_id, bool required, rest_api_objects::Type &iceberg_type,
 	          optional_ptr<rest_api_objects::PrimitiveTypeValue> initial_default = nullptr);
 
-private:
-	static LogicalType ParsePrimitiveType(rest_api_objects::PrimitiveType &type);
-
 public:
 	int32_t id;
 	string name;
