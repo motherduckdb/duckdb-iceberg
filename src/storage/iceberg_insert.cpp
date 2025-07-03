@@ -398,4 +398,40 @@ PhysicalOperator &IRCatalog::PlanInsert(ClientContext &context, PhysicalPlanGene
 	return insert;
 }
 
+PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalPlanGenerator &planner,
+											   LogicalCreateTable &op, PhysicalOperator &plan) {
+	auto &create_info = op.info->Base();
+
+	// TODO: check if create_info contains partitioned information, if yes, error
+	// if (create_info.partition_info) {
+	// 		return InvalidInputException("creating partitioned tables not yet supported");
+	// }
+
+	auto transaction = CatalogTransaction::GetSystemTransaction(*context.db);
+	auto &schema = op.schema;
+
+	auto &ic_schema_entry = schema.Cast<IRCSchemaEntry>();
+	auto &catalog = ic_schema_entry.catalog;
+	auto &irc_transaction = IRCTransaction::Get(context, catalog);
+
+	// create the table
+	auto table = ic_schema_entry.CreateTable(irc_transaction, context, *op.info);
+	auto &ic_table = table->Cast<ICTableEntry>();
+	auto &table_schema = ic_table.table_info->table_metadata.GetLatestSchema();
+
+	// Create Copy Info
+	IcebergCopyInput copy_input(context, ic_table);
+	vector<Value> field_input;
+	field_input.push_back(WrittenFieldIds(table_schema));
+	copy_input.options["field_ids"] = std::move(field_input);
+
+	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, plan);
+	physical_index_vector_t<idx_t> column_index_map;
+	auto &insert = planner.Make<IcebergInsert>(op, ic_table, column_index_map);
+
+	//	return planner.Make<IcebergInsert>(op, the_schema.get(), std::move(create_info));
+	insert.children.push_back(physical_copy);
+	return insert;
+}
+
 } // namespace duckdb

@@ -14,8 +14,7 @@
 #include "rest_catalog/objects/catalog_config.hpp"
 #include "duckdb/planner/operator/logical_create_table.hpp"
 #include "storage/irc_catalog.hpp"
-//#include "storage/iceberg_insert.hpp"
-#include "storage/iceberg_create_table_as.hpp"
+// #include "storage/iceberg_insert.hpp"
 
 #include <regex>
 #include "storage/irc_authorization.hpp"
