@@ -15,7 +15,6 @@ namespace duckdb {
 struct IcebergTableInformation;
 class ICTableEntry;
 
-// TODO: can this just be an add snapshot?
 struct IcebergCreateTableRequest {
 
 	IcebergCreateTableRequest(shared_ptr<IcebergTableSchema> schema, string table_name);

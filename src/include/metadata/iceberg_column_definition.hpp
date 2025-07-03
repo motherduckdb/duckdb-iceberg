@@ -15,6 +15,8 @@ namespace duckdb {
 struct IcebergColumnDefinition {
 public:
 	static unique_ptr<IcebergColumnDefinition> ParseStructField(rest_api_objects::StructField &field);
+
+public:
 	static LogicalType ParsePrimitiveType(rest_api_objects::PrimitiveType &type);
 	static LogicalType ParsePrimitiveTypeString(const string &type_str);
 	static unique_ptr<IcebergColumnDefinition>

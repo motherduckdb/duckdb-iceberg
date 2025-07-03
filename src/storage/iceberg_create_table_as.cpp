@@ -26,12 +26,6 @@ IcebergCreateTableAs::IcebergCreateTableAs(LogicalOperator &op, unique_ptr<Bound
       catalog(catalog) {
 }
 
-// IcebergCreateTableAs::IcebergCreateTableAs(LogicalOperator &op, SchemaCatalogEntry &schema,
-// unique_ptr<BoundCreateTableInfo> info)
-//    : PhysicalOperator(PhysicalOperatorType::EXTENSION, op.types, 1), table(nullptr), schema(&schema),
-//      info(std::move(info)) {
-//}
-
 //===--------------------------------------------------------------------===//
 // States
 //===--------------------------------------------------------------------===//

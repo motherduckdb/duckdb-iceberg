@@ -34,40 +34,8 @@ rest_api_objects::CreateTableRequest CreateUpdateCreateTableRequest() {
 	return create_table_request;
 }
 
-// rest_api_objects::TableUpdate IcebergAddSnapshot::CreateSetSnapshotRefUpdate() {
-//	rest_api_objects::TableUpdate table_update;
-//
-//	table_update.has_set_snapshot_ref_update = true;
-//	auto &update = table_update.set_snapshot_ref_update;
-//	update.base_update.action = "set-snapshot-ref";
-//	update.has_action = true;
-//	update.action = "set-snapshot-ref";
-//
-//	update.ref_name = "main";
-//	update.snapshot_reference.type = "branch";
-//	update.snapshot_reference.snapshot_id = snapshot.snapshot_id;
-//	return table_update;
-//}
-
 void IcebergCreateTableRequest::CreateCreateTableRequest(DatabaseInstance &db, ClientContext &context,
                                                          IcebergCommitState &commit_state) {
-	//	auto &system_catalog = Catalog::GetSystemCatalog(db);
-	//	auto data = CatalogTransaction::GetSystemTransaction(db);
-	//	auto &schema = system_catalog.GetSchema(data, DEFAULT_SCHEMA);
-	//	auto avro_copy_p = schema.GetEntry(data, CatalogType::COPY_FUNCTION_ENTRY, "avro");
-	//	D_ASSERT(avro_copy_p);
-	//	auto &avro_copy = avro_copy_p->Cast<CopyFunctionCatalogEntry>().function;
-	//
-	//	auto manifest_length = manifest_file::WriteToFile(table_info, manifest_file, avro_copy, db, context);
-	//	manifest.manifest_length = manifest_length;
-	//
-	//	D_ASSERT(manifest_list.manifests.empty());
-	//	manifest_list.manifests = std::move(commit_state.manifests);
-	//	manifest_list.manifests.push_back(std::move(manifest));
-	//	manifest_list::WriteToFile(manifest_list, avro_copy, db, context);
-	//	commit_state.manifests = std::move(manifest_list.manifests);
-	//
-	//	commit_state.table_change.updates.push_back(CreateAddSnapshotUpdate());
 }
 
 static void PopulateYYJSONfields(yyjson_mut_doc *doc, yyjson_mut_val *fields_array, IcebergColumnDefinition &column) {
