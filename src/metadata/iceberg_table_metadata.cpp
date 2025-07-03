@@ -241,6 +241,8 @@ rest_api_objects::TableMetadata IcebergTableMetadata::Parse(const string &path, 
 IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(rest_api_objects::TableMetadata &table_metadata) {
 	IcebergTableMetadata res;
 
+	res.table_uuid = table_metadata.table_uuid;
+	res.location = table_metadata.location;
 	res.iceberg_version = table_metadata.format_version;
 	for (auto &schema : table_metadata.schemas) {
 		res.schemas.emplace(schema.object_1.schema_id, IcebergTableSchema::ParseSchema(schema));

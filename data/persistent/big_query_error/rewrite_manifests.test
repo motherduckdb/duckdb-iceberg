@@ -52,6 +52,12 @@ statement ok
 alter table manifest_entries add column data_file.file_path VARCHAR DEFAULT 'data/persistent/big_query_error/data/bc12018c-b4ed-4ed8-adcb-a41cea51206d-3175699a3a6392ba-f-00000-of-00001.parquet';
 
 statement ok
+alter table manifest_entries drop column data_file.partition;
+
+statement ok
+alter table manifest_entries add column data_file.partition STRUCT("__duckdb_empty_struct_marker" VARCHAR) DEFAULT NULL::STRUCT("__duckdb_empty_struct_marker" VARCHAR);
+
+statement ok
 copy manifest_entries to
 './data/persistent/big_query_error/metadata/24f5f399-c7ec-488d-a9d3-f0aceb454be2-4830b289af0338e2-f-00000-of-00001.avro' (
 	FORMAT AVRO,
@@ -62,7 +68,9 @@ copy manifest_entries to
 			'content': 134,
 			'file_path': 100,
 			'file_format': 101,
-			'partition': 102,
+			'partition': {
+				'__duckdb_field_id': 102
+			},
 			'record_count': 103,
 			'file_size_in_bytes': 104,
 			'value_counts': {

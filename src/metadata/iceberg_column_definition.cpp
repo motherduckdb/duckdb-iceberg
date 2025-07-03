@@ -107,6 +107,10 @@ IcebergColumnDefinition::ParseType(const string &name, int32_t field_id, bool re
 LogicalType IcebergColumnDefinition::ParsePrimitiveType(rest_api_objects::PrimitiveType &type) {
 	auto &type_str = type.value;
 
+	return ParsePrimitiveTypeString(type_str);
+}
+
+LogicalType IcebergColumnDefinition::ParsePrimitiveTypeString(const string &type_str) {
 	if (type_str == "boolean") {
 		return LogicalType::BOOLEAN;
 	}

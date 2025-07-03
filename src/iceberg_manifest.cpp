@@ -16,7 +16,19 @@ Value IcebergManifestEntry::ToDataFileStruct(const LogicalType &type) const {
 	// file_format: string - 101
 	children.push_back(Value(file_format));
 	// partition: struct(...) - 102
-	children.push_back(partition);
+	if (partition_values.empty()) {
+		//! NOTE: Spark does *not* like it when this column is NULL, so we populate it with an empty struct value
+		//! instead
+		children.push_back(
+		    Value::STRUCT(child_list_t<Value> {{"__duckdb_empty_struct_marker", Value(LogicalTypeId::VARCHAR)}}));
+	} else {
+		child_list_t<Value> partition_children;
+		for (auto &field : partition_values) {
+			partition_children.emplace_back(StringUtil::Format("r%d", field.first), field.second);
+		}
+		children.push_back(Value::STRUCT(partition_children));
+	}
+
 	// record_count: long - 103
 	children.push_back(Value::BIGINT(record_count));
 	// file_size_in_bytes: long - 104
@@ -27,10 +39,21 @@ Value IcebergManifestEntry::ToDataFileStruct(const LogicalType &type) const {
 
 namespace manifest_file {
 
-static LogicalType PartitionStructType(IcebergTableInformation &table_info) {
-	//! TODO: actually use the partition info
+static LogicalType PartitionStructType(IcebergTableInformation &table_info, const IcebergManifestFile &file) {
+	//! FIXME: do we validate this beforehand anywhere?
+	D_ASSERT(!file.data_files.empty());
+
+	auto &first_entry = file.data_files.front();
 	child_list_t<LogicalType> children;
-	children.emplace_back("__duckdb_empty_struct_marker", LogicalType::INTEGER);
+	if (first_entry.partition_values.empty()) {
+		children.emplace_back("__duckdb_empty_struct_marker", LogicalType::INTEGER);
+	} else {
+		//! NOTE: all entries in the file should have the same schema, otherwise it can't be in the same manifest file
+		//! anyways
+		for (auto &it : first_entry.partition_values) {
+			children.emplace_back(StringUtil::Format("r%d", it.first), it.second.type());
+		}
+	}
 	return LogicalType::STRUCT(children);
 }
 
@@ -53,6 +76,8 @@ idx_t WriteToFile(IcebergTableInformation &table_info, const IcebergManifestFile
 	vector<string> names;
 	vector<LogicalType> types;
 
+	auto &current_partition_spec = table_info.table_metadata.GetLatestPartitionSpec();
+	auto &current_schema = table_info.table_metadata.GetLatestSchema();
 	{
 		// status: int - 0
 		names.push_back("status");
@@ -149,7 +174,7 @@ idx_t WriteToFile(IcebergTableInformation &table_info, const IcebergManifestFile
 
 	{
 		// partition: struct(...) - 102
-		children.emplace_back("partition", PartitionStructType(table_info));
+		children.emplace_back("partition", PartitionStructType(table_info, manifest_file));
 		data_file_field_ids.emplace_back("partition", Value::INTEGER(PARTITION));
 
 		auto field_obj = yyjson_mut_arr_add_obj(doc, child_fields_arr);
@@ -238,8 +263,6 @@ idx_t WriteToFile(IcebergTableInformation &table_info, const IcebergManifestFile
 		col_idx++;
 	}
 	data.SetCardinality(manifest_file.data_files.size());
-
-	auto &current_partition_spec = table_info.table_metadata.GetLatestPartitionSpec();
 	auto iceberg_schema_string = ICUtils::JsonToString(std::move(doc_p));
 
 	child_list_t<Value> metadata_values;

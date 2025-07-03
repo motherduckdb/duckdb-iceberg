@@ -41,7 +41,7 @@ public:
 private:
 	ICTableSet &GetCatalogSet(CatalogType type);
 
-private:
+public:
 	ICTableSet tables;
 };
 

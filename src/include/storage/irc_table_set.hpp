@@ -53,11 +53,11 @@ public:
 	void Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback);
 	void CreateNewEntry(ClientContext &context, shared_ptr<IcebergTableInformation> new_table, CreateTableInfo &info);
 
-protected:
+public:
 	void LoadEntries(ClientContext &context);
 	void FillEntry(ClientContext &context, shared_ptr<IcebergTableInformation> table);
 
-protected:
+public:
 	IRCSchemaEntry &schema;
 	Catalog &catalog;
 	case_insensitive_map_t<shared_ptr<IcebergTableInformation>> entries;

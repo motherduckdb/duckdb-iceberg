@@ -61,7 +61,21 @@ void ManifestFileReader::CreateVectorMapping(idx_t column_id, MultiFileColumnDef
 		D_ASSERT(child.identifier.type().id() == LogicalTypeId::INTEGER);
 		auto child_field_id = child.identifier.GetValue<int32_t>();
 
-		vector_mapping.emplace(child_field_id, ColumnIndex(column_id, {ColumnIndex(child_idx)}));
+		vector<ColumnIndex> child_indexes;
+		child_indexes.emplace_back(child_idx);
+
+		vector_mapping.emplace(child_field_id, ColumnIndex(column_id, child_indexes));
+		if (child_field_id == PARTITION) {
+			for (idx_t partition_idx = 0; partition_idx < child.children.size(); partition_idx++) {
+				auto &partition_field = child.children[partition_idx];
+
+				auto partition_field_id = partition_field.identifier.GetValue<int32_t>();
+				auto partition_child_indexes = child_indexes;
+				partition_child_indexes.emplace_back(partition_idx);
+
+				partition_fields.emplace(partition_field_id, ColumnIndex(column_id, partition_child_indexes));
+			}
+		}
 	}
 }
 
@@ -186,12 +200,17 @@ idx_t ManifestFileReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergMan
 	    *child_entries[vector_mapping.at(RECORD_COUNT).GetChildIndex(0).GetPrimaryIndex()]);
 	auto file_size_in_bytes = FlatVector::GetData<int64_t>(
 	    *child_entries[vector_mapping.at(FILE_SIZE_IN_BYTES).GetChildIndex(0).GetPrimaryIndex()]);
+	optional_ptr<Vector> column_sizes;
 	optional_ptr<Vector> lower_bounds;
 	optional_ptr<Vector> upper_bounds;
 	optional_ptr<Vector> value_counts;
 	optional_ptr<Vector> null_value_counts;
 	optional_ptr<Vector> nan_value_counts;
 
+	auto column_sizes_it = vector_mapping.find(COLUMN_SIZES);
+	if (column_sizes_it != vector_mapping.end()) {
+		column_sizes = *child_entries[column_sizes_it->second.GetChildIndex(0).GetPrimaryIndex()];
+	}
 	auto lower_bounds_it = vector_mapping.find(LOWER_BOUNDS);
 	if (lower_bounds_it != vector_mapping.end()) {
 		lower_bounds = *child_entries[lower_bounds_it->second.GetChildIndex(0).GetPrimaryIndex()];
@@ -213,6 +232,14 @@ idx_t ManifestFileReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergMan
 		nan_value_counts = *child_entries[nan_value_counts_it->second.GetChildIndex(0).GetPrimaryIndex()];
 	}
 	auto &partition_vec = child_entries[partition_idx.GetChildIndex(0).GetPrimaryIndex()];
+	unordered_map<int32_t, reference<Vector>> partition_vectors;
+	if (partition_vec->GetType().id() != LogicalTypeId::SQLNULL) {
+		auto &partition_children = StructVector::GetEntries(*partition_vec);
+		for (auto &it : partition_fields) {
+			auto partition_field_idx = it.second.GetChildIndex(1).GetPrimaryIndex();
+			partition_vectors.emplace(it.first, *partition_children[partition_field_idx]);
+		}
+	}
 
 	optional_ptr<Vector> referenced_data_file;
 	optional_ptr<Vector> content_offset;
@@ -251,6 +278,9 @@ idx_t ManifestFileReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergMan
 		if (lower_bounds && upper_bounds) {
 			entry.lower_bounds = GetBounds(*lower_bounds, index);
 			entry.upper_bounds = GetBounds(*upper_bounds, index);
+		}
+		if (column_sizes) {
+			entry.column_sizes = GetCounts(*column_sizes, index);
 		}
 		if (value_counts) {
 			entry.value_counts = GetCounts(*value_counts, index);
@@ -299,7 +329,12 @@ idx_t ManifestFileReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergMan
 		}
 
 		entry.partition_spec_id = this->partition_spec_id;
-		entry.partition = partition_vec->GetValue(index);
+		for (auto &it : partition_vectors) {
+			auto field_id = it.first;
+			auto &partition_vector = it.second.get();
+
+			entry.partition_values.emplace_back(field_id, partition_vector.GetValue(index));
+		}
 		produced++;
 		result.push_back(entry);
 	}

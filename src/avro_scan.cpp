@@ -9,7 +9,7 @@
 
 namespace duckdb {
 
-AvroScan::AvroScan(const string &scan_name, ClientContext &context, const string &path) : context(context) {
+AvroScan::AvroScan(const string &scan_name, ClientContext &context, const string &path) : path(path), context(context) {
 	auto &instance = DatabaseInstance::GetDatabase(context);
 	ExtensionHelper::AutoLoadExtension(instance, "avro");
 

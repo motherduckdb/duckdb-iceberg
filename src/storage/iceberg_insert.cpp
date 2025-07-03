@@ -157,10 +157,6 @@ static void AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &c
 		data_file.content = IcebergManifestEntryContentType::DATA;
 		data_file.status = IcebergManifestEntryStatusType::ADDED;
 		data_file.file_format = "parquet";
-		//! NOTE: Spark does *not* like it when this column is NULL, so we populate it with an empty struct value
-		//! instead
-		data_file.partition =
-		    Value::STRUCT(child_list_t<Value> {{"__duckdb_empty_struct_marker", Value(LogicalTypeId::VARCHAR)}});
 
 		if (partition_id.IsValid()) {
 			data_file.partition_spec_id = static_cast<int32_t>(partition_id.GetIndex());

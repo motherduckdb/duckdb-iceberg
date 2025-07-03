@@ -29,13 +29,13 @@ public:
 
 struct IcebergEqualityDeleteFile {
 public:
-	IcebergEqualityDeleteFile(Value partition, int32_t partition_spec_id)
-	    : partition(partition), partition_spec_id(partition_spec_id) {
+	IcebergEqualityDeleteFile(vector<pair<int32_t, Value>> partition_values, int32_t partition_spec_id)
+	    : partition_values(partition_values), partition_spec_id(partition_spec_id) {
 	}
 
 public:
 	//! The partition value (struct) if the equality delete has partition information
-	Value partition;
+	vector<pair<int32_t, Value>> partition_values;
 	int32_t partition_spec_id;
 	vector<IcebergEqualityDeleteRow> rows;
 };
