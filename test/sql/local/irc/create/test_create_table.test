@@ -2,7 +2,7 @@
 # description: test create table
 # group: [create]
 
-# require-env ICEBERG_SERVER_AVAILABLE
+require-env ICEBERG_SERVER_AVAILABLE
 
 require avro
 
@@ -37,6 +37,7 @@ ATTACH '' AS my_datalake (
     TYPE ICEBERG,
     CLIENT_ID 'admin',
     CLIENT_SECRET 'password',
+    WAREHOUSE_LOCATION 's3://warehouse/',
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
@@ -45,7 +46,71 @@ statement ok
 use my_datalake.default
 
 statement ok
-create table t9 (a int);
+begin;
 
 statement ok
-insert into t6 (select range a from range(100));
+create table create_table_t1_1 (a int, b varchar);
+
+statement ok
+insert into create_table_t1_1 select range a, range::VARCHAR b from range(10);
+
+query II
+select * from create_table_t1_1 order by all;
+----
+0	0
+1	1
+2	2
+3	3
+4	4
+5	5
+6	6
+7	7
+8	8
+9	9
+
+statement ok
+abort;
+
+# table does not oexist
+statement error
+select * from create_table_t1_1;
+----
+<REGEX>:.*does not exist.*
+
+# now commit the table
+
+statement ok
+begin;
+
+statement ok
+create table create_table_t1_1 (a int, b varchar);
+
+statement ok
+insert into create_table_t1_1 select range a, range::VARCHAR b from range(5);
+
+statement ok
+commit;
+
+query II
+select * from create_table_t1_1 order by all;
+----
+0	0
+1	1
+2	2
+3	3
+4	4
+
+statement ok
+create table create_table_t2_1 (b int, c varchar);
+
+statement ok
+insert into create_table_t2_1 select range*5, (range*5)::VARCHAR from range(5);
+
+query II
+select * from create_table_t2_1;
+----
+0	0
+5	5
+10	10
+15	15
+20	20

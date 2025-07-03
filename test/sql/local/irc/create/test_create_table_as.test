@@ -1,0 +1,126 @@
+# name: test/sql/local/irc/create/test_create_table_as.test
+# description: test create table as
+# group: [create]
+
+# require-env ICEBERG_SERVER_AVAILABLE
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+pragma enable_logging('HTTP');
+
+statement ok
+set logging_level='debug'
+
+statement ok
+CREATE SECRET (
+    TYPE S3,
+    KEY_ID 'admin',
+    SECRET 'password',
+    ENDPOINT '127.0.0.1:9000',
+    URL_STYLE 'path',
+    USE_SSL 0
+);
+
+
+statement ok
+ATTACH '' AS my_datalake (
+    TYPE ICEBERG,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    WAREHOUSE_LOCATION 's3://warehouse/',
+    ENDPOINT 'http://127.0.0.1:8181'
+);
+
+
+statement ok
+use my_datalake.default
+
+statement ok
+create table new_table_7 as select range a from range(100);
+
+query I
+select * from new_table_7 order by all limit 10;
+----
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+
+mode skip
+
+statement ok
+create table blah as select age, id, name from read_parquet('/Users/tomebergen/duckdb-iceberg/data/persistent/column_mapping/warehouse/example/mock_data.parquet');
+
+statement ok
+create table all_types_table as select
+column_name,
+bool,
+tinyint,
+smallint,
+int,
+bigint,
+hugeint,
+uhugeint,
+utinyint,
+usmallint,
+uint,
+ubigint,
+varint,
+date,
+time,
+timestamp,
+timestamp_s,
+timestamp_ms,
+timestamp_ns,
+time_tz,
+timestamp_tz,
+float,
+double,
+dec_4_1,
+dec_9_4,
+dec_18_6,
+dec38_10,
+uuid,
+interval,
+varchar,
+blob,
+bit,
+small_enum,
+medium_enum,
+large_enum,
+int_array,
+double_array,
+date_array,
+timestamp_array,
+timestamptz_array,
+varchar_array,
+nested_int_array,
+struct,
+struct_of_arrays,
+array_of_structs,
+map,
+union,
+fixed_int_array,
+fixed_varchar_array,
+fixed_nested_int_array,
+fixed_nested_varchar_array,
+fixed_struct_array,
+struct_of_fixed_array,
+fixed_array_of_int_list,
+list_of_fixed_int_array from test_all_types();
