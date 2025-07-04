@@ -2,7 +2,7 @@
 
 #include "storage/irc_table_entry.hpp"
 #include "storage/irc_transaction.hpp"
-#include "storage/iceberg_type.hpp"
+#include "utils/iceberg_type.hpp"
 #include "duckdb/parser/column_list.hpp"
 #include "duckdb/parser/parsed_data/create_view_info.hpp"
 #include "duckdb/parser/parsed_data/create_index_info.hpp"

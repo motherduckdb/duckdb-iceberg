@@ -399,21 +399,18 @@ PhysicalOperator &IRCatalog::PlanInsert(ClientContext &context, PhysicalPlanGene
 }
 
 PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalPlanGenerator &planner,
-											   LogicalCreateTable &op, PhysicalOperator &plan) {
+                                               LogicalCreateTable &op, PhysicalOperator &plan) {
 	auto &create_info = op.info->Base();
 
 	// TODO: check if create_info contains partitioned information, if yes, error
-	// if (create_info.partition_info) {
-	// 		return InvalidInputException("creating partitioned tables not yet supported");
-	// }
 
-	auto transaction = CatalogTransaction::GetSystemTransaction(*context.db);
 	auto &schema = op.schema;
 
 	auto &ic_schema_entry = schema.Cast<IRCSchemaEntry>();
 	auto &catalog = ic_schema_entry.catalog;
 	auto &irc_transaction = IRCTransaction::Get(context, catalog);
 
+	// TODO: should this be here?
 	// create the table
 	auto table = ic_schema_entry.CreateTable(irc_transaction, context, *op.info);
 	auto &ic_table = table->Cast<ICTableEntry>();

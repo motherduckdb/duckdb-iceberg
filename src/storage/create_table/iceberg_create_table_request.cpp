@@ -1,7 +1,7 @@
 #include "storage/table_update/iceberg_add_snapshot.hpp"
 #include "storage/table_create/iceberg_create_table_request.hpp"
 #include "storage/irc_table_set.hpp"
-#include "storage/iceberg_type.hpp"
+#include "utils/iceberg_type.hpp"
 #include "utils/json_utils.hpp"
 #include "catalog_utils.hpp"
 #include "duckdb/common/enums/catalog_type.hpp"
@@ -58,16 +58,45 @@ static void PopulateYYJSONfields(yyjson_mut_doc *doc, yyjson_mut_val *fields_arr
 			D_ASSERT(column.children.size() == 1);
 			yyjson_mut_obj_add_uint(doc, nested_type, "element-id", column.children[0]->id);
 			yyjson_mut_obj_add_strcpy(doc, nested_type, "element",
-			                          IcebergTypeRenamer::GetIcebergTypeString(column.children[0]->type).c_str());
+			                          IcebergTypeHelper::GetIcebergTypeString(column.children[0]->type).c_str());
 			yyjson_mut_obj_add_bool(doc, nested_type, "element-required", false);
+			break;
+		}
+		case LogicalTypeId::MAP: {
+			yyjson_mut_obj_add_strcpy(doc, nested_type, "type", "map");
+			D_ASSERT(column.children.size() == 2);
+			auto &key_child = column.children[0];
+			if (key_child->IsPrimitiveType()) {
+				yyjson_mut_obj_add_strcpy(doc, nested_type, "key",
+				                          IcebergTypeHelper::GetIcebergTypeString(key_child->type).c_str());
+			} else {
+				auto key_obj = yyjson_mut_obj_add_obj(doc, nested_type, "key");
+				yyjson_mut_obj_add_strcpy(doc, key_obj, "type",
+				                          IcebergTypeHelper::GetIcebergTypeString(key_child->type).c_str());
+				auto nested_key_fields_arr = yyjson_mut_obj_add_arr(doc, key_obj, "fields");
+				PopulateYYJSONfields(doc, nested_key_fields_arr, *key_child);
+			}
+			yyjson_mut_obj_add_uint(doc, nested_type, "key-id", key_child->id);
+			auto &val_child = column.children[1];
+			if (val_child->IsPrimitiveType()) {
+				yyjson_mut_obj_add_strcpy(doc, nested_type, "value",
+				                          IcebergTypeHelper::GetIcebergTypeString(val_child->type).c_str());
+			} else {
+				auto val_obj = yyjson_mut_obj_add_obj(doc, nested_type, "value");
+				yyjson_mut_obj_add_strcpy(doc, val_obj, "type",
+				                          IcebergTypeHelper::GetIcebergTypeString(val_child->type).c_str());
+				auto nested_key_fields_arr = yyjson_mut_obj_add_arr(doc, val_obj, "fields");
+				PopulateYYJSONfields(doc, nested_key_fields_arr, *val_child);
+			}
+			yyjson_mut_obj_add_uint(doc, nested_type, "value-id", val_child->id);
+			yyjson_mut_obj_add_bool(doc, nested_type, "value-required", false);
 			break;
 		}
 		default:
 			throw NotImplementedException("Not implemented");
 		}
 	} else {
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "type",
-		                          IcebergTypeRenamer::GetIcebergTypeString(column.type).c_str());
+		yyjson_mut_obj_add_strcpy(doc, field_obj, "type", IcebergTypeHelper::GetIcebergTypeString(column.type).c_str());
 	}
 	yyjson_mut_obj_add_bool(doc, field_obj, "required", column.required);
 	// skip doc, initial_default, and write_default for now.

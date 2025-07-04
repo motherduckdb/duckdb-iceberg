@@ -1,5 +1,5 @@
 #include "duckdb/common/string_util.hpp"
-#include "storage/iceberg_type.hpp"
+#include "utils/iceberg_type.hpp"
 #include "duckdb/common/extra_type_info.hpp"
 #include "rest_catalog/objects/list_type.hpp"
 #include "rest_catalog/objects/map_type.hpp"
@@ -9,13 +9,12 @@
 
 namespace duckdb {
 
-string IcebergTypeRenamer::GetIcebergTypeString(LogicalType &type) {
+string IcebergTypeHelper::GetIcebergTypeString(LogicalType &type) {
 	switch (type.id()) {
-	case LogicalTypeId::UTINYINT:
-	case LogicalTypeId::USMALLINT:
-	case LogicalTypeId::UINTEGER:
 	case LogicalTypeId::TINYINT:
+	case LogicalTypeId::UTINYINT:
 	case LogicalTypeId::SMALLINT:
+	case LogicalTypeId::USMALLINT:
 	case LogicalTypeId::INTEGER:
 		return "int";
 	case LogicalTypeId::BOOLEAN:
@@ -24,24 +23,41 @@ string IcebergTypeRenamer::GetIcebergTypeString(LogicalType &type) {
 		return "string";
 	case LogicalTypeId::DATE:
 		return "date";
+	case LogicalTypeId::UINTEGER:
+	case LogicalTypeId::HUGEINT:
 	case LogicalTypeId::BIGINT:
 		return "long";
 	case LogicalTypeId::FLOAT:
 		return "float";
 	case LogicalTypeId::DOUBLE:
 		return "double";
-	case LogicalTypeId::DECIMAL:
-		return "decimal";
+	case LogicalTypeId::DECIMAL: {
+		auto aux = type.AuxInfo()->Cast<DecimalTypeInfo>();
+		return StringUtil::Format("decimal(%s, %s)", aux.scale, aux.width);
+	}
 	case LogicalTypeId::UUID:
 		return "uuid";
 	case LogicalTypeId::BLOB:
+	case LogicalTypeId::BIT: // TODO: is this correct?
 		return "binary";
 	case LogicalTypeId::STRUCT:
 		return "struct";
 	case LogicalTypeId::LIST:
-	case LogicalTypeId::ARRAY:
 		return "list";
+	case LogicalTypeId::TIME:
+		return "time";
+	case LogicalTypeId::TIMESTAMP:
+		return "timestamp";
+	case LogicalTypeId::TIMESTAMP_TZ:
+		return "timestamp_tz";
+	case LogicalTypeId::ARRAY: {
+		// TODO: get extra type info. How long is the arry
+		auto aux = type.AuxInfo()->Cast<ArrayType>();
+		return "fixed(L)";
+	}
 	case LogicalTypeId::MAP:
+		return "map";
+	case LogicalTypeId::VARINT:
 	default:
 		throw NotImplementedException("Type not supported in Duckdb-Iceberg");
 	}
@@ -82,13 +98,25 @@ rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(LogicalType &typ
 
 	switch (type.id()) {
 	case LogicalTypeId::MAP: {
-		throw InvalidInputException("whatever");
-		//		type.has_map_type = true;
-		//		type.map_type = rest_api_objects::MapType();
-		//		auto aux = type.AuxInfo()->Cast<Map>();
-		//		for (auto &child : aux->child_types) {
-		//
-		//		}
+		rest_type.has_primitive_type = false;
+		rest_type.has_map_type = true;
+		rest_type.map_type = rest_api_objects::MapType();
+		auto aux = type.AuxInfo()->Cast<ListTypeInfo>();
+		auto child_type = aux.child_type.AuxInfo()->Cast<StructTypeInfo>();
+		// How do I get the child types for a map type?
+		// maybe both should just be string?
+		auto key_type = child_type.child_types.front().second;
+		rest_type.map_type.key = make_uniq<rest_api_objects::Type>(
+		    IcebergTypeHelper::CreateIcebergRestType(child_type.child_types.front().second, column_id));
+		rest_type.map_type.key_id = static_cast<int32_t>(column_id);
+		column_id++;
+		rest_type.map_type.value = make_uniq<rest_api_objects::Type>(
+		    IcebergTypeHelper::CreateIcebergRestType(child_type.child_types.back().second, column_id));
+		rest_type.map_type.value_id = static_cast<int32_t>(column_id);
+		column_id++;
+		rest_type.map_type.value_required = false;
+
+		return rest_type;
 	}
 	case LogicalTypeId::STRUCT: {
 		rest_type.has_primitive_type = false;
@@ -114,7 +142,7 @@ rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(LogicalType &typ
 		rest_type.has_list_type = true;
 		rest_type.list_type = rest_api_objects::ListType();
 		auto list_aux = type.AuxInfo()->Cast<ListTypeInfo>();
-		rest_type.list_type.type = IcebergTypeRenamer::GetIcebergTypeString(list_aux.child_type);
+		rest_type.list_type.type = IcebergTypeHelper::GetIcebergTypeString(list_aux.child_type);
 		rest_type.list_type.element =
 		    make_uniq<rest_api_objects::Type>(IcebergTypeHelper::CreateIcebergRestType(list_aux.child_type, column_id));
 		rest_type.list_type.element_required = false;
@@ -128,7 +156,7 @@ rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(LogicalType &typ
 	}
 	rest_type.has_primitive_type = true;
 	rest_type.primitive_type = rest_api_objects::PrimitiveType();
-	rest_type.primitive_type.value = IcebergTypeRenamer::GetIcebergTypeString(type);
+	rest_type.primitive_type.value = IcebergTypeHelper::GetIcebergTypeString(type);
 	return rest_type;
 }
 
