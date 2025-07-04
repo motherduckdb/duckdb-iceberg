@@ -27,7 +27,6 @@ string IcebergTypeHelper::GetIcebergTypeString(LogicalType &type) {
 	case LogicalTypeId::BIGINT:
 		return "long";
 	case LogicalTypeId::FLOAT:
-
 		return "float";
 	case LogicalTypeId::DOUBLE:
 		return "double";
@@ -156,6 +155,7 @@ rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(LogicalType &typ
 	rest_type.has_primitive_type = true;
 	rest_type.primitive_type = rest_api_objects::PrimitiveType();
 	rest_type.primitive_type.value = IcebergTypeHelper::GetIcebergTypeString(type);
+	column_id++;
 	return rest_type;
 }
 

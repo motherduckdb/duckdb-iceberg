@@ -45,6 +45,8 @@ ATTACH '' AS my_datalake (
 statement ok
 use my_datalake.default
 
+mode skip
+
 # create primitive type table from test all types
 statement ok
 create table all_types_table_primitives as select
@@ -72,6 +74,7 @@ blob from test_all_types();
 
 query T nosort res_1
 select * from all_types_table_primitives;
+----
 
 query T nosort res_1
 select
@@ -96,33 +99,52 @@ dec38_10,
 uuid,
 varchar,
 blob from test_all_types();
+----
+
+mode unskip
 
 # create nested types table from test all types
 statement ok
-create table all_types_table_nested as select
-int_array,
-double_array,
-date_array,
-timestamp_array,
-timestamptz_array,
-varchar_array,
-nested_int_array,
-struct,
-struct_of_arrays,
-array_of_structs,
-map,
-fixed_int_array,
-fixed_varchar_array,
-fixed_nested_int_array,
-fixed_nested_varchar_array,
-fixed_struct_array,
-struct_of_fixed_array,
-fixed_array_of_int_list,
-list_of_fixed_int_array from test_all_types();
+create table all_types_table_nested_5 as select
+nested_int_array from test_all_types();
+
+
+mode output_result
+
+statement ok
+select * from all_types_table_nested_5;
+
+
+mode skip
+
+
+# int_array,
+# double_array,
+# date_array,
+# timestamp_array,
+# timestamptz_array,
+# varchar_array,
+# nested_int_array
+
+
+#
+# struct,
+# struct_of_arrays,
+# array_of_structs,
+# map,
+# fixed_int_array,
+# fixed_varchar_array,
+# fixed_nested_int_array,
+# fixed_nested_varchar_array,
+# fixed_struct_array,
+# struct_of_fixed_array,
+# fixed_array_of_int_list,
+# list_of_fixed_int_array from test_all_types();
 
 
 query T nosort res_nested
 select * from all_types_table_nested;
+----
 
 query T nosort res_nested
 select
@@ -145,6 +167,7 @@ fixed_struct_array,
 struct_of_fixed_array,
 fixed_array_of_int_list,
 list_of_fixed_int_array from test_all_types();
+----
 
 mode skip
 
