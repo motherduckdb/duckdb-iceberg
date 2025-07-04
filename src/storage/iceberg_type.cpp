@@ -24,21 +24,20 @@ string IcebergTypeHelper::GetIcebergTypeString(LogicalType &type) {
 	case LogicalTypeId::DATE:
 		return "date";
 	case LogicalTypeId::UINTEGER:
-	case LogicalTypeId::HUGEINT:
 	case LogicalTypeId::BIGINT:
 		return "long";
 	case LogicalTypeId::FLOAT:
+
 		return "float";
 	case LogicalTypeId::DOUBLE:
 		return "double";
 	case LogicalTypeId::DECIMAL: {
 		auto aux = type.AuxInfo()->Cast<DecimalTypeInfo>();
-		return StringUtil::Format("decimal(%s, %s)", aux.scale, aux.width);
+		return StringUtil::Format("decimal(%d, %d)", aux.width, aux.scale);
 	}
 	case LogicalTypeId::UUID:
 		return "uuid";
 	case LogicalTypeId::BLOB:
-	case LogicalTypeId::BIT: // TODO: is this correct?
 		return "binary";
 	case LogicalTypeId::STRUCT:
 		return "struct";
@@ -49,17 +48,17 @@ string IcebergTypeHelper::GetIcebergTypeString(LogicalType &type) {
 	case LogicalTypeId::TIMESTAMP:
 		return "timestamp";
 	case LogicalTypeId::TIMESTAMP_TZ:
-		return "timestamp_tz";
+		return "timestamptz";
 	case LogicalTypeId::ARRAY: {
 		// TODO: get extra type info. How long is the arry
-		auto aux = type.AuxInfo()->Cast<ArrayType>();
-		return "fixed(L)";
+		auto aux = type.AuxInfo()->Cast<ArrayTypeInfo>();
+		auto length = aux.size;
+		return StringUtil::Format("fixed(%d)", length);
 	}
 	case LogicalTypeId::MAP:
 		return "map";
-	case LogicalTypeId::VARINT:
 	default:
-		throw NotImplementedException("Type not supported in Duckdb-Iceberg");
+		throw NotImplementedException("Type %s not supported in Iceberg", LogicalTypeIdToString(type.id()));
 	}
 }
 

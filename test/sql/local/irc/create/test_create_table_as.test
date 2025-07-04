@@ -45,28 +45,112 @@ ATTACH '' AS my_datalake (
 statement ok
 use my_datalake.default
 
+# create primitive type table from test all types
 statement ok
-create table new_table_7 as select range a from range(100);
+create table all_types_table_primitives as select
+bool,
+tinyint,
+smallint,
+int,
+bigint,
+utinyint,
+usmallint,
+uint,
+date,
+time,
+timestamp,
+timestamp_tz,
+float,
+double,
+dec_4_1,
+dec_9_4,
+dec_18_6,
+dec38_10,
+uuid,
+varchar,
+blob from test_all_types();
 
-query I
-select * from new_table_7 order by all limit 10;
-----
-0
-1
-2
-3
-4
-5
-6
-7
-8
-9
+query T nosort res_1
+select * from all_types_table_primitives;
+
+query T nosort res_1
+select
+bool,
+tinyint,
+smallint,
+int,
+bigint,
+utinyint,
+usmallint,
+uint,
+date,
+time,
+timestamp,
+timestamp_tz,
+float,
+double,
+dec_4_1,
+dec_9_4,
+dec_18_6,
+dec38_10,
+uuid,
+varchar,
+blob from test_all_types();
+
+# create nested types table from test all types
+statement ok
+create table all_types_table_nested as select
+int_array,
+double_array,
+date_array,
+timestamp_array,
+timestamptz_array,
+varchar_array,
+nested_int_array,
+struct,
+struct_of_arrays,
+array_of_structs,
+map,
+fixed_int_array,
+fixed_varchar_array,
+fixed_nested_int_array,
+fixed_nested_varchar_array,
+fixed_struct_array,
+struct_of_fixed_array,
+fixed_array_of_int_list,
+list_of_fixed_int_array from test_all_types();
+
+
+query T nosort res_nested
+select * from all_types_table_nested;
+
+query T nosort res_nested
+select
+int_array,
+double_array,
+date_array,
+timestamp_array,
+timestamptz_array,
+varchar_array,
+nested_int_array,
+struct,
+struct_of_arrays,
+array_of_structs,
+map,
+fixed_int_array,
+fixed_varchar_array,
+fixed_nested_int_array,
+fixed_nested_varchar_array,
+fixed_struct_array,
+struct_of_fixed_array,
+fixed_array_of_int_list,
+list_of_fixed_int_array from test_all_types();
 
 mode skip
 
-statement ok
-create table blah as select age, id, name from read_parquet('/Users/tomebergen/duckdb-iceberg/data/persistent/column_mapping/warehouse/example/mock_data.parquet');
-
+# statement ok
+# create table blah as select age, id, name from read_parquet('/Users/tomebergen/duckdb-iceberg/data/persistent/column_mapping/warehouse/example/mock_data.parquet');
+#
 statement ok
 create table all_types_table as select
 column_name,
@@ -81,7 +165,6 @@ utinyint,
 usmallint,
 uint,
 ubigint,
-varint,
 date,
 time,
 timestamp,
@@ -97,13 +180,9 @@ dec_9_4,
 dec_18_6,
 dec38_10,
 uuid,
-interval,
 varchar,
 blob,
 bit,
-small_enum,
-medium_enum,
-large_enum,
 int_array,
 double_array,
 date_array,
@@ -115,7 +194,6 @@ struct,
 struct_of_arrays,
 array_of_structs,
 map,
-union,
 fixed_int_array,
 fixed_varchar_array,
 fixed_nested_int_array,
@@ -124,3 +202,19 @@ fixed_struct_array,
 struct_of_fixed_array,
 fixed_array_of_int_list,
 list_of_fixed_int_array from test_all_types();
+
+
+# can not be convertedd
+interval,
+varint,
+small_enum,
+medium_enum,
+large_enum,
+union,
+bit
+timestamp_s,
+timestamp_ns,
+hugeint,
+uhugeint,
+timestamp_ms,
+time_tz,
