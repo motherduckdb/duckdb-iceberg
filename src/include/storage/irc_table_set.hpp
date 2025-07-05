@@ -32,8 +32,6 @@ public:
 	IRCSchemaEntry &schema;
 	string name;
 	string table_id;
-	//! Whether this table entry is verified as existing
-	bool verified = false;
 
 	rest_api_objects::LoadTableResult load_table_result;
 	IcebergTableMetadata table_metadata;
@@ -61,6 +59,8 @@ public:
 	IRCSchemaEntry &schema;
 	Catalog &catalog;
 	case_insensitive_map_t<IcebergTableInformation> entries;
+	//! Whether a listing is done for this transaction
+	bool listed = false;
 
 private:
 	mutex entry_lock;

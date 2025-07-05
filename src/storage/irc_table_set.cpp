@@ -204,7 +204,9 @@ optional_ptr<CatalogEntry> IcebergTableInformation::CreateSchemaVersion(IcebergT
 }
 
 optional_ptr<CatalogEntry> IcebergTableInformation::GetSchemaVersion(optional_ptr<BoundAtClause> at) {
-	D_ASSERT(!schema_versions.empty());
+	if (schema_versions.empty()) {
+		return nullptr;
+	}
 	auto snapshot_lookup = IcebergSnapshotLookup::FromAtClause(at);
 
 	int32_t schema_id;
@@ -248,12 +250,16 @@ void ICTableSet::Scan(ClientContext &context, const std::function<void(CatalogEn
 		auto &table_info = entry.second;
 		FillEntry(context, table_info);
 		auto schema_id = table_info.table_metadata.current_schema_id;
+		if (table_info.schema_versions.empty()) {
+			continue;
+		}
 		callback(*table_info.schema_versions[schema_id]);
 	}
 }
 
 void ICTableSet::LoadEntries(ClientContext &context) {
-	if (!entries.empty()) {
+	if (listed) {
+		D_ASSERT(!entries.empty());
 		return;
 	}
 
@@ -262,8 +268,12 @@ void ICTableSet::LoadEntries(ClientContext &context) {
 	auto tables = IRCAPI::GetTables(context, ic_catalog, schema.name);
 
 	for (auto &table : tables) {
-		entries.emplace(table.name, IcebergTableInformation(ic_catalog, schema, table.name));
+		auto entry_it = entries.find(table.name);
+		if (entry_it == entries.end()) {
+			entries.emplace(table.name, IcebergTableInformation(ic_catalog, schema, table.name));
+		}
 	}
+	listed = true;
 }
 
 unique_ptr<ICTableInfo> ICTableSet::GetTableInfo(ClientContext &context, IRCSchemaEntry &schema,
