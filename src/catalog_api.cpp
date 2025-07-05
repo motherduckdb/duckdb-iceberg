@@ -31,6 +31,20 @@ namespace duckdb {
 	                    int(response.status));
 }
 
+void VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, const string &schema) {
+	auto url_builder = catalog.GetBaseUrl();
+	url_builder.AddPathComponent(catalog.prefix);
+	url_builder.AddPathComponent("namespaces");
+	url_builder.AddPathComponent(schema);
+
+	auto url = url_builder.GetURL();
+	auto response = catalog.auth_handler->HeadRequest(context, url_builder);
+	if (response->Success()) {
+		return;
+	}
+	ThrowException(url, *response, "HEAD");
+}
+
 static string GetTableMetadata(ClientContext &context, IRCatalog &catalog, const string &schema, const string &table) {
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPathComponent(catalog.prefix);
@@ -42,6 +56,7 @@ static string GetTableMetadata(ClientContext &context, IRCatalog &catalog, const
 	auto url = url_builder.GetURL();
 	auto response = catalog.auth_handler->GetRequest(context, url_builder);
 	if (!response->Success()) {
+		VerifySchemaExistence(context, catalog, schema);
 		ThrowException(url, *response, "GET");
 	}
 

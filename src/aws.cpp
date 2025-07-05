@@ -128,6 +128,55 @@ unique_ptr<HTTPResponse> AWSInput::GetRequest(ClientContext &context) {
 	return result;
 }
 
+unique_ptr<HTTPResponse> AWSInput::HeadRequest(ClientContext &context) {
+	InitAWSAPI();
+	auto clientConfig = make_uniq<Aws::Client::ClientConfiguration>();
+
+	if (!cert_path.empty()) {
+		clientConfig->caFile = cert_path;
+	}
+
+	Aws::Http::URI uri;
+	Aws::Http::Scheme scheme = Aws::Http::Scheme::HTTPS;
+	uri.SetScheme(scheme);
+	uri.SetAuthority(authority);
+	for (auto &segment : path_segments) {
+		uri.AddPathSegment(segment);
+	}
+
+	for (auto &param : query_string_parameters) {
+		uri.AddQueryStringParameter(param.first.c_str(), param.second.c_str());
+	}
+
+	std::shared_ptr<Aws::Auth::AWSCredentialsProviderChain> provider;
+	provider = std::make_shared<DuckDBSecretCredentialProvider>(key_id, secret, session_token);
+	auto signer = make_uniq<Aws::Client::AWSAuthV4Signer>(provider, service.c_str(), region.c_str());
+
+	const Aws::Http::URI uri_const = Aws::Http::URI(uri);
+	auto request = Aws::Http::CreateHttpRequest(uri_const, Aws::Http::HttpMethod::HTTP_HEAD,
+	                                            Aws::Utils::Stream::DefaultResponseStreamFactoryMethod);
+	request->SetUserAgent(user_agent);
+
+	signer->SignRequest(*request);
+
+	std::shared_ptr<Aws::Http::HttpClient> MyHttpClient;
+	MyHttpClient = Aws::Http::CreateHttpClient(*clientConfig);
+
+	LogAWSRequest(context, request);
+	std::shared_ptr<Aws::Http::HttpResponse> res = MyHttpClient->MakeRequest(request);
+	Aws::Http::HttpResponseCode resCode = res->GetResponseCode();
+	DUCKDB_LOG(context, IcebergLogType,
+	           "GET %s (response %d) (signed with key_id '%s' for service '%s', in region '%s')", uri.GetURIString(),
+	           resCode, key_id, service.c_str(), region.c_str());
+
+	unique_ptr<HTTPResponse> result = make_uniq<HTTPResponse>(HTTPStatusCode(static_cast<idx_t>(resCode)));
+	result->url = uri.GetURIString();
+	Aws::StringStream resBody;
+	resBody << res->GetResponseBody().rdbuf();
+	result->body = resBody.str();
+	return result;
+}
+
 unique_ptr<HTTPResponse> AWSInput::PostRequest(ClientContext &context, string post_body) {
 
 	InitAWSAPI();
