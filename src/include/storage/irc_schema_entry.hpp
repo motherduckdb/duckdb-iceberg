@@ -13,8 +13,6 @@ public:
 	IRCSchemaEntry(Catalog &catalog, CreateSchemaInfo &info);
 	~IRCSchemaEntry() override;
 
-	unique_ptr<IRCAPISchema> schema_data;
-
 public:
 	optional_ptr<CatalogEntry> CreateTable(CatalogTransaction transaction, BoundCreateTableInfo &info) override;
 	optional_ptr<CatalogEntry> CreateFunction(CatalogTransaction transaction, CreateFunctionInfo &info) override;

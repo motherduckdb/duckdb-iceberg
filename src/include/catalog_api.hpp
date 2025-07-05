@@ -12,11 +12,6 @@ namespace duckdb {
 
 class IRCatalog;
 
-struct IRCAPISchema {
-	string schema_name;
-	string catalog_name;
-};
-
 class IRCAPI {
 public:
 	static const string API_VERSION_1;
@@ -25,7 +20,7 @@ public:
 	                                                           const string &schema);
 	static rest_api_objects::LoadTableResult GetTable(ClientContext &context, IRCatalog &catalog, const string &schema,
 	                                                  const string &table_name);
-	static vector<IRCAPISchema> GetSchemas(ClientContext &context, IRCatalog &catalog);
+	static vector<string> GetSchemas(ClientContext &context, IRCatalog &catalog);
 };
 
 } // namespace duckdb

@@ -90,8 +90,8 @@ vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &conte
 	return std::move(list_tables_response.identifiers);
 }
 
-vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IRCatalog &catalog) {
-	vector<IRCAPISchema> result;
+vector<string> IRCAPI::GetSchemas(ClientContext &context, IRCatalog &catalog) {
+	vector<string> result;
 	auto endpoint_builder = catalog.GetBaseUrl();
 	endpoint_builder.AddPathComponent(catalog.prefix);
 	endpoint_builder.AddPathComponent("namespaces");
@@ -110,16 +110,13 @@ vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IRCatalog &catal
 	}
 	auto &schemas = list_namespaces_response.namespaces;
 	for (auto &schema : schemas) {
-		IRCAPISchema schema_result;
-		schema_result.catalog_name = catalog.GetName();
 		auto &value = schema.value;
 		if (value.size() != 1) {
 			//! FIXME: we likely want to fix this by concatenating the components with a `.` ?
 			throw NotImplementedException("Only a namespace with a single component is supported currently, found %d",
 			                              value.size());
 		}
-		schema_result.schema_name = value[0];
-		result.push_back(schema_result);
+		result.push_back(value[0]);
 	}
 
 	return result;

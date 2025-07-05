@@ -38,10 +38,9 @@ void IRCSchemaSet::LoadEntries(ClientContext &context) {
 	auto schemas = IRCAPI::GetSchemas(context, ic_catalog);
 	for (const auto &schema : schemas) {
 		CreateSchemaInfo info;
-		info.schema = schema.schema_name;
+		info.schema = schema;
 		info.internal = false;
 		auto schema_entry = make_uniq<IRCSchemaEntry>(catalog, info);
-		schema_entry->schema_data = make_uniq<IRCAPISchema>(schema);
 		CreateEntryInternal(context, std::move(schema_entry));
 	}
 }
