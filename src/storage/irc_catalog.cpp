@@ -56,7 +56,7 @@ optional_ptr<SchemaCatalogEntry> IRCatalog::LookupSchema(CatalogTransaction tran
 	auto &schemas = irc_transaction.GetSchemas();
 
 	auto &schema_name = schema_lookup.GetEntryName();
-	auto entry = schemas.GetEntry(transaction.GetContext(), schema_name);
+	auto entry = schemas.GetEntry(transaction.GetContext(), schema_name, if_not_found);
 	if (!entry && if_not_found != OnEntryNotFound::RETURN_NULL) {
 		throw CatalogException(schema_lookup.GetErrorContext(), "Schema with name \"%s\" not found", schema_name);
 	}

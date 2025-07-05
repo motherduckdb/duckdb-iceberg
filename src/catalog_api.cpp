@@ -1,6 +1,7 @@
 #include "catalog_api.hpp"
 #include "catalog_utils.hpp"
 #include "storage/irc_catalog.hpp"
+#include "storage/irc_schema_entry.hpp"
 #include "yyjson.hpp"
 #include "iceberg_utils.hpp"
 #include "api_utils.hpp"
@@ -31,7 +32,7 @@ namespace duckdb {
 	                    int(response.status));
 }
 
-void VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, const string &schema) {
+bool VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, const string &schema) {
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPathComponent(catalog.prefix);
 	url_builder.AddPathComponent("namespaces");
@@ -40,24 +41,38 @@ void VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, const str
 	auto url = url_builder.GetURL();
 	auto response = catalog.auth_handler->HeadRequest(context, url_builder);
 	if (response->Success()) {
-		return;
+		return true;
 	}
-	throw CatalogException("Namespace by the name of '%s' does not exist", schema);
+	return false;
 }
 
-static string GetTableMetadata(ClientContext &context, IRCatalog &catalog, const string &schema, const string &table) {
+static string GetTableMetadata(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema,
+                               const string &table) {
+	const auto &schema_name = schema.name;
+
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPathComponent(catalog.prefix);
 	url_builder.AddPathComponent("namespaces");
-	url_builder.AddPathComponent(schema);
+	url_builder.AddPathComponent(schema_name);
 	url_builder.AddPathComponent("tables");
 	url_builder.AddPathComponent(table);
 
 	auto url = url_builder.GetURL();
 	auto response = catalog.auth_handler->GetRequest(context, url_builder);
 	if (!response->Success()) {
-		VerifySchemaExistence(context, catalog, schema);
-		throw CatalogException("Table by the name of '%s' in namespace '%s' doesn't exist", table, schema);
+		if (schema.existence_state.type == SchemaExistenceType::UNKNOWN) {
+			bool exists = VerifySchemaExistence(context, catalog, schema_name);
+			if (exists) {
+				schema.existence_state.type = SchemaExistenceType::PRESENT;
+			} else {
+				schema.existence_state.type = SchemaExistenceType::MISSING;
+				if (schema.existence_state.if_not_found == OnEntryNotFound::RETURN_NULL) {
+					return string();
+				}
+				throw CatalogException("Namespace by the name of '%s' does not exist", schema_name);
+			}
+		}
+		return string();
 	}
 
 	const auto &api_result = response->body;
@@ -71,13 +86,16 @@ vector<string> IRCAPI::GetCatalogs(ClientContext &context, IRCatalog &catalog) {
 	throw NotImplementedException("ICAPI::GetCatalogs");
 }
 
-rest_api_objects::LoadTableResult IRCAPI::GetTable(ClientContext &context, IRCatalog &catalog, const string &schema,
-                                                   const string &table_name) {
+bool IRCAPI::GetTable(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema, const string &table_name,
+                      rest_api_objects::LoadTableResult &out) {
 	string result = GetTableMetadata(context, catalog, schema, table_name);
+	if (result.empty()) {
+		return false;
+	}
 	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(result));
 	auto *metadata_root = yyjson_doc_get_root(doc.get());
-	auto load_table_result = rest_api_objects::LoadTableResult::FromJSON(metadata_root);
-	return load_table_result;
+	out = rest_api_objects::LoadTableResult::FromJSON(metadata_root);
+	return true;
 }
 
 // TODO: handle out-of-order columns using position property

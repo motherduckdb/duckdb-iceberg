@@ -11,7 +11,8 @@ namespace duckdb {
 IRCSchemaSet::IRCSchemaSet(Catalog &catalog) : catalog(catalog) {
 }
 
-optional_ptr<CatalogEntry> IRCSchemaSet::GetEntry(ClientContext &context, const string &name) {
+optional_ptr<CatalogEntry> IRCSchemaSet::GetEntry(ClientContext &context, const string &name,
+                                                  OnEntryNotFound if_not_found) {
 	lock_guard<mutex> l(entry_lock);
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
 
@@ -23,6 +24,7 @@ optional_ptr<CatalogEntry> IRCSchemaSet::GetEntry(ClientContext &context, const 
 		info.schema = name;
 		info.internal = false;
 		auto schema_entry = make_uniq<IRCSchemaEntry>(catalog, info);
+		schema_entry->existence_state.if_not_found = if_not_found;
 		CreateEntryInternal(context, std::move(schema_entry));
 		entry = entries.find(name);
 		D_ASSERT(entry != entries.end());

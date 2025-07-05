@@ -4,9 +4,18 @@
 #include "catalog_api.hpp"
 #include "duckdb/catalog/catalog_entry/schema_catalog_entry.hpp"
 #include "storage/irc_table_set.hpp"
+#include "duckdb/common/enums/on_entry_not_found.hpp"
 
 namespace duckdb {
 class IRCTransaction;
+
+enum class SchemaExistenceType : uint8_t { UNKNOWN, PRESENT, MISSING };
+
+struct SchemaExistenceState {
+public:
+	SchemaExistenceType type = SchemaExistenceType::UNKNOWN;
+	OnEntryNotFound if_not_found;
+};
 
 class IRCSchemaEntry : public SchemaCatalogEntry {
 public:
@@ -39,8 +48,7 @@ private:
 
 public:
 	ICTableSet tables;
-	//! Whether this schema entry is verified as existing
-	bool verified = false;
+	SchemaExistenceState existence_state;
 };
 
 } // namespace duckdb

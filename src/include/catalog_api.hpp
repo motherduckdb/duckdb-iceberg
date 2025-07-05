@@ -11,6 +11,7 @@
 namespace duckdb {
 
 class IRCatalog;
+class IRCSchemaEntry;
 
 class IRCAPI {
 public:
@@ -18,8 +19,8 @@ public:
 	static vector<string> GetCatalogs(ClientContext &context, IRCatalog &catalog);
 	static vector<rest_api_objects::TableIdentifier> GetTables(ClientContext &context, IRCatalog &catalog,
 	                                                           const string &schema);
-	static rest_api_objects::LoadTableResult GetTable(ClientContext &context, IRCatalog &catalog, const string &schema,
-	                                                  const string &table_name);
+	static bool GetTable(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema, const string &table_name,
+	                     rest_api_objects::LoadTableResult &out);
 	static vector<string> GetSchemas(ClientContext &context, IRCatalog &catalog);
 };
 
