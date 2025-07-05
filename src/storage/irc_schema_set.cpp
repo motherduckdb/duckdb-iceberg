@@ -12,11 +12,20 @@ IRCSchemaSet::IRCSchemaSet(Catalog &catalog) : catalog(catalog) {
 }
 
 optional_ptr<CatalogEntry> IRCSchemaSet::GetEntry(ClientContext &context, const string &name) {
-	LoadEntries(context);
 	lock_guard<mutex> l(entry_lock);
+	auto &ic_catalog = catalog.Cast<IRCatalog>();
+
 	auto entry = entries.find(name);
 	if (entry == entries.end()) {
-		return nullptr;
+		//! We create the entry immediately optimistically,
+		//! when we scan from the table we'll figure out if it exists or not.
+		CreateSchemaInfo info;
+		info.schema = name;
+		info.internal = false;
+		auto schema_entry = make_uniq<IRCSchemaEntry>(catalog, info);
+		CreateEntryInternal(context, std::move(schema_entry));
+		entry = entries.find(name);
+		D_ASSERT(entry != entries.end());
 	}
 	return entry->second.get();
 }

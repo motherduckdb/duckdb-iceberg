@@ -280,41 +280,6 @@ void IRCatalog::GetConfig(ClientContext &context, IcebergEndpointType &endpoint_
 	}
 }
 
-string IRCatalog::OptionalGetCachedValue(const string &url) {
-	std::lock_guard<std::mutex> lock(metadata_cache_mutex);
-	auto value = metadata_cache.find(url);
-	if (value != metadata_cache.end()) {
-		auto now = system_clock::now();
-		if (now < value->second->expires_at) {
-			return value->second->data;
-		}
-	}
-	return "";
-}
-
-bool IRCatalog::SetCachedValue(const string &url, const string &value,
-                               const rest_api_objects::LoadTableResult &result) {
-	//! FIXME: shouldn't this also store the 'storage-credentials' ??
-	if (!result.has_config) {
-		return false;
-	}
-	auto &credentials = result.config;
-	auto expires_at_it = credentials.find("s3.session-token-expires-at-ms");
-	if (expires_at_it == credentials.end()) {
-		return false;
-	}
-
-	auto &expires_at = expires_at_it->second;
-	auto epochMillis = std::stoll(expires_at);
-	auto expired_time = system_clock::time_point(milliseconds(epochMillis));
-	auto val = make_uniq<MetadataCacheValue>(value, expired_time);
-	{
-		std::lock_guard<std::mutex> lock(metadata_cache_mutex);
-		metadata_cache[url] = std::move(val);
-	}
-	return true;
-}
-
 //===--------------------------------------------------------------------===//
 // Attach
 //===--------------------------------------------------------------------===//

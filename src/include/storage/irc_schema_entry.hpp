@@ -39,6 +39,8 @@ private:
 
 public:
 	ICTableSet tables;
+	//! Whether this schema entry is verified as existing
+	bool verified = false;
 };
 
 } // namespace duckdb

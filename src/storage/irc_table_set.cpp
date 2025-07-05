@@ -270,11 +270,14 @@ unique_ptr<ICTableInfo> ICTableSet::GetTableInfo(ClientContext &context, IRCSche
 }
 
 optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const EntryLookupInfo &lookup) {
-	LoadEntries(context);
 	lock_guard<mutex> l(entry_lock);
-	auto entry = entries.find(lookup.GetEntryName());
+	auto &ic_catalog = catalog.Cast<IRCatalog>();
+
+	auto table_name = lookup.GetEntryName();
+	auto entry = entries.find(table_name);
 	if (entry == entries.end()) {
-		return nullptr;
+		auto it = entries.emplace(table_name, IcebergTableInformation(ic_catalog, schema, table_name));
+		entry = it.first;
 	}
 	FillEntry(context, entry->second);
 	return entry->second.GetSchemaVersion(lookup.GetAtClause());

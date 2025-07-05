@@ -49,7 +49,6 @@ static string GetTableMetadata(ClientContext &context, IRCatalog &catalog, const
 	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(api_result));
 	auto *root = yyjson_doc_get_root(doc.get());
 	auto load_table_result = rest_api_objects::LoadTableResult::FromJSON(root);
-	catalog.SetCachedValue(url, api_result, load_table_result);
 	return api_result;
 }
 
