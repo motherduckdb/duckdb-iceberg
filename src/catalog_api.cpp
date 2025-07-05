@@ -42,7 +42,7 @@ void VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, const str
 	if (response->Success()) {
 		return;
 	}
-	ThrowException(url, *response, "HEAD");
+	throw CatalogException("Namespace by the name of '%s' does not exist", schema);
 }
 
 static string GetTableMetadata(ClientContext &context, IRCatalog &catalog, const string &schema, const string &table) {
@@ -57,7 +57,7 @@ static string GetTableMetadata(ClientContext &context, IRCatalog &catalog, const
 	auto response = catalog.auth_handler->GetRequest(context, url_builder);
 	if (!response->Success()) {
 		VerifySchemaExistence(context, catalog, schema);
-		ThrowException(url, *response, "GET");
+		throw CatalogException("Table by the name of '%s' in namespace '%s' doesn't exist", table, schema);
 	}
 
 	const auto &api_result = response->body;
