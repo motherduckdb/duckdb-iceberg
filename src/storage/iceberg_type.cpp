@@ -40,6 +40,14 @@ string IcebergTypeHelper::GetIcebergTypeString(LogicalType &type) {
 		return "binary";
 	case LogicalTypeId::STRUCT:
 		return "struct";
+	case LogicalTypeId::ARRAY: {
+		// TODO: get extra type info. How long is the arry
+		return "list";
+		// auto aux = type.AuxInfo()->Cast<ArrayTypeInfo>();
+		// auto length = aux.size;
+		// auto child = aux.child_type;
+		// return StringUtil::Format("fixed(%d)", length);
+	}
 	case LogicalTypeId::LIST:
 		return "list";
 	case LogicalTypeId::TIME:
@@ -48,48 +56,13 @@ string IcebergTypeHelper::GetIcebergTypeString(LogicalType &type) {
 		return "timestamp";
 	case LogicalTypeId::TIMESTAMP_TZ:
 		return "timestamptz";
-	case LogicalTypeId::ARRAY: {
-		// TODO: get extra type info. How long is the arry
-		auto aux = type.AuxInfo()->Cast<ArrayTypeInfo>();
-		auto length = aux.size;
-		return StringUtil::Format("fixed(%d)", length);
-	}
+
 	case LogicalTypeId::MAP:
 		return "map";
 	default:
 		throw NotImplementedException("Type %s not supported in Iceberg", LogicalTypeIdToString(type.id()));
 	}
 }
-
-// if (type.has_primitive_type) {
-//	res->type = ParsePrimitiveType(type.primitive_type);
-//} else if (type.has_struct_type) {
-//	auto &struct_type = type.struct_type;
-//	child_list_t<LogicalType> struct_children;
-//	for (auto &field_p : struct_type.fields) {
-//		auto &field = *field_p;
-//		auto child = ParseType(field.name, field.id, field.required, *field.type,
-//							   field.has_initial_default ? &field.initial_default : nullptr);
-//		struct_children.push_back(std::make_pair(child->name, child->type));
-//		res->children.push_back(std::move(child));
-//	}
-//	res->type = LogicalType::STRUCT(std::move(struct_children));
-//} else if (type.has_list_type) {
-//	auto &list_type = type.list_type;
-//	auto child =
-//		ParseType("element", list_type.element_id, list_type.element_required, *list_type.element, nullptr);
-//	res->type = LogicalType::LIST(child->type);
-//	res->children.push_back(std::move(child));
-//} else if (type.has_map_type) {
-//	auto &map_type = type.map_type;
-//	auto key = ParseType("key", map_type.key_id, true, *map_type.key, nullptr);
-//	auto value = ParseType("value", map_type.value_id, map_type.value_required, *map_type.value, nullptr);
-//	res->type = LogicalType::MAP(key->type, value->type);
-//	res->children.push_back(std::move(key));
-//	res->children.push_back(std::move(value));
-//} else {
-//	throw InvalidConfigurationException("Encountered an invalid type in JSON schema");
-//}
 
 rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(LogicalType &type, idx_t &column_id) {
 	rest_api_objects::Type rest_type;
@@ -104,14 +77,14 @@ rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(LogicalType &typ
 		// How do I get the child types for a map type?
 		// maybe both should just be string?
 		auto key_type = child_type.child_types.front().second;
+		rest_type.map_type.key_id = static_cast<int32_t>(column_id);
+		column_id++;
 		rest_type.map_type.key = make_uniq<rest_api_objects::Type>(
 		    IcebergTypeHelper::CreateIcebergRestType(child_type.child_types.front().second, column_id));
-		rest_type.map_type.key_id = static_cast<int32_t>(column_id);
+		rest_type.map_type.value_id = static_cast<int32_t>(column_id);
 		column_id++;
 		rest_type.map_type.value = make_uniq<rest_api_objects::Type>(
 		    IcebergTypeHelper::CreateIcebergRestType(child_type.child_types.back().second, column_id));
-		rest_type.map_type.value_id = static_cast<int32_t>(column_id);
-		column_id++;
 		rest_type.map_type.value_required = false;
 
 		return rest_type;
@@ -124,13 +97,13 @@ rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(LogicalType &typ
 		for (auto &child : stuct_aux.child_types) {
 			auto struct_child = make_uniq<rest_api_objects::StructField>();
 			struct_child->name = child.first;
+			struct_child->id = column_id;
+			column_id++;
 			struct_child->type =
 			    make_uniq<rest_api_objects::Type>(IcebergTypeHelper::CreateIcebergRestType(child.second, column_id));
 			struct_child->has_doc = false;
 			struct_child->required = false;
 			struct_child->has_initial_default = false;
-			struct_child->id = column_id;
-			column_id++;
 			rest_type.struct_type.fields.push_back(std::move(struct_child));
 		}
 		return rest_type;
@@ -141,13 +114,28 @@ rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(LogicalType &typ
 		rest_type.list_type = rest_api_objects::ListType();
 		auto list_aux = type.AuxInfo()->Cast<ListTypeInfo>();
 		rest_type.list_type.type = IcebergTypeHelper::GetIcebergTypeString(list_aux.child_type);
+		rest_type.list_type.element_id = column_id;
+		column_id++;
 		rest_type.list_type.element =
 		    make_uniq<rest_api_objects::Type>(IcebergTypeHelper::CreateIcebergRestType(list_aux.child_type, column_id));
 		rest_type.list_type.element_required = false;
 		// TODO: what is the element id for? Is it the field id?
-		rest_type.list_type.element_id = column_id;
-		column_id++;
 		return rest_type;
+	}
+	case LogicalTypeId::ARRAY: {
+		throw InvalidConfigurationException("Array type not supported in Iceberg type. Please cast to LIST");
+		// rest_type.has_primitive_type = false;
+		// rest_type.has_list_type = true;
+		// rest_type.list_type = rest_api_objects::ListType();
+		// auto array_aux = type.AuxInfo()->Cast<ArrayTypeInfo>();
+		// rest_type.list_type.type = IcebergTypeHelper::GetIcebergTypeString(array_aux.child_type);
+		// rest_type.list_type.element_id = column_id;
+		// column_id++;
+		// rest_type.list_type.element =
+		// 	make_uniq<rest_api_objects::Type>(IcebergTypeHelper::CreateIcebergRestType(array_aux.child_type,
+		// column_id)); rest_type.list_type.element_required = false;
+		// // TODO: what is the element id for? Is it the field id?
+		// return rest_type;
 	}
 	default:
 		break;
@@ -155,7 +143,6 @@ rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(LogicalType &typ
 	rest_type.has_primitive_type = true;
 	rest_type.primitive_type = rest_api_objects::PrimitiveType();
 	rest_type.primitive_type.value = IcebergTypeHelper::GetIcebergTypeString(type);
-	column_id++;
 	return rest_type;
 }
 

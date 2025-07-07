@@ -153,38 +153,44 @@ static rest_api_objects::TableRequirement CreateAssertRefSnapshotIdRequirement(I
 	return req;
 }
 
-void IRCTransaction::CommitNewTables(ClientContext &context) {
-	for (auto &table : new_tables) {
-		// TODO: add D_ASSERT for the post table url
-		auto table_namespace = table->schema.name;
-		auto url_builder = catalog.GetBaseUrl();
-		url_builder.AddPathComponent(catalog.prefix);
-		url_builder.AddPathComponent("namespaces");
-		url_builder.AddPathComponent(table_namespace);
-		url_builder.AddPathComponent("tables");
+rest_api_objects::LoadTableResult IRCTransaction::CommitNewTable(ClientContext &context, const ICTableEntry *table,
+                                                                 bool stage_create) {
+	// TODO: add D_ASSERT for the post table url
+	auto table_namespace = table->schema.name;
+	auto url_builder = catalog.GetBaseUrl();
+	url_builder.AddPathComponent(catalog.prefix);
+	url_builder.AddPathComponent("namespaces");
+	url_builder.AddPathComponent(table_namespace);
+	url_builder.AddPathComponent("tables");
 
-		std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-		yyjson_mut_doc *doc = doc_p.get();
-		auto root_object = yyjson_mut_obj(doc);
-		yyjson_mut_doc_set_root(doc, root_object);
+	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
+	yyjson_mut_doc *doc = doc_p.get();
+	auto root_object = yyjson_mut_obj(doc);
+	yyjson_mut_doc_set_root(doc, root_object);
 
-		// todo, get the new table commit info?
-		D_ASSERT(table->table_info && table->table_info->transaction_data);
-		auto &create_table_request = table->table_info->transaction_data->create;
-		auto create_table_json = create_table_request->CreateTableToJSON(doc, root_object);
+	// todo, get the new table commit info?
+	D_ASSERT(table->table_info && table->table_info->transaction_data);
+	auto &create_table_request = table->table_info->transaction_data->create;
+	auto create_table_json = create_table_request->CreateTableToJSON(doc, root_object);
+	yyjson_mut_obj_add_bool(doc, root_object, "stage-create", stage_create);
 
-		try {
-			auto response = catalog.auth_handler->PostRequest(context, url_builder, create_table_json);
-			if (response->status != HTTPStatusCode::OK_200) {
-				throw InvalidConfigurationException(
-				    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s",
-				    url_builder.GetURL(), EnumUtil::ToString(response->status), response->reason, response->body);
-			}
-		} catch (const std::exception &e) {
-			throw InvalidConfigurationException("Request to '%s' returned a non-200 status code body: %s",
-			                                    url_builder.GetURL(), e.what());
+	try {
+		auto response = catalog.auth_handler->PostRequest(context, url_builder, create_table_json);
+		if (response->status != HTTPStatusCode::OK_200) {
+			throw InvalidConfigurationException(
+			    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s", url_builder.GetURL(),
+			    EnumUtil::ToString(response->status), response->reason, response->body);
 		}
+		std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(response->body));
+		auto *root = yyjson_doc_get_root(doc.get());
+		auto load_table_result = rest_api_objects::LoadTableResult::FromJSON(root);
+		table->table_info->transaction_data->create = nullptr;
+		return load_table_result;
+	} catch (const std::exception &e) {
+		throw InvalidConfigurationException("Request to '%s' returned a non-200 status code body: %s",
+		                                    url_builder.GetURL(), e.what());
 	}
+	throw InternalException("should not get here");
 }
 
 void IRCTransaction::DropSecrets(ClientContext &context) {
@@ -249,7 +255,11 @@ void IRCTransaction::Commit() {
 	auto &context = temp_con.context;
 
 	if (!new_tables.empty()) {
-		CommitNewTables(*context);
+		for (auto &table : new_tables) {
+			if (table->table_info && table->table_info->transaction_data->create) {
+				CommitNewTable(*context, table);
+			}
+		}
 	}
 
 	if (dirty_tables.empty()) {

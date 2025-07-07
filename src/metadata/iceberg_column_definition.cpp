@@ -189,7 +189,7 @@ bool IcebergColumnDefinition::IsPrimitiveType() {
 	case LogicalTypeId::DOUBLE:
 	case LogicalTypeId::DECIMAL:
 	case LogicalTypeId::UUID:
-	case LogicalTypeId::BLOB: // TODO: check BLOT and BIT 'binary' primitive type ?
+	case LogicalTypeId::BLOB: // TODO: check BLOB and BIT 'binary' primitive type ?
 	case LogicalTypeId::BIT:
 	case LogicalTypeId::TIME:
 	case LogicalTypeId::TIMESTAMP:

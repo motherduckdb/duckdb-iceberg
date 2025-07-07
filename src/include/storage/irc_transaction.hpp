@@ -29,7 +29,10 @@ public:
 	void MarkTableAsNew(const ICTableEntry &table);
 	void AddCreateTableRequest(unique_ptr<IcebergCreateTableRequest> creat_table_request);
 	IRCatalog &GetCatalog();
-	void CommitNewTables(ClientContext &context);
+	// stage create = false, table is created immediately in the IRC
+	// stage create = true, table is not created, but metadata is initialized and returned
+	rest_api_objects::LoadTableResult CommitNewTable(ClientContext &context, const ICTableEntry *table,
+	                                                 bool stage_create = false);
 	void DropSecrets(ClientContext &context);
 	rest_api_objects::CommitTransactionRequest GetTransactionRequest(ClientContext &context);
 

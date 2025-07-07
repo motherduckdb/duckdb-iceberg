@@ -60,7 +60,8 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, Iceb
 		yyjson_mut_obj_add_strcpy(doc, field_obj, "type", "struct");
 		auto nested_fields_arr = yyjson_mut_obj_add_arr(doc, field_obj, "fields");
 		for (auto &field : column.children) {
-			AddNamedField(doc, nested_fields_arr, *field);
+			auto nested_field_obj = yyjson_mut_arr_add_obj(doc, nested_fields_arr);
+			AddNamedField(doc, nested_field_obj, *field);
 		}
 		break;
 	}
@@ -134,8 +135,18 @@ shared_ptr<IcebergTableSchema> IcebergCreateTableRequest::CreateIcebergSchema(co
 		// TODO: is this correct?
 		bool required = false;
 		auto logical_type = (*column).GetType();
-		auto type = IcebergTypeHelper::CreateIcebergRestType(logical_type, column_id);
-		auto column_def = IcebergColumnDefinition::ParseType(name, column_id, required, type, nullptr);
+		auto top_level_id = column_id;
+		rest_api_objects::Type type;
+		if (logical_type.IsNested()) {
+			// column id ++ so top_level_id is valid
+			column_id++;
+			type = IcebergTypeHelper::CreateIcebergRestType(logical_type, column_id);
+		} else {
+			type.has_primitive_type = true;
+			type.primitive_type = rest_api_objects::PrimitiveType();
+			type.primitive_type.value = IcebergTypeHelper::GetIcebergTypeString(logical_type);
+		}
+		auto column_def = IcebergColumnDefinition::ParseType(name, top_level_id, required, type, nullptr);
 
 		schema->columns.push_back(std::move(column_def));
 	}
@@ -173,8 +184,6 @@ string IcebergCreateTableRequest::CreateTableToJSON(yyjson_mut_doc *doc, yyjson_
 	auto write_order = yyjson_mut_obj_add_obj(doc, root_object, "write-order");
 	yyjson_mut_obj_add_uint(doc, write_order, "order-id", 0);
 	auto write_order_fields = yyjson_mut_obj_add_arr(doc, write_order, "fields");
-
-	yyjson_mut_obj_add_bool(doc, root_object, "stage-create", false);
 	auto properties = yyjson_mut_obj_add_obj(doc, root_object, "properties");
 
 	return JSONUtils::JsonDocToString(doc);
