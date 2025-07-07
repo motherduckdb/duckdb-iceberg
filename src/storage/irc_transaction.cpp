@@ -168,11 +168,11 @@ rest_api_objects::LoadTableResult IRCTransaction::CommitNewTable(ClientContext &
 	auto root_object = yyjson_mut_obj(doc);
 	yyjson_mut_doc_set_root(doc, root_object);
 
-	// todo, get the new table commit info?
-	D_ASSERT(table->table_info && table->table_info->transaction_data);
-	auto &create_table_request = table->table_info->transaction_data->create;
-	auto create_table_json = create_table_request->CreateTableToJSON(doc, root_object);
+	auto initial_schema =
+	    table->table_info->table_metadata.schemas[table->table_info->table_metadata.current_schema_id];
+	auto create_transaction = make_uniq<IcebergCreateTableRequest>(initial_schema, table->table_info->name);
 	yyjson_mut_obj_add_bool(doc, root_object, "stage-create", stage_create);
+	auto create_table_json = create_transaction->CreateTableToJSON(doc, root_object);
 
 	try {
 		auto response = catalog.auth_handler->PostRequest(context, url_builder, create_table_json);
@@ -184,7 +184,6 @@ rest_api_objects::LoadTableResult IRCTransaction::CommitNewTable(ClientContext &
 		std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(response->body));
 		auto *root = yyjson_doc_get_root(doc.get());
 		auto load_table_result = rest_api_objects::LoadTableResult::FromJSON(root);
-		table->table_info->transaction_data->create = nullptr;
 		return load_table_result;
 	} catch (const std::exception &e) {
 		throw InvalidConfigurationException("Request to '%s' returned a non-200 status code body: %s",

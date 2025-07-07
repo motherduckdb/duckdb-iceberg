@@ -129,25 +129,27 @@ shared_ptr<IcebergTableSchema> IcebergCreateTableRequest::CreateIcebergSchema(co
 	//  this makes the IcebergTableSchema, and we use that to dump data to JSON.
 	//  we can just directly dump it to json.
 	auto column_iterator = table_entry->GetColumns().Logical();
-	idx_t column_id = 1;
+	idx_t field_id = 1;
+
+	auto next_field_id = [&field_id]() -> idx_t {
+		return field_id++;
+	};
+
 	for (auto column = column_iterator.begin(); column != column_iterator.end(); ++column) {
 		auto name = (*column).Name();
 		// TODO: is this correct?
 		bool required = false;
 		auto logical_type = (*column).GetType();
-		auto top_level_id = column_id;
+		idx_t first_id = next_field_id();
 		rest_api_objects::Type type;
 		if (logical_type.IsNested()) {
-			// column id ++ so top_level_id is valid
-			column_id++;
-			type = IcebergTypeHelper::CreateIcebergRestType(logical_type, column_id);
+			type = IcebergTypeHelper::CreateIcebergRestType(logical_type, next_field_id);
 		} else {
 			type.has_primitive_type = true;
 			type.primitive_type = rest_api_objects::PrimitiveType();
 			type.primitive_type.value = IcebergTypeHelper::GetIcebergTypeString(logical_type);
 		}
-		auto column_def = IcebergColumnDefinition::ParseType(name, top_level_id, required, type, nullptr);
-
+		auto column_def = IcebergColumnDefinition::ParseType(name, first_id, required, type, nullptr);
 		schema->columns.push_back(std::move(column_def));
 	}
 	return schema;
@@ -160,7 +162,6 @@ string IcebergCreateTableRequest::CreateTableToJSON(yyjson_mut_doc *doc, yyjson_
 	//! name
 	yyjson_mut_obj_add_strcpy(doc, root_object, "name", table_name.c_str());
 	//! location (apparently not needed)
-	// yyjson_mut_obj_add_strcpy(doc, root_object, "location", "s3://warehouse/default/this_is_a_new_table");
 
 	auto schema_json = yyjson_mut_obj_add_obj(doc, root_object, "schema");
 

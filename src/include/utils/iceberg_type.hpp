@@ -9,7 +9,7 @@ namespace duckdb {
 
 class IcebergTypeHelper {
 public:
-	static rest_api_objects::Type CreateIcebergRestType(LogicalType &type, idx_t &column_id);
+	static rest_api_objects::Type CreateIcebergRestType(LogicalType &type, std::function<idx_t()> get_next_id);
 	static string GetIcebergTypeString(LogicalType &type);
 };
 

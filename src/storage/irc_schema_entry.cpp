@@ -39,6 +39,7 @@ optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(IRCTransaction &irc_trans
 	// create a table entry in our local catalog
 	auto iceberg_table_info = make_uniq<IcebergTableInformation>(catalog, *this, base_info.table);
 
+	// handles posting to IRC catalog if needed.
 	tables.CreateNewEntry(context, std::move(iceberg_table_info), base_info);
 	auto lookup_info = EntryLookupInfo(CatalogType::TABLE_ENTRY, base_info.table);
 	auto entry = tables.GetEntry(context, lookup_info);
@@ -47,14 +48,6 @@ optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(IRCTransaction &irc_trans
 	D_ASSERT(entry);
 	D_ASSERT(entry->type == CatalogType::TABLE_ENTRY);
 	auto &ic_table = entry->Cast<ICTableEntry>();
-	auto initial_schema =
-	    ic_table.table_info->table_metadata.schemas[ic_table.table_info->table_metadata.current_schema_id];
-	auto create_transaction = make_uniq<IcebergCreateTableRequest>(initial_schema, ic_table.table_info->name);
-	if (!ic_table.table_info->transaction_data) {
-		ic_table.table_info->transaction_data = make_uniq<IcebergTransactionData>(context, *ic_table.table_info);
-	}
-	ic_table.table_info->transaction_data->create = std::move(create_transaction);
-
 	irc_transaction.MarkTableAsNew(ic_table);
 
 	return entry;

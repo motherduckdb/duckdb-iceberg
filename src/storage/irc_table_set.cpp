@@ -93,10 +93,7 @@ static void ParseConfigOptions(const case_insensitive_map_t<string> &config, cas
 }
 
 const string &IcebergTableInformation::BaseFilePath() const {
-	if (load_table_result.metadata.has_location) {
-		return load_table_result.metadata.location;
-	}
-	return "";
+	return load_table_result.metadata.location;
 }
 
 IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientContext &context) {
@@ -278,12 +275,6 @@ void ICTableSet::CreateNewEntry(ClientContext &context, shared_ptr<IcebergTableI
 		throw CatalogException("Table %s already exists", new_table->name.c_str());
 	}
 	auto table_name = new_table->name;
-	auto &irc_catalog = new_table->catalog.Cast<IRCatalog>();
-
-	string new_location = "s3://" + irc_catalog.warehouse + "/" + new_table->schema.name + "/" + table_name;
-	if (irc_catalog.attach_options.has_warehouse_location) {
-		new_location = irc_catalog.attach_options.warehouse_location + "/" + new_table->schema.name + "/" + table_name;
-	}
 
 	auto table_entry = make_uniq<ICTableEntry>(new_table, new_table->catalog, schema, info);
 	auto optional_entry = table_entry.get();
@@ -291,22 +282,32 @@ void ICTableSet::CreateNewEntry(ClientContext &context, shared_ptr<IcebergTableI
 	optional_entry->table_info->schema_versions[0] = std::move(table_entry);
 	optional_entry->table_info->table_metadata.schemas[0] =
 	    IcebergCreateTableRequest::CreateIcebergSchema(optional_entry);
-	optional_entry->table_info->table_metadata.schemas[0]->schema_id = 0;
-	optional_entry->table_info->table_metadata.partition_specs[0] = IcebergPartitionSpec();
-	optional_entry->table_info->table_metadata.default_spec_id = 0;
 	optional_entry->table_info->table_metadata.current_schema_id = 0;
-	optional_entry->table_info->table_metadata.has_current_snapshot = false;
-	optional_entry->table_info->table_metadata.current_snapshot_id = 0;
-	optional_entry->table_info->name = table_name;
+	optional_entry->table_info->table_metadata.schemas[0]->schema_id = 0;
+	auto &irc_transaction = IRCTransaction::Get(context, catalog);
+	// Immediately create the table with stage_create = true to get metadata & data location(s)
+	// transaction commit will either commit with data (OR) create the table with stage_create = false
+	// on abort, hit DELETE endpoint with purge = TRUE?
+	auto load_table_result = irc_transaction.CommitNewTable(context, optional_entry, true);
+	optional_entry->table_info->load_table_result = std::move(load_table_result);
+	optional_entry->table_info->table_metadata =
+	    IcebergTableMetadata::FromTableMetadata(optional_entry->table_info->load_table_result.metadata);
 
-	optional_entry->table_info->load_table_result.metadata.has_location = true;
-	optional_entry->table_info->load_table_result.metadata.location = new_location;
-
-	optional_entry->table_info->table_metadata.iceberg_version = 0;
-	optional_entry->table_info->table_metadata.last_sequence_number = 0;
+	// optional_entry->table_info->table_metadata.schemas[0]->schema_id = 0;
+	// optional_entry->table_info->table_metadata.partition_specs[0] = IcebergPartitionSpec();
+	// optional_entry->table_info->table_metadata.default_spec_id = 0;
+	// optional_entry->table_info->table_metadata.current_schema_id = 0;
+	// optional_entry->table_info->table_metadata.has_current_snapshot = false;
+	// optional_entry->table_info->table_metadata.current_snapshot_id = 0;
+	// optional_entry->table_info->name = table_name;
+	//
+	// optional_entry->table_info->load_table_result.metadata.has_location = true;
+	// optional_entry->table_info->load_table_result.metadata.location = new_location;
+	//
+	// optional_entry->table_info->table_metadata.iceberg_version = 0;
+	// optional_entry->table_info->table_metadata.last_sequence_number = 0;
 
 	entries.emplace(table_name, optional_entry->table_info);
-	auto check_table_entry_table_info_here = 0;
 }
 
 unique_ptr<ICTableInfo> ICTableSet::GetTableInfo(ClientContext &context, IRCSchemaEntry &schema,
