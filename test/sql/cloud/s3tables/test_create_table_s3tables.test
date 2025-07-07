@@ -1,0 +1,43 @@
+# name: test/sql/cloud/glue/test_insert_glue.test
+# description: test integration with iceberg catalog read
+# group: [glue]
+
+require-env ICEBERG_AWS_REMOTE_AVAILABLE
+
+require-env ICEBERG_REMOTE_INSERT_READY
+
+require-env AWS_ACCESS_KEY_ID
+
+require-env AWS_SECRET_ACCESS_KEY
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+require aws
+
+statement ok
+CREATE SECRET s1 (
+      TYPE S3,
+      KEY_ID '${AWS_ACCESS_KEY_ID}',
+      SECRET '${AWS_SECRET_ACCESS_KEY}',
+      REGION 'us-east-2'
+);
+
+statement ok
+attach 'arn:aws:s3tables:us-east-2:840140254803:bucket/iceberg-testing' as my_datalake (
+    TYPE ICEBERG,
+    ENDPOINT_TYPE 'S3_TABLES',
+    support_stage_create 'false'
+);
+
+# statement ok
+# select * from my_datalake.tpch_sf1.create_table_test_3;
+
+
+statement ok
+create table my_datalake.tpch_sf1.create_table_test_5 as select range a from range(10);

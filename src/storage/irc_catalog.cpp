@@ -435,9 +435,11 @@ unique_ptr<Catalog> IRCatalog::Attach(StorageExtensionInfo *storage_info, Client
 		} else if (lower_name == "endpoint") {
 			attach_options.endpoint = StringUtil::Lower(entry.second.ToString());
 			StringUtil::RTrim(attach_options.endpoint, "/");
-		} else if (lower_name == "warehouse_location") {
-			attach_options.warehouse_location = StringUtil::Lower(entry.second.ToString());
-			attach_options.has_warehouse_location = true;
+		} else if (lower_name == "support_stage_create") {
+			auto result = entry.second.GetValue<string>();
+			if (StringUtil::Lower(result).find("false") != string::npos) {
+				attach_options.supports_stage_create = false;
+			}
 		} else {
 			attach_options.options.emplace(std::move(entry));
 		}

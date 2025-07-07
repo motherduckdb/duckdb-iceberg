@@ -155,6 +155,14 @@ static rest_api_objects::TableRequirement CreateAssertRefSnapshotIdRequirement(I
 
 rest_api_objects::LoadTableResult IRCTransaction::CommitNewTable(ClientContext &context, const ICTableEntry *table,
                                                                  bool stage_create) {
+	auto &ic_catalog = table->catalog.Cast<IRCatalog>();
+	// Stupid hack for GLUE catalog
+	if (!stage_create && !ic_catalog.attach_options.supports_stage_create) {
+		// if the catalog does not support stage create, and stage_create = false
+		// it means we are trying to commit the table. We have already hit the endpoint with stage_create = true
+		// so this second request will result in an error. so we early out
+		return rest_api_objects::LoadTableResult();
+	}
 	// TODO: add D_ASSERT for the post table url
 	auto table_namespace = table->schema.name;
 	auto url_builder = catalog.GetBaseUrl();
@@ -171,7 +179,11 @@ rest_api_objects::LoadTableResult IRCTransaction::CommitNewTable(ClientContext &
 	auto initial_schema =
 	    table->table_info->table_metadata.schemas[table->table_info->table_metadata.current_schema_id];
 	auto create_transaction = make_uniq<IcebergCreateTableRequest>(initial_schema, table->table_info->name);
-	yyjson_mut_obj_add_bool(doc, root_object, "stage-create", stage_create);
+	if (stage_create && ic_catalog.attach_options.supports_stage_create) {
+		yyjson_mut_obj_add_bool(doc, root_object, "stage-create", stage_create);
+	} else {
+		yyjson_mut_obj_add_bool(doc, root_object, "stage-create", false);
+	}
 	auto create_table_json = create_transaction->CreateTableToJSON(doc, root_object);
 
 	try {
@@ -281,7 +293,7 @@ void IRCTransaction::Commit() {
 	try {
 		auto transaction = GetTransactionRequest(*context);
 		auto &authentication = *catalog.auth_handler;
-		if (CanCommitAllTransactions(*context) && catalog.supported_urls.find("POST /v1/{prefix}/transactions/commit") != catalog.supported_urls.end()) {
+		if (catalog.supported_urls.find("POST /v1/{prefix}/transactions/commit") != catalog.supported_urls.end()) {
 			// commit all transactions at once
 			std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
 			auto doc = doc_p.get();
@@ -317,7 +329,6 @@ void IRCTransaction::Commit() {
 				url_builder.AddPathComponent(table_change.identifier.name);
 
 				auto transaction_json = ConstructTableUpdateJSON(table_change);
-				Printer::Print(transaction_json);
 
 				auto response = authentication.PostRequest(*context, url_builder, transaction_json);
 				if (response->status != HTTPStatusCode::OK_200) {
@@ -329,6 +340,9 @@ void IRCTransaction::Commit() {
 		}
 		DropSecrets(*context);
 	} catch (std::exception &ex) {
+		if (!new_tables.empty()) {
+			// hit drop enpoints.
+		}
 		ErrorData error(ex);
 		CleanupFiles();
 		DropSecrets(*context);

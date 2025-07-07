@@ -411,15 +411,13 @@ PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalP
 	auto &catalog = ic_schema_entry.catalog;
 	auto &irc_transaction = IRCTransaction::Get(context, catalog);
 
-	// TODO: should this be here?
 	// create the table. Takes care of committing to rest catalog and getting the metadata location etc.
 	// setting the schema
 	auto table = ic_schema_entry.CreateTable(irc_transaction, context, *op.info);
 	auto &ic_table = table->Cast<ICTableEntry>();
-	// optional_ptr<ICTableEntry> tmp = ic_table;
-	// ic_table.table_info->load_table_result = irc_transaction.CommitNewTable(context, tmp.get(), true);
-	// ic_table.table_info->table_metadata =
-	//     IcebergTableMetadata::FromTableMetadata(ic_table.table_info->load_table_result.metadata);
+	// we've created the table, since we are running plan create table as, we also need to load
+	// credentials into our secrets for when we copy files
+	ic_table.table_info->GetVendedCredentials(context);
 
 	auto &table_schema = ic_table.table_info->table_metadata.GetLatestSchema();
 
