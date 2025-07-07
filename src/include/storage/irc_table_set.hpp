@@ -52,7 +52,7 @@ public:
 	void Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback);
 
 public:
-	void LoadEntries(ClientContext &context);
+	bool LoadEntries(ClientContext &context);
 	bool FillEntry(ClientContext &context, IcebergTableInformation &table);
 
 public:

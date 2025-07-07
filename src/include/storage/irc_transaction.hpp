@@ -31,6 +31,7 @@ public:
 
 private:
 	void CleanupFiles();
+	void CommitToRESTCatalog(Connection &connection, ClientContext &context);
 
 private:
 	DatabaseInstance &db;

@@ -191,16 +191,13 @@ rest_api_objects::CommitTransactionRequest IRCTransaction::GetTransactionRequest
 	return transaction;
 }
 
-void IRCTransaction::Commit() {
+void IRCTransaction::CommitToRESTCatalog(Connection &connection, ClientContext &context) {
 	if (dirty_tables.empty()) {
 		return;
 	}
 
-	Connection temp_con(db);
-	temp_con.BeginTransaction();
-	auto &context = temp_con.context;
 	try {
-		auto transaction = GetTransactionRequest(*context);
+		auto transaction = GetTransactionRequest(context);
 		auto &authentication = *catalog.auth_handler;
 		if (catalog.supported_urls.find("POST /v1/{prefix}/transactions/commit") != catalog.supported_urls.end()) {
 			// commit all transactions at once
@@ -218,7 +215,7 @@ void IRCTransaction::Commit() {
 			url_builder.AddPathComponent("transactions");
 			url_builder.AddPathComponent("commit");
 
-			auto response = authentication.PostRequest(*context, url_builder, transaction_json);
+			auto response = authentication.PostRequest(context, url_builder, transaction_json);
 			if (response->status != HTTPStatusCode::OK_200) {
 				throw InvalidConfigurationException(
 				    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s",
@@ -241,7 +238,7 @@ void IRCTransaction::Commit() {
 
 				auto transaction_json = ConstructTableUpdateJSON(table_change);
 
-				auto response = authentication.PostRequest(*context, url_builder, transaction_json);
+				auto response = authentication.PostRequest(context, url_builder, transaction_json);
 				if (response->status != HTTPStatusCode::OK_200) {
 					throw InvalidConfigurationException(
 					    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s",
@@ -249,14 +246,22 @@ void IRCTransaction::Commit() {
 				}
 			}
 		}
-		DropSecrets(*context);
+		DropSecrets(context);
 	} catch (std::exception &ex) {
 		ErrorData error(ex);
 		CleanupFiles();
-		DropSecrets(*context);
-		temp_con.Rollback();
+		DropSecrets(context);
+		connection.Rollback();
 		error.Throw("Failed to commit Iceberg transaction: ");
 	}
+}
+
+void IRCTransaction::Commit() {
+	Connection temp_con(db);
+	temp_con.BeginTransaction();
+	auto &context = temp_con.context;
+
+	CommitToRESTCatalog(temp_con, *context);
 
 	temp_con.Rollback();
 }
