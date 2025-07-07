@@ -34,6 +34,7 @@ public:
 	rest_api_objects::LoadTableResult CommitNewTable(ClientContext &context, const ICTableEntry *table,
 	                                                 bool stage_create = false);
 	void DropSecrets(ClientContext &context);
+	bool CanCommitAllTransactions(ClientContext &context);
 	rest_api_objects::CommitTransactionRequest GetTransactionRequest(ClientContext &context);
 
 private:

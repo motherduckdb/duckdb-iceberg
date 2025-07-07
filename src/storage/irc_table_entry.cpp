@@ -122,8 +122,6 @@ TableFunction ICTableEntry::GetScanFunction(ClientContext &context, unique_ptr<F
 		schema_id = snapshot->schema_id;
 	}
 
-	auto &irc_transaction = IRCTransaction::Get(context, catalog);
-
 	auto schema = metadata.GetSchemaFromId(schema_id);
 	auto scan_info =
 	    make_shared_ptr<IcebergScanInfo>(table_info->load_table_result.metadata_location, metadata, snapshot, *schema);

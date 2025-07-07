@@ -199,6 +199,17 @@ void IRCTransaction::DropSecrets(ClientContext &context) {
 	}
 }
 
+bool IRCTransaction::CanCommitAllTransactions(ClientContext &context) {
+	// if any dirty table is newly created, it is created by hitting the table update endpoint
+	// the transaction/commit endpoint is not enough
+	for (auto &dirty_table : dirty_tables) {
+		if (new_tables.find(dirty_table) != new_tables.end()) {
+			return false;
+		}
+	}
+	return true;
+}
+
 rest_api_objects::CommitTransactionRequest IRCTransaction::GetTransactionRequest(ClientContext &context) {
 	rest_api_objects::CommitTransactionRequest transaction;
 	for (auto &table : dirty_tables) {
@@ -270,7 +281,7 @@ void IRCTransaction::Commit() {
 	try {
 		auto transaction = GetTransactionRequest(*context);
 		auto &authentication = *catalog.auth_handler;
-		if (catalog.supported_urls.find("POST /v1/{prefix}/transactions/commit") != catalog.supported_urls.end()) {
+		if (CanCommitAllTransactions(*context) && catalog.supported_urls.find("POST /v1/{prefix}/transactions/commit") != catalog.supported_urls.end()) {
 			// commit all transactions at once
 			std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
 			auto doc = doc_p.get();
@@ -279,8 +290,6 @@ void IRCTransaction::Commit() {
 
 			CommitTransactionToJSON(doc, root_object, transaction);
 			auto transaction_json = JsonDocToString(std::move(doc_p));
-
-			auto &authentication = *catalog.auth_handler;
 			auto url_builder = catalog.GetBaseUrl();
 			url_builder.AddPathComponent(catalog.prefix);
 			url_builder.AddPathComponent("transactions");
