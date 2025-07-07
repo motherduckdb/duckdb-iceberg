@@ -19,25 +19,6 @@ IcebergCreateTableRequest::IcebergCreateTableRequest(shared_ptr<IcebergTableSche
     : table_name(table_name), initial_schema(schema) {
 }
 
-rest_api_objects::CreateTableRequest CreateUpdateCreateTableRequest() {
-	rest_api_objects::CreateTableRequest create_table_request;
-
-	create_table_request.name = "table_name";
-	//	create_table_request.schema = ;
-	create_table_request.location = "some file location";
-	create_table_request.has_location = true;
-	create_table_request.has_partition_spec = false;
-	create_table_request.has_write_order = false;
-	create_table_request.stage_create = true;
-	create_table_request.has_stage_create = true;
-	create_table_request.has_properties = false;
-	return create_table_request;
-}
-
-void IcebergCreateTableRequest::CreateCreateTableRequest(DatabaseInstance &db, ClientContext &context,
-                                                         IcebergCommitState &commit_state) {
-}
-
 static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, IcebergColumnDefinition &column);
 
 static void AddNamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, IcebergColumnDefinition &column) {

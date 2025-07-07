@@ -417,7 +417,8 @@ PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalP
 	auto &ic_table = table->Cast<ICTableEntry>();
 	// we've created the table, since we are running plan create table as, we also need to load
 	// credentials into our secrets for when we copy files
-	ic_table.table_info->GetVendedCredentials(context);
+	ic_table.PrepareIcebergScanFromEntry(context);
+	// ic_table.table_info->GetVendedCredentials(context);
 
 	auto &table_schema = ic_table.table_info->table_metadata.GetLatestSchema();
 

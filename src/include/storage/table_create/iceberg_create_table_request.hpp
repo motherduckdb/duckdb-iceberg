@@ -22,8 +22,6 @@ struct IcebergCreateTableRequest {
 public:
 	void CreateManifest(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state);
 	static shared_ptr<IcebergTableSchema> CreateIcebergSchema(const ICTableEntry *table_entry);
-	rest_api_objects::CreateTableRequest CreateUpdateCreateTableRequest();
-	void CreateCreateTableRequest(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state);
 	string CreateTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object);
 
 private:

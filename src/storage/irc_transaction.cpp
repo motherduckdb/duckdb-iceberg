@@ -278,6 +278,9 @@ void IRCTransaction::Commit() {
 
 	if (!new_tables.empty()) {
 		for (auto &table : new_tables) {
+			// we need to reload the secrets again because we are working in a different
+			// transaction with a different context again.
+			table->PrepareIcebergScanFromEntry(*context);
 			if (table->table_info && table->table_info->transaction_data->create) {
 				CommitNewTable(*context, table);
 			}

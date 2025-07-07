@@ -41,7 +41,7 @@ void ICTableEntry::BindUpdateConstraints(Binder &binder, LogicalGet &, LogicalPr
 	throw NotImplementedException("BindUpdateConstraints");
 }
 
-string ICTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) {
+string ICTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) const {
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
 	auto &secret_manager = SecretManager::Get(context);
 

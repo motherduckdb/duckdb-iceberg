@@ -16,8 +16,7 @@ struct IcebergAttachOptions {
 	string warehouse;
 	string secret;
 	string name;
-	// helps writing tables to the correct storage without needing
-	// to get a location from metadata
+	// some catalogs dont supprt stage create yet
 	bool supports_stage_create = true;
 	bool allows_deletes = true;
 	IRCAuthorizationType authorization_type = IRCAuthorizationType::INVALID;
