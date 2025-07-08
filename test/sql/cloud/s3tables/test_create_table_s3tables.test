@@ -4,7 +4,7 @@
 
 require-env ICEBERG_AWS_REMOTE_AVAILABLE
 
-require-env ICEBERG_REMOTE_INSERT_READY
+require-env ICEBERG_REMOTE_CREATE_READY
 
 require-env AWS_ACCESS_KEY_ID
 
@@ -29,8 +29,7 @@ CREATE SECRET (
 statement ok
 attach 'arn:aws:s3tables:us-east-2:840140254803:bucket/iceberg-testing' as s3_catalog (
     TYPE ICEBERG,
-    ENDPOINT_TYPE S3_TABLES,
-    support_stage_create 'false'
+    ENDPOINT_TYPE S3_TABLES
 );
 
 # statement ok
@@ -60,8 +59,7 @@ CREATE SECRET (
 statement ok
 attach 'arn:aws:s3tables:us-east-2:840140254803:bucket/iceberg-testing' as my_datalake (
     TYPE ICEBERG,
-    ENDPOINT_TYPE 'S3_TABLES',
-    support_stage_create 'false'
+    ENDPOINT_TYPE 'S3_TABLES'
 );
 
 # statement ok
