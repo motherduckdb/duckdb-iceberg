@@ -30,7 +30,7 @@ static void AddNamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, Iceber
 		yyjson_mut_obj_add_bool(doc, field_obj, "required", column.required);
 		return;
 	}
-	yyjson_mut_obj_add_strcpy(doc, field_obj, "type", IcebergTypeHelper::GetIcebergTypeString(column.type).c_str());
+	yyjson_mut_obj_add_strcpy(doc, field_obj, "type", IcebergTypeHelper::LogicalTypeToIcebergType(column.type).c_str());
 	yyjson_mut_obj_add_bool(doc, field_obj, "required", column.required);
 }
 
@@ -54,7 +54,7 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, Iceb
 		yyjson_mut_obj_add_uint(doc, field_obj, "element-id", list_type->id);
 		if (list_type->IsPrimitiveType()) {
 			yyjson_mut_obj_add_strcpy(doc, field_obj, "element",
-			                          IcebergTypeHelper::GetIcebergTypeString(list_type->type).c_str());
+			                          IcebergTypeHelper::LogicalTypeToIcebergType(list_type->type).c_str());
 		} else {
 			auto list_type_obj = yyjson_mut_obj_add_obj(doc, field_obj, "element");
 			AddUnnamedField(doc, list_type_obj, *list_type);
@@ -68,11 +68,11 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, Iceb
 		auto &key_child = column.children[0];
 		if (key_child->IsPrimitiveType()) {
 			yyjson_mut_obj_add_strcpy(doc, field_obj, "key",
-			                          IcebergTypeHelper::GetIcebergTypeString(key_child->type).c_str());
+			                          IcebergTypeHelper::LogicalTypeToIcebergType(key_child->type).c_str());
 		} else {
 			auto key_obj = yyjson_mut_obj_add_obj(doc, field_obj, "key");
 			yyjson_mut_obj_add_strcpy(doc, key_obj, "type",
-			                          IcebergTypeHelper::GetIcebergTypeString(key_child->type).c_str());
+			                          IcebergTypeHelper::LogicalTypeToIcebergType(key_child->type).c_str());
 			auto nested_key_fields_arr = yyjson_mut_obj_add_arr(doc, key_obj, "fields");
 			AddNamedField(doc, nested_key_fields_arr, *key_child);
 		}
@@ -80,11 +80,11 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, Iceb
 		auto &val_child = column.children[1];
 		if (val_child->IsPrimitiveType()) {
 			yyjson_mut_obj_add_strcpy(doc, field_obj, "value",
-			                          IcebergTypeHelper::GetIcebergTypeString(val_child->type).c_str());
+			                          IcebergTypeHelper::LogicalTypeToIcebergType(val_child->type).c_str());
 		} else {
 			auto val_obj = yyjson_mut_obj_add_obj(doc, field_obj, "value");
 			yyjson_mut_obj_add_strcpy(doc, val_obj, "type",
-			                          IcebergTypeHelper::GetIcebergTypeString(val_child->type).c_str());
+			                          IcebergTypeHelper::LogicalTypeToIcebergType(val_child->type).c_str());
 			auto nested_key_fields_arr = yyjson_mut_obj_add_arr(doc, val_obj, "fields");
 			AddNamedField(doc, nested_key_fields_arr, *val_child);
 		}
@@ -128,7 +128,7 @@ shared_ptr<IcebergTableSchema> IcebergCreateTableRequest::CreateIcebergSchema(co
 		} else {
 			type.has_primitive_type = true;
 			type.primitive_type = rest_api_objects::PrimitiveType();
-			type.primitive_type.value = IcebergTypeHelper::GetIcebergTypeString(logical_type);
+			type.primitive_type.value = IcebergTypeHelper::LogicalTypeToIcebergType(logical_type);
 		}
 		auto column_def = IcebergColumnDefinition::ParseType(name, first_id, required, type, nullptr);
 		schema->columns.push_back(std::move(column_def));

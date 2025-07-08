@@ -9,7 +9,7 @@
 
 namespace duckdb {
 
-string IcebergTypeHelper::GetIcebergTypeString(LogicalType &type) {
+string IcebergTypeHelper::LogicalTypeToIcebergType(LogicalType &type) {
 	switch (type.id()) {
 	case LogicalTypeId::TINYINT:
 	case LogicalTypeId::UTINYINT:
@@ -41,12 +41,8 @@ string IcebergTypeHelper::GetIcebergTypeString(LogicalType &type) {
 	case LogicalTypeId::STRUCT:
 		return "struct";
 	case LogicalTypeId::ARRAY: {
-		// TODO: get extra type info. How long is the arry
+		// Iceberg doesn't support fixed array lengths
 		return "list";
-		// auto aux = type.AuxInfo()->Cast<ArrayTypeInfo>();
-		// auto length = aux.size;
-		// auto child = aux.child_type;
-		// return StringUtil::Format("fixed(%d)", length);
 	}
 	case LogicalTypeId::LIST:
 		return "list";
@@ -109,7 +105,7 @@ rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(LogicalType &typ
 		rest_type.has_list_type = true;
 		rest_type.list_type = rest_api_objects::ListType();
 		auto list_aux = type.AuxInfo()->Cast<ListTypeInfo>();
-		rest_type.list_type.type = IcebergTypeHelper::GetIcebergTypeString(list_aux.child_type);
+		rest_type.list_type.type = IcebergTypeHelper::LogicalTypeToIcebergType(list_aux.child_type);
 		rest_type.list_type.element_id = get_next_id();
 		rest_type.list_type.element = make_uniq<rest_api_objects::Type>(
 		    IcebergTypeHelper::CreateIcebergRestType(list_aux.child_type, get_next_id));
@@ -125,7 +121,7 @@ rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(LogicalType &typ
 	}
 	rest_type.has_primitive_type = true;
 	rest_type.primitive_type = rest_api_objects::PrimitiveType();
-	rest_type.primitive_type.value = IcebergTypeHelper::GetIcebergTypeString(type);
+	rest_type.primitive_type.value = IcebergTypeHelper::LogicalTypeToIcebergType(type);
 	return rest_type;
 }
 
