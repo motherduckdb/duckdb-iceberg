@@ -45,7 +45,7 @@ void IRCSchemaSet::Scan(ClientContext &context, const std::function<void(Catalog
 }
 
 void IRCSchemaSet::LoadEntries(ClientContext &context) {
-	if (!entries.empty()) {
+	if (listed) {
 		return;
 	}
 
@@ -58,6 +58,7 @@ void IRCSchemaSet::LoadEntries(ClientContext &context) {
 		auto schema_entry = make_uniq<IRCSchemaEntry>(catalog, info);
 		CreateEntryInternal(context, std::move(schema_entry));
 	}
+	listed = true;
 }
 
 optional_ptr<CatalogEntry> IRCSchemaSet::CreateEntryInternal(ClientContext &context, unique_ptr<CatalogEntry> entry) {

@@ -17,7 +17,7 @@ class IRCAPI {
 public:
 	static const string API_VERSION_1;
 	static vector<string> GetCatalogs(ClientContext &context, IRCatalog &catalog);
-	static bool GetTables(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema,
+	static void GetTables(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema,
 	                      vector<rest_api_objects::TableIdentifier> &out);
 	static rest_api_objects::LoadTableResult GetTable(ClientContext &context, IRCatalog &catalog,
 	                                                  IRCSchemaEntry &schema, const string &table_name);

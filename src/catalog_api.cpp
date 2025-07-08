@@ -101,7 +101,7 @@ rest_api_objects::LoadTableResult IRCAPI::GetTable(ClientContext &context, IRCat
 	return rest_api_objects::LoadTableResult::FromJSON(metadata_root);
 }
 
-bool IRCAPI::GetTables(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema,
+void IRCAPI::GetTables(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema,
                        vector<rest_api_objects::TableIdentifier> &out) {
 	auto schema_name = schema.name;
 
@@ -124,7 +124,6 @@ bool IRCAPI::GetTables(ClientContext &context, IRCatalog &catalog, IRCSchemaEntr
 		throw NotImplementedException("List of 'identifiers' is missing, missing support for Iceberg V1");
 	}
 	out = std::move(list_tables_response.identifiers);
-	return true;
 }
 
 vector<string> IRCAPI::GetSchemas(ClientContext &context, IRCatalog &catalog) {

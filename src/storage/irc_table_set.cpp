@@ -242,9 +242,7 @@ void ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &tabl
 
 void ICTableSet::Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback) {
 	lock_guard<mutex> l(entry_lock);
-	if (!LoadEntries(context)) {
-		return;
-	}
+	LoadEntries(context);
 	for (auto &entry : entries) {
 		auto &table_info = entry.second;
 		FillEntry(context, table_info);
@@ -256,17 +254,14 @@ void ICTableSet::Scan(ClientContext &context, const std::function<void(CatalogEn
 	}
 }
 
-bool ICTableSet::LoadEntries(ClientContext &context) {
+void ICTableSet::LoadEntries(ClientContext &context) {
 	if (listed) {
-		D_ASSERT(!entries.empty());
-		return true;
+		return;
 	}
 
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
 	vector<rest_api_objects::TableIdentifier> tables;
-	if (!IRCAPI::GetTables(context, ic_catalog, schema, tables)) {
-		return false;
-	}
+	IRCAPI::GetTables(context, ic_catalog, schema, tables);
 
 	for (auto &table : tables) {
 		auto entry_it = entries.find(table.name);
@@ -275,7 +270,6 @@ bool ICTableSet::LoadEntries(ClientContext &context) {
 		}
 	}
 	listed = true;
-	return true;
 }
 
 unique_ptr<ICTableInfo> ICTableSet::GetTableInfo(ClientContext &context, IRCSchemaEntry &schema,

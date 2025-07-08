@@ -21,6 +21,8 @@ protected:
 public:
 	Catalog &catalog;
 	case_insensitive_map_t<unique_ptr<CatalogEntry>> entries;
+	//! Whether a listing has been done for the catalog
+	bool listed = false;
 
 private:
 	mutex entry_lock;
