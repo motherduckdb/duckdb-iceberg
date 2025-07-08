@@ -18,7 +18,6 @@ namespace duckdb {
 class JSONUtils {
 public:
 	static string JsonDocToString(yyjson_mut_doc *doc);
-	static string json_to_string(yyjson_mut_doc *doc, yyjson_write_flag flags = YYJSON_WRITE_PRETTY);
 };
 
 } // namespace duckdb

@@ -28,9 +28,6 @@ void IRCTransaction::MarkTableAsNew(const ICTableEntry &table) {
 	new_tables.insert(&table);
 }
 
-void IRCTransaction::AddCreateTableRequest(unique_ptr<IcebergCreateTableRequest> creat_table_request) {
-}
-
 void IRCTransaction::Start() {
 }
 
@@ -201,7 +198,6 @@ rest_api_objects::LoadTableResult IRCTransaction::CommitNewTable(ClientContext &
 		throw InvalidConfigurationException("Request to '%s' returned a non-200 status code body: %s",
 		                                    url_builder.GetURL(), e.what());
 	}
-	throw InternalException("should not get here");
 }
 
 void IRCTransaction::DropSecrets(ClientContext &context) {
@@ -209,17 +205,6 @@ void IRCTransaction::DropSecrets(ClientContext &context) {
 	for (auto &secret_name : created_secrets) {
 		(void)secret_manager.DropSecretByName(context, secret_name, OnEntryNotFound::RETURN_NULL);
 	}
-}
-
-bool IRCTransaction::CanCommitAllTransactions(ClientContext &context) {
-	// if any dirty table is newly created, it is created by hitting the table update endpoint
-	// the transaction/commit endpoint is not enough
-	for (auto &dirty_table : dirty_tables) {
-		if (new_tables.find(dirty_table) != new_tables.end()) {
-			return false;
-		}
-	}
-	return true;
 }
 
 rest_api_objects::CommitTransactionRequest IRCTransaction::GetTransactionRequest(ClientContext &context) {

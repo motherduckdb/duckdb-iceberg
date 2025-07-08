@@ -194,12 +194,10 @@ optional_ptr<CatalogEntry> IcebergTableInformation::CreateSchemaVersion(shared_p
 		info.columns.AddColumn(ColumnDefinition(col->name, col->type));
 	}
 
-	// auto new_iceberg_info = make_uniq<IcebergTableInformation>(catalog, schema, name);
 	auto table_entry = make_uniq<ICTableEntry>(table_info, table_info->catalog, table_info->schema, info);
-	// TODO: fix this. for some reason table_info ine
-	// if (!table_entry->internal) {
-	// 	table_entry->internal = table_info;
-	// }
+	if (!table_entry->internal) {
+		table_entry->internal = table_info->schema.internal;
+	}
 	auto result = table_entry.get();
 	if (result->name.empty()) {
 		throw InternalException("ICTableSet::CreateEntry called with empty name");
