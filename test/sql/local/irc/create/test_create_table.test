@@ -37,7 +37,6 @@ ATTACH '' AS my_datalake (
     TYPE ICEBERG,
     CLIENT_ID 'admin',
     CLIENT_SECRET 'password',
-    WAREHOUSE_LOCATION 's3://warehouse/',
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
@@ -49,13 +48,13 @@ statement ok
 begin;
 
 statement ok
-create table create_table_t1_1 (a int, b varchar);
+create table create_table_t1 (a int, b varchar);
 
 statement ok
-insert into create_table_t1_1 select range a, range::VARCHAR b from range(10);
+insert into create_table_t1 select range a, range::VARCHAR b from range(10);
 
 query II
-select * from create_table_t1_1 order by all;
+select * from create_table_t1 order by all;
 ----
 0	0
 1	1
@@ -73,7 +72,7 @@ abort;
 
 # table does not oexist
 statement error
-select * from create_table_t1_1;
+select * from create_table_t1;
 ----
 <REGEX>:.*does not exist.*
 
@@ -83,16 +82,16 @@ statement ok
 begin;
 
 statement ok
-create table create_table_t1_1 (a int, b varchar);
+create table create_table_t1 (a int, b varchar);
 
 statement ok
-insert into create_table_t1_1 select range a, range::VARCHAR b from range(5);
+insert into create_table_t1 select range a, range::VARCHAR b from range(5);
 
 statement ok
 commit;
 
 query II
-select * from create_table_t1_1 order by all;
+select * from create_table_t1 order by all;
 ----
 0	0
 1	1
@@ -101,13 +100,13 @@ select * from create_table_t1_1 order by all;
 4	4
 
 statement ok
-create table create_table_t2_1 (b int, c varchar);
+create table create_table_t2 (b int, c varchar);
 
 statement ok
-insert into create_table_t2_1 select range*5, (range*5)::VARCHAR from range(5);
+insert into create_table_t2 select range*5, (range*5)::VARCHAR from range(5);
 
 query II
-select * from create_table_t2_1;
+select * from create_table_t2;
 ----
 0	0
 5	5

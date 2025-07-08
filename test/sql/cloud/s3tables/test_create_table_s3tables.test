@@ -24,7 +24,7 @@ statement ok
 CREATE SECRET (
     TYPE S3,
     PROVIDER credential_chain
-);
+);e
 
 statement ok
 attach 'arn:aws:s3tables:us-east-2:840140254803:bucket/iceberg-testing' as s3_catalog (

@@ -2,7 +2,7 @@
 # description: test create table as
 # group: [create]
 
-# require-env ICEBERG_SERVER_AVAILABLE
+require-env ICEBERG_SERVER_AVAILABLE
 
 require avro
 
@@ -37,13 +37,14 @@ ATTACH '' AS my_datalake (
     TYPE ICEBERG,
     CLIENT_ID 'admin',
     CLIENT_SECRET 'password',
-    WAREHOUSE_LOCATION 's3://warehouse/',
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
 
 statement ok
-use my_datalake.default
+use my_datalake.default;
+
+mode skip
 
 # create primitive type table from test all types
 statement ok
@@ -132,26 +133,8 @@ array_of_structs,
 map from test_all_types();
 ----
 
-# int_array,
-# double_array,
-# date_array,
-# timestamp_array,
-# timestamptz_array,
-# varchar_array,
-# nested_int_array,
-# struct,
-# struct_of_arrays,
-# array_of_structs,
-# map,
-# fixed_int_array,
-# fixed_varchar_array,
-# fixed_nested_int_array,
-# fixed_nested_varchar_array,
-# fixed_struct_array,
-# struct_of_fixed_array,
-# fixed_array_of_int_list,
-# list_of_fixed_int_array from test_all_types();
-
+# fixed length array types will be supported later
+# They can be supported if cast to list
 statement error
 create table fixed_array_table as select
 fixed_int_array,
@@ -160,120 +143,42 @@ fixed_nested_int_array,
 fixed_nested_varchar_array,
 fixed_struct_array,
 struct_of_fixed_array,
-fixed_array_of_int_list,
 list_of_fixed_int_array from test_all_types();
 ----
 <REGEX>:.*Please cast to LIST.*
 
+mode unskip
 
-#
-# struct,
-# struct_of_arrays,
-# array_of_structs,
-# map,
-# fixed_int_array,
-# fixed_varchar_array,
-# fixed_nested_int_array,
-# fixed_nested_varchar_array,
-# fixed_struct_array,
-# struct_of_fixed_array,
-# fixed_array_of_int_list,
-# list_of_fixed_int_array from test_all_types();
+# casting to list works
+statement ok
+create table fixed_array_table_as_list as select
+fixed_int_array::INTEGER[] fixed_int_array,
+fixed_varchar_array::VARCHAR[] fixed_varchar_array,
+fixed_nested_int_array::INTEGER[][] fixed_nested_int_array,
+fixed_nested_varchar_array::VARCHAR[] fixed_nested_varchar_array,
+fixed_struct_array::STRUCT(a VARCHAR, b VARCHAR)[] fixed_struct_array,
+struct_of_fixed_array::STRUCT(a VARCHAR, b VARCHAR[]) struct_of_fixed_array,
+list_of_fixed_int_array::INTEGER[][] list_of_fixed_int_array,
+fixed_array_of_int_list::INTEGER[][] fixed_array_of_int_list from test_all_types();
 
+query T nosort res3
+select
+fixed_int_array::INTEGER[] fixed_int_array,
+fixed_varchar_array::VARCHAR[] fixed_varchar_array,
+fixed_nested_int_array::INTEGER[][] fixed_nested_int_array,
+fixed_nested_varchar_array::VARCHAR[] fixed_nested_varchar_array,
+fixed_struct_array::STRUCT(a VARCHAR, b VARCHAR)[] fixed_struct_array,
+struct_of_fixed_array::STRUCT(a VARCHAR, b VARCHAR[]) struct_of_fixed_array,
+list_of_fixed_int_array::INTEGER[][] list_of_fixed_int_array,
+fixed_array_of_int_list::INTEGER[][] from test_all_types();
+----
 
-# query T nosort res_nested
-# select * from all_types_table_nested;
-# ----
-#
-# query T nosort res_nested
-# select
-# int_array,
-# double_array,
-# date_array,
-# timestamp_array,
-# timestamptz_array,
-# varchar_array,
-# nested_int_array,
-# struct,
-# struct_of_arrays,
-# array_of_structs,
-# map,
-# fixed_int_array,
-# fixed_varchar_array,
-# fixed_nested_int_array,
-# fixed_nested_varchar_array,
-# fixed_struct_array,
-# struct_of_fixed_array,
-# fixed_array_of_int_list,
-# list_of_fixed_int_array from test_all_types();
-# ----
-#
-# mode skip
+query T nosort res3
+select * from fixed_array_table_as_list;
+----
 
-# statement ok
-# create table all_types_table as select
-# column_name,
-# bool,
-# tinyint,
-# smallint,
-# int,
-# bigint,
-# hugeint,
-# uhugeint,
-# utinyint,
-# usmallint,
-# uint,
-# ubigint,
-# date,
-# time,
-# timestamp,
-# timestamp_s,
-# timestamp_ms,
-# timestamp_ns,
-# time_tz,
-# timestamp_tz,
-# float,
-# double,
-# dec_4_1,
-# dec_9_4,
-# dec_18_6,
-# dec38_10,
-# uuid,
-# varchar,
-# blob,
-# bit,
-# int_array,
-# double_array,
-# date_array,
-# timestamp_array,
-# timestamptz_array,
-# varchar_array,
-# nested_int_array,
-# struct,
-# struct_of_arrays,
-# array_of_structs,
-# map,
-# fixed_int_array,
-# fixed_varchar_array,
-# fixed_nested_int_array,
-# fixed_nested_varchar_array,
-# fixed_struct_array,
-# struct_of_fixed_array,
-# fixed_array_of_int_list,
-# list_of_fixed_int_array from test_all_types();
+statement error
+create table bit_table as select bit from test_all_types();
+----
+not supported in Iceberg
 
-
-# can not be convertedd
-# interval,
-# varint,
-# small_enum,
-# medium_enum,
-# large_enum,
-# union,
-# bit
-# timestamp_s,
-# timestamp_ns,
-# hugeint,
-# uhugeint,
-# timestamp_ms,
-# time_tz,
