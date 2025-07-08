@@ -204,9 +204,6 @@ optional_ptr<CatalogEntry> IcebergTableInformation::CreateSchemaVersion(IcebergT
 }
 
 optional_ptr<CatalogEntry> IcebergTableInformation::GetSchemaVersion(optional_ptr<BoundAtClause> at) {
-	if (schema_versions.empty()) {
-		return nullptr;
-	}
 	auto snapshot_lookup = IcebergSnapshotLookup::FromAtClause(at);
 
 	int32_t schema_id;
@@ -247,9 +244,6 @@ void ICTableSet::Scan(ClientContext &context, const std::function<void(CatalogEn
 		auto &table_info = entry.second;
 		FillEntry(context, table_info);
 		auto schema_id = table_info.table_metadata.current_schema_id;
-		if (table_info.schema_versions.empty()) {
-			continue;
-		}
 		callback(*table_info.schema_versions[schema_id]);
 	}
 }
