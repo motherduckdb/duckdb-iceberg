@@ -9,6 +9,8 @@ require iceberg
 
 require httpfs
 
+require no_extension_autoloading "EXPECTED: enable logging is not aware of where 'Iceberg' option comes from"
+
 statement ok
 pragma enable_logging('Iceberg');
 

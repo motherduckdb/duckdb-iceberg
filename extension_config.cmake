@@ -13,7 +13,7 @@ duckdb_extension_load(icu)
 duckdb_extension_load(avro
         LOAD_TESTS
         GIT_URL https://github.com/duckdb/duckdb_avro
-        GIT_TAG f861995afa955b75b0543019113479424ce96cfe
+        GIT_TAG 180e41e8ad13b8712d207785a6bca0aa39341040
 )
 
 ################## AWS

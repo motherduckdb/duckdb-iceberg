@@ -6,7 +6,7 @@
 statement error
 SELECT * FROM ICEBERG_METADATA('__WORKING_DIRECTORY__/data/persistent/iceberg/lineitem_iceberg');
 ----
-Catalog Error
+Error
 
 require avro
 

@@ -446,8 +446,8 @@ static optional_ptr<const TableFilter> GetFilterForColumnIndex(TableFilterSet &f
 		}
 		auto &struct_extract = table_filter.Cast<StructFilter>();
 		if (struct_extract.child_idx != index) {
-			throw InvalidConfigurationException("Expected to find a StructFilter for child_index: %d, found %d instead",
-			                                    index, struct_extract.child_idx);
+			//! This filter is not targeting the column on which a partition exists
+			return nullptr;
 		}
 		current_filter = *struct_extract.child_filter;
 	}
