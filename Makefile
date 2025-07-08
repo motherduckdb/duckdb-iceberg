@@ -44,3 +44,6 @@ format-main:
 
 format-check-silent:
 	python3 scripts/format.py --all --check --silent
+
+wasm_pre_build_step:
+	jq 'del(.overrides,.dependencies[5])' vcpkg.json | unexpand -t2 > vcpkg.json.tmp && mv vcpkg.json.tmp vcpkg.json
