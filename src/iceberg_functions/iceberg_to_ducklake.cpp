@@ -819,7 +819,8 @@ public:
 	}
 
 public:
-	void AddTable(optional_ptr<IcebergTableInformation> table_info, ClientContext &context, const IcebergOptions &options) {
+	void AddTable(optional_ptr<IcebergTableInformation> table_info, ClientContext &context,
+	              const IcebergOptions &options) {
 		D_ASSERT(table_info);
 		auto &metadata = table_info->table_metadata;
 		if (table_names_to_skip.count(table_info->name)) {
