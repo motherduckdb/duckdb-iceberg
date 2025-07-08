@@ -223,15 +223,13 @@ optional_ptr<CatalogEntry> IcebergTableInformation::GetSchemaVersion(optional_pt
 ICTableSet::ICTableSet(IRCSchemaEntry &schema) : schema(schema), catalog(schema.ParentCatalog()) {
 }
 
-bool ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &table) {
+void ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &table) {
 	if (!table.schema_versions.empty()) {
-		return true;
+		return;
 	}
 
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
-	if (!IRCAPI::GetTable(context, ic_catalog, schema, table.name, table.load_table_result)) {
-		return false;
-	}
+	table.load_table_result = IRCAPI::GetTable(context, ic_catalog, schema, table.name);
 	table.table_metadata = IcebergTableMetadata::FromTableMetadata(table.load_table_result.metadata);
 	auto &schemas = table.table_metadata.schemas;
 
@@ -240,7 +238,6 @@ bool ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &tabl
 	for (auto &table_schema : schemas) {
 		table.CreateSchemaVersion(*table_schema.second);
 	}
-	return true;
 }
 
 void ICTableSet::Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback) {
@@ -293,13 +290,13 @@ optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const En
 	auto table_name = lookup.GetEntryName();
 	auto entry = entries.find(table_name);
 	if (entry == entries.end()) {
+		if (!IRCAPI::VerifyTableExistence(context, ic_catalog, schema, table_name)) {
+			return nullptr;
+		}
 		auto it = entries.emplace(table_name, IcebergTableInformation(ic_catalog, schema, table_name));
 		entry = it.first;
 	}
-	if (!FillEntry(context, entry->second)) {
-		//! The namespace or table doesn't exist and the schema lookup said OnEntryNotFound::RETURN_NULL
-		return nullptr;
-	}
+	FillEntry(context, entry->second);
 	return entry->second.GetSchemaVersion(lookup.GetAtClause());
 }
 

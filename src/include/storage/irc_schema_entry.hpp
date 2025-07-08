@@ -9,14 +9,6 @@
 namespace duckdb {
 class IRCTransaction;
 
-enum class SchemaExistenceType : uint8_t { UNKNOWN, PRESENT, MISSING };
-
-struct SchemaExistenceState {
-public:
-	SchemaExistenceType type = SchemaExistenceType::UNKNOWN;
-	OnEntryNotFound if_not_found;
-};
-
 class IRCSchemaEntry : public SchemaCatalogEntry {
 public:
 	IRCSchemaEntry(Catalog &catalog, CreateSchemaInfo &info);
@@ -48,7 +40,6 @@ private:
 
 public:
 	ICTableSet tables;
-	SchemaExistenceState existence_state;
 };
 
 } // namespace duckdb

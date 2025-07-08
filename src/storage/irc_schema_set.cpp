@@ -5,25 +5,10 @@
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_schema_set.hpp"
 #include "storage/irc_transaction.hpp"
-#include "storage/irc_context_state.hpp"
 
 namespace duckdb {
 
 IRCSchemaSet::IRCSchemaSet(Catalog &catalog) : catalog(catalog) {
-}
-
-void IRCSchemaSet::VerifySchemas(ClientContext &context) {
-	auto &ic_catalog = catalog.Cast<IRCatalog>();
-	for (auto &entry : entries) {
-		auto &schema = entry.second->Cast<IRCSchemaEntry>();
-		if (schema.existence_state.type != SchemaExistenceType::UNKNOWN) {
-			continue;
-		}
-		if (!IRCAPI::VerifySchemaExistence(context, ic_catalog, schema.name)) {
-			throw CatalogException("Iceberg namespace by the name of '%s' does not exist", schema.name);
-		}
-		schema.existence_state.type = SchemaExistenceType::PRESENT;
-	}
 }
 
 optional_ptr<CatalogEntry> IRCSchemaSet::GetEntry(ClientContext &context, const string &name,
@@ -33,16 +18,17 @@ optional_ptr<CatalogEntry> IRCSchemaSet::GetEntry(ClientContext &context, const 
 
 	auto entry = entries.find(name);
 	if (entry == entries.end()) {
-		auto context_state = context.registered_state->GetOrCreate<IRCContextState>("iceberg");
-
-		//! We create the entry immediately optimistically,
-		//! when we scan from the table we'll figure out if it exists or not.
 		CreateSchemaInfo info;
+		if (!IRCAPI::VerifySchemaExistence(context, ic_catalog, name)) {
+			if (if_not_found == OnEntryNotFound::RETURN_NULL) {
+				return nullptr;
+			} else {
+				throw CatalogException("Iceberg namespace by the name of '%s' does not exist", name);
+			}
+		}
 		info.schema = name;
 		info.internal = false;
 		auto schema_entry = make_uniq<IRCSchemaEntry>(catalog, info);
-		context_state->RegisterSchema(*schema_entry);
-		schema_entry->existence_state.if_not_found = if_not_found;
 		CreateEntryInternal(context, std::move(schema_entry));
 		entry = entries.find(name);
 		D_ASSERT(entry != entries.end());

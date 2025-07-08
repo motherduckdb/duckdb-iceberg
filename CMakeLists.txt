@@ -60,7 +60,6 @@ set(EXTENSION_SOURCES
     src/storage/irc_table_set.cpp
     src/storage/irc_transaction.cpp
     src/storage/irc_authorization.cpp
-    src/storage/irc_context_state.cpp
     src/storage/irc_transaction_manager.cpp
     src/storage/table_update/iceberg_add_snapshot.cpp
 )

@@ -39,6 +39,28 @@ bool IRCAPI::VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, c
 	url_builder.AddPathComponent(schema);
 
 	auto url = url_builder.GetURL();
+	try {
+		auto response = catalog.auth_handler->HeadRequest(context, url_builder);
+		if (response->Success()) {
+			return true;
+		}
+		return false;
+	} catch (std::exception &ex) {
+		//! For some reason this API likes to throw, instead of just returning a response with an error
+		return false;
+	}
+}
+
+bool IRCAPI::VerifyTableExistence(ClientContext &context, IRCatalog &catalog, const IRCSchemaEntry &schema,
+                                  const string &table) {
+	auto url_builder = catalog.GetBaseUrl();
+	url_builder.AddPathComponent(catalog.prefix);
+	url_builder.AddPathComponent("namespaces");
+	url_builder.AddPathComponent(schema.name);
+	url_builder.AddPathComponent("tables");
+	url_builder.AddPathComponent(table);
+
+	auto url = url_builder.GetURL();
 	auto response = catalog.auth_handler->HeadRequest(context, url_builder);
 	if (response->Success()) {
 		return true;
@@ -60,19 +82,8 @@ static string GetTableMetadata(ClientContext &context, IRCatalog &catalog, IRCSc
 	auto url = url_builder.GetURL();
 	auto response = catalog.auth_handler->GetRequest(context, url_builder);
 	if (!response->Success()) {
-		if (schema.existence_state.type == SchemaExistenceType::UNKNOWN) {
-			bool exists = IRCAPI::VerifySchemaExistence(context, catalog, schema_name);
-			if (exists) {
-				schema.existence_state.type = SchemaExistenceType::PRESENT;
-			} else {
-				schema.existence_state.type = SchemaExistenceType::MISSING;
-				if (schema.existence_state.if_not_found == OnEntryNotFound::RETURN_NULL) {
-					return string();
-				}
-				throw CatalogException("Namespace by the name of '%s' does not exist", schema_name);
-			}
-		}
-		return string();
+		auto url = url_builder.GetURL();
+		ThrowException(url, *response, "GET");
 	}
 
 	return response->body;
@@ -82,16 +93,12 @@ vector<string> IRCAPI::GetCatalogs(ClientContext &context, IRCatalog &catalog) {
 	throw NotImplementedException("ICAPI::GetCatalogs");
 }
 
-bool IRCAPI::GetTable(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema, const string &table_name,
-                      rest_api_objects::LoadTableResult &out) {
-	string result = GetTableMetadata(context, catalog, schema, table_name);
-	if (result.empty()) {
-		return false;
-	}
+rest_api_objects::LoadTableResult IRCAPI::GetTable(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema,
+                                                   const string &table_name) {
+	auto result = GetTableMetadata(context, catalog, schema, table_name);
 	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(result));
 	auto *metadata_root = yyjson_doc_get_root(doc.get());
-	out = rest_api_objects::LoadTableResult::FromJSON(metadata_root);
-	return true;
+	return rest_api_objects::LoadTableResult::FromJSON(metadata_root);
 }
 
 bool IRCAPI::GetTables(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema,
@@ -105,19 +112,8 @@ bool IRCAPI::GetTables(ClientContext &context, IRCatalog &catalog, IRCSchemaEntr
 	url_builder.AddPathComponent("tables");
 	auto response = catalog.auth_handler->GetRequest(context, url_builder);
 	if (!response->Success()) {
-		if (schema.existence_state.type == SchemaExistenceType::UNKNOWN) {
-			bool exists = VerifySchemaExistence(context, catalog, schema_name);
-			if (exists) {
-				schema.existence_state.type = SchemaExistenceType::PRESENT;
-			} else {
-				schema.existence_state.type = SchemaExistenceType::MISSING;
-				if (schema.existence_state.if_not_found == OnEntryNotFound::RETURN_NULL) {
-					return false;
-				}
-				throw CatalogException("Namespace by the name of '%s' does not exist", schema_name);
-			}
-		}
-		return false;
+		auto url = url_builder.GetURL();
+		ThrowException(url, *response, "GET");
 	}
 
 	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(response->body));

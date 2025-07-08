@@ -19,10 +19,12 @@ public:
 	static vector<string> GetCatalogs(ClientContext &context, IRCatalog &catalog);
 	static bool GetTables(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema,
 	                      vector<rest_api_objects::TableIdentifier> &out);
-	static bool GetTable(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema, const string &table_name,
-	                     rest_api_objects::LoadTableResult &out);
+	static rest_api_objects::LoadTableResult GetTable(ClientContext &context, IRCatalog &catalog,
+	                                                  IRCSchemaEntry &schema, const string &table_name);
 	static vector<string> GetSchemas(ClientContext &context, IRCatalog &catalog);
 	static bool VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, const string &schema);
+	static bool VerifyTableExistence(ClientContext &context, IRCatalog &catalog, const IRCSchemaEntry &schema,
+	                                 const string &table);
 };
 
 } // namespace duckdb

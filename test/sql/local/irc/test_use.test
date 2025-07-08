@@ -35,23 +35,20 @@ ATTACH '' AS my_datalake (
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
-statement error
+statement ok
 use my_datalake.default;
-----
-Request returned HTTP 500 for HTTP HEAD to 'http://127.0.0.1:8181/v1/namespaces/default'
-
 
 # schema will default to 'main', which doesnt exist
-# FIXME: with our optimistic approach, we can't error here
 statement error
 use my_datalake;
 ----
-Request returned HTTP 500 for HTTP HEAD to 'http://127.0.0.1:8181/v1/namespaces/default'
+Catalog Error: SET schema: No catalog + schema named "my_datalake" found.
 
 statement ok
 show all tables;
 
+# 'main' still doesn't exist
 statement error
 use my_datalake;
 ----
-Catalog Error
+Catalog Error: SET schema: No catalog + schema named "my_datalake" found.

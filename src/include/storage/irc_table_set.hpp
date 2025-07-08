@@ -53,7 +53,7 @@ public:
 
 public:
 	bool LoadEntries(ClientContext &context);
-	bool FillEntry(ClientContext &context, IcebergTableInformation &table);
+	void FillEntry(ClientContext &context, IcebergTableInformation &table);
 
 public:
 	IRCSchemaEntry &schema;

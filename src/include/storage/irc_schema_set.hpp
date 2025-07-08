@@ -14,7 +14,6 @@ public:
 	void LoadEntries(ClientContext &context);
 	optional_ptr<CatalogEntry> GetEntry(ClientContext &context, const string &name, OnEntryNotFound if_not_found);
 	void Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback);
-	void VerifySchemas(ClientContext &context);
 
 protected:
 	optional_ptr<CatalogEntry> CreateEntryInternal(ClientContext &context, unique_ptr<CatalogEntry> entry);
