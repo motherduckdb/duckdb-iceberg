@@ -19,7 +19,7 @@ namespace duckdb {
 
 #ifdef EMSCRIPTEN
 
-string AWSInput::GetRequest(ClientContext &context) {
+unique_ptr<HTTPResponse> AWSInput::GetRequest(ClientContext &context) {
 	throw NotImplementedException("GET on WASM not implemented yet");
 }
 
