@@ -109,11 +109,11 @@ bool IcebergPredicate::MatchBounds(const TableFilter &filter, const IcebergPredi
 	case IcebergTransformType::YEAR:
 		return MatchBoundsTemplated<YearTransform>(filter, stats, transform);
 	case IcebergTransformType::MONTH:
-		return true;
+		return MatchBoundsTemplated<MonthTransform>(filter, stats, transform);
 	case IcebergTransformType::DAY:
 		return MatchBoundsTemplated<DayTransform>(filter, stats, transform);
 	case IcebergTransformType::HOUR:
-		return true;
+		return MatchBoundsTemplated<HourTransform>(filter, stats, transform);
 	case IcebergTransformType::VOID:
 		return true;
 	default:

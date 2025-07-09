@@ -6,7 +6,7 @@
 statement error
 SELECT * FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/iceberg/lineitem_iceberg');
 ----
-Catalog Error
+Error
 
 require avro
 

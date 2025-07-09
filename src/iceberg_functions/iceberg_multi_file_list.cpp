@@ -272,10 +272,9 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &file) {
 	auto &filters = table_filters.filters;
 	auto &schema = GetSchema().columns;
 
-	for (idx_t column_id = 0; column_id < schema.size(); column_id++) {
-		// FIXME: is there a potential mismatch between column_id / field_id lurking here?
-		auto &column = *schema[column_id];
-		auto it = filters.find(column_id);
+	for (idx_t index = 0; index < schema.size(); index++) {
+		auto &column = *schema[index];
+		auto it = filters.find(index);
 
 		if (it == filters.end()) {
 			continue;
@@ -285,9 +284,9 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &file) {
 			continue;
 		}
 
-		auto &source_id = column.id;
-		auto lower_bound_it = file.lower_bounds.find(source_id);
-		auto upper_bound_it = file.upper_bounds.find(source_id);
+		auto &column_id = column.id;
+		auto lower_bound_it = file.lower_bounds.find(column_id);
+		auto upper_bound_it = file.upper_bounds.find(column_id);
 		Value lower_bound;
 		Value upper_bound;
 		if (lower_bound_it != file.lower_bounds.end()) {
@@ -298,12 +297,12 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &file) {
 		}
 
 		auto stats = IcebergPredicateStats::DeserializeBounds(lower_bound, upper_bound, column.name, column.type);
-		auto null_counts_it = file.null_value_counts.find(source_id);
+		auto null_counts_it = file.null_value_counts.find(column_id);
 		if (null_counts_it != file.null_value_counts.end()) {
 			auto &null_counts = null_counts_it->second;
 			stats.has_null = null_counts != 0;
 		}
-		auto nan_counts_it = file.nan_value_counts.find(source_id);
+		auto nan_counts_it = file.nan_value_counts.find(column_id);
 		if (nan_counts_it != file.nan_value_counts.end()) {
 			auto &nan_counts = nan_counts_it->second;
 			stats.has_nan = nan_counts != 0;
@@ -447,8 +446,8 @@ static optional_ptr<const TableFilter> GetFilterForColumnIndex(TableFilterSet &f
 		}
 		auto &struct_extract = table_filter.Cast<StructFilter>();
 		if (struct_extract.child_idx != index) {
-			throw InvalidConfigurationException("Expected to find a StructFilter for child_index: %d, found %d instead",
-			                                    index, struct_extract.child_idx);
+			//! This filter is not targeting the column on which a partition exists
+			return nullptr;
 		}
 		current_filter = *struct_extract.child_filter;
 	}
