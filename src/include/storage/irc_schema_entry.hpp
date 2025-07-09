@@ -13,7 +13,8 @@ public:
 	IRCSchemaEntry(Catalog &catalog, CreateSchemaInfo &info);
 	~IRCSchemaEntry() override;
 
-	unique_ptr<IRCAPISchema> schema_data;
+	//! The various levels of namespaces this flattened representation represents
+	vector<string> namespace_items;
 
 public:
 	optional_ptr<CatalogEntry> CreateTable(CatalogTransaction transaction, BoundCreateTableInfo &info) override;

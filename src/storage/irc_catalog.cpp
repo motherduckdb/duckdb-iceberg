@@ -437,6 +437,9 @@ unique_ptr<Catalog> IRCatalog::Attach(StorageExtensionInfo *storage_info, Client
 		} else if (lower_name == "endpoint") {
 			attach_options.endpoint = StringUtil::Lower(entry.second.ToString());
 			StringUtil::RTrim(attach_options.endpoint, "/");
+		} else if (lower_name == "support_nested_namespaces") {
+			attach_options.support_nested_namespaces =
+			    entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
 		} else {
 			attach_options.options.emplace(std::move(entry));
 		}

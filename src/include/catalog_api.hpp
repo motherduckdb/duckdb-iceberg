@@ -13,7 +13,8 @@ namespace duckdb {
 class IRCatalog;
 
 struct IRCAPISchema {
-	string schema_name;
+	//! The (potentially multiple) levels that the namespace is made up of
+	vector<string> items;
 	string catalog_name;
 };
 
@@ -25,7 +26,7 @@ public:
 	                                                           const string &schema);
 	static rest_api_objects::LoadTableResult GetTable(ClientContext &context, IRCatalog &catalog, const string &schema,
 	                                                  const string &table_name);
-	static vector<IRCAPISchema> GetSchemas(ClientContext &context, IRCatalog &catalog);
+	static vector<IRCAPISchema> GetSchemas(ClientContext &context, IRCatalog &catalog, const vector<string> &parent);
 };
 
 } // namespace duckdb
