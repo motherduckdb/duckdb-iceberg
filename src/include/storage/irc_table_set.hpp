@@ -21,8 +21,7 @@ public:
 
 public:
 	optional_ptr<CatalogEntry> GetSchemaVersion(optional_ptr<BoundAtClause> at);
-	static optional_ptr<CatalogEntry> CreateSchemaVersion(shared_ptr<IcebergTableInformation> table_info,
-	                                                      IcebergTableSchema &table_schema);
+	optional_ptr<CatalogEntry> CreateSchemaVersion(IcebergTableSchema &table_schema);
 	IRCAPITableCredentials GetVendedCredentials(ClientContext &context);
 	const string &BaseFilePath() const;
 
@@ -51,16 +50,16 @@ public:
 	                                            const string &table_name);
 	optional_ptr<CatalogEntry> GetEntry(ClientContext &context, const EntryLookupInfo &lookup);
 	void Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback);
-	void CreateNewEntry(ClientContext &context, shared_ptr<IcebergTableInformation> new_table, CreateTableInfo &info);
+	void CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema, CreateTableInfo &info);
 
 public:
 	void LoadEntries(ClientContext &context);
-	void FillEntry(ClientContext &context, shared_ptr<IcebergTableInformation> table);
+	void FillEntry(ClientContext &context, IcebergTableInformation &table);
 
 public:
 	IRCSchemaEntry &schema;
 	Catalog &catalog;
-	case_insensitive_map_t<shared_ptr<IcebergTableInformation>> entries;
+	case_insensitive_map_t<IcebergTableInformation> entries;
 
 private:
 	mutex entry_lock;

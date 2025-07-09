@@ -103,7 +103,7 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, Iceb
 shared_ptr<IcebergTableSchema> IcebergCreateTableRequest::CreateIcebergSchema(const ICTableEntry *table_entry) {
 	auto schema = make_shared_ptr<IcebergTableSchema>();
 	// should this be a different schema id?
-	schema->schema_id = table_entry->table_info->table_metadata.current_schema_id;
+	schema->schema_id = table_entry->table_info.table_metadata.current_schema_id;
 
 	// TODO: this can all be refactored out
 	//  this makes the IcebergTableSchema, and we use that to dump data to JSON.

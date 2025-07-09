@@ -173,9 +173,8 @@ rest_api_objects::LoadTableResult IRCTransaction::CommitNewTable(ClientContext &
 	auto root_object = yyjson_mut_obj(doc);
 	yyjson_mut_doc_set_root(doc, root_object);
 
-	auto initial_schema =
-	    table->table_info->table_metadata.schemas[table->table_info->table_metadata.current_schema_id];
-	auto create_transaction = make_uniq<IcebergCreateTableRequest>(initial_schema, table->table_info->name);
+	auto initial_schema = table->table_info.table_metadata.schemas[table->table_info.table_metadata.current_schema_id];
+	auto create_transaction = make_uniq<IcebergCreateTableRequest>(initial_schema, table->table_info.name);
 	if (stage_create && ic_catalog.attach_options.supports_stage_create) {
 		yyjson_mut_obj_add_bool(doc, root_object, "stage-create", stage_create);
 	} else {
@@ -216,7 +215,7 @@ rest_api_objects::CommitTransactionRequest IRCTransaction::GetTransactionRequest
 		table_change.identifier.name = table->name;
 		table_change.has_identifier = true;
 
-		auto &metadata = table->table_info->table_metadata;
+		auto &metadata = table->table_info.table_metadata;
 		auto current_snapshot = metadata.GetLatestSnapshot();
 		if (current_snapshot) {
 			auto &manifest_list_path = current_snapshot->manifest_list;
@@ -229,7 +228,7 @@ rest_api_objects::CommitTransactionRequest IRCTransaction::GetTransactionRequest
 			}
 		}
 
-		auto &transaction_data = *table->table_info->transaction_data;
+		auto &transaction_data = *table->table_info.transaction_data;
 		for (auto &update : transaction_data.updates) {
 			update->CreateUpdate(db, context, commit_state);
 		}
@@ -266,7 +265,7 @@ void IRCTransaction::Commit() {
 			// we need to reload the secrets again because we are working in a different
 			// transaction with a different context again.
 			table->PrepareIcebergScanFromEntry(*context);
-			if (table->table_info && table->table_info->transaction_data->create) {
+			if (table->table_info.transaction_data->create) {
 				CommitNewTable(*context, table);
 			}
 		}
@@ -351,7 +350,7 @@ void IRCTransaction::CleanupFiles() {
 	}
 	auto &fs = FileSystem::GetFileSystem(db);
 	for (auto &table : dirty_tables) {
-		auto &transaction_data = *table->table_info->transaction_data;
+		auto &transaction_data = *table->table_info.transaction_data;
 		for (auto &update : transaction_data.updates) {
 			if (update->type != IcebergTableUpdateType::ADD_SNAPSHOT) {
 				continue;

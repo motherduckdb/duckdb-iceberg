@@ -21,7 +21,7 @@
 
 namespace duckdb {
 
-ICTableEntry::ICTableEntry(shared_ptr<IcebergTableInformation> table_info, Catalog &catalog, SchemaCatalogEntry &schema,
+ICTableEntry::ICTableEntry(IcebergTableInformation &table_info, Catalog &catalog, SchemaCatalogEntry &schema,
                            CreateTableInfo &info)
     : TableCatalogEntry(catalog, schema, info), table_info(table_info) {
 	this->internal = false;
@@ -46,8 +46,8 @@ string ICTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) const {
 	auto &secret_manager = SecretManager::Get(context);
 
 	// Get Credentials from IRC API
-	auto table_credentials = table_info->GetVendedCredentials(context);
-	auto &load_result = table_info->load_table_result;
+	auto table_credentials = table_info.GetVendedCredentials(context);
+	auto &load_result = table_info.load_table_result;
 
 	if (table_credentials.config) {
 		auto &info = *table_credentials.config;
@@ -93,7 +93,7 @@ string ICTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) const {
 	for (auto &info : table_credentials.storage_credentials) {
 		(void)secret_manager.CreateSecret(context, info);
 	}
-	return table_info->load_table_result.metadata_location;
+	return table_info.load_table_result.metadata_location;
 }
 
 TableFunction ICTableEntry::GetScanFunction(ClientContext &context, unique_ptr<FunctionData> &bind_data,
@@ -109,7 +109,7 @@ TableFunction ICTableEntry::GetScanFunction(ClientContext &context, unique_ptr<F
 	vector<string> names;
 	TableFunctionRef empty_ref;
 
-	auto &metadata = table_info->table_metadata;
+	auto &metadata = table_info.table_metadata;
 	auto at = lookup.GetAtClause();
 	auto snapshot_lookup = IcebergSnapshotLookup::FromAtClause(at);
 	auto snapshot = metadata.GetSnapshot(snapshot_lookup);
@@ -124,9 +124,9 @@ TableFunction ICTableEntry::GetScanFunction(ClientContext &context, unique_ptr<F
 
 	auto schema = metadata.GetSchemaFromId(schema_id);
 	auto scan_info =
-	    make_shared_ptr<IcebergScanInfo>(table_info->load_table_result.metadata_location, metadata, snapshot, *schema);
-	if (table_info->transaction_data) {
-		scan_info->transaction_data = table_info->transaction_data.get();
+	    make_shared_ptr<IcebergScanInfo>(table_info.load_table_result.metadata_location, metadata, snapshot, *schema);
+	if (table_info.transaction_data) {
+		scan_info->transaction_data = table_info.transaction_data.get();
 	}
 
 	iceberg_scan_function.function_info = scan_info;

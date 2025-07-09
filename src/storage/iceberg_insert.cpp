@@ -36,7 +36,7 @@ IcebergInsert::IcebergInsert(LogicalOperator &op, SchemaCatalogEntry &schema, un
 
 IcebergCopyInput::IcebergCopyInput(ClientContext &context, ICTableEntry &table)
     : catalog(table.catalog.Cast<IRCatalog>()), columns(table.GetColumns()) {
-	data_path = table.table_info->BaseFilePath() + "/data";
+	data_path = table.table_info.BaseFilePath() + "/data";
 }
 
 IcebergCopyInput::IcebergCopyInput(ClientContext &context, IRCSchemaEntry &schema, const ColumnList &columns,
@@ -232,7 +232,7 @@ SinkFinalizeType IcebergInsert::Finalize(Pipeline &pipeline, Event &event, Clien
 	auto &table_info = irc_table.table_info;
 	auto &transaction = IRCTransaction::Get(context, table->catalog);
 
-	table_info->AddSnapshot(transaction, std::move(global_state.written_files));
+	table_info.AddSnapshot(transaction, std::move(global_state.written_files));
 	transaction.MarkTableAsDirty(irc_table);
 	return SinkFinalizeType::READY;
 }
@@ -376,9 +376,9 @@ PhysicalOperator &IRCatalog::PlanInsert(ClientContext &context, PhysicalPlanGene
 
 	auto &table_entry = op.table.Cast<ICTableEntry>();
 	auto &table_info = table_entry.table_info;
-	auto &schema = table_info->table_metadata.GetLatestSchema();
+	auto &schema = table_info.table_metadata.GetLatestSchema();
 
-	auto &partition_spec = table_info->table_metadata.GetLatestPartitionSpec();
+	auto &partition_spec = table_info.table_metadata.GetLatestPartitionSpec();
 	if (!partition_spec.IsUnpartitioned()) {
 		throw NotImplementedException("INSERT into a partitioned table is not supported yet");
 	}
@@ -418,9 +418,9 @@ PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalP
 	// we've created the table, since we are running plan create table as, we also need to load
 	// credentials into our secrets for when we copy files
 	ic_table.PrepareIcebergScanFromEntry(context);
-	// ic_table.table_info->GetVendedCredentials(context);
+	// ic_table.table_info.GetVendedCredentials(context);
 
-	auto &table_schema = ic_table.table_info->table_metadata.GetLatestSchema();
+	auto &table_schema = ic_table.table_info.table_metadata.GetLatestSchema();
 
 	// Create Copy Info
 	IcebergCopyInput copy_input(context, ic_table);
