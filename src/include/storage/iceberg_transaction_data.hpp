@@ -14,6 +14,7 @@
 namespace duckdb {
 
 struct IcebergTableInformation;
+struct IcebergCreateTableRequest;
 
 struct IcebergTransactionData {
 public:

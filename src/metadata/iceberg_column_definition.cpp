@@ -175,22 +175,18 @@ unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::ParseStructField(re
 bool IcebergColumnDefinition::IsPrimitiveType() {
 	switch (type.id()) {
 	case LogicalTypeId::TINYINT:
-	case LogicalTypeId::UTINYINT:
 	case LogicalTypeId::SMALLINT:
-	case LogicalTypeId::USMALLINT:
 	case LogicalTypeId::INTEGER:
 	case LogicalTypeId::BOOLEAN:
 	case LogicalTypeId::VARCHAR:
 	case LogicalTypeId::DATE:
-	case LogicalTypeId::UINTEGER:
 	case LogicalTypeId::HUGEINT:
 	case LogicalTypeId::BIGINT:
 	case LogicalTypeId::FLOAT:
 	case LogicalTypeId::DOUBLE:
 	case LogicalTypeId::DECIMAL:
 	case LogicalTypeId::UUID:
-	case LogicalTypeId::BLOB: // TODO: check BLOB and BIT 'binary' primitive type ?
-	case LogicalTypeId::BIT:
+	case LogicalTypeId::BLOB:
 	case LogicalTypeId::TIME:
 	case LogicalTypeId::TIMESTAMP:
 	case LogicalTypeId::TIMESTAMP_TZ:

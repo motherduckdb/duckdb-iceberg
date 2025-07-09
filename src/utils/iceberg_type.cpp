@@ -9,7 +9,7 @@
 
 namespace duckdb {
 
-string IcebergTypeHelper::LogicalTypeToIcebergType(LogicalType &type) {
+string IcebergTypeHelper::LogicalTypeToIcebergType(const LogicalType &type) {
 	switch (type.id()) {
 	case LogicalTypeId::TINYINT:
 	case LogicalTypeId::UTINYINT:
@@ -52,7 +52,6 @@ string IcebergTypeHelper::LogicalTypeToIcebergType(LogicalType &type) {
 		return "timestamp";
 	case LogicalTypeId::TIMESTAMP_TZ:
 		return "timestamptz";
-
 	case LogicalTypeId::MAP:
 		return "map";
 	default:
@@ -60,7 +59,8 @@ string IcebergTypeHelper::LogicalTypeToIcebergType(LogicalType &type) {
 	}
 }
 
-rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(LogicalType &type, std::function<idx_t()> get_next_id) {
+rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(const LogicalType &type,
+                                                                std::function<idx_t()> get_next_id) {
 	rest_api_objects::Type rest_type;
 
 	switch (type.id()) {
@@ -70,15 +70,14 @@ rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(LogicalType &typ
 		rest_type.map_type = rest_api_objects::MapType();
 		auto aux = type.AuxInfo()->Cast<ListTypeInfo>();
 		auto child_type = aux.child_type.AuxInfo()->Cast<StructTypeInfo>();
-		// How do I get the child types for a map type?
-		// maybe both should just be string?
-		auto key_type = child_type.child_types.front().second;
+		auto key_type = MapType::KeyType(type);
+		auto value_type = MapType::ValueType(type);
 		rest_type.map_type.key_id = static_cast<int32_t>(get_next_id());
-		rest_type.map_type.key = make_uniq<rest_api_objects::Type>(
-		    IcebergTypeHelper::CreateIcebergRestType(child_type.child_types.front().second, get_next_id));
+		rest_type.map_type.key =
+		    make_uniq<rest_api_objects::Type>(IcebergTypeHelper::CreateIcebergRestType(key_type, get_next_id));
 		rest_type.map_type.value_id = static_cast<int32_t>(get_next_id());
-		rest_type.map_type.value = make_uniq<rest_api_objects::Type>(
-		    IcebergTypeHelper::CreateIcebergRestType(child_type.child_types.back().second, get_next_id));
+		rest_type.map_type.value =
+		    make_uniq<rest_api_objects::Type>(IcebergTypeHelper::CreateIcebergRestType(value_type, get_next_id));
 		rest_type.map_type.value_required = false;
 		return rest_type;
 	}
@@ -86,8 +85,8 @@ rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(LogicalType &typ
 		rest_type.has_primitive_type = false;
 		rest_type.has_struct_type = true;
 		rest_type.struct_type = rest_api_objects::StructType();
-		auto stuct_aux = type.AuxInfo()->Cast<StructTypeInfo>();
-		for (auto &child : stuct_aux.child_types) {
+		auto &children = StructType::GetChildTypes(type);
+		for (auto &child : children) {
 			auto struct_child = make_uniq<rest_api_objects::StructField>();
 			struct_child->name = child.first;
 			struct_child->id = get_next_id();
@@ -104,13 +103,12 @@ rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(LogicalType &typ
 		rest_type.has_primitive_type = false;
 		rest_type.has_list_type = true;
 		rest_type.list_type = rest_api_objects::ListType();
-		auto list_aux = type.AuxInfo()->Cast<ListTypeInfo>();
-		rest_type.list_type.type = IcebergTypeHelper::LogicalTypeToIcebergType(list_aux.child_type);
+		auto list_child_type = ListType::GetChildType(type);
+		rest_type.list_type.type = IcebergTypeHelper::LogicalTypeToIcebergType(list_child_type);
 		rest_type.list_type.element_id = get_next_id();
-		rest_type.list_type.element = make_uniq<rest_api_objects::Type>(
-		    IcebergTypeHelper::CreateIcebergRestType(list_aux.child_type, get_next_id));
+		rest_type.list_type.element =
+		    make_uniq<rest_api_objects::Type>(IcebergTypeHelper::CreateIcebergRestType(list_child_type, get_next_id));
 		rest_type.list_type.element_required = false;
-		// TODO: what is the element id for? Is it the field id?
 		return rest_type;
 	}
 	case LogicalTypeId::ARRAY: {

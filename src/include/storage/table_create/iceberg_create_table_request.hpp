@@ -1,6 +1,7 @@
 #pragma once
-#include "storage/iceberg_table_update.hpp"
 
+#include "catalog_utils.hpp"
+#include "storage/iceberg_table_update.hpp"
 #include "metadata/iceberg_manifest.hpp"
 #include "metadata/iceberg_table_schema.hpp"
 #include "metadata/iceberg_manifest_list.hpp"
@@ -10,8 +11,10 @@
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/value.hpp"
 
+using namespace duckdb_yyjson;
 namespace duckdb {
 
+struct YyjsonDocDeleter;
 struct IcebergTableInformation;
 class ICTableEntry;
 
@@ -22,7 +25,7 @@ struct IcebergCreateTableRequest {
 public:
 	void CreateManifest(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state);
 	static shared_ptr<IcebergTableSchema> CreateIcebergSchema(const ICTableEntry *table_entry);
-	string CreateTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object);
+	string CreateTableToJSON(std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p);
 
 private:
 	string table_name;

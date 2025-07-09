@@ -2,8 +2,6 @@
 #include "storage/table_create/iceberg_create_table_request.hpp"
 #include "storage/irc_table_set.hpp"
 #include "utils/iceberg_type.hpp"
-#include "utils/json_utils.hpp"
-#include "catalog_utils.hpp"
 #include "duckdb/common/enums/catalog_type.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
 #include "duckdb/parser/parsed_data/copy_info.hpp"
@@ -13,6 +11,7 @@
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/storage/caching_file_system.hpp"
 
+using namespace duckdb_yyjson;
 namespace duckdb {
 
 IcebergCreateTableRequest::IcebergCreateTableRequest(shared_ptr<IcebergTableSchema> schema, string table_name)
@@ -136,7 +135,9 @@ shared_ptr<IcebergTableSchema> IcebergCreateTableRequest::CreateIcebergSchema(co
 	return schema;
 }
 
-string IcebergCreateTableRequest::CreateTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object) {
+string IcebergCreateTableRequest::CreateTableToJSON(std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p) {
+	auto doc = doc_p.get();
+	auto root_object = yyjson_mut_doc_get_root(doc);
 
 	auto schema = initial_schema;
 
@@ -168,7 +169,7 @@ string IcebergCreateTableRequest::CreateTableToJSON(yyjson_mut_doc *doc, yyjson_
 	auto write_order_fields = yyjson_mut_obj_add_arr(doc, write_order, "fields");
 	auto properties = yyjson_mut_obj_add_obj(doc, root_object, "properties");
 
-	return JSONUtils::JsonDocToString(doc);
+	return ICUtils::JsonToString(std::move(doc_p));
 }
 
 } // namespace duckdb

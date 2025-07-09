@@ -10,8 +10,8 @@ namespace duckdb {
 
 class IcebergTypeHelper {
 public:
-	static rest_api_objects::Type CreateIcebergRestType(LogicalType &type, std::function<idx_t()> get_next_id);
-	static string LogicalTypeToIcebergType(LogicalType &type);
+	static rest_api_objects::Type CreateIcebergRestType(const LogicalType &type, std::function<idx_t()> get_next_id);
+	static string LogicalTypeToIcebergType(const LogicalType &type);
 };
 
 } // namespace duckdb
