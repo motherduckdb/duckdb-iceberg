@@ -819,11 +819,10 @@ public:
 	}
 
 public:
-	void AddTable(optional_ptr<IcebergTableInformation> table_info, ClientContext &context,
+	void AddTable(IcebergTableInformation &table_info, ClientContext &context,
 	              const IcebergOptions &options) {
-		D_ASSERT(table_info);
-		auto &metadata = table_info->table_metadata;
-		if (table_names_to_skip.count(table_info->name)) {
+		auto &metadata = table_info.table_metadata;
+		if (table_names_to_skip.count(table_info.name)) {
 			//! FIXME: perhaps log that the table was skipped
 			return;
 		}
@@ -837,10 +836,10 @@ public:
 			snapshots.emplace(it.second.timestamp_ms, it.second);
 		}
 
-		auto &schema_entry = table_info->schema;
+		auto &schema_entry = table_info.schema;
 		auto &schema = GetSchema(schema_entry.name);
 
-		auto &table = GetTable(*table_info);
+		auto &table = GetTable(table_info);
 		schema.tables.push_back(table.table_uuid);
 		table.schema_name = schema.schema_name;
 
@@ -857,7 +856,7 @@ public:
 
 			if (!table.has_snapshot) {
 				//! Mark the table as being created by this snapshot
-				table.catalog_id_offset = ducklake_snapshot.AddTable(table_info->table_metadata.table_uuid);
+				table.catalog_id_offset = ducklake_snapshot.AddTable(table_info.table_metadata.table_uuid);
 				table.start_snapshot = ducklake_snapshot.snapshot_time;
 				table.has_snapshot = true;
 			}
