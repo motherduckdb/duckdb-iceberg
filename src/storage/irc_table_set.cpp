@@ -266,15 +266,20 @@ void ICTableSet::LoadEntries(ClientContext &context) {
 	}
 }
 
-void ICTableSet::CreateNewEntry(ClientContext &context, unique_ptr<IcebergTableInformation> new_table,
+void ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema,
                                 CreateTableInfo &info) {
-	if (entries.find(new_table->name) != entries.end()) {
-		throw CatalogException("Table %s already exists", new_table->name.c_str());
+	auto table_name = info.table;
+	if (entries.find(table_name) != entries.end()) {
+		throw CatalogException("Table %s already exists", table_name.c_str());
 	}
-	auto table_name = new_table->name;
 
-	auto table_entry = make_uniq<ICTableEntry>(*new_table, new_table->catalog, schema, info);
+	entries.emplace(table_name, IcebergTableInformation(catalog, schema, info.table));
+	auto &table_info = entries.find(table_name)->second;
+
+	auto table_entry = make_uniq<ICTableEntry>(table_info, catalog, schema, info);
+	// create the IcbergTableInformation in the entries
 	auto optional_entry = table_entry.get();
+
 	// Schema versions start at 1 I guess?
 	optional_entry->table_info.schema_versions[0] = std::move(table_entry);
 	optional_entry->table_info.table_metadata.schemas[0] =
@@ -303,8 +308,6 @@ void ICTableSet::CreateNewEntry(ClientContext &context, unique_ptr<IcebergTableI
 	//
 	// optional_entry->table_info->table_metadata.iceberg_version = 0;
 	// optional_entry->table_info->table_metadata.last_sequence_number = 0;
-
-	entries.emplace(table_name, table_info);
 }
 
 unique_ptr<ICTableInfo> ICTableSet::GetTableInfo(ClientContext &context, IRCSchemaEntry &schema,

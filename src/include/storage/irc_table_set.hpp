@@ -50,7 +50,7 @@ public:
 	                                            const string &table_name);
 	optional_ptr<CatalogEntry> GetEntry(ClientContext &context, const EntryLookupInfo &lookup);
 	void Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback);
-	void CreateNewEntry(ClientContext &context, unique_ptr<IcebergTableInformation> new_table, CreateTableInfo &info);
+	void CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema, CreateTableInfo &info);
 
 public:
 	void LoadEntries(ClientContext &context);
@@ -59,7 +59,7 @@ public:
 public:
 	IRCSchemaEntry &schema;
 	Catalog &catalog;
-	case_insensitive_map_t<unique_ptr<IcebergTableInformation>> entries;
+	case_insensitive_map_t<IcebergTableInformation> entries;
 
 private:
 	mutex entry_lock;
