@@ -44,8 +44,6 @@ ATTACH '' AS my_datalake (
 statement ok
 use my_datalake.default;
 
-mode skip
-
 # create primitive type table from test all types
 statement ok
 create table all_types_table_primitives_2 as select
@@ -146,8 +144,6 @@ struct_of_fixed_array,
 list_of_fixed_int_array from test_all_types();
 ----
 <REGEX>:.*Please cast to LIST.*
-
-mode unskip
 
 # casting to list works
 statement ok
