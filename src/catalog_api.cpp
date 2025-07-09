@@ -100,14 +100,14 @@ vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IRCatalog &catal
 	auto endpoint_builder = catalog.GetBaseUrl();
 	endpoint_builder.AddPathComponent(catalog.prefix);
 	endpoint_builder.AddPathComponent("namespaces");
+	if (!parent.empty()) {
+		auto parent_name = GetParentPath(parent);
+		endpoint_builder.SetParam("parent", parent_name);
+	}
 	auto response = catalog.auth_handler->GetRequest(context, endpoint_builder);
 	if (!response->Success()) {
 		auto url = endpoint_builder.GetURL();
 		ThrowException(url, *response, "GET");
-	}
-	if (!parent.empty()) {
-		auto parent_name = GetParentPath(parent);
-		endpoint_builder.SetParam("parent", parent_name);
 	}
 
 	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(response->body));
