@@ -46,12 +46,12 @@ optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(IRCTransaction &irc_trans
 	auto &ic_table = entry->Cast<ICTableEntry>();
 
 	auto initial_schema =
-	    ic_table.table_info->table_metadata.schemas[ic_table.table_info->table_metadata.current_schema_id];
-	auto create_transaction = make_uniq<IcebergCreateTableRequest>(initial_schema, ic_table.table_info->name);
-	if (!ic_table.table_info->transaction_data) {
-		ic_table.table_info->transaction_data = make_uniq<IcebergTransactionData>(context, *ic_table.table_info);
+	    ic_table.table_info.table_metadata.schemas[ic_table.table_info.table_metadata.current_schema_id];
+	auto create_transaction = make_uniq<IcebergCreateTableRequest>(initial_schema, ic_table.table_info.name);
+	if (!ic_table.table_info.transaction_data) {
+		ic_table.table_info.transaction_data = make_uniq<IcebergTransactionData>(context, ic_table.table_info);
 	}
-	ic_table.table_info->transaction_data->create = std::move(create_transaction);
+	ic_table.table_info.transaction_data->create = std::move(create_transaction);
 
 	// get the entry from the catalog.
 	D_ASSERT(entry);

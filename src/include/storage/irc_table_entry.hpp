@@ -29,7 +29,7 @@ struct ICTableInfo {
 
 class ICTableEntry : public TableCatalogEntry {
 public:
-	ICTableEntry(shared_ptr<IcebergTableInformation> table_info, Catalog &catalog, SchemaCatalogEntry &schema,
+	ICTableEntry(IcebergTableInformation &table_info, Catalog &catalog, SchemaCatalogEntry &schema,
 	             CreateTableInfo &info);
 
 	virtual_column_map_t GetVirtualColumns() const override;
@@ -46,7 +46,7 @@ public:
 	                           ClientContext &context) override;
 
 public:
-	shared_ptr<IcebergTableInformation> table_info;
+	IcebergTableInformation &table_info;
 };
 
 } // namespace duckdb
