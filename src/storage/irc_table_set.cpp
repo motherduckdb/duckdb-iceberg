@@ -277,10 +277,8 @@ void ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 	auto &table_info = entries.find(table_name)->second;
 
 	auto table_entry = make_uniq<ICTableEntry>(table_info, catalog, schema, info);
-	// create the IcbergTableInformation in the entries
 	auto optional_entry = table_entry.get();
 
-	// Schema versions start at 1 I guess?
 	optional_entry->table_info.schema_versions[0] = std::move(table_entry);
 	optional_entry->table_info.table_metadata.schemas[0] =
 	    IcebergCreateTableRequest::CreateIcebergSchema(optional_entry);
@@ -294,20 +292,6 @@ void ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 	optional_entry->table_info.load_table_result = std::move(load_table_result);
 	optional_entry->table_info.table_metadata =
 	    IcebergTableMetadata::FromTableMetadata(optional_entry->table_info.load_table_result.metadata);
-
-	// optional_entry->table_info->table_metadata.schemas[0]->schema_id = 0;
-	// optional_entry->table_info->table_metadata.partition_specs[0] = IcebergPartitionSpec();
-	// optional_entry->table_info->table_metadata.default_spec_id = 0;
-	// optional_entry->table_info->table_metadata.current_schema_id = 0;
-	// optional_entry->table_info->table_metadata.has_current_snapshot = false;
-	// optional_entry->table_info->table_metadata.current_snapshot_id = 0;
-	// optional_entry->table_info->name = table_name;
-	//
-	// optional_entry->table_info->load_table_result.metadata.has_location = true;
-	// optional_entry->table_info->load_table_result.metadata.location = new_location;
-	//
-	// optional_entry->table_info->table_metadata.iceberg_version = 0;
-	// optional_entry->table_info->table_metadata.last_sequence_number = 0;
 }
 
 unique_ptr<ICTableInfo> ICTableSet::GetTableInfo(ClientContext &context, IRCSchemaEntry &schema,
