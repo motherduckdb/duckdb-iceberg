@@ -17,8 +17,15 @@
 using namespace duckdb_yyjson;
 namespace duckdb {
 
+//! Used for the query parameter (parent=...)
 static string GetSchemaName(const vector<string> &items) {
 	static const string unit_separator = "\x1F";
+	return StringUtil::Join(items, unit_separator);
+}
+
+//! Used for the path parameters
+static string GetEncodedSchemaName(const vector<string> &items) {
+	static const string unit_separator = "%1F";
 	return StringUtil::Join(items, unit_separator);
 }
 
@@ -39,7 +46,7 @@ static string GetSchemaName(const vector<string> &items) {
 
 static string GetTableMetadata(ClientContext &context, IRCatalog &catalog, const IRCSchemaEntry &schema,
                                const string &table) {
-	auto schema_name = GetSchemaName(schema.namespace_items);
+	auto schema_name = GetEncodedSchemaName(schema.namespace_items);
 
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPathComponent(catalog.prefix);
@@ -73,7 +80,7 @@ rest_api_objects::LoadTableResult IRCAPI::GetTable(ClientContext &context, IRCat
 
 vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &context, IRCatalog &catalog,
                                                             const IRCSchemaEntry &schema) {
-	auto schema_name = GetSchemaName(schema.namespace_items);
+	auto schema_name = GetEncodedSchemaName(schema.namespace_items);
 
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPathComponent(catalog.prefix);
@@ -153,7 +160,7 @@ void IRCAPI::CommitMultiTableUpdate(ClientContext &context, IRCatalog &catalog, 
 
 void IRCAPI::CommitTableUpdate(ClientContext &context, IRCatalog &catalog, const vector<string> &schema,
                                const string &table_name, const string &body) {
-	auto schema_name = GetSchemaName(schema);
+	auto schema_name = GetEncodedSchemaName(schema);
 
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPathComponent(catalog.prefix);
