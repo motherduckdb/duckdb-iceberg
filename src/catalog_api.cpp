@@ -1,6 +1,7 @@
 #include "catalog_api.hpp"
 #include "catalog_utils.hpp"
 #include "storage/irc_catalog.hpp"
+#include "storage/irc_schema_entry.hpp"
 #include "yyjson.hpp"
 #include "iceberg_utils.hpp"
 #include "api_utils.hpp"
@@ -15,6 +16,11 @@
 
 using namespace duckdb_yyjson;
 namespace duckdb {
+
+static string GetSchemaName(const vector<string> &items) {
+	static const string unit_separator = "\x1F";
+	return StringUtil::Join(items, unit_separator);
+}
 
 [[noreturn]] static void ThrowException(const string &url, const HTTPResponse &response, const string &method) {
 	D_ASSERT(!response.Success());
@@ -31,11 +37,14 @@ namespace duckdb {
 	                    int(response.status));
 }
 
-static string GetTableMetadata(ClientContext &context, IRCatalog &catalog, const string &schema, const string &table) {
+static string GetTableMetadata(ClientContext &context, IRCatalog &catalog, const IRCSchemaEntry &schema,
+                               const string &table) {
+	auto schema_name = GetSchemaName(schema.namespace_items);
+
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPathComponent(catalog.prefix);
 	url_builder.AddPathComponent("namespaces");
-	url_builder.AddPathComponent(schema);
+	url_builder.AddPathComponent(schema_name);
 	url_builder.AddPathComponent("tables");
 	url_builder.AddPathComponent(table);
 
@@ -53,12 +62,8 @@ static string GetTableMetadata(ClientContext &context, IRCatalog &catalog, const
 	return api_result;
 }
 
-vector<string> IRCAPI::GetCatalogs(ClientContext &context, IRCatalog &catalog) {
-	throw NotImplementedException("ICAPI::GetCatalogs");
-}
-
-rest_api_objects::LoadTableResult IRCAPI::GetTable(ClientContext &context, IRCatalog &catalog, const string &schema,
-                                                   const string &table_name) {
+rest_api_objects::LoadTableResult IRCAPI::GetTable(ClientContext &context, IRCatalog &catalog,
+                                                   const IRCSchemaEntry &schema, const string &table_name) {
 	string result = GetTableMetadata(context, catalog, schema, table_name);
 	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(result));
 	auto *metadata_root = yyjson_doc_get_root(doc.get());
@@ -66,13 +71,14 @@ rest_api_objects::LoadTableResult IRCAPI::GetTable(ClientContext &context, IRCat
 	return load_table_result;
 }
 
-// TODO: handle out-of-order columns using position property
 vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &context, IRCatalog &catalog,
-                                                            const string &schema) {
+                                                            const IRCSchemaEntry &schema) {
+	auto schema_name = GetSchemaName(schema.namespace_items);
+
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPathComponent(catalog.prefix);
 	url_builder.AddPathComponent("namespaces");
-	url_builder.AddPathComponent(schema);
+	url_builder.AddPathComponent(schema_name);
 	url_builder.AddPathComponent("tables");
 	auto response = catalog.auth_handler->GetRequest(context, url_builder);
 	if (!response->Success()) {
@@ -90,18 +96,13 @@ vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &conte
 	return std::move(list_tables_response.identifiers);
 }
 
-static string GetParentPath(const vector<string> &parent) {
-	static const string unit_separator = "\x1F";
-	return StringUtil::Join(parent, unit_separator);
-}
-
 vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IRCatalog &catalog, const vector<string> &parent) {
 	vector<IRCAPISchema> result;
 	auto endpoint_builder = catalog.GetBaseUrl();
 	endpoint_builder.AddPathComponent(catalog.prefix);
 	endpoint_builder.AddPathComponent("namespaces");
 	if (!parent.empty()) {
-		auto parent_name = GetParentPath(parent);
+		auto parent_name = GetSchemaName(parent);
 		endpoint_builder.SetParam("parent", parent_name);
 	}
 	auto response = catalog.auth_handler->GetRequest(context, endpoint_builder);
@@ -134,6 +135,53 @@ vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IRCatalog &catal
 		result.push_back(schema_result);
 	}
 	return result;
+}
+
+void IRCAPI::CommitMultiTableUpdate(ClientContext &context, IRCatalog &catalog, const string &body) {
+	auto url_builder = catalog.GetBaseUrl();
+	url_builder.AddPathComponent(catalog.prefix);
+	url_builder.AddPathComponent("transactions");
+	url_builder.AddPathComponent("commit");
+
+	auto response = catalog.auth_handler->PostRequest(context, url_builder, body);
+	if (response->status != HTTPStatusCode::OK_200) {
+		throw InvalidConfigurationException(
+		    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s", url_builder.GetURL(),
+		    EnumUtil::ToString(response->status), response->reason, response->body);
+	}
+}
+
+void IRCAPI::CommitTableUpdate(ClientContext &context, IRCatalog &catalog, const vector<string> &schema,
+                               const string &table_name, const string &body) {
+	auto schema_name = GetSchemaName(schema);
+
+	auto url_builder = catalog.GetBaseUrl();
+	url_builder.AddPathComponent(catalog.prefix);
+	url_builder.AddPathComponent("namespaces");
+	url_builder.AddPathComponent(schema_name);
+	url_builder.AddPathComponent("tables");
+	url_builder.AddPathComponent(table_name);
+
+	auto response = catalog.auth_handler->PostRequest(context, url_builder, body);
+	if (response->status != HTTPStatusCode::OK_200) {
+		throw InvalidConfigurationException(
+		    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s", url_builder.GetURL(),
+		    EnumUtil::ToString(response->status), response->reason, response->body);
+	}
+}
+
+rest_api_objects::CatalogConfig IRCAPI::GetCatalogConfig(ClientContext &context, IRCatalog &catalog) {
+	auto url = catalog.GetBaseUrl();
+	url.AddPathComponent("config");
+	url.SetParam("warehouse", catalog.warehouse);
+	auto response = catalog.auth_handler->GetRequest(context, url);
+	if (response->status != HTTPStatusCode::OK_200) {
+		throw InvalidConfigurationException("Request to '%s' returned a non-200 status code (%s), with reason: %s",
+		                                    url.GetURL(), EnumUtil::ToString(response->status), response->reason);
+	}
+	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(response->body));
+	auto *root = yyjson_doc_get_root(doc.get());
+	return rest_api_objects::CatalogConfig::FromJSON(root);
 }
 
 static string json_to_string(yyjson_mut_doc *doc, yyjson_write_flag flags = YYJSON_WRITE_PRETTY) {

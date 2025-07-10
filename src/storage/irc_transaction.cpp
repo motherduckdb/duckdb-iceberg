@@ -114,12 +114,6 @@ string JsonDocToString(std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc) {
 	return res;
 }
 
-static string ConstructNamespace(vector<string> namespaces) {
-	auto table_namespace = std::accumulate(namespaces.begin() + 1, namespaces.end(), namespaces[0],
-	                                       [](const std::string &a, const std::string &b) { return a + "." + b; });
-	return table_namespace;
-}
-
 static string ConstructTableUpdateJSON(rest_api_objects::CommitTableRequest &table_change) {
 	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
 	auto doc = doc_p.get();
@@ -152,7 +146,8 @@ rest_api_objects::CommitTransactionRequest IRCTransaction::GetTransactionRequest
 	for (auto &table : dirty_tables) {
 		IcebergCommitState commit_state;
 		auto &table_change = commit_state.table_change;
-		table_change.identifier._namespace.value.push_back(table->ParentSchema().name);
+		auto &schema = table->ParentSchema().Cast<IRCSchemaEntry>();
+		table_change.identifier._namespace.value = schema.namespace_items;
 		table_change.identifier.name = table->name;
 		table_change.has_identifier = true;
 
@@ -201,7 +196,6 @@ void IRCTransaction::Commit() {
 	auto &context = temp_con.context;
 	try {
 		auto transaction = GetTransactionRequest(*context);
-		auto &authentication = *catalog.auth_handler;
 		if (catalog.supported_urls.find("POST /v1/{prefix}/transactions/commit") != catalog.supported_urls.end()) {
 			// commit all transactions at once
 			std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
@@ -211,42 +205,16 @@ void IRCTransaction::Commit() {
 
 			CommitTransactionToJSON(doc, root_object, transaction);
 			auto transaction_json = JsonDocToString(std::move(doc_p));
-
-			auto &authentication = *catalog.auth_handler;
-			auto url_builder = catalog.GetBaseUrl();
-			url_builder.AddPathComponent(catalog.prefix);
-			url_builder.AddPathComponent("transactions");
-			url_builder.AddPathComponent("commit");
-
-			auto response = authentication.PostRequest(*context, url_builder, transaction_json);
-			if (response->status != HTTPStatusCode::OK_200) {
-				throw InvalidConfigurationException(
-				    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s",
-				    url_builder.GetURL(), EnumUtil::ToString(response->status), response->reason, response->body);
-			}
+			IRCAPI::CommitMultiTableUpdate(*context, catalog, transaction_json);
 		} else {
 			D_ASSERT(catalog.supported_urls.find("POST /v1/{prefix}/namespaces/{namespace}/tables/{table}") !=
 			         catalog.supported_urls.end());
 			// each table change will make a separate request
 			for (auto &table_change : transaction.table_changes) {
 				D_ASSERT(table_change.has_identifier);
-
-				auto table_namespace = ConstructNamespace(table_change.identifier._namespace.value);
-				auto url_builder = catalog.GetBaseUrl();
-				url_builder.AddPathComponent(catalog.prefix);
-				url_builder.AddPathComponent("namespaces");
-				url_builder.AddPathComponent(table_namespace);
-				url_builder.AddPathComponent("tables");
-				url_builder.AddPathComponent(table_change.identifier.name);
-
 				auto transaction_json = ConstructTableUpdateJSON(table_change);
-
-				auto response = authentication.PostRequest(*context, url_builder, transaction_json);
-				if (response->status != HTTPStatusCode::OK_200) {
-					throw InvalidConfigurationException(
-					    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s",
-					    url_builder.GetURL(), EnumUtil::ToString(response->status), response->reason, response->body);
-				}
+				IRCAPI::CommitTableUpdate(*context, catalog, table_change.identifier._namespace.value,
+				                          table_change.identifier.name, transaction_json);
 			}
 		}
 		DropSecrets(*context);
