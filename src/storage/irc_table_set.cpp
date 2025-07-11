@@ -22,7 +22,7 @@
 namespace duckdb {
 
 IcebergTableInformation::IcebergTableInformation(IRCatalog &catalog, IRCSchemaEntry &schema, const string &name)
-    : catalog(catalog), schema(schema), name(name) {
+    : catalog(catalog), schema(schema), name(name), deleted(false) {
 	table_id = "uuid-" + schema.name + "-" + name;
 }
 

@@ -65,6 +65,7 @@ optional_ptr<SchemaCatalogEntry> IRCatalog::LookupSchema(CatalogTransaction tran
 }
 
 optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transaction, CreateSchemaInfo &info) {
+	Printer::Print("create schema?");
 	throw NotImplementedException("IRCatalog::CreateSchema not implemented");
 }
 

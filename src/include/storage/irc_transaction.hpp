@@ -26,6 +26,7 @@ public:
 		return schemas;
 	}
 	void MarkTableAsDirty(const ICTableEntry &table);
+	bool DirtyTablesHaveUpdates();
 	void DropSecrets(ClientContext &context);
 	rest_api_objects::CommitTransactionRequest GetTransactionRequest(ClientContext &context);
 

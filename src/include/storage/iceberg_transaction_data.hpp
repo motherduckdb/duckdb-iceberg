@@ -17,7 +17,7 @@ struct IcebergTableInformation;
 struct IcebergTransactionData {
 public:
 	IcebergTransactionData(ClientContext &context, IcebergTableInformation &table_info)
-	    : context(context), table_info(table_info) {
+	    : context(context), table_info(table_info), is_deleted(false) {
 	}
 
 public:
@@ -27,6 +27,7 @@ public:
 	ClientContext &context;
 	IcebergTableInformation &table_info;
 	vector<unique_ptr<IcebergTableUpdate>> updates;
+	bool is_deleted;
 
 	//! Every insert/update/delete creates an alter of the table data
 	vector<reference<IcebergAddSnapshot>> alters;

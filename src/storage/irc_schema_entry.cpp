@@ -20,19 +20,31 @@ IRCSchemaEntry::IRCSchemaEntry(Catalog &catalog, CreateSchemaInfo &info)
 IRCSchemaEntry::~IRCSchemaEntry() {
 }
 
-IRCTransaction &GetUCTransaction(CatalogTransaction transaction) {
-	if (!transaction.transaction) {
-		throw InternalException("No transaction!?");
-	}
-	return transaction.transaction->Cast<IRCTransaction>();
-}
 
 optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(CatalogTransaction transaction, BoundCreateTableInfo &info) {
 	throw NotImplementedException("Create Table");
 }
 
 void IRCSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {
-	throw NotImplementedException("Drop Entry");
+//	auto &ic_catalog = catalog.Cast<IRCatalog>();
+	auto &transaction = IRCTransaction::Get(context, catalog);
+	auto table_name = info.name;
+	// find if info has a table name, if so look for it in
+	auto table_info_it = tables.entries.find(table_name);
+	if (table_info_it == tables.entries.end()) {
+		throw InvalidInputException("Table %s does not exist");
+	}
+	auto &table_entry = table_info_it->second;
+	auto lookupInfo = EntryLookupInfo(CatalogType::TABLE_ENTRY, table_name);
+	auto catalog_transaction = CatalogTransaction::GetSystemCatalogTransaction(context);
+	auto table_entry_actual = LookupEntry(catalog_transaction, lookupInfo);
+	auto &ic_entry = table_entry_actual->Cast<ICTableEntry>();
+	D_ASSERT(table_entry_actual);
+//	tables.entries.erase(table_name);
+	table_entry.deleted = true;
+	transaction.MarkTableAsDirty(ic_entry);
+	return;
+	// table does not exist, potentially already dropped?
 }
 
 optional_ptr<CatalogEntry> IRCSchemaEntry::CreateFunction(CatalogTransaction transaction, CreateFunctionInfo &info) {
