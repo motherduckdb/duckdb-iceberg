@@ -48,7 +48,6 @@ public:
 	IRCSchemaSet schemas;
 	//! Tables marked dirty in this transaction, to be rewritten on commit
 	unordered_set<const ICTableEntry *> dirty_tables;
-	unordered_set<const ICTableEntry *> new_tables;
 	case_insensitive_set_t created_secrets;
 };
 

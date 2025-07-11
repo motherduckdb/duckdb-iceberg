@@ -37,6 +37,24 @@ void IcebergTableInformation::AddSnapshot(IRCTransaction &transaction, vector<Ic
 	transaction_data->AddSnapshot(IcebergSnapshotOperationType::APPEND, std::move(data_files));
 }
 
+void IcebergTableInformation::AddSchema(IRCTransaction &transaction) {
+	if (!transaction_data) {
+		auto context = transaction.context.lock();
+		transaction_data = make_uniq<IcebergTransactionData>(*context, *this);
+	}
+
+	transaction_data->TableAddSchema();
+}
+
+void IcebergTableInformation::AddAssertCreate(IRCTransaction &transaction) {
+	if (!transaction_data) {
+		auto context = transaction.context.lock();
+		transaction_data = make_uniq<IcebergTransactionData>(*context, *this);
+	}
+
+	transaction_data->TableAddAssertCreate();
+}
+
 static void ParseConfigOptions(const case_insensitive_map_t<string> &config, case_insensitive_map_t<Value> &options) {
 	//! Set of recognized config parameters and the duckdb secret option that matches it.
 	static const case_insensitive_map_t<string> config_to_option = {{"s3.access-key-id", "key_id"},
@@ -275,6 +293,9 @@ void ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 
 	entries.emplace(table_name, IcebergTableInformation(catalog, schema, info.table));
 	auto &table_info = entries.find(table_name)->second;
+	auto &irc_transaction = IRCTransaction::Get(context, catalog);
+	table_info.AddAssertCreate(irc_transaction);
+	table_info.AddSchema(irc_transaction);
 
 	auto table_entry = make_uniq<ICTableEntry>(table_info, catalog, schema, info);
 	auto optional_entry = table_entry.get();
@@ -284,7 +305,6 @@ void ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 	    IcebergCreateTableRequest::CreateIcebergSchema(optional_entry);
 	optional_entry->table_info.table_metadata.current_schema_id = 0;
 	optional_entry->table_info.table_metadata.schemas[0]->schema_id = 0;
-	auto &irc_transaction = IRCTransaction::Get(context, catalog);
 	// Immediately create the table with stage_create = true to get metadata & data location(s)
 	// transaction commit will either commit with data (OR) create the table with stage_create = false
 	// on abort, hit DELETE endpoint with purge = TRUE?

@@ -25,7 +25,7 @@ void IRCTransaction::MarkTableAsDirty(const ICTableEntry &table) {
 }
 
 void IRCTransaction::MarkTableAsNew(const ICTableEntry &table) {
-	new_tables.insert(&table);
+	// new_tables.insert(&table);
 }
 
 void IRCTransaction::Start() {
@@ -252,24 +252,13 @@ rest_api_objects::CommitTransactionRequest IRCTransaction::GetTransactionRequest
 
 void IRCTransaction::Commit() {
 
-	if (dirty_tables.empty() && new_tables.empty()) {
+	if (dirty_tables.empty()) {
 		return;
 	}
 
 	Connection temp_con(db);
 	temp_con.BeginTransaction();
 	auto &context = temp_con.context;
-
-	if (!new_tables.empty()) {
-		for (auto &table : new_tables) {
-			// we need to reload the secrets again because we are working in a different
-			// transaction with a different context again.
-			table->PrepareIcebergScanFromEntry(*context);
-			if (table->table_info.transaction_data->create) {
-				CommitNewTable(*context, table);
-			}
-		}
-	}
 
 	if (dirty_tables.empty()) {
 		// we don't need to do anything here.
@@ -327,9 +316,6 @@ void IRCTransaction::Commit() {
 		}
 		DropSecrets(*context);
 	} catch (std::exception &ex) {
-		if (!new_tables.empty()) {
-			// hit drop enpoints.
-		}
 		ErrorData error(ex);
 		CleanupFiles();
 		DropSecrets(*context);

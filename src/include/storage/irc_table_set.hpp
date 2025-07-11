@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include "duckdb/catalog/catalog_entry.hpp"
 #include "storage/irc_table_entry.hpp"
 #include "storage/iceberg_transaction_data.hpp"
 
@@ -26,6 +27,8 @@ public:
 	const string &BaseFilePath() const;
 
 	void AddSnapshot(IRCTransaction &transaction, vector<IcebergManifestEntry> &&data_files);
+	void AddSchema(IRCTransaction &transaction);
+	void AddAssertCreate(IRCTransaction &transaction);
 
 public:
 	IRCatalog &catalog;

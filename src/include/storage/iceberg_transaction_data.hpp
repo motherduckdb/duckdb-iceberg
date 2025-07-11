@@ -24,6 +24,10 @@ public:
 
 public:
 	void AddSnapshot(IcebergSnapshotOperationType operation, vector<IcebergManifestEntry> &&data_files);
+	// add a schema update for a table
+	void TableAddSchema();
+	// add assert create requirement for a table
+	void TableAddAssertCreate();
 
 public:
 	ClientContext &context;

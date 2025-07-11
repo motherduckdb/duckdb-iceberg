@@ -1,6 +1,7 @@
 #include "storage/iceberg_transaction_data.hpp"
 #include "storage/irc_table_set.hpp"
 #include "storage/table_update/iceberg_add_snapshot.hpp"
+#include "storage/table_update/generic.hpp"
 
 #include "duckdb/common/types/uuid.hpp"
 
@@ -92,6 +93,14 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 	                                std::make_move_iterator(data_files.end()));
 	alters.push_back(*add_snapshot);
 	updates.push_back(std::move(add_snapshot));
+}
+
+void IcebergTransactionData::TableAddSchema() {
+	updates.push_back(make_uniq<AddSchemaUpdate>(table_info));
+}
+
+void IcebergTransactionData::TableAddAssertCreate() {
+	updates.push_back(make_uniq<AddAssertCreateRequirement>(table_info));
 }
 
 } // namespace duckdb

@@ -63,6 +63,7 @@ set(EXTENSION_SOURCES
     src/storage/irc_transaction_manager.cpp
     src/utils/iceberg_type.cpp
     src/storage/table_update/iceberg_add_snapshot.cpp
+    src/storage/table_update/generic.cpp
     src/storage/create_table/iceberg_create_table_request.cpp
 )
 
