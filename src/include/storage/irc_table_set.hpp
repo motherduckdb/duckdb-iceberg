@@ -29,6 +29,7 @@ public:
 	void AddSnapshot(IRCTransaction &transaction, vector<IcebergManifestEntry> &&data_files);
 	void AddSchema(IRCTransaction &transaction);
 	void AddAssertCreate(IRCTransaction &transaction);
+	void AddAssignUUID(IRCTransaction &transaction);
 
 public:
 	IRCatalog &catalog;

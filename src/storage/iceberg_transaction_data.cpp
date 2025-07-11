@@ -99,6 +99,10 @@ void IcebergTransactionData::TableAddSchema() {
 	updates.push_back(make_uniq<AddSchemaUpdate>(table_info));
 }
 
+void IcebergTransactionData::TableAssignUUID() {
+	updates.push_back(make_uniq<AssignUUID>(table_info));
+}
+
 void IcebergTransactionData::TableAddAssertCreate() {
 	updates.push_back(make_uniq<AddAssertCreateRequirement>(table_info));
 }

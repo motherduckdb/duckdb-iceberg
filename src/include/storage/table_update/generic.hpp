@@ -20,7 +20,7 @@ struct AddSchemaUpdate : public IcebergTableUpdate {
 
 	explicit AddSchemaUpdate(IcebergTableInformation &table_info);
 	void CreateUpdate(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state) {};
-	rest_api_objects::TableUpdate CreateAddSchemaUpdate();
+	// rest_api_objects::TableUpdate CreateAddSchemaUpdate();
 };
 
 struct AddAssertCreateRequirement : public IcebergTableUpdate {
@@ -28,7 +28,15 @@ struct AddAssertCreateRequirement : public IcebergTableUpdate {
 
 	explicit AddAssertCreateRequirement(IcebergTableInformation &table_info);
 	void CreateUpdate(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state);
-	rest_api_objects::TableUpdate CreateAddAssertCreateRequirement();
+	// rest_api_objects::TableUpdate CreateAddAssertCreateRequirement();
+};
+
+struct AssignUUID : public IcebergTableUpdate {
+	static constexpr const IcebergTableUpdateType TYPE = IcebergTableUpdateType::ASSIGN_UUID;
+
+	explicit AssignUUID(IcebergTableInformation &table_info);
+	void CreateUpdate(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state);
+	// rest_api_objects::TableUpdate CreateAssignUUIDUpdate();
 };
 
 // struct AddSortOrder : public IcebergTableUpdate {
@@ -39,13 +47,7 @@ struct AddAssertCreateRequirement : public IcebergTableUpdate {
 // 	rest_api_objects::TableUpdate CreateAddSortOrderUpdate();
 // };
 //
-// struct AssignUUID : public IcebergTableUpdate {
-// 	static constexpr const IcebergTableUpdateType TYPE = IcebergTableUpdateType::ASSIGN_UUID;
-//
-// 	explicit AssignUUID(IcebergTableInformation &table_info);
-// 	void CreateUpdate(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state) {};
-// 	rest_api_objects::TableUpdate CreateAssignUUIDUpdate();
-// };
+
 //
 // struct SetCurrentSchema : public IcebergTableUpdate {
 // 	static constexpr const IcebergTableUpdateType TYPE = IcebergTableUpdateType::SET_CURRENT_SCHEMA;

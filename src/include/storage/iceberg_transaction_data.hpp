@@ -28,6 +28,8 @@ public:
 	void TableAddSchema();
 	// add assert create requirement for a table
 	void TableAddAssertCreate();
+	// assign a UUID to the table
+	void TableAssignUUID();
 
 public:
 	ClientContext &context;

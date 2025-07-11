@@ -46,6 +46,15 @@ void IcebergTableInformation::AddSchema(IRCTransaction &transaction) {
 	transaction_data->TableAddSchema();
 }
 
+void IcebergTableInformation::AddAssignUUID(IRCTransaction &transaction) {
+	if (!transaction_data) {
+		auto context = transaction.context.lock();
+		transaction_data = make_uniq<IcebergTransactionData>(*context, *this);
+	}
+
+	transaction_data->TableAssignUUID();
+}
+
 void IcebergTableInformation::AddAssertCreate(IRCTransaction &transaction) {
 	if (!transaction_data) {
 		auto context = transaction.context.lock();
@@ -295,6 +304,7 @@ void ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 	auto &table_info = entries.find(table_name)->second;
 	auto &irc_transaction = IRCTransaction::Get(context, catalog);
 	table_info.AddAssertCreate(irc_transaction);
+	table_info.AddAssignUUID(irc_transaction);
 	table_info.AddSchema(irc_transaction);
 
 	auto table_entry = make_uniq<ICTableEntry>(table_info, catalog, schema, info);
