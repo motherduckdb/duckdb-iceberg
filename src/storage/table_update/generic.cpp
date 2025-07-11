@@ -5,11 +5,11 @@ AddSchemaUpdate::AddSchemaUpdate(IcebergTableInformation &table_info)
     : IcebergTableUpdate(IcebergTableUpdateType::ADD_SCHEMA, table_info) {
 }
 
-AssignUUID::AssignUUID(IcebergTableInformation &table_info)
+AssignUUIDUpdate::AssignUUIDUpdate(IcebergTableInformation &table_info)
     : IcebergTableUpdate(IcebergTableUpdateType::ADD_SCHEMA, table_info) {
 }
 
-void AssignUUID::CreateUpdate(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state) {
+void AssignUUIDUpdate::CreateUpdate(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state) {
 	commit_state.table_change.updates.push_back(rest_api_objects::TableUpdate());
 	auto &update = commit_state.table_change.updates.back();
 	update.has_assign_uuidupdate = true;
@@ -18,12 +18,12 @@ void AssignUUID::CreateUpdate(DatabaseInstance &db, ClientContext &context, Iceb
 	update.assign_uuidupdate.uuid = "TODO-fix-me";
 }
 
-AddAssertCreateRequirement::AddAssertCreateRequirement(IcebergTableInformation &table_info)
-    : IcebergTableUpdate(IcebergTableUpdateType::ADD_SCHEMA, table_info) {
+AssertCreateRequirement::AssertCreateRequirement(IcebergTableInformation &table_info)
+    : IcebergTableRequirement(IcebergTableRequirementType::ASSERT_CREATE, table_info) {
 }
 
-void AddAssertCreateRequirement::CreateUpdate(DatabaseInstance &db, ClientContext &context,
-                                              IcebergCommitState &commit_state) {
+void AssertCreateRequirement::CreateUpdate(DatabaseInstance &db, ClientContext &context,
+                                           IcebergCommitState &commit_state) {
 	commit_state.table_change.requirements.push_back(rest_api_objects::TableRequirement());
 	auto &req = commit_state.table_change.requirements.back();
 	req.assert_create.type.value = "assert-create";

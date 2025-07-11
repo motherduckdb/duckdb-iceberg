@@ -8,6 +8,7 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/function/copy_function.hpp"
 #include "storage/iceberg_table_update.hpp"
+#include "storage/iceberg_table_requirement.hpp"
 #include "storage/table_update/iceberg_add_snapshot.hpp"
 #include "storage/table_create/iceberg_create_table_request.hpp"
 
@@ -36,6 +37,7 @@ public:
 	IcebergTableInformation &table_info;
 	unique_ptr<IcebergCreateTableRequest> create;
 	vector<unique_ptr<IcebergTableUpdate>> updates;
+	vector<unique_ptr<IcebergTableRequirement>> requirements;
 
 	//! Every insert/update/delete creates an alter of the table data
 	vector<reference<IcebergAddSnapshot>> alters;

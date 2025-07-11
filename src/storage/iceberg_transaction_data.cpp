@@ -100,11 +100,11 @@ void IcebergTransactionData::TableAddSchema() {
 }
 
 void IcebergTransactionData::TableAssignUUID() {
-	updates.push_back(make_uniq<AssignUUID>(table_info));
+	updates.push_back(make_uniq<AssignUUIDUpdate>(table_info));
 }
 
 void IcebergTransactionData::TableAddAssertCreate() {
-	updates.push_back(make_uniq<AddAssertCreateRequirement>(table_info));
+	requirements.push_back(make_uniq<AssertCreateRequirement>(table_info));
 }
 
 } // namespace duckdb

@@ -9,6 +9,7 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/types.hpp"
+#include "storage/iceberg_table_requirement.hpp"
 #include "duckdb/common/types/value.hpp"
 
 namespace duckdb {
@@ -23,18 +24,18 @@ struct AddSchemaUpdate : public IcebergTableUpdate {
 	// rest_api_objects::TableUpdate CreateAddSchemaUpdate();
 };
 
-struct AddAssertCreateRequirement : public IcebergTableUpdate {
-	static constexpr const IcebergTableUpdateType TYPE = IcebergTableUpdateType::ADD_SCHEMA;
+struct AssertCreateRequirement : public IcebergTableRequirement {
+	static constexpr const IcebergTableRequirementType TYPE = IcebergTableRequirementType::ASSERT_CREATE;
 
-	explicit AddAssertCreateRequirement(IcebergTableInformation &table_info);
+	explicit AssertCreateRequirement(IcebergTableInformation &table_info);
 	void CreateUpdate(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state);
 	// rest_api_objects::TableUpdate CreateAddAssertCreateRequirement();
 };
 
-struct AssignUUID : public IcebergTableUpdate {
+struct AssignUUIDUpdate : public IcebergTableUpdate {
 	static constexpr const IcebergTableUpdateType TYPE = IcebergTableUpdateType::ASSIGN_UUID;
 
-	explicit AssignUUID(IcebergTableInformation &table_info);
+	explicit AssignUUIDUpdate(IcebergTableInformation &table_info);
 	void CreateUpdate(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state);
 	// rest_api_objects::TableUpdate CreateAssignUUIDUpdate();
 };
