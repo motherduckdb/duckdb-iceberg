@@ -191,11 +191,4 @@ rest_api_objects::CatalogConfig IRCAPI::GetCatalogConfig(ClientContext &context,
 	return rest_api_objects::CatalogConfig::FromJSON(root);
 }
 
-static string json_to_string(yyjson_mut_doc *doc, yyjson_write_flag flags = YYJSON_WRITE_PRETTY) {
-	char *json_chars = yyjson_mut_write(doc, flags, NULL);
-	string json_str(json_chars);
-	free(json_chars);
-	return json_str;
-}
-
 } // namespace duckdb

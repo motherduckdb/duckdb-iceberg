@@ -44,7 +44,7 @@ static bool MatchBoundsIsNullFilter(const IcebergPredicateStats &stats, const Ic
 
 template <class TRANSFORM>
 static bool MatchBoundsIsNotNullFilter(const IcebergPredicateStats &stats, const IcebergTransform &transform) {
-	return stats.has_null == false;
+	return stats.has_not_null == true;
 }
 
 template <class TRANSFORM>
