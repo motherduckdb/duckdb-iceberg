@@ -228,7 +228,7 @@ void ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &tabl
 	}
 
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
-	table.load_table_result = IRCAPI::GetTable(context, ic_catalog, schema.name, table.name);
+	table.load_table_result = IRCAPI::GetTable(context, ic_catalog, schema, table.name);
 	table.table_metadata = IcebergTableMetadata::FromTableMetadata(table.load_table_result.metadata);
 	auto &schemas = table.table_metadata.schemas;
 
@@ -257,7 +257,7 @@ void ICTableSet::LoadEntries(ClientContext &context) {
 
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
 	// TODO: handle out-of-order columns using position property
-	auto tables = IRCAPI::GetTables(context, ic_catalog, schema.name);
+	auto tables = IRCAPI::GetTables(context, ic_catalog, schema);
 
 	for (auto &table : tables) {
 		entries.emplace(table.name, IcebergTableInformation(ic_catalog, schema, table.name));
