@@ -372,16 +372,23 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 		optional_ptr<const IcebergManifestEntry> result;
 		while (data_file_idx < current_data_files.size()) {
 			auto &data_file = current_data_files[data_file_idx];
+			data_file_idx++;
+
+			// Check whether current data file is filtered out.
 			if (!table_filters.filters.empty() && !FileMatchesFilter(data_file)) {
 				DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'data_file': '%s'",
 				           data_file.file_path);
 				//! Skip this file
-				data_file_idx++;
+				continue;
+			}
+
+			// Check whether current data file belongs to an unknown puffin file, skip if so.
+			if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
+				//! Skip this file
 				continue;
 			}
 
 			result = data_file;
-			data_file_idx++;
 			break;
 		}
 		if (!result) {
@@ -395,7 +402,6 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 }
 
 OpenFileInfo IcebergMultiFileList::GetFileInternal(idx_t file_id, lock_guard<mutex> &guard) {
-
 	if (!initialized) {
 		InitializeFiles(guard);
 	}
@@ -408,9 +414,9 @@ OpenFileInfo IcebergMultiFileList::GetFileInternal(idx_t file_id, lock_guard<mut
 	const auto &data_file = *found_data_file;
 	const auto &path = data_file.file_path;
 
-	// Unknown data type, could be customized puffin blobs, directly ignore.
 	if (!StringUtil::CIEquals(data_file.file_format, "parquet")) {
-		return OpenFileInfo();
+		throw NotImplementedException("File format '%s' not supported, only supports 'parquet' currently",
+		                              data_file.file_format);
 	}
 
 	string file_path = path;
