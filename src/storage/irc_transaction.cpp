@@ -226,8 +226,6 @@ static rest_api_objects::TableRequirement CreateAssertRefSnapshotIdRequirement(I
 rest_api_objects::LoadTableResult IRCTransaction::CommitNewTable(ClientContext &context, const ICTableEntry *table,
                                                                  bool stage_create) {
 	auto &ic_catalog = table->catalog.Cast<IRCatalog>();
-	// Stupid hack for GLUE catalog
-	// TODO: add D_ASSERT for the post table url
 	auto table_namespace = table->schema.name;
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPathComponent(catalog.prefix);
