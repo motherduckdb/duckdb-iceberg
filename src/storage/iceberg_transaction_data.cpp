@@ -1,7 +1,7 @@
 #include "storage/iceberg_transaction_data.hpp"
 #include "storage/irc_table_set.hpp"
 #include "storage/table_update/iceberg_add_snapshot.hpp"
-#include "storage/table_update/generic.hpp"
+#include "storage/table_update/common.hpp"
 
 #include "duckdb/common/types/uuid.hpp"
 

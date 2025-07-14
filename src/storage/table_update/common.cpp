@@ -1,4 +1,4 @@
-#include "storage/table_update/generic.hpp"
+#include "storage/table_update/common.hpp"
 #include "storage/irc_table_set.hpp"
 
 namespace duckdb {
