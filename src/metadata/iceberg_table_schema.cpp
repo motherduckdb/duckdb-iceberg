@@ -59,4 +59,146 @@ IcebergTableSchema::GetFromColumnIndex(const vector<unique_ptr<IcebergColumnDefi
 	return GetFromColumnIndex(column->children, column_index, depth + 1);
 }
 
+static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, rest_api_objects::Type &column);
+
+static void AddListField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, rest_api_objects::StructField &column) {
+	yyjson_mut_obj_add_strcpy(doc, field_obj, "name", column.name.c_str());
+	yyjson_mut_obj_add_uint(doc, field_obj, "id", column.id);
+	if (!column.type->has_primitive_type) {
+		auto type_obj = yyjson_mut_obj_add_obj(doc, field_obj, "type");
+		AddUnnamedField(doc, type_obj, *column.type);
+		yyjson_mut_obj_add_bool(doc, field_obj, "required", column.required);
+		return;
+	}
+	yyjson_mut_obj_add_strcpy(doc, field_obj, "type", column.type->primitive_type.value.c_str());
+	yyjson_mut_obj_add_bool(doc, field_obj, "required", column.required);
+}
+
+static void AddStructField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, rest_api_objects::StructField &column) {
+	yyjson_mut_obj_add_strcpy(doc, field_obj, "name", column.name.c_str());
+	yyjson_mut_obj_add_uint(doc, field_obj, "id", column.id);
+	if (!column.type->has_primitive_type) {
+		auto type_obj = yyjson_mut_obj_add_obj(doc, field_obj, "type");
+		AddUnnamedField(doc, type_obj, *column.type);
+		yyjson_mut_obj_add_bool(doc, field_obj, "required", column.required);
+		return;
+	}
+	yyjson_mut_obj_add_strcpy(doc, field_obj, "type", column.type->primitive_type.value.c_str());
+	yyjson_mut_obj_add_bool(doc, field_obj, "required", column.required);
+}
+
+static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, rest_api_objects::Type &column) {
+	if (column.has_struct_type) {
+		yyjson_mut_obj_add_strcpy(doc, field_obj, "type", "struct");
+		auto nested_fields_arr = yyjson_mut_obj_add_arr(doc, field_obj, "fields");
+		for (auto &field : column.struct_type.fields) {
+			auto nested_field_obj = yyjson_mut_arr_add_obj(doc, nested_fields_arr);
+			AddStructField(doc, nested_field_obj, *field);
+		}
+	} else if (column.has_list_type) {
+		auto type_obj = yyjson_mut_obj_add_obj(doc, field_obj, "type");
+		yyjson_mut_obj_add_strcpy(doc, field_obj, "type", "list");
+		auto &list_type = column.list_type;
+		yyjson_mut_obj_add_uint(doc, field_obj, "element-id", list_type.element_id);
+		if (list_type.element->has_primitive_type) {
+			yyjson_mut_obj_add_strcpy(doc, field_obj, "element", list_type.element->primitive_type.value.c_str());
+		} else {
+			auto list_type_obj = yyjson_mut_obj_add_obj(doc, field_obj, "element");
+			AddUnnamedField(doc, list_type_obj, *list_type.element);
+		}
+		yyjson_mut_obj_add_bool(doc, field_obj, "element-required", false);
+		return;
+	} else if (column.has_map_type) {
+		throw InternalException("should not be here");
+		yyjson_mut_obj_add_strcpy(doc, field_obj, "type", "map");
+		// D_ASSERT(column.children.size() == 2);
+		auto &key_child = column.map_type.key;
+		if (key_child->has_primitive_type) {
+			yyjson_mut_obj_add_strcpy(doc, field_obj, "key", key_child->primitive_type.value.c_str());
+		} else {
+			string type_str = "";
+			auto key_obj = yyjson_mut_obj_add_obj(doc, field_obj, "key");
+			D_ASSERT(key_child->has_struct_type);
+			if (key_child->has_struct_type) {
+				auto nested_key_fields_arr = yyjson_mut_obj_add_arr(doc, key_obj, "fields");
+				for (auto &field : key_child->struct_type.fields) {
+					AddStructField(doc, nested_key_fields_arr, *field);
+				}
+				type_str = "struct";
+				yyjson_mut_obj_add_strcpy(doc, key_obj, "type", type_str.c_str());
+			} else {
+				throw InternalException("should not be here");
+			}
+			//
+			//
+			// string type_str;
+			// if (key_child->has_map_type) {
+			// 	type_str = "map";
+			// }
+			// if (key_child->has_list_type) {
+			// 	type_str = "list";
+			// }
+			// if (key_child->has_struct_type) {
+			// 	type_str = "struct";
+			// }
+			// yyjson_mut_obj_add_strcpy(doc, key_obj, "type", type_str.c_str());
+			//
+			// auto nested_key_fields_arr = yyjson_mut_obj_add_arr(doc, key_obj, "fields");
+			// AddStructField(doc, nested_key_fields_arr, key_child->);
+		}
+		// yyjson_mut_obj_add_uint(doc, field_obj, "key-id", key_child.);
+		// auto &val_child = column.map_type.value;
+		//
+		// if (val_child->has_primitive_type) {
+		// 	yyjson_mut_obj_add_strcpy(doc, field_obj, "value",
+		// 	                          val_child->primitive_type.value.c_str());
+		// } else {
+		// 	auto val_obj = yyjson_mut_obj_add_obj(doc, field_obj, "val");
+		//
+		// 	string type_str;
+		// 	if (key_child->has_map_type) {
+		// 		type_str = "map";
+		// 	}
+		// 	if (key_child->has_list_type) {
+		// 		auto nested_key_fields_arr = yyjson_mut_obj_add_arr(doc, val_obj, "fields");
+		// 		AddNamedField(doc, nested_key_fields_arr, *val_child);
+		// 		type_str = "list";
+		// 	}
+		// 	if (key_child->has_struct_type) {
+		// 		auto nested_key_fields_arr = yyjson_mut_obj_add_arr(doc, val_obj, "fields");
+		// 		for (auto &field : key_child->struct_type.fields) {
+		// 			AddStructField(doc, nested_key_fields_arr, *field);
+		// 		}
+		// 		type_str = "struct";
+		// 	}
+		// 	yyjson_mut_obj_add_strcpy(doc, val_obj, "type", type_str.c_str());
+		// }
+		// yyjson_mut_obj_add_uint(doc, field_obj, "value-id", val_child->id);
+		// yyjson_mut_obj_add_bool(doc, field_obj, "value-required", false);
+	} else {
+		throw NotImplementedException("Unrecognized nested type");
+	}
+	// skip doc, initial_default, and write_default for now.
+	//	yyjson_mut_obj_add_strcpy(doc, field_obj, "doc", "string");
+	//	yyjson_mut_obj_add_bool(doc, field_obj, "initial_default", true);
+	//	yyjson_mut_obj_add_bool(doc, field_obj, "write_default", true);
+}
+
+void IcebergTableSchema::SchemaToJson(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
+                                      const rest_api_objects::Schema &schema) {
+	yyjson_mut_obj_add_strcpy(doc, root_object, "type", "struct");
+	auto fields_arr = yyjson_mut_obj_add_arr(doc, root_object, "fields");
+
+	// populate the fields
+	for (auto &field : schema.struct_type.fields) {
+		auto field_obj = yyjson_mut_arr_add_obj(doc, fields_arr);
+		// add name and id for top level items immediately
+		AddStructField(doc, field_obj, *field);
+	}
+
+	D_ASSERT(schema.object_1.has_schema_id);
+	yyjson_mut_obj_add_uint(doc, root_object, "schema-id", schema.object_1.schema_id);
+	yyjson_mut_obj_add_arr(doc, root_object, "identifier-field-ids");
+}
+
 } // namespace duckdb

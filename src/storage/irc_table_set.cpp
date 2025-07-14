@@ -64,6 +64,71 @@ void IcebergTableInformation::AddAssertCreate(IRCTransaction &transaction) {
 	transaction_data->TableAddAssertCreate();
 }
 
+void IcebergTableInformation::AddUpradeFormatVersion(IRCTransaction &transaction) {
+	if (!transaction_data) {
+		auto context = transaction.context.lock();
+		transaction_data = make_uniq<IcebergTransactionData>(*context, *this);
+	}
+
+	transaction_data->TableAddUpradeFormatVersion();
+}
+void IcebergTableInformation::AddSetCurrentSchema(IRCTransaction &transaction) {
+	if (!transaction_data) {
+		auto context = transaction.context.lock();
+		transaction_data = make_uniq<IcebergTransactionData>(*context, *this);
+	}
+
+	transaction_data->TableAddSetCurrentSchema();
+}
+void IcebergTableInformation::AddPartitionSpec(IRCTransaction &transaction) {
+	if (!transaction_data) {
+		auto context = transaction.context.lock();
+		transaction_data = make_uniq<IcebergTransactionData>(*context, *this);
+	}
+
+	transaction_data->TableAddPartitionSpec();
+}
+void IcebergTableInformation::AddSortOrder(IRCTransaction &transaction) {
+	if (!transaction_data) {
+		auto context = transaction.context.lock();
+		transaction_data = make_uniq<IcebergTransactionData>(*context, *this);
+	}
+
+	transaction_data->TableAddSortOrder();
+}
+void IcebergTableInformation::SetDefaultSortOrder(IRCTransaction &transaction) {
+	if (!transaction_data) {
+		auto context = transaction.context.lock();
+		transaction_data = make_uniq<IcebergTransactionData>(*context, *this);
+	}
+
+	transaction_data->TableSetDefaultSortOrder();
+}
+void IcebergTableInformation::SetDefaultSpec(IRCTransaction &transaction) {
+	if (!transaction_data) {
+		auto context = transaction.context.lock();
+		transaction_data = make_uniq<IcebergTransactionData>(*context, *this);
+	}
+
+	transaction_data->TableSetDefaultSpec();
+}
+void IcebergTableInformation::SetProperties(IRCTransaction &transaction, case_insensitive_map_t<string> properties) {
+	if (!transaction_data) {
+		auto context = transaction.context.lock();
+		transaction_data = make_uniq<IcebergTransactionData>(*context, *this);
+	}
+
+	transaction_data->TableSetProperties(properties);
+}
+void IcebergTableInformation::SetLocation(IRCTransaction &transaction) {
+	if (!transaction_data) {
+		auto context = transaction.context.lock();
+		transaction_data = make_uniq<IcebergTransactionData>(*context, *this);
+	}
+
+	transaction_data->TableSetLocation();
+}
+
 static void ParseConfigOptions(const case_insensitive_map_t<string> &config, case_insensitive_map_t<Value> &options) {
 	//! Set of recognized config parameters and the duckdb secret option that matches it.
 	static const case_insensitive_map_t<string> config_to_option = {{"s3.access-key-id", "key_id"},
@@ -303,9 +368,6 @@ void ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 	entries.emplace(table_name, IcebergTableInformation(catalog, schema, info.table));
 	auto &table_info = entries.find(table_name)->second;
 	auto &irc_transaction = IRCTransaction::Get(context, catalog);
-	table_info.AddAssertCreate(irc_transaction);
-	table_info.AddAssignUUID(irc_transaction);
-	table_info.AddSchema(irc_transaction);
 
 	auto table_entry = make_uniq<ICTableEntry>(table_info, catalog, schema, info);
 	auto optional_entry = table_entry.get();
@@ -322,6 +384,28 @@ void ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 	optional_entry->table_info.load_table_result = std::move(load_table_result);
 	optional_entry->table_info.table_metadata =
 	    IcebergTableMetadata::FromTableMetadata(optional_entry->table_info.load_table_result.metadata);
+
+	if (catalog.attach_options.supports_stage_create) {
+		// We have a response from the server for a stage create, we need to also send a number of table
+		// updates to finalize creation of the table.
+		table_info.AddAssertCreate(irc_transaction);
+		table_info.AddAssignUUID(irc_transaction);
+		table_info.AddUpradeFormatVersion(irc_transaction);
+		// skipping these for now, If a user modifies the schema immediately, the alter table statement
+		// will handle the add Schema
+		table_info.AddSchema(irc_transaction);
+		table_info.AddSetCurrentSchema(irc_transaction);
+		table_info.AddPartitionSpec(irc_transaction);
+		table_info.SetDefaultSpec(irc_transaction);
+		table_info.AddSortOrder(irc_transaction);
+		table_info.SetDefaultSortOrder(irc_transaction);
+		table_info.SetLocation(irc_transaction);
+		// case_insensitive_map_t<string> properties;
+		// properties.emplace("created-at", Timestamp::ToString(Timestamp::GetCurrentTimestamp()));
+		// // TODO: here we should actually get the default value from the parquet writer.
+		// properties.emplace("write.parquet.compression-codec", "snappy");
+		// table_info.SetProperties(irc_transaction, properties);
+	}
 }
 
 unique_ptr<ICTableInfo> ICTableSet::GetTableInfo(ClientContext &context, IRCSchemaEntry &schema,

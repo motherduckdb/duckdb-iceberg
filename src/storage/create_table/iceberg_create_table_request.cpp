@@ -135,30 +135,31 @@ shared_ptr<IcebergTableSchema> IcebergCreateTableRequest::CreateIcebergSchema(co
 	return schema;
 }
 
-string IcebergCreateTableRequest::CreateTableToJSON(std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p) {
+void IcebergCreateTableRequest::PopulateSchema(yyjson_mut_doc *doc, yyjson_mut_val *schema_json,
+                                               IcebergTableSchema &schema) {
+	yyjson_mut_obj_add_strcpy(doc, schema_json, "type", "struct");
+	auto fields_arr = yyjson_mut_obj_add_arr(doc, schema_json, "fields");
+
+	// populate the fields
+	for (auto &field : schema.columns) {
+		auto field_obj = yyjson_mut_arr_add_obj(doc, fields_arr);
+		// add name and id for top level items immediately
+		AddNamedField(doc, field_obj, *field);
+	}
+
+	yyjson_mut_obj_add_uint(doc, schema_json, "schema-id", schema.schema_id);
+}
+string IcebergCreateTableRequest::CreateTableToJSON(std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p,
+                                                    IcebergTableSchema &schema, string &table_name) {
 	auto doc = doc_p.get();
 	auto root_object = yyjson_mut_doc_get_root(doc);
-
-	auto schema = initial_schema;
 
 	//! name
 	yyjson_mut_obj_add_strcpy(doc, root_object, "name", table_name.c_str());
 	//! location (apparently not needed)
 
 	auto schema_json = yyjson_mut_obj_add_obj(doc, root_object, "schema");
-
-	yyjson_mut_obj_add_strcpy(doc, schema_json, "type", "struct");
-	auto fields_arr = yyjson_mut_obj_add_arr(doc, schema_json, "fields");
-
-	// populate the fields
-	for (auto &field : schema->columns) {
-		auto field_obj = yyjson_mut_arr_add_obj(doc, fields_arr);
-		// add name and id for top level items immediately
-		AddNamedField(doc, field_obj, *field);
-	}
-
-	yyjson_mut_obj_add_uint(doc, schema_json, "schema-id", schema->schema_id);
-	auto identifier_fields_arr = yyjson_mut_obj_add_arr(doc, schema_json, "identifier-field-ids");
+	PopulateSchema(doc, schema_json, schema);
 
 	auto partition_spec = yyjson_mut_obj_add_obj(doc, root_object, "partition-spec");
 	yyjson_mut_obj_add_uint(doc, partition_spec, "spec-id", 0);

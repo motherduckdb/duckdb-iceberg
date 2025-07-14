@@ -9,6 +9,13 @@ class IRCatalog;
 class IRCSchemaEntry;
 class ICTableEntry;
 
+struct TableTransactionInfo {
+	TableTransactionInfo() {};
+
+	rest_api_objects::CommitTransactionRequest request;
+	bool has_assert_create = false;
+};
+
 class IRCTransaction : public Transaction {
 public:
 	IRCTransaction(IRCatalog &ic_catalog, TransactionManager &manager, ClientContext &context);
@@ -26,15 +33,13 @@ public:
 		return schemas;
 	}
 	void MarkTableAsDirty(const ICTableEntry &table);
-	void MarkTableAsNew(const ICTableEntry &table);
 	IRCatalog &GetCatalog();
-	// stage create = false, table is created immediately in the IRC
-	// stage create = true, table is not created, but metadata is initialized and returned
-	//     To commit table, call CommitNewTable again with stage_create = true
+	//! stage create = false, table is created immediately in the IRC
+	//! stage create = true, table is not created, but metadata is initialized and returned
 	rest_api_objects::LoadTableResult CommitNewTable(ClientContext &context, const ICTableEntry *table,
 	                                                 bool stage_create = false);
 	void DropSecrets(ClientContext &context);
-	rest_api_objects::CommitTransactionRequest GetTransactionRequest(ClientContext &context);
+	TableTransactionInfo GetTransactionRequest(ClientContext &context);
 
 private:
 	void CleanupFiles();

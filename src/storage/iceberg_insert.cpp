@@ -401,10 +401,7 @@ PhysicalOperator &IRCatalog::PlanInsert(ClientContext &context, PhysicalPlanGene
 
 PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalPlanGenerator &planner,
                                                LogicalCreateTable &op, PhysicalOperator &plan) {
-	auto &create_info = op.info->Base();
-
-	// TODO: check if create_info contains partitioned information, if yes, error
-
+	// TODO: parse partition information here.
 	auto &schema = op.schema;
 
 	auto &ic_schema_entry = schema.Cast<IRCSchemaEntry>();

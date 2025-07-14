@@ -20,7 +20,7 @@ struct IcebergCreateTableRequest;
 struct IcebergTransactionData {
 public:
 	IcebergTransactionData(ClientContext &context, IcebergTableInformation &table_info)
-	    : context(context), table_info(table_info), create(nullptr) {
+	    : context(context), table_info(table_info) {
 	}
 
 public:
@@ -31,11 +31,18 @@ public:
 	void TableAddAssertCreate();
 	// assign a UUID to the table
 	void TableAssignUUID();
+	void TableAddUpradeFormatVersion();
+	void TableAddSetCurrentSchema();
+	void TableAddPartitionSpec();
+	void TableAddSortOrder();
+	void TableSetDefaultSortOrder();
+	void TableSetDefaultSpec();
+	void TableSetProperties(case_insensitive_map_t<string> properties);
+	void TableSetLocation();
 
 public:
 	ClientContext &context;
 	IcebergTableInformation &table_info;
-	unique_ptr<IcebergCreateTableRequest> create;
 	vector<unique_ptr<IcebergTableUpdate>> updates;
 	vector<unique_ptr<IcebergTableRequirement>> requirements;
 

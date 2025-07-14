@@ -27,7 +27,7 @@ public:
 	}
 
 public:
-	virtual void CreateUpdate(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state) = 0;
+	virtual void CreateRequirement(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state) = 0;
 
 public:
 	template <class TARGET>

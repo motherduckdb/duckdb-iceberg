@@ -30,6 +30,14 @@ public:
 	void AddSchema(IRCTransaction &transaction);
 	void AddAssertCreate(IRCTransaction &transaction);
 	void AddAssignUUID(IRCTransaction &transaction);
+	void AddUpradeFormatVersion(IRCTransaction &transaction);
+	void AddSetCurrentSchema(IRCTransaction &transaction);
+	void AddPartitionSpec(IRCTransaction &transaction);
+	void AddSortOrder(IRCTransaction &transaction);
+	void SetDefaultSortOrder(IRCTransaction &transaction);
+	void SetDefaultSpec(IRCTransaction &transaction);
+	void SetProperties(IRCTransaction &transaction, case_insensitive_map_t<string> properties);
+	void SetLocation(IRCTransaction &transaction);
 
 public:
 	IRCatalog &catalog;

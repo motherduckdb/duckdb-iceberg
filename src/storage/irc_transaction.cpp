@@ -24,10 +24,6 @@ void IRCTransaction::MarkTableAsDirty(const ICTableEntry &table) {
 	dirty_tables.insert(&table);
 }
 
-void IRCTransaction::MarkTableAsNew(const ICTableEntry &table) {
-	// new_tables.insert(&table);
-}
-
 void IRCTransaction::Start() {
 }
 
@@ -46,6 +42,10 @@ void CommitTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
 			yyjson_mut_obj_add_strcpy(doc, requirement_json, "type", assert_ref_snapshot_id.type.value.c_str());
 			yyjson_mut_obj_add_strcpy(doc, requirement_json, "ref", assert_ref_snapshot_id.ref.c_str());
 			yyjson_mut_obj_add_uint(doc, requirement_json, "snapshot-id", assert_ref_snapshot_id.snapshot_id);
+		} else if (requirement.has_assert_create) {
+			auto &assert_create = requirement.assert_create;
+			auto requirement_json = yyjson_mut_arr_add_obj(doc, requirements_array);
+			yyjson_mut_obj_add_strcpy(doc, requirement_json, "type", assert_create.type.value.c_str());
 		} else {
 			throw NotImplementedException("Can't serialize this TableRequirement type to JSON");
 		}
@@ -77,13 +77,85 @@ void CommitTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
 			auto &ref_update = update.set_snapshot_ref_update;
 
 			//! updates[...].action
-			yyjson_mut_obj_add_strcpy(doc, update_json, "action", "set-snapshot-ref");
+			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
 			//! updates[...].ref-name
 			yyjson_mut_obj_add_strcpy(doc, update_json, "ref-name", ref_update.ref_name.c_str());
 			//! updates[...].type
 			yyjson_mut_obj_add_strcpy(doc, update_json, "type", ref_update.snapshot_reference.type.c_str());
 			//! updates[...].snapshot-id
 			yyjson_mut_obj_add_uint(doc, update_json, "snapshot-id", ref_update.snapshot_reference.snapshot_id);
+		} else if (update.has_assign_uuidupdate) {
+			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
+			auto &ref_update = update.assign_uuidupdate;
+			//! updates[...].action
+			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
+			//! updates[...].ref-name
+			yyjson_mut_obj_add_strcpy(doc, update_json, "uuid", ref_update.uuid.c_str());
+		} else if (update.has_upgrade_format_version_update) {
+			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
+			auto &ref_update = update.upgrade_format_version_update;
+			//! updates[...].action
+			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
+			//! updates[...].ref-name
+			yyjson_mut_obj_add_uint(doc, update_json, "format-version", ref_update.format_version);
+		} else if (update.has_set_properties_update) {
+			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
+			auto &ref_update = update.set_properties_update;
+			//! updates[...].action
+			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
+			auto properties_json = yyjson_mut_obj_add_obj(doc, update_json, "updates");
+			for (auto &prop : ref_update.updates) {
+				yyjson_mut_obj_add_strcpy(doc, properties_json, prop.first.c_str(), prop.second.c_str());
+			}
+		} else if (update.has_add_schema_update) {
+			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
+			auto &ref_update = update.add_schema_update;
+			//! updates[...].action
+			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
+			auto schema_json = yyjson_mut_obj_add_obj(doc, update_json, "schema");
+			IcebergTableSchema::SchemaToJson(doc, schema_json, update.add_schema_update.schema);
+		} else if (update.has_set_current_schema_update) {
+			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
+			auto &ref_update = update.set_current_schema_update;
+			//! updates[...].action
+			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
+			yyjson_mut_obj_add_int(doc, update_json, "schema-id", ref_update.schema_id);
+		} else if (update.has_set_default_spec_update) {
+			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
+			auto &ref_update = update.set_default_spec_update;
+			//! updates[...].action
+			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
+			yyjson_mut_obj_add_int(doc, update_json, "spec-id", ref_update.spec_id);
+		} else if (update.has_add_partition_spec_update) {
+			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
+			auto &ref_update = update.add_partition_spec_update;
+			//! updates[...].action
+			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
+			auto spec_json = yyjson_mut_obj_add_obj(doc, update_json, "spec");
+			yyjson_mut_obj_add_int(doc, spec_json, "spec-id", ref_update.spec.spec_id);
+			// Add fields array, later we can add the fields
+			auto fields_arr = yyjson_mut_obj_add_arr(doc, spec_json, "fields");
+		} else if (update.has_set_default_sort_order_update) {
+			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
+			auto &ref_update = update.set_default_sort_order_update;
+			//! updates[...].action
+			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
+			yyjson_mut_obj_add_int(doc, update_json, "sort-order-id", ref_update.sort_order_id);
+		} else if (update.has_add_sort_order_update) {
+			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
+			auto &ref_update = update.add_sort_order_update;
+			//! updates[...].action
+			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
+			auto sort_order_json = yyjson_mut_obj_add_obj(doc, update_json, "sort-order");
+			yyjson_mut_obj_add_int(doc, sort_order_json, "order-id", ref_update.sort_order.order_id);
+			// Add fields array, later we can add the fields
+			auto fields_arr = yyjson_mut_obj_add_arr(doc, sort_order_json, "fields");
+		} else if (update.has_set_location_update) {
+			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
+			auto &ref_update = update.set_location_update;
+			//! updates[...].action
+			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
+			yyjson_mut_obj_add_strcpy(doc, update_json, "location", ref_update.location.c_str());
 		} else {
 			throw NotImplementedException("Can't serialize this TableUpdate type to JSON");
 		}
@@ -180,7 +252,8 @@ rest_api_objects::LoadTableResult IRCTransaction::CommitNewTable(ClientContext &
 	} else {
 		yyjson_mut_obj_add_bool(doc, root_object, "stage-create", false);
 	}
-	auto create_table_json = create_transaction->CreateTableToJSON(std::move(doc_p));
+	auto create_table_json =
+	    create_transaction->CreateTableToJSON(std::move(doc_p), *initial_schema, table->table_info.name);
 
 	try {
 		auto response = catalog.auth_handler->PostRequest(context, url_builder, create_table_json);
@@ -206,8 +279,9 @@ void IRCTransaction::DropSecrets(ClientContext &context) {
 	}
 }
 
-rest_api_objects::CommitTransactionRequest IRCTransaction::GetTransactionRequest(ClientContext &context) {
-	rest_api_objects::CommitTransactionRequest transaction;
+TableTransactionInfo IRCTransaction::GetTransactionRequest(ClientContext &context) {
+	TableTransactionInfo info;
+	auto &transaction = info.request;
 	for (auto &table : dirty_tables) {
 		IcebergCommitState commit_state;
 		auto &table_change = commit_state.table_change;
@@ -232,6 +306,10 @@ rest_api_objects::CommitTransactionRequest IRCTransaction::GetTransactionRequest
 		for (auto &update : transaction_data.updates) {
 			update->CreateUpdate(db, context, commit_state);
 		}
+		for (auto &requirement : transaction_data.requirements) {
+			requirement->CreateRequirement(db, context, commit_state);
+			info.has_assert_create = requirement->type == IcebergTableRequirementType::ASSERT_CREATE;
+		}
 
 		if (!transaction_data.alters.empty()) {
 			if (current_snapshot) {
@@ -247,7 +325,7 @@ rest_api_objects::CommitTransactionRequest IRCTransaction::GetTransactionRequest
 
 		transaction.table_changes.push_back(std::move(table_change));
 	}
-	return transaction;
+	return info;
 }
 
 void IRCTransaction::Commit() {
@@ -267,9 +345,14 @@ void IRCTransaction::Commit() {
 	}
 
 	try {
-		auto transaction = GetTransactionRequest(*context);
+		auto transaction_info = GetTransactionRequest(*context);
+		auto &transaction = transaction_info.request;
 		auto &authentication = *catalog.auth_handler;
-		if (catalog.supported_urls.find("POST /v1/{prefix}/transactions/commit") != catalog.supported_urls.end()) {
+
+		// if there are no new tables, we can post to the transactions/commit endpoint
+		// otherwise we fall back to posting a commit for each table.
+		if (!transaction_info.has_assert_create &&
+		    catalog.supported_urls.find("POST /v1/{prefix}/transactions/commit") != catalog.supported_urls.end()) {
 			// commit all transactions at once
 			std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
 			auto doc = doc_p.get();
