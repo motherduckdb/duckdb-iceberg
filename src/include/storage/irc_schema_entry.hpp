@@ -7,6 +7,7 @@
 
 namespace duckdb {
 class IRCTransaction;
+struct IRCAPISchema;
 
 class IRCSchemaEntry : public SchemaCatalogEntry {
 public:

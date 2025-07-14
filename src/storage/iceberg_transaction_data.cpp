@@ -2,6 +2,7 @@
 #include "storage/irc_table_set.hpp"
 #include "storage/table_update/iceberg_add_snapshot.hpp"
 #include "storage/table_update/common.hpp"
+#include "storage/iceberg_table_information.hpp"
 
 #include "duckdb/common/types/uuid.hpp"
 

@@ -1,6 +1,7 @@
 #include "storage/table_update/iceberg_add_snapshot.hpp"
 #include "storage/table_create/iceberg_create_table_request.hpp"
 #include "storage/irc_table_set.hpp"
+#include "storage/iceberg_table_information.hpp"
 #include "utils/iceberg_type.hpp"
 #include "duckdb/common/enums/catalog_type.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"

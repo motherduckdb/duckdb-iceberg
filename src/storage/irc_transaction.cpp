@@ -7,6 +7,7 @@
 #include "storage/irc_transaction.hpp"
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_authorization.hpp"
+#include "storage/iceberg_table_information.hpp"
 #include "storage/table_update/iceberg_add_snapshot.hpp"
 #include "storage/table_create/iceberg_create_table_request.hpp"
 #include "catalog_utils.hpp"

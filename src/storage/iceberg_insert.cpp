@@ -2,6 +2,7 @@
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_transaction.hpp"
 #include "storage/irc_table_entry.hpp"
+#include "storage/iceberg_table_information.hpp"
 
 #include "iceberg_multi_file_list.hpp"
 
