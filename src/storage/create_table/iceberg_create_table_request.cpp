@@ -107,7 +107,6 @@ shared_ptr<IcebergTableSchema> IcebergCreateTableRequest::CreateIcebergSchema(co
 
 	for (auto column = column_iterator.begin(); column != column_iterator.end(); ++column) {
 		auto name = (*column).Name();
-		// TODO: is this correct?
 		bool required = false;
 		auto logical_type = (*column).GetType();
 		idx_t first_id = next_field_id();
@@ -130,10 +129,9 @@ void IcebergCreateTableRequest::PopulateSchema(yyjson_mut_doc *doc, yyjson_mut_v
 	yyjson_mut_obj_add_strcpy(doc, schema_json, "type", "struct");
 	auto fields_arr = yyjson_mut_obj_add_arr(doc, schema_json, "fields");
 
-	// populate the fields
 	for (auto &field : schema.columns) {
 		auto field_obj = yyjson_mut_arr_add_obj(doc, fields_arr);
-		// add name and id for top level items immediately
+		// top level fields are always named
 		AddNamedField(doc, field_obj, *field);
 	}
 
@@ -144,11 +142,9 @@ string IcebergCreateTableRequest::CreateTableToJSON(std::unique_ptr<yyjson_mut_d
 	auto doc = doc_p.get();
 	auto root_object = yyjson_mut_doc_get_root(doc);
 
-	//! name
 	yyjson_mut_obj_add_strcpy(doc, root_object, "name", table_name.c_str());
-	//! location (apparently not needed)
-
 	auto schema_json = yyjson_mut_obj_add_obj(doc, root_object, "schema");
+
 	PopulateSchema(doc, schema_json, *initial_schema.get());
 
 	auto partition_spec = yyjson_mut_obj_add_obj(doc, root_object, "partition-spec");
@@ -157,6 +153,7 @@ string IcebergCreateTableRequest::CreateTableToJSON(std::unique_ptr<yyjson_mut_d
 
 	auto write_order = yyjson_mut_obj_add_obj(doc, root_object, "write-order");
 	yyjson_mut_obj_add_uint(doc, write_order, "order-id", 0);
+	// unused, but we want to add teh objects
 	auto write_order_fields = yyjson_mut_obj_add_arr(doc, write_order, "fields");
 	auto properties = yyjson_mut_obj_add_obj(doc, root_object, "properties");
 

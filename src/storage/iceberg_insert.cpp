@@ -413,10 +413,8 @@ PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalP
 	// setting the schema
 	auto table = ic_schema_entry.CreateTable(irc_transaction, context, *op.info);
 	auto &ic_table = table->Cast<ICTableEntry>();
-	// we've created the table, since we are running plan create table as, we also need to load
-	// credentials into our secrets for when we copy files
+	// We need to load table credentials into our secrets for when we copy files
 	ic_table.PrepareIcebergScanFromEntry(context);
-	// ic_table.table_info.GetVendedCredentials(context);
 
 	auto &table_schema = ic_table.table_info.table_metadata.GetLatestSchema();
 
@@ -430,7 +428,6 @@ PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalP
 	physical_index_vector_t<idx_t> column_index_map;
 	auto &insert = planner.Make<IcebergInsert>(op, ic_table, column_index_map);
 
-	//	return planner.Make<IcebergInsert>(op, the_schema.get(), std::move(create_info));
 	insert.children.push_back(physical_copy);
 	return insert;
 }

@@ -31,8 +31,9 @@ string IcebergTypeHelper::LogicalTypeToIcebergType(const LogicalType &type) {
 	case LogicalTypeId::DOUBLE:
 		return "double";
 	case LogicalTypeId::DECIMAL: {
-		auto aux = type.AuxInfo()->Cast<DecimalTypeInfo>();
-		return StringUtil::Format("decimal(%d, %d)", aux.width, aux.scale);
+		auto width = DecimalType::GetWidth(type);
+		auto scale = DecimalType::GetScale(type);
+		return StringUtil::Format("decimal(%d, %d)", width, scale);
 	}
 	case LogicalTypeId::UUID:
 		return "uuid";
@@ -68,8 +69,6 @@ rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(const LogicalTyp
 		rest_type.has_primitive_type = false;
 		rest_type.has_map_type = true;
 		rest_type.map_type = rest_api_objects::MapType();
-		auto aux = type.AuxInfo()->Cast<ListTypeInfo>();
-		auto child_type = aux.child_type.AuxInfo()->Cast<StructTypeInfo>();
 		auto key_type = MapType::KeyType(type);
 		auto value_type = MapType::ValueType(type);
 		rest_type.map_type.key_id = static_cast<int32_t>(get_next_id());

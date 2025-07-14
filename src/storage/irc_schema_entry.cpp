@@ -36,7 +36,7 @@ optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(IRCTransaction &irc_trans
 
 	auto &catalog = irc_transaction.GetCatalog();
 
-	// handles posting to IRC catalog if needed.
+	// always posts to IRC catalog so we can get the metadata
 	tables.CreateNewEntry(context, catalog, *this, base_info, stage_create);
 	auto lookup_info = EntryLookupInfo(CatalogType::TABLE_ENTRY, base_info.table);
 	auto entry = tables.GetEntry(context, lookup_info);

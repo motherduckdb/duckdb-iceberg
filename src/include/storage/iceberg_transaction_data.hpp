@@ -27,9 +27,7 @@ public:
 	void AddSnapshot(IcebergSnapshotOperationType operation, vector<IcebergManifestEntry> &&data_files);
 	// add a schema update for a table
 	void TableAddSchema();
-	// add assert create requirement for a table
 	void TableAddAssertCreate();
-	// assign a UUID to the table
 	void TableAssignUUID();
 	void TableAddUpradeFormatVersion();
 	void TableAddSetCurrentSchema();

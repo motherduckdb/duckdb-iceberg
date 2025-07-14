@@ -61,19 +61,6 @@ IcebergTableSchema::GetFromColumnIndex(const vector<unique_ptr<IcebergColumnDefi
 
 static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, rest_api_objects::Type &column);
 
-static void AddListField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, rest_api_objects::StructField &column) {
-	yyjson_mut_obj_add_strcpy(doc, field_obj, "name", column.name.c_str());
-	yyjson_mut_obj_add_uint(doc, field_obj, "id", column.id);
-	if (!column.type->has_primitive_type) {
-		auto type_obj = yyjson_mut_obj_add_obj(doc, field_obj, "type");
-		AddUnnamedField(doc, type_obj, *column.type);
-		yyjson_mut_obj_add_bool(doc, field_obj, "required", column.required);
-		return;
-	}
-	yyjson_mut_obj_add_strcpy(doc, field_obj, "type", column.type->primitive_type.value.c_str());
-	yyjson_mut_obj_add_bool(doc, field_obj, "required", column.required);
-}
-
 static void AddStructField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, rest_api_objects::StructField &column) {
 	yyjson_mut_obj_add_strcpy(doc, field_obj, "name", column.name.c_str());
 	yyjson_mut_obj_add_uint(doc, field_obj, "id", column.id);

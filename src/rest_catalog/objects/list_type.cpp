@@ -26,7 +26,6 @@ ListType ListType::FromJSON(yyjson_val *obj) {
 
 string ListType::TryFromJSON(yyjson_val *obj) {
 	string error;
-
 	auto type_val = yyjson_obj_get(obj, "type");
 	if (!type_val) {
 		return "ListType required property 'type' is missing";

@@ -27,11 +27,6 @@ ICTableEntry::ICTableEntry(IcebergTableInformation &table_info, Catalog &catalog
 	this->internal = false;
 }
 
-/*ICTableEntry::ICTableEntry(shared_ptr<IcebergTableInformation> table_info, IRCatalog &catalog,
-                           SchemaCatalogEntry &schema, CreateTableInfo &info)
-    : ICTableEntry(table_info, catalog.Cast<Catalog>(), schema, info) {
-}*/
-
 unique_ptr<BaseStatistics> ICTableEntry::GetStatistics(ClientContext &context, column_t column_id) {
 	return nullptr;
 }

@@ -13,6 +13,9 @@ struct TableTransactionInfo {
 	TableTransactionInfo() {};
 
 	rest_api_objects::CommitTransactionRequest request;
+	// if a table is created with assert create, we cannot use the
+	// transactions/commit endpoint. Instead we iterate through each table
+	// update and update each table individually
 	bool has_assert_create = false;
 };
 

@@ -330,12 +330,6 @@ void IRCTransaction::Commit() {
 	temp_con.BeginTransaction();
 	auto &context = temp_con.context;
 
-	if (dirty_tables.empty()) {
-		// we don't need to do anything here.
-		temp_con.Rollback();
-		return;
-	}
-
 	try {
 		auto transaction_info = GetTransactionRequest(*context);
 		auto &transaction = transaction_info.request;
