@@ -46,7 +46,6 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, Iceb
 		break;
 	}
 	case LogicalTypeId::LIST: {
-		auto type_obj = yyjson_mut_obj_add_obj(doc, field_obj, "type");
 		yyjson_mut_obj_add_strcpy(doc, field_obj, "type", "list");
 		D_ASSERT(column.children.size() == 1);
 		auto &list_type = column.children[0];
@@ -70,10 +69,7 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, Iceb
 			                          IcebergTypeHelper::LogicalTypeToIcebergType(key_child->type).c_str());
 		} else {
 			auto key_obj = yyjson_mut_obj_add_obj(doc, field_obj, "key");
-			yyjson_mut_obj_add_strcpy(doc, key_obj, "type",
-			                          IcebergTypeHelper::LogicalTypeToIcebergType(key_child->type).c_str());
-			auto nested_key_fields_arr = yyjson_mut_obj_add_arr(doc, key_obj, "fields");
-			AddNamedField(doc, nested_key_fields_arr, *key_child);
+			AddUnnamedField(doc, key_obj, *key_child);
 		}
 		yyjson_mut_obj_add_uint(doc, field_obj, "key-id", key_child->id);
 		auto &val_child = column.children[1];
@@ -82,10 +78,7 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, Iceb
 			                          IcebergTypeHelper::LogicalTypeToIcebergType(val_child->type).c_str());
 		} else {
 			auto val_obj = yyjson_mut_obj_add_obj(doc, field_obj, "value");
-			yyjson_mut_obj_add_strcpy(doc, val_obj, "type",
-			                          IcebergTypeHelper::LogicalTypeToIcebergType(val_child->type).c_str());
-			auto nested_key_fields_arr = yyjson_mut_obj_add_arr(doc, val_obj, "fields");
-			AddNamedField(doc, nested_key_fields_arr, *val_child);
+			AddUnnamedField(doc, val_obj, *val_child);
 		}
 		yyjson_mut_obj_add_uint(doc, field_obj, "value-id", val_child->id);
 		yyjson_mut_obj_add_bool(doc, field_obj, "value-required", false);

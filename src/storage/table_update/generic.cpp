@@ -4,6 +4,8 @@
 namespace duckdb {
 
 static rest_api_objects::Schema CopySchema(IcebergTableSchema &schema) {
+	// TODO: the rest api objects should be copyable. Without having to modify generated code
+	//  the easiest way to copy for now is to write the schema to string, then parse it again
 	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
 	yyjson_mut_doc *doc = doc_p.get();
 	auto root_object = yyjson_mut_obj(doc);
@@ -11,7 +13,7 @@ static rest_api_objects::Schema CopySchema(IcebergTableSchema &schema) {
 	IcebergCreateTableRequest::PopulateSchema(doc, root_object, schema);
 	auto schema_str = ICUtils::JsonToString(std::move(doc_p));
 
-	// Step 2: Parse it back as immutable
+	// Parse it back as immutable
 	yyjson_doc *new_doc = yyjson_read(schema_str.c_str(), strlen(schema_str.c_str()), 0);
 	yyjson_val *val = yyjson_doc_get_root(new_doc);
 	return rest_api_objects::Schema::FromJSON(val);

@@ -226,12 +226,6 @@ rest_api_objects::LoadTableResult IRCTransaction::CommitNewTable(ClientContext &
                                                                  bool stage_create) {
 	auto &ic_catalog = table->catalog.Cast<IRCatalog>();
 	// Stupid hack for GLUE catalog
-	if (!stage_create && !ic_catalog.attach_options.supports_stage_create) {
-		// if the catalog does not support stage create, and stage_create = false
-		// it means we are trying to commit the table. We have already hit the endpoint with stage_create = true
-		// so this second request will result in an error. so we early out
-		return rest_api_objects::LoadTableResult();
-	}
 	// TODO: add D_ASSERT for the post table url
 	auto table_namespace = table->schema.name;
 	auto url_builder = catalog.GetBaseUrl();

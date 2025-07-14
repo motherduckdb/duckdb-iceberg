@@ -109,72 +109,25 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, rest
 		yyjson_mut_obj_add_bool(doc, field_obj, "element-required", false);
 		return;
 	} else if (column.has_map_type) {
-		throw InternalException("should not be here");
 		yyjson_mut_obj_add_strcpy(doc, field_obj, "type", "map");
-		// D_ASSERT(column.children.size() == 2);
+		yyjson_mut_obj_add_uint(doc, field_obj, "key-id", column.map_type.key_id);
 		auto &key_child = column.map_type.key;
 		if (key_child->has_primitive_type) {
 			yyjson_mut_obj_add_strcpy(doc, field_obj, "key", key_child->primitive_type.value.c_str());
 		} else {
-			string type_str = "";
-			auto key_obj = yyjson_mut_obj_add_obj(doc, field_obj, "key");
-			D_ASSERT(key_child->has_struct_type);
-			if (key_child->has_struct_type) {
-				auto nested_key_fields_arr = yyjson_mut_obj_add_arr(doc, key_obj, "fields");
-				for (auto &field : key_child->struct_type.fields) {
-					AddStructField(doc, nested_key_fields_arr, *field);
-				}
-				type_str = "struct";
-				yyjson_mut_obj_add_strcpy(doc, key_obj, "type", type_str.c_str());
-			} else {
-				throw InternalException("should not be here");
-			}
-			//
-			//
-			// string type_str;
-			// if (key_child->has_map_type) {
-			// 	type_str = "map";
-			// }
-			// if (key_child->has_list_type) {
-			// 	type_str = "list";
-			// }
-			// if (key_child->has_struct_type) {
-			// 	type_str = "struct";
-			// }
-			// yyjson_mut_obj_add_strcpy(doc, key_obj, "type", type_str.c_str());
-			//
-			// auto nested_key_fields_arr = yyjson_mut_obj_add_arr(doc, key_obj, "fields");
-			// AddStructField(doc, nested_key_fields_arr, key_child->);
+			auto key_type_obj = yyjson_mut_obj_add_obj(doc, field_obj, "key");
+			AddUnnamedField(doc, key_type_obj, *key_child);
 		}
-		// yyjson_mut_obj_add_uint(doc, field_obj, "key-id", key_child.);
-		// auto &val_child = column.map_type.value;
-		//
-		// if (val_child->has_primitive_type) {
-		// 	yyjson_mut_obj_add_strcpy(doc, field_obj, "value",
-		// 	                          val_child->primitive_type.value.c_str());
-		// } else {
-		// 	auto val_obj = yyjson_mut_obj_add_obj(doc, field_obj, "val");
-		//
-		// 	string type_str;
-		// 	if (key_child->has_map_type) {
-		// 		type_str = "map";
-		// 	}
-		// 	if (key_child->has_list_type) {
-		// 		auto nested_key_fields_arr = yyjson_mut_obj_add_arr(doc, val_obj, "fields");
-		// 		AddNamedField(doc, nested_key_fields_arr, *val_child);
-		// 		type_str = "list";
-		// 	}
-		// 	if (key_child->has_struct_type) {
-		// 		auto nested_key_fields_arr = yyjson_mut_obj_add_arr(doc, val_obj, "fields");
-		// 		for (auto &field : key_child->struct_type.fields) {
-		// 			AddStructField(doc, nested_key_fields_arr, *field);
-		// 		}
-		// 		type_str = "struct";
-		// 	}
-		// 	yyjson_mut_obj_add_strcpy(doc, val_obj, "type", type_str.c_str());
-		// }
-		// yyjson_mut_obj_add_uint(doc, field_obj, "value-id", val_child->id);
-		// yyjson_mut_obj_add_bool(doc, field_obj, "value-required", false);
+
+		auto &val_child = column.map_type.value;
+		yyjson_mut_obj_add_uint(doc, field_obj, "value-id", column.map_type.value_id);
+		yyjson_mut_obj_add_bool(doc, field_obj, "value-required", false);
+		if (val_child->has_primitive_type) {
+			yyjson_mut_obj_add_strcpy(doc, field_obj, "value", val_child->primitive_type.value.c_str());
+		} else {
+			auto value_type_obj = yyjson_mut_obj_add_obj(doc, field_obj, "value");
+			AddUnnamedField(doc, value_type_obj, *val_child);
+		}
 	} else {
 		throw NotImplementedException("Unrecognized nested type");
 	}
