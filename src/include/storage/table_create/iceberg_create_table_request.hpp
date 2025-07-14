@@ -23,10 +23,8 @@ struct IcebergCreateTableRequest {
 	IcebergCreateTableRequest(shared_ptr<IcebergTableSchema> schema, string table_name);
 
 public:
-	void CreateManifest(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state);
 	static shared_ptr<IcebergTableSchema> CreateIcebergSchema(const ICTableEntry *table_entry);
-	static string CreateTableToJSON(std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p, IcebergTableSchema &schema,
-	                                string &table_name);
+	string CreateTableToJSON(std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p);
 	static void PopulateSchema(yyjson_mut_doc *doc, yyjson_mut_val *schema_json, IcebergTableSchema &schema);
 
 private:

@@ -107,7 +107,6 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, rest
 			AddUnnamedField(doc, list_type_obj, *list_type.element);
 		}
 		yyjson_mut_obj_add_bool(doc, field_obj, "element-required", false);
-		return;
 	} else if (column.has_map_type) {
 		yyjson_mut_obj_add_strcpy(doc, field_obj, "type", "map");
 		yyjson_mut_obj_add_uint(doc, field_obj, "key-id", column.map_type.key_id);
@@ -131,10 +130,6 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, rest
 	} else {
 		throw NotImplementedException("Unrecognized nested type");
 	}
-	// skip doc, initial_default, and write_default for now.
-	//	yyjson_mut_obj_add_strcpy(doc, field_obj, "doc", "string");
-	//	yyjson_mut_obj_add_bool(doc, field_obj, "initial_default", true);
-	//	yyjson_mut_obj_add_bool(doc, field_obj, "write_default", true);
 }
 
 void IcebergTableSchema::SchemaToJson(yyjson_mut_doc *doc, yyjson_mut_val *root_object,

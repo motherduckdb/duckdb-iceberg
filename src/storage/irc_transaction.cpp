@@ -246,8 +246,7 @@ rest_api_objects::LoadTableResult IRCTransaction::CommitNewTable(ClientContext &
 	} else {
 		yyjson_mut_obj_add_bool(doc, root_object, "stage-create", false);
 	}
-	auto create_table_json =
-	    create_transaction->CreateTableToJSON(std::move(doc_p), *initial_schema, table->table_info.name);
+	auto create_table_json = create_transaction->CreateTableToJSON(std::move(doc_p));
 
 	try {
 		auto response = catalog.auth_handler->PostRequest(context, url_builder, create_table_json);

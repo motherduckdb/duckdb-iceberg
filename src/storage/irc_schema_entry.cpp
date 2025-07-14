@@ -31,13 +31,13 @@ IRCTransaction &GetUCTransaction(CatalogTransaction transaction) {
 }
 
 optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(IRCTransaction &irc_transaction, ClientContext &context,
-                                                       BoundCreateTableInfo &info) {
+                                                       BoundCreateTableInfo &info, bool stage_create) {
 	auto &base_info = info.Base();
 
 	auto &catalog = irc_transaction.GetCatalog();
 
 	// handles posting to IRC catalog if needed.
-	tables.CreateNewEntry(context, catalog, *this, base_info);
+	tables.CreateNewEntry(context, catalog, *this, base_info, stage_create);
 	auto lookup_info = EntryLookupInfo(CatalogType::TABLE_ENTRY, base_info.table);
 	auto entry = tables.GetEntry(context, lookup_info);
 
@@ -51,7 +51,8 @@ optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(IRCTransaction &irc_trans
 optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(CatalogTransaction transaction, BoundCreateTableInfo &info) {
 	auto &irc_transaction = transaction.transaction->Cast<IRCTransaction>();
 	auto &context = transaction.context;
-	return CreateTable(irc_transaction, *context, info);
+	// directly create the table with stage_create = true;
+	return CreateTable(irc_transaction, *context, info, false);
 }
 
 void IRCSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {

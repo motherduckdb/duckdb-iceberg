@@ -18,7 +18,7 @@ public:
 public:
 	optional_ptr<CatalogEntry> CreateTable(CatalogTransaction transaction, BoundCreateTableInfo &info) override;
 	optional_ptr<CatalogEntry> CreateTable(IRCTransaction &irc_transaction, ClientContext &context,
-	                                       BoundCreateTableInfo &info);
+	                                       BoundCreateTableInfo &info, bool stage_create = true);
 	optional_ptr<CatalogEntry> CreateFunction(CatalogTransaction transaction, CreateFunctionInfo &info) override;
 	optional_ptr<CatalogEntry> CreateIndex(CatalogTransaction transaction, CreateIndexInfo &info,
 	                                       TableCatalogEntry &table) override;

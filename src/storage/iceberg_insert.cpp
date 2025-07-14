@@ -143,7 +143,7 @@ static IcebergColumnStats ParseColumnStats(const vector<Value> col_stats) {
 			column_stats.has_contains_nan = true;
 			column_stats.contains_nan = stats_value == "true";
 		} else {
-			throw NotImplementedException("Unsupported stats type \"%s\" in Iceberg::Sink()", stats_name);
+			throw NotImplementedException("Unsupported stats type \"%s\" in IcebergInsert::Sink()", stats_name);
 		}
 	}
 	return column_stats;

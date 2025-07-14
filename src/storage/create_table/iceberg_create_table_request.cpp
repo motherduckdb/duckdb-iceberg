@@ -50,7 +50,7 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, Iceb
 		D_ASSERT(column.children.size() == 1);
 		auto &list_type = column.children[0];
 		yyjson_mut_obj_add_uint(doc, field_obj, "element-id", list_type->id);
-		if (list_type->IsPrimitiveType()) {
+		if (list_type->IsIcebergPrimitiveType()) {
 			yyjson_mut_obj_add_strcpy(doc, field_obj, "element",
 			                          IcebergTypeHelper::LogicalTypeToIcebergType(list_type->type).c_str());
 		} else {
@@ -64,7 +64,7 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, Iceb
 		yyjson_mut_obj_add_strcpy(doc, field_obj, "type", "map");
 		D_ASSERT(column.children.size() == 2);
 		auto &key_child = column.children[0];
-		if (key_child->IsPrimitiveType()) {
+		if (key_child->IsIcebergPrimitiveType()) {
 			yyjson_mut_obj_add_strcpy(doc, field_obj, "key",
 			                          IcebergTypeHelper::LogicalTypeToIcebergType(key_child->type).c_str());
 		} else {
@@ -73,7 +73,7 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, Iceb
 		}
 		yyjson_mut_obj_add_uint(doc, field_obj, "key-id", key_child->id);
 		auto &val_child = column.children[1];
-		if (val_child->IsPrimitiveType()) {
+		if (val_child->IsIcebergPrimitiveType()) {
 			yyjson_mut_obj_add_strcpy(doc, field_obj, "value",
 			                          IcebergTypeHelper::LogicalTypeToIcebergType(val_child->type).c_str());
 		} else {
@@ -87,10 +87,6 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, Iceb
 	default:
 		throw NotImplementedException("Unrecognized nested type %s", LogicalTypeIdToString(column.type.id()));
 	}
-	// skip doc, initial_default, and write_default for now.
-	//	yyjson_mut_obj_add_strcpy(doc, field_obj, "doc", "string");
-	//	yyjson_mut_obj_add_bool(doc, field_obj, "initial_default", true);
-	//	yyjson_mut_obj_add_bool(doc, field_obj, "write_default", true);
 }
 
 shared_ptr<IcebergTableSchema> IcebergCreateTableRequest::CreateIcebergSchema(const ICTableEntry *table_entry) {
@@ -142,8 +138,8 @@ void IcebergCreateTableRequest::PopulateSchema(yyjson_mut_doc *doc, yyjson_mut_v
 
 	yyjson_mut_obj_add_uint(doc, schema_json, "schema-id", schema.schema_id);
 }
-string IcebergCreateTableRequest::CreateTableToJSON(std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p,
-                                                    IcebergTableSchema &schema, string &table_name) {
+
+string IcebergCreateTableRequest::CreateTableToJSON(std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p) {
 	auto doc = doc_p.get();
 	auto root_object = yyjson_mut_doc_get_root(doc);
 
@@ -152,7 +148,7 @@ string IcebergCreateTableRequest::CreateTableToJSON(std::unique_ptr<yyjson_mut_d
 	//! location (apparently not needed)
 
 	auto schema_json = yyjson_mut_obj_add_obj(doc, root_object, "schema");
-	PopulateSchema(doc, schema_json, schema);
+	PopulateSchema(doc, schema_json, *initial_schema.get());
 
 	auto partition_spec = yyjson_mut_obj_add_obj(doc, root_object, "partition-spec");
 	yyjson_mut_obj_add_uint(doc, partition_spec, "spec-id", 0);

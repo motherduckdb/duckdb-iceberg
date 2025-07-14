@@ -172,7 +172,7 @@ unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::ParseStructField(re
 	                 field.has_initial_default ? &field.initial_default : nullptr);
 }
 
-bool IcebergColumnDefinition::IsPrimitiveType() {
+bool IcebergColumnDefinition::IsIcebergPrimitiveType() {
 	switch (type.id()) {
 	case LogicalTypeId::TINYINT:
 	case LogicalTypeId::SMALLINT:
