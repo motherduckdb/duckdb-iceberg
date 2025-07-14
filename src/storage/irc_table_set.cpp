@@ -391,8 +391,6 @@ void ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 		table_info.AddAssertCreate(irc_transaction);
 		table_info.AddAssignUUID(irc_transaction);
 		table_info.AddUpradeFormatVersion(irc_transaction);
-		// skipping these for now, If a user modifies the schema immediately, the alter table statement
-		// will handle the add Schema
 		table_info.AddSchema(irc_transaction);
 		table_info.AddSetCurrentSchema(irc_transaction);
 		table_info.AddPartitionSpec(irc_transaction);
@@ -400,11 +398,6 @@ void ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 		table_info.AddSortOrder(irc_transaction);
 		table_info.SetDefaultSortOrder(irc_transaction);
 		table_info.SetLocation(irc_transaction);
-		// case_insensitive_map_t<string> properties;
-		// properties.emplace("created-at", Timestamp::ToString(Timestamp::GetCurrentTimestamp()));
-		// // TODO: here we should actually get the default value from the parquet writer.
-		// properties.emplace("write.parquet.compression-codec", "snappy");
-		// table_info.SetProperties(irc_transaction, properties);
 	}
 }
 

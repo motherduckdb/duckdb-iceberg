@@ -6,7 +6,6 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/list.hpp"
-#include "iostream"
 
 using namespace duckdb_yyjson;
 
@@ -32,12 +31,6 @@ string ListType::TryFromJSON(yyjson_val *obj) {
 	if (!type_val) {
 		return "ListType required property 'type' is missing";
 	} else {
-		auto wat = yyjson_is_obj(type_val);
-		if (wat) {
-			auto wat_2 = yyjson_obj_get(type_val, "type");
-			auto check_me = yyjson_obj_get(wat_2, "type");
-			std::cout << "check me = " << check_me << std::endl;
-		}
 		if (yyjson_is_str(type_val)) {
 			type = yyjson_get_str(type_val);
 		} else {
