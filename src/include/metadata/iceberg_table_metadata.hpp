@@ -56,8 +56,6 @@ public:
 
 	//! partition_spec_id -> partition spec
 	unordered_map<int32_t, IcebergPartitionSpec> partition_specs;
-	//! sort_order_id -> sort order
-	// unordered_map<int32_t, rest_api_objects::SortOrder> sort_order_specs;
 	//! snapshot_id -> snapshot
 	unordered_map<int64_t, IcebergSnapshot> snapshots;
 	//! schema_id -> schema

@@ -113,3 +113,47 @@ select * from create_table_t2;
 10	10
 15	15
 20	20
+
+# two updates to one table
+statement ok
+begin;
+
+# creates one update
+statement ok
+create table create_table_t3 as select range d, range::VARCHAR e from range(100);
+
+# creates a second snapshot update
+statement ok
+insert into create_table_t3 select range d, range::VARCHAR e from range(100, 200);
+
+statement ok
+commit;
+
+# many updates to one table
+statement ok
+begin;
+
+# creates one update
+statement ok
+create table create_table_t4 as select range d, range::VARCHAR e from range(100);
+
+loop i 1 15
+
+# creates a second snapshot update
+statement ok
+insert into create_table_t4 select range d, range::VARCHAR e from range((${i} * 100), (${i} + 1) * 100);
+
+endloop
+
+# commit sends long commit body
+statement ok
+commit;
+
+
+query II nosort res_2
+select * from create_table_t4;
+----
+
+query II nosort res_2
+select range d, range::VARCHAR e from range(0,1500);
+----
