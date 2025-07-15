@@ -62,6 +62,7 @@ struct AddPartitionSpec : public IcebergTableUpdate {
 };
 
 struct AddSortOrder : public IcebergTableUpdate {
+	static constexpr const int64_t DEFAULT_SORT_ORDER_ID = 0;
 	static constexpr const IcebergTableUpdateType TYPE = IcebergTableUpdateType::ADD_SORT_ORDER;
 
 	explicit AddSortOrder(IcebergTableInformation &table_info);

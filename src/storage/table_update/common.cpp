@@ -103,10 +103,26 @@ void AddPartitionSpec::CreateUpdate(DatabaseInstance &db, ClientContext &context
 	req.add_partition_spec_update.has_action = true;
 	req.add_partition_spec_update.action = "add-spec";
 	req.add_partition_spec_update.spec.has_spec_id = true;
-	// auto current_schema_id = table_info.table_metadata.current_schema_id;
-	// auto &current_partition_spec = table_info.table_metadata.partition_specs[current_schema_id];
-	req.add_partition_spec_update.spec.spec_id = 0;
-	// TODO: Set partition fields here
+	req.add_partition_spec_update.spec.spec_id = table_info.table_metadata.default_spec_id;
+	idx_t partition_spec_id = req.add_partition_spec_update.spec.spec_id;
+	if (table_info.load_table_result.metadata.has_partition_specs) {
+		auto &table_partition_specs = table_info.load_table_result.metadata.partition_specs;
+		optional_ptr<rest_api_objects::PartitionSpec> current_partition_spect = nullptr;
+		for (auto &partition_spec : table_partition_specs) {
+			if (partition_spec.spec_id == partition_spec_id) {
+				current_partition_spect = partition_spec;
+			}
+		}
+		for (auto &field : current_partition_spect.get()->fields) {
+			req.add_partition_spec_update.spec.fields.push_back(rest_api_objects::PartitionField());
+			auto &updated_field = req.add_partition_spec_update.spec.fields.back();
+			updated_field.name = field.name;
+			updated_field.transform.value = field.transform.value;
+			updated_field.field_id = field.field_id;
+			updated_field.source_id = field.source_id;
+			updated_field.has_field_id = field.has_field_id;
+		}
+	}
 }
 
 AddSortOrder::AddSortOrder(IcebergTableInformation &table_info)
@@ -119,8 +135,29 @@ void AddSortOrder::CreateUpdate(DatabaseInstance &db, ClientContext &context, Ic
 	req.has_add_sort_order_update = true;
 	req.add_sort_order_update.has_action = true;
 	req.add_sort_order_update.action = "add-sort-order";
-	req.add_sort_order_update.sort_order.order_id = 0;
-	// TODO: Set sort order fields here
+	idx_t sort_order_id = 0;
+	if (table_info.load_table_result.metadata.has_default_sort_order_id) {
+		req.add_sort_order_update.sort_order.order_id = table_info.load_table_result.metadata.default_sort_order_id;
+		sort_order_id = req.add_sort_order_update.sort_order.order_id;
+	}
+
+	if (table_info.load_table_result.metadata.has_sort_orders) {
+		auto &table_sort_orders = table_info.load_table_result.metadata.sort_orders;
+		optional_ptr<rest_api_objects::SortOrder> current_sort_order = nullptr;
+		for (auto &sort_order : table_sort_orders) {
+			if (sort_order.order_id == sort_order_id) {
+				current_sort_order = sort_order;
+			}
+		}
+		for (auto &field : current_sort_order.get()->fields) {
+			req.add_sort_order_update.sort_order.fields.push_back(rest_api_objects::SortField());
+			auto &updated_field = req.add_sort_order_update.sort_order.fields.back();
+			updated_field.direction.value = field.direction.value;
+			updated_field.transform.value = field.transform.value;
+			updated_field.null_order.value = field.null_order.value;
+			updated_field.source_id = field.source_id;
+		}
+	}
 }
 
 SetDefaultSortOrder::SetDefaultSortOrder(IcebergTableInformation &table_info)
@@ -133,7 +170,8 @@ void SetDefaultSortOrder::CreateUpdate(DatabaseInstance &db, ClientContext &cont
 	req.has_set_default_sort_order_update = true;
 	req.set_default_sort_order_update.has_action = true;
 	req.set_default_sort_order_update.action = "set-default-sort-order";
-	req.set_default_sort_order_update.sort_order_id = 0;
+	D_ASSERT(table_info.load_table_result.metadata.has_default_sort_order_id);
+	req.set_default_sort_order_update.sort_order_id = table_info.load_table_result.metadata.default_sort_order_id;
 }
 
 SetDefaultSpec::SetDefaultSpec(IcebergTableInformation &table_info)
