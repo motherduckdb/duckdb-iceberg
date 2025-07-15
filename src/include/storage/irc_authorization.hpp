@@ -17,6 +17,7 @@ struct IcebergAttachOptions {
 	string secret;
 	string name;
 	bool allows_deletes = true;
+	bool support_nested_namespaces = false;
 	IRCAuthorizationType authorization_type = IRCAuthorizationType::INVALID;
 	unordered_map<string, Value> options;
 };

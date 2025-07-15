@@ -65,7 +65,6 @@ optional_ptr<SchemaCatalogEntry> IRCatalog::LookupSchema(CatalogTransaction tran
 }
 
 optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transaction, CreateSchemaInfo &info) {
-	Printer::Print("create schema?");
 	throw NotImplementedException("IRCatalog::CreateSchema not implemented");
 }
 
@@ -229,20 +228,10 @@ void IRCatalog::AddS3TablesEndpoints() {
 }
 
 void IRCatalog::GetConfig(ClientContext &context, IcebergEndpointType &endpoint_type) {
-	auto url = GetBaseUrl();
 	// set the prefix to be empty. To get the config endpoint,
 	// we cannot add a default prefix.
 	D_ASSERT(prefix.empty());
-	url.AddPathComponent("config");
-	url.SetParam("warehouse", warehouse);
-	auto response = auth_handler->GetRequest(context, url);
-	if (response->status != HTTPStatusCode::OK_200) {
-		throw InvalidConfigurationException("Request to '%s' returned a non-200 status code (%s), with reason: %s",
-		                                    url.GetURL(), EnumUtil::ToString(response->status), response->reason);
-	}
-	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(response->body));
-	auto *root = yyjson_doc_get_root(doc.get());
-	auto catalog_config = rest_api_objects::CatalogConfig::FromJSON(root);
+	auto catalog_config = IRCAPI::GetCatalogConfig(context, *this);
 
 	overrides = catalog_config.overrides;
 	defaults = catalog_config.defaults;
@@ -438,6 +427,9 @@ unique_ptr<Catalog> IRCatalog::Attach(StorageExtensionInfo *storage_info, Client
 		} else if (lower_name == "endpoint") {
 			attach_options.endpoint = StringUtil::Lower(entry.second.ToString());
 			StringUtil::RTrim(attach_options.endpoint, "/");
+		} else if (lower_name == "support_nested_namespaces") {
+			attach_options.support_nested_namespaces =
+			    entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
 		} else {
 			attach_options.options.emplace(std::move(entry));
 		}

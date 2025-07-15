@@ -11,21 +11,26 @@
 namespace duckdb {
 
 class IRCatalog;
+class IRCSchemaEntry;
 
 struct IRCAPISchema {
-	string schema_name;
+	//! The (potentially multiple) levels that the namespace is made up of
+	vector<string> items;
 	string catalog_name;
 };
 
 class IRCAPI {
 public:
 	static const string API_VERSION_1;
-	static vector<string> GetCatalogs(ClientContext &context, IRCatalog &catalog);
 	static vector<rest_api_objects::TableIdentifier> GetTables(ClientContext &context, IRCatalog &catalog,
-	                                                           const string &schema);
-	static rest_api_objects::LoadTableResult GetTable(ClientContext &context, IRCatalog &catalog, const string &schema,
-	                                                  const string &table_name);
-	static vector<IRCAPISchema> GetSchemas(ClientContext &context, IRCatalog &catalog);
+	                                                           const IRCSchemaEntry &schema);
+	static rest_api_objects::LoadTableResult GetTable(ClientContext &context, IRCatalog &catalog,
+	                                                  const IRCSchemaEntry &schema, const string &table_name);
+	static vector<IRCAPISchema> GetSchemas(ClientContext &context, IRCatalog &catalog, const vector<string> &parent);
+	static void CommitTableUpdate(ClientContext &context, IRCatalog &catalog, const vector<string> &schema,
+	                              const string &table_name, const string &body);
+	static void CommitMultiTableUpdate(ClientContext &context, IRCatalog &catalog, const string &body);
+	static rest_api_objects::CatalogConfig GetCatalogConfig(ClientContext &context, IRCatalog &catalog);
 };
 
 } // namespace duckdb

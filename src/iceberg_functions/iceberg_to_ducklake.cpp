@@ -921,7 +921,7 @@ public:
 				}
 
 				if (!current_partition_spec_id.IsValid() ||
-				    manifest.partition_spec_id > current_partition_spec_id.GetIndex()) {
+				    static_cast<idx_t>(manifest.partition_spec_id) > current_partition_spec_id.GetIndex()) {
 					auto &partition_spec = *metadata.FindPartitionSpecById(manifest.partition_spec_id);
 					auto new_partition = DuckLakePartition(partition_spec);
 					current_partition = table.AddPartition(new_partition, ducklake_snapshot);
@@ -1503,7 +1503,7 @@ public:
 		auto res = make_uniq<IcebergToDuckLakeGlobalTableFunctionState>(std::move(connection), metadata_catalog);
 		res->VerifyDuckLakeVersion();
 		res->VerifyEmptyCatalog();
-		return res;
+		return std::move(res);
 	}
 
 public:
