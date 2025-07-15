@@ -48,7 +48,6 @@ public:
 	int32_t iceberg_version;
 	int32_t current_schema_id;
 	int32_t default_spec_id;
-	// int32_t default_sort_order_id;
 
 	bool has_current_snapshot = false;
 	int64_t current_snapshot_id;
