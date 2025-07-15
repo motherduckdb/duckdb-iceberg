@@ -218,8 +218,7 @@ static rest_api_objects::TableRequirement CreateAssertRefSnapshotIdRequirement(I
 	return req;
 }
 
-rest_api_objects::LoadTableResult IRCTransaction::CommitNewTable(ClientContext &context, const ICTableEntry *table,
-                                                                 bool stage_create) {
+rest_api_objects::LoadTableResult IRCTransaction::CommitNewTable(ClientContext &context, const ICTableEntry *table) {
 	auto &ic_catalog = table->catalog.Cast<IRCatalog>();
 	auto table_namespace = table->schema.name;
 	auto url_builder = catalog.GetBaseUrl();
@@ -235,11 +234,9 @@ rest_api_objects::LoadTableResult IRCTransaction::CommitNewTable(ClientContext &
 
 	auto initial_schema = table->table_info.table_metadata.schemas[table->table_info.table_metadata.current_schema_id];
 	auto create_transaction = make_uniq<IcebergCreateTableRequest>(initial_schema, table->table_info.name);
-	if (stage_create && ic_catalog.attach_options.supports_stage_create) {
-		yyjson_mut_obj_add_bool(doc, root_object, "stage-create", stage_create);
-	} else {
-		yyjson_mut_obj_add_bool(doc, root_object, "stage-create", false);
-	}
+	// if stage create is supported, create the table with stage_create = true and the table update will
+	// commit the table.
+	yyjson_mut_obj_add_bool(doc, root_object, "stage-create", ic_catalog.attach_options.supports_stage_create);
 	auto create_table_json = create_transaction->CreateTableToJSON(std::move(doc_p));
 
 	try {

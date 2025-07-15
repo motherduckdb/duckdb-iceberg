@@ -71,7 +71,7 @@ void ICTableSet::LoadEntries(ClientContext &context) {
 }
 
 void ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema,
-                                CreateTableInfo &info, bool stage_create) {
+                                CreateTableInfo &info) {
 	auto table_name = info.table;
 	if (entries.find(table_name) != entries.end()) {
 		throw CatalogException("Table %s already exists", table_name.c_str());
@@ -92,7 +92,7 @@ void ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 	// Immediately create the table with stage_create = true to get metadata & data location(s)
 	// transaction commit will either commit with data (OR) create the table with stage_create = false
 	// on abort, hit DELETE endpoint with purge = TRUE?
-	auto load_table_result = irc_transaction.CommitNewTable(context, optional_entry, stage_create);
+	auto load_table_result = irc_transaction.CommitNewTable(context, optional_entry);
 	optional_entry->table_info.load_table_result = std::move(load_table_result);
 	optional_entry->table_info.table_metadata =
 	    IcebergTableMetadata::FromTableMetadata(optional_entry->table_info.load_table_result.metadata);

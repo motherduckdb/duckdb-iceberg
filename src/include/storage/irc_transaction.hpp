@@ -39,8 +39,7 @@ public:
 	IRCatalog &GetCatalog();
 	//! stage create = false, table is created immediately in the IRC
 	//! stage create = true, table is not created, but metadata is initialized and returned
-	rest_api_objects::LoadTableResult CommitNewTable(ClientContext &context, const ICTableEntry *table,
-	                                                 bool stage_create = false);
+	rest_api_objects::LoadTableResult CommitNewTable(ClientContext &context, const ICTableEntry *table);
 	void DropSecrets(ClientContext &context);
 	TableTransactionInfo GetTransactionRequest(ClientContext &context);
 

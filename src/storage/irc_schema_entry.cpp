@@ -31,15 +31,18 @@ IRCTransaction &GetUCTransaction(CatalogTransaction transaction) {
 }
 
 optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(IRCTransaction &irc_transaction, ClientContext &context,
-                                                       BoundCreateTableInfo &info, bool stage_create) {
+                                                       BoundCreateTableInfo &info) {
 	auto &base_info = info.Base();
 
 	auto &catalog = irc_transaction.GetCatalog();
 
 	// always posts to IRC catalog so we can get the metadata
-	tables.CreateNewEntry(context, catalog, *this, base_info, stage_create);
+	tables.CreateNewEntry(context, catalog, *this, base_info);
 	auto lookup_info = EntryLookupInfo(CatalogType::TABLE_ENTRY, base_info.table);
 	auto entry = tables.GetEntry(context, lookup_info);
+	// mark table as dirty so at the end of the transaction updates/creates are commited
+	auto &ic_entry = entry->Cast<ICTableEntry>();
+	irc_transaction.MarkTableAsDirty(ic_entry);
 
 	// get the entry from the catalog.
 	D_ASSERT(entry);
@@ -52,7 +55,7 @@ optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(CatalogTransaction transa
 	auto &irc_transaction = transaction.transaction->Cast<IRCTransaction>();
 	auto &context = transaction.context;
 	// directly create the table with stage_create = true;
-	return CreateTable(irc_transaction, *context, info, false);
+	return CreateTable(irc_transaction, *context, info);
 }
 
 void IRCSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {
