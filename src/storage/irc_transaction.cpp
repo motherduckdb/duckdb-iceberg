@@ -11,6 +11,7 @@
 #include "storage/table_update/iceberg_add_snapshot.hpp"
 #include "storage/table_create/iceberg_create_table_request.hpp"
 #include "catalog_utils.hpp"
+#include "duckdb/storage/table/update_state.hpp"
 
 namespace duckdb {
 
@@ -291,6 +292,10 @@ TableTransactionInfo IRCTransaction::GetTransactionRequest(ClientContext &contex
 
 		auto &transaction_data = *table->table_info.transaction_data;
 		for (auto &update : transaction_data.updates) {
+			if (update->type == IcebergTableUpdateType::ADD_SNAPSHOT) {
+				// we need to recreate the keys in the current context.
+				table->PrepareIcebergScanFromEntry(context);
+			}
 			update->CreateUpdate(db, context, commit_state);
 		}
 		for (auto &requirement : transaction_data.requirements) {
