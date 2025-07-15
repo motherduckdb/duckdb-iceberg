@@ -78,7 +78,6 @@ idx_t WriteToFile(IcebergTableInformation &table_info, const IcebergManifestFile
 	vector<LogicalType> types;
 
 	auto &current_partition_spec = table_info.table_metadata.GetLatestPartitionSpec();
-	auto &current_schema = table_info.table_metadata.GetLatestSchema();
 	{
 		// status: int - 0
 		names.push_back("status");
@@ -187,7 +186,7 @@ idx_t WriteToFile(IcebergTableInformation &table_info, const IcebergManifestFile
 		yyjson_mut_obj_add_strcpy(doc, partition_struct, "type", "struct");
 		//! NOTE: this has to be populated with the fields of the partition spec when we support INSERT into a
 		//! partitioned table
-		auto partition_fields = yyjson_mut_obj_add_arr(doc, partition_struct, "fields");
+		[[maybe_unused]] auto partition_fields = yyjson_mut_obj_add_arr(doc, partition_struct, "fields");
 	}
 
 	{

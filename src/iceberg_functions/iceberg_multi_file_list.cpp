@@ -297,11 +297,22 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &file) {
 		}
 
 		auto stats = IcebergPredicateStats::DeserializeBounds(lower_bound, upper_bound, column.name, column.type);
+
+		int64_t value_count = 0;
+		auto value_counts_it = file.value_counts.find(column_id);
+		if (value_counts_it != file.value_counts.end()) {
+			value_count = value_counts_it->second;
+		}
+
 		auto null_counts_it = file.null_value_counts.find(column_id);
 		if (null_counts_it != file.null_value_counts.end()) {
 			auto &null_counts = null_counts_it->second;
 			stats.has_null = null_counts != 0;
+			stats.has_not_null = (value_count - null_counts) > 0;
+		} else {
+			stats.has_not_null = value_count > 0;
 		}
+
 		auto nan_counts_it = file.nan_value_counts.find(column_id);
 		if (nan_counts_it != file.nan_value_counts.end()) {
 			auto &nan_counts = nan_counts_it->second;
@@ -361,20 +372,27 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 		optional_ptr<const IcebergManifestEntry> result;
 		while (data_file_idx < current_data_files.size()) {
 			auto &data_file = current_data_files[data_file_idx];
+			data_file_idx++;
+
+			// Check whether current data file is filtered out.
 			if (!table_filters.filters.empty() && !FileMatchesFilter(data_file)) {
 				DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'data_file': '%s'",
 				           data_file.file_path);
 				//! Skip this file
-				data_file_idx++;
+				continue;
+			}
+
+			// Check whether current data file belongs to an unknown puffin file, skip if so.
+			if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
+				//! Skip this file
 				continue;
 			}
 
 			result = data_file;
-			data_file_idx++;
 			break;
 		}
 		if (!result) {
-			return nullptr;
+			continue;
 		}
 
 		data_files.push_back(*result);
@@ -384,7 +402,6 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 }
 
 OpenFileInfo IcebergMultiFileList::GetFileInternal(idx_t file_id, lock_guard<mutex> &guard) {
-
 	if (!initialized) {
 		InitializeFiles(guard);
 	}
@@ -503,6 +520,7 @@ bool IcebergMultiFileList::ManifestMatchesFilter(const IcebergManifest &manifest
 		                                                      column.name, result_type);
 		stats.has_nan = field_summary.contains_nan;
 		stats.has_null = field_summary.contains_null;
+		stats.has_not_null = true; // Not enough information in field_summary to determine if this should be false
 
 		if (!IcebergPredicate::MatchBounds(*table_filter, stats, field.transform)) {
 			return false;

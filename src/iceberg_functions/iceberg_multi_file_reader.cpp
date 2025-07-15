@@ -237,7 +237,7 @@ static void ApplyPartitionConstants(const IcebergMultiFileList &multi_file_list,
 		}
 		optional_ptr<const Value> partition_value;
 		for (auto &it : partition_values) {
-			if (it.first == field.partition_field_id && !it.second.IsNull()) {
+			if (static_cast<uint64_t>(it.first) == field.partition_field_id && !it.second.IsNull()) {
 				partition_value = it.second;
 				break;
 			}

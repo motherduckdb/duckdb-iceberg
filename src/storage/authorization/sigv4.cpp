@@ -50,7 +50,7 @@ unique_ptr<IRCAuthorization> SIGV4Authorization::FromAttachOptions(IcebergAttach
 		}
 	}
 	input.options = std::move(remaining_options);
-	return result;
+	return std::move(result);
 }
 
 static string GetAwsRegion(const string &host) {
