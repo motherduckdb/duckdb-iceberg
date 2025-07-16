@@ -91,7 +91,7 @@ void ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 	optional_entry->table_info.table_metadata.schemas[0]->schema_id = 0;
 	// Immediately create the table with stage_create = true to get metadata & data location(s)
 	// transaction commit will either commit with data (OR) create the table with stage_create = false
-	auto load_table_result = irc_transaction.CommitNewTable(context, optional_entry);
+	auto load_table_result = IRCAPI::CommitNewTable(context, catalog, optional_entry);
 	optional_entry->table_info.load_table_result = std::move(load_table_result);
 	optional_entry->table_info.table_metadata =
 	    IcebergTableMetadata::FromTableMetadata(optional_entry->table_info.load_table_result.metadata);
