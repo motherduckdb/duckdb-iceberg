@@ -1,6 +1,9 @@
 #include "storage/irc_schema_entry.hpp"
+
 #include "storage/irc_table_entry.hpp"
 #include "storage/irc_transaction.hpp"
+#include "utils/iceberg_type.hpp"
+#include "duckdb/parser/column_list.hpp"
 #include "duckdb/parser/parsed_data/create_view_info.hpp"
 #include "duckdb/parser/parsed_data/create_index_info.hpp"
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
@@ -10,7 +13,6 @@
 #include "duckdb/parser/parsed_data/alter_info.hpp"
 #include "duckdb/parser/parsed_data/alter_table_info.hpp"
 #include "duckdb/parser/parsed_expression_iterator.hpp"
-
 namespace duckdb {
 
 IRCSchemaEntry::IRCSchemaEntry(Catalog &catalog, CreateSchemaInfo &info)
@@ -20,8 +22,39 @@ IRCSchemaEntry::IRCSchemaEntry(Catalog &catalog, CreateSchemaInfo &info)
 IRCSchemaEntry::~IRCSchemaEntry() {
 }
 
+IRCTransaction &GetICTransaction(CatalogTransaction transaction) {
+	if (!transaction.transaction) {
+		throw InternalException("No transaction!?");
+	}
+	return transaction.transaction->Cast<IRCTransaction>();
+}
+
+optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(IRCTransaction &irc_transaction, ClientContext &context,
+                                                       BoundCreateTableInfo &info) {
+	auto &base_info = info.Base();
+
+	auto &catalog = irc_transaction.GetCatalog();
+
+	// always posts to IRC catalog so we can get the metadata
+	tables.CreateNewEntry(context, catalog, *this, base_info);
+	auto lookup_info = EntryLookupInfo(CatalogType::TABLE_ENTRY, base_info.table);
+	auto entry = tables.GetEntry(context, lookup_info);
+	// mark table as dirty so at the end of the transaction updates/creates are commited
+	auto &ic_entry = entry->Cast<ICTableEntry>();
+	irc_transaction.MarkTableAsDirty(ic_entry);
+
+	// get the entry from the catalog.
+	D_ASSERT(entry);
+	D_ASSERT(entry->type == CatalogType::TABLE_ENTRY);
+
+	return entry;
+}
+
 optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(CatalogTransaction transaction, BoundCreateTableInfo &info) {
-	throw NotImplementedException("Create Table");
+	auto &irc_transaction = transaction.transaction->Cast<IRCTransaction>();
+	auto &context = transaction.context;
+	// directly create the table with stage_create = true;
+	return CreateTable(irc_transaction, *context, info);
 }
 
 void IRCSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {

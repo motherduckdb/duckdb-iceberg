@@ -12,6 +12,7 @@
 #include "duckdb/parser/parsed_data/create_schema_info.hpp"
 #include "duckdb/main/attached_database.hpp"
 #include "rest_catalog/objects/catalog_config.hpp"
+#include "duckdb/planner/operator/logical_create_table.hpp"
 #include "storage/irc_catalog.hpp"
 
 #include <regex>
@@ -91,28 +92,12 @@ optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transactio
 }
 
 void IRCatalog::DropSchema(ClientContext &context, DropInfo &info) {
-	rest_api_objects::CreateNamespaceRequest request;
-	request.has_properties = false;
-	request._namespace.value.push_back(info.schema);
-	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-	auto doc = doc_p.get();
-	auto root_object = yyjson_mut_obj(doc);
-	yyjson_mut_doc_set_root(doc, root_object);
-	auto namespace_arr = yyjson_mut_obj_add_arr(doc, root_object, "namespace");
-	for (auto &name : request._namespace.value) {
-		yyjson_mut_arr_add_strcpy(doc, namespace_arr, name.c_str());
-	}
-	// properties object is also requeried. Empty for now since we don't support properties
-	auto properties_obj = yyjson_mut_obj_add_obj(doc, root_object, "properties");
-
-	auto create_body = ICUtils::JsonToString(std::move(doc_p));
-	IRCAPI::CommitNamespaceCreate(context, *this, create_body);
+	// TODO: how to handle nested namespaces
+	vector<string> namespace_items;
+	namespace_items.push_back(info.name);
+	IRCAPI::CommitNamespaceDrop(context, *this, namespace_items);
 }
 
-PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalPlanGenerator &planner,
-                                               LogicalCreateTable &op, PhysicalOperator &plan) {
-	throw NotImplementedException("IRCatalog PlanCreateTableAs");
-}
 PhysicalOperator &IRCatalog::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,
                                         PhysicalOperator &plan) {
 	throw NotImplementedException("IRCatalog PlanDelete");
@@ -464,6 +449,9 @@ unique_ptr<Catalog> IRCatalog::Attach(StorageExtensionInfo *storage_info, Client
 		} else if (lower_name == "endpoint") {
 			attach_options.endpoint = StringUtil::Lower(entry.second.ToString());
 			StringUtil::RTrim(attach_options.endpoint, "/");
+		} else if (lower_name == "supports_stage_create") {
+			auto result = entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+			attach_options.supports_stage_create = result;
 		} else if (lower_name == "support_nested_namespaces") {
 			attach_options.support_nested_namespaces =
 			    entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
@@ -479,12 +467,14 @@ unique_ptr<Catalog> IRCatalog::Attach(StorageExtensionInfo *storage_info, Client
 		case IcebergEndpointType::AWS_GLUE: {
 			GlueAttach(context, attach_options);
 			endpoint_type = IcebergEndpointType::AWS_GLUE;
+			attach_options.supports_stage_create = false;
 			break;
 		}
 		case IcebergEndpointType::AWS_S3TABLES: {
 			S3TablesAttach(attach_options);
 			endpoint_type = IcebergEndpointType::AWS_S3TABLES;
 			attach_options.allows_deletes = false;
+			attach_options.supports_stage_create = false;
 			break;
 		}
 		default:

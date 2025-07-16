@@ -17,7 +17,7 @@
 #include "duckdb/planner/tableref/bound_at_clause.hpp"
 
 #include "rest_catalog/objects/list.hpp"
-#include "storage/irc_transaction.hpp"
+#include "storage/iceberg_table_information.hpp"
 
 namespace duckdb {
 
@@ -36,7 +36,7 @@ void ICTableEntry::BindUpdateConstraints(Binder &binder, LogicalGet &, LogicalPr
 	throw NotImplementedException("BindUpdateConstraints");
 }
 
-string ICTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) {
+string ICTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) const {
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
 	auto &secret_manager = SecretManager::Get(context);
 

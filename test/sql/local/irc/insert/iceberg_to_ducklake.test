@@ -1,6 +1,5 @@
-# name: test/sql/local/irc/create/create_schema.test
-# description: test integration with iceberg catalog read
-# group: [create]
+# name: test/sql/local/irc/insert/iceberg_to_ducklake.test
+# group: [insert]
 
 require-env ICEBERG_SERVER_AVAILABLE
 
@@ -12,11 +11,13 @@ require iceberg
 
 require httpfs
 
+require ducklake
+
 # Do not ignore 'HTTP' error messages!
 set ignore_error_messages
 
 statement ok
-pragma enable_logging('HTTP');
+set enable_logging=true
 
 statement ok
 set logging_level='debug'
@@ -40,14 +41,15 @@ ATTACH '' AS my_datalake (
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
+statement ok
+ATTACH 'ducklake:duckdb:__TEST_DIR__/ducklake.duckdb' as my_ducklake (DATA_PATH '__TEST_DIR__/data_path');
 
 statement ok
-create schema my_datalake.new_schema_1;
-
-statement ok
-create table my_datalake.new_schema_1.my_table as select range a from range(100);
-
-statement ok
-drop table my_datalake.new_schema_1.my_table;
-
-statement ok
+call iceberg_to_ducklake(
+    'my_datalake',
+    'my_ducklake',
+    skip_tables := [
+        'pyspark_iceberg_table_v2',
+        'deletion_vectors'
+    ]
+)

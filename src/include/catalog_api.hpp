@@ -5,6 +5,7 @@
 #include "duckdb/parser/parsed_data/create_table_info.hpp"
 #include "duckdb/parser/parsed_data/create_secret_info.hpp"
 #include "iceberg_metadata.hpp"
+#include "storage/irc_table_entry.hpp"
 #include "rest_catalog/objects/table_identifier.hpp"
 #include "rest_catalog/objects/load_table_result.hpp"
 
@@ -33,7 +34,11 @@ public:
 	                              const string &table_name);
 	static void CommitMultiTableUpdate(ClientContext &context, IRCatalog &catalog, const string &body);
 	static void CommitNamespaceCreate(ClientContext &context, IRCatalog &catalog, string body);
-	static void CommitNamespaceDrop(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema);
+	static void CommitNamespaceDrop(ClientContext &context, IRCatalog &catalog, vector<string> namespace_items);
+	//! stage create = false, table is created immediately in the IRC
+	//! stage create = true, table is not created, but metadata is initialized and returned
+	static rest_api_objects::LoadTableResult CommitNewTable(ClientContext &context, IRCatalog &catalog,
+	                                                        const ICTableEntry *table);
 	static rest_api_objects::CatalogConfig GetCatalogConfig(ClientContext &context, IRCatalog &catalog);
 };
 
