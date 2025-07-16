@@ -179,7 +179,8 @@ void IRCAPI::CommitTableUpdate(ClientContext &context, IRCatalog &catalog, const
 
 rest_api_objects::LoadTableResult IRCAPI::CommitNewTable(ClientContext &context, IRCatalog &catalog, const ICTableEntry *table) {
 	auto &ic_catalog = table->catalog.Cast<IRCatalog>();
-	auto table_namespace = table->schema.name;
+	auto &ic_schema = table->schema.Cast<IRCSchemaEntry>();
+	auto table_namespace = GetEncodedSchemaName(ic_schema.namespace_items);
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPathComponent(catalog.prefix);
 	url_builder.AddPathComponent("namespaces");
