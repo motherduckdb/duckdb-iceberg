@@ -26,6 +26,9 @@ public:
 		return schemas;
 	}
 	void MarkTableAsDirty(const ICTableEntry &table);
+	void MarkTableAsDeleted(const ICTableEntry &table);
+	void DoTableUpdates(ClientContext &context);
+	void DoTableDeletes(ClientContext &context);
 	bool DirtyTablesHaveUpdates();
 	void DropSecrets(ClientContext &context);
 	rest_api_objects::CommitTransactionRequest GetTransactionRequest(ClientContext &context);
@@ -42,6 +45,7 @@ public:
 	IRCSchemaSet schemas;
 	//! Tables marked dirty in this transaction, to be rewritten on commit
 	unordered_set<const ICTableEntry *> dirty_tables;
+	unordered_set<const ICTableEntry *> deleted_tables;
 	case_insensitive_set_t created_secrets;
 };
 

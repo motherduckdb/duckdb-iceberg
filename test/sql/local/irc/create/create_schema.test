@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/iceberg_catalog_eager_refresh.test
+# name: test/sql/local/irc/create/create_schema.test
 # description: test integration with iceberg catalog read
-# group: [irc]
+# group: [create]
 
 require-env ICEBERG_SERVER_AVAILABLE
 
@@ -42,4 +42,4 @@ ATTACH '' AS my_datalake (
 
 
 statement ok
-drop table my_datalake.default.test_inserts;
+create schema my_datalake.new_schema;

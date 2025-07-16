@@ -29,6 +29,8 @@ public:
 	static vector<IRCAPISchema> GetSchemas(ClientContext &context, IRCatalog &catalog, const vector<string> &parent);
 	static void CommitTableUpdate(ClientContext &context, IRCatalog &catalog, const vector<string> &schema,
 	                              const string &table_name, const string &body);
+	static void CommitTableDelete(ClientContext &context, IRCatalog &catalog, const vector<string> &schema,
+	                              const string &table_name);
 	static void CommitMultiTableUpdate(ClientContext &context, IRCatalog &catalog, const string &body);
 	static rest_api_objects::CatalogConfig GetCatalogConfig(ClientContext &context, IRCatalog &catalog);
 };

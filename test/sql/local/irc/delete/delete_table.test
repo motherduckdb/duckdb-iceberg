@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/iceberg_catalog_eager_refresh.test
+# name: test/sql/local/irc/delete/delete_table.test
 # description: test integration with iceberg catalog read
-# group: [irc]
+# group: [delete]
 
 require-env ICEBERG_SERVER_AVAILABLE
 
@@ -40,6 +40,34 @@ ATTACH '' AS my_datalake (
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
+# wait for create table PR to land.
+mode skip
 
 statement ok
-drop table my_datalake.default.insert_test;
+begin;
+
+statement ok
+drop table my_datalake.default.nation;
+
+statement error
+select * from my_datalake.default.nation;
+<REGEX>.*does not exist.*
+
+statement ok
+abort;
+
+statement ok
+select * from my_datalake.default.nation
+
+statement ok
+begin;
+
+statement ok
+drop table my_datalake.default.nation;
+
+statement ok
+commit;
+
+statement error
+select * from my_datalake.default.nation;
+<REGEX>.*does not exist.*

@@ -276,6 +276,9 @@ optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const En
 	if (entry == entries.end()) {
 		return nullptr;
 	}
+	if (entry->second.deleted) {
+		return nullptr;
+	}
 	FillEntry(context, entry->second);
 	return entry->second.GetSchemaVersion(lookup.GetAtClause());
 }

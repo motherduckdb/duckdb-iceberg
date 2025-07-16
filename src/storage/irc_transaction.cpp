@@ -22,6 +22,10 @@ void IRCTransaction::MarkTableAsDirty(const ICTableEntry &table) {
 	dirty_tables.insert(&table);
 }
 
+void IRCTransaction::MarkTableAsDeleted(const ICTableEntry &table) {
+	deleted_tables.insert(&table);
+}
+
 void IRCTransaction::Start() {
 }
 
@@ -198,16 +202,9 @@ bool IRCTransaction::DirtyTablesHaveUpdates() {
 	return false;
 }
 
-void IRCTransaction::Commit() {
-	if (dirty_tables.empty()) {
-		return;
-	}
-
-	Connection temp_con(db);
-	temp_con.BeginTransaction();
-	auto &context = temp_con.context;
-	try {
-		auto transaction = GetTransactionRequest(*context);
+void IRCTransaction::DoTableUpdates(ClientContext &context) {
+	if (!dirty_tables.empty()) {
+		auto transaction = GetTransactionRequest(context);
 		if (catalog.supported_urls.find("POST /v1/{prefix}/transactions/commit") != catalog.supported_urls.end()) {
 			// commit all transactions at once
 			std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
@@ -217,7 +214,7 @@ void IRCTransaction::Commit() {
 
 			CommitTransactionToJSON(doc, root_object, transaction);
 			auto transaction_json = JsonDocToString(std::move(doc_p));
-			IRCAPI::CommitMultiTableUpdate(*context, catalog, transaction_json);
+			IRCAPI::CommitMultiTableUpdate(context, catalog, transaction_json);
 		} else {
 			D_ASSERT(catalog.supported_urls.find("POST /v1/{prefix}/namespaces/{namespace}/tables/{table}") !=
 			         catalog.supported_urls.end());
@@ -225,11 +222,33 @@ void IRCTransaction::Commit() {
 			for (auto &table_change : transaction.table_changes) {
 				D_ASSERT(table_change.has_identifier);
 				auto transaction_json = ConstructTableUpdateJSON(table_change);
-				IRCAPI::CommitTableUpdate(*context, catalog, table_change.identifier._namespace.value,
+				IRCAPI::CommitTableUpdate(context, catalog, table_change.identifier._namespace.value,
 				                          table_change.identifier.name, transaction_json);
 			}
 		}
-		DropSecrets(*context);
+		DropSecrets(context);
+	}
+}
+
+void IRCTransaction::DoTableDeletes(ClientContext &context) {
+	for (auto &table : deleted_tables) {
+		auto a = 0;
+		auto &irc_schema = table->ParentSchema().Cast<IRCSchemaEntry>();
+		IRCAPI::CommitTableDelete(context, catalog, irc_schema.namespace_items, table->name);
+	}
+}
+
+void IRCTransaction::Commit() {
+	if (dirty_tables.empty() && deleted_tables.empty()) {
+		return;
+	}
+
+	Connection temp_con(db);
+	temp_con.BeginTransaction();
+	auto &context = temp_con.context;
+	try {
+		DoTableUpdates(*context);
+		DoTableDeletes(*context);
 	} catch (std::exception &ex) {
 		ErrorData error(ex);
 		CleanupFiles();
