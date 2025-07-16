@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/create/test_create_schema_table.test
+# name: test/sql/local/irc/create/test_create_and_delete_schema_table.test
 # description: test integration with iceberg catalog read
 # group: [create]
 
@@ -55,7 +55,7 @@ query I nosort res_1
 select * from range(100);
 ----
 
-query I
+query Igit
 select name from (show all tables) where schema = 'new_schema_1';
 ----
 my_table

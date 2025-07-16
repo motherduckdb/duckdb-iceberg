@@ -40,34 +40,34 @@ ATTACH '' AS my_datalake (
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
-# wait for create table PR to land.
-mode skip
+statement ok
+create table my_datalake.default.test_delete_table as select range a from range(10);
 
 statement ok
 begin;
 
 statement ok
-drop table my_datalake.default.nation;
+drop table my_datalake.default.test_delete_table;
 
 statement error
-select * from my_datalake.default.nation;
+select * from my_datalake.default.test_delete_table;
 <REGEX>.*does not exist.*
 
 statement ok
 abort;
 
 statement ok
-select * from my_datalake.default.nation
+select * from my_datalake.default.test_delete_table
 
 statement ok
 begin;
 
 statement ok
-drop table my_datalake.default.nation;
+drop table my_datalake.default.test_delete_table;
 
 statement ok
 commit;
 
 statement error
-select * from my_datalake.default.nation;
+select * from my_datalake.default.test_delete_table;
 <REGEX>.*does not exist.*
