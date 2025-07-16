@@ -218,8 +218,8 @@ void IRCAPI::CommitNamespaceDrop(ClientContext &context, IRCatalog &catalog, vec
 	auto response = catalog.auth_handler->DeleteRequest(context, url_builder);
 	if (response->status != HTTPStatusCode::OK_200) {
 		throw InvalidConfigurationException(
-			"Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s", url_builder.GetURL(),
-			EnumUtil::ToString(response->status), response->reason, response->body);
+		    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s", url_builder.GetURL(),
+		    EnumUtil::ToString(response->status), response->reason, response->body);
 	}
 }
 

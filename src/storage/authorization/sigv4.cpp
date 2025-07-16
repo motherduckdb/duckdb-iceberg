@@ -140,7 +140,7 @@ unique_ptr<HTTPResponse> SIGV4Authorization::GetRequest(ClientContext &context,
 }
 
 unique_ptr<HTTPResponse> SIGV4Authorization::DeleteRequest(ClientContext &context,
-														const IRCEndpointBuilder &endpoint_builder) {
+                                                           const IRCEndpointBuilder &endpoint_builder) {
 	AWSInput aws_input;
 	aws_input.cert_path = APIUtils::GetCURLCertPath();
 	// Set the user Agent.
@@ -171,7 +171,7 @@ unique_ptr<HTTPResponse> SIGV4Authorization::DeleteRequest(ClientContext &contex
 	aws_input.key_id = kv_secret.secret_map["key_id"].GetValue<string>();
 	aws_input.secret = kv_secret.secret_map["secret"].GetValue<string>();
 	aws_input.session_token =
-		kv_secret.secret_map["session_token"].IsNull() ? "" : kv_secret.secret_map["session_token"].GetValue<string>();
+	    kv_secret.secret_map["session_token"].IsNull() ? "" : kv_secret.secret_map["session_token"].GetValue<string>();
 
 	return aws_input.DeleteRequest(context);
 }

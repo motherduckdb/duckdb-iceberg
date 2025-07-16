@@ -18,7 +18,7 @@ unique_ptr<HTTPResponse> NoneAuthorization::GetRequest(ClientContext &context,
 }
 
 unique_ptr<HTTPResponse> NoneAuthorization::DeleteRequest(ClientContext &context,
-													   const IRCEndpointBuilder &endpoint_builder) {
+                                                          const IRCEndpointBuilder &endpoint_builder) {
 	return APIUtils::DeleteRequest(context, endpoint_builder, "");
 }
 

@@ -32,7 +32,8 @@ static string AddHttpHostIfMissing(const string &url) {
 	return "http://" + url;
 }
 
-unique_ptr<HTTPResponse> APIUtils::DeleteRequest(ClientContext &context, const IRCEndpointBuilder &endpoint_builder, const string &token) {
+unique_ptr<HTTPResponse> APIUtils::DeleteRequest(ClientContext &context, const IRCEndpointBuilder &endpoint_builder,
+                                                 const string &token) {
 	auto &db = DatabaseInstance::GetDatabase(context);
 
 	HTTPHeaders headers(db);

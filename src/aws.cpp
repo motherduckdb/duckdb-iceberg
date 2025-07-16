@@ -212,7 +212,7 @@ unique_ptr<HTTPResponse> AWSInput::DeleteRequest(ClientContext &context) {
 
 	const Aws::Http::URI uri_const = Aws::Http::URI(uri);
 	auto request = Aws::Http::CreateHttpRequest(uri_const, Aws::Http::HttpMethod::HTTP_DELETE,
-												Aws::Utils::Stream::DefaultResponseStreamFactoryMethod);
+	                                            Aws::Utils::Stream::DefaultResponseStreamFactoryMethod);
 	request->SetUserAgent(user_agent);
 
 	signer->SignRequest(*request);
@@ -224,8 +224,8 @@ unique_ptr<HTTPResponse> AWSInput::DeleteRequest(ClientContext &context) {
 	std::shared_ptr<Aws::Http::HttpResponse> res = MyHttpClient->MakeRequest(request);
 	Aws::Http::HttpResponseCode resCode = res->GetResponseCode();
 	DUCKDB_LOG(context, IcebergLogType,
-			   "Delete %s (response %d) (signed with key_id '%s' for service '%s', in region '%s')", uri.GetURIString(),
-			   resCode, key_id, service.c_str(), region.c_str());
+	           "Delete %s (response %d) (signed with key_id '%s' for service '%s', in region '%s')", uri.GetURIString(),
+	           resCode, key_id, service.c_str(), region.c_str());
 
 	unique_ptr<HTTPResponse> result = make_uniq<HTTPResponse>(HTTPStatusCode(static_cast<idx_t>(resCode)));
 	result->url = uri.GetURIString();
