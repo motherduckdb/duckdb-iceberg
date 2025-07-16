@@ -67,6 +67,10 @@ optional_ptr<SchemaCatalogEntry> IRCatalog::LookupSchema(CatalogTransaction tran
 
 optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transaction, CreateSchemaInfo &info) {
 	optional_ptr<ClientContext> context = transaction.GetContext();
+	if (info.on_conflict == OnCreateConflict::REPLACE_ON_CONFLICT) {
+		throw InvalidInputException("CREATE OR REPLACE not supported in DuckDB-Iceberg");
+	}
+
 	D_ASSERT(context.get() != nullptr);
 	rest_api_objects::CreateNamespaceRequest request;
 	request.has_properties = false;
@@ -83,6 +87,7 @@ optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transactio
 	auto properties_obj = yyjson_mut_obj_add_obj(doc, root_object, "properties");
 	auto create_body = ICUtils::JsonToString(std::move(doc_p));
 	IRCAPI::CommitNamespaceCreate(*context.get(), *this, create_body);
+
 	auto &irc_transaction = IRCTransaction::Get(transaction.GetContext(), *this);
 	auto &schemas = irc_transaction.GetSchemas();
 	auto new_schema = make_uniq<IRCSchemaEntry>(*this, info);
