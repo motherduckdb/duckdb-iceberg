@@ -32,6 +32,8 @@ public:
 	static void CommitTableDelete(ClientContext &context, IRCatalog &catalog, const vector<string> &schema,
 	                              const string &table_name);
 	static void CommitMultiTableUpdate(ClientContext &context, IRCatalog &catalog, const string &body);
+	static void CommitNamespaceCreate(ClientContext &context, IRCatalog &catalog, string body);
+	static void CommitNamespaceDrop(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema);
 	static rest_api_objects::CatalogConfig GetCatalogConfig(ClientContext &context, IRCatalog &catalog);
 };
 

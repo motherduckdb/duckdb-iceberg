@@ -65,9 +65,34 @@ optional_ptr<SchemaCatalogEntry> IRCatalog::LookupSchema(CatalogTransaction tran
 }
 
 optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transaction, CreateSchemaInfo &info) {
+	optional_ptr<ClientContext> context = transaction.GetContext();
+	D_ASSERT(context.get() != nullptr);
 	rest_api_objects::CreateNamespaceRequest request;
 	request.has_properties = false;
+	request._namespace.value.push_back(info.schema);
+	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
+	auto doc = doc_p.get();
+	auto root_object = yyjson_mut_obj(doc);
+	yyjson_mut_doc_set_root(doc, root_object);
+	auto namespace_arr = yyjson_mut_obj_add_arr(doc, root_object, "namespace");
+	for (auto &name : request._namespace.value) {
+		yyjson_mut_arr_add_strcpy(doc, namespace_arr, name.c_str());
+	}
+	// properties object is also requeried. Empty for now since we don't support properties
+	auto properties_obj = yyjson_mut_obj_add_obj(doc, root_object, "properties");
+	auto create_body = ICUtils::JsonToString(std::move(doc_p));
+	IRCAPI::CommitNamespaceCreate(*context.get(), *this, create_body);
+	auto &irc_transaction = IRCTransaction::Get(transaction.GetContext(), *this);
+	auto &schemas = irc_transaction.GetSchemas();
+	auto new_schema = make_uniq<IRCSchemaEntry>(*this, info);
+	schemas.entries.insert(make_pair(new_schema->name, std::move(new_schema)));
+	auto ret = schemas.entries.find(info.schema);
+	return ret->second.get();
+}
 
+void IRCatalog::DropSchema(ClientContext &context, DropInfo &info) {
+	rest_api_objects::CreateNamespaceRequest request;
+	request.has_properties = false;
 	request._namespace.value.push_back(info.schema);
 	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
 	auto doc = doc_p.get();
@@ -81,14 +106,7 @@ optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transactio
 	auto properties_obj = yyjson_mut_obj_add_obj(doc, root_object, "properties");
 
 	auto create_body = ICUtils::JsonToString(std::move(doc_p));
-	Printer::Print("here we send a post body to create the namespace");
-	Printer::Print(create_body);
-
-	throw NotImplementedException("IRCatalog::CreateSchema not implemented");
-}
-
-void IRCatalog::DropSchema(ClientContext &context, DropInfo &info) {
-	throw NotImplementedException("IRCatalog::DropSchema not implemented");
+	IRCAPI::CommitNamespaceCreate(context, *this, create_body);
 }
 
 PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalPlanGenerator &planner,

@@ -42,4 +42,4 @@ ATTACH '' AS my_datalake (
 
 
 statement ok
-create schema my_datalake.new_schema;
+create schema my_datalake.new_schema_2;

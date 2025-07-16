@@ -195,6 +195,34 @@ void IRCAPI::CommitTableDelete(ClientContext &context, IRCatalog &catalog, const
 	}
 }
 
+void IRCAPI::CommitNamespaceCreate(ClientContext &context, IRCatalog &catalog, string body) {
+	auto url_builder = catalog.GetBaseUrl();
+	url_builder.AddPathComponent(catalog.prefix);
+	url_builder.AddPathComponent("namespaces");
+
+	auto response = catalog.auth_handler->PostRequest(context, url_builder, body);
+	if (response->status != HTTPStatusCode::OK_200) {
+		throw InvalidConfigurationException(
+		    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s", url_builder.GetURL(),
+		    EnumUtil::ToString(response->status), response->reason, response->body);
+	}
+}
+
+void IRCAPI::CommitNamespaceDrop(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema) {
+	auto url_builder = catalog.GetBaseUrl();
+	auto schema_name = GetEncodedSchemaName(schema.namespace_items);
+	url_builder.AddPathComponent(catalog.prefix);
+	url_builder.AddPathComponent("namespaces");
+	url_builder.AddPathComponent(schema_name);
+
+	auto response = catalog.auth_handler->DeleteRequest(context, url_builder);
+	if (response->status != HTTPStatusCode::OK_200) {
+		throw InvalidConfigurationException(
+		    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s", url_builder.GetURL(),
+		    EnumUtil::ToString(response->status), response->reason, response->body);
+	}
+}
+
 rest_api_objects::CatalogConfig IRCAPI::GetCatalogConfig(ClientContext &context, IRCatalog &catalog) {
 	auto url = catalog.GetBaseUrl();
 	url.AddPathComponent("config");
