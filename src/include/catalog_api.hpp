@@ -5,6 +5,7 @@
 #include "duckdb/parser/parsed_data/create_table_info.hpp"
 #include "duckdb/parser/parsed_data/create_secret_info.hpp"
 #include "iceberg_metadata.hpp"
+#include "storage/irc_table_entry.hpp"
 #include "rest_catalog/objects/table_identifier.hpp"
 #include "rest_catalog/objects/load_table_result.hpp"
 
@@ -30,6 +31,10 @@ public:
 	static void CommitTableUpdate(ClientContext &context, IRCatalog &catalog, const vector<string> &schema,
 	                              const string &table_name, const string &body);
 	static void CommitMultiTableUpdate(ClientContext &context, IRCatalog &catalog, const string &body);
+	//! stage create = false, table is created immediately in the IRC
+	//! stage create = true, table is not created, but metadata is initialized and returned
+	static rest_api_objects::LoadTableResult CommitNewTable(ClientContext &context, IRCatalog &catalog,
+	                                                        const ICTableEntry *table);
 	static rest_api_objects::CatalogConfig GetCatalogConfig(ClientContext &context, IRCatalog &catalog);
 };
 

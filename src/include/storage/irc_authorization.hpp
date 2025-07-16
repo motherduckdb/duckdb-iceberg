@@ -16,6 +16,8 @@ struct IcebergAttachOptions {
 	string warehouse;
 	string secret;
 	string name;
+	// some catalogs do not yet support stage create
+	bool supports_stage_create = true;
 	bool allows_deletes = true;
 	bool support_nested_namespaces = false;
 	IRCAuthorizationType authorization_type = IRCAuthorizationType::INVALID;

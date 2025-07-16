@@ -12,6 +12,7 @@
 #include "duckdb/parser/parsed_data/create_schema_info.hpp"
 #include "duckdb/main/attached_database.hpp"
 #include "rest_catalog/objects/catalog_config.hpp"
+#include "duckdb/planner/operator/logical_create_table.hpp"
 #include "storage/irc_catalog.hpp"
 
 #include <regex>
@@ -72,10 +73,6 @@ void IRCatalog::DropSchema(ClientContext &context, DropInfo &info) {
 	throw NotImplementedException("IRCatalog::DropSchema not implemented");
 }
 
-PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalPlanGenerator &planner,
-                                               LogicalCreateTable &op, PhysicalOperator &plan) {
-	throw NotImplementedException("IRCatalog PlanCreateTableAs");
-}
 PhysicalOperator &IRCatalog::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,
                                         PhysicalOperator &plan) {
 	throw NotImplementedException("IRCatalog PlanDelete");
@@ -427,6 +424,9 @@ unique_ptr<Catalog> IRCatalog::Attach(StorageExtensionInfo *storage_info, Client
 		} else if (lower_name == "endpoint") {
 			attach_options.endpoint = StringUtil::Lower(entry.second.ToString());
 			StringUtil::RTrim(attach_options.endpoint, "/");
+		} else if (lower_name == "supports_stage_create") {
+			auto result = entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+			attach_options.supports_stage_create = result;
 		} else if (lower_name == "support_nested_namespaces") {
 			attach_options.support_nested_namespaces =
 			    entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
@@ -442,12 +442,14 @@ unique_ptr<Catalog> IRCatalog::Attach(StorageExtensionInfo *storage_info, Client
 		case IcebergEndpointType::AWS_GLUE: {
 			GlueAttach(context, attach_options);
 			endpoint_type = IcebergEndpointType::AWS_GLUE;
+			attach_options.supports_stage_create = false;
 			break;
 		}
 		case IcebergEndpointType::AWS_S3TABLES: {
 			S3TablesAttach(attach_options);
 			endpoint_type = IcebergEndpointType::AWS_S3TABLES;
 			attach_options.allows_deletes = false;
+			attach_options.supports_stage_create = false;
 			break;
 		}
 		default:
