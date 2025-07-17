@@ -18,8 +18,11 @@ struct IcebergAttachOptions {
 	string name;
 	// some catalogs do not yet support stage create
 	bool supports_stage_create = true;
+	// other catalogs do not allow manual deletes/cleanup
 	bool allows_deletes = true;
 	bool support_nested_namespaces = false;
+	bool purge_requested = false;
+
 	IRCAuthorizationType authorization_type = IRCAuthorizationType::INVALID;
 	unordered_map<string, Value> options;
 };

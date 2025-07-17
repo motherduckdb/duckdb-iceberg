@@ -187,11 +187,11 @@ void IRCAPI::CommitTableDelete(ClientContext &context, IRCatalog &catalog, const
 	url_builder.AddPathComponent("tables");
 	url_builder.AddPathComponent(table_name);
 	Value purge_requested;
-	context.TryGetCurrentSetting("delete_table.purge_requested", purge_requested);
-	url_builder.SetParam("purgeRequested", purge_requested.ToString());
+	url_builder.SetParam("purgeRequested", Value::BOOLEAN(catalog.attach_options.purge_requested).ToString());
 
 	auto response = catalog.auth_handler->DeleteRequest(context, url_builder);
-	if (response->status != HTTPStatusCode::OK_200) {
+	// Glue/S3Tables follow spec and return 204, apache/iceberg-rest-fixture docker image returns 200
+	if (response->status != HTTPStatusCode::NoContent_204 || response->status != HTTPStatusCode::OK_200) {
 		throw InvalidConfigurationException(
 		    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s", url_builder.GetURL(),
 		    EnumUtil::ToString(response->status), response->reason, response->body);
@@ -219,6 +219,7 @@ void IRCAPI::CommitNamespaceDrop(ClientContext &context, IRCatalog &catalog, vec
 	url_builder.AddPathComponent(schema_name);
 
 	auto response = catalog.auth_handler->DeleteRequest(context, url_builder);
+	// Glue/S3Tables follow spec and return 204, apache/iceberg-rest-fixture docker image returns 200
 	if (response->status != HTTPStatusCode::OK_200) {
 		throw InvalidConfigurationException(
 		    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s", url_builder.GetURL(),

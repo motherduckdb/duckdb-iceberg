@@ -440,6 +440,7 @@ unique_ptr<Catalog> IRCatalog::Attach(StorageExtensionInfo *storage_info, Client
 
 	// check if we have a secret provided
 	string secret_name;
+	case_insensitive_set_t set_by_attach_options;
 	//! First handle generic attach options
 	for (auto &entry : info.options) {
 		auto lower_name = StringUtil::Lower(entry.first);
@@ -454,12 +455,17 @@ unique_ptr<Catalog> IRCatalog::Attach(StorageExtensionInfo *storage_info, Client
 		} else if (lower_name == "endpoint") {
 			attach_options.endpoint = StringUtil::Lower(entry.second.ToString());
 			StringUtil::RTrim(attach_options.endpoint, "/");
-		} else if (lower_name == "supports_stage_create") {
+		} else if (lower_name == "support_stage_create") {
 			auto result = entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
 			attach_options.supports_stage_create = result;
+			set_by_attach_options.insert("supports_stage_create");
 		} else if (lower_name == "support_nested_namespaces") {
 			attach_options.support_nested_namespaces =
 			    entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+			set_by_attach_options.insert("support_nested_namespaces");
+		} else if (lower_name == "purge_requested") {
+			attach_options.purge_requested = entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+			set_by_attach_options.insert("purge_requested");
 		} else {
 			attach_options.options.emplace(std::move(entry));
 		}
@@ -472,7 +478,12 @@ unique_ptr<Catalog> IRCatalog::Attach(StorageExtensionInfo *storage_info, Client
 		case IcebergEndpointType::AWS_GLUE: {
 			GlueAttach(context, attach_options);
 			endpoint_type = IcebergEndpointType::AWS_GLUE;
-			context.config.set_variables["create_table.stage_create"] = Value::BOOLEAN(false);
+			if (set_by_attach_options.find("support_stage_create") == set_by_attach_options.end()) {
+				attach_options.supports_stage_create = false;
+			}
+			if (set_by_attach_options.find("purge_requested") == set_by_attach_options.end()) {
+				attach_options.purge_requested = true;
+			}
 			break;
 		}
 		case IcebergEndpointType::AWS_S3TABLES: {
@@ -480,7 +491,12 @@ unique_ptr<Catalog> IRCatalog::Attach(StorageExtensionInfo *storage_info, Client
 			endpoint_type = IcebergEndpointType::AWS_S3TABLES;
 			attach_options.allows_deletes = false;
 			attach_options.supports_stage_create = false;
-			context.config.set_variables["create_table.stage_create"] = Value::BOOLEAN(false);
+			if (set_by_attach_options.find("support_stage_create") == set_by_attach_options.end()) {
+				attach_options.supports_stage_create = false;
+			}
+			if (set_by_attach_options.find("purge_requested") == set_by_attach_options.end()) {
+				attach_options.purge_requested = true;
+			}
 			break;
 		}
 		default:
