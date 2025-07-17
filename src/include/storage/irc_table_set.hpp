@@ -25,7 +25,10 @@ public:
 
 public:
 	void LoadEntries(ClientContext &context);
-	void FillEntry(ClientContext &context, IcebergTableInformation &table);
+	// return true if request to LoadTableInformation was successful and entry has been filled
+	// or if entry is already filled
+	// False otherwise
+	bool FillEntry(ClientContext &context, IcebergTableInformation &table);
 
 public:
 	IRCSchemaEntry &schema;
