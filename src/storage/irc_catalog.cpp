@@ -427,6 +427,17 @@ static void GlueAttach(ClientContext &context, IcebergAttachOptions &input) {
 	S3OrGlueAttachInternal(input, "glue", region.ToString());
 }
 
+void IRCatalog::SetAWSCatalogOptions(IcebergAttachOptions &attach_options,
+                                     case_insensitive_set_t &set_by_attach_options) {
+	attach_options.allows_deletes = false;
+	if (set_by_attach_options.find("support_stage_create") == set_by_attach_options.end()) {
+		attach_options.supports_stage_create = false;
+	}
+	if (set_by_attach_options.find("purge_requested") == set_by_attach_options.end()) {
+		attach_options.purge_requested = true;
+	}
+}
+
 unique_ptr<Catalog> IRCatalog::Attach(StorageExtensionInfo *storage_info, ClientContext &context, AttachedDatabase &db,
                                       const string &name, AttachInfo &info, AccessMode access_mode) {
 	IRCEndpointBuilder endpoint_builder;
@@ -478,25 +489,13 @@ unique_ptr<Catalog> IRCatalog::Attach(StorageExtensionInfo *storage_info, Client
 		case IcebergEndpointType::AWS_GLUE: {
 			GlueAttach(context, attach_options);
 			endpoint_type = IcebergEndpointType::AWS_GLUE;
-			if (set_by_attach_options.find("support_stage_create") == set_by_attach_options.end()) {
-				attach_options.supports_stage_create = false;
-			}
-			if (set_by_attach_options.find("purge_requested") == set_by_attach_options.end()) {
-				attach_options.purge_requested = true;
-			}
+			SetAWSCatalogOptions(attach_options, set_by_attach_options);
 			break;
 		}
 		case IcebergEndpointType::AWS_S3TABLES: {
 			S3TablesAttach(attach_options);
 			endpoint_type = IcebergEndpointType::AWS_S3TABLES;
-			attach_options.allows_deletes = false;
-			attach_options.supports_stage_create = false;
-			if (set_by_attach_options.find("support_stage_create") == set_by_attach_options.end()) {
-				attach_options.supports_stage_create = false;
-			}
-			if (set_by_attach_options.find("purge_requested") == set_by_attach_options.end()) {
-				attach_options.purge_requested = true;
-			}
+			SetAWSCatalogOptions(attach_options, set_by_attach_options);
 			break;
 		}
 		default:

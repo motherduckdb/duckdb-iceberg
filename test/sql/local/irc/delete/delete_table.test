@@ -51,6 +51,7 @@ drop table my_datalake.default.test_delete_table;
 
 statement error
 select * from my_datalake.default.test_delete_table;
+----
 <REGEX>.*does not exist.*
 
 statement ok
@@ -70,4 +71,5 @@ commit;
 
 statement error
 select * from my_datalake.default.test_delete_table;
+----
 <REGEX>.*does not exist.*

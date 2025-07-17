@@ -49,11 +49,7 @@ static void LoadInternal(DatabaseInstance &instance) {
 	                          "Enable globbing the filesystem (if possible) to find the latest version metadata. This "
 	                          "could result in reading an uncommitted version.",
 	                          LogicalType::BOOLEAN, Value::BOOLEAN(false));
-	config.AddExtensionOption("create_table.stage_create", "Value of stage-create parameter when creating tables",
-							  LogicalType::BOOLEAN, Value::BOOLEAN(true));
-	config.AddExtensionOption("delete_table.purge_requested", "Value of PurgeRequested when deleting a table",
-							  LogicalType::BOOLEAN, Value::BOOLEAN(false));
-	// context.TryGetCurrentSetting("disable_parquet_prefetching", disable_prefetch);
+
 	// Iceberg Table Functions
 	for (auto &fun : IcebergFunctions::GetTableFunctions(instance)) {
 		ExtensionUtil::RegisterFunction(instance, std::move(fun));
