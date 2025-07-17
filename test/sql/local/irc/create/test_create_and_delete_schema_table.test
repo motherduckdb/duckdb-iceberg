@@ -55,7 +55,7 @@ query I nosort res_1
 select * from range(100);
 ----
 
-query Igit
+query I
 select name from (show all tables) where schema = 'new_schema_1';
 ----
 my_table
