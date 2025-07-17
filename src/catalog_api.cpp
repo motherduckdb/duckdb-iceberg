@@ -191,7 +191,7 @@ void IRCAPI::CommitTableDelete(ClientContext &context, IRCatalog &catalog, const
 
 	auto response = catalog.auth_handler->DeleteRequest(context, url_builder);
 	// Glue/S3Tables follow spec and return 204, apache/iceberg-rest-fixture docker image returns 200
-	if (response->status != HTTPStatusCode::NoContent_204 || response->status != HTTPStatusCode::OK_200) {
+	if (response->status != HTTPStatusCode::NoContent_204 && response->status != HTTPStatusCode::OK_200) {
 		throw InvalidConfigurationException(
 		    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s", url_builder.GetURL(),
 		    EnumUtil::ToString(response->status), response->reason, response->body);
@@ -220,7 +220,7 @@ void IRCAPI::CommitNamespaceDrop(ClientContext &context, IRCatalog &catalog, vec
 
 	auto response = catalog.auth_handler->DeleteRequest(context, url_builder);
 	// Glue/S3Tables follow spec and return 204, apache/iceberg-rest-fixture docker image returns 200
-	if (response->status != HTTPStatusCode::OK_200) {
+	if (response->status != HTTPStatusCode::NoContent_204 && response->status != HTTPStatusCode::OK_200) {
 		throw InvalidConfigurationException(
 		    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s", url_builder.GetURL(),
 		    EnumUtil::ToString(response->status), response->reason, response->body);
@@ -247,8 +247,7 @@ rest_api_objects::LoadTableResult IRCAPI::CommitNewTable(ClientContext &context,
 	auto create_transaction = make_uniq<IcebergCreateTableRequest>(initial_schema, table->table_info.name);
 	// if stage create is supported, create the table with stage_create = true and the table update will
 	// commit the table.
-	Value stage_create = false;
-	auto support_stage_create = context.TryGetCurrentSetting("create_table.stage_create", stage_create);
+	auto support_stage_create = catalog.attach_options.supports_stage_create;
 	yyjson_mut_obj_add_bool(doc, root_object, "stage-create", support_stage_create);
 	auto create_table_json = create_transaction->CreateTableToJSON(std::move(doc_p));
 

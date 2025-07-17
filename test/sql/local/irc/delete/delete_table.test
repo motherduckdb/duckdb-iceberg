@@ -52,7 +52,7 @@ drop table my_datalake.default.test_delete_table;
 statement error
 select * from my_datalake.default.test_delete_table;
 ----
-<REGEX>.*does not exist.*
+<REGEX>:.*does not exist.*
 
 statement ok
 abort;
@@ -72,4 +72,23 @@ commit;
 statement error
 select * from my_datalake.default.test_delete_table;
 ----
-<REGEX>.*does not exist.*
+<REGEX>:.*does not exist.*
+
+statement ok
+DETACH my_datalake;
+
+statement ok
+ATTACH '' AS my_datalake (
+    TYPE ICEBERG,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    ENDPOINT 'http://127.0.0.1:8181',
+    purge_requested true
+);
+
+statement ok
+create table my_datalake.default.test_purge_table as select range a from range(100);
+
+# purgeRequested = true from attach option.
+statement ok
+drop table my_datalake.default.test_purge_table;

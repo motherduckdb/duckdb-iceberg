@@ -74,7 +74,6 @@ void IRCSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {
 	D_ASSERT(table_entry_actual);
 	table_entry.deleted = true;
 	transaction.MarkTableAsDeleted(ic_entry);
-	// tables.entries.erase(table_name);
 }
 
 optional_ptr<CatalogEntry> IRCSchemaEntry::CreateFunction(CatalogTransaction transaction, CreateFunctionInfo &info) {

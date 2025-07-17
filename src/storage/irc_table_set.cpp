@@ -62,11 +62,6 @@ void ICTableSet::LoadEntries(ClientContext &context) {
 	}
 
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
-	for (auto &entry : schema.namespace_items) {
-		if (entry == "level1") {
-			auto break_here = 0;
-		}
-	}
 	// TODO: handle out-of-order columns using position property
 	auto tables = IRCAPI::GetTables(context, ic_catalog, schema);
 
