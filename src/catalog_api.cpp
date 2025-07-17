@@ -186,6 +186,9 @@ void IRCAPI::CommitTableDelete(ClientContext &context, IRCatalog &catalog, const
 	url_builder.AddPathComponent(schema_name);
 	url_builder.AddPathComponent("tables");
 	url_builder.AddPathComponent(table_name);
+	Value purge_requested;
+	context.TryGetCurrentSetting("delete_table.purge_requested", purge_requested);
+	url_builder.SetParam("purgeRequested", purge_requested.ToString());
 
 	auto response = catalog.auth_handler->DeleteRequest(context, url_builder);
 	if (response->status != HTTPStatusCode::OK_200) {
@@ -243,7 +246,9 @@ rest_api_objects::LoadTableResult IRCAPI::CommitNewTable(ClientContext &context,
 	auto create_transaction = make_uniq<IcebergCreateTableRequest>(initial_schema, table->table_info.name);
 	// if stage create is supported, create the table with stage_create = true and the table update will
 	// commit the table.
-	yyjson_mut_obj_add_bool(doc, root_object, "stage-create", ic_catalog.attach_options.supports_stage_create);
+	Value stage_create = false;
+	auto support_stage_create = context.TryGetCurrentSetting("create_table.stage_create", stage_create);
+	yyjson_mut_obj_add_bool(doc, root_object, "stage-create", support_stage_create);
 	auto create_table_json = create_transaction->CreateTableToJSON(std::move(doc_p));
 
 	try {

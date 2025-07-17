@@ -472,7 +472,7 @@ unique_ptr<Catalog> IRCatalog::Attach(StorageExtensionInfo *storage_info, Client
 		case IcebergEndpointType::AWS_GLUE: {
 			GlueAttach(context, attach_options);
 			endpoint_type = IcebergEndpointType::AWS_GLUE;
-			attach_options.supports_stage_create = false;
+			context.config.set_variables["create_table.stage_create"] = Value::BOOLEAN(false);
 			break;
 		}
 		case IcebergEndpointType::AWS_S3TABLES: {
@@ -480,6 +480,7 @@ unique_ptr<Catalog> IRCatalog::Attach(StorageExtensionInfo *storage_info, Client
 			endpoint_type = IcebergEndpointType::AWS_S3TABLES;
 			attach_options.allows_deletes = false;
 			attach_options.supports_stage_create = false;
+			context.config.set_variables["create_table.stage_create"] = Value::BOOLEAN(false);
 			break;
 		}
 		default:

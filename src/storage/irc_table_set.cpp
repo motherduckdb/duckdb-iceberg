@@ -104,7 +104,9 @@ void ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 	optional_entry->table_info.table_metadata =
 	    IcebergTableMetadata::FromTableMetadata(optional_entry->table_info.load_table_result.metadata);
 
-	if (catalog.attach_options.supports_stage_create) {
+	Value stage_create = false;
+	auto support_stage_create = context.TryGetCurrentSetting("create_table.stage_create", stage_create);
+	if (support_stage_create) {
 		// We have a response from the server for a stage create, we need to also send a number of table
 		// updates to finalize creation of the table.
 		table_info.AddAssertCreate(irc_transaction);
