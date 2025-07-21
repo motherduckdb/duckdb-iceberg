@@ -186,7 +186,6 @@ void IRCAPI::CommitTableDelete(ClientContext &context, IRCatalog &catalog, const
 	url_builder.AddPathComponent(schema_name);
 	url_builder.AddPathComponent("tables");
 	url_builder.AddPathComponent(table_name);
-	Value purge_requested;
 	url_builder.SetParam("purgeRequested", Value::BOOLEAN(catalog.attach_options.purge_requested).ToString());
 
 	auto response = catalog.auth_handler->DeleteRequest(context, url_builder);

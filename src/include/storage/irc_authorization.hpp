@@ -18,9 +18,10 @@ struct IcebergAttachOptions {
 	string name;
 	// some catalogs do not yet support stage create
 	bool supports_stage_create = true;
-	// other catalogs do not allow manual deletes/cleanup
+	// if the catalog allows manual cleaning up of storage files.
 	bool allows_deletes = true;
 	bool support_nested_namespaces = false;
+	// in rest api spec, purge requested defaults to false.
 	bool purge_requested = false;
 
 	IRCAuthorizationType authorization_type = IRCAuthorizationType::INVALID;

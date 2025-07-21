@@ -74,6 +74,12 @@ select * from my_datalake.default.test_delete_table;
 ----
 <REGEX>:.*does not exist.*
 
+# purgeRequested defaults to False
+query II
+SELECT request.url FROM duckdb_logs_parsed('HTTP') where request.type = 'DELETE';
+----
+http://127.0.0.1:8181/v1/namespaces/default/tables/test_delete_table?purgeRequested=false
+
 statement ok
 DETACH my_datalake;
 
@@ -83,12 +89,48 @@ ATTACH '' AS my_datalake (
     CLIENT_ID 'admin',
     CLIENT_SECRET 'password',
     ENDPOINT 'http://127.0.0.1:8181',
-    purge_requested true
+    purge_requested True
 );
 
 statement ok
 create table my_datalake.default.test_purge_table as select range a from range(100);
 
+statement ok
+pragma truncate_duckdb_logs
+
 # purgeRequested = true from attach option.
 statement ok
 drop table my_datalake.default.test_purge_table;
+
+query II
+SELECT request.url FROM duckdb_logs_parsed('HTTP') where request.type = 'DELETE';
+----
+http://127.0.0.1:8181/v1/namespaces/default/tables/test_purge_table?purgeRequested=true
+
+
+statement ok
+DETACH my_datalake;
+
+statement ok
+ATTACH '' AS my_datalake (
+    TYPE ICEBERG,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    ENDPOINT 'http://127.0.0.1:8181',
+    purge_requested false
+);
+
+statement ok
+create table my_datalake.default.test_purge_table as select range a from range(100);
+
+statement ok
+pragma truncate_duckdb_logs
+
+# purgeRequested = false from attach option.
+statement ok
+drop table my_datalake.default.test_purge_table;
+
+query II
+SELECT request.url FROM duckdb_logs_parsed('HTTP') where request.type = 'DELETE';
+----
+http://127.0.0.1:8181/v1/namespaces/default/tables/test_purge_table?purgeRequested=false
