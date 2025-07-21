@@ -58,3 +58,39 @@ select * from my_datalake.default.all_types_table;
 2	200	2000	20000000000	2.34	234.567	23456.78901	2023-06-15
 3	300	3000	30000000000	3.45	345.678	34567.89012	2024-12-25
 
+statement ok
+create table my_datalake.default.polaris_create_table (a int);
+
+statement ok
+insert into my_datalake.default.polaris_create_table select range a from range(10);
+
+query I
+select * from my_datalake.default.polaris_create_table order by all
+----
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+
+statement ok
+create table my_datalake.default.polaris_create_table_as as select range a, range::VARCHAR b from range(10, 20);
+
+query II
+select * from my_datalake.default.polaris_create_table_as order by all;
+----
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
