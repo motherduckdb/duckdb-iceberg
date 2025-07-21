@@ -72,7 +72,10 @@ void IRCSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {
 	auto table_entry_actual = LookupEntry(catalog_transaction, lookupInfo);
 	auto &ic_entry = table_entry_actual->Cast<ICTableEntry>();
 	D_ASSERT(table_entry_actual);
-	table_entry.deleted = true;
+	if (!table_entry.transaction_data) {
+		table_entry.transaction_data = make_uniq<IcebergTransactionData>(context, table_entry);
+	}
+	table_entry.transaction_data->is_deleted = true;
 	transaction.MarkTableAsDeleted(ic_entry);
 }
 

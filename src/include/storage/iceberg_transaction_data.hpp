@@ -42,6 +42,7 @@ public:
 	ClientContext &context;
 	IcebergTableInformation &table_info;
 	vector<unique_ptr<IcebergTableUpdate>> updates;
+	//! has the table been deleted in the current transaction
 	bool is_deleted;
 	vector<unique_ptr<IcebergTableRequirement>> requirements;
 

@@ -195,7 +195,7 @@ optional_ptr<CatalogEntry> IcebergTableInformation::GetSchemaVersion(optional_pt
 }
 
 IcebergTableInformation::IcebergTableInformation(IRCatalog &catalog, IRCSchemaEntry &schema, const string &name)
-    : catalog(catalog), schema(schema), name(name), deleted(false) {
+    : catalog(catalog), schema(schema), name(name) {
 	table_id = "uuid-" + schema.name + "-" + name;
 }
 

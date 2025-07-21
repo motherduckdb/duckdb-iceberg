@@ -127,7 +127,7 @@ optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const En
 	if (entry == entries.end()) {
 		return nullptr;
 	}
-	if (entry->second.deleted) {
+	if (entry->second.transaction_data && entry->second.transaction_data->is_deleted) {
 		return nullptr;
 	}
 	FillEntry(context, entry->second);
