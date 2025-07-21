@@ -151,7 +151,7 @@ void IRCAPI::CommitMultiTableUpdate(ClientContext &context, IRCatalog &catalog, 
 	url_builder.AddPathComponent("commit");
 
 	auto response = catalog.auth_handler->PostRequest(context, url_builder, body);
-	if (response->status != HTTPStatusCode::OK_200) {
+	if (response->status != HTTPStatusCode::OK_200 && response->status != HTTPStatusCode::NoContent_204) {
 		throw InvalidConfigurationException(
 		    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s", url_builder.GetURL(),
 		    EnumUtil::ToString(response->status), response->reason, response->body);
@@ -170,7 +170,7 @@ void IRCAPI::CommitTableUpdate(ClientContext &context, IRCatalog &catalog, const
 	url_builder.AddPathComponent(table_name);
 
 	auto response = catalog.auth_handler->PostRequest(context, url_builder, body);
-	if (response->status != HTTPStatusCode::OK_200) {
+	if (response->status != HTTPStatusCode::OK_200 && response->status != HTTPStatusCode::NoContent_204) {
 		throw InvalidConfigurationException(
 		    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s", url_builder.GetURL(),
 		    EnumUtil::ToString(response->status), response->reason, response->body);
