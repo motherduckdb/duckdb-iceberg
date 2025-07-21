@@ -75,7 +75,7 @@ select * from my_datalake.default.test_delete_table;
 <REGEX>:.*does not exist.*
 
 # purgeRequested defaults to False
-query II
+query I
 SELECT request.url FROM duckdb_logs_parsed('HTTP') where request.type = 'DELETE';
 ----
 http://127.0.0.1:8181/v1/namespaces/default/tables/test_delete_table?purgeRequested=false
@@ -102,7 +102,7 @@ pragma truncate_duckdb_logs
 statement ok
 drop table my_datalake.default.test_purge_table;
 
-query II
+query I
 SELECT request.url FROM duckdb_logs_parsed('HTTP') where request.type = 'DELETE';
 ----
 http://127.0.0.1:8181/v1/namespaces/default/tables/test_purge_table?purgeRequested=true
