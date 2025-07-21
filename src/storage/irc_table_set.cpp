@@ -23,8 +23,6 @@
 #include "storage/iceberg_table_information.hpp"
 #include "storage/authorization/oauth2.hpp"
 
-#include <aws/core/http/Scheme.h>
-
 namespace duckdb {
 
 ICTableSet::ICTableSet(IRCSchemaEntry &schema) : schema(schema), catalog(schema.ParentCatalog()) {
@@ -60,7 +58,7 @@ bool ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &tabl
 void ICTableSet::Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback) {
 	lock_guard<mutex> l(entry_lock);
 	LoadEntries(context);
-	case_insensitive_set_t not_iceberg_tables;
+	case_insensitive_set_t non_iceberg_tables;
 	auto table_namespace = IRCAPI::GetEncodedSchemaName(schema.namespace_items);
 	for (auto &entry : entries) {
 		auto &table_info = entry.second;
@@ -69,11 +67,11 @@ void ICTableSet::Scan(ClientContext &context, const std::function<void(CatalogEn
 			callback(*table_info.schema_versions[schema_id]);
 		} else {
 			DUCKDB_LOG(context, IcebergLogType, "Table %s.%s not an Iceberg Table", table_namespace, entry.first);
-			not_iceberg_tables.insert(entry.first);
+			non_iceberg_tables.insert(entry.first);
 		}
 	}
 	// erase not iceberg tables
-	for (auto &entry : not_iceberg_tables) {
+	for (auto &entry : non_iceberg_tables) {
 		entries.erase(entry);
 	}
 }

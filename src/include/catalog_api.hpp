@@ -23,7 +23,6 @@ struct IRCAPISchema {
 template <typename T>
 class APIResult {
 public:
-	// Constructors
 	APIResult() {};
 
 	T result_;
