@@ -17,14 +17,29 @@
 using namespace duckdb_yyjson;
 namespace duckdb {
 
+vector<string> IRCAPI::ParseSchemaName(string &namespace_name) {
+	idx_t start = 0;
+	idx_t end = namespace_name.find(".", start);
+	vector<string> ret;
+	while (end != std::string::npos) {
+		auto nested_identifier = namespace_name.substr(start, end - start);
+		ret.push_back(nested_identifier);
+		start = end + 1;
+		end = namespace_name.find(".", start);
+	}
+	auto last_identifier = namespace_name.substr(start, end - start);
+	ret.push_back(last_identifier);
+	return ret;
+}
+
 //! Used for the query parameter (parent=...)
-static string GetSchemaName(const vector<string> &items) {
+string IRCAPI::GetSchemaName(const vector<string> &items) {
 	static const string unit_separator = "\x1F";
 	return StringUtil::Join(items, unit_separator);
 }
 
 //! Used for the path parameters
-static string GetEncodedSchemaName(const vector<string> &items) {
+string IRCAPI::GetEncodedSchemaName(const vector<string> &items) {
 	static const string unit_separator = "%1F";
 	return StringUtil::Join(items, unit_separator);
 }
@@ -46,7 +61,7 @@ static string GetEncodedSchemaName(const vector<string> &items) {
 
 static string GetTableMetadata(ClientContext &context, IRCatalog &catalog, const IRCSchemaEntry &schema,
                                const string &table) {
-	auto schema_name = GetEncodedSchemaName(schema.namespace_items);
+	auto schema_name = IRCAPI::GetEncodedSchemaName(schema.namespace_items);
 
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPathComponent(catalog.prefix);

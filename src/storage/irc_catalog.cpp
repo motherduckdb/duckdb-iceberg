@@ -74,7 +74,10 @@ optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transactio
 	D_ASSERT(context.get() != nullptr);
 	rest_api_objects::CreateNamespaceRequest request;
 	request.has_properties = false;
-	request._namespace.value.push_back(info.schema);
+	auto namespace_identifiers = IRCAPI::ParseSchemaName(info.schema);
+	for (auto &identifier : namespace_identifiers) {
+		request._namespace.value.push_back(identifier);
+	}
 	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
 	auto doc = doc_p.get();
 	auto root_object = yyjson_mut_obj(doc);
@@ -99,7 +102,8 @@ optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transactio
 void IRCatalog::DropSchema(ClientContext &context, DropInfo &info) {
 	// TODO: how to handle nested namespaces
 	vector<string> namespace_items;
-	namespace_items.push_back(info.name);
+	auto namespace_identifier = IRCAPI::ParseSchemaName(info.name);
+	namespace_items.push_back(IRCAPI::GetEncodedSchemaName(namespace_identifier));
 	IRCAPI::CommitNamespaceDrop(context, *this, namespace_items);
 }
 

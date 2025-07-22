@@ -176,8 +176,10 @@ void CommitTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
 	yyjson_mut_obj_add_strcpy(doc, identifier_json, "name", table.identifier.name.c_str());
 	//! identifier.namespace
 	auto namespace_arr = yyjson_mut_obj_add_arr(doc, identifier_json, "namespace");
-	D_ASSERT(_namespace.size() == 1);
-	yyjson_mut_arr_add_strcpy(doc, namespace_arr, _namespace[0].c_str());
+	D_ASSERT(_namespace.size() >= 1);
+	for (auto &identifier : _namespace) {
+		yyjson_mut_arr_add_strcpy(doc, namespace_arr, identifier.c_str());
+	}
 }
 
 void CommitTransactionToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
