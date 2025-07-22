@@ -21,7 +21,7 @@ require aws
 statement ok
 CREATE SECRET r2_secret (
     TYPE ICEBERG,
-    TOKEN 'qq5IoEUuIImHrBQSjz_7Sa2gcNvyEuk_8ruKXkD1'
+    TOKEN '${r2_token}'
 );
 
 statement ok

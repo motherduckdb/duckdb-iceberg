@@ -120,6 +120,9 @@ unique_ptr<HTTPResponse> AWSInput::GetRequest(ClientContext &context) {
 	           "GET %s (response %d) (signed with key_id '%s' for service '%s', in region '%s')", uri.GetURIString(),
 	           resCode, key_id, service.c_str(), region.c_str());
 
+	if (resCode == Aws::Http::HttpResponseCode::REQUEST_NOT_MADE) {
+		throw InvalidConfigurationException("AWS Request was never made");
+	}
 	unique_ptr<HTTPResponse> result = make_uniq<HTTPResponse>(HTTPStatusCode(static_cast<idx_t>(resCode)));
 	result->url = uri.GetURIString();
 	Aws::StringStream resBody;
@@ -178,6 +181,9 @@ unique_ptr<HTTPResponse> AWSInput::PostRequest(ClientContext &context, string po
 	           "POST %s (response %d) (signed with key_id '%s' for service '%s', in region '%s')", uri.GetURIString(),
 	           resCode, key_id, service.c_str(), region.c_str());
 
+	if (resCode == Aws::Http::HttpResponseCode::REQUEST_NOT_MADE) {
+		throw InvalidConfigurationException("AWS Request was never made");
+	}
 	unique_ptr<HTTPResponse> result = make_uniq<HTTPResponse>(HTTPStatusCode(static_cast<idx_t>(resCode)));
 	result->url = uri.GetURIString();
 	Aws::StringStream resBody;
@@ -227,6 +233,9 @@ unique_ptr<HTTPResponse> AWSInput::DeleteRequest(ClientContext &context) {
 	           "Delete %s (response %d) (signed with key_id '%s' for service '%s', in region '%s')", uri.GetURIString(),
 	           resCode, key_id, service.c_str(), region.c_str());
 
+	if (resCode == Aws::Http::HttpResponseCode::REQUEST_NOT_MADE) {
+		throw InvalidConfigurationException("AWS Request was never made");
+	}
 	unique_ptr<HTTPResponse> result = make_uniq<HTTPResponse>(HTTPStatusCode(static_cast<idx_t>(resCode)));
 	result->url = uri.GetURIString();
 	Aws::StringStream resBody;

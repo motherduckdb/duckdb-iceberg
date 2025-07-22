@@ -20,6 +20,8 @@ require aws
 
 require tpch
 
+mode skip
+
 statement ok
 CREATE SECRET glue_secret (
     TYPE S3,

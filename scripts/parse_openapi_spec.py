@@ -167,6 +167,10 @@ class ResponseObjectsGenerator:
         if property_type == 'object':
             result = ObjectProperty()
             self.parse_object_property(spec, result)
+            if reference == 'LoadTableResult':
+                import pdb
+                pdb.set_trace()
+                result.properties['metadata-location'].nullable = True
         elif property_type == 'array' or property_type == 'list':
             result = ArrayProperty()
             self.parse_array_property(spec, result)

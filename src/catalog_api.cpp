@@ -259,6 +259,17 @@ rest_api_objects::LoadTableResult IRCAPI::CommitNewTable(ClientContext &context,
 		}
 		std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(response->body));
 		auto *root = yyjson_doc_get_root(doc.get());
+		// auto metadata_location = yyjson_obj_get(root, "metadata-location");
+		// if (!yyjson_is_str(metadata_location)) {
+		// 	auto metadata_obj = yyjson_obj_get(metadata_location, "metadata");
+		// 	D_ASSERT(yyjson_is_obj(metadata_obj));
+		// 	metadata_location = yyjson_obj_get(metadata_obj, "location");
+		// 	if (!yyjson_is_str(metadata_location)) {
+		// 		throw InvalidConfigurationException("No metadata location returned during table creation");
+		// 	}
+		// 	auto metadata_location_str = yyjson_get_str(metadata_location);
+		// 	yyjson_mut_obj_add_str(, root, "metadata-location", metadata_location_str);
+		// }
 		auto load_table_result = rest_api_objects::LoadTableResult::FromJSON(root);
 		return load_table_result;
 	} catch (const std::exception &e) {
