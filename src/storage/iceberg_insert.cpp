@@ -376,6 +376,7 @@ PhysicalOperator &IRCatalog::PlanInsert(ClientContext &context, PhysicalPlanGene
 	}
 
 	auto &table_entry = op.table.Cast<ICTableEntry>();
+	table_entry.PrepareIcebergScanFromEntry(context);
 	auto &table_info = table_entry.table_info;
 	auto &schema = table_info.table_metadata.GetLatestSchema();
 

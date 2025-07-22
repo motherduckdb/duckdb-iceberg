@@ -30,8 +30,8 @@ attach '6b17833f308abc1e1cc343c552b51f51_r2-catalog' AS my_datalake (
     ENDPOINT 'https://catalog.cloudflarestorage.com/6b17833f308abc1e1cc343c552b51f51/r2-catalog'
 );
 
-# statement ok
-# create schema my_datalake.test_create;
+statement ok
+create schema my_datalake.test_create;
 
 statement ok
 use my_datalake.test_create;
@@ -39,10 +39,9 @@ use my_datalake.test_create;
 statement ok
 create table test_basic_create (a int);
 
-mode skip
-
 query I
 select * from test_basic_create;
+----
 
 statement ok
 create table test_basic_create_as as select range a, range::VARCHAR from range(10);
@@ -73,4 +72,7 @@ select count(*) from (show tables);
 0
 
 statement ok
-use
+use main;
+
+statement ok
+drop schema my_datalake.test_create;
