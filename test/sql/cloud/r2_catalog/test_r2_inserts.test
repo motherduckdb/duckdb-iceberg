@@ -18,6 +18,9 @@ require httpfs
 
 require aws
 
+# renable when https://github.com/duckdb/duckdb/pull/18380 merges (and also bump duckdb)
+mode skip
+
 statement ok
 CREATE SECRET r2_secret (
     TYPE ICEBERG,

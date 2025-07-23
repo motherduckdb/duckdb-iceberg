@@ -120,10 +120,15 @@ unique_ptr<HTTPResponse> AWSInput::GetRequest(ClientContext &context) {
 	           "GET %s (response %d) (signed with key_id '%s' for service '%s', in region '%s')", uri.GetURIString(),
 	           resCode, key_id, service.c_str(), region.c_str());
 
+	unique_ptr<HTTPResponse> result;
 	if (resCode == Aws::Http::HttpResponseCode::REQUEST_NOT_MADE) {
-		throw InvalidConfigurationException("AWS Request was never made");
-	}
-	unique_ptr<HTTPResponse> result = make_uniq<HTTPResponse>(HTTPStatusCode(static_cast<idx_t>(resCode)));
+		result = make_uniq<HTTPResponse>(HTTPStatusCode::INVALID);
+		// If the request is not made, there should be a client error message
+		D_ASSERT(res->HasClientError());
+		result->reason = res->GetClientErrorMessage();
+		return result;
+ 	}
+	result = make_uniq<HTTPResponse>(HTTPStatusCode(static_cast<idx_t>(resCode)));
 	result->url = uri.GetURIString();
 	Aws::StringStream resBody;
 	resBody << res->GetResponseBody().rdbuf();
@@ -181,10 +186,15 @@ unique_ptr<HTTPResponse> AWSInput::PostRequest(ClientContext &context, string po
 	           "POST %s (response %d) (signed with key_id '%s' for service '%s', in region '%s')", uri.GetURIString(),
 	           resCode, key_id, service.c_str(), region.c_str());
 
+	unique_ptr<HTTPResponse> result;
 	if (resCode == Aws::Http::HttpResponseCode::REQUEST_NOT_MADE) {
-		throw InvalidConfigurationException("AWS Request was never made");
+		result = make_uniq<HTTPResponse>(HTTPStatusCode::INVALID);
+		// If the request is not made, there should be a client error message
+		D_ASSERT(res->HasClientError());
+		result->body = res->GetClientErrorMessage();
+		return result;
 	}
-	unique_ptr<HTTPResponse> result = make_uniq<HTTPResponse>(HTTPStatusCode(static_cast<idx_t>(resCode)));
+	result = make_uniq<HTTPResponse>(HTTPStatusCode(static_cast<idx_t>(resCode)));
 	result->url = uri.GetURIString();
 	Aws::StringStream resBody;
 	resBody << res->GetResponseBody().rdbuf();
@@ -233,10 +243,15 @@ unique_ptr<HTTPResponse> AWSInput::DeleteRequest(ClientContext &context) {
 	           "Delete %s (response %d) (signed with key_id '%s' for service '%s', in region '%s')", uri.GetURIString(),
 	           resCode, key_id, service.c_str(), region.c_str());
 
+	unique_ptr<HTTPResponse> result;
 	if (resCode == Aws::Http::HttpResponseCode::REQUEST_NOT_MADE) {
-		throw InvalidConfigurationException("AWS Request was never made");
+		result = make_uniq<HTTPResponse>(HTTPStatusCode::INVALID);
+		// If the request is not made, there should be a client error message
+		D_ASSERT(res->HasClientError());
+		result->body = res->GetClientErrorMessage();
+		return result;
 	}
-	unique_ptr<HTTPResponse> result = make_uniq<HTTPResponse>(HTTPStatusCode(static_cast<idx_t>(resCode)));
+	result = make_uniq<HTTPResponse>(HTTPStatusCode(static_cast<idx_t>(resCode)));
 	result->url = uri.GetURIString();
 	Aws::StringStream resBody;
 	resBody << res->GetResponseBody().rdbuf();
