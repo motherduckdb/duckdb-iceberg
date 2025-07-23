@@ -23,6 +23,9 @@ struct IRCAPISchema {
 class IRCAPI {
 public:
 	static const string API_VERSION_1;
+	static vector<string> ParseSchemaName(string &namespace_name);
+	static string GetSchemaName(const vector<string> &items);
+	static string GetEncodedSchemaName(const vector<string> &items);
 	static vector<rest_api_objects::TableIdentifier> GetTables(ClientContext &context, IRCatalog &catalog,
 	                                                           const IRCSchemaEntry &schema);
 	static rest_api_objects::LoadTableResult GetTable(ClientContext &context, IRCatalog &catalog,
