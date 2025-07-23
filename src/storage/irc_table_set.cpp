@@ -73,6 +73,9 @@ void ICTableSet::LoadEntries(ClientContext &context) {
 void ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema,
                                 CreateTableInfo &info) {
 	auto table_name = info.table;
+	if (info.on_conflict == OnCreateConflict::REPLACE_ON_CONFLICT) {
+		throw InvalidInputException("CREATE OR REPLACE not supported in DuckDB-Iceberg");
+	}
 	if (entries.find(table_name) != entries.end()) {
 		throw CatalogException("Table %s already exists", table_name.c_str());
 	}
@@ -122,6 +125,9 @@ optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const En
 	lock_guard<mutex> l(entry_lock);
 	auto entry = entries.find(lookup.GetEntryName());
 	if (entry == entries.end()) {
+		return nullptr;
+	}
+	if (entry->second.transaction_data && entry->second.transaction_data->is_deleted) {
 		return nullptr;
 	}
 	FillEntry(context, entry->second);

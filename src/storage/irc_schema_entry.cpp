@@ -13,7 +13,6 @@
 #include "duckdb/parser/parsed_data/alter_info.hpp"
 #include "duckdb/parser/parsed_data/alter_table_info.hpp"
 #include "duckdb/parser/parsed_expression_iterator.hpp"
-
 namespace duckdb {
 
 IRCSchemaEntry::IRCSchemaEntry(Catalog &catalog, CreateSchemaInfo &info)
@@ -23,7 +22,7 @@ IRCSchemaEntry::IRCSchemaEntry(Catalog &catalog, CreateSchemaInfo &info)
 IRCSchemaEntry::~IRCSchemaEntry() {
 }
 
-IRCTransaction &GetUCTransaction(CatalogTransaction transaction) {
+IRCTransaction &GetICTransaction(CatalogTransaction transaction) {
 	if (!transaction.transaction) {
 		throw InternalException("No transaction!?");
 	}
@@ -59,7 +58,25 @@ optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(CatalogTransaction transa
 }
 
 void IRCSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {
-	throw NotImplementedException("Drop Entry");
+	//	auto &ic_catalog = catalog.Cast<IRCatalog>();
+	auto &transaction = IRCTransaction::Get(context, catalog);
+	auto table_name = info.name;
+	// find if info has a table name, if so look for it in
+	auto table_info_it = tables.entries.find(table_name);
+	if (table_info_it == tables.entries.end()) {
+		throw InvalidInputException("Table %s does not exist");
+	}
+	auto &table_entry = table_info_it->second;
+	auto lookupInfo = EntryLookupInfo(CatalogType::TABLE_ENTRY, table_name);
+	auto catalog_transaction = CatalogTransaction::GetSystemCatalogTransaction(context);
+	auto table_entry_actual = LookupEntry(catalog_transaction, lookupInfo);
+	auto &ic_entry = table_entry_actual->Cast<ICTableEntry>();
+	D_ASSERT(table_entry_actual);
+	if (!table_entry.transaction_data) {
+		table_entry.transaction_data = make_uniq<IcebergTransactionData>(context, table_entry);
+	}
+	table_entry.transaction_data->is_deleted = true;
+	transaction.MarkTableAsDeleted(ic_entry);
 }
 
 optional_ptr<CatalogEntry> IRCSchemaEntry::CreateFunction(CatalogTransaction transaction, CreateFunctionInfo &info) {

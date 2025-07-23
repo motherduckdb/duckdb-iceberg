@@ -26,6 +26,10 @@ void IRCTransaction::MarkTableAsDirty(const ICTableEntry &table) {
 	dirty_tables.insert(&table);
 }
 
+void IRCTransaction::MarkTableAsDeleted(const ICTableEntry &table) {
+	deleted_tables.insert(&table);
+}
+
 void IRCTransaction::Start() {
 }
 
@@ -172,8 +176,10 @@ void CommitTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
 	yyjson_mut_obj_add_strcpy(doc, identifier_json, "name", table.identifier.name.c_str());
 	//! identifier.namespace
 	auto namespace_arr = yyjson_mut_obj_add_arr(doc, identifier_json, "namespace");
-	D_ASSERT(_namespace.size() == 1);
-	yyjson_mut_arr_add_strcpy(doc, namespace_arr, _namespace[0].c_str());
+	D_ASSERT(_namespace.size() >= 1);
+	for (auto &identifier : _namespace) {
+		yyjson_mut_arr_add_strcpy(doc, namespace_arr, identifier.c_str());
+	}
 }
 
 void CommitTransactionToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
@@ -229,6 +235,9 @@ TableTransactionInfo IRCTransaction::GetTransactionRequest(ClientContext &contex
 	TableTransactionInfo info;
 	auto &transaction = info.request;
 	for (auto &table : dirty_tables) {
+		if (!table->table_info.transaction_data) {
+			continue;
+		}
 		IcebergCommitState commit_state;
 		auto &table_change = commit_state.table_change;
 		auto &schema = table->ParentSchema().Cast<IRCSchemaEntry>();
@@ -280,17 +289,30 @@ TableTransactionInfo IRCTransaction::GetTransactionRequest(ClientContext &contex
 }
 
 void IRCTransaction::Commit() {
-
-	if (dirty_tables.empty()) {
+	if (dirty_tables.empty() && deleted_tables.empty()) {
 		return;
 	}
 
 	Connection temp_con(db);
 	temp_con.BeginTransaction();
 	auto &context = temp_con.context;
-
 	try {
-		auto transaction_info = GetTransactionRequest(*context);
+		DoTableUpdates(*context);
+		DoTableDeletes(*context);
+	} catch (std::exception &ex) {
+		ErrorData error(ex);
+		CleanupFiles();
+		DropSecrets(*context);
+		temp_con.Rollback();
+		error.Throw("Failed to commit Iceberg transaction: ");
+	}
+
+	temp_con.Rollback();
+}
+
+void IRCTransaction::DoTableUpdates(ClientContext &context) {
+	if (!dirty_tables.empty()) {
+		auto transaction_info = GetTransactionRequest(context);
 		auto &transaction = transaction_info.request;
 
 		// if there are no new tables, we can post to the transactions/commit endpoint
@@ -305,7 +327,7 @@ void IRCTransaction::Commit() {
 
 			CommitTransactionToJSON(doc, root_object, transaction);
 			auto transaction_json = JsonDocToString(std::move(doc_p));
-			IRCAPI::CommitMultiTableUpdate(*context, catalog, transaction_json);
+			IRCAPI::CommitMultiTableUpdate(context, catalog, transaction_json);
 		} else {
 			D_ASSERT(catalog.supported_urls.find("POST /v1/{prefix}/namespaces/{namespace}/tables/{table}") !=
 			         catalog.supported_urls.end());
@@ -313,20 +335,19 @@ void IRCTransaction::Commit() {
 			for (auto &table_change : transaction.table_changes) {
 				D_ASSERT(table_change.has_identifier);
 				auto transaction_json = ConstructTableUpdateJSON(table_change);
-				IRCAPI::CommitTableUpdate(*context, catalog, table_change.identifier._namespace.value,
+				IRCAPI::CommitTableUpdate(context, catalog, table_change.identifier._namespace.value,
 				                          table_change.identifier.name, transaction_json);
 			}
 		}
-		DropSecrets(*context);
-	} catch (std::exception &ex) {
-		ErrorData error(ex);
-		CleanupFiles();
-		DropSecrets(*context);
-		temp_con.Rollback();
-		error.Throw("Failed to commit Iceberg transaction: ");
+		DropSecrets(context);
 	}
+}
 
-	temp_con.Rollback();
+void IRCTransaction::DoTableDeletes(ClientContext &context) {
+	for (auto &table : deleted_tables) {
+		auto &irc_schema = table->ParentSchema().Cast<IRCSchemaEntry>();
+		IRCAPI::CommitTableDelete(context, catalog, irc_schema.namespace_items, table->name);
+	}
 }
 
 void IRCTransaction::CleanupFiles() {

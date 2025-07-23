@@ -40,7 +40,6 @@ ATTACH '' AS my_datalake (
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
-
 statement ok
 use my_datalake.default
 
@@ -148,7 +147,6 @@ endloop
 # commit sends long commit body
 statement ok
 commit;
-
 
 query II nosort res_2
 select * from create_table_t4;
