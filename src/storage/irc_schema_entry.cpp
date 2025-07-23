@@ -13,6 +13,7 @@
 #include "duckdb/parser/parsed_data/alter_info.hpp"
 #include "duckdb/parser/parsed_data/alter_table_info.hpp"
 #include "duckdb/parser/parsed_expression_iterator.hpp"
+#include "storage/irc_catalog.hpp"
 namespace duckdb {
 
 IRCSchemaEntry::IRCSchemaEntry(Catalog &catalog, CreateSchemaInfo &info)
@@ -39,9 +40,12 @@ optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(IRCTransaction &irc_trans
 	tables.CreateNewEntry(context, catalog, *this, base_info);
 	auto lookup_info = EntryLookupInfo(CatalogType::TABLE_ENTRY, base_info.table);
 	auto entry = tables.GetEntry(context, lookup_info);
-	// mark table as dirty so at the end of the transaction updates/creates are commited
 	auto &ic_entry = entry->Cast<ICTableEntry>();
-	irc_transaction.MarkTableAsDirty(ic_entry);
+	// mark table as dirty so at the end of the transaction updates/creates are commited
+	// if catalog does not support stage create, then it does not need to be marked dirty
+	if (catalog.attach_options.supports_stage_create) {
+		irc_transaction.MarkTableAsDirty(ic_entry);
+	}
 
 	// get the entry from the catalog.
 	D_ASSERT(entry);
