@@ -102,7 +102,7 @@ Aws::Http::URI AWSInput::BuildURI() {
 
 std::shared_ptr<Aws::Http::HttpRequest> AWSInput::CreateSignedRequest(Aws::Http::HttpMethod method,
                                                                       const Aws::Http::URI &uri, const string &body,
-                                                                      bool set_json) {
+                                                                      string content_type) {
 
 	auto request = Aws::Http::CreateHttpRequest(uri, method, Aws::Utils::Stream::DefaultResponseStreamFactoryMethod);
 	request->SetUserAgent(user_agent);
@@ -112,8 +112,8 @@ std::shared_ptr<Aws::Http::HttpRequest> AWSInput::CreateSignedRequest(Aws::Http:
 		*bodyStream << body;
 		request->AddContentBody(bodyStream);
 		request->SetContentLength(std::to_string(body.size()));
-		if (set_json) {
-			request->SetHeaderValue("Content-Type", "application/json");
+		if (!content_type.empty()) {
+			request->SetHeaderValue("Content-Type", content_type);
 		}
 	}
 
@@ -128,12 +128,12 @@ std::shared_ptr<Aws::Http::HttpRequest> AWSInput::CreateSignedRequest(Aws::Http:
 }
 
 unique_ptr<HTTPResponse> AWSInput::ExecuteRequest(ClientContext &context, Aws::Http::HttpMethod method,
-                                                  const string body, bool set_json) {
+                                                  const string body, string content_type) {
 
 	InitAWSAPI();
 	auto clientConfig = BuildClientConfig();
 	auto uri = BuildURI();
-	auto request = CreateSignedRequest(method, uri, body, set_json);
+	auto request = CreateSignedRequest(method, uri, body, content_type);
 
 	LogAWSRequest(context, request);
 	auto httpClient = Aws::Http::CreateHttpClient(clientConfig);
@@ -170,7 +170,7 @@ unique_ptr<HTTPResponse> AWSInput::DeleteRequest(ClientContext &context) {
 }
 
 unique_ptr<HTTPResponse> AWSInput::PostRequest(ClientContext &context, string post_body) {
-	return ExecuteRequest(context, Aws::Http::HttpMethod::HTTP_POST, post_body, true);
+	return ExecuteRequest(context, Aws::Http::HttpMethod::HTTP_POST, post_body, "application/json");
 }
 
 #endif

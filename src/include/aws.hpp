@@ -25,9 +25,9 @@ public:
 	unique_ptr<HTTPResponse> DeleteRequest(ClientContext &context);
 	unique_ptr<HTTPResponse> PostRequest(ClientContext &context, string post_body);
 	unique_ptr<HTTPResponse> ExecuteRequest(ClientContext &context, Aws::Http::HttpMethod method,
-	                                        const string body = "", bool set_json = false);
+	                                        const string body = "", string content_type = "");
 	std::shared_ptr<Aws::Http::HttpRequest> CreateSignedRequest(Aws::Http::HttpMethod method, const Aws::Http::URI &uri,
-	                                                            const string &body = "", bool set_json = false);
+	                                                            const string &body = "", string content_type = "");
 	Aws::Http::URI BuildURI();
 	Aws::Client::ClientConfiguration BuildClientConfig();
 
