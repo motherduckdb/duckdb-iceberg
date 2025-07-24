@@ -1,4 +1,4 @@
-# name: test/sql/cloud/s3tables/test_aws_no_request.test_slow
+# name: test/sql/cloud/s3tables/test_aws_no_request.test
 # description: Test when no request is made
 # group: [s3tables]
 

@@ -127,7 +127,7 @@ unique_ptr<HTTPResponse> AWSInput::GetRequest(ClientContext &context) {
 		D_ASSERT(res->HasClientError());
 		result->reason = res->GetClientErrorMessage();
 		return result;
- 	}
+	}
 	result = make_uniq<HTTPResponse>(HTTPStatusCode(static_cast<idx_t>(resCode)));
 	result->url = uri.GetURIString();
 	Aws::StringStream resBody;
