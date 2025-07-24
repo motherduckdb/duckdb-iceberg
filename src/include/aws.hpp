@@ -3,6 +3,16 @@
 #include "duckdb/common/string.hpp"
 #include "duckdb/main/client_context.hpp"
 
+#ifdef EMSCRIPTEN
+#else
+#include <aws/core/Aws.h>
+#include <aws/core/auth/AWSCredentials.h>
+#include <aws/core/auth/AWSCredentialsProviderChain.h>
+#include <aws/core/auth/AWSCredentialsProvider.h>
+#include <aws/core/http/HttpClient.h>
+#include <aws/core/http/HttpRequest.h>
+#endif
+
 namespace duckdb {
 
 class AWSInput {
@@ -14,6 +24,12 @@ public:
 	unique_ptr<HTTPResponse> GetRequest(ClientContext &context);
 	unique_ptr<HTTPResponse> DeleteRequest(ClientContext &context);
 	unique_ptr<HTTPResponse> PostRequest(ClientContext &context, string post_body);
+	unique_ptr<HTTPResponse> ExecuteRequest(ClientContext &context, Aws::Http::HttpMethod method,
+	                                        const string body = "", bool set_json = false);
+	std::shared_ptr<Aws::Http::HttpRequest> CreateSignedRequest(Aws::Http::HttpMethod method, const Aws::Http::URI &uri,
+	                                                            const string &body = "", bool set_json = false);
+	Aws::Http::URI BuildURI();
+	Aws::Client::ClientConfiguration BuildClientConfig();
 
 public:
 	//! NOTE: 'scheme' is assumed to be HTTPS!
