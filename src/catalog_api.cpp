@@ -294,7 +294,7 @@ rest_api_objects::CatalogConfig IRCAPI::GetCatalogConfig(ClientContext &context,
 	auto response = catalog.auth_handler->GetRequest(context, url);
 	if (response->status != HTTPStatusCode::OK_200) {
 		throw InvalidConfigurationException("Request to '%s' returned a non-200 status code (%s), with reason: %s",
-		                                    url.GetURL(), EnumUtil::ToString(response-<status), response->reason);
+		                                    url.GetURL(), EnumUtil::ToString(response->status), response->reason);
 	}
 	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(response->body));
 	auto *root = yyjson_doc_get_root(doc.get());
