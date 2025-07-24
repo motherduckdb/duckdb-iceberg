@@ -27,6 +27,8 @@ CREATE SECRET s3table_secret (
     region 'ap-southeast-2'
 );
 
+
+# This region is in sydney, so we should see a timeout message
 statement error
 attach 'arn:aws:s3tables:ap-southeast-2:840140254803:bucket/test-curl-timeout' as s3_catalog (
     TYPE ICEBERG,

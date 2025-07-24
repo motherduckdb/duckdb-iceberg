@@ -122,6 +122,7 @@ unique_ptr<HTTPResponse> AWSInput::GetRequest(ClientContext &context) {
 
 	unique_ptr<HTTPResponse> result;
 	if (resCode == Aws::Http::HttpResponseCode::REQUEST_NOT_MADE) {
+		// REQUEST_NOT_MADE has value -1, HTTPStatusCode is unsigned, so use INVALID=0
 		result = make_uniq<HTTPResponse>(HTTPStatusCode::INVALID);
 		// If the request is not made, there should be a client error message
 		D_ASSERT(res->HasClientError());
@@ -188,6 +189,7 @@ unique_ptr<HTTPResponse> AWSInput::PostRequest(ClientContext &context, string po
 
 	unique_ptr<HTTPResponse> result;
 	if (resCode == Aws::Http::HttpResponseCode::REQUEST_NOT_MADE) {
+		// REQUEST_NOT_MADE has value -1, HTTPStatusCode is unsigned, so use INVALID=0
 		result = make_uniq<HTTPResponse>(HTTPStatusCode::INVALID);
 		// If the request is not made, there should be a client error message
 		D_ASSERT(res->HasClientError());
@@ -245,6 +247,7 @@ unique_ptr<HTTPResponse> AWSInput::DeleteRequest(ClientContext &context) {
 
 	unique_ptr<HTTPResponse> result;
 	if (resCode == Aws::Http::HttpResponseCode::REQUEST_NOT_MADE) {
+		// REQUEST_NOT_MADE has value -1, HTTPStatusCode is unsigned, so use INVALID=0
 		result = make_uniq<HTTPResponse>(HTTPStatusCode::INVALID);
 		// If the request is not made, there should be a client error message
 		D_ASSERT(res->HasClientError());
