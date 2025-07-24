@@ -41,9 +41,11 @@ optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(IRCTransaction &irc_trans
 	auto lookup_info = EntryLookupInfo(CatalogType::TABLE_ENTRY, base_info.table);
 	auto entry = tables.GetEntry(context, lookup_info);
 	auto &ic_entry = entry->Cast<ICTableEntry>();
-	// mark table as dirty so at the end of the transaction updates/creates are commited
-	// if catalog does not support stage create, then it does not need to be marked dirty
+	// An eagerly created table (if stage_create isn't supported by Catalog) is not marked as dirty, because it requires
+	// no action on commit/abort. We do not drop it on abort because that isn't transactionally safe (no guarantees a
+	// different transaction didn't interact with the created table in the meantime)
 	if (catalog.attach_options.supports_stage_create) {
+		// mark table as dirty so at the end of the transaction updates/creates are commited
 		irc_transaction.MarkTableAsDirty(ic_entry);
 	}
 
