@@ -4,7 +4,7 @@
 
 require-env ICEBERG_AWS_REMOTE_AVAILABLE
 
-require-env r2_token
+require-env R2_TOKEN
 
 require httpfs
 
@@ -21,7 +21,7 @@ require tpch
 statement ok
 CREATE SECRET r2_secret (
     TYPE ICEBERG,
-    TOKEN '${r2_token}'
+    TOKEN '${R2_TOKEN}'
 );
 
 
