@@ -7,9 +7,7 @@
 #else
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentials.h>
-#include <aws/core/auth/AWSCredentialsProviderChain.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
-#include <aws/core/http/HttpClient.h>
 #include <aws/core/http/HttpRequest.h>
 #endif
 

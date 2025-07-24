@@ -64,8 +64,7 @@ static string GetAwsService(const string &host) {
 	return host.substr(0, host.find_first_of('.'));
 }
 
-AWSInput SIGV4Authorization::CreateAWSInput(ClientContext &context,
-											const IRCEndpointBuilder &endpoint_builder) {
+AWSInput SIGV4Authorization::CreateAWSInput(ClientContext &context, const IRCEndpointBuilder &endpoint_builder) {
 	AWSInput aws_input;
 	aws_input.cert_path = APIUtils::GetCURLCertPath();
 
@@ -97,26 +96,26 @@ AWSInput SIGV4Authorization::CreateAWSInput(ClientContext &context,
 	aws_input.key_id = kv_secret.secret_map["key_id"].GetValue<string>();
 	aws_input.secret = kv_secret.secret_map["secret"].GetValue<string>();
 	aws_input.session_token =
-		kv_secret.secret_map["session_token"].IsNull() ? "" : kv_secret.secret_map["session_token"].GetValue<string>();
+	    kv_secret.secret_map["session_token"].IsNull() ? "" : kv_secret.secret_map["session_token"].GetValue<string>();
 
 	return aws_input;
 }
 
 unique_ptr<HTTPResponse> SIGV4Authorization::PostRequest(ClientContext &context,
-														 const IRCEndpointBuilder &endpoint_builder,
-														 const string &body) {
+                                                         const IRCEndpointBuilder &endpoint_builder,
+                                                         const string &body) {
 	AWSInput aws_input = CreateAWSInput(context, endpoint_builder);
 	return aws_input.PostRequest(context, body);
 }
 
 unique_ptr<HTTPResponse> SIGV4Authorization::GetRequest(ClientContext &context,
-														const IRCEndpointBuilder &endpoint_builder) {
+                                                        const IRCEndpointBuilder &endpoint_builder) {
 	AWSInput aws_input = CreateAWSInput(context, endpoint_builder);
 	return aws_input.GetRequest(context);
 }
 
 unique_ptr<HTTPResponse> SIGV4Authorization::DeleteRequest(ClientContext &context,
-														   const IRCEndpointBuilder &endpoint_builder) {
+                                                           const IRCEndpointBuilder &endpoint_builder) {
 	AWSInput aws_input = CreateAWSInput(context, endpoint_builder);
 	return aws_input.DeleteRequest(context);
 }
