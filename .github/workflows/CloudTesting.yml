@@ -58,7 +58,7 @@ jobs:
           AWS_DEFAULT_REGION: ${{secrets.S3_ICEBERG_TEST_USER_REGION}}
           R2_TOKEN: ${{secrets.r2_token}}
         run: | 
-          python3 scripts/create_s3_insert_table.py --action=delete-and-create --catalogs=s3tables,r2,glue
+          python3 scripts/create_s3_insert_table.py --action=delete-and-create --catalogs=s3tables,r2
 
       - name: Test with rest catalog
         env:
