@@ -22,12 +22,16 @@ public:
 	unique_ptr<HTTPResponse> GetRequest(ClientContext &context);
 	unique_ptr<HTTPResponse> DeleteRequest(ClientContext &context);
 	unique_ptr<HTTPResponse> PostRequest(ClientContext &context, string post_body);
+
+#ifdef EMSCRIPTEN
+#else
 	unique_ptr<HTTPResponse> ExecuteRequest(ClientContext &context, Aws::Http::HttpMethod method,
 	                                        const string body = "", string content_type = "");
 	std::shared_ptr<Aws::Http::HttpRequest> CreateSignedRequest(Aws::Http::HttpMethod method, const Aws::Http::URI &uri,
 	                                                            const string &body = "", string content_type = "");
 	Aws::Http::URI BuildURI();
 	Aws::Client::ClientConfiguration BuildClientConfig();
+#endif
 
 public:
 	//! NOTE: 'scheme' is assumed to be HTTPS!
