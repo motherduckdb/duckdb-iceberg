@@ -1,5 +1,3 @@
-#define DUCKDB_EXTENSION_MAIN
-
 #include "iceberg_extension.hpp"
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_transaction_manager.hpp"
@@ -9,7 +7,7 @@
 #include "duckdb/common/exception/http_exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/function/scalar_function.hpp"
-#include "duckdb/main/extension_util.hpp"
+#include "duckdb/main/extension/extension_loader.hpp"
 #include "duckdb/catalog/catalog_entry/macro_catalog_entry.hpp"
 #include "duckdb/catalog/default/default_functions.hpp"
 #include "duckdb/parser/parsed_data/attach_info.hpp"
@@ -122,9 +120,9 @@ static void GlueAttach(ClientContext &context, IcebergAttachOptions &input) {
 
 //! Base attach method
 
-static unique_ptr<Catalog> IcebergCatalogAttach(StorageExtensionInfo *storage_info, ClientContext &context,
+static unique_ptr<Catalog> IcebergCatalogAttach(optional_ptr<StorageExtensionInfo> storage_info, ClientContext &context,
                                                 AttachedDatabase &db, const string &name, AttachInfo &info,
-                                                AccessMode access_mode) {
+                                                AttachOptions &options) {
 	IRCEndpointBuilder endpoint_builder;
 
 	string endpoint_type_string;
@@ -213,13 +211,13 @@ static unique_ptr<Catalog> IcebergCatalogAttach(StorageExtensionInfo *storage_in
 	}
 
 	D_ASSERT(auth_handler);
-	auto catalog = make_uniq<IRCatalog>(db, access_mode, std::move(auth_handler), attach_options.warehouse,
+	auto catalog = make_uniq<IRCatalog>(db, options.access_mode, std::move(auth_handler), attach_options.warehouse,
 	                                    attach_options.endpoint);
 	catalog->GetConfig(context);
 	return std::move(catalog);
 }
 
-static unique_ptr<TransactionManager> CreateTransactionManager(StorageExtensionInfo *storage_info, AttachedDatabase &db,
+static unique_ptr<TransactionManager> CreateTransactionManager(optional_ptr<StorageExtensionInfo> storage_info, AttachedDatabase &db,
                                                                Catalog &catalog) {
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
 	return make_uniq<ICTransactionManager>(db, ic_catalog);
@@ -233,9 +231,11 @@ public:
 	}
 };
 
-static void LoadInternal(DatabaseInstance &instance) {
+static void LoadInternal(ExtensionLoader &loader) {
 	Aws::SDKOptions options;
 	Aws::InitAPI(options); // Should only be called once.
+
+	auto &instance = loader.GetDatabaseInstance();
 
 	ExtensionHelper::AutoLoadExtension(instance, "parquet");
 	if (!instance.ExtensionIsLoaded("parquet")) {
@@ -250,13 +250,13 @@ static void LoadInternal(DatabaseInstance &instance) {
 	                          LogicalType::BOOLEAN, Value::BOOLEAN(false));
 
 	// Iceberg Table Functions
-	for (auto &fun : IcebergFunctions::GetTableFunctions(instance)) {
-		ExtensionUtil::RegisterFunction(instance, fun);
+	for (auto &fun : IcebergFunctions::GetTableFunctions(loader)) {
+		loader.RegisterFunction(fun);
 	}
 
 	// Iceberg Scalar Functions
 	for (auto &fun : IcebergFunctions::GetScalarFunctions()) {
-		ExtensionUtil::RegisterFunction(instance, fun);
+		loader.RegisterFunction(fun);
 	}
 
 	SecretType secret_type;
@@ -264,16 +264,16 @@ static void LoadInternal(DatabaseInstance &instance) {
 	secret_type.deserializer = KeyValueSecret::Deserialize<KeyValueSecret>;
 	secret_type.default_provider = "config";
 
-	ExtensionUtil::RegisterSecretType(instance, secret_type);
+	loader.RegisterSecretType(secret_type);
 	CreateSecretFunction secret_function = {"iceberg", "config", OAuth2Authorization::CreateCatalogSecretFunction};
 	OAuth2Authorization::SetCatalogSecretParameters(secret_function);
-	ExtensionUtil::RegisterFunction(instance, secret_function);
+	loader.RegisterFunction(secret_function);
 
 	config.storage_extensions["iceberg"] = make_uniq<IRCStorageExtension>();
 }
 
-void IcebergExtension::Load(DuckDB &db) {
-	LoadInternal(*db.instance);
+void IcebergExtension::Load(ExtensionLoader &loader) {
+	LoadInternal(loader);
 }
 std::string IcebergExtension::Name() {
 	return "iceberg";
@@ -283,15 +283,8 @@ std::string IcebergExtension::Name() {
 
 extern "C" {
 
-DUCKDB_EXTENSION_API void iceberg_init(duckdb::DatabaseInstance &db) {
-	LoadInternal(db);
+DUCKDB_CPP_EXTENSION_ENTRY(iceberg, loader) {
+	LoadInternal(loader);
 }
 
-DUCKDB_EXTENSION_API const char *iceberg_version() {
-	return duckdb::DuckDB::LibraryVersion();
 }
-}
-
-#ifndef DUCKDB_EXTENSION_MAIN
-#error DUCKDB_EXTENSION_MAIN not defined
-#endif
