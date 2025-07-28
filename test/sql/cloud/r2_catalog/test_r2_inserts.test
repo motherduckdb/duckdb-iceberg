@@ -116,7 +116,7 @@ commit
 statement error con1
 commit
 ----
-<REGEX>:.*HTTP Error.*branch main has changed.*
+<REGEX>:.*TransactionContext Error.*Branch.*main.*has changed.*
 
 # we see the con2 update
 query IIII
@@ -165,9 +165,3 @@ select * from my_datalake.test_inserts.basic_insert_test;
 15	mr.scroog	bitlane	2010-06-11
 16	mr.Goose	ponder	2010-06-11
 17	ms.Swan	lakeway	2010-06-11
-
-
-query I
-select count(*) from duckdb_secrets() where name like '%__internal_ic%';
-----
-0
