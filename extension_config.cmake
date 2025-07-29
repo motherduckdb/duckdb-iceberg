@@ -18,8 +18,7 @@ duckdb_extension_load(ducklake
 duckdb_extension_load(avro
         LOAD_TESTS
         GIT_URL https://github.com/duckdb/duckdb-avro
-        GIT_TAG ff766174cc6cc9c4ed93fc4b75871bcdffcc6e65
-        APPLY_PATCHES
+        GIT_TAG b75cb5cea43d3e2bee6f5d0f377aa99354dd868a
 )
 
 if (NOT EMSCRIPTEN)

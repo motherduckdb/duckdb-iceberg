@@ -648,6 +648,24 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 	D_ASSERT(current_delete_manifest == delete_manifests.end());
 }
 
+vector<IcebergFileListExtendedEntry> IcebergMultiFileList::GetFilesExtended() {
+	lock_guard<mutex> l(lock);
+	InitializeFiles(l);
+
+	vector<IcebergFileListExtendedEntry> result;
+	if (HasTransactionData()) {
+		throw NotImplementedException("Cannot stack multiple updates in a transaction");
+	}
+
+	for (auto &file : data_files) {
+		IcebergFileListExtendedEntry file_entry;
+		file_entry.file.path = file.file_path;
+		file_entry.file.file_size_bytes = file.file_size_in_bytes;
+		result.push_back(file_entry);
+	}
+	return result;
+}
+
 void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &entry,
                                           const vector<MultiFileColumnDefinition> &global_columns,
                                           const vector<ColumnIndex> &column_indexes) const {

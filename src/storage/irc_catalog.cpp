@@ -13,8 +13,10 @@
 #include "duckdb/main/attached_database.hpp"
 #include "rest_catalog/objects/catalog_config.hpp"
 #include "duckdb/planner/operator/logical_create_table.hpp"
+#include "duckdb/planner/operator/logical_delete.hpp"
 #include "storage/irc_catalog.hpp"
 
+#include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include <regex>
 #include "storage/irc_authorization.hpp"
 #include "storage/authorization/oauth2.hpp"
@@ -106,10 +108,6 @@ void IRCatalog::DropSchema(ClientContext &context, DropInfo &info) {
 	IRCAPI::CommitNamespaceDrop(context, *this, namespace_items);
 }
 
-PhysicalOperator &IRCatalog::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,
-                                        PhysicalOperator &plan) {
-	throw NotImplementedException("IRCatalog PlanDelete");
-}
 PhysicalOperator &IRCatalog::PlanUpdate(ClientContext &context, PhysicalPlanGenerator &planner, LogicalUpdate &op,
                                         PhysicalOperator &plan) {
 	throw NotImplementedException("IRCatalog PlanUpdate");

@@ -10,6 +10,7 @@
 
 #include "duckdb/common/multi_file/multi_file_list.hpp"
 #include "duckdb/common/types/batched_data_collection.hpp"
+#include "storage/iceberg_metadata_info.hpp"
 #include "iceberg_metadata.hpp"
 #include "iceberg_utils.hpp"
 #include "manifest_reader.hpp"
@@ -53,6 +54,7 @@ public:
 	unique_ptr<DeleteFilter> GetPositionalDeletesForFile(const string &file_path) const;
 	void ProcessDeletes(const vector<MultiFileColumnDefinition> &global_columns,
 	                    const vector<ColumnIndex> &column_indexes) const;
+	vector<IcebergFileListExtendedEntry> GetFilesExtended();
 
 public:
 	//! MultiFileList API
