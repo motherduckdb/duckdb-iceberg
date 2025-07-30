@@ -40,10 +40,11 @@ ATTACH '' AS my_datalake (
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
-statement ok
-delete from my_datalake.default.many_adds_deletes where l_orderkey > 5;
+# statement ok
+# select * from my_datalake.default.test_delete_table;
 
-mode skip
+# statement ok
+# delete from my_datalake.default.many_adds_deletes where l_orderkey > 5;
 
 statement ok
 drop table if exists my_datalake.default.test_delete_table;

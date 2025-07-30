@@ -1,3 +1,4 @@
+#include "../include/storage/iceberg_delete.hpp"
 #include "storage/iceberg_delete.hpp"
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_transaction.hpp"
@@ -147,7 +148,8 @@ void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &cont
 	// TODO: figure out how to get a UUID filepattern here.
 	// auto delete_file_uuid = transaction.GenerateUUID() + "-delete.parquet";
 	string delete_file_uuid = UUID::ToString(UUID::GenerateRandomUUID()) + "-deletes.parquet";
-	string delete_file_path = fs.JoinPath(table.table_info.table_metadata.location, "data", delete_file_uuid);
+	string delete_file_path =
+	    fs.JoinPath(table.table_info.table_metadata.location, fs.JoinPath("data", delete_file_uuid));
 
 	auto info = make_uniq<CopyInfo>();
 	info->file_path = delete_file_path;
@@ -243,7 +245,6 @@ void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &cont
 		throw InternalException("Expected a single delete file to be written here");
 	}
 	idx_t r = 0;
-	// add to the written files
 	delete_file.file_name = stats_chunk.GetValue(0, r).GetValue<string>();
 	delete_file.delete_count = stats_chunk.GetValue(1, r).GetValue<idx_t>();
 	delete_file.file_size_bytes = stats_chunk.GetValue(2, r).GetValue<idx_t>();
@@ -268,22 +269,25 @@ SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, Clien
 		}
 		FlushDelete(irc_transaction, context, global_state, filename_entry->second, entry.second);
 	}
-	vector<IcebergDeleteFile> delete_files;
+	auto &irc_table = table.Cast<ICTableEntry>();
+	auto &table_info = irc_table.table_info;
+	auto &transaction = IRCTransaction::Get(context, table.catalog);
+	vector<IcebergManifestEntry> iceberg_delete_files;
 	for (auto &entry : global_state.written_files) {
-		auto &data_file_path = entry.first;
-		auto delete_file = std::move(entry.second);
-		if (delete_file.data_file_id.IsValid()) {
-			// deleting from a committed file - add to delete files directly
-			delete_files.push_back(std::move(delete_file));
-		}
-		// else {
-		// 	// deleting from a irc_transaction local file - find the file we are deleting from
-		// 	delete_file.overwrites_existing_delete = false;
-		// 	irc_transaction.TransactionLocalDelete(table.GetTableId(), data_file_path, std::move(delete_file));
-		// }
+		auto data_file_name = entry.first;
+		auto &delete_file = entry.second;
+		IcebergManifestEntry manifest_entry;
+		manifest_entry.status = IcebergManifestEntryStatusType::ADDED;
+		manifest_entry.content = IcebergManifestEntryContentType::POSITION_DELETES;
+		manifest_entry.file_path = delete_file.file_name;
+		manifest_entry.file_format = "parquet";
+		manifest_entry.record_count = delete_file.delete_count;
+		manifest_entry.file_size_in_bytes = delete_file.file_size_bytes;
+		iceberg_delete_files.push_back(std::move(manifest_entry));
 	}
 	// TODO: add a Delete update to the transaction.
-	// irc_transaction.AddDeletes(table.GetTableId(), std::move(delete_files));
+	table_info.AddDeleteSnapshot(transaction, std::move(iceberg_delete_files));
+	transaction.MarkTableAsDirty(irc_table);
 	return SinkFinalizeType::READY;
 }
 
