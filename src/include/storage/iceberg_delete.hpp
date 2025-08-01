@@ -9,12 +9,12 @@
 #pragma once
 
 #include "duckdb/execution/physical_operator.hpp"
+#include "duckdb/planner/operator/logical_delete.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
 #include "storage/iceberg_metadata_info.hpp"
 #include "storage/iceberg_delete_filter.hpp"
 #include "storage/irc_table_entry.hpp"
 #include "storage/irc_schema_entry.hpp"
-#include "duckdb/planner/operator/logical_delete.hpp"
 
 namespace duckdb {
 

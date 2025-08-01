@@ -100,29 +100,8 @@ bool ManifestFileReader::ValidateVectorMapping() {
 	return true;
 }
 
-static unordered_map<string, Value> GetManifestEntryBounds(Vector &bounds) {
-
-	auto &keys_vector = MapVector::GetKeys(bounds);
-	auto &values_vector = MapVector::GetValues(bounds);
-
-	// auto keys_flat = FlatVector::GetData<string>(keys_vector);
-	// auto values_flat = FlatVector::GetData<string>(keys_vector);
-
-	unordered_map<string, Value> parsed_bounds;
-	auto &validity = FlatVector::Validity(bounds);
-
-	Printer::Print("keys = ");
-	Printer::Print(keys_vector.ToString());
-
-	Printer::Print("values = ");
-	Printer::Print(values_vector.ToString());
-
-	return parsed_bounds;
-}
-
 static unordered_map<int32_t, Value> GetBounds(Vector &bounds, idx_t index) {
 	auto &bounds_child = ListVector::GetEntry(bounds);
-	// reading from a avro file, maps always have string values.
 	auto keys = FlatVector::GetData<int32_t>(*StructVector::GetEntries(bounds_child)[0]);
 	auto &values = *StructVector::GetEntries(bounds_child)[1];
 	auto bounds_list = FlatVector::GetData<list_entry_t>(bounds);
@@ -297,8 +276,8 @@ idx_t ManifestFileReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergMan
 		entry.file_size_in_bytes = file_size_in_bytes[index];
 
 		if (lower_bounds && upper_bounds) {
-			entry.lower_bounds = GetManifestEntryBounds(*lower_bounds);
-			entry.upper_bounds = GetManifestEntryBounds(*upper_bounds);
+			entry.lower_bounds = GetBounds(*lower_bounds, index);
+			entry.upper_bounds = GetBounds(*upper_bounds, index);
 		}
 		if (column_sizes) {
 			entry.column_sizes = GetCounts(*column_sizes, index);

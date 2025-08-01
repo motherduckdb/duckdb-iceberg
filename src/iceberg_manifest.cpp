@@ -35,25 +35,6 @@ Value IcebergManifestEntry::ToDataFileStruct(const LogicalType &type) const {
 	// file_size_in_bytes: long - 104
 	children.push_back(Value::BIGINT(file_size_in_bytes));
 
-	vector<Value> lower_bound_key_vector;
-	vector<Value> lower_bound_value_vector;
-	// lower bounds: map<126: int, 127: binary> - 104
-	for (auto &child : lower_bounds) {
-		lower_bound_key_vector.emplace_back(child.first);
-		lower_bound_value_vector.emplace_back(child.second);
-	}
-	children.push_back(Value::MAP(LogicalType::VARCHAR, LogicalType::BLOB,  lower_bound_key_vector, lower_bound_value_vector));
-
-
-	vector<Value> upper_bound_key_vector;
-	vector<Value> upper_bound_value_vector;
-	// lower bounds: map<126: int, 127: binary> - 104
-	for (auto &child : lower_bounds) {
-		upper_bound_key_vector.emplace_back(child.first);
-		upper_bound_value_vector.emplace_back(child.second);
-	}
-	children.push_back(Value::MAP(LogicalType::VARCHAR, LogicalType::BLOB,  upper_bound_key_vector, upper_bound_value_vector));
-
 	return Value::STRUCT(type, children);
 }
 
@@ -237,57 +218,8 @@ idx_t WriteToFile(IcebergTableInformation &table_info, const IcebergManifestFile
 	//! value_counts
 	//! null_value_counts
 	//! nan_value_counts
-
-	// if (!manifest_file.data_files.empty() && !manifest_file.data_files.front().lower_bounds.empty()) {
-	// lower bounds struct
-	child_list_t<Value> lower_bounds_field_ids;
-	child_list_t<LogicalType> lower_bounds_children;
-	{
-		// lower bounds: map<126: int, 127: binary> - 104
-		children.emplace_back("lower_bounds", LogicalType::MAP(LogicalType::VARCHAR, LogicalTypeId::BLOB));
-		lower_bounds_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(LOWER_BOUNDS));
-		lower_bounds_field_ids.emplace_back("key-id", Value::INTEGER(LOWER_BOUNDS_KEY));
-		lower_bounds_field_ids.emplace_back("value-id", Value::INTEGER(LOWER_BOUNDS_VALUE));
-		data_file_field_ids.emplace_back("lower_bounds", Value::STRUCT(lower_bounds_field_ids));
-
-		auto field_obj = yyjson_mut_arr_add_obj(doc, child_fields_arr);
-		yyjson_mut_obj_add_uint(doc, field_obj, "id", LOWER_BOUNDS);
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "name", "lower_bounds");
-		yyjson_mut_obj_add_bool(doc, field_obj, "required", false);
-		auto lower_bound_type_struct = yyjson_mut_obj_add_obj(doc, field_obj, "type");
-		yyjson_mut_obj_add_strcpy(doc, lower_bound_type_struct, "type", "map");
-		yyjson_mut_obj_add_uint(doc, lower_bound_type_struct, "key-id", LOWER_BOUNDS_KEY);
-		// yyjson_mut_obj_add_strcpy(doc, lower_bound_type_struct, "key", "int");
-		yyjson_mut_obj_add_uint(doc, lower_bound_type_struct, "value-id", LOWER_BOUNDS_VALUE);
-		yyjson_mut_obj_add_bool(doc, lower_bound_type_struct, "value-required", false);
-		yyjson_mut_obj_add_strcpy(doc, lower_bound_type_struct, "values", "bytes");
-	}
-
-	// if (!manifest_file.data_files.empty() && !manifest_file.data_files.front().upper_bounds.empty()) {
-	// upper bounds struct
-	child_list_t<Value> upper_bounds_field_ids;
-	child_list_t<LogicalType> upper_bounds_children;
-	{
-		// upper bounds: map<129: int, 130: binary>
-		// stored as INT then serialized binary
-		children.emplace_back("upper_bounds", LogicalType::MAP(LogicalType::VARCHAR, LogicalTypeId::BLOB));
-		upper_bounds_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(UPPER_BOUNDS));
-		upper_bounds_field_ids.emplace_back("key-id", Value::INTEGER(UPPER_BOUNDS_KEY));
-		upper_bounds_field_ids.emplace_back("value-id", Value::INTEGER(UPPER_BOUNDS_VALUE));
-		data_file_field_ids.emplace_back("upper_bounds", Value::STRUCT(upper_bounds_field_ids));
-
-		auto field_obj = yyjson_mut_arr_add_obj(doc, child_fields_arr);
-		yyjson_mut_obj_add_uint(doc, field_obj, "id", UPPER_BOUNDS);
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "name", "upper_bounds");
-		yyjson_mut_obj_add_bool(doc, field_obj, "required", false);
-		auto lower_bound_type_struct = yyjson_mut_obj_add_obj(doc, field_obj, "type");
-		yyjson_mut_obj_add_strcpy(doc, lower_bound_type_struct, "type", "map");
-		yyjson_mut_obj_add_uint(doc, lower_bound_type_struct, "key-id", UPPER_BOUNDS_KEY);
-		// yyjson_mut_obj_add_strcpy(doc, lower_bound_type_struct, "key", "int");
-		yyjson_mut_obj_add_uint(doc, lower_bound_type_struct, "value-id", UPPER_BOUNDS_VALUE);
-		yyjson_mut_obj_add_bool(doc, lower_bound_type_struct, "value-required", false);
-		yyjson_mut_obj_add_strcpy(doc, lower_bound_type_struct, "values", "bytes");
-	}
+	//! lower_bounds
+	//! upper_bounds
 
 	{
 		// data_file: struct(...) - 2
@@ -332,7 +264,6 @@ idx_t WriteToFile(IcebergTableInformation &table_info, const IcebergManifestFile
 	}
 	data.SetCardinality(manifest_file.data_files.size());
 	auto iceberg_schema_string = ICUtils::JsonToString(std::move(doc_p));
-	Printer::Print("Iceberg schema string (metadata) : \n" + iceberg_schema_string);
 
 	child_list_t<Value> metadata_values;
 	metadata_values.emplace_back("schema", iceberg_schema_string);

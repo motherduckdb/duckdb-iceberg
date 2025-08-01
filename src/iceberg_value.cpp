@@ -123,8 +123,6 @@ static DeserializeResult DeserializeUUID(const string_t &blob, const LogicalType
 	return Value::UUID(UUID::FromUHugeint(ret));
 }
 
-
-
 //! FIXME: because of schema evolution, there are rules for inferring the correct type that we need to apply:
 //! See https://iceberg.apache.org/spec/#schema-evolution
 DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const LogicalType &type) {
