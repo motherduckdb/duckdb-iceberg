@@ -1,4 +1,3 @@
-#include "../include/storage/iceberg_delete.hpp"
 #include "storage/iceberg_delete.hpp"
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_transaction.hpp"
@@ -282,6 +281,13 @@ SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, Clien
 		manifest_entry.file_path = delete_file.file_name;
 		manifest_entry.file_format = "parquet";
 		manifest_entry.record_count = delete_file.delete_count;
+
+		// set lower and upper bound for the filename column
+		manifest_entry.lower_bounds["2147483546"] = Value::BLOB(data_file_name);
+		manifest_entry.upper_bounds["2147483546"] = Value::BLOB(data_file_name);
+		// need to add for the filename column an upper and lower bound
+		// need to add for the postition column an upper and lower bound
+		// manifest_entry.upper_bound;
 		manifest_entry.file_size_in_bytes = delete_file.file_size_bytes;
 		iceberg_delete_files.push_back(std::move(manifest_entry));
 	}

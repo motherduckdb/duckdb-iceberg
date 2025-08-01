@@ -32,8 +32,8 @@ public:
 	vector<int32_t> equality_ids;
 	int64_t record_count;
 	//! source_id -> blob
-	unordered_map<int32_t, Value> lower_bounds;
-	unordered_map<int32_t, Value> upper_bounds;
+	unordered_map<string, Value> lower_bounds;
+	unordered_map<string, Value> upper_bounds;
 	unordered_map<int32_t, int64_t> column_sizes;
 	unordered_map<int32_t, int64_t> value_counts;
 	unordered_map<int32_t, int64_t> null_value_counts;

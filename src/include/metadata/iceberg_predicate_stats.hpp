@@ -12,6 +12,8 @@ public:
 	static IcebergPredicateStats DeserializeBounds(const Value &lower_bound, const Value &upper_bound,
 	                                               const string &name, const LogicalType &type);
 
+	Value SerializeBound(const Value &bound);
+
 public:
 	Value lower_bound;
 	Value upper_bound;

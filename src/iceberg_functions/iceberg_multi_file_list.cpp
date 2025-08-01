@@ -233,6 +233,15 @@ unique_ptr<NodeStatistics> IcebergMultiFileList::GetCardinality(ClientContext &c
 	return make_uniq<NodeStatistics>(cardinality, cardinality);
 }
 
+Value IcebergPredicateStats::SerializeBound(const Value &bound) {
+	switch (bound.type().id()) {
+	case LogicalTypeId::VARCHAR:
+	default:
+		throw InternalException("cannot serialize bounds for non varchar column");
+	}
+}
+
+
 IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(const Value &lower_bound, const Value &upper_bound,
                                                                const string &name, const LogicalType &type) {
 	IcebergPredicateStats res;
@@ -284,8 +293,8 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &file) {
 		}
 
 		auto &column_id = column.id;
-		auto lower_bound_it = file.lower_bounds.find(column_id);
-		auto upper_bound_it = file.upper_bounds.find(column_id);
+		auto lower_bound_it = file.lower_bounds.find(to_string(column_id));
+		auto upper_bound_it = file.upper_bounds.find(to_string(column_id));
 		Value lower_bound;
 		Value upper_bound;
 		if (lower_bound_it != file.lower_bounds.end()) {

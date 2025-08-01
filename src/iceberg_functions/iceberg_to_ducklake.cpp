@@ -470,8 +470,8 @@ public:
 		file_size_bytes = entry.file_size_in_bytes;
 
 		//! Find lower and upper bounds for the 'file_path' of the position delete file
-		auto lower_bound_it = entry.lower_bounds.find(2147483546);
-		auto upper_bound_it = entry.upper_bounds.find(2147483546);
+		auto lower_bound_it = entry.lower_bounds.find("2147483546");
+		auto upper_bound_it = entry.upper_bounds.find("2147483546");
 		if (lower_bound_it == entry.lower_bounds.end() || upper_bound_it == entry.upper_bounds.end()) {
 			throw InvalidInputException("No lower/upper bounds are available for the Position Delete File, this is "
 			                            "required for export to DuckLake");
@@ -1097,8 +1097,8 @@ public:
 					Value upper_bound;
 					Value null_count;
 
-					auto lower_bound_it = manifest_entry.lower_bounds.find(column.column_id);
-					auto upper_bound_it = manifest_entry.upper_bounds.find(column.column_id);
+					auto lower_bound_it = manifest_entry.lower_bounds.find(to_string(column.column_id));
+					auto upper_bound_it = manifest_entry.upper_bounds.find(to_string(column.column_id));
 					if (lower_bound_it != manifest_entry.lower_bounds.end()) {
 						lower_bound = lower_bound_it->second;
 					}
