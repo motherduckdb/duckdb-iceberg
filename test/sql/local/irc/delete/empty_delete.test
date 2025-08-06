@@ -41,7 +41,7 @@ ATTACH '' AS my_datalake (
 );
 
 statement ok
-DELETE TABLE IF EXISTS my_datalake.default.test;
+DROP TABLE IF EXISTS my_datalake.default.test;
 
 statement ok
 CREATE TABLE my_datalake.default.test AS SELECT i id FROM range(1000) t(i);

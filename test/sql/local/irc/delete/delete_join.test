@@ -51,7 +51,7 @@ statement ok
 BEGIN
 
 statement ok
-INSERT INTO my_datalake.default.test FROM range(500, 1000)
+INSERT INTO my_datalake.default.test FROM range(500, 1000);
 
 statement ok
 CREATE TEMPORARY TABLE deleted_rows AS FROM range(0, 1000, 2) t(delete_id);

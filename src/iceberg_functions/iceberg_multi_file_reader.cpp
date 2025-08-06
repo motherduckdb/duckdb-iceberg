@@ -482,33 +482,9 @@ unique_ptr<Expression> IcebergMultiFileReader::GetVirtualColumnExpression(
 			throw InternalException("Extended info not found for reading row id column");
 		}
 
-		// auto &options = reader_data.file_to_be_opened.extended_info->options;
-		// auto entry = options.find("row_id_start");
-		// if (entry == options.end()) {
-		// 	throw InvalidInputException("File \"%s\" does not have row_id_start defined, and the file does not have a "
-		// 	                            "row_id column written either - row id could not be read",
-		// 	                            reader_data.file_to_be_opened.path);
-		// }
 		auto row_id_expr = make_uniq<BoundConstantExpression>(Value::BIGINT(0));
 		column_id = MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER;
 		return row_id_expr;
-
-		// auto file_row_number = make_uniq<BoundReferenceExpression>(type, local_idx.GetIndex());
-		//
-		// // transform this virtual column to file_row_number
-		// column_id = MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER;
-		//
-		// // generate the addition
-		// vector<unique_ptr<Expression>> children;
-		// children.push_back(std::move(row_id_expr));
-		// children.push_back(std::move(file_row_number));
-		//
-		// FunctionBinder binder(context);
-		// ErrorData error;
-		// auto function_expr = binder.BindScalarFunction(DEFAULT_SCHEMA, "+", std::move(children), error, true,
-		// nullptr); if (error.HasError()) { 	error.Throw();
-		// }
-		// return function_expr;
 	}
 	return MultiFileReader::GetVirtualColumnExpression(context, reader_data, local_columns, column_id, type, local_idx,
 	                                                   global_column_reference);

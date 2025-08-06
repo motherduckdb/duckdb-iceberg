@@ -680,9 +680,9 @@ vector<IcebergFileListExtendedEntry> IcebergMultiFileList::GetFilesExtended() {
 	InitializeFiles(l);
 
 	vector<IcebergFileListExtendedEntry> result;
-	if (HasTransactionData()) {
-		throw NotImplementedException("Cannot stack multiple updates in a transaction");
-	}
+	// if (HasTransactionData()) {
+	// 	throw NotImplementedException("Cannot stack multiple updates in a transaction");
+	// }
 
 	for (auto &file : data_files) {
 		IcebergFileListExtendedEntry file_entry;
@@ -692,6 +692,25 @@ vector<IcebergFileListExtendedEntry> IcebergMultiFileList::GetFilesExtended() {
 	}
 
 	if (HasTransactionData()) {
+		auto &transaction_data = GetTransactionData();
+		for (auto &alter_p : transaction_data.alters) {
+			auto &alter = alter_p.get();
+			auto break_here = 0;
+			for (auto &file : alter.manifest_file.data_files) {
+				IcebergFileListExtendedEntry file_entry;
+				file_entry.file.path = file.file_path;
+				file_entry.file.file_size_bytes = file.file_size_in_bytes;
+				result.push_back(file_entry);
+			}
+			// if (alter.snapshot.operation == IcebergSnapshotOperationType::APPEND) {
+			// 	transaction_data_manifests.push_back(alter.manifest_file);
+			// } else if (alter.snapshot.operation == IcebergSnapshotOperationType::DELETE) {
+			// 	transaction_delete_manifests.push_back(alter.manifest_file);
+			// } else {
+			// 	throw NotImplementedException("IcebergSnapshotOperationType: %d",
+			// 								  static_cast<uint8_t>(alter.snapshot.operation));
+			// }
+		}
 		// get updates.
 	}
 	return result;
