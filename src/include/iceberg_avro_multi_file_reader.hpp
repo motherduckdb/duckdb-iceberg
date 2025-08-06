@@ -17,8 +17,6 @@ struct IcebergAvroMultiFileReader : public MultiFileReader {
 	                                         FileGlobOptions options) override;
 
 	static unique_ptr<MultiFileReader> CreateInstance(const TableFunction &table);
-	bool Bind(MultiFileOptions &options, MultiFileList &files, vector<LogicalType> &return_types, vector<string> &names,
-	          MultiFileReaderBindData &bind_data) override;
 };
 
 } // namespace duckdb
