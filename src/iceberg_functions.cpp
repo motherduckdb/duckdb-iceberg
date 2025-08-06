@@ -8,12 +8,11 @@
 class ExtensionLoader;
 
 namespace duckdb {
-
 vector<TableFunctionSet> IcebergFunctions::GetTableFunctions(ExtensionLoader &loader) {
 	vector<TableFunctionSet> functions;
 
 	functions.push_back(std::move(GetIcebergSnapshotsFunction()));
-	functions.push_back(GetIcebergScanFunction(loader));
+	functions.push_back(std::move(GetIcebergScanFunction(loader)));
 	functions.push_back(std::move(GetIcebergMetadataFunction()));
 	functions.push_back(std::move(GetIcebergToDuckLakeFunction()));
 
