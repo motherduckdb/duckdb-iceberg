@@ -1,0 +1,37 @@
+# name: test/sql/local/irc/delete/delete_rollback_cleanup.test
+# description: Test ducklake cleaning up files after rollback of delete
+# group: [delete]
+
+mode skip
+
+# require ducklake
+#
+# require parquet
+#
+# statement ok
+# ATTACH 'ducklake:__TEST_DIR__/ducklake_delete_rollback_cleanup.db' AS ducklake (DATA_PATH '__TEST_DIR__/ducklake_delete_rollback_cleanup_files')
+#
+# statement ok
+# CREATE TABLE ducklake.test AS SELECT i id FROM range(1000) t(i);
+#
+# statement ok
+# BEGIN
+#
+# query I
+# DELETE FROM ducklake.test WHERE id%2=0
+# ----
+# 500
+#
+# statement ok
+# ROLLBACK
+#
+# query I
+# SELECT COUNT(*) FROM ducklake.test
+# ----
+# 1000
+#
+# # verify that we don't have the delete file there anymore
+# query I
+# SELECT COUNT(*) FROM glob('__TEST_DIR__/ducklake_delete_rollback_cleanup_files/*-delete.parquet')
+# ----
+# 0

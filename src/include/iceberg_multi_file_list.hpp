@@ -110,6 +110,7 @@ public:
 
 	vector<IcebergManifest>::iterator current_data_manifest;
 	mutable vector<IcebergManifest>::iterator current_delete_manifest;
+	mutable vector<reference<IcebergManifestFile>>::iterator current_transaction_delete_manifest;
 	//! The data files of the manifest file that we last scanned
 	idx_t data_file_idx = 0;
 	vector<IcebergManifestEntry> current_data_files;
