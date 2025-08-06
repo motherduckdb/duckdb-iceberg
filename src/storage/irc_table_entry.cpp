@@ -97,8 +97,8 @@ TableFunction ICTableEntry::GetScanFunction(ClientContext &context, unique_ptr<F
 	auto &db = DatabaseInstance::GetDatabase(context);
 	auto &system_catalog = Catalog::GetSystemCatalog(db);
 	auto data = CatalogTransaction::GetSystemTransaction(db);
-	auto &schema = system_catalog.GetSchema(data, DEFAULT_SCHEMA);
-	auto catalog_entry = schema.GetEntry(data, CatalogType::TABLE_FUNCTION_ENTRY, "iceberg_scan");
+	auto &catalog_schema = system_catalog.GetSchema(data, DEFAULT_SCHEMA);
+	auto catalog_entry = catalog_schema.GetEntry(data, CatalogType::TABLE_FUNCTION_ENTRY, "iceberg_scan");
 	if (!catalog_entry) {
 		throw InvalidInputException("Function with name \"iceberg_scan\" not found!");
 	}
