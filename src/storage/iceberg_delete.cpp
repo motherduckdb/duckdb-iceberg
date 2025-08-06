@@ -191,6 +191,7 @@ void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &cont
 	copy_to_file.rotate = false;
 	copy_to_file.return_type = CopyFunctionReturnType::WRITTEN_FILE_STATISTICS;
 	copy_to_file.write_partition_columns = false;
+	copy_to_file.expected_types = {LogicalType::VARCHAR, LogicalType::BIGINT};
 
 	// run the copy to file
 	vector<LogicalType> write_types;
@@ -283,6 +284,13 @@ SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, Clien
 		manifest_entry.file_format = "parquet";
 		manifest_entry.record_count = delete_file.delete_count;
 		manifest_entry.file_size_in_bytes = delete_file.file_size_bytes;
+
+		// set lower and upper bound for the filename column
+		manifest_entry.lower_bounds[2147483546] = Value::BLOB(data_file_name);
+		manifest_entry.upper_bounds[2147483546] = Value::BLOB(data_file_name);
+		// set referenced_data_file
+		manifest_entry.referenced_data_file = data_file_name;
+
 		iceberg_delete_files.push_back(std::move(manifest_entry));
 	}
 	// TODO: add a Delete update to the transaction.

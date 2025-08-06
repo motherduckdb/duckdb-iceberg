@@ -92,6 +92,7 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 			manifest.deleted_rows_count += data_file.record_count;
 		}
 		data_file.sequence_number = snapshot.sequence_number;
+		data_file.snapshot_id = snapshot.snapshot_id;
 		if (!manifest.has_min_sequence_number || data_file.sequence_number < manifest.min_sequence_number) {
 			manifest.min_sequence_number = data_file.sequence_number;
 		}
