@@ -40,6 +40,8 @@ ATTACH '' AS my_datalake (
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
+statement ok
+create schema if not exists my_datalake.default;
 
 statement ok
 DROP TABLE IF EXISTS my_datalake.default.test;

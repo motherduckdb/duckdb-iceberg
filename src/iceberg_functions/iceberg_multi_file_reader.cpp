@@ -3,6 +3,7 @@
 #include "iceberg_logging.hpp"
 #include "iceberg_predicate.hpp"
 #include "iceberg_value.hpp"
+#include "../../duckdb/third_party/catch/catch.hpp"
 
 #include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
 #include "duckdb/common/exception.hpp"
@@ -472,6 +473,7 @@ unique_ptr<Expression> IcebergMultiFileReader::GetVirtualColumnExpression(
 				continue;
 			}
 			if (col.identifier.GetValue<int32_t>() == MultiFileReader::ROW_ID_FIELD_ID) {
+				throw InternalException("Should not be here. Iceberg doesn't support global row ids");
 				// it is! return a reference to the global row id column so we can read it from the file directly
 				global_column_reference = row_id_column.get();
 				return nullptr;
@@ -490,82 +492,10 @@ unique_ptr<Expression> IcebergMultiFileReader::GetVirtualColumnExpression(
 	                                                   global_column_reference);
 }
 
-// vector<MultiFileColumnDefinition> MapColumns(MultiFileReaderData &reader_data,
-//                                              const vector<MultiFileColumnDefinition> &global_map,
-//                                              const vector<unique_ptr<DuckLakeNameMapEntry>> &column_maps) {
-// 	// create a map of field id -> column map index for the mapping at this level
-// 	unordered_map<idx_t, idx_t> field_id_map;
-// 	for (idx_t column_map_idx = 0; column_map_idx < column_maps.size(); column_map_idx++) {
-// 		auto &column_map = *column_maps[column_map_idx];
-// 		field_id_map.emplace(column_map.target_field_id.index, column_map_idx);
-// 	}
-// 	map<string, string> partitions;
-//
-// 	// make a copy of the global column map
-// 	auto result = global_map;
-// 	// now perform the actual remapping for the file
-// 	for (auto &result_col : result) {
-// 		auto field_id = result_col.identifier.GetValue<idx_t>();
-// 		// look up the field id
-// 		auto entry = field_id_map.find(field_id);
-// 		if (entry == field_id_map.end()) {
-// 			// field-id not found - this means the column is not present in the file
-// 			// replace the identifier with a stub name to ensure it is omitted
-// 			result_col.identifier = Value("__ducklake_unknown_identifier");
-// 			continue;
-// 		}
-// 		// field-id found - add the name-based mapping at this level
-// 		auto &column_map = column_maps[entry->second];
-// 		if (column_map->hive_partition) {
-// 			// this column is read from a hive partition - replace the identifier with a stub name
-// 			result_col.identifier = Value("__ducklake_unknown_identifier");
-// 			// replace the default value with the actual partition value
-// 			if (partitions.empty()) {
-// 				partitions = HivePartitioning::Parse(reader_data.reader->file.path);
-// 			}
-// 			auto entry = partitions.find(column_map->source_name);
-// 			if (entry == partitions.end()) {
-// 				throw InvalidInputException("Column \"%s\" should have been read from hive partitions - but it was not "
-// 				                            "found in filename \"%s\"",
-// 				                            column_map->source_name, reader_data.reader->file.path);
-// 			}
-// 			Value partition_val(entry->second);
-// 			result_col.default_expression = make_uniq<ConstantExpression>(partition_val.DefaultCastAs(result_col.type));
-// 			continue;
-// 		}
-// 		result_col.identifier = Value(column_map->source_name);
-// 		// recursively process any child nodes
-// 		if (!column_map->child_entries.empty()) {
-// 			result_col.children = MapColumns(reader_data, result_col.children, column_map->child_entries);
-// 		}
-// 	}
-// 	return result;
-// }
-//
-// vector<MultiFileColumnDefinition> CreateNewMapping(MultiFileReaderData &reader_data,
-// 												   const vector<MultiFileColumnDefinition> &global_map,
-// 												   const DuckLakeNameMap &name_map) {
-// 	return MapColumns(reader_data, global_map, name_map.column_maps);
-// }
-
 ReaderInitializeType IcebergMultiFileReader::CreateMapping(
     ClientContext &context, MultiFileReaderData &reader_data, const vector<MultiFileColumnDefinition> &global_columns,
     const vector<ColumnIndex> &global_column_ids, optional_ptr<TableFilterSet> filters, MultiFileList &multi_file_list,
     const MultiFileReaderBindData &bind_data, const virtual_column_map_t &virtual_columns) {
-	// if (reader_data.reader->file.extended_info) {
-	// 	auto &file_options = reader_data.reader->file.extended_info->options;
-	// 	auto entry = file_options.find("mapping_id");
-	// 	if (entry != file_options.end()) {
-	// 		auto mapping_id = MappingIndex(entry->second.GetValue<idx_t>());
-	// 		auto transaction = read_info.transaction.lock();
-	// 		auto &mapping = transaction->GetMappingById(mapping_id);
-	// 		// use the mapping to generate a new set of global columns for this file
-	// 		auto mapped_columns = CreateNewMapping(reader_data, global_columns, mapping);
-	// 		return MultiFileReader::CreateMapping(context, reader_data, mapped_columns, global_column_ids, filters,
-	// 											  multi_file_list, bind_data, virtual_columns,
-	// 											  MultiFileColumnMappingMode::BY_NAME);
-	// 	}
-	// }
 	return MultiFileReader::CreateMapping(context, reader_data, global_columns, global_column_ids, filters,
 	                                      multi_file_list, bind_data, virtual_columns);
 }
