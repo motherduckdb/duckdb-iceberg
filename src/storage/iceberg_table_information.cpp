@@ -63,6 +63,8 @@ static void ParseConfigOptions(const case_insensitive_map_t<string> &config, cas
 	}
 	if (StringUtil::StartsWith(endpoint, "https://")) {
 		endpoint = endpoint.substr(8, string::npos);
+		// if there is an endpoint and the endpoiont has https, use ssl.
+		options["use_ssl"] = Value(true);
 	}
 	if (StringUtil::EndsWith(endpoint, "/")) {
 		endpoint = endpoint.substr(0, endpoint.size() - 1);

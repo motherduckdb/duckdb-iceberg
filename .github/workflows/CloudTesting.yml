@@ -12,7 +12,7 @@ defaults:
 
 jobs:
   rest:
-    name: Test against remote AWS account
+    name: Test against remote cloud catalogs
     runs-on: ubuntu-latest
     env:
       VCPKG_TARGET_TRIPLET: 'x64-linux-release'
@@ -58,7 +58,7 @@ jobs:
           AWS_DEFAULT_REGION: ${{secrets.S3_ICEBERG_TEST_USER_REGION}}
           R2_TOKEN: ${{secrets.r2_token}}
         run: | 
-          python3 scripts/create_insert_table.py --action=delete-and-create --catalogs=s3tables,r2,glue
+          python3 scripts/create_s3_insert_table.py --action=delete-and-create --catalogs=s3tables,r2
 
       - name: Test with rest catalog
         env:
@@ -73,6 +73,8 @@ jobs:
 
       - name: File issue if error
         if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          echo "Cloud tests failed. see [Run Link](https://github.com/duckdblabs/duckdb-internal/actions/runs/${{ github.run_id }})" > report.txt
+          echo "Cloud tests failed. see [Run Link](https://github.com/duckdb/duckdb-iceberg/actions/runs/${{ github.run_id }})" > report.txt
           gh issue create --repo duckdb/duckdb-iceberg --title "Cloud Test Failures" --body-file report.txt
