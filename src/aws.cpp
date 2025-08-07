@@ -149,6 +149,7 @@ unique_ptr<HTTPResponse> AWSInput::ExecuteRequest(ClientContext &context, Aws::H
 	if (resCode == Aws::Http::HttpResponseCode::REQUEST_NOT_MADE) {
 		D_ASSERT(response->HasClientError());
 		result->reason = response->GetClientErrorMessage();
+		result->success = false;
 	} else {
 		Aws::StringStream resBody;
 		resBody << response->GetResponseBody().rdbuf();
