@@ -32,29 +32,15 @@ static string DetectStorageType(const string &location) {
 }
 
 static void ParseGCSConfigOptions(const case_insensitive_map_t<string> &config, case_insensitive_map_t<Value> &options) {
-	//! Set of recognized GCS config parameters and the duckdb secret option that matches it.
-	static const case_insensitive_map_t<string> gcs_config_to_option = {
-		{"gcs.oauth2.token", "bearer_token"},
-		{"gcs.bearer-token", "bearer_token"},
-		{"gcs.access-token", "bearer_token"},
-		{"gcs.endpoint", "endpoint"},
-		{"gcs.project-id", "project_id"},
-		// Map common OAuth2 patterns
-		{"oauth2.token", "bearer_token"},
-		{"bearer_token", "bearer_token"},
-		{"access_token", "bearer_token"}
-	};
-	
-	for (auto &entry : config) {
-		auto it = gcs_config_to_option.find(entry.first);
-		if (it != gcs_config_to_option.end()) {
-			options[it->second] = entry.second;
-		}
+	// Parse GCS-specific configuration.
+	auto token_it = config.find("gcs.oauth2.token");
+	if (token_it != config.end()) {
+		options["bearer_token"] = token_it->second;
 	}
 }
 
 static void ParseS3ConfigOptions(const case_insensitive_map_t<string> &config, case_insensitive_map_t<Value> &options) {
-	//! Set of recognized S3 config parameters and the duckdb secret option that matches it.
+	// Set of recognized S3 config parameters and the duckdb secret option that matches it.
 	static const case_insensitive_map_t<string> config_to_option = {{"s3.access-key-id", "key_id"},
 	                                                                {"s3.secret-access-key", "secret"},
 	                                                                {"s3.session-token", "session_token"},
@@ -158,15 +144,6 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 	// Detect storage type from metadata location
 	const auto &metadata_location = load_table_result.metadata.location;
 	string storage_type = DetectStorageType(metadata_location);
-	
-	// If storage is GCS and we have a bearer token from catalog OAuth2 auth
-	if (storage_type == "gcs" && catalog.auth_handler->type == IRCAuthorizationType::OAUTH2) {
-		auto &oauth2_auth = catalog.auth_handler->Cast<OAuth2Authorization>();
-		if (!oauth2_auth.token.empty()) {
-			// Use catalog's OAuth2 token for storage access
-			user_defaults["bearer_token"] = oauth2_auth.token;
-		}
-	}
 	
 	// Mapping from config key to a duckdb secret option
 	case_insensitive_map_t<Value> config_options;
