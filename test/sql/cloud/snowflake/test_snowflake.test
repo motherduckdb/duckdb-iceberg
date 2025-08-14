@@ -1,0 +1,56 @@
+# name: test/sql/cloud/snowflake/test_snowflake.test_slow
+# description: test integration with iceberg catalog read
+# group: [s3tables]
+
+require-env ICEBERG_SNOWFLAKE_REMOTE_AVAILABLE
+
+require-env SNOWFLAKE_KEY_ID
+
+require-env SNOWFLAKE_SECRET_KEY
+
+require-env SNOWFLAKE_CATALOG_URI
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+require aws
+
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+
+statement ok
+create secret polaris_secret (
+	TYPE ICEBERG,
+	CLIENT_ID '${POLARIS_CLIENT_ID}',
+    CLIENT_SECRET '${POLARIS_CLIENT_SECRET}',
+	ENDPOINT '${SNOWFLAKE_CATALOG_URI}'
+);
+
+
+statement ok
+attach 'GCS_catalog' as my_datalake (
+	type ICEBERG,
+	ENDPOINT '${SNOWFLAKE_CATALOG_URI}'
+);
+
+
+query I
+select * from my_datalake.default.duckdb_created_table;
+----
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
