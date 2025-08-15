@@ -161,6 +161,8 @@ void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &cont
 	child_list_t<Value> values;
 	values.emplace_back("file_path", Value::INTEGER(MultiFileReader::FILENAME_FIELD_ID));
 	values.emplace_back("pos", Value::INTEGER(MultiFileReader::ORDINAL_FIELD_ID));
+	// values.emplace_back("file_path", Value::INTEGER(2147483546));
+	// values.emplace_back("pos", Value::INTEGER(2147483545));
 	auto field_ids = Value::STRUCT(std::move(values));
 	vector<Value> field_input;
 	field_input.push_back(std::move(field_ids));
