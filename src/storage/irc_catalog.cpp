@@ -13,11 +13,8 @@
 #include "duckdb/main/attached_database.hpp"
 #include "rest_catalog/objects/catalog_config.hpp"
 #include "duckdb/planner/operator/logical_create_table.hpp"
-#include "duckdb/planner/operator/logical_delete.hpp"
 #include "storage/irc_catalog.hpp"
-
-#include "duckdb/planner/expression/bound_reference_expression.hpp"
-#include <regex>
+#include "regex"
 #include "storage/irc_authorization.hpp"
 #include "storage/authorization/oauth2.hpp"
 #include "storage/authorization/sigv4.hpp"
