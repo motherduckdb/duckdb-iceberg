@@ -57,3 +57,6 @@ select * from my_datalake.default.test_delete_table;
 5
 7
 9
+
+statement ok
+drop table my_datalake.default.test_delete_table;
