@@ -28,7 +28,6 @@ public:
 
 	idx_t Filter(row_t start_row_index, idx_t count, SelectionVector &result_sel) override;
 	void Initialize(ClientContext &context, const IcebergFileData &delete_file);
-	void Initialize(ClientContext &context, const IcebergDeleteScanEntry &delete_scan);
 	void SetMaxRowCount(idx_t max_row_count);
 
 private:

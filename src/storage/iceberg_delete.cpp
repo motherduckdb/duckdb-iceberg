@@ -125,7 +125,7 @@ void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &cont
 		                              "Iceberg. Eliminate duplicate matches prior to running the UPDATE");
 	}
 
-	IcebergDeleteFile delete_file;
+	IcebergDeleteFileInfo delete_file;
 	delete_file.data_file_path = filename;
 	delete_file.data_file_id = data_file_info.file_id;
 	// check if the file already has deletes

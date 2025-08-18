@@ -82,7 +82,7 @@ public:
 	}
 
 	mutex lock;
-	unordered_map<string, IcebergDeleteFile> written_files;
+	unordered_map<string, IcebergDeleteFileInfo> written_files;
 	unordered_map<string, WrittenColumnInfo> written_columns;
 	idx_t total_deleted_count = 0;
 	unordered_map<uint64_t, vector<idx_t>> deleted_rows;
