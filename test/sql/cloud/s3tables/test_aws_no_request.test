@@ -27,6 +27,9 @@ CREATE SECRET s3table_secret (
     region 'ap-southeast-2'
 );
 
+# skipping on github actions because the timeout is not reached
+# Still nice to keep to test locally.
+mode skip
 
 # This region is in sydney, so we should see a timeout message
 statement error

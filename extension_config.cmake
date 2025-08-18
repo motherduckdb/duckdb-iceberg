@@ -12,8 +12,7 @@ duckdb_extension_load(icu)
 duckdb_extension_load(ducklake
         LOAD_TESTS
         GIT_URL https://github.com/duckdb/ducklake
-        GIT_TAG f84ab92354579d64a4f0a2a2f40335260972fae4
-	APPLY_PATCHES
+        GIT_TAG dfe2e3c6ed7154514f6730e2db30b17fb506afaa
 )
 
 duckdb_extension_load(avro
