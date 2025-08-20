@@ -17,21 +17,19 @@ const string &IcebergTableInformation::BaseFilePath() const {
 
 static string DetectStorageType(const string &location) {
 	// Detect storage type from the location URL
-	if (StringUtil::StartsWith(location, "gs://") || 
-	    StringUtil::Contains(location, "storage.googleapis.com")) {
+	if (StringUtil::StartsWith(location, "gs://") || StringUtil::Contains(location, "storage.googleapis.com")) {
 		return "gcs";
-	} else if (StringUtil::StartsWith(location, "s3://") || 
-	           StringUtil::StartsWith(location, "s3a://")) {
+	} else if (StringUtil::StartsWith(location, "s3://") || StringUtil::StartsWith(location, "s3a://")) {
 		return "s3";
-	} else if (StringUtil::StartsWith(location, "abfs://") || 
-	           StringUtil::StartsWith(location, "az://")) {
+	} else if (StringUtil::StartsWith(location, "abfs://") || StringUtil::StartsWith(location, "az://")) {
 		return "azure";
 	}
 	// Default to s3 for backward compatibility
 	return "s3";
 }
 
-static void ParseGCSConfigOptions(const case_insensitive_map_t<string> &config, case_insensitive_map_t<Value> &options) {
+static void ParseGCSConfigOptions(const case_insensitive_map_t<string> &config,
+                                  case_insensitive_map_t<Value> &options) {
 	// Parse GCS-specific configuration.
 	auto token_it = config.find("gcs.oauth2.token");
 	if (token_it != config.end()) {
@@ -57,12 +55,12 @@ static void ParseS3ConfigOptions(const case_insensitive_map_t<string> &config, c
 	}
 }
 
-static void ParseConfigOptions(const case_insensitive_map_t<string> &config, case_insensitive_map_t<Value> &options, 
+static void ParseConfigOptions(const case_insensitive_map_t<string> &config, case_insensitive_map_t<Value> &options,
                                const string &storage_type = "s3") {
 	if (config.empty()) {
 		return;
 	}
-	
+
 	// Parse storage-specific config options
 	if (storage_type == "gcs") {
 		ParseGCSConfigOptions(config, options);
@@ -144,7 +142,7 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 	// Detect storage type from metadata location
 	const auto &metadata_location = load_table_result.metadata.location;
 	string storage_type = DetectStorageType(metadata_location);
-	
+
 	// Mapping from config key to a duckdb secret option
 	case_insensitive_map_t<Value> config_options;
 	//! TODO: apply the 'defaults' retrieved from the /v1/config endpoint

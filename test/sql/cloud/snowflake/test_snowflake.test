@@ -1,6 +1,6 @@
-# name: test/sql/cloud/snowflake/test_snowflake.test_slow
+# name: test/sql/cloud/snowflake/test_snowflake.test
 # description: test integration with iceberg catalog read
-# group: [s3tables]
+# group: [snowflake]
 
 require-env ICEBERG_SNOWFLAKE_REMOTE_AVAILABLE
 
