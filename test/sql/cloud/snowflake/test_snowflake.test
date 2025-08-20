@@ -4,11 +4,11 @@
 
 require-env ICEBERG_SNOWFLAKE_REMOTE_AVAILABLE
 
-require-env SNOWFLAKE_KEY_ID
+require-env SNOWFLAKE_KEY_ID_GCS
 
-require-env SNOWFLAKE_SECRET_KEY
+require-env SNOWFLAKE_SECRET_KEY_GCS
 
-require-env SNOWFLAKE_CATALOG_URI
+require-env SNOWFLAKE_CATALOG_URI_GCS
 
 require avro
 
@@ -28,16 +28,16 @@ set ignore_error_messages
 statement ok
 create secret polaris_secret (
 	TYPE ICEBERG,
-	CLIENT_ID '${POLARIS_CLIENT_ID}',
-    CLIENT_SECRET '${POLARIS_CLIENT_SECRET}',
-	ENDPOINT '${SNOWFLAKE_CATALOG_URI}'
+	CLIENT_ID '${SNOWFLAKE_KEY_ID_GCS}',
+	CLIENT_SECRET '${SNOWFLAKE_SECRET_KEY_GCS}',
+	ENDPOINT '${SNOWFLAKE_CATALOG_URI_GCS}'
 );
 
 
 statement ok
 attach 'GCS_catalog' as my_datalake (
 	type ICEBERG,
-	ENDPOINT '${SNOWFLAKE_CATALOG_URI}'
+	ENDPOINT '${SNOWFLAKE_CATALOG_URI_GCS}'
 );
 
 
