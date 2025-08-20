@@ -71,6 +71,7 @@ jobs:
           R2_TOKEN: ${{secrets.r2_token}}
           ICEBERG_REMOTE_INSERT_READY: 1
           ICEBERG_AWS_REMOTE_AVAILABLE: 1
+          ICEBERG_SNOWFLAKE_REMOTE_AVAILABLE: 1
         run: |
           make test_release
 
