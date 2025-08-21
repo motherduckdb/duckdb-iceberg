@@ -53,7 +53,6 @@ Value IcebergManifestEntry::ToDataFileStruct(const LogicalType &type) const {
 	}
 	children.push_back(Value::MAP(LogicalType::STRUCT(bounds_types), upper_bounds_values));
 
-
 	return Value::STRUCT(type, children);
 }
 

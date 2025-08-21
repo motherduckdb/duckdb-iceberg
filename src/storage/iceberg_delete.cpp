@@ -6,7 +6,6 @@
 #include "iceberg_multi_file_reader.hpp"
 #include "iceberg_multi_file_list.hpp"
 
-
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
@@ -155,8 +154,8 @@ void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &cont
 	// generate the field ids to be written by the parquet writer
 	// these field ids follow icebergs' ids and names for the delete files
 	child_list_t<Value> values;
-	values.emplace_back("file_path", MultiFileReader::DELETE_FILE_PATH_FIELD_ID);
-	values.emplace_back("pos", MultiFileReader::DELETE_POS_FIELD_ID);
+	values.emplace_back("file_path", Value::INTEGER(MultiFileReader::DELETE_FILE_PATH_FIELD_ID));
+	values.emplace_back("pos", Value::INTEGER(MultiFileReader::DELETE_POS_FIELD_ID));
 	auto field_ids = Value::STRUCT(std::move(values));
 	vector<Value> field_input;
 	field_input.push_back(std::move(field_ids));

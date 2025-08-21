@@ -17,7 +17,6 @@ struct IcebergConstants {
 	static constexpr const idx_t TRANSACTION_LOCAL_ID_START = 9223372036854775808ULL;
 };
 
-
 struct DataFileIndex {
 	DataFileIndex() : index(DConstants::INVALID_INDEX) {
 	}
