@@ -693,6 +693,8 @@ vector<IcebergFileListExtendedEntry> IcebergMultiFileList::GetFilesExtended() {
 		for (auto &alter_p : transaction_data.alters) {
 			auto &alter = alter_p.get();
 			for (auto &file : alter.manifest_file.data_files) {
+				// if this is transaction local data, we can be positive every delete file only
+				/// references one data file.
 				IcebergFileListExtendedEntry file_entry;
 				file_entry.file.path = file.file_path;
 				file_entry.file.file_size_bytes = file.file_size_in_bytes;

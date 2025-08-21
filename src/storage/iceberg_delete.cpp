@@ -127,19 +127,8 @@ void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &cont
 	delete_file.data_file_id = data_file_info.file_id;
 	// check if the file already has deletes
 	auto existing_delete_data = delete_map->GetDeleteData(filename);
-	// TODO: for V3 deletes, we need to be able to find existing delete files and merge with them
+	// TODO: we can merge with existing delete data for the same data file for faster reads.
 	D_ASSERT(!existing_delete_data);
-	if (sorted_deletes.size() == data_file_info.row_count) {
-		// ALL rows in this file are deleted - we don't need to write the deletes out to a file
-		// we can just invalidate the source data file directly
-		if (delete_file.data_file_id.IsValid()) {
-			// persistent file - drop the file as part of the transaction
-			// TODO: transaction does not have a DropFile command
-			//  but the concept still stands that we can rewrite the manifest to not include a completely deleted file.
-			// transaction.DropFile(table.GetTableId(), delete_file.data_file_id, data_file_info.file.path);
-		}
-		return;
-	}
 
 	auto &fs = FileSystem::GetFileSystem(context);
 	string delete_file_uuid = UUID::ToString(UUID::GenerateRandomUUID()) + "-deletes.parquet";

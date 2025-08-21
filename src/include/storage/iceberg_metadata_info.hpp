@@ -36,7 +36,6 @@ struct IcebergFileData {
 
 struct IcebergFileListExtendedEntry {
 	DataFileIndex file_id;
-	DataFileIndex delete_file_id;
 	IcebergFileData file;
 	IcebergFileData delete_file;
 	optional_idx row_id_start;
