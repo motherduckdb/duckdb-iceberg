@@ -40,25 +40,19 @@ Value IcebergManifestEntry::ToDataFileStruct(const LogicalType &type) const {
 	bounds_types.emplace_back("value", LogicalType::BLOB);
 
 	vector<Value> lower_bounds_values;
-	// lower bounds: map<126: int, 127: binary> - 104
+	// lower bounds: map<126: int, 127: binary> - 125
 	for (auto &child : lower_bounds) {
 		lower_bounds_values.push_back(Value::STRUCT({{"key", child.first}, {"value", child.second}}));
 	}
 	children.push_back(Value::MAP(LogicalType::STRUCT(bounds_types), lower_bounds_values));
 
 	vector<Value> upper_bounds_values;
-	// lower bounds: map<126: int, 127: binary> - 104
+	// upper bounds: map<129: int, 130: binary> - 128
 	for (auto &child : upper_bounds) {
 		upper_bounds_values.push_back(Value::STRUCT({{"key", child.first}, {"value", child.second}}));
 	}
 	children.push_back(Value::MAP(LogicalType::STRUCT(bounds_types), upper_bounds_values));
 
-	// referenced_data_file: long - 104
-	if (content == IcebergManifestEntryContentType::POSITION_DELETES) {
-		children.push_back(Value(referenced_data_file));
-	} else {
-		children.push_back(Value(""));
-	}
 
 	return Value::STRUCT(type, children);
 }
@@ -318,18 +312,6 @@ idx_t WriteToFile(IcebergTableInformation &table_info, const IcebergManifestFile
 		yyjson_mut_obj_add_strcpy(doc, val_obj, "name", "value");
 		yyjson_mut_obj_add_strcpy(doc, val_obj, "type", "binary");
 		yyjson_mut_obj_add_uint(doc, val_obj, "id", UPPER_BOUNDS_VALUE);
-	}
-
-	{
-		// referenced_data_file: long - 103
-		children.emplace_back("referenced_data_file", LogicalType::VARCHAR);
-		data_file_field_ids.emplace_back("referenced_data_file", Value::INTEGER(REFERENCED_DATA_FILE));
-
-		auto field_obj = yyjson_mut_arr_add_obj(doc, child_fields_arr);
-		yyjson_mut_obj_add_uint(doc, field_obj, "id", REFERENCED_DATA_FILE);
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "name", "referenced_data_file");
-		yyjson_mut_obj_add_bool(doc, field_obj, "required", false);
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "type", "string");
 	}
 
 	{

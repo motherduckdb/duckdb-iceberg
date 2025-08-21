@@ -1,4 +1,3 @@
-#include "../include/storage/iceberg_delete.hpp"
 #include "storage/iceberg_delete.hpp"
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_transaction.hpp"
@@ -6,11 +5,10 @@
 #include "storage/iceberg_table_information.hpp"
 #include "iceberg_multi_file_reader.hpp"
 #include "iceberg_multi_file_list.hpp"
-#include "storage/irc_transaction.hpp"
+
 
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
-
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 #include "duckdb/execution/operator/persistent/physical_copy_to_file.hpp"
 #include "duckdb/execution/physical_plan_generator.hpp"
@@ -145,8 +143,6 @@ void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &cont
 	}
 
 	auto &fs = FileSystem::GetFileSystem(context);
-	// TODO: figure out how to get a UUID filepattern here.
-	// auto delete_file_uuid = transaction.GenerateUUID() + "-delete.parquet";
 	string delete_file_uuid = UUID::ToString(UUID::GenerateRandomUUID()) + "-deletes.parquet";
 	string delete_file_path =
 	    fs.JoinPath(table.table_info.table_metadata.location, fs.JoinPath("data", delete_file_uuid));
@@ -159,10 +155,8 @@ void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &cont
 	// generate the field ids to be written by the parquet writer
 	// these field ids follow icebergs' ids and names for the delete files
 	child_list_t<Value> values;
-	// TODO: once https://github.com/duckdb/duckdb/pull/18617 is merged, used values
-	// in multifile reader
-	values.emplace_back("file_path", Value::INTEGER(2147483546));
-	values.emplace_back("pos", Value::INTEGER(2147483545));
+	values.emplace_back("file_path", MultiFileReader::DELETE_FILE_PATH_FIELD_ID);
+	values.emplace_back("pos", MultiFileReader::DELETE_POS_FIELD_ID);
 	auto field_ids = Value::STRUCT(std::move(values));
 	vector<Value> field_input;
 	field_input.push_back(std::move(field_ids));
@@ -252,7 +246,6 @@ void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &cont
 	delete_file.delete_count = stats_chunk.GetValue(1, r).GetValue<idx_t>();
 	delete_file.file_size_bytes = stats_chunk.GetValue(2, r).GetValue<idx_t>();
 	delete_file.footer_size = stats_chunk.GetValue(3, r).GetValue<idx_t>();
-	// TODO: add this back in
 	global_state.written_files.emplace(filename, std::move(delete_file));
 }
 
@@ -295,7 +288,6 @@ SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, Clien
 
 		iceberg_delete_files.push_back(std::move(manifest_entry));
 	}
-	// TODO: add a Delete update to the transaction.
 	table_info.AddDeleteSnapshot(transaction, std::move(iceberg_delete_files));
 	transaction.MarkTableAsDirty(irc_table);
 	return SinkFinalizeType::READY;

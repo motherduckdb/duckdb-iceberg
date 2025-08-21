@@ -113,7 +113,6 @@ void IRCatalog::DropSchema(ClientContext &context, DropInfo &info) {
 	namespace_items.push_back(IRCAPI::GetEncodedSchemaName(namespace_identifier));
 	if (info.if_not_found == OnEntryNotFound::RETURN_NULL) {
 		auto schema_lookup = EntryLookupInfo(CatalogType::SCHEMA_ENTRY, info.name);
-		// auto &irc_transaction = CatalogTran::Get(context, *this);
 		auto transaction = CatalogTransaction::GetSystemCatalogTransaction(context);
 		auto schema_exists = LookupSchema(transaction, schema_lookup, info.if_not_found);
 		if (!schema_exists) {

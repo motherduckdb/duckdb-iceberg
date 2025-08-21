@@ -271,7 +271,7 @@ void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, cons
 		const auto &file_path = data_file.file_path;
 		lock_guard<mutex> delete_guard(multi_file_list.delete_lock);
 		if (multi_file_list.current_delete_manifest != multi_file_list.delete_manifests.end() ||
-		    !multi_file_list.transaction_delete_manifests.empty()) {
+		    multi_file_list.current_transaction_delete_manifest != multi_file_list.transaction_delete_manifests.end()) {
 			multi_file_list.ProcessDeletes(global_columns, global_column_ids);
 		}
 		reader.deletion_filter = std::move(multi_file_list.GetPositionalDeletesForFile(file_path));
@@ -472,10 +472,7 @@ unique_ptr<Expression> IcebergMultiFileReader::GetVirtualColumnExpression(
 				continue;
 			}
 			if (col.identifier.GetValue<int32_t>() == MultiFileReader::ROW_ID_FIELD_ID) {
-				throw InternalException("Should not be here. Iceberg doesn't support global row ids");
-				// it is! return a reference to the global row id column so we can read it from the file directly
-				global_column_reference = row_id_column.get();
-				return nullptr;
+				throw InternalException("Iceberg does not support global row ids");
 			}
 		}
 		// get the row id start for this file
