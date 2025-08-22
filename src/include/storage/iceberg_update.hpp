@@ -21,12 +21,12 @@ namespace duckdb {
 
 class IcebergUpdate : public PhysicalOperator {
 public:
-	IcebergUpdate(PhysicalPlan &physical_plan, IcebergTableEntry &table, vector<PhysicalIndex> columns,
-	               PhysicalOperator &child, PhysicalOperator &copy_op, PhysicalOperator &delete_op,
-	               PhysicalOperator &insert_op);
+	IcebergUpdate(PhysicalPlan &physical_plan, ICTableEntry &table, vector<PhysicalIndex> columns,
+	              PhysicalOperator &child, PhysicalOperator &copy_op, PhysicalOperator &delete_op,
+	              PhysicalOperator &insert_op);
 
 	//! The table to update
-	IcebergTableEntry &table;
+	ICTableEntry &table;
 	//! The order of to-be-inserted columns
 	vector<PhysicalIndex> columns;
 	//! The copy operator for writing new data to files

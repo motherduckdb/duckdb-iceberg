@@ -9,6 +9,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 include_directories(src/include)
+#include_directories(src/include/common)
+#include_directories(src/include/deletes)
+#include_directories(src/include/metadata)
+#include_directories(src/include/storage)
+#include_directories(src/include/storage/authorization)
+#include_directories(src/include/storage/table_create)
+#include_directories(src/include/storage/table_update)
+
 
 set(EXTENSION_SOURCES
     src/iceberg_extension.cpp
@@ -22,6 +30,7 @@ set(EXTENSION_SOURCES
     src/catalog_utils.cpp
     src/storage/iceberg_insert.cpp
     src/storage/iceberg_delete.cpp
+    src/storage/iceberg_update.cpp
     src/aws.cpp
     src/base_manifest_reader.cpp
     src/manifest_list_reader.cpp
