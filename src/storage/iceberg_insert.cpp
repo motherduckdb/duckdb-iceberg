@@ -401,7 +401,9 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 	physical_copy_ref.per_thread_output = false;
 	physical_copy_ref.return_type = CopyFunctionReturnType::WRITTEN_FILE_STATISTICS; // TODO: capture stats
 	physical_copy_ref.write_partition_columns = true;
-	physical_copy_ref.children.push_back(*plan);
+	if (plan) {
+		physical_copy.children.push_back(*plan);
+	}
 	physical_copy_ref.names = names_to_write;
 	physical_copy_ref.expected_types = types_to_write;
 	physical_copy_ref.hive_file_pattern = true;
