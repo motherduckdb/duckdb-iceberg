@@ -53,6 +53,10 @@ string IRCAPI::GetEncodedSchemaName(const vector<string> &items) {
 	}
 	//! FIXME: the spec defines response objects for all failure conditions, we can deserialize the response and
 	//! return a more descriptive error message based on that.
+	if (!response.reason.empty()) {
+		throw HTTPException(response, "%s request to endpoint '%s' returned an error response (HTTP %n). Reason: %s",
+		                    method, url, int(response.status), response.reason);
+	}
 
 	//! If this was not a request error this means the server responded - report the response status and response
 	throw HTTPException(response, "%s request to endpoint '%s' returned an error response (HTTP %n)", method, url,

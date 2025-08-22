@@ -51,7 +51,7 @@ def get_r2_catalog():
         name="r2_catalog",
         warehouse='6b17833f308abc1e1cc343c552b51f51_r2-catalog',
         uri='https://catalog.cloudflarestorage.com/6b17833f308abc1e1cc343c552b51f51/r2-catalog',
-        token=os.getenv('r2_token'),
+        token=os.getenv('R2_TOKEN'),
     )
     return catalog
 
