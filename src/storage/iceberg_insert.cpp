@@ -5,6 +5,8 @@
 #include "storage/iceberg_table_information.hpp"
 
 #include "iceberg_multi_file_list.hpp"
+#include "../include/storage/iceberg_table_information.hpp"
+#include "../include/storage/irc_table_entry.hpp"
 
 #include "duckdb/common/sort/partition_state.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
@@ -32,6 +34,10 @@ IcebergInsert::IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op, S
                              unique_ptr<BoundCreateTableInfo> info)
     : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, op.types, 1), table(nullptr), schema(&schema),
       info(std::move(info)) {
+}
+
+IcebergInsert::IcebergInsert(PhysicalPlan &physical_plan, const vector<LogicalType> &types, TableCatalogEntry &table)
+    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, types, 1), table(&table), schema(nullptr) {
 }
 
 IcebergCopyInput::IcebergCopyInput(ClientContext &context, ICTableEntry &table)
@@ -363,6 +369,18 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 	physical_copy_ref.expected_types = types_to_write;
 	physical_copy_ref.hive_file_pattern = true;
 	return physical_copy;
+}
+
+PhysicalOperator &IcebergInsert::PlanInsert(ClientContext &context, PhysicalPlanGenerator &planner,
+                                            ICTableEntry &table) {
+	// auto partition_data = table.table_info.load_table_result->me;
+	optional_idx partition_id;
+	// if (partition_data) {
+	// 	partition_id = partition_data->partition_id;
+	// }
+	vector<LogicalType> return_types;
+	return_types.emplace_back(LogicalType::BIGINT);
+	return planner.Make<IcebergInsert>(return_types, table);
 }
 
 PhysicalOperator &IRCatalog::PlanInsert(ClientContext &context, PhysicalPlanGenerator &planner, LogicalInsert &op,

@@ -34,6 +34,10 @@ public:
 	//! INSERT INTO
 	IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op, TableCatalogEntry &table,
 	              physical_index_vector_t<idx_t> column_index_map);
+	//! ??
+	//! INSERT INTO
+	IcebergInsert(PhysicalPlan &physical_plan, const vector<LogicalType> &types, TableCatalogEntry &table);
+
 	//! CREATE TABLE AS
 	IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op, SchemaCatalogEntry &schema,
 	              unique_ptr<BoundCreateTableInfo> info);
@@ -65,6 +69,8 @@ public:
 	unique_ptr<GlobalSinkState> GetGlobalSinkState(ClientContext &context) const override;
 	static PhysicalOperator &PlanCopyForInsert(ClientContext &context, PhysicalPlanGenerator &planner,
 	                                           IcebergCopyInput &copy_input, optional_ptr<PhysicalOperator> plan);
+
+	static PhysicalOperator &PlanInsert(ClientContext &context, PhysicalPlanGenerator &planner, ICTableEntry &table);
 
 	bool IsSink() const override {
 		return true;
