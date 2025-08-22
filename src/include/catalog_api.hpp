@@ -20,6 +20,10 @@ struct IRCAPISchema {
 	string catalog_name;
 };
 
+// Some API responses have error messages that need to be checked before being raised
+// to the user, since sometimes is does not mean whole operation has failed.
+// Ex: Glue will return an error when trying to get the metadata for a non-iceberg table during a list tables operation
+//     The complete operation did not fail, just getting metadata for one table
 template <typename T>
 class APIResult {
 public:
