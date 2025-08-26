@@ -44,7 +44,14 @@ statement ok
 drop table if exists my_datalake.default.test_delete_table;
 
 statement ok
-create table my_datalake.default.test_delete_table as select range a from range(10);
+create table my_datalake.default.test_delete_table (a int);
+
+loop i 0 5
+
+statement ok
+insert into my_datalake.default.test_delete_table values ((${i}*2)) ((${i}*2) + 1);
+
+endloop
 
 statement ok
 delete from my_datalake.default.test_delete_table where a%2 = 0;
