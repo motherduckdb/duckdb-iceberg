@@ -19,8 +19,6 @@
 namespace duckdb {
 
 struct IcebergDeleteFileInfo {
-	// TODO: should this be a data file index?
-	DataFileIndex data_file_id;
 	string data_file_path;
 	string file_name;
 	idx_t footer_size;
@@ -35,7 +33,6 @@ struct IcebergFileData {
 };
 
 struct IcebergFileListExtendedEntry {
-	DataFileIndex file_id;
 	IcebergFileData file;
 	IcebergFileData delete_file;
 	optional_idx row_id_start;

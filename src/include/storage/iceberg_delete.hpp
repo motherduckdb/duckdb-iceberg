@@ -69,9 +69,9 @@ struct WrittenColumnInfo {
 
 class IcebergDeleteLocalState : public LocalSinkState {
 public:
-	optional_idx current_file_index;
+	string current_file_name;
 	vector<idx_t> file_row_numbers;
-	unordered_map<idx_t, string> filenames;
+	unordered_set<string> filenames;
 };
 
 class IcebergDeleteGlobalState : public GlobalSinkState {
@@ -85,8 +85,8 @@ public:
 	unordered_map<string, IcebergDeleteFileInfo> written_files;
 	unordered_map<string, WrittenColumnInfo> written_columns;
 	idx_t total_deleted_count = 0;
-	unordered_map<uint64_t, vector<idx_t>> deleted_rows;
-	unordered_map<idx_t, string> filenames;
+	unordered_map<string, vector<idx_t>> deleted_rows;
+	unordered_set<string> filenames;
 
 	void Flush(IcebergDeleteLocalState &local_state) {
 		auto &local_entry = local_state.file_row_numbers;
@@ -94,7 +94,7 @@ public:
 			return;
 		}
 		lock_guard<mutex> guard(lock);
-		auto &global_entry = deleted_rows[local_state.current_file_index.GetIndex()];
+		auto &global_entry = deleted_rows[local_state.current_file_name];
 		global_entry.insert(global_entry.end(), local_entry.begin(), local_entry.end());
 		total_deleted_count += local_entry.size();
 		local_entry.clear();
@@ -105,7 +105,7 @@ public:
 		// flush the file names to the global state
 		lock_guard<mutex> guard(lock);
 		for (auto &entry : local_state.filenames) {
-			filenames.emplace(entry.first, entry.second);
+			filenames.emplace(entry);
 		}
 	}
 };

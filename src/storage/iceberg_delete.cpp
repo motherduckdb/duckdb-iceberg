@@ -14,6 +14,8 @@
 #include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/function/copy_function.hpp"
 #include "duckdb/common/types/uuid.hpp"
+#include "duckdb/common/multi_file/multi_file_reader.hpp"
+#include "fmt/format.h"
 
 namespace duckdb {
 class IcebergDeleteLocalState;
@@ -43,8 +45,7 @@ SinkResultType IcebergDelete::Sink(ExecutionContext &context, DataChunk &chunk, 
 	auto &local_state = input.local_state.Cast<IcebergDeleteLocalState>();
 
 	auto &file_name_vector = chunk.data[row_id_indexes[0]];
-	auto &file_index_vector = chunk.data[row_id_indexes[1]];
-	auto &file_row_number = chunk.data[row_id_indexes[2]];
+	auto &file_row_number = chunk.data[row_id_indexes[1]];
 
 	UnifiedVectorFormat row_data;
 	file_row_number.ToUnifiedFormat(chunk.size(), row_data);
@@ -52,31 +53,23 @@ SinkResultType IcebergDelete::Sink(ExecutionContext &context, DataChunk &chunk, 
 
 	UnifiedVectorFormat file_name_vdata;
 	file_name_vector.ToUnifiedFormat(chunk.size(), file_name_vdata);
-
-	UnifiedVectorFormat file_index_vdata;
-	file_index_vector.ToUnifiedFormat(chunk.size(), file_index_vdata);
-
-	auto file_index_data = UnifiedVectorFormat::GetData<uint64_t>(file_index_vdata);
 	for (idx_t i = 0; i < chunk.size(); i++) {
-		auto file_idx = file_index_vdata.sel->get_index(i);
 		auto row_idx = row_data.sel->get_index(i);
-		if (!file_index_vdata.validity.RowIsValid(file_idx)) {
-			throw InternalException("File index cannot be NULL!");
+		auto file_name_idx = file_name_vdata.sel->get_index(i);
+		if (!file_name_vdata.validity.RowIsValid(file_name_idx)) {
+			throw InternalException("Filename cannot be NULL!");
 		}
-		auto file_index = file_index_data[file_idx];
-		if (!local_state.current_file_index.IsValid() || file_index != local_state.current_file_index.GetIndex()) {
+		auto file_name_data = UnifiedVectorFormat::GetData<string_t>(file_name_vdata);
+		auto file_name = file_name_data[file_name_idx].GetString();
+
+		if (local_state.current_file_name.empty() || local_state.current_file_name != file_name) {
 			// file has changed - flush
 			global_state.Flush(local_state);
-			local_state.current_file_index = file_index;
+			local_state.current_file_name = file_name;
 			// insert the file name for the file if it has not yet been inserted
-			auto entry = local_state.filenames.find(file_index);
+			auto entry = local_state.filenames.find(file_name);
 			if (entry == local_state.filenames.end()) {
-				auto file_name_idx = file_name_vdata.sel->get_index(i);
-				auto file_name_data = UnifiedVectorFormat::GetData<string_t>(file_name_vdata);
-				if (!file_name_vdata.validity.RowIsValid(file_name_idx)) {
-					throw InternalException("Filename cannot be NULL!");
-				}
-				local_state.filenames.emplace(file_index, file_name_data[file_name_idx].GetString());
+				local_state.filenames.emplace(file_name);
 			}
 		}
 		auto row_number = file_row_data[row_idx];
@@ -124,10 +117,9 @@ void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &cont
 
 	IcebergDeleteFileInfo delete_file;
 	delete_file.data_file_path = filename;
-	delete_file.data_file_id = data_file_info.file_id;
 	// check if the file already has deletes
 	auto existing_delete_data = delete_map->GetDeleteData(filename);
-	// TODO: we can merge with existing delete data for the same data file for faster reads.
+	// FIXME: merge with existing delete data for the same data file for faster reads.
 	D_ASSERT(!existing_delete_data);
 
 	auto &fs = FileSystem::GetFileSystem(context);
@@ -251,7 +243,7 @@ SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, Clien
 		if (filename_entry == global_state.filenames.end()) {
 			throw InternalException("Filename not found for file index");
 		}
-		FlushDelete(irc_transaction, context, global_state, filename_entry->second, entry.second);
+		FlushDelete(irc_transaction, context, global_state, *filename_entry, entry.second);
 	}
 	auto &irc_table = table.Cast<ICTableEntry>();
 	auto &table_info = irc_table.table_info;
@@ -354,8 +346,8 @@ PhysicalOperator &IRCatalog::PlanDelete(ClientContext &context, PhysicalPlanGene
 	}
 
 	vector<idx_t> row_id_indexes;
-	for (idx_t i = 0; i < 3; i++) {
-		auto &bound_ref = op.expressions[i + 1]->Cast<BoundReferenceExpression>();
+	for (idx_t i = 0; i < 2; i++) {
+		auto &bound_ref = op.expressions[i]->Cast<BoundReferenceExpression>();
 		row_id_indexes.push_back(bound_ref.index);
 	}
 	auto &ic_table_entry = op.table.Cast<ICTableEntry>();

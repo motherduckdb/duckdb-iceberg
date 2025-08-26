@@ -70,9 +70,8 @@ delete from my_datalake.default.test where id in (10001, 3000001, 4800001);
 query I
 select count(*) from iceberg_metadata(my_datalake.default.test) where manifest_content = 'DELETE';
 ----
-3
+6
 
-# Expect 3 more delete files, each containing point deletes
 query I
 select * from my_datalake.default.test where id in (10000, 10001, 3000000, 3000001, 4800000, 4800001);
 ----

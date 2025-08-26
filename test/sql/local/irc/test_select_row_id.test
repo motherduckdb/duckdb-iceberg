@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/delete/delete_from_table.test
+# name: test/sql/local/irc/test_select_row_id.test
 # description: test integration with iceberg catalog read
-# group: [delete]
+# group: [irc]
 
 require-env ICEBERG_SERVER_AVAILABLE
 
@@ -40,30 +40,8 @@ ATTACH '' AS my_datalake (
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
-statement ok
-drop table if exists my_datalake.default.test_delete_table;
-
-statement ok
-create table my_datalake.default.test_delete_table (a int);
-
-loop i 0 5
-
-statement ok
-insert into my_datalake.default.test_delete_table values ((${i}*2)), ((${i}*2) + 1);
-
-endloop
-
-statement ok
-delete from my_datalake.default.test_delete_table where a%2 = 0;
-
-query I
-select * from my_datalake.default.test_delete_table;
+statement error
+select rowid from my_datalake.default.table_unpartitioned order by all;
 ----
-1
-3
-5
-7
-9
+<REGEX>:.*Referenced column "rowid" not found in FROM clause.*
 
-statement ok
-drop table my_datalake.default.test_delete_table;
