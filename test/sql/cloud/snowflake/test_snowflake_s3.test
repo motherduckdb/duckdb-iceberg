@@ -1,3 +1,5 @@
+# name: test/sql/cloud/snowflake/test_snowflake_s3.test
+# group: [snowflake]
 
 require-env SNOWFLAKE_KEY_ID_S3
 
