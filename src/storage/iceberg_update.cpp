@@ -53,7 +53,6 @@ unique_ptr<LocalSinkState> IcebergUpdate::GetLocalSinkState(ExecutionContext &co
 	vector<LogicalType> delete_types;
 	// TODO: Verify these deletes tupes
 	delete_types.emplace_back(LogicalType::VARCHAR);
-	delete_types.emplace_back(LogicalType::UBIGINT);
 	delete_types.emplace_back(LogicalType::BIGINT);
 
 	// updates also write the row id to the file
@@ -77,7 +76,6 @@ SinkResultType IcebergUpdate::Sink(ExecutionContext &context, DataChunk &chunk, 
 	for (idx_t i = 0; i < columns.size(); i++) {
 		insert_chunk.data[columns[i].index].Reference(chunk.data[i]);
 	}
-	// insert_chunk.data[columns.size()].Reference(chunk.data[row_id_index]);
 
 	OperatorSinkInput copy_input {*copy_op.sink_state, *lstate.copy_local_state, input.interrupt_state};
 	copy_op.Sink(context, insert_chunk, copy_input);
@@ -85,8 +83,12 @@ SinkResultType IcebergUpdate::Sink(ExecutionContext &context, DataChunk &chunk, 
 	// push the rowids into the delete
 	auto &delete_chunk = lstate.delete_chunk;
 	delete_chunk.SetCardinality(chunk.size());
-	idx_t delete_idx_start = chunk.ColumnCount() - 3;
-	for (idx_t i = 0; i < 3; i++) {
+	idx_t delete_idx_start = chunk.ColumnCount() - 2;
+	for (idx_t i = 0; i < 2; i++) {
+		if (delete_chunk.data[i].GetVectorType() != chunk.data[delete_idx_start + i].GetVectorType()) {
+			delete_chunk.data[i].Flatten(chunk.size());
+			chunk.data[delete_idx_start + i].Flatten(chunk.size());
+		}
 		delete_chunk.data[i].Reference(chunk.data[delete_idx_start + i]);
 	}
 
@@ -199,6 +201,32 @@ InsertionOrderPreservingMap<string> IcebergUpdate::ParamsToString() const {
 	return result;
 }
 
+static Value GetFieldIdValue(const IcebergColumnDefinition &column) {
+	auto column_value = Value::BIGINT(column.id);
+	if (column.children.empty()) {
+		// primitive type - return the field-id directly
+		return column_value;
+	}
+	// nested type - generate a struct and recurse into children
+	child_list_t<Value> values;
+	values.emplace_back("__duckdb_field_id", std::move(column_value));
+	for (auto &child : column.children) {
+		values.emplace_back(child->name, GetFieldIdValue(*child));
+	}
+	return Value::STRUCT(std::move(values));
+}
+
+static Value WrittenFieldIds(const IcebergTableSchema &schema) {
+	auto &columns = schema.columns;
+
+	child_list_t<Value> values;
+	for (idx_t c_idx = 0; c_idx < columns.size(); c_idx++) {
+		auto &column = columns[c_idx];
+		values.emplace_back(column->name, GetFieldIdValue(*column));
+	}
+	return Value::STRUCT(std::move(values));
+}
+
 PhysicalOperator &IRCatalog::PlanUpdate(ClientContext &context, PhysicalPlanGenerator &planner, LogicalUpdate &op,
                                         PhysicalOperator &child_plan) {
 	if (op.return_chunk) {
@@ -214,8 +242,12 @@ PhysicalOperator &IRCatalog::PlanUpdate(ClientContext &context, PhysicalPlanGene
 	// FIXME: we should take the inlining limit into account here and write new updates to the inline data tables if
 	// possible updates are executed as a delete + insert - generate the two nodes (delete and insert) plan the copy for
 	// the insert
-
+	auto &table_schema = table.table_info.table_metadata.GetLatestSchema();
 	IcebergCopyInput copy_input(context, table);
+	vector<Value> field_input;
+	field_input.push_back(WrittenFieldIds(table_schema));
+	copy_input.options["field_ids"] = std::move(field_input);
+
 	auto &copy_op = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, nullptr);
 	// plan the delete
 	vector<idx_t> row_id_indexes;
