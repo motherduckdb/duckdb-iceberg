@@ -43,8 +43,7 @@ SinkResultType IcebergDelete::Sink(ExecutionContext &context, DataChunk &chunk, 
 	auto &local_state = input.local_state.Cast<IcebergDeleteLocalState>();
 
 	auto &file_name_vector = chunk.data[row_id_indexes[0]];
-	auto &file_index_vector = chunk.data[row_id_indexes[1]];
-	auto &file_row_number = chunk.data[row_id_indexes[2]];
+	auto &file_row_number = chunk.data[row_id_indexes[1]];
 
 	UnifiedVectorFormat row_data;
 	file_row_number.ToUnifiedFormat(chunk.size(), row_data);
@@ -141,7 +140,7 @@ void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &cont
 	info->is_from = false;
 
 	// generate the field ids to be written by the parquet writer
-	// these field ids follow icebergs' ids and names for the delete files
+	// these field ids follow bergs' ids and names for the delete files
 	child_list_t<Value> values;
 	values.emplace_back("file_path", Value::INTEGER(MultiFileReader::DELETE_FILE_PATH_FIELD_ID));
 	values.emplace_back("pos", Value::INTEGER(MultiFileReader::DELETE_POS_FIELD_ID));

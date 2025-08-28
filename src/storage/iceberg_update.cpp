@@ -51,13 +51,13 @@ unique_ptr<LocalSinkState> IcebergUpdate::GetLocalSinkState(ExecutionContext &co
 	result->delete_local_state = delete_op.GetLocalSinkState(context);
 
 	vector<LogicalType> delete_types;
+	// TODO: Verify these deletes tupes
 	delete_types.emplace_back(LogicalType::VARCHAR);
 	delete_types.emplace_back(LogicalType::UBIGINT);
 	delete_types.emplace_back(LogicalType::BIGINT);
 
 	// updates also write the row id to the file
 	auto insert_types = table.GetTypes();
-	insert_types.push_back(LogicalType::BIGINT);
 
 	result->insert_chunk.Initialize(context.client, insert_types);
 	result->delete_chunk.Initialize(context.client, delete_types);
@@ -72,11 +72,12 @@ SinkResultType IcebergUpdate::Sink(ExecutionContext &context, DataChunk &chunk, 
 
 	// push the to-be-inserted data into the copy
 	auto &insert_chunk = lstate.insert_chunk;
+
 	insert_chunk.SetCardinality(chunk.size());
 	for (idx_t i = 0; i < columns.size(); i++) {
 		insert_chunk.data[columns[i].index].Reference(chunk.data[i]);
 	}
-	insert_chunk.data[columns.size()].Reference(chunk.data[row_id_index]);
+	// insert_chunk.data[columns.size()].Reference(chunk.data[row_id_index]);
 
 	OperatorSinkInput copy_input {*copy_op.sink_state, *lstate.copy_local_state, input.interrupt_state};
 	copy_op.Sink(context, insert_chunk, copy_input);
@@ -215,11 +216,10 @@ PhysicalOperator &IRCatalog::PlanUpdate(ClientContext &context, PhysicalPlanGene
 	// the insert
 
 	IcebergCopyInput copy_input(context, table);
-	// copy_input.virtual_columns = InsertVirtualColumns::WRITE_ROW_ID;
 	auto &copy_op = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, nullptr);
 	// plan the delete
 	vector<idx_t> row_id_indexes;
-	for (idx_t i = 0; i < 3; i++) {
+	for (idx_t i = 0; i < 2; i++) {
 		row_id_indexes.push_back(i);
 	}
 	auto &delete_op = IcebergDelete::PlanDelete(context, planner, table, child_plan, std::move(row_id_indexes));
