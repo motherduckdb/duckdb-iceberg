@@ -366,8 +366,6 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 					//! Exhausted all the transaction-local data
 					return nullptr;
 				}
-				// add to the current data files? I don't think so.
-				auto &manifest_file = transaction_delete_manifests[transaction_delete_idx].get();
 				transaction_delete_idx++;
 			} else {
 				//! No more data manifests to explore

@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/delete/delete_from_table.test
+# name: test/sql/local/irc/delete/test_delete_rowid.test
 # description: test integration with iceberg catalog read
 # group: [delete]
 
@@ -46,24 +46,11 @@ drop table if exists my_datalake.default.test_delete_table;
 statement ok
 create table my_datalake.default.test_delete_table (a int);
 
-loop i 0 5
-
 statement ok
-insert into my_datalake.default.test_delete_table values ((${i}*2)), ((${i}*2) + 1);
+insert into my_datalake.default.test_delete_table select range a from range(1000);
 
-endloop
-
-statement ok
-delete from my_datalake.default.test_delete_table where a%2 = 0;
-
-query I
-select * from my_datalake.default.test_delete_table;
+statement error
+delete from my_datalake.default.test_delete_table where rowid in (0, 2, 4, 6);
 ----
-1
-3
-5
-7
-9
+<REGEX>:.*Referenced column "rowid" not found in FROM clause.*
 
-statement ok
-drop table my_datalake.default.test_delete_table;
