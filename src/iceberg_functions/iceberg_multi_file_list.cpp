@@ -361,12 +361,6 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 				auto &data_files = manifest_file.data_files;
 				current_data_files.insert(current_data_files.end(), data_files.begin(), data_files.end());
 				transaction_data_idx++;
-			} else if (!transaction_delete_manifests.empty()) {
-				if (transaction_delete_idx >= transaction_delete_manifests.size()) {
-					//! Exhausted all the transaction-local data
-					return nullptr;
-				}
-				transaction_delete_idx++;
 			} else {
 				//! No more data manifests to explore
 				return nullptr;
@@ -379,7 +373,6 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 		while (data_file_idx < current_data_files.size()) {
 			auto &data_file = current_data_files[data_file_idx];
 			data_file_idx++;
-
 			// Check whether current data file is filtered out.
 			if (!table_filters.filters.empty() && !FileMatchesFilter(data_file)) {
 				DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'data_file': '%s'",
