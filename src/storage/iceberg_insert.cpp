@@ -6,8 +6,8 @@
 #include "metadata/iceberg_column_definition.hpp"
 
 #include "iceberg_multi_file_list.hpp"
-#include "../include/storage/iceberg_table_information.hpp"
-#include "../include/storage/irc_table_entry.hpp"
+#include "storage/iceberg_table_information.hpp"
+#include "storage/irc_table_entry.hpp"
 
 #include "duckdb/common/sort/partition_state.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
@@ -423,12 +423,9 @@ void VerifyDirectInsertionOrder(LogicalInsert &op) {
 
 PhysicalOperator &IcebergInsert::PlanInsert(ClientContext &context, PhysicalPlanGenerator &planner,
                                             ICTableEntry &table) {
-	// auto partition_data = table.table_info.load_table_result->me;
 	optional_idx partition_id;
-	// if (partition_data) {
-	// 	partition_id = partition_data->partition_id;
-	// }
 	vector<LogicalType> return_types;
+	// the one return value is how many rows we are returning
 	return_types.emplace_back(LogicalType::BIGINT);
 	return planner.Make<IcebergInsert>(return_types, table);
 }

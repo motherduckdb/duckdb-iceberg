@@ -103,7 +103,7 @@ void IcebergDelete::WritePositionalDeleteFile(ClientContext &context, IcebergDel
 	info->is_from = false;
 
 	// generate the field ids to be written by the parquet writer
-	// these field ids follow icebergs' ids and names for the delete files
+	// these field ids follow bergs' ids and names for the delete files
 	child_list_t<Value> values;
 	values.emplace_back("file_path", Value::INTEGER(MultiFileReader::DELETE_FILE_PATH_FIELD_ID));
 	values.emplace_back("pos", Value::INTEGER(MultiFileReader::DELETE_POS_FIELD_ID));
