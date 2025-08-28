@@ -14,7 +14,7 @@ namespace duckdb {
 
 struct IcebergAvroMultiFileReader : public MultiFileReader {
 	shared_ptr<MultiFileList> CreateFileList(ClientContext &context, const vector<string> &paths,
-	                                         const FileGlobInput &glob_input) override;
+	                                         const FileGlobInput &input) override;
 
 	static unique_ptr<MultiFileReader> CreateInstance(const TableFunction &table);
 };
