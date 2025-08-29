@@ -66,11 +66,6 @@ SinkResultType IcebergDelete::Sink(ExecutionContext &context, DataChunk &chunk, 
 			// file has changed - flush
 			global_state.Flush(local_state);
 			local_state.current_file_name = file_name;
-			// insert the file name for the file if it has not yet been inserted
-			auto entry = local_state.filenames.find(file_name);
-			if (entry == local_state.filenames.end()) {
-				local_state.filenames.emplace(file_name);
-			}
 		}
 		auto row_number = file_row_data[row_idx];
 		local_state.file_row_numbers.push_back(row_number);
@@ -99,35 +94,10 @@ static optional_ptr<CopyFunctionCatalogEntry> TryGetCopyFunction(DatabaseInstanc
 //===--------------------------------------------------------------------===//
 // Finalize
 //===--------------------------------------------------------------------===//
-
-void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &context,
-                                IcebergDeleteGlobalState &global_state, const string &filename,
-                                vector<idx_t> &deleted_rows) const {
-	// find the matching data file for the deletion
-	auto data_file_info = delete_map->GetExtendedFileInfo(filename);
-
-	// sort and duplicate eliminate the deletes
-	set<idx_t> sorted_deletes;
-	for (auto &row_idx : deleted_rows) {
-		sorted_deletes.insert(row_idx);
-	}
-	if (sorted_deletes.size() != deleted_rows.size()) {
-		throw NotImplementedException("The same row was updated multiple times - this is not (yet) supported in "
-		                              "Iceberg. Eliminate duplicate matches prior to running the UPDATE");
-	}
-
-	IcebergDeleteFileInfo delete_file;
-	delete_file.data_file_path = filename;
-	// check if the file already has deletes
-	auto existing_delete_data = delete_map->GetDeleteData(filename);
-	// FIXME: merge with existing delete data for the same data file for faster reads.
-	D_ASSERT(!existing_delete_data);
-
-	auto &fs = FileSystem::GetFileSystem(context);
-	string delete_file_uuid = UUID::ToString(UUID::GenerateRandomUUID()) + "-deletes.parquet";
-	string delete_file_path =
-	    fs.JoinPath(table.table_info.table_metadata.location, fs.JoinPath("data", delete_file_uuid));
-
+void IcebergDelete::WritePositionalDeleteFile(ClientContext &context, IcebergDeleteGlobalState &global_state,
+                                              const string &filename, IcebergDeleteFileInfo delete_file,
+                                              set<idx_t> sorted_deletes) const {
+	auto delete_file_path = delete_file.data_file_path;
 	auto info = make_uniq<CopyInfo>();
 	info->file_path = delete_file_path;
 	info->format = "parquet";
@@ -222,12 +192,40 @@ void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &cont
 	if (stats_chunk.size() != 1) {
 		throw InternalException("Expected a single delete file to be written here");
 	}
-	idx_t r = 0;
-	delete_file.file_name = stats_chunk.GetValue(0, r).GetValue<string>();
-	delete_file.delete_count = stats_chunk.GetValue(1, r).GetValue<idx_t>();
-	delete_file.file_size_bytes = stats_chunk.GetValue(2, r).GetValue<idx_t>();
-	delete_file.footer_size = stats_chunk.GetValue(3, r).GetValue<idx_t>();
+	delete_file.file_name = stats_chunk.GetValue(0, 0).GetValue<string>();
+	delete_file.delete_count = stats_chunk.GetValue(1, 0).GetValue<idx_t>();
+	delete_file.file_size_bytes = stats_chunk.GetValue(2, 0).GetValue<idx_t>();
+	delete_file.footer_size = stats_chunk.GetValue(3, 0).GetValue<idx_t>();
 	global_state.written_files.emplace(filename, std::move(delete_file));
+}
+
+void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &context,
+                                IcebergDeleteGlobalState &global_state, const string &filename,
+                                vector<idx_t> &deleted_rows) const {
+
+	// sort and duplicate eliminate the deletes
+	set<idx_t> sorted_deletes;
+	for (auto &row_idx : deleted_rows) {
+		sorted_deletes.insert(row_idx);
+	}
+	if (sorted_deletes.size() != deleted_rows.size()) {
+		throw NotImplementedException("The same row was updated multiple times - this is not (yet) supported in "
+		                              "Iceberg. Eliminate duplicate matches prior to running the UPDATE");
+	}
+
+	IcebergDeleteFileInfo delete_file;
+	delete_file.data_file_path = filename;
+	// check if the file already has deletes
+	auto existing_delete_data = delete_map->GetDeleteData(filename);
+	// FIXME: merge with existing delete data for the same data file for faster reads.
+	D_ASSERT(!existing_delete_data);
+
+	auto &fs = FileSystem::GetFileSystem(context);
+	string delete_file_uuid = UUID::ToString(UUID::GenerateRandomUUID()) + "-deletes.parquet";
+	string delete_file_path =
+	    fs.JoinPath(table.table_info.table_metadata.location, fs.JoinPath("data", delete_file_uuid));
+
+	WritePositionalDeleteFile(context, global_state, filename, delete_file, sorted_deletes);
 }
 
 SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
@@ -330,11 +328,6 @@ PhysicalOperator &IcebergDelete::PlanDelete(ClientContext &context, PhysicalPlan
 	if (delete_source) {
 		auto &bind_data = delete_source->bind_data->Cast<MultiFileBindData>();
 		auto &reader = bind_data.multi_file_reader->Cast<IcebergMultiFileReader>();
-		auto &file_list = bind_data.file_list->Cast<IcebergMultiFileList>();
-		auto files = file_list.GetFilesExtended();
-		for (auto &file_entry : files) {
-			delete_map->AddExtendedFileInfo(std::move(file_entry));
-		}
 		reader.delete_map = delete_map;
 	}
 	return planner.Make<IcebergDelete>(table, child_plan, std::move(delete_map), std::move(row_id_indexes));

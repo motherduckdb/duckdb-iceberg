@@ -20,19 +20,6 @@ namespace duckdb {
 
 struct IcebergDeleteMap {
 
-	void AddExtendedFileInfo(IcebergFileListExtendedEntry file_entry) {
-		auto filename = file_entry.file.path;
-		file_map.emplace(std::move(filename), std::move(file_entry));
-	}
-
-	IcebergFileListExtendedEntry GetExtendedFileInfo(const string &filename) {
-		auto delete_entry = file_map.find(filename);
-		if (delete_entry == file_map.end()) {
-			throw InternalException("Could not find matching file for written delete file");
-		}
-		return delete_entry->second;
-	}
-
 	optional_ptr<IcebergDeleteData> GetDeleteData(const string &filename) {
 		lock_guard<mutex> guard(lock);
 		auto entry = delete_data_map.find(filename);
@@ -44,7 +31,6 @@ struct IcebergDeleteMap {
 
 private:
 	mutex lock;
-	unordered_map<string, IcebergFileListExtendedEntry> file_map;
 	unordered_map<string, shared_ptr<IcebergDeleteData>> delete_data_map;
 };
 
@@ -61,7 +47,6 @@ class IcebergDeleteLocalState : public LocalSinkState {
 public:
 	string current_file_name;
 	vector<idx_t> file_row_numbers;
-	unordered_set<string> filenames;
 };
 
 class IcebergDeleteGlobalState : public GlobalSinkState {
@@ -94,9 +79,7 @@ public:
 		Flush(local_state);
 		// flush the file names to the global state
 		lock_guard<mutex> guard(lock);
-		for (auto &entry : local_state.filenames) {
-			filenames.emplace(entry);
-		}
+		filenames.emplace(local_state.current_file_name);
 	}
 };
 
@@ -144,6 +127,9 @@ public:
 	InsertionOrderPreservingMap<string> ParamsToString() const override;
 
 private:
+	void WritePositionalDeleteFile(ClientContext &context, IcebergDeleteGlobalState &global_state,
+	                               const string &filename, IcebergDeleteFileInfo delete_file,
+	                               set<idx_t> sorted_deletes) const;
 	void FlushDelete(IRCTransaction &transaction, ClientContext &context, IcebergDeleteGlobalState &global_state,
 	                 const string &filename, vector<idx_t> &deleted_rows) const;
 };

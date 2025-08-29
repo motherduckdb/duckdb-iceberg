@@ -32,13 +32,4 @@ struct IcebergFileData {
 	optional_idx footer_size;
 };
 
-struct IcebergFileListExtendedEntry {
-	IcebergFileData file;
-	IcebergFileData delete_file;
-	optional_idx row_id_start;
-	optional_idx snapshot_id;
-	idx_t row_count;
-	idx_t delete_count = 0;
-};
-
 } // namespace duckdb

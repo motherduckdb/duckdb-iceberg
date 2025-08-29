@@ -666,36 +666,6 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 	D_ASSERT(current_delete_manifest == delete_manifests.end());
 }
 
-vector<IcebergFileListExtendedEntry> IcebergMultiFileList::GetFilesExtended() {
-	lock_guard<mutex> l(lock);
-	InitializeFiles(l);
-
-	vector<IcebergFileListExtendedEntry> result;
-
-	for (auto &file : data_files) {
-		IcebergFileListExtendedEntry file_entry;
-		file_entry.file.path = file.file_path;
-		file_entry.file.file_size_bytes = file.file_size_in_bytes;
-		result.push_back(file_entry);
-	}
-
-	if (HasTransactionData()) {
-		auto &transaction_data = GetTransactionData();
-		for (auto &alter_p : transaction_data.alters) {
-			auto &alter = alter_p.get();
-			for (auto &file : alter.manifest_file.data_files) {
-				// if this is transaction local data, we can be positive every delete file only
-				/// references one data file.
-				IcebergFileListExtendedEntry file_entry;
-				file_entry.file.path = file.file_path;
-				file_entry.file.file_size_bytes = file.file_size_in_bytes;
-				result.push_back(file_entry);
-			}
-		}
-	}
-	return result;
-}
-
 void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &entry,
                                           const vector<MultiFileColumnDefinition> &global_columns,
                                           const vector<ColumnIndex> &column_indexes) const {
