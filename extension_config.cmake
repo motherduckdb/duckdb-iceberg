@@ -39,3 +39,4 @@ duckdb_extension_load(httpfs
         INCLUDE_DIR extension/httpfs/include
         APPLY_PATCHES
 )
+
