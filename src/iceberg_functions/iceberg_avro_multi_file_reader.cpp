@@ -12,7 +12,7 @@ unique_ptr<MultiFileReader> IcebergAvroMultiFileReader::CreateInstance(const Tab
 
 shared_ptr<MultiFileList> IcebergAvroMultiFileReader::CreateFileList(ClientContext &context,
                                                                      const vector<string> &paths,
-                                                                     const FileGlobInput &input) {
+                                                                     const FileGlobInput &glob_input) {
 
 	vector<OpenFileInfo> open_files;
 	for (auto &path : paths) {
