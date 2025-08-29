@@ -42,16 +42,6 @@ struct IcebergDeleteMap {
 		return entry->second.get();
 	}
 
-	void ClearDeletes(const string &filename) {
-		lock_guard<mutex> guard(lock);
-		delete_data_map.erase(filename);
-	}
-
-	void AddDeleteData(const string &filename, shared_ptr<IcebergDeleteData> delete_data) {
-		lock_guard<mutex> guard(lock);
-		delete_data_map.emplace(filename, std::move(delete_data));
-	}
-
 private:
 	mutex lock;
 	unordered_map<string, IcebergFileListExtendedEntry> file_map;

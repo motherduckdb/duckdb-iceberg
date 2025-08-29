@@ -99,6 +99,7 @@ static optional_ptr<CopyFunctionCatalogEntry> TryGetCopyFunction(DatabaseInstanc
 //===--------------------------------------------------------------------===//
 // Finalize
 //===--------------------------------------------------------------------===//
+
 void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &context,
                                 IcebergDeleteGlobalState &global_state, const string &filename,
                                 vector<idx_t> &deleted_rows) const {
@@ -243,7 +244,7 @@ SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, Clien
 		if (filename_entry == global_state.filenames.end()) {
 			throw InternalException("Filename not found for file index");
 		}
-		FlushDelete(irc_transaction, context, global_state, *filename_entry, entry.second);
+		FlushDelete(irc_transaction, context, global_state, entry.first, entry.second);
 	}
 	auto &irc_table = table.Cast<ICTableEntry>();
 	auto &table_info = irc_table.table_info;
@@ -261,8 +262,8 @@ SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, Clien
 		manifest_entry.file_size_in_bytes = delete_file.file_size_bytes;
 
 		// set lower and upper bound for the filename column
-		manifest_entry.lower_bounds[2147483546] = Value::BLOB(data_file_name);
-		manifest_entry.upper_bounds[2147483546] = Value::BLOB(data_file_name);
+		manifest_entry.lower_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB(data_file_name);
+		manifest_entry.upper_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB(data_file_name);
 		// set referenced_data_file
 		manifest_entry.referenced_data_file = data_file_name;
 
