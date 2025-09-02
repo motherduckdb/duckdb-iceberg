@@ -177,7 +177,7 @@ vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IRCatalog &catal
 				new_parent.push_back(schema_result.items.back());
 				auto nested_namespaces = GetSchemas(context, catalog, new_parent);
 				result.insert(result.end(), std::make_move_iterator(nested_namespaces.begin()),
-							  std::make_move_iterator(nested_namespaces.end()));
+				              std::make_move_iterator(nested_namespaces.end()));
 			}
 			result.push_back(schema_result);
 		}

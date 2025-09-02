@@ -1,4 +1,4 @@
-# name: test/sql/cloud/r2_catalog/test_r2_inserts.test
+# name: test/sql/cloud/r2_catalog/test_r2_pagination.test
 # description: test integration with iceberg catalog read
 # group: [r2_catalog]
 
