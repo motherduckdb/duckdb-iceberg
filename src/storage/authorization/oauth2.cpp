@@ -108,6 +108,11 @@ unique_ptr<HTTPResponse> OAuth2Authorization::HeadRequest(ClientContext &context
 	return APIUtils::HeadRequest(context, endpoint_builder, token);
 }
 
+unique_ptr<HTTPResponse> OAuth2Authorization::DeleteRequest(ClientContext &context,
+                                                            const IRCEndpointBuilder &endpoint_builder) {
+	return APIUtils::DeleteRequest(context, endpoint_builder, token);
+}
+
 unique_ptr<HTTPResponse> OAuth2Authorization::PostRequest(ClientContext &context,
                                                           const IRCEndpointBuilder &endpoint_builder,
                                                           const string &body) {

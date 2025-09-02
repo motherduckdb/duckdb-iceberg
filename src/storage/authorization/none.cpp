@@ -9,7 +9,7 @@ NoneAuthorization::NoneAuthorization() : IRCAuthorization(IRCAuthorizationType::
 
 unique_ptr<IRCAuthorization> NoneAuthorization::FromAttachOptions(IcebergAttachOptions &input) {
 	auto result = make_uniq<NoneAuthorization>();
-	return result;
+	return std::move(result);
 }
 
 unique_ptr<HTTPResponse> NoneAuthorization::GetRequest(ClientContext &context,
@@ -20,6 +20,11 @@ unique_ptr<HTTPResponse> NoneAuthorization::GetRequest(ClientContext &context,
 unique_ptr<HTTPResponse> NoneAuthorization::HeadRequest(ClientContext &context,
                                                         const IRCEndpointBuilder &endpoint_builder) {
 	return APIUtils::HeadRequest(context, endpoint_builder, "");
+}
+
+unique_ptr<HTTPResponse> NoneAuthorization::DeleteRequest(ClientContext &context,
+                                                          const IRCEndpointBuilder &endpoint_builder) {
+	return APIUtils::DeleteRequest(context, endpoint_builder, "");
 }
 
 unique_ptr<HTTPResponse>

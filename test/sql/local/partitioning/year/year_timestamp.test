@@ -12,7 +12,7 @@ require httpfs
 require-env DUCKDB_ICEBERG_HAVE_GENERATED_DATA
 
 statement ok
-pragma enable_logging('Iceberg');
+CALL enable_logging('Iceberg');
 
 statement ok
 set enable_logging=false;
@@ -31,7 +31,7 @@ select * from ICEBERG_SCAN('__WORKING_DIRECTORY__/data/generated/iceberg/spark-l
 NULL	99999	null_event
 
 statement ok
-pragma truncate_duckdb_logs;
+CALL truncate_duckdb_logs();
 
 query I
 select user_id from ICEBERG_SCAN('__WORKING_DIRECTORY__/data/generated/iceberg/spark-local/default/year_timestamp') 
@@ -63,7 +63,7 @@ ON logs.msg = meta.manifest_path;
 5
 
 statement ok
-pragma truncate_duckdb_logs;
+CALL truncate_duckdb_logs();
 
 query I
 select user_id from ICEBERG_SCAN('__WORKING_DIRECTORY__/data/generated/iceberg/spark-local/default/year_timestamp') 
@@ -75,20 +75,20 @@ WHERE partition_col IS NOT NULL ORDER BY user_id
 88888
 NULL
 
-# We can skip 1 record (at the manifest level) by filtering on IS NOT NULL
+# We can skip 1 record (at the data file level) by filtering on IS NOT NULL
 query I
 SELECT SUM(meta.record_count) AS total_record_count
 FROM (
 	SELECT message.split(': ')[2][2:-2] AS msg
-	FROM duckdb_logs() where type = 'Iceberg' and message.contains('manifest_file')
+	FROM duckdb_logs() where type = 'Iceberg' and message.contains('data_file')
 ) logs
 JOIN ICEBERG_METADATA('__WORKING_DIRECTORY__/data/generated/iceberg/spark-local/default/year_timestamp') meta
-ON logs.msg = meta.manifest_path;
+ON logs.msg = meta.file_path;
 ----
 1
 
 statement ok
-pragma truncate_duckdb_logs;
+CALL truncate_duckdb_logs();
 
 # Test filtering by year
 query I
@@ -109,7 +109,7 @@ ON logs.msg = meta.manifest_path;
 2
 
 statement ok
-pragma truncate_duckdb_logs;
+CALL truncate_duckdb_logs();
 
 query I
 select user_id from ICEBERG_SCAN('__WORKING_DIRECTORY__/data/generated/iceberg/spark-local/default/year_timestamp') 
@@ -129,7 +129,7 @@ ON logs.msg = meta.manifest_path;
 2
 
 statement ok
-pragma truncate_duckdb_logs;
+CALL truncate_duckdb_logs();
 
 query I
 select user_id from ICEBERG_SCAN('__WORKING_DIRECTORY__/data/generated/iceberg/spark-local/default/year_timestamp') 
@@ -149,7 +149,7 @@ ON logs.msg = meta.manifest_path;
 2
 
 statement ok
-pragma truncate_duckdb_logs;
+CALL truncate_duckdb_logs();
 
 # Test filtering by timestamp range
 query I
@@ -170,4 +170,4 @@ ON logs.msg = meta.manifest_path;
 2
 
 statement ok
-pragma truncate_duckdb_logs;
+CALL truncate_duckdb_logs();

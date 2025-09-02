@@ -44,18 +44,23 @@ void IRCSchemaSet::Scan(ClientContext &context, const std::function<void(Catalog
 	}
 }
 
+static string GetSchemaName(const vector<string> &items) {
+	return StringUtil::Join(items, ".");
+}
+
 void IRCSchemaSet::LoadEntries(ClientContext &context) {
 	if (listed) {
 		return;
 	}
 
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
-	auto schemas = IRCAPI::GetSchemas(context, ic_catalog);
+	auto schemas = IRCAPI::GetSchemas(context, ic_catalog, {});
 	for (const auto &schema : schemas) {
 		CreateSchemaInfo info;
-		info.schema = schema;
+		info.schema = GetSchemaName(schema.items);
 		info.internal = false;
 		auto schema_entry = make_uniq<IRCSchemaEntry>(catalog, info);
+		schema_entry->namespace_items = std::move(schema.items);
 		CreateEntryInternal(context, std::move(schema_entry));
 	}
 	listed = true;

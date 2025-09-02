@@ -24,7 +24,7 @@ optional_ptr<IcebergSnapshot> IcebergTableMetadata::FindSnapshotByIdTimestampInt
 	for (auto &it : snapshots) {
 		auto &snapshot = it.second;
 		auto curr_millis = Timestamp::GetEpochMs(snapshot.timestamp_ms);
-		if (curr_millis <= timestamp_millis && curr_millis >= max_millis) {
+		if (curr_millis <= timestamp_millis && static_cast<uint64_t>(curr_millis) >= max_millis) {
 			max_snapshot = snapshot;
 			max_millis = curr_millis;
 		}
