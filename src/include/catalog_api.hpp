@@ -31,8 +31,6 @@ public:
 	static vector<string> ParseSchemaName(const string &namespace_name);
 	static string GetSchemaName(const vector<string> &items);
 	static string GetEncodedSchemaName(const vector<string> &items);
-	static void GetTables(ClientContext &context, IRCatalog &catalog, const IRCSchemaEntry &schema,
-	                      vector<rest_api_objects::TableIdentifier> &out);
 	static rest_api_objects::LoadTableResult GetTable(ClientContext &context, IRCatalog &catalog,
 	                                                  const IRCSchemaEntry &schema, const string &table_name);
 	static vector<IRCAPISchema> GetSchemas(ClientContext &context, IRCatalog &catalog, const vector<string> &parent);
