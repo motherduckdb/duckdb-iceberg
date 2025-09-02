@@ -24,113 +24,6 @@
 
 namespace duckdb {
 
-// IcebergTableInformation::IcebergTableInformation(IRCatalog &catalog, IRCSchemaEntry &schema, const string &name)
-//    : catalog(catalog), schema(schema), name(name) {
-//	table_id = "uuid-" + schema.name + "-" + name;
-//}
-
-// void IcebergTableInformation::AddSnapshot(IRCTransaction &transaction, vector<IcebergManifestEntry> &&data_files) {
-//	if (!transaction_data) {
-//		auto context = transaction.context.lock();
-//		transaction_data = make_uniq<IcebergTransactionData>(*context, *this);
-//	}
-
-//	transaction_data->AddSnapshot(IcebergSnapshotOperationType::APPEND, std::move(data_files));
-//}
-
-// static void ParseConfigOptions(const case_insensitive_map_t<string> &config, case_insensitive_map_t<Value> &options)
-// {
-//	//! Set of recognized config parameters and the duckdb secret option that matches it.
-//	static const case_insensitive_map_t<string> config_to_option = {{"s3.access-key-id", "key_id"},
-//	                                                                {"s3.secret-access-key", "secret"},
-//	                                                                {"s3.session-token", "session_token"},
-//	                                                                {"s3.region", "region"},
-//	                                                                {"region", "region"},
-//	                                                                {"client.region", "region"},
-//	                                                                {"s3.endpoint", "endpoint"}};
-
-//	if (config.empty()) {
-//		return;
-//	}
-//	for (auto &entry : config) {
-//		auto it = config_to_option.find(entry.first);
-//		if (it != config_to_option.end()) {
-//			options[it->second] = entry.second;
-//		}
-//	}
-
-//	auto it = config.find("s3.path-style-access");
-//	if (it != config.end()) {
-//		bool path_style;
-//		if (it->second == "true") {
-//			path_style = true;
-//		} else if (it->second == "false") {
-//			path_style = false;
-//		} else {
-//			throw InvalidInputException("Unexpected value ('%s') for 's3.path-style-access' in 'config' property",
-//			                            it->second);
-//		}
-
-//		options["use_ssl"] = Value(!path_style);
-//		if (path_style) {
-//			options["url_style"] = "path";
-//		}
-//	}
-
-//	auto endpoint_it = options.find("endpoint");
-//	if (endpoint_it == options.end()) {
-//		return;
-//	}
-//	auto endpoint = endpoint_it->second.ToString();
-//	if (StringUtil::StartsWith(endpoint, "http://")) {
-//		endpoint = endpoint.substr(7, string::npos);
-//	}
-//	if (StringUtil::StartsWith(endpoint, "https://")) {
-//		endpoint = endpoint.substr(8, string::npos);
-//	}
-//	if (StringUtil::EndsWith(endpoint, "/")) {
-//		endpoint = endpoint.substr(0, endpoint.size() - 1);
-//	}
-//	endpoint_it->second = endpoint;
-//}
-
-// const string &IcebergTableInformation::BaseFilePath() const {
-//	return load_table_result.metadata.location;
-//}
-
-// optional_ptr<CatalogEntry> IcebergTableInformation::CreateSchemaVersion(IcebergTableSchema &table_schema) {
-//	CreateTableInfo info;
-//	info.table = name;
-//	for (auto &col : table_schema.columns) {
-//		info.columns.AddColumn(ColumnDefinition(col->name, col->type));
-//	}
-
-//	auto table_entry = make_uniq<ICTableEntry>(*this, catalog, schema, info);
-//	if (!table_entry->internal) {
-//		table_entry->internal = schema.internal;
-//	}
-//	auto result = table_entry.get();
-//	if (result->name.empty()) {
-//		throw InternalException("ICTableSet::CreateEntry called with empty name");
-//	}
-//	schema_versions.emplace(table_schema.schema_id, std::move(table_entry));
-//	return result;
-//}
-
-// optional_ptr<CatalogEntry> IcebergTableInformation::GetSchemaVersion(optional_ptr<BoundAtClause> at) {
-//	auto snapshot_lookup = IcebergSnapshotLookup::FromAtClause(at);
-
-//	int32_t schema_id;
-//	if (snapshot_lookup.IsLatest()) {
-//		schema_id = table_metadata.current_schema_id;
-//	} else {
-//		auto snapshot = table_metadata.GetSnapshot(snapshot_lookup);
-//		D_ASSERT(snapshot);
-//		schema_id = snapshot->schema_id;
-//	}
-//	return schema_versions[schema_id].get();
-//}
-
 ICTableSet::ICTableSet(IRCSchemaEntry &schema) : schema(schema), catalog(schema.ParentCatalog()) {
 }
 
@@ -168,8 +61,7 @@ void ICTableSet::LoadEntries(ClientContext &context) {
 	}
 
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
-	vector<rest_api_objects::TableIdentifier> tables;
-	IRCAPI::GetTables(context, ic_catalog, schema, tables);
+	auto tables = IRCAPI::GetTables(context, ic_catalog, schema);
 
 	for (auto &table : tables) {
 		auto entry_it = entries.find(table.name);

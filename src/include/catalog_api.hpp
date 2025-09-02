@@ -23,10 +23,8 @@ struct IRCAPISchema {
 class IRCAPI {
 public:
 	static const string API_VERSION_1;
-	static vector<string> GetCatalogs(ClientContext &context, IRCatalog &catalog);
-	static void GetTables(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema,
-	                      vector<rest_api_objects::TableIdentifier> &out);
-	static vector<string> GetSchemas(ClientContext &context, IRCatalog &catalog);
+	static vector<rest_api_objects::TableIdentifier> GetTables(ClientContext &context, IRCatalog &catalog,
+	                                                           IRCSchemaEntry &schema);
 	static bool VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, const string &schema);
 	static bool VerifyTableExistence(ClientContext &context, IRCatalog &catalog, const IRCSchemaEntry &schema,
 	                                 const string &table);

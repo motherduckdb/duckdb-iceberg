@@ -119,15 +119,10 @@ static string GetTableMetadata(ClientContext &context, IRCatalog &catalog, const
 	auto url = url_builder.GetURL();
 	auto response = catalog.auth_handler->GetRequest(context, url_builder);
 	if (!response->Success()) {
-		auto url = url_builder.GetURL();
 		ThrowException(url, *response, "GET");
 	}
 
 	return response->body;
-}
-
-vector<string> IRCAPI::GetCatalogs(ClientContext &context, IRCatalog &catalog) {
-	throw NotImplementedException("ICAPI::GetCatalogs");
 }
 
 rest_api_objects::LoadTableResult IRCAPI::GetTable(ClientContext &context, IRCatalog &catalog,
@@ -138,8 +133,8 @@ rest_api_objects::LoadTableResult IRCAPI::GetTable(ClientContext &context, IRCat
 	return rest_api_objects::LoadTableResult::FromJSON(metadata_root);
 }
 
-void IRCAPI::GetTables(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema,
-                       vector<rest_api_objects::TableIdentifier> &out) {
+vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &context, IRCatalog &catalog,
+                                                            IRCSchemaEntry &schema) {
 	auto schema_name = GetEncodedSchemaName(schema.namespace_items);
 
 	auto url_builder = catalog.GetBaseUrl();
@@ -160,7 +155,7 @@ void IRCAPI::GetTables(ClientContext &context, IRCatalog &catalog, IRCSchemaEntr
 	if (!list_tables_response.has_identifiers) {
 		throw NotImplementedException("List of 'identifiers' is missing, missing support for Iceberg V1");
 	}
-	out = std::move(list_tables_response.identifiers);
+	return std::move(list_tables_response.identifiers);
 }
 
 vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IRCatalog &catalog, const vector<string> &parent) {
