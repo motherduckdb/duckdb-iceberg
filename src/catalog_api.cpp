@@ -40,6 +40,7 @@ string IRCAPI::GetSchemaName(const vector<string> &items) {
 
 //! Used for the path parameters
 string IRCAPI::GetEncodedSchemaName(const vector<string> &items) {
+	D_ASSERT(!items.empty());
 	static const string unit_separator = "%1F";
 	return StringUtil::Join(items, unit_separator);
 }
@@ -84,10 +85,12 @@ bool IRCAPI::VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, c
 
 bool IRCAPI::VerifyTableExistence(ClientContext &context, IRCatalog &catalog, const IRCSchemaEntry &schema,
                                   const string &table) {
+	auto schema_name = GetEncodedSchemaName(schema.namespace_items);
+
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPathComponent(catalog.prefix);
 	url_builder.AddPathComponent("namespaces");
-	url_builder.AddPathComponent(schema.name);
+	url_builder.AddPathComponent(schema_name);
 	url_builder.AddPathComponent("tables");
 	url_builder.AddPathComponent(table);
 
@@ -134,7 +137,7 @@ rest_api_objects::LoadTableResult IRCAPI::GetTable(ClientContext &context, IRCat
 
 void IRCAPI::GetTables(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema,
                        vector<rest_api_objects::TableIdentifier> &out) {
-	auto schema_name = schema.name;
+	auto schema_name = GetEncodedSchemaName(schema.namespace_items);
 
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPathComponent(catalog.prefix);

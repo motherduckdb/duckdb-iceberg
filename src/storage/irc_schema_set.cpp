@@ -29,6 +29,7 @@ optional_ptr<CatalogEntry> IRCSchemaSet::GetEntry(ClientContext &context, const 
 		info.schema = name;
 		info.internal = false;
 		auto schema_entry = make_uniq<IRCSchemaEntry>(catalog, info);
+		schema_entry->namespace_items = {name};
 		CreateEntryInternal(context, std::move(schema_entry));
 		entry = entries.find(name);
 		D_ASSERT(entry != entries.end());
