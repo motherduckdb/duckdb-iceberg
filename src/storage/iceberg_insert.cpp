@@ -3,6 +3,7 @@
 #include "storage/irc_transaction.hpp"
 #include "storage/irc_table_entry.hpp"
 #include "storage/iceberg_table_information.hpp"
+#include "metadata/iceberg_column_definition.hpp"
 
 #include "iceberg_multi_file_list.hpp"
 
@@ -149,7 +150,11 @@ static IcebergColumnStats ParseColumnStats(const vector<Value> col_stats) {
 	return column_stats;
 }
 
-static void AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &chunk, optional_idx partition_id) {
+static void AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &chunk,
+                            optional_ptr<TableCatalogEntry> table) {
+	D_ASSERT(table);
+	auto &ic_table = table->Cast<ICTableEntry>();
+	auto partition_id = ic_table.table_info.table_metadata.default_spec_id;
 	for (idx_t r = 0; r < chunk.size(); r++) {
 		IcebergManifestEntry data_file;
 		data_file.file_path = chunk.GetValue(0, r).GetValue<string>();
@@ -159,17 +164,26 @@ static void AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &c
 		data_file.status = IcebergManifestEntryStatusType::ADDED;
 		data_file.file_format = "parquet";
 
-		if (partition_id.IsValid()) {
-			data_file.partition_spec_id = static_cast<int32_t>(partition_id.GetIndex());
+		if (partition_id) {
+			data_file.partition_spec_id = static_cast<int32_t>(partition_id);
 		} else {
 			data_file.partition_spec_id = 0;
 		}
 
 		// extract the column stats
 		auto column_stats = chunk.GetValue(4, r);
+
 		auto &map_children = MapValue::GetChildren(column_stats);
 
 		global_state.insert_count += data_file.record_count;
+
+		auto table_current_schema_id = ic_table.table_info.table_metadata.current_schema_id;
+		auto ic_schema = ic_table.table_info.table_metadata.schemas[table_current_schema_id];
+
+		case_insensitive_map_t<optional_ptr<IcebergColumnDefinition>> column_info;
+		for (auto &column : ic_schema->columns) {
+			column_info.emplace(column->name, column.get());
+		}
 
 		for (idx_t col_idx = 0; col_idx < map_children.size(); col_idx++) {
 			auto &struct_children = StructValue::GetChildren(map_children[col_idx]);
@@ -177,6 +191,18 @@ static void AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &c
 			auto &col_stats = MapValue::GetChildren(struct_children[1]);
 			auto column_names = ParseQuotedList(col_name, '.');
 			auto stats = ParseColumnStats(col_stats);
+			idx_t pos = 0;
+			auto parsed_col_name = ParseQuotedValue(col_name, pos);
+
+			auto ic_column_info = column_info.find(parsed_col_name);
+			if (stats.has_null_count && stats.null_count > 0) {
+				D_ASSERT(ic_column_info != column_info.end());
+				if (ic_column_info->second->required) {
+					throw InvalidInputException("Column %s is required. Cannot Insert NULL values", col_name);
+				}
+			}
+
+			auto break_here = 0;
 
 			//! TODO: convert 'stats' into 'data_file.lower_bounds', upper_bounds, value_counts, null_value_counts,
 			//! nan_value_counts ...
@@ -205,7 +231,7 @@ SinkResultType IcebergInsert::Sink(ExecutionContext &context, DataChunk &chunk, 
 	auto &global_state = input.global_state.Cast<IcebergInsertGlobalState>();
 
 	// TODO: pass through the partition id?
-	AddWrittenFiles(global_state, chunk, {});
+	AddWrittenFiles(global_state, chunk, table);
 
 	return SinkResultType::NEED_MORE_INPUT;
 }
