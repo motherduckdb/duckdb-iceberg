@@ -138,6 +138,10 @@ vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IRCatalog &catal
 	}
 	auto response = catalog.auth_handler->GetRequest(context, endpoint_builder);
 	if (!response->Success()) {
+		if (response->status == HTTPStatusCode::Forbidden_403 || response->status == HTTPStatusCode::Unauthorized_401) {
+			// return empty result if user cannot list catalog.
+			return result;
+		}
 		auto url = endpoint_builder.GetURL();
 		ThrowException(url, *response, "GET");
 	}
