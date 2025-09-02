@@ -126,9 +126,8 @@ vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &conte
 			throw NotImplementedException("List of 'identifiers' is missing, missing support for Iceberg V1");
 		}
 
-		all_identifiers.insert(all_identifiers.end(), 
-		                      std::make_move_iterator(list_tables_response.identifiers.begin()),
-		                      std::make_move_iterator(list_tables_response.identifiers.end()));
+		all_identifiers.insert(all_identifiers.end(), std::make_move_iterator(list_tables_response.identifiers.begin()),
+		                       std::make_move_iterator(list_tables_response.identifiers.end()));
 
 		if (list_tables_response.has_next_page_token) {
 			page_token = list_tables_response.next_page_token.value;
@@ -142,42 +141,54 @@ vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &conte
 
 vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IRCatalog &catalog, const vector<string> &parent) {
 	vector<IRCAPISchema> result;
-	auto endpoint_builder = catalog.GetBaseUrl();
-	endpoint_builder.AddPathComponent(catalog.prefix);
-	endpoint_builder.AddPathComponent("namespaces");
-	if (!parent.empty()) {
-		auto parent_name = GetSchemaName(parent);
-		endpoint_builder.SetParam("parent", parent_name);
-	}
-	auto response = catalog.auth_handler->GetRequest(context, endpoint_builder);
-	if (!response->Success()) {
-		auto url = endpoint_builder.GetURL();
-		ThrowException(url, *response, "GET");
-	}
-
-	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(response->body));
-	auto *root = yyjson_doc_get_root(doc.get());
-	auto list_namespaces_response = rest_api_objects::ListNamespacesResponse::FromJSON(root);
-	if (!list_namespaces_response.has_namespaces) {
-		//! FIXME: old code expected 'namespaces' to always be present, but it's not a required property
-		return result;
-	}
-	auto &schemas = list_namespaces_response.namespaces;
-	for (auto &schema : schemas) {
-		IRCAPISchema schema_result;
-		schema_result.catalog_name = catalog.GetName();
-		schema_result.items = std::move(schema.value);
-
-		if (catalog.attach_options.support_nested_namespaces) {
-			auto new_parent = parent;
-			new_parent.push_back(schema_result.items.back());
-			auto nested_namespaces = GetSchemas(context, catalog, new_parent);
-			result.insert(result.end(), std::make_move_iterator(nested_namespaces.begin()),
-			              std::make_move_iterator(nested_namespaces.end()));
+	string page_token = "";
+	do {
+		auto endpoint_builder = catalog.GetBaseUrl();
+		endpoint_builder.AddPathComponent(catalog.prefix);
+		endpoint_builder.AddPathComponent("namespaces");
+		if (!parent.empty()) {
+			auto parent_name = GetSchemaName(parent);
+			endpoint_builder.SetParam("parent", parent_name);
+		}
+		if (!page_token.empty()) {
+			endpoint_builder.SetParam("pageToken", page_token);
+		}
+		auto response = catalog.auth_handler->GetRequest(context, endpoint_builder);
+		if (!response->Success()) {
+			auto url = endpoint_builder.GetURL();
+			ThrowException(url, *response, "GET");
 		}
 
-		result.push_back(schema_result);
-	}
+		std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(response->body));
+		auto *root = yyjson_doc_get_root(doc.get());
+		auto list_namespaces_response = rest_api_objects::ListNamespacesResponse::FromJSON(root);
+		if (!list_namespaces_response.has_namespaces) {
+			//! FIXME: old code expected 'namespaces' to always be present, but it's not a required property
+			return result;
+		}
+		auto &schemas = list_namespaces_response.namespaces;
+		for (auto &schema : schemas) {
+			IRCAPISchema schema_result;
+			schema_result.catalog_name = catalog.GetName();
+			schema_result.items = std::move(schema.value);
+
+			if (catalog.attach_options.support_nested_namespaces) {
+				auto new_parent = parent;
+				new_parent.push_back(schema_result.items.back());
+				auto nested_namespaces = GetSchemas(context, catalog, new_parent);
+				result.insert(result.end(), std::make_move_iterator(nested_namespaces.begin()),
+							  std::make_move_iterator(nested_namespaces.end()));
+			}
+			result.push_back(schema_result);
+		}
+
+		if (list_namespaces_response.has_next_page_token) {
+			page_token = list_namespaces_response.next_page_token.value;
+		} else {
+			page_token.clear();
+		}
+	} while (!page_token.empty());
+
 	return result;
 }
 
