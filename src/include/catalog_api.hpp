@@ -24,7 +24,7 @@ class IRCAPI {
 public:
 	static const string API_VERSION_1;
 	static vector<rest_api_objects::TableIdentifier> GetTables(ClientContext &context, IRCatalog &catalog,
-	                                                           IRCSchemaEntry &schema);
+	                                                           const IRCSchemaEntry &schema);
 	static bool VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, const string &schema);
 	static bool VerifyTableExistence(ClientContext &context, IRCatalog &catalog, const IRCSchemaEntry &schema,
 	                                 const string &table);

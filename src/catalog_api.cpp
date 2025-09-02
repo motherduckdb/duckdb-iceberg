@@ -134,7 +134,7 @@ rest_api_objects::LoadTableResult IRCAPI::GetTable(ClientContext &context, IRCat
 }
 
 vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &context, IRCatalog &catalog,
-                                                            IRCSchemaEntry &schema) {
+                                                            const IRCSchemaEntry &schema) {
 	auto schema_name = GetEncodedSchemaName(schema.namespace_items);
 
 	auto url_builder = catalog.GetBaseUrl();
