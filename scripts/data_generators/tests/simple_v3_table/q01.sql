@@ -1,0 +1,1 @@
+delete from default.simple_v3_table where l_orderkey%2 = 0;
