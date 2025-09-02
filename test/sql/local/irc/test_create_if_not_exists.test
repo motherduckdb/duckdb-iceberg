@@ -62,6 +62,14 @@ query III
 select * from my_datalake.default.a;
 ----
 
+# Now the table already exists, making the create a no-op
+statement ok
+CREATE TABLE IF NOT EXISTS my_datalake.default.a AS FROM my_datalake.default.empty_table WITH NO DATA;
+
+query III
+select * from my_datalake.default.a;
+----
+
 # FIXME:
 # This needs a DROP 'my_datalake.default.a' to make this test rerunnable.
 
