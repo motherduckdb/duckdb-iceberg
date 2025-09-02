@@ -30,7 +30,7 @@ public:
 	static bool VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, const string &schema);
 	static bool VerifyTableExistence(ClientContext &context, IRCatalog &catalog, const IRCSchemaEntry &schema,
 	                                 const string &table);
-	static vector<string> ParseSchemaName(string &namespace_name);
+	static vector<string> ParseSchemaName(const string &namespace_name);
 	static string GetSchemaName(const vector<string> &items);
 	static string GetEncodedSchemaName(const vector<string> &items);
 	static void GetTables(ClientContext &context, IRCatalog &catalog, const IRCSchemaEntry &schema,

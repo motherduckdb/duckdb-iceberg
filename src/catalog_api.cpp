@@ -17,7 +17,7 @@
 using namespace duckdb_yyjson;
 namespace duckdb {
 
-vector<string> IRCAPI::ParseSchemaName(string &namespace_name) {
+vector<string> IRCAPI::ParseSchemaName(const string &namespace_name) {
 	idx_t start = 0;
 	idx_t end = namespace_name.find(".", start);
 	vector<string> ret;
@@ -65,10 +65,13 @@ string IRCAPI::GetEncodedSchemaName(const vector<string> &items) {
 }
 
 bool IRCAPI::VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, const string &schema) {
+	auto namespace_items = ParseSchemaName(schema);
+	auto schema_name = GetEncodedSchemaName(namespace_items);
+
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPathComponent(catalog.prefix);
 	url_builder.AddPathComponent("namespaces");
-	url_builder.AddPathComponent(schema);
+	url_builder.AddPathComponent(schema_name);
 
 	auto url = url_builder.GetURL();
 	try {
