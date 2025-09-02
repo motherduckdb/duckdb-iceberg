@@ -92,6 +92,7 @@ APIResult<rest_api_objects::LoadTableResult> IRCAPI::GetTable(ClientContext &con
 			throw InvalidConfigurationException(result->body);
 		}
 		ret.has_error = true;
+		ret.status_ = result->status;
 		ret.error_ = rest_api_objects::IcebergErrorResponse::FromJSON(error_obj);
 		return ret;
 	}

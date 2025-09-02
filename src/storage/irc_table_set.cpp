@@ -12,6 +12,7 @@
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
 #include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/catalog/dependency_list.hpp"
+#include "duckdb/common/enums/http_status_code.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
 #include "duckdb/parser/parsed_data/create_table_info.hpp"
 #include "duckdb/parser/constraints/list.hpp"
@@ -39,6 +40,9 @@ bool ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &tabl
 	auto get_table_result = IRCAPI::GetTable(context, ic_catalog, schema, table.name);
 	if (get_table_result.has_error) {
 		if (get_table_result.error_._error.type == "NoSuchIcebergTableException") {
+			return false;
+		} else if (get_table_result.status_ == HTTPStatusCode::Forbidden_403 ||
+		           get_table_result.status_ == HTTPStatusCode::Unauthorized_401) {
 			return false;
 		}
 		throw HTTPException(get_table_result.error_._error.message);
