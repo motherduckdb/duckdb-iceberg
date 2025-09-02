@@ -89,6 +89,15 @@ optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transactio
 	// properties object is also requeried. Empty for now since we don't support properties
 	auto properties_obj = yyjson_mut_obj_add_obj(doc, root_object, "properties");
 	auto create_body = ICUtils::JsonToString(std::move(doc_p));
+
+	if (info.on_conflict == OnCreateConflict::IGNORE_ON_CONFLICT) {
+		auto schema_lookup = EntryLookupInfo(CatalogType::SCHEMA_ENTRY, info.schema);
+		auto schema_exists = LookupSchema(transaction, schema_lookup, OnEntryNotFound::RETURN_NULL);
+		if (schema_exists) {
+			return nullptr;
+		}
+	}
+
 	IRCAPI::CommitNamespaceCreate(*context.get(), *this, create_body);
 
 	auto &irc_transaction = IRCTransaction::Get(transaction.GetContext(), *this);
@@ -103,6 +112,15 @@ void IRCatalog::DropSchema(ClientContext &context, DropInfo &info) {
 	vector<string> namespace_items;
 	auto namespace_identifier = IRCAPI::ParseSchemaName(info.name);
 	namespace_items.push_back(IRCAPI::GetEncodedSchemaName(namespace_identifier));
+	if (info.if_not_found == OnEntryNotFound::RETURN_NULL) {
+		auto schema_lookup = EntryLookupInfo(CatalogType::SCHEMA_ENTRY, info.name);
+		// auto &irc_transaction = CatalogTran::Get(context, *this);
+		auto transaction = CatalogTransaction::GetSystemCatalogTransaction(context);
+		auto schema_exists = LookupSchema(transaction, schema_lookup, info.if_not_found);
+		if (!schema_exists) {
+			return;
+		}
+	}
 	IRCAPI::CommitNamespaceDrop(context, *this, namespace_items);
 }
 
@@ -441,8 +459,9 @@ void IRCatalog::SetAWSCatalogOptions(IcebergAttachOptions &attach_options,
 	}
 }
 
-unique_ptr<Catalog> IRCatalog::Attach(StorageExtensionInfo *storage_info, ClientContext &context, AttachedDatabase &db,
-                                      const string &name, AttachInfo &info, AccessMode access_mode) {
+unique_ptr<Catalog> IRCatalog::Attach(optional_ptr<StorageExtensionInfo> storage_info, ClientContext &context,
+                                      AttachedDatabase &db, const string &name, AttachInfo &info,
+                                      AttachOptions &options) {
 	IRCEndpointBuilder endpoint_builder;
 
 	string endpoint_type_string;
@@ -551,7 +570,7 @@ unique_ptr<Catalog> IRCatalog::Attach(StorageExtensionInfo *storage_info, Client
 	}
 
 	D_ASSERT(auth_handler);
-	auto catalog = make_uniq<IRCatalog>(db, access_mode, std::move(auth_handler), attach_options);
+	auto catalog = make_uniq<IRCatalog>(db, options.access_mode, std::move(auth_handler), attach_options);
 	catalog->GetConfig(context, endpoint_type);
 	return std::move(catalog);
 }
