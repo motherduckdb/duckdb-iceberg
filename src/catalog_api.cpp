@@ -75,11 +75,7 @@ static unique_ptr<HTTPResponse> GetTableMetadata(ClientContext &context, IRCatal
 	url_builder.AddPathComponent(table);
 
 	auto url = url_builder.GetURL();
-	auto response = catalog.auth_handler->GetRequest(context, url_builder);
-	if (!response->Success()) {
-		ThrowException(url, *response, "GET");
-	}
-	return std::move(response);
+	return catalog.auth_handler->GetRequest(context, url_builder);
 }
 
 APIResult<rest_api_objects::LoadTableResult> IRCAPI::GetTable(ClientContext &context, IRCatalog &catalog,

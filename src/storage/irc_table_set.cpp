@@ -41,8 +41,9 @@ bool ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &tabl
 	if (get_table_result.has_error) {
 		if (get_table_result.error_._error.type == "NoSuchIcebergTableException") {
 			return false;
-		} else if (get_table_result.status_ == HTTPStatusCode::Forbidden_403 ||
-		           get_table_result.status_ == HTTPStatusCode::Unauthorized_401) {
+		}
+		if (get_table_result.status_ == HTTPStatusCode::Forbidden_403 ||
+		    get_table_result.status_ == HTTPStatusCode::Unauthorized_401) {
 			return false;
 		}
 		throw HTTPException(get_table_result.error_._error.message);
