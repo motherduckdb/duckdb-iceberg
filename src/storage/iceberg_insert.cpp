@@ -6,7 +6,6 @@
 #include "metadata/iceberg_column_definition.hpp"
 
 #include "iceberg_multi_file_list.hpp"
-#include "../include/metadata/iceberg_column_definition.hpp"
 
 #include "duckdb/common/sort/partition_state.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
@@ -198,7 +197,6 @@ static void AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &c
 
 		// extract the column stats
 		auto column_stats = chunk.GetValue(4, r);
-
 		auto &map_children = MapValue::GetChildren(column_stats);
 
 		global_state.insert_count += data_file.record_count;
@@ -222,8 +220,7 @@ static void AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &c
 			auto ic_column_info = column_info.find(normalized_col_name);
 			D_ASSERT(ic_column_info != column_info.end());
 			if (ic_column_info->second->required && stats.has_null_count && stats.null_count > 0) {
-				throw InvalidInputException("Column %s is marked required. Cannot Insert NULL values",
-				                            normalized_col_name);
+				throw ConstraintException("NOT NULL constraint failed: %s.%s boop", table->name, normalized_col_name);
 			}
 
 			//! TODO: convert 'stats' into 'data_file.lower_bounds', upper_bounds, value_counts, null_value_counts,
