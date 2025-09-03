@@ -72,6 +72,9 @@ void IRCSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {
 	if (table_info_it == tables.entries.end()) {
 		throw InvalidInputException("Table %s does not exist");
 	}
+	if (info.cascade) {
+		throw NotImplementedException("DROP TABLE <table_name> CASCADE is not supported currently");
+	}
 	auto &table_entry = table_info_it->second;
 	auto lookupInfo = EntryLookupInfo(CatalogType::TABLE_ENTRY, table_name);
 	auto catalog_transaction = CatalogTransaction::GetSystemCatalogTransaction(context);
