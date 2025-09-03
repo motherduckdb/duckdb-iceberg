@@ -114,6 +114,11 @@ vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &conte
 	url_builder.AddPathComponent("tables");
 	auto response = catalog.auth_handler->GetRequest(context, url_builder);
 	if (!response->Success()) {
+		if (response->status == HTTPStatusCode::Forbidden_403 || response->status == HTTPStatusCode::Unauthorized_401) {
+			// return empty result if user cannot list tables for a schema.
+			vector<rest_api_objects::TableIdentifier> ret;
+			return ret;
+		}
 		auto url = url_builder.GetURL();
 		ThrowException(url, *response, "GET");
 	}
