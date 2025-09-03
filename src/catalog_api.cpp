@@ -100,66 +100,95 @@ rest_api_objects::LoadTableResult IRCAPI::GetTable(ClientContext &context, IRCat
 vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &context, IRCatalog &catalog,
                                                             const IRCSchemaEntry &schema) {
 	auto schema_name = GetEncodedSchemaName(schema.namespace_items);
+	vector<rest_api_objects::TableIdentifier> all_identifiers;
+	string page_token;
 
-	auto url_builder = catalog.GetBaseUrl();
-	url_builder.AddPathComponent(catalog.prefix);
-	url_builder.AddPathComponent("namespaces");
-	url_builder.AddPathComponent(schema_name);
-	url_builder.AddPathComponent("tables");
-	auto response = catalog.auth_handler->GetRequest(context, url_builder);
-	if (!response->Success()) {
-		auto url = url_builder.GetURL();
-		ThrowException(url, *response, "GET");
-	}
+	do {
+		auto url_builder = catalog.GetBaseUrl();
+		url_builder.AddPathComponent(catalog.prefix);
+		url_builder.AddPathComponent("namespaces");
+		url_builder.AddPathComponent(schema_name);
+		url_builder.AddPathComponent("tables");
+		if (!page_token.empty()) {
+			url_builder.SetParam("pageToken", page_token);
+		}
+		auto response = catalog.auth_handler->GetRequest(context, url_builder);
+		if (!response->Success()) {
+			auto url = url_builder.GetURL();
+			ThrowException(url, *response, "GET");
+		}
 
-	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(response->body));
-	auto *root = yyjson_doc_get_root(doc.get());
-	auto list_tables_response = rest_api_objects::ListTablesResponse::FromJSON(root);
+		std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(response->body));
+		auto *root = yyjson_doc_get_root(doc.get());
+		auto list_tables_response = rest_api_objects::ListTablesResponse::FromJSON(root);
 
-	if (!list_tables_response.has_identifiers) {
-		throw NotImplementedException("List of 'identifiers' is missing, missing support for Iceberg V1");
-	}
-	return std::move(list_tables_response.identifiers);
+		if (!list_tables_response.has_identifiers) {
+			throw NotImplementedException("List of 'identifiers' is missing, missing support for Iceberg V1");
+		}
+
+		all_identifiers.insert(all_identifiers.end(), std::make_move_iterator(list_tables_response.identifiers.begin()),
+		                       std::make_move_iterator(list_tables_response.identifiers.end()));
+
+		if (list_tables_response.has_next_page_token) {
+			page_token = list_tables_response.next_page_token.value;
+		} else {
+			page_token.clear();
+		}
+	} while (!page_token.empty());
+
+	return all_identifiers;
 }
 
 vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IRCatalog &catalog, const vector<string> &parent) {
 	vector<IRCAPISchema> result;
-	auto endpoint_builder = catalog.GetBaseUrl();
-	endpoint_builder.AddPathComponent(catalog.prefix);
-	endpoint_builder.AddPathComponent("namespaces");
-	if (!parent.empty()) {
-		auto parent_name = GetSchemaName(parent);
-		endpoint_builder.SetParam("parent", parent_name);
-	}
-	auto response = catalog.auth_handler->GetRequest(context, endpoint_builder);
-	if (!response->Success()) {
-		auto url = endpoint_builder.GetURL();
-		ThrowException(url, *response, "GET");
-	}
-
-	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(response->body));
-	auto *root = yyjson_doc_get_root(doc.get());
-	auto list_namespaces_response = rest_api_objects::ListNamespacesResponse::FromJSON(root);
-	if (!list_namespaces_response.has_namespaces) {
-		//! FIXME: old code expected 'namespaces' to always be present, but it's not a required property
-		return result;
-	}
-	auto &schemas = list_namespaces_response.namespaces;
-	for (auto &schema : schemas) {
-		IRCAPISchema schema_result;
-		schema_result.catalog_name = catalog.GetName();
-		schema_result.items = std::move(schema.value);
-
-		if (catalog.attach_options.support_nested_namespaces) {
-			auto new_parent = parent;
-			new_parent.push_back(schema_result.items.back());
-			auto nested_namespaces = GetSchemas(context, catalog, new_parent);
-			result.insert(result.end(), std::make_move_iterator(nested_namespaces.begin()),
-			              std::make_move_iterator(nested_namespaces.end()));
+	string page_token = "";
+	do {
+		auto endpoint_builder = catalog.GetBaseUrl();
+		endpoint_builder.AddPathComponent(catalog.prefix);
+		endpoint_builder.AddPathComponent("namespaces");
+		if (!parent.empty()) {
+			auto parent_name = GetSchemaName(parent);
+			endpoint_builder.SetParam("parent", parent_name);
+		}
+		if (!page_token.empty()) {
+			endpoint_builder.SetParam("pageToken", page_token);
+		}
+		auto response = catalog.auth_handler->GetRequest(context, endpoint_builder);
+		if (!response->Success()) {
+			auto url = endpoint_builder.GetURL();
+			ThrowException(url, *response, "GET");
 		}
 
-		result.push_back(schema_result);
-	}
+		std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(response->body));
+		auto *root = yyjson_doc_get_root(doc.get());
+		auto list_namespaces_response = rest_api_objects::ListNamespacesResponse::FromJSON(root);
+		if (!list_namespaces_response.has_namespaces) {
+			//! FIXME: old code expected 'namespaces' to always be present, but it's not a required property
+			return result;
+		}
+		auto &schemas = list_namespaces_response.namespaces;
+		for (auto &schema : schemas) {
+			IRCAPISchema schema_result;
+			schema_result.catalog_name = catalog.GetName();
+			schema_result.items = std::move(schema.value);
+
+			if (catalog.attach_options.support_nested_namespaces) {
+				auto new_parent = parent;
+				new_parent.push_back(schema_result.items.back());
+				auto nested_namespaces = GetSchemas(context, catalog, new_parent);
+				result.insert(result.end(), std::make_move_iterator(nested_namespaces.begin()),
+				              std::make_move_iterator(nested_namespaces.end()));
+			}
+			result.push_back(schema_result);
+		}
+
+		if (list_namespaces_response.has_next_page_token) {
+			page_token = list_namespaces_response.next_page_token.value;
+		} else {
+			page_token.clear();
+		}
+	} while (!page_token.empty());
+
 	return result;
 }
 
