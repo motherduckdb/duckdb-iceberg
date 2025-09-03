@@ -40,7 +40,12 @@ ATTACH '' AS my_datalake (
 );
 
 statement error
-insert into my_datalake.default.test_not_null VALUES (NULL, NULL);
+insert into my_datalake.default.test_not_null VALUES (
+	1,
+	'NULL nested type',
+	{'street': NULL, 'city': 'Metropolis', 'zip': '12345'},
+	['123-456-7890', '987-654-3210']::VARCHAR[],
+	MAP {'age': '30', 'membership': 'gold'}
+);
 ----
 <REGEX>:.*Invalid Input Error.*
-

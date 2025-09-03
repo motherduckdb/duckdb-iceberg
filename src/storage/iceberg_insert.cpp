@@ -6,6 +6,7 @@
 #include "metadata/iceberg_column_definition.hpp"
 
 #include "iceberg_multi_file_list.hpp"
+#include "../include/metadata/iceberg_column_definition.hpp"
 
 #include "duckdb/common/sort/partition_state.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
@@ -150,6 +151,52 @@ static IcebergColumnStats ParseColumnStats(const vector<Value> col_stats) {
 	return column_stats;
 }
 
+struct IcebergColumnDef {
+
+	IcebergColumnDef(string nested_name, optional_ptr<IcebergColumnDefinition> col_def_) : nested_name(nested_name) {
+		column_def = col_def_;
+	}
+	//! nested column name separated by "."
+	string nested_name;
+	optional_ptr<IcebergColumnDefinition> column_def;
+};
+
+static vector<IcebergColumnDef> GetNestedColumn(string &col_name, optional_ptr<IcebergColumnDefinition> column_def) {
+	vector<IcebergColumnDef> ret;
+	if (column_def->IsIcebergPrimitiveType()) {
+		auto column_name = col_name + "." + column_def->name;
+		ret.push_back(IcebergColumnDef(column_name, column_def.get()));
+	} else {
+		for (auto &child : column_def->children) {
+			auto new_col_name = col_name + "." + column_def->name;
+			auto nested_children = GetNestedColumn(new_col_name, child.get());
+			for (auto &nested_child : nested_children) {
+				ret.push_back(nested_child);
+			}
+		}
+	}
+	return ret;
+}
+
+static case_insensitive_map_t<optional_ptr<IcebergColumnDefinition>>
+GetIcebergColumnDefinitions(shared_ptr<IcebergTableSchema> ic_schema) {
+	case_insensitive_map_t<optional_ptr<IcebergColumnDefinition>> column_info;
+	for (auto &column : ic_schema->columns) {
+		if (column->IsIcebergPrimitiveType()) {
+			column_info.emplace(column->name, column.get());
+		} else {
+			// type is
+			for (auto &child : column->children) {
+				auto nested_children = GetNestedColumn(column->name, child);
+				for (auto &nested_child : nested_children) {
+					column_info.emplace(nested_child.nested_name, nested_child.column_def);
+				}
+			}
+		}
+	}
+	return column_info;
+}
+
 static void AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &chunk,
                             optional_ptr<TableCatalogEntry> table) {
 	D_ASSERT(table);
@@ -180,10 +227,7 @@ static void AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &c
 		auto table_current_schema_id = ic_table.table_info.table_metadata.current_schema_id;
 		auto ic_schema = ic_table.table_info.table_metadata.schemas[table_current_schema_id];
 
-		case_insensitive_map_t<optional_ptr<IcebergColumnDefinition>> column_info;
-		for (auto &column : ic_schema->columns) {
-			column_info.emplace(column->name, column.get());
-		}
+		auto column_info = GetIcebergColumnDefinitions(ic_schema);
 
 		for (idx_t col_idx = 0; col_idx < map_children.size(); col_idx++) {
 			auto &struct_children = StructValue::GetChildren(map_children[col_idx]);
@@ -191,18 +235,14 @@ static void AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &c
 			auto &col_stats = MapValue::GetChildren(struct_children[1]);
 			auto column_names = ParseQuotedList(col_name, '.');
 			auto stats = ParseColumnStats(col_stats);
-			idx_t pos = 0;
-			auto parsed_col_name = ParseQuotedValue(col_name, pos);
+			string normalized_col_name = StringUtil::Join(column_names, ".");
 
-			auto ic_column_info = column_info.find(parsed_col_name);
-			if (stats.has_null_count && stats.null_count > 0) {
-				D_ASSERT(ic_column_info != column_info.end());
-				if (ic_column_info->second->required) {
-					throw InvalidInputException("Column %s is required. Cannot Insert NULL values", col_name);
-				}
+			auto ic_column_info = column_info.find(normalized_col_name);
+			D_ASSERT(ic_column_info != column_info.end());
+			if (ic_column_info->second->required && stats.has_null_count && stats.null_count > 0) {
+				throw InvalidInputException("Column %s is marked required. Cannot Insert NULL values",
+				                            normalized_col_name);
 			}
-
-			auto break_here = 0;
 
 			//! TODO: convert 'stats' into 'data_file.lower_bounds', upper_bounds, value_counts, null_value_counts,
 			//! nan_value_counts ...
