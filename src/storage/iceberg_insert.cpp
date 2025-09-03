@@ -161,40 +161,19 @@ struct IcebergColumnDef {
 	optional_ptr<IcebergColumnDefinition> column_def;
 };
 
-static vector<IcebergColumnDef> GetNestedColumn(string &col_name, optional_ptr<IcebergColumnDefinition> column_def) {
-	vector<IcebergColumnDef> ret;
+static void AddToColDefMap(case_insensitive_map_t<optional_ptr<IcebergColumnDefinition>> &name_to_coldef,
+                           string col_name_prefix, optional_ptr<IcebergColumnDefinition> column_def) {
+	string column_name = column_def->name;
+	if (!col_name_prefix.empty()) {
+		column_name = col_name_prefix + "." + column_def->name;
+	}
 	if (column_def->IsIcebergPrimitiveType()) {
-		auto column_name = col_name + "." + column_def->name;
-		ret.push_back(IcebergColumnDef(column_name, column_def.get()));
+		name_to_coldef.emplace(column_name, column_def.get());
 	} else {
 		for (auto &child : column_def->children) {
-			auto new_col_name = col_name + "." + column_def->name;
-			auto nested_children = GetNestedColumn(new_col_name, child.get());
-			for (auto &nested_child : nested_children) {
-				ret.push_back(nested_child);
-			}
+			AddToColDefMap(name_to_coldef, column_name, child.get());
 		}
 	}
-	return ret;
-}
-
-static case_insensitive_map_t<optional_ptr<IcebergColumnDefinition>>
-GetIcebergColumnDefinitions(shared_ptr<IcebergTableSchema> ic_schema) {
-	case_insensitive_map_t<optional_ptr<IcebergColumnDefinition>> column_info;
-	for (auto &column : ic_schema->columns) {
-		if (column->IsIcebergPrimitiveType()) {
-			column_info.emplace(column->name, column.get());
-		} else {
-			// type is
-			for (auto &child : column->children) {
-				auto nested_children = GetNestedColumn(column->name, child);
-				for (auto &nested_child : nested_children) {
-					column_info.emplace(nested_child.nested_name, nested_child.column_def);
-				}
-			}
-		}
-	}
-	return column_info;
 }
 
 static void AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &chunk,
@@ -227,7 +206,10 @@ static void AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &c
 		auto table_current_schema_id = ic_table.table_info.table_metadata.current_schema_id;
 		auto ic_schema = ic_table.table_info.table_metadata.schemas[table_current_schema_id];
 
-		auto column_info = GetIcebergColumnDefinitions(ic_schema);
+		case_insensitive_map_t<optional_ptr<IcebergColumnDefinition>> column_info;
+		for (auto &column : ic_schema->columns) {
+			AddToColDefMap(column_info, "", column.get());
+		}
 
 		for (idx_t col_idx = 0; col_idx < map_children.size(); col_idx++) {
 			auto &struct_children = StructValue::GetChildren(map_children[col_idx]);

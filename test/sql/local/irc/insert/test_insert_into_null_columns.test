@@ -39,11 +39,34 @@ ATTACH '' AS my_datalake (
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
+# first test that we can insert nested types
+statement ok
+insert into my_datalake.default.test_not_null VALUES (
+	1,
+	'NULL nested type',
+	{'street': 'duck street', 'city': 'Metropolis', 'zip': '12345'},
+	['123-456-7890', '987-654-3210']::VARCHAR[],
+	MAP {'age': '30', 'membership': 'gold'}
+);
+
+# cannot insert null into a nested type that is required
 statement error
 insert into my_datalake.default.test_not_null VALUES (
 	1,
 	'NULL nested type',
 	{'street': NULL, 'city': 'Metropolis', 'zip': '12345'},
+	['123-456-7890', '987-654-3210']::VARCHAR[],
+	MAP {'age': '30', 'membership': 'gold'}
+);
+----
+<REGEX>:.*Invalid Input Error.*
+
+# cannot insert NULL into primitive type marked NOT NULL
+statement error
+insert into my_datalake.default.test_not_null VALUES (
+	1,
+	NULL,
+	{'street': 'duck street', 'city': 'swan city', 'zip': '12345'},
 	['123-456-7890', '987-654-3210']::VARCHAR[],
 	MAP {'age': '30', 'membership': 'gold'}
 );
