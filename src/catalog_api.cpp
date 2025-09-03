@@ -76,7 +76,7 @@ bool IRCAPI::VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, c
 	auto url = url_builder.GetURL();
 	try {
 		auto response = catalog.auth_handler->HeadRequest(context, url_builder);
-		if (response->Success()) {
+		if (response->Success() || response->status == HTTPStatusCode::NoContent_204) {
 			return true;
 		}
 		return false;
@@ -99,7 +99,7 @@ bool IRCAPI::VerifyTableExistence(ClientContext &context, IRCatalog &catalog, co
 
 	auto url = url_builder.GetURL();
 	auto response = catalog.auth_handler->HeadRequest(context, url_builder);
-	if (response->Success()) {
+	if (response->Success() || response->status == HTTPStatusCode::NoContent_204) {
 		return true;
 	}
 	return false;
