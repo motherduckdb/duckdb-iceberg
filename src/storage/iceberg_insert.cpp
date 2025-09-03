@@ -375,6 +375,13 @@ PhysicalOperator &IRCatalog::PlanInsert(ClientContext &context, PhysicalPlanGene
 		throw BinderException("ON CONFLICT clause not yet supported for insertion into Iceberg table");
 	}
 
+	for (auto &mapping : op.column_index_map) {
+		if (mapping == DConstants::INVALID_INDEX) {
+			//! See issue#444
+			throw NotImplementedException("Iceberg inserts don't support targeted inserts yet (i.e tbl(col1,col2))");
+		}
+	}
+
 	auto &table_entry = op.table.Cast<ICTableEntry>();
 	table_entry.PrepareIcebergScanFromEntry(context);
 	auto &table_info = table_entry.table_info;
