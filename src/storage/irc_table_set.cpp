@@ -29,7 +29,6 @@ ICTableSet::ICTableSet(IRCSchemaEntry &schema) : schema(schema), catalog(schema.
 
 void ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &table) {
 	if (!table.schema_versions.empty()) {
-		//! Already filled
 		return;
 	}
 
@@ -57,17 +56,20 @@ void ICTableSet::Scan(ClientContext &context, const std::function<void(CatalogEn
 }
 
 void ICTableSet::LoadEntries(ClientContext &context) {
-	if (!entries.empty()) {
+	if (listed) {
 		return;
 	}
 
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
-	// TODO: handle out-of-order columns using position property
 	auto tables = IRCAPI::GetTables(context, ic_catalog, schema);
 
 	for (auto &table : tables) {
-		entries.emplace(table.name, IcebergTableInformation(ic_catalog, schema, table.name));
+		auto entry_it = entries.find(table.name);
+		if (entry_it == entries.end()) {
+			entries.emplace(table.name, IcebergTableInformation(ic_catalog, schema, table.name));
+		}
 	}
+	listed = true;
 }
 
 void ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema,
@@ -121,11 +123,17 @@ unique_ptr<ICTableInfo> ICTableSet::GetTableInfo(ClientContext &context, IRCSche
 }
 
 optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const EntryLookupInfo &lookup) {
-	LoadEntries(context);
 	lock_guard<mutex> l(entry_lock);
-	auto entry = entries.find(lookup.GetEntryName());
+	auto &ic_catalog = catalog.Cast<IRCatalog>();
+
+	auto table_name = lookup.GetEntryName();
+	auto entry = entries.find(table_name);
 	if (entry == entries.end()) {
-		return nullptr;
+		if (!IRCAPI::VerifyTableExistence(context, ic_catalog, schema, table_name)) {
+			return nullptr;
+		}
+		auto it = entries.emplace(table_name, IcebergTableInformation(ic_catalog, schema, table_name));
+		entry = it.first;
 	}
 	if (entry->second.transaction_data && entry->second.transaction_data->is_deleted) {
 		return nullptr;

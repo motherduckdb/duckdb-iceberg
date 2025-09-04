@@ -31,6 +31,8 @@ public:
 	IRCSchemaEntry &schema;
 	Catalog &catalog;
 	case_insensitive_map_t<IcebergTableInformation> entries;
+	//! Whether a listing is done for this transaction
+	bool listed = false;
 
 private:
 	mutex entry_lock;

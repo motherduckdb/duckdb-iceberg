@@ -17,7 +17,7 @@
 using namespace duckdb_yyjson;
 namespace duckdb {
 
-vector<string> IRCAPI::ParseSchemaName(string &namespace_name) {
+vector<string> IRCAPI::ParseSchemaName(const string &namespace_name) {
 	idx_t start = 0;
 	idx_t end = namespace_name.find(".", start);
 	vector<string> ret;
@@ -40,6 +40,7 @@ string IRCAPI::GetSchemaName(const vector<string> &items) {
 
 //! Used for the path parameters
 string IRCAPI::GetEncodedSchemaName(const vector<string> &items) {
+	D_ASSERT(!items.empty());
 	static const string unit_separator = "%1F";
 	return StringUtil::Join(items, unit_separator);
 }
@@ -63,6 +64,47 @@ string IRCAPI::GetEncodedSchemaName(const vector<string> &items) {
 	                    int(response.status));
 }
 
+bool IRCAPI::VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, const string &schema) {
+	auto namespace_items = ParseSchemaName(schema);
+	auto schema_name = GetEncodedSchemaName(namespace_items);
+
+	auto url_builder = catalog.GetBaseUrl();
+	url_builder.AddPathComponent(catalog.prefix);
+	url_builder.AddPathComponent("namespaces");
+	url_builder.AddPathComponent(schema_name);
+
+	auto url = url_builder.GetURL();
+	try {
+		auto response = catalog.auth_handler->HeadRequest(context, url_builder);
+		if (response->Success() || response->status == HTTPStatusCode::NoContent_204) {
+			return true;
+		}
+		return false;
+	} catch (std::exception &ex) {
+		//! For some reason this API likes to throw, instead of just returning a response with an error
+		return false;
+	}
+}
+
+bool IRCAPI::VerifyTableExistence(ClientContext &context, IRCatalog &catalog, const IRCSchemaEntry &schema,
+                                  const string &table) {
+	auto schema_name = GetEncodedSchemaName(schema.namespace_items);
+
+	auto url_builder = catalog.GetBaseUrl();
+	url_builder.AddPathComponent(catalog.prefix);
+	url_builder.AddPathComponent("namespaces");
+	url_builder.AddPathComponent(schema_name);
+	url_builder.AddPathComponent("tables");
+	url_builder.AddPathComponent(table);
+
+	auto url = url_builder.GetURL();
+	auto response = catalog.auth_handler->HeadRequest(context, url_builder);
+	if (response->Success() || response->status == HTTPStatusCode::NoContent_204) {
+		return true;
+	}
+	return false;
+}
+
 static string GetTableMetadata(ClientContext &context, IRCatalog &catalog, const IRCSchemaEntry &schema,
                                const string &table) {
 	auto schema_name = IRCAPI::GetEncodedSchemaName(schema.namespace_items);
@@ -80,21 +122,15 @@ static string GetTableMetadata(ClientContext &context, IRCatalog &catalog, const
 		ThrowException(url, *response, "GET");
 	}
 
-	const auto &api_result = response->body;
-	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(api_result));
-	auto *root = yyjson_doc_get_root(doc.get());
-	auto load_table_result = rest_api_objects::LoadTableResult::FromJSON(root);
-	catalog.SetCachedValue(url, api_result, load_table_result);
-	return api_result;
+	return response->body;
 }
 
 rest_api_objects::LoadTableResult IRCAPI::GetTable(ClientContext &context, IRCatalog &catalog,
                                                    const IRCSchemaEntry &schema, const string &table_name) {
-	string result = GetTableMetadata(context, catalog, schema, table_name);
+	auto result = GetTableMetadata(context, catalog, schema, table_name);
 	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(result));
 	auto *metadata_root = yyjson_doc_get_root(doc.get());
-	auto load_table_result = rest_api_objects::LoadTableResult::FromJSON(metadata_root);
-	return load_table_result;
+	return rest_api_objects::LoadTableResult::FromJSON(metadata_root);
 }
 
 vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &context, IRCatalog &catalog,
