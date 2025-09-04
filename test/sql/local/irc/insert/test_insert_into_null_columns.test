@@ -59,7 +59,7 @@ insert into my_datalake.default.test_not_null VALUES (
 	MAP {'age': '30', 'membership': 'gold'}
 );
 ----
-<REGEX>:.*Constraint Error.*
+<REGEX>:.*Constraint Error.*NOT NULL.*
 
 # cannot insert NULL into primitive type marked NOT NULL
 statement error
@@ -71,4 +71,4 @@ insert into my_datalake.default.test_not_null VALUES (
 	MAP {'age': '30', 'membership': 'gold'}
 );
 ----
-<REGEX>:.*Constraint Error.*
+<REGEX>:.*Constraint Error.*NOT NULL.*

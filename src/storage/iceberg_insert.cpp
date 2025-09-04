@@ -205,12 +205,12 @@ static void AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &c
 			auto &col_stats = MapValue::GetChildren(struct_children[1]);
 			auto column_names = ParseQuotedList(col_name, '.');
 			auto stats = ParseColumnStats(col_stats);
-			string normalized_col_name = StringUtil::Join(column_names, ".");
+			auto normalized_col_name = StringUtil::Join(column_names, ".");
 
 			auto ic_column_info = column_info.find(normalized_col_name);
 			D_ASSERT(ic_column_info != column_info.end());
 			if (ic_column_info->second->required && stats.has_null_count && stats.null_count > 0) {
-				throw ConstraintException("NOT NULL constraint failed: %s.%s boop", table->name, normalized_col_name);
+				throw ConstraintException("NOT NULL constraint failed: %s.%s", table->name, normalized_col_name);
 			}
 
 			//! TODO: convert 'stats' into 'data_file.lower_bounds', upper_bounds, value_counts, null_value_counts,
