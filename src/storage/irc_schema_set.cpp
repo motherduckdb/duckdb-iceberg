@@ -11,12 +11,28 @@ namespace duckdb {
 IRCSchemaSet::IRCSchemaSet(Catalog &catalog) : catalog(catalog) {
 }
 
-optional_ptr<CatalogEntry> IRCSchemaSet::GetEntry(ClientContext &context, const string &name) {
-	LoadEntries(context);
+optional_ptr<CatalogEntry> IRCSchemaSet::GetEntry(ClientContext &context, const string &name,
+                                                  OnEntryNotFound if_not_found) {
 	lock_guard<mutex> l(entry_lock);
+	auto &ic_catalog = catalog.Cast<IRCatalog>();
+
 	auto entry = entries.find(name);
 	if (entry == entries.end()) {
-		return nullptr;
+		CreateSchemaInfo info;
+		if (!IRCAPI::VerifySchemaExistence(context, ic_catalog, name)) {
+			if (if_not_found == OnEntryNotFound::RETURN_NULL) {
+				return nullptr;
+			} else {
+				throw CatalogException("Iceberg namespace by the name of '%s' does not exist", name);
+			}
+		}
+		info.schema = name;
+		info.internal = false;
+		auto schema_entry = make_uniq<IRCSchemaEntry>(catalog, info);
+		schema_entry->namespace_items = IRCAPI::ParseSchemaName(name);
+		CreateEntryInternal(context, std::move(schema_entry));
+		entry = entries.find(name);
+		D_ASSERT(entry != entries.end());
 	}
 	return entry->second.get();
 }
@@ -34,7 +50,7 @@ static string GetSchemaName(const vector<string> &items) {
 }
 
 void IRCSchemaSet::LoadEntries(ClientContext &context) {
-	if (!entries.empty()) {
+	if (listed) {
 		return;
 	}
 
@@ -48,6 +64,7 @@ void IRCSchemaSet::LoadEntries(ClientContext &context) {
 		schema_entry->namespace_items = std::move(schema.items);
 		CreateEntryInternal(context, std::move(schema_entry));
 	}
+	listed = true;
 }
 
 optional_ptr<CatalogEntry> IRCSchemaSet::CreateEntryInternal(ClientContext &context, unique_ptr<CatalogEntry> entry) {
