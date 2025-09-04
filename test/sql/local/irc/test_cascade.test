@@ -37,9 +37,9 @@ ATTACH '' AS my_datalake (
 statement error
 DROP SCHEMA my_datalake.default CASCADE;
 ----
-Not implemented Error: DROP SCHEMA <schema_name> CASCADE is not supported currently
+Not implemented Error: DROP SCHEMA <schema_name> CASCADE is not supported for Iceberg schemas currently
 
 statement error
 DROP TABLE my_datalake.default.empty_table CASCADE;
 ----
-Not implemented Error: DROP TABLE <table_name> CASCADE is not supported currently
+Not implemented Error: DROP TABLE <table_name> CASCADE is not supported for Iceberg tables currently
