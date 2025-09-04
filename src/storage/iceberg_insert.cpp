@@ -150,16 +150,6 @@ static IcebergColumnStats ParseColumnStats(const vector<Value> col_stats) {
 	return column_stats;
 }
 
-struct IcebergColumnDef {
-
-	IcebergColumnDef(string nested_name, optional_ptr<IcebergColumnDefinition> col_def_) : nested_name(nested_name) {
-		column_def = col_def_;
-	}
-	//! nested column name separated by "."
-	string nested_name;
-	optional_ptr<IcebergColumnDefinition> column_def;
-};
-
 static void AddToColDefMap(case_insensitive_map_t<optional_ptr<IcebergColumnDefinition>> &name_to_coldef,
                            string col_name_prefix, optional_ptr<IcebergColumnDefinition> column_def) {
 	string column_name = column_def->name;

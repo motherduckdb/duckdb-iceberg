@@ -117,9 +117,7 @@ shared_ptr<IcebergTableSchema> IcebergCreateTableRequest::CreateIcebergSchema(co
 					continue;
 				}
 				auto &not_null_constraint = constraint->Cast<NotNullConstraint>();
-				auto break_here = column.pos;
-				auto wat = not_null_constraint.index.index;
-				if (not_null_constraint.index.index == column.pos) {
+				if (not_null_constraint.index.IsValid() && not_null_constraint.index.index == column.pos) {
 					required = true;
 				}
 			}
