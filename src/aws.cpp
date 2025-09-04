@@ -158,6 +158,10 @@ unique_ptr<HTTPResponse> AWSInput::ExecuteRequest(ClientContext &context, Aws::H
 	return result;
 }
 
+unique_ptr<HTTPResponse> AWSInput::HeadRequest(ClientContext &context) {
+	return ExecuteRequest(context, Aws::Http::HttpMethod::HTTP_HEAD);
+}
+
 unique_ptr<HTTPResponse> AWSInput::GetRequest(ClientContext &context) {
 	return ExecuteRequest(context, Aws::Http::HttpMethod::HTTP_GET);
 }
