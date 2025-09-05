@@ -400,6 +400,17 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 	return physical_copy;
 }
 
+void VerifyDirectInsertionOrder(LogicalInsert &op) {
+	idx_t column_index = 0;
+	for (auto &mapping : op.column_index_map) {
+		if (mapping == DConstants::INVALID_INDEX || mapping != column_index) {
+			//! See issue#444
+			throw NotImplementedException("Iceberg inserts don't support targeted inserts yet (i.e tbl(col1,col2))");
+		}
+		column_index++;
+	}
+}
+
 PhysicalOperator &IRCatalog::PlanInsert(ClientContext &context, PhysicalPlanGenerator &planner, LogicalInsert &op,
                                         optional_ptr<PhysicalOperator> plan) {
 	if (op.return_chunk) {
@@ -409,6 +420,8 @@ PhysicalOperator &IRCatalog::PlanInsert(ClientContext &context, PhysicalPlanGene
 	if (op.on_conflict_info.action_type != OnConflictAction::THROW) {
 		throw BinderException("ON CONFLICT clause not yet supported for insertion into Iceberg table");
 	}
+
+	VerifyDirectInsertionOrder(op);
 
 	auto &table_entry = op.table.Cast<ICTableEntry>();
 	// FIXME: Inserts into V3 tables is not yet supported since
