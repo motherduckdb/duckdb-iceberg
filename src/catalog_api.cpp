@@ -105,8 +105,8 @@ bool IRCAPI::VerifyTableExistence(ClientContext &context, IRCatalog &catalog, co
 	return false;
 }
 
-static string GetTableMetadata(ClientContext &context, IRCatalog &catalog, const IRCSchemaEntry &schema,
-                               const string &table) {
+static unique_ptr<HTTPResponse> GetTableMetadata(ClientContext &context, IRCatalog &catalog,
+                                                 const IRCSchemaEntry &schema, const string &table) {
 	auto schema_name = IRCAPI::GetEncodedSchemaName(schema.namespace_items);
 
 	auto url_builder = catalog.GetBaseUrl();
@@ -117,20 +117,28 @@ static string GetTableMetadata(ClientContext &context, IRCatalog &catalog, const
 	url_builder.AddPathComponent(table);
 
 	auto url = url_builder.GetURL();
-	auto response = catalog.auth_handler->GetRequest(context, url_builder);
-	if (!response->Success()) {
-		ThrowException(url, *response, "GET");
-	}
-
-	return response->body;
+	return catalog.auth_handler->GetRequest(context, url_builder);
 }
 
-rest_api_objects::LoadTableResult IRCAPI::GetTable(ClientContext &context, IRCatalog &catalog,
-                                                   const IRCSchemaEntry &schema, const string &table_name) {
+APIResult<rest_api_objects::LoadTableResult> IRCAPI::GetTable(ClientContext &context, IRCatalog &catalog,
+                                                              const IRCSchemaEntry &schema, const string &table_name) {
+	auto ret = APIResult<rest_api_objects::LoadTableResult>();
 	auto result = GetTableMetadata(context, catalog, schema, table_name);
-	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(result));
+	if (result->status != HTTPStatusCode::OK_200) {
+		yyjson_val *error_obj = ICUtils::get_error_message(result->body);
+		if (error_obj == nullptr) {
+			throw InvalidConfigurationException(result->body);
+		}
+		ret.has_error = true;
+		ret.status_ = result->status;
+		ret.error_ = rest_api_objects::IcebergErrorResponse::FromJSON(error_obj);
+		return ret;
+	}
+	ret.has_error = false;
+	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(ICUtils::api_result_to_doc(result->body));
 	auto *metadata_root = yyjson_doc_get_root(doc.get());
-	return rest_api_objects::LoadTableResult::FromJSON(metadata_root);
+	ret.result_ = rest_api_objects::LoadTableResult::FromJSON(metadata_root);
+	return ret;
 }
 
 vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &context, IRCatalog &catalog,
@@ -150,6 +158,12 @@ vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &conte
 		}
 		auto response = catalog.auth_handler->GetRequest(context, url_builder);
 		if (!response->Success()) {
+			if (response->status == HTTPStatusCode::Forbidden_403 ||
+			    response->status == HTTPStatusCode::Unauthorized_401) {
+				// return empty result if user cannot list tables for a schema.
+				vector<rest_api_objects::TableIdentifier> ret;
+				return ret;
+			}
 			auto url = url_builder.GetURL();
 			ThrowException(url, *response, "GET");
 		}
@@ -191,6 +205,11 @@ vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IRCatalog &catal
 		}
 		auto response = catalog.auth_handler->GetRequest(context, endpoint_builder);
 		if (!response->Success()) {
+			if (response->status == HTTPStatusCode::Forbidden_403 ||
+			    response->status == HTTPStatusCode::Unauthorized_401) {
+				// return empty result if user cannot list schemas.
+				return result;
+			}
 			auto url = endpoint_builder.GetURL();
 			ThrowException(url, *response, "GET");
 		}
