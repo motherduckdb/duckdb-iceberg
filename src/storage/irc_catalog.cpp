@@ -109,6 +109,10 @@ optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transactio
 }
 
 void IRCatalog::DropSchema(ClientContext &context, DropInfo &info) {
+	if (info.cascade) {
+		throw NotImplementedException(
+		    "DROP SCHEMA <schema_name> CASCADE is not supported for Iceberg schemas currently");
+	}
 	vector<string> namespace_items;
 	auto namespace_identifier = IRCAPI::ParseSchemaName(info.name);
 	namespace_items.push_back(IRCAPI::GetEncodedSchemaName(namespace_identifier));
