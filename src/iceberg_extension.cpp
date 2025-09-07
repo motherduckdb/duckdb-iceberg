@@ -37,10 +37,14 @@ public:
 
 static void LoadInternal(ExtensionLoader &loader) {
 	auto &instance = loader.GetDatabaseInstance();
-	ExtensionHelper::AutoLoadExtension(instance, "parquet");
+	ExtensionHelper::AutoLoadExtension(instance, "parquet")
+	ExtensionHelper::AutoLoadExtension(instance, "avro");
 
 	if (!instance.ExtensionIsLoaded("parquet")) {
 		throw MissingExtensionException("The iceberg extension requires the parquet extension to be loaded!");
+	}
+	if (!instance.ExtensionIsLoaded("avro")) {
+		throw MissingExtensionException("The iceberg extension requires the avro extension to be loaded!");
 	}
 
 	auto &config = DBConfig::GetConfig(instance);
