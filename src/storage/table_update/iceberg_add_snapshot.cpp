@@ -6,6 +6,8 @@
 #include "duckdb/parser/parsed_data/copy_info.hpp"
 #include "duckdb/execution/execution_context.hpp"
 #include "duckdb/parallel/thread_context.hpp"
+#include "duckdb/main/extension_helper.hpp"
+#include "duckdb/main/extension/extension_loader.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/storage/caching_file_system.hpp"
 
