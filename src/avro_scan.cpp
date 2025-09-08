@@ -11,6 +11,7 @@
 namespace duckdb {
 
 AvroScan::AvroScan(const string &scan_name, ClientContext &context, const string &path) : path(path), context(context) {
+	auto &instance = DatabaseInstance::GetDatabase(context);
 	auto &system_catalog = Catalog::GetSystemCatalog(instance);
 	auto data = CatalogTransaction::GetSystemTransaction(instance);
 	auto &schema = system_catalog.GetSchema(data, DEFAULT_SCHEMA);

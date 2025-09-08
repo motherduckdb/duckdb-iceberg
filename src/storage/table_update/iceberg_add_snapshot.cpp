@@ -47,7 +47,6 @@ rest_api_objects::TableUpdate IcebergAddSnapshot::CreateSetSnapshotRefUpdate() {
 }
 
 void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state) {
-	// load avro so we can get
 	auto &system_catalog = Catalog::GetSystemCatalog(db);
 	auto data = CatalogTransaction::GetSystemTransaction(db);
 	auto &schema = system_catalog.GetSchema(data, DEFAULT_SCHEMA);
