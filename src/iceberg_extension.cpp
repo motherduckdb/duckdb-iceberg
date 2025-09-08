@@ -37,7 +37,7 @@ public:
 
 static void LoadInternal(ExtensionLoader &loader) {
 	auto &instance = loader.GetDatabaseInstance();
-	ExtensionHelper::AutoLoadExtension(instance, "parquet")
+	ExtensionHelper::AutoLoadExtension(instance, "parquet");
 	ExtensionHelper::AutoLoadExtension(instance, "avro");
 
 	if (!instance.ExtensionIsLoaded("parquet")) {
