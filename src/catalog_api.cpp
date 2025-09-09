@@ -83,7 +83,7 @@ bool IRCAPI::VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, c
 	if (response->status == HTTPStatusCode::NotFound_404) {
 		return false;
 	}
-	throw HTTPException(*response, response->reason);
+	ThrowException(url, *response, response->reason);
 }
 
 bool IRCAPI::VerifyTableExistence(ClientContext &context, IRCatalog &catalog, const IRCSchemaEntry &schema,
@@ -107,7 +107,7 @@ bool IRCAPI::VerifyTableExistence(ClientContext &context, IRCatalog &catalog, co
 	if (response->status == HTTPStatusCode::NotFound_404) {
 		return false;
 	}
-	throw HTTPException(*response, response->reason);
+	ThrowException(url, *response, response->reason);
 }
 
 static unique_ptr<HTTPResponse> GetTableMetadata(ClientContext &context, IRCatalog &catalog,
