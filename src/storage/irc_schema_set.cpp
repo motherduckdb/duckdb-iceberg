@@ -23,13 +23,18 @@ optional_ptr<CatalogEntry> IRCSchemaSet::GetEntry(ClientContext &context, const 
 
 	auto &irc_transaction = IRCTransaction::Get(context, catalog);
 
+	auto verify_existence = irc_transaction.looked_up_entries.insert(name).second;
 	auto entry = entries.find(name);
-	auto perform_catalog_check = !SchemaDoesNotExist(irc_transaction.known_non_existent_schemas, name);
+	if (entry != entries.end()) {
+		return entry->second.get();
+	}
+	if (!verify_existence) {
+		return nullptr;
+	}
 	if (entry == entries.end()) {
 		CreateSchemaInfo info;
-		if (!perform_catalog_check || !IRCAPI::VerifySchemaExistence(context, ic_catalog, name)) {
+		if (!IRCAPI::VerifySchemaExistence(context, ic_catalog, name)) {
 			if (if_not_found == OnEntryNotFound::RETURN_NULL) {
-				irc_transaction.known_non_existent_schemas.insert(name);
 				return nullptr;
 			} else {
 				throw CatalogException("Iceberg namespace by the name of '%s' does not exist", name);
