@@ -74,16 +74,16 @@ bool IRCAPI::VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, c
 	url_builder.AddPathComponent(schema_name);
 
 	auto url = url_builder.GetURL();
-	try {
-		auto response = catalog.auth_handler->HeadRequest(context, url_builder);
-		if (response->Success() || response->status == HTTPStatusCode::NoContent_204) {
-			return true;
-		}
-		return false;
-	} catch (std::exception &ex) {
-		//! For some reason this API likes to throw, instead of just returning a response with an error
+	auto response = catalog.auth_handler->HeadRequest(context, url_builder);
+	// the httputil currently only sets 200 and 304 response to success
+	// for AWS all responses < 400 are successful
+	if (response->Success() || response->status == HTTPStatusCode::NoContent_204) {
+		return true;
+	}
+	if (response->status == HTTPStatusCode::NotFound_404) {
 		return false;
 	}
+	throw HTTPException(*response, response->reason);
 }
 
 bool IRCAPI::VerifyTableExistence(ClientContext &context, IRCatalog &catalog, const IRCSchemaEntry &schema,
@@ -99,10 +99,15 @@ bool IRCAPI::VerifyTableExistence(ClientContext &context, IRCatalog &catalog, co
 
 	auto url = url_builder.GetURL();
 	auto response = catalog.auth_handler->HeadRequest(context, url_builder);
+	// the httputil currently only sets 200 and 304 response to success
+	// for AWS all responses < 400 are successful
 	if (response->Success() || response->status == HTTPStatusCode::NoContent_204) {
 		return true;
 	}
-	return false;
+	if (response->status == HTTPStatusCode::NotFound_404) {
+		return false;
+	}
+	throw HTTPException(*response, response->reason);
 }
 
 static unique_ptr<HTTPResponse> GetTableMetadata(ClientContext &context, IRCatalog &catalog,
