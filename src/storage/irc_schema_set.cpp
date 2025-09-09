@@ -11,16 +11,25 @@ namespace duckdb {
 IRCSchemaSet::IRCSchemaSet(Catalog &catalog) : catalog(catalog) {
 }
 
+// we are sure the schema does not exist, we performed the head request and got a 404 response.
+static bool SchemaDoesNotExist(case_insensitive_set_t &known_non_existent_schemas, const string &name) {
+	return known_non_existent_schemas.find(name) != known_non_existent_schemas.end();
+}
+
 optional_ptr<CatalogEntry> IRCSchemaSet::GetEntry(ClientContext &context, const string &name,
                                                   OnEntryNotFound if_not_found) {
 	lock_guard<mutex> l(entry_lock);
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
 
+	auto &irc_transaction = IRCTransaction::Get(context, catalog);
+
 	auto entry = entries.find(name);
+	auto perform_catalog_check = !SchemaDoesNotExist(irc_transaction.known_non_existent_schemas, name);
 	if (entry == entries.end()) {
 		CreateSchemaInfo info;
-		if (!IRCAPI::VerifySchemaExistence(context, ic_catalog, name)) {
+		if (!perform_catalog_check || !IRCAPI::VerifySchemaExistence(context, ic_catalog, name)) {
 			if (if_not_found == OnEntryNotFound::RETURN_NULL) {
+				irc_transaction.known_non_existent_schemas.insert(name);
 				return nullptr;
 			} else {
 				throw CatalogException("Iceberg namespace by the name of '%s' does not exist", name);
