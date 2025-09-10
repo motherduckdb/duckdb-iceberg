@@ -29,7 +29,10 @@ optional_ptr<CatalogEntry> IRCSchemaSet::GetEntry(ClientContext &context, const 
 		return entry->second.get();
 	}
 	if (!verify_existence) {
-		return nullptr;
+		if (if_not_found == OnEntryNotFound::RETURN_NULL) {
+			return nullptr;
+		}
+		throw CatalogException("Iceberg namespace by the name of '%s' does not exist", name);
 	}
 	if (entry == entries.end()) {
 		CreateSchemaInfo info;
