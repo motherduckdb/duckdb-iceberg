@@ -293,7 +293,7 @@ TableTransactionInfo IRCTransaction::GetTransactionRequest(ClientContext &contex
 				commit_state.table_change.requirements.push_back(
 				    CreateAssertRefSnapshotIdRequirement(*current_snapshot));
 			}
-			CreateSetSnapshotRefUpdate(commit_state.new_snapshot_id);
+			commit_state.table_change.updates.push_back(CreateSetSnapshotRefUpdate(commit_state.new_snapshot_id));
 		}
 
 		transaction.table_changes.push_back(std::move(table_change));
