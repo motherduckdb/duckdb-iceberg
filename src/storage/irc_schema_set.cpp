@@ -11,11 +11,6 @@ namespace duckdb {
 IRCSchemaSet::IRCSchemaSet(Catalog &catalog) : catalog(catalog) {
 }
 
-// we are sure the schema does not exist, we performed the head request and got a 404 response.
-static bool SchemaDoesNotExist(case_insensitive_set_t &known_non_existent_schemas, const string &name) {
-	return known_non_existent_schemas.find(name) != known_non_existent_schemas.end();
-}
-
 optional_ptr<CatalogEntry> IRCSchemaSet::GetEntry(ClientContext &context, const string &name,
                                                   OnEntryNotFound if_not_found) {
 	lock_guard<mutex> l(entry_lock);
