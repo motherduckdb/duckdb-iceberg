@@ -16,7 +16,19 @@ optional_ptr<CatalogEntry> IRCSchemaSet::GetEntry(ClientContext &context, const 
 	lock_guard<mutex> l(entry_lock);
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
 
+	auto &irc_transaction = IRCTransaction::Get(context, catalog);
+
+	auto verify_existence = irc_transaction.looked_up_entries.insert(name).second;
 	auto entry = entries.find(name);
+	if (entry != entries.end()) {
+		return entry->second.get();
+	}
+	if (!verify_existence) {
+		if (if_not_found == OnEntryNotFound::RETURN_NULL) {
+			return nullptr;
+		}
+		throw CatalogException("Iceberg namespace by the name of '%s' does not exist", name);
+	}
 	if (entry == entries.end()) {
 		CreateSchemaInfo info;
 		if (!IRCAPI::VerifySchemaExistence(context, ic_catalog, name)) {
