@@ -1,4 +1,9 @@
 # This file is included by DuckDB's build system. It specifies which extension to load
+duckdb_extension_load(avro
+		LOAD_TESTS
+		GIT_URL https://github.com/duckdb/duckdb-avro
+		GIT_TAG 0c97a61781f63f8c5444cf3e0c6881ecbaa9fe13
+)
 
 # Extension from this repo
 duckdb_extension_load(iceberg
@@ -15,11 +20,6 @@ duckdb_extension_load(ducklake
         GIT_TAG c1ebd032eb4c763910551c08f4b61bdb8168f209
 )
 
-duckdb_extension_load(avro
-	LOAD_TESTS
-	GIT_URL https://github.com/duckdb/duckdb-avro
-	GIT_TAG 0c97a61781f63f8c5444cf3e0c6881ecbaa9fe13
-)
 
 if (NOT EMSCRIPTEN)
 ################## AWS
