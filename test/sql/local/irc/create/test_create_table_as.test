@@ -44,6 +44,15 @@ ATTACH '' AS my_datalake (
 statement ok
 use my_datalake.default;
 
+statement ok
+drop table if exists all_types_table_primitives_2;
+
+statement ok
+drop table if exists nested_types_2;
+
+statement ok
+drop table if exists fixed_array_table_as_list;
+
 # create primitive type table from test all types
 statement ok
 create table all_types_table_primitives_2 as select

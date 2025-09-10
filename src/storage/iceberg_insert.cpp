@@ -267,8 +267,10 @@ SinkFinalizeType IcebergInsert::Finalize(Pipeline &pipeline, Event &event, Clien
 	auto &table_info = irc_table.table_info;
 	auto &transaction = IRCTransaction::Get(context, table->catalog);
 
-	table_info.AddSnapshot(transaction, std::move(global_state.written_files));
-	transaction.MarkTableAsDirty(irc_table);
+	if (!global_state.written_files.empty()) {
+		table_info.AddSnapshot(transaction, std::move(global_state.written_files));
+		transaction.MarkTableAsDirty(irc_table);
+	}
 	return SinkFinalizeType::READY;
 }
 
