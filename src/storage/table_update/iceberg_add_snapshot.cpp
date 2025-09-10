@@ -37,11 +37,8 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 	D_ASSERT(avro_copy_p);
 	auto &avro_copy = avro_copy_p->Cast<CopyFunctionCatalogEntry>().function;
 
-	if (manifest_file.data_files.empty()) {
-		return;
-	}
-	commit_state.added_snapshot = true;
-	commit_state.new_snapshot_id = snapshot.snapshot_id;
+	D_ASSERT(!manifest_file.data_files.empty());
+
 	auto manifest_length = manifest_file::WriteToFile(table_info, manifest_file, avro_copy, db, context);
 	manifest.manifest_length = manifest_length;
 

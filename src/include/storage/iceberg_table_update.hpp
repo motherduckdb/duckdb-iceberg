@@ -35,8 +35,6 @@ enum class IcebergTableUpdateType : uint8_t {
 struct IcebergCommitState {
 	vector<IcebergManifest> manifests;
 	rest_api_objects::CommitTableRequest table_change;
-	bool added_snapshot = false;
-	int64_t new_snapshot_id;
 };
 
 struct IcebergTableUpdate {
