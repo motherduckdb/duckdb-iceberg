@@ -51,21 +51,18 @@ select count(*) from duckdb_logs_parsed('HTTP');
 query I
 select count(*) from duckdb_logs_parsed('HTTP');
 ----
-5
+3
 
 statement ok
 use memory;
 
-# 3 more requests are made,
-# 2 from previous duckdb_logs_parsed call for 'main', 'default',
-# and 1 for 'memory'
-# requests no longer go up
+# namespace 'memory' is looked up in the iceberg catalog
 query I
 select count(*) from duckdb_logs_parsed('HTTP');
 ----
-8
+4
 
 query I
 select count(*) from duckdb_logs_parsed('HTTP');
 ----
-8
+4
