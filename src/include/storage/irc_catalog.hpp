@@ -49,7 +49,7 @@ public:
 	static void SetAWSCatalogOptions(IcebergAttachOptions &attach_options,
 	                                 case_insensitive_set_t &set_by_attach_options);
 	//! Whether or not this catalog should search a specific type with the standard priority
-	CatalogLookupBehavior CatalogTypeLookupRule(CatalogType type) const override{
+	CatalogLookupBehavior CatalogTypeLookupRule(CatalogType type) const override {
 		switch (type) {
 		case CatalogType::TABLE_FUNCTION_ENTRY:
 		case CatalogType::SCALAR_FUNCTION_ENTRY:
