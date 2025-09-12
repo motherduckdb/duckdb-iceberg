@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/test_show_all_tables.test
+# name: test/sql/local/irc/test_table_information_requests.test
 # description: test integration with iceberg catalog read
 # group: [irc]
 
