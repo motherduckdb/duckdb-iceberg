@@ -69,6 +69,9 @@ void ICTableSet::Scan(ClientContext &context, const std::function<void(CatalogEn
 	auto table_namespace = IRCAPI::GetEncodedSchemaName(schema.namespace_items);
 	for (auto &entry : entries) {
 		auto &table_info = entry.second;
+		if (table_info.dummy_entry) {
+			continue;
+		}
 
 		// create a table entry with fake schema data
 		// filled stays false
@@ -85,9 +88,8 @@ void ICTableSet::Scan(ClientContext &context, const std::function<void(CatalogEn
 		if (result->name.empty()) {
 			throw InternalException("ICTableSet::CreateEntry called with empty name");
 		}
-		table_info.schema_versions.emplace(0, std::move(table_entry));
-		auto &optional = table_info.schema_versions[0].get()->Cast<CatalogEntry>();
-		table_info.table_metadata.current_schema_id = 0;
+		table_info.dummy_entry = std::move(table_entry);
+		auto &optional = table_info.dummy_entry.get()->Cast<CatalogEntry>();
 		callback(optional);
 	}
 	// erase not iceberg tables
