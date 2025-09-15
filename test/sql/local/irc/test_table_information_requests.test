@@ -43,8 +43,10 @@ ATTACH '' AS my_datalake (
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
-statement ok
-show all tables;
+query I
+select count(*) > 10 from (show all tables);
+----
+1
 
 # 1 call for oath, 1 call for config
 # 1 call to list namespaces

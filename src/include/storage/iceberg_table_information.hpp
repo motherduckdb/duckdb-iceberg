@@ -45,7 +45,6 @@ public:
 	IRCSchemaEntry &schema;
 	string name;
 	string table_id;
-	bool filled = false;
 
 	rest_api_objects::LoadTableResult load_table_result;
 	IcebergTableMetadata table_metadata;
