@@ -93,30 +93,22 @@ bool MatchBoundsTemplated(const TableFilter &filter, const IcebergPredicateStats
 			return true;
 		}
 
-		if (expr.expression_class != ExpressionClass::BOUND_OPERATOR) {
-			return true;
-		}
-
+		D_ASSERT(expr.GetExpressionClass() == ExpressionClass::BOUND_OPERATOR);
 		auto &bound_operator_expr = expr.Cast<BoundOperatorExpression>();
-		if (bound_operator_expr.children.size() != 1) {
-			return true;
-		}
 
+		D_ASSERT(bound_operator_expr.children.size() == 1);
 		auto &child_expr = bound_operator_expr.children[0];
 		if (child_expr->type != ExpressionType::BOUND_REF) {
+			//! We can't evaluate expressions that aren't direct column references
 			return true;
 		}
 
 		if (expr.type == ExpressionType::OPERATOR_IS_NULL) {
 			return MatchBoundsIsNullFilter<TRANSFORM>(stats, transform);
-		}
-
-		if (expr.type == ExpressionType::OPERATOR_IS_NOT_NULL) {
+		} else {
+			D_ASSERT(expr.type == ExpressionType::OPERATOR_IS_NOT_NULL);
 			return MatchBoundsIsNotNullFilter<TRANSFORM>(stats, transform);
 		}
-
-		//! Should be unreachable
-		return true;
 	}
 	default:
 		//! Conservative approach: we don't know what this is, just say it doesn't filter anything
