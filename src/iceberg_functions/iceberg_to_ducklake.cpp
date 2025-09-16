@@ -1001,7 +1001,7 @@ public:
 public:
 	vector<string> CreateSQLStatements() {
 		//! Order to process in:
-		// - snapshot
+		// - snapshot + schema_versions
 		// - schema
 		// - table
 		//   - partition_info
@@ -1026,6 +1026,13 @@ public:
 			auto &snapshot = it.second;
 
 			auto values = snapshot.FinalizeEntry(serializer);
+			if (snapshot.catalog_changes) {
+				auto snapshot_id = snapshot.snapshot_id;
+				auto schema_version = snapshot.base_schema_version;
+				sql.push_back(
+				    StringUtil::Format("INSERT INTO {METADATA_CATALOG}.ducklake_schema_versions VALUES (%llu, %llu);",
+				                       snapshot_id.GetIndex(), schema_version));
+			}
 			sql.push_back(StringUtil::Format("INSERT INTO {METADATA_CATALOG}.ducklake_snapshot %s", values));
 		}
 

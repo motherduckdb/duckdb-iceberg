@@ -17,7 +17,7 @@ duckdb_extension_load(icu)
 duckdb_extension_load(ducklake
         LOAD_TESTS
         GIT_URL https://github.com/duckdb/ducklake
-        GIT_TAG c1ebd032eb4c763910551c08f4b61bdb8168f209
+        GIT_TAG e0a7b6ed5f2e6a52424d66fff0f91c87bc309022
 )
 
 
@@ -27,9 +27,8 @@ if (NOT MINGW)
     duckdb_extension_load(aws
             LOAD_TESTS
             GIT_URL https://github.com/duckdb/duckdb-aws
-            GIT_TAG f855eb3dce37700bfd36fe906a683e4be17dcaf6
+            GIT_TAG 880da03202acc973d6ee7f3a0423dae5a6dea83b
     )
 endif ()
 endif()
-
 
