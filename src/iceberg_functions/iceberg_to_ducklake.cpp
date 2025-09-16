@@ -1452,8 +1452,9 @@ public:
 			    "DuckLake version metadata is corrupt, the value can't be NULL and has to be of type VARCHAR");
 		}
 		auto version_string = value.GetValue<string>();
-		if (version_string != "0.2") {
-			throw InvalidInputException("'iceberg_to_ducklake' only support version 0.2 currently");
+		if (!StringUtil::StartsWith(version_string, "0.3")) {
+			throw InvalidInputException(
+			    "'iceberg_to_ducklake' only support version 0.3 currently, detected '%s' instead", version_string);
 		}
 	}
 
