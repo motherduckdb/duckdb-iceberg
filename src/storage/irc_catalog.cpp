@@ -56,7 +56,7 @@ optional_ptr<SchemaCatalogEntry> IRCatalog::LookupSchema(CatalogTransaction tran
 	auto &schemas = irc_transaction.GetSchemas();
 
 	auto &schema_name = schema_lookup.GetEntryName();
-	auto entry = schemas.GetEntry(transaction.GetContext(), schema_name);
+	auto entry = schemas.GetEntry(transaction.GetContext(), schema_name, if_not_found);
 	if (!entry && if_not_found != OnEntryNotFound::RETURN_NULL) {
 		throw CatalogException(schema_lookup.GetErrorContext(), "Schema with name \"%s\" not found", schema_name);
 	}
@@ -108,6 +108,10 @@ optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transactio
 }
 
 void IRCatalog::DropSchema(ClientContext &context, DropInfo &info) {
+	if (info.cascade) {
+		throw NotImplementedException(
+		    "DROP SCHEMA <schema_name> CASCADE is not supported for Iceberg schemas currently");
+	}
 	vector<string> namespace_items;
 	auto namespace_identifier = IRCAPI::ParseSchemaName(info.name);
 	namespace_items.push_back(IRCAPI::GetEncodedSchemaName(namespace_identifier));
@@ -310,41 +314,6 @@ void IRCatalog::GetConfig(ClientContext &context, IcebergEndpointType &endpoint_
 	if (prefix.empty()) {
 		DUCKDB_LOG(context, IcebergLogType, "No prefix found for catalog with warehouse value %s", warehouse);
 	}
-}
-
-string IRCatalog::OptionalGetCachedValue(const string &url) {
-	std::lock_guard<std::mutex> lock(metadata_cache_mutex);
-	auto value = metadata_cache.find(url);
-	if (value != metadata_cache.end()) {
-		auto now = system_clock::now();
-		if (now < value->second->expires_at) {
-			return value->second->data;
-		}
-	}
-	return "";
-}
-
-bool IRCatalog::SetCachedValue(const string &url, const string &value,
-                               const rest_api_objects::LoadTableResult &result) {
-	//! FIXME: shouldn't this also store the 'storage-credentials' ??
-	if (!result.has_config) {
-		return false;
-	}
-	auto &credentials = result.config;
-	auto expires_at_it = credentials.find("s3.session-token-expires-at-ms");
-	if (expires_at_it == credentials.end()) {
-		return false;
-	}
-
-	auto &expires_at = expires_at_it->second;
-	auto epochMillis = std::stoll(expires_at);
-	auto expired_time = system_clock::time_point(milliseconds(epochMillis));
-	auto val = make_uniq<MetadataCacheValue>(value, expired_time);
-	{
-		std::lock_guard<std::mutex> lock(metadata_cache_mutex);
-		metadata_cache[url] = std::move(val);
-	}
-	return true;
 }
 
 //===--------------------------------------------------------------------===//

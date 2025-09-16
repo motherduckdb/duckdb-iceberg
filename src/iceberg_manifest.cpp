@@ -59,7 +59,6 @@ Value IcebergManifestEntry::ToDataFileStruct(const LogicalType &type) const {
 namespace manifest_file {
 
 static LogicalType PartitionStructType(IcebergTableInformation &table_info, const IcebergManifestFile &file) {
-	//! FIXME: do we validate this beforehand anywhere?
 	D_ASSERT(!file.data_files.empty());
 
 	auto &first_entry = file.data_files.front();
@@ -78,6 +77,7 @@ static LogicalType PartitionStructType(IcebergTableInformation &table_info, cons
 
 idx_t WriteToFile(IcebergTableInformation &table_info, const IcebergManifestFile &manifest_file, CopyFunction &copy,
                   DatabaseInstance &db, ClientContext &context) {
+	D_ASSERT(!manifest_file.data_files.empty());
 	auto &allocator = db.GetBufferManager().GetBufferAllocator();
 
 	//! We need to create an iceberg-schema for the manifest file, written in the metadata of the Avro file.

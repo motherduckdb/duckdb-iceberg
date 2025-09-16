@@ -45,7 +45,13 @@ statement ok
 use my_datalake.default;
 
 statement ok
-DROP TABLE IF EXISTS all_types_table_primitives_2;
+DROP TABLE if exists all_types_table_primitives_2;
+
+statement ok
+DROP TABLE if exists nested_types_2;
+
+statement ok
+DROP TABLE if exists fixed_array_table_as_list;
 
 # create primitive type table from test all types
 statement ok

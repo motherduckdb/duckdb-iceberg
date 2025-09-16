@@ -48,6 +48,11 @@ virtual_column_map_t IcebergVirtualColumns(ClientContext &context, optional_ptr<
 	return result;
 }
 
+static void IcebergScanSerialize(Serializer &serializer, const optional_ptr<FunctionData> bind_data,
+                                 const TableFunction &function) {
+	throw NotImplementedException("IcebergScan serialization not implemented");
+}
+
 TableFunctionSet IcebergFunctions::GetIcebergScanFunction(ExtensionLoader &loader) {
 	// The iceberg_scan function is constructed by grabbing the parquet scan from the Catalog, then injecting the
 	// IcebergMultiFileReader into it to create a Iceberg-based multi file read
@@ -62,8 +67,9 @@ TableFunctionSet IcebergFunctions::GetIcebergScanFunction(ExtensionLoader &loade
 
 		// Unset all of these: they are either broken, very inefficient.
 		// TODO: implement/fix these
-		function.serialize = nullptr;
+		function.serialize = IcebergScanSerialize;
 		function.deserialize = nullptr;
+
 		function.statistics = nullptr;
 		function.table_scan_progress = nullptr;
 		function.get_bind_info = nullptr;
