@@ -5,6 +5,7 @@
 #include "storage/iceberg_table_information.hpp"
 #include "iceberg_multi_file_reader.hpp"
 #include "iceberg_multi_file_list.hpp"
+#include "../include/iceberg_multi_file_list.hpp"
 
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
@@ -328,6 +329,11 @@ PhysicalOperator &IcebergDelete::PlanDelete(ClientContext &context, PhysicalPlan
 	if (delete_source) {
 		auto &bind_data = delete_source->bind_data->Cast<MultiFileBindData>();
 		auto &reader = bind_data.multi_file_reader->Cast<IcebergMultiFileReader>();
+		auto &file_list = bind_data.file_list->Cast<IcebergMultiFileList>();
+		auto files = file_list.GetFilesExtended(context, table.catalog);
+		for (auto &file_entry : files) {
+			delete_map->AddExtendedFileInfo(std::move(file_entry));
+		}
 		reader.delete_map = delete_map;
 	}
 	return planner.Make<IcebergDelete>(table, child_plan, std::move(delete_map), std::move(row_id_indexes));

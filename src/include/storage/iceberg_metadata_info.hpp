@@ -14,7 +14,6 @@
 #include "duckdb/common/optional_idx.hpp"
 #include "duckdb/common/reference_map.hpp"
 #include "duckdb/common/types/value.hpp"
-#include "common/index.hpp"
 
 namespace duckdb {
 
@@ -30,6 +29,13 @@ struct IcebergFileData {
 	string path;
 	idx_t file_size_bytes = 0;
 	optional_idx footer_size;
+};
+
+struct IcebergFileListExtendedEntry {
+	IcebergFileData file;
+	IcebergFileData delete_file;
+	idx_t row_count;
+	idx_t delete_count = 0;
 };
 
 } // namespace duckdb

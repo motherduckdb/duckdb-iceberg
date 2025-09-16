@@ -20,6 +20,11 @@ namespace duckdb {
 
 struct IcebergDeleteMap {
 
+	void AddExtendedFileInfo(IcebergFileListExtendedEntry file_entry) {
+		auto filename = file_entry.file.path;
+		file_map.emplace(std::move(filename), std::move(file_entry));
+	}
+
 	optional_ptr<IcebergDeleteData> GetDeleteData(const string &filename) {
 		lock_guard<mutex> guard(lock);
 		auto entry = delete_data_map.find(filename);
@@ -32,6 +37,7 @@ struct IcebergDeleteMap {
 private:
 	mutex lock;
 	unordered_map<string, shared_ptr<IcebergDeleteData>> delete_data_map;
+	unordered_map<string, IcebergFileListExtendedEntry> file_map;
 };
 
 struct WrittenColumnInfo {
