@@ -51,7 +51,8 @@ call iceberg_to_ducklake(
     skip_tables := [
         'pyspark_iceberg_table_v2',
         'deletion_vectors',
-        'variant_column'
+        'variant_column',
+        'simple_v3_table'
     ]
 )
 
