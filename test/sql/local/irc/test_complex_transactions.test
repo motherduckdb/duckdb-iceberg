@@ -46,7 +46,7 @@ drop table if exists duid;
 statement error
 create table if not exists duid as select range a from range(100);
 ----
-<REGEX>:.*Not implemented Error: Cannot replace a table within a transaction.*
+<REGEX>:.*Not implemented Error: Cannot create table previously deleted in the same transactio.*
 
 statement ok
 commit;
