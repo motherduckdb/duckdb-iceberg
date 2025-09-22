@@ -11,6 +11,7 @@
 #include "storage/table_update/iceberg_add_snapshot.hpp"
 #include "storage/table_create/iceberg_create_table_request.hpp"
 #include "catalog_utils.hpp"
+#include "yyjson.hpp"
 #include "duckdb/storage/table/update_state.hpp"
 
 namespace duckdb {
@@ -118,8 +119,9 @@ void CommitTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
 			auto &ref_update = update.add_schema_update;
 			//! updates[...].action
 			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
+			yyjson_mut_obj_add_uint(doc, update_json, "last-column-id", update.add_schema_update.last_column_id);
 			auto schema_json = yyjson_mut_obj_add_obj(doc, update_json, "schema");
-			IcebergTableSchema::SchemaToJson(doc, schema_json, update.add_schema_update.schema);
+			IcebergTableSchema::SchemaToJson(doc, schema_json, update.add_schema_update);
 		} else if (update.has_set_current_schema_update) {
 			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
 			auto &ref_update = update.set_current_schema_update;

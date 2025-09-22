@@ -2,6 +2,7 @@
 
 #include "metadata/iceberg_column_definition.hpp"
 #include "rest_catalog/objects/schema.hpp"
+#include "rest_catalog/objects/add_schema_update.hpp"
 #include "duckdb/common/column_index.hpp"
 
 namespace duckdb {
@@ -17,10 +18,13 @@ public:
 	static const IcebergColumnDefinition &GetFromColumnIndex(const vector<unique_ptr<IcebergColumnDefinition>> &columns,
 	                                                         const ColumnIndex &column_index, idx_t depth);
 
-	static void SchemaToJson(yyjson_mut_doc *doc, yyjson_mut_val *root_object, const rest_api_objects::Schema &schema);
+	static void SchemaToJson(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
+	                         const rest_api_objects::AddSchemaUpdate &update);
 
 public:
 	int32_t schema_id;
+	// Nessie Needs this for some reason.
+	idx_t last_column_id;
 	vector<unique_ptr<IcebergColumnDefinition>> columns;
 };
 

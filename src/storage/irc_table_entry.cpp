@@ -52,8 +52,6 @@ string ICTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) const {
 		size_t metadata_pos = lc_storage_location.find("metadata");
 		if (metadata_pos != string::npos) {
 			info.scope = {load_result.metadata_location.substr(0, metadata_pos)};
-		} else {
-			throw InvalidInputException("Substring not found");
 		}
 
 		if (StringUtil::StartsWith(ic_catalog.uri, "glue")) {
