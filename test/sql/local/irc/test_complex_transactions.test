@@ -38,6 +38,12 @@ statement ok
 use my_datalake.default;
 
 statement ok
+drop table if exists duid;
+
+statement ok
+create table if not exists duid as select range a from range(100);
+
+statement ok
 begin;
 
 statement ok
