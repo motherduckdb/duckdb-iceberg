@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/test_complex_transactions.test
+# name: test/sql/local/irc/test_drop_and_create_table_in_a_transaction.test
 # group: [irc]
 
 require-env ICEBERG_SERVER_AVAILABLE
@@ -56,3 +56,14 @@ create table if not exists duid as select range a from range(100);
 
 statement ok
 commit;
+
+statement error
+create or replace table duid (a int);
+----
+<REGEX>:.*Invalid Input.*CREATE OR REPLACE not supported.*
+
+statement error
+create or replace schema new_schema;
+----
+<REGEX>:.*Invalid Input.*CREATE OR REPLACE not supported.*
+

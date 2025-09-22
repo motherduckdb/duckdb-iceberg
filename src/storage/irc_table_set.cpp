@@ -143,7 +143,7 @@ bool ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 		case OnCreateConflict::ALTER_ON_CONFLICT:
 			throw NotImplementedException("Alter on conflict");
 		default:
-			break;
+			throw InternalException("Unknown conflict state when creating a table");
 		}
 	}
 
