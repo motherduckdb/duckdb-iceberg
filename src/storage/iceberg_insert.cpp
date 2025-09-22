@@ -469,6 +469,27 @@ PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalP
 	// create the table. Takes care of committing to rest catalog and getting the metadata location etc.
 	// setting the schema
 	auto table = ic_schema_entry.CreateTable(irc_transaction, context, *op.info);
+	if (!table) {
+		// the table was not created, it either already exists, or
+		for (auto &table_entry : irc_transaction.deleted_tables) {
+			if (table_entry->table_info.name == op.info->Base().table) {
+				throw NotImplementedException("Cannot replace a table within a transaction");
+			}
+		}
+		switch (op.info->base->on_conflict) {
+		case OnCreateConflict::REPLACE_ON_CONFLICT:
+			throw NotImplementedException("Cannot replace a table within a transaction");
+		case OnCreateConflict::IGNORE_ON_CONFLICT:
+			// FIXME: how to silently execute a nop.
+			throw NotImplementedException("Cannot replace a table within a transaction");
+		case OnCreateConflict::ERROR_ON_CONFLICT:
+			throw NotImplementedException("Table %s already exists!", op.info->Base().table);
+		case OnCreateConflict::ALTER_ON_CONFLICT:
+			throw NotImplementedException("Alter on conflict");
+		default:
+			throw InvalidConfigurationException("Should not be here.");
+		}
+	}
 	auto &ic_table = table->Cast<ICTableEntry>();
 	// We need to load table credentials into our secrets for when we copy files
 	ic_table.PrepareIcebergScanFromEntry(context);
