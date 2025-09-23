@@ -65,6 +65,32 @@ string IRCAPI::GetEncodedSchemaName(const vector<string> &items) {
 	                    int(response.status));
 }
 
+static bool CheckResponse(ClientContext &context, HTTPStatusCode &status) {
+	// The following response codes return "schema does not exist"
+	// This list can change, some error codes we want to surface to the user (i.e PaymentRequired_402)
+	// but others not (Forbidden_403).
+	// We log 400, 401, and 500 just in case.
+	switch (response->status) {
+	case HTTPStatusCode::Forbidden_403:
+	case HTTPStatusCode::NotFound_404:
+		return false;
+		break;
+	case HTTPStatusCode::BadRequest_400:
+	case HTTPStatusCode::Unauthorized_401:
+#ifndef DEBUG
+		// Our local docker IRC can return 500 randomly, in debug we want to throw the error
+		// Glue returns 500 if the schema doesn't exist.
+	case HTTPStatusCode::InternalServerError_500:
+#endif
+		DUCKDB_LOG(context, IcebergLogType, "VerifySchemaExistence returned status code %s",
+				   EnumUtil::ToString(response->status));
+		return false;
+	default:
+		break;
+	}
+	return false;
+}
+
 bool IRCAPI::VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, const string &schema) {
 	auto namespace_items = ParseSchemaName(schema);
 	auto schema_name = GetEncodedSchemaName(namespace_items);
@@ -81,27 +107,20 @@ bool IRCAPI::VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, c
 	if (response->Success() || response->status == HTTPStatusCode::NoContent_204) {
 		return true;
 	}
-	// The following response codes return "schema does not exist"
-	// This list can change, some error codes we want to surface to the user (i.e PaymentRequired_402)
-	// but others not (Forbidden_403).
-	// We log 400, 401, and 500 just in case.
+	// try again with Get Request if 400 or 405
 	switch (response->status) {
-	case HTTPStatusCode::Forbidden_403:
-	case HTTPStatusCode::NotFound_404:
-		return false;
-		break;
-	case HTTPStatusCode::Unauthorized_401:
 	case HTTPStatusCode::BadRequest_400:
-#ifndef DEBUG
-		// Our local docker IRC can return 500 randomly, in debug we want to throw the error
-		// Glue returns 500 if the schema doesn't exist.
-	case HTTPStatusCode::InternalServerError_500:
-#endif
-		DUCKDB_LOG(context, IcebergLogType, "VerifySchemaExistence returned status code %s",
-		           EnumUtil::ToString(response->status));
-		return false;
+	case HTTPStatusCode::MethodNotAllowed_405:
+		response = catalog.auth_handler->GetRequest(context, url_builder);
+		if (response->Success() || response->status == HTTPStatusCode::NoContent_204) {
+			return true;
+		}
+		break;
 	default:
 		break;
+	}
+	if (CheckResponse(context, response->status)) {
+		return true;
 	}
 	ThrowException(url, *response, response->reason);
 }
