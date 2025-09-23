@@ -1,6 +1,5 @@
 #include "storage/authorization/none.hpp"
 #include "api_utils.hpp"
-#include "../../include/api_utils.hpp"
 #include "storage/irc_catalog.hpp"
 
 namespace duckdb {

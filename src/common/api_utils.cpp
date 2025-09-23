@@ -1,6 +1,5 @@
 #include "api_utils.hpp"
 
-#include "../include/storage/irc_authorization.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
 #include "duckdb/common/string_util.hpp"

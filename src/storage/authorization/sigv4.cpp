@@ -1,6 +1,5 @@
 #include "storage/authorization/sigv4.hpp"
 #include "api_utils.hpp"
-#include "../../include/storage/irc_authorization.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "storage/irc_catalog.hpp"
 

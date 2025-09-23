@@ -2,7 +2,7 @@
 # description: test nessie integration
 # group: [irc]
 
-# require-env NESSIE_SERVER_AVAILABLE
+require-env NESSIE_SERVER_AVAILABLE
 
 require avro
 

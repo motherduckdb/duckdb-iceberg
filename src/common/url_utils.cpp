@@ -1,5 +1,4 @@
 #include "url_utils.hpp"
-#include "../include/url_utils.hpp"
 
 #include "duckdb/common/string_util.hpp"
 
