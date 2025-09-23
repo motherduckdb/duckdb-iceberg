@@ -85,6 +85,12 @@ string ICTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) const {
 			                {"endpoint", endpoint}};
 		}
 		(void)secret_manager.CreateSecret(context, info);
+		// if there is no key_id, secret, or token in the info. log that vended credentials has not worked
+		if (info.options.find("key_id") == info.options.end() && info.options.find("secret") == info.options.end() &&
+		    info.options.find("token") == info.options.end()) {
+			DUCKDB_LOG_INFO(context, "Failed to create valid secret from Vendend Credentials for table '%s'",
+			                table_info.name);
+		}
 	}
 
 	for (auto &info : table_credentials.storage_credentials) {
