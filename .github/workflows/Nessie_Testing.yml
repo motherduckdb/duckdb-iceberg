@@ -64,9 +64,10 @@ jobs:
         uses: mxschmitt/action-tmate@v3
 
       - name: Start Nessie
-        working-directory: nessie
+        working-directory: nessie/docker
         run: |
-         docker-compose -f catalog-auth-s3/docker-compose.yml up -d
+          sed -i '/healthcheck/,/]/ s/\$/$$/g' catalog-auth-s3/docker-compose.yml
+          docker-compose -f catalog-auth-s3/docker-compose.yml up -d
 
       - uses: actions/checkout@v4
         with:
@@ -103,7 +104,6 @@ jobs:
             attempt=$((attempt + 1))
           done
           echo "Keycloak is healthy"
-
 
       - name: Test with rest catalog
         env:
