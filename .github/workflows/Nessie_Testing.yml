@@ -33,9 +33,6 @@ jobs:
             make gcc-multilib \
             g++-multilib \
             libssl-dev \
-            wget \
-            openjdk-8-jdk \
-            zip \
             maven \
             unixodbc-dev \
             libc6-dev-i386 \
@@ -54,6 +51,19 @@ jobs:
           sudo apt-get install -y -qq tar pkg-config
           sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
           sudo chmod +x /usr/local/bin/docker-compose
+          
+      - name: Set up for Nessie
+        run: |
+          # install java
+          sudo apt install -y -qq openjdk-21-jre-headless
+          sudo apt install -y -qq openjdk-21-jdk-headless
+          sudo apt-get install -y -qq python3-venv
+          git clone https://github.com/projectnessie/nessie.git nessie
+
+      - name: Start Nessie
+        working-directory: nessie
+        run: |
+         docker-compose -f catalog-auth-s3/docker-compose.yml up -d
 
       - uses: actions/checkout@v4
         with:
@@ -75,21 +85,6 @@ jobs:
           STATIC_LIBCPP: 1
         run: |
           make release
-
-      - name: Set up for Nessie
-        run: |
-          # install java
-          # TODO: need a newer java version maybe?
-          sudo apt install -y -qq openjdk-21-jre-headless
-          sudo apt install -y -qq openjdk-21-jdk-headless
-          sudo apt-get install -y -qq python3-venv
-          git clone https://github.com/projectnessie/nessie.git nessie
-
-      - name: Start Nessie
-        working-directory: ./nessie
-        run: |
-          docker-compose -f catalog-auth-s3/docker-compose.yml up -d
-          
 
       - name: Wait for Nessie/Keycloak
         run: |
