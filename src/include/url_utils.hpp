@@ -26,6 +26,7 @@ public:
 	const unordered_map<string, string> GetParams() const;
 
 	string GetURL() const;
+	static IRCEndpointBuilder FromURL(const string &url);
 
 	//! path components when querying. Like namespaces/tables etc.
 	vector<string> path_components;

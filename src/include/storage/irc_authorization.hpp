@@ -13,6 +13,8 @@ enum class IRCAuthorizationType : uint8_t { OAUTH2, SIGV4, NONE, INVALID };
 
 enum class IRCAccessDelegationMode : uint8_t { NONE, VENDED_CREDENTIALS };
 
+enum class HTTPRequestType : uint8_t { HTTP_GET, HTTP_POST, HTTP_PUT, HTTP_DELETE, HTTP_HEAD };
+
 struct IcebergAttachOptions {
 	string endpoint;
 	string warehouse;
@@ -41,13 +43,9 @@ public:
 	static IRCAuthorizationType TypeFromString(const string &type);
 
 public:
-	virtual unique_ptr<HTTPResponse> GetRequest(ClientContext &context, const IRCEndpointBuilder &endpoint_builder) = 0;
-	virtual unique_ptr<HTTPResponse> HeadRequest(ClientContext &context,
-	                                             const IRCEndpointBuilder &endpoint_builder) = 0;
-	virtual unique_ptr<HTTPResponse> DeleteRequest(ClientContext &context,
-	                                               const IRCEndpointBuilder &endpoint_builder) = 0;
-	virtual unique_ptr<HTTPResponse> PostRequest(ClientContext &context, const IRCEndpointBuilder &endpoint_builder,
-	                                             const string &body) = 0;
+	virtual unique_ptr<HTTPResponse> Request(HTTPRequestType request_type, ClientContext &context,
+	                                         const IRCEndpointBuilder &endpoint_builder, HTTPHeaders &headers,
+	                                         const string &data = "") = 0;
 
 public:
 	template <class TARGET>

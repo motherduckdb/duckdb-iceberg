@@ -42,7 +42,6 @@ string ICTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) const {
 
 	if (ic_catalog.attach_options.access_mode != IRCAccessDelegationMode::VENDED_CREDENTIALS) {
 		return table_info.load_table_result.metadata_location;
-		;
 	}
 	// Get Credentials from IRC API
 	auto table_credentials = table_info.GetVendedCredentials(context);
