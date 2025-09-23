@@ -26,14 +26,6 @@ const string &APIUtils::GetCURLCertPath() {
 	return cert_path;
 }
 
-static string AddHttpHostIfMissing(const string &url) {
-	auto lower_url = StringUtil::Lower(url);
-	if (StringUtil::StartsWith(lower_url, "http://") || StringUtil::StartsWith(lower_url, "https://")) {
-		return url;
-	}
-	return "http://" + url;
-}
-
 unique_ptr<HTTPResponse> APIUtils::Request(HTTPRequestType request_type, ClientContext &context,
                                            const IRCEndpointBuilder &endpoint_builder, HTTPHeaders &headers,
                                            const string &data) {

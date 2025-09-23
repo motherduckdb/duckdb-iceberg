@@ -9,10 +9,13 @@
 #pragma once
 
 #include "duckdb/common/string.hpp"
+#include "duckdb/common/string_util.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/unordered_map.hpp"
 
 namespace duckdb {
+
+string AddHttpHostIfMissing(const string &url);
 
 class IRCEndpointBuilder {
 public:

@@ -1,3 +1,4 @@
+#include "../include/storage/irc_authorization.hpp"
 #include "storage/irc_authorization.hpp"
 #include "api_utils.hpp"
 #include "storage/authorization/oauth2.hpp"
@@ -21,6 +22,23 @@ IRCAuthorizationType IRCAuthorization::TypeFromString(const string &type) {
 	}
 	throw InvalidConfigurationException("'authorization_type' '%s' is not supported, valid options are: %s", type,
 	                                    StringUtil::Join(accepted_options, ", "));
+}
+
+string HTTPRequestTypeToString(HTTPRequestType request_type) {
+	switch (request_type) {
+	case HTTPRequestType::HTTP_GET:
+		return "GET";
+	case HTTPRequestType::HTTP_POST:
+		return "POST";
+	case HTTPRequestType::HTTP_PUT:
+		return "PUT";
+	case HTTPRequestType::HTTP_DELETE:
+		return "DELETE";
+	case HTTPRequestType::HTTP_HEAD:
+		return "HEAD";
+	default:
+		throw InternalException("Unrecognized HTTP request type");
+	}
 }
 
 } // namespace duckdb
