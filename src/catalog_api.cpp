@@ -65,12 +65,12 @@ string IRCAPI::GetEncodedSchemaName(const vector<string> &items) {
 	                    int(response.status));
 }
 
-static bool CheckResponse(ClientContext &context, HTTPStatusCode &status) {
+static bool CheckVerificationResponse(ClientContext &context, HTTPStatusCode &status) {
 	// The following response codes return "schema does not exist"
 	// This list can change, some error codes we want to surface to the user (i.e PaymentRequired_402)
 	// but others not (Forbidden_403).
 	// We log 400, 401, and 500 just in case.
-	switch (response->status) {
+	switch (status) {
 	case HTTPStatusCode::Forbidden_403:
 	case HTTPStatusCode::NotFound_404:
 		return false;
@@ -83,7 +83,7 @@ static bool CheckResponse(ClientContext &context, HTTPStatusCode &status) {
 	case HTTPStatusCode::InternalServerError_500:
 #endif
 		DUCKDB_LOG(context, IcebergLogType, "VerifySchemaExistence returned status code %s",
-				   EnumUtil::ToString(response->status));
+		           EnumUtil::ToString(status));
 		return false;
 	default:
 		break;
@@ -119,7 +119,7 @@ bool IRCAPI::VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, c
 	default:
 		break;
 	}
-	if (CheckResponse(context, response->status)) {
+	if (CheckVerificationResponse(context, response->status)) {
 		return true;
 	}
 	ThrowException(url, *response, response->reason);
@@ -143,8 +143,20 @@ bool IRCAPI::VerifyTableExistence(ClientContext &context, IRCatalog &catalog, co
 	if (response->Success() || response->status == HTTPStatusCode::NoContent_204) {
 		return true;
 	}
-	if (response->status == HTTPStatusCode::NotFound_404) {
+	switch (response->status) {
+	case HTTPStatusCode::NotFound_404:
 		return false;
+	case HTTPStatusCode::BadRequest_400:
+	case HTTPStatusCode::MethodNotAllowed_405:
+		response = catalog.auth_handler->GetRequest(context, url_builder);
+		if (response->Success()) {
+			return true;
+		}
+	default:
+		break;
+	}
+	if (CheckVerificationResponse(context, response->status)) {
+		return true;
 	}
 	ThrowException(url, *response, response->reason);
 }
