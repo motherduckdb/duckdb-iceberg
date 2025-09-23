@@ -194,12 +194,6 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 		config.storage_type = "memory";
 	}
 
-	if (result.config->options.find("key_id") == result.config->options.end()) {
-		auto wat = 0;
-		result.config->options["key_id"] = "minioadmin";
-		result.config->options["secret"] = "minioadmin";
-	}
-
 	return result;
 }
 

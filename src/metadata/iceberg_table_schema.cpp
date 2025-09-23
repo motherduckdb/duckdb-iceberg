@@ -2,7 +2,6 @@
 
 #include "iceberg_metadata.hpp"
 #include "iceberg_utils.hpp"
-#include "yyjson.hpp"
 #include "rest_catalog/objects/list.hpp"
 
 namespace duckdb {
@@ -121,10 +120,9 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, rest
 }
 
 void IcebergTableSchema::SchemaToJson(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
-                                      const rest_api_objects::AddSchemaUpdate &update) {
+                                      const rest_api_objects::Schema &schema) {
 	yyjson_mut_obj_add_strcpy(doc, root_object, "type", "struct");
 	auto fields_arr = yyjson_mut_obj_add_arr(doc, root_object, "fields");
-	auto &schema = update.schema;
 	// populate the fields
 	for (auto &field : schema.struct_type.fields) {
 		auto field_obj = yyjson_mut_arr_add_obj(doc, fields_arr);

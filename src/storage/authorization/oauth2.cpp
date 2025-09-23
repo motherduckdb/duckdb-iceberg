@@ -131,7 +131,8 @@ unique_ptr<OAuth2Authorization> OAuth2Authorization::FromAttachOptions(ClientCon
 	Value token;
 
 	static const unordered_set<string> recognized_create_secret_options {
-	    "oauth2_scope", "oauth2_server_uri", "oauth2_grant_type", "token", "client_id", "client_secret"};
+	    "oauth2_scope", "oauth2_server_uri", "oauth2_grant_type",     "token",
+	    "client_id",    "client_secret",     "access_delegation_mode"};
 
 	for (auto &entry : input.options) {
 		auto lower_name = StringUtil::Lower(entry.first);

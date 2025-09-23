@@ -2,7 +2,7 @@
 # description: test nessie integration
 # group: [irc]
 
-require-env ICEBERG_SERVER_AVAILABLE
+# require-env NESSIE_SERVER_AVAILABLE
 
 require avro
 
@@ -14,6 +14,15 @@ require httpfs
 
 require aws
 
+statement ok
+CREATE SECRET (
+    TYPE S3,
+    KEY_ID 'minioadmin',
+    SECRET 'minioadmin',
+    ENDPOINT '127.0.0.1:9002',
+    URL_STYLE 'path',
+    USE_SSL 0
+);
 
 statement ok
 create secret my_secret (
@@ -22,7 +31,7 @@ create secret my_secret (
     CLIENT_SECRET 's3cr3t',
     OAUTH2_SCOPE 'catalog sign',
     OAUTH2_SERVER_URI 'http://127.0.0.1:8080/realms/iceberg/protocol/openid-connect/token'
-  );
+);
 
 
 statement ok
@@ -30,14 +39,22 @@ attach '' as my_datalake (
     type ICEBERG,
     ENDPOINT 'http://127.0.0.1:19120/iceberg/',
     SECRET 'my_secret'
-  );
-
-# statement ok
-# create table if not exist my_datalake.default.t1 (a int);
-
-# statement ok
-# insert into my_datalake.default.t1 select range a from range(10);
-
+);
 
 statement ok
-create table my_datalake.default.t2 as select range a from range(100);
+create schema if not exists my_datalake.default;
+
+statement ok
+create table if not exists my_datalake.default.t1 (a int);
+
+statement ok
+insert into my_datalake.default.t1 select range a from range(10);
+
+statement ok
+create table my_datalake.default.t2 as select range a from range(1000);
+
+statement ok
+drop table my_datalake.default.t2;
+
+statement ok
+drop table my_datalake.default.t1;

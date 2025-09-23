@@ -34,7 +34,6 @@ public:
 
 	//! The user-supplied default region to add to the default secret
 	string default_region;
-
 	//! The (bearer) token retrieved
 	string token;
 };

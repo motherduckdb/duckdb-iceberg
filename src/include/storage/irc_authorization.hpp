@@ -11,6 +11,8 @@ enum class IcebergEndpointType : uint8_t { AWS_S3TABLES, AWS_GLUE, INVALID };
 
 enum class IRCAuthorizationType : uint8_t { OAUTH2, SIGV4, NONE, INVALID };
 
+enum class IRCAccessDelegationMode : uint8_t { NONE, VENDED_CREDENTIALS };
+
 struct IcebergAttachOptions {
 	string endpoint;
 	string warehouse;
@@ -23,7 +25,7 @@ struct IcebergAttachOptions {
 	bool support_nested_namespaces = false;
 	// in rest api spec, purge requested defaults to false.
 	bool purge_requested = false;
-
+	IRCAccessDelegationMode access_mode = IRCAccessDelegationMode::VENDED_CREDENTIALS;
 	IRCAuthorizationType authorization_type = IRCAuthorizationType::INVALID;
 	unordered_map<string, Value> options;
 };
