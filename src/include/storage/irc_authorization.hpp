@@ -15,6 +15,23 @@ enum class IRCAccessDelegationMode : uint8_t { NONE, VENDED_CREDENTIALS };
 
 enum class HTTPRequestType : uint8_t { HTTP_GET, HTTP_POST, HTTP_PUT, HTTP_DELETE, HTTP_HEAD };
 
+static string HTTPRequestTypeToString(HTTPRequestType request_type) {
+	switch (request_type) {
+	case HTTPRequestType::HTTP_GET:
+		return "GET";
+	case HTTPRequestType::HTTP_POST:
+		return "POST";
+	case HTTPRequestType::HTTP_PUT:
+		return "PUT";
+	case HTTPRequestType::HTTP_DELETE:
+		return "DELETE";
+	case HTTPRequestType::HTTP_HEAD:
+		return "HEAD";
+	default:
+		throw InternalException("Unrecognized HTTP request type");
+	}
+}
+
 struct IcebergAttachOptions {
 	string endpoint;
 	string warehouse;

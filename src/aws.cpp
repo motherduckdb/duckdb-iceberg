@@ -194,7 +194,7 @@ unique_ptr<HTTPResponse> AWSInput::Request(HTTPRequestType request_type, ClientC
 	case HTTPRequestType::HTTP_HEAD:
 		return ExecuteRequest(context, Aws::Http::HttpMethod::HTTP_HEAD, headers);
 	default:
-		throw NotImplementedException("Cannot make this type of request");
+		throw NotImplementedException("Cannot make request of type %s", HTTPRequestTypeToString(request_type));
 	}
 }
 

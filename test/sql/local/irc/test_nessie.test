@@ -2,7 +2,7 @@
 # description: test nessie integration
 # group: [irc]
 
-require-env NESSIE_SERVER_AVAILABLE
+# require-env NESSIE_SERVER_AVAILABLE
 
 require avro
 
@@ -34,6 +34,16 @@ create secret my_secret (
     OAUTH2_SCOPE 'catalog sign',
     OAUTH2_SERVER_URI 'http://127.0.0.1:8080/realms/iceberg/protocol/openid-connect/token'
 );
+
+statement error
+attach '' as my_datalake (
+    type ICEBERG,
+    ENDPOINT 'http://127.0.0.1:19120/iceberg/',
+    ACCESS_DELEGATION_MODE 'blah',
+    SECRET 'my_secret'
+);
+----
+<REGEX>:.*Unrecognized access mode.*Supported options are 'vended_credentials' and 'none'.*
 
 statement ok
 attach '' as my_datalake (

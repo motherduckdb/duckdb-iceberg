@@ -65,7 +65,7 @@ unique_ptr<HTTPResponse> APIUtils::Request(HTTPRequestType request_type, ClientC
 		return http_util.Request(head_request);
 	}
 	default:
-		throw NotImplementedException("This request type idk");
+		throw NotImplementedException("Cannot make request of type %s", HTTPRequestTypeToString(request_type));
 	}
 }
 
