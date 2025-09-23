@@ -41,6 +41,8 @@ public:
 	vector<std::pair<string, string>> query_string_parameters;
 	string user_agent;
 	string cert_path;
+	bool use_httpfs_timeout = false;
+	idx_t request_timeout_in_ms;
 
 	//! Provider credentials
 	string key_id;

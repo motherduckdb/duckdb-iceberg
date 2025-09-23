@@ -100,6 +100,9 @@ Aws::Client::ClientConfiguration AWSInput::BuildClientConfig() {
 	if (!cert_path.empty()) {
 		config.caFile = cert_path;
 	}
+	if (use_httpfs_timeout) {
+		config.httpRequestTimeoutMs = request_timeout_in_ms;
+	}
 	return config;
 }
 

@@ -1,4 +1,4 @@
-# name: test/sql/cloud/s3tables/test_aws_no_request.test
+# name: test/sql/cloud/s3tables/test_timeout_aws.test
 # description: Test when no request is made
 # group: [s3tables]
 
@@ -27,10 +27,12 @@ CREATE SECRET s3table_secret (
     region 'ap-southeast-2'
 );
 
+# set http timeout super low to start (1 second)
+statement ok
+set http_timeout=1;
+
 # skipping on github actions because the timeout is not reached
 # Still nice to keep to test locally.
-mode skip
-
 # This region is in sydney, so we should see a timeout message
 statement error
 attach 'arn:aws:s3tables:ap-southeast-2:840140254803:bucket/test-curl-timeout' as s3_catalog (
@@ -39,3 +41,12 @@ attach 'arn:aws:s3tables:ap-southeast-2:840140254803:bucket/test-curl-timeout' a
 );
 ----
 <REGEX>:.*Timeout was reached;.*
+
+statement ok
+set http_timeout=30;
+
+statement ok
+attach 'arn:aws:s3tables:ap-southeast-2:840140254803:bucket/test-curl-timeout' as s3_catalog (
+    TYPE ICEBERG,
+    ENDPOINT_TYPE 'S3_TABLES'
+);
