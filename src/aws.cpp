@@ -101,6 +101,14 @@ Aws::Client::ClientConfiguration AWSInput::BuildClientConfig() {
 	if (!cert_path.empty()) {
 		config.caFile = cert_path;
 	}
+	if (use_httpfs_timeout) {
+		// requestTimeoutMS is for Windows
+		config.requestTimeoutMs = request_timeout_in_ms;
+		// httpRequestTimoutMS is for all other OS's
+		// see
+		// https://github.com/aws/aws-sdk-cpp/blob/199c0a80b29a30db35b8d23c043aacf7ccb28957/src/aws-cpp-sdk-core/include/aws/core/client/ClientConfiguration.h#L190
+		config.httpRequestTimeoutMs = request_timeout_in_ms;
+	}
 	return config;
 }
 

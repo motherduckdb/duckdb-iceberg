@@ -293,6 +293,8 @@ void IRCatalog::GetConfig(ClientContext &context, IcebergEndpointType &endpoint_
 	auto default_prefix_it = defaults.find("prefix");
 	auto override_prefix_it = overrides.find("prefix");
 
+	// auto defaults_access_mode =
+
 	if (default_prefix_it != defaults.end()) {
 		// sometimes there is a prefix in the defaults
 		prefix = StringUtil::URLDecode(default_prefix_it->second);
@@ -511,7 +513,7 @@ unique_ptr<Catalog> IRCatalog::Attach(optional_ptr<StorageExtensionInfo> storage
 			attach_options.access_mode = IRCAccessDelegationMode::NONE;
 		} else {
 			throw InvalidInputException(
-			    "Unrecognized access mode '%s'. Supported options are 'vended_credentials' and 'none'",
+			    "Unrecognized access mode '%s'. Supported options are 'vended_credentials', 'none', and 'default'",
 			    access_mode_string);
 		}
 	}

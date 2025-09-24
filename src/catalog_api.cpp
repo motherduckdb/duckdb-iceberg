@@ -1,4 +1,6 @@
 #include "catalog_api.hpp"
+#include "include/catalog_api.hpp"
+
 #include "catalog_utils.hpp"
 #include "iceberg_logging.hpp"
 #include "storage/irc_catalog.hpp"
@@ -13,6 +15,7 @@
 #include "duckdb/common/http_util.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
 #include "include/storage/irc_authorization.hpp"
+#include "include/storage/irc_catalog.hpp"
 
 #include "rest_catalog/objects/list.hpp"
 
@@ -66,6 +69,72 @@ string IRCAPI::GetEncodedSchemaName(const vector<string> &items) {
 	                    int(response.status));
 }
 
+static IRCEntryLookupStatus CheckVerificationResponse(ClientContext &context, HTTPStatusCode &status) {
+	// The following response codes return "schema does not exist"
+	// This list can change, some error codes we want to surface to the user (i.e PaymentRequired_402)
+	// but others not (Forbidden_403).
+	// We log 400, 401, and 500 just in case.
+	switch (status) {
+	case HTTPStatusCode::OK_200:
+	case HTTPStatusCode::NoContent_204:
+		return IRCEntryLookupStatus::EXISTS;
+	case HTTPStatusCode::Forbidden_403:
+	case HTTPStatusCode::NotFound_404:
+		return IRCEntryLookupStatus::NOT_FOUND;
+		break;
+	case HTTPStatusCode::BadRequest_400:
+	case HTTPStatusCode::Unauthorized_401:
+#ifndef DEBUG
+		// Our local docker IRC can return 500 randomly, in debug we want to throw the error
+		// Glue returns 500 if the schema doesn't exist.
+	case HTTPStatusCode::InternalServerError_500:
+#endif
+		DUCKDB_LOG(context, IcebergLogType, "VerifySchemaExistence returned status code %s",
+		           EnumUtil::ToString(status));
+		return IRCEntryLookupStatus::API_ERROR;
+	default:
+		break;
+	}
+	return IRCEntryLookupStatus::API_ERROR;
+}
+
+bool IRCAPI::VerifyResponse(ClientContext &context, IRCatalog &catalog, IRCEndpointBuilder &url_builder,
+                            bool execute_head) {
+	HTTPHeaders headers(*context.db);
+	IRCEntryLookupStatus entry_status = IRCEntryLookupStatus::API_ERROR;
+	unique_ptr<HTTPResponse> response;
+	if (execute_head) {
+		// First response of Head request
+		response = catalog.auth_handler->Request(RequestType::HEAD_REQUEST, context, url_builder, headers);
+		// the httputil currently only sets 200 and 304 response to success
+		// for AWS all responses < 400 are successful
+		entry_status = CheckVerificationResponse(context, response->status);
+		switch (entry_status) {
+		case IRCEntryLookupStatus::EXISTS:
+			return true;
+		case IRCEntryLookupStatus::NOT_FOUND:
+			return false;
+		default:
+			break;
+		}
+	}
+	D_ASSERT(entry_status == IRCEntryLookupStatus::API_ERROR);
+	response = catalog.auth_handler->Request(RequestType::GET_REQUEST, context, url_builder, headers);
+	// if execute head has a weird response, fall back to GET just in case.
+	// check response of GET REQUEST
+	entry_status = CheckVerificationResponse(context, response->status);
+	switch (entry_status) {
+	case IRCEntryLookupStatus::EXISTS:
+		return true;
+	case IRCEntryLookupStatus::NOT_FOUND:
+		return false;
+	default:
+		// both head and get responses have returned a status that is an
+		// error status
+		ThrowException(url_builder.GetURL(), *response, response->reason);
+	}
+}
+
 bool IRCAPI::VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, const string &schema) {
 	auto namespace_items = ParseSchemaName(schema);
 	auto schema_name = GetEncodedSchemaName(namespace_items);
@@ -74,38 +143,9 @@ bool IRCAPI::VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, c
 	url_builder.AddPathComponent(catalog.prefix);
 	url_builder.AddPathComponent("namespaces");
 	url_builder.AddPathComponent(schema_name);
-
-	HTTPHeaders headers(*context.db);
-	auto response = catalog.auth_handler->Request(RequestType::HEAD_REQUEST, context, url_builder, headers);
-	// the httputil currently only sets 200 and 304 response to success
-	// for AWS all responses < 400 are successful
-	if (response->Success() || response->status == HTTPStatusCode::NoContent_204) {
-		return true;
-	}
-	// The following response codes return "schema does not exist"
-	// This list can change, some error codes we want to surface to the user (i.e PaymentRequired_402)
-	// but others not (Forbidden_403).
-	// We log 400, 401, and 500 just in case.
-	switch (response->status) {
-	case HTTPStatusCode::Forbidden_403:
-	case HTTPStatusCode::NotFound_404:
-		return false;
-		break;
-	case HTTPStatusCode::Unauthorized_401:
-	case HTTPStatusCode::BadRequest_400:
-#ifndef DEBUG
-		// Our local docker IRC can return 500 randomly, in debug we want to throw the error
-		// Glue returns 500 if the schema doesn't exist.
-	case HTTPStatusCode::InternalServerError_500:
-#endif
-		DUCKDB_LOG(context, IcebergLogType, "VerifySchemaExistence returned status code %s",
-		           EnumUtil::ToString(response->status));
-		return false;
-	default:
-		break;
-	}
-	auto url = url_builder.GetURL();
-	ThrowException(url, *response, response->reason);
+	bool execute_head =
+	    catalog.supported_urls.find("HEAD /v1/{prefix}/namespaces/{namespace}") != catalog.supported_urls.end();
+	return VerifyResponse(context, catalog, url_builder, execute_head);
 }
 
 bool IRCAPI::VerifyTableExistence(ClientContext &context, IRCatalog &catalog, const IRCSchemaEntry &schema,
@@ -118,20 +158,9 @@ bool IRCAPI::VerifyTableExistence(ClientContext &context, IRCatalog &catalog, co
 	url_builder.AddPathComponent(schema_name);
 	url_builder.AddPathComponent("tables");
 	url_builder.AddPathComponent(table);
-
-	HTTPHeaders headers(*context.db);
-	string body = "";
-	auto response = catalog.auth_handler->Request(RequestType::HEAD_REQUEST, context, url_builder, headers, body);
-	// the httputil currently only sets 200 and 304 response to success
-	// for AWS all responses < 400 are successful
-	if (response->Success() || response->status == HTTPStatusCode::NoContent_204) {
-		return true;
-	}
-	if (response->status == HTTPStatusCode::NotFound_404) {
-		return false;
-	}
-	auto url = url_builder.GetURL();
-	ThrowException(url, *response, response->reason);
+	bool execute_head = catalog.supported_urls.find("HEAD /v1/{prefix}/namespaces/{namespace}/tables/{table}") !=
+	                    catalog.supported_urls.end();
+	return VerifyResponse(context, catalog, url_builder, execute_head);
 }
 
 static unique_ptr<HTTPResponse> GetTableMetadata(ClientContext &context, IRCatalog &catalog,
