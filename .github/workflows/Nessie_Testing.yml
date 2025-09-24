@@ -30,7 +30,7 @@ jobs:
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11.1
         with:
-          vcpkgGitCommitId: 5e5d0e1cd7785623065e77eff011afdeec1a3574
+          vcpkgGitCommitId: ce613c41372b23b1f51333815feb3edd87ef8a8b
 
       - name: Install nessie required packages
         shell: bash
@@ -59,9 +59,6 @@ jobs:
         run: |
           sed -i '/healthcheck/,/]/ s/\$/$$/g' catalog-auth-s3/docker-compose.yml
           docker-compose -f catalog-auth-s3/docker-compose.yml up -d
-
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
 
       - name: Build extension
         env:
