@@ -13,7 +13,7 @@ public:
 
 public:
 	static unique_ptr<IRCAuthorization> FromAttachOptions(IcebergAttachOptions &input);
-	unique_ptr<HTTPResponse> Request(HTTPRequestType request_type, ClientContext &context,
+	unique_ptr<HTTPResponse> Request(RequestType request_type, ClientContext &context,
 	                                 const IRCEndpointBuilder &endpoint_builder, HTTPHeaders &headers,
 	                                 const string &data = "") override;
 };

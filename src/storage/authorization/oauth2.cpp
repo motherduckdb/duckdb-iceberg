@@ -73,7 +73,7 @@ string OAuth2Authorization::GetToken(ClientContext &context, const string &grant
 	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc;
 	try {
 		auto endpoint_builder = IRCEndpointBuilder::FromURL(uri);
-		auto response = APIUtils::Request(HTTPRequestType::HTTP_POST, context, endpoint_builder, headers, post_data);
+		auto response = APIUtils::Request(RequestType::POST_REQUEST, context, endpoint_builder, headers, post_data);
 		doc = std::unique_ptr<yyjson_doc, YyjsonDocDeleter>(ICUtils::api_result_to_doc(response->body));
 	} catch (std::exception &ex) {
 		ErrorData error(ex);
@@ -258,7 +258,7 @@ unique_ptr<BaseSecret> OAuth2Authorization::CreateCatalogSecretFunction(ClientCo
 	return std::move(result);
 }
 
-unique_ptr<HTTPResponse> OAuth2Authorization::Request(HTTPRequestType request_type, ClientContext &context,
+unique_ptr<HTTPResponse> OAuth2Authorization::Request(RequestType request_type, ClientContext &context,
                                                       const IRCEndpointBuilder &endpoint_builder, HTTPHeaders &headers,
                                                       const string &data) {
 	if (!token.empty()) {

@@ -182,19 +182,19 @@ unique_ptr<HTTPResponse> AWSInput::ExecuteRequest(ClientContext &context, Aws::H
 	return result;
 }
 
-unique_ptr<HTTPResponse> AWSInput::Request(HTTPRequestType request_type, ClientContext &context, HTTPHeaders &headers,
+unique_ptr<HTTPResponse> AWSInput::Request(RequestType request_type, ClientContext &context, HTTPHeaders &headers,
                                            const string &data) {
 	switch (request_type) {
-	case HTTPRequestType::HTTP_GET:
+	case RequestType::GET_REQUEST:
 		return ExecuteRequest(context, Aws::Http::HttpMethod::HTTP_GET, headers);
-	case HTTPRequestType::HTTP_POST:
+	case RequestType::POST_REQUEST:
 		return ExecuteRequest(context, Aws::Http::HttpMethod::HTTP_POST, headers, data);
-	case HTTPRequestType::HTTP_DELETE:
+	case RequestType::DELETE_REQUEST:
 		return ExecuteRequest(context, Aws::Http::HttpMethod::HTTP_DELETE, headers);
-	case HTTPRequestType::HTTP_HEAD:
+	case RequestType::HEAD_REQUEST:
 		return ExecuteRequest(context, Aws::Http::HttpMethod::HTTP_HEAD, headers);
 	default:
-		throw NotImplementedException("Cannot make request of type %s", HTTPRequestTypeToString(request_type));
+		throw NotImplementedException("Cannot make request of type %s", EnumUtil::ToString(request_type));
 	}
 }
 

@@ -102,7 +102,7 @@ AWSInput SIGV4Authorization::CreateAWSInput(ClientContext &context, const IRCEnd
 	return aws_input;
 }
 
-unique_ptr<HTTPResponse> SIGV4Authorization::Request(HTTPRequestType request_type, ClientContext &context,
+unique_ptr<HTTPResponse> SIGV4Authorization::Request(RequestType request_type, ClientContext &context,
                                                      const IRCEndpointBuilder &endpoint_builder, HTTPHeaders &headers,
                                                      const string &data) {
 	auto aws_input = CreateAWSInput(context, endpoint_builder);

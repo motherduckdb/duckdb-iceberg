@@ -21,7 +21,7 @@ public:
 	}
 
 public:
-	unique_ptr<HTTPResponse> Request(HTTPRequestType request_type, ClientContext &context, HTTPHeaders &headers,
+	unique_ptr<HTTPResponse> Request(RequestType request_type, ClientContext &context, HTTPHeaders &headers,
 	                                 const string &data);
 
 #ifdef EMSCRIPTEN

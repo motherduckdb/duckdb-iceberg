@@ -24,21 +24,4 @@ IRCAuthorizationType IRCAuthorization::TypeFromString(const string &type) {
 	                                    StringUtil::Join(accepted_options, ", "));
 }
 
-string HTTPRequestTypeToString(HTTPRequestType request_type) {
-	switch (request_type) {
-	case HTTPRequestType::HTTP_GET:
-		return "GET";
-	case HTTPRequestType::HTTP_POST:
-		return "POST";
-	case HTTPRequestType::HTTP_PUT:
-		return "PUT";
-	case HTTPRequestType::HTTP_DELETE:
-		return "DELETE";
-	case HTTPRequestType::HTTP_HEAD:
-		return "HEAD";
-	default:
-		throw InternalException("Unrecognized HTTP request type");
-	}
-}
-
 } // namespace duckdb

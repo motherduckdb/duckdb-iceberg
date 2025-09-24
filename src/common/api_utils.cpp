@@ -1,6 +1,7 @@
 #include "api_utils.hpp"
 
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/http_util.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/main/client_data.hpp"
@@ -26,7 +27,7 @@ const string &APIUtils::GetCURLCertPath() {
 	return cert_path;
 }
 
-unique_ptr<HTTPResponse> APIUtils::Request(HTTPRequestType request_type, ClientContext &context,
+unique_ptr<HTTPResponse> APIUtils::Request(RequestType request_type, ClientContext &context,
                                            const IRCEndpointBuilder &endpoint_builder, HTTPHeaders &headers,
                                            const string &data) {
 	auto &db = DatabaseInstance::GetDatabase(context);
@@ -37,27 +38,27 @@ unique_ptr<HTTPResponse> APIUtils::Request(HTTPRequestType request_type, ClientC
 	params = http_util.InitializeParameters(context, request_url);
 
 	switch (request_type) {
-	case HTTPRequestType::HTTP_GET: {
+	case RequestType::GET_REQUEST: {
 		GetRequestInfo get_request(request_url, headers, *params, nullptr, nullptr);
 		return http_util.Request(get_request);
 	}
-	case HTTPRequestType::HTTP_DELETE: {
+	case RequestType::DELETE_REQUEST: {
 		DeleteRequestInfo delete_request(request_url, headers, *params);
 		return http_util.Request(delete_request);
 	}
-	case HTTPRequestType::HTTP_POST: {
+	case RequestType::POST_REQUEST: {
 		PostRequestInfo post_request(request_url, headers, *params, reinterpret_cast<const_data_ptr_t>(data.data()),
 		                             data.size());
 		auto response = http_util.Request(post_request);
 		response->body = post_request.buffer_out;
 		return response;
 	}
-	case HTTPRequestType::HTTP_HEAD: {
+	case RequestType::HEAD_REQUEST: {
 		HeadRequestInfo head_request(request_url, headers, *params);
 		return http_util.Request(head_request);
 	}
 	default:
-		throw NotImplementedException("Cannot make request of type %s", HTTPRequestTypeToString(request_type));
+		throw NotImplementedException("Cannot make request of type %s", EnumUtil::ToString(request_type));
 	}
 }
 

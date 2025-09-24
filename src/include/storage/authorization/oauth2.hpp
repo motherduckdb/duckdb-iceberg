@@ -15,7 +15,7 @@ public:
 
 public:
 	static unique_ptr<OAuth2Authorization> FromAttachOptions(ClientContext &context, IcebergAttachOptions &input);
-	unique_ptr<HTTPResponse> Request(HTTPRequestType request_type, ClientContext &context,
+	unique_ptr<HTTPResponse> Request(RequestType request_type, ClientContext &context,
 	                                 const IRCEndpointBuilder &endpoint_builder, HTTPHeaders &headers,
 	                                 const string &data = "") override;
 	static string GetToken(ClientContext &context, const string &grant_type, const string &uri, const string &client_id,

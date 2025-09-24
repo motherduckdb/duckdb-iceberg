@@ -34,7 +34,7 @@ static string certFileLocations[] = {
 
 class APIUtils {
 public:
-	static unique_ptr<HTTPResponse> Request(HTTPRequestType request_type, ClientContext &context,
+	static unique_ptr<HTTPResponse> Request(RequestType request_type, ClientContext &context,
 	                                        const IRCEndpointBuilder &endpoint_builder, HTTPHeaders &headers,
 	                                        const string &data);
 

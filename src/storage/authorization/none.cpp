@@ -12,7 +12,7 @@ unique_ptr<IRCAuthorization> NoneAuthorization::FromAttachOptions(IcebergAttachO
 	return std::move(result);
 }
 
-unique_ptr<HTTPResponse> NoneAuthorization::Request(HTTPRequestType request_type, ClientContext &context,
+unique_ptr<HTTPResponse> NoneAuthorization::Request(RequestType request_type, ClientContext &context,
                                                     const IRCEndpointBuilder &endpoint_builder, HTTPHeaders &headers,
                                                     const string &data) {
 	return APIUtils::Request(request_type, context, endpoint_builder, headers, data);
