@@ -22,6 +22,16 @@ jobs:
       PIP_BREAK_SYSTEM_PACKAGES: 1
 
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: 'true'
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11.1
+        with:
+          vcpkgGitCommitId: 5e5d0e1cd7785623065e77eff011afdeec1a3574
+
       - name: Install nessie required packages
         shell: bash
         run: |
@@ -44,21 +54,11 @@ jobs:
           key: ${{ github.job }}
           save: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}
 
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11.1
-        with:
-          vcpkgGitCommitId: 5e5d0e1cd7785623065e77eff011afdeec1a3574
-
       - name: Start Nessie
         working-directory: nessie/docker
         run: |
           sed -i '/healthcheck/,/]/ s/\$/$$/g' catalog-auth-s3/docker-compose.yml
           docker-compose -f catalog-auth-s3/docker-compose.yml up -d
-
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          submodules: 'true'
 
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3
