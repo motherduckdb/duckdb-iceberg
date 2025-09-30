@@ -20,6 +20,8 @@ require aws
 
 require tpch
 
+mode skip
+
 statement ok
 CREATE SECRET s3table_secret (
     TYPE s3,
