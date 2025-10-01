@@ -4,6 +4,7 @@
 #include "duckdb/common/http_util.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
+#include "include/storage/irc_authorization.hpp"
 
 #ifdef EMSCRIPTEN
 #else
@@ -53,7 +54,8 @@ static void InitAWSAPI() {
 	}
 }
 
-static void LogAWSRequest(ClientContext &context, std::shared_ptr<Aws::Http::HttpRequest> &req) {
+static void LogAWSRequest(ClientContext &context, std::shared_ptr<Aws::Http::HttpRequest> &req,
+                          Aws::Http::HttpMethod &method) {
 	if (context.db) {
 		auto http_util = HTTPUtil::Get(*context.db);
 		auto aws_headers = req->GetHeaders();
@@ -67,9 +69,28 @@ static void LogAWSRequest(ClientContext &context, std::shared_ptr<Aws::Http::Htt
 		if (!query_str.empty()) {
 			url += "?" + query_str;
 		}
-		auto request = GetRequestInfo(
-		    url, http_headers, params, [](const HTTPResponse &response) { return false; },
-		    [](const_data_ptr_t data, idx_t data_length) { return false; });
+		RequestType type;
+		switch (method) {
+		case Aws::Http::HttpMethod::HTTP_GET:
+			type = RequestType::GET_REQUEST;
+			break;
+		case Aws::Http::HttpMethod::HTTP_HEAD:
+			type = RequestType::HEAD_REQUEST;
+			break;
+		case Aws::Http::HttpMethod::HTTP_DELETE:
+			type = RequestType::DELETE_REQUEST;
+			break;
+		case Aws::Http::HttpMethod::HTTP_POST:
+			type = RequestType::POST_REQUEST;
+			break;
+		case Aws::Http::HttpMethod::HTTP_PUT:
+			type = RequestType::PUT_REQUEST;
+			break;
+		default:
+			throw InvalidConfigurationException("Aws client cannot create request of type %s",
+			                                    Aws::Http::HttpMethodMapper::GetNameForHttpMethod(method));
+		}
+		auto request = BaseRequest(type, url, http_headers, params);
 		request.params.logger = context.logger;
 		http_util.LogRequest(request, nullptr);
 	}
@@ -79,6 +100,14 @@ Aws::Client::ClientConfiguration AWSInput::BuildClientConfig() {
 	auto config = Aws::Client::ClientConfiguration();
 	if (!cert_path.empty()) {
 		config.caFile = cert_path;
+	}
+	if (use_httpfs_timeout) {
+		// requestTimeoutMS is for Windows
+		config.requestTimeoutMs = request_timeout_in_ms;
+		// httpRequestTimoutMS is for all other OS's
+		// see
+		// https://github.com/aws/aws-sdk-cpp/blob/199c0a80b29a30db35b8d23c043aacf7ccb28957/src/aws-cpp-sdk-core/include/aws/core/client/ClientConfiguration.h#L190
+		config.httpRequestTimeoutMs = request_timeout_in_ms;
 	}
 	return config;
 }
@@ -97,8 +126,8 @@ Aws::Http::URI AWSInput::BuildURI() {
 }
 
 std::shared_ptr<Aws::Http::HttpRequest> AWSInput::CreateSignedRequest(Aws::Http::HttpMethod method,
-                                                                      const Aws::Http::URI &uri, const string &body,
-                                                                      string content_type) {
+                                                                      const Aws::Http::URI &uri, HTTPHeaders &headers,
+                                                                      const string &body) {
 
 	auto request = Aws::Http::CreateHttpRequest(uri, method, Aws::Utils::Stream::DefaultResponseStreamFactoryMethod);
 	request->SetUserAgent(user_agent);
@@ -108,8 +137,8 @@ std::shared_ptr<Aws::Http::HttpRequest> AWSInput::CreateSignedRequest(Aws::Http:
 		*bodyStream << body;
 		request->AddContentBody(bodyStream);
 		request->SetContentLength(std::to_string(body.size()));
-		if (!content_type.empty()) {
-			request->SetHeaderValue("Content-Type", content_type);
+		if (headers.HasHeader("Content-Type")) {
+			request->SetHeaderValue("Content-Type", headers.GetHeaderValue("Content-Type"));
 		}
 	}
 
@@ -124,14 +153,14 @@ std::shared_ptr<Aws::Http::HttpRequest> AWSInput::CreateSignedRequest(Aws::Http:
 }
 
 unique_ptr<HTTPResponse> AWSInput::ExecuteRequest(ClientContext &context, Aws::Http::HttpMethod method,
-                                                  const string body, string content_type) {
+                                                  HTTPHeaders &headers, const string &body) {
 
 	InitAWSAPI();
 	auto clientConfig = BuildClientConfig();
 	auto uri = BuildURI();
-	auto request = CreateSignedRequest(method, uri, body, content_type);
+	auto request = CreateSignedRequest(method, uri, headers, body);
 
-	LogAWSRequest(context, request);
+	LogAWSRequest(context, request, method);
 	auto httpClient = Aws::Http::CreateHttpClient(clientConfig);
 	auto response = httpClient->MakeRequest(request);
 	auto resCode = response->GetResponseCode();
@@ -161,20 +190,20 @@ unique_ptr<HTTPResponse> AWSInput::ExecuteRequest(ClientContext &context, Aws::H
 	return result;
 }
 
-unique_ptr<HTTPResponse> AWSInput::HeadRequest(ClientContext &context) {
-	return ExecuteRequest(context, Aws::Http::HttpMethod::HTTP_HEAD);
-}
-
-unique_ptr<HTTPResponse> AWSInput::GetRequest(ClientContext &context) {
-	return ExecuteRequest(context, Aws::Http::HttpMethod::HTTP_GET);
-}
-
-unique_ptr<HTTPResponse> AWSInput::DeleteRequest(ClientContext &context) {
-	return ExecuteRequest(context, Aws::Http::HttpMethod::HTTP_DELETE);
-}
-
-unique_ptr<HTTPResponse> AWSInput::PostRequest(ClientContext &context, string post_body) {
-	return ExecuteRequest(context, Aws::Http::HttpMethod::HTTP_POST, post_body, "application/json");
+unique_ptr<HTTPResponse> AWSInput::Request(RequestType request_type, ClientContext &context, HTTPHeaders &headers,
+                                           const string &data) {
+	switch (request_type) {
+	case RequestType::GET_REQUEST:
+		return ExecuteRequest(context, Aws::Http::HttpMethod::HTTP_GET, headers);
+	case RequestType::POST_REQUEST:
+		return ExecuteRequest(context, Aws::Http::HttpMethod::HTTP_POST, headers, data);
+	case RequestType::DELETE_REQUEST:
+		return ExecuteRequest(context, Aws::Http::HttpMethod::HTTP_DELETE, headers);
+	case RequestType::HEAD_REQUEST:
+		return ExecuteRequest(context, Aws::Http::HttpMethod::HTTP_HEAD, headers);
+	default:
+		throw NotImplementedException("Cannot make request of type %s", EnumUtil::ToString(request_type));
+	}
 }
 
 #endif
