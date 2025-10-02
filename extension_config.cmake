@@ -1,8 +1,8 @@
 # This file is included by DuckDB's build system. It specifies which extension to load
 duckdb_extension_load(avro
 		LOAD_TESTS
-		GIT_URL https://github.com/Tmonster/duckdb-avro
-		GIT_TAG fa0d3c53c7d0e00f82b92b60e1b1a1be56222e40
+		GIT_URL https://github.com/duckdb/duckdb-avro
+		GIT_TAG 7b75062f6345d11c5342c09216a75c57342c2e82
 )
 
 # Extension from this repo
