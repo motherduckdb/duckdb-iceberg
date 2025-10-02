@@ -84,8 +84,8 @@ idx_t WriteToFile(IcebergTableInformation &table_info, const IcebergManifestFile
 		// status: int - 0
 		names.push_back("status");
 		types.push_back(LogicalType::INTEGER);
-		status_field.emplace_back('__duckdb_field_id', Value::INTEGER(STATUS));
-		status_field.emplace_back('__duckdb_nullable', Value::BOOLEAN(false));
+		status_field.emplace_back("__duckdb_field_id", Value::INTEGER(STATUS));
+		status_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
 
 		auto field_obj = yyjson_mut_arr_add_obj(doc, fields_arr);
 		yyjson_mut_obj_add_uint(doc, field_obj, "id", STATUS);
@@ -146,7 +146,7 @@ idx_t WriteToFile(IcebergTableInformation &table_info, const IcebergManifestFile
 		children.emplace_back("content", LogicalType::INTEGER);
 		content_field.emplace_back("__duckdb_field_id", Value::INTEGER(CONTENT));
 		content_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-		data_file_field_ids.emplace_back("conetnt", Value::STRUCT(content_field));
+		data_file_field_ids.emplace_back("content", Value::STRUCT(content_field));
 
 		auto field_obj = yyjson_mut_arr_add_obj(doc, child_fields_arr);
 		yyjson_mut_obj_add_uint(doc, field_obj, "id", CONTENT);
