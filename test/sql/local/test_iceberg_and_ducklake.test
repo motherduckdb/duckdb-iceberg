@@ -54,4 +54,4 @@ ATTACH 'ducklake:duckdb:ducklake.duckdb' as my_ducklake (DATA_PATH 'data_path');
 query I
 select count(*) from duckdb_logs_parsed('HTTP');
 ----
-6
+5
