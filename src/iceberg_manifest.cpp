@@ -226,6 +226,7 @@ idx_t WriteToFile(IcebergTableInformation &table_info, const IcebergManifestFile
 		names.push_back("data_file");
 		types.push_back(LogicalType::STRUCT(std::move(children)));
 		data_file_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(DATA_FILE));
+		// data_file_field_ids.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
 		field_ids.emplace_back("data_file", Value::STRUCT(data_file_field_ids));
 
 		auto field_obj = yyjson_mut_arr_add_obj(doc, fields_arr);
