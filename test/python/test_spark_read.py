@@ -16,15 +16,17 @@ Row = pyspark_sql.Row
 
 # List of runtimes you want to test
 ICEBERG_RUNTIMES = [
-    "org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.9.0",
     "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.4.1",
+    "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.9.0",
+    "org.apache.iceberg:iceberg-spark-runtime-3.5_2.13:1.9.1"
 ]
 
 
 @pytest.fixture(params=ICEBERG_RUNTIMES, scope="session")
 def spark_con(request):
     runtime_pkg = request.param
-    runtime_path = os.path.join(SCRIPT_DIR, '..', '..', 'scripts', 'data_generators', runtime_pkg)
+    runtime_pkg_jar = (runtime_pkg[len("org.apache.iceberg:"):] + ".jar").replace(":", "-")
+    runtime_path = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..', 'scripts', 'data_generators', runtime_pkg_jar))
 
     os.environ["PYSPARK_SUBMIT_ARGS"] = (
         f"--packages {runtime_pkg},org.apache.iceberg:iceberg-aws-bundle:1.9.0 pyspark-shell"
@@ -34,7 +36,7 @@ def spark_con(request):
     os.environ["AWS_SECRET_ACCESS_KEY"] = "password"
 
     spark = (
-        SparkSession.builder.appName(f"DuckDB REST Integration test ({runtime_pkg})")
+        SparkSession.builder.appName(f"DuckDB REST Integration tes")
         .config(
             "spark.sql.extensions",
             "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
@@ -54,7 +56,7 @@ def spark_con(request):
     spark.sql("USE demo")
     spark.sql("CREATE NAMESPACE IF NOT EXISTS default")
     spark.sql("USE NAMESPACE default")
-    spark.stop()
+    return spark
 
 
 @pytest.mark.skipif(
@@ -75,4 +77,29 @@ class TestSparkRead:
             Row(col1=datetime.date(2020, 8, 14), col2=2, col3='insert 2'),
             Row(col1=datetime.date(2020, 8, 15), col2=3, col3='insert 3'),
             Row(col1=datetime.date(2020, 8, 16), col2=4, col3='insert 4'),
+        ]
+
+
+@pytest.mark.skipif(
+    os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None, reason="Test data wasn't generated, run tests in test/sql/local/irc/other_engines first"
+)
+class TestSparkReadDuckDBTable:
+    def test_spark_read(self, spark_con):
+        df = spark_con.sql(
+            """
+            select * from other_engines.duckdb_written_table order by a
+            """
+        )
+        res = df.collect()
+        assert res == [
+            Row(a=0),
+            Row(a=1),
+            Row(a=2),
+            Row(a=3),
+            Row(a=4),
+            Row(a=5),
+            Row(a=6),
+            Row(a=7),
+            Row(a=8),
+            Row(a=9),
         ]

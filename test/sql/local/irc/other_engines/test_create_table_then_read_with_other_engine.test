@@ -2,6 +2,15 @@
 # description: test create table
 # group: [create]
 
+require-env ICEBERG_SERVER_AVAILABLE
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
 
 statement ok
 CALL enable_logging('HTTP');
@@ -29,10 +38,10 @@ ATTACH '' AS my_datalake (
 );
 
 statement ok
-use my_datalake.default
+create schema if not exists my_datalake.other_engines;
 
 statement ok
-drop table if exists duckdb_written_table;
+use my_datalake.other_engines;
 
 statement ok
 create table duckdb_written_table as select range a from range(10);
