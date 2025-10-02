@@ -38,10 +38,10 @@ ATTACH '' AS my_datalake (
 );
 
 statement ok
-create schema if not exists my_datalake.other_engines;
+create schema if not exists my_datalake.default;
 
 statement ok
-use my_datalake.other_engines;
+use my_datalake.default;
 
 statement ok
 create table duckdb_written_table as select range a from range(10);

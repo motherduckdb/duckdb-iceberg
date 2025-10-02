@@ -87,7 +87,7 @@ class TestSparkReadDuckDBTable:
     def test_spark_read(self, spark_con):
         df = spark_con.sql(
             """
-            select * from other_engines.duckdb_written_table order by a
+            select * from default.duckdb_written_table order by a
             """
         )
         res = df.collect()
