@@ -18,14 +18,14 @@ Row = pyspark_sql.Row
 ICEBERG_RUNTIMES = [
     "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.4.1",
     "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.9.0",
-    "org.apache.iceberg:iceberg-spark-runtime-3.5_2.13:1.9.1"
+    "org.apache.iceberg:iceberg-spark-runtime-3.5_2.13:1.9.1",
 ]
 
 
 @pytest.fixture(params=ICEBERG_RUNTIMES, scope="session")
 def spark_con(request):
     runtime_pkg = request.param
-    runtime_pkg_jar = (runtime_pkg[len("org.apache.iceberg:"):] + ".jar").replace(":", "-")
+    runtime_pkg_jar = (runtime_pkg[len("org.apache.iceberg:") :] + ".jar").replace(":", "-")
     runtime_path = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..', 'scripts', 'data_generators', runtime_pkg_jar))
 
     os.environ["PYSPARK_SUBMIT_ARGS"] = (
@@ -81,7 +81,8 @@ class TestSparkRead:
 
 
 @pytest.mark.skipif(
-    os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None, reason="Test data wasn't generated, run tests in test/sql/local/irc/other_engines first"
+    os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None,
+    reason="Test data wasn't generated, run tests in test/sql/local/irc/other_engines first",
 )
 class TestSparkReadDuckDBTable:
     def test_spark_read(self, spark_con):
