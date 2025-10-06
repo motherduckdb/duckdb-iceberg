@@ -2,6 +2,7 @@
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/http_util.hpp"
+#include "duckdb/main/extension_helper.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/main/client_data.hpp"
@@ -31,8 +32,11 @@ unique_ptr<HTTPResponse> APIUtils::Request(RequestType request_type, ClientConte
                                            const IRCEndpointBuilder &endpoint_builder, HTTPHeaders &headers,
                                            const string &data) {
 	// load httpfs since iceberg requests do not go through the file system api
-	ExtensionHelper::AutoLoadExtension(instance, "httpfs");
-	if (!instance.ExtensionIsLoaded("httpfs")) {
+	if (!context.db.get()) {
+		throw InvalidConfigurationException("Context does not have database instance when loading Httpfs in Iceberg");
+	}
+	ExtensionHelper::AutoLoadExtension(*context.db, "httpfs");
+	if (!context.db->ExtensionIsLoaded("httpfs")) {
 		throw MissingExtensionException("The iceberg extension requires the httpfs extension to be loaded!");
 	}
 
