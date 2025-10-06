@@ -67,19 +67,12 @@ optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(CatalogTransaction transa
 }
 
 void IRCSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {
-	//	auto &ic_catalog = catalog.Cast<IRCatalog>();
 	auto &transaction = IRCTransaction::Get(context, catalog);
 	auto table_name = info.name;
 	// find if info has a table name, if so look for it in
 	auto table_info_it = tables.entries.find(table_name);
-	bool table_exists = table_info_it != tables.entries.end();
-	if (!table_exists && info.if_not_found == OnEntryNotFound::RETURN_NULL) {
-		// drop table if exists statement
-		return;
-	}
-	if (!table_exists) {
-		D_ASSERT(info.if_not_found == OnEntryNotFound::THROW_EXCEPTION);
-		throw InvalidInputException("Table %s does not exist");
+	if (table_info_it == tables.entries.end()) {
+		throw CatalogException("Table %s does not exist");
 	}
 	if (info.cascade) {
 		throw NotImplementedException("DROP TABLE <table_name> CASCADE is not supported for Iceberg tables currently");
