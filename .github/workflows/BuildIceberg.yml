@@ -49,11 +49,11 @@ jobs:
         run: |
           make release
 
-      - name: Upload DuckDB-Iceberg binary
+      - name: Upload DuckDB-Iceberg release folder
         uses: actions/upload-artifact@v4
         with:
           name: duckdb-iceberg
-          path: build/release/duckdb
+          path: build/release/
           retention-days: 3
 
   test-nessie:
@@ -62,11 +62,16 @@ jobs:
     needs: build_iceberg
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: duckdb-iceberg
-          path: ./duckdb_bin
-      - run: chmod +x ./duckdb_bin/duckdb
+          path: ./duckdb
+
+      - name: Restore permissions
+        run: |
+          # Make all executables in duckdb_bin/release executable
+          find ./duckdb -type f -name 'duckdb*' -exec chmod +x {} \;
 
       - name: Install nessie required packages
         shell: bash
