@@ -30,6 +30,12 @@ const string &APIUtils::GetCURLCertPath() {
 unique_ptr<HTTPResponse> APIUtils::Request(RequestType request_type, ClientContext &context,
                                            const IRCEndpointBuilder &endpoint_builder, HTTPHeaders &headers,
                                            const string &data) {
+	// load httpfs since iceberg requests do not go through the file system api
+	ExtensionHelper::AutoLoadExtension(instance, "httpfs");
+	if (!instance.ExtensionIsLoaded("httpfs")) {
+		throw MissingExtensionException("The iceberg extension requires the httpfs extension to be loaded!");
+	}
+
 	auto &db = DatabaseInstance::GetDatabase(context);
 	string request_url = AddHttpHostIfMissing(endpoint_builder.GetURL());
 
