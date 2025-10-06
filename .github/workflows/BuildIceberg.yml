@@ -72,9 +72,7 @@ jobs:
         run: |
           # Make all executables in duckdb_bin/release executable
           find ./build/release -type f -name 'duckdb*' -exec chmod +x {} \;
-
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
+          find ./build/release -type f -name 'unittest*' -exec chmod +x {} \;
 
       - name: Install nessie required packages
         shell: bash
