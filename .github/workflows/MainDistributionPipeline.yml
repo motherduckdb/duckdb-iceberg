@@ -17,7 +17,7 @@ jobs:
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
     with:
       extension_name: iceberg
-      duckdb_version: v1.4.0
+      duckdb_version: b390a7c3760bd95926fe8aefde20d04b349b472e
       ci_tools_version: main
       exclude_archs: 'windows_amd64_mingw;wasm_mvp;wasm_eh;wasm_threads'
       extra_toolchains: 'python3'
@@ -29,7 +29,7 @@ jobs:
     secrets: inherit
     with:
       extension_name: iceberg
-      duckdb_version: v1.4.0
+      duckdb_version: b390a7c3760bd95926fe8aefde20d04b349b472e
       ci_tools_version: main
       exclude_archs: 'windows_amd64_mingw;wasm_mvp;wasm_eh;wasm_threads'
       deploy_latest: ${{ startsWith(github.ref, 'refs/heads/v') || github.ref == 'refs/heads/main' }}
