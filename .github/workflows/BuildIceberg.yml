@@ -66,12 +66,12 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: duckdb-iceberg
-          path: ./duckdb
+          path: build/release
 
       - name: Restore permissions
         run: |
           # Make all executables in duckdb_bin/release executable
-          find ./duckdb -type f -name 'duckdb*' -exec chmod +x {} \;
+          find ./build/release -type f -name 'duckdb*' -exec chmod +x {} \;
 
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3
