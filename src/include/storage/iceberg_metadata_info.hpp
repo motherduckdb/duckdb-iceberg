@@ -27,7 +27,7 @@ struct IcebergDeleteFileInfo {
 
 struct IcebergFileData {
 	string path;
-	idx_t file_size_bytes = 0;
+	idx_t file_size_in_bytes = 0;
 	optional_idx footer_size;
 };
 

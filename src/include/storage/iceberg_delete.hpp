@@ -48,7 +48,7 @@ private:
 	// ???
 	// stores information about positional deletes
 	unordered_map<string, shared_ptr<IcebergDeleteData>> delete_data_map;
-	// stores information about a data file, and related delete files.
+	// stores information about a data file
 	unordered_map<string, IcebergFileListExtendedEntry> file_map;
 };
 

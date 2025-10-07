@@ -3,6 +3,7 @@
 #include "iceberg_logging.hpp"
 #include "iceberg_predicate.hpp"
 #include "iceberg_value.hpp"
+#include "../include/storage/irc_table_entry.hpp"
 #include "storage/irc_transaction.hpp"
 
 #include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
@@ -667,11 +668,24 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 	D_ASSERT(current_delete_manifest == delete_manifests.end());
 }
 
-vector<IcebergFileListExtendedEntry> IcebergMultiFileList::GetFilesExtended(ClientContext &context, Catalog &catalog) {
+vector<IcebergFileListExtendedEntry> IcebergMultiFileList::GetFilesExtended(ClientContext &context,
+                                                                            ICTableEntry &table) {
 	lock_guard<mutex> l(lock);
 	vector<IcebergFileListExtendedEntry> result;
+	auto &catalog = table.catalog;
 	auto &irc_catalog = catalog.Cast<IRCatalog>();
 	auto &irc_transaction = IRCTransaction::Get(context, catalog);
+	// do I want all the manifest information for the data files?
+	for (auto &file : data_files) {
+		auto foo = IcebergFileListExtendedEntry();
+		foo.file.path = file.file_path;
+		foo.file.file_size_in_bytes = file.file_size_in_bytes;
+		foo.row_count = file.record_count;
+		result.emplace_back(std::move(foo));
+	}
+	// Also add delete file information?
+
+	// for (auto &file )
 	// does this transaction have already written delete or insert files?
 	// for (auto &file : transaction_local_files) {
 	// 	IcebergFileListExtendedEntry file_entry;

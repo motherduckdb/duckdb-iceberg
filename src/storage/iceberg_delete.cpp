@@ -98,7 +98,7 @@ static optional_ptr<CopyFunctionCatalogEntry> TryGetCopyFunction(DatabaseInstanc
 void IcebergDelete::WritePositionalDeleteFile(ClientContext &context, IcebergDeleteGlobalState &global_state,
                                               const string &filename, IcebergDeleteFileInfo delete_file,
                                               set<idx_t> sorted_deletes) const {
-	auto delete_file_path = delete_file.data_file_path;
+	auto delete_file_path = delete_file.file_name;
 	auto info = make_uniq<CopyInfo>();
 	info->file_path = delete_file_path;
 	info->format = "parquet";
@@ -229,6 +229,7 @@ void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &cont
 	string delete_file_path =
 	    fs.JoinPath(table.table_info.table_metadata.location, fs.JoinPath("data", delete_file_uuid));
 
+	delete_file.file_name = delete_file_path;
 	WritePositionalDeleteFile(context, global_state, filename, delete_file, sorted_deletes);
 }
 
@@ -333,7 +334,7 @@ PhysicalOperator &IcebergDelete::PlanDelete(ClientContext &context, PhysicalPlan
 		auto &bind_data = delete_source->bind_data->Cast<MultiFileBindData>();
 		auto &reader = bind_data.multi_file_reader->Cast<IcebergMultiFileReader>();
 		auto &file_list = bind_data.file_list->Cast<IcebergMultiFileList>();
-		auto files = file_list.GetFilesExtended(context, table.catalog);
+		auto files = file_list.GetFilesExtended(context, table);
 		for (auto &file_entry : files) {
 			delete_map->AddExtendedFileInfo(std::move(file_entry));
 		}
