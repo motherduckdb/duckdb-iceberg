@@ -54,6 +54,7 @@ public:
 	unique_ptr<DeleteFilter> GetPositionalDeletesForFile(const string &file_path) const;
 	void ProcessDeletes(const vector<MultiFileColumnDefinition> &global_columns,
 	                    const vector<ColumnIndex> &column_indexes) const;
+	vector<IcebergFileListExtendedEntry> GetFilesExtended(ClientContext &context, Catalog &catalog);
 
 public:
 	//! MultiFileList API

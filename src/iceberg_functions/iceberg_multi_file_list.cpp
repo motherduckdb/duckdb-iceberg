@@ -3,6 +3,7 @@
 #include "iceberg_logging.hpp"
 #include "iceberg_predicate.hpp"
 #include "iceberg_value.hpp"
+#include "storage/irc_transaction.hpp"
 
 #include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
 #include "duckdb/common/exception.hpp"
@@ -670,46 +671,28 @@ vector<IcebergFileListExtendedEntry> IcebergMultiFileList::GetFilesExtended(Clie
 	lock_guard<mutex> l(lock);
 	vector<IcebergFileListExtendedEntry> result;
 	auto &irc_catalog = catalog.Cast<IRCatalog>();
-	auto &irc_transaction = IRCTransaction::Get(context, irc_catalog);
-	// if the transaction has any local deletes - apply them to the file list
-	// if (irc_transaction.HasLocalDeletes()) {
-	// 	for (auto &file_entry : result) {
-	// 		transaction.GetLocalDeleteForFile(read_info.table_id, file_entry.file.path, file_entry.delete_file);
-	// 	}
+	auto &irc_transaction = IRCTransaction::Get(context, catalog);
+	// does this transaction have already written delete or insert files?
+	// for (auto &file : transaction_local_files) {
+	// 	IcebergFileListExtendedEntry file_entry;
+	// 	file_entry.row_count = file.row_count;
+	// 	file_entry.file = GetFileData(file);
+	// 	file_entry.delete_file = GetDeleteData(file);
+	// 	file_entry.row_id_start = transaction_row_start;
+	// 	transaction_row_start += file.row_count;
+	// 	result.push_back(std::move(file_entry));
 	// }
-	for (auto &file : transaction_local_files) {
-		IcebergFileListExtendedEntry file_entry;
-		file_entry.file_id = DataFileIndex();
-		file_entry.delete_file_id = DataFileIndex();
-		file_entry.row_count = file.row_count;
-		file_entry.file = GetFileData(file);
-		file_entry.delete_file = GetDeleteData(file);
-		file_entry.row_id_start = transaction_row_start;
-		transaction_row_start += file.row_count;
-		result.push_back(std::move(file_entry));
-	}
-	if (transaction_local_data) {
-		// we have transaction local inlined data - create the dummy file entry
-		IcebergFileListExtendedEntry file_entry;
-		file_entry.file.path = DUCKLAKE_TRANSACTION_LOCAL_INLINED_FILENAME;
-		file_entry.file_id = DataFileIndex();
-		file_entry.delete_file_id = DataFileIndex();
-		file_entry.row_count = transaction_local_data->data->Count();
-		file_entry.row_id_start = transaction_row_start;
-		file_entry.data_type = IcebergDataType::TRANSACTION_LOCAL_INLINED_DATA;
-		result.push_back(std::move(file_entry));
-	}
-	if (!read_file_list) {
-		// we have not read the file list yet - construct it from the extended file list
-		for (auto &file : result) {
-			IcebergFileListEntry file_entry;
-			file_entry.file = file.file;
-			file_entry.row_id_start = file.row_id_start;
-			file_entry.delete_file = file.delete_file;
-			files.emplace_back(std::move(file_entry));
-		}
-		read_file_list = true;
-	}
+	// if (!read_file_list) {
+	// 	// we have not read the file list yet - construct it from the extended file list
+	// 	for (auto &file : result) {
+	// 		IcebergFileListEntry file_entry;
+	// 		file_entry.file = file.file;
+	// 		file_entry.row_id_start = file.row_id_start;
+	// 		file_entry.delete_file = file.delete_file;
+	// 		files.emplace_back(std::move(file_entry));
+	// 	}
+	// 	read_file_list = true;
+	// }
 	return result;
 }
 

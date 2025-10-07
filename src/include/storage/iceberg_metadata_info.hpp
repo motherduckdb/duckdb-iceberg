@@ -20,9 +20,9 @@ namespace duckdb {
 struct IcebergDeleteFileInfo {
 	string data_file_path;
 	string file_name;
-	idx_t footer_size;
+	optional_idx footer_size;
 	idx_t delete_count;
-	idx_t file_size_bytes;
+	idx_t file_size_bytes = 0;
 };
 
 struct IcebergFileData {
@@ -33,7 +33,7 @@ struct IcebergFileData {
 
 struct IcebergFileListExtendedEntry {
 	IcebergFileData file;
-	IcebergFileData delete_file;
+	IcebergDeleteFileInfo delete_file;
 	idx_t row_count;
 	idx_t delete_count = 0;
 };

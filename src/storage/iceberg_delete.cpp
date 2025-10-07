@@ -204,6 +204,9 @@ void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &cont
                                 IcebergDeleteGlobalState &global_state, const string &filename,
                                 vector<idx_t> &deleted_rows) const {
 
+	// find the matching data file for the deletion
+	auto data_file_info = delete_map->GetExtendedFileInfo(filename);
+
 	// sort and duplicate eliminate the deletes
 	set<idx_t> sorted_deletes;
 	for (auto &row_idx : deleted_rows) {

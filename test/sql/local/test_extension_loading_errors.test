@@ -1,0 +1,21 @@
+# name: test/sql/local/test_extension_loading_errors.test
+# group: [local]
+
+require parquet
+
+require avro
+
+require iceberg
+
+statement ok
+CALL enable_logging('HTTP');
+
+statement error
+ATTACH '' AS my_datalake (
+    TYPE ICEBERG,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    ENDPOINT 'http://127.0.0.1:8181'
+);
+----
+<REGEX>:.*avro.*

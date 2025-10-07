@@ -25,6 +25,14 @@ struct IcebergDeleteMap {
 		file_map.emplace(std::move(filename), std::move(file_entry));
 	}
 
+	IcebergFileListExtendedEntry GetExtendedFileInfo(const string &filename) {
+		auto delete_entry = file_map.find(filename);
+		if (delete_entry == file_map.end()) {
+			throw InternalException("Could not find matching file for written delete file");
+		}
+		return delete_entry->second;
+	}
+
 	optional_ptr<IcebergDeleteData> GetDeleteData(const string &filename) {
 		lock_guard<mutex> guard(lock);
 		auto entry = delete_data_map.find(filename);
@@ -36,7 +44,11 @@ struct IcebergDeleteMap {
 
 private:
 	mutex lock;
+	// still need some way to know if we are deleting an extra row or not.
+	// ???
+	// stores information about positional deletes
 	unordered_map<string, shared_ptr<IcebergDeleteData>> delete_data_map;
+	// stores information about a data file, and related delete files.
 	unordered_map<string, IcebergFileListExtendedEntry> file_map;
 };
 
