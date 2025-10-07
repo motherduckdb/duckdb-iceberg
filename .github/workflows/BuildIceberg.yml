@@ -106,6 +106,9 @@ jobs:
             attempt=$((attempt + 1))
           done
           echo "Keycloak is healthy"
+          
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
 
       - name: Test with rest catalog
         env:
