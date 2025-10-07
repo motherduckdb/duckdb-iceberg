@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/test_create_table_then_read_with_other_engine.test
+# name: test/sql/local/irc/other_engines/test_create_table_then_read_with_other_engine.test
 # description: test create table
-# group: [create]
+# group: [other_engines]
 
 require-env ICEBERG_SERVER_AVAILABLE
 
