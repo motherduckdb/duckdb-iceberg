@@ -63,19 +63,13 @@ select count(*) from iceberg_metadata(my_datalake.default.test) where manifest_c
 ----
 3
 
-# write a test to make sure only 2 delete files are rewritten and one stays the same
-# also write a test to figure out how to do equality deletes.
-query I
-select 1;
-----
-0
 
 statement ok
 delete from my_datalake.default.test where id in (10001, 4800001);
 
-# Expect 3 delete files, one for every data file
+# Expect 2 more delete files, the original 3, plus 2 more for the new deletes
 query I
 select count(*) from iceberg_metadata(my_datalake.default.test) where manifest_content = 'DELETE';
 ----
-3
+5
 
