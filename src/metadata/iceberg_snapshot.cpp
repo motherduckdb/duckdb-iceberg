@@ -26,6 +26,7 @@ rest_api_objects::Snapshot IcebergSnapshot::ToRESTObject() const {
 	res.manifest_list = manifest_list;
 
 	res.summary.operation = OperationTypeToString(operation);
+	res.summary.additional_properties = additional_properties;
 
 	if (!has_parent_snapshot) {
 		res.has_parent_snapshot_id = false;
@@ -57,6 +58,8 @@ IcebergSnapshot IcebergSnapshot::ParseSnapshot(rest_api_objects::Snapshot &snaps
 	D_ASSERT(snapshot.has_schema_id);
 	ret.schema_id = snapshot.schema_id;
 	ret.manifest_list = snapshot.manifest_list;
+	ret.additional_properties = snapshot.summary.additional_properties;
+
 	return ret;
 }
 

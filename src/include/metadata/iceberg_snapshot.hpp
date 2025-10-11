@@ -27,6 +27,7 @@ public:
 	IcebergSnapshotOperationType operation = IcebergSnapshotOperationType::APPEND;
 	timestamp_t timestamp_ms;
 	string manifest_list;
+	case_insensitive_map_t<string> additional_properties;
 };
 
 } // namespace duckdb
