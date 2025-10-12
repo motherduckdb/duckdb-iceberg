@@ -29,14 +29,18 @@ static IcebergSnapshot::metrics_map_t GetSnapshotMetrics(const IcebergManifest &
 
 	auto previous_total_files = previous_metrics.find(SnapshotMetricType::TOTAL_DATA_FILES);
 	if (previous_total_files != previous_metrics.end()) {
-		metrics[SnapshotMetricType::TOTAL_DATA_FILES] =
-		    previous_total_files->second + manifest.added_files_count - manifest.deleted_files_count;
+		int64_t total_files = previous_total_files->second + manifest.added_files_count - manifest.deleted_files_count;
+		if (total_files >= 0)
+			metrics[SnapshotMetricType::TOTAL_DATA_FILES] = total_files;
 	}
 
 	auto previous_total_records = previous_metrics.find(SnapshotMetricType::TOTAL_RECORDS);
 	if (previous_total_records != previous_metrics.end()) {
-		metrics[SnapshotMetricType::TOTAL_RECORDS] =
+		int64_t total_records =
 		    previous_total_records->second + manifest.added_rows_count - manifest.deleted_rows_count;
+		if (total_records >= 0) {
+			metrics[SnapshotMetricType::TOTAL_RECORDS] = total_records;
+		}
 	}
 
 	return metrics;

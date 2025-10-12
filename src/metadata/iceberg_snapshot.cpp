@@ -39,7 +39,14 @@ static IcebergSnapshot::metrics_map_t MetricsFromSummary(const case_insensitive_
 	for (auto &entry : kSnapshotMetricKeys) {
 		auto it = snapshot_summary.find(entry.second);
 		if (it != snapshot_summary.end()) {
-			metrics[entry.first] = std::stoll(it->second);
+			int64_t value;
+			try {
+				value = std::stoll(it->second);
+			} catch (...) {
+				// Skip invalid metrics
+				continue;
+			}
+			metrics[entry.first] = value;
 		}
 	}
 	return metrics;
