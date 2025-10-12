@@ -52,10 +52,11 @@ static void ParseAzureConfigOptions(const case_insensitive_map_t<string> &config
 			string account_name = dot_pos.IsValid() ? token_key.substr(0, dot_pos.GetIndex()) : token_key;
 
 			if (!account_name.empty() && !entry.second.empty()) {
+				options["account_name"] = account_name;
 				options["connection_string"] =
 				    StringUtil::Format("AccountName=%s;SharedAccessSignature=%s", account_name, entry.second);
 
-				// For now, only process the first SAS token we find in the config
+				// For now, only process the first {storage account, token} pair we find in the config
 				return;
 			}
 		}
