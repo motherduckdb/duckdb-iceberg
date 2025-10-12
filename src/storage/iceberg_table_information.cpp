@@ -42,14 +42,13 @@ static void ParseAzureConfigOptions(const case_insensitive_map_t<string> &config
                                     case_insensitive_map_t<Value> &options) {
 	static const string ADLS_SAS_TOKEN_PREFIX = "adls.sas-token.";
 
-	for (const auto &entry : config) {
+	for (auto &entry : config) {
 		// SAS token config format is e.g. {adls.sas-token.<account-name>.dfs.core.windows.net, <token>}
 		if (StringUtil::StartsWith(entry.first, ADLS_SAS_TOKEN_PREFIX)) {
-			string token_key = entry.first.substr(ADLS_SAS_TOKEN_PREFIX.length());
-
+			string host = entry.first.substr(ADLS_SAS_TOKEN_PREFIX.length());
 			// Extract account name
-			auto dot_pos = StringUtil::Find(token_key, ".");
-			string account_name = dot_pos.IsValid() ? token_key.substr(0, dot_pos.GetIndex()) : token_key;
+			auto dot_pos = StringUtil::Find(host, ".");
+			string account_name = dot_pos.IsValid() ? host.substr(0, dot_pos.GetIndex()) : host;
 
 			if (!account_name.empty() && !entry.second.empty()) {
 				options["account_name"] = account_name;
