@@ -17,14 +17,27 @@ static int64_t NewSnapshotId() {
 	return random_number;
 }
 
-// TODO: Merge with previous metrics
-static case_insensitive_map_t<string> GetSnapshotMetrics(const IcebergManifest &manifest) {
-	case_insensitive_map_t<string> metrics;
+static const IcebergSnapshot::metrics_map_t kMetricsWithEmptyTotals {{SnapshotMetricType::TOTAL_DATA_FILES, 0},
+                                                                     {SnapshotMetricType::TOTAL_RECORDS, 0}};
 
-	metrics["added-data-files"] = std::to_string(manifest.added_files_count);
-	metrics["added-records"] = std::to_string(manifest.added_rows_count);
-	metrics["deleted-data-files"] = std::to_string(manifest.deleted_files_count);
-	metrics["deleted-records"] = std::to_string(manifest.deleted_rows_count);
+static IcebergSnapshot::metrics_map_t GetSnapshotMetrics(const IcebergManifest &manifest,
+                                                         const IcebergSnapshot::metrics_map_t &previous_metrics) {
+	IcebergSnapshot::metrics_map_t metrics {{SnapshotMetricType::ADDED_DATA_FILES, manifest.added_files_count},
+	                                        {SnapshotMetricType::ADDED_RECORDS, manifest.added_rows_count},
+	                                        {SnapshotMetricType::DELETED_DATA_FILES, manifest.deleted_files_count},
+	                                        {SnapshotMetricType::DELETED_RECORDS, manifest.deleted_rows_count}};
+
+	auto previous_total_files = previous_metrics.find(SnapshotMetricType::TOTAL_DATA_FILES);
+	if (previous_total_files != previous_metrics.end()) {
+		metrics[SnapshotMetricType::TOTAL_DATA_FILES] =
+		    previous_total_files->second + manifest.added_files_count - manifest.deleted_files_count;
+	}
+
+	auto previous_total_records = previous_metrics.find(SnapshotMetricType::TOTAL_RECORDS);
+	if (previous_total_records != previous_metrics.end()) {
+		metrics[SnapshotMetricType::TOTAL_RECORDS] =
+		    previous_total_records->second + manifest.added_rows_count - manifest.deleted_rows_count;
+	}
 
 	return metrics;
 }
@@ -55,26 +68,6 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 	auto manifest_list_path = table_info.BaseFilePath() + "/metadata/snap-" + std::to_string(snapshot_id) + "-" +
 	                          manifest_list_uuid + ".avro";
 
-	//! Construct the snapshot
-	IcebergSnapshot new_snapshot;
-	new_snapshot.snapshot_id = snapshot_id;
-	new_snapshot.sequence_number = sequence_number;
-	new_snapshot.schema_id = table_metadata.current_schema_id;
-	new_snapshot.manifest_list = manifest_list_path;
-	new_snapshot.operation = operation;
-	new_snapshot.timestamp_ms = Timestamp::GetEpochMs(Timestamp::GetCurrentTimestamp());
-
-	new_snapshot.has_parent_snapshot = table_info.table_metadata.has_current_snapshot || !alters.empty();
-	if (new_snapshot.has_parent_snapshot) {
-		if (!alters.empty()) {
-			auto &last_alter = alters.back().get();
-			new_snapshot.parent_snapshot_id = last_alter.snapshot.snapshot_id;
-		} else {
-			D_ASSERT(table_info.table_metadata.has_current_snapshot);
-			new_snapshot.parent_snapshot_id = table_info.table_metadata.current_snapshot_id;
-		}
-	}
-
 	//! Construct the manifest
 	IcebergManifest manifest;
 	manifest.manifest_path = manifest_file_path;
@@ -93,18 +86,40 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 	//! Add the data files
 	for (auto &data_file : data_files) {
 		manifest.added_rows_count += data_file.record_count;
-		data_file.sequence_number = new_snapshot.sequence_number;
+		data_file.sequence_number = sequence_number;
 		if (!manifest.has_min_sequence_number || data_file.sequence_number < manifest.min_sequence_number) {
 			manifest.min_sequence_number = data_file.sequence_number;
 		}
 		manifest.has_min_sequence_number = true;
 	}
-	manifest.added_snapshot_id = new_snapshot.snapshot_id;
+	manifest.added_snapshot_id = snapshot_id;
 
-	//! Update snapshot summary metrics with manifest metrics
-	new_snapshot.additional_properties = GetSnapshotMetrics(manifest);
+	//! Construct the snapshot
+	IcebergSnapshot new_snapshot;
+	new_snapshot.snapshot_id = snapshot_id;
+	new_snapshot.sequence_number = sequence_number;
+	new_snapshot.schema_id = table_metadata.current_schema_id;
+	new_snapshot.manifest_list = manifest_list_path;
+	new_snapshot.operation = operation;
+	new_snapshot.timestamp_ms = Timestamp::GetEpochMs(Timestamp::GetCurrentTimestamp());
 
-	//! Construct the AddSnapshot update
+	new_snapshot.has_parent_snapshot = table_info.table_metadata.has_current_snapshot || !alters.empty();
+	if (new_snapshot.has_parent_snapshot) {
+		if (!alters.empty()) {
+			auto &last_alter = alters.back().get();
+			new_snapshot.parent_snapshot_id = last_alter.snapshot.snapshot_id;
+			new_snapshot.metrics = GetSnapshotMetrics(manifest, last_alter.snapshot.metrics);
+		} else {
+			D_ASSERT(table_info.table_metadata.has_current_snapshot);
+			new_snapshot.parent_snapshot_id = table_info.table_metadata.current_snapshot_id;
+			new_snapshot.metrics = GetSnapshotMetrics(
+			    manifest, table_info.table_metadata.GetSnapshotById(new_snapshot.parent_snapshot_id)->metrics);
+		}
+	} else {
+		// If there was no previous snapshot, default the metrics to start totals at 0
+		new_snapshot.metrics = GetSnapshotMetrics(manifest, kMetricsWithEmptyTotals);
+	}
+
 	new_manifest_file.data_files.insert(new_manifest_file.data_files.end(), std::make_move_iterator(data_files.begin()),
 	                                    std::make_move_iterator(data_files.end()));
 	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info, std::move(new_manifest_file), manifest_list_path,
