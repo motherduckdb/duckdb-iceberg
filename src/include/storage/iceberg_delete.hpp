@@ -18,27 +18,6 @@
 
 namespace duckdb {
 
-struct IcebergDeleteMap {
-
-	void AddExtendedFileInfo(IcebergFileListExtendedEntry file_entry) {
-		auto filename = file_entry.file.path;
-		file_map.emplace(std::move(filename), std::move(file_entry));
-	}
-
-	IcebergFileListExtendedEntry GetExtendedFileInfo(const string &filename) {
-		auto delete_entry = file_map.find(filename);
-		if (delete_entry == file_map.end()) {
-			throw InternalException("Could not find matching file for written delete file");
-		}
-		return delete_entry->second;
-	}
-
-private:
-	mutex lock;
-	// stores information about a data file
-	unordered_map<string, IcebergFileListExtendedEntry> file_map;
-};
-
 struct WrittenColumnInfo {
 	WrittenColumnInfo() = default;
 	WrittenColumnInfo(LogicalType type_p, int32_t field_id) : type(std::move(type_p)), field_id(field_id) {
@@ -90,12 +69,10 @@ public:
 class IcebergDelete : public PhysicalOperator {
 public:
 	IcebergDelete(PhysicalPlan &physical_plan, ICTableEntry &table, PhysicalOperator &child,
-	              shared_ptr<IcebergDeleteMap> delete_map_p, vector<idx_t> row_id_indexes);
+	              vector<idx_t> row_id_indexes);
 
 	//! The table to delete from
 	ICTableEntry &table;
-	// A map of filename -> data file index and filename -> delete data
-	shared_ptr<IcebergDeleteMap> delete_map;
 	//! The column indexes for the relevant row-id columns
 	vector<idx_t> row_id_indexes;
 

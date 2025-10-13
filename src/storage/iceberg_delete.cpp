@@ -22,9 +22,9 @@ class IcebergDeleteGlobalState;
 class ICTableEntry;
 
 IcebergDelete::IcebergDelete(PhysicalPlan &physical_plan, ICTableEntry &table, PhysicalOperator &child,
-                             shared_ptr<IcebergDeleteMap> delete_map_p, vector<idx_t> row_id_indexes)
+                             vector<idx_t> row_id_indexes)
     : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, {LogicalType::BIGINT}, 1), table(table),
-      delete_map(std::move(delete_map_p)), row_id_indexes(std::move(row_id_indexes)) {
+      row_id_indexes(std::move(row_id_indexes)) {
 	children.push_back(child);
 }
 
@@ -291,46 +291,9 @@ InsertionOrderPreservingMap<string> IcebergDelete::ParamsToString() const {
 	return result;
 }
 
-optional_ptr<PhysicalTableScan> FindIcebergDeleteSource(PhysicalOperator &plan) {
-	if (plan.type == PhysicalOperatorType::TABLE_SCAN) {
-		// does this emit the virtual columns?
-		auto &scan = plan.Cast<PhysicalTableScan>();
-		bool found = false;
-		for (auto &col : scan.column_ids) {
-			if (col.GetPrimaryIndex() == MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER) {
-				found = true;
-				break;
-			}
-		}
-		if (!found) {
-			return nullptr;
-		}
-		return scan;
-	}
-	for (auto &children : plan.children) {
-		auto result = FindIcebergDeleteSource(children.get());
-		if (result) {
-			return result;
-		}
-	}
-	return nullptr;
-}
-
 PhysicalOperator &IcebergDelete::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, ICTableEntry &table,
                                             PhysicalOperator &child_plan, vector<idx_t> row_id_indexes) {
-	auto delete_source = FindIcebergDeleteSource(child_plan);
-	auto delete_map = make_shared_ptr<IcebergDeleteMap>();
-	if (delete_source) {
-		auto &bind_data = delete_source->bind_data->Cast<MultiFileBindData>();
-		auto &reader = bind_data.multi_file_reader->Cast<IcebergMultiFileReader>();
-		auto &file_list = bind_data.file_list->Cast<IcebergMultiFileList>();
-		auto files = file_list.GetFilesExtended(context, table);
-		for (auto &file_entry : files) {
-			delete_map->AddExtendedFileInfo(std::move(file_entry));
-		}
-		reader.delete_map = delete_map;
-	}
-	return planner.Make<IcebergDelete>(table, child_plan, std::move(delete_map), std::move(row_id_indexes));
+	return planner.Make<IcebergDelete>(table, child_plan, std::move(row_id_indexes));
 }
 
 PhysicalOperator &IRCatalog::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,

@@ -24,8 +24,6 @@
 
 namespace duckdb {
 
-struct IcebergDeleteMap;
-
 struct IcebergMultiFileReaderGlobalState : public MultiFileReaderGlobalState {
 public:
 	IcebergMultiFileReaderGlobalState(vector<LogicalType> extra_columns_p, const MultiFileList &file_list_p)
@@ -79,7 +77,6 @@ public:
 
 public:
 	shared_ptr<TableFunctionInfo> function_info;
-	shared_ptr<IcebergDeleteMap> delete_map;
 	IcebergOptions options;
 
 private:
