@@ -105,6 +105,9 @@ jobs:
         run: |
           make test_release
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+
       - name: Test reads with PyIceberg
         env:
           ICEBERG_SERVER_AVAILABLE: 1
