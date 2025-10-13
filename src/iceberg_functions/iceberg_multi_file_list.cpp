@@ -319,7 +319,7 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &file) {
 		}
 
 		auto &filter = *it->second;
-		if (!IcebergPredicate::MatchBounds(filter, stats, IcebergTransform::Identity())) {
+		if (!IcebergPredicate::MatchBounds(context, filter, stats, IcebergTransform::Identity())) {
 			//! If any predicate fails, exclude the file
 			return false;
 		}
@@ -521,7 +521,7 @@ bool IcebergMultiFileList::ManifestMatchesFilter(const IcebergManifest &manifest
 		stats.has_null = field_summary.contains_null;
 		stats.has_not_null = true; // Not enough information in field_summary to determine if this should be false
 
-		if (!IcebergPredicate::MatchBounds(*table_filter, stats, field.transform)) {
+		if (!IcebergPredicate::MatchBounds(context, *table_filter, stats, field.transform)) {
 			return false;
 		}
 	}
