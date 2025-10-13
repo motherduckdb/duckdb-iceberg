@@ -5,7 +5,6 @@
 #include "storage/iceberg_table_information.hpp"
 #include "iceberg_multi_file_reader.hpp"
 #include "iceberg_multi_file_list.hpp"
-#include "../include/iceberg_multi_file_list.hpp"
 
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
@@ -16,7 +15,6 @@
 #include "duckdb/function/copy_function.hpp"
 #include "duckdb/common/types/uuid.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
-#include "fmt/format.h"
 
 namespace duckdb {
 class IcebergDeleteLocalState;
@@ -64,7 +62,7 @@ SinkResultType IcebergDelete::Sink(ExecutionContext &context, DataChunk &chunk, 
 		auto file_name = file_name_data[file_name_idx].GetString();
 
 		if (local_state.current_file_name.empty() || local_state.current_file_name != file_name) {
-			// file has changed - flush
+			// local_state points to new file, flush to global state
 			global_state.Flush(local_state);
 			local_state.current_file_name = file_name;
 		}
@@ -203,10 +201,6 @@ void IcebergDelete::WritePositionalDeleteFile(ClientContext &context, IcebergDel
 void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &context,
                                 IcebergDeleteGlobalState &global_state, const string &filename,
                                 vector<idx_t> &deleted_rows) const {
-
-	// find the matching data file for the deletion
-	auto data_file_info = delete_map->GetExtendedFileInfo(filename);
-
 	// sort and duplicate eliminate the deletes
 	set<idx_t> sorted_deletes;
 	for (auto &row_idx : deleted_rows) {
@@ -219,15 +213,11 @@ void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &cont
 
 	IcebergDeleteFileInfo delete_file;
 	delete_file.data_file_path = filename;
-	// check if the file already has deletes
-	auto existing_delete_data = delete_map->GetDeleteData(filename);
-	// FIXME: merge with existing delete data for the same data file for faster reads.
-	D_ASSERT(!existing_delete_data);
 
 	auto &fs = FileSystem::GetFileSystem(context);
-	string delete_file_uuid = UUID::ToString(UUID::GenerateRandomUUID()) + "-deletes.parquet";
+	string delete_filename = UUID::ToString(UUID::GenerateRandomUUID()) + "-deletes.parquet";
 	string delete_file_path =
-	    fs.JoinPath(table.table_info.table_metadata.location, fs.JoinPath("data", delete_file_uuid));
+	    fs.JoinPath(table.table_info.table_metadata.location, fs.JoinPath("data", delete_filename));
 
 	delete_file.file_name = delete_file_path;
 	WritePositionalDeleteFile(context, global_state, filename, delete_file, sorted_deletes);
@@ -350,6 +340,7 @@ PhysicalOperator &IRCatalog::PlanDelete(ClientContext &context, PhysicalPlanGene
 	}
 
 	vector<idx_t> row_id_indexes;
+	// we only push 2 columns for positional deletes
 	for (idx_t i = 0; i < 2; i++) {
 		auto &bound_ref = op.expressions[i]->Cast<BoundReferenceExpression>();
 		row_id_indexes.push_back(bound_ref.index);

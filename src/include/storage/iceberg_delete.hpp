@@ -33,21 +33,8 @@ struct IcebergDeleteMap {
 		return delete_entry->second;
 	}
 
-	optional_ptr<IcebergDeleteData> GetDeleteData(const string &filename) {
-		lock_guard<mutex> guard(lock);
-		auto entry = delete_data_map.find(filename);
-		if (entry == delete_data_map.end()) {
-			return nullptr;
-		}
-		return entry->second.get();
-	}
-
 private:
 	mutex lock;
-	// still need some way to know if we are deleting an extra row or not.
-	// ???
-	// stores information about positional deletes
-	unordered_map<string, shared_ptr<IcebergDeleteData>> delete_data_map;
 	// stores information about a data file
 	unordered_map<string, IcebergFileListExtendedEntry> file_map;
 };
@@ -78,6 +65,7 @@ public:
 	unordered_map<string, IcebergDeleteFileInfo> written_files;
 	unordered_map<string, WrittenColumnInfo> written_columns;
 	idx_t total_deleted_count = 0;
+	// data file name -> newly deleted rows.
 	unordered_map<string, vector<idx_t>> deleted_rows;
 	unordered_set<string> filenames;
 
@@ -89,15 +77,13 @@ public:
 		lock_guard<mutex> guard(lock);
 		auto &global_entry = deleted_rows[local_state.current_file_name];
 		global_entry.insert(global_entry.end(), local_entry.begin(), local_entry.end());
+		filenames.insert(local_state.current_file_name);
 		total_deleted_count += local_entry.size();
 		local_entry.clear();
 	}
 
 	void FinalFlush(IcebergDeleteLocalState &local_state) {
 		Flush(local_state);
-		// flush the file names to the global state
-		lock_guard<mutex> guard(lock);
-		filenames.emplace(local_state.current_file_name);
 	}
 };
 
