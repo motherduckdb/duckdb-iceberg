@@ -11,6 +11,7 @@
 #include "duckdb/planner/filter/expression_filter.hpp"
 
 #include "duckdb/planner/logical_operator_visitor.hpp"
+#include "duckdb/execution/expression_executor.hpp"
 
 namespace duckdb {
 
@@ -93,6 +94,37 @@ static bool MatchBoundsConjunctionAndFilter(ClientContext &context, const Conjun
 }
 
 template <class TRANSFORM>
+bool MatchTransformedBounds(ClientContext &context, ExpressionType comparison_type, const Expression &left,
+                            const Expression &right, const IcebergPredicateStats &stats,
+                            const IcebergTransform &transform) {
+	BoundExpressionReplacer lower_replacer(stats.lower_bound);
+	BoundExpressionReplacer upper_replacer(stats.upper_bound);
+	auto lower_copy = left.Copy();
+	auto upper_copy = left.Copy();
+	lower_replacer.VisitExpression(&lower_copy);
+	lower_replacer.VisitExpression(&upper_copy);
+
+	Value right_constant;
+	if (!ExpressionExecutor::TryEvaluateScalar(context, right, right_constant)) {
+		return true;
+	}
+
+	Value transformed_lower_bound;
+	Value transformed_upper_bound;
+	if (!ExpressionExecutor::TryEvaluateScalar(context, *lower_copy, transformed_lower_bound)) {
+		return true;
+	}
+	if (!ExpressionExecutor::TryEvaluateScalar(context, *upper_copy, transformed_upper_bound)) {
+		return true;
+	}
+	IcebergPredicateStats transformed_stats(stats);
+	transformed_stats.lower_bound = transformed_lower_bound;
+	transformed_stats.upper_bound = transformed_upper_bound;
+
+	return MatchBoundsConstant<TRANSFORM>(right_constant, comparison_type, transformed_stats, transform);
+}
+
+template <class TRANSFORM>
 bool MatchBoundsTemplated(ClientContext &context, const TableFilter &filter, const IcebergPredicateStats &stats,
                           const IcebergTransform &transform) {
 	//! TODO: support more filter types
@@ -159,6 +191,10 @@ bool MatchBoundsTemplated(ClientContext &context, const TableFilter &filter, con
 			D_ASSERT(expr.type == ExpressionType::OPERATOR_IS_NOT_NULL);
 			return MatchBoundsIsNotNullFilter<TRANSFORM>(stats, transform);
 		}
+		case ExpressionType::COMPARE_GREATERTHAN:
+		case ExpressionType::COMPARE_GREATERTHANOREQUALTO:
+		case ExpressionType::COMPARE_LESSTHAN:
+		case ExpressionType::COMPARE_LESSTHANOREQUALTO:
 		case ExpressionType::COMPARE_EQUAL: {
 			D_ASSERT(expr.GetExpressionClass() == ExpressionClass::BOUND_COMPARISON);
 			auto &compare_expr = expr.Cast<BoundComparisonExpression>();
@@ -175,17 +211,9 @@ bool MatchBoundsTemplated(ClientContext &context, const TableFilter &filter, con
 				}
 
 				if (left_foldable) {
-
+					return MatchTransformedBounds<TRANSFORM>(context, expr.type, right, left, stats, transform);
 				} else {
-					// D_ASSERT(right_foldable);
-					// BoundExpressionReplacer lower_replacer(stats.lower_bound);
-					// BoundExpressionReplacer upper_replacer(stats.upper_bound);
-					// auto lower_copy = left.Copy();
-					// auto upper_copy = left.Copy();
-					// lower_replacer.VisitExpression(&lower_copy);
-					// lower_replacer.VisitExpression(&upper_copy);
-
-					// ExpressionExecutor::EvaluateScalar();
+					return MatchTransformedBounds<TRANSFORM>(context, expr.type, left, right, stats, transform);
 				}
 				return true;
 			}
