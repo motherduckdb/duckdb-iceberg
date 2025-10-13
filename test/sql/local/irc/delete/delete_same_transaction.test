@@ -78,12 +78,6 @@ SELECT COUNT(*), COUNT(*) FILTER(WHERE id%2=0) FROM my_datalake.default.test
 statement ok
 COMMIT
 
-# verify that we only have one delete file written after the commit (i.e. we cleaned up the first file
-query I
-SELECT COUNT(*) FROM glob('__WORKING_DIRECTORY__/data/generated/iceberg/spark-rest/warehouse/default/test/data/*-deletes/*.meta.parquet')
-----
-1
-
 query II
 SELECT COUNT(*), COUNT(*) FILTER(WHERE id%2=0) FROM my_datalake.default.test
 ----

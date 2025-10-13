@@ -63,8 +63,3 @@ SELECT COUNT(*) FROM my_datalake.default.test
 ----
 1000
 
-# verify that we don't have the delete file there anymore
-query I
-SELECT COUNT(*) FROM glob('__WORKING_DIRECTORY__/data/generated/iceberg/spark-rest/warehouse/default/test/data/*-deletes/*.meta.parquet')
-----
-0

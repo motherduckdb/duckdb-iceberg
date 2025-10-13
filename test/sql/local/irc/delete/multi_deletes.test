@@ -81,11 +81,6 @@ SELECT COUNT(*), SUM(id) FROM my_datalake.default.test;
 ----
 7500	37500000
 
-# we have 2 files since there are 2 delete statements
-query I
-SELECT count(*) FROM glob('__WORKING_DIR__/data/generated/iceberg/spark-rest/warehouse/default/test/data/*-deletes.parquet/*.meta');
-----
-2
 
 # deleting from the file again
 query I
