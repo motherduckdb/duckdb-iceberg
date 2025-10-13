@@ -102,7 +102,7 @@ bool MatchTransformedBounds(ClientContext &context, ExpressionType comparison_ty
 	auto lower_copy = left.Copy();
 	auto upper_copy = left.Copy();
 	lower_replacer.VisitExpression(&lower_copy);
-	lower_replacer.VisitExpression(&upper_copy);
+	upper_replacer.VisitExpression(&upper_copy);
 
 	Value right_constant;
 	if (!ExpressionExecutor::TryEvaluateScalar(context, right, right_constant)) {
