@@ -65,6 +65,10 @@ jobs:
           fetch-depth: 0
           submodules: 'true'
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13' 
+
       - name: Install required python packages
         run: |
           python3 -m pip install -r scripts/requirements.txt 
