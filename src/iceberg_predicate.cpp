@@ -3,6 +3,8 @@
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/null_filter.hpp"
+#include "duckdb/planner/filter/in_filter.hpp"
+#include "duckdb/planner/filter/optional_filter.hpp"
 #include "duckdb/planner/filter/expression_filter.hpp"
 
 namespace duckdb {
@@ -12,16 +14,15 @@ bool MatchBoundsTemplated(const TableFilter &filter, const IcebergPredicateStats
                           const IcebergTransform &transform);
 
 template <class TRANSFORM>
-static bool MatchBoundsConstantFilter(const ConstantFilter &constant_filter, const IcebergPredicateStats &stats,
-                                      const IcebergTransform &transform) {
-	auto constant_value = TRANSFORM::ApplyTransform(constant_filter.constant, transform);
-
+static bool MatchBoundsConstant(const Value &constant, ExpressionType comparison_type,
+                                const IcebergPredicateStats &stats, const IcebergTransform &transform) {
+	auto constant_value = TRANSFORM::ApplyTransform(constant, transform);
 	if (constant_value.IsNull() || stats.lower_bound.IsNull() || stats.upper_bound.IsNull()) {
 		//! Can't compare when there are no bounds
 		return true;
 	}
 
-	switch (constant_filter.comparison_type) {
+	switch (comparison_type) {
 	case ExpressionType::COMPARE_EQUAL:
 		return TRANSFORM::CompareEqual(constant_value, stats);
 	case ExpressionType::COMPARE_GREATERTHAN:
@@ -36,6 +37,12 @@ static bool MatchBoundsConstantFilter(const ConstantFilter &constant_filter, con
 		//! Conservative approach: we don't know, so we just say it's not filtered out
 		return true;
 	}
+}
+
+template <class TRANSFORM>
+static bool MatchBoundsConstantFilter(const ConstantFilter &constant_filter, const IcebergPredicateStats &stats,
+                                      const IcebergTransform &transform) {
+	return MatchBoundsConstant<TRANSFORM>(constant_filter.constant, constant_filter.comparison_type, stats, transform);
 }
 
 template <class TRANSFORM>
@@ -79,6 +86,24 @@ bool MatchBoundsTemplated(const TableFilter &filter, const IcebergPredicateStats
 	case TableFilterType::IS_NOT_NULL: {
 		//! FIXME: these are never hit, because it goes through ExpressionFilter instead?
 		return MatchBoundsIsNotNullFilter<TRANSFORM>(stats, transform);
+	}
+	case TableFilterType::OPTIONAL_FILTER: {
+		auto &optional_filter = filter.Cast<OptionalFilter>();
+		if (optional_filter.child_filter) {
+			return MatchBoundsTemplated<TRANSFORM>(*optional_filter.child_filter, stats, transform);
+		}
+		//! child filter wasn't populated (yet?) for some reason, just be conservative
+		return true;
+	}
+	case TableFilterType::IN_FILTER: {
+		auto &in_filter = filter.Cast<InFilter>();
+		D_ASSERT(!in_filter.values.empty());
+		for (auto &value : in_filter.values) {
+			if (MatchBoundsConstant<TRANSFORM>(value, ExpressionType::COMPARE_EQUAL, stats, transform)) {
+				return true;
+			}
+		}
+		return false;
 	}
 	case TableFilterType::EXPRESSION_FILTER: {
 		//! Expressions can be arbitrarily complex, and we currently only support IS NULL/IS NOT NULL checks against the
