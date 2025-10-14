@@ -233,12 +233,10 @@ SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, Clien
 	auto &irc_transaction = IRCTransaction::Get(context, table.catalog);
 	// write out the delete rows
 	for (auto &entry : global_state.deleted_rows) {
-		auto filename_entry = global_state.filenames.find(entry.first);
-		if (filename_entry == global_state.filenames.end()) {
-			throw InternalException("Filename not found for file index");
-		}
 		FlushDelete(irc_transaction, context, global_state, entry.first, entry.second);
 	}
+
+	// write out the new manifest file
 	auto &irc_table = table.Cast<ICTableEntry>();
 	auto &table_info = irc_table.table_info;
 	auto &transaction = IRCTransaction::Get(context, table.catalog);

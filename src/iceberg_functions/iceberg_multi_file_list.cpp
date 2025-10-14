@@ -667,23 +667,6 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 	D_ASSERT(current_delete_manifest == delete_manifests.end());
 }
 
-vector<IcebergFileListExtendedEntry> IcebergMultiFileList::GetFilesExtended(ClientContext &context,
-                                                                            ICTableEntry &table) {
-	lock_guard<mutex> l(lock);
-	vector<IcebergFileListExtendedEntry> result;
-	auto &catalog = table.catalog;
-	// do I want all the manifest information for the data files?
-	for (auto &file : data_files) {
-		auto extended_entry = IcebergFileListExtendedEntry();
-		extended_entry.file.path = file.file_path;
-		extended_entry.file.file_size_in_bytes = file.file_size_in_bytes;
-		extended_entry.row_count = file.record_count;
-		extended_entry.delete_file.data_file_path = file.file_path;
-		result.emplace_back(std::move(extended_entry));
-	}
-	return result;
-}
-
 void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &entry,
                                           const vector<MultiFileColumnDefinition> &global_columns,
                                           const vector<ColumnIndex> &column_indexes) const {

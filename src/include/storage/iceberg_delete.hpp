@@ -46,7 +46,6 @@ public:
 	idx_t total_deleted_count = 0;
 	// data file name -> newly deleted rows.
 	unordered_map<string, vector<idx_t>> deleted_rows;
-	unordered_set<string> filenames;
 
 	void Flush(IcebergDeleteLocalState &local_state) {
 		auto &local_entry = local_state.file_row_numbers;
@@ -56,7 +55,6 @@ public:
 		lock_guard<mutex> guard(lock);
 		auto &global_entry = deleted_rows[local_state.current_file_name];
 		global_entry.insert(global_entry.end(), local_entry.begin(), local_entry.end());
-		filenames.insert(local_state.current_file_name);
 		total_deleted_count += local_entry.size();
 		local_entry.clear();
 	}

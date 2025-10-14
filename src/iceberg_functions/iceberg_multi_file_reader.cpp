@@ -467,12 +467,4 @@ unique_ptr<Expression> IcebergMultiFileReader::GetVirtualColumnExpression(
 	                                                   global_column_reference);
 }
 
-ReaderInitializeType IcebergMultiFileReader::CreateMapping(
-    ClientContext &context, MultiFileReaderData &reader_data, const vector<MultiFileColumnDefinition> &global_columns,
-    const vector<ColumnIndex> &global_column_ids, optional_ptr<TableFilterSet> filters, MultiFileList &multi_file_list,
-    const MultiFileReaderBindData &bind_data, const virtual_column_map_t &virtual_columns) {
-	return MultiFileReader::CreateMapping(context, reader_data, global_columns, global_column_ids, filters,
-	                                      multi_file_list, bind_data, virtual_columns);
-}
-
 } // namespace duckdb
