@@ -46,11 +46,11 @@ create schema if not exists my_datalake.new_schema_1;
 statement ok
 drop table if exists my_datalake.new_schema_1.tinyint_table;
 
+statement ok
+create table my_datalake.new_schema_1.tinyint_table  as select range::TINYINT from range(10);
+
 # statement ok
-# create table my_datalake.new_schema_1.tinyint_table  as select range::TINYINT from range(10);
-
-statement ok
-create table my_datalake.new_schema_1.tinyint_table (a TINYINT);
-
-statement ok
-insert into my_datalake.new_schema_1.tinyint_table select range::TINYINT a from range(10);
+# create table my_datalake.new_schema_1.tinyint_table (a TINYINT);
+#
+# statement ok
+# insert into my_datalake.new_schema_1.tinyint_table select range::TINYINT a from range(10);
