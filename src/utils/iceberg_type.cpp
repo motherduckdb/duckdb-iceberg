@@ -1,6 +1,7 @@
 #include "duckdb/common/string_util.hpp"
 #include "utils/iceberg_type.hpp"
 #include "duckdb/common/extra_type_info.hpp"
+#include "duckdb/parser/column_definition.hpp"
 #include "rest_catalog/objects/list_type.hpp"
 #include "rest_catalog/objects/map_type.hpp"
 #include "rest_catalog/objects/struct_type.hpp"
@@ -9,12 +10,28 @@
 
 namespace duckdb {
 
-string IcebergTypeHelper::LogicalTypeToIcebergType(const LogicalType &type) {
-	switch (type.id()) {
-	case LogicalTypeId::TINYINT:
+
+void IcebergTypeHelper::PromoteDuckDBTypeToValidIcebergTpe(ColumnDefinition &column) {
+	switch (column.Type().id()) {
+	case LogicalTypeId::USMALLINT:
 	case LogicalTypeId::UTINYINT:
 	case LogicalTypeId::SMALLINT:
+	case LogicalTypeId::TINYINT:
+	case LogicalTypeId::INTEGER:
+		column.SetType(LogicalTypeId::INTEGER);
+		return;
+	default:
+		return;
+	}
+}
+
+
+string IcebergTypeHelper::LogicalTypeToIcebergType(const LogicalType &type) {
+	switch (type.id()) {
 	case LogicalTypeId::USMALLINT:
+	case LogicalTypeId::UTINYINT:
+	case LogicalTypeId::SMALLINT:
+	case LogicalTypeId::TINYINT:
 	case LogicalTypeId::INTEGER:
 		return "int";
 	case LogicalTypeId::BOOLEAN:

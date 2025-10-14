@@ -1,0 +1,108 @@
+# name: test/sql/local/irc/create/test_create_table_invalid_types.test
+# description: test integration with iceberg catalog read
+# group: [create]
+
+require-env ICEBERG_SERVER_AVAILABLE
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+CALL enable_logging('HTTP');
+
+statement ok
+set logging_level='debug'
+
+statement ok
+CREATE SECRET (
+    TYPE S3,
+    KEY_ID 'admin',
+    SECRET 'password',
+    ENDPOINT '127.0.0.1:9000',
+    URL_STYLE 'path',
+    USE_SSL 0
+);
+
+
+statement ok
+ATTACH '' AS my_datalake (
+    TYPE ICEBERG,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    ENDPOINT 'http://127.0.0.1:8181'
+);
+
+
+statement ok
+create schema if not exists my_datalake.new_schema_1;
+
+statement ok
+drop table if exists my_datalake.new_schema_1.my_table;
+
+statement error
+create table my_datalake.new_schema_1.my_table as select range::UINTEGER a from range(10);
+----
+<REGEX>:.*not supported in Iceberg.*
+
+statement error
+create table my_datalake.new_schema_1.my_table as select range::UTINYINT a from range(10);
+----
+<REGEX>:.*not supported in Iceberg.*
+
+statement error
+create table my_datalake.new_schema_1.my_table as select range::USMALLINT a from range(10);
+----
+<REGEX>:.*not supported in Iceberg.*
+
+statement error
+create table my_datalake.new_schema_1.unsupported_types as select uint from test_all_types();
+----
+<REGEX>:.*not supported in Iceberg.*
+
+statement error
+create table my_datalake.new_schema_1.unsupported_types as select ubigint from test_all_types();
+----
+<REGEX>:.*not supported in Iceberg.*
+
+statement error
+create table my_datalake.new_schema_1.unsupported_types as select bignum from test_all_types();
+----
+<REGEX>:.*not supported in Iceberg.*
+
+statement error
+create table my_datalake.new_schema_1.unsupported_types as select bignum from test_all_types();
+----
+<REGEX>:.*not supported in Iceberg.*
+
+statement error
+create table my_datalake.new_schema_1.unsupported_types as select timestamp_s from test_all_types();
+----
+<REGEX>:.*not supported in Iceberg.*
+
+statement error
+create table my_datalake.new_schema_1.unsupported_types as select timestamp_ms from test_all_types();
+----
+<REGEX>:.*not supported in Iceberg.*
+
+statement error
+create table my_datalake.new_schema_1.unsupported_types as select interval from test_all_types();
+----
+<REGEX>:.*not supported in Iceberg.*
+
+statement error
+create table my_datalake.new_schema_1.unsupported_types as select bit from test_all_types();
+----
+<REGEX>:.*not supported in Iceberg.*
+
+statement error
+create table my_datalake.new_schema_1.unsupported_types as select small_enum, medium_enum, large_enum from test_all_types();
+----
+<REGEX>:.*not supported in Iceberg.*

@@ -4,6 +4,8 @@
 
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_table_set.hpp"
+
+#include "../include/utils/iceberg_type.hpp"
 #include "storage/irc_transaction.hpp"
 #include "metadata/iceberg_partition_spec.hpp"
 #include "duckdb/parser/constraints/not_null_constraint.hpp"
@@ -120,6 +122,11 @@ bool ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 	if (info.on_conflict == OnCreateConflict::REPLACE_ON_CONFLICT) {
 		throw InvalidInputException("CREATE OR REPLACE not supported in DuckDB-Iceberg");
 	}
+	for (idx_t i = 0; i < info.columns.LogicalColumnCount(); i++) {
+		auto &column = info.columns.GetColumnMutable(LogicalIndex(i));
+		IcebergTypeHelper::PromoteDuckDBTypeToValidIcebergTpe(column);
+	}
+
 	auto &irc_transaction = IRCTransaction::Get(context, catalog);
 	bool table_deleted_in_transaction = false;
 	for (auto &deleted_entry : irc_transaction.deleted_tables) {
