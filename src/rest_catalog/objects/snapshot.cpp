@@ -30,7 +30,7 @@ string Snapshot::Object2::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto operation_val = yyjson_obj_get(obj, "operation");
 	if (!operation_val) {
-		operation = "overwrite"; // assume overwrite as default value
+		operation = "overwrite";
 	} else {
 		if (yyjson_is_str(operation_val)) {
 			operation = yyjson_get_str(operation_val);
