@@ -1,5 +1,6 @@
-# name: test/sql/local/irc/insert/iceberg_to_ducklake.test
-# group: [insert]
+# name: test/sql/local/irc/delete/delete_rollback_cleanup.test
+# description: Test ducklake cleaning up files after rollback of delete
+# group: [delete]
 
 require-env ICEBERG_SERVER_AVAILABLE
 
@@ -11,15 +12,11 @@ require iceberg
 
 require httpfs
 
-require ducklake
-
 # Do not ignore 'HTTP' error messages!
 set ignore_error_messages
 
-mode skip
-
 statement ok
-set enable_logging=true
+CALL enable_logging('HTTP');
 
 statement ok
 set logging_level='debug'
@@ -43,15 +40,26 @@ ATTACH '' AS my_datalake (
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
-statement ok
-ATTACH 'ducklake:duckdb:__TEST_DIR__/ducklake.duckdb' as my_ducklake (DATA_PATH '__TEST_DIR__/data_path');
 
 statement ok
-call iceberg_to_ducklake(
-    'my_datalake',
-    'my_ducklake',
-    skip_tables := [
-        'pyspark_iceberg_table_v2',
-        'deletion_vectors'
-    ]
-)
+DROP TABLE IF EXISTS my_datalake.default.test;
+
+statement ok
+CREATE TABLE my_datalake.default.test AS SELECT i id FROM range(1000) t(i);
+
+statement ok
+BEGIN
+
+query I
+DELETE FROM my_datalake.default.test WHERE id%2=0
+----
+500
+
+statement ok
+ROLLBACK
+
+query I
+SELECT COUNT(*) FROM my_datalake.default.test
+----
+1000
+

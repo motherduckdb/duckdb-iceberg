@@ -3,9 +3,11 @@
 #include "iceberg_logging.hpp"
 #include "iceberg_predicate.hpp"
 #include "iceberg_value.hpp"
+#include "storage/irc_transaction.hpp"
 
 #include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/file_system.hpp"
 #include "duckdb/execution/execution_context.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/parser/tableref/table_function_ref.hpp"
@@ -372,7 +374,6 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 		while (data_file_idx < current_data_files.size()) {
 			auto &data_file = current_data_files[data_file_idx];
 			data_file_idx++;
-
 			// Check whether current data file is filtered out.
 			if (!table_filters.filters.empty() && !FileMatchesFilter(data_file)) {
 				DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'data_file': '%s'",
@@ -590,6 +591,8 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) {
 
 			if (alter.snapshot.operation == IcebergSnapshotOperationType::APPEND) {
 				transaction_data_manifests.push_back(alter.manifest_file);
+			} else if (alter.snapshot.operation == IcebergSnapshotOperationType::DELETE) {
+				transaction_delete_manifests.push_back(alter.manifest_file);
 			} else {
 				throw NotImplementedException("IcebergSnapshotOperationType: %d",
 				                              static_cast<uint8_t>(alter.snapshot.operation));
@@ -599,6 +602,7 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) {
 
 	current_data_manifest = data_manifests.begin();
 	current_delete_manifest = delete_manifests.begin();
+	current_transaction_delete_manifest = transaction_delete_manifests.begin();
 }
 
 void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition> &global_columns,
@@ -643,6 +647,21 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 				    entry.file_format);
 			}
 		}
+	}
+
+	while (current_transaction_delete_manifest != transaction_delete_manifests.end()) {
+		for (auto &entry : current_transaction_delete_manifest->get().data_files) {
+			if (StringUtil::CIEquals(entry.file_format, "parquet")) {
+				ScanDeleteFile(entry, global_columns, column_indexes);
+			} else if (StringUtil::CIEquals(entry.file_format, "puffin")) {
+				ScanPuffinFile(entry);
+			} else {
+				throw NotImplementedException(
+				    "File format '%s' not supported for deletes, only supports 'parquet' and 'puffin' currently",
+				    entry.file_format);
+			}
+		}
+		++current_transaction_delete_manifest;
 	}
 
 	D_ASSERT(current_delete_manifest == delete_manifests.end());
