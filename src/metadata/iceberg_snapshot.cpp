@@ -34,8 +34,9 @@ static string MetricsTypeToString(SnapshotMetricType type) {
 	return entry->second;
 }
 
-static IcebergSnapshot::metrics_map_t MetricsFromSummary(const case_insensitive_map_t<string> &snapshot_summary) {
-	IcebergSnapshot::metrics_map_t metrics;
+static std::map<SnapshotMetricType, int64_t>
+MetricsFromSummary(const case_insensitive_map_t<string> &snapshot_summary) {
+	std::map<SnapshotMetricType, int64_t> metrics;
 	for (auto &entry : kSnapshotMetricKeys) {
 		auto it = snapshot_summary.find(entry.second);
 		if (it != snapshot_summary.end()) {

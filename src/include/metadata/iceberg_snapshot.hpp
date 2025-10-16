@@ -37,7 +37,7 @@ public:
 	IcebergSnapshotOperationType operation = IcebergSnapshotOperationType::APPEND;
 	timestamp_t timestamp_ms;
 	string manifest_list;
-	metrics_map_t metrics;
+	std::map<SnapshotMetricType, int64_t> metrics;
 };
 
 } // namespace duckdb
