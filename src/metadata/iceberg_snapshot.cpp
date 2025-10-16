@@ -18,7 +18,7 @@ static string OperationTypeToString(IcebergSnapshotOperationType type) {
 	}
 }
 
-static const std::unordered_map<SnapshotMetricType, string> kSnapshotMetricKeys = {
+static const std::map<SnapshotMetricType, string> kSnapshotMetricKeys = {
     {SnapshotMetricType::ADDED_DATA_FILES, "added-data-files"},
     {SnapshotMetricType::ADDED_RECORDS, "added-records"},
     {SnapshotMetricType::DELETED_DATA_FILES, "deleted-data-files"},
@@ -34,8 +34,9 @@ static string MetricsTypeToString(SnapshotMetricType type) {
 	return entry->second;
 }
 
-static IcebergSnapshot::metrics_map_t MetricsFromSummary(const case_insensitive_map_t<string> &snapshot_summary) {
-	IcebergSnapshot::metrics_map_t metrics;
+static std::map<SnapshotMetricType, int64_t>
+MetricsFromSummary(const case_insensitive_map_t<string> &snapshot_summary) {
+	std::map<SnapshotMetricType, int64_t> metrics;
 	for (auto &entry : kSnapshotMetricKeys) {
 		auto it = snapshot_summary.find(entry.second);
 		if (it != snapshot_summary.end()) {

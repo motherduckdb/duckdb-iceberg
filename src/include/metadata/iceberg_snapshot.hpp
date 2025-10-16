@@ -25,7 +25,6 @@ public:
 	}
 	static IcebergSnapshot ParseSnapshot(rest_api_objects::Snapshot &snapshot, IcebergTableMetadata &metadata);
 	rest_api_objects::Snapshot ToRESTObject() const;
-	using metrics_map_t = std::unordered_map<SnapshotMetricType, int64_t>;
 
 public:
 	//! Snapshot metadata
@@ -37,7 +36,7 @@ public:
 	IcebergSnapshotOperationType operation = IcebergSnapshotOperationType::APPEND;
 	timestamp_t timestamp_ms;
 	string manifest_list;
-	metrics_map_t metrics;
+	std::map<SnapshotMetricType, int64_t> metrics;
 };
 
 } // namespace duckdb
