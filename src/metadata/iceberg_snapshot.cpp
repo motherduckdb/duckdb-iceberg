@@ -18,7 +18,7 @@ static string OperationTypeToString(IcebergSnapshotOperationType type) {
 	}
 }
 
-static const std::unordered_map<SnapshotMetricType, string> kSnapshotMetricKeys = {
+static const std::map<SnapshotMetricType, string> kSnapshotMetricKeys = {
     {SnapshotMetricType::ADDED_DATA_FILES, "added-data-files"},
     {SnapshotMetricType::ADDED_RECORDS, "added-records"},
     {SnapshotMetricType::DELETED_DATA_FILES, "deleted-data-files"},
