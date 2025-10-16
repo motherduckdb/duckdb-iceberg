@@ -1,9 +1,9 @@
 {
   "format-version" : 2,
-  "table-uuid" : "1ae326c0-3903-43b4-a8a4-c02987f34076",
+  "table-uuid" : "31ad6764-1255-4aa3-bff4-9a27a25d69a7",
   "location" : "data/persistent/equality_deletes/warehouse/mydb/mytable_partitioned",
   "last-sequence-number" : 0,
-  "last-updated-ms" : 1759132810451,
+  "last-updated-ms" : 1760585152178,
   "last-column-id" : 3,
   "current-schema-id" : 0,
   "schemas" : [ {
@@ -12,7 +12,7 @@
     "fields" : [ {
       "id" : 1,
       "name" : "id",
-      "required" : false,
+      "required" : true,
       "type" : "int"
     }, {
       "id" : 2,
@@ -43,7 +43,6 @@
     "fields" : [ ]
   } ],
   "properties" : {
-    "owner" : "zhangjun",
     "write.parquet.compression-codec" : "zstd"
   },
   "current-snapshot-id" : -1,

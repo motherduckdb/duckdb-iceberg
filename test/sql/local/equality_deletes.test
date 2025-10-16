@@ -89,10 +89,10 @@ SELECT count(*) FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equalit
 
 
 # for partitioned table:
-# create table by spark sql: create table mytable_partitioned(id int,name string,bir date ) partitioned by (name);
+# create table  :  mytable_partitioned(id int,name string,bir date ) partitioned by (name);
 
 # First snapshot:
-# insert into mytable values(1,'a',date '2025-01-01'),(2,'b',date '2025-01-02'),(3,'c',date '2025-01-03'),(4,'d',date '2025-01-04');
+# insert into mytable_partitioned values(1,'a',date '2025-01-01'),(2,'b',date '2025-01-02'),(3,'c',date '2025-01-03'),(4,'d',date '2025-01-04');
 # Result: [(id=1, name=a, bir=2025-01-01), (id=2, name=b, bir=2025-01-02), (id=3, name=c, bir=2025-01-03), (id=4, name=d, bir=2025-01-04)]
 
 # Second snapshot:
@@ -104,20 +104,12 @@ SELECT count(*) FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equalit
 # Result: [(id=1, name=a, bir=2025-01-01), (id=4, name=d, bir=2025-01-04)]
 
 # Fourth snapshot:
-#  insert into mytable values(5,'e',date '2025-01-05'),(6,'f',date '2025-01-06');
+#  insert into mytable_partitioned values(5,'e',date '2025-01-05'),(6,'f',date '2025-01-06');
 # Result:[(id=1, name=a, bir=2025-01-01), (id=4, name=d, bir=2025-01-04), (5,'e',date '2025-01-05'),(6,'f',date '2025-01-06')]
 
 # Fifth snapshot:
 # delete where  name = f
 # Result:[(id=1, name=a, bir=2025-01-01), (id=4, name=d, bir=2025-01-04), (5,'e',date '2025-01-05')]
-
-# all
-query III
-SELECT * FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable_partitioned');
-----
-5	e	2025-01-05
-1	a	2025-01-01
-4	d	2025-01-04
 
 # only equality delete fields
 query I
@@ -156,3 +148,11 @@ query I
 SELECT count(*) FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable_partitioned');
 ----
 3
+
+# all
+query III
+SELECT * FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable_partitioned');
+----
+5	e	2025-01-05
+1	a	2025-01-01
+4	d	2025-01-04
