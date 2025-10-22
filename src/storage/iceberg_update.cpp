@@ -239,9 +239,6 @@ PhysicalOperator &IRCatalog::PlanUpdate(ClientContext &context, PhysicalPlanGene
 	}
 
 	auto &table = op.table.Cast<ICTableEntry>();
-	// FIXME: we should take the inlining limit into account here and write new updates to the inline data tables if
-	// possible updates are executed as a delete + insert - generate the two nodes (delete and insert) plan the copy for
-	// the insert
 	auto &table_schema = table.table_info.table_metadata.GetLatestSchema();
 	IcebergCopyInput copy_input(context, table);
 	vector<Value> field_input;

@@ -412,7 +412,7 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 
 void VerifyDirectInsertionOrder(LogicalInsert &op) {
 	idx_t column_index = 0;
-	for (auto &mapping : op.column_index_map) {
+	for (auto &mapping: op.column_index_map) {
 		if (mapping == DConstants::INVALID_INDEX || mapping != column_index) {
 			//! See issue#444
 			throw NotImplementedException("Iceberg inserts don't support targeted inserts yet (i.e tbl(col1,col2))");
