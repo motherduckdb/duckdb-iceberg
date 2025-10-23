@@ -257,7 +257,7 @@ void IcebergTableInformation::AddDeleteSnapshot(IRCTransaction &transaction,
 }
 
 void IcebergTableInformation::AddUpdateSnapshot(IRCTransaction &transaction,
-                                                unordered_map<string, IcebergDeleteFileInfo> &&delete_files,
+                                                vector<IcebergManifestEntry> &&delete_files,
                                                 vector<IcebergManifestEntry> &&data_files) {
 	InitTransactionData(transaction);
 

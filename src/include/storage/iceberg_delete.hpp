@@ -94,6 +94,8 @@ public:
 	                          OperatorSinkFinalizeInput &input) const override;
 	unique_ptr<GlobalSinkState> GetGlobalSinkState(ClientContext &context) const override;
 	unique_ptr<LocalSinkState> GetLocalSinkState(ExecutionContext &context) const override;
+	static vector<IcebergManifestEntry>
+	GenerateDeleteManifestEntries(unordered_map<string, IcebergDeleteFileInfo> &delete_files);
 
 	bool IsSink() const override {
 		return true;

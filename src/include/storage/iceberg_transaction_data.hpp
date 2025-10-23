@@ -26,8 +26,7 @@ public:
 
 public:
 	void AddSnapshot(IcebergSnapshotOperationType operation, vector<IcebergManifestEntry> &&data_files);
-	void AddUpdateSnapshot(unordered_map<string, IcebergDeleteFileInfo> &&delete_files,
-	                       vector<IcebergManifestEntry> &&data_files);
+	void AddUpdateSnapshot(vector<IcebergManifestEntry> &&delete_files, vector<IcebergManifestEntry> &&data_files);
 	// add a schema update for a table
 	void TableAddSchema();
 	void TableAddAssertCreate();

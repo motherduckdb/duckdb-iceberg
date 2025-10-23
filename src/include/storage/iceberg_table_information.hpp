@@ -31,7 +31,7 @@ public:
 	void InitTransactionData(IRCTransaction &transaction);
 	void AddSnapshot(IRCTransaction &transaction, vector<IcebergManifestEntry> &&data_files);
 	void AddDeleteSnapshot(IRCTransaction &transaction, vector<IcebergManifestEntry> &&data_files);
-	void AddUpdateSnapshot(IRCTransaction &transaction, unordered_map<string, IcebergDeleteFileInfo> &&delete_files,
+	void AddUpdateSnapshot(IRCTransaction &transaction, vector<IcebergManifestEntry> &&delete_files,
 	                       vector<IcebergManifestEntry> &&data_files);
 	void AddOverwriteSnapshot(IRCTransaction &transaction, vector<IcebergManifestEntry> &&data_files);
 	void AddSchema(IRCTransaction &transaction);

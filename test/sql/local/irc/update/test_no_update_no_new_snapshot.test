@@ -1,0 +1,9 @@
+# name: test/sql/local/irc/update/test_no_update_no_new_snapshot.test
+# group: [update]
+
+# make sure with no updated rows, there is no new snapshot
+
+query I
+select 1;
+----
+0
