@@ -252,11 +252,11 @@ PhysicalOperator &IRCatalog::PlanUpdate(ClientContext &context, PhysicalPlanGene
 		row_id_indexes.push_back(i);
 	}
 	auto &delete_op = IcebergDelete::PlanDelete(context, planner, table, child_plan, std::move(row_id_indexes));
+	auto &iceberg_delete = delete_op.Cast<IcebergDelete>();
+	iceberg_delete.is_delete_and_insert = true;
 	// plan the actual insert
 	auto &insert_op = IcebergInsert::PlanInsert(context, planner, table);
 
-	// IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op, TableCatalogEntry &table,
-	// 		  physical_index_vector_t<idx_t> column_index_map);
 	return planner.Make<IcebergUpdate>(table, op.columns, child_plan, copy_op, delete_op, insert_op);
 }
 

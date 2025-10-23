@@ -46,7 +46,7 @@ public:
 	idx_t total_deleted_count = 0;
 	// data file name -> newly deleted rows.
 	unordered_map<string, vector<idx_t>> deleted_rows;
-
+	
 	void Flush(IcebergDeleteLocalState &local_state) {
 		auto &local_entry = local_state.file_row_numbers;
 		if (local_entry.empty()) {
@@ -73,6 +73,7 @@ public:
 	ICTableEntry &table;
 	//! The column indexes for the relevant row-id columns
 	vector<idx_t> row_id_indexes;
+	bool is_delete_and_insert = false;
 
 public:
 	// // Source interface
