@@ -29,6 +29,14 @@ struct IcebergCopyInput {
 	case_insensitive_map_t<vector<Value>> options;
 };
 
+class IcebergInsertGlobalState : public GlobalSinkState {
+public:
+	explicit IcebergInsertGlobalState() = default;
+	vector<IcebergManifestEntry> written_files;
+
+	idx_t insert_count;
+};
+
 class IcebergInsert : public PhysicalOperator {
 public:
 	//! INSERT INTO
@@ -52,6 +60,7 @@ public:
 	physical_index_vector_t<idx_t> column_index_map;
 	//! The physical copy used internally by this insert
 	unique_ptr<PhysicalOperator> physical_copy_to_file;
+	bool is_delete_and_insert = false;
 
 public:
 	// // Source interface

@@ -46,7 +46,7 @@ public:
 	idx_t total_deleted_count = 0;
 	// data file name -> newly deleted rows.
 	unordered_map<string, vector<idx_t>> deleted_rows;
-	
+
 	void Flush(IcebergDeleteLocalState &local_state) {
 		auto &local_entry = local_state.file_row_numbers;
 		if (local_entry.empty()) {
@@ -105,13 +105,13 @@ public:
 
 	string GetName() const override;
 	InsertionOrderPreservingMap<string> ParamsToString() const override;
+	void FlushDelete(IRCTransaction &transaction, ClientContext &context, IcebergDeleteGlobalState &global_state,
+	                 const string &filename, vector<idx_t> &deleted_rows) const;
 
 private:
 	void WritePositionalDeleteFile(ClientContext &context, IcebergDeleteGlobalState &global_state,
 	                               const string &filename, IcebergDeleteFileInfo delete_file,
 	                               set<idx_t> sorted_deletes) const;
-	void FlushDelete(IRCTransaction &transaction, ClientContext &context, IcebergDeleteGlobalState &global_state,
-	                 const string &filename, vector<idx_t> &deleted_rows) const;
 };
 
 } // namespace duckdb

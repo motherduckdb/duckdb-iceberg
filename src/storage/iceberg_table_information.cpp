@@ -256,6 +256,14 @@ void IcebergTableInformation::AddDeleteSnapshot(IRCTransaction &transaction,
 	transaction_data->AddSnapshot(IcebergSnapshotOperationType::DELETE, std::move(data_files));
 }
 
+void IcebergTableInformation::AddUpdateSnapshot(IRCTransaction &transaction,
+                                                unordered_map<string, IcebergDeleteFileInfo> &&delete_files,
+                                                vector<IcebergManifestEntry> &&data_files) {
+	InitTransactionData(transaction);
+
+	transaction_data->AddUpdateSnapshot(std::move(delete_files), std::move(data_files));
+}
+
 void IcebergTableInformation::AddOverwriteSnapshot(IRCTransaction &transaction,
                                                    vector<IcebergManifestEntry> &&data_files) {
 	InitTransactionData(transaction);

@@ -31,10 +31,10 @@ unique_ptr<IcebergTable> IcebergTable::Load(const string &iceberg_path, const Ic
 	auto scan = make_uniq<AvroScan>("IcebergManifestList", context, manifest_list_full_path);
 	manifest_list_reader->Initialize(std::move(scan));
 	while (!manifest_list_reader->Finished()) {
-		manifest_list_reader->Read(STANDARD_VECTOR_SIZE, manifest_list.manifests);
+		manifest_list_reader->Read(STANDARD_VECTOR_SIZE, manifest_list.manifest_entries);
 	}
 
-	for (auto &manifest : manifest_list.manifests) {
+	for (auto &manifest : manifest_list.manifest_entries) {
 		auto full_path = options.allow_moved_paths ? IcebergUtils::GetFullPath(iceberg_path, manifest.manifest_path, fs)
 		                                           : manifest.manifest_path;
 		auto scan = make_uniq<AvroScan>("IcebergManifest", context, full_path);

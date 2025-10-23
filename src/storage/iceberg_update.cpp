@@ -1,5 +1,7 @@
 #include "storage/iceberg_update.hpp"
 #include "storage/iceberg_delete.hpp"
+#include "storage/iceberg_insert.hpp"
+#include "storage/irc_transaction.hpp"
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_table_entry.hpp"
 #include "duckdb/planner/operator/logical_update.hpp"
@@ -53,6 +55,7 @@ unique_ptr<LocalSinkState> IcebergUpdate::GetLocalSinkState(ExecutionContext &co
 	vector<LogicalType> delete_types;
 	// TODO: Verify these deletes tupes
 	delete_types.emplace_back(LogicalType::VARCHAR);
+	delete_types.emplace_back(LogicalType::BIGINT);
 	delete_types.emplace_back(LogicalType::BIGINT);
 
 	// updates also write the row id to the file
@@ -131,10 +134,18 @@ SinkFinalizeType IcebergUpdate::Finalize(Pipeline &pipeline, Event &event, Clien
 	if (result != SinkFinalizeType::READY) {
 		throw InternalException("IcebergUpdate::Finalize does not support async child operators");
 	}
-	OperatorSinkFinalizeInput del_finalize_input {*delete_op.sink_state, input.interrupt_state};
-	result = delete_op.Finalize(pipeline, event, context, del_finalize_input);
-	if (result != SinkFinalizeType::READY) {
-		throw InternalException("IcebergUpdate::Finalize does not support async child operators");
+	// OperatorSinkFinalizeInput del_finalize_input {*delete_op.sink_state, input.interrupt_state};
+	// result = delete_op.Finalize(pipeline, event, context, del_finalize_input);
+
+	// Finalize the Delete.
+	auto &iceberg_delete = delete_op.Cast<IcebergDelete>();
+	auto &delete_global_state = delete_op.sink_state->Cast<IcebergDeleteGlobalState>();
+	auto &irc_transaction = IRCTransaction::Get(context, table.catalog);
+	if (!delete_global_state.deleted_rows.empty()) {
+		// write out the delete rows
+		for (auto &entry : delete_global_state.deleted_rows) {
+			iceberg_delete.FlushDelete(irc_transaction, context, delete_global_state, entry.first, entry.second);
+		}
 	}
 
 	// scan the copy operator and sink into the insert operator
@@ -170,10 +181,19 @@ SinkFinalizeType IcebergUpdate::Finalize(Pipeline &pipeline, Event &event, Clien
 	}
 
 	OperatorSinkFinalizeInput insert_finalize_input {*global_sink, input.interrupt_state};
-	result = insert_op.Finalize(pipeline, event, context, insert_finalize_input);
-	if (result != SinkFinalizeType::READY) {
-		throw InternalException("IcebergUpdate::Finalize does not support async child operators");
+	auto &insert_global_state = global_sink->Cast<IcebergInsertGlobalState>();
+	auto &irc_table = table.Cast<ICTableEntry>();
+	auto &table_info = irc_table.table_info;
+	if (!insert_global_state.written_files.empty()) {
+		table_info.AddUpdateSnapshot(irc_transaction, std::move(delete_global_state.written_files),
+		                             std::move(insert_global_state.written_files));
+		irc_transaction.MarkTableAsDirty(irc_table);
 	}
+	// iceberg_insert.is_delete_and_insert = true;
+	// result = insert_op.Finalize(pipeline, event, context, insert_finalize_input);
+	// if (result != SinkFinalizeType::READY) {
+	// 	throw InternalException("IcebergUpdate::Finalize does not support async child operators");
+	// }
 	return SinkFinalizeType::READY;
 }
 

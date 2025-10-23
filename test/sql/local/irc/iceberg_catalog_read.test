@@ -105,5 +105,3 @@ statement error
 Alter table my_datalake.default.table_more_deletes add column new_column INTEGER default 10;
 ----
 <REGEX>:.*Not implemented Error.*
-
-

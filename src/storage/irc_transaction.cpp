@@ -383,10 +383,11 @@ void IRCTransaction::CleanupFiles() {
 				continue;
 			}
 			auto &add_snapshot = update->Cast<IcebergAddSnapshot>();
-			auto &data_files = add_snapshot.manifest_file.data_files;
-			for (auto &data_file : data_files) {
-				fs.TryRemoveFile(data_file.file_path);
-			}
+			// FIXME: add this back in
+			// auto &data_files = add_snapshot.manifest_file.data_files;
+			// for (auto &data_file : data_files) {
+			// 	fs.TryRemoveFile(data_file.file_path);
+			// }
 		}
 	}
 }

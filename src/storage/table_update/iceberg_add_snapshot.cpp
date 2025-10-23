@@ -1,4 +1,6 @@
 #include "storage/table_update/iceberg_add_snapshot.hpp"
+
+#include "../../include/metadata/iceberg_manifest_list.hpp"
 #include "storage/irc_table_set.hpp"
 
 #include "duckdb/common/enums/catalog_type.hpp"
@@ -13,10 +15,10 @@
 
 namespace duckdb {
 
-IcebergAddSnapshot::IcebergAddSnapshot(IcebergTableInformation &table_info, IcebergManifestFile &&manifest_file,
-                                       const string &manifest_list_path, IcebergSnapshot &&snapshot)
-    : IcebergTableUpdate(IcebergTableUpdateType::ADD_SNAPSHOT, table_info), manifest_file(std::move(manifest_file)),
-      manifest_list(manifest_list_path), snapshot(std::move(snapshot)) {
+IcebergAddSnapshot::IcebergAddSnapshot(IcebergTableInformation &table_info, const string &manifest_list_path,
+                                       IcebergSnapshot &&snapshot)
+    : IcebergTableUpdate(IcebergTableUpdateType::ADD_SNAPSHOT, table_info), manifest_list(manifest_list_path),
+      snapshot(std::move(snapshot)) {
 }
 
 rest_api_objects::TableUpdate CreateAddSnapshotUpdate(const IcebergSnapshot &snapshot) {
@@ -39,18 +41,34 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 	D_ASSERT(avro_copy_p);
 	auto &avro_copy = avro_copy_p->Cast<CopyFunctionCatalogEntry>().function;
 
-	D_ASSERT(!manifest_file.data_files.empty());
+	D_ASSERT(!manifest_list.manifest_entries.empty());
 
-	auto manifest_length = manifest_file::WriteToFile(table_info, manifest_file, avro_copy, db, context);
-	manifest.manifest_length = manifest_length;
+	auto manifest_files = manifest_list.GetManifestFiles();
+	for (auto &manifest_file_ref : manifest_files) {
+		auto manifest_file = manifest_file_ref.get();
+		auto manifest_length =
+		    manifest_file::WriteToFile(table_info, manifest_file.manifest_file, avro_copy, db, context);
+		manifest_file.manifest_length = manifest_length;
+	}
 
-	D_ASSERT(manifest_list.manifests.empty());
-	manifest_list.manifests = std::move(commit_state.manifests);
-	manifest_list.manifests.push_back(std::move(manifest));
+	manifest_list.manifest_entries.insert(manifest_list.manifest_entries.begin(),
+	                                      std::make_move_iterator(commit_state.manifests.begin()),
+	                                      std::make_move_iterator(commit_state.manifests.end()));
 	manifest_list::WriteToFile(manifest_list, avro_copy, db, context);
-	commit_state.manifests = std::move(manifest_list.manifests);
+	commit_state.manifests = std::move(manifest_list.manifest_entries);
 
 	commit_state.table_change.updates.push_back(CreateAddSnapshotUpdate(snapshot));
 }
 
+vector<reference<IcebergManifestListEntry>> IcebergManifestList::GetManifestFiles() {
+	vector<reference<IcebergManifestListEntry>> ret;
+	// TODO: Loop through every manfist list entry and then add the ManifestFile of the Manfist LIst
+	return ret;
+}
+
+vector<reference<IcebergManifestListEntry>> IcebergManifestList::GetManifestFilesConst() const {
+	vector<reference<IcebergManifestListEntry>> ret;
+	// TODO: Loop through every manfist list entry and then add the ManifestFile of the Manfist LIst
+	return ret;
+}
 } // namespace duckdb

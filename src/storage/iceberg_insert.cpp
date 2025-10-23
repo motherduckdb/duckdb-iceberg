@@ -55,17 +55,6 @@ IcebergCopyInput::IcebergCopyInput(ClientContext &context, IRCSchemaEntry &schem
 	data_path = data_path_p + "/data";
 }
 
-//===--------------------------------------------------------------------===//
-// States
-//===--------------------------------------------------------------------===//
-class IcebergInsertGlobalState : public GlobalSinkState {
-public:
-	explicit IcebergInsertGlobalState() = default;
-	vector<IcebergManifestEntry> written_files;
-
-	idx_t insert_count;
-};
-
 unique_ptr<GlobalSinkState> IcebergInsert::GetGlobalSinkState(ClientContext &context) const {
 	return make_uniq<IcebergInsertGlobalState>();
 }

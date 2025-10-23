@@ -114,12 +114,12 @@ void WriteToFile(const IcebergManifestList &manifest_list, CopyFunction &copy, D
 	field_ids.emplace_back("partitions", FieldSummaryFieldIds());
 
 	//! Populate the DataChunk with the manifests
-
+	auto manifest_files = manifest_list.GetManifestFilesConst();
 	DataChunk data;
-	data.Initialize(allocator, types, manifest_list.manifests.size());
+	data.Initialize(allocator, types, manifest_files.size());
 
-	for (idx_t i = 0; i < manifest_list.manifests.size(); i++) {
-		auto &manifest = manifest_list.manifests[i];
+	for (idx_t i = 0; i < manifest_files.size(); i++) {
+		auto &manifest = manifest_files[i].get();
 		idx_t col_idx = 0;
 
 		// manifest_path: string - 500
@@ -169,7 +169,7 @@ void WriteToFile(const IcebergManifestList &manifest_list, CopyFunction &copy, D
 		// partitions: list<508: field_summary> - 507
 		data.SetValue(col_idx++, i, manifest.partitions.ToValue());
 	}
-	data.SetCardinality(manifest_list.manifests.size());
+	data.SetCardinality(manifest_files.size());
 
 	CopyInfo copy_info;
 	copy_info.is_from = false;
