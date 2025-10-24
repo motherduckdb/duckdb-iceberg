@@ -73,7 +73,6 @@ public:
 	ICTableEntry &table;
 	//! The column indexes for the relevant row-id columns
 	vector<idx_t> row_id_indexes;
-	bool is_delete_and_insert = false;
 
 public:
 	// // Source interface

@@ -42,8 +42,6 @@ public:
 	//! INSERT INTO
 	IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op, TableCatalogEntry &table,
 	              physical_index_vector_t<idx_t> column_index_map);
-	//! ??
-	//! INSERT INTO
 	IcebergInsert(PhysicalPlan &physical_plan, const vector<LogicalType> &types, TableCatalogEntry &table);
 
 	//! CREATE TABLE AS
@@ -60,7 +58,6 @@ public:
 	physical_index_vector_t<idx_t> column_index_map;
 	//! The physical copy used internally by this insert
 	unique_ptr<PhysicalOperator> physical_copy_to_file;
-	bool is_delete_and_insert = false;
 
 public:
 	// // Source interface

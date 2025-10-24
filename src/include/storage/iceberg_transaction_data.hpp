@@ -25,6 +25,9 @@ public:
 	}
 
 public:
+	void CreateManifestListEntry(IcebergAddSnapshot &add_snapshot, IcebergTableMetadata &table_metadata,
+	                             IcebergManifestContentType manifest_content_type,
+	                             vector<IcebergManifestEntry> &&data_files);
 	void AddSnapshot(IcebergSnapshotOperationType operation, vector<IcebergManifestEntry> &&data_files);
 	void AddUpdateSnapshot(vector<IcebergManifestEntry> &&delete_files, vector<IcebergManifestEntry> &&data_files);
 	// add a schema update for a table

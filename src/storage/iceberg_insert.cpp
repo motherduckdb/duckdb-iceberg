@@ -417,7 +417,7 @@ PhysicalOperator &IcebergInsert::PlanInsert(ClientContext &context, PhysicalPlan
                                             ICTableEntry &table) {
 	optional_idx partition_id;
 	vector<LogicalType> return_types;
-	// the one return value is how many rows we are returning
+	// the one return value is how many rows we are inserting
 	return_types.emplace_back(LogicalType::BIGINT);
 	return planner.Make<IcebergInsert>(return_types, table);
 }

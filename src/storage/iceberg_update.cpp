@@ -189,11 +189,6 @@ SinkFinalizeType IcebergUpdate::Finalize(Pipeline &pipeline, Event &event, Clien
 		                             std::move(insert_global_state.written_files));
 		irc_transaction.MarkTableAsDirty(irc_table);
 	}
-	// iceberg_insert.is_delete_and_insert = true;
-	// result = insert_op.Finalize(pipeline, event, context, insert_finalize_input);
-	// if (result != SinkFinalizeType::READY) {
-	// 	throw InternalException("IcebergUpdate::Finalize does not support async child operators");
-	// }
 	return SinkFinalizeType::READY;
 }
 
@@ -279,7 +274,6 @@ PhysicalOperator &IRCatalog::PlanUpdate(ClientContext &context, PhysicalPlanGene
 	}
 	auto &delete_op = IcebergDelete::PlanDelete(context, planner, table, child_plan, std::move(row_id_indexes));
 	auto &iceberg_delete = delete_op.Cast<IcebergDelete>();
-	iceberg_delete.is_delete_and_insert = true;
 	// plan the actual insert
 	auto &insert_op = IcebergInsert::PlanInsert(context, planner, table);
 
@@ -288,8 +282,6 @@ PhysicalOperator &IRCatalog::PlanUpdate(ClientContext &context, PhysicalPlanGene
 
 void ICTableEntry::BindUpdateConstraints(Binder &binder, LogicalGet &get, LogicalProjection &proj,
                                          LogicalUpdate &update, ClientContext &context) {
-	// all updates in Iceberg are deletes + inserts
-	update.update_is_del_and_insert = true;
 
 	// push projections for all columns that are not projected yet
 	auto &column_ids = get.GetColumnIds();

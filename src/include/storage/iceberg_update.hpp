@@ -39,7 +39,7 @@ public:
 	idx_t row_id_index;
 
 public:
-	// // Source interface
+	// Source interface
 	SourceResultType GetData(ExecutionContext &context, DataChunk &chunk, OperatorSourceInput &input) const override;
 
 	bool IsSource() const override {

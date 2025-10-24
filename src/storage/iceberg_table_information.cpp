@@ -260,15 +260,8 @@ void IcebergTableInformation::AddUpdateSnapshot(IRCTransaction &transaction,
                                                 vector<IcebergManifestEntry> &&delete_files,
                                                 vector<IcebergManifestEntry> &&data_files) {
 	InitTransactionData(transaction);
-
+	// Automatically creates new snapshot with SnapshotOperationType::Overwrite
 	transaction_data->AddUpdateSnapshot(std::move(delete_files), std::move(data_files));
-}
-
-void IcebergTableInformation::AddOverwriteSnapshot(IRCTransaction &transaction,
-                                                   vector<IcebergManifestEntry> &&data_files) {
-	InitTransactionData(transaction);
-
-	transaction_data->AddSnapshot(IcebergSnapshotOperationType::OVERWRITE, std::move(data_files));
 }
 
 void IcebergTableInformation::AddSchema(IRCTransaction &transaction) {
