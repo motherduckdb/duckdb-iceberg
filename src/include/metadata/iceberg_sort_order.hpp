@@ -15,13 +15,15 @@ public:
 	static IcebergSortOrderField ParseFromJson(rest_api_objects::SortField &field);
 
 public:
-	int32_t source_id;
-	//! "Applied to the source column(s) to produce a partition value"
-	IcebergTransform transform;
+	//! the source id of the field (field_id)
 	//! NOTE: v3 replaces 'source-id' with 'source-ids'
-	//! "A source column id or a list of source column ids from the table’s schema"
+	int32_t source_id;
+	//! used to produce values to be sorted on from the source column(s)
+	//! The same as a transform for partition values
+	IcebergTransform transform;
+	//! "A sort direction that can either be ASC or DESC"
 	string direction;
-	//! "Used to identify a sort field and is unique within a sort order spec"
+	//! "A null order that describes the order of null values when sorted, Can either be 'nulls-first' or 'nulls-last'"
 	string null_order;
 };
 
