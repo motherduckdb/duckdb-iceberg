@@ -260,6 +260,12 @@ PhysicalOperator &IRCatalog::PlanUpdate(ClientContext &context, PhysicalPlanGene
 
 	auto &table = op.table.Cast<ICTableEntry>();
 	auto &table_schema = table.table_info.table_metadata.GetLatestSchema();
+
+	auto &partition_spec = table.table_info.table_metadata.GetLatestPartitionSpec();
+	if (!partition_spec.IsUnpartitioned()) {
+		throw NotImplementedException("Update into a partitioned table is not supported yet");
+	}
+
 	IcebergCopyInput copy_input(context, table);
 	vector<Value> field_input;
 	field_input.push_back(WrittenFieldIds(table_schema));

@@ -1,6 +1,6 @@
 #include "storage/iceberg_transaction_data.hpp"
 
-#include "../include/metadata/iceberg_manifest_list.hpp"
+#include "metadata/iceberg_manifest_list.hpp"
 #include "metadata/iceberg_manifest.hpp"
 #include "metadata/iceberg_snapshot.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"

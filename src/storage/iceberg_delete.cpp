@@ -1,4 +1,4 @@
-#include "../include/storage/iceberg_delete.hpp"
+#include "storage/iceberg_delete.hpp"
 #include "storage/iceberg_delete.hpp"
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_transaction.hpp"
@@ -6,8 +6,8 @@
 #include "storage/iceberg_table_information.hpp"
 #include "iceberg_multi_file_reader.hpp"
 #include "iceberg_multi_file_list.hpp"
-#include "../include/metadata/iceberg_manifest.hpp"
-#include "../include/storage/iceberg_metadata_info.hpp"
+#include "metadata/iceberg_manifest.hpp"
+#include "storage/iceberg_metadata_info.hpp"
 
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"

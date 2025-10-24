@@ -3,10 +3,11 @@
 #include "iceberg_logging.hpp"
 #include "iceberg_predicate.hpp"
 #include "iceberg_value.hpp"
+#include "metadata/iceberg_manifest.hpp"
 #include "storage/irc_transaction.hpp"
 
 #include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
-#include "duckdb/common/exception.hpp"
+#include "duckdb/common/exception.hpp" /*cle*/
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/execution/execution_context.hpp"
 #include "duckdb/parallel/thread_context.hpp"
@@ -591,13 +592,16 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) {
 					continue;
 				}
 
-				if (alter.snapshot.operation == IcebergSnapshotOperationType::APPEND) {
+				switch (manifest.content) {
+				case IcebergManifestContentType::DATA:
 					transaction_data_manifests.push_back(manifest.manifest_file);
-				} else if (alter.snapshot.operation == IcebergSnapshotOperationType::DELETE) {
+					break;
+				case IcebergManifestContentType::DELETE:
 					transaction_delete_manifests.push_back(manifest.manifest_file);
-				} else {
-					throw NotImplementedException("IcebergSnapshotOperationType: %d",
-					                              static_cast<uint8_t>(alter.snapshot.operation));
+					break;
+				default:
+					throw NotImplementedException("IcebergManifestContentType: %d",
+					                              static_cast<uint8_t>(manifest.content));
 				}
 			}
 		}

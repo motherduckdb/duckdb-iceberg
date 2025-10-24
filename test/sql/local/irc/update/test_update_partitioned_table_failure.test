@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/update/test_no_update_no_new_snapshot.test
+# name: test/sql/local/irc/update/test_update_partitioned_table_failure.test
 # description: Test there are no new snapshots if there are no new updates
 # group: [update]
 
@@ -41,36 +41,9 @@ ATTACH '' AS my_datalake (
 );
 
 statement ok
-DROP TABLE IF EXISTS my_datalake.default.test;
+select 1 from my_datalake.default.lineitem_partitioned_l_shipmode limit 1;
 
-statement ok
-CREATE TABLE my_datalake.default.test AS SELECT range a from range(10);
-
-query I
-select count(*) from iceberg_snapshots(my_datalake.default.test);
+statement error
+update my_datalake.default.lineitem_partitioned_l_shipmode set l_linenumber = 100 where l_linenumber % 5 = 0;
 ----
-1
-
-statement ok
-update my_datalake.default.test set a = 100 where a % 100  = 99;
-
-query I
-select * from my_datalake.default.test order by a;
-----
-0
-1
-2
-3
-4
-5
-6
-7
-8
-9
-
-query I
-select count(*) from iceberg_snapshots(my_datalake.default.test);
-----
-1
-
-
+<REGEX>:.*Not implemented.*Update into a partitioned table.*
