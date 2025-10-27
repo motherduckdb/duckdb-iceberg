@@ -1,5 +1,7 @@
 #include "storage/iceberg_transaction_data.hpp"
 
+#include "../include/metadata/iceberg_manifest_list.hpp"
+#include "../include/metadata/iceberg_snapshot.hpp"
 #include "metadata/iceberg_manifest_list.hpp"
 #include "metadata/iceberg_manifest.hpp"
 #include "metadata/iceberg_snapshot.hpp"
@@ -115,8 +117,19 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 		}
 	}
 
+	auto manifest_content_type = IcebergManifestContentType::DATA;
+	switch (operation) {
+	case IcebergSnapshotOperationType::DELETE:
+		manifest_content_type = IcebergManifestContentType::DELETE;
+		break;
+	case IcebergSnapshotOperationType::APPEND:
+		manifest_content_type = IcebergManifestContentType::DATA;
+		break;
+	default:
+		throw NotImplementedException("Cannot have use snapshot operation type REPLACE or OVERWRITE here");
+	}
 	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info, manifest_list_path, std::move(new_snapshot));
-	CreateManifestListEntry(*add_snapshot, table_metadata, IcebergManifestContentType::DATA, std::move(data_files));
+	CreateManifestListEntry(*add_snapshot, table_metadata, manifest_content_type, std::move(data_files));
 	alters.push_back(*add_snapshot);
 	updates.push_back(std::move(add_snapshot));
 }
