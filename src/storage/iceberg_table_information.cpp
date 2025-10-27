@@ -299,6 +299,10 @@ void IcebergTableInformation::SetProperties(IRCTransaction &transaction, case_in
 	InitTransactionData(transaction);
 	transaction_data->TableSetProperties(properties);
 }
+void IcebergTableInformation::RemoveProperties(IRCTransaction &transaction, vector<string> properties) {
+	InitTransactionData(transaction);
+	transaction_data->TableRemoveProperties(properties);
+}
 void IcebergTableInformation::SetLocation(IRCTransaction &transaction) {
 	InitTransactionData(transaction);
 	transaction_data->TableSetLocation();

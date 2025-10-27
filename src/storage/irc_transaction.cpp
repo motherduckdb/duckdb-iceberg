@@ -288,16 +288,16 @@ TableTransactionInfo IRCTransaction::GetTransactionRequest(ClientContext &contex
 		}
 
 		if (!transaction_data.alters.empty()) {
-			if (current_snapshot) {
-				//! If any changes were made to the data of the table, we should assert that our parent snapshot has
-				//! not changed
-				commit_state.table_change.requirements.push_back(
-				    CreateAssertRefSnapshotIdRequirement(*current_snapshot));
-			}
 			auto &last_alter = transaction_data.alters.back();
 			auto snapshot_id = last_alter.get().snapshot.snapshot_id;
 			auto set_snapshot_ref_update = CreateSetSnapshotRefUpdate(snapshot_id);
 			commit_state.table_change.updates.push_back(std::move(set_snapshot_ref_update));
+		}
+
+		if (current_snapshot) {
+			//! If any changes were made to the state of the table, we should assert that our parent snapshot has
+			//! not changed. We don't want to change the table location if someone has added a snapshot
+			commit_state.table_change.requirements.push_back(CreateAssertRefSnapshotIdRequirement(*current_snapshot));
 		}
 
 		transaction.table_changes.push_back(std::move(table_change));

@@ -36,6 +36,7 @@ public:
 	void TableSetDefaultSortOrder();
 	void TableSetDefaultSpec();
 	void TableSetProperties(case_insensitive_map_t<string> properties);
+	void TableRemoveProperties(vector<string> properties);
 	void TableSetLocation();
 
 public:

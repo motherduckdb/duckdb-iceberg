@@ -1,0 +1,74 @@
+# name: test/sql/local/irc/table_properties/test_set_table_properties.test
+# group: [table_properties]
+
+require-env ICEBERG_SERVER_AVAILABLE
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+statement ok
+CALL enable_logging('HTTP');
+
+statement ok
+set logging_level='debug';
+
+statement ok
+CREATE SECRET (
+    TYPE S3,
+    KEY_ID 'admin',
+    SECRET 'password',
+    ENDPOINT '127.0.0.1:9000',
+    URL_STYLE 'path',
+    USE_SSL 0
+);
+
+
+statement ok
+ATTACH '' AS my_datalake (
+    TYPE ICEBERG,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    ENDPOINT 'http://127.0.0.1:8181'
+);
+
+
+statement ok
+CALL set_iceberg_table_properties(my_datalake.default.test,
+        'write.update.mode=merge-on-read');
+
+# test deleting table properties
+statement ok
+CALL remove_iceberg_table_properties(my_datalake.default.test,
+        'write.update.mode');
+
+
+query II
+select * from iceberg_table_properties(my_datalake.default.test_table_properties) where "key" not in ('created-at', 'owner');;
+----
+read.split.target-size	268435456
+write.parquet.compression-codec	zstd
+duckdb_man	superman
+write.delete.mode	merge-on-read
+another1	neato
+
+
+mode skip
+
+
+statement ok
+CALL set_iceberg_table_properties(my_datalake.default.table_unpartitioned, 'write.update.mode=copy-on-write')
+
+# According to the spec, Table Properties can be set and removed at the same time
+# need to check that a server supports setting and removing table properties.
+# summary: An update namespace properties request with both properties to remove and properties to upsert.
+# value: {
+#     "removals": [ "foo", "bar" ],
+#     "updates": { "owner": "Raoul" }
+#   }
+statement ok
+select * from iceberg_table_properties(my_datalake.default.table_unpartitioned);
