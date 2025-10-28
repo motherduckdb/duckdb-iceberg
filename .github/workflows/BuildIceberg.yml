@@ -69,3 +69,10 @@ jobs:
     uses: Tmonster/duckdb-iceberg/.github/workflows/test-spark-catalog.yml@update_test_infrastructure
     with:
       artifact-name: duckdb-iceberg
+
+  test-polaris:
+    name: Test against Polaris Catalog
+    needs: build_iceberg
+    uses: Tmonster/duckdb-iceberg/.github/workflows/test-polaris-catalog.yml@update_test_infrastructure
+    with:
+      artifact-name: duckdb-iceberg

@@ -13,7 +13,7 @@ env:
 jobs:
   rest:
     name: Test against local Rest Catalog
-    if: false # disabled until lakekeeper setup process is more stable
+    if: false
     runs-on: ubuntu-latest
     env:
       VCPKG_TARGET_TRIPLET: 'x64-linux-release'
