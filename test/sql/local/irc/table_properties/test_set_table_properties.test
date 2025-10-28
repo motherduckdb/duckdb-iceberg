@@ -36,15 +36,30 @@ ATTACH '' AS my_datalake (
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
+statement ok
+drop table if exists my_datalake.default.test;
+
+statement ok
+create table if not exists my_datalake.default.test as select range a from range(100);
 
 statement ok
 CALL set_iceberg_table_properties(my_datalake.default.test,
-        'write.update.mode=merge-on-read');
+       MAP {
+        'write.update.mode' : 'merge-on-read',
+        'foo' : 'buzz',
+        'page-write-size': '10000'
+        });
 
 # test deleting table properties
 statement ok
 CALL remove_iceberg_table_properties(my_datalake.default.test,
-        'write.update.mode');
+        ['write.update.mode']);
+
+query II
+select * from iceberg_table_properties(my_datalake.default.test);
+----
+foo	buzz
+page-write-size	10000
 
 
 query II

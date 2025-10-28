@@ -31,12 +31,14 @@
 
 #include <string>
 #include <numeric>
+#include <sys/socket.h>
 
 namespace duckdb {
 
 struct SetIcebergTablePropertiesBindData : public TableFunctionData {
 	optional_ptr<ICTableEntry> iceberg_table;
-	vector<string> properties;
+	case_insensitive_map_t<string> properties;
+	vector<string> remove_properties;
 };
 
 struct SetIcebergTablePropertiesGlobalTableFunctionState : public GlobalTableFunctionState {
@@ -48,19 +50,51 @@ public:
 	}
 
 	idx_t property_count = 0;
+	bool properties_set = false;
+	bool properties_removed = false;
 };
 
-static unique_ptr<FunctionData> IcebergTablePropertiesBind(ClientContext &context, TableFunctionBindInput &input,
-                                                           vector<LogicalType> &return_types, vector<string> &names) {
+static unique_ptr<FunctionData> SetIcebergTablePropertiesBind(ClientContext &context, TableFunctionBindInput &input,
+                                                              vector<LogicalType> &return_types,
+                                                              vector<string> &names) {
 	// return a TableRef that contains the scans for the
 	auto ret = make_uniq<SetIcebergTablePropertiesBindData>();
 
 	auto input_string = input.inputs[0].ToString();
-	auto properties = input.inputs[1].ToString();
-	ret->properties.push_back(properties);
+	auto &map = input.inputs[1];
+
+	auto &map_children = MapValue::GetChildren(map);
+	for (idx_t col_idx = 0; col_idx < map_children.size(); col_idx++) {
+		auto &struct_children = StructValue::GetChildren(map_children[col_idx]);
+		auto &key = StringValue::Get(struct_children[0]);
+		auto &val = StringValue::Get(struct_children[1]);
+		ret->properties.emplace(key, val);
+	}
+
 	auto iceberg_table = IcebergUtils::GetICTableEntry(context, input_string);
 	ret->iceberg_table = iceberg_table;
+	return_types.insert(return_types.end(), LogicalType::BIGINT);
+	names.insert(names.end(), string("Success"));
+	return std::move(ret);
+}
 
+static unique_ptr<FunctionData> RemoveIcebergTablePropertiesBind(ClientContext &context, TableFunctionBindInput &input,
+                                                                 vector<LogicalType> &return_types,
+                                                                 vector<string> &names) {
+	// return a TableRef that contains the scans for the
+	auto ret = make_uniq<SetIcebergTablePropertiesBindData>();
+
+	auto input_string = input.inputs[0].ToString();
+	auto &remove_values = input.inputs[1];
+
+	auto &list_children = ListValue::GetChildren(remove_values);
+	for (idx_t col_idx = 0; col_idx < list_children.size(); col_idx++) {
+		auto &remove_property = StringValue::Get(list_children[0]);
+		ret->remove_properties.push_back(remove_property);
+	}
+
+	auto iceberg_table = IcebergUtils::GetICTableEntry(context, input_string);
+	ret->iceberg_table = iceberg_table;
 	return_types.insert(return_types.end(), LogicalType::BIGINT);
 	names.insert(names.end(), string("Success"));
 	return std::move(ret);
@@ -95,6 +129,10 @@ static void SetIcebergTablePropertiesFunction(ClientContext &context, TableFunct
 		//! Table is empty
 		return;
 	}
+	if (global_state.properties_set) {
+		output.SetCardinality(0);
+		return;
+	}
 
 	auto iceberg_table = bind_data.iceberg_table;
 	auto &irc_transaction = IRCTransaction::Get(context, iceberg_table->catalog);
@@ -106,13 +144,11 @@ static void SetIcebergTablePropertiesFunction(ClientContext &context, TableFunct
 
 	auto schema = iceberg_table->schema.name;
 	auto table_name = iceberg_table->name;
-	case_insensitive_map_t<string> properties;
-	properties.emplace("write.update.mode", "merge-on-read");
-	transaction_data.TableSetProperties(properties);
+	transaction_data.TableSetProperties(bind_data.properties);
 	irc_transaction.dirty_tables.emplace(iceberg_table.get());
-
+	global_state.properties_set = true;
 	// set success output, failure happens during transaction commit.
-	AddString(output.data[0], 0, string_t("true"));
+	FlatVector::GetData<int64_t>(output.data[0])[0] = bind_data.properties.size();
 	output.SetCardinality(1);
 }
 
@@ -122,6 +158,10 @@ static void RemoveIcebergTablePropertiesFunction(ClientContext &context, TableFu
 
 	if (!bind_data.iceberg_table) {
 		//! Table is empty
+		return;
+	}
+	if (global_state.properties_removed) {
+		output.SetCardinality(0);
 		return;
 	}
 
@@ -139,9 +179,9 @@ static void RemoveIcebergTablePropertiesFunction(ClientContext &context, TableFu
 	properties.push_back("write.update.mode");
 	transaction_data.TableRemoveProperties(properties);
 	irc_transaction.dirty_tables.emplace(iceberg_table.get());
-
+	global_state.properties_removed = true;
 	// set success output, failure happens during transaction commit.
-	AddString(output.data[0], 0, string_t("true"));
+	FlatVector::GetData<int64_t>(output.data[0])[0] = bind_data.properties.size();
 	output.SetCardinality(1);
 }
 
@@ -179,8 +219,9 @@ static void GetIcebergTablePropertiesFunction(ClientContext &context, TableFunct
 TableFunctionSet IcebergFunctions::SetIcebergTablePropertiesFunctions() {
 	TableFunctionSet function_set("set_iceberg_table_properties");
 
-	auto fun = TableFunction({LogicalType::VARCHAR, LogicalType::VARCHAR}, SetIcebergTablePropertiesFunction,
-	                         IcebergTablePropertiesBind, SetIcebergTablePropertiesGlobalTableFunctionState::Init);
+	auto fun = TableFunction({LogicalType::VARCHAR, LogicalType::MAP(LogicalType::VARCHAR, LogicalType::VARCHAR)},
+	                         SetIcebergTablePropertiesFunction, SetIcebergTablePropertiesBind,
+	                         SetIcebergTablePropertiesGlobalTableFunctionState::Init);
 	function_set.AddFunction(fun);
 
 	return function_set;
@@ -189,8 +230,9 @@ TableFunctionSet IcebergFunctions::SetIcebergTablePropertiesFunctions() {
 TableFunctionSet IcebergFunctions::RemoveIcebergTablePropertiesFunctions() {
 	TableFunctionSet function_set("remove_iceberg_table_properties");
 
-	auto fun = TableFunction({LogicalType::VARCHAR, LogicalType::VARCHAR}, RemoveIcebergTablePropertiesFunction,
-	                         IcebergTablePropertiesBind, SetIcebergTablePropertiesGlobalTableFunctionState::Init);
+	auto fun = TableFunction({LogicalType::VARCHAR, LogicalType::LIST(LogicalType::VARCHAR)},
+	                         RemoveIcebergTablePropertiesFunction, RemoveIcebergTablePropertiesBind,
+	                         SetIcebergTablePropertiesGlobalTableFunctionState::Init);
 	function_set.AddFunction(fun);
 
 	return function_set;

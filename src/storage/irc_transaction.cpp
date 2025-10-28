@@ -113,6 +113,15 @@ void CommitTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
 			for (auto &prop : ref_update.updates) {
 				yyjson_mut_obj_add_strcpy(doc, properties_json, prop.first.c_str(), prop.second.c_str());
 			}
+		} else if (update.has_remove_properties_update) {
+			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
+			auto &ref_update = update.remove_properties_update;
+			//! updates[...].action
+			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
+			auto properties_json = yyjson_mut_obj_add_arr(doc, update_json, "removals");
+			for (auto &prop : ref_update.removals) {
+				yyjson_mut_arr_add_strcpy(doc, properties_json, prop.c_str());
+			}
 		} else if (update.has_add_schema_update) {
 			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
 			auto &ref_update = update.add_schema_update;
