@@ -32,7 +32,6 @@ CREATE SECRET (
     USE_SSL 0
 );
 
-
 statement ok
 ATTACH '' AS my_datalake (
     TYPE ICEBERG,
@@ -48,3 +47,23 @@ statement error
 insert into my_datalake.default.table_sort_order select * from lineitem limit 5;
 ----
 <REGEX>:.*Not implemented.*Insert into a sorted iceberg table is not supported yet.*
+
+statement ok
+BEGIN;
+
+query I
+select count(*) from my_datalake.default.table_sort_order;
+----
+60175
+
+statement ok
+delete from my_datalake.default.table_sort_order where l_orderkey > 20;
+
+query I
+select count(*) from my_datalake.default.table_sort_order;
+----
+25
+
+statement ok
+ABORT;
+

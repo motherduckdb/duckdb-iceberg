@@ -11,8 +11,6 @@ require iceberg
 
 require httpfs
 
-require tpch
-
 # Do not ignore 'HTTP' error messages!
 set ignore_error_messages
 
