@@ -4,6 +4,7 @@
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/types/value.hpp"
+#include "metadata/iceberg_manifest.hpp"
 
 #include "duckdb/function/copy_function.hpp"
 #include "duckdb/execution/execution_context.hpp"
@@ -67,7 +68,7 @@ enum class IcebergManifestContentType : uint8_t {
 };
 
 //! An entry in the manifest list file (top level AVRO file)
-struct IcebergManifest {
+struct IcebergManifestListEntry {
 public:
 	//! Path to the manifest AVRO file
 	string manifest_path;
@@ -96,8 +97,13 @@ public:
 	int32_t partition_spec_id;
 	//! The field summaries of the partition (if present)
 	ManifestPartitions partitions;
+	//! the actual manifest file information
+	IcebergManifestFile manifest_file;
 
 public:
+	IcebergManifestListEntry() {
+	}
+
 	static vector<LogicalType> Types() {
 		return {
 		    LogicalType::VARCHAR,
@@ -127,9 +133,18 @@ public:
 	IcebergManifestList(const string &path) : path(path) {
 	}
 
+	vector<reference<IcebergManifestListEntry>> GetManifestFiles();
+
+	vector<reference<const IcebergManifestListEntry>> GetManifestFilesConst() const;
+
+	IcebergManifestListEntry &CreateNewManifestListEntry() {
+		manifest_entries.push_back(IcebergManifestListEntry());
+		return manifest_entries.back();
+	}
+
 public:
 	string path;
-	vector<IcebergManifest> manifests;
+	vector<IcebergManifestListEntry> manifest_entries;
 };
 
 namespace manifest_list {

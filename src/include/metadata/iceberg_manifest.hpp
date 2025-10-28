@@ -91,10 +91,11 @@ public:
 };
 
 struct IcebergManifestFile {
+	IcebergManifestFile() {
+	}
 	IcebergManifestFile(const string &path) : path(path) {
 	}
 
-public:
 public:
 	string path;
 	vector<IcebergManifestEntry> data_files;
