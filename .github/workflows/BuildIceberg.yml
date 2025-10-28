@@ -58,59 +58,66 @@ jobs:
 
   test-nessie:
     name: Test against Nessie Catalog
-    runs-on: ubuntu-latest
     needs: build_iceberg
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: duckdb-iceberg
-          path: build/release
-
-      - name: Restore permissions
-        run: |
-          # Make all executables in duckdb_bin/release executable
-          find ./build/release -type f -name 'duckdb*' -exec chmod +x {} \;
-          find ./build/release -type f -name 'unittest*' -exec chmod +x {} \;
-
-      - name: Install nessie required packages
-        shell: bash
-        run: |
-          # install docker
-          sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-          sudo chmod +x /usr/local/bin/docker-compose
-          # install java
-          sudo apt install -y -qq openjdk-21-jre-headless
-          sudo apt install -y -qq openjdk-21-jdk-headless
-          sudo apt-get install -y -qq python3-venv
-          git clone https://github.com/projectnessie/nessie.git nessie
-
-      - name: Start Nessie
-        working-directory: nessie/docker
-        run: |
-          sed -i '/healthcheck/,/]/ s/\$/$$/g' catalog-auth-s3/docker-compose.yml
-          docker-compose -f catalog-auth-s3/docker-compose.yml up -d
-
-      - name: Wait for Nessie/Keycloak
-        run: |
-          max_attempts=30
-          attempt=1
-          sleep 10
-          while ! curl -sf "http://localhost:8080/realms/master/.well-known/openid-configuration"; do
-            if [ $attempt -gt $max_attempts ]; then
-              echo "Keycloak failed to initialize after $max_attempts attempts"
-              exit 1
-            fi
-            echo "Waiting for Keycloak to initialize (attempt $attempt/$max_attempts)..."
-            sleep 5
-            attempt=$((attempt + 1))
-          done
-          echo "Keycloak is healthy"
-
-      - name: Test with rest catalog
-        env:
-          NESSIE_SERVER_AVAILABLE: 1
-        run: |
-          ./build/release/test/unittest "$PWD/test/*" --list-test-names-only || true
-          ./build/release/test/unittest "$PWD/test/*"
+    uses: .github/workflows/test-nessie-reusable.yml
+    with:
+      artifact-name: duckdb-iceberg
+#  test-nessie:
+#    name: Test against Nessie Catalog
+#    runs-on: ubuntu-latest
+#    needs: build_iceberg
+#    steps:
+#      - uses: actions/checkout@v4
+#
+#      - uses: actions/download-artifact@v4
+#        with:
+#          name: duckdb-iceberg
+#          path: build/release
+#
+#      - name: Restore permissions
+#        run: |
+#          # Make all executables in duckdb_bin/release executable
+#          find ./build/release -type f -name 'duckdb*' -exec chmod +x {} \;
+#          find ./build/release -type f -name 'unittest*' -exec chmod +x {} \;
+#
+#      - name: Install nessie required packages
+#        shell: bash
+#        run: |
+#          # install docker
+#          sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+#          sudo chmod +x /usr/local/bin/docker-compose
+#          # install java
+#          sudo apt install -y -qq openjdk-21-jre-headless
+#          sudo apt install -y -qq openjdk-21-jdk-headless
+#          sudo apt-get install -y -qq python3-venv
+#          git clone https://github.com/projectnessie/nessie.git nessie
+#
+#      - name: Start Nessie
+#        working-directory: nessie/docker
+#        run: |
+#          sed -i '/healthcheck/,/]/ s/\$/$$/g' catalog-auth-s3/docker-compose.yml
+#          docker-compose -f catalog-auth-s3/docker-compose.yml up -d
+#
+#      - name: Wait for Nessie/Keycloak
+#        run: |
+#          max_attempts=30
+#          attempt=1
+#          # sleep anyway to let keycloack get started
+#          sleep 10
+#          while ! curl -sf "http://localhost:8080/realms/master/.well-known/openid-configuration"; do
+#            if [ $attempt -gt $max_attempts ]; then
+#              echo "Keycloak failed to initialize after $max_attempts attempts"
+#              exit 1
+#            fi
+#            echo "Waiting for Keycloak to initialize (attempt $attempt/$max_attempts)..."
+#            sleep 5
+#            attempt=$((attempt + 1))
+#          done
+#          echo "Keycloak is healthy"
+#
+#      - name: Test with rest catalog
+#        env:
+#          NESSIE_SERVER_AVAILABLE: 1
+#        run: |
+#          ./build/release/test/unittest "$PWD/test/*" --list-test-names-only || true
+#          ./build/release/test/unittest "$PWD/test/*"
