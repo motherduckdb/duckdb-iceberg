@@ -556,11 +556,12 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) {
 		auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(metadata.iceberg_version);
 		auto scan = make_uniq<AvroScan>("IcebergManifestList", context, manifest_list_full_path);
 		manifest_list_reader->Initialize(std::move(scan));
+		auto manifest_list_entries = manifest_list.GetManifestFilesMutable();
 		while (!manifest_list_reader->Finished()) {
-			manifest_list_reader->Read(STANDARD_VECTOR_SIZE, manifest_list.manifest_entries);
+			manifest_list_reader->Read(STANDARD_VECTOR_SIZE, manifest_list_entries);
 		}
 
-		for (auto &manifest : manifest_list.manifest_entries) {
+		for (auto &manifest : manifest_list_entries) {
 			if (!ManifestMatchesFilter(manifest)) {
 				DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'manifest_file': '%s'",
 				           manifest.manifest_path);
