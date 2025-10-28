@@ -50,10 +50,10 @@ static string ExtractIcebergScanPath(const string &sql) {
 
 optional_ptr<ICTableEntry> IcebergUtils::GetICTableEntry(ClientContext &context, const string &input) {
 	auto qualified_name = QualifiedName::ParseComponents(input);
-	EntryLookupInfo table_info(CatalogType::TABLE_ENTRY, qualified_name[2]);
 	if (qualified_name.size() != 3) {
-		throw InvalidInputException("Please fully qualify Iceberg Table");
+		return nullptr;
 	}
+	EntryLookupInfo table_info(CatalogType::TABLE_ENTRY, qualified_name[2]);
 	auto table =
 	    Catalog::GetEntry(context, qualified_name[0], qualified_name[1], table_info, OnEntryNotFound::RETURN_NULL);
 	if (!table) {
