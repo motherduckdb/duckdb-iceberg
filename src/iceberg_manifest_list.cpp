@@ -5,6 +5,14 @@
 
 namespace duckdb {
 
+vector<IcebergManifestListEntry> &IcebergManifestList::GetManifestFilesMutable() {
+	return manifest_entries;
+}
+
+const vector<IcebergManifestListEntry> &IcebergManifestList::GetManifestFilesConst() const {
+	return manifest_entries;
+}
+
 namespace manifest_list {
 
 static LogicalType FieldSummaryType() {
@@ -119,7 +127,7 @@ void WriteToFile(const IcebergManifestList &manifest_list, CopyFunction &copy, D
 	data.Initialize(allocator, types, manifest_files.size());
 
 	for (idx_t i = 0; i < manifest_files.size(); i++) {
-		auto &manifest = manifest_files[i].get();
+		const auto &manifest = manifest_files[i];
 		idx_t col_idx = 0;
 
 		// manifest_path: string - 500

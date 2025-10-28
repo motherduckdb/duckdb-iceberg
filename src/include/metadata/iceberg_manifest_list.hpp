@@ -133,9 +133,8 @@ public:
 	IcebergManifestList(const string &path) : path(path) {
 	}
 
-	vector<reference<IcebergManifestListEntry>> GetManifestFiles();
-
-	vector<reference<const IcebergManifestListEntry>> GetManifestFilesConst() const;
+	vector<IcebergManifestListEntry> &GetManifestFilesMutable();
+	const vector<IcebergManifestListEntry> &GetManifestFilesConst() const;
 
 	IcebergManifestListEntry &CreateNewManifestListEntry() {
 		manifest_entries.push_back(IcebergManifestListEntry());

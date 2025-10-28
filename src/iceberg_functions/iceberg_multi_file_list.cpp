@@ -582,9 +582,8 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) {
 		for (auto &alter_p : transaction_data.alters) {
 			auto &alter = alter_p.get();
 
-			auto manifest_list_entries = alter.manifest_list.GetManifestFiles();
-			for (auto &manifest_list_entry : manifest_list_entries) {
-				auto &manifest = manifest_list_entry.get();
+			auto &manifest_list_entries = alter.manifest_list.GetManifestFilesMutable();
+			for (auto &manifest : manifest_list_entries) {
 				if (!ManifestMatchesFilter(manifest)) {
 					DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'manifest_file': '%s'",
 					           manifest.manifest_path);
