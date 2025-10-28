@@ -2,6 +2,7 @@
 
 #include "iceberg_utils.hpp"
 #include "catalog_utils.hpp"
+#include "../include/metadata/iceberg_snapshot.hpp"
 #include "rest_catalog/objects/list.hpp"
 
 namespace duckdb {
@@ -284,35 +285,53 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(rest_api_objects::T
 		IcebergFieldMapping::ParseFieldMappings(root, res.mappings, mapping_index, 0);
 	}
 
-	// Parse write.data.path property
-	auto write_data_path = properties.find("write.data.path");
-	if (write_data_path != properties.end()) {
-		res.write_data_path = write_data_path->second;
-	}
-
-	// Parse write.metadata.path property
-	auto write_metadata_path = properties.find("write.metadata.path");
-	if (write_metadata_path != properties.end()) {
-		res.write_metadata_path = write_metadata_path->second;
+	// parse all table properties
+	for (auto &property : properties) {
+		res.table_properties.emplace(property.first, property.second);
 	}
 
 	return res;
 }
 
+const case_insensitive_map_t<string> &IcebergTableMetadata::GetTableProperties() const {
+	return table_properties;
+}
+
 string IcebergTableMetadata::GetDataPath() const {
+	auto write_path = table_properties.find("write.data.path");
 	// If write.data.path property is set, use it; otherwise use default location + "/data"
-	if (!write_data_path.empty()) {
-		return write_data_path;
+	if (write_path != table_properties.end()) {
+		return write_path->second;
 	}
 	return location + "/data";
 }
 
 string IcebergTableMetadata::GetMetadataPath() const {
 	// If write.metadata.path property is set, use it; otherwise use default location + "/metadata"
-	if (!write_metadata_path.empty()) {
-		return write_metadata_path;
+	auto metadata_path = table_properties.find("write.metadata.path");
+	// If write.data.path property is set, use it; otherwise use default location + "/data"
+	if (metadata_path != table_properties.end()) {
+		return metadata_path->second;
 	}
-	return location + "/metadata";
+	return location + "/data";
+}
+
+bool IcebergTableMetadata::PropertiesAllowPositionalDeletes(IcebergSnapshotOperationType operation_type) const {
+	// first check write.delete.mode. If not present go to write.update.mode
+	if (operation_type == IcebergSnapshotOperationType::DELETE) {
+		auto delete_mode = table_properties.find("write.delete.mode");
+		if (delete_mode != table_properties.end()) {
+			return delete_mode->second == "merge-on-read";
+		}
+	}
+
+	auto delete_mode = table_properties.find("write.update.mode");
+	if (delete_mode != table_properties.end()) {
+		return delete_mode->second == "merge-on-read";
+	}
+
+	// if no table property describes the update/delete mode, default to true.
+	return true;
 }
 
 } // namespace duckdb

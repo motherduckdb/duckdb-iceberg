@@ -175,9 +175,7 @@ static void RemoveIcebergTablePropertiesFunction(ClientContext &context, TableFu
 
 	auto schema = iceberg_table->schema.name;
 	auto table_name = iceberg_table->name;
-	vector<string> properties;
-	properties.push_back("write.update.mode");
-	transaction_data.TableRemoveProperties(properties);
+	transaction_data.TableRemoveProperties(bind_data.remove_properties);
 	irc_transaction.dirty_tables.emplace(iceberg_table.get());
 	global_state.properties_removed = true;
 	// set success output, failure happens during transaction commit.

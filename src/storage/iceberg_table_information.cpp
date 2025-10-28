@@ -1,5 +1,6 @@
 #include "storage/iceberg_table_information.hpp"
 
+#include "duckdb/common/case_insensitive_map.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "storage/irc_transaction.hpp"
 #include "storage/irc_schema_entry.hpp"

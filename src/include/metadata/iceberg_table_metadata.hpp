@@ -45,6 +45,9 @@ public:
 	string GetDataPath() const;
 	string GetMetadataPath() const;
 
+	const case_insensitive_map_t<string> &GetTableProperties() const;
+	bool PropertiesAllowPositionalDeletes(IcebergSnapshotOperationType operation_type) const;
+
 public:
 	string table_uuid;
 	string location;
@@ -68,6 +71,9 @@ public:
 	//! Custom write paths from table properties
 	string write_data_path;
 	string write_metadata_path;
+
+	//! table properties
+	case_insensitive_map_t<string> table_properties;
 };
 
 } // namespace duckdb

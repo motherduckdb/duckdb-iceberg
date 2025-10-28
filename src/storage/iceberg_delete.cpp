@@ -5,6 +5,7 @@
 #include "storage/iceberg_table_information.hpp"
 #include "iceberg_multi_file_reader.hpp"
 #include "iceberg_multi_file_list.hpp"
+#include "../include/metadata/iceberg_snapshot.hpp"
 
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
@@ -307,6 +308,19 @@ PhysicalOperator &IRCatalog::PlanDelete(ClientContext &context, PhysicalPlanGene
 		row_id_indexes.push_back(bound_ref.index);
 	}
 	auto &ic_table_entry = op.table.Cast<ICTableEntry>();
+	auto allows_positional_deletes =
+	    ic_table_entry.table_info.table_metadata.PropertiesAllowPositionalDeletes(IcebergSnapshotOperationType::DELETE);
+	if (!allows_positional_deletes) {
+		auto error_message =
+		    StringUtil::Format("DuckDB-Iceberg only supports merge-on-read for updates/deletes. The table %s does not "
+		                       "have the merge-on-read property for table updates/deletes. You can "
+		                       "modify the write.delete.mode property with the set_iceberg_table_properties() "
+		                       "function, or remove it with the "
+		                       "remove_iceberg_table_properties() function. You can view Iceberg Table properties with "
+		                       "the iceberg_table_properties() function",
+		                       ic_table_entry.name);
+		throw NotImplementedException(error_message);
+	}
 	auto &iceberg_delete = IcebergDelete::PlanDelete(context, planner, ic_table_entry, plan, row_id_indexes);
 	return iceberg_delete;
 }
