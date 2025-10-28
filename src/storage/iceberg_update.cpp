@@ -4,6 +4,7 @@
 #include "storage/irc_transaction.hpp"
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_table_entry.hpp"
+#include "storage/iceberg_table_information.hpp"
 #include "duckdb/planner/operator/logical_update.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
@@ -273,7 +274,6 @@ PhysicalOperator &IRCatalog::PlanUpdate(ClientContext &context, PhysicalPlanGene
 		row_id_indexes.push_back(i);
 	}
 	auto &delete_op = IcebergDelete::PlanDelete(context, planner, table, child_plan, std::move(row_id_indexes));
-	auto &iceberg_delete = delete_op.Cast<IcebergDelete>();
 	// plan the actual insert
 	auto &insert_op = IcebergInsert::PlanInsert(context, planner, table);
 

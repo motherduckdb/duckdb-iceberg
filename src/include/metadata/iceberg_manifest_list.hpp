@@ -97,11 +97,11 @@ public:
 	int32_t partition_spec_id;
 	//! The field summaries of the partition (if present)
 	ManifestPartitions partitions;
-
+	//! the actual manifest file information
 	IcebergManifestFile manifest_file;
 
 public:
-	IcebergManifestListEntry() {
+	IcebergManifestListEntry(string manifest_path) : manifest_path(manifest_path), manifest_file(manifest_path) {
 	}
 
 	static vector<LogicalType> Types() {
@@ -133,17 +133,24 @@ public:
 	IcebergManifestList(const string &path) : path(path) {
 	}
 
-	vector<reference<IcebergManifestListEntry>> GetManifestFiles();
+	vector<IcebergManifestListEntry> &GetManifestFilesMutable();
+	const vector<IcebergManifestListEntry> &GetManifestFilesConst() const;
 
-	vector<reference<const IcebergManifestListEntry>> GetManifestFilesConst() const;
-
-	IcebergManifestListEntry &CreateNewManifestListEntry() {
-		manifest_entries.push_back(IcebergManifestListEntry());
+	IcebergManifestListEntry &CreateNewManifestListEntry(string manifest_file_path) {
+		manifest_entries.push_back(IcebergManifestListEntry(manifest_file_path));
 		return manifest_entries.back();
 	}
+	idx_t GetManifestListEntriesCount() const;
+
+	void WriteManifestListEntry(IcebergTableInformation &table_info, idx_t manifest_index, CopyFunction &avro_copy,
+	                            DatabaseInstance &db, ClientContext &context);
+	void AddToManifestEntries(vector<IcebergManifestListEntry> &manifest_list_entries);
+	vector<IcebergManifestListEntry> GetManifestListEntries();
 
 public:
 	string path;
+
+private:
 	vector<IcebergManifestListEntry> manifest_entries;
 };
 

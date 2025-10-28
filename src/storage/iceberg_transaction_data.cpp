@@ -1,7 +1,5 @@
 #include "storage/iceberg_transaction_data.hpp"
 
-#include "../include/metadata/iceberg_manifest_list.hpp"
-#include "../include/metadata/iceberg_snapshot.hpp"
 #include "metadata/iceberg_manifest_list.hpp"
 #include "metadata/iceberg_manifest.hpp"
 #include "metadata/iceberg_snapshot.hpp"
@@ -28,13 +26,14 @@ void IcebergTransactionData::CreateManifestListEntry(IcebergAddSnapshot &add_sna
                                                      IcebergTableMetadata &table_metadata,
                                                      IcebergManifestContentType manifest_content_type,
                                                      vector<IcebergManifestEntry> &&data_files) {
-	// Add a manifest list entry for the delete files
-	auto &manifest_list_delete_entry = add_snapshot.manifest_list.CreateNewManifestListEntry();
-	auto &manifest_entry = manifest_list_delete_entry.manifest_file;
-
-	//! give the manifest file a path
+	//! create manifest file path
 	auto manifest_file_uuid = UUID::ToString(UUID::GenerateRandomUUID());
 	auto manifest_file_path = table_metadata.GetMetadataPath() + "/" + manifest_file_uuid + "-m0.avro";
+
+	// Add a manifest list entry for the delete files
+	auto &manifest_list_delete_entry = add_snapshot.manifest_list.CreateNewManifestListEntry(manifest_file_path);
+	auto &manifest_entry = manifest_list_delete_entry.manifest_file;
+
 	manifest_entry.path = manifest_file_path;
 
 	// auto &manifest = add_snapshot->manifest;

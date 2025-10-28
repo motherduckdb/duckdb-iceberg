@@ -2,6 +2,7 @@
 
 #include "duckdb/common/string_util.hpp"
 #include "storage/irc_transaction.hpp"
+#include "storage/iceberg_transaction_data.hpp"
 #include "storage/irc_schema_entry.hpp"
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_authorization.hpp"

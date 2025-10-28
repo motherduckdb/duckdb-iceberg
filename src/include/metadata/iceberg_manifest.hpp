@@ -97,7 +97,6 @@ struct IcebergManifestFile {
 	}
 
 public:
-public:
 	string path;
 	vector<IcebergManifestEntry> data_files;
 };

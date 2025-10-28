@@ -1,9 +1,40 @@
+#include "include/metadata/iceberg_manifest_list.hpp"
 #include "metadata/iceberg_manifest_list.hpp"
 #include "duckdb/main/database.hpp"
 
 #include "duckdb/storage/buffer_manager.hpp"
 
 namespace duckdb {
+
+vector<IcebergManifestListEntry> &IcebergManifestList::GetManifestFilesMutable() {
+	return manifest_entries;
+}
+
+const vector<IcebergManifestListEntry> &IcebergManifestList::GetManifestFilesConst() const {
+	return manifest_entries;
+}
+
+void IcebergManifestList::WriteManifestListEntry(IcebergTableInformation &table_info, idx_t manifest_index,
+                                                 CopyFunction &avro_copy, DatabaseInstance &db,
+                                                 ClientContext &context) {
+	D_ASSERT(manifest_index < manifest_entries.size());
+	auto &manifest_file = manifest_entries[manifest_index];
+	auto manifest_length = manifest_file::WriteToFile(table_info, manifest_file.manifest_file, avro_copy, db, context);
+	manifest_file.manifest_length = manifest_length;
+}
+
+idx_t IcebergManifestList::GetManifestListEntriesCount() const {
+	return manifest_entries.size();
+}
+
+void IcebergManifestList::AddToManifestEntries(vector<IcebergManifestListEntry> &manifest_list_entries) {
+	manifest_entries.insert(manifest_entries.begin(), std::make_move_iterator(manifest_list_entries.begin()),
+	                        std::make_move_iterator(manifest_list_entries.end()));
+}
+
+vector<IcebergManifestListEntry> IcebergManifestList::GetManifestListEntries() {
+	return std::move(manifest_entries);
+}
 
 namespace manifest_list {
 
@@ -119,7 +150,7 @@ void WriteToFile(const IcebergManifestList &manifest_list, CopyFunction &copy, D
 	data.Initialize(allocator, types, manifest_files.size());
 
 	for (idx_t i = 0; i < manifest_files.size(); i++) {
-		auto &manifest = manifest_files[i].get();
+		const auto &manifest = manifest_files[i];
 		idx_t col_idx = 0;
 
 		// manifest_path: string - 500
