@@ -44,16 +44,16 @@ create table if not exists my_datalake.default.test as select range a from range
 
 statement ok
 CALL set_iceberg_table_properties(my_datalake.default.test,
-       MAP {
-        'write.update.mode' : 'copy-on-write',
-        'foo' : 'buzz',
-        'page-write-size': '10000'
-        });
+   MAP {
+    'write.update.mode' : 'copy-on-write',
+    'foo' : 'buzz',
+    'page-write-size': '10000'
+    }
+);
 
 # test deleting table properties
 statement ok
-CALL remove_iceberg_table_properties(my_datalake.default.test,
-        ['foo']);
+CALL remove_iceberg_table_properties(my_datalake.default.test, ['foo']);
 
 query II
 select * from iceberg_table_properties(my_datalake.default.test);
@@ -85,27 +85,10 @@ select count(*) from my_datalake.default.test;
 50
 
 query II
-select * from iceberg_table_properties(my_datalake.default.test_table_properties) where "key" not in ('created-at', 'owner');;
+select * from iceberg_table_properties(my_datalake.default.test_table_properties) where "key" not in ('created-at', 'owner') order by all;
 ----
-read.split.target-size	268435456
-write.parquet.compression-codec	zstd
-duckdb_man	superman
-write.delete.mode	merge-on-read
 another1	neato
-
-
-mode skip
-
-
-statement ok
-CALL set_iceberg_table_properties(my_datalake.default.table_unpartitioned, 'write.update.mode=copy-on-write')
-
-# According to the spec, Table Properties can be set and removed at the same time
-# need to check that a server supports setting and removing table properties.
-# summary: An update namespace properties request with both properties to remove and properties to upsert.
-# value: {
-#     "removals": [ "foo", "bar" ],
-#     "updates": { "owner": "Raoul" }
-#   }
-statement ok
-select * from iceberg_table_properties(my_datalake.default.table_unpartitioned);
+duckdb_man	superman
+read.split.target-size	268435456
+write.delete.mode	merge-on-read
+write.parquet.compression-codec	zstd
