@@ -20,7 +20,6 @@ duckdb_extension_load(ducklake
         GIT_TAG f134ad86f2f6e7cdf4133086c38ecd9c48f1a772
 )
 
-
 if (NOT EMSCRIPTEN)
 ################## AWS
 if (NOT MINGW)

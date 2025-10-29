@@ -1,4 +1,10 @@
 #include "storage/iceberg_transaction_data.hpp"
+
+#include "metadata/iceberg_manifest_list.hpp"
+#include "metadata/iceberg_manifest.hpp"
+#include "metadata/iceberg_snapshot.hpp"
+#include "duckdb/common/multi_file/multi_file_reader.hpp"
+
 #include "storage/irc_table_set.hpp"
 #include "storage/table_update/iceberg_add_snapshot.hpp"
 #include "storage/table_update/common.hpp"
@@ -17,6 +23,58 @@ static int64_t NewSnapshotId() {
 	return random_number;
 }
 
+void IcebergTransactionData::CreateManifestListEntry(IcebergAddSnapshot &add_snapshot,
+                                                     IcebergTableMetadata &table_metadata,
+                                                     IcebergManifestContentType manifest_content_type,
+                                                     vector<IcebergManifestEntry> &&data_files) {
+	//! create manifest file path
+	auto manifest_file_uuid = UUID::ToString(UUID::GenerateRandomUUID());
+	auto manifest_file_path = table_metadata.GetMetadataPath() + "/" + manifest_file_uuid + "-m0.avro";
+
+	// Add a manifest list entry for the delete files
+	auto &manifest_list_delete_entry = add_snapshot.manifest_list.CreateNewManifestListEntry(manifest_file_path);
+	auto &manifest_entry = manifest_list_delete_entry.manifest_file;
+
+	manifest_entry.path = manifest_file_path;
+
+	// auto &manifest = add_snapshot->manifest;
+	auto &snapshot = add_snapshot.snapshot;
+	manifest_list_delete_entry.manifest_path = manifest_file_path;
+	manifest_list_delete_entry.sequence_number = snapshot.sequence_number;
+	manifest_list_delete_entry.content = manifest_content_type;
+	manifest_list_delete_entry.added_files_count = data_files.size();
+	manifest_list_delete_entry.deleted_files_count = 0;
+	manifest_list_delete_entry.existing_files_count = 0;
+	manifest_list_delete_entry.added_rows_count = 0;
+	manifest_list_delete_entry.existing_rows_count = 0;
+	//! TODO: support partitions
+	manifest_list_delete_entry.partition_spec_id = 0;
+	//! manifest.partitions = CreateManifestPartition();
+
+	//! Add the delete files to the manifest
+	for (auto &data_file : data_files) {
+		switch (manifest_content_type) {
+		case IcebergManifestContentType::DATA:
+			manifest_list_delete_entry.added_rows_count += data_file.record_count;
+			break;
+		case IcebergManifestContentType::DELETE:
+			manifest_list_delete_entry.deleted_rows_count += data_file.record_count;
+			break;
+		}
+		data_file.sequence_number = snapshot.sequence_number;
+		data_file.snapshot_id = snapshot.snapshot_id;
+		data_file.partition_spec_id = manifest_list_delete_entry.partition_spec_id;
+		if (!manifest_list_delete_entry.has_min_sequence_number ||
+		    data_file.sequence_number < manifest_list_delete_entry.min_sequence_number) {
+			manifest_list_delete_entry.min_sequence_number = data_file.sequence_number;
+		}
+		manifest_list_delete_entry.has_min_sequence_number = true;
+	}
+	manifest_list_delete_entry.added_snapshot_id = snapshot.snapshot_id;
+	manifest_entry.data_files.insert(manifest_entry.data_files.end(), std::make_move_iterator(data_files.begin()),
+	                                 std::make_move_iterator(data_files.end()));
+}
+
 void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
                                          vector<IcebergManifestEntry> &&data_files) {
 	D_ASSERT(!data_files.empty());
@@ -33,18 +91,14 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 
 	auto sequence_number = last_sequence_number + 1;
 
-	//! Construct the manifest file
-	auto manifest_file_uuid = UUID::ToString(UUID::GenerateRandomUUID());
-	auto manifest_file_path = table_info.BaseFilePath() + "/metadata/" + manifest_file_uuid + "-m0.avro";
-	IcebergManifestFile new_manifest_file(manifest_file_path);
-
 	//! Construct the manifest list
 	auto manifest_list_uuid = UUID::ToString(UUID::GenerateRandomUUID());
-	auto manifest_list_path = table_info.BaseFilePath() + "/metadata/snap-" + std::to_string(snapshot_id) + "-" +
-	                          manifest_list_uuid + ".avro";
+	auto manifest_list_path =
+	    table_metadata.GetMetadataPath() + "/snap-" + std::to_string(snapshot_id) + "-" + manifest_list_uuid + ".avro";
 
 	//! Construct the snapshot
 	IcebergSnapshot new_snapshot;
+	new_snapshot.operation = operation;
 	new_snapshot.snapshot_id = snapshot_id;
 	new_snapshot.sequence_number = sequence_number;
 	new_snapshot.schema_id = table_metadata.current_schema_id;
@@ -63,37 +117,19 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 		}
 	}
 
-	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info, std::move(new_manifest_file), manifest_list_path,
-	                                                  std::move(new_snapshot));
-	auto &manifest_file = add_snapshot->manifest_file;
-	auto &manifest = add_snapshot->manifest;
-	auto &snapshot = add_snapshot->snapshot;
-
-	manifest.manifest_path = manifest_file_path;
-	manifest.sequence_number = sequence_number;
-	manifest.content = IcebergManifestContentType::DATA;
-	manifest.added_files_count = data_files.size();
-	manifest.existing_files_count = 0;
-	manifest.deleted_files_count = 0;
-	manifest.added_rows_count = 0;
-	manifest.existing_rows_count = 0;
-	manifest.deleted_rows_count = 0;
-	//! TODO: support partitions
-	manifest.partition_spec_id = 0;
-	//! manifest.partitions = CreateManifestPartition();
-
-	//! Add the data files
-	for (auto &data_file : data_files) {
-		manifest.added_rows_count += data_file.record_count;
-		data_file.sequence_number = snapshot.sequence_number;
-		if (!manifest.has_min_sequence_number || data_file.sequence_number < manifest.min_sequence_number) {
-			manifest.min_sequence_number = data_file.sequence_number;
-		}
-		manifest.has_min_sequence_number = true;
+	auto manifest_content_type = IcebergManifestContentType::DATA;
+	switch (operation) {
+	case IcebergSnapshotOperationType::DELETE:
+		manifest_content_type = IcebergManifestContentType::DELETE;
+		break;
+	case IcebergSnapshotOperationType::APPEND:
+		manifest_content_type = IcebergManifestContentType::DATA;
+		break;
+	default:
+		throw NotImplementedException("Cannot have use snapshot operation type REPLACE or OVERWRITE here");
 	}
-	manifest.added_snapshot_id = snapshot.snapshot_id;
-	manifest_file.data_files.insert(manifest_file.data_files.end(), std::make_move_iterator(data_files.begin()),
-	                                std::make_move_iterator(data_files.end()));
+	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info, manifest_list_path, std::move(new_snapshot));
+	CreateManifestListEntry(*add_snapshot, table_metadata, manifest_content_type, std::move(data_files));
 	alters.push_back(*add_snapshot);
 	updates.push_back(std::move(add_snapshot));
 }
