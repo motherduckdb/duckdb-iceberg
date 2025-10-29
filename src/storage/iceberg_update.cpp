@@ -258,6 +258,12 @@ PhysicalOperator &IRCatalog::PlanUpdate(ClientContext &context, PhysicalPlanGene
 	if (!partition_spec.IsUnpartitioned()) {
 		throw NotImplementedException("Update into a partitioned table is not supported yet");
 	}
+	if (table_info.table_metadata.HasSortOrder()) {
+		auto &sort_spec = table_info.table_metadata.GetLatestSortOrder();
+		if (sort_spec.IsSorted()) {
+			throw NotImplementedException("Update on a sorted iceberg table is not supported yet");
+		}
+	}
 
 	IcebergCopyInput copy_input(context, table);
 	vector<Value> field_input;
@@ -279,8 +285,11 @@ PhysicalOperator &IRCatalog::PlanUpdate(ClientContext &context, PhysicalPlanGene
 
 void ICTableEntry::BindUpdateConstraints(Binder &binder, LogicalGet &get, LogicalProjection &proj,
                                          LogicalUpdate &update, ClientContext &context) {
+	// all updates in DuckDB-Iceberg are deletes + inserts
+	update.update_is_del_and_insert = true;
 
-	// push projections for all columns that are not projected yet
+	// FIXME: this is almost a copy of LogicalUpdate::BindExtraColumns aside from the duplicate elimination
+	// add that to main DuckDB
 	auto &column_ids = get.GetColumnIds();
 	for (auto &column : columns.Physical()) {
 		auto physical_index = column.Physical();
