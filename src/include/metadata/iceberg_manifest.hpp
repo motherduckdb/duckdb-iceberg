@@ -91,8 +91,6 @@ public:
 };
 
 struct IcebergManifestFile {
-	IcebergManifestFile() {
-	}
 	IcebergManifestFile(const string &path) : path(path) {
 	}
 

@@ -135,9 +135,6 @@ SinkFinalizeType IcebergUpdate::Finalize(Pipeline &pipeline, Event &event, Clien
 	if (result != SinkFinalizeType::READY) {
 		throw InternalException("IcebergUpdate::Finalize does not support async child operators");
 	}
-	// OperatorSinkFinalizeInput del_finalize_input {*delete_op.sink_state, input.interrupt_state};
-	// result = delete_op.Finalize(pipeline, event, context, del_finalize_input);
-
 	// Finalize the Deletes.
 	auto &iceberg_delete = delete_op.Cast<IcebergDelete>();
 	auto &delete_global_state = delete_op.sink_state->Cast<IcebergDeleteGlobalState>();
