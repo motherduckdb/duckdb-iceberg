@@ -6,6 +6,7 @@
 #include "metadata/iceberg_column_definition.hpp"
 
 #include "iceberg_multi_file_list.hpp"
+#include "utils/iceberg_type.hpp"
 
 #include "duckdb/common/sort/partition_state.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
@@ -446,7 +447,7 @@ PhysicalOperator &IRCatalog::PlanInsert(ClientContext &context, PhysicalPlanGene
 	if (table_info.table_metadata.HasSortOrder()) {
 		auto &sort_spec = table_info.table_metadata.GetLatestSortOrder();
 		if (sort_spec.IsSorted()) {
-			throw NotImplementedException("Insert into a sorted iceberg table is not supported yet");
+			throw NotImplementedException("INSERT into a sorted iceberg table is not supported yet");
 		}
 	}
 
@@ -477,6 +478,9 @@ PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalP
 
 	// create the table. Takes care of committing to rest catalog and getting the metadata location etc.
 	// setting the schema
+	// check columns are valid.
+	auto &wat = op.info->Base();
+	auto columns_are_valid = IcebergTypeHelper::ColumnTypesAreValidInIceberg(wat);
 	auto table = ic_schema_entry.CreateTable(irc_transaction, context, *op.info);
 	if (!table) {
 		throw InternalException("Table could not be created");

@@ -122,10 +122,6 @@ bool ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 	if (info.on_conflict == OnCreateConflict::REPLACE_ON_CONFLICT) {
 		throw InvalidInputException("CREATE OR REPLACE not supported in DuckDB-Iceberg");
 	}
-	for (idx_t i = 0; i < info.columns.LogicalColumnCount(); i++) {
-		auto &column = info.columns.GetColumnMutable(LogicalIndex(i));
-		IcebergTypeHelper::PromoteDuckDBTypeToValidIcebergTpe(column);
-	}
 
 	auto &irc_transaction = IRCTransaction::Get(context, catalog);
 	bool table_deleted_in_transaction = false;

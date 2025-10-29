@@ -10,21 +10,35 @@
 
 namespace duckdb {
 
-
-void IcebergTypeHelper::PromoteDuckDBTypeToValidIcebergTpe(ColumnDefinition &column) {
-	switch (column.Type().id()) {
-	case LogicalTypeId::USMALLINT:
-	case LogicalTypeId::UTINYINT:
-	case LogicalTypeId::SMALLINT:
-	case LogicalTypeId::TINYINT:
-	case LogicalTypeId::INTEGER:
-		column.SetType(LogicalTypeId::INTEGER);
-		return;
-	default:
-		return;
+bool IcebergTypeHelper::ColumnTypesAreValidInIceberg(CreateTableInfo &info) {
+	for (idx_t i = 0; i < info.columns.LogicalColumnCount(); i++) {
+		auto &column = info.columns.GetColumn(LogicalIndex(i));
+		switch (column.Type().id()) {
+		case LogicalTypeId::BOOLEAN:
+		case LogicalTypeId::INTEGER:
+		case LogicalTypeId::BIGINT:
+		case LogicalTypeId::FLOAT:
+		case LogicalTypeId::DOUBLE:
+		case LogicalTypeId::DECIMAL:
+		case LogicalTypeId::DATE:
+		case LogicalTypeId::TIME:
+		case LogicalTypeId::TIMESTAMP:
+		case LogicalTypeId::TIMESTAMP_TZ:
+		case LogicalTypeId::VARCHAR:
+		case LogicalTypeId::UUID:
+		case LogicalTypeId::BLOB:
+		case LogicalTypeId::ARRAY:
+		case LogicalTypeId::STRUCT:
+		case LogicalTypeId::LIST:
+		case LogicalTypeId::MAP:
+			continue;
+		default:
+			throw InvalidInputException("Column type %s is not a valid Iceberg Type.",
+			                            LogicalTypeIdToString(column.Type().id()));
+		}
 	}
+	return true;
 }
-
 
 string IcebergTypeHelper::LogicalTypeToIcebergType(const LogicalType &type) {
 	switch (type.id()) {
