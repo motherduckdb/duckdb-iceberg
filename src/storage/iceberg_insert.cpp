@@ -7,7 +7,6 @@
 
 #include "iceberg_multi_file_list.hpp"
 #include "utils/iceberg_type.hpp"
-
 #include "duckdb/common/sort/partition_state.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
 #include "duckdb/main/client_data.hpp"

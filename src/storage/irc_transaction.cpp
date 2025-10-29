@@ -383,9 +383,11 @@ void IRCTransaction::CleanupFiles() {
 				continue;
 			}
 			auto &add_snapshot = update->Cast<IcebergAddSnapshot>();
-			auto &data_files = add_snapshot.manifest_file.data_files;
-			for (auto &data_file : data_files) {
-				fs.TryRemoveFile(data_file.file_path);
+			auto manifest_list_entries = add_snapshot.manifest_list.GetManifestFilesConst();
+			for (const auto &manifest_entry : manifest_list_entries) {
+				for (auto &data_file : manifest_entry.manifest_file.data_files) {
+					fs.TryRemoveFile(data_file.file_path);
+				}
 			}
 		}
 	}

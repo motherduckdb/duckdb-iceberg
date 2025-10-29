@@ -5,6 +5,8 @@
 #include "storage/iceberg_table_information.hpp"
 #include "iceberg_multi_file_reader.hpp"
 #include "iceberg_multi_file_list.hpp"
+#include "metadata/iceberg_manifest.hpp"
+#include "storage/iceberg_metadata_info.hpp"
 
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
@@ -103,7 +105,7 @@ void IcebergDelete::WritePositionalDeleteFile(ClientContext &context, IcebergDel
 	info->is_from = false;
 
 	// generate the field ids to be written by the parquet writer
-	// these field ids follow icebergs' ids and names for the delete files
+	// these field ids follow icebergs ids and names for the delete files
 	child_list_t<Value> values;
 	values.emplace_back("file_path", Value::INTEGER(MultiFileReader::DELETE_FILE_PATH_FIELD_ID));
 	values.emplace_back("pos", Value::INTEGER(MultiFileReader::DELETE_POS_FIELD_ID));
@@ -223,6 +225,31 @@ void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &cont
 	WritePositionalDeleteFile(context, global_state, filename, delete_file, sorted_deletes);
 }
 
+vector<IcebergManifestEntry>
+IcebergDelete::GenerateDeleteManifestEntries(unordered_map<string, IcebergDeleteFileInfo> &delete_files) {
+	vector<IcebergManifestEntry> iceberg_delete_files;
+	for (auto &delete_entry : delete_files) {
+		auto data_file_name = delete_entry.first;
+		auto &delete_file = delete_entry.second;
+
+		IcebergManifestEntry manifest_entry;
+		manifest_entry.status = IcebergManifestEntryStatusType::ADDED;
+		manifest_entry.content = IcebergManifestEntryContentType::POSITION_DELETES;
+		manifest_entry.file_path = delete_file.file_name;
+		manifest_entry.file_format = "parquet";
+		manifest_entry.record_count = delete_file.delete_count;
+		manifest_entry.file_size_in_bytes = delete_file.file_size_bytes;
+
+		// set lower and upper bound for the filename column
+		manifest_entry.lower_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB(data_file_name);
+		manifest_entry.upper_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB(data_file_name);
+		// set referenced_data_file
+		manifest_entry.referenced_data_file = data_file_name;
+		iceberg_delete_files.push_back(manifest_entry);
+	}
+	return iceberg_delete_files;
+}
+
 SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
                                          OperatorSinkFinalizeInput &input) const {
 	auto &global_state = input.global_state.Cast<IcebergDeleteGlobalState>();
@@ -240,26 +267,7 @@ SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, Clien
 	auto &irc_table = table.Cast<ICTableEntry>();
 	auto &table_info = irc_table.table_info;
 	auto &transaction = IRCTransaction::Get(context, table.catalog);
-	vector<IcebergManifestEntry> iceberg_delete_files;
-	for (auto &entry : global_state.written_files) {
-		auto data_file_name = entry.first;
-		auto &delete_file = entry.second;
-		IcebergManifestEntry manifest_entry;
-		manifest_entry.status = IcebergManifestEntryStatusType::ADDED;
-		manifest_entry.content = IcebergManifestEntryContentType::POSITION_DELETES;
-		manifest_entry.file_path = delete_file.file_name;
-		manifest_entry.file_format = "parquet";
-		manifest_entry.record_count = delete_file.delete_count;
-		manifest_entry.file_size_in_bytes = delete_file.file_size_bytes;
-
-		// set lower and upper bound for the filename column
-		manifest_entry.lower_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB(data_file_name);
-		manifest_entry.upper_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB(data_file_name);
-		// set referenced_data_file
-		manifest_entry.referenced_data_file = data_file_name;
-
-		iceberg_delete_files.push_back(std::move(manifest_entry));
-	}
+	auto iceberg_delete_files = GenerateDeleteManifestEntries(global_state.written_files);
 	table_info.AddDeleteSnapshot(transaction, std::move(iceberg_delete_files));
 	transaction.MarkTableAsDirty(irc_table);
 	return SinkFinalizeType::READY;
