@@ -93,6 +93,8 @@ public:
 	                          OperatorSinkFinalizeInput &input) const override;
 	unique_ptr<GlobalSinkState> GetGlobalSinkState(ClientContext &context) const override;
 	unique_ptr<LocalSinkState> GetLocalSinkState(ExecutionContext &context) const override;
+	static vector<IcebergManifestEntry>
+	GenerateDeleteManifestEntries(unordered_map<string, IcebergDeleteFileInfo> &delete_files);
 
 	bool IsSink() const override {
 		return true;
@@ -104,13 +106,13 @@ public:
 
 	string GetName() const override;
 	InsertionOrderPreservingMap<string> ParamsToString() const override;
+	void FlushDelete(IRCTransaction &transaction, ClientContext &context, IcebergDeleteGlobalState &global_state,
+	                 const string &filename, vector<idx_t> &deleted_rows) const;
 
 private:
 	void WritePositionalDeleteFile(ClientContext &context, IcebergDeleteGlobalState &global_state,
 	                               const string &filename, IcebergDeleteFileInfo delete_file,
 	                               set<idx_t> sorted_deletes) const;
-	void FlushDelete(IRCTransaction &transaction, ClientContext &context, IcebergDeleteGlobalState &global_state,
-	                 const string &filename, vector<idx_t> &deleted_rows) const;
 };
 
 } // namespace duckdb
