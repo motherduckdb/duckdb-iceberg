@@ -37,12 +37,15 @@ IcebergInsert::IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op, S
 
 IcebergCopyInput::IcebergCopyInput(ClientContext &context, ICTableEntry &table)
     : catalog(table.catalog.Cast<IRCatalog>()), columns(table.GetColumns()) {
-	data_path = table.table_info.BaseFilePath() + "/data";
+	data_path = table.table_info.table_metadata.GetDataPath();
 }
 
 IcebergCopyInput::IcebergCopyInput(ClientContext &context, IRCSchemaEntry &schema, const ColumnList &columns,
                                    const string &data_path_p)
     : catalog(schema.catalog.Cast<IRCatalog>()), columns(columns) {
+	// When data_path_p is provided directly, it's already the table location
+	// We should check if it has write.data.path property, but since this is a schema-level
+	// constructor and we don't have access to table metadata, we use the default behavior
 	data_path = data_path_p + "/data";
 }
 
@@ -439,6 +442,12 @@ PhysicalOperator &IRCatalog::PlanInsert(ClientContext &context, PhysicalPlanGene
 	auto &partition_spec = table_info.table_metadata.GetLatestPartitionSpec();
 	if (!partition_spec.IsUnpartitioned()) {
 		throw NotImplementedException("INSERT into a partitioned table is not supported yet");
+	}
+	if (table_info.table_metadata.HasSortOrder()) {
+		auto &sort_spec = table_info.table_metadata.GetLatestSortOrder();
+		if (sort_spec.IsSorted()) {
+			throw NotImplementedException("Insert into a sorted iceberg table is not supported yet");
+		}
 	}
 
 	// Create Copy Info

@@ -10,6 +10,7 @@
 
 #include "duckdb/common/multi_file/multi_file_list.hpp"
 #include "duckdb/common/types/batched_data_collection.hpp"
+#include "storage/iceberg_metadata_info.hpp"
 #include "iceberg_metadata.hpp"
 #include "iceberg_utils.hpp"
 #include "manifest_reader.hpp"
@@ -108,6 +109,7 @@ public:
 
 	vector<IcebergManifest>::iterator current_data_manifest;
 	mutable vector<IcebergManifest>::iterator current_delete_manifest;
+	mutable vector<reference<IcebergManifestFile>>::iterator current_transaction_delete_manifest;
 	//! The data files of the manifest file that we last scanned
 	idx_t data_file_idx = 0;
 	vector<IcebergManifestEntry> current_data_files;
