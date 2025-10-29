@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/create/test_create_table_invalid_types.test
+# name: test/sql/local/irc/insert/test_create_table_as_with_incorrect_types.test
 # description: test integration with iceberg catalog read
 # group: [create]
 
@@ -102,6 +102,9 @@ create table my_datalake.new_schema_1.unsupported_types as select small_enum, me
 ----
 <REGEX>:.*Column type ENUM is not a valid Iceberg Type.*
 
+statement ok
+drop table IF EXISTS my_datalake.new_schema_1.supported_types;
+
 # you can create tables with types that can be promoted to iceberg types
 statement ok
 create table my_datalake.new_schema_1.supported_types (
@@ -120,3 +123,9 @@ tinyint_type	INTEGER
 smallint_type	INTEGER
 utinyint_type	INTEGER
 usmallint_type	INTEGER
+
+statement ok
+drop table my_datalake.new_schema_1.supported_types;
+
+statement ok
+drop schema my_datalake.new_schema_1;
