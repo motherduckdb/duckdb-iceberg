@@ -471,7 +471,7 @@ static optional_ptr<const TableFilter> GetFilterForColumnIndex(TableFilterSet &f
 	return current_filter.get();
 }
 
-bool IcebergMultiFileList::ManifestMatchesFilter(const IcebergManifest &manifest) {
+bool IcebergMultiFileList::ManifestMatchesFilter(const IcebergManifestListEntry &manifest) {
 	auto spec_id = manifest.partition_spec_id;
 	auto &metadata = GetMetadata();
 
@@ -556,11 +556,12 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) {
 		auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(metadata.iceberg_version);
 		auto scan = make_uniq<AvroScan>("IcebergManifestList", context, manifest_list_full_path);
 		manifest_list_reader->Initialize(std::move(scan));
+		auto manifest_list_entries = manifest_list.GetManifestFilesMutable();
 		while (!manifest_list_reader->Finished()) {
-			manifest_list_reader->Read(STANDARD_VECTOR_SIZE, manifest_list.manifests);
+			manifest_list_reader->Read(STANDARD_VECTOR_SIZE, manifest_list_entries);
 		}
 
-		for (auto &manifest : manifest_list.manifests) {
+		for (auto &manifest : manifest_list_entries) {
 			if (!ManifestMatchesFilter(manifest)) {
 				DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'manifest_file': '%s'",
 				           manifest.manifest_path);
@@ -582,20 +583,25 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) {
 		for (auto &alter_p : transaction_data.alters) {
 			auto &alter = alter_p.get();
 
-			if (!ManifestMatchesFilter(alter.manifest)) {
-				DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'manifest_file': '%s'",
-				           alter.manifest.manifest_path);
-				//! Skip this manifest
-				continue;
-			}
-
-			if (alter.snapshot.operation == IcebergSnapshotOperationType::APPEND) {
-				transaction_data_manifests.push_back(alter.manifest_file);
-			} else if (alter.snapshot.operation == IcebergSnapshotOperationType::DELETE) {
-				transaction_delete_manifests.push_back(alter.manifest_file);
-			} else {
-				throw NotImplementedException("IcebergSnapshotOperationType: %d",
-				                              static_cast<uint8_t>(alter.snapshot.operation));
+			auto &manifest_list_entries = alter.manifest_list.GetManifestFilesMutable();
+			for (auto &manifest : manifest_list_entries) {
+				if (!ManifestMatchesFilter(manifest)) {
+					DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'manifest_file': '%s'",
+					           manifest.manifest_path);
+					//! Skip this manifest
+					continue;
+				}
+				switch (manifest.content) {
+				case IcebergManifestContentType::DATA:
+					transaction_data_manifests.push_back(manifest.manifest_file);
+					break;
+				case IcebergManifestContentType::DELETE:
+					transaction_delete_manifests.push_back(manifest.manifest_file);
+					break;
+				default:
+					throw NotImplementedException("IcebergManifestContentType: %d",
+					                              static_cast<uint8_t>(manifest.content));
+				}
 			}
 		}
 	}
