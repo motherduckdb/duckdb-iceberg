@@ -258,8 +258,8 @@ PhysicalOperator &IRCatalog::PlanUpdate(ClientContext &context, PhysicalPlanGene
 	if (!partition_spec.IsUnpartitioned()) {
 		throw NotImplementedException("Update into a partitioned table is not supported yet");
 	}
-	if (table_info.table_metadata.HasSortOrder()) {
-		auto &sort_spec = table_info.table_metadata.GetLatestSortOrder();
+	if (table.table_info.table_metadata.HasSortOrder()) {
+		auto &sort_spec = table.table_info.table_metadata.GetLatestSortOrder();
 		if (sort_spec.IsSorted()) {
 			throw NotImplementedException("Update on a sorted iceberg table is not supported yet");
 		}
