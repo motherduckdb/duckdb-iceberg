@@ -28,7 +28,8 @@ public:
 	//! were moved without their paths updated
 	static string GetFullPath(const string &iceberg_path, const string &relative_file_path, FileSystem &fs);
 	static string GetStorageLocation(ClientContext &context, const string &input);
-	static optional_ptr<ICTableEntry> GetICTableEntry(ClientContext &context, const string &input);
+	static optional_ptr<CatalogEntry> GetICTableEntry(ClientContext &context, const string &input);
+	static optional_ptr<ICTableEntry> GetIcebergTableEntry(ClientContext &context, const string &name);
 	static idx_t CountOccurrences(const string &input, const string &to_find);
 };
 

@@ -44,13 +44,23 @@ create table if not exists my_datalake.default.test as select range a from range
 
 statement ok
 CALL set_iceberg_table_properties(my_datalake.default.test,
-   MAP {
+    {
     'write.update.mode' : 'copy-on-write',
     'write.delete.mode' : 'copy-on-write',
     'foo' : 'buzz',
     'page-write-size': '10000'
     }
 );
+
+statement error
+CALL set_iceberg_table_properties(my_datalake.default.test,'blah');
+----
+<REGEX>:.*Invalid Input Error.*Failed to cast value.*
+
+statement error
+CALL set_iceberg_table_properties(my_datalake.default.test,1000);
+----
+<REGEX>:.*Invalid Input Error.*Failed to cast value.*
 
 # test deleting table properties
 statement ok
@@ -73,7 +83,7 @@ delete from my_datalake.default.test where a %2 = 0;
 # set the table property to merge on read
 statement ok
 CALL set_iceberg_table_properties(my_datalake.default.test,
-       MAP {
+       {
         'write.delete.mode' : 'merge-on-read',
         });
 
@@ -86,6 +96,9 @@ select count(*) from my_datalake.default.test;
 ----
 50
 
+
+
+
 query II
 select * from iceberg_table_properties(my_datalake.default.test_table_properties) where "key" not in ('created-at', 'owner') order by all;
 ----
@@ -94,3 +107,34 @@ duckdb_man	superman
 read.split.target-size	268435456
 write.delete.mode	merge-on-read
 write.parquet.compression-codec	zstd
+
+
+statement ok
+create table tbl1 as select range a from range(100);
+
+statement error
+select * from iceberg_table_properties(tbl1);
+----
+<REGEX>:.*Invalid Input.*
+
+
+statement error
+select * from iceberg_table_properties('not exists');
+----
+<REGEX>:.*Invalid Input.*
+
+statement error
+select * from iceberg_table_properties('default.test');
+----
+<REGEX>:.*Invalid Input.*
+
+statement ok
+use my_datalake.default;
+
+statement ok
+select * from iceberg_table_properties('default.test');
+
+statement error
+select * from iceberg_table_properties('default.test.blah.blah');
+----
+<REGEX>:.*four identifiers.*

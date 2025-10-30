@@ -1,6 +1,7 @@
 #include "duckdb.hpp"
 #include "iceberg_utils.hpp"
 #include "fstream"
+#include "../include/storage/irc_table_entry.hpp"
 #include "storage/irc_table_entry.hpp"
 #include "duckdb/common/gzip_file_system.hpp"
 #include "storage/irc_table_entry.hpp"
@@ -48,7 +49,7 @@ static string ExtractIcebergScanPath(const string &sql) {
 	return sql.substr(start, end - start);
 }
 
-optional_ptr<ICTableEntry> IcebergUtils::GetICTableEntry(ClientContext &context, const string &input) {
+optional_ptr<CatalogEntry> IcebergUtils::GetICTableEntry(ClientContext &context, const string &input) {
 	auto qualified_name = QualifiedName::ParseComponents(input);
 	if (qualified_name.size() != 3) {
 		return nullptr;
@@ -57,9 +58,22 @@ optional_ptr<ICTableEntry> IcebergUtils::GetICTableEntry(ClientContext &context,
 	auto table =
 	    Catalog::GetEntry(context, qualified_name[0], qualified_name[1], table_info, OnEntryNotFound::RETURN_NULL);
 	if (!table) {
-		throw InvalidInputException("Could not find Iceberg Table with name '%s'", input);
+		throw InvalidInputException("Could not find Catalog Entry with name '%s'", input);
 	}
-	return table->Cast<ICTableEntry>();
+	return table;
+}
+
+optional_ptr<ICTableEntry> IcebergUtils::GetIcebergTableEntry(ClientContext &context, const string &name) {
+	auto catalog_entry = IcebergUtils::GetICTableEntry(context, name);
+	if (catalog_entry->type == CatalogType::TABLE_ENTRY) {
+		//! This is a IRCTableEntry, set up the scan from this
+		auto &table_entry = catalog_entry->Cast<ICTableEntry>();
+		return table_entry;
+	}
+	if (catalog_entry->type == CatalogType::VIEW_ENTRY) {
+		throw InvalidInputException("%s is a view and not a table.", name);
+	}
+	throw InvalidInputException("Could not find Iceberg Table Entry with name '%s'", name);
 }
 
 string IcebergUtils::GetStorageLocation(ClientContext &context, const string &input) {

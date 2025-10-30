@@ -2,7 +2,7 @@
 
 #include "iceberg_utils.hpp"
 #include "catalog_utils.hpp"
-#include "../include/metadata/iceberg_snapshot.hpp"
+#include "metadata/iceberg_snapshot.hpp"
 #include "duckdb/common/exception.hpp"
 #include "rest_catalog/objects/list.hpp"
 
