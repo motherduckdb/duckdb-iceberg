@@ -47,6 +47,7 @@ static unique_ptr<FunctionData> SetIcebergTablePropertiesBind(ClientContext &con
 	auto ret = make_uniq<SetIcebergTablePropertiesBindData>();
 
 	auto input_string = input.inputs[0].ToString();
+	auto blah = Value(input.inputs[1]).DefaultCastAs(LogicalType::MAP(LogicalType::VARCHAR, LogicalType::VARCHAR));
 	auto &map = input.inputs[1];
 
 	auto &map_children = MapValue::GetChildren(map);
@@ -219,6 +220,13 @@ TableFunctionSet IcebergFunctions::SetIcebergTablePropertiesFunctions() {
 	                         SetIcebergTablePropertiesFunction, SetIcebergTablePropertiesBind,
 	                         SetIcebergTablePropertiesGlobalTableFunctionState::Init);
 	function_set.AddFunction(fun);
+	child_list_t<LogicalType> child_list;
+	child_list.emplace_back(make_pair("key", LogicalType::VARCHAR));
+	child_list.emplace_back(make_pair("value", LogicalType::VARCHAR));
+	auto fun2 =
+	    TableFunction({LogicalType::VARCHAR, LogicalType::STRUCT(child_list)}, SetIcebergTablePropertiesFunction,
+	                  SetIcebergTablePropertiesBind, SetIcebergTablePropertiesGlobalTableFunctionState::Init);
+	function_set.AddFunction(fun2);
 
 	return function_set;
 }

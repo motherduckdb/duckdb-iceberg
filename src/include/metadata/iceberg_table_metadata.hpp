@@ -13,6 +13,10 @@
 
 namespace duckdb {
 
+// common Iceberg table property keys
+const string WRITE_UPDATE_MODE = "write.update.mode";
+const string WRITE_DELETE_MODE = "write.delete.mode";
+
 struct IcebergTableMetadata {
 public:
 	IcebergTableMetadata() = default;
@@ -50,6 +54,7 @@ public:
 	string GetMetadataPath() const;
 
 	const case_insensitive_map_t<string> &GetTableProperties() const;
+	string GetTableProperty(string property_string) const;
 	bool PropertiesAllowPositionalDeletes(IcebergSnapshotOperationType operation_type) const;
 
 public:

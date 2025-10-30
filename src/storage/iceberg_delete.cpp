@@ -319,14 +319,9 @@ PhysicalOperator &IRCatalog::PlanDelete(ClientContext &context, PhysicalPlanGene
 	auto allows_positional_deletes =
 	    ic_table_entry.table_info.table_metadata.PropertiesAllowPositionalDeletes(IcebergSnapshotOperationType::DELETE);
 	if (!allows_positional_deletes) {
-		auto error_message =
-			StringUtil::Format("DuckDB-Iceberg only supports merge-on-read for updates/deletes. The table %s does not "
-							   "have the merge-on-read property for table updates/deletes. You can "
-							   "modify the write.delete.mode property with the set_iceberg_table_properties() "
-							   "function, or remove it with the "
-							   "remove_iceberg_table_properties() function. You can view Iceberg Table properties with "
-							   "the iceberg_table_properties() function",
-							   ic_table_entry.name);
+		auto delete_table_property = ic_table_entry.table_info.table_metadata.GetTableProperty(WRITE_DELETE_MODE);
+		auto error_message = IRCatalog::GetOnlyMergeOnReadSupportedErrorMessage(ic_table_entry.name, WRITE_DELETE_MODE,
+		                                                                        delete_table_property);
 		throw NotImplementedException(error_message);
 	}
 

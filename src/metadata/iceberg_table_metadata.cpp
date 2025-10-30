@@ -3,6 +3,7 @@
 #include "iceberg_utils.hpp"
 #include "catalog_utils.hpp"
 #include "../include/metadata/iceberg_snapshot.hpp"
+#include "duckdb/common/exception.hpp"
 #include "rest_catalog/objects/list.hpp"
 
 namespace duckdb {
@@ -340,22 +341,30 @@ string IcebergTableMetadata::GetMetadataPath() const {
 	return location + "/data";
 }
 
+string IcebergTableMetadata::GetTableProperty(string property_string) const {
+	auto prop = table_properties.find(property_string);
+	if (prop != table_properties.end()) {
+		return prop->second;
+	}
+	return "";
+}
+
 bool IcebergTableMetadata::PropertiesAllowPositionalDeletes(IcebergSnapshotOperationType operation_type) const {
 	// first check write.delete.mode. If not present go to write.update.mode
-	if (operation_type == IcebergSnapshotOperationType::DELETE) {
-		auto delete_mode = table_properties.find("write.delete.mode");
-		if (delete_mode != table_properties.end()) {
-			return delete_mode->second == "merge-on-read";
-		}
+	switch (operation_type) {
+	case IcebergSnapshotOperationType::DELETE: {
+		auto delete_mode = GetTableProperty("write.delete.mode");
+		// if unset or merge-on-read, it supports positional deletes
+		return delete_mode == "merge-on-read" || delete_mode.empty();
 	}
-
-	auto delete_mode = table_properties.find("write.update.mode");
-	if (delete_mode != table_properties.end()) {
-		return delete_mode->second == "merge-on-read";
+	case IcebergSnapshotOperationType::OVERWRITE: {
+		// if unset or merge-on-read, it supports positional deletes
+		auto update_mode = GetTableProperty("write.update.mode");
+		return update_mode == "merge-on-read" || update_mode.empty();
 	}
-
-	// if no table property describes the update/delete mode, default to true.
-	return true;
+	default:
+		throw NotImplementedException("Operation type not supported");
+	}
 }
 
 } // namespace duckdb
