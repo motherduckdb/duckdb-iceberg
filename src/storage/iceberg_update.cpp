@@ -137,12 +137,7 @@ SinkFinalizeType IcebergUpdate::Finalize(Pipeline &pipeline, Event &event, Clien
 	auto &iceberg_delete = delete_op.Cast<IcebergDelete>();
 	auto &delete_global_state = delete_op.sink_state->Cast<IcebergDeleteGlobalState>();
 	auto &irc_transaction = IRCTransaction::Get(context, table.catalog);
-	if (!delete_global_state.deleted_rows.empty()) {
-		// write out the delete rows
-		for (auto &entry : delete_global_state.deleted_rows) {
-			iceberg_delete.FlushDelete(irc_transaction, context, delete_global_state, entry.first, entry.second);
-		}
-	}
+	iceberg_delete.FlushDeletes(irc_transaction, context, delete_global_state);
 
 	// scan the copy operator and sink into the insert operator
 	ThreadContext thread_context(context);
@@ -180,7 +175,7 @@ SinkFinalizeType IcebergUpdate::Finalize(Pipeline &pipeline, Event &event, Clien
 	lock_guard<mutex> guard(insert_global_state.lock);
 	auto &irc_table = table.Cast<ICTableEntry>();
 	auto &table_info = irc_table.table_info;
-	auto delete_manifest_entries = IcebergDelete::GenerateDeleteManifestEntries(delete_global_state.written_files);
+	auto delete_manifest_entries = IcebergDelete::GenerateDeleteManifestEntries(delete_global_state);
 	if (!insert_global_state.written_files.empty()) {
 		table_info.AddUpdateSnapshot(irc_transaction, std::move(delete_manifest_entries),
 		                             std::move(insert_global_state.written_files));
