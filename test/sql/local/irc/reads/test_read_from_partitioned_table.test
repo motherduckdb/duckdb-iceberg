@@ -1,5 +1,5 @@
-# name: test/sql/local/irc/reads/test_read_from_partitioned_table.test_slow
-# group: [sql]
+# name: test/sql/local/irc/reads/test_read_from_partitioned_table.test
+# group: [reads]
 
 require-env ICEBERG_SERVER_AVAILABLE
 
