@@ -138,3 +138,9 @@ statement error
 select * from iceberg_table_properties('default.test.blah.blah');
 ----
 <REGEX>:.*four identifiers.*
+
+
+statement error
+select * from iceberg_table_properties('__WORKING_DIRECTORY__/data/generated/iceberg/spark-local/default/schema_evolve_float_to_double');
+----
+<REGEX>:.*Cannot call iceberg_table_properties.*on a file.*directory.*

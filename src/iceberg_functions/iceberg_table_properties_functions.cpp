@@ -13,7 +13,6 @@
 #include "../include/storage/irc_table_entry.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "storage/irc_catalog.hpp"
-#include "storage/irc_table_entry.hpp"
 #include "storage/iceberg_table_information.hpp"
 #include "storage/iceberg_transaction_data.hpp"
 #include "storage/irc_table_entry.hpp"
@@ -57,9 +56,20 @@ static optional_ptr<ICTableEntry> GetTableEntry(ClientContext &context, string &
 	auto default_db = DatabaseManager::GetDefaultDatabase(context);
 	auto &catalog = Catalog::GetCatalog(context, default_db);
 	switch (qualified_name.size()) {
-	case 3:
-		iceberg_table = IcebergUtils::GetIcebergTableEntry(context, input_string);
+	case 3: {
+		auto lookup_info = EntryLookupInfo(CatalogType::TABLE_ENTRY, qualified_name[2]);
+		auto table =
+		    Catalog::GetEntry(context, qualified_name[0], qualified_name[1], lookup_info, OnEntryNotFound::RETURN_NULL);
+		if (!table) {
+			return nullptr;
+		}
+		auto &table_catalog = table->ParentSchema().ParentCatalog();
+		if (table_catalog.GetCatalogType() != "iceberg") {
+			throw InvalidInputException("Cannot call iceberg_table_properties() on non-iceberg Table");
+		}
+		iceberg_table = table->Cast<ICTableEntry>();
 		break;
+	}
 	case 2: {
 		// assume "schema"."table"
 		if (catalog.GetCatalogType() != "iceberg") {
@@ -67,19 +77,28 @@ static optional_ptr<ICTableEntry> GetTableEntry(ClientContext &context, string &
 		}
 		// make sure default catalog is iceberg
 		auto table_entry = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, qualified_name[0], qualified_name[1],
-		                                    OnEntryNotFound::THROW_EXCEPTION);
+		                                    OnEntryNotFound::RETURN_NULL);
+		if (!table_entry) {
+			return nullptr;
+		}
 		iceberg_table = table_entry->Cast<ICTableEntry>();
 		break;
 	}
 	case 1: {
 		// assume "table"
 		if (catalog.GetCatalogType() != "iceberg") {
+			auto &fs = FileSystem::GetFileSystem(context);
+			if (fs.DirectoryExists(input_string) || fs.FileExists(input_string)) {
+				throw InvalidInputException("Cannot call iceberg_table_properties() on a file/directory");
+			}
 			throw InvalidInputException("Cannot call iceberg_table_properties() on non-iceberg Table");
 		}
 		auto schema = catalog.GetDefaultSchema();
-		// auto lookup_info = EntryLookupInfo(CatalogType::TABLE_ENTRY, qualified_name[0]);
 		auto table_entry = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, schema, qualified_name[0],
-		                                    OnEntryNotFound::THROW_EXCEPTION);
+		                                    OnEntryNotFound::RETURN_NULL);
+		if (!table_entry) {
+			return nullptr;
+		}
 		iceberg_table = table_entry->Cast<ICTableEntry>();
 		break;
 	}
@@ -99,7 +118,6 @@ static unique_ptr<FunctionData> SetIcebergTablePropertiesBind(ClientContext &con
 	auto iceberg_table = GetTableEntry(context, input_string);
 	ret->iceberg_table = iceberg_table;
 	auto map = Value(input.inputs[1]).DefaultCastAs(LogicalType::MAP(LogicalType::VARCHAR, LogicalType::VARCHAR));
-	// auto &map = input.inputs[1];
 
 	auto &map_children = MapValue::GetChildren(map);
 	for (idx_t col_idx = 0; col_idx < map_children.size(); col_idx++) {
