@@ -116,12 +116,12 @@ struct MonthTransform {
 		switch (constant.type().id()) {
 		case LogicalTypeId::TIMESTAMP: {
 			auto val = constant.GetValue<timestamp_t>();
-			auto diff = Interval::GetDifference(val, timestamp_t::epoch());
+			auto diff = Interval::GetAge(val, timestamp_t::epoch());
 			return Value::INTEGER(diff.months);
 		}
 		case LogicalTypeId::TIMESTAMP_TZ: {
 			auto val = constant.GetValue<timestamp_tz_t>();
-			auto diff = Interval::GetDifference(val, timestamp_t::epoch());
+			auto diff = Interval::GetAge(val, timestamp_t::epoch());
 			return Value::INTEGER(diff.months);
 		}
 		case LogicalTypeId::DATE: {
