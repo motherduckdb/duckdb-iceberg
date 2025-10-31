@@ -163,6 +163,8 @@ static void AddToColDefMap(case_insensitive_map_t<optional_ptr<IcebergColumnDefi
 static void AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &chunk,
                             optional_ptr<TableCatalogEntry> table) {
 	D_ASSERT(table);
+	// grab lock for written files vector
+	lock_guard<mutex> guard(global_state.lock);
 	auto &ic_table = table->Cast<ICTableEntry>();
 	auto partition_id = ic_table.table_info.table_metadata.default_spec_id;
 	for (idx_t r = 0; r < chunk.size(); r++) {
@@ -262,6 +264,7 @@ SinkFinalizeType IcebergInsert::Finalize(Pipeline &pipeline, Event &event, Clien
 	auto &table_info = irc_table.table_info;
 	auto &transaction = IRCTransaction::Get(context, table->catalog);
 
+	lock_guard<mutex> guard(global_state.lock);
 	if (!global_state.written_files.empty()) {
 		table_info.AddSnapshot(transaction, std::move(global_state.written_files));
 		transaction.MarkTableAsDirty(irc_table);
@@ -349,8 +352,8 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 	auto function_data = copy_fun->function.copy_to_bind(context, bind_input, names_to_write, types_to_write);
 
 	auto &physical_copy = planner.Make<PhysicalCopyToFile>(
-		GetCopyFunctionReturnLogicalTypes(CopyFunctionReturnType::WRITTEN_FILE_STATISTICS), copy_fun->function,
-		std::move(function_data), 1);
+	    GetCopyFunctionReturnLogicalTypes(CopyFunctionReturnType::WRITTEN_FILE_STATISTICS), copy_fun->function,
+	    std::move(function_data), 1);
 	auto &physical_copy_ref = physical_copy.Cast<PhysicalCopyToFile>();
 
 	vector<idx_t> partition_columns;

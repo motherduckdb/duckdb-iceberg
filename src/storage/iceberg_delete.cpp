@@ -253,6 +253,7 @@ IcebergDelete::GenerateDeleteManifestEntries(unordered_map<string, IcebergDelete
 SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
                                          OperatorSinkFinalizeInput &input) const {
 	auto &global_state = input.global_state.Cast<IcebergDeleteGlobalState>();
+	lock_guard<mutex> guard(global_state.lock);
 	if (global_state.deleted_rows.empty()) {
 		return SinkFinalizeType::READY;
 	}

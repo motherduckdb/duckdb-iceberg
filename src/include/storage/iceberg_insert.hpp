@@ -32,9 +32,9 @@ struct IcebergCopyInput {
 class IcebergInsertGlobalState : public GlobalSinkState {
 public:
 	explicit IcebergInsertGlobalState() = default;
+	mutex lock;
 	vector<IcebergManifestEntry> written_files;
-
-	idx_t insert_count;
+	atomic<idx_t> insert_count;
 };
 
 class IcebergInsert : public PhysicalOperator {
