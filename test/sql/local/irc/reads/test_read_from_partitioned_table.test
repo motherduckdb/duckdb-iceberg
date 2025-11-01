@@ -43,16 +43,52 @@ ATTACH '' AS my_datalake (
 
 
 query I
-SELECT count(*) FROM my_datalake.default.check_partition_logic where ts < TIMESTAMP '2025-02-01';
+SELECT count(*) FROM my_datalake.default.month_partitioned_tabled where ts < TIMESTAMP '2025-02-01';
 ----
 5
 
 query I
-SELECT count(*) FROM my_datalake.default.check_partition_logic where ts = TIMESTAMP '2025-02-01';
+SELECT count(*) FROM my_datalake.default.month_partitioned_tabled where ts <= TIMESTAMP '2025-02-01';
+----
+6
+
+query I
+SELECT count(*) FROM my_datalake.default.month_partitioned_tabled where ts = TIMESTAMP '2025-02-01';
 ----
 1
 
 query I
-SELECT count(*) FROM my_datalake.default.check_partition_logic where ts > TIMESTAMP '2025-02-01';
+SELECT count(*) FROM my_datalake.default.month_partitioned_tabled where ts > TIMESTAMP '2025-02-01';
 ----
 9
+
+query I
+SELECT count(*) FROM my_datalake.default.month_partitioned_tabled where ts >= TIMESTAMP '2025-02-01';
+----
+10
+
+
+query I
+SELECT count(*) FROM my_datalake.default.day_partitioned_table where ts < TIMESTAMP '2025-01-02';
+----
+4
+
+query I
+SELECT count(*) FROM my_datalake.default.day_partitioned_table where ts <= TIMESTAMP '2025-01-02';
+----
+9
+
+query I
+SELECT count(*) FROM my_datalake.default.day_partitioned_table where ts = TIMESTAMP '2025-01-02';
+----
+4
+
+query I
+SELECT count(*) FROM my_datalake.default.day_partitioned_table where ts >= TIMESTAMP '2025-01-02';
+----
+11
+
+query I
+SELECT count(*) FROM my_datalake.default.day_partitioned_table where ts > TIMESTAMP '2025-01-02';
+----
+6
