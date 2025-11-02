@@ -172,13 +172,13 @@ SinkFinalizeType IcebergUpdate::Finalize(Pipeline &pipeline, Event &event, Clien
 	}
 
 	auto &insert_global_state = global_sink->Cast<IcebergInsertGlobalState>();
-	lock_guard<mutex> guard(insert_global_state.lock);
 	auto &irc_table = table.Cast<ICTableEntry>();
 	auto &table_info = irc_table.table_info;
 	auto delete_manifest_entries = IcebergDelete::GenerateDeleteManifestEntries(delete_global_state);
-	if (!insert_global_state.written_files.empty()) {
+	auto insert_manifest_entries = IcebergInsert::GetInsertManifestEntries(insert_global_state);
+	if (!insert_manifest_entries.empty()) {
 		table_info.AddUpdateSnapshot(irc_transaction, std::move(delete_manifest_entries),
-		                             std::move(insert_global_state.written_files));
+		                             std::move(insert_manifest_entries));
 		irc_transaction.MarkTableAsDirty(irc_table);
 	}
 	return SinkFinalizeType::READY;

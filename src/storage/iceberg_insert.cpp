@@ -1,3 +1,4 @@
+#include "../include/storage/iceberg_insert.hpp"
 #include "storage/iceberg_insert.hpp"
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_transaction.hpp"
@@ -333,6 +334,11 @@ unique_ptr<CopyInfo> GetBindInput(IcebergCopyInput &input) {
 		info->options[option.first] = option.second;
 	}
 	return info;
+}
+
+vector<IcebergManifestEntry> IcebergInsert::GetInsertManifestEntries(IcebergInsertGlobalState &global_state) {
+	lock_guard<mutex> guard(global_state.lock);
+	return std::move(global_state.written_files);
 }
 
 PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, PhysicalPlanGenerator &planner,

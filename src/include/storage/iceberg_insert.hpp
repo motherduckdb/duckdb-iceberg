@@ -77,6 +77,7 @@ public:
 	                                           IcebergCopyInput &copy_input, optional_ptr<PhysicalOperator> plan);
 
 	static PhysicalOperator &PlanInsert(ClientContext &context, PhysicalPlanGenerator &planner, ICTableEntry &table);
+	static vector<IcebergManifestEntry> GetInsertManifestEntries(IcebergInsertGlobalState &global_state);
 
 	bool IsSink() const override {
 		return true;
