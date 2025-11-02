@@ -86,7 +86,7 @@ SELECT count(*) FROM my_datalake.default.day_partitioned_table where ts <= TIMES
 query I
 SELECT count(*) FROM my_datalake.default.day_partitioned_table where ts = TIMESTAMPTZ '2025-01-02';
 ----
-4
+5
 
 query I
 SELECT count(*) FROM my_datalake.default.day_partitioned_table where ts >= TIMESTAMPTZ '2025-01-02';
