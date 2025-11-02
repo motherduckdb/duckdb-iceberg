@@ -96,9 +96,6 @@ select count(*) from my_datalake.default.test;
 ----
 50
 
-
-
-
 query II
 select * from iceberg_table_properties(my_datalake.default.test_table_properties) where "key" not in ('created-at', 'owner') order by all;
 ----
@@ -121,12 +118,12 @@ select * from iceberg_table_properties(tbl1);
 statement error
 select * from iceberg_table_properties('not exists');
 ----
-<REGEX>:.*Invalid Input.*
+<REGEX>:.*Catalog Error.*
 
 statement error
 select * from iceberg_table_properties('default.test');
 ----
-<REGEX>:.*Invalid Input.*
+<REGEX>:.*Catalog Error.*
 
 statement ok
 use my_datalake.default;
@@ -137,7 +134,7 @@ select * from iceberg_table_properties('default.test');
 statement error
 select * from iceberg_table_properties('default.test.blah.blah');
 ----
-<REGEX>:.*four identifiers.*
+<REGEX>:.*Invalid Input Error.*Too many identifiers.*
 
 
 statement error

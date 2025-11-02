@@ -49,63 +49,26 @@ public:
 	bool properties_removed = false;
 };
 
-static optional_ptr<ICTableEntry> GetTableEntry(ClientContext &context, string &input_string) {
+static bool CheckTableIsIcebergTable(optional_ptr<CatalogEntry> entry) {
+	auto &catalog_entry = entry->Cast<InCatalogEntry>();
+	auto &catalog = catalog_entry.catalog;
+	if (catalog.GetCatalogType() != "iceberg") {
+		return false;
+	}
+	if (entry->type != CatalogType::TABLE_ENTRY) {
+		return false;
+	}
+	return true;
+}
 
+static void VerifyInputIsNotAFile(ClientContext &context, string &input_string, string function_name) {
 	auto qualified_name = QualifiedName::ParseComponents(input_string);
-	optional_ptr<ICTableEntry> iceberg_table = nullptr;
-	auto default_db = DatabaseManager::GetDefaultDatabase(context);
-	auto &catalog = Catalog::GetCatalog(context, default_db);
-	switch (qualified_name.size()) {
-	case 3: {
-		auto lookup_info = EntryLookupInfo(CatalogType::TABLE_ENTRY, qualified_name[2]);
-		auto table =
-		    Catalog::GetEntry(context, qualified_name[0], qualified_name[1], lookup_info, OnEntryNotFound::RETURN_NULL);
-		if (!table) {
-			return nullptr;
+	if (qualified_name.size() == 1) {
+		auto &fs = FileSystem::GetFileSystem(context);
+		if (fs.DirectoryExists(input_string) || fs.FileExists(input_string)) {
+			throw InvalidInputException("Cannot call %s() on a file/directory", function_name);
 		}
-		auto &table_catalog = table->ParentSchema().ParentCatalog();
-		if (table_catalog.GetCatalogType() != "iceberg") {
-			throw InvalidInputException("Cannot call iceberg_table_properties() on non-iceberg Table");
-		}
-		iceberg_table = table->Cast<ICTableEntry>();
-		break;
 	}
-	case 2: {
-		// assume "schema"."table"
-		if (catalog.GetCatalogType() != "iceberg") {
-			throw InvalidInputException("Cannot call iceberg_table_properties() on non-iceberg Table");
-		}
-		// make sure default catalog is iceberg
-		auto table_entry = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, qualified_name[0], qualified_name[1],
-		                                    OnEntryNotFound::RETURN_NULL);
-		if (!table_entry) {
-			return nullptr;
-		}
-		iceberg_table = table_entry->Cast<ICTableEntry>();
-		break;
-	}
-	case 1: {
-		// assume "table"
-		if (catalog.GetCatalogType() != "iceberg") {
-			auto &fs = FileSystem::GetFileSystem(context);
-			if (fs.DirectoryExists(input_string) || fs.FileExists(input_string)) {
-				throw InvalidInputException("Cannot call iceberg_table_properties() on a file/directory");
-			}
-			throw InvalidInputException("Cannot call iceberg_table_properties() on non-iceberg Table");
-		}
-		auto schema = catalog.GetDefaultSchema();
-		auto table_entry = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, schema, qualified_name[0],
-		                                    OnEntryNotFound::RETURN_NULL);
-		if (!table_entry) {
-			return nullptr;
-		}
-		iceberg_table = table_entry->Cast<ICTableEntry>();
-		break;
-	}
-	default:
-		throw InvalidInputException("Cannot have four identifiers in table name %s", input_string);
-	}
-	return iceberg_table;
 }
 
 static unique_ptr<FunctionData> SetIcebergTablePropertiesBind(ClientContext &context, TableFunctionBindInput &input,
@@ -115,8 +78,12 @@ static unique_ptr<FunctionData> SetIcebergTablePropertiesBind(ClientContext &con
 	auto ret = make_uniq<SetIcebergTablePropertiesBindData>();
 
 	auto input_string = input.inputs[0].ToString();
-	auto iceberg_table = GetTableEntry(context, input_string);
-	ret->iceberg_table = iceberg_table;
+	VerifyInputIsNotAFile(context, input_string, "set_iceberg_table_properties");
+	auto iceberg_table = IcebergUtils::GetTableEntry(context, input_string);
+	if (!CheckTableIsIcebergTable(iceberg_table)) {
+		throw InvalidInputException("Cannot call set_iceberg_table_properties on non-iceberg table");
+	}
+	ret->iceberg_table = iceberg_table->Cast<ICTableEntry>();
 	auto map = Value(input.inputs[1]).DefaultCastAs(LogicalType::MAP(LogicalType::VARCHAR, LogicalType::VARCHAR));
 
 	auto &map_children = MapValue::GetChildren(map);
@@ -137,10 +104,13 @@ static unique_ptr<FunctionData> RemoveIcebergTablePropertiesBind(ClientContext &
                                                                  vector<string> &names) {
 	// return a TableRef that contains the scans for the
 	auto ret = make_uniq<SetIcebergTablePropertiesBindData>();
-
 	auto input_string = input.inputs[0].ToString();
-	auto iceberg_table = GetTableEntry(context, input_string);
-	ret->iceberg_table = iceberg_table;
+	VerifyInputIsNotAFile(context, input_string, "remove_iceberg_table_properties");
+	auto iceberg_table = IcebergUtils::GetTableEntry(context, input_string);
+	if (!CheckTableIsIcebergTable(iceberg_table)) {
+		throw InvalidInputException("Cannot call set_iceberg_table_properties on non-iceberg table");
+	}
+	ret->iceberg_table = iceberg_table->Cast<ICTableEntry>();
 
 	auto &remove_values = input.inputs[1];
 	auto &list_children = ListValue::GetChildren(remove_values);
@@ -160,10 +130,12 @@ static unique_ptr<FunctionData> GetIcebergTablePropertiesBind(ClientContext &con
 	// return a TableRef that contains the scans for the
 	auto ret = make_uniq<SetIcebergTablePropertiesBindData>();
 	auto input_string = input.inputs[0].ToString();
-	auto iceberg_table = GetTableEntry(context, input_string);
-
-	D_ASSERT(iceberg_table);
-	ret->iceberg_table = iceberg_table;
+	VerifyInputIsNotAFile(context, input_string, "iceberg_table_properties");
+	auto iceberg_table = IcebergUtils::GetTableEntry(context, input_string);
+	if (!CheckTableIsIcebergTable(iceberg_table)) {
+		throw InvalidInputException("Cannot call set_iceberg_table_properties on non-iceberg table");
+	}
+	ret->iceberg_table = iceberg_table->Cast<ICTableEntry>();
 
 	return_types.insert(return_types.end(), LogicalType::VARCHAR);
 	return_types.insert(return_types.end(), LogicalType::VARCHAR);
