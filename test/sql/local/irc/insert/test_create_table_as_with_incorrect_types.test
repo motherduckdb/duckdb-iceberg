@@ -1,6 +1,6 @@
 # name: test/sql/local/irc/insert/test_create_table_as_with_incorrect_types.test
 # description: test integration with iceberg catalog read
-# group: [create]
+# group: [insert]
 
 require-env ICEBERG_SERVER_AVAILABLE
 
