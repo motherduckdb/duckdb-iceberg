@@ -94,7 +94,8 @@ public:
 	bool InMemory() override;
 	string GetDBPath() override;
 
-	static string GetOnlyMergeOnReadSupportedErrorMessage(string table_name, string property, string property_value);
+	static string GetOnlyMergeOnReadSupportedErrorMessage(const string &table_name, const string &property,
+	                                                      const string &property_value);
 
 public:
 	AccessMode access_mode;

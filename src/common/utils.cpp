@@ -3,7 +3,6 @@
 #include "fstream"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "storage/irc_table_entry.hpp"
-#include "storage/irc_table_entry.hpp"
 #include "duckdb/common/gzip_file_system.hpp"
 #include "storage/irc_table_entry.hpp"
 #include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
