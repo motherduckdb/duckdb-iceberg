@@ -58,7 +58,6 @@ insert into my_datalake.default.test select range id from range(50000, 100000);
 statement ok
 delete from my_datalake.default.test where id % 10 = 0;
 
-
 statement ok
 Update my_datalake.default.test set id = 9999999999 where id % 10 = 0;
 
