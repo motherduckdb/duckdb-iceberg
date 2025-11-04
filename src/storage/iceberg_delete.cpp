@@ -5,6 +5,7 @@
 #include "storage/iceberg_table_information.hpp"
 #include "iceberg_multi_file_reader.hpp"
 #include "iceberg_multi_file_list.hpp"
+#include "metadata/iceberg_snapshot.hpp"
 #include "metadata/iceberg_manifest.hpp"
 #include "storage/iceberg_metadata_info.hpp"
 
@@ -320,9 +321,21 @@ PhysicalOperator &IRCatalog::PlanDelete(ClientContext &context, PhysicalPlanGene
 		row_id_indexes.push_back(bound_ref.index);
 	}
 	auto &ic_table_entry = op.table.Cast<ICTableEntry>();
-	if (ic_table_entry.table_info.table_metadata.iceberg_version == 3) {
-		throw NotImplementedException("Delete from Iceberg V3 tables");
+	// Verify Iceberg table version is v2
+	if (ic_table_entry.table_info.table_metadata.iceberg_version != 2) {
+		throw NotImplementedException("Delete from Iceberg V%d tables",
+		                              ic_table_entry.table_info.table_metadata.iceberg_version);
 	}
+
+	auto allows_positional_deletes =
+	    ic_table_entry.table_info.table_metadata.PropertiesAllowPositionalDeletes(IcebergSnapshotOperationType::DELETE);
+	if (!allows_positional_deletes) {
+		auto delete_table_property = ic_table_entry.table_info.table_metadata.GetTableProperty(WRITE_DELETE_MODE);
+		auto error_message = IRCatalog::GetOnlyMergeOnReadSupportedErrorMessage(ic_table_entry.name, WRITE_DELETE_MODE,
+		                                                                        delete_table_property);
+		throw NotImplementedException(error_message);
+	}
+
 	auto &partition_spec = ic_table_entry.table_info.table_metadata.GetLatestPartitionSpec();
 	if (!partition_spec.IsUnpartitioned()) {
 		throw NotImplementedException("Delete from a partitioned table is not supported yet");
