@@ -10,7 +10,7 @@
 
 namespace duckdb {
 
-void IcebergTypeHelper::VerifyTypeValidity(CreateTableInfo &info) {
+void IcebergTypeHelper::IsValidIcebergType(CreateTableInfo &info) {
 	for (idx_t i = 0; i < info.columns.LogicalColumnCount(); i++) {
 		auto &column = info.columns.GetColumn(LogicalIndex(i));
 		switch (column.Type().id()) {

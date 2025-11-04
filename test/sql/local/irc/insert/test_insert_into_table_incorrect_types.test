@@ -51,7 +51,7 @@ statement ok
 create table my_datalake.default.test (int_col UTINYINT, long_col UINT32, string_col varchar);
 
 query II
-describe my_datalake.default.test;
+select column_name, column_type from (describe from my_datalake.default.test);
 ----
 int_col	INTEGER
 long_col	BIGINT
@@ -118,6 +118,32 @@ select * from my_datalake.default.test order by all;
 NULL	4294967295	NULL
 NULL	NULL	343
 
+
+statement ok
+drop table if exists my_datalake.default.test_upcasting;
+
+statement ok
+create table my_datalake.default.test_upcasting (int_col int, long_col BIGINT);
+
+statement ok
+insert into my_datalake.default.test_upcasting select usmallint, usmallint from test_all_types();
+
+statement ok
+insert into my_datalake.default.test_upcasting select utinyint, utinyint from test_all_types();
+
+statement ok
+insert into my_datalake.default.test_upcasting select tinyint, tinyint from test_all_types();
+
+statement ok
+insert into my_datalake.default.test_upcasting select smallint, smallint from test_all_types();
+
+statement ok
+insert into my_datalake.default.test_upcasting select NULL, uint from test_all_types();
+
+statement error
+insert into my_datalake.default.test_upcasting select NULL, ubigint from test_all_types();
+----
+<REGEX>:.*Conversion Error.*out of range for the destination type INT64.*
 
 
 

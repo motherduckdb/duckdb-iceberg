@@ -479,7 +479,7 @@ PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalP
 	// setting the schema
 	// check columns are valid.
 	auto &create_info = op.info->Base();
-	IcebergTypeHelper::VerifyTypeValidity(create_info);
+	IcebergTypeHelper::IsValidIcebergType(create_info);
 	auto table = ic_schema_entry.CreateTable(irc_transaction, context, *op.info);
 	if (!table) {
 		throw InternalException("Table could not be created");
