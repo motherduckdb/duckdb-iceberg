@@ -2,7 +2,7 @@
 # description: test iceberg metadata function
 # group: [iceberg_scans]
 
-Before we load the extension, this will fail
+# Before we load the extension, this will fail
 statement error
 SELECT * FROM ICEBERG_METADATA('__WORKING_DIRECTORY__/data/persistent/iceberg/lineitem_iceberg');
 ----
