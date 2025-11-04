@@ -478,8 +478,8 @@ PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalP
 	// create the table. Takes care of committing to rest catalog and getting the metadata location etc.
 	// setting the schema
 	// check columns are valid.
-	auto &wat = op.info->Base();
-	auto columns_are_valid = IcebergTypeHelper::ColumnTypesAreValidInIceberg(wat);
+	auto &create_info = op.info->Base();
+	IcebergTypeHelper::VerifyTypeValidity(create_info);
 	auto table = ic_schema_entry.CreateTable(irc_transaction, context, *op.info);
 	if (!table) {
 		throw InternalException("Table could not be created");
