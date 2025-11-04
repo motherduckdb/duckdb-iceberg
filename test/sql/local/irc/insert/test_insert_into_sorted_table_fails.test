@@ -46,7 +46,7 @@ call dbgen(sf=0.001);
 statement error
 insert into my_datalake.default.table_sort_order select * from lineitem limit 5;
 ----
-<REGEX>:.*Not implemented.*INSERT into a sorted iceberg table is not supported yet.*
+<REGEX>:.*Not implemented Error.*INSERT into a sorted iceberg table is not supported yet.*
 
 statement ok
 BEGIN;

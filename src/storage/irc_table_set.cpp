@@ -4,8 +4,6 @@
 
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_table_set.hpp"
-
-#include "utils/iceberg_type.hpp"
 #include "storage/irc_transaction.hpp"
 #include "metadata/iceberg_partition_spec.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
@@ -117,7 +115,6 @@ bool ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 	if (info.on_conflict == OnCreateConflict::REPLACE_ON_CONFLICT) {
 		throw InvalidInputException("CREATE OR REPLACE not supported in DuckDB-Iceberg");
 	}
-
 	auto &irc_transaction = IRCTransaction::Get(context, catalog);
 	bool table_deleted_in_transaction = false;
 	for (auto &deleted_entry : irc_transaction.deleted_tables) {

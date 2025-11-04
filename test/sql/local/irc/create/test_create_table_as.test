@@ -181,5 +181,5 @@ select * from fixed_array_table_as_list;
 statement error
 create table bit_table as select bit from test_all_types();
 ----
-<REGEX>:.*Invalid Input Error: Column type BIT is not a valid Iceberg Type.*
+<REGEX>:.*Invalid Input.*Column type BIT is not a valid Iceberg Type.*
 

@@ -106,26 +106,28 @@ statement ok
 drop table IF EXISTS my_datalake.new_schema_1.supported_types;
 
 # you can create tables with types that can be promoted to iceberg types
-statement ok
-create table my_datalake.new_schema_1.supported_types (
+statement error
+create table my_datalake.new_schema_1.not_supported_types (
 unsigned_int UINTEGER,
 tinyint_type tinyint,
 smallint_type smallint,
 utinyint_type utinyint,
 usmallint_type usmallint
 );
-
-query II
-select column_name, column_type from (describe (from my_datalake.new_schema_1.supported_types));
 ----
-unsigned_int	BIGINT
-tinyint_type	INTEGER
-smallint_type	INTEGER
-utinyint_type	INTEGER
-usmallint_type	INTEGER
+<REGEX>:.*Invalid Input.*Column type UINTEGER is not a valid Iceberg Type.*
+
+statement error
+create table my_datalake.new_schema_1.fixed_arr_table (a int[3]);
+----
+<REGEX>:.*Array type not supported in Iceberg type. Please cast to LIST.*
 
 statement ok
-drop table my_datalake.new_schema_1.supported_types;
+create table my_datalake.new_schema_1.list_table (a int[]);
+
+statement ok
+drop table my_datalake.new_schema_1.list_table;
+
 
 statement ok
 drop schema my_datalake.new_schema_1;

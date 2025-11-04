@@ -10,41 +10,8 @@
 
 namespace duckdb {
 
-void IcebergTypeHelper::VerifyValidIcebergType(CreateTableInfo &info) {
-	for (idx_t i = 0; i < info.columns.LogicalColumnCount(); i++) {
-		auto &column = info.columns.GetColumn(LogicalIndex(i));
-		switch (column.Type().id()) {
-		case LogicalTypeId::BOOLEAN:
-		case LogicalTypeId::INTEGER:
-		case LogicalTypeId::BIGINT:
-		case LogicalTypeId::FLOAT:
-		case LogicalTypeId::DOUBLE:
-		case LogicalTypeId::DECIMAL:
-		case LogicalTypeId::DATE:
-		case LogicalTypeId::TIME:
-		case LogicalTypeId::TIMESTAMP:
-		case LogicalTypeId::TIMESTAMP_TZ:
-		case LogicalTypeId::VARCHAR:
-		case LogicalTypeId::UUID:
-		case LogicalTypeId::BLOB:
-		case LogicalTypeId::ARRAY:
-		case LogicalTypeId::STRUCT:
-		case LogicalTypeId::LIST:
-		case LogicalTypeId::MAP:
-			continue;
-		default:
-			throw InvalidInputException("Column type %s is not a valid Iceberg Type.",
-			                            LogicalTypeIdToString(column.Type().id()));
-		}
-	}
-}
-
 string IcebergTypeHelper::LogicalTypeToIcebergType(const LogicalType &type) {
 	switch (type.id()) {
-	case LogicalTypeId::USMALLINT:
-	case LogicalTypeId::UTINYINT:
-	case LogicalTypeId::SMALLINT:
-	case LogicalTypeId::TINYINT:
 	case LogicalTypeId::INTEGER:
 		return "int";
 	case LogicalTypeId::BOOLEAN:
@@ -53,7 +20,6 @@ string IcebergTypeHelper::LogicalTypeToIcebergType(const LogicalType &type) {
 		return "string";
 	case LogicalTypeId::DATE:
 		return "date";
-	case LogicalTypeId::UINTEGER:
 	case LogicalTypeId::BIGINT:
 		return "long";
 	case LogicalTypeId::FLOAT:
@@ -71,11 +37,8 @@ string IcebergTypeHelper::LogicalTypeToIcebergType(const LogicalType &type) {
 		return "binary";
 	case LogicalTypeId::STRUCT:
 		return "struct";
-	case LogicalTypeId::ARRAY: {
-		// Iceberg doesn't support fixed array lengths
-		return "list";
-	}
 	case LogicalTypeId::LIST:
+		// Iceberg doesn't support fixed array lengths
 		return "list";
 	case LogicalTypeId::TIME:
 		return "time";
@@ -86,7 +49,7 @@ string IcebergTypeHelper::LogicalTypeToIcebergType(const LogicalType &type) {
 	case LogicalTypeId::MAP:
 		return "map";
 	default:
-		throw NotImplementedException("Type %s not supported in Iceberg", LogicalTypeIdToString(type.id()));
+		throw InvalidInputException("Column type %s is not a valid Iceberg Type.", LogicalTypeIdToString(type.id()));
 	}
 }
 
