@@ -1,10 +1,6 @@
 
 #pragma once
 
-#include "duckdb/common/string_util.hpp"
-#include "duckdb/common/types.hpp"
-#include "duckdb/parser/column_definition.hpp"
-#include "duckdb/parser/parsed_data/create_table_info.hpp"
 #include "rest_catalog/objects/type.hpp"
 #include "functional"
 
