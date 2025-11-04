@@ -1,6 +1,6 @@
 # name: test/sql/local/irc/update/test_spark_can_read_duckdb_updates.test
 # description: Test iceberg deletes
-# group: [delete]
+# group: [update]
 
 require-env ICEBERG_SERVER_AVAILABLE
 

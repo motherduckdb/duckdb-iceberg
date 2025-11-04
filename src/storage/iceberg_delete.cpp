@@ -321,9 +321,10 @@ PhysicalOperator &IRCatalog::PlanDelete(ClientContext &context, PhysicalPlanGene
 		row_id_indexes.push_back(bound_ref.index);
 	}
 	auto &ic_table_entry = op.table.Cast<ICTableEntry>();
-    // Verify Iceberg table version is v2
+	// Verify Iceberg table version is v2
 	if (ic_table_entry.table_info.table_metadata.iceberg_version != 2) {
-		throw NotImplementedException("Delete from Iceberg V%d tables", ic_table_entry.table_info.table_metadata.iceberg_version);
+		throw NotImplementedException("Delete from Iceberg V%d tables",
+		                              ic_table_entry.table_info.table_metadata.iceberg_version);
 	}
 
 	auto allows_positional_deletes =

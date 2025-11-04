@@ -95,6 +95,7 @@ class TestPyIcebergRead:
             {'a': 59},
         ]
 
+
 @pytest.mark.skipif(
     os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None, reason="Test data wasn't generated, run 'make data' first"
 )

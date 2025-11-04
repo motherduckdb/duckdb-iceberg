@@ -258,8 +258,9 @@ PhysicalOperator &IRCatalog::PlanUpdate(ClientContext &context, PhysicalPlanGene
 			throw NotImplementedException("Update on a sorted iceberg table is not supported yet");
 		}
 	}
-	if (table.table_info.table_metadata.iceberg_version == 3) {
-		throw NotImplementedException("Update Iceberg V3 tables");
+	// Verify Iceberg table version is v2
+	if (table.table_info.table_metadata.iceberg_version != 2) {
+		throw NotImplementedException("Update Iceberg V%d tables", table.table_info.table_metadata.iceberg_version);
 	}
 
 	IcebergCopyInput copy_input(context, table);
