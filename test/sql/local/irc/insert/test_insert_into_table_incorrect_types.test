@@ -62,6 +62,12 @@ insert into my_datalake.default.test values (8::TINYINT, null, null);
 statement ok
 set variable data_file = (select file_path  from iceberg_metadata(my_datalake.default.test) limit 1);
 
+# verify file is a parquet file
+query I
+select count(*) from (select getvariable('data_file') file_name where file_name like '%.parquet');
+----
+1
+
 # query the column_type of the parquet file, make sure it is integer and not tinyint.
 query I
 select column_type from (describe (from read_parquet(getvariable('data_file')))) where column_name = 'int_col';
