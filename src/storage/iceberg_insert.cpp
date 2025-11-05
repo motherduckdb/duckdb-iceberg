@@ -7,6 +7,7 @@
 #include "metadata/iceberg_column_definition.hpp"
 
 #include "iceberg_multi_file_list.hpp"
+#include "utils/iceberg_type.hpp"
 #include "duckdb/common/sort/partition_state.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
 #include "duckdb/main/client_data.hpp"
@@ -458,7 +459,7 @@ PhysicalOperator &IRCatalog::PlanInsert(ClientContext &context, PhysicalPlanGene
 	if (table_info.table_metadata.HasSortOrder()) {
 		auto &sort_spec = table_info.table_metadata.GetLatestSortOrder();
 		if (sort_spec.IsSorted()) {
-			throw NotImplementedException("Insert into a sorted iceberg table is not supported yet");
+			throw NotImplementedException("INSERT into a sorted iceberg table is not supported yet");
 		}
 	}
 
@@ -500,12 +501,13 @@ PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalP
 	auto &table_schema = ic_table.table_info.table_metadata.GetLatestSchema();
 
 	// Create Copy Info
-	IcebergCopyInput copy_input(context, ic_table);
+	auto info = make_uniq<IcebergCopyInput>(context, ic_table);
+
 	vector<Value> field_input;
 	field_input.push_back(WrittenFieldIds(table_schema));
-	copy_input.options["field_ids"] = std::move(field_input);
+	info->options["field_ids"] = std::move(field_input);
 
-	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, plan);
+	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, *info, plan);
 	physical_index_vector_t<idx_t> column_index_map;
 	auto &insert = planner.Make<IcebergInsert>(op, ic_table, column_index_map);
 

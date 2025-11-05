@@ -57,13 +57,8 @@ DROP TABLE if exists fixed_array_table_as_list;
 statement ok
 create table all_types_table_primitives_2 as select
 bool,
-tinyint,
-smallint,
 int,
 bigint,
-utinyint,
-usmallint,
-uint,
 date,
 time,
 timestamp,
@@ -85,13 +80,8 @@ select * from all_types_table_primitives_2;
 query T nosort res_1
 select
 bool,
-tinyint,
-smallint,
 int,
 bigint,
-utinyint,
-usmallint,
-uint,
 date,
 time,
 timestamp,
@@ -191,5 +181,5 @@ select * from fixed_array_table_as_list;
 statement error
 create table bit_table as select bit from test_all_types();
 ----
-not supported in Iceberg
+<REGEX>:.*Invalid Input.*Column type BIT is not a valid Iceberg Type.*
 
