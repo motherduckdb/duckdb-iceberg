@@ -58,9 +58,18 @@ select count(*) from iceberg_metadata(my_datalake.default.test) where manifest_c
 statement ok
 begin;
 
+statement ok
+CALL enable_logging('HTTP');
+
 # populate the cache
 statement ok
 select * from my_datalake.default.test;
+
+# 1 get call for delete information
+query I
+select count(*) from duckdb_logs_parsed('HTTP') where request.type in ('GET') and request.url like '%-deletes.parquet%';
+----
+1
 
 # 0 head calls for delete information
 query I
@@ -69,14 +78,14 @@ select count(*) from duckdb_logs_parsed('HTTP') where request.type in ('HEAD') a
 0
 
 statement ok
-CALL enable_logging('HTTP');
+call truncate_duckdb_logs();
 
 statement ok
 select * from my_datalake.default.test;
 
-# stil 0 head calls for delete information
+# no extra calls at all on second request
 query I
-select count(*) from duckdb_logs_parsed('HTTP') where request.type in ('HEAD') and request.url like '%data%';
+select count(*) from duckdb_logs_parsed('HTTP');
 ----
 0
 

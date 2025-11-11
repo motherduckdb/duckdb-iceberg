@@ -1,4 +1,3 @@
-#include "iceberg_avro_multi_file_reader.hpp"
 #include "iceberg_multi_file_reader.hpp"
 #include "iceberg_functions/iceberg_deletes_file_reader.hpp"
 #include "iceberg_utils.hpp"
@@ -722,7 +721,6 @@ void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &entry,
 	                                  dummy_table_function, empty);
 	vector<LogicalType> return_types;
 	vector<string> return_names;
-	// HERE HERE HERE
 	auto bind_data = parquet_scan.bind(context, bind_input, return_types, return_names);
 
 	DataChunk result;
