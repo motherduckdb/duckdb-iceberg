@@ -212,94 +212,92 @@ unique_ptr<HTTPResponse> AWSInput::ExecuteRequest(ClientContext &context, Aws::H
 	auto &db = DatabaseInstance::GetDatabase(context);
 
 	HTTPHeaders res(db);
-	{
-		const string host = uri.GetAuthority();
-		res["host"] = host;
-		// If access key is not set, we don't set the headers at all to allow accessing public files through s3 urls
 
-		string payload_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"; // Empty payload hash
+	const string host = uri.GetAuthority();
+	res["host"] = host;
+	// If access key is not set, we don't set the headers at all to allow accessing public files through s3 urls
 
-		if (!body.empty()) {
-			payload_hash = GetPayloadHash(body.c_str(), body.size());
-		}
+	string payload_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"; // Empty payload hash
 
-		// key_id, secret, session_token
-		// we can pass date/time but this is mostly useful in testing. normally we just get the current datetime
-		// here.
-		auto timestamp = Timestamp::GetCurrentTimestamp();
-		string date_now = StrfTimeFormat::Format(timestamp, "%Y%m%d");
-		string datetime_now = StrfTimeFormat::Format(timestamp, "%Y%m%dT%H%M%SZ");
-
-		res["x-amz-date"] = datetime_now;
-		res["x-amz-content-sha256"] = payload_hash;
-		if (session_token.length() > 0) {
-			res["x-amz-security-token"] = session_token;
-		}
-		string content_type;
-		if (headers.HasHeader("Content-Type")) {
-			content_type = headers.GetHeaderValue("Content-Type");
-		}
-		if (!content_type.empty()) {
-			res["Content-Type"] = content_type;
-		}
-		string signed_headers = "";
-		hash_bytes canonical_request_hash;
-		hash_str canonical_request_hash_str;
-		if (content_type.length() > 0) {
-			signed_headers += "content-type;";
-			res["Content-Type"] = content_type;
-		}
-		signed_headers += "host;x-amz-content-sha256;x-amz-date";
-		if (session_token.length() > 0) {
-			signed_headers += ";x-amz-security-token";
-		}
-
-		string url_encoded_path = uri.GetURLEncodedPath();
-
-		{
-			// it's unclear to be why we need to transform %2F into %252F, see
-			// https://en.wikipedia.org/wiki/Percent-encoding#Percent_character
-			url_encoded_path = StringUtil::Replace(url_encoded_path, "%2F", "%252F");
-		}
-
-		auto canonical_request =
-		    string(Aws::Http::HttpMethodMapper::GetNameForHttpMethod(method)) + "\n" + url_encoded_path + "\n";
-		if (uri.GetQueryString().size()) {
-			canonical_request += uri.GetQueryString().substr(1);
-		}
-
-		if (content_type.length() > 0) {
-			canonical_request += "\ncontent-type:" + content_type;
-		}
-		canonical_request +=
-		    "\nhost:" + host + "\nx-amz-content-sha256:" + payload_hash + "\nx-amz-date:" + datetime_now;
-		if (session_token.length() > 0) {
-			canonical_request += "\nx-amz-security-token:" + session_token;
-		}
-		canonical_request += "\n\n" + signed_headers + "\n" + payload_hash;
-		sha256(canonical_request.c_str(), canonical_request.length(), canonical_request_hash);
-
-		hex256(canonical_request_hash, canonical_request_hash_str);
-		auto string_to_sign = "AWS4-HMAC-SHA256\n" + datetime_now + "\n" + date_now + "/" + region + "/" + service +
-		                      "/aws4_request\n" + string((char *)canonical_request_hash_str, sizeof(hash_str));
-
-		// TODO: DUCKDB_LOGS (canonical_request + string_to_sing)
-
-		// compute signature
-		hash_bytes k_date, k_region, k_service, signing_key, signature;
-		hash_str signature_str;
-		auto sign_key = "AWS4" + secret;
-		hmac256(date_now, sign_key.c_str(), sign_key.length(), k_date);
-		hmac256(region, k_date, k_region);
-		hmac256(service, k_region, k_service);
-		hmac256("aws4_request", k_service, signing_key);
-		hmac256(string_to_sign, signing_key, signature);
-		hex256(signature, signature_str);
-
-		res["Authorization"] = "AWS4-HMAC-SHA256 Credential=" + key_id + "/" + date_now + "/" + region + "/" + service +
-		                       "/aws4_request, SignedHeaders=" + signed_headers +
-		                       ", Signature=" + string((char *)signature_str, sizeof(hash_str));
+	if (!body.empty()) {
+		payload_hash = GetPayloadHash(body.c_str(), body.size());
 	}
+
+	// key_id, secret, session_token
+	// we can pass date/time but this is mostly useful in testing. normally we just get the current datetime
+	// here.
+	auto timestamp = Timestamp::GetCurrentTimestamp();
+	string date_now = StrfTimeFormat::Format(timestamp, "%Y%m%d");
+	string datetime_now = StrfTimeFormat::Format(timestamp, "%Y%m%dT%H%M%SZ");
+
+	res["x-amz-date"] = datetime_now;
+	res["x-amz-content-sha256"] = payload_hash;
+	if (session_token.length() > 0) {
+		res["x-amz-security-token"] = session_token;
+	}
+	string content_type;
+	if (headers.HasHeader("Content-Type")) {
+		content_type = headers.GetHeaderValue("Content-Type");
+	}
+	if (!content_type.empty()) {
+		res["Content-Type"] = content_type;
+	}
+	string signed_headers = "";
+	hash_bytes canonical_request_hash;
+	hash_str canonical_request_hash_str;
+	if (content_type.length() > 0) {
+		signed_headers += "content-type;";
+		res["Content-Type"] = content_type;
+	}
+	signed_headers += "host;x-amz-content-sha256;x-amz-date";
+	if (session_token.length() > 0) {
+		signed_headers += ";x-amz-security-token";
+	}
+
+	string url_encoded_path = uri.GetURLEncodedPath();
+
+	{
+		// it's unclear to be why we need to transform %2F into %252F, see
+		// https://en.wikipedia.org/wiki/Percent-encoding#Percent_character
+		url_encoded_path = StringUtil::Replace(url_encoded_path, "%2F", "%252F");
+	}
+
+	auto canonical_request =
+	    string(Aws::Http::HttpMethodMapper::GetNameForHttpMethod(method)) + "\n" + url_encoded_path + "\n";
+	if (uri.GetQueryString().size()) {
+		canonical_request += uri.GetQueryString().substr(1);
+	}
+
+	if (content_type.length() > 0) {
+		canonical_request += "\ncontent-type:" + content_type;
+	}
+	canonical_request += "\nhost:" + host + "\nx-amz-content-sha256:" + payload_hash + "\nx-amz-date:" + datetime_now;
+	if (session_token.length() > 0) {
+		canonical_request += "\nx-amz-security-token:" + session_token;
+	}
+	canonical_request += "\n\n" + signed_headers + "\n" + payload_hash;
+	sha256(canonical_request.c_str(), canonical_request.length(), canonical_request_hash);
+
+	hex256(canonical_request_hash, canonical_request_hash_str);
+	auto string_to_sign = "AWS4-HMAC-SHA256\n" + datetime_now + "\n" + date_now + "/" + region + "/" + service +
+	                      "/aws4_request\n" + string((char *)canonical_request_hash_str, sizeof(hash_str));
+
+	// TODO: DUCKDB_LOGS (canonical_request + string_to_sing)
+
+	// compute signature
+	hash_bytes k_date, k_region, k_service, signing_key, signature;
+	hash_str signature_str;
+	auto sign_key = "AWS4" + secret;
+	hmac256(date_now, sign_key.c_str(), sign_key.length(), k_date);
+	hmac256(region, k_date, k_region);
+	hmac256(service, k_region, k_service);
+	hmac256("aws4_request", k_service, signing_key);
+	hmac256(string_to_sign, signing_key, signature);
+	hex256(signature, signature_str);
+
+	res["Authorization"] = "AWS4-HMAC-SHA256 Credential=" + key_id + "/" + date_now + "/" + region + "/" + service +
+	                       "/aws4_request, SignedHeaders=" + signed_headers +
+	                       ", Signature=" + string((char *)signature_str, sizeof(hash_str));
 
 	auto &http_util = HTTPUtil::Get(db);
 	unique_ptr<HTTPParams> params;
