@@ -63,15 +63,6 @@ public:
 	IcebergTableSchema &schema;
 };
 
-struct ParquetDeleteScanInfo : public TableFunctionInfo {
-public:
-	ParquetDeleteScanInfo(OpenFileInfo file_info) : file_info(file_info) {
-	}
-
-public:
-	OpenFileInfo file_info;
-};
-
 //! ------------- ICEBERG_METADATA TABLE FUNCTION -------------
 
 struct IcebergTableEntry {

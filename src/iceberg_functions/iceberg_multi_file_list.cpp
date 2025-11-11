@@ -1,4 +1,6 @@
+#include "iceberg_avro_multi_file_reader.hpp"
 #include "iceberg_multi_file_reader.hpp"
+#include "iceberg_functions/iceberg_deletes_file_reader.hpp"
 #include "iceberg_utils.hpp"
 #include "iceberg_logging.hpp"
 #include "iceberg_predicate.hpp"
@@ -689,6 +691,7 @@ void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &entry,
 	}
 	auto &parquet_scan_entry = catalog_entry->Cast<TableFunctionCatalogEntry>();
 	auto &parquet_scan = parquet_scan_entry.functions.functions[0];
+	parquet_scan.get_multi_file_reader = IcebergDeleteFileReader::CreateInstance;
 
 	// Prepare the inputs for the bind
 	vector<Value> children;
@@ -701,6 +704,7 @@ void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &entry,
 	TableFunctionRef empty;
 	TableFunction dummy_table_function;
 	dummy_table_function.name = "IcebergDeleteScan";
+	dummy_table_function.get_multi_file_reader = IcebergDeleteFileReader::CreateInstance;
 
 	OpenFileInfo res(delete_file_path);
 	auto extended_info = make_shared_ptr<ExtendedOpenFileInfo>();
@@ -711,9 +715,10 @@ void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &entry,
 	extended_info->options["etag"] = Value("");
 	extended_info->options["last_modified"] = Value::TIMESTAMP(timestamp_t(0));
 	res.extended_info = extended_info;
-	ParquetDeleteScanInfo delete_info = ParquetDeleteScanInfo(res);
+	auto delete_info = make_shared_ptr<ParquetDeleteScanInfo>(res);
+	dummy_table_function.function_info = delete_info;
 
-	TableFunctionBindInput bind_input(children, named_params, input_types, input_names, delete_info, nullptr,
+	TableFunctionBindInput bind_input(children, named_params, input_types, input_names, nullptr, nullptr,
 	                                  dummy_table_function, empty);
 	vector<LogicalType> return_types;
 	vector<string> return_names;
