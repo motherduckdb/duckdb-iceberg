@@ -701,11 +701,23 @@ void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &entry,
 	TableFunctionRef empty;
 	TableFunction dummy_table_function;
 	dummy_table_function.name = "IcebergDeleteScan";
-	TableFunctionBindInput bind_input(children, named_params, input_types, input_names, nullptr, nullptr,
+
+	OpenFileInfo res(delete_file_path);
+	auto extended_info = make_shared_ptr<ExtendedOpenFileInfo>();
+	extended_info->options["file_size"] = Value::UBIGINT(entry.file_size_in_bytes);
+	// files managed by Iceberg are never modified - we can keep them cached
+	extended_info->options["validate_external_file_cache"] = Value::BOOLEAN(false);
+	// etag / last modified time can be set to dummy values
+	extended_info->options["etag"] = Value("");
+	extended_info->options["last_modified"] = Value::TIMESTAMP(timestamp_t(0));
+	res.extended_info = extended_info;
+	ParquetDeleteScanInfo delete_info = ParquetDeleteScanInfo(res);
+
+	TableFunctionBindInput bind_input(children, named_params, input_types, input_names, delete_info, nullptr,
 	                                  dummy_table_function, empty);
 	vector<LogicalType> return_types;
 	vector<string> return_names;
-
+	// HERE HERE HERE
 	auto bind_data = parquet_scan.bind(context, bind_input, return_types, return_names);
 
 	DataChunk result;
