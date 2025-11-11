@@ -195,7 +195,16 @@ unique_ptr<HTTPResponse> AWSInput::ExecuteRequestLegacy(ClientContext &context, 
 
 unique_ptr<HTTPResponse> AWSInput::ExecuteRequest(ClientContext &context, Aws::Http::HttpMethod method,
                                                   HTTPHeaders &headers, const string &body) {
-	if (false) {
+	bool use_httputils = true;
+	{
+		Value result;
+		(void)context.TryGetCurrentSetting("iceberg_via_aws_sdk_for_catalog_interactions", result);
+		if (!result.IsNull() && result.GetValue<bool>()) {
+			use_httputils = false;
+		}
+	}
+	if (!use_httputils) {
+		// Query Iceberg REST catalog via AWS's SDK
 		return ExecuteRequestLegacy(context, method, headers, body);
 	}
 
