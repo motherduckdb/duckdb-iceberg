@@ -25,6 +25,7 @@ set(EXTENSION_SOURCES
     src/storage/iceberg_delete.cpp
     src/storage/iceberg_update.cpp
     src/aws.cpp
+    src/hash_utils.cpp
     src/base_manifest_reader.cpp
     src/manifest_list_reader.cpp
     src/manifest_file_reader.cpp
