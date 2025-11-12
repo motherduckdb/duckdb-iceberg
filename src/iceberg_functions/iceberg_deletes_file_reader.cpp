@@ -1,6 +1,52 @@
+#include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
 #include "iceberg_functions/iceberg_deletes_file_reader.hpp"
+#include "iceberg_functions.hpp"
+#include "storage/irc_table_entry.hpp"
 
 namespace duckdb {
+
+virtual_column_map_t IcebergDeleteVirtualColumns(ClientContext &context, optional_ptr<FunctionData> bind_data_p) {
+	auto &bind_data = bind_data_p->Cast<MultiFileBindData>();
+	auto result = ICTableEntry::VirtualColumns();
+	bind_data.virtual_columns = result;
+	return result;
+}
+
+static void IcebergDeletesScanSerialize(Serializer &serializer, const optional_ptr<FunctionData> bind_data,
+                                        const TableFunction &function) {
+	throw NotImplementedException("IcebergDeletesScan serialization not implemented");
+}
+
+TableFunctionSet IcebergFunctions::GetIcebergDeletesScanFunction(ExtensionLoader &loader) {
+	// The iceberg_scan function is constructed by grabbing the parquet scan from the Catalog, then injecting the
+	// IcebergMultiFileReader into it to create a Iceberg-based multi file read
+
+	auto &parquet_scan = loader.GetTableFunction("parquet_scan");
+	auto parquet_scan_copy = parquet_scan.functions;
+
+	for (auto &function : parquet_scan_copy.functions) {
+		// Register the MultiFileReader as the driver for reads
+		function.get_multi_file_reader = IcebergDeleteFileReader::CreateInstance;
+		function.late_materialization = false;
+
+		// Unset all of these: they are either broken, very inefficient.
+		// TODO: implement/fix these
+		function.serialize = IcebergDeletesScanSerialize;
+		function.deserialize = nullptr;
+
+		function.statistics = nullptr;
+		function.table_scan_progress = nullptr;
+		function.get_bind_info = nullptr;
+		function.get_virtual_columns = IcebergDeleteVirtualColumns;
+
+		// Schema param is just confusing here
+		function.named_parameters.erase("schema");
+		function.name = "iceberg_deletes_scan";
+	}
+
+	parquet_scan_copy.name = "iceberg_deletes_scan";
+	return parquet_scan_copy;
+}
 
 IcebergDeleteFileReader::IcebergDeleteFileReader(shared_ptr<TableFunctionInfo> function_info)
     : function_info(function_info) {

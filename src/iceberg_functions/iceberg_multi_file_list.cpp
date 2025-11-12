@@ -684,13 +684,12 @@ void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &entry,
 	auto &system_catalog = Catalog::GetSystemCatalog(instance);
 	auto data = CatalogTransaction::GetSystemTransaction(instance);
 	auto &schema = system_catalog.GetSchema(data, DEFAULT_SCHEMA);
-	auto catalog_entry = schema.GetEntry(data, CatalogType::TABLE_FUNCTION_ENTRY, "parquet_scan");
+	auto catalog_entry = schema.GetEntry(data, CatalogType::TABLE_FUNCTION_ENTRY, "iceberg_deletes_scan");
 	if (!catalog_entry) {
 		throw InvalidInputException("Function with name \"parquet_scan\" not found!");
 	}
-	auto &parquet_scan_entry = catalog_entry->Cast<TableFunctionCatalogEntry>();
-	auto &parquet_scan = parquet_scan_entry.functions.functions[0];
-	parquet_scan.get_multi_file_reader = IcebergDeleteFileReader::CreateInstance;
+	auto &iceberg_deletes_scan_entry = catalog_entry->Cast<TableFunctionCatalogEntry>();
+	auto &delete_scan_function = iceberg_deletes_scan_entry.functions.functions[0];
 
 	// Prepare the inputs for the bind
 	vector<Value> children;
@@ -721,7 +720,7 @@ void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &entry,
 	                                  dummy_table_function, empty);
 	vector<LogicalType> return_types;
 	vector<string> return_names;
-	auto bind_data = parquet_scan.bind(context, bind_input, return_types, return_names);
+	auto bind_data = delete_scan_function.bind(context, bind_input, return_types, return_names);
 
 	DataChunk result;
 	// Reserve for STANDARD_VECTOR_SIZE instead of count, in case the returned table contains too many tuples
@@ -735,8 +734,8 @@ void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &entry,
 		column_ids.push_back(i);
 	}
 	TableFunctionInitInput input(bind_data.get(), column_ids, vector<idx_t>(), nullptr);
-	auto global_state = parquet_scan.init_global(context, input);
-	auto local_state = parquet_scan.init_local(execution_context, input, global_state.get());
+	auto global_state = delete_scan_function.init_global(context, input);
+	auto local_state = delete_scan_function.init_local(execution_context, input, global_state.get());
 
 	auto &multi_file_local_state = local_state->Cast<MultiFileLocalState>();
 
@@ -744,7 +743,7 @@ void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &entry,
 		do {
 			TableFunctionInput function_input(bind_data.get(), local_state.get(), global_state.get());
 			result.Reset();
-			parquet_scan.function(context, function_input, result);
+			delete_scan_function.function(context, function_input, result);
 			result.Flatten();
 			ScanPositionalDeleteFile(result);
 		} while (result.size() != 0);
@@ -752,7 +751,7 @@ void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &entry,
 		do {
 			TableFunctionInput function_input(bind_data.get(), local_state.get(), global_state.get());
 			result.Reset();
-			parquet_scan.function(context, function_input, result);
+			delete_scan_function.function(context, function_input, result);
 			result.Flatten();
 			ScanEqualityDeleteFile(entry, result, multi_file_local_state.reader->columns, global_columns,
 			                       column_indexes);

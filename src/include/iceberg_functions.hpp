@@ -22,12 +22,13 @@ public:
 
 private:
 	static TableFunctionSet GetIcebergSnapshotsFunction();
-	static TableFunctionSet GetIcebergScanFunction(ExtensionLoader &instance);
+	static TableFunctionSet GetIcebergScanFunction(ExtensionLoader &loader);
 	static TableFunctionSet GetIcebergMetadataFunction();
 	static TableFunctionSet GetIcebergToDuckLakeFunction();
 	static TableFunctionSet GetIcebergTablePropertiesFunctions();
 	static TableFunctionSet SetIcebergTablePropertiesFunctions();
 	static TableFunctionSet RemoveIcebergTablePropertiesFunctions();
+	static TableFunctionSet GetIcebergDeletesScanFunction(ExtensionLoader &instance);
 };
 
 } // namespace duckdb
