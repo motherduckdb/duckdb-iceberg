@@ -19,6 +19,7 @@ class IcebergFunctions {
 public:
 	static vector<TableFunctionSet> GetTableFunctions(ExtensionLoader &loader);
 	static vector<ScalarFunction> GetScalarFunctions();
+	static TableFunctionSet GetIcebergDeletesScanFunction(ClientContext &context);
 
 private:
 	static TableFunctionSet GetIcebergSnapshotsFunction();
@@ -28,7 +29,6 @@ private:
 	static TableFunctionSet GetIcebergTablePropertiesFunctions();
 	static TableFunctionSet SetIcebergTablePropertiesFunctions();
 	static TableFunctionSet RemoveIcebergTablePropertiesFunctions();
-	static TableFunctionSet GetIcebergDeletesScanFunction(ExtensionLoader &instance);
 };
 
 } // namespace duckdb

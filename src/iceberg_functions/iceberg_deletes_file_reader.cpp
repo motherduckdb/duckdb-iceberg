@@ -17,11 +17,20 @@ static void IcebergDeletesScanSerialize(Serializer &serializer, const optional_p
 	throw NotImplementedException("IcebergDeletesScan serialization not implemented");
 }
 
-TableFunctionSet IcebergFunctions::GetIcebergDeletesScanFunction(ExtensionLoader &loader) {
+TableFunctionSet IcebergFunctions::GetIcebergDeletesScanFunction(ClientContext &context) {
 	// The iceberg_scan function is constructed by grabbing the parquet scan from the Catalog, then injecting the
 	// IcebergMultiFileReader into it to create a Iceberg-based multi file read
-
-	auto &parquet_scan = loader.GetTableFunction("parquet_scan");
+	auto &instance = DatabaseInstance::GetDatabase(context);
+	//! FIXME: delete files could also be made without row_ids,
+	//! in which case we need to rely on the `'schema.column-mapping.default'` property just like data files do.
+	auto &system_catalog = Catalog::GetSystemCatalog(instance);
+	auto data = CatalogTransaction::GetSystemTransaction(instance);
+	auto &schema = system_catalog.GetSchema(data, DEFAULT_SCHEMA);
+	auto catalog_entry = schema.GetEntry(data, CatalogType::TABLE_FUNCTION_ENTRY, "parquet_scan");
+	if (!catalog_entry) {
+		throw InvalidInputException("Function with name \"parquet_scan\" not found!");
+	}
+	auto &parquet_scan = catalog_entry->Cast<TableFunctionCatalogEntry>();
 	auto parquet_scan_copy = parquet_scan.functions;
 
 	for (auto &function : parquet_scan_copy.functions) {
@@ -61,7 +70,10 @@ shared_ptr<MultiFileList> IcebergDeleteFileReader::CreateFileList(ClientContext 
 
 	D_ASSERT(paths.size() == 1);
 	vector<OpenFileInfo> open_files;
-	D_ASSERT(function_info);
+	// in case someone calls this
+	if (!function_info) {
+		throw NotImplementedException("IcebergDeleteFileReader must be called with function info");
+	}
 	auto &iceberg_delete_function_info = function_info->Cast<ParquetDeleteScanInfo>();
 	auto &extended_delete_info = iceberg_delete_function_info.file_info;
 	open_files.emplace_back(extended_delete_info);
