@@ -74,7 +74,7 @@ shared_ptr<MultiFileList> IcebergDeleteFileReader::CreateFileList(ClientContext 
 	if (!function_info) {
 		throw NotImplementedException("IcebergDeleteFileReader must be called with function info");
 	}
-	auto &iceberg_delete_function_info = function_info->Cast<ParquetDeleteScanInfo>();
+	auto &iceberg_delete_function_info = function_info->Cast<IcebergDeleteScanInfo>();
 	auto &extended_delete_info = iceberg_delete_function_info.file_info;
 	open_files.emplace_back(extended_delete_info);
 	auto res = make_uniq<SimpleMultiFileList>(std::move(open_files));

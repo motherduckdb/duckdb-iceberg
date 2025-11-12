@@ -679,16 +679,6 @@ void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &entry,
                                           const vector<MultiFileColumnDefinition> &global_columns,
                                           const vector<ColumnIndex> &column_indexes) const {
 	const auto &delete_file_path = entry.file_path;
-	// auto &instance = DatabaseInstance::GetDatabase(context);
-	// //! FIXME: delete files could also be made without row_ids,
-	// //! in which case we need to rely on the `'schema.column-mapping.default'` property just like data files do.
-	// auto &system_catalog = Catalog::GetSystemCatalog(instance);
-	// auto data = CatalogTransaction::GetSystemTransaction(instance);
-	// auto &schema = system_catalog.GetSchema(data, DEFAULT_SCHEMA);
-	// auto catalog_entry = schema.GetEntry(data, CatalogType::TABLE_FUNCTION_ENTRY, "iceberg_deletes_scan");
-	// if (!catalog_entry) {
-	// 	throw InvalidInputException("Function with name \"parquet_scan\" not found!");
-	// }
 	auto iceberg_deletes_scan = IcebergFunctions::GetIcebergDeletesScanFunction(context);
 	auto &delete_scan_function = iceberg_deletes_scan.functions[0];
 
@@ -711,7 +701,7 @@ void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &entry,
 	extended_info->options["etag"] = Value("");
 	extended_info->options["last_modified"] = Value::TIMESTAMP(timestamp_t(0));
 	res.extended_info = extended_info;
-	auto delete_info = make_shared_ptr<ParquetDeleteScanInfo>(res);
+	auto delete_info = make_shared_ptr<IcebergDeleteScanInfo>(res);
 	delete_scan_function.function_info = delete_info;
 
 	TableFunctionBindInput bind_input(children, named_params, input_types, input_names, nullptr, nullptr,

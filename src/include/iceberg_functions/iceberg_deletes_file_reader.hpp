@@ -13,9 +13,9 @@
 namespace duckdb {
 
 // pass a open file info to the delete scan
-struct ParquetDeleteScanInfo : public TableFunctionInfo {
+struct IcebergDeleteScanInfo : public TableFunctionInfo {
 public:
-	ParquetDeleteScanInfo(OpenFileInfo file_info) : file_info(file_info) {
+	IcebergDeleteScanInfo(OpenFileInfo file_info) : file_info(file_info) {
 	}
 
 public:
