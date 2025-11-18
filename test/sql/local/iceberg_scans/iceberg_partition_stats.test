@@ -14,28 +14,28 @@ require parquet
 
 require iceberg
 
-query IIIIIIIIIII
+query IIIIIIIIIIII
 SELECT * FROM ICEBERG_PARTITION_STATS('__WORKING_DIRECTORY__/data/persistent/hive_partitioned_table', ALLOW_MOVED_PATHS=TRUE);
 ----
-data/persistent/hive_partitioned_table/metadata/fee93099-6425-4d83-bd7c-0aa646533090-m0.avro	5128628767169163501	1	1000	event_date	identity	DATE	2024-01-03	2024-01-04	false	false
-data/persistent/hive_partitioned_table/metadata/fee93099-6425-4d83-bd7c-0aa646533090-m0.avro	5128628767169163501	1	1001	event_type	identity	VARCHAR	click	view	false	false
-data/persistent/hive_partitioned_table/metadata/8f7c6cdd-f7e6-4743-857e-021adfe0b999-m0.avro	2541674261311761067	0	1000	event_date	identity	DATE	2024-01-01	2024-01-02	false	false
+data/persistent/hive_partitioned_table/metadata/fee93099-6425-4d83-bd7c-0aa646533090-m0.avro	5128628767169163501	1	1000	event_date	[event_date]	identity	DATE	2024-01-03	2024-01-04	false	false
+data/persistent/hive_partitioned_table/metadata/fee93099-6425-4d83-bd7c-0aa646533090-m0.avro	5128628767169163501	1	1001	event_type	[event_type]	identity	VARCHAR	click	view	false	false
+data/persistent/hive_partitioned_table/metadata/8f7c6cdd-f7e6-4743-857e-021adfe0b999-m0.avro	2541674261311761067	0	1000	event_date	[event_date]	identity	DATE	2024-01-01	2024-01-02	false	false
 
-query IIIIIIIIIII
+query IIIIIIIIIIII
 SELECT * FROM ICEBERG_PARTITION_STATS('__WORKING_DIRECTORY__/data/persistent/hive_partitioned_table', ALLOW_MOVED_PATHS=TRUE, version='1');
 ----
 
-query IIIIIIIIIII
+query IIIIIIIIIIII
 SELECT * FROM ICEBERG_PARTITION_STATS('__WORKING_DIRECTORY__/data/persistent/hive_partitioned_table', ALLOW_MOVED_PATHS=TRUE, version_name_format='v%s%s.metadata.json');
 ----
-data/persistent/hive_partitioned_table/metadata/fee93099-6425-4d83-bd7c-0aa646533090-m0.avro	5128628767169163501	1	1000	event_date	identity	DATE	2024-01-03	2024-01-04	false	false
-data/persistent/hive_partitioned_table/metadata/fee93099-6425-4d83-bd7c-0aa646533090-m0.avro	5128628767169163501	1	1001	event_type	identity	VARCHAR	click	view	false	false
-data/persistent/hive_partitioned_table/metadata/8f7c6cdd-f7e6-4743-857e-021adfe0b999-m0.avro	2541674261311761067	0	1000	event_date	identity	DATE	2024-01-01	2024-01-02	false	false
+data/persistent/hive_partitioned_table/metadata/fee93099-6425-4d83-bd7c-0aa646533090-m0.avro	5128628767169163501	1	1000	event_date	[event_date]	identity	DATE	2024-01-03	2024-01-04	false	false
+data/persistent/hive_partitioned_table/metadata/fee93099-6425-4d83-bd7c-0aa646533090-m0.avro	5128628767169163501	1	1001	event_type	[event_type]	identity	VARCHAR	click	view	false	false
+data/persistent/hive_partitioned_table/metadata/8f7c6cdd-f7e6-4743-857e-021adfe0b999-m0.avro	2541674261311761067	0	1000	event_date	[event_date]	identity	DATE	2024-01-01	2024-01-02	false	false
 
-query IIIIIIIIIII
+query IIIIIIIIIIII
 SELECT * FROM ICEBERG_PARTITION_STATS('__WORKING_DIRECTORY__/data/persistent/hive_partitioned_table', ALLOW_MOVED_PATHS=TRUE, version='2', version_name_format='v%s%s.metadata.json');
 ----
-data/persistent/hive_partitioned_table/metadata/8f7c6cdd-f7e6-4743-857e-021adfe0b999-m0.avro	2541674261311761067	0	1000	event_date	identity	DATE	2024-01-01	2024-01-02	false	false
+data/persistent/hive_partitioned_table/metadata/8f7c6cdd-f7e6-4743-857e-021adfe0b999-m0.avro	2541674261311761067	0	1000	event_date	[event_date]	identity	DATE	2024-01-01	2024-01-02	false	false
 
 statement error
 SELECT * FROM ICEBERG_PARTITION_STATS('__WORKING_DIRECTORY__/data/persistent/hive_partitioned_table_nonexistent');

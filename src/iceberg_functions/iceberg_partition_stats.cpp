@@ -128,6 +128,9 @@ static unique_ptr<FunctionData> IcebergPartitionStatsBind(ClientContext &context
     names.emplace_back("partition_field_name");
     return_types.emplace_back(LogicalType::VARCHAR);
 
+    names.emplace_back("partition_source_columns");
+    return_types.emplace_back(LogicalType::LIST(LogicalType::VARCHAR));
+
     names.emplace_back("partition_field_transform");
     return_types.emplace_back(LogicalType::VARCHAR);
 
@@ -185,6 +188,11 @@ static void IcebergPartitionStatsFunction(ClientContext &context, TableFunctionI
 			}
 			auto &field_summary = field_summaries[global_state.current_manifest_entry_idx];
 			auto &field = partition_spec.fields[global_state.current_manifest_entry_idx];
+
+			const auto &column_id = bind_data.source_to_column_id.at(field.source_id);
+			auto &column = IcebergTableSchema::GetFromColumnIndex(schema, column_id, 0);
+			auto result_type = field.transform.GetSerializedType(column.type);
+
 			idx_t col = 0;
 			//! manifest_path
 			AddString(output.data[col++], out, string_t(manifest.manifest_path));
@@ -196,12 +204,11 @@ static void IcebergPartitionStatsFunction(ClientContext &context, TableFunctionI
 			FlatVector::GetData<uint64_t>(output.data[col++])[out] = field.partition_field_id;
 			//! partition_field_name
 			AddString(output.data[col++], out, string_t(field.name));
+			//! partition_source_columns
+			output.data[col++].SetValue(out, Value::LIST({column.name}));
 			//! partition_field_transform
 			AddString(output.data[col++], out, string_t(field.transform.RawType()));
 
-			const auto &column_id = bind_data.source_to_column_id.at(field.source_id);
-			auto &column = IcebergTableSchema::GetFromColumnIndex(schema, column_id, 0);
-			auto result_type = field.transform.GetSerializedType(column.type);
 			auto stats = IcebergPredicateStats::DeserializeBounds(field_summary.lower_bound, field_summary.upper_bound,
 																column.name, result_type);
 			//! partition_field_type
