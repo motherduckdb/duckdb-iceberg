@@ -1,0 +1,1 @@
+delete from default.complicated_partitioned_table where amount >= 5000; and amount <= 7000;

@@ -1,0 +1,68 @@
+# name: test/sql/local/irc/reads/test_requests_to_partitioned_table.test
+# group: [reads]
+
+require-env ICEBERG_SERVER_AVAILABLE
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+require icu
+
+require ducklake
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+set enable_logging=true
+
+statement ok
+set logging_level='debug'
+
+statement ok
+SET TimeZone = 'UTC';
+
+statement ok
+CREATE SECRET (
+    TYPE S3,
+    KEY_ID 'admin',
+    SECRET 'password',
+    ENDPOINT '127.0.0.1:9000',
+    URL_STYLE 'path',
+    USE_SSL 0
+);
+
+
+statement ok
+ATTACH '' AS my_datalake (
+    TYPE ICEBERG,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    ENDPOINT 'http://127.0.0.1:8181'
+);
+
+
+mode skip
+
+statement ok
+call enable_logging(level='debug');
+
+query I
+SELECT * FROM my_datalake.default.complicated_partitioned_table where ts = TIMESTAMPTZ '2025-01-01 00:00:00' order by id;
+----
+1000	2025-01-01 00:00:00+00	C01-00	16.87
+1001	2025-01-01 00:00:00+00	C01-01	80.19
+1002	2025-01-01 00:00:00+00	C01-02	49.46
+1003	2025-01-01 00:00:00+00	C01-03	75.11
+
+# we should only read 1 data file.
+query I
+select request.url from duckdb_logs_parsed('HTTP');
+----
+1
+

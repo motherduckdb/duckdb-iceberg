@@ -57,6 +57,35 @@ const IcebergTableSchema &IcebergMultiFileList::GetSchema() const {
 	return scan_info->schema;
 }
 
+static optional_ptr<const TableFilter> GetFilterForColumnIndex(TableFilterSet &filter_set,
+                                                               const ColumnIndex &column_index) {
+	auto primary_index = column_index.GetPrimaryIndex();
+	auto filter_it = filter_set.filters.find(primary_index);
+	if (filter_it == filter_set.filters.end()) {
+		return nullptr;
+	}
+
+	auto &parent_filter = *filter_it->second;
+	auto &child_indexes = column_index.GetChildIndexes();
+
+	reference<const TableFilter> current_filter(parent_filter);
+	for (idx_t i = 0; i < child_indexes.size(); i++) {
+		auto &table_filter = current_filter.get();
+		auto &child_index = child_indexes[i];
+		auto index = child_index.GetPrimaryIndex();
+		if (table_filter.filter_type != TableFilterType::STRUCT_EXTRACT) {
+			return nullptr;
+		}
+		auto &struct_extract = table_filter.Cast<StructFilter>();
+		if (struct_extract.child_idx != index) {
+			//! This filter is not targeting the column on which a partition exists
+			return nullptr;
+		}
+		current_filter = *struct_extract.child_filter;
+	}
+	return current_filter.get();
+}
+
 void IcebergMultiFileList::Bind(vector<LogicalType> &return_types, vector<string> &names) {
 	lock_guard<mutex> guard(lock);
 
@@ -283,6 +312,59 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &file) {
 		if (it == filters.end()) {
 			continue;
 		}
+		auto &metadata = GetMetadata();
+		// First check if there are partitions
+		if (!file.partition_values.empty()) {
+			// check if the index is in the parititon value thing.
+			auto partition_spec_it = metadata.partition_specs.find(file.partition_spec_id);
+			if (partition_spec_it == metadata.partition_specs.end()) {
+				throw InvalidConfigurationException(
+				    "Data file %s has partition spec %d while the metadata does not have this partition spec",
+				    file.file_path, file.partition_spec_id);
+			}
+			auto &partition_spec = partition_spec_it->second;
+			unordered_map<uint64_t, ColumnIndex> source_to_column_id;
+			IcebergTableSchema::PopulateSourceIdMap(source_to_column_id, schema, nullptr);
+
+			auto &field_summaries = partition_spec.fields;
+			for (idx_t i = 0; i < field_summaries.size(); i++) {
+				auto &field_summary = field_summaries[i];
+				auto &field = partition_spec.fields[i];
+
+				const auto &column_id = source_to_column_id.at(field.source_id);
+				// Find if we have a filter for this source column
+				auto table_filter = GetFilterForColumnIndex(table_filters, column_id);
+				if (!table_filter) {
+					continue;
+				}
+
+				auto &column = IcebergTableSchema::GetFromColumnIndex(schema, column_id, 0);
+
+				// initialize dummy stats
+				auto stats = IcebergPredicateStats();
+				bool found_parition_field = false;
+				for (auto &partition_val : file.partition_values) {
+					auto source_id = partition_val.first;
+					if (field.partition_field_id == source_id) {
+						found_parition_field = true;
+						stats.lower_bound = partition_val.second;
+						stats.upper_bound = partition_val.second;
+						break;
+					}
+				}
+
+				if (!found_parition_field) {
+					break;
+				}
+
+				auto result_type = field.transform.GetSerializedType(column.type);
+
+				// if the filter doesn't match the partition value, we don't need to scan the data file
+				if (!IcebergPredicate::MatchBounds(context, *table_filter, stats, field.transform)) {
+					return false;
+				}
+			}
+		}
 		if (file.lower_bounds.empty() || file.upper_bounds.empty()) {
 			//! There are no bounds statistics for the file, can't filter
 			continue;
@@ -443,35 +525,6 @@ OpenFileInfo IcebergMultiFileList::GetFileInternal(idx_t file_id, lock_guard<mut
 OpenFileInfo IcebergMultiFileList::GetFile(idx_t file_id) {
 	lock_guard<mutex> guard(lock);
 	return GetFileInternal(file_id, guard);
-}
-
-static optional_ptr<const TableFilter> GetFilterForColumnIndex(TableFilterSet &filter_set,
-                                                               const ColumnIndex &column_index) {
-	auto primary_index = column_index.GetPrimaryIndex();
-	auto filter_it = filter_set.filters.find(primary_index);
-	if (filter_it == filter_set.filters.end()) {
-		return nullptr;
-	}
-
-	auto &parent_filter = *filter_it->second;
-	auto &child_indexes = column_index.GetChildIndexes();
-
-	reference<const TableFilter> current_filter(parent_filter);
-	for (idx_t i = 0; i < child_indexes.size(); i++) {
-		auto &table_filter = current_filter.get();
-		auto &child_index = child_indexes[i];
-		auto index = child_index.GetPrimaryIndex();
-		if (table_filter.filter_type != TableFilterType::STRUCT_EXTRACT) {
-			return nullptr;
-		}
-		auto &struct_extract = table_filter.Cast<StructFilter>();
-		if (struct_extract.child_idx != index) {
-			//! This filter is not targeting the column on which a partition exists
-			return nullptr;
-		}
-		current_filter = *struct_extract.child_filter;
-	}
-	return current_filter.get();
 }
 
 bool IcebergMultiFileList::ManifestMatchesFilter(const IcebergManifestListEntry &manifest) {
