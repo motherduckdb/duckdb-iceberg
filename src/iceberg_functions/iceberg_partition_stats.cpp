@@ -53,7 +53,7 @@ public:
 };
 
 static unique_ptr<FunctionData> IcebergPartitionStatsBind(ClientContext &context, TableFunctionBindInput &input,
-                                                    vector<LogicalType> &return_types, vector<string> &names) {
+                                                          vector<LogicalType> &return_types, vector<string> &names) {
 	// return a TableRef that contains the scans for the
 	auto ret = make_uniq<IcebergPartitionStatsBindData>();
 
@@ -116,38 +116,38 @@ static unique_ptr<FunctionData> IcebergPartitionStatsBind(ClientContext &context
 	names.emplace_back("manifest_path");
 	return_types.emplace_back(LogicalType::VARCHAR);
 
-    names.emplace_back("added_snapshot_id");
-    return_types.emplace_back(LogicalType::BIGINT);
+	names.emplace_back("added_snapshot_id");
+	return_types.emplace_back(LogicalType::BIGINT);
 
 	names.emplace_back("partition_spec_id");
 	return_types.emplace_back(LogicalType::INTEGER);
 
-    names.emplace_back("partition_field_id");
-    return_types.emplace_back(LogicalType::UBIGINT);
+	names.emplace_back("partition_field_id");
+	return_types.emplace_back(LogicalType::UBIGINT);
 
-    names.emplace_back("partition_field_name");
-    return_types.emplace_back(LogicalType::VARCHAR);
+	names.emplace_back("partition_field_name");
+	return_types.emplace_back(LogicalType::VARCHAR);
 
-    names.emplace_back("partition_source_columns");
-    return_types.emplace_back(LogicalType::LIST(LogicalType::VARCHAR));
+	names.emplace_back("partition_source_columns");
+	return_types.emplace_back(LogicalType::LIST(LogicalType::VARCHAR));
 
-    names.emplace_back("partition_field_transform");
-    return_types.emplace_back(LogicalType::VARCHAR);
+	names.emplace_back("partition_field_transform");
+	return_types.emplace_back(LogicalType::VARCHAR);
 
-    names.emplace_back("partition_field_type");
-    return_types.emplace_back(LogicalType::VARCHAR);
+	names.emplace_back("partition_field_type");
+	return_types.emplace_back(LogicalType::VARCHAR);
 
-    names.emplace_back("lower_bound");
-    return_types.emplace_back(LogicalType::VARCHAR);
+	names.emplace_back("lower_bound");
+	return_types.emplace_back(LogicalType::VARCHAR);
 
-    names.emplace_back("upper_bound");
-    return_types.emplace_back(LogicalType::VARCHAR);
+	names.emplace_back("upper_bound");
+	return_types.emplace_back(LogicalType::VARCHAR);
 
-    names.emplace_back("contains_null");
-    return_types.emplace_back(LogicalType::BOOLEAN);
+	names.emplace_back("contains_null");
+	return_types.emplace_back(LogicalType::BOOLEAN);
 
-    names.emplace_back("contains_nan");
-    return_types.emplace_back(LogicalType::BOOLEAN);
+	names.emplace_back("contains_nan");
+	return_types.emplace_back(LogicalType::BOOLEAN);
 
 	return std::move(ret);
 }
@@ -178,10 +178,11 @@ static void IcebergPartitionStatsFunction(ClientContext &context, TableFunctionI
 		auto partition_spec_it = metadata.partition_specs.find(spec_id);
 		if (partition_spec_it == metadata.partition_specs.end()) {
 			throw InvalidInputException("Manifest %s references 'partition_spec_id' %d which doesn't exist",
-										manifest.manifest_path, spec_id);
+			                            manifest.manifest_path, spec_id);
 		}
 		auto &partition_spec = partition_spec_it->second;
-		for (; global_state.current_manifest_entry_idx < field_summaries.size(); global_state.current_manifest_entry_idx++) {
+		for (; global_state.current_manifest_entry_idx < field_summaries.size();
+		     global_state.current_manifest_entry_idx++) {
 			if (out >= STANDARD_VECTOR_SIZE) {
 				output.SetCardinality(out);
 				return;
@@ -210,7 +211,7 @@ static void IcebergPartitionStatsFunction(ClientContext &context, TableFunctionI
 			AddString(output.data[col++], out, string_t(field.transform.RawType()));
 
 			auto stats = IcebergPredicateStats::DeserializeBounds(field_summary.lower_bound, field_summary.upper_bound,
-																column.name, result_type);
+			                                                      column.name, result_type);
 			//! partition_field_type
 			AddString(output.data[col++], out, string_t(result_type.ToString()));
 
@@ -233,12 +234,8 @@ static void IcebergPartitionStatsFunction(ClientContext &context, TableFunctionI
 
 TableFunctionSet IcebergFunctions::GetIcebergPartitionStatsFunction() {
 	TableFunctionSet function_set("iceberg_partition_stats");
-	TableFunction fun(
-		{LogicalType::VARCHAR},
-		IcebergPartitionStatsFunction,
-		IcebergPartitionStatsBind,
-		IcebergPartitionStatsGlobalTableFunctionState::Init
-	);
+	TableFunction fun({LogicalType::VARCHAR}, IcebergPartitionStatsFunction, IcebergPartitionStatsBind,
+	                  IcebergPartitionStatsGlobalTableFunctionState::Init);
 
 	fun.named_parameters["allow_moved_paths"] = LogicalType::BOOLEAN;
 	fun.named_parameters["metadata_compression_codec"] = LogicalType::VARCHAR;
