@@ -349,6 +349,12 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &file) {
 						found_parition_field = true;
 						stats.lower_bound = partition_val.second;
 						stats.upper_bound = partition_val.second;
+						// set null stats for partitioned column.
+						if (partition_val.second.IsNull()) {
+							stats.has_null = true;
+						} else {
+							stats.has_not_null = true;
+						}
 						break;
 					}
 				}
@@ -358,6 +364,13 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &file) {
 				}
 
 				auto result_type = field.transform.GetSerializedType(column.type);
+
+				// can you parition by not a number?
+				auto nan_counts_it = file.nan_value_counts.find(column_id.GetPrimaryIndex());
+				if (nan_counts_it != file.nan_value_counts.end()) {
+					auto &nan_counts = nan_counts_it->second;
+					stats.has_nan = nan_counts != 0;
+				}
 
 				// if the filter doesn't match the partition value, we don't need to scan the data file
 				if (!IcebergPredicate::MatchBounds(context, *table_filter, stats, field.transform)) {
@@ -459,6 +472,11 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 		while (data_file_idx < current_data_files.size()) {
 			auto &data_file = current_data_files[data_file_idx];
 			data_file_idx++;
+			if (data_file.file_path ==
+			    "/Users/tomebergen/duckdb-iceberg/data/generated/iceberg/spark-local/default/year_timestamp/data/"
+			    "partition_col_year=null/00000-7-7cc6869c-7c7b-402d-b47e-565772346b52-0-00001.parquet") {
+				auto stop_here = 0;
+			}
 			// Check whether current data file is filtered out.
 			if (!table_filters.filters.empty() && !FileMatchesFilter(data_file)) {
 				DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'data_file': '%s'",
