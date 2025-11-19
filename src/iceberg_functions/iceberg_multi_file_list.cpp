@@ -472,11 +472,6 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 		while (data_file_idx < current_data_files.size()) {
 			auto &data_file = current_data_files[data_file_idx];
 			data_file_idx++;
-			if (data_file.file_path ==
-			    "/Users/tomebergen/duckdb-iceberg/data/generated/iceberg/spark-local/default/year_timestamp/data/"
-			    "partition_col_year=null/00000-7-7cc6869c-7c7b-402d-b47e-565772346b52-0-00001.parquet") {
-				auto stop_here = 0;
-			}
 			// Check whether current data file is filtered out.
 			if (!table_filters.filters.empty() && !FileMatchesFilter(data_file)) {
 				DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'data_file': '%s'",
