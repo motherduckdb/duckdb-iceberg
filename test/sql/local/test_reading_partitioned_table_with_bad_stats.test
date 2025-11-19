@@ -1,0 +1,45 @@
+# name: test/sql/local/test_reading_partitioned_table_with_bad_stats.test
+# group: [local]
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+require-env DUCKDB_ICEBERG_HAVE_GENERATED_DATA
+
+statement ok
+call enable_logging(level='debug');
+
+query I
+select * from ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/large_partitioned_table/metadata/v2.metadata.json') where joined >= '1984-12-01 00:00:00+01' order by id desc limit 10;
+----
+66454	User_66454	1985-02-01 00:00:00+01
+66453	User_66453	1985-02-01 00:00:00+01
+66452	User_66452	1985-02-01 00:00:00+01
+66451	User_66451	1985-02-01 00:00:00+01
+66450	User_66450	1985-02-01 00:00:00+01
+66449	User_66449	1985-02-01 00:00:00+01
+66448	User_66448	1985-02-01 00:00:00+01
+66447	User_66447	1985-02-01 00:00:00+01
+66446	User_66446	1985-02-01 00:00:00+01
+66445	User_66445	1985-02-01 00:00:00+01
+
+
+# skipped all partitioned data files where partition information is does not match.
+query III
+select message from duckdb_logs() where type = 'Iceberg';
+----
+Iceberg Filter Pushdown, skipped 'data_file': 'data/persistent/large_partitioned_table/data/joined_month=1984-09/00000-42167-732c9827-ec5e-44f2-b2a3-1a919fd2f708-0-00001.parquet'
+Iceberg Filter Pushdown, skipped 'data_file': 'data/persistent/large_partitioned_table/data/joined_month=1984-09/00000-42167-732c9827-ec5e-44f2-b2a3-1a919fd2f708-0-00001.parquet'
+Iceberg Filter Pushdown, skipped 'data_file': 'data/persistent/large_partitioned_table/data/joined_month=1984-09/00000-42179-88be9947-7b02-4fd4-b3d4-c794944129c7-0-00001.parquet'
+Iceberg Filter Pushdown, skipped 'data_file': 'data/persistent/large_partitioned_table/data/joined_month=1984-09/00000-42179-88be9947-7b02-4fd4-b3d4-c794944129c7-0-00001.parquet'
+Iceberg Filter Pushdown, skipped 'data_file': 'data/persistent/large_partitioned_table/data/joined_month=1984-10/00000-43055-fba934f2-9233-4232-b0ee-c2590d27b5a1-0-00001.parquet'
+Iceberg Filter Pushdown, skipped 'data_file': 'data/persistent/large_partitioned_table/data/joined_month=1984-10/00000-43055-fba934f2-9233-4232-b0ee-c2590d27b5a1-0-00001.parquet'
+Iceberg Filter Pushdown, skipped 'data_file': 'data/persistent/large_partitioned_table/data/joined_month=1984-10/00000-43067-4f95304c-c723-4687-8866-b10c02e6a2f1-0-00001.parquet'
+Iceberg Filter Pushdown, skipped 'data_file': 'data/persistent/large_partitioned_table/data/joined_month=1984-10/00000-43067-4f95304c-c723-4687-8866-b10c02e6a2f1-0-00001.parquet'
+Iceberg Filter Pushdown, skipped 'data_file': 'data/persistent/large_partitioned_table/data/joined_month=1984-10/00000-43079-941f1f20-929b-4fef-a1c4-3ddd0cc73a72-0-00001.parquet'
+Iceberg Filter Pushdown, skipped 'data_file': 'data/persistent/large_partitioned_table/data/joined_month=1984-10/00000-43079-941f1f20-929b-4fef-a1c4-3ddd0cc73a72-0-00001.parquet'
