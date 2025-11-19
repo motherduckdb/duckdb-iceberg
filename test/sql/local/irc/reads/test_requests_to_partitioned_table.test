@@ -46,12 +46,6 @@ ATTACH '' AS my_datalake (
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
-
-# TODO:
-# filter on non-partitioned column, make sure the filter matching does not break
-# Test against partitions of different types
-# test against an evolved partition (i.e goes from year to year + month, then filter on year and on year + month.)
-
 statement ok
 call enable_logging(level='debug');
 
