@@ -4,7 +4,7 @@ CREATE or REPLACE TABLE default.complicated_partitioned_table (
 	customer varchar(20),
     amount long
 )
-PARTITIONED BY (day(ts))
+PARTITIONED BY (year(ts))
 TBLPROPERTIES (
     'format-version'='2',
     'write.update.mode'='merge-on-read'

@@ -1,1 +1,0 @@
-delete from default.complicated_partitioned_table where amount % 73 = 0 or amount % 113 = 0 or amount % 13 = 0 or amount % 19 = 0;

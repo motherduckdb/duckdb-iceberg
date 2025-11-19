@@ -52,22 +52,18 @@ ATTACH '' AS my_datalake (
 # Test against partitions of different types
 # test against an evolved partition (i.e goes from year to year + month, then filter on year and on year + month.)
 
-mode skip
-
 statement ok
 call enable_logging(level='debug');
 
-query I
-SELECT * FROM my_datalake.default.complicated_partitioned_table where ts = TIMESTAMPTZ '2025-01-01 00:00:00' order by id;
+# partitioning was evolved, so make sure we get all tuples inserted in both partitioning schemes
+query IIII
+select * from my_datalake.default.complicated_partitioned_table where ts <= '2020-01-30 00:00:00'::TIMESTAMP and ts >= '2020-01-01 00:00:00'::TIMESTAMP;
 ----
-1000	2025-01-01 00:00:00+00	C01-00	16.87
-1001	2025-01-01 00:00:00+00	C01-01	80.19
-1002	2025-01-01 00:00:00+00	C01-02	49.46
-1003	2025-01-01 00:00:00+00	C01-03	75.11
-
-# we should only read 1 data file.
-query I
-select request.url from duckdb_logs_parsed('HTTP');
-----
-1
-
+1000	2020-01-01 01:00:00+01	C01-00	16
+1001	2020-01-01 01:00:00+01	C01-01	80
+1002	2020-01-01 01:00:00+01	C01-02	49
+1003	2020-01-01 01:00:00+01	C01-03	75
+4000	2020-01-10 01:00:00+01	C01-00	16
+4001	2020-01-10 01:00:00+01	C01-01	80
+4002	2020-01-10 01:00:00+01	C01-02	49
+4003	2020-01-10 01:00:00+01	C01-03	75
