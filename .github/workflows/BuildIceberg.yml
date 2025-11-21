@@ -1,4 +1,4 @@
-name: Build DuckDB-Iceberg
+name: Build & Test against catalogs
 on: [push, pull_request,repository_dispatch]
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref || '' }}-${{ github.base_ref || '' }}-${{ github.ref != 'refs/heads/main' || github.sha }}
@@ -59,7 +59,7 @@ jobs:
   test-nessie:
     name: Test against Nessie Catalog
     needs: build_iceberg
-    uses: Tmonster/duckdb-iceberg/.github/workflows/test-nessie-reusable.yml@update_test_infrastructure
+    uses: Tmonster/duckdb-iceberg/.github/workflows/test-nessie-catalog.yml@update_test_infrastructure
     with:
       artifact-name: duckdb-iceberg
 
