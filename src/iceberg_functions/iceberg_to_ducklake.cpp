@@ -384,6 +384,7 @@ public:
 		for (auto &field : partition.fields) {
 			columns.push_back(DuckLakePartitionColumn(field));
 		}
+		partition_id = partition.spec_id;
 	}
 
 public:
@@ -584,7 +585,7 @@ public:
 public:
 	//! ----- Partition Updates -----
 
-	DuckLakePartition &AddPartition(DuckLakePartition &new_partition, DuckLakeSnapshot &begin_snapshot) {
+	DuckLakePartition &AddPartition(unique_ptr<DuckLakePartition> new_partition, DuckLakeSnapshot &begin_snapshot) {
 		if (current_partition) {
 			auto &old_partition = *current_partition;
 			old_partition.end_snapshot = begin_snapshot.snapshot_time;
@@ -592,9 +593,9 @@ public:
 			current_partition = nullptr;
 		}
 		begin_snapshot.AlterTable(table_uuid);
-		new_partition.start_snapshot = begin_snapshot.snapshot_time;
-		all_partitions.push_back(new_partition);
-		current_partition = all_partitions.back();
+		new_partition->start_snapshot = begin_snapshot.snapshot_time;
+		all_partitions.push_back(std::move(new_partition));
+		current_partition = all_partitions.back().get();
 
 		return *current_partition;
 	}
@@ -698,7 +699,7 @@ public:
 	vector<DuckLakeColumn> all_columns;
 	unordered_map<int64_t, idx_t> current_columns;
 
-	vector<DuckLakePartition> all_partitions;
+	vector<unique_ptr<DuckLakePartition>> all_partitions;
 	optional_ptr<DuckLakePartition> current_partition;
 
 	vector<DuckLakeDataFile> all_data_files;
@@ -927,8 +928,8 @@ public:
 				if (!current_partition_spec_id.IsValid() ||
 				    static_cast<idx_t>(manifest.partition_spec_id) > current_partition_spec_id.GetIndex()) {
 					auto &partition_spec = *metadata.FindPartitionSpecById(manifest.partition_spec_id);
-					auto new_partition = DuckLakePartition(partition_spec);
-					current_partition = table.AddPartition(new_partition, ducklake_snapshot);
+					auto new_partition = make_uniq<DuckLakePartition>(partition_spec);
+					current_partition = table.AddPartition(std::move(new_partition), ducklake_snapshot);
 					current_partition_spec_id = manifest.partition_spec_id;
 				}
 
@@ -1064,13 +1065,13 @@ public:
 			int64_t table_id = table.table_id.GetIndex();
 			//! ducklake_partition_info
 			for (auto &partition : table.all_partitions) {
-				auto values = partition.FinalizeEntry(table_id, serializer, snapshots);
+				auto values = partition->FinalizeEntry(table_id, serializer, snapshots);
 				sql.push_back(StringUtil::Format("INSERT INTO {METADATA_CATALOG}.ducklake_partition_info %s", values));
-
-				auto partition_id = partition.partition_id.GetIndex();
+				D_ASSERT(partition->partition_id.IsValid());
+				auto partition_id = partition->partition_id.GetIndex();
 				//! ducklake_partition_column
-				for (idx_t i = 0; i < partition.columns.size(); i++) {
-					auto &column = partition.columns[i];
+				for (idx_t i = 0; i < partition->columns.size(); i++) {
+					auto &column = partition->columns[i];
 					auto values = column.FinalizeEntry(table_id, partition_id, i);
 					sql.push_back(
 					    StringUtil::Format("INSERT INTO {METADATA_CATALOG}.ducklake_partition_column %s", values));
