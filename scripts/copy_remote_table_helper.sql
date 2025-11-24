@@ -1,5 +1,6 @@
 
 -- first copy the data files from the remote
+-- you will need to manually copy the field id information.
 copy (select * from 's3://path/to/data/file/remote.parquet') to 'path/to/data/file/local.parquet' (FIELD_IDS {<field_ids + partition_field_ids>});
 
 -- then copy the manifest files you want
@@ -119,5 +120,5 @@ copy (
 });
 
 
--- lastly you need to create a metadata.json. You can mostl likely get away with copying the first or second metadata.json
--- assuming the schema has not been changed.
+-- lastly you need to create a metadata.json. You can most likely get away with copying the first or second metadata.json
+-- and changing the location of the manifest list. This is assuming the schema has not been changed.
