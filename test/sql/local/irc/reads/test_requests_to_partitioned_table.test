@@ -61,3 +61,25 @@ select * from my_datalake.default.complicated_partitioned_table where ts <= '202
 4001	2020-01-10 00:00:00+00	C01-01	80
 4002	2020-01-10 00:00:00+00	C01-02	49
 4003	2020-01-10 00:00:00+00	C01-03	75
+
+query I
+select count(*) from duckdb_logs_parsed('HTTP') where request.url like '%.parquet';
+----
+2
+
+statement ok
+call truncate_duckdb_logs();
+
+query IIII
+select * from my_datalake.default.complicated_partitioned_table where ts is null order by id
+----
+6005	NULL	C06-04	40
+6006	NULL	C06-04	41
+6007	NULL	C06-04	42
+
+
+query I
+select count(*) from duckdb_logs_parsed('HTTP') where request.url like '%.parquet';
+----
+1
+

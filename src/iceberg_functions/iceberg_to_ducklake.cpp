@@ -384,7 +384,6 @@ public:
 		for (auto &field : partition.fields) {
 			columns.push_back(DuckLakePartitionColumn(field));
 		}
-		partition_id = partition.spec_id;
 	}
 
 public:

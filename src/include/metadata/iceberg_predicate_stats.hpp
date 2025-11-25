@@ -14,6 +14,8 @@ public:
 	                                               const string &name, const LogicalType &type);
 
 public:
+	bool has_lower_bounds;
+	bool has_upper_bounds;
 	Value lower_bound;
 	Value upper_bound;
 	bool has_null = false;

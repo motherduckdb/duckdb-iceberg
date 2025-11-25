@@ -44,12 +44,28 @@ template <class TRANSFORM>
 static bool MatchBoundsConstant(const Value &constant, ExpressionType comparison_type,
                                 const IcebergPredicateStats &stats, const IcebergTransform &transform) {
 	auto constant_value = TRANSFORM::ApplyTransform(constant, transform);
-	if (constant_value.IsNull() || stats.lower_bound.IsNull() || stats.upper_bound.IsNull()) {
+
+	if (stats.has_upper_bounds && stats.has_lower_bounds && stats.lower_bound.IsNull() && stats.upper_bound.IsNull()) {
+		// most likely filtering on a null partition.
+		switch (comparison_type) {
+		case ExpressionType::COMPARE_DISTINCT_FROM:
+			return !constant_value.IsNull();
+		case ExpressionType::COMPARE_NOT_DISTINCT_FROM:
+			return constant_value.IsNull();
+		default:
+			// return false, all other expression types against null evaluate to false
+			// even null=null
+			return false;
+		}
+	}
+
+	if (constant_value.IsNull()) {
 		//! Can't compare when there are no bounds
 		return true;
 	}
 
 	switch (comparison_type) {
+	case ExpressionType::COMPARE_NOT_DISTINCT_FROM:
 	case ExpressionType::COMPARE_EQUAL:
 		return TRANSFORM::CompareEqual(constant_value, stats);
 	case ExpressionType::COMPARE_GREATERTHAN:

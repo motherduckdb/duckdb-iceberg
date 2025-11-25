@@ -273,6 +273,7 @@ IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(const Value &lowe
 
 	if (lower_bound.IsNull()) {
 		res.lower_bound = Value(type);
+		res.has_lower_bounds = false;
 	} else {
 		D_ASSERT(lower_bound.type().id() == LogicalTypeId::BLOB);
 		auto lower_bound_blob = lower_bound.GetValueUnsafe<string_t>();
@@ -282,10 +283,12 @@ IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(const Value &lowe
 			                                    deserialized_lower_bound.GetError());
 		}
 		res.lower_bound = deserialized_lower_bound.GetValue();
+		res.has_lower_bounds = true;
 	}
 
 	if (upper_bound.IsNull()) {
 		res.upper_bound = Value(type);
+		res.has_upper_bounds = false;
 	} else {
 		D_ASSERT(upper_bound.type().id() == LogicalTypeId::BLOB);
 		auto upper_bound_blob = upper_bound.GetValueUnsafe<string_t>();
@@ -295,6 +298,7 @@ IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(const Value &lowe
 			                                    deserialized_upper_bound.GetError());
 		}
 		res.upper_bound = deserialized_upper_bound.GetValue();
+		res.has_upper_bounds = true;
 	}
 	return res;
 }
@@ -328,7 +332,6 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &file) {
 
 			auto &field_summaries = partition_spec.fields;
 			for (idx_t i = 0; i < field_summaries.size(); i++) {
-				auto &field_summary = field_summaries[i];
 				auto &field = partition_spec.fields[i];
 
 				const auto &column_id = source_to_column_id.at(field.source_id);
@@ -338,19 +341,20 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &file) {
 					continue;
 				}
 
-				auto &column = IcebergTableSchema::GetFromColumnIndex(schema, column_id, 0);
-
 				// initialize dummy stats
 				auto stats = IcebergPredicateStats();
-				bool found_parition_field = false;
+				bool found_partition_field = false;
 				for (auto &partition_val : file.partition_values) {
-					auto source_id = partition_val.first;
-					if (field.partition_field_id == source_id) {
-						found_parition_field = true;
+					auto partition_field_id = partition_val.first;
+					if (field.partition_field_id == partition_field_id) {
+						found_partition_field = true;
 						stats.lower_bound = partition_val.second;
 						stats.upper_bound = partition_val.second;
+						stats.has_upper_bounds = true;
+						stats.has_lower_bounds = true;
 						// set null stats for partitioned column.
 						if (partition_val.second.IsNull()) {
+							// partition values can be null
 							stats.has_null = true;
 						} else {
 							stats.has_not_null = true;
@@ -359,13 +363,11 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &file) {
 					}
 				}
 
-				if (!found_parition_field) {
-					break;
+				if (!found_partition_field) {
+					// continue to next partition spec field summary
+					continue;
 				}
 
-				auto result_type = field.transform.GetSerializedType(column.type);
-
-				// can you parition by not a number?
 				auto nan_counts_it = file.nan_value_counts.find(column_id.GetPrimaryIndex());
 				if (nan_counts_it != file.nan_value_counts.end()) {
 					auto &nan_counts = nan_counts_it->second;
