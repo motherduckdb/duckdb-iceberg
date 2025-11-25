@@ -277,6 +277,10 @@ void IcebergPredicateStats::SetUpperBound(const Value &new_upper_bound) {
 	upper_bound = new_upper_bound;
 }
 
+bool IcebergPredicateStats::BoundsAreNull() const {
+	return has_lower_bounds && has_upper_bounds && lower_bound.IsNull() && upper_bound.IsNull();
+}
+
 IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(const Value &lower_bound, const Value &upper_bound,
                                                                const string &name, const LogicalType &type) {
 	IcebergPredicateStats res;

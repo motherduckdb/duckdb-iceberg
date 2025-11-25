@@ -14,6 +14,7 @@ public:
 	                                               const string &name, const LogicalType &type);
 	void SetLowerBound(const Value &new_lower_bound);
 	void SetUpperBound(const Value &new_upper_bound);
+	bool BoundsAreNull() const;
 
 public:
 	bool has_lower_bounds = false;

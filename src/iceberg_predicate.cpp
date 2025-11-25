@@ -45,18 +45,15 @@ static bool MatchBoundsConstant(const Value &constant, ExpressionType comparison
                                 const IcebergPredicateStats &stats, const IcebergTransform &transform) {
 	auto constant_value = TRANSFORM::ApplyTransform(constant, transform);
 
-	if (stats.has_upper_bounds && stats.has_lower_bounds && stats.lower_bound.IsNull() && stats.upper_bound.IsNull()) {
-		// most likely filtering on a null partition.
-		switch (comparison_type) {
-		case ExpressionType::COMPARE_DISTINCT_FROM:
-			return !constant_value.IsNull();
-		case ExpressionType::COMPARE_NOT_DISTINCT_FROM:
-			return constant_value.IsNull();
-		default:
-			// return false, all other expression types against null evaluate to false
-			// even null=null
-			return false;
-		}
+	if (stats.BoundsAreNull()) {
+		// bounds are actually null, expression is not a null comparison expression
+		// those are handled in MatchBoundsTemplated
+		// So we can return false since no remaining expression type will match a null value
+		D_ASSERT(comparison_type != ExpressionType::OPERATOR_IS_NOT_NULL);
+		D_ASSERT(comparison_type != ExpressionType::OPERATOR_IS_NULL);
+		D_ASSERT(comparison_type != ExpressionType::COMPARE_DISTINCT_FROM);
+		D_ASSERT(comparison_type != ExpressionType::COMPARE_NOT_DISTINCT_FROM);
+		return false;
 	}
 
 	if (!stats.has_upper_bounds || !stats.has_lower_bounds) {
@@ -65,7 +62,6 @@ static bool MatchBoundsConstant(const Value &constant, ExpressionType comparison
 	}
 
 	switch (comparison_type) {
-	case ExpressionType::COMPARE_NOT_DISTINCT_FROM:
 	case ExpressionType::COMPARE_EQUAL:
 		return TRANSFORM::CompareEqual(constant_value, stats);
 	case ExpressionType::COMPARE_GREATERTHAN:
