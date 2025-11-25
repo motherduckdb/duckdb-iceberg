@@ -54,7 +54,7 @@ NULL	NULL
 NULL	duck
 
 query II
-select * from my_datalake.default.test_null_filtering where a is not null;
+select * from my_datalake.default.test_null_filtering where a is not null order by a;
 ----
 0	hello
 1	world
@@ -64,7 +64,7 @@ select * from my_datalake.default.test_null_filtering where a is not null;
 10	no nulls
 
 query II
-select * from my_datalake.default.test_null_filtering where a is distinct from null;
+select * from my_datalake.default.test_null_filtering where a is distinct from null order by a;
 ----
 0	hello
 1	world
@@ -74,7 +74,7 @@ select * from my_datalake.default.test_null_filtering where a is distinct from n
 10	no nulls
 
 query II
-select * from my_datalake.default.test_null_filtering where a is not distinct from null;
+select * from my_datalake.default.test_null_filtering where a is not distinct from null order by a;
 ----
 NULL	NULL
 NULL	duck
