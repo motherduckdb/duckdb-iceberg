@@ -59,8 +59,8 @@ static bool MatchBoundsConstant(const Value &constant, ExpressionType comparison
 		}
 	}
 
-	if (constant_value.IsNull()) {
-		//! Can't compare when there are no bounds
+	if (!stats.has_upper_bounds || !stats.has_lower_bounds) {
+		// we do not have upper or lower bounds, assume the file matches.
 		return true;
 	}
 

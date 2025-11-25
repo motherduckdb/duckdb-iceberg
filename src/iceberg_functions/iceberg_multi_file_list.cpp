@@ -267,14 +267,21 @@ unique_ptr<NodeStatistics> IcebergMultiFileList::GetCardinality(ClientContext &c
 	return make_uniq<NodeStatistics>(cardinality, cardinality);
 }
 
+void IcebergPredicateStats::SetLowerBound(const Value &new_lower_bound) {
+	has_lower_bounds = true;
+	lower_bound = new_lower_bound;
+}
+
+void IcebergPredicateStats::SetUpperBound(const Value &new_upper_bound) {
+	has_upper_bounds = true;
+	upper_bound = new_upper_bound;
+}
+
 IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(const Value &lower_bound, const Value &upper_bound,
                                                                const string &name, const LogicalType &type) {
 	IcebergPredicateStats res;
 
-	if (lower_bound.IsNull()) {
-		res.lower_bound = Value(type);
-		res.has_lower_bounds = false;
-	} else {
+	if (!lower_bound.IsNull()) {
 		D_ASSERT(lower_bound.type().id() == LogicalTypeId::BLOB);
 		auto lower_bound_blob = lower_bound.GetValueUnsafe<string_t>();
 		auto deserialized_lower_bound = IcebergValue::DeserializeValue(lower_bound_blob, type);
@@ -282,14 +289,10 @@ IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(const Value &lowe
 			throw InvalidConfigurationException("Column %s lower bound deserialization failed: %s", name,
 			                                    deserialized_lower_bound.GetError());
 		}
-		res.lower_bound = deserialized_lower_bound.GetValue();
-		res.has_lower_bounds = true;
+		res.SetLowerBound(deserialized_lower_bound.GetValue());
 	}
 
-	if (upper_bound.IsNull()) {
-		res.upper_bound = Value(type);
-		res.has_upper_bounds = false;
-	} else {
+	if (!upper_bound.IsNull()) {
 		D_ASSERT(upper_bound.type().id() == LogicalTypeId::BLOB);
 		auto upper_bound_blob = upper_bound.GetValueUnsafe<string_t>();
 		auto deserialized_upper_bound = IcebergValue::DeserializeValue(upper_bound_blob, type);
@@ -297,8 +300,7 @@ IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(const Value &lowe
 			throw InvalidConfigurationException("Column %s upper bound deserialization failed: %s", name,
 			                                    deserialized_upper_bound.GetError());
 		}
-		res.upper_bound = deserialized_upper_bound.GetValue();
-		res.has_upper_bounds = true;
+		res.SetUpperBound(deserialized_upper_bound.GetValue());
 	}
 	return res;
 }
