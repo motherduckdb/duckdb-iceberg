@@ -83,3 +83,22 @@ select count(*) from duckdb_logs_parsed('HTTP') where request.url like '%.parque
 ----
 1
 
+
+statement ok
+call truncate_duckdb_logs();
+
+
+query I
+select id from my_datalake.default.complicated_partitioned_table where ts >= '2021-01-25 00:00:00'::TIMESTAMP and ts <= '2021-01-30 00:00:00'::TIMESTAMP;
+----
+
+# skips the partitions/data files that match the partiition (2021 & 2021-01) but do not match on upper/lower bounds
+query I
+select count(*) from duckdb_logs where type like 'Iceberg' and
+(message like '%skipped%data_file%ts_year=2021%'
+ or
+ message like '%skipped%data_file%ts_month=2021-01%'
+);
+----
+2
+
