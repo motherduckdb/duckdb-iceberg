@@ -166,20 +166,16 @@ unique_ptr<HTTPResponse> AWSInput::ExecuteRequestLegacy(ClientContext &context, 
 	auto response = httpClient->MakeRequest(request);
 	auto resCode = response->GetResponseCode();
 
-	DUCKDB_LOG(context, IcebergLogType,
-	           "%s %s (response %d) (signed with key_id '%s' for service '%s', in region '%s')",
-	           Aws::Http::HttpMethodMapper::GetNameForHttpMethod(method), uri.GetURIString(), resCode, key_id,
-	           service.c_str(), region.c_str());
-
 	auto result = make_uniq<HTTPResponse>(resCode == Aws::Http::HttpResponseCode::REQUEST_NOT_MADE
 	                                          ? HTTPStatusCode::INVALID
 	                                          : HTTPStatusCode(static_cast<idx_t>(resCode)));
 
+	bool throw_exception = false;
 	result->url = uri.GetURIString();
 	if (resCode == Aws::Http::HttpResponseCode::REQUEST_NOT_MADE) {
 		D_ASSERT(response->HasClientError());
 		result->reason = response->GetClientErrorMessage();
-		throw HTTPException(*result, result->reason);
+		throw_exception = true;
 	}
 	for (auto &header : response->GetHeaders()) {
 		result->headers[header.first] = header.second;
@@ -191,6 +187,9 @@ unique_ptr<HTTPResponse> AWSInput::ExecuteRequestLegacy(ClientContext &context, 
 		result->success = false;
 	}
 	LogAWSHTTPRequest(context, request, *result, method);
+	if (throw_exception) {
+		throw HTTPException(*result, result->reason);
+	}
 	return result;
 }
 

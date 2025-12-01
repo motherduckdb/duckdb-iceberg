@@ -142,7 +142,7 @@ bool IRCAPI::VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, c
 	auto namespace_items = ParseSchemaName(schema);
 	auto schema_name = GetEncodedSchemaName(namespace_items);
 
-	auto url_builder = catalog.GetBaseUrl();
+	auto url_builder = catalog.GetBaseUrl(context);
 	url_builder.AddPathComponent(catalog.prefix);
 	url_builder.AddPathComponent("namespaces");
 	url_builder.AddPathComponent(schema_name);
@@ -155,7 +155,7 @@ bool IRCAPI::VerifyTableExistence(ClientContext &context, IRCatalog &catalog, co
                                   const string &table) {
 	auto schema_name = GetEncodedSchemaName(schema.namespace_items);
 
-	auto url_builder = catalog.GetBaseUrl();
+	auto url_builder = catalog.GetBaseUrl(context);
 	url_builder.AddPathComponent(catalog.prefix);
 	url_builder.AddPathComponent("namespaces");
 	url_builder.AddPathComponent(schema_name);
@@ -170,7 +170,7 @@ static unique_ptr<HTTPResponse> GetTableMetadata(ClientContext &context, IRCatal
                                                  const IRCSchemaEntry &schema, const string &table) {
 	auto schema_name = IRCAPI::GetEncodedSchemaName(schema.namespace_items);
 
-	auto url_builder = catalog.GetBaseUrl();
+	auto url_builder = catalog.GetBaseUrl(context);
 	url_builder.AddPathComponent(catalog.prefix);
 	url_builder.AddPathComponent("namespaces");
 	url_builder.AddPathComponent(schema_name);
@@ -212,7 +212,7 @@ vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &conte
 	string page_token;
 
 	do {
-		auto url_builder = catalog.GetBaseUrl();
+		auto url_builder = catalog.GetBaseUrl(context);
 		url_builder.AddPathComponent(catalog.prefix);
 		url_builder.AddPathComponent("namespaces");
 		url_builder.AddPathComponent(schema_name);
@@ -262,7 +262,7 @@ vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IRCatalog &catal
 	vector<IRCAPISchema> result;
 	string page_token = "";
 	do {
-		auto endpoint_builder = catalog.GetBaseUrl();
+		auto endpoint_builder = catalog.GetBaseUrl(context);
 		endpoint_builder.AddPathComponent(catalog.prefix);
 		endpoint_builder.AddPathComponent("namespaces");
 		if (!parent.empty()) {
@@ -318,7 +318,7 @@ vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IRCatalog &catal
 }
 
 void IRCAPI::CommitMultiTableUpdate(ClientContext &context, IRCatalog &catalog, const string &body) {
-	auto url_builder = catalog.GetBaseUrl();
+	auto url_builder = catalog.GetBaseUrl(context);
 	url_builder.AddPathComponent(catalog.prefix);
 	url_builder.AddPathComponent("transactions");
 	url_builder.AddPathComponent("commit");
@@ -336,7 +336,7 @@ void IRCAPI::CommitTableUpdate(ClientContext &context, IRCatalog &catalog, const
                                const string &table_name, const string &body) {
 	auto schema_name = GetEncodedSchemaName(schema);
 
-	auto url_builder = catalog.GetBaseUrl();
+	auto url_builder = catalog.GetBaseUrl(context);
 	url_builder.AddPathComponent(catalog.prefix);
 	url_builder.AddPathComponent("namespaces");
 	url_builder.AddPathComponent(schema_name);
@@ -355,7 +355,7 @@ void IRCAPI::CommitTableUpdate(ClientContext &context, IRCatalog &catalog, const
 void IRCAPI::CommitTableDelete(ClientContext &context, IRCatalog &catalog, const vector<string> &schema,
                                const string &table_name) {
 	auto schema_name = GetEncodedSchemaName(schema);
-	auto url_builder = catalog.GetBaseUrl();
+	auto url_builder = catalog.GetBaseUrl(context);
 	url_builder.AddPathComponent(catalog.prefix);
 	url_builder.AddPathComponent("namespaces");
 	url_builder.AddPathComponent(schema_name);
@@ -374,7 +374,7 @@ void IRCAPI::CommitTableDelete(ClientContext &context, IRCatalog &catalog, const
 }
 
 void IRCAPI::CommitNamespaceCreate(ClientContext &context, IRCatalog &catalog, string body) {
-	auto url_builder = catalog.GetBaseUrl();
+	auto url_builder = catalog.GetBaseUrl(context);
 	url_builder.AddPathComponent(catalog.prefix);
 	url_builder.AddPathComponent("namespaces");
 	HTTPHeaders headers(*context.db);
@@ -388,7 +388,7 @@ void IRCAPI::CommitNamespaceCreate(ClientContext &context, IRCatalog &catalog, s
 }
 
 void IRCAPI::CommitNamespaceDrop(ClientContext &context, IRCatalog &catalog, vector<string> namespace_items) {
-	auto url_builder = catalog.GetBaseUrl();
+	auto url_builder = catalog.GetBaseUrl(context);
 	auto schema_name = GetEncodedSchemaName(namespace_items);
 	url_builder.AddPathComponent(catalog.prefix);
 	url_builder.AddPathComponent("namespaces");
@@ -409,7 +409,7 @@ rest_api_objects::LoadTableResult IRCAPI::CommitNewTable(ClientContext &context,
                                                          const ICTableEntry *table) {
 	auto &ic_schema = table->schema.Cast<IRCSchemaEntry>();
 	auto table_namespace = GetEncodedSchemaName(ic_schema.namespace_items);
-	auto url_builder = catalog.GetBaseUrl();
+	auto url_builder = catalog.GetBaseUrl(context);
 	url_builder.AddPathComponent(catalog.prefix);
 	url_builder.AddPathComponent("namespaces");
 	url_builder.AddPathComponent(table_namespace);
@@ -453,7 +453,7 @@ rest_api_objects::LoadTableResult IRCAPI::CommitNewTable(ClientContext &context,
 }
 
 rest_api_objects::CatalogConfig IRCAPI::GetCatalogConfig(ClientContext &context, IRCatalog &catalog) {
-	auto url_builder = catalog.GetBaseUrl();
+	auto url_builder = catalog.GetBaseUrl(context);
 	url_builder.AddPathComponent("config");
 	url_builder.SetParam("warehouse", catalog.warehouse);
 	string body = "";

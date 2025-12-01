@@ -70,7 +70,6 @@ string IRCEndpointBuilder::GetURL() const {
 
 IRCEndpointBuilder IRCEndpointBuilder::FromURL(const string &url, bool encode_components) {
 	auto url_with_http = AddHttpHostIfMissing(url);
-	// FIX this
 	auto ret = IRCEndpointBuilder(encode_components);
 	size_t schemeEnd = url_with_http.find("://");
 	if (schemeEnd == string::npos) {
