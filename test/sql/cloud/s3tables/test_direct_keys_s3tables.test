@@ -84,7 +84,7 @@ detach my_datalake
 
 # test using provider credential chain
 statement ok
-CREATE SECRET (
+CREATE OR REPLACE SECRET (
   TYPE S3,
   PROVIDER credential_chain
 );
@@ -94,6 +94,7 @@ attach 'arn:aws:s3tables:us-east-2:840140254803:bucket/iceberg-testing' as my_da
     TYPE ICEBERG,
     ENDPOINT_TYPE 'S3_Tables'
 );
+
 
 query T nosort tables_1
 show all tables;

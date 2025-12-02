@@ -25,7 +25,7 @@ SET iceberg_via_aws_sdk_for_catalog_interactions=${aws_sdk_val};
 
 # test using keys directly
 statement ok
-CREATE SECRET s1 (
+CREATE OR REPLACE SECRET s1 (
 	TYPE S3,
 	KEY_ID '${AWS_ACCESS_KEY_ID}',
 	SECRET '${AWS_SECRET_ACCESS_KEY}',
@@ -86,7 +86,7 @@ detach my_datalake
 
 # test using provider credential chain
 statement ok
-CREATE SECRET (
+CREATE OR REPLACE SECRET (
   TYPE S3,
   PROVIDER credential_chain
 );
