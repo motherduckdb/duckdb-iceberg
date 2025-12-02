@@ -649,8 +649,6 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) {
 				data_manifests.push_back(manifest);
 			} else if (manifest.content == IcebergManifestContentType::DELETE) {
 				delete_manifests.push_back(manifest);
-			} else {
-				auto break_here = 0;
 			}
 		}
 	}
@@ -718,11 +716,6 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 
 		current_delete_manifest++;
 
-		if (manifest_file.path ==
-		    "s3://redshift-catalog-playground-bucket/s3-tables-for-redshift-catalog/large_partitioned_table_for_vacuum/"
-		    "metadata/5aeade19-bc2d-4e28-b7b6-9d9900209024-m0.avro") {
-			auto break_here = 0;
-		}
 		for (auto &entry : manifest_file.data_files) {
 			// Check whether current data file is filtered out.
 			if (!table_filters.filters.empty() && !FileMatchesFilter(entry)) {
