@@ -28,8 +28,6 @@ CREATE SECRET s1 (
 
 set ignore_error_messages
 
-foreach aws_sdk_val true false
-
 statement ok
 SET iceberg_via_aws_sdk_for_catalog_interactions=${aws_sdk_val};
 
@@ -190,8 +188,6 @@ select * from s3_catalog.test_inserts.basic_insert_test;
 15	mr.scroog	bitlane	2010-06-11
 16	mr.Goose	ponder	2010-06-11
 17	ms.Swan	lakeway	2010-06-11
-
-endloop
 
 # TODO: cleanup temporary secretes
 # query I

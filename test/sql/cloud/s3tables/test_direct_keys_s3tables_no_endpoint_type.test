@@ -18,7 +18,9 @@ require httpfs
 
 require aws
 
-# test using keys directory
+foreach aws_sdk_val true false
+
+# test using keys directly
 statement ok
 CREATE SECRET s1 (
 	TYPE S3,
@@ -27,7 +29,6 @@ CREATE SECRET s1 (
 	REGION 'us-east-2'
 );
 
-foreach aws_sdk_val true false
 
 statement ok
 SET iceberg_via_aws_sdk_for_catalog_interactions=${aws_sdk_val};
