@@ -24,7 +24,6 @@ CREATE SECRET (
     PROVIDER credential_chain
 );
 
-
 foreach aws_sdk_val true false
 
 statement ok
@@ -43,6 +42,9 @@ create schema IF NOT EXISTS s3_catalog.test_create_schema;
 
 statement ok
 use s3_catalog.test_create_schema;
+
+statement ok
+drop table if exists test_create_table;
 
 statement ok
 create table test_create_table (a int);
