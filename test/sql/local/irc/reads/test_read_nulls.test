@@ -48,7 +48,7 @@ statement ok
 set logging_level='debug'
 
 query II
-select * from my_datalake.default.test_null_filtering where a is null;
+select * from my_datalake.default.test_null_filtering where a is null order by all NULLS FIRST;
 ----
 NULL	NULL
 NULL	duck
