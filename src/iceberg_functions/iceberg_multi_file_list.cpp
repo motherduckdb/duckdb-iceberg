@@ -25,7 +25,9 @@ namespace duckdb {
 IcebergMultiFileList::IcebergMultiFileList(ClientContext &context_p, shared_ptr<IcebergScanInfo> scan_info,
                                            const string &path, const IcebergOptions &options)
     : MultiFileList(vector<OpenFileInfo> {}, FileGlobOptions::ALLOW_EMPTY), context(context_p),
-      fs(FileSystem::GetFileSystem(context)), scan_info(scan_info), path(path), lock(), options(options) {
+      fs(FileSystem::GetFileSystem(context)), scan_info(scan_info), path(path), table(nullptr), lock(),
+      options(options) {
+	auto wat = 0;
 }
 
 string IcebergMultiFileList::ToDuckDBPath(const string &raw_path) {

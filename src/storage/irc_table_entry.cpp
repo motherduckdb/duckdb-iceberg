@@ -143,6 +143,12 @@ TableFunction ICTableEntry::GetScanFunction(ClientContext &context, unique_ptr<F
 	                                  empty_ref);
 	auto result = iceberg_scan_function.bind(context, bind_input, return_types, names);
 	bind_data = std::move(result);
+	// does this work?
+	auto &wat = bind_data->Cast<MultiFileBindData>();
+	D_ASSERT(wat.file_list);
+	auto &ic_file_list = wat.file_list->Cast<IcebergMultiFileList>();
+	ic_file_list.table = this;
+
 	return iceberg_scan_function;
 }
 

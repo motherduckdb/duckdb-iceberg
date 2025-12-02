@@ -433,8 +433,8 @@ bool IcebergMultiFileReader::ParseOption(const string &key, const Value &val, Mu
 		auto value = StringValue::Get(val);
 		auto string_substitutions = IcebergUtils::CountOccurrences(value, "%s");
 		if (string_substitutions != 2) {
-			throw InvalidInputException("'version_name_format' has to contain two occurrences of '%s' in it, found %d",
-			                            "%s", string_substitutions);
+			throw InvalidInputException("'version_name_format' has to contain two occurrences of '%%s' in it, found %d",
+			                            string_substitutions);
 		}
 		this->options.version_name_format = value;
 		return true;
