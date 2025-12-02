@@ -3,7 +3,7 @@
 
 namespace duckdb {
 
-IRCEndpointBuilder::IRCEndpointBuilder(bool encode_components) : encode_components(encode_components) {
+IRCEndpointBuilder::IRCEndpointBuilder() {
 }
 
 string AddHttpHostIfMissing(const string &url) {
@@ -44,15 +44,11 @@ const std::unordered_map<string, string> IRCEndpointBuilder::GetParams() const {
 	return params;
 }
 
-string IRCEndpointBuilder::GetURL() const {
+string IRCEndpointBuilder::GetURLEncoded() const {
 	//! {host}[/{version}][/{prefix}]/{path_component[0]}/{path_component[1]}
 	string ret = host;
 	for (auto &component : path_components) {
-		if (encode_components) {
-			ret += "/" + StringUtil::URLEncode(component);
-		} else {
-			ret += "/" + component;
-		}
+		ret += "/" + StringUtil::URLEncode(component);
 	}
 
 	// encode params
@@ -68,9 +64,9 @@ string IRCEndpointBuilder::GetURL() const {
 	return ret;
 }
 
-IRCEndpointBuilder IRCEndpointBuilder::FromURL(const string &url, bool encode_components) {
+IRCEndpointBuilder IRCEndpointBuilder::FromURL(const string &url) {
 	auto url_with_http = AddHttpHostIfMissing(url);
-	auto ret = IRCEndpointBuilder(encode_components);
+	auto ret = IRCEndpointBuilder();
 	size_t schemeEnd = url_with_http.find("://");
 	if (schemeEnd == string::npos) {
 		throw InvalidInputException("Invalid URL: missing scheme");

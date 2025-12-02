@@ -150,16 +150,9 @@ DatabaseSize IRCatalog::GetDatabaseSize(ClientContext &context) {
 // Iceberg REST Catalog
 //===--------------------------------------------------------------------===//
 
-IRCEndpointBuilder IRCatalog::GetBaseUrl(ClientContext &context) const {
-	bool encode_url_components = true;
+IRCEndpointBuilder IRCatalog::GetBaseUrl() const {
 	Value result;
-	auto using_aws_sdk = context.TryGetCurrentSetting("iceberg_via_aws_sdk_for_catalog_interactions", result);
-	// This means we are using the AWS SDK to communicate with an IRC. the AWS sdk will encode the
-	// components for us.
-	if (auth_handler->type == IRCAuthorizationType::SIGV4 && using_aws_sdk) {
-		encode_url_components = false;
-	}
-	auto base_url = IRCEndpointBuilder(encode_url_components);
+	auto base_url = IRCEndpointBuilder();
 	base_url.SetHost(uri);
 	base_url.AddPathComponent(version);
 	return base_url;

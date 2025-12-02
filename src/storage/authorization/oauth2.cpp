@@ -72,8 +72,7 @@ string OAuth2Authorization::GetToken(ClientContext &context, const string &grant
 	string post_data = StringUtil::Format("%s", StringUtil::Join(parameters, "&"));
 	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc;
 	try {
-		bool encode_components = false;
-		auto endpoint_builder = IRCEndpointBuilder::FromURL(uri, encode_components);
+		auto endpoint_builder = IRCEndpointBuilder::FromURL(uri);
 		unique_ptr<HTTPClient> placeholder_client;
 		auto response = APIUtils::Request(RequestType::POST_REQUEST, context, endpoint_builder, placeholder_client,
 		                                  headers, post_data);
