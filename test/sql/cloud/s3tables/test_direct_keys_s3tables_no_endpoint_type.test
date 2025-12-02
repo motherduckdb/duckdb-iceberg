@@ -20,6 +20,9 @@ require aws
 
 foreach aws_sdk_val true false
 
+statement ok
+SET iceberg_via_aws_sdk_for_catalog_interactions=${aws_sdk_val};
+
 # test using keys directly
 statement ok
 CREATE SECRET s1 (
@@ -28,10 +31,6 @@ CREATE SECRET s1 (
 	SECRET '${AWS_SECRET_ACCESS_KEY}',
 	REGION 'us-east-2'
 );
-
-
-statement ok
-SET iceberg_via_aws_sdk_for_catalog_interactions=${aws_sdk_val};
 
 statement ok
 attach or replace 'arn:aws:s3tables:us-east-2:840140254803:bucket/iceberg-testing' as my_datalake (
