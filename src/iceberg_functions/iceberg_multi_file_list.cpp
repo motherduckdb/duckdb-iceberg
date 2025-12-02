@@ -57,8 +57,8 @@ const IcebergTableSchema &IcebergMultiFileList::GetSchema() const {
 	return scan_info->schema;
 }
 
-static optional_ptr<const TableFilter> GetFilterForColumnIndex(TableFilterSet &filter_set,
-                                                               const ColumnIndex &column_index) {
+optional_ptr<const TableFilter> IcebergMultiFileList::GetFilterForColumnIndex(const TableFilterSet &filter_set,
+                                                                              const ColumnIndex &column_index) const {
 	auto primary_index = column_index.GetPrimaryIndex();
 	auto filter_it = filter_set.filters.find(primary_index);
 	if (filter_it == filter_set.filters.end()) {
@@ -309,7 +309,7 @@ IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(const Value &lowe
 	return res;
 }
 
-bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &file) {
+bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &file) const {
 	D_ASSERT(!table_filters.filters.empty());
 
 	auto &filters = table_filters.filters;
@@ -450,7 +450,6 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 				auto full_path = options.allow_moved_paths ? IcebergUtils::GetFullPath(path, manifest.manifest_path, fs)
 				                                           : manifest.manifest_path;
 				auto scan = make_uniq<AvroScan>("IcebergManifest", context, full_path);
-
 				data_manifest_reader->Initialize(std::move(scan));
 				data_manifest_reader->SetSequenceNumber(manifest.sequence_number);
 				data_manifest_reader->SetPartitionSpecID(manifest.partition_spec_id);
@@ -648,9 +647,10 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) {
 
 			if (manifest.content == IcebergManifestContentType::DATA) {
 				data_manifests.push_back(manifest);
-			} else {
-				D_ASSERT(manifest.content == IcebergManifestContentType::DELETE);
+			} else if (manifest.content == IcebergManifestContentType::DELETE) {
 				delete_manifests.push_back(manifest);
+			} else {
+				auto break_here = 0;
 			}
 		}
 	}
@@ -718,7 +718,20 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 
 		current_delete_manifest++;
 
+		if (manifest_file.path ==
+		    "s3://redshift-catalog-playground-bucket/s3-tables-for-redshift-catalog/large_partitioned_table_for_vacuum/"
+		    "metadata/5aeade19-bc2d-4e28-b7b6-9d9900209024-m0.avro") {
+			auto break_here = 0;
+		}
 		for (auto &entry : manifest_file.data_files) {
+			// Check whether current data file is filtered out.
+			if (!table_filters.filters.empty() && !FileMatchesFilter(entry)) {
+				DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'data_file': '%s'",
+				           entry.file_path);
+				//! Skip this file
+				continue;
+			}
+
 			if (StringUtil::CIEquals(entry.file_format, "parquet")) {
 				ScanDeleteFile(entry, global_columns, column_indexes);
 			} else if (StringUtil::CIEquals(entry.file_format, "puffin")) {
