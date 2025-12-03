@@ -647,7 +647,8 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) {
 
 			if (manifest.content == IcebergManifestContentType::DATA) {
 				data_manifests.push_back(manifest);
-			} else if (manifest.content == IcebergManifestContentType::DELETE) {
+			} else {
+				D_ASSERT(manifest.content == IcebergManifestContentType::DELETE);
 				delete_manifests.push_back(manifest);
 			}
 		}
