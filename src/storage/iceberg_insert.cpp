@@ -484,11 +484,11 @@ PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalP
 
 	auto &ic_schema_entry = schema.Cast<IRCSchemaEntry>();
 	auto &catalog = ic_schema_entry.catalog;
-	auto &irc_transaction = IRCTransaction::Get(context, catalog);
+	auto transaction = CatalogTransaction::GetSystemTransaction(*context.db);
 
 	// create the table. Takes care of committing to rest catalog and getting the metadata location etc.
 	// setting the schema
-	auto table = ic_schema_entry.CreateTable(irc_transaction, context, *op.info);
+	auto table = ic_schema_entry.CreateTable(transaction, context, *op.info);
 	if (!table) {
 		throw InternalException("Table could not be created");
 	}

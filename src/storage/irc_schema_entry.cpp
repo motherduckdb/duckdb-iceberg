@@ -30,40 +30,88 @@ IRCTransaction &GetICTransaction(CatalogTransaction transaction) {
 	return transaction.transaction->Cast<IRCTransaction>();
 }
 
-optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(IRCTransaction &irc_transaction, ClientContext &context,
+bool IRCSchemaEntry::HandleCreateConflict(CatalogTransaction &transaction, CatalogType catalog_type,
+                                          const string &entry_name, OnCreateConflict on_conflict) {
+	auto existing_entry = GetEntry(transaction, catalog_type, entry_name);
+	if (!existing_entry) {
+		// no conflict
+		return true;
+	}
+	switch (on_conflict) {
+	case OnCreateConflict::ERROR_ON_CONFLICT:
+		throw CatalogException("%s with name \"%s\" already exists", CatalogTypeToString(existing_entry->type),
+		                       entry_name);
+	case OnCreateConflict::IGNORE_ON_CONFLICT:
+		// ignore - skip without throwing an error
+		throw CatalogException("DuckDB-Iceberg Ignore on Conflict Not supported");
+	case OnCreateConflict::REPLACE_ON_CONFLICT: {
+		throw NotImplementedException("DuckDB-Iceberg does not yet support replace on conflict");
+		// if (existing_entry->type != catalog_type) {
+		// 	throw CatalogException("Existing object %s is of type %s, trying to replace with type %s", entry_name,
+		// 						   CatalogTypeToString(existing_entry->type), CatalogTypeToString(catalog_type));
+		// }
+		// // try to drop the entry prior to creating
+		// DropInfo info;
+		// info.type = catalog_type;
+		// info.name = entry_name;
+		// DropEntry(transaction.GetContext(), info);
+		// break;
+	}
+	default:
+		throw InternalException("Unsupported conflict type");
+	}
+	return true;
+}
+
+optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(CatalogTransaction &transaction, ClientContext &context,
                                                        BoundCreateTableInfo &info) {
 	auto &base_info = info.Base();
-
-	auto &catalog = irc_transaction.GetCatalog();
-
-	// always posts to IRC catalog so we can get the metadata
-	if (!tables.CreateNewEntry(context, catalog, *this, base_info)) {
-		D_ASSERT(base_info.on_conflict == OnCreateConflict::IGNORE_ON_CONFLICT);
+	auto &irc_transaction = GetICTransaction(transaction);
+	auto &ir_catalog = catalog.Cast<IRCatalog>();
+	// check if we have an existing entry with this name
+	if (!HandleCreateConflict(transaction, CatalogType::TABLE_ENTRY, base_info.table, base_info.on_conflict)) {
 		return nullptr;
 	}
-	auto lookup_info = EntryLookupInfo(CatalogType::TABLE_ENTRY, base_info.table);
-	auto entry = tables.GetEntry(context, lookup_info);
-	auto &ic_entry = entry->Cast<ICTableEntry>();
-	// An eagerly created table (if stage_create isn't supported by Catalog) is not marked as dirty, because it requires
-	// no action on commit/abort. We do not drop it on abort because that isn't transactionally safe (no guarantees a
-	// different transaction didn't interact with the created table in the meantime)
-	if (catalog.attach_options.supports_stage_create) {
-		// mark table as dirty so at the end of the transaction updates/creates are commited
-		irc_transaction.MarkTableAsDirty(ic_entry);
+
+	if (!ICTableSet::CreateNewEntry(context, ir_catalog, *this, base_info)) {
+		throw InternalException("We should not be here");
 	}
+	// TODO: add this not to new tables, but to updated tables.
+	auto entry = irc_transaction.updated_tables.find(base_info.table);
+	return entry->second.schema_versions[0].get();
 
-	// get the entry from the catalog.
-	D_ASSERT(entry);
-	D_ASSERT(entry->type == CatalogType::TABLE_ENTRY);
-
-	return entry;
+	// return CreateTableExtended(transaction, info, std::move(table_uuid), std::move(table_data_path));
+	//
+	// auto &catalog = irc_transaction.GetCatalog();
+	//
+	// // always posts to IRC catalog so we can get the metadata
+	// if (!tables.CreateNewEntry(context, catalog, *this, base_info)) {
+	// 	D_ASSERT(base_info.on_conflict == OnCreateConflict::IGNORE_ON_CONFLICT);
+	// 	return nullptr;
+	// }
+	// auto lookup_info = EntryLookupInfo(CatalogType::TABLE_ENTRY, base_info.table);
+	// auto entry = tables.GetEntry(context, lookup_info);
+	// auto &ic_entry = entry->Cast<ICTableEntry>();
+	// // An eagerly created table (if stage_create isn't supported by Catalog) is not marked as dirty, because it
+	// requires
+	// // no action on commit/abort. We do not drop it on abort because that isn't transactionally safe (no guarantees a
+	// // different transaction didn't interact with the created table in the meantime)
+	// if (catalog.attach_options.supports_stage_create) {
+	// 	// mark table as dirty so at the end of the transaction updates/creates are commited
+	// 	irc_transaction.MarkTableAsDirty(ic_entry);
+	// }
+	//
+	// // get the entry from the catalog.
+	// D_ASSERT(entry);
+	// D_ASSERT(entry->type == CatalogType::TABLE_ENTRY);
+	//
+	// return entry;
 }
 
 optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(CatalogTransaction transaction, BoundCreateTableInfo &info) {
-	auto &irc_transaction = transaction.transaction->Cast<IRCTransaction>();
 	auto &context = transaction.context;
 	// directly create the table with stage_create = true;
-	return CreateTable(irc_transaction, *context, info);
+	return CreateTable(transaction, *context, info);
 }
 
 void IRCSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {

@@ -16,18 +16,18 @@
 namespace duckdb {
 
 IRCTransaction::IRCTransaction(IRCatalog &ic_catalog, TransactionManager &manager, ClientContext &context)
-    : Transaction(manager, context), db(*context.db), catalog(ic_catalog), access_mode(ic_catalog.access_mode),
-      schemas(ic_catalog) {
+    : Transaction(manager, context), db(*context.db), catalog(ic_catalog), access_mode(ic_catalog.access_mode) {
 }
 
 IRCTransaction::~IRCTransaction() = default;
 
 void IRCTransaction::MarkTableAsDirty(const ICTableEntry &table) {
-	dirty_tables.insert(&table);
+	updated_tables.emplace(table.name, table.table_info.Copy());
 }
 
 void IRCTransaction::MarkTableAsDeleted(const ICTableEntry &table) {
-	deleted_tables.insert(&table);
+	deleted_tables.emplace(table.name, table.table_info.Copy());
+	;
 }
 
 void IRCTransaction::Start() {
@@ -259,18 +259,19 @@ static rest_api_objects::TableUpdate CreateSetSnapshotRefUpdate(int64_t snapshot
 TableTransactionInfo IRCTransaction::GetTransactionRequest(ClientContext &context) {
 	TableTransactionInfo info;
 	auto &transaction = info.request;
-	for (auto &table : dirty_tables) {
-		if (!table->table_info.transaction_data) {
+	for (auto &updated_table : updated_tables) {
+		auto &table_info = updated_table.second;
+		if (!table_info.transaction_data) {
 			continue;
 		}
 		IcebergCommitState commit_state;
 		auto &table_change = commit_state.table_change;
-		auto &schema = table->ParentSchema().Cast<IRCSchemaEntry>();
+		auto &schema = table_info.schema.Cast<IRCSchemaEntry>();
 		table_change.identifier._namespace.value = schema.namespace_items;
-		table_change.identifier.name = table->name;
+		table_change.identifier.name = table_info.name;
 		table_change.has_identifier = true;
 
-		auto &metadata = table->table_info.table_metadata;
+		auto &metadata = table_info.table_metadata;
 		auto current_snapshot = metadata.GetLatestSnapshot();
 		if (current_snapshot) {
 			auto &manifest_list_path = current_snapshot->manifest_list;
@@ -283,11 +284,12 @@ TableTransactionInfo IRCTransaction::GetTransactionRequest(ClientContext &contex
 			}
 		}
 
-		auto &transaction_data = *table->table_info.transaction_data;
+		auto &transaction_data = *table_info.transaction_data;
 		for (auto &update : transaction_data.updates) {
 			if (update->type == IcebergTableUpdateType::ADD_SNAPSHOT) {
 				// we need to recreate the keys in the current context.
-				table->PrepareIcebergScanFromEntry(context);
+				auto &ic_table_entry = table_info.GetLatestSchema()->Cast<ICTableEntry>();
+				ic_table_entry.PrepareIcebergScanFromEntry(context);
 			}
 			update->CreateUpdate(db, context, commit_state);
 		}
@@ -315,7 +317,7 @@ TableTransactionInfo IRCTransaction::GetTransactionRequest(ClientContext &contex
 }
 
 void IRCTransaction::Commit() {
-	if (dirty_tables.empty() && deleted_tables.empty()) {
+	if (updated_tables.empty() && deleted_tables.empty()) {
 		return;
 	}
 
@@ -337,7 +339,7 @@ void IRCTransaction::Commit() {
 }
 
 void IRCTransaction::DoTableUpdates(ClientContext &context) {
-	if (!dirty_tables.empty()) {
+	if (!updated_tables.empty()) {
 		auto transaction_info = GetTransactionRequest(context);
 		auto &transaction = transaction_info.request;
 
@@ -370,9 +372,9 @@ void IRCTransaction::DoTableUpdates(ClientContext &context) {
 }
 
 void IRCTransaction::DoTableDeletes(ClientContext &context) {
-	for (auto &table : deleted_tables) {
-		auto &irc_schema = table->ParentSchema().Cast<IRCSchemaEntry>();
-		IRCAPI::CommitTableDelete(context, catalog, irc_schema.namespace_items, table->name);
+	for (auto &deleted_table : deleted_tables) {
+		auto &table = deleted_table.second;
+		IRCAPI::CommitTableDelete(context, catalog, table.schema.namespace_items, table.name);
 	}
 }
 
@@ -385,9 +387,10 @@ void IRCTransaction::CleanupFiles() {
 		return;
 	}
 	auto &fs = FileSystem::GetFileSystem(db);
-	for (auto &table : dirty_tables) {
-		auto &transaction_data = *table->table_info.transaction_data;
-		for (auto &update : transaction_data.updates) {
+	for (auto &up_table : updated_tables) {
+		auto &table = up_table.second;
+		auto &transaction_data = table.transaction_data;
+		for (auto &update : transaction_data->updates) {
 			if (update->type != IcebergTableUpdateType::ADD_SNAPSHOT) {
 				continue;
 			}

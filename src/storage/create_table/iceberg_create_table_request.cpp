@@ -160,7 +160,7 @@ string IcebergCreateTableRequest::CreateTableToJSON(std::unique_ptr<yyjson_mut_d
 	yyjson_mut_obj_add_strcpy(doc, root_object, "name", table_name.c_str());
 	auto schema_json = yyjson_mut_obj_add_obj(doc, root_object, "schema");
 
-	PopulateSchema(doc, schema_json, *initial_schema.get());
+	// PopulateSchema(doc, schema_json, *initial_schema.get());
 
 	auto partition_spec = yyjson_mut_obj_add_obj(doc, root_object, "partition-spec");
 	yyjson_mut_obj_add_uint(doc, partition_spec, "spec-id", 0);

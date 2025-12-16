@@ -16,6 +16,10 @@ struct IcebergColumnDefinition {
 public:
 	static unique_ptr<IcebergColumnDefinition> ParseStructField(rest_api_objects::StructField &field);
 
+	// IcebergColumnDefinition() = default;
+	// copy constructor for .... reasons
+	// IcebergColumnDefinition(const IcebergColumnDefinition &other);
+
 public:
 	static LogicalType ParsePrimitiveType(rest_api_objects::PrimitiveType &type);
 	static LogicalType ParsePrimitiveTypeString(const string &type_str);

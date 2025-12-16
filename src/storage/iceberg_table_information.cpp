@@ -14,7 +14,7 @@
 namespace duckdb {
 
 const string &IcebergTableInformation::BaseFilePath() const {
-	return load_table_result.metadata.location;
+	return table_metadata.location;
 }
 
 static string DetectStorageType(const string &location) {
@@ -137,9 +137,9 @@ static void ParseConfigOptions(const case_insensitive_map_t<string> &config, cas
 
 IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientContext &context) {
 	IRCAPITableCredentials result;
-
+	auto &regular_catalog = dynamic_cast<Catalog &>(catalog);
 	auto transaction_id = MetaTransaction::Get(context).global_transaction_id;
-	auto &transaction = IRCTransaction::Get(context, catalog);
+	auto &transaction = IRCTransaction::Get(context, regular_catalog);
 
 	auto secret_base_name =
 	    StringUtil::Format("__internal_ic_%s__%s__%s__%s", table_id, schema.name, name, to_string(transaction_id));
@@ -169,14 +169,17 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 	}
 
 	// Detect storage type from metadata location
-	const auto &metadata_location = load_table_result.metadata.location;
+	const auto &metadata_location = table_metadata.GetMetadataPath();
 	string storage_type = DetectStorageType(metadata_location);
 
 	// Mapping from config key to a duckdb secret option
 	case_insensitive_map_t<Value> config_options;
 	//! TODO: apply the 'defaults' retrieved from the /v1/config endpoint
 	config_options.insert(user_defaults.begin(), user_defaults.end());
-
+	auto key = IRCAPI::GetEncodedSchemaName(schema.namespace_items) + "." + name;
+	auto &cached_value = catalog.GetLoadTableResult(key);
+	auto &load_table_result = cached_value.load_table_result;
+	// TODO: parse config from IcebergTableMetadata
 	if (load_table_result.has_config) {
 		auto &config = load_table_result.config;
 		ParseConfigOptions(config, config_options, storage_type);
@@ -258,6 +261,18 @@ optional_ptr<CatalogEntry> IcebergTableInformation::GetSchemaVersion(optional_pt
 		schema_id = snapshot->schema_id;
 	}
 	return schema_versions[schema_id].get();
+}
+
+optional_ptr<CatalogEntry> IcebergTableInformation::GetLatestSchema() {
+	return GetSchemaVersion(nullptr);
+}
+
+IcebergTableInformation IcebergTableInformation::Copy() {
+	auto ret = IcebergTableInformation(catalog, schema, name);
+	auto table_key = IRCAPI::GetEncodedSchemaName(schema.namespace_items) + "." + name;
+	auto &cached_load_table_result = catalog.GetLoadTableResult(table_key);
+	ret.table_metadata = IcebergTableMetadata::FromTableMetadata(cached_load_table_result.load_table_result.metadata);
+	return ret;
 }
 
 IcebergTableInformation::IcebergTableInformation(IRCatalog &catalog, IRCSchemaEntry &schema, const string &name)

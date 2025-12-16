@@ -32,9 +32,6 @@ public:
 	AccessMode GetAccessMode() const {
 		return access_mode;
 	}
-	IRCSchemaSet &GetSchemas() {
-		return schemas;
-	}
 	void MarkTableAsDirty(const ICTableEntry &table);
 	void MarkTableAsDeleted(const ICTableEntry &table);
 	void DoTableUpdates(ClientContext &context);
@@ -53,10 +50,12 @@ private:
 	AccessMode access_mode;
 
 public:
-	IRCSchemaSet schemas;
-	//! Tables marked dirty in this transaction, to be rewritten on commit
-	unordered_set<const ICTableEntry *> dirty_tables;
-	unordered_set<const ICTableEntry *> deleted_tables;
+	//! tables that have been created in this transaction
+	//! tables are hashed by catalog_name.table name
+	//! Tables that have been updated in this transaction, to be rewritten on commit.
+	case_insensitive_map_t<IcebergTableInformation> updated_tables;
+	//! tables that have been deleted in this transaction, to be deleted on commit.
+	case_insensitive_map_t<IcebergTableInformation> deleted_tables;
 	case_insensitive_set_t created_secrets;
 
 	case_insensitive_set_t looked_up_entries;

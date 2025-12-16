@@ -17,6 +17,9 @@ namespace duckdb {
 const string WRITE_UPDATE_MODE = "write.update.mode";
 const string WRITE_DELETE_MODE = "write.delete.mode";
 
+//! A structure to store "LoadTableResult" information that changes as a transaction goes on
+//! Everything is parsed from a load table result, but if a transaction changes a schema, those schema
+//! updates are reflected here and never within the
 struct IcebergTableMetadata {
 public:
 	IcebergTableMetadata() = default;
@@ -24,14 +27,19 @@ public:
 public:
 	static rest_api_objects::TableMetadata Parse(const string &path, FileSystem &fs,
 	                                             const string &metadata_compression_codec);
-	static IcebergTableMetadata FromTableMetadata(rest_api_objects::TableMetadata &table_metadata);
+	static IcebergTableMetadata FromTableMetadata(const rest_api_objects::TableMetadata &table_metadata);
 	static string GetMetaDataPath(ClientContext &context, const string &path, FileSystem &fs,
 	                              const IcebergOptions &options);
 	optional_ptr<IcebergSnapshot> GetLatestSnapshot();
 	const IcebergTableSchema &GetLatestSchema() const;
+	bool HasPartitionSpec() const;
 	const IcebergPartitionSpec &GetLatestPartitionSpec() const;
+	const unordered_map<int32_t, IcebergPartitionSpec> GetPartitionSpecs() const;
+
 	bool HasSortOrder() const;
 	const IcebergSortOrder &GetLatestSortOrder() const;
+	const unordered_map<int32_t, IcebergSortOrder> GetSortOrderSpecs() const;
+
 	optional_ptr<IcebergSnapshot> GetSnapshotById(int64_t snapshot_id);
 	optional_ptr<IcebergSnapshot> GetSnapshotByTimestamp(timestamp_t timestamp);
 
@@ -53,6 +61,10 @@ public:
 	string GetDataPath() const;
 	string GetMetadataPath() const;
 
+	//! For Nessie catalogs (version ?)
+	bool HasLastColumnId() const;
+	idx_t GetLastColumnId() const;
+
 	const case_insensitive_map_t<string> &GetTableProperties() const;
 	string GetTableProperty(string property_string) const;
 	bool PropertiesAllowPositionalDeletes(IcebergSnapshotOperationType operation_type) const;
@@ -69,6 +81,8 @@ public:
 	bool has_current_snapshot = false;
 	int64_t current_snapshot_id;
 	int64_t last_sequence_number;
+
+	optional_idx last_column_id;
 
 	//! partition_spec_id -> partition spec
 	unordered_map<int32_t, IcebergPartitionSpec> partition_specs;
