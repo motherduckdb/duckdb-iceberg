@@ -64,7 +64,8 @@ optional_ptr<SchemaCatalogEntry> IRCatalog::LookupSchema(CatalogTransaction tran
 	return reinterpret_cast<SchemaCatalogEntry *>(entry.get());
 }
 
-void IRCatalog::StoreLoadTableResult(string table_key, rest_api_objects::LoadTableResult &&load_table_result) {
+void IRCatalog::StoreLoadTableResult(string table_key,
+                                     unique_ptr<const rest_api_objects::LoadTableResult> load_table_result) {
 	std::lock_guard<std::mutex> g(metadata_cache_mutex);
 	auto now = system_clock::now() + std::chrono::minutes(10);
 	auto val = make_uniq<MetadataCacheValue>(now, std::move(load_table_result));
@@ -79,6 +80,14 @@ MetadataCacheValue &IRCatalog::GetLoadTableResult(string table_key) {
 	auto res = metadata_cache.find(table_key);
 	D_ASSERT(res != metadata_cache.end());
 	return *res->second;
+}
+
+void IRCatalog::RemoveLoadTableResult(string table_key) {
+	std::lock_guard<std::mutex> g(metadata_cache_mutex);
+	if (metadata_cache.find(table_key) == metadata_cache.end()) {
+		throw InternalException("Attempting to remove table information that was never stored");
+	}
+	metadata_cache.erase(table_key);
 }
 
 optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transaction, CreateSchemaInfo &info) {

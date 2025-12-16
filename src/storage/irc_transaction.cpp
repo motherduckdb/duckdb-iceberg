@@ -11,6 +11,7 @@
 #include "storage/table_update/iceberg_add_snapshot.hpp"
 #include "storage/table_create/iceberg_create_table_request.hpp"
 #include "catalog_utils.hpp"
+#include "../include/storage/irc_catalog.hpp"
 #include "duckdb/storage/table/update_state.hpp"
 
 namespace duckdb {
@@ -22,11 +23,17 @@ IRCTransaction::IRCTransaction(IRCatalog &ic_catalog, TransactionManager &manage
 IRCTransaction::~IRCTransaction() = default;
 
 void IRCTransaction::MarkTableAsDirty(const ICTableEntry &table) {
-	updated_tables.emplace(table.name, table.table_info.Copy());
+	updated_tables.emplace(table.table_info.GetTableKey(), table.table_info.Copy());
+	auto &table_info = updated_tables.at(table.table_info.GetTableKey());
+	table_info.InitSchemaVersions();
+	auto boop = 0;
 }
 
 void IRCTransaction::MarkTableAsDeleted(const ICTableEntry &table) {
-	deleted_tables.emplace(table.name, table.table_info.Copy());
+	deleted_tables.emplace(table.table_info.GetTableKey(), table.table_info.Copy());
+	auto &table_info = deleted_tables.at(table.table_info.GetTableKey());
+	table_info.InitSchemaVersions();
+	auto boop = 0;
 }
 
 void IRCTransaction::Start() {
@@ -326,6 +333,7 @@ void IRCTransaction::Commit() {
 	try {
 		DoTableUpdates(*context);
 		DoTableDeletes(*context);
+		// TODO: after table deletes, we need to remove the entry from the catalog.schemas.entries
 	} catch (std::exception &ex) {
 		ErrorData error(ex);
 		CleanupFiles();
@@ -371,9 +379,24 @@ void IRCTransaction::DoTableUpdates(ClientContext &context) {
 }
 
 void IRCTransaction::DoTableDeletes(ClientContext &context) {
+	auto &ic_catalog = catalog.Cast<IRCatalog>();
 	for (auto &deleted_table : deleted_tables) {
 		auto &table = deleted_table.second;
+		auto schema_key = table.schema.name;
+		auto table_key = table.GetTableKey();
+		auto table_name = table.name;
 		IRCAPI::CommitTableDelete(context, catalog, table.schema.namespace_items, table.name);
+		// remove the load table result
+		ic_catalog.RemoveLoadTableResult(table_key);
+		// remove the entry from the loaded schemas.
+		if (ic_catalog.schemas.entries.find(schema_key) != ic_catalog.schemas.entries.end()) {
+			auto &schema_entry = ic_catalog.schemas.entries.at(schema_key);
+			auto &ic_table_entry = schema_entry->Cast<IRCSchemaEntry>();
+			if (ic_table_entry.tables.entries.find(table_name) != ic_table_entry.tables.entries.end()) {
+				auto &table_entry = ic_table_entry.tables.entries.at(table_name);
+				ic_table_entry.tables.entries.erase(table_name);
+			}
+		}
 	}
 }
 

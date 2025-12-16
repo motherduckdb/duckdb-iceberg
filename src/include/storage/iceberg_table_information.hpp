@@ -46,7 +46,9 @@ public:
 	void SetProperties(IRCTransaction &transaction, case_insensitive_map_t<string> properties);
 	void RemoveProperties(IRCTransaction &transaction, vector<string> properties);
 	void SetLocation(IRCTransaction &transaction);
+	string GetTableKey();
 	IcebergTableInformation Copy();
+	void InitSchemaVersions();
 
 public:
 	IRCatalog &catalog;

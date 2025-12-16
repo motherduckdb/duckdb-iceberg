@@ -7,6 +7,7 @@
 #include "metadata/iceberg_column_definition.hpp"
 
 #include "iceberg_multi_file_list.hpp"
+#include "../include/storage/irc_transaction.hpp"
 #include "utils/iceberg_type.hpp"
 #include "duckdb/common/sort/partition_state.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
@@ -263,11 +264,14 @@ SinkFinalizeType IcebergInsert::Finalize(Pipeline &pipeline, Event &event, Clien
 	auto &irc_table = table->Cast<ICTableEntry>();
 	auto &table_info = irc_table.table_info;
 	auto &transaction = IRCTransaction::Get(context, table->catalog);
+	auto &irc_transaction = transaction.Cast<IRCTransaction>();
 
 	lock_guard<mutex> guard(global_state.lock);
 	if (!global_state.written_files.empty()) {
-		table_info.AddSnapshot(transaction, std::move(global_state.written_files));
-		transaction.MarkTableAsDirty(irc_table);
+		irc_transaction.updated_tables.emplace(table_info.GetTableKey(), table_info.Copy());
+		auto &updated_table = irc_transaction.updated_tables.at(table_info.GetTableKey());
+		updated_table.InitSchemaVersions();
+		updated_table.AddSnapshot(transaction, std::move(global_state.written_files));
 	}
 	return SinkFinalizeType::READY;
 }

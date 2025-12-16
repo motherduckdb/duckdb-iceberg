@@ -46,7 +46,7 @@ bool ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &tabl
 	ic_catalog.StoreLoadTableResult(table_key, std::move(get_table_result.result_));
 	auto &cached_table_result = ic_catalog.GetLoadTableResult(table_key);
 	// TODO: fix this to use load table result getters and setters
-	table.table_metadata = IcebergTableMetadata::FromTableMetadata(cached_table_result.load_table_result.metadata);
+	table.table_metadata = IcebergTableMetadata::FromTableMetadata(cached_table_result.load_table_result->metadata);
 	auto &schemas = table.table_metadata.schemas;
 
 	//! It should be impossible to have a metadata file without any schema
@@ -142,14 +142,15 @@ bool ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 
 	// Immediately create the table with stage_create = true to get metadata & data location(s)
 	// transaction commit will either commit with data (OR) create the table with stage_create = false
-	auto load_table_result = IRCAPI::CommitNewTable(context, catalog, table_ptr);
+	auto load_table_result =
+	    make_uniq<const rest_api_objects::LoadTableResult>(IRCAPI::CommitNewTable(context, catalog, table_ptr));
 
 	auto key = IRCAPI::GetSchemaName(table_info.schema.namespace_items) + "." + table_name;
 	catalog.StoreLoadTableResult(key, std::move(load_table_result));
 	auto &cached_table_result = catalog.GetLoadTableResult(key);
 
 	table_ptr->table_info.table_metadata =
-	    IcebergTableMetadata::FromTableMetadata(cached_table_result.load_table_result.metadata);
+	    IcebergTableMetadata::FromTableMetadata(cached_table_result.load_table_result->metadata);
 
 	if (catalog.attach_options.supports_stage_create) {
 		// We have a response from the server for a stage create, we need to also send a number of table

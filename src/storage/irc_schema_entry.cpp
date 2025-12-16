@@ -1,5 +1,6 @@
 #include "storage/irc_schema_entry.hpp"
 
+#include "../include/storage/irc_transaction.hpp"
 #include "storage/irc_table_entry.hpp"
 #include "storage/irc_transaction.hpp"
 #include "utils/iceberg_type.hpp"
@@ -115,7 +116,7 @@ optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(CatalogTransaction transa
 }
 
 void IRCSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {
-	auto &transaction = IRCTransaction::Get(context, catalog);
+	auto &transaction = IRCTransaction::Get(context, catalog).Cast<IRCTransaction>();
 	auto table_name = info.name;
 	// find if info has a table name, if so look for it in
 	auto table_info_it = tables.entries.find(table_name);
@@ -125,17 +126,13 @@ void IRCSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {
 	if (info.cascade) {
 		throw NotImplementedException("DROP TABLE <table_name> CASCADE is not supported for Iceberg tables currently");
 	}
-	auto &table_entry = table_info_it->second;
-	auto lookupInfo = EntryLookupInfo(CatalogType::TABLE_ENTRY, table_name);
-	auto catalog_transaction = CatalogTransaction::GetSystemCatalogTransaction(context);
-	auto table_entry_actual = LookupEntry(catalog_transaction, lookupInfo);
-	auto &ic_entry = table_entry_actual->Cast<ICTableEntry>();
-	D_ASSERT(table_entry_actual);
-	if (!table_entry.transaction_data) {
-		table_entry.transaction_data = make_uniq<IcebergTransactionData>(context, table_entry);
-	}
-	table_entry.transaction_data->is_deleted = true;
-	transaction.MarkTableAsDeleted(ic_entry);
+	auto &table_info = table_info_it->second;
+	// TODO:
+	auto table_key = table_info.GetTableKey();
+	transaction.deleted_tables.emplace(table_key, table_info.Copy());
+	auto &deleted_table_info = transaction.deleted_tables.at(table_key);
+	deleted_table_info.InitSchemaVersions();
+	auto boop = 0;
 }
 
 optional_ptr<CatalogEntry> IRCSchemaEntry::CreateFunction(CatalogTransaction transaction, CreateFunctionInfo &info) {
