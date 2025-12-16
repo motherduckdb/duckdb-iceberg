@@ -3,16 +3,6 @@
 
 namespace duckdb {
 
-// IcebergColumnDefinition::IcebergColumnDefinition(const IcebergColumnDefinition &other) : id(other.id),
-// name(other.name), type(other.type), 		 initial_default(other.initial_default), required(other.required) {
-// 	children.reserve(other.children.size());
-// 	for (const auto &child : other.children) {
-// 		if (child) {
-// 			children.push_back(make_uniq<IcebergColumnDefinition>(*child));
-// 		}
-// 	}
-// }
-
 // https://iceberg.apache.org/spec/#schemas
 
 //! Hexadecimal values are given without the proper escape sequences, so we add them, for simplicity of conversion

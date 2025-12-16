@@ -128,8 +128,10 @@ bool ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 
 	if (catalog.attach_options.supports_stage_create) {
 		irc_transaction.updated_tables.emplace(table_name, IcebergTableInformation(catalog, schema, info.table));
+	} else {
+		throw InternalException("Need to fix case of stage create");
 	}
-	irc_transaction.updated_tables.emplace(table_name, IcebergTableInformation(catalog, schema, info.table));
+	// irc_transaction.updated_tables.emplace(table_name, IcebergTableInformation(catalog, schema, info.table));
 	auto &table_info = irc_transaction.updated_tables.find(table_name)->second;
 	auto table_entry = make_uniq<ICTableEntry>(table_info, catalog, schema, info);
 	auto table_ptr = table_entry.get();

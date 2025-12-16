@@ -27,7 +27,6 @@ void IRCTransaction::MarkTableAsDirty(const ICTableEntry &table) {
 
 void IRCTransaction::MarkTableAsDeleted(const ICTableEntry &table) {
 	deleted_tables.emplace(table.name, table.table_info.Copy());
-	;
 }
 
 void IRCTransaction::Start() {

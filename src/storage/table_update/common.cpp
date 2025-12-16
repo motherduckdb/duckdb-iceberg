@@ -39,7 +39,6 @@ void AddSchemaUpdate::CreateUpdate(DatabaseInstance &db, ClientContext &context,
 	auto &current_schema = table_info.table_metadata.GetLatestSchema();
 	auto &schema = table_info.table_metadata.schemas[current_schema.schema_id];
 	update.add_schema_update.schema = CopySchema(*schema.get());
-	//
 	// last column id is technically deprecated, but some catalogs still use it (nessie).
 	if (table_info.table_metadata.HasLastColumnId()) {
 		update.add_schema_update.has_last_column_id = true;
@@ -115,14 +114,14 @@ void AddPartitionSpec::CreateUpdate(DatabaseInstance &db, ClientContext &context
 	idx_t partition_spec_id = req.add_partition_spec_update.spec.spec_id;
 	if (table_info.table_metadata.HasPartitionSpec()) {
 		auto &table_partition_specs = table_info.table_metadata.GetPartitionSpecs();
-		optional_ptr<IcebergPartitionSpec> current_partition_spect = nullptr;
-		for (auto &partition_spec : table_partition_specs) {
-			if (partition_spec.first == partition_spec_id) {
-				*current_partition_spect = partition_spec.second;
-				break;
-			}
-		}
-		for (auto &field : current_partition_spect.get()->fields) {
+		auto &current_partition_spec = table_info.table_metadata.GetLatestPartitionSpec();
+		// for (auto &partition_spec : table_partition_specs) {
+		// 	if (partition_spec.first == partition_spec_id) {
+		// 		*current_partition_spec = partition_spec.second;
+		// 		break;
+		// 	}
+		// }
+		for (auto &field : current_partition_spec.fields) {
 			req.add_partition_spec_update.spec.fields.push_back(rest_api_objects::PartitionField());
 			auto &updated_field = req.add_partition_spec_update.spec.fields.back();
 			updated_field.name = field.name;
@@ -144,21 +143,23 @@ void AddSortOrder::CreateUpdate(DatabaseInstance &db, ClientContext &context, Ic
 	req.has_add_sort_order_update = true;
 	req.add_sort_order_update.has_action = true;
 	req.add_sort_order_update.action = "add-sort-order";
-	idx_t sort_order_id = 0;
 	if (table_info.table_metadata.HasSortOrder()) {
 		req.add_sort_order_update.sort_order.order_id = table_info.table_metadata.default_sort_order_id.GetIndex();
-		sort_order_id = req.add_sort_order_update.sort_order.order_id;
+		// sort_order_id = req.add_sort_order_update.sort_order.order_id;
 	}
 
 	if (table_info.table_metadata.HasSortOrder()) {
 		auto &table_sort_orders = table_info.table_metadata.GetSortOrderSpecs();
-		optional_ptr<IcebergSortOrder> current_sort_order = nullptr;
-		for (auto &sort_order : table_sort_orders) {
-			if (sort_order.first == sort_order_id) {
-				*current_sort_order = sort_order.second;
-			}
-		}
-		for (auto &field : current_sort_order.get()->fields) {
+		// FIXME: is it correct to just get the latest sort order?
+		auto &current_sort_order = table_info.table_metadata.GetLatestSortOrder();
+		// IcebergSortOrder current_sort_order;
+		// for (auto &sort_order : table_sort_orders) {
+		// 	if (sort_order.first == sort_order_id) {
+		// 		current_sort_order = sort_order.second;
+		// 		break;
+		// 	}
+		// }
+		for (auto &field : current_sort_order.fields) {
 			req.add_sort_order_update.sort_order.fields.push_back(rest_api_objects::SortField());
 			auto &updated_field = req.add_sort_order_update.sort_order.fields.back();
 			updated_field.direction.value = field.direction;
