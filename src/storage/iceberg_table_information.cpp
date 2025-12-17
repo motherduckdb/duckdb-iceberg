@@ -268,8 +268,15 @@ optional_ptr<CatalogEntry> IcebergTableInformation::GetLatestSchema() {
 	return GetSchemaVersion(nullptr);
 }
 
+string IcebergTableInformation::GetTableKey(vector<string> &namespace_items, string &table_name) {
+	if (namespace_items.empty()) {
+		return table_name;
+	}
+	return IRCAPI::GetEncodedSchemaName(namespace_items) + "." + table_name;
+}
+
 string IcebergTableInformation::GetTableKey() {
-	return IRCAPI::GetEncodedSchemaName(schema.namespace_items) + "." + name;
+	return GetTableKey(schema.namespace_items, name);
 }
 
 IcebergTableInformation IcebergTableInformation::Copy() {
@@ -369,6 +376,17 @@ void IcebergTableInformation::RemoveProperties(IRCTransaction &transaction, vect
 void IcebergTableInformation::SetLocation(IRCTransaction &transaction) {
 	InitTransactionData(transaction);
 	transaction_data->TableSetLocation();
+}
+
+bool IcebergTableInformation::IsTransactionLocalTable(IRCTransaction &transaction) {
+	for (auto &tbl : transaction.updated_tables) {
+		auto wat = tbl.first;
+		auto key = GetTableKey();
+		if (tbl.first == GetTableKey()) {
+			return true;
+		}
+	}
+	return false;
 }
 
 } // namespace duckdb

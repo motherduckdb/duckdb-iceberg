@@ -46,6 +46,8 @@ public:
 	void SetProperties(IRCTransaction &transaction, case_insensitive_map_t<string> properties);
 	void RemoveProperties(IRCTransaction &transaction, vector<string> properties);
 	void SetLocation(IRCTransaction &transaction);
+	bool IsTransactionLocalTable(IRCTransaction &transaction);
+	static string GetTableKey(vector<string> &namespace_items, string &table_name);
 	string GetTableKey();
 	IcebergTableInformation Copy();
 	void InitSchemaVersions();

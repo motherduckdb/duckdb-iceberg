@@ -67,6 +67,10 @@ optional_ptr<SchemaCatalogEntry> IRCatalog::LookupSchema(CatalogTransaction tran
 void IRCatalog::StoreLoadTableResult(string table_key,
                                      unique_ptr<const rest_api_objects::LoadTableResult> load_table_result) {
 	std::lock_guard<std::mutex> g(metadata_cache_mutex);
+	// erase load table result if it exists.
+	if (metadata_cache.find(table_key) != metadata_cache.end()) {
+		metadata_cache.erase(table_key);
+	}
 	auto now = system_clock::now() + std::chrono::minutes(10);
 	auto val = make_uniq<MetadataCacheValue>(now, std::move(load_table_result));
 	metadata_cache.emplace(table_key, std::move(val));

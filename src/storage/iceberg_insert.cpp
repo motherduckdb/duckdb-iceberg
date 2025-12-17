@@ -268,10 +268,15 @@ SinkFinalizeType IcebergInsert::Finalize(Pipeline &pipeline, Event &event, Clien
 
 	lock_guard<mutex> guard(global_state.lock);
 	if (!global_state.written_files.empty()) {
-		irc_transaction.updated_tables.emplace(table_info.GetTableKey(), table_info.Copy());
-		auto &updated_table = irc_transaction.updated_tables.at(table_info.GetTableKey());
-		updated_table.InitSchemaVersions();
-		updated_table.AddSnapshot(transaction, std::move(global_state.written_files));
+		if (table_info.IsTransactionLocalTable(irc_transaction)) {
+			table_info.AddSnapshot(transaction, std::move(global_state.written_files));
+		} else {
+			// add the table to updated tables for the transaction.
+			irc_transaction.updated_tables.emplace(table_info.GetTableKey(), table_info.Copy());
+			auto &updated_table = irc_transaction.updated_tables.at(table_info.GetTableKey());
+			updated_table.InitSchemaVersions();
+			updated_table.AddSnapshot(transaction, std::move(global_state.written_files));
+		}
 	}
 	return SinkFinalizeType::READY;
 }
@@ -488,7 +493,7 @@ PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalP
 
 	auto &ic_schema_entry = schema.Cast<IRCSchemaEntry>();
 	auto &catalog = ic_schema_entry.catalog;
-	auto transaction = CatalogTransaction::GetSystemTransaction(*context.db);
+	auto transaction = catalog.GetCatalogTransaction(context);
 
 	// create the table. Takes care of committing to rest catalog and getting the metadata location etc.
 	// setting the schema

@@ -67,8 +67,8 @@ bool IRCSchemaEntry::HandleCreateConflict(CatalogTransaction &transaction, Catal
 optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(CatalogTransaction &transaction, ClientContext &context,
                                                        BoundCreateTableInfo &info) {
 	auto &base_info = info.Base();
-	auto &irc_transaction = GetICTransaction(transaction);
 	auto &ir_catalog = catalog.Cast<IRCatalog>();
+	auto &irc_transaction = GetICTransaction(transaction);
 	// check if we have an existing entry with this name
 	if (!HandleCreateConflict(transaction, CatalogType::TABLE_ENTRY, base_info.table, base_info.on_conflict)) {
 		return nullptr;
@@ -78,35 +78,9 @@ optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(CatalogTransaction &trans
 		throw InternalException("We should not be here");
 	}
 	// TODO: add this not to new tables, but to updated tables.
-	auto entry = irc_transaction.updated_tables.find(base_info.table);
+	auto table_key = IcebergTableInformation::GetTableKey(namespace_items, base_info.table);
+	auto entry = irc_transaction.updated_tables.find(table_key);
 	return entry->second.schema_versions[0].get();
-
-	// return CreateTableExtended(transaction, info, std::move(table_uuid), std::move(table_data_path));
-	//
-	// auto &catalog = irc_transaction.GetCatalog();
-	//
-	// // always posts to IRC catalog so we can get the metadata
-	// if (!tables.CreateNewEntry(context, catalog, *this, base_info)) {
-	// 	D_ASSERT(base_info.on_conflict == OnCreateConflict::IGNORE_ON_CONFLICT);
-	// 	return nullptr;
-	// }
-	// auto lookup_info = EntryLookupInfo(CatalogType::TABLE_ENTRY, base_info.table);
-	// auto entry = tables.GetEntry(context, lookup_info);
-	// auto &ic_entry = entry->Cast<ICTableEntry>();
-	// // An eagerly created table (if stage_create isn't supported by Catalog) is not marked as dirty, because it
-	// requires
-	// // no action on commit/abort. We do not drop it on abort because that isn't transactionally safe (no guarantees a
-	// // different transaction didn't interact with the created table in the meantime)
-	// if (catalog.attach_options.supports_stage_create) {
-	// 	// mark table as dirty so at the end of the transaction updates/creates are commited
-	// 	irc_transaction.MarkTableAsDirty(ic_entry);
-	// }
-	//
-	// // get the entry from the catalog.
-	// D_ASSERT(entry);
-	// D_ASSERT(entry->type == CatalogType::TABLE_ENTRY);
-	//
-	// return entry;
 }
 
 optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(CatalogTransaction transaction, BoundCreateTableInfo &info) {
@@ -127,12 +101,12 @@ void IRCSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {
 		throw NotImplementedException("DROP TABLE <table_name> CASCADE is not supported for Iceberg tables currently");
 	}
 	auto &table_info = table_info_it->second;
-	// TODO:
 	auto table_key = table_info.GetTableKey();
 	transaction.deleted_tables.emplace(table_key, table_info.Copy());
 	auto &deleted_table_info = transaction.deleted_tables.at(table_key);
+	// must init schema versions after copy. Schema versions have a pointer to IcebergTableInformation
+	// if the IcebergTableInformation is moved, then the pointer is no longer valid.
 	deleted_table_info.InitSchemaVersions();
-	auto boop = 0;
 }
 
 optional_ptr<CatalogEntry> IRCSchemaEntry::CreateFunction(CatalogTransaction transaction, CreateFunctionInfo &info) {

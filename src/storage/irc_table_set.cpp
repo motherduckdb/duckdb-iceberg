@@ -42,7 +42,7 @@ bool ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &tabl
 		}
 		throw HTTPException(get_table_result.error_._error.message);
 	}
-	auto table_key = IRCAPI::GetEncodedSchemaName(table.schema.namespace_items) + "." + table.name;
+	auto table_key = table.GetTableKey();
 	ic_catalog.StoreLoadTableResult(table_key, std::move(get_table_result.result_));
 	auto &cached_table_result = ic_catalog.GetLoadTableResult(table_key);
 	// TODO: fix this to use load table result getters and setters
@@ -126,13 +126,13 @@ bool ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 	// 	}
 	// }
 
+	auto key = IcebergTableInformation::GetTableKey(schema.namespace_items, info.table);
 	if (catalog.attach_options.supports_stage_create) {
-		irc_transaction.updated_tables.emplace(table_name, IcebergTableInformation(catalog, schema, info.table));
+		irc_transaction.updated_tables.emplace(key, IcebergTableInformation(catalog, schema, info.table));
 	} else {
 		throw InternalException("Need to fix case of stage create");
 	}
-	// irc_transaction.updated_tables.emplace(table_name, IcebergTableInformation(catalog, schema, info.table));
-	auto &table_info = irc_transaction.updated_tables.find(table_name)->second;
+	auto &table_info = irc_transaction.updated_tables.find(key)->second;
 	auto table_entry = make_uniq<ICTableEntry>(table_info, catalog, schema, info);
 	auto table_ptr = table_entry.get();
 	table_entry->table_info.schema_versions[0] = std::move(table_entry);
@@ -145,7 +145,6 @@ bool ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 	auto load_table_result =
 	    make_uniq<const rest_api_objects::LoadTableResult>(IRCAPI::CommitNewTable(context, catalog, table_ptr));
 
-	auto key = IRCAPI::GetSchemaName(table_info.schema.namespace_items) + "." + table_name;
 	catalog.StoreLoadTableResult(key, std::move(load_table_result));
 	auto &cached_table_result = catalog.GetLoadTableResult(key);
 
@@ -179,11 +178,13 @@ optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const En
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
 	auto &irc_transaction = IRCTransaction::Get(context, catalog);
 	auto table_name = lookup.GetEntryName();
-	auto entry = entries.find(table_name);
-	auto transaction_entry = irc_transaction.updated_tables.find(table_name);
-	if (entry == entries.end() && transaction_entry != irc_transaction.updated_tables.end()) {
+	// first check transaction entries
+	auto table_key = IcebergTableInformation::GetTableKey(schema.namespace_items, table_name);
+	auto transaction_entry = irc_transaction.updated_tables.find(table_key);
+	if (transaction_entry != irc_transaction.updated_tables.end()) {
 		return transaction_entry->second.GetSchemaVersion(lookup.GetAtClause());
 	}
+	auto entry = entries.find(table_name);
 	if (entry == entries.end()) {
 		if (!IRCAPI::VerifyTableExistence(context, ic_catalog, schema, table_name)) {
 			return nullptr;
