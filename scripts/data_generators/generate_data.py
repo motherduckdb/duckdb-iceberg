@@ -1,8 +1,4 @@
 from scripts.data_generators.tests import IcebergTest
-from scripts.data_generators.connections import IcebergConnection
-import sys
-from typing import Dict
-
 import argparse
 
 
@@ -11,27 +7,38 @@ parser.add_argument(
     "targets",
     nargs="+",
     choices=["polaris", "lakekeeper", "local", "spark-rest"],
-    help="Specify one or more targets to generate data for",
+    help="Specify one or more catalogs/targets to generate for",
 )
 parser.add_argument("--test", help='Generate only a specific test (for debugging)', action='store')
+parser.add_argument("--target", help='Override registry target for the catalog (advanced)', action='store')
+parser.add_argument("--conn", dest="conn_kv", action="append", help="Connection kwargs as key=value (repeatable)")
 
 args = parser.parse_args()
 
 test_classes = IcebergTest.registry
-tests = []
+all_tests = []
+actual_tests = []
+
 for test_class in test_classes:
-    tests.append(test_class())
+    all_tests.append(test_class())
 
 if args.test:
-    tests = [x for x in tests if x.table == args.test]
+    for x in all_tests:
+        if x.table == args.test:
+            actual_tests.append(x)
 
-for target in args.targets:
-    connection_class = IcebergConnection.get_class(target)
-    con = connection_class()
-    print(f"Generating for '{target}'")
-    for test in tests:
+connection_kwargs = {}
+if args.conn_kv:
+    for kv in args.conn_kv:
+        if '=' in kv:
+            k, v = kv.split('=', 1)
+            connection_kwargs[k] = v
+
+for catalog in args.targets:
+    print(f"Generating for '{catalog}'")
+    for test in actual_tests:
         print(f"Generating test '{test.table}'")
-        test.generate(con)
+        test.generate(catalog, target=args.target, connection_kwargs=connection_kwargs)
 
 if __name__ == "__main__":
     if __package__ is None:

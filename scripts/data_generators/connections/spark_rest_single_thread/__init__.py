@@ -27,7 +27,7 @@ from ..base import IcebergConnection
 import sys
 import os
 
-CONNECTION_KEY = 'spark-rest'
+CONNECTION_KEY = 'spark-rest-single-thread'
 SPARK_RUNTIME_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'iceberg-spark-runtime-3.5_2.12-1.9.0.jar')
 
 @IcebergConnection.register(CONNECTION_KEY)
@@ -43,13 +43,18 @@ class IcebergSparkRest(IcebergConnection):
         os.environ["AWS_REGION"] = "us-east-1"
         os.environ["AWS_ACCESS_KEY_ID"] = "admin"
         os.environ["AWS_SECRET_ACCESS_KEY"] = "password"
+        if SparkContext._active_spark_context is not None:
+            SparkContext._active_spark_context.stop()
 
         spark = (
             SparkSession.builder.appName("DuckDB REST Integration test")
+            .master("local[1]")
             .config(
                 "spark.sql.extensions",
                 "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
             )
+            .config("spark.sql.parquet.datetimeRebaseModeInWrite", "CORRECTED")
+            .config("spark.sql.parquet.int96RebaseModeInWrite", "CORRECTED")
             .config("spark.sql.catalog.demo", "org.apache.iceberg.spark.SparkCatalog")
             .config("spark.sql.catalog.demo.type", "rest")
             .config("spark.sql.catalog.demo.uri", "http://127.0.0.1:8181")
@@ -66,3 +71,4 @@ class IcebergSparkRest(IcebergConnection):
         spark.sql("USE demo")
         spark.sql("CREATE NAMESPACE IF NOT EXISTS default")
         return spark
+
