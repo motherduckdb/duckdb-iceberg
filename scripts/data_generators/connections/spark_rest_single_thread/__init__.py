@@ -31,7 +31,7 @@ CONNECTION_KEY = 'spark-rest-single-thread'
 SPARK_RUNTIME_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'iceberg-spark-runtime-3.5_2.12-1.9.0.jar')
 
 @IcebergConnection.register(CONNECTION_KEY)
-class IcebergSparkRest(IcebergConnection):
+class IcebergSparkRestSingleThreaded(IcebergConnection):
     def __init__(self):
         super().__init__(CONNECTION_KEY, 'demo')
         self.con = self.get_connection()

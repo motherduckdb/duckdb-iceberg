@@ -23,9 +23,9 @@ for test_class in test_classes:
     all_tests.append(test_class())
 
 if args.test:
-    for x in all_tests:
-        if x.table == args.test:
-            actual_tests.append(x)
+    actual_tests = [x for x in all_tests if x.table == args.test]
+else:
+    actual_tests = all_tests
 
 connection_kwargs = {}
 if args.conn_kv:
