@@ -13,10 +13,6 @@ struct IcebergLogType : public LogType {
 	//! Construct the log type
 	IcebergLogType();
 
-	static LogicalType GetLogType() {
-		return LogicalType::VARCHAR;
-	}
-
 	template <typename... ARGS>
 	static string ConstructLogMessage(const string &str, ARGS... params) {
 		return StringUtil::Format(str, params...);
