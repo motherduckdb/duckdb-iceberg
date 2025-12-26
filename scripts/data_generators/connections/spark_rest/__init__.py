@@ -63,6 +63,15 @@ class IcebergSparkRest(IcebergConnection):
             .config('spark.jars', SPARK_RUNTIME_PATH)
             .getOrCreate()
         )
+        # Reduce noisy WARNs from S3FileIO by lowering its log level
+        try:
+            jvm = spark.sparkContext._jvm
+            # Spark 3.x ships a log4j-1.2 bridge, so org.apache.log4j.* APIs are available
+            logger = jvm.org.apache.log4j.LogManager.getLogger("org.apache.iceberg.aws.s3.S3FileIO")
+            logger.setLevel(jvm.org.apache.log4j.Level.ERROR)
+        except Exception:
+            # Best-effort; ignore if logging backend is different/unavailable
+            pass
         spark.sql("USE demo")
         spark.sql("CREATE NAMESPACE IF NOT EXISTS default")
         return spark
