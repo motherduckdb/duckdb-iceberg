@@ -32,6 +32,8 @@ class IcebergTest:
     # Default mapping from high-level catalog names to connection registry keys.
     # Extend this map as you introduce new catalogs/targets.
     CATALOG_DEFAULT_TARGET = {
+        "polaris": "polaris",
+        "lakekeeper": "lakekeeper",
         "spark-rest": "spark-rest",
         "local": "local",
     }
