@@ -38,7 +38,11 @@ for catalog in args.targets:
     print(f"Generating for '{catalog}'")
     for test in actual_tests:
         print(f"Generating test '{test.table}'")
-        test.generate(catalog, target=args.target, connection_kwargs=connection_kwargs)
+        try:
+            test.generate(catalog, target=args.target, connection_kwargs=connection_kwargs)
+        except Exception as e:
+            print(e)
+            print(f"skip {test.table} for polaris")
 
 if __name__ == "__main__":
     if __package__ is None:
