@@ -10,6 +10,7 @@ import sys
 import os
 
 CONNECTION_KEY = 'polaris'
+SPARK_RUNTIME_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'iceberg-spark-runtime-3.5_2.12-1.9.0.jar')
 
 
 @IcebergConnection.register(CONNECTION_KEY)
@@ -41,6 +42,7 @@ class IcebergSparkLocal(IcebergConnection):
         config.set('spark.sql.iceberg.vectorization.enabled', 'false')
         # Configure the 'polaris' catalog as an Iceberg rest catalog
         config.set("spark.sql.catalog.quickstart_catalog.type", "rest")
+        config.set('spark.driver.memory', '10g')
         config.set("spark.sql.catalog.quickstart_catalog.rest.auth.type", "oauth2")
         config.set("spark.sql.catalog.quickstart_catalog", "org.apache.iceberg.spark.SparkCatalog")
         # Specify the rest catalog endpoint
@@ -59,6 +61,7 @@ class IcebergSparkLocal(IcebergConnection):
         config.set("spark.sql.catalog.quickstart_catalog.io-impl", "org.apache.iceberg.io.ResolvingFileIO")
         config.set("spark.sql.catalog.quickstart_catalog.s3.region", "us-west-2")
         config.set("spark.history.fs.logDirectory", "/home/iceberg/spark-events")
+        config.set("spark.jars", SPARK_RUNTIME_PATH)
 
         spark = SparkSession.builder.config(conf=config).getOrCreate()
         spark.sql("USE quickstart_catalog")

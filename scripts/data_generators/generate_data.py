@@ -1,6 +1,14 @@
 from scripts.data_generators.tests import IcebergTest
 import argparse
 
+# list of tables that cannot be generated against a polaris catalog
+# a polaris catalog expects updates to be deletes + insert which spark does not support.
+polaris_blacklist = [
+    "complicated_partitioned_table",
+    "spark_written_upper_lower_bounds",
+    "nested_namespaces",
+    "table_sort_order"
+]
 
 parser = argparse.ArgumentParser(description="Generate data for various systems.")
 parser.add_argument(
@@ -37,12 +45,14 @@ if args.conn_kv:
 for catalog in args.targets:
     print(f"Generating for '{catalog}'")
     for test in actual_tests:
+        if catalog == 'polaris' and test.table in polaris_blacklist:
+            continue
         print(f"Generating test '{test.table}'")
         try:
             test.generate(catalog, target=args.target, connection_kwargs=connection_kwargs)
         except Exception as e:
             print(e)
-            print(f"skip {test.table} for polaris")
+            print(f"Error generating test '{test.table}' for catalog '{catalog}'")
 
 if __name__ == "__main__":
     if __package__ is None:
