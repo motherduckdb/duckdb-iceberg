@@ -46,7 +46,7 @@ bool ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &tabl
 	ic_catalog.StoreLoadTableResult(table_key, std::move(get_table_result.result_));
 	auto &cached_table_result = ic_catalog.GetLoadTableResult(table_key);
 	// TODO: fix this to use load table result getters and setters
-	table.table_metadata = IcebergTableMetadata::FromTableMetadata(cached_table_result.load_table_result->metadata);
+	table.table_metadata = IcebergTableMetadata::FromLoadTableResult(*cached_table_result.load_table_result);
 	auto &schemas = table.table_metadata.schemas;
 
 	//! It should be impossible to have a metadata file without any schema

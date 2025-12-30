@@ -2,6 +2,7 @@
 
 #include "iceberg_utils.hpp"
 #include "catalog_utils.hpp"
+#include "iceberg_metadata.hpp"
 #include "metadata/iceberg_snapshot.hpp"
 #include "duckdb/common/exception.hpp"
 #include "rest_catalog/objects/list.hpp"
@@ -285,6 +286,13 @@ rest_api_objects::TableMetadata IcebergTableMetadata::Parse(const string &path, 
 	return rest_api_objects::TableMetadata::FromJSON(root);
 }
 
+IcebergTableMetadata
+IcebergTableMetadata::FromLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result) {
+	auto res = FromTableMetadata(load_table_result.metadata);
+	res.latest_metadata_location = load_table_result.metadata_location;
+	return res;
+}
+
 IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_objects::TableMetadata &table_metadata) {
 	IcebergTableMetadata res;
 
@@ -353,6 +361,14 @@ const case_insensitive_map_t<string> &IcebergTableMetadata::GetTableProperties()
 	return table_properties;
 }
 
+string IcebergTableMetadata::GetLatestMetadataLocation() const {
+	return latest_metadata_location;
+}
+
+string IcebergTableMetadata::GetLocation() const {
+	return location;
+}
+
 string IcebergTableMetadata::GetDataPath() const {
 	auto write_path = table_properties.find("write.data.path");
 	// If write.data.path property is set, use it; otherwise use default location + "/data"
@@ -369,7 +385,7 @@ string IcebergTableMetadata::GetMetadataPath() const {
 	if (metadata_path != table_properties.end()) {
 		return metadata_path->second;
 	}
-	return location + "/data";
+	return location + "/metdata";
 }
 
 string IcebergTableMetadata::GetTableProperty(string property_string) const {

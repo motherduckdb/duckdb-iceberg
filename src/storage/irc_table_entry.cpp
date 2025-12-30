@@ -32,12 +32,13 @@ unique_ptr<BaseStatistics> ICTableEntry::GetStatistics(ClientContext &context, c
 	return nullptr;
 }
 
-string ICTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) const {
+void ICTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) const {
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
 	auto &secret_manager = SecretManager::Get(context);
 
 	if (ic_catalog.attach_options.access_mode != IRCAccessDelegationMode::VENDED_CREDENTIALS) {
-		return table_info.table_metadata.GetMetadataPath();
+		// assume secret already exists
+		return;
 	}
 	// Get Credentials from IRC API
 	auto table_credentials = table_info.GetVendedCredentials(context);
@@ -92,7 +93,6 @@ string ICTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) const {
 	for (auto &info : table_credentials.storage_credentials) {
 		(void)secret_manager.CreateSecret(context, info);
 	}
-	return metadata_path;
 }
 
 TableFunction ICTableEntry::GetScanFunction(ClientContext &context, unique_ptr<FunctionData> &bind_data,
@@ -108,7 +108,8 @@ TableFunction ICTableEntry::GetScanFunction(ClientContext &context, unique_ptr<F
 	auto &iceberg_scan_function_set = catalog_entry->Cast<TableFunctionCatalogEntry>();
 	auto iceberg_scan_function =
 	    iceberg_scan_function_set.functions.GetFunctionByArguments(context, {LogicalType::VARCHAR});
-	auto storage_location = PrepareIcebergScanFromEntry(context);
+	PrepareIcebergScanFromEntry(context);
+	auto storage_location = table_info.table_metadata.location;
 
 	named_parameter_map_t param_map;
 	vector<LogicalType> return_types;

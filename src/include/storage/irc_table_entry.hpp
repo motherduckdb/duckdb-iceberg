@@ -2,7 +2,6 @@
 #pragma once
 
 #include "catalog_api.hpp"
-// #include "iceberg_table_information.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/parser/parsed_data/create_table_info.hpp"
 
@@ -39,7 +38,7 @@ public:
 
 public:
 	unique_ptr<BaseStatistics> GetStatistics(ClientContext &context, column_t column_id) override;
-	string PrepareIcebergScanFromEntry(ClientContext &context) const;
+	void PrepareIcebergScanFromEntry(ClientContext &context) const;
 	TableFunction GetScanFunction(ClientContext &context, unique_ptr<FunctionData> &bind_data) override;
 	TableFunction GetScanFunction(ClientContext &context, unique_ptr<FunctionData> &bind_data,
 	                              const EntryLookupInfo &lookup) override;
@@ -54,27 +53,10 @@ public:
 struct ICTableEntryHashFunction {
 	uint64_t operator()(const optional_ptr<ICTableEntry> &entry) const {
 		D_ASSERT(entry);
-		// auto beep = cool.table_info.name;
+		// FIXME: we shuold use a table uuid in case renaming tables to the same name happens
 		auto qualified_name = entry->catalog.GetName() + "." + entry->name;
 		return std::hash<string>()(qualified_name);
 	}
 };
 
 } // namespace duckdb
-
-// namespace std {
-// template <>
-// struct std::hash<duckdb::optional_ptr<duckdb::ICTableEntry>> {
-//
-// 	// Default constructor
-// 	hash() noexcept = default;
-//
-// 	// required operator()
-// 	size_t operator()(duckdb::optional_ptr<duckdb::ICTableEntry> const &ic_table_entry) const noexcept {
-// 		const auto catalog_name = ic_table_entry->catalog.GetName();
-// 		auto table_name = ic_table_entry->name;
-// 		return std::hash<std::string>()(catalog_name);
-// 	}
-// };
-//
-// }

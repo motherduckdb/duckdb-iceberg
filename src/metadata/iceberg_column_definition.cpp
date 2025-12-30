@@ -1,4 +1,3 @@
-#include "../include/metadata/iceberg_column_definition.hpp"
 #include "metadata/iceberg_column_definition.hpp"
 
 namespace duckdb {

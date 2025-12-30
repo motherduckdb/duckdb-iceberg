@@ -8,7 +8,7 @@
 #include "metadata/iceberg_field_mapping.hpp"
 
 #include "iceberg_options.hpp"
-#include "rest_catalog/objects/table_metadata.hpp"
+#include "rest_catalog/objects/list.hpp"
 #include "duckdb/common/file_system.hpp"
 
 namespace duckdb {
@@ -19,7 +19,7 @@ const string WRITE_DELETE_MODE = "write.delete.mode";
 
 //! A structure to store "LoadTableResult" information that changes as a transaction goes on
 //! Everything is parsed from a load table result, but if a transaction changes a schema, those schema
-//! updates are reflected here and never within the
+//! updates are reflected here and never within the catalog that lives beyond transactions
 struct IcebergTableMetadata {
 public:
 	IcebergTableMetadata() = default;
@@ -27,6 +27,7 @@ public:
 public:
 	static rest_api_objects::TableMetadata Parse(const string &path, FileSystem &fs,
 	                                             const string &metadata_compression_codec);
+	static IcebergTableMetadata FromLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result);
 	static IcebergTableMetadata FromTableMetadata(const rest_api_objects::TableMetadata &table_metadata);
 	static string GetMetaDataPath(ClientContext &context, const string &path, FileSystem &fs,
 	                              const IcebergOptions &options);
@@ -58,6 +59,8 @@ public:
 	optional_ptr<IcebergSnapshot> GetSnapshot(const IcebergSnapshotLookup &lookup);
 
 	//! Get the data and metadata paths, falling back to default if not set
+	string GetLatestMetadataLocation() const;
+	string GetLocation() const;
 	string GetDataPath() const;
 	string GetMetadataPath() const;
 
@@ -71,6 +74,7 @@ public:
 
 public:
 	string table_uuid;
+	string latest_metadata_location;
 	string location;
 
 	int32_t iceberg_version;
