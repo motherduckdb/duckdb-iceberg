@@ -1,10 +1,11 @@
 #include "iceberg_logging.hpp"
+#include "include/iceberg_logging.hpp"
 
 namespace duckdb {
 
 constexpr LogLevel IcebergLogType::LEVEL;
 
-IcebergLogType::IcebergLogType() : LogType(NAME, LEVEL, GetLogType()) {
+IcebergLogType::IcebergLogType() : LogType(NAME, LEVEL) {
 }
 
 } // namespace duckdb
