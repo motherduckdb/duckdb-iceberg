@@ -74,7 +74,7 @@ static unique_ptr<FunctionData> IcebergMetaDataBind(ClientContext &context, Tabl
 			auto string_substitutions = IcebergUtils::CountOccurrences(value, "%s");
 			if (string_substitutions != 2) {
 				throw InvalidInputException(
-				    "'version_name_format' has to contain two occurrences of '%s' in it, found %d", "%s",
+				    "'version_name_format' has to contain two occurrences of '%%s' in it, found %d",
 				    string_substitutions);
 			}
 			options.version_name_format = value;

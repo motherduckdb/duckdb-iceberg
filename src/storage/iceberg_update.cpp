@@ -187,7 +187,8 @@ SinkFinalizeType IcebergUpdate::Finalize(Pipeline &pipeline, Event &event, Clien
 //===--------------------------------------------------------------------===//
 // GetData
 //===--------------------------------------------------------------------===//
-SourceResultType IcebergUpdate::GetData(ExecutionContext &context, DataChunk &chunk, OperatorSourceInput &input) const {
+SourceResultType IcebergUpdate::GetDataInternal(ExecutionContext &context, DataChunk &chunk,
+                                                OperatorSourceInput &input) const {
 	auto &global_state = sink_state->Cast<IcebergUpdateGlobalState>();
 	auto value = Value::BIGINT(NumericCast<int64_t>(global_state.total_updated_count.load()));
 	chunk.SetCardinality(1);
