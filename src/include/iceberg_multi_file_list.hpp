@@ -76,18 +76,22 @@ protected:
 
 protected:
 	bool ManifestMatchesFilter(const IcebergManifestListEntry &manifest);
-	bool FileMatchesFilter(const IcebergManifestEntry &file);
+	bool FileMatchesFilter(const IcebergManifestEntry &file) const;
 	// TODO: How to guarantee we only call this after the filter pushdown?
 	void InitializeFiles(lock_guard<mutex> &guard);
 
 	//! NOTE: this requires the lock because it modifies the 'data_files' vector, potentially invalidating references
 	optional_ptr<const IcebergManifestEntry> GetDataFile(idx_t file_id, lock_guard<mutex> &guard);
 
+	optional_ptr<const TableFilter> GetFilterForColumnIndex(const TableFilterSet &filter_set,
+	                                                        const ColumnIndex &column_index) const;
+
 public:
 	ClientContext &context;
 	FileSystem &fs;
 	shared_ptr<IcebergScanInfo> scan_info;
 	string path;
+	ICTableEntry *table;
 
 	mutable mutex lock;
 	//! ComplexFilterPushdown results
