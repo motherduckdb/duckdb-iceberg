@@ -52,7 +52,6 @@ static string ExtractIcebergScanPath(const string &sql) {
 }
 
 optional_ptr<CatalogEntry> IcebergUtils::GetTableEntry(ClientContext &context, string &input_string) {
-
 	auto qualified_name = QualifiedName::ParseComponents(input_string);
 	auto default_db = DatabaseManager::GetDefaultDatabase(context);
 	auto &catalog = Catalog::GetCatalog(context, default_db);

@@ -87,7 +87,6 @@ IcebergMultiFileReader::InitializeGlobalState(ClientContext &context, const Mult
                                               const MultiFileReaderBindData &bind_data, const MultiFileList &file_list,
                                               const vector<MultiFileColumnDefinition> &global_columns,
                                               const vector<ColumnIndex> &global_column_ids) {
-
 	vector<LogicalType> extra_columns;
 	auto res = make_uniq<IcebergMultiFileReaderGlobalState>(extra_columns, file_list);
 	return std::move(res);
@@ -434,8 +433,8 @@ bool IcebergMultiFileReader::ParseOption(const string &key, const Value &val, Mu
 		auto value = StringValue::Get(val);
 		auto string_substitutions = IcebergUtils::CountOccurrences(value, "%s");
 		if (string_substitutions != 2) {
-			throw InvalidInputException("'version_name_format' has to contain two occurrences of '%s' in it, found %d",
-			                            "%s", string_substitutions);
+			throw InvalidInputException("'version_name_format' has to contain two occurrences of '%%s' in it, found %d",
+			                            string_substitutions);
 		}
 		this->options.version_name_format = value;
 		return true;

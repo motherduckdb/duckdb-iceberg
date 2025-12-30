@@ -91,6 +91,7 @@ public:
 	FileSystem &fs;
 	shared_ptr<IcebergScanInfo> scan_info;
 	string path;
+	ICTableEntry *table;
 
 	mutable mutex lock;
 	//! ComplexFilterPushdown results

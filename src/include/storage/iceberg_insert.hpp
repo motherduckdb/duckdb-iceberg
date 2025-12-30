@@ -60,8 +60,9 @@ public:
 	unique_ptr<PhysicalOperator> physical_copy_to_file;
 
 public:
-	// // Source interface
-	SourceResultType GetData(ExecutionContext &context, DataChunk &chunk, OperatorSourceInput &input) const override;
+	// Source interface
+	SourceResultType GetDataInternal(ExecutionContext &context, DataChunk &chunk,
+	                                 OperatorSourceInput &input) const override;
 
 	bool IsSource() const override {
 		return true;

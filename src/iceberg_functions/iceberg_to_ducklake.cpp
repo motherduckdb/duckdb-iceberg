@@ -1380,10 +1380,10 @@ static unique_ptr<FunctionData> IcebergToDuckLakeBind(ClientContext &context, Ta
 			options.table_version = StringValue::Get(val);
 		} else if (loption == "version_name_format") {
 			auto value = StringValue::Get(kv.second);
-			auto string_substitutions = IcebergUtils::CountOccurrences(value, "%s");
+			int string_substitutions = IcebergUtils::CountOccurrences(value, "%s");
 			if (string_substitutions != 2) {
 				throw InvalidInputException(
-				    "'version_name_format' has to contain two occurrences of '%s' in it, found %d", "%s",
+				    "'version_name_format' has to contain two occurrences of '%%s' in it, found %d",
 				    string_substitutions);
 			}
 			options.version_name_format = value;
@@ -1463,9 +1463,9 @@ public:
 			    "DuckLake version metadata is corrupt, the value can't be NULL and has to be of type VARCHAR");
 		}
 		auto version_string = value.GetValue<string>();
-		if (!StringUtil::StartsWith(version_string, "0.3")) {
+		if (!StringUtil::StartsWith(version_string, "0.4")) {
 			throw InvalidInputException(
-			    "'iceberg_to_ducklake' only support version 0.3 currently, detected '%s' instead", version_string);
+			    "'iceberg_to_ducklake' only support version 0.4 currently, detected '%s' instead", version_string);
 		}
 	}
 
