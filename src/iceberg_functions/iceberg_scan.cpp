@@ -56,7 +56,9 @@ static void IcebergScanSerialize(Serializer &serializer, const optional_ptr<Func
 BindInfo IcebergBindInfo(const optional_ptr<FunctionData> bind_data) {
 	auto &multi_file_data = bind_data->Cast<MultiFileBindData>();
 	auto &file_list = multi_file_data.file_list->Cast<IcebergMultiFileList>();
-	D_ASSERT(file_list.table);
+	if (!file_list.table) {
+		return BindInfo(ScanType::EXTERNAL);
+	}
 	return BindInfo(*file_list.table);
 }
 
