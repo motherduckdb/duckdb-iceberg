@@ -19,7 +19,7 @@ statement ok
 set enable_logging=true
 
 statement ok
-set logging_level='debug'
+set logging_level='debug';
 
 statement ok
 CALL enable_logging('HTTP');

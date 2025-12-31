@@ -6,6 +6,8 @@
 #include "duckdb/catalog/catalog.hpp"
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_schema_set.hpp"
+
+#include "../include/storage/irc_transaction.hpp"
 #include "storage/irc_transaction.hpp"
 
 namespace duckdb {
@@ -57,11 +59,13 @@ void IRCSchemaSet::Scan(ClientContext &context, const std::function<void(Catalog
 	for (auto &entry : entries) {
 		callback(*entry.second);
 	}
+	// By getting the IRC transaction here we initialize it, which will
+	// allow us to clear the entries at the end of a transaction
+	auto &irc_transaction = IRCTransaction::Get(context, catalog);
 }
 
 void IRCSchemaSet::AddEntry(string name, unique_ptr<IRCSchemaEntry> entry) {
 	entries.insert(make_pair(name, std::move(entry)));
-	auto boop = 0;
 }
 
 CatalogEntry &IRCSchemaSet::GetEntry(const string &name) {
@@ -79,6 +83,7 @@ const case_insensitive_map_t<unique_ptr<CatalogEntry>> &IRCSchemaSet::GetEntries
 
 void IRCSchemaSet::ClearEntries() {
 	entries.clear();
+	listed = false;
 }
 
 static string GetSchemaName(const vector<string> &items) {

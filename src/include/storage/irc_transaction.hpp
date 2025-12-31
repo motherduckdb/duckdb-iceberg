@@ -54,8 +54,11 @@ public:
 	case_insensitive_map_t<IcebergTableInformation> updated_tables;
 	//! tables that have been deleted in this transaction, to be deleted on commit.
 	case_insensitive_map_t<IcebergTableInformation> deleted_tables;
-	case_insensitive_set_t created_secrets;
 
+	IRCSchemaSet updated_schemas;
+	case_insensitive_set_t deleted_schemas;
+
+	case_insensitive_set_t created_secrets;
 	case_insensitive_set_t looked_up_entries;
 };
 

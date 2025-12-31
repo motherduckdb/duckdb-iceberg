@@ -52,7 +52,6 @@ void IRCatalog::InvalidateSchemas() {
 optional_ptr<SchemaCatalogEntry> IRCatalog::LookupSchema(CatalogTransaction transaction,
                                                          const EntryLookupInfo &schema_lookup,
                                                          OnEntryNotFound if_not_found) {
-	auto &irc_transaction = IRCTransaction::Get(transaction.GetContext(), *this);
 	if (schema_lookup.GetEntryName() == DEFAULT_SCHEMA && default_schema != DEFAULT_SCHEMA) {
 		D_ASSERT(!default_schema.empty());
 		return GetSchema(transaction, default_schema, if_not_found);
@@ -132,8 +131,6 @@ optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transactio
 	}
 
 	IRCAPI::CommitNamespaceCreate(*context.get(), *this, create_body);
-
-	// auto &irc_transaction = IRCTransaction::Get(transaction.GetContext(), *this);
 	auto new_schema = make_uniq<IRCSchemaEntry>(*this, info);
 	schemas.AddEntry(new_schema->name, std::move(new_schema));
 	auto &ret = schemas.GetEntry(info.schema);

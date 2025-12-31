@@ -416,6 +416,12 @@ void IRCTransaction::CleanupFiles() {
 	auto &fs = FileSystem::GetFileSystem(db);
 	for (auto &up_table : updated_tables) {
 		auto &table = up_table.second;
+		if (!table.transaction_data) {
+			// error occurred before transaction data was initialized
+			// this can happen during table creation with schema that cannot convert to
+			// an iceberg schema
+			continue;
+		}
 		auto &transaction_data = table.transaction_data;
 		for (auto &update : transaction_data->updates) {
 			if (update->type != IcebergTableUpdateType::ADD_SNAPSHOT) {
