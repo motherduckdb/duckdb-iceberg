@@ -1,5 +1,4 @@
 #include "storage/iceberg_insert.hpp"
-#include "storage/iceberg_insert.hpp"
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_transaction.hpp"
 #include "storage/irc_table_entry.hpp"

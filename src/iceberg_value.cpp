@@ -311,7 +311,7 @@ SerializeResult IcebergValue::SerializeValue(Value input_value, LogicalType &col
 		string val = truncate_and_increment_utf8(input_value.GetValue<string>());
 		// create blob value of int32
 		const_data_ptr_t string_data = reinterpret_cast<const_data_ptr_t>(&val);
-		auto serialized_val = Value::BLOB(string_data, val.size());
+		auto serialized_val = Value(val);
 		auto ret = SerializeResult(column_type, serialized_val);
 		return ret;
 	}
