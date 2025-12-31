@@ -134,9 +134,8 @@ class TestPyIcebergRead:
 )
 class TestPyIcebergRead:
     def test_pyiceberg_read(self, rest_catalog):
-        tbl = rest_catalog.load_table("default.test_reading_upper_and_lower_bounds")
-        scan = tbl.scan(row_filter=pyice.expressions.GreaterThanOrEqual("a", 350))
-
+        tbl = rest_catalog.load_table("default.test_metadata_for_pyiceberg")
+        scan = tbl.scan(row_filter=pyice.expressions.EqualTo("a", 350))
         # Collect the file paths Iceberg selects
         matched_files = [task.file.file_path for task in scan.plan_files()]
         # only 1 data file should match the filter
