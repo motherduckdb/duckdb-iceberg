@@ -39,9 +39,6 @@ public:
 
 struct IcebergColumnStats {
 	explicit IcebergColumnStats(LogicalType type_p) : type(std::move(type_p)) {
-		// if (DuckLakeTypes::IsGeoType(type)) {
-		// 	extra_stats = make_uniq<DuckLakeColumnGeoStats>();
-		// }
 	}
 
 	// Copy constructor
