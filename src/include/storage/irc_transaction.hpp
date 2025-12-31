@@ -32,8 +32,6 @@ public:
 	AccessMode GetAccessMode() const {
 		return access_mode;
 	}
-	void MarkTableAsDirty(const ICTableEntry &table);
-	void MarkTableAsDeleted(const ICTableEntry &table);
 	void DoTableUpdates(ClientContext &context);
 	void DoTableDeletes(ClientContext &context);
 	bool DirtyTablesHaveUpdates();

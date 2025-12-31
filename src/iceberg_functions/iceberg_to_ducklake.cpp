@@ -1404,7 +1404,7 @@ static unique_ptr<FunctionData> IcebergToDuckLakeBind(ClientContext &context, Ta
 	}
 
 	schema_set.LoadEntries(context);
-	for (auto &it : schema_set.entries) {
+	for (auto &it : schema_set.GetEntries()) {
 		auto &schema_entry = it.second->Cast<IRCSchemaEntry>();
 
 		auto &tables = schema_entry.tables;

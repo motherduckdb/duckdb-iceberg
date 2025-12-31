@@ -62,6 +62,7 @@ public:
 	string GetDefaultSchema() const override {
 		return default_schema;
 	}
+	void InvalidateSchemas();
 
 public:
 	static unique_ptr<Catalog> Attach(optional_ptr<StorageExtensionInfo> storage_info, ClientContext &context,

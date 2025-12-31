@@ -28,7 +28,7 @@ IRCatalog::IRCatalog(AttachedDatabase &db_p, AccessMode access_mode, unique_ptr<
                      IcebergAttachOptions &attach_options, const string &default_schema)
     : Catalog(db_p), access_mode(access_mode), auth_handler(std::move(auth_handler)),
       warehouse(attach_options.warehouse), uri(attach_options.endpoint), version("v1"), attach_options(attach_options),
-      default_schema(default_schema), metadata_cache(), schemas(*this) {
+      default_schema(default_schema), schemas(*this), metadata_cache() {
 	D_ASSERT(!default_schema.empty());
 }
 
@@ -42,8 +42,11 @@ void IRCatalog::Initialize(bool load_builtin) {
 }
 
 void IRCatalog::ScanSchemas(ClientContext &context, std::function<void(SchemaCatalogEntry &)> callback) {
-	auto &transaction = IRCTransaction::Get(context, *this);
 	schemas.Scan(context, [&](CatalogEntry &schema) { callback(schema.Cast<IRCSchemaEntry>()); });
+}
+
+void IRCatalog::InvalidateSchemas() {
+	schemas.ClearEntries();
 }
 
 optional_ptr<SchemaCatalogEntry> IRCatalog::LookupSchema(CatalogTransaction transaction,
@@ -97,7 +100,8 @@ void IRCatalog::RemoveLoadTableResult(string table_key) {
 optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transaction, CreateSchemaInfo &info) {
 	optional_ptr<ClientContext> context = transaction.GetContext();
 	if (info.on_conflict == OnCreateConflict::REPLACE_ON_CONFLICT) {
-		throw InvalidInputException("CREATE OR REPLACE not supported in DuckDB-Iceberg");
+		throw NotImplementedException("CREATE OR REPLACE schema not supported in DuckDB-Iceberg. Please use separate "
+		                              "Drop and Create Schema Statements");
 	}
 
 	D_ASSERT(context.get() != nullptr);
@@ -129,11 +133,11 @@ optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transactio
 
 	IRCAPI::CommitNamespaceCreate(*context.get(), *this, create_body);
 
-	auto &irc_transaction = IRCTransaction::Get(transaction.GetContext(), *this);
+	// auto &irc_transaction = IRCTransaction::Get(transaction.GetContext(), *this);
 	auto new_schema = make_uniq<IRCSchemaEntry>(*this, info);
-	schemas.entries.insert(make_pair(new_schema->name, std::move(new_schema)));
-	auto ret = schemas.entries.find(info.schema);
-	return ret->second.get();
+	schemas.AddEntry(new_schema->name, std::move(new_schema));
+	auto &ret = schemas.GetEntry(info.schema);
+	return ret;
 }
 
 void IRCatalog::DropSchema(ClientContext &context, DropInfo &info) {

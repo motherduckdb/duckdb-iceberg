@@ -1,3 +1,5 @@
+#include "../include/storage/irc_schema_set.hpp"
+
 #include "catalog_api.hpp"
 #include "duckdb/parser/parsed_data/create_schema_info.hpp"
 #include "duckdb/parser/parsed_data/drop_info.hpp"
@@ -55,6 +57,28 @@ void IRCSchemaSet::Scan(ClientContext &context, const std::function<void(Catalog
 	for (auto &entry : entries) {
 		callback(*entry.second);
 	}
+}
+
+void IRCSchemaSet::AddEntry(string name, unique_ptr<IRCSchemaEntry> entry) {
+	entries.insert(make_pair(name, std::move(entry)));
+	auto boop = 0;
+}
+
+CatalogEntry &IRCSchemaSet::GetEntry(const string &name) {
+	auto exists = entries.find(name) != entries.end();
+	if (!exists) {
+		throw CatalogException("Schema '%s' does not exist", name);
+	}
+	auto &entry = entries.find(name)->second;
+	return *entry;
+}
+
+const case_insensitive_map_t<unique_ptr<CatalogEntry>> &IRCSchemaSet::GetEntries() {
+	return entries;
+}
+
+void IRCSchemaSet::ClearEntries() {
+	entries.clear();
 }
 
 static string GetSchemaName(const vector<string> &items) {

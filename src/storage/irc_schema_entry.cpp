@@ -1,5 +1,7 @@
 #include "storage/irc_schema_entry.hpp"
 
+#include "../include/storage/iceberg_table_information.hpp"
+#include "../include/storage/irc_catalog.hpp"
 #include "../include/storage/irc_transaction.hpp"
 #include "storage/irc_table_entry.hpp"
 #include "storage/irc_transaction.hpp"
@@ -35,6 +37,20 @@ bool IRCSchemaEntry::HandleCreateConflict(CatalogTransaction &transaction, Catal
                                           const string &entry_name, OnCreateConflict on_conflict) {
 	auto existing_entry = GetEntry(transaction, catalog_type, entry_name);
 	if (!existing_entry) {
+		// If there is no existing entry, make sure the entry has not been deleted in this transaction.
+		// We cannot create (or stage create) a table replace within a transaction yet.
+		// FIXME: With Snapshot operation type overwrite, you can handle create or replace for tables.
+		auto &irc_transaction = GetICTransaction(transaction);
+		auto table_key = IcebergTableInformation::GetTableKey(namespace_items, entry_name);
+		auto deleted_table_entry = irc_transaction.deleted_tables.find(table_key);
+		if (deleted_table_entry != irc_transaction.deleted_tables.end()) {
+			auto &ic_catalog = catalog.Cast<IRCatalog>();
+			vector<string> qualified_name = {ic_catalog.GetName()};
+			qualified_name.insert(qualified_name.end(), namespace_items.begin(), namespace_items.end());
+			qualified_name.push_back(entry_name);
+			auto qualified_table_name = StringUtil::Join(qualified_name, ".");
+			throw NotImplementedException("Cannot create table deleted within a transaction: %s", qualified_table_name);
+		}
 		// no conflict
 		return true;
 	}
@@ -42,21 +58,13 @@ bool IRCSchemaEntry::HandleCreateConflict(CatalogTransaction &transaction, Catal
 	case OnCreateConflict::ERROR_ON_CONFLICT:
 		throw CatalogException("%s with name \"%s\" already exists", CatalogTypeToString(existing_entry->type),
 		                       entry_name);
-	case OnCreateConflict::IGNORE_ON_CONFLICT:
+	case OnCreateConflict::IGNORE_ON_CONFLICT: {
 		// ignore - skip without throwing an error
-		throw CatalogException("DuckDB-Iceberg Ignore on Conflict Not supported");
+		return false;
+	}
 	case OnCreateConflict::REPLACE_ON_CONFLICT: {
-		throw NotImplementedException("DuckDB-Iceberg does not yet support replace on conflict");
-		// if (existing_entry->type != catalog_type) {
-		// 	throw CatalogException("Existing object %s is of type %s, trying to replace with type %s", entry_name,
-		// 						   CatalogTypeToString(existing_entry->type), CatalogTypeToString(catalog_type));
-		// }
-		// // try to drop the entry prior to creating
-		// DropInfo info;
-		// info.type = catalog_type;
-		// info.name = entry_name;
-		// DropEntry(transaction.GetContext(), info);
-		// break;
+		throw NotImplementedException(
+		    "DuckDB-Iceberg Replace on Conflict not supported. Please use separate Drop and Create Table statements");
 	}
 	default:
 		throw InternalException("Unsupported conflict type");

@@ -268,7 +268,7 @@ optional_ptr<CatalogEntry> IcebergTableInformation::GetLatestSchema() {
 	return GetSchemaVersion(nullptr);
 }
 
-string IcebergTableInformation::GetTableKey(vector<string> &namespace_items, string &table_name) {
+string IcebergTableInformation::GetTableKey(const vector<string> &namespace_items, const string &table_name) {
 	if (namespace_items.empty()) {
 		return table_name;
 	}
@@ -281,7 +281,7 @@ string IcebergTableInformation::GetTableKey() {
 
 IcebergTableInformation IcebergTableInformation::Copy() {
 	auto ret = IcebergTableInformation(catalog, schema, name);
-	auto table_key = IRCAPI::GetEncodedSchemaName(schema.namespace_items) + "." + name;
+	auto table_key = ret.GetTableKey();
 	auto &cached_load_table_result = catalog.GetLoadTableResult(table_key);
 	ret.table_metadata = IcebergTableMetadata::FromTableMetadata(cached_load_table_result.load_table_result->metadata);
 	return ret;

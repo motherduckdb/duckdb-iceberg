@@ -45,7 +45,6 @@ bool ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &tabl
 	auto table_key = table.GetTableKey();
 	ic_catalog.StoreLoadTableResult(table_key, std::move(get_table_result.result_));
 	auto &cached_table_result = ic_catalog.GetLoadTableResult(table_key);
-	// TODO: fix this to use load table result getters and setters
 	table.table_metadata = IcebergTableMetadata::FromLoadTableResult(*cached_table_result.load_table_result);
 	auto &schemas = table.table_metadata.schemas;
 
@@ -180,10 +179,17 @@ optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const En
 	auto table_name = lookup.GetEntryName();
 	// first check transaction entries
 	auto table_key = IcebergTableInformation::GetTableKey(schema.namespace_items, table_name);
+	// Check if table has been deleted within in the transaction.
+	auto deleted_table_entry = irc_transaction.deleted_tables.find(table_key);
+	if (deleted_table_entry != irc_transaction.deleted_tables.end()) {
+		return nullptr;
+	}
+	// Check if the table has been updated within the transaction
 	auto transaction_entry = irc_transaction.updated_tables.find(table_key);
 	if (transaction_entry != irc_transaction.updated_tables.end()) {
 		return transaction_entry->second.GetSchemaVersion(lookup.GetAtClause());
 	}
+	// Check regular catalog Entries
 	auto entry = entries.find(table_name);
 	if (entry == entries.end()) {
 		if (!IRCAPI::VerifyTableExistence(context, ic_catalog, schema, table_name)) {
@@ -191,9 +197,6 @@ optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const En
 		}
 		auto it = entries.emplace(table_name, IcebergTableInformation(ic_catalog, schema, table_name));
 		entry = it.first;
-	}
-	if (entry->second.transaction_data && entry->second.transaction_data->is_deleted) {
-		return nullptr;
 	}
 	FillEntry(context, entry->second);
 	return entry->second.GetSchemaVersion(lookup.GetAtClause());
