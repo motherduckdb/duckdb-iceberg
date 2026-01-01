@@ -39,7 +39,7 @@ bool IRCSchemaEntry::HandleCreateConflict(CatalogTransaction &transaction, Catal
 	auto existing_entry = GetEntry(transaction, catalog_type, entry_name);
 	if (on_conflict == OnCreateConflict::REPLACE_ON_CONFLICT) {
 		throw NotImplementedException(
-		    "DuckDB-Iceberg Replace on Conflict not supported. Please use separate Drop and Create Table statements");
+		    "CREATE OR REPLACE not supported in DuckDB-Iceberg. Please use separate Drop and Create Statements");
 	}
 	if (!existing_entry) {
 		// If there is no existing entry, make sure the entry has not been deleted in this transaction.

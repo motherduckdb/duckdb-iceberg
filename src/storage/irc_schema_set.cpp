@@ -45,7 +45,6 @@ optional_ptr<CatalogEntry> IRCSchemaSet::GetEntry(ClientContext &context, const 
 		info.schema = name;
 		info.internal = false;
 		auto schema_entry = make_uniq<IRCSchemaEntry>(catalog, info);
-		schema_entry->namespace_items = IRCAPI::ParseSchemaName(name);
 		CreateEntryInternal(context, std::move(schema_entry));
 		entry = entries.find(name);
 		D_ASSERT(entry != entries.end());
@@ -83,7 +82,6 @@ const case_insensitive_map_t<unique_ptr<CatalogEntry>> &IRCSchemaSet::GetEntries
 
 void IRCSchemaSet::ClearEntries() {
 	for (auto &entry : entries) {
-		auto boop = 0;
 		auto &ic_schema_entry = entry.second.get()->Cast<IRCSchemaEntry>();
 		ic_schema_entry.ClearTableEntries();
 	}

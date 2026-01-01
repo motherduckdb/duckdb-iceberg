@@ -86,10 +86,10 @@ ROLLBACK
 statement error
 create or replace table duid (a int);
 ----
-<REGEX>:.*Not implemented Error.*DuckDB-Iceberg Replace on Conflict not supported. Please use separate Drop and Create Table statements.*
+<REGEX>:.*Not implemented Error.*CREATE OR REPLACE not supported in DuckDB-Iceberg. Please use separate Drop and Create Statements.*
 
 statement error
 create or replace schema new_schema;
 ----
-<REGEX>:.*Not implemented Error.*CREATE OR REPLACE schema not supported in DuckDB-Iceberg. Please use separate Drop and Create Schema Statements.*
+<REGEX>:.*Not implemented Error.*CREATE OR REPLACE not supported in DuckDB-Iceberg. Please use separate Drop and Create Statements.*
 

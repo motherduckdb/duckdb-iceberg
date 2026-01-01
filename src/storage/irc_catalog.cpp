@@ -104,7 +104,7 @@ optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transactio
 	optional_ptr<ClientContext> context = transaction.GetContext();
 	if (info.on_conflict == OnCreateConflict::REPLACE_ON_CONFLICT) {
 		throw NotImplementedException(
-		    "DuckDB-Iceberg Replace on Conflict not supported. Please use separate Drop and Create Schema statements");
+		    "CREATE OR REPLACE not supported in DuckDB-Iceberg. Please use separate Drop and Create Statements");
 	}
 
 	D_ASSERT(context.get() != nullptr);
