@@ -64,7 +64,7 @@ statement ok con1
 commit
 
 # con2 should not see con1 data
-query III con2
+query II con2
 select * from my_datalake.default.multi_transaction_insert;
 ----
 2	2

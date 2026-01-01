@@ -24,6 +24,10 @@ namespace duckdb {
 ICTableSet::ICTableSet(IRCSchemaEntry &schema) : schema(schema), catalog(schema.ParentCatalog()) {
 }
 
+void ICTableSet::ClearEntries() {
+	entries.clear();
+}
+
 bool ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &table) {
 	if (!table.schema_versions.empty()) {
 		return true;

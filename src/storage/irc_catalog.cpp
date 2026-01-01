@@ -45,6 +45,10 @@ void IRCatalog::ScanSchemas(ClientContext &context, std::function<void(SchemaCat
 	schemas.Scan(context, [&](CatalogEntry &schema) { callback(schema.Cast<IRCSchemaEntry>()); });
 }
 
+void IRCatalog::ClearTableEntries() {
+	schemas.ClearEntries();
+}
+
 void IRCatalog::InvalidateSchemas() {
 	schemas.ClearEntries();
 }

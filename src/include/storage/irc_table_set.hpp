@@ -23,6 +23,7 @@ public:
 	void Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback);
 	static bool CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema,
 	                           CreateTableInfo &info);
+	void ClearEntries();
 
 public:
 	void LoadEntries(ClientContext &context);

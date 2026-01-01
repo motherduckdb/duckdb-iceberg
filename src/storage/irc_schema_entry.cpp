@@ -117,6 +117,10 @@ void IRCSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {
 	deleted_table_info.InitSchemaVersions();
 }
 
+void IRCSchemaEntry::ClearTableEntries() {
+	tables.ClearEntries();
+}
+
 optional_ptr<CatalogEntry> IRCSchemaEntry::CreateFunction(CatalogTransaction transaction, CreateFunctionInfo &info) {
 	throw BinderException("Iceberg databases do not support creating functions");
 }

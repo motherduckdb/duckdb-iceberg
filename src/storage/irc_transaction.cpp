@@ -11,6 +11,8 @@
 #include "storage/table_update/iceberg_add_snapshot.hpp"
 #include "storage/table_create/iceberg_create_table_request.hpp"
 #include "catalog_utils.hpp"
+#include "yyjson.hpp"
+#include "../include/metadata/iceberg_snapshot.hpp"
 #include "../include/storage/irc_catalog.hpp"
 #include "duckdb/storage/table/update_state.hpp"
 
@@ -310,7 +312,7 @@ TableTransactionInfo IRCTransaction::GetTransactionRequest(ClientContext &contex
 
 void IRCTransaction::Commit() {
 	if (updated_tables.empty() && deleted_tables.empty()) {
-		catalog.schemas.ClearEntries();
+		catalog.ClearTableEntries();
 		return;
 	}
 
@@ -320,7 +322,7 @@ void IRCTransaction::Commit() {
 	try {
 		DoTableUpdates(*context);
 		DoTableDeletes(*context);
-		catalog.schemas.ClearEntries();
+		catalog.ClearTableEntries();
 		// TODO: after table deletes, we need to remove the entry from the catalog.schemas.entries
 	} catch (std::exception &ex) {
 		ErrorData error(ex);

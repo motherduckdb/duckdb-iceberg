@@ -22,9 +22,9 @@ optional_ptr<CatalogEntry> IRCSchemaSet::GetEntry(ClientContext &context, const 
 
 	auto &irc_transaction = IRCTransaction::Get(context, catalog);
 
-	auto verify_existence = irc_transaction.looked_up_entries.insert(name).second;
+	auto verify_existence = irc_transaction.looked_up_entries.insert(name).second || !listed;
 	auto entry = entries.find(name);
-	if (entry != entries.end()) {
+	if (entry != entries.end() && !listed) {
 		return entry->second.get();
 	}
 	if (!verify_existence) {
@@ -82,7 +82,11 @@ const case_insensitive_map_t<unique_ptr<CatalogEntry>> &IRCSchemaSet::GetEntries
 }
 
 void IRCSchemaSet::ClearEntries() {
-	entries.clear();
+	for (auto &entry : entries) {
+		auto boop = 0;
+		auto &ic_schema_entry = entry.second.get()->Cast<IRCSchemaEntry>();
+		ic_schema_entry.ClearTableEntries();
+	}
 	listed = false;
 }
 
@@ -112,6 +116,9 @@ optional_ptr<CatalogEntry> IRCSchemaSet::CreateEntryInternal(ClientContext &cont
 	auto result = entry.get();
 	if (result->name.empty()) {
 		throw InternalException("IRCSchemaSet::CreateEntry called with empty name");
+	}
+	if (entries.find(result->name) != entries.end()) {
+		entries.erase(result->name);
 	}
 	entries.insert(make_pair(result->name, std::move(entry)));
 	return result;

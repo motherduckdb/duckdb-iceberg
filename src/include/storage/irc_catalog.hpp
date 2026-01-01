@@ -63,6 +63,7 @@ public:
 		return default_schema;
 	}
 	void InvalidateSchemas();
+	void ClearTableEntries();
 
 public:
 	static unique_ptr<Catalog> Attach(optional_ptr<StorageExtensionInfo> storage_info, ClientContext &context,
