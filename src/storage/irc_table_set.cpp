@@ -230,7 +230,7 @@ optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const En
 		//  This will make it seem like a transaction is not seeing changes from other catalogs
 		return nullptr;
 	}
-	// TODO_NEW in irc_transaction, record the snapshot id of the created table.
+
 	if (!IRCAPI::VerifyTableExistence(context, ic_catalog, schema, table_name)) {
 		return nullptr;
 	}

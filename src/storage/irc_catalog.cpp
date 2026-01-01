@@ -103,8 +103,8 @@ void IRCatalog::RemoveLoadTableResult(string table_key) {
 optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transaction, CreateSchemaInfo &info) {
 	optional_ptr<ClientContext> context = transaction.GetContext();
 	if (info.on_conflict == OnCreateConflict::REPLACE_ON_CONFLICT) {
-		throw NotImplementedException("CREATE OR REPLACE schema not supported in DuckDB-Iceberg. Please use separate "
-		                              "Drop and Create Schema Statements");
+		throw NotImplementedException(
+		    "DuckDB-Iceberg Replace on Conflict not supported. Please use separate Drop and Create Schema statements");
 	}
 
 	D_ASSERT(context.get() != nullptr);

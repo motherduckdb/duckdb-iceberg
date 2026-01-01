@@ -1,14 +1,15 @@
 #include "storage/irc_schema_entry.hpp"
 
-#include "../include/storage/iceberg_table_information.hpp"
-#include "../include/storage/irc_catalog.hpp"
-#include "../include/storage/irc_transaction.hpp"
+#include "storage/iceberg_table_information.hpp"
+#include "storage/irc_catalog.hpp"
+#include "storage/irc_transaction.hpp"
 #include "storage/irc_table_entry.hpp"
 #include "storage/irc_transaction.hpp"
 #include "utils/iceberg_type.hpp"
 #include "duckdb/parser/column_list.hpp"
 #include "duckdb/parser/parsed_data/create_view_info.hpp"
 #include "duckdb/parser/parsed_data/create_index_info.hpp"
+#include "duckdb/parser/parsed_data/create_schema_info.hpp"
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
 #include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/parser/constraints/list.hpp"
@@ -20,7 +21,7 @@
 namespace duckdb {
 
 IRCSchemaEntry::IRCSchemaEntry(Catalog &catalog, CreateSchemaInfo &info)
-    : SchemaCatalogEntry(catalog, info), tables(*this) {
+    : SchemaCatalogEntry(catalog, info), namespace_items(IRCAPI::ParseSchemaName(info.schema)), tables(*this) {
 }
 
 IRCSchemaEntry::~IRCSchemaEntry() {
@@ -36,6 +37,10 @@ IRCTransaction &GetICTransaction(CatalogTransaction transaction) {
 bool IRCSchemaEntry::HandleCreateConflict(CatalogTransaction &transaction, CatalogType catalog_type,
                                           const string &entry_name, OnCreateConflict on_conflict) {
 	auto existing_entry = GetEntry(transaction, catalog_type, entry_name);
+	if (on_conflict == OnCreateConflict::REPLACE_ON_CONFLICT) {
+		throw NotImplementedException(
+		    "DuckDB-Iceberg Replace on Conflict not supported. Please use separate Drop and Create Table statements");
+	}
 	if (!existing_entry) {
 		// If there is no existing entry, make sure the entry has not been deleted in this transaction.
 		// We cannot create (or stage create) a table replace within a transaction yet.
@@ -62,12 +67,8 @@ bool IRCSchemaEntry::HandleCreateConflict(CatalogTransaction &transaction, Catal
 		// ignore - skip without throwing an error
 		return false;
 	}
-	case OnCreateConflict::REPLACE_ON_CONFLICT: {
-		throw NotImplementedException(
-		    "DuckDB-Iceberg Replace on Conflict not supported. Please use separate Drop and Create Table statements");
-	}
 	default:
-		throw InternalException("Unsupported conflict type");
+		throw InternalException("DuckDB-Iceberg, Unsupported conflict type: %s", EnumUtil::ToString(on_conflict));
 	}
 	return true;
 }

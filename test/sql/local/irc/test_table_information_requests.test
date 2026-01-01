@@ -84,7 +84,7 @@ statement ok
 begin;
 
 query I
-select count(*) > 30from (show all tables);
+select count(*) > 30 from (show all tables);
 ----
 1
 
@@ -101,13 +101,11 @@ statement ok
 commit;
 
 # 3 calls from above
-# 1 call to list namespaces
-# 1 call to list tables in default
-# 1 call to list tables in level1
+# 1 call to verify supplier
 # 1 call to GetTableInformationEndpoint for supplier
 # 1 call to the manifest list
 # 2 calls to read parquet files
 query I
 select count(*) from duckdb_logs_parsed('HTTP');
 ----
-10
+8
