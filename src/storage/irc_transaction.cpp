@@ -312,7 +312,6 @@ TableTransactionInfo IRCTransaction::GetTransactionRequest(ClientContext &contex
 
 void IRCTransaction::Commit() {
 	if (updated_tables.empty() && deleted_tables.empty()) {
-		catalog.ClearTableEntries();
 		return;
 	}
 
@@ -322,7 +321,6 @@ void IRCTransaction::Commit() {
 	try {
 		DoTableUpdates(*context);
 		DoTableDeletes(*context);
-		catalog.ClearTableEntries();
 		// TODO: after table deletes, we need to remove the entry from the catalog.schemas.entries
 	} catch (std::exception &ex) {
 		ErrorData error(ex);

@@ -39,12 +39,19 @@ ATTACH '' AS my_datalake (
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
+statement ok
+set threads=1;
+
 # Perform an INSERT and COMMIT it
 statement ok
 drop table if exists my_datalake.default.multi_transaction_insert;
 
 statement ok
 create table my_datalake.default.multi_transaction_insert (a int, b int);
+
+# make sure the table has a snapshot id to start
+statement ok
+insert into my_datalake.default.multi_transaction_insert select 0, 0;
 
 # Perform an insert into the same table from two separate transactions
 
@@ -67,6 +74,7 @@ commit
 query II con2
 select * from my_datalake.default.multi_transaction_insert;
 ----
+0	0
 2	2
 
 # The second commit failed because both transactions tried to add sequence number: 2
@@ -75,7 +83,8 @@ commit
 ----
 <REGEX>:.*Requirement failed: branch main has changed.*
 
-query III
+query II
 select * from my_datalake.default.multi_transaction_insert;
 ----
+0	0
 1	1

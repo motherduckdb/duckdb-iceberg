@@ -194,14 +194,17 @@ optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const En
 		return transaction_entry->second.GetSchemaVersion(lookup.GetAtClause());
 	}
 	// Check regular catalog Entries
-	auto entry = entries.find(table_name);
-	if (entry == entries.end()) {
-		if (!IRCAPI::VerifyTableExistence(context, ic_catalog, schema, table_name)) {
-			return nullptr;
-		}
-		auto it = entries.emplace(table_name, IcebergTableInformation(ic_catalog, schema, table_name));
-		entry = it.first;
+	// auto entry = entries.find(table_name);
+	// if (entry == entries.end()) {
+	// TODO_NEW in irc_transaction, record the snapshot id of the created table.
+	if (!IRCAPI::VerifyTableExistence(context, ic_catalog, schema, table_name)) {
+		return nullptr;
 	}
+	if (entries.find(table_name) != entries.end()) {
+		entries.erase(table_name);
+	}
+	auto it = entries.emplace(table_name, IcebergTableInformation(ic_catalog, schema, table_name));
+	auto entry = it.first;
 	FillEntry(context, entry->second);
 	return entry->second.GetSchemaVersion(lookup.GetAtClause());
 }

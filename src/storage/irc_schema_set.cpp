@@ -22,9 +22,9 @@ optional_ptr<CatalogEntry> IRCSchemaSet::GetEntry(ClientContext &context, const 
 
 	auto &irc_transaction = IRCTransaction::Get(context, catalog);
 
-	auto verify_existence = irc_transaction.looked_up_entries.insert(name).second || !listed;
+	auto verify_existence = irc_transaction.looked_up_entries.insert(name).second;
 	auto entry = entries.find(name);
-	if (entry != entries.end() && !listed) {
+	if (entry != entries.end()) {
 		return entry->second.get();
 	}
 	if (!verify_existence) {
@@ -116,9 +116,6 @@ optional_ptr<CatalogEntry> IRCSchemaSet::CreateEntryInternal(ClientContext &cont
 	auto result = entry.get();
 	if (result->name.empty()) {
 		throw InternalException("IRCSchemaSet::CreateEntry called with empty name");
-	}
-	if (entries.find(result->name) != entries.end()) {
-		entries.erase(result->name);
 	}
 	entries.insert(make_pair(result->name, std::move(entry)));
 	return result;
