@@ -19,6 +19,14 @@ struct TableTransactionInfo {
 	bool has_assert_create = false;
 };
 
+struct TableInfoCache {
+	TableInfoCache(idx_t sequence_number, idx_t snapshot_id)
+	    : sequence_number(sequence_number), snapshot_id(snapshot_id) {
+	}
+	idx_t sequence_number;
+	idx_t snapshot_id;
+};
+
 class IRCTransaction : public Transaction {
 public:
 	IRCTransaction(IRCatalog &ic_catalog, TransactionManager &manager, ClientContext &context);
@@ -59,7 +67,7 @@ public:
 	//! store the latest snapshot id, so if the table is requested again
 	//! (with no updates), we can return table information at that snapshot
 	//! while other transactions can still request up to date tables
-	case_insensitive_map_t<idx_t> requested_tables;
+	case_insensitive_map_t<TableInfoCache> requested_tables;
 
 	case_insensitive_set_t created_secrets;
 	case_insensitive_set_t looked_up_entries;

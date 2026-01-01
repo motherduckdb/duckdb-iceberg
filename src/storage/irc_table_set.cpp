@@ -4,6 +4,8 @@
 
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_table_set.hpp"
+
+#include "storage/irc_table_entry.hpp"
 #include "storage/irc_transaction.hpp"
 #include "metadata/iceberg_partition_spec.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
@@ -14,6 +16,7 @@
 #include "duckdb/parser/parsed_data/create_table_info.hpp"
 #include "storage/irc_schema_entry.hpp"
 #include "duckdb/parser/parser.hpp"
+#include "duckdb/planner/tableref/bound_at_clause.hpp"
 
 #include "storage/authorization/sigv4.hpp"
 #include "storage/iceberg_table_information.hpp"
@@ -194,8 +197,39 @@ optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const En
 		return transaction_entry->second.GetSchemaVersion(lookup.GetAtClause());
 	}
 	// Check regular catalog Entries
-	// auto entry = entries.find(table_name);
-	// if (entry == entries.end()) {
+	auto previous_requested_snapshot = irc_transaction.requested_tables.find(table_name);
+	if (previous_requested_snapshot != irc_transaction.requested_tables.end()) {
+		// transaction has already looked up this table, find it in entries
+		auto entry = entries.find(table_name);
+		if (entry != entries.end()) {
+			// if we are looking up the latest snapshot, just lookup at previously requested snapshot id
+			auto snapshot_lookup = IcebergSnapshotLookup::FromAtClause(lookup.GetAtClause());
+			// snapshot_id = -1 means table is created, but is empty. So we can return latest (or using lookup clause).
+			if (previous_requested_snapshot->second.snapshot_id == -1) {
+				auto schema_version = entry->second.GetSchemaVersion(lookup.GetAtClause());
+				auto &ic_table = schema_version->Cast<ICTableEntry>();
+				if (ic_table.table_info.table_metadata.last_sequence_number == 0) {
+					return schema_version;
+				}
+				// TODO: Figure out how to get the empty table snapshot
+				throw CatalogException("Empty table has been updated by other transaction. Please Rollback");
+			} else if (snapshot_lookup.IsLatest()) {
+				auto snapshot_id = previous_requested_snapshot->second.snapshot_id;
+				auto new_lookup = BoundAtClause("version", Value::BIGINT(snapshot_id));
+				return entry->second.GetSchemaVersion(new_lookup);
+			} else {
+				auto schema_version = entry->second.GetSchemaVersion(lookup.GetAtClause());
+				// check the sequence number. if it is higher than what has been previously looked up
+				// return an error, if lower return the schema version
+				throw InternalException("Sequence number of snapshot lookup is lower than previously requested");
+			}
+		}
+		// table no longer exists (was most likely dropped in another transaction)
+		// TODO: we can recreate the table (but not insert it in the ICTableSet) by pulling it back
+		//  out of the MetadataCache
+		//  This will make it seem like a transaction is not seeing changes from other catalogs
+		return nullptr;
+	}
 	// TODO_NEW in irc_transaction, record the snapshot id of the created table.
 	if (!IRCAPI::VerifyTableExistence(context, ic_catalog, schema, table_name)) {
 		return nullptr;
@@ -206,7 +240,23 @@ optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const En
 	auto it = entries.emplace(table_name, IcebergTableInformation(ic_catalog, schema, table_name));
 	auto entry = it.first;
 	FillEntry(context, entry->second);
-	return entry->second.GetSchemaVersion(lookup.GetAtClause());
+	auto ret = entry->second.GetSchemaVersion(lookup.GetAtClause());
+
+	// get the latest information and save it to the transaction cache
+	auto &ic_ret = ret->Cast<ICTableEntry>();
+	auto latest_snapshot = ic_ret.table_info.table_metadata.GetLatestSnapshot();
+	idx_t latest_sequence_number, latest_snapshot_id;
+	if (latest_snapshot) {
+		latest_snapshot_id = latest_snapshot->snapshot_id;
+		latest_sequence_number = latest_snapshot->sequence_number;
+	} else {
+		// table is not yet initialized.
+		latest_sequence_number = 0;
+		latest_snapshot_id = -1;
+	}
+
+	irc_transaction.requested_tables.emplace(table_name, TableInfoCache(latest_sequence_number, latest_snapshot_id));
+	return ret;
 }
 
 } // namespace duckdb
