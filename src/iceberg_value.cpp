@@ -262,10 +262,13 @@ std::string truncate_and_increment_utf8(const std::string &input) {
 		// skip continuation bytes
 		--i;
 	}
-	bytes[i]++;
-	// make sure the buffer is still valid UTF-8
-	if (!Utf8Proc::IsValid(reinterpret_cast<const char *>(bytes.data()), bytes.size())) {
-		bytes[i]--;
+	// if size > 16 increment the last byte so that the upper bound will be higher than the string
+	if (n > 16) {
+		bytes[i]++;
+		// make sure the buffer is still valid UTF-8
+		if (!Utf8Proc::IsValid(reinterpret_cast<const char *>(bytes.data()), bytes.size())) {
+			bytes[i]--;
+		}
 	}
 
 	// Convert back to string
