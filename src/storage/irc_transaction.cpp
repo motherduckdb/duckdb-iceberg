@@ -362,22 +362,6 @@ void IRCTransaction::DoTableUpdates(ClientContext &context) {
 				                          table_change.identifier.name, transaction_json);
 			}
 		}
-		// remove table from entries and cache
-		// for (auto &table : updated_tables) {
-		// 	auto schema_key = table.second.schema.name;
-		// 	auto table_key = table.second.GetTableKey();
-		// 	auto table_name = table.second.name;
-		// 	catalog.RemoveLoadTableResult(table_key);
-		// 	// remove the entry from the loaded schemas.
-		// 	if (catalog.schemas.entries.find(schema_key) != catalog.schemas.entries.end()) {
-		// 		auto &schema_entry = catalog.schemas.entries.at(schema_key);
-		// 		auto &ic_table_entry = schema_entry->Cast<IRCSchemaEntry>();
-		// 		if (ic_table_entry.tables.entries.find(table_name) != ic_table_entry.tables.entries.end()) {
-		// 			auto &table_entry = ic_table_entry.tables.entries.at(table_name);
-		// 			ic_table_entry.tables.entries.erase(table_name);
-		// 		}
-		// 	}
-		// }
 		updated_tables.clear();
 		DropSecrets(context);
 	}
