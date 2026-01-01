@@ -252,6 +252,7 @@ DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const Log
 std::string truncate_and_increment_utf8(const std::string &input) {
 	std::vector<unsigned char> bytes(input.begin(), input.end());
 	// Truncate to first 16 bytes
+	idx_t original_size = bytes.size();
 	idx_t n = std::min<size_t>(16, bytes.size());
 	if (n == 0) {
 		return std::string(bytes.begin(), bytes.end());
@@ -263,7 +264,7 @@ std::string truncate_and_increment_utf8(const std::string &input) {
 		--i;
 	}
 	// if size > 16 increment the last byte so that the upper bound will be higher than the string
-	if (n > 16) {
+	if (original_size > 16) {
 		bytes[i]++;
 		// make sure the buffer is still valid UTF-8
 		if (!Utf8Proc::IsValid(reinterpret_cast<const char *>(bytes.data()), bytes.size())) {
