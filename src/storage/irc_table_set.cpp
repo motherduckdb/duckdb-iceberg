@@ -21,8 +21,6 @@
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/planner/tableref/bound_at_clause.hpp"
 
-
-
 namespace duckdb {
 
 ICTableSet::ICTableSet(IRCSchemaEntry &schema) : schema(schema), catalog(schema.ParentCatalog()) {
@@ -149,7 +147,7 @@ bool ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 	if (catalog.attach_options.supports_stage_create) {
 		table_info.AddAssertCreate(irc_transaction);
 	}
-	// updates more updates to the table
+	// other required updates to the table
 	table_info.AddAssignUUID(irc_transaction);
 	table_info.AddUpradeFormatVersion(irc_transaction);
 	table_info.AddSchema(irc_transaction);
