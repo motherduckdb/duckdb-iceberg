@@ -385,7 +385,7 @@ string IcebergTableMetadata::GetMetadataPath() const {
 	if (metadata_path != table_properties.end()) {
 		return metadata_path->second;
 	}
-	return location + "/metdata";
+	return location + "/metadata";
 }
 
 string IcebergTableMetadata::GetTableProperty(string property_string) const {

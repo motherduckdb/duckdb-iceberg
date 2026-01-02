@@ -4,23 +4,24 @@
 
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_table_set.hpp"
-
 #include "storage/irc_table_entry.hpp"
 #include "storage/irc_transaction.hpp"
+#include "storage/authorization/sigv4.hpp"
+#include "storage/iceberg_table_information.hpp"
+#include "storage/authorization/oauth2.hpp"
+#include "storage/irc_schema_entry.hpp"
 #include "metadata/iceberg_partition_spec.hpp"
+
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
 #include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/common/enums/http_status_code.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
 #include "duckdb/parser/parsed_data/create_table_info.hpp"
-#include "storage/irc_schema_entry.hpp"
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/planner/tableref/bound_at_clause.hpp"
 
-#include "storage/authorization/sigv4.hpp"
-#include "storage/iceberg_table_information.hpp"
-#include "storage/authorization/oauth2.hpp"
+
 
 namespace duckdb {
 
@@ -124,11 +125,7 @@ bool ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 	auto &irc_transaction = IRCTransaction::Get(context, catalog);
 
 	auto key = IcebergTableInformation::GetTableKey(schema.namespace_items, info.table);
-	if (catalog.attach_options.supports_stage_create) {
-		irc_transaction.updated_tables.emplace(key, IcebergTableInformation(catalog, schema, info.table));
-	} else {
-		throw InternalException("Need to fix case of stage create");
-	}
+	irc_transaction.updated_tables.emplace(key, IcebergTableInformation(catalog, schema, info.table));
 	auto &table_info = irc_transaction.updated_tables.find(key)->second;
 	auto table_entry = make_uniq<ICTableEntry>(table_info, catalog, schema, info);
 	auto table_ptr = table_entry.get();
@@ -148,20 +145,20 @@ bool ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 	table_ptr->table_info.table_metadata =
 	    IcebergTableMetadata::FromTableMetadata(cached_table_result.load_table_result->metadata);
 
+	// if we stage created the table, we add an assert create
 	if (catalog.attach_options.supports_stage_create) {
-		// We have a response from the server for a stage create, we need to also send a number of table
-		// updates to finalize creation of the table.
 		table_info.AddAssertCreate(irc_transaction);
-		table_info.AddAssignUUID(irc_transaction);
-		table_info.AddUpradeFormatVersion(irc_transaction);
-		table_info.AddSchema(irc_transaction);
-		table_info.AddSetCurrentSchema(irc_transaction);
-		table_info.AddPartitionSpec(irc_transaction);
-		table_info.SetDefaultSpec(irc_transaction);
-		table_info.AddSortOrder(irc_transaction);
-		table_info.SetDefaultSortOrder(irc_transaction);
-		table_info.SetLocation(irc_transaction);
 	}
+	// updates more updates to the table
+	table_info.AddAssignUUID(irc_transaction);
+	table_info.AddUpradeFormatVersion(irc_transaction);
+	table_info.AddSchema(irc_transaction);
+	table_info.AddSetCurrentSchema(irc_transaction);
+	table_info.AddPartitionSpec(irc_transaction);
+	table_info.SetDefaultSpec(irc_transaction);
+	table_info.AddSortOrder(irc_transaction);
+	table_info.SetDefaultSortOrder(irc_transaction);
+	table_info.SetLocation(irc_transaction);
 	return true;
 }
 
