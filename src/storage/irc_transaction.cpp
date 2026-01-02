@@ -12,8 +12,8 @@
 #include "storage/table_create/iceberg_create_table_request.hpp"
 #include "catalog_utils.hpp"
 #include "yyjson.hpp"
-#include "../include/metadata/iceberg_snapshot.hpp"
-#include "../include/storage/irc_catalog.hpp"
+#include "metadata/iceberg_snapshot.hpp"
+#include "storage/irc_catalog.hpp"
 #include "duckdb/storage/table/update_state.hpp"
 
 namespace duckdb {
@@ -321,7 +321,6 @@ void IRCTransaction::Commit() {
 	try {
 		DoTableUpdates(*context);
 		DoTableDeletes(*context);
-		// TODO: after table deletes, we need to remove the entry from the catalog.schemas.entries
 	} catch (std::exception &ex) {
 		ErrorData error(ex);
 		CleanupFiles();
@@ -377,15 +376,6 @@ void IRCTransaction::DoTableDeletes(ClientContext &context) {
 		IRCAPI::CommitTableDelete(context, catalog, table.schema.namespace_items, table.name);
 		// remove the load table result
 		ic_catalog.RemoveLoadTableResult(table_key);
-		// remove the entry from the loaded schemas.
-		// if (ic_catalog.schemas.entries.find(schema_key) != ic_catalog.schemas.entries.end()) {
-		// 	auto &schema_entry = ic_catalog.schemas.entries.at(schema_key);
-		// 	auto &ic_table_entry = schema_entry->Cast<IRCSchemaEntry>();
-		// 	if (ic_table_entry.tables.entries.find(table_name) != ic_table_entry.tables.entries.end()) {
-		// 		auto &table_entry = ic_table_entry.tables.entries.at(table_name);
-		// 		ic_table_entry.tables.entries.erase(table_name);
-		// 	}
-		// }
 	}
 }
 

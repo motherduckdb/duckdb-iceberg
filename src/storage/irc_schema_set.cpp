@@ -54,9 +54,6 @@ void IRCSchemaSet::Scan(ClientContext &context, const std::function<void(Catalog
 	for (auto &entry : entries) {
 		callback(*entry.second);
 	}
-	// By getting the IRC transaction here we initialize it, which will
-	// allow us to clear the entries at the end of a transaction
-	auto &irc_transaction = IRCTransaction::Get(context, catalog);
 }
 
 void IRCSchemaSet::AddEntry(string name, unique_ptr<IRCSchemaEntry> entry) {
@@ -64,11 +61,11 @@ void IRCSchemaSet::AddEntry(string name, unique_ptr<IRCSchemaEntry> entry) {
 }
 
 CatalogEntry &IRCSchemaSet::GetEntry(const string &name) {
-	auto exists = entries.find(name) != entries.end();
-	if (!exists) {
+	auto entry_it = entries.find(name);
+	if (entry_it == entries.end()) {
 		throw CatalogException("Schema '%s' does not exist", name);
 	}
-	auto &entry = entries.find(name)->second;
+	auto &entry = entry_it->second;
 	return *entry;
 }
 

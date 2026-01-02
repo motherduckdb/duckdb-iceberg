@@ -123,15 +123,6 @@ bool ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCS
 	auto table_name = info.table;
 	auto &irc_transaction = IRCTransaction::Get(context, catalog);
 
-	bool table_deleted_in_transaction = false;
-	// FIXME: come back to this
-	// for (auto &deleted_entry : irc_transaction.deleted_tables) {
-	// 	if (deleted_entry->second.name == table_name) {
-	// 		table_deleted_in_transaction = true;
-	// 		break;
-	// 	}
-	// }
-
 	auto key = IcebergTableInformation::GetTableKey(schema.namespace_items, info.table);
 	if (catalog.attach_options.supports_stage_create) {
 		irc_transaction.updated_tables.emplace(key, IcebergTableInformation(catalog, schema, info.table));

@@ -108,7 +108,7 @@ string IcebergUtils::GetStorageLocation(ClientContext &context, const string &in
 			}
 			auto &table_entry = catalog_entry->Cast<ICTableEntry>();
 			storage_location = table_entry.table_info.table_metadata.GetLatestMetadataLocation();
-			// Prepare Iceberg Scan from entry will create the secret
+			// Prepare Iceberg Scan from entry will create the secret needed to access the table
 			table_entry.PrepareIcebergScanFromEntry(context);
 			break;
 		}

@@ -113,14 +113,7 @@ void AddPartitionSpec::CreateUpdate(DatabaseInstance &db, ClientContext &context
 	req.add_partition_spec_update.spec.spec_id = table_info.table_metadata.default_spec_id;
 	idx_t partition_spec_id = req.add_partition_spec_update.spec.spec_id;
 	if (table_info.table_metadata.HasPartitionSpec()) {
-		auto &table_partition_specs = table_info.table_metadata.GetPartitionSpecs();
 		auto &current_partition_spec = table_info.table_metadata.GetLatestPartitionSpec();
-		// for (auto &partition_spec : table_partition_specs) {
-		// 	if (partition_spec.first == partition_spec_id) {
-		// 		*current_partition_spec = partition_spec.second;
-		// 		break;
-		// 	}
-		// }
 		for (auto &field : current_partition_spec.fields) {
 			req.add_partition_spec_update.spec.fields.push_back(rest_api_objects::PartitionField());
 			auto &updated_field = req.add_partition_spec_update.spec.fields.back();
@@ -145,20 +138,12 @@ void AddSortOrder::CreateUpdate(DatabaseInstance &db, ClientContext &context, Ic
 	req.add_sort_order_update.action = "add-sort-order";
 	if (table_info.table_metadata.HasSortOrder()) {
 		req.add_sort_order_update.sort_order.order_id = table_info.table_metadata.default_sort_order_id.GetIndex();
-		// sort_order_id = req.add_sort_order_update.sort_order.order_id;
 	}
 
 	if (table_info.table_metadata.HasSortOrder()) {
 		auto &table_sort_orders = table_info.table_metadata.GetSortOrderSpecs();
 		// FIXME: is it correct to just get the latest sort order?
 		auto &current_sort_order = table_info.table_metadata.GetLatestSortOrder();
-		// IcebergSortOrder current_sort_order;
-		// for (auto &sort_order : table_sort_orders) {
-		// 	if (sort_order.first == sort_order_id) {
-		// 		current_sort_order = sort_order.second;
-		// 		break;
-		// 	}
-		// }
 		for (auto &field : current_sort_order.fields) {
 			req.add_sort_order_update.sort_order.fields.push_back(rest_api_objects::SortField());
 			auto &updated_field = req.add_sort_order_update.sort_order.fields.back();

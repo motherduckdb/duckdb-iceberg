@@ -86,7 +86,6 @@ optional_ptr<CatalogEntry> IRCSchemaEntry::CreateTable(CatalogTransaction &trans
 	if (!ICTableSet::CreateNewEntry(context, ir_catalog, *this, base_info)) {
 		throw InternalException("We should not be here");
 	}
-	// TODO: add this not to new tables, but to updated tables.
 	auto table_key = IcebergTableInformation::GetTableKey(namespace_items, base_info.table);
 	auto entry = irc_transaction.updated_tables.find(table_key);
 	return entry->second.schema_versions[0].get();

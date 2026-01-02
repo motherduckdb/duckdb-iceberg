@@ -1,9 +1,8 @@
 #include "storage/iceberg_table_information.hpp"
 
-#include "../include/catalog_api.hpp"
+#include "catalog_api.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "duckdb/common/string_util.hpp"
-#include "fmt/format.h"
 #include "storage/irc_transaction.hpp"
 #include "storage/iceberg_transaction_data.hpp"
 #include "storage/irc_schema_entry.hpp"
@@ -380,8 +379,6 @@ void IcebergTableInformation::SetLocation(IRCTransaction &transaction) {
 
 bool IcebergTableInformation::IsTransactionLocalTable(IRCTransaction &transaction) {
 	for (auto &tbl : transaction.updated_tables) {
-		auto wat = tbl.first;
-		auto key = GetTableKey();
 		if (tbl.first == GetTableKey()) {
 			return true;
 		}
