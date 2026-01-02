@@ -3,7 +3,6 @@
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
 
-#include "fstream"
 #include "iceberg_utils.hpp"
 #include "storage/irc_table_entry.hpp"
 #include "storage/iceberg_table_information.hpp"

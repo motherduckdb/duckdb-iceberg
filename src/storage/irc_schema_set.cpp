@@ -1,13 +1,9 @@
-#include "../include/storage/irc_schema_set.hpp"
-
 #include "catalog_api.hpp"
 #include "duckdb/parser/parsed_data/create_schema_info.hpp"
 #include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/catalog/catalog.hpp"
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_schema_set.hpp"
-
-#include "../include/storage/irc_transaction.hpp"
 #include "storage/irc_transaction.hpp"
 
 namespace duckdb {

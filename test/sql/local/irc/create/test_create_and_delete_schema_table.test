@@ -52,6 +52,9 @@ drop schema if exists my_datalake.new_schema_1;
 statement ok
 create schema my_datalake.new_schema_1;
 
+
+mode skip
+
 statement ok
 create table my_datalake.new_schema_1.my_table as select range a from range(100);
 

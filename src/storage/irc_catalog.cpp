@@ -107,7 +107,7 @@ optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transactio
 		    "CREATE OR REPLACE not supported in DuckDB-Iceberg. Please use separate Drop and Create Statements");
 	}
 
-	D_ASSERT(context.get() != nullptr);
+	D_ASSERT(context);
 	rest_api_objects::CreateNamespaceRequest request;
 	request.has_properties = false;
 	auto namespace_identifiers = IRCAPI::ParseSchemaName(info.schema);
@@ -134,9 +134,10 @@ optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transactio
 		}
 	}
 
-	IRCAPI::CommitNamespaceCreate(*context.get(), *this, create_body);
+	IRCAPI::CommitNamespaceCreate(*context, *this, create_body);
 	auto new_schema = make_uniq<IRCSchemaEntry>(*this, info);
-	schemas.AddEntry(new_schema->name, std::move(new_schema));
+	auto schema_name = new_schema->name;
+	schemas.AddEntry(schema_name, std::move(new_schema));
 	auto &ret = schemas.GetEntry(info.schema);
 	return ret;
 }
