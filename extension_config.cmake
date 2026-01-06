@@ -16,7 +16,6 @@ duckdb_extension_load(iceberg
 if (NOT EMSCRIPTEN)
 duckdb_extension_load(tpch)
 duckdb_extension_load(icu)
-
 #duckdb_extension_load(ducklake
 #        LOAD_TESTS
 #        GIT_URL https://github.com/duckdb/ducklake
