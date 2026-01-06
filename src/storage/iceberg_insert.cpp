@@ -199,7 +199,8 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 			// go through stats and add upper and lower bounds
 			// Do serialization of values here in case we read transaction updates
 			if (stats.has_min) {
-				auto serialized_value = IcebergValue::SerializeValue(stats.min, column_info->type);
+				auto serialized_value =
+				    IcebergValue::SerializeValue(stats.min, column_info->type, SerializeBound::LOWER_BOUND);
 				if (serialized_value.HasError()) {
 					throw InvalidConfigurationException(serialized_value.GetError());
 				} else if (serialized_value.HasValue()) {
@@ -207,7 +208,8 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 				}
 			}
 			if (stats.has_max) {
-				auto serialized_value = IcebergValue::SerializeValue(stats.max, column_info->type);
+				auto serialized_value =
+				    IcebergValue::SerializeValue(stats.max, column_info->type, SerializeBound::UPPER_BOUND);
 				if (serialized_value.HasError()) {
 					throw InvalidConfigurationException(serialized_value.GetError());
 				} else if (serialized_value.HasValue()) {

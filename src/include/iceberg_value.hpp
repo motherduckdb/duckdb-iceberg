@@ -7,6 +7,11 @@
 
 namespace duckdb {
 
+enum class SerializeBound : uint8_t {
+	LOWER_BOUND = 0,
+	UPPER_BOUND = 1,
+};
+
 struct DeserializeResult {
 public:
 	DeserializeResult(Value &&val) : value(std::move(val)) {
@@ -70,11 +75,14 @@ public:
 
 struct IcebergValue {
 public:
+	static constexpr idx_t MAX_STRING_UPPERBOUND_LENGTH = 16;
 	IcebergValue() = delete;
 
 public:
 	static DeserializeResult DeserializeValue(const string_t &blob, const LogicalType &target);
-	static SerializeResult SerializeValue(Value input_value, LogicalType &column_type);
+	static SerializeResult SerializeValue(Value input_value, LogicalType &column_type, SerializeBound bound_type);
+	static string TruncateString(const string &input);
+	static string TruncateAndIncrementString(const string &input);
 };
 
 } // namespace duckdb

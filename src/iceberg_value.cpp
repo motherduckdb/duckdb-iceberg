@@ -3,6 +3,7 @@
 #include "duckdb/common/helper.hpp"
 #include "duckdb/common/types/uuid.hpp"
 #include "duckdb/common/bswap.hpp"
+#include "duckdb/common/exception/conversion_exception.hpp"
 #include "duckdb/common/types/date.hpp"
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/common/types/value.hpp"
@@ -249,28 +250,48 @@ DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const Log
 	return DeserializeError(blob, type);
 }
 
-std::string truncate_and_increment_utf8(const std::string &input) {
+const idx_t IcebergValue::MAX_STRING_UPPERBOUND_LENGTH;
+
+string IcebergValue::TruncateString(const string &input) {
 	std::vector<unsigned char> bytes(input.begin(), input.end());
-	// Truncate to first 16 bytes
-	idx_t n = std::min<size_t>(16, bytes.size());
-	if (n == 0) {
-		return std::string(bytes.begin(), bytes.end());
-	}
-	bytes.resize(n);
-	idx_t i = n - 1;
-	while (((bytes[i] & 0xC0) == 0x80) && i > 0) {
-		// skip continuation bytes
-		--i;
-	}
-	// if size > 16 increment the last byte so that the upper bound will be higher than the string
-	if (n > 16) {
-		bytes[i]++;
-		// make sure the buffer is still valid UTF-8
-		if (!Utf8Proc::IsValid(reinterpret_cast<const char *>(bytes.data()), bytes.size())) {
+	idx_t truncated_length = std::min<idx_t>(IcebergValue::MAX_STRING_UPPERBOUND_LENGTH, bytes.size());
+	bytes.resize(truncated_length);
+	return std::string(bytes.begin(), bytes.end());
+}
+
+string IcebergValue::TruncateAndIncrementString(const string &input) {
+	idx_t original_input_size = input.size();
+	std::vector<unsigned char> bytes(input.begin(), input.end());
+	idx_t truncated_length = std::min<idx_t>(IcebergValue::MAX_STRING_UPPERBOUND_LENGTH, bytes.size());
+	while (truncated_length > 0) {
+		// Truncate to first 16 bytes
+		bytes.resize(truncated_length);
+		idx_t i = truncated_length - 1;
+		while (((bytes[i] & 0xC0) == 0x80) && i > 0) {
+			// skip continuation bytes
+			--i;
+		}
+		// if size > max_upper_bound increment the last non-continuation byte so that the upper bound will be higher
+		// than the string
+		if (original_input_size > IcebergValue::MAX_STRING_UPPERBOUND_LENGTH) {
+			bytes[i]++;
+			// make sure the buffer is still valid UTF-8
+			if (Utf8Proc::IsValid(reinterpret_cast<const char *>(bytes.data()), bytes.size())) {
+				break;
+			}
+			// revert last byte
 			bytes[i]--;
+			// decrease truncated length, try again until we can truncate and increase the
+			// last byte and keep valid utf8 characteristics
+			truncated_length--;
 		}
 	}
-
+	if (truncated_length == 0 && original_input_size > 0) {
+		throw ConversionException("Could not write upper bounds for string column");
+	}
+	if (truncated_length == 0) {
+		bytes.resize(0);
+	}
 	// Convert back to string
 	return std::string(bytes.begin(), bytes.end());
 }
@@ -287,7 +308,7 @@ std::vector<uint8_t> HexStringToBytes(const std::string &hex) {
 	return bytes;
 }
 
-SerializeResult IcebergValue::SerializeValue(Value input_value, LogicalType &column_type) {
+SerializeResult IcebergValue::SerializeValue(Value input_value, LogicalType &column_type, SerializeBound bound_type) {
 	switch (column_type.id()) {
 	case LogicalTypeId::INTEGER: {
 		// get const data ptr for the string value
@@ -311,7 +332,14 @@ SerializeResult IcebergValue::SerializeValue(Value input_value, LogicalType &col
 	}
 	case LogicalTypeId::VARCHAR: {
 		// get const data ptr for the string value
-		string val = truncate_and_increment_utf8(input_value.GetValue<string>());
+		string val;
+		if (bound_type == SerializeBound::UPPER_BOUND) {
+			// if we are serializing upper bound, we must truncate and increment
+			val = IcebergValue::TruncateAndIncrementString(input_value.GetValue<string>());
+		} else {
+			// for lower bound truncating is enough
+			val = IcebergValue::TruncateString(input_value.GetValue<string>());
+		}
 		// create blob value of int32
 		// const_data_ptr_t string_data = reinterpret_cast<const_data_ptr_t>(&val);
 		auto serialized_val = Value::BLOB(reinterpret_cast<const_data_ptr_t>(val.data()), val.size());
