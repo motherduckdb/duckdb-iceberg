@@ -15,11 +15,11 @@ require httpfs
 # Do not ignore 'HTTP' error messages!
 set ignore_error_messages
 
-# statement ok
-# CALL enable_logging('HTTP');
-#
-# statement ok
-# set logging_level='debug'
+statement ok
+CALL enable_logging('HTTP');
+
+statement ok
+set logging_level='debug'
 
 statement ok
 CREATE SECRET (

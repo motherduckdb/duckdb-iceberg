@@ -12,11 +12,8 @@ require iceberg
 
 require httpfs
 
-statement ok
-set threads=1;
-
-# Do not ignore 'HTTP' error messages!
-# set ignore_error_messages
+Do not ignore 'HTTP' error messages!
+set ignore_error_messages
 
 statement ok
 CALL enable_logging('HTTP');
