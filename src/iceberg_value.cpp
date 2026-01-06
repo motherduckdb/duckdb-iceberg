@@ -271,8 +271,8 @@ string IcebergValue::TruncateAndIncrementString(const string &input) {
 			// skip continuation bytes
 			--i;
 		}
-		// if size > max_upper_bound increment the last non-continuation byte so that the upper bound will be higher
-		// than the string
+		// if original string size > max_upper_bound increment the last non-continuation byte
+		// so that the upper bound will be higher than the string
 		if (original_input_size > IcebergValue::MAX_STRING_UPPERBOUND_LENGTH) {
 			bytes[i]++;
 			// make sure the buffer is still valid UTF-8
