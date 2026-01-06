@@ -14,10 +14,10 @@ concurrency:
 jobs:
   duckdb-stable-build:
     name: Build extension binaries
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.4.3
     with:
       extension_name: iceberg
-      duckdb_version: 9fffe278189182bc4538dfe99e4c885d3d45db27
+      duckdb_version: 60a92c869361bdcfa927415dca178df4f274bb90
       ci_tools_version: main
       exclude_archs: 'windows_amd64_mingw;wasm_mvp;wasm_eh;wasm_threads'
       extra_toolchains: 'python3'
@@ -25,11 +25,11 @@ jobs:
   duckdb-stable-deploy:
     name: Deploy extension binaries
     needs: duckdb-stable-build
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_deploy.yml@main
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_deploy.yml@v1.4.3
     secrets: inherit
     with:
       extension_name: iceberg
-      duckdb_version: 9fffe278189182bc4538dfe99e4c885d3d45db27
+      duckdb_version: 60a92c869361bdcfa927415dca178df4f274bb90
       ci_tools_version: main
       exclude_archs: 'windows_amd64_mingw;wasm_mvp;wasm_eh;wasm_threads'
       deploy_latest: ${{ startsWith(github.ref, 'refs/heads/v') || github.ref == 'refs/heads/main' }}
