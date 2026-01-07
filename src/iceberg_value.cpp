@@ -266,25 +266,28 @@ string IcebergValue::TruncateAndIncrementString(const string &input) {
 	while (truncated_length > 0) {
 		// Truncate to first 16 bytes
 		bytes.resize(truncated_length);
+		// if the original string is less than our length upperbound, return the string as is.
+		if (original_input_size <= IcebergValue::MAX_STRING_UPPERBOUND_LENGTH) {
+			break;
+		}
+		// if original string size > max_upper_bound increment the last non-continuation byte
+		// so that the upper bound will be higher than the string
 		idx_t i = truncated_length - 1;
 		while (((bytes[i] & 0xC0) == 0x80) && i > 0) {
 			// skip continuation bytes
 			--i;
 		}
-		// if original string size > max_upper_bound increment the last non-continuation byte
-		// so that the upper bound will be higher than the string
-		if (original_input_size > IcebergValue::MAX_STRING_UPPERBOUND_LENGTH) {
-			bytes[i]++;
-			// make sure the buffer is still valid UTF-8
-			if (Utf8Proc::IsValid(reinterpret_cast<const char *>(bytes.data()), bytes.size())) {
-				break;
-			}
-			// revert last byte
-			bytes[i]--;
-			// decrease truncated length, try again until we can truncate and increase the
-			// last byte and keep valid utf8 characteristics
-			truncated_length--;
+		bytes[i]++;
+		// make sure the buffer is still valid UTF-8
+		if (Utf8Proc::IsValid(reinterpret_cast<const char *>(bytes.data()), bytes.size())) {
+			// it is! we can return bytes as the current string
+			break;
 		}
+		// revert last byte
+		bytes[i]--;
+		// decrease truncated length until we can truncate and increase the
+		// last byte and keep valid utf8 characteristics
+		truncated_length--;
 	}
 	if (truncated_length == 0 && original_input_size > 0) {
 		throw ConversionException("Could not write upper bounds for string column");
