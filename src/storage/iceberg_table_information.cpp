@@ -169,8 +169,8 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 	}
 
 	// Detect storage type from metadata location
-	const auto &metadata_location = table_metadata.GetMetadataPath();
-	string storage_type = DetectStorageType(metadata_location);
+	const auto &table_location = table_metadata.GetLocation();
+	string storage_type = DetectStorageType(table_location);
 
 	// Mapping from config key to a duckdb secret option
 	case_insensitive_map_t<Value> config_options;
@@ -189,7 +189,7 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 		auto &storage_credentials = load_table_result->storage_credentials;
 
 		//! If there is only one credential listed, we don't really care about the prefix,
-		//! we can use the metadata_location instead.
+		//! we can use the table_location instead.
 		const bool ignore_credential_prefix = storage_credentials.size() == 1;
 		for (idx_t index = 0; index < storage_credentials.size(); index++) {
 			auto &credential = storage_credentials[index];
@@ -197,7 +197,7 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 			create_secret_input.on_conflict = OnCreateConflict::REPLACE_ON_CONFLICT;
 			create_secret_input.persist_type = SecretPersistType::TEMPORARY;
 
-			create_secret_input.scope.push_back(ignore_credential_prefix ? metadata_location : credential.prefix);
+			create_secret_input.scope.push_back(ignore_credential_prefix ? table_location : credential.prefix);
 			create_secret_input.name = StringUtil::Format("%s_%d_%s", secret_base_name, index, credential.prefix);
 
 			create_secret_input.type = storage_type;
