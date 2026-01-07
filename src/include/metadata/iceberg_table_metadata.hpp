@@ -59,7 +59,7 @@ public:
 	optional_ptr<IcebergSnapshot> GetSnapshot(const IcebergSnapshotLookup &lookup);
 
 	//! Get the data and metadata paths, falling back to default if not set
-	string GetLatestMetadataLocation() const;
+	string GetLatestMetadataJson() const;
 	string GetLocation() const;
 	string GetDataPath() const;
 	string GetMetadataPath() const;
@@ -74,7 +74,8 @@ public:
 
 public:
 	string table_uuid;
-	string latest_metadata_location;
+	// when loading table metadata, store the path to the metadata.json for extension functions like iceberg_metadata()
+	string latest_metadata_json;
 	string location;
 
 	int32_t iceberg_version;

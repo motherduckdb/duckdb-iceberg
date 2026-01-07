@@ -179,7 +179,6 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 	auto key = IRCAPI::GetEncodedSchemaName(schema.namespace_items) + "." + name;
 	auto &cached_value = catalog.GetLoadTableResult(key);
 	auto &load_table_result = cached_value.load_table_result;
-	// TODO: parse config from IcebergTableMetadata
 	if (load_table_result->has_config) {
 		auto &config = load_table_result->config;
 		ParseConfigOptions(config, config_options, storage_type);

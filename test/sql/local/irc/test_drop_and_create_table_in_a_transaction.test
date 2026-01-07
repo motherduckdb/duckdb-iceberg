@@ -35,9 +35,6 @@ ATTACH '' AS my_datalake (
 );
 
 statement ok
-set threads=1;
-
-statement ok
 use my_datalake.default;
 
 statement ok
@@ -78,7 +75,7 @@ drop table if exists duid;
 statement error
 create table duid as select range a from range(10);
 ----
-Not implemented Error: Cannot create table deleted within a transaction: my_datalake.default.duid
+<REGEX>:.*Not implemented Error: Cannot create table deleted within a transaction: my_datalake.default.duid.*
 
 statement ok
 ROLLBACK

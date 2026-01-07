@@ -289,7 +289,7 @@ rest_api_objects::TableMetadata IcebergTableMetadata::Parse(const string &path, 
 IcebergTableMetadata
 IcebergTableMetadata::FromLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result) {
 	auto res = FromTableMetadata(load_table_result.metadata);
-	res.latest_metadata_location = load_table_result.metadata_location;
+	res.latest_metadata_json = load_table_result.metadata_location;
 	return res;
 }
 
@@ -361,8 +361,8 @@ const case_insensitive_map_t<string> &IcebergTableMetadata::GetTableProperties()
 	return table_properties;
 }
 
-string IcebergTableMetadata::GetLatestMetadataLocation() const {
-	return latest_metadata_location;
+string IcebergTableMetadata::GetLatestMetadataJson() const {
+	return latest_metadata_json;
 }
 
 string IcebergTableMetadata::GetLocation() const {
