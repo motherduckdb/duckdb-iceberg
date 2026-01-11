@@ -359,6 +359,9 @@ SerializeResult IcebergValue::SerializeValue(Value input_value, LogicalType &col
 	}
 	case LogicalTypeId::DATE: {
 		date_t val = input_value.GetValue<date_t>();
+		if (val == date_t::infinity() || val == date_t::ninfinity()) {
+			throw ConversionException("Cannot write infinity/-infinity for date type");
+		}
 		int32_t epoch_days = Date::EpochDays(val);
 		auto serialized_const_data_ptr = const_data_ptr_cast<int32_t>(&epoch_days);
 		// create blob value of int32
@@ -368,6 +371,9 @@ SerializeResult IcebergValue::SerializeValue(Value input_value, LogicalType &col
 	}
 	case LogicalTypeId::TIMESTAMP: {
 		timestamp_t val = input_value.GetValue<timestamp_t>();
+		if (val == timestamp_t::infinity() || val == timestamp_t::ninfinity()) {
+			throw ConversionException("Cannot write infinity/-infinity for timestamp type");
+		}
 		int64_t micros_since_epoch = val.value;
 		auto serialized_const_data_ptr = const_data_ptr_cast<int64_t>(&micros_since_epoch);
 		// create blob value of int32
@@ -377,6 +383,9 @@ SerializeResult IcebergValue::SerializeValue(Value input_value, LogicalType &col
 	}
 	case LogicalTypeId::TIMESTAMP_TZ: {
 		timestamp_tz_t val = input_value.GetValue<timestamp_tz_t>();
+		if (val == timestamp_tz_t::infinity() || val == timestamp_tz_t::ninfinity()) {
+			throw ConversionException("Cannot write infinity/-infinity for date type");
+		}
 		// Get the timestamp component (microseconds since epoch in UTC)
 		int64_t micros_since_epoch = val.value;
 		auto serialized_const_data_ptr = const_data_ptr_cast<int64_t>(&micros_since_epoch);

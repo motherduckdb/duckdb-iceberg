@@ -47,37 +47,43 @@ ATTACH '' AS my_datalake (
 );
 
 statement ok
-drop table if exists my_datalake.default.test_time_types_upper_lower_bounds;
-
-statement ok
 create schema if not exists my_datalake.default;
 
 statement ok
-create table my_datalake.default.test_time_types_upper_lower_bounds (
-date_type DATE,
-timestamp_type TIMESTAMP,
-timestamptz_type TIMESTAMPTZ
-);
+drop table if exists my_datalake.default.test_time_types_upper_lower_bounds;
+
+# statement error
+# create table my_datalake.default.test_date_inf as select DATE 'infinity' date_type;
+# ----
+# <REGEX>:.*Conversion Error.*
+#
+# statement error
+# create table my_datalake.default.test_date_ninf as select DATE '-infinity' date_type;
+# ----
+# <REGEX>:.*Conversion Error.*
+#
+# statement error
+# create table my_datalake.default.test_timestamp_inf as select TIMESTAMP 'infinity'  timestamp_type;
+# ----
+# <REGEX>:.*Conversion Error.*
+#
+# statement error
+# create table my_datalake.default.test_dtimestampninf as select TIMESTAMP '-infinity' timestamp_type;
+# ----
+# <REGEX>:.*Conversion Error.*
+#
+# statement error
+# create table my_datalake.default.test_timestamp_tz_inf as select TIMESTAMPTZ 'infinity' timestamptz_type;
+# ----
+# <REGEX>:.*Conversion Error.*
+#
+# statement error
+# create table my_datalake.default.test_timestamp_tz_ninf as select TIMESTAMPTZ '-infinity' timestamptz_type;
+# ----
+# <REGEX>:.*Conversion Error.*
 
 statement ok
-insert into my_datalake.default.test_time_types_upper_lower_bounds values
-(
-    DATE 'infinity',
-    TIMESTAMP 'infinity',
-    TIMESTAMPTZ 'infinity'
-),
-(
-    DATE '-infinity',
-    TIMESTAMP '-infinity',
-    TIMESTAMPTZ '-infinity'
-);
+drop table if exists my_datalake.default.test_infinities;
 
-query II
-select column_name, upper_bound, lower_bound from iceberg_column_stats(my_datalake.default.test_time_types_upper_lower_bounds);
-----
-timestamptz_type	+infinity	-infinity
-timestamp_type	+infinity	-infinity
-date_type	+infinity	-infinity
-
-
-
+statement ok
+create table my_datalake.default.test_infinities as from values (FLOAT 'infinity', DOUBLE 'infinity'), (FLOAT '-infinity', DOUBLE '-infinity') t(float_type, double_type);
