@@ -1,5 +1,4 @@
 #include "storage/iceberg_insert.hpp"
-#include "storage/iceberg_insert.hpp"
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_transaction.hpp"
 #include "storage/irc_table_entry.hpp"
@@ -52,8 +51,11 @@ IcebergCopyInput::IcebergCopyInput(ClientContext &context, IRCSchemaEntry &schem
 	data_path = data_path_p + "/data";
 }
 
+IcebergInsertGlobalState::IcebergInsertGlobalState(ClientContext &context) : context(context) {
+}
+
 unique_ptr<GlobalSinkState> IcebergInsert::GetGlobalSinkState(ClientContext &context) const {
-	return make_uniq<IcebergInsertGlobalState>();
+	return make_uniq<IcebergInsertGlobalState>(context);
 }
 
 //===--------------------------------------------------------------------===//
@@ -115,7 +117,8 @@ static void AddToColDefMap(case_insensitive_map_t<optional_ptr<IcebergColumnDefi
 	}
 }
 
-IcebergColumnStats IcebergInsert::ParseColumnStatsNew(const LogicalType &type, const vector<Value> &col_stats) {
+IcebergColumnStats IcebergInsert::ParseColumnStats(const LogicalType &type, const vector<Value> &col_stats,
+                                                   ClientContext &context) {
 	IcebergColumnStats column_stats(type);
 	for (idx_t stats_idx = 0; stats_idx < col_stats.size(); stats_idx++) {
 		auto &stats_children = StructValue::GetChildren(col_stats[stats_idx]);
@@ -138,9 +141,10 @@ IcebergColumnStats IcebergInsert::ParseColumnStatsNew(const LogicalType &type, c
 		} else if (stats_name == "has_nan") {
 			column_stats.has_contains_nan = true;
 			column_stats.contains_nan = StringValue::Get(stats_children[1]) == "true";
+		} else {
+			// Ignore other stats types.s
+			DUCKDB_LOG_INFO(context, "Iceberg", "Did not write column stats %s", stats_name);
 		}
-		// Ignore other stats types.
-		// TODO: Log that we did not write stats
 	}
 	return column_stats;
 }
@@ -192,7 +196,7 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 			auto ic_column_info_it = column_info.find(normalized_col_name);
 			D_ASSERT(ic_column_info_it != column_info.end());
 			auto column_info = ic_column_info_it->second;
-			auto stats = ParseColumnStatsNew(column_info->type, col_stats);
+			auto stats = ParseColumnStats(column_info->type, col_stats, global_state.context);
 			if (column_info->required && stats.has_null_count && stats.null_count > 0) {
 				throw ConstraintException("NOT NULL constraint failed: %s.%s", table->name, normalized_col_name);
 			}

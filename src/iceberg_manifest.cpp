@@ -60,7 +60,7 @@ Value IcebergManifestEntry::ToDataFileStruct(const LogicalType &type) const {
 	null_value_count_types.emplace_back("value", LogicalType::BIGINT);
 
 	vector<Value> null_value_counts_values;
-	// upper bounds: map<129: int, 130: binary> - 128
+	// null_value_counts: map<121: int, 122: long> - 110
 	for (auto &child : null_value_counts) {
 		null_value_counts_values.push_back(Value::STRUCT({{"key", child.first}, {"value", child.second}}));
 	}
@@ -355,8 +355,7 @@ idx_t WriteToFile(IcebergTableInformation &table_info, const IcebergManifestFile
 	null_value_counts_fields.emplace_back("key", LogicalType::INTEGER);
 	null_value_counts_fields.emplace_back("value", LogicalType::BIGINT);
 	{
-		// child_list_t<Value> null_value_counts_struct;
-		// upper bounds: map<121: int, 122: binary>
+		// null_value_counts: map<121: int, 122: binary>
 		children.emplace_back("null_value_counts", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
 
 		child_list_t<Value> null_values_counts_record_field_ids;

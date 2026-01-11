@@ -31,7 +31,8 @@ struct IcebergCopyInput {
 
 class IcebergInsertGlobalState : public GlobalSinkState {
 public:
-	explicit IcebergInsertGlobalState() = default;
+	explicit IcebergInsertGlobalState(ClientContext &context);
+	ClientContext &context;
 	mutex lock;
 	vector<IcebergManifestEntry> written_files;
 	atomic<idx_t> insert_count;
@@ -59,8 +60,6 @@ struct IcebergColumnStats {
 	bool any_valid = true;
 	bool has_contains_nan = false;
 	bool has_column_size_bytes = false;
-
-	// unique_ptr<DuckLakeColumnExtraStats> extra_stats;
 
 public:
 	unique_ptr<BaseStatistics> ToStats() const;
@@ -114,7 +113,8 @@ public:
 
 	static PhysicalOperator &PlanInsert(ClientContext &context, PhysicalPlanGenerator &planner, ICTableEntry &table);
 	static vector<IcebergManifestEntry> GetInsertManifestEntries(IcebergInsertGlobalState &global_state);
-	static IcebergColumnStats ParseColumnStatsNew(const LogicalType &type, const vector<Value> &col_stats);
+	static IcebergColumnStats ParseColumnStats(const LogicalType &type, const vector<Value> &col_stats,
+	                                           ClientContext &context);
 	static void AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &chunk,
 	                            optional_ptr<TableCatalogEntry> table);
 
