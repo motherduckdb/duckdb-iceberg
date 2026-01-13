@@ -48,8 +48,8 @@ public:
 	void SetLocation(IRCTransaction &transaction);
 	bool IsTransactionLocalTable(IRCTransaction &transaction);
 	static string GetTableKey(const vector<string> &namespace_items, const string &table_name);
-	string GetTableKey();
-	IcebergTableInformation Copy();
+	string GetTableKey() const;
+	IcebergTableInformation Copy() const;
 	void InitSchemaVersions();
 
 public:

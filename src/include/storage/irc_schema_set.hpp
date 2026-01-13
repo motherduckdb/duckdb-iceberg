@@ -21,7 +21,6 @@ public:
 	const case_insensitive_map_t<unique_ptr<CatalogEntry>> &GetEntries();
 	void AddEntry(string name, unique_ptr<IRCSchemaEntry> entry);
 	CatalogEntry &GetEntry(const string &name);
-	void ClearEntries();
 
 protected:
 	optional_ptr<CatalogEntry> CreateEntryInternal(ClientContext &context, unique_ptr<CatalogEntry> entry);
@@ -31,7 +30,6 @@ public:
 
 private:
 	//! Whether a listing has been done for the catalog
-	bool listed = false;
 	case_insensitive_map_t<unique_ptr<CatalogEntry>> entries;
 	mutex entry_lock;
 };

@@ -4,6 +4,7 @@
 
 #include "storage/irc_catalog.hpp"
 #include "storage/irc_table_set.hpp"
+
 #include "storage/irc_table_entry.hpp"
 #include "storage/irc_transaction.hpp"
 #include "storage/authorization/sigv4.hpp"
@@ -24,10 +25,6 @@
 namespace duckdb {
 
 ICTableSet::ICTableSet(IRCSchemaEntry &schema) : schema(schema), catalog(schema.ParentCatalog()) {
-}
-
-void ICTableSet::ClearEntries() {
-	entries.clear();
 }
 
 bool ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &table) {
@@ -63,7 +60,7 @@ bool ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &tabl
 }
 
 void ICTableSet::Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback) {
-	lock_guard<mutex> l(entry_lock);
+	lock_guard<mutex> lock(entry_lock);
 	LoadEntries(context);
 	case_insensitive_set_t non_iceberg_tables;
 	auto table_namespace = IRCAPI::GetEncodedSchemaName(schema.namespace_items);
@@ -101,20 +98,27 @@ void ICTableSet::Scan(ClientContext &context, const std::function<void(CatalogEn
 	}
 }
 
+const case_insensitive_map_t<IcebergTableInformation> &ICTableSet::GetEntries() {
+	return entries;
+}
+
+case_insensitive_map_t<IcebergTableInformation> &ICTableSet::GetEntriesMutable() {
+	return entries;
+}
+
 void ICTableSet::LoadEntries(ClientContext &context) {
-	if (listed) {
+	auto &irc_transaction = IRCTransaction::Get(context, catalog);
+	// auto &irc_transaction = transaction.Cast<IRCTransaction>();
+	bool schema_listed = irc_transaction.listed_schemas.find(schema.name) != irc_transaction.listed_schemas.end();
+	if (schema_listed) {
 		return;
 	}
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
 	auto tables = IRCAPI::GetTables(context, ic_catalog, schema);
-
 	for (auto &table : tables) {
-		auto entry_it = entries.find(table.name);
-		if (entry_it == entries.end()) {
-			entries.emplace(table.name, IcebergTableInformation(ic_catalog, schema, table.name));
-		}
+		entries.emplace(table.name, IcebergTableInformation(ic_catalog, schema, table.name));
 	}
-	listed = true;
+	irc_transaction.listed_schemas.insert(schema.name);
 }
 
 bool ICTableSet::CreateNewEntry(ClientContext &context, IRCatalog &catalog, IRCSchemaEntry &schema,

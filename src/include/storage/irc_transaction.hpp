@@ -69,6 +69,9 @@ public:
 	//! while other transactions can still request up to date tables
 	case_insensitive_map_t<TableInfoCache> requested_tables;
 
+	bool called_list_schemas = false;
+	case_insensitive_set_t listed_schemas;
+
 	case_insensitive_set_t created_secrets;
 	case_insensitive_set_t looked_up_entries;
 };

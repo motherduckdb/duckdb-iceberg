@@ -73,24 +73,18 @@ const case_insensitive_map_t<unique_ptr<CatalogEntry>> &IRCSchemaSet::GetEntries
 	return entries;
 }
 
-void IRCSchemaSet::ClearEntries() {
-	for (auto &entry : entries) {
-		auto &ic_schema_entry = entry.second.get()->Cast<IRCSchemaEntry>();
-		ic_schema_entry.ClearTableEntries();
-	}
-	listed = false;
-}
-
 static string GetSchemaName(const vector<string> &items) {
 	return StringUtil::Join(items, ".");
 }
 
 void IRCSchemaSet::LoadEntries(ClientContext &context) {
-	if (listed) {
+	auto &ic_catalog = catalog.Cast<IRCatalog>();
+	auto &irc_transaction = IRCTransaction::Get(context, catalog);
+	// auto &irc_transaction = transaction.Cast<IRCTransaction>();
+	bool schema_listed = irc_transaction.called_list_schemas;
+	if (schema_listed) {
 		return;
 	}
-
-	auto &ic_catalog = catalog.Cast<IRCatalog>();
 	auto schemas = IRCAPI::GetSchemas(context, ic_catalog, {});
 	for (const auto &schema : schemas) {
 		CreateSchemaInfo info;
@@ -100,7 +94,7 @@ void IRCSchemaSet::LoadEntries(ClientContext &context) {
 		schema_entry->namespace_items = std::move(schema.items);
 		CreateEntryInternal(context, std::move(schema_entry));
 	}
-	listed = true;
+	irc_transaction.called_list_schemas = true;
 }
 
 optional_ptr<CatalogEntry> IRCSchemaSet::CreateEntryInternal(ClientContext &context, unique_ptr<CatalogEntry> entry) {

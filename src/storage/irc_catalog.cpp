@@ -45,14 +45,6 @@ void IRCatalog::ScanSchemas(ClientContext &context, std::function<void(SchemaCat
 	schemas.Scan(context, [&](CatalogEntry &schema) { callback(schema.Cast<IRCSchemaEntry>()); });
 }
 
-void IRCatalog::ClearTableEntries() {
-	schemas.ClearEntries();
-}
-
-void IRCatalog::InvalidateSchemas() {
-	schemas.ClearEntries();
-}
-
 optional_ptr<SchemaCatalogEntry> IRCatalog::LookupSchema(CatalogTransaction transaction,
                                                          const EntryLookupInfo &schema_lookup,
                                                          OnEntryNotFound if_not_found) {

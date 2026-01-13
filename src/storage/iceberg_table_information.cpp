@@ -273,11 +273,11 @@ string IcebergTableInformation::GetTableKey(const vector<string> &namespace_item
 	return IRCAPI::GetEncodedSchemaName(namespace_items) + "." + table_name;
 }
 
-string IcebergTableInformation::GetTableKey() {
+string IcebergTableInformation::GetTableKey() const {
 	return GetTableKey(schema.namespace_items, name);
 }
 
-IcebergTableInformation IcebergTableInformation::Copy() {
+IcebergTableInformation IcebergTableInformation::Copy() const {
 	auto ret = IcebergTableInformation(catalog, schema, name);
 	auto table_key = ret.GetTableKey();
 	auto &cached_load_table_result = catalog.GetLoadTableResult(table_key);

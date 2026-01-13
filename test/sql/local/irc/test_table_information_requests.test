@@ -101,11 +101,10 @@ statement ok
 commit;
 
 # 3 calls from above
-# 1 call to verify supplier
-# 1 call to GetTableInformationEndpoint for supplier
+# 5 calls from show all tables above
 # 1 call to the manifest list
 # 2 calls to read parquet files
 query I
 select count(*) from duckdb_logs_parsed('HTTP');
 ----
-8
+11

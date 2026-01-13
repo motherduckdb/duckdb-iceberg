@@ -101,8 +101,8 @@ void IRCSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {
 	auto &transaction = IRCTransaction::Get(context, catalog).Cast<IRCTransaction>();
 	auto table_name = info.name;
 	// find if info has a table name, if so look for it in
-	auto table_info_it = tables.entries.find(table_name);
-	if (table_info_it == tables.entries.end()) {
+	auto table_info_it = tables.GetEntries().find(table_name);
+	if (table_info_it == tables.GetEntries().end()) {
 		throw CatalogException("Table %s does not exist");
 	}
 	if (info.cascade) {
@@ -115,10 +115,6 @@ void IRCSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {
 	// must init schema versions after copy. Schema versions have a pointer to IcebergTableInformation
 	// if the IcebergTableInformation is moved, then the pointer is no longer valid.
 	deleted_table_info.InitSchemaVersions();
-}
-
-void IRCSchemaEntry::ClearTableEntries() {
-	tables.ClearEntries();
 }
 
 optional_ptr<CatalogEntry> IRCSchemaEntry::CreateFunction(CatalogTransaction transaction, CreateFunctionInfo &info) {
