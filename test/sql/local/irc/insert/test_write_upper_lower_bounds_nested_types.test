@@ -74,7 +74,7 @@ insert into my_datalake.default.bounds_nested_types values
 
 
 query III
-select column_name, upper_bound, lower_bound from iceberg_column_stats(my_datalake.default.bounds_nested_types);
+select column_name, upper_bound, lower_bound from iceberg_column_stats(my_datalake.default.bounds_nested_types) order by column_name;
 ----
 date_array	NULL	NULL
 element	1990-01-01 00:00:00	1990-01-01 00:00:00
