@@ -26,9 +26,6 @@ statement ok
 SET TimeZone = 'UTC';
 
 statement ok
-pragma threads=1;
-
-statement ok
 CREATE SECRET (
     TYPE S3,
     KEY_ID 'admin',

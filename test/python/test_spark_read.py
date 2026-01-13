@@ -204,3 +204,27 @@ class TestSparkReadInfinities:
             Row(float_type=inf, double_type=inf),
             Row(float_type=-inf, double_type=-inf),
         ]
+
+
+@pytest.mark.skipif(
+    os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None,
+    reason="Test data wasn't generated, run tests in test/sql/local/irc first",
+)
+class TestSparkReadDuckDBNestedTypes:
+    def test_spark_read(self, spark_con):
+        df = spark_con.sql(
+            """
+            select * from default.duckdb_nested_types;
+            """
+        )
+        res = df.collect()
+        assert len(res) == 1
+        assert res == [
+            Row(
+                id=1,
+                name='Alice',
+                address=Row(street='123 Main St', city='Metropolis', zip='12345'),
+                phone_numbers=['123-456-7890', '987-654-3210'],
+                metadata={'age': '30', 'membership': 'gold'},
+            ),
+        ]

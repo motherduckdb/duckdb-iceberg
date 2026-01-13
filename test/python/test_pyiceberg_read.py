@@ -203,3 +203,23 @@ class TestPyIcebergRead:
         res = arrow_table.to_pylist()
         assert len(res) == 2
         assert res == [{'float_type': inf, 'double_type': inf}, {'float_type': -inf, 'double_type': -inf}]
+
+
+@pytest.mark.skipif(
+    os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None, reason="Test data wasn't generated, run 'make data' first"
+)
+class TestPyIcebergReadDuckDBNestedTypes:
+    def test_pyiceberg_read_duckdb_nested_types(self, rest_catalog):
+        tbl = rest_catalog.load_table("default.duckdb_nested_types")
+        arrow_table: pa.Table = tbl.scan().to_arrow()
+        res = arrow_table.to_pylist()
+        assert len(res) == 1
+        assert res == [
+            {
+                'id': 1,
+                'name': 'Alice',
+                'address': {'street': '123 Main St', 'city': 'Metropolis', 'zip': '12345'},
+                'phone_numbers': ['123-456-7890', '987-654-3210'],
+                'metadata': [('age', '30'), ('membership', 'gold')],
+            }
+        ]

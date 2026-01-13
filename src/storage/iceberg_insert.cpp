@@ -158,7 +158,6 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 	auto partition_id = ic_table.table_info.table_metadata.default_spec_id;
 	for (idx_t r = 0; r < chunk.size(); r++) {
 		IcebergManifestEntry data_file;
-		auto &ic_table = table->Cast<ICTableEntry>();
 		data_file.file_path = chunk.GetValue(0, r).GetValue<string>();
 		data_file.record_count = static_cast<int64_t>(chunk.GetValue(1, r).GetValue<idx_t>());
 		data_file.file_size_in_bytes = static_cast<int64_t>(chunk.GetValue(2, r).GetValue<idx_t>());
