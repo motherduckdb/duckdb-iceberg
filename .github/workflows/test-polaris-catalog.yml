@@ -11,6 +11,7 @@ jobs:
   test-polaris:
     name: Test against Polaris Catalog
     runs-on: ubuntu-latest
+    if: false # skip for now until nessie docker image can work again on github runners
 
     steps:
       - name: Checkout repository
