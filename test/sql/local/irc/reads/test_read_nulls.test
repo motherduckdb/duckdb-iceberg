@@ -74,7 +74,7 @@ select * from my_datalake.default.test_null_filtering where a is distinct from n
 10	no nulls
 
 query II
-select * from my_datalake.default.test_null_filtering where a is not distinct from null order by a NULLS FIRST;
+select * from my_datalake.default.test_null_filtering where a is not distinct from null order by all NULLS FIRST;
 ----
 NULL	NULL
 NULL	duck
