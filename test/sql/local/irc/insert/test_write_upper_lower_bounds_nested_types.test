@@ -72,16 +72,18 @@ insert into my_datalake.default.bounds_nested_types values
     [TIMESTAMPTZ '1990-01-01 00:00:00'],
 );
 
-
 query III
-select column_name, upper_bound, lower_bound from iceberg_column_stats(my_datalake.default.bounds_nested_types) order by column_name;
+select column_name, upper_bound, lower_bound from iceberg_column_stats(my_datalake.default.bounds_nested_types) order by all;
 ----
 date_array	NULL	NULL
-element	1990-01-01 00:00:00	1990-01-01 00:00:00
-element	1989-12-31 23:00:00+00	1989-12-31 23:00:00+00
 element	1990-01-01	1990-01-01
+element	1990-01-01 00:00:00	1990-01-01 00:00:00
+element	1990-01-01 00:00:00+00	1990-01-01 00:00:00+00
 timestamp_array	NULL	NULL
 timestamptz_array	NULL	NULL
+
+statement ok
+drop table if exists my_datalake.default.duckdb_nested_types;
 
 statement ok
 create table my_datalake.default.duckdb_nested_types (
@@ -105,7 +107,7 @@ INSERT INTO my_datalake.default.duckdb_nested_types VALUES (
     MAP(['age', 'membership'], ['30', 'gold'])
 );
 
-query IIII
+query IIIII
 SELECT * FROM my_datalake.default.duckdb_nested_types;
 ----
 1	Alice	{'street': 123 Main St, 'city': Metropolis, 'zip': 12345}	[123-456-7890, 987-654-3210]	{age=30, membership=gold}
@@ -123,4 +125,4 @@ name	VARCHAR	Alice	Alice
 phone_numbers	VARCHAR[]	NULL	NULL
 street	VARCHAR	123 Main St	123 Main St
 value	VARCHAR	gold	30
-zip	VARCHAR	12345	1234
+zip	VARCHAR	12345	12345
