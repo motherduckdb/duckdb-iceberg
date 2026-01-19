@@ -44,7 +44,7 @@ jobs:
         run: |
           # lower client timeouts because they cannot be longer than realm timeouts.
           # all client timeouts are 86400 right now
-          sed -i 's/86400/1800/g' authn-keycloak/config/iceberg-realm.json
+          sed -i -g 's/86400/1800/g' authn-keycloak/config/iceberg-realm.json
           docker-compose -f catalog-auth-s3/docker-compose.yml up -d
 
       - name: Wait for Nessie/Keycloak
