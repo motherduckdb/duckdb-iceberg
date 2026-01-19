@@ -11,7 +11,6 @@ jobs:
   test-nessie:
     name: Test against Nessie Catalog
     runs-on: ubuntu-latest
-    if: false # skip for now until nessie docker image can work again on github runners
 
     steps:
       - name: Checkout repository
@@ -43,7 +42,12 @@ jobs:
       - name: Start Nessie
         working-directory: nessie/docker
         run: |
+          # replace $ with $$ in all healthcheck lines, otherwise there are interpolation errors
+          # on github machines for some reason
           sed -i '/healthcheck/,/]/ s/\$/$$/g' catalog-auth-s3/docker-compose.yml
+          # lower client timeouts because they cannot be longer than realm timeouts.
+          # all client timeouts are 86400 right now
+          sed -i 's/86400/1800/g' authn-keycloak/config/iceberg-realm.json
           docker-compose -f catalog-auth-s3/docker-compose.yml up -d
 
       - name: Wait for Nessie/Keycloak
