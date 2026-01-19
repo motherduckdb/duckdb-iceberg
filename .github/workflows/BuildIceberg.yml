@@ -59,7 +59,7 @@ jobs:
   test-nessie:
     name: Test against Nessie Catalog
     needs: build_iceberg
-    uses: Tmonster/duckdb-iceberg/.github/workflows/test-nessie-catalog.yml@fix_nessie_tests
+    uses: duckdb/duckdb-iceberg/.github/workflows/test-nessie-catalog.yml@main
     with:
       artifact-name: duckdb-iceberg
 
