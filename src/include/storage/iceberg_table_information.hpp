@@ -1,11 +1,11 @@
 #pragma once
 
-#include "iceberg_transaction_data.hpp"
-#include "duckdb/catalog/catalog_entry.hpp"
 #include "storage/irc_table_entry.hpp"
 #include "storage/iceberg_metadata_info.hpp"
 #include "metadata/iceberg_manifest.hpp"
 #include "metadata/iceberg_table_metadata.hpp"
+#include "iceberg_transaction_data.hpp"
+#include "duckdb/catalog/catalog_entry.hpp"
 
 namespace duckdb {
 class IcebergTableSchema;

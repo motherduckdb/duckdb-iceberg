@@ -53,11 +53,11 @@ optional_ptr<const IcebergSortOrder> IcebergTableMetadata::FindSortOrderById(int
 	return it->second;
 }
 
-const unordered_map<int32_t, IcebergSortOrder> IcebergTableMetadata::GetSortOrderSpecs() const {
+const unordered_map<int32_t, IcebergSortOrder> &IcebergTableMetadata::GetSortOrderSpecs() const {
 	return sort_specs;
 }
 
-const unordered_map<int32_t, IcebergPartitionSpec> IcebergTableMetadata::GetPartitionSpecs() const {
+const unordered_map<int32_t, IcebergPartitionSpec> &IcebergTableMetadata::GetPartitionSpecs() const {
 	return partition_specs;
 }
 
@@ -365,11 +365,11 @@ string IcebergTableMetadata::GetLatestMetadataJson() const {
 	return latest_metadata_json;
 }
 
-string IcebergTableMetadata::GetLocation() const {
+const string &IcebergTableMetadata::GetLocation() const {
 	return location;
 }
 
-string IcebergTableMetadata::GetDataPath() const {
+const string IcebergTableMetadata::GetDataPath() const {
 	auto write_path = table_properties.find("write.data.path");
 	// If write.data.path property is set, use it; otherwise use default location + "/data"
 	if (write_path != table_properties.end()) {
@@ -378,7 +378,7 @@ string IcebergTableMetadata::GetDataPath() const {
 	return location + "/data";
 }
 
-string IcebergTableMetadata::GetMetadataPath() const {
+const string IcebergTableMetadata::GetMetadataPath() const {
 	// If write.metadata.path property is set, use it; otherwise use default location + "/metadata"
 	auto metadata_path = table_properties.find("write.metadata.path");
 	// If write.data.path property is set, use it; otherwise use default location + "/metadata"
