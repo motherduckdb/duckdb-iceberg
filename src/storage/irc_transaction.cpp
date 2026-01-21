@@ -321,14 +321,20 @@ void IRCTransaction::Commit() {
 
 	Connection temp_con(db);
 	temp_con.BeginTransaction();
-	auto &context = temp_con.context;
+	auto &temp_con_context = temp_con.context;
+	// auto shared_context = context.lock();
+	// if (!shared_context) {
+	// 	throw InternalException("Context has been destroyed");
+	// }
 	try {
-		DoTableUpdates(*context);
-		DoTableDeletes(*context);
+		// DoTableUpdates(*shared_context);
+		// DoTableDeletes(*shared_context);
+		DoTableUpdates(*temp_con_context);
+		DoTableDeletes(*temp_con_context);
 	} catch (std::exception &ex) {
 		ErrorData error(ex);
 		CleanupFiles();
-		DropSecrets(*context);
+		DropSecrets(*temp_con_context);
 		temp_con.Rollback();
 		error.Throw("Failed to commit Iceberg transaction: ");
 	}
