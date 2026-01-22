@@ -69,11 +69,8 @@ insert into my_datalake.default.multi_transaction_read_empty select 2, 2;
 statement ok con2
 commit
 
-
-mode output_result
-
 # con1 does not see a table, this is a bug in the iceberg spec
 statement error con1
 select * from my_datalake.default.multi_transaction_read_empty;
 ----
-<REGEX>:.*table default.multi_transaction_read_empty.* does not exist
+<REGEX>:.*Table default.multi_transaction_read_empty does not have a reachable snapshot.*

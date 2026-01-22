@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/table_properties/test_many_table_properties.test
+# name: test/sql/local/irc/table_properties/test_many_table_properties.test_slow
 # group: [table_properties]
 
 require-env ICEBERG_SERVER_AVAILABLE
@@ -35,7 +35,6 @@ ATTACH '' AS my_datalake (
     CLIENT_SECRET 'password',
     ENDPOINT 'http://127.0.0.1:8181'
 );
-
 
 statement ok
 drop table if exists my_datalake.default.many_properties;

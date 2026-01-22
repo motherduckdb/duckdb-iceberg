@@ -287,6 +287,41 @@ IcebergTableInformation IcebergTableInformation::Copy() const {
 	return ret;
 }
 
+IcebergSnapshotLookup IcebergTableInformation::GetSnapshotLookup(IRCTransaction &irc_transaction) const {
+	auto &context = *irc_transaction.context.lock();
+	return GetSnapshotLookup(context);
+}
+
+IcebergSnapshotLookup IcebergTableInformation::GetSnapshotLookup(ClientContext &context) const {
+	const auto table_name = name;
+	auto &meta_transaction = MetaTransaction::Get(context);
+	auto transaction_start = meta_transaction.GetCurrentTransactionStartTimestamp();
+	auto start = timestamp_tz_t(transaction_start);
+	BoundAtClause new_at_clause = BoundAtClause("timestamp", Value::TIMESTAMPTZ(start));
+	auto new_lookup_storage = EntryLookupInfo(CatalogType::TABLE_ENTRY, table_name, new_at_clause, QueryErrorContext());
+
+	auto at = new_lookup_storage.GetAtClause();
+	auto snapshot_lookup = IcebergSnapshotLookup::FromAtClause(at);
+	return snapshot_lookup;
+}
+
+bool IcebergTableInformation::TableIsEmpty(const IcebergSnapshotLookup &snapshot_lookup) const {
+	// edge case tables before data is inserted. There is no snapshot information, so we defer to latest.
+	if (table_metadata.snapshots.empty() && snapshot_lookup.snapshot_source == SnapshotSource::FROM_TIMESTAMP) {
+		auto timestamp_millis = Timestamp::GetEpochMs(snapshot_lookup.snapshot_timestamp);
+		if (timestamp_millis >= table_metadata.last_updated_ms) {
+			// current table was made before the transaction but is empty.
+			// you can return current table information in an as-is form
+			return true;
+		}
+	}
+	return false;
+}
+
+bool IcebergTableInformation::HasTransactionUpdates() {
+	return transaction_data && (!transaction_data->updates.empty() || !transaction_data->requirements.empty());
+}
+
 IcebergTableInformation IcebergTableInformation::Copy(IRCTransaction &irc_transaction) const {
 	auto ret = IcebergTableInformation(catalog, schema, name);
 	auto table_key = ret.GetTableKey();
@@ -297,32 +332,15 @@ IcebergTableInformation IcebergTableInformation::Copy(IRCTransaction &irc_transa
 	// latest_snapshot_id and sequence of copied table information should be asof the transaction start
 	// this is to ensure when the transaction commits, the assert ref snapshot id is the one closest to the start of
 	// this
-	auto &context = *irc_transaction.context.lock();
-	const auto table_name = name;
-	auto &meta_transaction = MetaTransaction::Get(context);
-	auto transaction_start = meta_transaction.GetCurrentTransactionStartTimestamp();
-	auto start = timestamp_tz_t(transaction_start);
-	BoundAtClause new_at_clause = BoundAtClause("timestamp", Value::TIMESTAMPTZ(start));
-	auto new_lookup_storage = EntryLookupInfo(CatalogType::TABLE_ENTRY, table_name, new_at_clause, QueryErrorContext());
-
-	auto at = new_lookup_storage.GetAtClause();
-	auto snapshot_lookup = IcebergSnapshotLookup::FromAtClause(at);
-	// edge case tables before data is inserted. There is no snapshot information, so we defer to latest.
-	// there is no way to request a table at it's empty state, we cannot fall back to last_updated_ms
-	if (ret.table_metadata.snapshots.empty() && snapshot_lookup.snapshot_source == SnapshotSource::FROM_TIMESTAMP) {
-		auto timestamp_millis = Timestamp::GetEpochMs(snapshot_lookup.snapshot_timestamp);
-		if (timestamp_millis >= ret.table_metadata.last_updated_ms) {
-			// current table was made before the transaction but is empty.
-			// you can return current table information in an as-is form
-			return ret;
-		} else {
-			throw TransactionException("Table %s is already outdated. Please restart your transaction", GetTableKey());
-		}
-	}
+	auto snapshot_lookup = GetSnapshotLookup(irc_transaction);
 	optional_ptr<IcebergSnapshot> snapshot = nullptr;
 	try {
 		snapshot = ret.table_metadata.GetSnapshot(snapshot_lookup);
 	} catch (InvalidConfigurationException &e) {
+		// lookup may fail for empty tables, since no snapshot exists
+		if (ret.TableIsEmpty(snapshot_lookup)) {
+			return ret;
+		}
 		throw TransactionException("Table %s is already outdated. Please restart your transaction", GetTableKey());
 	}
 

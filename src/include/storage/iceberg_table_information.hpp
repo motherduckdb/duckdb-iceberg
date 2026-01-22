@@ -53,6 +53,11 @@ public:
 	IcebergTableInformation Copy() const;
 	void InitSchemaVersions();
 
+	IcebergSnapshotLookup GetSnapshotLookup(IRCTransaction &irc_transaction) const;
+	IcebergSnapshotLookup GetSnapshotLookup(ClientContext &context) const;
+	bool TableIsEmpty(const IcebergSnapshotLookup &snapshot_lookup) const;
+	bool HasTransactionUpdates();
+
 public:
 	IRCatalog &catalog;
 	IRCSchemaEntry &schema;

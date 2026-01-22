@@ -74,11 +74,6 @@ select * from my_datalake.default.multi_transaction_update;
 statement ok con1
 update my_datalake.default.multi_transaction_update set a = 50;
 
-mode output_result
-
-statement ok
-select 100;
-
 # con1 should error. con1 cannot update the table since the last snapshot it saw was the 1, 1 insert.
 statement error con1
 commit;
