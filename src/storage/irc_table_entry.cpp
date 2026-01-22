@@ -116,10 +116,47 @@ TableFunction ICTableEntry::GetScanFunction(ClientContext &context, unique_ptr<F
 	vector<string> names;
 	TableFunctionRef empty_ref;
 
+	// lookup should be asof start of the transaction if the lookup info is empty
+	bool using_transaction_timestamp = false;
+	optional_ptr<const EntryLookupInfo> lookup_to_use = &lookup;
+	unique_ptr<EntryLookupInfo> new_lookup_storage;
+	const auto table_name = lookup.GetEntryName();
+	auto &meta_transaction = MetaTransaction::Get(context);
+	auto transaction_start = meta_transaction.GetCurrentTransactionStartTimestamp();
+	auto start = timestamp_tz_t(transaction_start);
+	BoundAtClause new_at_clause = BoundAtClause("timestamp", Value::TIMESTAMPTZ(start));
+	if (!lookup.GetAtClause()) {
+		new_lookup_storage =
+		    make_uniq<EntryLookupInfo>(CatalogType::TABLE_ENTRY, table_name, new_at_clause, lookup.GetErrorContext());
+		lookup_to_use = new_lookup_storage.get();
+		using_transaction_timestamp = true;
+	}
+
 	auto &metadata = table_info.table_metadata;
-	auto at = lookup.GetAtClause();
+	auto at = lookup_to_use->GetAtClause();
 	auto snapshot_lookup = IcebergSnapshotLookup::FromAtClause(at);
-	auto snapshot = metadata.GetSnapshot(snapshot_lookup);
+	// edge case for requesting tables before data was inserted. Technically there is no
+	// snapshot information, so we defer to latest.
+	// there is no way to request a table at it's empty state, we cannot fall back to last_updated_ms
+	if (metadata.snapshots.empty() && snapshot_lookup.snapshot_source == SnapshotSource::FROM_TIMESTAMP) {
+		auto timestamp_millis = Timestamp::GetEpochMs(snapshot_lookup.snapshot_timestamp);
+		if (timestamp_millis >= metadata.last_updated_ms) {
+			snapshot_lookup.snapshot_source = SnapshotSource::LATEST;
+		} else {
+			throw InvalidConfigurationException("Table %s does not exist", table_info.GetTableKey());
+		}
+	}
+	optional_ptr<IcebergSnapshot> snapshot = nullptr;
+	try {
+		snapshot = metadata.GetSnapshot(snapshot_lookup);
+	} catch (InvalidConfigurationException &e) {
+		if (using_transaction_timestamp) {
+			// If we are using the transaction start time, this may throw. If it does,
+			// we want to catch it and say no table exists
+			throw InvalidConfigurationException("Table %s does not exist", table_info.GetTableKey());
+		}
+		throw e;
+	}
 
 	int32_t schema_id;
 	if (snapshot_lookup.IsLatest()) {
@@ -130,8 +167,7 @@ TableFunction ICTableEntry::GetScanFunction(ClientContext &context, unique_ptr<F
 	}
 
 	auto iceberg_schema = metadata.GetSchemaFromId(schema_id);
-	auto scan_info = make_shared_ptr<IcebergScanInfo>(table_info.table_metadata.GetMetadataPath(), metadata, snapshot,
-	                                                  *iceberg_schema);
+	auto scan_info = make_shared_ptr<IcebergScanInfo>(metadata.GetMetadataPath(), metadata, snapshot, *iceberg_schema);
 	if (table_info.transaction_data) {
 		scan_info->transaction_data = table_info.transaction_data.get();
 	}

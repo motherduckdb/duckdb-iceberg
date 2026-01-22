@@ -173,7 +173,7 @@ optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const En
 	lock_guard<mutex> l(entry_lock);
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
 	auto &irc_transaction = IRCTransaction::Get(context, catalog);
-	auto table_name = lookup.GetEntryName();
+	const auto table_name = lookup.GetEntryName();
 	// first check transaction entries
 	auto table_key = IcebergTableInformation::GetTableKey(schema.namespace_items, table_name);
 	// Check if table has been deleted within in the transaction.
@@ -185,7 +185,6 @@ optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const En
 	if (transaction_entry != irc_transaction.updated_tables.end()) {
 		return transaction_entry->second.GetSchemaVersion(lookup.GetAtClause());
 	}
-	// Check regular catalog Entries
 	auto previous_requested_snapshot = irc_transaction.requested_tables.find(table_name);
 	if (previous_requested_snapshot != irc_transaction.requested_tables.end()) {
 		// transaction has already looked up this table, find it in entries
@@ -197,27 +196,7 @@ optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const En
 			//  will fail regardless
 			return nullptr;
 		}
-		// if we are looking up the latest snapshot, just lookup at previously requested snapshot id
-		auto snapshot_lookup = IcebergSnapshotLookup::FromAtClause(lookup.GetAtClause());
-		// snapshot_id = -1 means table is created, but is empty. So we can return latest (or using lookup clause).
-		if (previous_requested_snapshot->second.snapshot_id == -1) {
-			auto schema_version = entry->second.GetSchemaVersion(lookup.GetAtClause());
-			auto &ic_table = schema_version->Cast<ICTableEntry>();
-			if (ic_table.table_info.table_metadata.last_sequence_number == 0) {
-				return schema_version;
-			}
-			// TODO: Figure out how to get the empty table snapshot
-			throw CatalogException("Empty table has been updated by other transaction. Please Rollback");
-		} else if (snapshot_lookup.IsLatest()) {
-			auto snapshot_id = previous_requested_snapshot->second.snapshot_id;
-			auto new_lookup = BoundAtClause("version", Value::BIGINT(snapshot_id));
-			return entry->second.GetSchemaVersion(new_lookup);
-		} else {
-			auto schema_version = entry->second.GetSchemaVersion(lookup.GetAtClause());
-			// check the sequence number. if it is higher than what has been previously looked up
-			// return an error, if lower return the schema version
-			throw InternalException("Sequence number of snapshot lookup is lower than previously requested");
-		}
+		return entry->second.GetSchemaVersion(lookup.GetAtClause());
 	}
 
 	if (!IRCAPI::VerifyTableExistence(context, ic_catalog, schema, table_name)) {

@@ -3,6 +3,7 @@
 #include "catalog_api.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/common/types/timestamp.hpp"
 #include "storage/irc_transaction.hpp"
 #include "storage/iceberg_transaction_data.hpp"
 #include "storage/irc_schema_entry.hpp"

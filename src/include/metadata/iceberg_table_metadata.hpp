@@ -86,6 +86,7 @@ public:
 	bool has_current_snapshot = false;
 	int64_t current_snapshot_id;
 	int64_t last_sequence_number;
+	idx_t last_updated_ms;
 
 	optional_idx last_column_id;
 
