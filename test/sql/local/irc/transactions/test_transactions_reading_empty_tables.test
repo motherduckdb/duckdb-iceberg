@@ -73,4 +73,4 @@ commit
 statement error con1
 select * from my_datalake.default.multi_transaction_read_empty;
 ----
-<REGEX>:.*Table default.multi_transaction_read_empty does not have a reachable snapshot.*
+<REGEX>:.*Table default.multi_transaction_read_empty does not have a reachable state in this transaction.*

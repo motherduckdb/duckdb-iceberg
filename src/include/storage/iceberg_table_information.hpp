@@ -49,7 +49,10 @@ public:
 	bool IsTransactionLocalTable(IRCTransaction &transaction);
 	static string GetTableKey(const vector<string> &namespace_items, const string &table_name);
 	string GetTableKey() const;
+	// we pass the transaction, because we are only allowed to copy table information state provded by the catalog
+	// from before our transaction start time.
 	IcebergTableInformation Copy(IRCTransaction &irc_transaction) const;
+	// This copy is used for deletes, where we don't care about valid table state
 	IcebergTableInformation Copy() const;
 	void InitSchemaVersions();
 

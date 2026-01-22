@@ -62,7 +62,7 @@ optional_ptr<SchemaCatalogEntry> IRCatalog::LookupSchema(CatalogTransaction tran
 	return reinterpret_cast<SchemaCatalogEntry *>(entry.get());
 }
 
-void IRCatalog::StoreLoadTableResult(string table_key,
+void IRCatalog::StoreLoadTableResult(const string &table_key,
                                      unique_ptr<const rest_api_objects::LoadTableResult> load_table_result) {
 	std::lock_guard<std::mutex> g(metadata_cache_mutex);
 	// erase load table result if it exists.

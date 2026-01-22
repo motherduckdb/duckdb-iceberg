@@ -362,7 +362,7 @@ const case_insensitive_map_t<string> &IcebergTableMetadata::GetTableProperties()
 	return table_properties;
 }
 
-string IcebergTableMetadata::GetLatestMetadataJson() const {
+const string &IcebergTableMetadata::GetLatestMetadataJson() const {
 	return latest_metadata_json;
 }
 

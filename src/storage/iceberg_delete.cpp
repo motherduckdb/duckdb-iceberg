@@ -278,14 +278,6 @@ SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, Clien
 		ApplyTableUpdate(table_info, irc_transaction, [&](IcebergTableInformation &tbl) {
 			tbl.AddDeleteSnapshot(irc_transaction, std::move(iceberg_delete_files));
 		});
-		// if (table_info.IsTransactionLocalTable(irc_transaction)) {
-		// 	table_info.AddDeleteSnapshot(transaction, std::move(iceberg_delete_files));
-		// } else {
-		// 	irc_transaction.updated_tables.emplace(table_info.GetTableKey(), table_info.Copy());
-		// 	auto &updated_table = irc_transaction.updated_tables.at(table_info.GetTableKey());
-		// 	updated_table.InitSchemaVersions();
-		// 	updated_table.AddDeleteSnapshot(transaction, std::move(iceberg_delete_files));
-		// }
 	}
 	return SinkFinalizeType::READY;
 }

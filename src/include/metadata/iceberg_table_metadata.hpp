@@ -59,7 +59,7 @@ public:
 	optional_ptr<IcebergSnapshot> GetSnapshot(const IcebergSnapshotLookup &lookup);
 
 	//! Get the data and metadata paths, falling back to default if not set
-	string GetLatestMetadataJson() const;
+	const string &GetLatestMetadataJson() const;
 	const string &GetLocation() const;
 	const string GetDataPath() const;
 	const string GetMetadataPath() const;

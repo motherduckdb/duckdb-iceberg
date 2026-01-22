@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/table_properties/test_many_table_properties.test_slow
+# name: test/sql/local/irc/table_properties/test_many_table_properties.test
 # group: [table_properties]
 
 require-env ICEBERG_SERVER_AVAILABLE

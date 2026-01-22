@@ -101,7 +101,8 @@ public:
 	string GetDBPath() override;
 	static string GetOnlyMergeOnReadSupportedErrorMessage(const string &table_name, const string &property,
 	                                                      const string &property_value);
-	void StoreLoadTableResult(string table_key, unique_ptr<const rest_api_objects::LoadTableResult> load_table_result);
+	void StoreLoadTableResult(const string &table_key,
+	                          unique_ptr<const rest_api_objects::LoadTableResult> load_table_result);
 	MetadataCacheValue &GetLoadTableResult(const string &table_key);
 	void RemoveLoadTableResult(string table_key);
 

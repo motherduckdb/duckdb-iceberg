@@ -120,6 +120,8 @@ TableFunction ICTableEntry::GetScanFunction(ClientContext &context, unique_ptr<F
 	bool using_transaction_timestamp = false;
 	IcebergSnapshotLookup snapshot_lookup;
 	if (!lookup.GetAtClause() && !table_info.HasTransactionUpdates()) {
+		// if there is no user supplied AT () clause, and the table does not have transaction updates
+		// use transaction start time
 		snapshot_lookup = table_info.GetSnapshotLookup(context);
 		using_transaction_timestamp = true;
 	} else {
@@ -134,14 +136,14 @@ TableFunction ICTableEntry::GetScanFunction(ClientContext &context, unique_ptr<F
 		if (!table_info.TableIsEmpty(snapshot_lookup)) {
 			if (using_transaction_timestamp) {
 				// We are using the transaction start time.
-				// the table is not empty, but GetSnapshot is asking for table state before data was inserted
+				// The table is not empty, but GetSnapshot is asking for table state before the first snapshot
 				// table creation has no snapshot, so we return this error message
-				throw InvalidConfigurationException("Table %s does not have a reachable snapshot in this transaction",
+				throw InvalidConfigurationException("Table %s does not have a reachable state in this transaction",
 				                                    table_info.GetTableKey());
 			}
 			throw e;
 		}
-		// try normal. This is allowed to throw
+		// try without transaction start time bounds. This is allowed to throw
 		snapshot_lookup = IcebergSnapshotLookup::FromAtClause(lookup.GetAtClause());
 		snapshot = metadata.GetSnapshot(snapshot_lookup);
 	}
@@ -203,6 +205,10 @@ TableStorageInfo ICTableEntry::GetStorageInfo(ClientContext &context) {
 	TableStorageInfo result;
 	// TODO fill info
 	return result;
+}
+
+string ICTableEntry::GetUUID() const {
+	return table_info.table_id;
 }
 
 } // namespace duckdb
