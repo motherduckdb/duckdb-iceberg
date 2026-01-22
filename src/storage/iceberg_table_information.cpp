@@ -3,6 +3,7 @@
 #include "catalog_api.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/common/exception/transaction_exception.hpp"
 #include "duckdb/common/types/timestamp.hpp"
 #include "storage/irc_transaction.hpp"
 #include "storage/iceberg_transaction_data.hpp"
@@ -283,6 +284,52 @@ IcebergTableInformation IcebergTableInformation::Copy() const {
 	auto table_key = ret.GetTableKey();
 	auto &cached_load_table_result = catalog.GetLoadTableResult(table_key);
 	ret.table_metadata = IcebergTableMetadata::FromTableMetadata(cached_load_table_result.load_table_result->metadata);
+	return ret;
+}
+
+IcebergTableInformation IcebergTableInformation::Copy(IRCTransaction &irc_transaction) const {
+	auto ret = IcebergTableInformation(catalog, schema, name);
+	auto table_key = ret.GetTableKey();
+	auto &cached_load_table_result = catalog.GetLoadTableResult(table_key);
+	ret.table_metadata = IcebergTableMetadata::FromTableMetadata(cached_load_table_result.load_table_result->metadata);
+
+	// get snapshot from start of transaction
+	// latest_snapshot_id and sequence of copied table information should be asof the transaction start
+	// this is to ensure when the transaction commits, the assert ref snapshot id is the one closest to the start of
+	// this
+	auto &context = *irc_transaction.context.lock();
+	const auto table_name = name;
+	auto &meta_transaction = MetaTransaction::Get(context);
+	auto transaction_start = meta_transaction.GetCurrentTransactionStartTimestamp();
+	auto start = timestamp_tz_t(transaction_start);
+	BoundAtClause new_at_clause = BoundAtClause("timestamp", Value::TIMESTAMPTZ(start));
+	auto new_lookup_storage = EntryLookupInfo(CatalogType::TABLE_ENTRY, table_name, new_at_clause, QueryErrorContext());
+
+	auto at = new_lookup_storage.GetAtClause();
+	auto snapshot_lookup = IcebergSnapshotLookup::FromAtClause(at);
+	// edge case tables before data is inserted. There is no snapshot information, so we defer to latest.
+	// there is no way to request a table at it's empty state, we cannot fall back to last_updated_ms
+	if (ret.table_metadata.snapshots.empty() && snapshot_lookup.snapshot_source == SnapshotSource::FROM_TIMESTAMP) {
+		auto timestamp_millis = Timestamp::GetEpochMs(snapshot_lookup.snapshot_timestamp);
+		if (timestamp_millis >= ret.table_metadata.last_updated_ms) {
+			// current table was made before the transaction but is empty.
+			// you can return current table information in an as-is form
+			return ret;
+		} else {
+			throw TransactionException("Table %s is already outdated. Please restart your transaction", GetTableKey());
+		}
+	}
+	optional_ptr<IcebergSnapshot> snapshot = nullptr;
+	try {
+		snapshot = ret.table_metadata.GetSnapshot(snapshot_lookup);
+	} catch (InvalidConfigurationException &e) {
+		throw TransactionException("Table %s is already outdated. Please restart your transaction", GetTableKey());
+	}
+
+	D_ASSERT(snapshot);
+	ret.table_metadata.current_schema_id = snapshot->schema_id;
+	ret.table_metadata.last_sequence_number = snapshot->sequence_number;
+	ret.table_metadata.current_snapshot_id = snapshot->snapshot_id;
 	return ret;
 }
 
