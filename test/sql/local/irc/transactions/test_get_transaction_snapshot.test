@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/transactions/test_transactional_updates.test
+# name: test/sql/local/irc/transactions/test_get_transaction_snapshot.test
 # group: [transactions]
 
 require-env ICEBERG_SERVER_AVAILABLE
@@ -41,38 +41,32 @@ ATTACH '' AS my_datalake (
 
 # Perform an INSERT and COMMIT it so table has a snapshot id other transactions can find
 statement ok
-drop table if exists my_datalake.default.multi_transaction_update;
+drop table if exists my_datalake.default.get_transaction_snapshot;
 
 statement ok
-create table my_datalake.default.multi_transaction_update (a int, b int);
+create table my_datalake.default.get_transaction_snapshot (a int, b int);
 
 # make sure the table has a snapshot id to start
 statement ok
-insert into my_datalake.default.multi_transaction_update select 0, 0;
+insert into my_datalake.default.get_transaction_snapshot select 0, 0;
 
 statement ok con1
 begin
 
-statement ok con2
-begin
+statement ok con1
+insert into my_datalake.default.get_transaction_snapshot select 1, 1;
 
-statement ok con2
-insert into my_datalake.default.multi_transaction_update select 2, 2;
-
-statement ok con2
-commit
-
-# con1 should only see data from con1 and before (from transaction start of con1)
-query II con1
-select * from my_datalake.default.multi_transaction_update;
+# we will not show committed local snapshots for (iceberg_snapshots)
+query I con1
+select count(*) from iceberg_snapshots(my_datalake.default.get_transaction_snapshot);
 ----
-0	0
+1
 
 statement ok con1
-update my_datalake.default.multi_transaction_update set a = 50;
-
-# con1 should error. con1 cannot update the table since the last snapshot it saw was the 1, 1 insert.
-statement error con1
 commit;
+
+query I
+select count(*) from iceberg_snapshots(my_datalake.default.get_transaction_snapshot);
 ----
-<REGEX>:.*TransactionContext Error:.*Conflict.*
+2
+

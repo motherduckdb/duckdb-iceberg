@@ -279,14 +279,6 @@ string IcebergTableInformation::GetTableKey() const {
 	return GetTableKey(schema.namespace_items, name);
 }
 
-IcebergTableInformation IcebergTableInformation::Copy() const {
-	auto ret = IcebergTableInformation(catalog, schema, name);
-	auto table_key = ret.GetTableKey();
-	auto &cached_load_table_result = catalog.GetLoadTableResult(table_key);
-	ret.table_metadata = IcebergTableMetadata::FromTableMetadata(cached_load_table_result.load_table_result->metadata);
-	return ret;
-}
-
 IcebergSnapshotLookup IcebergTableInformation::GetSnapshotLookup(IRCTransaction &irc_transaction) const {
 	auto &context = *irc_transaction.context.lock();
 	return GetSnapshotLookup(context);
@@ -322,12 +314,17 @@ bool IcebergTableInformation::HasTransactionUpdates() {
 	return transaction_data && (!transaction_data->updates.empty() || !transaction_data->requirements.empty());
 }
 
-IcebergTableInformation IcebergTableInformation::Copy(IRCTransaction &irc_transaction) const {
+IcebergTableInformation IcebergTableInformation::Copy() const {
 	auto ret = IcebergTableInformation(catalog, schema, name);
 	auto table_key = ret.GetTableKey();
 	auto &cached_load_table_result = catalog.GetLoadTableResult(table_key);
 	ret.table_metadata = IcebergTableMetadata::FromTableMetadata(cached_load_table_result.load_table_result->metadata);
+	ret.table_metadata.latest_metadata_json = cached_load_table_result.load_table_result->metadata_location;
+	return ret;
+}
 
+IcebergTableInformation IcebergTableInformation::Copy(IRCTransaction &irc_transaction) const {
+	auto ret = Copy();
 	// get snapshot from start of transaction
 	// latest_snapshot_id and sequence of copied table information should be asof the transaction start
 	// this is to ensure when the transaction commits, the assert ref snapshot id is the one closest to the start of

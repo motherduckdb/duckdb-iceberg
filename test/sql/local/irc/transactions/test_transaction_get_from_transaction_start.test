@@ -39,9 +39,6 @@ ATTACH '' AS my_datalake (
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
-statement ok
-set threads=1;
-
 # Perform an INSERT and COMMIT it
 statement ok
 drop table if exists my_datalake.default.multi_transaction_read;
