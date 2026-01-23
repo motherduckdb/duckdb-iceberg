@@ -1,5 +1,4 @@
 #include "iceberg_logging.hpp"
-#include "include/iceberg_logging.hpp"
 
 namespace duckdb {
 
