@@ -348,7 +348,7 @@ void IRCTransaction::Commit() {
 	} catch (std::exception &ex) {
 		ErrorData error(ex);
 		CleanupFiles();
-		DropSecrets(*context_t);
+		DropSecrets(*temp_con_context);
 		temp_con.Rollback();
 		error.Throw("Failed to commit Iceberg transaction: ");
 	}

@@ -170,34 +170,13 @@ void IcebergDelete::WritePositionalDeleteFile(ClientContext &context, IcebergDel
 	delete_file.delete_count = stats.row_count;
 	delete_file.file_size_bytes = stats.file_size_bytes;
 	delete_file.footer_size = stats.footer_size_bytes.GetValue<idx_t>();
-
-	if (stats_chunk.size() != 1) {
-		throw InternalException("Expected a single delete file to be written here");
-	}
-	delete_file.file_name = stats_chunk.GetValue(0, 0).GetValue<string>();
-	delete_file.delete_count = stats_chunk.GetValue(1, 0).GetValue<idx_t>();
-	delete_file.file_size_bytes = stats_chunk.GetValue(2, 0).GetValue<idx_t>();
-	delete_file.footer_size = stats_chunk.GetValue(3, 0).GetValue<idx_t>();
-	// also get pos min and max
-	auto col_stats = stats_chunk.GetValue(4, 0);
-	auto &map_children = MapValue::GetChildren(column_stats);
-	for (idx_t col_idx = 0; col_idx < map_children.size(); col_idx++) {
-		auto &struct_children = StructValue::GetChildren(map_children[col_idx]);
-		auto &col_name = StringValue::Get(struct_children[0]);
-		if (col_name != "pos") {
-			continue;
-		}
-		auto &col_stats = MapValue::GetChildren(struct_children[1]);
-		for (idx_t stats_idx = 0; stats_idx < col_stats.size(); stats_idx++) {
-			auto &stats_children = StructValue::GetChildren(col_stats[stats_idx]);
-			auto &stats_name = StringValue::Get(stats_children[0]);
-			if (stats_name == "min") {
-				delete_file.pos_min_value = StringValue::Get(stats_children[1]);
-			} else if (stats_name == "max") {
-				delete_file.pos_max_value = StringValue::Get(stats_children[1]);
-			}
-		}
-	}
+	auto pos_stats = stats.column_statistics.find("\"pos\"");
+	auto pos_min = pos_stats->second.find("min");
+	auto pos_min_value = pos_min->second.GetValue<idx_t>();
+	auto pos_max = pos_stats->second.find("max");
+	auto pos_max_value = pos_max->second.GetValue<idx_t>();
+	delete_file.pos_min_value = pos_min_value;
+	delete_file.pos_max_value = pos_max_value;
 	global_state.written_files.emplace(filename, std::move(delete_file));
 }
 
