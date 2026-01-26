@@ -342,13 +342,7 @@ void IRCTransaction::Commit() {
 	Connection temp_con(db);
 	temp_con.BeginTransaction();
 	auto &temp_con_context = temp_con.context;
-	// auto shared_context = context.lock();
-	// if (!shared_context) {
-	// 	throw InternalException("Context has been destroyed");
-	// }
 	try {
-		// DoTableUpdates(*shared_context);
-		// DoTableDeletes(*shared_context);
 		DoTableUpdates(*temp_con_context);
 		DoTableDeletes(*temp_con_context);
 	} catch (std::exception &ex) {
