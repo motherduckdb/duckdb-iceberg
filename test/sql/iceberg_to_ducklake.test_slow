@@ -56,8 +56,6 @@ call iceberg_to_ducklake(
     ]
 )
 
-mode skip
-
 # These are empty, so they are omitted:
 # - insert_all_types
 # - simple_v3_table
