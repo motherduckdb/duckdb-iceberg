@@ -28,7 +28,7 @@ IRCatalog::IRCatalog(AttachedDatabase &db_p, AccessMode access_mode, unique_ptr<
                      IcebergAttachOptions &attach_options, const string &default_schema)
     : Catalog(db_p), access_mode(access_mode), auth_handler(std::move(auth_handler)),
       warehouse(attach_options.warehouse), uri(attach_options.endpoint), version("v1"), attach_options(attach_options),
-      default_schema(default_schema) {
+      default_schema(default_schema), schemas(*this), metadata_cache() {
 	D_ASSERT(!default_schema.empty());
 }
 
@@ -42,16 +42,12 @@ void IRCatalog::Initialize(bool load_builtin) {
 }
 
 void IRCatalog::ScanSchemas(ClientContext &context, std::function<void(SchemaCatalogEntry &)> callback) {
-	auto &transaction = IRCTransaction::Get(context, *this);
-	auto &schemas = transaction.GetSchemas();
 	schemas.Scan(context, [&](CatalogEntry &schema) { callback(schema.Cast<IRCSchemaEntry>()); });
 }
 
 optional_ptr<SchemaCatalogEntry> IRCatalog::LookupSchema(CatalogTransaction transaction,
                                                          const EntryLookupInfo &schema_lookup,
                                                          OnEntryNotFound if_not_found) {
-	auto &irc_transaction = IRCTransaction::Get(transaction.GetContext(), *this);
-	auto &schemas = irc_transaction.GetSchemas();
 	if (schema_lookup.GetEntryName() == DEFAULT_SCHEMA && default_schema != DEFAULT_SCHEMA) {
 		D_ASSERT(!default_schema.empty());
 		return GetSchema(transaction, default_schema, if_not_found);
@@ -66,13 +62,44 @@ optional_ptr<SchemaCatalogEntry> IRCatalog::LookupSchema(CatalogTransaction tran
 	return reinterpret_cast<SchemaCatalogEntry *>(entry.get());
 }
 
+void IRCatalog::StoreLoadTableResult(const string &table_key,
+                                     unique_ptr<const rest_api_objects::LoadTableResult> load_table_result) {
+	std::lock_guard<std::mutex> g(metadata_cache_mutex);
+	// erase load table result if it exists.
+	if (metadata_cache.find(table_key) != metadata_cache.end()) {
+		metadata_cache.erase(table_key);
+	}
+	auto now = system_clock::now() + std::chrono::minutes(10);
+	auto val = make_uniq<MetadataCacheValue>(now, std::move(load_table_result));
+	metadata_cache.emplace(table_key, std::move(val));
+}
+
+MetadataCacheValue &IRCatalog::GetLoadTableResult(const string &table_key) {
+	std::lock_guard<std::mutex> g(metadata_cache_mutex);
+	if (metadata_cache.find(table_key) == metadata_cache.end()) {
+		throw InternalException("Attempting to retrieve table information that was never stored");
+	}
+	auto res = metadata_cache.find(table_key);
+	D_ASSERT(res != metadata_cache.end());
+	return *res->second;
+}
+
+void IRCatalog::RemoveLoadTableResult(string table_key) {
+	std::lock_guard<std::mutex> g(metadata_cache_mutex);
+	if (metadata_cache.find(table_key) == metadata_cache.end()) {
+		throw InternalException("Attempting to remove table information that was never stored");
+	}
+	metadata_cache.erase(table_key);
+}
+
 optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transaction, CreateSchemaInfo &info) {
 	optional_ptr<ClientContext> context = transaction.GetContext();
 	if (info.on_conflict == OnCreateConflict::REPLACE_ON_CONFLICT) {
-		throw InvalidInputException("CREATE OR REPLACE not supported in DuckDB-Iceberg");
+		throw NotImplementedException(
+		    "CREATE OR REPLACE not supported in DuckDB-Iceberg. Please use separate Drop and Create Statements");
 	}
 
-	D_ASSERT(context.get() != nullptr);
+	D_ASSERT(context);
 	rest_api_objects::CreateNamespaceRequest request;
 	request.has_properties = false;
 	auto namespace_identifiers = IRCAPI::ParseSchemaName(info.schema);
@@ -99,14 +126,12 @@ optional_ptr<CatalogEntry> IRCatalog::CreateSchema(CatalogTransaction transactio
 		}
 	}
 
-	IRCAPI::CommitNamespaceCreate(*context.get(), *this, create_body);
-
-	auto &irc_transaction = IRCTransaction::Get(transaction.GetContext(), *this);
-	auto &schemas = irc_transaction.GetSchemas();
+	IRCAPI::CommitNamespaceCreate(*context, *this, create_body);
 	auto new_schema = make_uniq<IRCSchemaEntry>(*this, info);
-	schemas.entries.insert(make_pair(new_schema->name, std::move(new_schema)));
-	auto ret = schemas.entries.find(info.schema);
-	return ret->second.get();
+	auto schema_name = new_schema->name;
+	schemas.AddEntry(schema_name, std::move(new_schema));
+	auto &ret = schemas.GetEntry(info.schema);
+	return ret;
 }
 
 void IRCatalog::DropSchema(ClientContext &context, DropInfo &info) {
@@ -193,6 +218,10 @@ unique_ptr<SecretEntry> IRCatalog::GetStorageSecret(ClientContext &context, cons
 		}
 	}
 	throw InvalidConfigurationException("Could not find a valid storage secret (s3 or aws)");
+}
+
+IRCSchemaSet &IRCatalog::GetSchemas() {
+	return schemas;
 }
 
 unique_ptr<SecretEntry> IRCatalog::GetIcebergSecret(ClientContext &context, const string &secret_name) {

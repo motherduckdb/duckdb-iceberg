@@ -9,7 +9,7 @@ namespace duckdb {
 
 class IcebergTableSchema {
 public:
-	static shared_ptr<IcebergTableSchema> ParseSchema(rest_api_objects::Schema &schema);
+	static shared_ptr<IcebergTableSchema> ParseSchema(const rest_api_objects::Schema &schema);
 
 public:
 	static void PopulateSourceIdMap(unordered_map<uint64_t, ColumnIndex> &source_to_column_id,

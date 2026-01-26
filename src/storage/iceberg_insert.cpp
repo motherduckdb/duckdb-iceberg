@@ -1,11 +1,10 @@
 #include "storage/iceberg_insert.hpp"
 #include "storage/irc_catalog.hpp"
-#include "storage/irc_transaction.hpp"
 #include "storage/irc_table_entry.hpp"
 #include "storage/iceberg_table_information.hpp"
 #include "metadata/iceberg_column_definition.hpp"
-
 #include "iceberg_multi_file_list.hpp"
+#include "storage/irc_transaction.hpp"
 #include "iceberg_value.hpp"
 #include "utils/iceberg_type.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
@@ -281,11 +280,13 @@ SinkFinalizeType IcebergInsert::Finalize(Pipeline &pipeline, Event &event, Clien
 	auto &irc_table = table->Cast<ICTableEntry>();
 	auto &table_info = irc_table.table_info;
 	auto &transaction = IRCTransaction::Get(context, table->catalog);
+	auto &irc_transaction = transaction.Cast<IRCTransaction>();
 
 	lock_guard<mutex> guard(global_state.lock);
 	if (!global_state.written_files.empty()) {
-		table_info.AddSnapshot(transaction, std::move(global_state.written_files));
-		transaction.MarkTableAsDirty(irc_table);
+		ApplyTableUpdate(table_info, irc_transaction, [&](IcebergTableInformation &tbl) {
+			tbl.AddSnapshot(transaction, std::move(global_state.written_files));
+		});
 	}
 	return SinkFinalizeType::READY;
 }
@@ -502,11 +503,11 @@ PhysicalOperator &IRCatalog::PlanCreateTableAs(ClientContext &context, PhysicalP
 
 	auto &ic_schema_entry = schema.Cast<IRCSchemaEntry>();
 	auto &catalog = ic_schema_entry.catalog;
-	auto &irc_transaction = IRCTransaction::Get(context, catalog);
+	auto transaction = catalog.GetCatalogTransaction(context);
 
 	// create the table. Takes care of committing to rest catalog and getting the metadata location etc.
 	// setting the schema
-	auto table = ic_schema_entry.CreateTable(irc_transaction, context, *op.info);
+	auto table = ic_schema_entry.CreateTable(transaction, context, *op.info);
 	if (!table) {
 		throw InternalException("Table could not be created");
 	}
