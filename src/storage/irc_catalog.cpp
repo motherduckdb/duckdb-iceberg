@@ -69,8 +69,14 @@ void IRCatalog::StoreLoadTableResult(const string &table_key,
 	if (metadata_cache.find(table_key) != metadata_cache.end()) {
 		metadata_cache.erase(table_key);
 	}
-	auto now = system_clock::now() + std::chrono::minutes(10);
-	auto val = make_uniq<MetadataCacheValue>(now, std::move(load_table_result));
+	// If max_table_staleness_minutes is not set, use a time in the past so cache is always expired
+	system_clock::time_point expires_at;
+	if (attach_options.max_table_staleness_minutes.IsValid()) {
+		expires_at = system_clock::now() + std::chrono::minutes(attach_options.max_table_staleness_minutes.GetIndex());
+	} else {
+		expires_at = system_clock::time_point::min();
+	}
+	auto val = make_uniq<MetadataCacheValue>(expires_at, std::move(load_table_result));
 	metadata_cache.emplace(table_key, std::move(val));
 }
 
@@ -82,6 +88,20 @@ MetadataCacheValue &IRCatalog::GetLoadTableResult(const string &table_key) {
 	auto res = metadata_cache.find(table_key);
 	D_ASSERT(res != metadata_cache.end());
 	return *res->second;
+}
+
+optional_ptr<MetadataCacheValue> IRCatalog::TryGetValidCachedLoadTableResult(const string &table_key) {
+	std::lock_guard<std::mutex> g(metadata_cache_mutex);
+	auto it = metadata_cache.find(table_key);
+	if (it == metadata_cache.end()) {
+		return nullptr;
+	}
+	auto &cached_value = *it->second;
+	if (system_clock::now() > cached_value.expires_at) {
+		// cached value has expired
+		return nullptr;
+	}
+	return &cached_value;
 }
 
 void IRCatalog::RemoveLoadTableResult(string table_key) {
@@ -522,6 +542,9 @@ unique_ptr<Catalog> IRCatalog::Attach(optional_ptr<StorageExtensionInfo> storage
 			set_by_attach_options.insert("purge_requested");
 		} else if (lower_name == "default_schema") {
 			default_schema = entry.second.ToString();
+		} else if (lower_name == "max_table_staleness") {
+			attach_options.max_table_staleness_minutes =
+			    entry.second.DefaultCastAs(LogicalType::UBIGINT).GetValue<idx_t>();
 		} else {
 			attach_options.options.emplace(std::move(entry));
 		}

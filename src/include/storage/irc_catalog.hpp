@@ -104,6 +104,7 @@ public:
 	void StoreLoadTableResult(const string &table_key,
 	                          unique_ptr<const rest_api_objects::LoadTableResult> load_table_result);
 	MetadataCacheValue &GetLoadTableResult(const string &table_key);
+	optional_ptr<MetadataCacheValue> TryGetValidCachedLoadTableResult(const string &table_key);
 	void RemoveLoadTableResult(string table_key);
 
 public:

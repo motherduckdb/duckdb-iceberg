@@ -33,7 +33,24 @@ bool ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &tabl
 	}
 
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
+	auto table_key = table.GetTableKey();
 
+	// Only check cache if MAX_TABLE_STALENESS option is set
+	if (ic_catalog.attach_options.max_table_staleness_minutes.IsValid()) {
+		auto cached_result = ic_catalog.TryGetValidCachedLoadTableResult(table_key);
+		if (cached_result) {
+			// Use the cached result instead of making a new request
+			table.table_metadata = IcebergTableMetadata::FromLoadTableResult(*cached_result->load_table_result);
+			auto &schemas = table.table_metadata.schemas;
+			D_ASSERT(!schemas.empty());
+			for (auto &table_schema : schemas) {
+				table.CreateSchemaVersion(*table_schema.second);
+			}
+			return true;
+		}
+	}
+
+	// No valid cached result or caching disabled, make a new request
 	auto get_table_result = IRCAPI::GetTable(context, ic_catalog, schema, table.name);
 	if (get_table_result.has_error) {
 		if (get_table_result.error_._error.type == "NoSuchIcebergTableException") {
@@ -45,7 +62,6 @@ bool ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &tabl
 		}
 		throw HTTPException(get_table_result.error_._error.message);
 	}
-	auto table_key = table.GetTableKey();
 	ic_catalog.StoreLoadTableResult(table_key, std::move(get_table_result.result_));
 	auto &cached_table_result = ic_catalog.GetLoadTableResult(table_key);
 	table.table_metadata = IcebergTableMetadata::FromLoadTableResult(*cached_table_result.load_table_result);

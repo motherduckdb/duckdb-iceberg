@@ -28,6 +28,8 @@ struct IcebergAttachOptions {
 	IRCAccessDelegationMode access_mode = IRCAccessDelegationMode::VENDED_CREDENTIALS;
 	IRCAuthorizationType authorization_type = IRCAuthorizationType::INVALID;
 	unordered_map<string, Value> options;
+	// max staleness for cached table metadata in minutes (optional - if not set, always request fresh metadata)
+	optional_idx max_table_staleness_minutes;
 };
 
 struct IRCAuthorization {
