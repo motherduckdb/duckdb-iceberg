@@ -199,9 +199,9 @@ optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const En
 		return entry->second.GetSchemaVersion(lookup.GetAtClause());
 	}
 
-	if (!IRCAPI::VerifyTableExistence(context, ic_catalog, schema, table_name)) {
-		return nullptr;
-	}
+	// if (!IRCAPI::VerifyTableExistence(context, ic_catalog, schema, table_name)) {
+	// 	return nullptr;
+	// }
 	if (entries.find(table_name) != entries.end()) {
 		entries.erase(table_name);
 	}
