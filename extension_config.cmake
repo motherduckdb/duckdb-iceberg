@@ -16,11 +16,11 @@ duckdb_extension_load(iceberg
 if (NOT EMSCRIPTEN)
 duckdb_extension_load(tpch)
 duckdb_extension_load(icu)
-#duckdb_extension_load(ducklake
-#        LOAD_TESTS
-#        GIT_URL https://github.com/duckdb/ducklake
-#        GIT_TAG c16de934130a7aa6c2d88a97acba935450276633
-#)
+duckdb_extension_load(ducklake
+        LOAD_TESTS
+        GIT_URL https://github.com/duckdb/ducklake
+        GIT_TAG 73adbb015e31607f11c30484dd34dfc541758bdd
+)
 
 if (NOT MINGW)
     duckdb_extension_load(aws

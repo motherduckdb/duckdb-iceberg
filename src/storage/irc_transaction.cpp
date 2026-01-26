@@ -341,11 +341,10 @@ void IRCTransaction::Commit() {
 
 	Connection temp_con(db);
 	temp_con.BeginTransaction();
-	// transaction also has a context member, but that is no longer active
-	auto &context_t = temp_con.context;
+	auto &temp_con_context = temp_con.context;
 	try {
-		DoTableUpdates(*context_t);
-		DoTableDeletes(*context_t);
+		DoTableUpdates(*temp_con_context);
+		DoTableDeletes(*temp_con_context);
 	} catch (std::exception &ex) {
 		ErrorData error(ex);
 		CleanupFiles();
