@@ -24,9 +24,8 @@ namespace duckdb {
 
 IcebergMultiFileList::IcebergMultiFileList(ClientContext &context_p, shared_ptr<IcebergScanInfo> scan_info,
                                            const string &path, const IcebergOptions &options)
-    : context(context_p),
-      fs(FileSystem::GetFileSystem(context)), scan_info(scan_info), path(path), table(nullptr), lock(),
-      options(options) {
+    : context(context_p), fs(FileSystem::GetFileSystem(context)), scan_info(scan_info), path(path), table(nullptr),
+      lock(), options(options) {
 }
 
 string IcebergMultiFileList::ToDuckDBPath(const string &raw_path) {
@@ -436,7 +435,8 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &file) c
 	return true;
 }
 
-optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t file_id, lock_guard<mutex> &guard) const {
+optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t file_id,
+                                                                           lock_guard<mutex> &guard) const {
 	if (file_id < data_files.size()) {
 		//! Have we already scanned this data file and returned it? If so, return it
 		return data_files[file_id];
