@@ -14,6 +14,9 @@ require httpfs
 
 require aws
 
+statement ok
+set threads = 1;
+
 # Do not ignore 'HTTP' error messages!
 set ignore_error_messages
 
@@ -35,20 +38,30 @@ ATTACH '' AS my_datalake (
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
-statement ok
-use my_datalake.default;
-
-# schema will default to 'main', which doesnt exist
+# no default schema means error
 statement error
 use my_datalake;
 ----
-Catalog Error: SET schema: No catalog + schema named "my_datalake" found.
+<REGEX>:.*Catalog Error: No default schema for catalog my_datalake.*
+
+statement ok
+use my_datalake.default;
 
 statement ok
 select * from my_datalake.default.table_unpartitioned;
 
-# 'main' still doesn't exist
-statement error
+# for some reason, this now works
+statement ok
 use my_datalake;
+
+statement ok
+call enable_logging('http');
+
+statement error
+select * from table_unpartitioned;
 ----
-Catalog Error: SET schema: No catalog + schema named "my_datalake" found.
+<REGEX>:.*Catalog Error: No default schema for catalog my_datalake.*
+
+statement ok
+select * from my_datalake.default.table_unpartitioned;
+

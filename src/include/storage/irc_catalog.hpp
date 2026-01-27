@@ -63,6 +63,9 @@ public:
 		return false;
 	}
 	string GetDefaultSchema() const override {
+		if (default_schema.empty()) {
+			throw CatalogException("No default schema for catalog %s", GetName());
+		}
 		return default_schema;
 	}
 

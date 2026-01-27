@@ -60,7 +60,8 @@ public:
 	                              const string &table_name);
 	static void CommitMultiTableUpdate(ClientContext &context, IRCatalog &catalog, const string &body);
 	static void CommitNamespaceCreate(ClientContext &context, IRCatalog &catalog, string body);
-	static void CommitNamespaceDrop(ClientContext &context, IRCatalog &catalog, vector<string> namespace_items);
+	static void CommitNamespaceDrop(ClientContext &context, IRCatalog &catalog, vector<string> namespace_items,
+	                                OnEntryNotFound on_4xx);
 	//! stage create = false, table is created immediately in the IRC
 	//! stage create = true, table is not created, but metadata is initialized and returned
 	static rest_api_objects::LoadTableResult CommitNewTable(ClientContext &context, IRCatalog &catalog,

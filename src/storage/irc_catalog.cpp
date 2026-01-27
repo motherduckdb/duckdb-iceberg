@@ -29,7 +29,6 @@ IRCatalog::IRCatalog(AttachedDatabase &db_p, AccessMode access_mode, unique_ptr<
     : Catalog(db_p), access_mode(access_mode), auth_handler(std::move(auth_handler)),
       warehouse(attach_options.warehouse), uri(attach_options.endpoint), version("v1"), attach_options(attach_options),
       default_schema(default_schema), schemas(*this), metadata_cache() {
-	D_ASSERT(!default_schema.empty());
 }
 
 IRCatalog::~IRCatalog() = default;
@@ -49,7 +48,8 @@ optional_ptr<SchemaCatalogEntry> IRCatalog::LookupSchema(CatalogTransaction tran
                                                          const EntryLookupInfo &schema_lookup,
                                                          OnEntryNotFound if_not_found) {
 	if (schema_lookup.GetEntryName() == DEFAULT_SCHEMA && default_schema != DEFAULT_SCHEMA) {
-		D_ASSERT(!default_schema.empty());
+		// throws error if default schema is empty
+		GetDefaultSchema();
 		return GetSchema(transaction, default_schema, if_not_found);
 	}
 
@@ -170,7 +170,7 @@ void IRCatalog::DropSchema(ClientContext &context, DropInfo &info) {
 			return;
 		}
 	}
-	IRCAPI::CommitNamespaceDrop(context, *this, namespace_items);
+	IRCAPI::CommitNamespaceDrop(context, *this, namespace_items, OnEntryNotFound::RETURN_NULL);
 }
 
 unique_ptr<LogicalOperator> IRCatalog::BindCreateIndex(Binder &binder, CreateStatement &stmt, TableCatalogEntry &table,
@@ -626,9 +626,6 @@ unique_ptr<Catalog> IRCatalog::Attach(optional_ptr<StorageExtensionInfo> storage
 		throw InvalidConfigurationException("Missing 'endpoint' option for Iceberg attach");
 	}
 
-	if (default_schema.empty()) {
-		default_schema = DEFAULT_SCHEMA;
-	}
 	D_ASSERT(auth_handler);
 	auto catalog =
 	    make_uniq<IRCatalog>(db, options.access_mode, std::move(auth_handler), attach_options, default_schema);
