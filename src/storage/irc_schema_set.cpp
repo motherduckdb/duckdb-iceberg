@@ -31,6 +31,11 @@ optional_ptr<CatalogEntry> IRCSchemaSet::GetEntry(ClientContext &context, const 
 	}
 	if (entry == entries.end()) {
 		CreateSchemaInfo info;
+		// in TryLookupEntryInternal, only Schema lookup recieves
+		// if (if_not_found == OnEntryNotFound::RETURN_NULL && !IRCAPI::VerifySchemaExistence(context, ic_catalog,
+		// name)) {
+		//     return nullptr;
+		// }
 		info.schema = name;
 		info.internal = false;
 		auto schema_entry = make_uniq<IRCSchemaEntry>(catalog, info);

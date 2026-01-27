@@ -57,7 +57,8 @@ bool ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &tabl
 			return false;
 		}
 		if (get_table_result.status_ == HTTPStatusCode::Forbidden_403 ||
-		    get_table_result.status_ == HTTPStatusCode::Unauthorized_401) {
+		    get_table_result.status_ == HTTPStatusCode::Unauthorized_401 ||
+		    get_table_result.status_ == HTTPStatusCode::NotFound_404) {
 			return false;
 		}
 		throw HTTPException(get_table_result.error_._error.message);
@@ -214,13 +215,22 @@ optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const En
 		}
 		return entry->second.GetSchemaVersion(lookup.GetAtClause());
 	}
-	
+
 	if (entries.find(table_name) != entries.end()) {
 		entries.erase(table_name);
 	}
 	auto it = entries.emplace(table_name, IcebergTableInformation(ic_catalog, schema, table_name));
 	auto entry = it.first;
-	FillEntry(context, entry->second);
+	if (!FillEntry(context, entry->second)) {
+		// Table doesn't exist
+		entries.erase(entry);
+		return nullptr;
+		// if (!IRCAPI::VerifySchemaExistence(context, ic_catalog,
+		// IRCAPI::GetEncodedSchemaName(schema.namespace_items))) { 	throw CatalogException("Schema %s does not exist",
+		// StringUtil::Join(schema.namespace_items, ","));
+		// }
+		// throw CatalogException("Table %s does not exist", table_name);
+	}
 	auto ret = entry->second.GetSchemaVersion(lookup.GetAtClause());
 
 	// get the latest information and save it to the transaction cache
