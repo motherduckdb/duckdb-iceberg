@@ -35,7 +35,7 @@ ATTACH '' AS my_datalake (
     CLIENT_ID 'admin',
     CLIENT_SECRET 'password',
     ENDPOINT 'http://127.0.0.1:8181',
-    MAX_TABLE_STALENESS 5
+    MAX_TABLE_STALENESS '5 minutes'
 );
 
 statement ok
@@ -45,19 +45,132 @@ statement ok
 FROM my_datalake.default.spark_written_upper_lower_bounds;
 
 # request to table
-# manifest file
-# manifest list
-# parquet file
 query I
-select count(*) from duckdb_logs_parsed('http');
+select request.url[26:] from duckdb_logs_parsed('http') where request.url not like '%.avro' and request.url not like '%.parquet';
 ----
-4
+namespaces/default/tables/spark_written_upper_lower_bounds
 
 statement ok
 FROM my_datalake.default.spark_written_upper_lower_bounds;
 
-# no new requests
+# no new requests to the catalog
 query I
-select count(*) from duckdb_logs_parsed('http');
+select request.url[26:] from duckdb_logs_parsed('http') where request.url not like '%.avro' and request.url not like '%.parquet';
 ----
-4
+namespaces/default/tables/spark_written_upper_lower_bounds
+
+# test parsing of interval
+statement ok
+ATTACH OR REPLACE '' AS my_datalake (
+    TYPE ICEBERG,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    ENDPOINT 'http://127.0.0.1:8181',
+    MAX_TABLE_STALENESS '10 seconds'
+);
+
+statement ok
+call truncate_duckdb_logs();
+
+statement ok
+FROM my_datalake.default.spark_written_upper_lower_bounds;
+
+# just 1 catalog request to the table
+query I
+select request.url[26:] from duckdb_logs_parsed('http') where request.url not like '%.avro' and request.url not like '%.parquet';
+----
+namespaces/default/tables/spark_written_upper_lower_bounds
+
+statement ok
+FROM my_datalake.default.spark_written_upper_lower_bounds;
+
+# no new requests to the table
+query I
+select request.url[26:] from duckdb_logs_parsed('http') where request.url not like '%.avro' and request.url not like '%.parquet';
+----
+namespaces/default/tables/spark_written_upper_lower_bounds
+
+statement ok
+ATTACH OR REPLACE '' AS my_datalake (
+    TYPE ICEBERG,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    ENDPOINT 'http://127.0.0.1:8181',
+    MAX_TABLE_STALENESS '4 hours'
+);
+
+statement ok
+call truncate_duckdb_logs();
+
+statement ok
+FROM my_datalake.default.spark_written_upper_lower_bounds;
+
+# just 1 catalog request to the table
+query I
+select request.url[26:] from duckdb_logs_parsed('http') where request.url not like '%.avro' and request.url not like '%.parquet';
+----
+namespaces/default/tables/spark_written_upper_lower_bounds
+
+statement ok
+FROM my_datalake.default.spark_written_upper_lower_bounds;
+
+# no new requests to the table
+query I
+select request.url[26:] from duckdb_logs_parsed('http') where request.url not like '%.avro' and request.url not like '%.parquet';
+----
+namespaces/default/tables/spark_written_upper_lower_bounds
+
+statement ok
+ATTACH OR REPLACE '' AS my_datalake (
+    TYPE ICEBERG,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    ENDPOINT 'http://127.0.0.1:8181',
+    MAX_TABLE_STALENESS '10 seconds'
+);
+
+statement ok
+call truncate_duckdb_logs();
+
+statement ok
+FROM my_datalake.default.spark_written_upper_lower_bounds;
+
+# request to table
+query I
+select request.url[26:] from duckdb_logs_parsed('http') where request.url not like '%.avro' and request.url not like '%.parquet';
+----
+namespaces/default/tables/spark_written_upper_lower_bounds
+
+sleep 11 seconds
+
+statement ok
+FROM my_datalake.default.spark_written_upper_lower_bounds;
+
+# table staleness has passed, so another request is made to the table metadata endpoint
+query I
+select request.url[26:] from duckdb_logs_parsed('http') where request.url not like '%.avro' and request.url not like '%.parquet';
+----
+namespaces/default/tables/spark_written_upper_lower_bounds
+namespaces/default/tables/spark_written_upper_lower_bounds
+
+statement error
+ATTACH OR REPLACE '' AS my_datalake (
+    TYPE ICEBERG,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    ENDPOINT 'http://127.0.0.1:8181',
+    MAX_TABLE_STALENESS 'blah blah'
+);
+----
+<REGEX>:.*Could not convert string 'blah blah' to INTERVAL.*
+
+statement error
+ATTACH OR REPLACE '' AS my_datalake (
+    TYPE ICEBERG,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    ENDPOINT 'http://127.0.0.1:8181',
+    MAX_TABLE_STALENESS '1000000 years'
+);
+----
+<REGEX>:.*Conversion Error.*

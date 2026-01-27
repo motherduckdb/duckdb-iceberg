@@ -36,9 +36,9 @@ bool ICTableSet::FillEntry(ClientContext &context, IcebergTableInformation &tabl
 	auto table_key = table.GetTableKey();
 
 	// Only check cache if MAX_TABLE_STALENESS option is set
-	if (ic_catalog.attach_options.max_table_staleness_minutes.IsValid()) {
+	if (ic_catalog.attach_options.max_table_staleness_micros.IsValid()) {
 		auto cached_result = ic_catalog.TryGetValidCachedLoadTableResult(table_key);
-		if (cached_result) {
+		if (cached_result && cached_result->expires_at > system_clock::now()) {
 			// Use the cached result instead of making a new request
 			table.table_metadata = IcebergTableMetadata::FromLoadTableResult(*cached_result->load_table_result);
 			auto &schemas = table.table_metadata.schemas;

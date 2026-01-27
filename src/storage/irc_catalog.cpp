@@ -15,6 +15,7 @@
 #include "duckdb/planner/operator/logical_create_table.hpp"
 #include "storage/irc_catalog.hpp"
 #include "regex"
+#include "duckdb/common/exception/conversion_exception.hpp"
 #include "storage/irc_authorization.hpp"
 #include "storage/authorization/oauth2.hpp"
 #include "storage/authorization/sigv4.hpp"
@@ -71,8 +72,8 @@ void IRCatalog::StoreLoadTableResult(const string &table_key,
 	}
 	// If max_table_staleness_minutes is not set, use a time in the past so cache is always expired
 	system_clock::time_point expires_at;
-	if (attach_options.max_table_staleness_minutes.IsValid()) {
-		expires_at = system_clock::now() + std::chrono::minutes(attach_options.max_table_staleness_minutes.GetIndex());
+	if (attach_options.max_table_staleness_micros.IsValid()) {
+		expires_at = system_clock::now() + std::chrono::microseconds(attach_options.max_table_staleness_micros.GetIndex());
 	} else {
 		expires_at = system_clock::time_point::min();
 	}
@@ -543,8 +544,13 @@ unique_ptr<Catalog> IRCatalog::Attach(optional_ptr<StorageExtensionInfo> storage
 		} else if (lower_name == "default_schema") {
 			default_schema = entry.second.ToString();
 		} else if (lower_name == "max_table_staleness") {
-			attach_options.max_table_staleness_minutes =
-			    entry.second.DefaultCastAs(LogicalType::UBIGINT).GetValue<idx_t>();
+			auto interval_option = entry.second.DefaultCastAs(LogicalType::INTERVAL);
+			auto interval_value = interval_option.GetValue<interval_t>();
+			int64_t interval_in_micros = 0;
+			if (!Interval::TryGetMicro(interval_value, interval_in_micros)) {
+				throw ConversionException("Could not get interval information from %s", interval_option.ToString());
+			}
+			attach_options.max_table_staleness_micros = interval_in_micros;
 		} else {
 			attach_options.options.emplace(std::move(entry));
 		}
