@@ -59,6 +59,9 @@ public:
 			return CatalogLookupBehavior::STANDARD;
 		}
 	}
+	bool CheckAmbiguousCatalogOrSchema(ClientContext &context, const string &schema) override {
+		return false;
+	}
 	string GetDefaultSchema() const override {
 		return default_schema;
 	}

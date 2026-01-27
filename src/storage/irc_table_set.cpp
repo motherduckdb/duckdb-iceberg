@@ -191,6 +191,9 @@ optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const En
 	auto &ic_catalog = catalog.Cast<IRCatalog>();
 	auto &irc_transaction = IRCTransaction::Get(context, catalog);
 	const auto table_name = lookup.GetEntryName();
+	if (table_name == "duckdb_tables") {
+		auto break_here = 0;
+	}
 	// first check transaction entries
 	auto table_key = IcebergTableInformation::GetTableKey(schema.namespace_items, table_name);
 	// Check if table has been deleted within in the transaction.
@@ -224,12 +227,8 @@ optional_ptr<CatalogEntry> ICTableSet::GetEntry(ClientContext &context, const En
 	if (!FillEntry(context, entry->second)) {
 		// Table doesn't exist
 		entries.erase(entry);
+		irc_transaction.requested_tables.emplace(table_name, TableInfoCache(false));
 		return nullptr;
-		// if (!IRCAPI::VerifySchemaExistence(context, ic_catalog,
-		// IRCAPI::GetEncodedSchemaName(schema.namespace_items))) { 	throw CatalogException("Schema %s does not exist",
-		// StringUtil::Join(schema.namespace_items, ","));
-		// }
-		// throw CatalogException("Table %s does not exist", table_name);
 	}
 	auto ret = entry->second.GetSchemaVersion(lookup.GetAtClause());
 

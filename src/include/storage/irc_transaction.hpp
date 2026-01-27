@@ -21,10 +21,13 @@ struct TableTransactionInfo {
 
 struct TableInfoCache {
 	TableInfoCache(idx_t sequence_number, idx_t snapshot_id)
-	    : sequence_number(sequence_number), snapshot_id(snapshot_id) {
+	    : sequence_number(sequence_number), snapshot_id(snapshot_id), exists(true) {
+	}
+	TableInfoCache(bool exists_) : sequence_number(0), snapshot_id(0), exists(exists_) {
 	}
 	idx_t sequence_number;
 	idx_t snapshot_id;
+	bool exists;
 };
 
 class IRCTransaction : public Transaction {
