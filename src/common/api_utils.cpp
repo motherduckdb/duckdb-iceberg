@@ -76,4 +76,32 @@ unique_ptr<HTTPResponse> APIUtils::Request(RequestType request_type, ClientConte
 	}
 }
 
+void APIUtils::RemoveStackTraceFromBody(unique_ptr<HTTPResponse> &response) {
+	std::string response_body = response->body;
+	yyjson_doc *immutable_doc = yyjson_read(response_body.c_str(), response_body.length(), 0);
+	if (!immutable_doc) {
+		return;
+	}
+	yyjson_mut_doc *doc = yyjson_doc_mut_copy(immutable_doc, NULL);
+	if (!doc) {
+		return;
+	}
+	duckdb_yyjson::yyjson_mut_val *root = yyjson_mut_doc_get_root(doc);
+	yyjson_mut_val *error = yyjson_mut_obj_get(root, "error");
+	// Remove stacktrace
+	if (!error) {
+		return;
+	}
+	yyjson_mut_obj_remove_str(error, "stack");
+
+	// Write the modified JSON back to response_body
+	size_t len;
+	char *json = yyjson_mut_write(doc, 0, &len);
+	if (json) {
+		response->body = std::string(json, len);
+		free(json);
+	}
+	yyjson_mut_doc_free(doc);
+}
+
 } // namespace duckdb

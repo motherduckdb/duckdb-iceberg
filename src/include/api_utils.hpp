@@ -40,6 +40,8 @@ public:
 
 	//! We use a singleton here to store the path, set by SelectCurlCertPath
 	static const string &GetCURLCertPath();
+
+	static void RemoveStackTraceFromBody(unique_ptr<HTTPResponse> &response);
 };
 
 } // namespace duckdb
