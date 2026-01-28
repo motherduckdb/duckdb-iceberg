@@ -38,14 +38,13 @@ ATTACH '' AS my_datalake (
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
-# no default schema means error
-statement error
-use my_datalake;
-----
-<REGEX>:.*Catalog Error: No default schema for catalog my_datalake.*
-
 statement ok
 use my_datalake.default;
+
+statement error
+select * from non_existend_table;
+----
+<REGEX>:.*Table with name non_existend_table does not exist.*
 
 statement ok
 select * from my_datalake.default.table_unpartitioned;
@@ -60,8 +59,13 @@ call enable_logging('http');
 statement error
 select * from table_unpartitioned;
 ----
-<REGEX>:.*Catalog Error: No default schema for catalog my_datalake.*
+<REGEX>:.*Table with name table_unpartitioned does not exist.*Did you mean "default.table_unpartitioned".*
 
-statement ok
+query II nosort res1
+select * from "default".table_unpartitioned;
+----
+
+query II nosort res1
 select * from my_datalake.default.table_unpartitioned;
+----
 

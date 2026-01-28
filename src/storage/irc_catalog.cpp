@@ -50,7 +50,9 @@ optional_ptr<SchemaCatalogEntry> IRCatalog::LookupSchema(CatalogTransaction tran
                                                          OnEntryNotFound if_not_found) {
 	if (schema_lookup.GetEntryName() == DEFAULT_SCHEMA && default_schema != DEFAULT_SCHEMA) {
 		// throws error if default schema is empty
-		GetDefaultSchema();
+		if (default_schema.empty() && if_not_found == OnEntryNotFound::RETURN_NULL) {
+			return nullptr;
+		}
 		return GetSchema(transaction, default_schema, if_not_found);
 	}
 
@@ -73,7 +75,8 @@ void IRCatalog::StoreLoadTableResult(const string &table_key,
 	// If max_table_staleness_minutes is not set, use a time in the past so cache is always expired
 	system_clock::time_point expires_at;
 	if (attach_options.max_table_staleness_micros.IsValid()) {
-		expires_at = system_clock::now() + std::chrono::microseconds(attach_options.max_table_staleness_micros.GetIndex());
+		expires_at =
+		    system_clock::now() + std::chrono::microseconds(attach_options.max_table_staleness_micros.GetIndex());
 	} else {
 		expires_at = system_clock::time_point::min();
 	}
