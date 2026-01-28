@@ -39,6 +39,8 @@ public:
 
 public:
 	static IcebergAuthorizationType TypeFromString(const string &type);
+	
+	static void ParseExtraHttpHeaders(const Value &headers_value, unordered_map<string, string> &out_headers);
 
 public:
 	virtual unique_ptr<HTTPResponse> Request(RequestType request_type, ClientContext &context,
@@ -65,6 +67,7 @@ public:
 public:
 	IcebergAuthorizationType type;
 	unique_ptr<HTTPClient> client;
+	unordered_map<string, string> extra_http_headers;
 };
 
 } // namespace duckdb

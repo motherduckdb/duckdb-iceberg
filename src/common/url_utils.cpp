@@ -18,7 +18,19 @@ void IRCEndpointBuilder::AddPathComponent(const string &component) {
 	if (component.empty()) {
 		return;
 	}
-	path_components.push_back(component);
+	
+	// If the component contains slashes, split it into multiple segments
+	if (component.find('/') != string::npos) {
+		auto segments = StringUtil::Split(component, '/');
+		for (const auto &segment : segments) {
+			if (!segment.empty()) {
+				path_components.push_back(segment);
+			}
+		}
+	} else {
+		// Single component without slashes
+		path_components.push_back(component);
+	}
 }
 
 string IRCEndpointBuilder::GetHost() const {
