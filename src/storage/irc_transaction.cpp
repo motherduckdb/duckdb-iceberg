@@ -15,6 +15,8 @@
 #include "metadata/iceberg_snapshot.hpp"
 #include "storage/irc_catalog.hpp"
 #include "duckdb/storage/table/update_state.hpp"
+#include "duckdb/parser/parsed_data/drop_info.hpp"
+#include "storage/irc_schema_entry.hpp"
 
 namespace duckdb {
 
@@ -396,6 +398,12 @@ void IRCTransaction::DoTableDeletes(ClientContext &context) {
 		IRCAPI::CommitTableDelete(context, catalog, table.schema.namespace_items, table.name);
 		// remove the load table result
 		ic_catalog.RemoveLoadTableResult(table_key);
+		// remove the table entry from the catalog
+		auto &schema_entry = ic_catalog.schemas.GetEntry(schema_key).Cast<IRCSchemaEntry>();
+		DropInfo drop_info;
+		drop_info.name = table_name;
+		drop_info.if_not_found = OnEntryNotFound::RETURN_NULL;
+		schema_entry.DropEntry(context, drop_info, true);
 	}
 }
 
