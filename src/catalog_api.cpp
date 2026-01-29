@@ -14,11 +14,11 @@
 #include "duckdb/common/error_data.hpp"
 #include "duckdb/common/http_util.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
-#include "include/api_utils.hpp"
 #include "include/storage/irc_authorization.hpp"
 #include "include/storage/irc_catalog.hpp"
 
 #include "rest_catalog/objects/list.hpp"
+#include "rest_catalog/objects/iceberg_error_response.hpp"
 
 using namespace duckdb_yyjson;
 namespace duckdb {
@@ -328,10 +328,19 @@ void IRCAPI::CommitMultiTableUpdate(ClientContext &context, IRCatalog &catalog, 
 	headers.Insert("Content-Type", "application/json");
 	auto response = catalog.auth_handler->Request(RequestType::POST_REQUEST, context, url_builder, headers, body);
 	if (response->status != HTTPStatusCode::OK_200 && response->status != HTTPStatusCode::NoContent_204) {
-		APIUtils::RemoveStackTraceFromBody(response);
-		throw InvalidConfigurationException(
-		    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s",
-		    url_builder.GetURLEncoded(), EnumUtil::ToString(response->status), response->reason, response->body);
+		yyjson_val *error_obj = ICUtils::get_error_message(response->body);
+		if (error_obj == nullptr) {
+			throw InvalidConfigurationException(response->body);
+		}
+		auto error = rest_api_objects::IcebergErrorResponse::FromJSON(error_obj);
+		for (const auto &str : error._error.stack) {
+			DUCKDB_LOG(context, IcebergLogType, str);
+		}
+		// Omit stack from error output
+		error._error.stack = vector<string>();
+		throw InvalidConfigurationException("Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s",
+		                                    url_builder.GetURLEncoded(), EnumUtil::ToString(response->status),
+		                                    response->reason, error.ToString());
 	}
 }
 

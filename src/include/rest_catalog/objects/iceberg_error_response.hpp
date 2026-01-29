@@ -27,6 +27,9 @@ public:
 	string TryFromJSON(yyjson_val *obj);
 
 public:
+	string ToString() const;
+
+public:
 	ErrorModel _error;
 };
 

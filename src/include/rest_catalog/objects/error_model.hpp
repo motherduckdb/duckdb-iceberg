@@ -26,11 +26,13 @@ public:
 	string TryFromJSON(yyjson_val *obj);
 
 public:
+	string ToString() const;
+
+public:
 	string message;
 	string type;
 	int32_t code;
 	vector<string> stack;
-	bool has_stack = false;
 };
 
 } // namespace rest_api_objects

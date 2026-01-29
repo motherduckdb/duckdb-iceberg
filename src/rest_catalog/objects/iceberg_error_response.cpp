@@ -38,5 +38,9 @@ string IcebergErrorResponse::TryFromJSON(yyjson_val *obj) {
 	return string();
 }
 
+string IcebergErrorResponse::ToString() const {
+	return _error.ToString();
+}
+
 } // namespace rest_api_objects
 } // namespace duckdb
