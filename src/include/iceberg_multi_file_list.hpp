@@ -75,7 +75,7 @@ protected:
 	OpenFileInfo GetFileInternal(idx_t i, lock_guard<mutex> &guard) const;
 
 protected:
-	bool ManifestMatchesFilter(const IcebergManifestListEntry &manifest) const;
+	bool ManifestMatchesFilter(const IcebergManifestFile &manifest) const;
 	bool FileMatchesFilter(const IcebergManifestEntry &file) const;
 	// TODO: How to guarantee we only call this after the filter pushdown?
 	void InitializeFiles(lock_guard<mutex> &guard) const;
@@ -104,16 +104,16 @@ public:
 	mutable unique_ptr<manifest_file::ManifestFileReader> delete_manifest_reader;
 
 	mutable vector<IcebergManifestEntry> manifest_entries;
-	mutable vector<IcebergManifestListEntry> data_manifests;
-	mutable vector<IcebergManifestListEntry> delete_manifests;
-	mutable vector<reference<IcebergManifestFile>> transaction_data_manifests;
-	mutable vector<reference<IcebergManifestFile>> transaction_delete_manifests;
+	mutable vector<IcebergManifestFile> data_manifests;
+	mutable vector<IcebergManifestFile> delete_manifests;
+	mutable vector<reference<IcebergManifest>> transaction_data_manifests;
+	mutable vector<reference<IcebergManifest>> transaction_delete_manifests;
 	mutable idx_t transaction_data_idx = 0;
 	idx_t transaction_delete_idx = 0;
 
-	mutable vector<IcebergManifestListEntry>::iterator current_data_manifest;
-	mutable vector<IcebergManifestListEntry>::iterator current_delete_manifest;
-	mutable vector<reference<IcebergManifestFile>>::iterator current_transaction_delete_manifest;
+	mutable vector<IcebergManifestFile>::iterator current_data_manifest;
+	mutable vector<IcebergManifestFile>::iterator current_delete_manifest;
+	mutable vector<reference<IcebergManifest>>::iterator current_transaction_delete_manifest;
 	//! The data files of the manifest file that we last scanned
 	mutable idx_t manifest_entry_idx = 0;
 	mutable vector<IcebergManifestEntry> current_manifest_entries;

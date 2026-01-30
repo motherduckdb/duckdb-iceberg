@@ -72,7 +72,7 @@ Value IcebergDataFile::ToValue(const LogicalType &type) const {
 
 namespace manifest_file {
 
-static LogicalType PartitionStructType(IcebergTableInformation &table_info, const IcebergManifestFile &file) {
+static LogicalType PartitionStructType(IcebergTableInformation &table_info, const IcebergManifest &file) {
 	D_ASSERT(!file.entries.empty());
 
 	auto &first_entry = file.entries.front();
@@ -90,7 +90,7 @@ static LogicalType PartitionStructType(IcebergTableInformation &table_info, cons
 	return LogicalType::STRUCT(children);
 }
 
-idx_t WriteToFile(IcebergTableInformation &table_info, const IcebergManifestFile &manifest_file, CopyFunction &copy,
+idx_t WriteToFile(IcebergTableInformation &table_info, const IcebergManifest &manifest_file, CopyFunction &copy,
                   DatabaseInstance &db, ClientContext &context) {
 	D_ASSERT(!manifest_file.entries.empty());
 	auto &allocator = db.GetBufferManager().GetBufferAllocator();

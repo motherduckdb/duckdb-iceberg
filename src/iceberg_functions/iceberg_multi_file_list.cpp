@@ -553,7 +553,7 @@ OpenFileInfo IcebergMultiFileList::GetFile(idx_t file_id) const {
 	return GetFileInternal(file_id, guard);
 }
 
-bool IcebergMultiFileList::ManifestMatchesFilter(const IcebergManifestListEntry &manifest) const {
+bool IcebergMultiFileList::ManifestMatchesFilter(const IcebergManifestFile &manifest) const {
 	auto spec_id = manifest.partition_spec_id;
 	auto &metadata = GetMetadata();
 
@@ -716,7 +716,7 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 		delete_manifest_reader->SetSequenceNumber(manifest.sequence_number);
 		delete_manifest_reader->SetPartitionSpecID(manifest.partition_spec_id);
 
-		IcebergManifestFile manifest_file(full_path);
+		IcebergManifest manifest_file(full_path);
 		while (!delete_manifest_reader->Finished()) {
 			delete_manifest_reader->Read(STANDARD_VECTOR_SIZE, manifest_file.entries);
 		}

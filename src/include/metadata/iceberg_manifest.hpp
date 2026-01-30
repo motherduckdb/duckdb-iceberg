@@ -97,8 +97,8 @@ public:
 	}
 };
 
-struct IcebergManifestFile {
-	IcebergManifestFile(const string &path) : path(path) {
+struct IcebergManifest {
+	IcebergManifest(const string &path) : path(path) {
 	}
 
 public:
@@ -153,7 +153,7 @@ static constexpr const int32_t REFERENCED_DATA_FILE = 143;
 static constexpr const int32_t CONTENT_OFFSET = 144;
 static constexpr const int32_t CONTENT_SIZE_IN_BYTES = 145;
 
-idx_t WriteToFile(IcebergTableInformation &table_info, const IcebergManifestFile &manifest_file,
+idx_t WriteToFile(IcebergTableInformation &table_info, const IcebergManifest &manifest_file,
                   CopyFunction &copy_function, DatabaseInstance &db, ClientContext &context);
 
 } // namespace manifest_file

@@ -67,9 +67,9 @@ enum class IcebergManifestContentType : uint8_t {
 	DELETE = 1,
 };
 
-//! TODO: why do we call this IcebergManifestListEntry? this represents a 'manifest_file' in the spec
+//! TODO: why do we call this IcebergManifestFile? this represents a 'manifest_file' in the spec
 //! An entry in the manifest list file (top level AVRO file)
-struct IcebergManifestListEntry {
+struct IcebergManifestFile {
 public:
 	//! Path to the manifest AVRO file
 	string manifest_path;
@@ -99,10 +99,10 @@ public:
 	//! The field summaries of the partition (if present)
 	ManifestPartitions partitions;
 	//! the actual manifest file information
-	IcebergManifestFile manifest_file;
+	IcebergManifest manifest_file;
 
 public:
-	IcebergManifestListEntry(string manifest_path) : manifest_path(manifest_path), manifest_file(manifest_path) {
+	IcebergManifestFile(string manifest_path) : manifest_path(manifest_path), manifest_file(manifest_path) {
 	}
 
 	static vector<LogicalType> Types() {
@@ -134,25 +134,25 @@ public:
 	IcebergManifestList(const string &path) : path(path) {
 	}
 
-	vector<IcebergManifestListEntry> &GetManifestFilesMutable();
-	const vector<IcebergManifestListEntry> &GetManifestFilesConst() const;
+	vector<IcebergManifestFile> &GetManifestFilesMutable();
+	const vector<IcebergManifestFile> &GetManifestFilesConst() const;
 
-	IcebergManifestListEntry &CreateNewManifestListEntry(string manifest_file_path) {
-		manifest_entries.push_back(IcebergManifestListEntry(manifest_file_path));
+	IcebergManifestFile &CreateNewManifestListEntry(string manifest_file_path) {
+		manifest_entries.push_back(IcebergManifestFile(manifest_file_path));
 		return manifest_entries.back();
 	}
 	idx_t GetManifestListEntriesCount() const;
 
 	void WriteManifestListEntry(IcebergTableInformation &table_info, idx_t manifest_index, CopyFunction &avro_copy,
 	                            DatabaseInstance &db, ClientContext &context);
-	void AddToManifestEntries(vector<IcebergManifestListEntry> &manifest_list_entries);
-	vector<IcebergManifestListEntry> GetManifestListEntries();
+	void AddToManifestEntries(vector<IcebergManifestFile> &manifest_list_entries);
+	vector<IcebergManifestFile> GetManifestListEntries();
 
 public:
 	string path;
 
 private:
-	vector<IcebergManifestListEntry> manifest_entries;
+	vector<IcebergManifestFile> manifest_entries;
 };
 
 namespace manifest_list {
