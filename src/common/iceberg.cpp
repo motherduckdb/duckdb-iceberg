@@ -49,7 +49,7 @@ unique_ptr<IcebergTable> IcebergTable::Load(const string &iceberg_path, const Ic
 			manifest_file_reader->Read(STANDARD_VECTOR_SIZE, manifest_file.data_files);
 		}
 
-		IcebergTableEntry table_entry(std::move(manifest), std::move(manifest_file));
+		IcebergTableManifestEntry table_entry(std::move(manifest), std::move(manifest_file));
 		ret->entries.push_back(table_entry);
 	}
 	return ret;

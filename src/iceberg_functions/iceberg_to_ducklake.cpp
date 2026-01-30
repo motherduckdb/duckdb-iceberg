@@ -25,12 +25,12 @@
 #include "duckdb/common/types/uuid.hpp"
 #include "duckdb/common/numeric_utils.hpp"
 
-#include "storage/irc_catalog.hpp"
-#include "storage/irc_transaction.hpp"
-#include "storage/irc_schema_entry.hpp"
-#include "storage/irc_schema_set.hpp"
-#include "storage/irc_table_set.hpp"
-#include "storage/irc_table_entry.hpp"
+#include "storage/iceberg_catalog.hpp"
+#include "storage/iceberg_transaction.hpp"
+#include "storage/iceberg_schema_entry.hpp"
+#include "storage/iceberg_schema_set.hpp"
+#include "storage/iceberg_table_set.hpp"
+#include "storage/iceberg_table_entry.hpp"
 #include "storage/iceberg_table_information.hpp"
 
 #include "metadata/iceberg_table_metadata.hpp"
@@ -1366,9 +1366,9 @@ static unique_ptr<FunctionData> IcebergToDuckLakeBind(ClientContext &context, Ta
 	if (catalog_type != "iceberg") {
 		throw InvalidInputException("First parameter must be the name of an attached Iceberg catalog");
 	}
-	auto &irc_catalog = catalog.Cast<IRCatalog>();
-	auto &irc_transaction = IRCTransaction::Get(context, irc_catalog);
-	auto &schema_set = irc_catalog.GetSchemas();
+	auto &iceberg_catalog = catalog.Cast<IcebergCatalog>();
+	auto &iceberg_transaction = IcebergTransaction::Get(context, iceberg_catalog);
+	auto &schema_set = iceberg_catalog.GetSchemas();
 
 	IcebergOptions options;
 	for (auto &kv : input.named_parameters) {
@@ -1407,7 +1407,7 @@ static unique_ptr<FunctionData> IcebergToDuckLakeBind(ClientContext &context, Ta
 
 	schema_set.LoadEntries(context);
 	for (auto &it : schema_set.GetEntries()) {
-		auto &schema_entry = it.second->Cast<IRCSchemaEntry>();
+		auto &schema_entry = it.second->Cast<IcebergSchemaEntry>();
 		auto &tables = schema_entry.tables;
 		tables.LoadEntries(context);
 		for (auto &it : tables.GetEntriesMutable()) {
