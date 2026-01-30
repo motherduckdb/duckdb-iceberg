@@ -1,5 +1,5 @@
 #include "iceberg_extension.hpp"
-#include "storage/iceberg_catalog.hpp"
+#include "storage/catalog/iceberg_catalog.hpp"
 #include "storage/iceberg_transaction_manager.hpp"
 #include "duckdb.hpp"
 #include "duckdb/main/secret/secret_manager.hpp"

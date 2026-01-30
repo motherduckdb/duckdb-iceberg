@@ -24,7 +24,7 @@
 #include "iceberg_utils.hpp"
 #include "iceberg_multi_file_reader.hpp"
 #include "iceberg_functions.hpp"
-#include "storage/iceberg_table_entry.hpp"
+#include "storage/catalog/iceberg_table_entry.hpp"
 
 #include <string>
 #include <numeric>

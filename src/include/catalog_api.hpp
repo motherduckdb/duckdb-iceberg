@@ -6,7 +6,7 @@
 #include "duckdb/parser/parsed_data/create_secret_info.hpp"
 #include "iceberg_metadata.hpp"
 #include "url_utils.hpp"
-#include "storage/iceberg_table_entry.hpp"
+#include "storage/catalog/iceberg_table_entry.hpp"
 #include "rest_catalog/objects/table_identifier.hpp"
 #include "rest_catalog/objects/load_table_result.hpp"
 

@@ -3,7 +3,7 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/main/setting_info.hpp"
-#include "storage/iceberg_catalog.hpp"
+#include "storage/catalog/iceberg_catalog.hpp"
 
 namespace duckdb {
 

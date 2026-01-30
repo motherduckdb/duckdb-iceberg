@@ -4,7 +4,7 @@
 #include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
 
 #include "iceberg_utils.hpp"
-#include "storage/iceberg_table_entry.hpp"
+#include "storage/catalog/iceberg_table_entry.hpp"
 #include "storage/iceberg_table_information.hpp"
 #include "metadata/iceberg_table_metadata.hpp"
 

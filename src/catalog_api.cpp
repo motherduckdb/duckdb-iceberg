@@ -3,8 +3,8 @@
 
 #include "catalog_utils.hpp"
 #include "iceberg_logging.hpp"
-#include "storage/iceberg_catalog.hpp"
-#include "storage/iceberg_schema_entry.hpp"
+#include "storage/catalog/iceberg_catalog.hpp"
+#include "storage/catalog/iceberg_schema_entry.hpp"
 #include "yyjson.hpp"
 #include "iceberg_utils.hpp"
 #include "api_utils.hpp"
@@ -15,7 +15,7 @@
 #include "duckdb/common/http_util.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
 #include "include/storage/iceberg_authorization.hpp"
-#include "include/storage/iceberg_catalog.hpp"
+#include "include/storage/catalog/iceberg_catalog.hpp"
 
 #include "rest_catalog/objects/list.hpp"
 

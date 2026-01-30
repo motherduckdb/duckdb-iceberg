@@ -1,6 +1,6 @@
 #include "storage/table_update/iceberg_add_snapshot.hpp"
 #include "storage/table_create/iceberg_create_table_request.hpp"
-#include "storage/iceberg_table_set.hpp"
+#include "storage/catalog/iceberg_table_set.hpp"
 #include "storage/iceberg_table_information.hpp"
 #include "duckdb/parser/constraints/not_null_constraint.hpp"
 #include "utils/iceberg_type.hpp"

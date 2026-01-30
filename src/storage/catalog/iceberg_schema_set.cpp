@@ -2,8 +2,8 @@
 #include "duckdb/parser/parsed_data/create_schema_info.hpp"
 #include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/catalog/catalog.hpp"
-#include "storage/iceberg_catalog.hpp"
-#include "storage/iceberg_schema_set.hpp"
+#include "storage/catalog/iceberg_catalog.hpp"
+#include "storage/catalog/iceberg_schema_set.hpp"
 #include "storage/iceberg_transaction.hpp"
 
 namespace duckdb {

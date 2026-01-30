@@ -1,9 +1,8 @@
 
 #pragma once
 
-#include "iceberg_table_information.hpp"
 #include "duckdb/catalog/catalog_entry.hpp"
-#include "storage/iceberg_table_entry.hpp"
+#include "storage/catalog/iceberg_table_entry.hpp"
 #include "storage/iceberg_table_information.hpp"
 #include "storage/iceberg_transaction_data.hpp"
 

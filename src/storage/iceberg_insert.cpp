@@ -1,6 +1,6 @@
 #include "storage/iceberg_insert.hpp"
-#include "storage/iceberg_catalog.hpp"
-#include "storage/iceberg_table_entry.hpp"
+#include "storage/catalog/iceberg_catalog.hpp"
+#include "storage/catalog/iceberg_table_entry.hpp"
 #include "storage/iceberg_table_information.hpp"
 #include "metadata/iceberg_column_definition.hpp"
 #include "iceberg_multi_file_list.hpp"

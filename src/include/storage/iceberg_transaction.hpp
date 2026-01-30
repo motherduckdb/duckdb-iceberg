@@ -2,7 +2,7 @@
 #pragma once
 
 #include "duckdb/transaction/transaction.hpp"
-#include "storage/iceberg_schema_set.hpp"
+#include "storage/catalog/iceberg_schema_set.hpp"
 
 namespace duckdb {
 class IcebergCatalog;

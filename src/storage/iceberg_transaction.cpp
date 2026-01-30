@@ -5,7 +5,7 @@
 #include "manifest_reader.hpp"
 
 #include "storage/iceberg_transaction.hpp"
-#include "storage/iceberg_catalog.hpp"
+#include "storage/catalog/iceberg_catalog.hpp"
 #include "storage/iceberg_authorization.hpp"
 #include "storage/iceberg_table_information.hpp"
 #include "storage/table_update/iceberg_add_snapshot.hpp"
@@ -13,10 +13,10 @@
 #include "catalog_utils.hpp"
 #include "yyjson.hpp"
 #include "metadata/iceberg_snapshot.hpp"
-#include "storage/iceberg_catalog.hpp"
+#include "storage/catalog/iceberg_catalog.hpp"
 #include "duckdb/storage/table/update_state.hpp"
 #include "duckdb/parser/parsed_data/drop_info.hpp"
-#include "storage/iceberg_schema_entry.hpp"
+#include "storage/catalog/iceberg_schema_entry.hpp"
 
 namespace duckdb {
 

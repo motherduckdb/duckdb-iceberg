@@ -2,7 +2,7 @@
 #pragma once
 
 #include "duckdb/transaction/transaction_manager.hpp"
-#include "storage/iceberg_catalog.hpp"
+#include "storage/catalog/iceberg_catalog.hpp"
 #include "storage/iceberg_transaction.hpp"
 
 namespace duckdb {

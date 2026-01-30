@@ -3,7 +3,7 @@
 #include "iceberg_logging.hpp"
 #include "duckdb/main/extension_helper.hpp"
 #include "storage/authorization/oauth2.hpp"
-#include "storage/iceberg_catalog.hpp"
+#include "storage/catalog/iceberg_catalog.hpp"
 #include "api_utils.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
 #include "duckdb/logging/logger.hpp"

@@ -9,13 +9,12 @@
 #include "iceberg_metadata.hpp"
 #include "iceberg_functions.hpp"
 #include "iceberg_utils.hpp"
-#include "storage/iceberg_table_entry.hpp"
+#include "storage/catalog/iceberg_table_entry.hpp"
 #include "duckdb/main/client_context.hpp"
-#include "storage/iceberg_catalog.hpp"
+#include "storage/catalog/iceberg_catalog.hpp"
 #include "storage/iceberg_table_information.hpp"
 #include "storage/iceberg_transaction_data.hpp"
 #include "storage/iceberg_transaction.hpp"
-#include "storage/iceberg_table_information.hpp"
 #include "metadata/iceberg_table_metadata.hpp"
 
 #include <string>

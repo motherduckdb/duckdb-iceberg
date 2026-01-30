@@ -1,7 +1,7 @@
 #include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
 #include "iceberg_functions/iceberg_deletes_file_reader.hpp"
 #include "iceberg_functions.hpp"
-#include "storage/iceberg_table_entry.hpp"
+#include "storage/catalog/iceberg_table_entry.hpp"
 
 namespace duckdb {
 

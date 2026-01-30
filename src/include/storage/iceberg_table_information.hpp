@@ -1,6 +1,6 @@
 #pragma once
 
-#include "storage/iceberg_table_entry.hpp"
+#include "storage/catalog/iceberg_table_entry.hpp"
 #include "storage/iceberg_metadata_info.hpp"
 #include "metadata/iceberg_manifest.hpp"
 #include "metadata/iceberg_table_metadata.hpp"

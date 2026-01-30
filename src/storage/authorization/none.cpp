@@ -1,6 +1,6 @@
 #include "storage/authorization/none.hpp"
 #include "api_utils.hpp"
-#include "storage/iceberg_catalog.hpp"
+#include "storage/catalog/iceberg_catalog.hpp"
 
 namespace duckdb {
 

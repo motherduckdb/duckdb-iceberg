@@ -25,12 +25,12 @@
 #include "duckdb/common/types/uuid.hpp"
 #include "duckdb/common/numeric_utils.hpp"
 
-#include "storage/iceberg_catalog.hpp"
+#include "storage/catalog/iceberg_catalog.hpp"
 #include "storage/iceberg_transaction.hpp"
-#include "storage/iceberg_schema_entry.hpp"
-#include "storage/iceberg_schema_set.hpp"
-#include "storage/iceberg_table_set.hpp"
-#include "storage/iceberg_table_entry.hpp"
+#include "storage/catalog/iceberg_schema_entry.hpp"
+#include "storage/catalog/iceberg_schema_set.hpp"
+#include "storage/catalog/iceberg_table_set.hpp"
+#include "storage/catalog/iceberg_table_entry.hpp"
 #include "storage/iceberg_table_information.hpp"
 
 #include "metadata/iceberg_table_metadata.hpp"

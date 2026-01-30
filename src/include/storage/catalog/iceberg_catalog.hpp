@@ -5,7 +5,7 @@
 #include "duckdb/common/enums/access_mode.hpp"
 #include "duckdb/main/secret/secret_manager.hpp"
 #include "url_utils.hpp"
-#include "storage/iceberg_schema_set.hpp"
+#include "storage/catalog/iceberg_schema_set.hpp"
 #include "rest_catalog/objects/load_table_result.hpp"
 #include "storage/iceberg_authorization.hpp"
 
