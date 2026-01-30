@@ -39,7 +39,7 @@ public:
 
 public:
 	static IcebergAuthorizationType TypeFromString(const string &type);
-	
+
 	static void ParseExtraHttpHeaders(const Value &headers_value, unordered_map<string, string> &out_headers);
 
 public:

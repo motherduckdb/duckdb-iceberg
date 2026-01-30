@@ -161,7 +161,7 @@ unique_ptr<OAuth2Authorization> OAuth2Authorization::FromAttachOptions(ClientCon
 
 		// Parse extra_http_headers from secret if present
 		IcebergAuthorization::ParseExtraHttpHeaders(kv_iceberg_secret.TryGetValue("extra_http_headers"),
-		                                        result->extra_http_headers);
+		                                            result->extra_http_headers);
 	} else {
 		if (!secret.empty()) {
 			set<string> option_names;
@@ -183,7 +183,7 @@ unique_ptr<OAuth2Authorization> OAuth2Authorization::FromAttachOptions(ClientCon
 
 		// Parse extra_http_headers from inline options if present
 		IcebergAuthorization::ParseExtraHttpHeaders(kv_iceberg_secret.TryGetValue("extra_http_headers"),
-		                                        result->extra_http_headers);
+		                                            result->extra_http_headers);
 	}
 
 	if (token.IsNull()) {
