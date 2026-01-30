@@ -333,9 +333,12 @@ void IRCAPI::CommitMultiTableUpdate(ClientContext &context, IRCatalog &catalog, 
 			throw InvalidConfigurationException(response->body);
 		}
 		auto error = rest_api_objects::IcebergErrorResponse::FromJSON(error_obj);
+		string stack_trace;
 		for (const auto &str : error._error.stack) {
-			DUCKDB_LOG(context, IcebergLogType, str);
+			stack_trace.append(str + "\n");
 		}
+		DUCKDB_LOG(context, IcebergLogType, stack_trace);
+
 		// Omit stack from error output
 		error._error.stack = vector<string>();
 		throw InvalidConfigurationException("Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s",
