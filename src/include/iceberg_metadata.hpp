@@ -95,11 +95,11 @@ public:
 			if (table_entry.manifest.content != TYPE) {
 				continue;
 			}
-			for (auto &data_file : table_entry.manifest_file.data_files) {
-				if (data_file.status == IcebergManifestEntryStatusType::DELETED) {
+			for (auto &manifest_entry : table_entry.manifest_file.entries) {
+				if (manifest_entry.status == IcebergManifestEntryStatusType::DELETED) {
 					continue;
 				}
-				ret.push_back(data_file.file_path);
+				ret.push_back(manifest_entry.data_file.file_path);
 			}
 		}
 		return ret;
@@ -107,7 +107,7 @@ public:
 	vector<IcebergManifestEntry> GetAllPaths() {
 		vector<IcebergManifestEntry> ret;
 		for (auto &table_entry : entries) {
-			for (auto &manifest_entry : table_entry.manifest_file.data_files) {
+			for (auto &manifest_entry : table_entry.manifest_file.entries) {
 				if (manifest_entry.status == IcebergManifestEntryStatusType::DELETED) {
 					continue;
 				}

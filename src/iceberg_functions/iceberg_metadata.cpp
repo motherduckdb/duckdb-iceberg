@@ -137,14 +137,15 @@ static void IcebergMetaDataFunction(ClientContext &context, TableFunctionInput &
 	auto &table_entries = bind_data.iceberg_table->entries;
 	for (; global_state.current_manifest_idx < table_entries.size(); global_state.current_manifest_idx++) {
 		auto &table_entry = table_entries[global_state.current_manifest_idx];
-		auto &data_files = table_entry.manifest_file.data_files;
-		for (; global_state.current_manifest_entry_idx < data_files.size(); global_state.current_manifest_entry_idx++) {
+		auto &entries = table_entry.manifest_file.entries;
+		for (; global_state.current_manifest_entry_idx < entries.size(); global_state.current_manifest_entry_idx++) {
 			if (out >= STANDARD_VECTOR_SIZE) {
 				output.SetCardinality(out);
 				return;
 			}
 			auto &manifest = table_entry.manifest;
-			auto &data_file = data_files[global_state.current_manifest_entry_idx];
+			auto &manifest_entry = entries[global_state.current_manifest_entry_idx];
+			auto &data_file = manifest_entry.data_file;
 
 			//! manifest_path
 			AddString(output.data[0], out, string_t(manifest.manifest_path));
@@ -154,7 +155,7 @@ static void IcebergMetaDataFunction(ClientContext &context, TableFunctionInput &
 			AddString(output.data[2], out, string_t(IcebergManifestListEntry::ContentTypeToString(manifest.content)));
 
 			//! status
-			AddString(output.data[3], out, string_t(IcebergManifestEntry::StatusTypeToString(data_file.status)));
+			AddString(output.data[3], out, string_t(IcebergManifestEntry::StatusTypeToString(manifest_entry.status)));
 			//! content
 			AddString(output.data[4], out, string_t(IcebergManifestEntry::ContentTypeToString(data_file.content)));
 			//! file_path

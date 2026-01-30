@@ -219,17 +219,18 @@ vector<IcebergManifestEntry> IcebergDelete::GenerateDeleteManifestEntries(Iceber
 
 		IcebergManifestEntry manifest_entry;
 		manifest_entry.status = IcebergManifestEntryStatusType::ADDED;
-		manifest_entry.content = IcebergManifestEntryContentType::POSITION_DELETES;
-		manifest_entry.file_path = delete_file.file_name;
-		manifest_entry.file_format = "parquet";
-		manifest_entry.record_count = delete_file.delete_count;
-		manifest_entry.file_size_in_bytes = delete_file.file_size_bytes;
+		auto &data_file = manifest_entry.data_file;
+		data_file.content = IcebergManifestEntryContentType::POSITION_DELETES;
+		data_file.file_path = delete_file.file_name;
+		data_file.file_format = "parquet";
+		data_file.record_count = delete_file.delete_count;
+		data_file.file_size_in_bytes = delete_file.file_size_bytes;
 
 		// set lower and upper bound for the filename column
-		manifest_entry.lower_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB(data_file_name);
-		manifest_entry.upper_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB(data_file_name);
+		data_file.lower_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB(data_file_name);
+		data_file.upper_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB(data_file_name);
 		// set referenced_data_file
-		manifest_entry.referenced_data_file = data_file_name;
+		data_file.referenced_data_file = data_file_name;
 		iceberg_delete_files.push_back(manifest_entry);
 	}
 	return iceberg_delete_files;

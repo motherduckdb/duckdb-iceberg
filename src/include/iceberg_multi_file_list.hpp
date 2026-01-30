@@ -44,13 +44,13 @@ public:
 	void Bind(vector<LogicalType> &return_types, vector<string> &names);
 	unique_ptr<IcebergMultiFileList> PushdownInternal(ClientContext &context, TableFilterSet &new_filters) const;
 	void ScanPositionalDeleteFile(DataChunk &result) const;
-	void ScanEqualityDeleteFile(const IcebergManifestEntry &entry, DataChunk &result,
+	void ScanEqualityDeleteFile(const IcebergManifestEntry &manifest_entry, DataChunk &result,
 	                            vector<MultiFileColumnDefinition> &columns,
 	                            const vector<MultiFileColumnDefinition> &global_columns,
 	                            const vector<ColumnIndex> &column_indexes) const;
 	void ScanDeleteFile(const IcebergManifestEntry &entry, const vector<MultiFileColumnDefinition> &global_columns,
 	                    const vector<ColumnIndex> &column_indexes) const;
-	void ScanPuffinFile(const IcebergManifestEntry &entry) const;
+	void ScanPuffinFile(const IcebergDataFile &entry) const;
 	unique_ptr<DeleteFilter> GetPositionalDeletesForFile(const string &file_path) const;
 	void ProcessDeletes(const vector<MultiFileColumnDefinition> &global_columns,
 	                    const vector<ColumnIndex> &column_indexes) const;
@@ -103,7 +103,7 @@ public:
 	mutable unique_ptr<manifest_file::ManifestFileReader> data_manifest_reader;
 	mutable unique_ptr<manifest_file::ManifestFileReader> delete_manifest_reader;
 
-	mutable vector<IcebergManifestEntry> data_files;
+	mutable vector<IcebergManifestEntry> manifest_entries;
 	mutable vector<IcebergManifestListEntry> data_manifests;
 	mutable vector<IcebergManifestListEntry> delete_manifests;
 	mutable vector<reference<IcebergManifestFile>> transaction_data_manifests;
@@ -115,8 +115,8 @@ public:
 	mutable vector<IcebergManifestListEntry>::iterator current_delete_manifest;
 	mutable vector<reference<IcebergManifestFile>>::iterator current_transaction_delete_manifest;
 	//! The data files of the manifest file that we last scanned
-	mutable idx_t data_file_idx = 0;
-	mutable vector<IcebergManifestEntry> current_data_files;
+	mutable idx_t manifest_entry_idx = 0;
+	mutable vector<IcebergManifestEntry> current_manifest_entries;
 
 	//! For each file that has a delete file, the state for processing that/those delete file(s)
 	mutable case_insensitive_map_t<unique_ptr<DeleteFilter>> positional_delete_data;

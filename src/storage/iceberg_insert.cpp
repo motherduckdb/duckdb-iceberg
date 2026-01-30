@@ -157,19 +157,20 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 	auto &ic_table = table->Cast<IcebergTableEntry>();
 	auto partition_id = ic_table.table_info.table_metadata.default_spec_id;
 	for (idx_t r = 0; r < chunk.size(); r++) {
-		IcebergManifestEntry data_file;
+		IcebergManifestEntry manifest_entry;
+		manifest_entry.status = IcebergManifestEntryStatusType::ADDED;
+		if (partition_id) {
+			manifest_entry.partition_spec_id = static_cast<int32_t>(partition_id);
+		} else {
+			manifest_entry.partition_spec_id = 0;
+		}
+
+		auto &data_file = manifest_entry.data_file;
 		data_file.file_path = chunk.GetValue(0, r).GetValue<string>();
 		data_file.record_count = static_cast<int64_t>(chunk.GetValue(1, r).GetValue<idx_t>());
 		data_file.file_size_in_bytes = static_cast<int64_t>(chunk.GetValue(2, r).GetValue<idx_t>());
 		data_file.content = IcebergManifestEntryContentType::DATA;
-		data_file.status = IcebergManifestEntryStatusType::ADDED;
 		data_file.file_format = "parquet";
-
-		if (partition_id) {
-			data_file.partition_spec_id = static_cast<int32_t>(partition_id);
-		} else {
-			data_file.partition_spec_id = 0;
-		}
 
 		// extract the column stats
 		auto column_stats = chunk.GetValue(4, r);
@@ -245,7 +246,7 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 		//	}
 		//}
 
-		global_state.written_files.push_back(std::move(data_file));
+		global_state.written_files.push_back(std::move(manifest_entry));
 	}
 }
 
