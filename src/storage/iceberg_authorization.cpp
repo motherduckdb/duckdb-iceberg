@@ -29,21 +29,21 @@ void IRCAuthorization::ParseExtraHttpHeaders(const Value &headers_value, unorder
 	if (headers_value.IsNull() || headers_value.type().id() != LogicalTypeId::MAP) {
 		return;
 	}
-	
+
 	// MAP is internally a LIST<STRUCT(key, value)>
 	// Each entry in the list is a STRUCT with exactly two fields: key and value
 	auto &map_entries = MapValue::GetChildren(headers_value);
-	
+
 	for (const auto &entry : map_entries) {
 		if (entry.type().id() != LogicalTypeId::STRUCT) {
 			continue;
 		}
-		
+
 		auto &struct_children = StructValue::GetChildren(entry);
 		if (struct_children.size() != 2) {
 			continue;
 		}
-		
+
 		// struct_children[0] = key, struct_children[1] = value
 		out_headers[struct_children[0].ToString()] = struct_children[1].ToString();
 	}

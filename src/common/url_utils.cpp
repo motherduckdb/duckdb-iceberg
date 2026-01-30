@@ -18,7 +18,14 @@ void IRCEndpointBuilder::AddPathComponent(const string &component) {
 	if (component.empty()) {
 		return;
 	}
-	
+	path_components.push_back(component);
+}
+
+void IRCEndpointBuilder::AddPrefixComponent(const string &component) {
+	if (component.empty()) {
+		return;
+	}
+
 	// If the component contains slashes, split it into multiple segments
 	if (component.find('/') != string::npos) {
 		auto segments = StringUtil::Split(component, '/');

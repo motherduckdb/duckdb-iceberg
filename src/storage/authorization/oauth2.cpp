@@ -18,9 +18,12 @@ namespace {
 //! So we use this to deduplicate it instead
 static const case_insensitive_map_t<LogicalType> &IcebergSecretOptions() {
 	static const case_insensitive_map_t<LogicalType> options {
-	    {"client_id", LogicalType::VARCHAR},        {"client_secret", LogicalType::VARCHAR},
-	    {"endpoint", LogicalType::VARCHAR},         {"token", LogicalType::VARCHAR},
-	    {"oauth2_scope", LogicalType::VARCHAR},     {"oauth2_server_uri", LogicalType::VARCHAR},
+	    {"client_id", LogicalType::VARCHAR},
+	    {"client_secret", LogicalType::VARCHAR},
+	    {"endpoint", LogicalType::VARCHAR},
+	    {"token", LogicalType::VARCHAR},
+	    {"oauth2_scope", LogicalType::VARCHAR},
+	    {"oauth2_server_uri", LogicalType::VARCHAR},
 	    {"oauth2_grant_type", LogicalType::VARCHAR},
 	    {"extra_http_headers", LogicalType::MAP(LogicalType::VARCHAR, LogicalType::VARCHAR)}};
 	return options;
@@ -114,7 +117,7 @@ unique_ptr<OAuth2Authorization> OAuth2Authorization::FromAttachOptions(ClientCon
 	Value token;
 
 	static const unordered_set<string> recognized_create_secret_options {
-	    "oauth2_scope", "oauth2_server_uri", "oauth2_grant_type",     "token",
+	    "oauth2_scope", "oauth2_server_uri", "oauth2_grant_type",      "token",
 	    "client_id",    "client_secret",     "access_delegation_mode", "extra_http_headers"};
 
 	for (auto &entry : input.options) {
@@ -155,9 +158,9 @@ unique_ptr<OAuth2Authorization> OAuth2Authorization::FromAttachOptions(ClientCon
 			input.endpoint = endpoint_from_secret.ToString();
 		}
 		token = kv_iceberg_secret.TryGetValue("token");
-		
+
 		// Parse extra_http_headers from secret if present
-		IRCAuthorization::ParseExtraHttpHeaders(kv_iceberg_secret.TryGetValue("extra_http_headers"), 
+		IRCAuthorization::ParseExtraHttpHeaders(kv_iceberg_secret.TryGetValue("extra_http_headers"),
 		                                        result->extra_http_headers);
 	} else {
 		if (!secret.empty()) {
@@ -177,7 +180,7 @@ unique_ptr<OAuth2Authorization> OAuth2Authorization::FromAttachOptions(ClientCon
 		auto new_secret = OAuth2Authorization::CreateCatalogSecretFunction(context, create_secret_input);
 		auto &kv_iceberg_secret = dynamic_cast<KeyValueSecret &>(*new_secret);
 		token = kv_iceberg_secret.TryGetValue("token");
-		
+
 		// Parse extra_http_headers from inline options if present
 		IRCAuthorization::ParseExtraHttpHeaders(kv_iceberg_secret.TryGetValue("extra_http_headers"),
 		                                        result->extra_http_headers);
@@ -282,12 +285,12 @@ unique_ptr<HTTPResponse> OAuth2Authorization::Request(RequestType request_type, 
 	if (!token.empty()) {
 		headers.Insert("Authorization", StringUtil::Format("Bearer %s", token));
 	}
-	
+
 	// Merge extra HTTP headers from secret
 	for (auto &entry : extra_http_headers) {
 		headers.Insert(entry.first, entry.second);
 	}
-	
+
 	return APIUtils::Request(request_type, context, endpoint_builder, client, headers, data);
 }
 

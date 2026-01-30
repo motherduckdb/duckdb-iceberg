@@ -123,7 +123,7 @@ unique_ptr<HTTPResponse> SIGV4Authorization::Request(RequestType request_type, C
 	for (auto &entry : extra_http_headers) {
 		headers.Insert(entry.first, entry.second);
 	}
-	
+
 	auto aws_input = CreateAWSInput(context, endpoint_builder);
 	return aws_input.Request(request_type, context, client, headers, data);
 }
