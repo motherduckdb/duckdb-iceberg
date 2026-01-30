@@ -65,9 +65,9 @@ public:
 
 //! ------------- ICEBERG_METADATA TABLE FUNCTION -------------
 
-struct IcebergTableEntry {
+struct IcebergTableManifestEntry {
 public:
-	IcebergTableEntry(IcebergManifestListEntry &&manifest, IcebergManifestFile &&manifest_file)
+	IcebergTableManifestEntry(IcebergManifestListEntry &&manifest, IcebergManifestFile &&manifest_file)
 	    : manifest(std::move(manifest)), manifest_file(std::move(manifest_file)) {
 	}
 
@@ -120,7 +120,7 @@ public:
 	//! The snapshot of this table
 	const IcebergSnapshot &snapshot;
 	//! The entries (manifests) of this table
-	vector<IcebergTableEntry> entries;
+	vector<IcebergTableManifestEntry> entries;
 
 protected:
 	string path;

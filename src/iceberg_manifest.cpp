@@ -1,5 +1,5 @@
 #include "metadata/iceberg_manifest.hpp"
-#include "storage/irc_table_set.hpp"
+#include "storage/catalog/iceberg_table_set.hpp"
 
 #include "duckdb/storage/caching_file_system.hpp"
 #include "catalog_utils.hpp"

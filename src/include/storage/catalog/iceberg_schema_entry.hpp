@@ -3,17 +3,17 @@
 
 #include "catalog_api.hpp"
 #include "duckdb/catalog/catalog_entry/schema_catalog_entry.hpp"
-#include "storage/irc_table_set.hpp"
+#include "storage/catalog/iceberg_table_set.hpp"
 #include "duckdb/common/enums/on_entry_not_found.hpp"
 
 namespace duckdb {
-class IRCTransaction;
+class IcebergTransaction;
 struct IRCAPISchema;
 
-class IRCSchemaEntry : public SchemaCatalogEntry {
+class IcebergSchemaEntry : public SchemaCatalogEntry {
 public:
-	IRCSchemaEntry(Catalog &catalog, CreateSchemaInfo &info);
-	~IRCSchemaEntry() override;
+	IcebergSchemaEntry(Catalog &catalog, CreateSchemaInfo &info);
+	~IcebergSchemaEntry() override;
 
 	//! The various levels of namespaces this flattened representation represents
 	vector<string> namespace_items;
@@ -45,10 +45,10 @@ public:
 	                          OnCreateConflict on_conflict);
 
 private:
-	ICTableSet &GetCatalogSet(CatalogType type);
+	IcebergTableSet &GetCatalogSet(CatalogType type);
 
 public:
-	ICTableSet tables;
+	IcebergTableSet tables;
 };
 
 } // namespace duckdb

@@ -4,7 +4,7 @@
 #include "metadata/iceberg_manifest.hpp"
 #include "metadata/iceberg_snapshot.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
-#include "storage/irc_table_set.hpp"
+#include "storage/catalog/iceberg_table_set.hpp"
 #include "storage/table_update/iceberg_add_snapshot.hpp"
 #include "storage/table_update/common.hpp"
 #include "storage/iceberg_table_information.hpp"

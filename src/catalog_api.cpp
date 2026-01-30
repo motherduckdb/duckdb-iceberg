@@ -3,8 +3,8 @@
 
 #include "catalog_utils.hpp"
 #include "iceberg_logging.hpp"
-#include "storage/irc_catalog.hpp"
-#include "storage/irc_schema_entry.hpp"
+#include "storage/catalog/iceberg_catalog.hpp"
+#include "storage/catalog/iceberg_schema_entry.hpp"
 #include "yyjson.hpp"
 #include "iceberg_utils.hpp"
 #include "api_utils.hpp"
@@ -14,8 +14,8 @@
 #include "duckdb/common/error_data.hpp"
 #include "duckdb/common/http_util.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
-#include "include/storage/irc_authorization.hpp"
-#include "include/storage/irc_catalog.hpp"
+#include "include/storage/iceberg_authorization.hpp"
+#include "include/storage/catalog/iceberg_catalog.hpp"
 
 #include "rest_catalog/objects/list.hpp"
 
@@ -101,7 +101,7 @@ static IRCEntryLookupStatus CheckVerificationResponse(ClientContext &context, HT
 	return IRCEntryLookupStatus::API_ERROR;
 }
 
-bool IRCAPI::VerifyResponse(ClientContext &context, IRCatalog &catalog, IRCEndpointBuilder &url_builder,
+bool IRCAPI::VerifyResponse(ClientContext &context, IcebergCatalog &catalog, IRCEndpointBuilder &url_builder,
                             bool execute_head) {
 	HTTPHeaders headers(*context.db);
 	IRCEntryLookupStatus entry_status = IRCEntryLookupStatus::API_ERROR;
@@ -138,7 +138,7 @@ bool IRCAPI::VerifyResponse(ClientContext &context, IRCatalog &catalog, IRCEndpo
 	}
 }
 
-bool IRCAPI::VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, const string &schema) {
+bool IRCAPI::VerifySchemaExistence(ClientContext &context, IcebergCatalog &catalog, const string &schema) {
 	auto namespace_items = ParseSchemaName(schema);
 	auto schema_name = GetEncodedSchemaName(namespace_items);
 
@@ -151,7 +151,7 @@ bool IRCAPI::VerifySchemaExistence(ClientContext &context, IRCatalog &catalog, c
 	return VerifyResponse(context, catalog, url_builder, execute_head);
 }
 
-bool IRCAPI::VerifyTableExistence(ClientContext &context, IRCatalog &catalog, const IRCSchemaEntry &schema,
+bool IRCAPI::VerifyTableExistence(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema,
                                   const string &table) {
 	auto schema_name = GetEncodedSchemaName(schema.namespace_items);
 
@@ -166,8 +166,8 @@ bool IRCAPI::VerifyTableExistence(ClientContext &context, IRCatalog &catalog, co
 	return VerifyResponse(context, catalog, url_builder, execute_head);
 }
 
-static unique_ptr<HTTPResponse> GetTableMetadata(ClientContext &context, IRCatalog &catalog,
-                                                 const IRCSchemaEntry &schema, const string &table) {
+static unique_ptr<HTTPResponse> GetTableMetadata(ClientContext &context, IcebergCatalog &catalog,
+                                                 const IcebergSchemaEntry &schema, const string &table) {
 	auto schema_name = IRCAPI::GetEncodedSchemaName(schema.namespace_items);
 
 	auto url_builder = catalog.GetBaseUrl();
@@ -184,8 +184,10 @@ static unique_ptr<HTTPResponse> GetTableMetadata(ClientContext &context, IRCatal
 	return catalog.auth_handler->Request(RequestType::GET_REQUEST, context, url_builder, headers);
 }
 
-APIResult<unique_ptr<const rest_api_objects::LoadTableResult>>
-IRCAPI::GetTable(ClientContext &context, IRCatalog &catalog, const IRCSchemaEntry &schema, const string &table_name) {
+APIResult<unique_ptr<const rest_api_objects::LoadTableResult>> IRCAPI::GetTable(ClientContext &context,
+                                                                                IcebergCatalog &catalog,
+                                                                                const IcebergSchemaEntry &schema,
+                                                                                const string &table_name) {
 	auto ret = APIResult<unique_ptr<const rest_api_objects::LoadTableResult>>();
 	auto result = GetTableMetadata(context, catalog, schema, table_name);
 	if (result->status != HTTPStatusCode::OK_200) {
@@ -206,8 +208,8 @@ IRCAPI::GetTable(ClientContext &context, IRCatalog &catalog, const IRCSchemaEntr
 	return ret;
 }
 
-vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &context, IRCatalog &catalog,
-                                                            const IRCSchemaEntry &schema) {
+vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &context, IcebergCatalog &catalog,
+                                                            const IcebergSchemaEntry &schema) {
 	auto schema_name = GetEncodedSchemaName(schema.namespace_items);
 	vector<rest_api_objects::TableIdentifier> all_identifiers;
 	string page_token;
@@ -259,7 +261,7 @@ vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &conte
 	return all_identifiers;
 }
 
-vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IRCatalog &catalog, const vector<string> &parent) {
+vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IcebergCatalog &catalog, const vector<string> &parent) {
 	vector<IRCAPISchema> result;
 	string page_token = "";
 	do {
@@ -318,7 +320,7 @@ vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IRCatalog &catal
 	return result;
 }
 
-void IRCAPI::CommitMultiTableUpdate(ClientContext &context, IRCatalog &catalog, const string &body) {
+void IRCAPI::CommitMultiTableUpdate(ClientContext &context, IcebergCatalog &catalog, const string &body) {
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPathComponent(catalog.prefix);
 	url_builder.AddPathComponent("transactions");
@@ -333,7 +335,7 @@ void IRCAPI::CommitMultiTableUpdate(ClientContext &context, IRCatalog &catalog, 
 	}
 }
 
-void IRCAPI::CommitTableUpdate(ClientContext &context, IRCatalog &catalog, const vector<string> &schema,
+void IRCAPI::CommitTableUpdate(ClientContext &context, IcebergCatalog &catalog, const vector<string> &schema,
                                const string &table_name, const string &body) {
 	auto schema_name = GetEncodedSchemaName(schema);
 
@@ -353,7 +355,7 @@ void IRCAPI::CommitTableUpdate(ClientContext &context, IRCatalog &catalog, const
 	}
 }
 
-void IRCAPI::CommitTableDelete(ClientContext &context, IRCatalog &catalog, const vector<string> &schema,
+void IRCAPI::CommitTableDelete(ClientContext &context, IcebergCatalog &catalog, const vector<string> &schema,
                                const string &table_name) {
 	auto schema_name = GetEncodedSchemaName(schema);
 	auto url_builder = catalog.GetBaseUrl();
@@ -375,7 +377,7 @@ void IRCAPI::CommitTableDelete(ClientContext &context, IRCatalog &catalog, const
 	}
 }
 
-void IRCAPI::CommitNamespaceCreate(ClientContext &context, IRCatalog &catalog, string body) {
+void IRCAPI::CommitNamespaceCreate(ClientContext &context, IcebergCatalog &catalog, string body) {
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPathComponent(catalog.prefix);
 	url_builder.AddPathComponent("namespaces");
@@ -389,7 +391,7 @@ void IRCAPI::CommitNamespaceCreate(ClientContext &context, IRCatalog &catalog, s
 	}
 }
 
-void IRCAPI::CommitNamespaceDrop(ClientContext &context, IRCatalog &catalog, vector<string> namespace_items) {
+void IRCAPI::CommitNamespaceDrop(ClientContext &context, IcebergCatalog &catalog, vector<string> namespace_items) {
 	auto url_builder = catalog.GetBaseUrl();
 	auto schema_name = GetEncodedSchemaName(namespace_items);
 	url_builder.AddPathComponent(catalog.prefix);
@@ -407,9 +409,9 @@ void IRCAPI::CommitNamespaceDrop(ClientContext &context, IRCatalog &catalog, vec
 	}
 }
 
-rest_api_objects::LoadTableResult IRCAPI::CommitNewTable(ClientContext &context, IRCatalog &catalog,
-                                                         const ICTableEntry *table) {
-	auto &ic_schema = table->schema.Cast<IRCSchemaEntry>();
+rest_api_objects::LoadTableResult IRCAPI::CommitNewTable(ClientContext &context, IcebergCatalog &catalog,
+                                                         const IcebergTableEntry *table) {
+	auto &ic_schema = table->schema.Cast<IcebergSchemaEntry>();
 	auto table_namespace = GetEncodedSchemaName(ic_schema.namespace_items);
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPathComponent(catalog.prefix);
@@ -454,7 +456,7 @@ rest_api_objects::LoadTableResult IRCAPI::CommitNewTable(ClientContext &context,
 	}
 }
 
-rest_api_objects::CatalogConfig IRCAPI::GetCatalogConfig(ClientContext &context, IRCatalog &catalog) {
+rest_api_objects::CatalogConfig IRCAPI::GetCatalogConfig(ClientContext &context, IcebergCatalog &catalog) {
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPathComponent("config");
 	url_builder.SetParam("warehouse", catalog.warehouse);

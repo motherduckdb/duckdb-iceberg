@@ -6,7 +6,7 @@
 #include "iceberg_predicate.hpp"
 #include "iceberg_value.hpp"
 #include "metadata/iceberg_manifest.hpp"
-#include "storage/irc_transaction.hpp"
+#include "storage/iceberg_transaction.hpp"
 
 #include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
 #include "duckdb/common/exception.hpp"
