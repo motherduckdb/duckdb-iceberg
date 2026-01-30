@@ -160,7 +160,7 @@ unique_ptr<OAuth2Authorization> OAuth2Authorization::FromAttachOptions(ClientCon
 		token = kv_iceberg_secret.TryGetValue("token");
 
 		// Parse extra_http_headers from secret if present
-		IRCAuthorization::ParseExtraHttpHeaders(kv_iceberg_secret.TryGetValue("extra_http_headers"),
+		IcebergAuthorization::ParseExtraHttpHeaders(kv_iceberg_secret.TryGetValue("extra_http_headers"),
 		                                        result->extra_http_headers);
 	} else {
 		if (!secret.empty()) {
@@ -182,7 +182,7 @@ unique_ptr<OAuth2Authorization> OAuth2Authorization::FromAttachOptions(ClientCon
 		token = kv_iceberg_secret.TryGetValue("token");
 
 		// Parse extra_http_headers from inline options if present
-		IRCAuthorization::ParseExtraHttpHeaders(kv_iceberg_secret.TryGetValue("extra_http_headers"),
+		IcebergAuthorization::ParseExtraHttpHeaders(kv_iceberg_secret.TryGetValue("extra_http_headers"),
 		                                        result->extra_http_headers);
 	}
 

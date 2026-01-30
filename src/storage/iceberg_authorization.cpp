@@ -25,7 +25,7 @@ IcebergAuthorizationType IcebergAuthorization::TypeFromString(const string &type
 	                                    StringUtil::Join(accepted_options, ", "));
 }
 
-void IRCAuthorization::ParseExtraHttpHeaders(const Value &headers_value, unordered_map<string, string> &out_headers) {
+void IcebergAuthorization::ParseExtraHttpHeaders(const Value &headers_value, unordered_map<string, string> &out_headers) {
 	if (headers_value.IsNull() || headers_value.type().id() != LogicalTypeId::MAP) {
 		return;
 	}
