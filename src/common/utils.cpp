@@ -30,16 +30,27 @@ string IcebergUtils::FileToString(const string &path, FileSystem &fs) {
 	// Table metadata is typically small (a few KB) and there is only one per query, so
 	// progressively reallocating the result string has minimal cost compared to the latency
 	// of an additional network request.
+	//
+	// We read directly into the result string's buffer to avoid an intermediate copy,
+	// growing the buffer 2x when space runs out (amortized O(1) per byte).
 	auto handle = fs.OpenFile(path, FileFlags::FILE_FLAGS_READ);
 	string result;
-	char buffer[32768];
+	idx_t capacity = 32768;
+	idx_t size = 0;
+	result.resize(capacity);
+
 	while (true) {
-		auto bytes_read = handle->Read(buffer, sizeof(buffer));
+		if (size == capacity) {
+			capacity *= 2;
+			result.resize(capacity);
+		}
+		auto bytes_read = handle->Read(&result[size], capacity - size);
 		if (bytes_read == 0) {
 			break;
 		}
-		result.append(buffer, bytes_read);
+		size += bytes_read;
 	}
+	result.resize(size);
 	return result;
 }
 
