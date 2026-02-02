@@ -12,6 +12,7 @@
 #include "duckdb/common/insertion_order_preserving_map.hpp"
 
 #include "metadata/iceberg_table_schema.hpp"
+#include "metadata/iceberg_table_metadata.hpp"
 
 namespace duckdb {
 
@@ -26,6 +27,12 @@ enum class IcebergManifestEntryStatusType : uint8_t { EXISTING = 0, ADDED = 1, D
 struct IcebergDataFile {
 public:
 	Value ToValue(const LogicalType &type) const;
+
+public:
+	static map<idx_t, reference<const LogicalType>>
+	GetFieldIdToTypeMapping(const IcebergTableMetadata &metadata, const unordered_set<int32_t> &partition_spec_ids);
+	static LogicalType PartitionStructType(const map<idx_t, reference<const LogicalType>> &partition_field_id_to_type);
+	static LogicalType GetType(const IcebergTableMetadata &metadata, const LogicalType &partition_type);
 
 public:
 	IcebergManifestEntryContentType content;

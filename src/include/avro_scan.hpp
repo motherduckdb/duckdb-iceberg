@@ -13,12 +13,20 @@
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/parser/tableref/table_function_ref.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
+#include "iceberg_avro_multi_file_list.hpp"
 
 namespace duckdb {
 
 class AvroScan {
 public:
-	AvroScan(const string &scan_name, ClientContext &context, const string &path);
+	AvroScan(const string &path, ClientContext &context, shared_ptr<IcebergAvroScanInfo> avro_scan_info);
+
+public:
+	static unique_ptr<AvroScan> ScanManifestList(const IcebergTableMetadata &metadata, ClientContext &context,
+	                                             const string &path);
+	static unique_ptr<AvroScan> ScanManifest(const vector<IcebergManifestFile> &manifest_files,
+	                                         const IcebergTableMetadata &metadata, ClientContext &context,
+	                                         const string &path);
 
 public:
 	bool GetNext(DataChunk &chunk);

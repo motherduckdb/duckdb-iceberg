@@ -7,10 +7,12 @@
 
 #include "iceberg_multi_file_reader.hpp"
 #include "iceberg_avro_multi_file_reader.hpp"
+#include "iceberg_avro_multi_file_list.hpp"
 
 namespace duckdb {
 
-AvroScan::AvroScan(const string &scan_name, ClientContext &context, const string &path) : path(path), context(context) {
+AvroScan::AvroScan(const string &path, ClientContext &context, shared_ptr<IcebergAvroScanInfo> avro_scan_info)
+    : path(path), context(context) {
 	auto &instance = DatabaseInstance::GetDatabase(context);
 	auto &system_catalog = Catalog::GetSystemCatalog(instance);
 	auto data = CatalogTransaction::GetSystemTransaction(instance);
@@ -21,7 +23,6 @@ AvroScan::AvroScan(const string &scan_name, ClientContext &context, const string
 	}
 	auto &avro_scan_entry = catalog_entry->Cast<TableFunctionCatalogEntry>();
 	avro_scan = avro_scan_entry.functions.functions[0];
-	avro_scan->get_multi_file_reader = IcebergAvroMultiFileReader::CreateInstance;
 
 	// Prepare the inputs for the bind
 	vector<Value> children;
@@ -31,10 +32,14 @@ AvroScan::AvroScan(const string &scan_name, ClientContext &context, const string
 	vector<LogicalType> input_types;
 	vector<string> input_names;
 
+	const bool is_manifest_list = avro_scan_info->is_manifest_list;
+
 	TableFunctionRef empty;
 	TableFunction dummy_table_function;
-	dummy_table_function.name = scan_name;
+	dummy_table_function.name = is_manifest_list ? "IcebergManifestList" : "IcebergManifest";
 	dummy_table_function.get_multi_file_reader = IcebergAvroMultiFileReader::CreateInstance;
+
+	dummy_table_function.function_info = avro_scan_info;
 	TableFunctionBindInput bind_input(children, named_params, input_types, input_names, nullptr, nullptr,
 	                                  dummy_table_function, empty);
 	bind_data = avro_scan->bind(context, bind_input, return_types, return_names);
@@ -50,6 +55,22 @@ AvroScan::AvroScan(const string &scan_name, ClientContext &context, const string
 	TableFunctionInitInput input(bind_data.get(), column_ids, vector<idx_t>(), nullptr);
 	global_state = avro_scan->init_global(context, input);
 	local_state = avro_scan->init_local(execution_context, input, global_state.get());
+}
+
+unique_ptr<AvroScan> AvroScan::ScanManifest(const vector<IcebergManifestFile> &manifest_files,
+                                            const IcebergTableMetadata &metadata, ClientContext &context,
+                                            const string &path) {
+	auto avro_scan_info = make_shared_ptr<IcebergAvroScanInfo>(false, metadata);
+	for (auto &manifest_file : manifest_files) {
+		avro_scan_info->partition_spec_ids.insert(manifest_file.partition_spec_id);
+	}
+	return make_uniq<AvroScan>(path, context, std::move(avro_scan_info));
+}
+
+unique_ptr<AvroScan> AvroScan::ScanManifestList(const IcebergTableMetadata &metadata, ClientContext &context,
+                                                const string &path) {
+	auto avro_scan_info = make_shared_ptr<IcebergAvroScanInfo>(true, metadata);
+	return make_uniq<AvroScan>(path, context, std::move(avro_scan_info));
 }
 
 bool AvroScan::GetNext(DataChunk &result) {

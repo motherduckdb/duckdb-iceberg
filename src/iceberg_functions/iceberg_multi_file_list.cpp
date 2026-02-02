@@ -444,6 +444,7 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 		//! Have we already scanned this data file and returned it? If so, return it
 		return manifest_entries[file_id];
 	}
+	auto &metadata = GetMetadata();
 
 	while (file_id >= manifest_entries.size()) {
 		//! Replenish the 'current_manifest_entries' if it's empty
@@ -454,7 +455,7 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 				auto &manifest = *current_data_manifest;
 				auto full_path = options.allow_moved_paths ? IcebergUtils::GetFullPath(path, manifest.manifest_path, fs)
 				                                           : manifest.manifest_path;
-				auto scan = make_uniq<AvroScan>("IcebergManifest", context, full_path);
+				auto scan = AvroScan::ScanManifest(data_manifests, metadata, context, full_path);
 				data_manifest_reader->Initialize(std::move(scan));
 				data_manifest_reader->SetSequenceNumber(manifest.sequence_number);
 				data_manifest_reader->SetPartitionSpecID(manifest.partition_spec_id);
@@ -636,7 +637,7 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 
 		//! Read the manifest list
 		auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(metadata.iceberg_version);
-		auto scan = make_uniq<AvroScan>("IcebergManifestList", context, manifest_list_full_path);
+		auto scan = AvroScan::ScanManifestList(metadata, context, manifest_list_full_path);
 		manifest_list_reader->Initialize(std::move(scan));
 		auto manifest_list_entries = manifest_list.GetManifestFilesMutable();
 		while (!manifest_list_reader->Finished()) {
@@ -705,13 +706,14 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 
 	//! NOTE: The lock is required because we're reading from the 'data_files' vector
 	auto iceberg_path = GetPath();
+	auto &metadata = GetMetadata();
 	auto &fs = FileSystem::GetFileSystem(context);
 
 	while (current_delete_manifest != delete_manifests.end()) {
 		auto &manifest = *current_delete_manifest;
 		auto full_path = options.allow_moved_paths ? IcebergUtils::GetFullPath(iceberg_path, manifest.manifest_path, fs)
 		                                           : manifest.manifest_path;
-		auto scan = make_uniq<AvroScan>("IcebergManifest", context, full_path);
+		auto scan = AvroScan::ScanManifest(delete_manifests, metadata, context, full_path);
 
 		delete_manifest_reader->Initialize(std::move(scan));
 		delete_manifest_reader->SetSequenceNumber(manifest.sequence_number);
