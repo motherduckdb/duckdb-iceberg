@@ -57,7 +57,7 @@ unique_ptr<IcebergDeletionVector> IcebergDeletionVector::FromBlob(data_ptr_t blo
 	return result_p;
 }
 
-void IcebergMultiFileList::ScanPuffinFile(const IcebergManifestEntry &entry) const {
+void IcebergMultiFileList::ScanPuffinFile(const IcebergDataFile &entry) const {
 	auto file_path = entry.file_path;
 	D_ASSERT(!entry.referenced_data_file.empty());
 
