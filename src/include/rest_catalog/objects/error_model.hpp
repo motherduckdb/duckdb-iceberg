@@ -26,9 +26,6 @@ public:
 	string TryFromJSON(yyjson_val *obj);
 
 public:
-	string ToString() const;
-
-public:
 	string message;
 	string type;
 	int32_t code;

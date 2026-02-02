@@ -1,7 +1,6 @@
 
 #include "rest_catalog/objects/error_model.hpp"
 
-#include "catalog_utils.hpp"
 #include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
@@ -81,37 +80,6 @@ string ErrorModel::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	return string();
-}
-
-string ErrorModel::ToString() const {
-	unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc(yyjson_mut_doc_new(nullptr));
-
-	auto error_obj = yyjson_mut_obj(doc.get());
-	yyjson_mut_obj_add_str(doc.get(), error_obj, "message", message.c_str());
-	yyjson_mut_obj_add_str(doc.get(), error_obj, "type", type.c_str());
-	yyjson_mut_obj_add_int(doc.get(), error_obj, "code", code);
-
-	if (!stack.empty()) {
-		auto stack_arr = yyjson_mut_arr(doc.get());
-		for (const auto &s : stack) {
-			yyjson_mut_arr_add_str(doc.get(), stack_arr, s.c_str());
-		}
-		yyjson_mut_obj_add_val(doc.get(), error_obj, "stack", stack_arr);
-	}
-
-	auto root = yyjson_mut_obj(doc.get());
-
-	yyjson_mut_obj_add_val(doc.get(), root, "error", error_obj);
-	yyjson_mut_doc_set_root(doc.get(), root);
-
-	yyjson_write_err err;
-	size_t len;
-	const string json_str = yyjson_mut_write_opts(doc.get(), YYJSON_WRITE_PRETTY, nullptr, &len, &err);
-	if (err.code != YYJSON_WRITE_SUCCESS) {
-		throw InternalException("ErrorModel::ToString() failed to write JSON: %s", err.msg);
-	}
-
-	return json_str;
 }
 
 } // namespace rest_api_objects
