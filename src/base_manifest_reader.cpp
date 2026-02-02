@@ -18,8 +18,8 @@ void BaseManifestReader::Initialize(unique_ptr<AvroScan> scan_p) {
 	vector_mapping.clear();
 	partition_fields.clear();
 
-	auto &multi_file_local_state = scan->local_state->Cast<MultiFileLocalState>();
-	auto &columns = multi_file_local_state.reader->columns;
+	auto &multi_file_bind_data = scan->bind_data->Cast<MultiFileBindData>();
+	auto &columns = multi_file_bind_data.reader_bind.schema;
 	for (idx_t i = 0; i < columns.size(); i++) {
 		auto &column = columns[i];
 		CreateVectorMapping(i, column);

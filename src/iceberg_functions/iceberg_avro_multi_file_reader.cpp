@@ -119,19 +119,19 @@ static vector<MultiFileColumnDefinition> BuildManifestListSchema(const IcebergTa
 	return schema;
 }
 
-static MultiFileColumnDefinition
-CreateManifestPartitionsColumn(const map<idx_t, reference<const LogicalType>> partition_field_id_to_type,
-                               const LogicalType &partition_type) {
-	MultiFileColumnDefinition partitions("partitions", partition_type);
+static MultiFileColumnDefinition CreateManifestPartitionColumn(const map<idx_t, LogicalType> partition_field_id_to_type,
+                                                               const LogicalType &partition_type) {
+	MultiFileColumnDefinition partition("partition", partition_type);
+	partition.identifier = Value::INTEGER(102);
 	for (auto &it : partition_field_id_to_type) {
 		auto partition_field_id = it.first;
 		auto &type = it.second;
 
-		MultiFileColumnDefinition partition_field(StringUtil::Format("r%d"), type);
+		MultiFileColumnDefinition partition_field(StringUtil::Format("r%d", partition_field_id), type);
 		partition_field.identifier = Value::INTEGER(partition_field_id);
-		partitions.children.push_back(partition_field);
+		partition.children.push_back(partition_field);
 	}
-	return partitions;
+	return partition;
 }
 
 static vector<MultiFileColumnDefinition> BuildManifestSchema(const IcebergTableMetadata &metadata,
@@ -183,7 +183,7 @@ static vector<MultiFileColumnDefinition> BuildManifestSchema(const IcebergTableM
 	file_format.identifier = Value::INTEGER(101);
 	data_file.children.push_back(file_format);
 
-	data_file.children.push_back(CreateManifestPartitionsColumn(partition_field_id_to_type, partition_type));
+	data_file.children.push_back(CreateManifestPartitionColumn(partition_field_id_to_type, partition_type));
 
 	MultiFileColumnDefinition record_count("record_count", LogicalType::BIGINT);
 	record_count.identifier = Value::INTEGER(103);
@@ -197,6 +197,7 @@ static vector<MultiFileColumnDefinition> BuildManifestSchema(const IcebergTableM
 	auto column_sizes_type = LogicalType::MAP(LogicalType::INTEGER, LogicalType::BIGINT);
 	MultiFileColumnDefinition column_sizes("column_sizes", column_sizes_type);
 	column_sizes.identifier = Value::INTEGER(108);
+	column_sizes.default_expression = make_uniq<ConstantExpression>(Value(column_sizes_type));
 	{
 		MultiFileColumnDefinition key("key", MapType::KeyType(column_sizes_type));
 		key.identifier = Value::INTEGER(117);
@@ -212,6 +213,7 @@ static vector<MultiFileColumnDefinition> BuildManifestSchema(const IcebergTableM
 	auto value_counts_type = LogicalType::MAP(LogicalType::INTEGER, LogicalType::BIGINT);
 	MultiFileColumnDefinition value_counts("value_counts", value_counts_type);
 	value_counts.identifier = Value::INTEGER(109);
+	value_counts.default_expression = make_uniq<ConstantExpression>(Value(value_counts_type));
 	{
 		MultiFileColumnDefinition key("key", MapType::KeyType(value_counts_type));
 		key.identifier = Value::INTEGER(119);
@@ -227,6 +229,7 @@ static vector<MultiFileColumnDefinition> BuildManifestSchema(const IcebergTableM
 	auto null_value_counts_type = LogicalType::MAP(LogicalType::INTEGER, LogicalType::BIGINT);
 	MultiFileColumnDefinition null_value_counts("null_value_counts", null_value_counts_type);
 	null_value_counts.identifier = Value::INTEGER(110);
+	null_value_counts.default_expression = make_uniq<ConstantExpression>(Value(null_value_counts_type));
 	{
 		MultiFileColumnDefinition key("key", MapType::KeyType(null_value_counts_type));
 		key.identifier = Value::INTEGER(121);
@@ -242,6 +245,7 @@ static vector<MultiFileColumnDefinition> BuildManifestSchema(const IcebergTableM
 	auto nan_value_counts_type = LogicalType::MAP(LogicalType::INTEGER, LogicalType::BIGINT);
 	MultiFileColumnDefinition nan_value_counts("nan_value_counts", nan_value_counts_type);
 	nan_value_counts.identifier = Value::INTEGER(138);
+	nan_value_counts.default_expression = make_uniq<ConstantExpression>(Value(nan_value_counts_type));
 	{
 		MultiFileColumnDefinition key("key", MapType::KeyType(nan_value_counts_type));
 		key.identifier = Value::INTEGER(138);
@@ -257,6 +261,7 @@ static vector<MultiFileColumnDefinition> BuildManifestSchema(const IcebergTableM
 	auto lower_bounds_type = LogicalType::MAP(LogicalType::INTEGER, LogicalType::BLOB);
 	MultiFileColumnDefinition lower_bounds("lower_bounds", lower_bounds_type);
 	lower_bounds.identifier = Value::INTEGER(125);
+	lower_bounds.default_expression = make_uniq<ConstantExpression>(Value(lower_bounds_type));
 	{
 		MultiFileColumnDefinition key("key", MapType::KeyType(lower_bounds_type));
 		key.identifier = Value::INTEGER(126);
@@ -272,6 +277,7 @@ static vector<MultiFileColumnDefinition> BuildManifestSchema(const IcebergTableM
 	auto upper_bounds_type = LogicalType::MAP(LogicalType::INTEGER, LogicalType::BLOB);
 	MultiFileColumnDefinition upper_bounds("upper_bounds", upper_bounds_type);
 	upper_bounds.identifier = Value::INTEGER(128);
+	upper_bounds.default_expression = make_uniq<ConstantExpression>(Value(upper_bounds_type));
 	{
 		MultiFileColumnDefinition key("key", MapType::KeyType(upper_bounds_type));
 		key.identifier = Value::INTEGER(129);
@@ -288,9 +294,9 @@ static vector<MultiFileColumnDefinition> BuildManifestSchema(const IcebergTableM
 	MultiFileColumnDefinition split_offsets("split_offsets", split_offsets_type);
 	split_offsets.identifier = Value::INTEGER(132);
 	{
-		MultiFileColumnDefinition element("element", ListType::GetChildType(split_offsets_type));
-		element.identifier = Value::INTEGER(133);
-		split_offsets.children.push_back(element);
+		MultiFileColumnDefinition list("list", ListType::GetChildType(split_offsets_type));
+		list.identifier = Value::INTEGER(133);
+		split_offsets.children.push_back(list);
 	}
 	data_file.children.push_back(split_offsets);
 
@@ -299,9 +305,9 @@ static vector<MultiFileColumnDefinition> BuildManifestSchema(const IcebergTableM
 	MultiFileColumnDefinition equality_ids("equality_ids", equality_ids_type);
 	equality_ids.identifier = Value::INTEGER(135);
 	{
-		MultiFileColumnDefinition element("element", ListType::GetChildType(equality_ids_type));
-		element.identifier = Value::INTEGER(136);
-		equality_ids.children.push_back(element);
+		MultiFileColumnDefinition list("list", ListType::GetChildType(equality_ids_type));
+		list.identifier = Value::INTEGER(136);
+		equality_ids.children.push_back(list);
 	}
 	data_file.children.push_back(equality_ids);
 

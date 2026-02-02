@@ -8,27 +8,26 @@
 
 namespace duckdb {
 
-map<idx_t, reference<const LogicalType>>
-IcebergDataFile::GetFieldIdToTypeMapping(const IcebergTableMetadata &metadata,
-                                         const unordered_set<int32_t> &partition_spec_ids) {
+map<idx_t, LogicalType> IcebergDataFile::GetFieldIdToTypeMapping(const IcebergTableMetadata &metadata,
+                                                                 const unordered_set<int32_t> &partition_spec_ids) {
 	D_ASSERT(!partition_spec_ids.empty());
 	auto &partition_specs = metadata.GetPartitionSpecs();
 	auto &latest_schema = metadata.GetLatestSchema();
-	map<idx_t, reference<const LogicalType>> partition_field_id_to_type;
+	map<idx_t, LogicalType> partition_field_id_to_type;
 	for (auto &spec_id : partition_spec_ids) {
 		auto &partition_spec = partition_specs.at(spec_id);
 		auto &fields = partition_spec.GetFields();
 
 		for (auto &field : fields) {
 			auto &column_type = latest_schema.GetColumnTypeFromFieldId(field.source_id);
-			partition_field_id_to_type.emplace(field.partition_field_id, column_type);
+			partition_field_id_to_type.emplace(field.partition_field_id,
+			                                   field.transform.GetSerializedType(column_type));
 		}
 	}
 	return partition_field_id_to_type;
 }
 
-LogicalType
-IcebergDataFile::PartitionStructType(const map<idx_t, reference<const LogicalType>> &partition_field_id_to_type) {
+LogicalType IcebergDataFile::PartitionStructType(const map<idx_t, LogicalType> &partition_field_id_to_type) {
 	child_list_t<LogicalType> children;
 	if (partition_field_id_to_type.empty()) {
 		children.emplace_back("__duckdb_empty_struct_marker", LogicalType::INTEGER);
@@ -69,12 +68,40 @@ LogicalType IcebergDataFile::GetType(const IcebergTableMetadata &metadata, const
 	children.emplace_back("record_count", LogicalType::BIGINT);
 	// file_size_in_bytes: long - 104
 	children.emplace_back("file_size_in_bytes", LogicalType::BIGINT);
+	// column_sizes: map<117: int, 118: binary>
+	children.emplace_back("column_sizes", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
+	// value_counts: map<119: int, 120: binary>
+	children.emplace_back("value_counts", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
+	// null_value_counts: map<121: int, 122: binary>
+	children.emplace_back("null_value_counts", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
+	// nan_value_counts: map<138: int, 139: binary>
+	children.emplace_back("nan_value_counts", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
 	// lower bounds: map<126: int, 127: binary> - 104
 	children.emplace_back("lower_bounds", LogicalType::MAP(LogicalType::STRUCT(bounds_fields)));
 	// upper bounds: map<129: int, 130: binary>
 	children.emplace_back("upper_bounds", LogicalType::MAP(LogicalType::STRUCT(bounds_fields)));
-	// null_value_counts: map<121: int, 122: binary>
-	children.emplace_back("null_value_counts", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
+	// split_offsets
+	children.emplace_back("split_offsets", LogicalType::LIST(LogicalType::BIGINT));
+	// equality_ids
+	children.emplace_back("equality_ids", LogicalType::LIST(LogicalType::INTEGER));
+	// sort_id
+	children.emplace_back("sort_order_id", LogicalType::INTEGER);
+	// first_row_id
+	if (iceberg_version >= 3) {
+		children.emplace_back("first_row_id", LogicalType::BIGINT);
+	}
+	// referenced_data_file
+	if (iceberg_version >= 2) {
+		children.emplace_back("referenced_data_file", LogicalType::VARCHAR);
+	}
+	// content_offset
+	if (iceberg_version >= 3) {
+		children.emplace_back("content_offset", LogicalType::BIGINT);
+	}
+	// content_size_in_bytes
+	if (iceberg_version >= 3) {
+		children.emplace_back("content_size_in_bytes", LogicalType::BIGINT);
+	}
 
 	return LogicalType::STRUCT(std::move(children));
 }
