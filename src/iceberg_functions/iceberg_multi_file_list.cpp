@@ -842,12 +842,11 @@ void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &manifest_e
 	}
 }
 
-//! FIXME: isn't this problematic if we need to scan the same delete file multiple times??
 unique_ptr<DeleteFilter> IcebergMultiFileList::GetPositionalDeletesForFile(const string &file_path) const {
 	auto it = positional_delete_data.find(file_path);
 	if (it != positional_delete_data.end()) {
 		// There is delete data for this file, return it
-		return std::move(it->second);
+		return it->second->ToFilter();
 	}
 	return nullptr;
 }

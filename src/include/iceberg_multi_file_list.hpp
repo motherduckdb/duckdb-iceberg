@@ -24,6 +24,7 @@
 
 #include "deletes/equality_delete.hpp"
 #include "deletes/positional_delete.hpp"
+#include "deletes/iceberg_delete_data.hpp"
 
 namespace duckdb {
 
@@ -102,7 +103,7 @@ public:
 
 	mutable vector<IcebergManifestEntry> manifest_entries;
 	//! For each file that has a delete file, the state for processing that/those delete file(s)
-	mutable case_insensitive_map_t<unique_ptr<DeleteFilter>> positional_delete_data;
+	mutable case_insensitive_map_t<shared_ptr<IcebergDeleteData>> positional_delete_data;
 	//! All equality deletes with sequence numbers higher than that of the data_file apply to that data_file
 	mutable map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> equality_delete_data;
 
