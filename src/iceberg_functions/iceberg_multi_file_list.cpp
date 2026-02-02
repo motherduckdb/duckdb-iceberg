@@ -247,8 +247,6 @@ idx_t IcebergMultiFileList::GetTotalFileCount() const {
 }
 
 unique_ptr<NodeStatistics> IcebergMultiFileList::GetCardinality(ClientContext &context) const {
-	idx_t cardinality = 0;
-
 	if (GetMetadata().iceberg_version == 1) {
 		//! We collect no cardinality information from manifests for V1 tables.
 		return nullptr;
@@ -256,7 +254,10 @@ unique_ptr<NodeStatistics> IcebergMultiFileList::GetCardinality(ClientContext &c
 
 	//! Make sure we have fetched all manifests
 	(void)GetTotalFileCount();
+	D_ASSERT(initialized);
 
+	//! FIXME: doesn't this need to take the transaction-local data/delete manifests into account?
+	idx_t cardinality = 0;
 	for (idx_t i = 0; i < data_manifests.size(); i++) {
 		cardinality += data_manifests[i].added_rows_count;
 		cardinality += data_manifests[i].existing_rows_count;
@@ -438,12 +439,14 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &manifes
 
 optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t file_id,
                                                                            lock_guard<mutex> &guard) const {
+	D_ASSERT(initialized);
 	if (file_id < manifest_entries.size()) {
 		//! Have we already scanned this data file and returned it? If so, return it
 		return manifest_entries[file_id];
 	}
 
 	while (file_id >= manifest_entries.size()) {
+		//! Replenish the 'current_manifest_entries' if it's empty
 		if (current_manifest_entries.empty() || manifest_entry_idx >= current_manifest_entries.size()) {
 			current_manifest_entries.clear();
 			//! Load the next manifest file
@@ -460,11 +463,8 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 					data_manifest_reader->Read(STANDARD_VECTOR_SIZE, current_manifest_entries);
 				}
 				current_data_manifest++;
-			} else if (!transaction_data_manifests.empty()) {
-				if (transaction_data_idx >= transaction_data_manifests.size()) {
-					//! Exhausted all the transaction-local data
-					return nullptr;
-				}
+			} else if (!transaction_data_manifests.empty() &&
+			           transaction_data_idx < transaction_data_manifests.size()) {
 				auto &manifest_file = transaction_data_manifests[transaction_data_idx].get();
 				auto &entries = manifest_file.entries;
 				for (auto &entry : entries) {
@@ -689,7 +689,8 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 
 	current_data_manifest = data_manifests.begin();
 	current_delete_manifest = delete_manifests.begin();
-	current_transaction_delete_manifest = transaction_delete_manifests.begin();
+	transaction_delete_idx = 0;
+	transaction_data_idx = 0;
 }
 
 void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition> &global_columns,
@@ -745,9 +746,13 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 		}
 	}
 
-	while (current_transaction_delete_manifest != transaction_delete_manifests.end()) {
-		for (auto &manifest_entry : current_transaction_delete_manifest->get().entries) {
+	while (transaction_delete_idx < transaction_delete_manifests.size()) {
+		auto &delete_manifest = transaction_delete_manifests[transaction_delete_idx];
+		for (auto &manifest_entry : delete_manifest.get().entries) {
 			auto &data_file = manifest_entry.data_file;
+
+			//! FIXME: no file pruning for uncommitted data?
+
 			if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
 				ScanDeleteFile(manifest_entry, global_columns, column_indexes);
 			} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
@@ -758,7 +763,7 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 				    data_file.file_format);
 			}
 		}
-		++current_transaction_delete_manifest;
+		transaction_delete_idx++;
 	}
 
 	D_ASSERT(current_delete_manifest == delete_manifests.end());

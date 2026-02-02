@@ -100,28 +100,31 @@ public:
 	vector<LogicalType> types;
 	TableFilterSet table_filters;
 
-	mutable unique_ptr<manifest_file::ManifestFileReader> data_manifest_reader;
-	mutable unique_ptr<manifest_file::ManifestFileReader> delete_manifest_reader;
-
 	mutable vector<IcebergManifestEntry> manifest_entries;
-	mutable vector<IcebergManifestFile> data_manifests;
-	mutable vector<IcebergManifestFile> delete_manifests;
-	mutable vector<reference<IcebergManifest>> transaction_data_manifests;
-	mutable vector<reference<IcebergManifest>> transaction_delete_manifests;
-	mutable idx_t transaction_data_idx = 0;
-	idx_t transaction_delete_idx = 0;
-
-	mutable vector<IcebergManifestFile>::iterator current_data_manifest;
-	mutable vector<IcebergManifestFile>::iterator current_delete_manifest;
-	mutable vector<reference<IcebergManifest>>::iterator current_transaction_delete_manifest;
-	//! The data files of the manifest file that we last scanned
-	mutable idx_t manifest_entry_idx = 0;
-	mutable vector<IcebergManifestEntry> current_manifest_entries;
-
 	//! For each file that has a delete file, the state for processing that/those delete file(s)
 	mutable case_insensitive_map_t<unique_ptr<DeleteFilter>> positional_delete_data;
 	//! All equality deletes with sequence numbers higher than that of the data_file apply to that data_file
 	mutable map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> equality_delete_data;
+
+	//! State used for lazy-loading the data files
+	mutable unique_ptr<manifest_file::ManifestFileReader> data_manifest_reader;
+	mutable idx_t manifest_entry_idx = 0;
+	//! The data files of the manifest file that we last scanned
+	mutable vector<IcebergManifestEntry> current_manifest_entries;
+	mutable vector<IcebergManifestFile> data_manifests;
+	mutable vector<IcebergManifestFile>::iterator current_data_manifest;
+	mutable vector<reference<IcebergManifest>> transaction_data_manifests;
+	mutable idx_t transaction_data_idx = 0;
+
+	//! State used for pre-processing delete files
+	mutable unique_ptr<manifest_file::ManifestFileReader> delete_manifest_reader;
+	mutable vector<IcebergManifestFile> delete_manifests;
+	mutable vector<IcebergManifestFile>::iterator current_delete_manifest;
+	mutable vector<reference<IcebergManifest>> transaction_delete_manifests;
+	mutable idx_t transaction_delete_idx = 0;
+
+	//! FIXME: this is only used in 'FinalizeBind',
+	//! shouldn't this be used to protect all the variable accesses that are accessed there while the lock is held?
 	mutable mutex delete_lock;
 
 	mutable bool initialized = false;
