@@ -15,7 +15,6 @@ void BaseManifestReader::Initialize(unique_ptr<AvroScan> scan_p) {
 
 	finished = false;
 	offset = 0;
-	vector_mapping.clear();
 	partition_fields.clear();
 
 	auto &multi_file_bind_data = scan->bind_data->Cast<MultiFileBindData>();

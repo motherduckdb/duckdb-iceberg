@@ -31,8 +31,7 @@ protected:
 
 protected:
 	DataChunk chunk;
-	unordered_map<int32_t, ColumnIndex> vector_mapping;
-	unordered_map<int32_t, ColumnIndex> partition_fields;
+	unordered_map<int32_t, idx_t> partition_fields;
 	const idx_t iceberg_version;
 	unique_ptr<AvroScan> scan;
 	idx_t offset = 0;

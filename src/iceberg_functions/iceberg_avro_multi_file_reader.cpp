@@ -67,11 +67,11 @@ static vector<MultiFileColumnDefinition> BuildManifestListSchema(const IcebergTa
 		schema.push_back(content);
 	}
 
-	// sequence_number (v2+, field-id 515, default 0)
+	// sequence_number (v2+, field-id 515)
 	if (iceberg_version >= 2) {
 		MultiFileColumnDefinition sequence_number("sequence_number", LogicalType::BIGINT);
 		sequence_number.identifier = Value::INTEGER(515);
-		sequence_number.default_expression = make_uniq<ConstantExpression>(Value::BIGINT(0));
+		sequence_number.default_expression = make_uniq<ConstantExpression>(Value(sequence_number.type));
 		schema.push_back(sequence_number);
 	}
 
