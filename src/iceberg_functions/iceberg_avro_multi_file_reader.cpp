@@ -83,42 +83,42 @@ static vector<MultiFileColumnDefinition> BuildManifestListSchema(const IcebergTa
 		schema.push_back(min_sequence_number);
 	}
 
-	// added_snapshot_id (field-id 503, default 0)
+	// added_snapshot_id (field-id 503)
 	MultiFileColumnDefinition added_snapshot_id("added_snapshot_id", LogicalType::BIGINT);
 	added_snapshot_id.identifier = Value::INTEGER(503);
 	schema.push_back(added_snapshot_id);
 
-	// added_files_count (v2+, field-id 504, default 0)
+	// added_files_count (v2+, field-id 504)
 	MultiFileColumnDefinition added_files_count("added_files_count", LogicalType::INTEGER);
 	added_files_count.identifier = Value::INTEGER(504);
 	schema.push_back(added_files_count);
 
-	// existing_files_count (v2+, field-id 505, default 0)
+	// existing_files_count (v2+, field-id 505)
 	MultiFileColumnDefinition existing_files_count("existing_files_count", LogicalType::INTEGER);
 	existing_files_count.identifier = Value::INTEGER(505);
 	schema.push_back(existing_files_count);
 
-	// deleted_files_count (v2+, field-id 506, default 0)
+	// deleted_files_count (v2+, field-id 506)
 	MultiFileColumnDefinition deleted_files_count("deleted_files_count", LogicalType::INTEGER);
 	deleted_files_count.identifier = Value::INTEGER(506);
 	schema.push_back(deleted_files_count);
 
-	// added_rows_count (v2+, field-id 512, default 0)
+	// added_rows_count (v2+, field-id 512)
 	MultiFileColumnDefinition added_rows_count("added_rows_count", LogicalType::BIGINT);
 	added_rows_count.identifier = Value::INTEGER(512);
 	schema.push_back(added_rows_count);
 
-	// existing_rows_count (v2+, field-id 513, default 0)
+	// existing_rows_count (v2+, field-id 513)
 	MultiFileColumnDefinition existing_rows_count("existing_rows_count", LogicalType::BIGINT);
 	existing_rows_count.identifier = Value::INTEGER(513);
 	schema.push_back(existing_rows_count);
 
-	// deleted_rows_count (v2+, field-id 514, default 0)
+	// deleted_rows_count (v2+, field-id 514)
 	MultiFileColumnDefinition deleted_rows_count("deleted_rows_count", LogicalType::BIGINT);
 	deleted_rows_count.identifier = Value::INTEGER(514);
 	schema.push_back(deleted_rows_count);
 
-	// partitions (v2+, field-id 507, default 0)
+	// partitions (v2+, field-id 507)
 	schema.push_back(CreateManifestFilePartitionsColumn());
 
 	// first_row_id (v3+, field-id 520, default 0)
