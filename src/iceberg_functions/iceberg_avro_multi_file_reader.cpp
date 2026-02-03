@@ -12,18 +12,29 @@ unique_ptr<MultiFileReader> IcebergAvroMultiFileReader::CreateInstance(const Tab
 static MultiFileColumnDefinition CreateManifestFilePartitionsColumn() {
 	MultiFileColumnDefinition partitions("partitions", IcebergManifestList::FieldSummaryType());
 	partitions.identifier = Value::INTEGER(507);
+	partitions.default_expression = make_uniq<ConstantExpression>(Value(partitions.type));
 
 	MultiFileColumnDefinition field_summary("field_summary", ListType::GetChildType(partitions.type));
 	field_summary.identifier = Value::INTEGER(508);
 
+	//! contains_null - required
 	field_summary.children.emplace_back("contains_null", LogicalType::BOOLEAN);
 	field_summary.children.back().identifier = Value::INTEGER(509);
+
+	//! contains_nan - optional
 	field_summary.children.emplace_back("contains_nan", LogicalType::BOOLEAN);
 	field_summary.children.back().identifier = Value::INTEGER(518);
+	field_summary.children.back().default_expression = make_uniq<ConstantExpression>(Value(LogicalType::BOOLEAN));
+
+	//! lower_bound - optional
 	field_summary.children.emplace_back("lower_bound", LogicalType::BLOB);
 	field_summary.children.back().identifier = Value::INTEGER(510);
+	field_summary.children.back().default_expression = make_uniq<ConstantExpression>(Value(LogicalType::BLOB));
+
+	//! upper_bound - optional
 	field_summary.children.emplace_back("upper_bound", LogicalType::BLOB);
 	field_summary.children.back().identifier = Value::INTEGER(511);
+	field_summary.children.back().default_expression = make_uniq<ConstantExpression>(Value(LogicalType::BLOB));
 
 	partitions.children.push_back(field_summary);
 	return partitions;
@@ -114,6 +125,7 @@ static vector<MultiFileColumnDefinition> BuildManifestListSchema(const IcebergTa
 	if (iceberg_version >= 3) {
 		MultiFileColumnDefinition first_row_id("first_row_id", LogicalType::BIGINT);
 		first_row_id.identifier = Value::INTEGER(520);
+		first_row_id.default_expression = make_uniq<ConstantExpression>(Value(first_row_id.type));
 		schema.push_back(first_row_id);
 	}
 	return schema;
@@ -147,16 +159,19 @@ static vector<MultiFileColumnDefinition> BuildManifestSchema(const IcebergTableM
 	// snapshot_id (optional, field-id 1)
 	MultiFileColumnDefinition snapshot_id("snapshot_id", LogicalType::BIGINT);
 	snapshot_id.identifier = Value::INTEGER(1);
+	snapshot_id.default_expression = make_uniq<ConstantExpression>(Value(snapshot_id.type));
 	schema.push_back(snapshot_id);
 
 	// sequence_number (optional, field-id 3)
 	MultiFileColumnDefinition sequence_number("sequence_number", LogicalType::BIGINT);
 	sequence_number.identifier = Value::INTEGER(3);
+	sequence_number.default_expression = make_uniq<ConstantExpression>(Value(sequence_number.type));
 	schema.push_back(sequence_number);
 
 	// file_sequence_number (optional, field-id 4)
 	MultiFileColumnDefinition file_sequence_number("file_sequence_number", LogicalType::BIGINT);
 	file_sequence_number.identifier = Value::INTEGER(4);
+	file_sequence_number.default_expression = make_uniq<ConstantExpression>(Value(file_sequence_number.type));
 	schema.push_back(file_sequence_number);
 
 	//! Map all the referenced partition spec ids to the partition fields that *could* be referenced,
@@ -289,10 +304,11 @@ static vector<MultiFileColumnDefinition> BuildManifestSchema(const IcebergTableM
 	}
 	data_file.children.push_back(upper_bounds);
 
-	// split_offsets
+	// split_offsets - optional
 	auto split_offsets_type = LogicalType::LIST(LogicalType::BIGINT);
 	MultiFileColumnDefinition split_offsets("split_offsets", split_offsets_type);
 	split_offsets.identifier = Value::INTEGER(132);
+	split_offsets.default_expression = make_uniq<ConstantExpression>(Value(split_offsets.type));
 	{
 		MultiFileColumnDefinition list("list", ListType::GetChildType(split_offsets_type));
 		list.identifier = Value::INTEGER(133);
@@ -300,10 +316,11 @@ static vector<MultiFileColumnDefinition> BuildManifestSchema(const IcebergTableM
 	}
 	data_file.children.push_back(split_offsets);
 
-	// equality_ids
+	// equality_ids - optional
 	auto equality_ids_type = LogicalType::LIST(LogicalType::INTEGER);
 	MultiFileColumnDefinition equality_ids("equality_ids", equality_ids_type);
 	equality_ids.identifier = Value::INTEGER(135);
+	equality_ids.default_expression = make_uniq<ConstantExpression>(Value(equality_ids.type));
 	{
 		MultiFileColumnDefinition list("list", ListType::GetChildType(equality_ids_type));
 		list.identifier = Value::INTEGER(136);
@@ -311,36 +328,41 @@ static vector<MultiFileColumnDefinition> BuildManifestSchema(const IcebergTableM
 	}
 	data_file.children.push_back(equality_ids);
 
-	// sort_id
+	// sort_order_id - optional
 	MultiFileColumnDefinition sort_order_id("sort_order_id", LogicalType::INTEGER);
 	sort_order_id.identifier = Value::INTEGER(140);
+	sort_order_id.default_expression = make_uniq<ConstantExpression>(Value(sort_order_id.type));
 	data_file.children.push_back(sort_order_id);
 
 	// first_row_id
 	if (iceberg_version >= 3) {
 		MultiFileColumnDefinition first_row_id("first_row_id", LogicalType::BIGINT);
 		first_row_id.identifier = Value::INTEGER(142);
+		first_row_id.default_expression = make_uniq<ConstantExpression>(Value(first_row_id.type));
 		data_file.children.push_back(first_row_id);
 	}
 
-	// referenced_data_file
+	// referenced_data_file - optional
 	if (iceberg_version >= 2) {
 		MultiFileColumnDefinition referenced_data_file("referenced_data_file", LogicalType::VARCHAR);
 		referenced_data_file.identifier = Value::INTEGER(143);
+		referenced_data_file.default_expression = make_uniq<ConstantExpression>(Value(referenced_data_file.type));
 		data_file.children.push_back(referenced_data_file);
 	}
 
-	// content_offset
+	// content_offset - optional
 	if (iceberg_version >= 3) {
 		MultiFileColumnDefinition content_offset("content_offset", LogicalType::BIGINT);
 		content_offset.identifier = Value::INTEGER(144);
+		content_offset.default_expression = make_uniq<ConstantExpression>(Value(content_offset.type));
 		data_file.children.push_back(content_offset);
 	}
 
-	// content_size_in_bytes
+	// content_size_in_bytes - optional
 	if (iceberg_version >= 3) {
 		MultiFileColumnDefinition content_size_in_bytes("content_size_in_bytes", LogicalType::BIGINT);
 		content_size_in_bytes.identifier = Value::INTEGER(145);
+		content_size_in_bytes.default_expression = make_uniq<ConstantExpression>(Value(content_size_in_bytes.type));
 		data_file.children.push_back(content_size_in_bytes);
 	}
 
