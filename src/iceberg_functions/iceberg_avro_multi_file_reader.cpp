@@ -141,6 +141,7 @@ static MultiFileColumnDefinition CreateManifestPartitionColumn(const map<idx_t, 
 
 		MultiFileColumnDefinition partition_field(StringUtil::Format("r%d", partition_field_id), type);
 		partition_field.identifier = Value::INTEGER(partition_field_id);
+		partition_field.default_expression = make_uniq<ConstantExpression>(Value(type));
 		partition.children.push_back(partition_field);
 	}
 	return partition;

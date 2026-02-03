@@ -20,8 +20,7 @@ map<idx_t, LogicalType> IcebergDataFile::GetFieldIdToTypeMapping(const IcebergTa
 
 		for (auto &field : fields) {
 			auto &column_type = latest_schema.GetColumnTypeFromFieldId(field.source_id);
-			partition_field_id_to_type.emplace(field.partition_field_id,
-			                                   field.transform.GetSerializedType(column_type));
+			partition_field_id_to_type.emplace(field.partition_field_id, field.transform.GetBoundsType(column_type));
 		}
 	}
 	return partition_field_id_to_type;
@@ -30,7 +29,7 @@ map<idx_t, LogicalType> IcebergDataFile::GetFieldIdToTypeMapping(const IcebergTa
 LogicalType IcebergDataFile::PartitionStructType(const map<idx_t, LogicalType> &partition_field_id_to_type) {
 	child_list_t<LogicalType> children;
 	if (partition_field_id_to_type.empty()) {
-		children.emplace_back("__duckdb_empty_struct_marker", LogicalType::INTEGER);
+		return LogicalType::SQLNULL;
 	} else {
 		for (auto &it : partition_field_id_to_type) {
 			children.emplace_back(StringUtil::Format("r%d", it.first), it.second);
@@ -170,6 +169,23 @@ Value IcebergDataFile::ToValue(const LogicalType &type) const {
 
 namespace manifest_file {
 
+static LogicalType PartitionStructType(IcebergTableInformation &table_info, const IcebergManifest &file) {
+	D_ASSERT(!file.entries.empty());
+	auto &first_entry = file.entries.front();
+	child_list_t<LogicalType> children;
+	auto &data_file = first_entry.data_file;
+	if (data_file.partition_values.empty()) {
+		children.emplace_back("__duckdb_empty_struct_marker", LogicalType::INTEGER);
+	} else {
+		//! NOTE: all entries in the file should have the same schema, otherwise it can't be in the same manifest file
+		//! anyways
+		for (auto &it : data_file.partition_values) {
+			children.emplace_back(StringUtil::Format("r%d", it.first), it.second.type());
+		}
+	}
+	return LogicalType::STRUCT(children);
+}
+
 idx_t WriteToFile(IcebergTableInformation &table_info, const IcebergManifest &manifest_file, CopyFunction &copy,
                   DatabaseInstance &db, ClientContext &context) {
 	D_ASSERT(!manifest_file.entries.empty());
@@ -301,9 +317,7 @@ idx_t WriteToFile(IcebergTableInformation &table_info, const IcebergManifest &ma
 	{
 		child_list_t<Value> partition;
 		// partition: struct(...) - 102
-		auto partition_field_id_to_type = IcebergDataFile::GetFieldIdToTypeMapping(
-		    table_info.table_metadata, {table_info.table_metadata.default_spec_id});
-		children.emplace_back("partition", IcebergDataFile::PartitionStructType(partition_field_id_to_type));
+		children.emplace_back("partition", PartitionStructType(table_info, manifest_file));
 		partition.emplace_back("__duckdb_field_id", Value::INTEGER(PARTITION));
 		partition.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
 		data_file_field_ids.emplace_back("partition", Value::STRUCT(partition));

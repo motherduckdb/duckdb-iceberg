@@ -59,7 +59,7 @@ static Value FieldSummaryFieldIds() {
 	auto field_summary = Value::STRUCT(children);
 
 	child_list_t<Value> list_children;
-	list_children.emplace_back("element", field_summary);
+	list_children.emplace_back("list", field_summary);
 	list_children.emplace_back("__duckdb_field_id", Value::INTEGER(PARTITIONS));
 	return Value::STRUCT(list_children);
 }
