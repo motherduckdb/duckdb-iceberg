@@ -459,8 +459,8 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 				//                                           : manifest.manifest_path;
 				auto scan = AvroScan::ScanManifest(*snapshot, data_manifests, options, fs, path, metadata, context);
 				data_manifest_reader->Initialize(std::move(scan));
-				data_manifest_reader->SetSequenceNumber(manifest.sequence_number);
-				data_manifest_reader->SetPartitionSpecID(manifest.partition_spec_id);
+				// data_manifest_reader->SetSequenceNumber(manifest.sequence_number);
+				// data_manifest_reader->SetPartitionSpecID(manifest.partition_spec_id);
 
 				while (!data_manifest_reader->Finished()) {
 					data_manifest_reader->Read(STANDARD_VECTOR_SIZE, current_manifest_entries);
@@ -720,8 +720,8 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 		auto scan = AvroScan::ScanManifest(*snapshot, delete_manifests, options, fs, iceberg_path, metadata, context);
 
 		delete_manifest_reader->Initialize(std::move(scan));
-		delete_manifest_reader->SetSequenceNumber(manifest.sequence_number);
-		delete_manifest_reader->SetPartitionSpecID(manifest.partition_spec_id);
+		// delete_manifest_reader->SetSequenceNumber(manifest.sequence_number);
+		// delete_manifest_reader->SetPartitionSpecID(manifest.partition_spec_id);
 
 		IcebergManifest manifest_file("???");
 		while (!delete_manifest_reader->Finished()) {

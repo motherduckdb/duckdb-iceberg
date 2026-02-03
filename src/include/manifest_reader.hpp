@@ -73,17 +73,17 @@ public:
 	bool ValidateVectorMapping() override;
 
 public:
-	void SetSequenceNumber(sequence_number_t sequence_number);
-	void SetPartitionSpecID(int32_t partition_spec_id);
+	// void SetSequenceNumber(sequence_number_t sequence_number);
+	// void SetPartitionSpecID(int32_t partition_spec_id);
 
 private:
 	idx_t ReadChunk(idx_t offset, idx_t count, vector<IcebergManifestEntry> &result);
 
 public:
-	//! The sequence number to inherit when the condition to do so is met
-	sequence_number_t sequence_number;
-	//! The inherited partition spec id (from the 'manifest_file')
-	int32_t partition_spec_id;
+	////! The sequence number to inherit when the condition to do so is met
+	// sequence_number_t sequence_number;
+	////! The inherited partition spec id (from the 'manifest_file')
+	// int32_t partition_spec_id;
 	//! Whether the deleted entries should be skipped outright
 	bool skip_deleted = false;
 };

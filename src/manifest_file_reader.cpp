@@ -8,13 +8,13 @@ ManifestFileReader::ManifestFileReader(idx_t iceberg_version, bool skip_deleted)
     : BaseManifestReader(iceberg_version), skip_deleted(skip_deleted) {
 }
 
-void ManifestFileReader::SetSequenceNumber(sequence_number_t sequence_number_p) {
-	sequence_number = sequence_number_p;
-}
+// void ManifestFileReader::SetSequenceNumber(sequence_number_t sequence_number_p) {
+//	sequence_number = sequence_number_p;
+//}
 
-void ManifestFileReader::SetPartitionSpecID(int32_t partition_spec_id_p) {
-	partition_spec_id = partition_spec_id_p;
-}
+// void ManifestFileReader::SetPartitionSpecID(int32_t partition_spec_id_p) {
+//	partition_spec_id = partition_spec_id_p;
+//}
 
 idx_t ManifestFileReader::Read(idx_t count, vector<IcebergManifestEntry> &result) {
 	if (!scan || finished) {
@@ -244,14 +244,14 @@ idx_t ManifestFileReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergMan
 			} else {
 				//! Value should only be NULL for ADDED manifest entries, to support inheritance
 				D_ASSERT(entry.status == IcebergManifestEntryStatusType::ADDED);
-				entry.sequence_number = this->sequence_number;
+				throw InternalException("INHERIT SEQUENCE NUMBER");
 			}
 		} else {
-			entry.sequence_number = this->sequence_number;
+			throw InternalException("INHERIT SEQUENCE NUMBER");
 			data_file.content = IcebergManifestEntryContentType::DATA;
 		}
 
-		entry.partition_spec_id = this->partition_spec_id;
+		throw InternalException("INHERIT PARTITION SPEC ID");
 		for (auto &it : partition_vectors) {
 			auto field_id = it.first;
 			auto &partition_vector = it.second.get();

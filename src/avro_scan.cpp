@@ -11,6 +11,27 @@
 
 namespace duckdb {
 
+static void GetManifestVirtualColumns(ClientContext &context, optional_ptr<FunctionData> bind_data_p,
+                                      vector<LogicalType> &return_types, vector<string> &return_names) {
+	auto &bind_data = bind_data_p->Cast<MultiFileBindData>();
+	virtual_column_map_t result;
+	result.insert(make_pair(IcebergAvroMultiFileReader::PARTITION_SPEC_ID_FIELD_ID,
+	                        TableColumn("partition_spec_id", LogicalType::INTEGER)));
+	return_names.emplace_back("partition_spec_id");
+	return_types.emplace_back(LogicalType::INTEGER);
+
+	result.insert(make_pair(IcebergAvroMultiFileReader::SEQUENCE_NUMBER_FIELD_ID,
+	                        TableColumn("sequence_number", LogicalType::BIGINT)));
+	return_names.emplace_back("sequence_number");
+	return_types.emplace_back(LogicalType::BIGINT);
+
+	result.insert(make_pair(IcebergAvroMultiFileReader::MANIFEST_FILE_INDEX_FIELD_ID,
+	                        TableColumn("manifest_file_index", LogicalType::UBIGINT)));
+	return_names.emplace_back("manifest_file_index");
+	return_types.emplace_back(LogicalType::UBIGINT);
+	bind_data.virtual_columns = result;
+}
+
 AvroScan::AvroScan(const string &path, ClientContext &context, shared_ptr<IcebergAvroScanInfo> avro_scan_info)
     : context(context) {
 	auto &instance = DatabaseInstance::GetDatabase(context);
@@ -38,15 +59,23 @@ AvroScan::AvroScan(const string &path, ClientContext &context, shared_ptr<Iceber
 	TableFunction dummy_table_function;
 	dummy_table_function.name = is_manifest_list ? "IcebergManifestList" : "IcebergManifest";
 	dummy_table_function.get_multi_file_reader = IcebergAvroMultiFileReader::CreateInstance;
-
 	dummy_table_function.function_info = avro_scan_info;
+
 	TableFunctionBindInput bind_input(children, named_params, input_types, input_names, nullptr, nullptr,
 	                                  dummy_table_function, empty);
 	bind_data = avro_scan->bind(context, bind_input, return_types, return_names);
+	if (!is_manifest_list) {
+		GetManifestVirtualColumns(context, bind_data.get(), return_types, return_names);
+	}
 
 	vector<column_t> column_ids;
 	for (idx_t i = 0; i < return_types.size(); i++) {
 		column_ids.push_back(i);
+	}
+	if (!is_manifest_list) {
+		column_ids.push_back(IcebergAvroMultiFileReader::PARTITION_SPEC_ID_FIELD_ID);
+		column_ids.push_back(IcebergAvroMultiFileReader::SEQUENCE_NUMBER_FIELD_ID);
+		column_ids.push_back(IcebergAvroMultiFileReader::MANIFEST_FILE_INDEX_FIELD_ID);
 	}
 
 	ThreadContext thread_context(context);

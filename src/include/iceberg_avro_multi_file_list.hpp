@@ -68,6 +68,12 @@ public:
 	}
 
 public:
+	// Helper to get manifest metadata by file index
+	const IcebergManifestFile &GetManifestFile(idx_t file_idx) const {
+		return manifest_files[file_idx];
+	}
+
+public:
 	const vector<IcebergManifestFile> &manifest_files;
 	const IcebergOptions &options;
 	FileSystem &fs;
