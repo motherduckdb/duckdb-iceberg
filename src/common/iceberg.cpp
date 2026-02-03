@@ -28,7 +28,7 @@ unique_ptr<IcebergTable> IcebergTable::Load(const string &iceberg_path, const Ic
 
 	//! Read the manifest list
 	auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(metadata.iceberg_version);
-	auto scan = AvroScan::ScanManifestList(metadata, context, manifest_list_full_path);
+	auto scan = AvroScan::ScanManifestList(snapshot, metadata, context, manifest_list_full_path);
 	manifest_list_reader->Initialize(std::move(scan));
 	auto &manifest_list_entries = manifest_list.GetManifestFilesMutable();
 	while (!manifest_list_reader->Finished()) {
@@ -38,7 +38,7 @@ unique_ptr<IcebergTable> IcebergTable::Load(const string &iceberg_path, const Ic
 	for (auto &manifest : manifest_list_entries) {
 		auto full_path = options.allow_moved_paths ? IcebergUtils::GetFullPath(iceberg_path, manifest.manifest_path, fs)
 		                                           : manifest.manifest_path;
-		auto scan = AvroScan::ScanManifest(manifest_list_entries, metadata, context, full_path);
+		auto scan = AvroScan::ScanManifest(snapshot, manifest_list_entries, metadata, context, full_path);
 
 		manifest_file_reader->Initialize(std::move(scan));
 		manifest_file_reader->SetSequenceNumber(manifest.sequence_number);

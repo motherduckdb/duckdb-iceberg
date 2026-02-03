@@ -22,9 +22,10 @@ public:
 	AvroScan(const string &path, ClientContext &context, shared_ptr<IcebergAvroScanInfo> avro_scan_info);
 
 public:
-	static unique_ptr<AvroScan> ScanManifestList(const IcebergTableMetadata &metadata, ClientContext &context,
-	                                             const string &path);
-	static unique_ptr<AvroScan> ScanManifest(const vector<IcebergManifestFile> &manifest_files,
+	static unique_ptr<AvroScan> ScanManifestList(const IcebergSnapshot &snapshot, const IcebergTableMetadata &metadata,
+	                                             ClientContext &context, const string &path);
+	static unique_ptr<AvroScan> ScanManifest(const IcebergSnapshot &snapshot,
+	                                         const vector<IcebergManifestFile> &manifest_files,
 	                                         const IcebergTableMetadata &metadata, ClientContext &context,
 	                                         const string &path);
 

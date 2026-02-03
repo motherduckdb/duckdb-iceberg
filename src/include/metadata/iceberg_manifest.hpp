@@ -29,7 +29,8 @@ public:
 	Value ToValue(const LogicalType &type) const;
 
 public:
-	static map<idx_t, LogicalType> GetFieldIdToTypeMapping(const IcebergTableMetadata &metadata,
+	static map<idx_t, LogicalType> GetFieldIdToTypeMapping(const IcebergSnapshot &snapshot,
+	                                                       const IcebergTableMetadata &metadata,
 	                                                       const unordered_set<int32_t> &partition_spec_ids);
 	static LogicalType PartitionStructType(const map<idx_t, LogicalType> &partition_field_id_to_type);
 	static LogicalType GetType(const IcebergTableMetadata &metadata, const LogicalType &partition_type);

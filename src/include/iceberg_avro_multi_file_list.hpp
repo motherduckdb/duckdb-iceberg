@@ -7,13 +7,14 @@ namespace duckdb {
 
 class IcebergAvroScanInfo : public TableFunctionInfo {
 public:
-	IcebergAvroScanInfo(bool is_manifest_list, const IcebergTableMetadata &metadata)
-	    : is_manifest_list(is_manifest_list), metadata(metadata) {
+	IcebergAvroScanInfo(bool is_manifest_list, const IcebergTableMetadata &metadata, const IcebergSnapshot &snapshot)
+	    : is_manifest_list(is_manifest_list), metadata(metadata), snapshot(snapshot) {
 	}
 
 public:
 	bool is_manifest_list;
 	const IcebergTableMetadata &metadata;
+	const IcebergSnapshot &snapshot;
 	//! If 'is_manifest_list' is false, the partition spec ids referenced by the manifests we're scanning
 	unordered_set<int32_t> partition_spec_ids;
 };

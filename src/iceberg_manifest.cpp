@@ -8,19 +8,24 @@
 
 namespace duckdb {
 
-map<idx_t, LogicalType> IcebergDataFile::GetFieldIdToTypeMapping(const IcebergTableMetadata &metadata,
+map<idx_t, LogicalType> IcebergDataFile::GetFieldIdToTypeMapping(const IcebergSnapshot &snapshot,
+                                                                 const IcebergTableMetadata &metadata,
                                                                  const unordered_set<int32_t> &partition_spec_ids) {
 	D_ASSERT(!partition_spec_ids.empty());
 	auto &partition_specs = metadata.GetPartitionSpecs();
-	auto &latest_schema = metadata.GetLatestSchema();
+	auto &schema = *metadata.GetSchemaFromId(snapshot.schema_id);
+
+	unordered_map<uint64_t, ColumnIndex> source_to_column_id;
+	IcebergTableSchema::PopulateSourceIdMap(source_to_column_id, schema.columns, nullptr);
 	map<idx_t, LogicalType> partition_field_id_to_type;
 	for (auto &spec_id : partition_spec_ids) {
 		auto &partition_spec = partition_specs.at(spec_id);
 		auto &fields = partition_spec.GetFields();
 
 		for (auto &field : fields) {
-			auto &column_type = latest_schema.GetColumnTypeFromFieldId(field.source_id);
-			partition_field_id_to_type.emplace(field.partition_field_id, field.transform.GetBoundsType(column_type));
+			auto &column_id = source_to_column_id[field.source_id];
+			auto &column = IcebergTableSchema::GetFromColumnIndex(schema.columns, column_id, 0);
+			partition_field_id_to_type.emplace(field.partition_field_id, field.transform.GetBoundsType(column.type));
 		}
 	}
 	return partition_field_id_to_type;

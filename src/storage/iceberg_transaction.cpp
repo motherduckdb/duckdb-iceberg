@@ -289,7 +289,7 @@ TableTransactionInfo IcebergTransaction::GetTransactionRequest(ClientContext &co
 			auto &manifest_list_path = current_snapshot->manifest_list;
 			//! Read the manifest list
 			auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(metadata.iceberg_version);
-			auto scan = AvroScan::ScanManifestList(metadata, context, manifest_list_path);
+			auto scan = AvroScan::ScanManifestList(*current_snapshot, metadata, context, manifest_list_path);
 			manifest_list_reader->Initialize(std::move(scan));
 			while (!manifest_list_reader->Finished()) {
 				manifest_list_reader->Read(STANDARD_VECTOR_SIZE, commit_state.manifests);

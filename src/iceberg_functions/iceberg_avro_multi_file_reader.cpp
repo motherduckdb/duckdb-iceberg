@@ -147,7 +147,8 @@ static MultiFileColumnDefinition CreateManifestPartitionColumn(const map<idx_t, 
 	return partition;
 }
 
-static vector<MultiFileColumnDefinition> BuildManifestSchema(const IcebergTableMetadata &metadata,
+static vector<MultiFileColumnDefinition> BuildManifestSchema(const IcebergSnapshot &snapshot,
+                                                             const IcebergTableMetadata &metadata,
                                                              const unordered_set<int32_t> &partition_spec_ids) {
 	vector<MultiFileColumnDefinition> schema;
 
@@ -177,7 +178,7 @@ static vector<MultiFileColumnDefinition> BuildManifestSchema(const IcebergTableM
 
 	//! Map all the referenced partition spec ids to the partition fields that *could* be referenced,
 	//! any missing fields will be NULL
-	auto partition_field_id_to_type = IcebergDataFile::GetFieldIdToTypeMapping(metadata, partition_spec_ids);
+	auto partition_field_id_to_type = IcebergDataFile::GetFieldIdToTypeMapping(snapshot, metadata, partition_spec_ids);
 	auto partition_type = IcebergDataFile::PartitionStructType(partition_field_id_to_type);
 
 	// data_file struct (field-id 2)
@@ -380,6 +381,7 @@ bool IcebergAvroMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &
 	auto &scan_info = iceberg_avro_list.info->Cast<IcebergAvroScanInfo>();
 	auto &is_manifest_list = scan_info.is_manifest_list;
 	auto &metadata = scan_info.metadata;
+	auto &snapshot = scan_info.snapshot;
 	auto &partition_spec_ids = scan_info.partition_spec_ids;
 
 	// Build the expected schema with field IDs
@@ -387,7 +389,7 @@ bool IcebergAvroMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &
 	if (is_manifest_list) {
 		schema = BuildManifestListSchema(metadata);
 	} else {
-		schema = BuildManifestSchema(metadata, partition_spec_ids);
+		schema = BuildManifestSchema(snapshot, metadata, partition_spec_ids);
 	}
 
 	// Populate return_types and names from schema

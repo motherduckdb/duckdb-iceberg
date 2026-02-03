@@ -57,19 +57,20 @@ AvroScan::AvroScan(const string &path, ClientContext &context, shared_ptr<Iceber
 	local_state = avro_scan->init_local(execution_context, input, global_state.get());
 }
 
-unique_ptr<AvroScan> AvroScan::ScanManifest(const vector<IcebergManifestFile> &manifest_files,
+unique_ptr<AvroScan> AvroScan::ScanManifest(const IcebergSnapshot &snapshot,
+                                            const vector<IcebergManifestFile> &manifest_files,
                                             const IcebergTableMetadata &metadata, ClientContext &context,
                                             const string &path) {
-	auto avro_scan_info = make_shared_ptr<IcebergAvroScanInfo>(false, metadata);
+	auto avro_scan_info = make_shared_ptr<IcebergAvroScanInfo>(false, metadata, snapshot);
 	for (auto &manifest_file : manifest_files) {
 		avro_scan_info->partition_spec_ids.insert(manifest_file.partition_spec_id);
 	}
 	return make_uniq<AvroScan>(path, context, std::move(avro_scan_info));
 }
 
-unique_ptr<AvroScan> AvroScan::ScanManifestList(const IcebergTableMetadata &metadata, ClientContext &context,
-                                                const string &path) {
-	auto avro_scan_info = make_shared_ptr<IcebergAvroScanInfo>(true, metadata);
+unique_ptr<AvroScan> AvroScan::ScanManifestList(const IcebergSnapshot &snapshot, const IcebergTableMetadata &metadata,
+                                                ClientContext &context, const string &path) {
+	auto avro_scan_info = make_shared_ptr<IcebergAvroScanInfo>(true, metadata, snapshot);
 	return make_uniq<AvroScan>(path, context, std::move(avro_scan_info));
 }
 
