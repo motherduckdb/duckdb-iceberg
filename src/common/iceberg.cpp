@@ -36,15 +36,17 @@ unique_ptr<IcebergTable> IcebergTable::Load(const string &iceberg_path, const Ic
 	}
 
 	for (auto &manifest : manifest_list_entries) {
-		auto full_path = options.allow_moved_paths ? IcebergUtils::GetFullPath(iceberg_path, manifest.manifest_path, fs)
-		                                           : manifest.manifest_path;
-		auto scan = AvroScan::ScanManifest(snapshot, manifest_list_entries, metadata, context, full_path);
+		// auto full_path = options.allow_moved_paths ? IcebergUtils::GetFullPath(iceberg_path, manifest.manifest_path,
+		// fs)
+		//                                           : manifest.manifest_path;
+		auto scan =
+		    AvroScan::ScanManifest(snapshot, manifest_list_entries, options, fs, iceberg_path, metadata, context);
 
 		manifest_file_reader->Initialize(std::move(scan));
 		manifest_file_reader->SetSequenceNumber(manifest.sequence_number);
 		manifest_file_reader->SetPartitionSpecID(manifest.partition_spec_id);
 
-		IcebergManifest manifest_file(full_path);
+		IcebergManifest manifest_file("???");
 		while (!manifest_file_reader->Finished()) {
 			manifest_file_reader->Read(STANDARD_VECTOR_SIZE, manifest_file.entries);
 		}

@@ -12,7 +12,7 @@
 namespace duckdb {
 
 AvroScan::AvroScan(const string &path, ClientContext &context, shared_ptr<IcebergAvroScanInfo> avro_scan_info)
-    : path(path), context(context) {
+    : context(context) {
 	auto &instance = DatabaseInstance::GetDatabase(context);
 	auto &system_catalog = Catalog::GetSystemCatalog(instance);
 	auto data = CatalogTransaction::GetSystemTransaction(instance);
@@ -32,7 +32,7 @@ AvroScan::AvroScan(const string &path, ClientContext &context, shared_ptr<Iceber
 	vector<LogicalType> input_types;
 	vector<string> input_names;
 
-	const bool is_manifest_list = avro_scan_info->is_manifest_list;
+	const bool is_manifest_list = avro_scan_info->type == AvroScanInfoType::MANIFEST_LIST;
 
 	TableFunctionRef empty;
 	TableFunction dummy_table_function;
@@ -59,18 +59,17 @@ AvroScan::AvroScan(const string &path, ClientContext &context, shared_ptr<Iceber
 
 unique_ptr<AvroScan> AvroScan::ScanManifest(const IcebergSnapshot &snapshot,
                                             const vector<IcebergManifestFile> &manifest_files,
-                                            const IcebergTableMetadata &metadata, ClientContext &context,
-                                            const string &path) {
-	auto avro_scan_info = make_shared_ptr<IcebergAvroScanInfo>(false, metadata, snapshot);
-	for (auto &manifest_file : manifest_files) {
-		avro_scan_info->partition_spec_ids.insert(manifest_file.partition_spec_id);
-	}
-	return make_uniq<AvroScan>(path, context, std::move(avro_scan_info));
+                                            const IcebergOptions &options, FileSystem &fs, const string &iceberg_path,
+                                            const IcebergTableMetadata &metadata, ClientContext &context) {
+	D_ASSERT(!manifest_files.empty());
+	auto avro_scan_info =
+	    make_shared_ptr<IcebergManifestFileScanInfo>(metadata, snapshot, manifest_files, options, fs, iceberg_path);
+	return make_uniq<AvroScan>("placeholder", context, std::move(avro_scan_info));
 }
 
 unique_ptr<AvroScan> AvroScan::ScanManifestList(const IcebergSnapshot &snapshot, const IcebergTableMetadata &metadata,
                                                 ClientContext &context, const string &path) {
-	auto avro_scan_info = make_shared_ptr<IcebergAvroScanInfo>(true, metadata, snapshot);
+	auto avro_scan_info = make_shared_ptr<IcebergManifestListScanInfo>(metadata, snapshot);
 	return make_uniq<AvroScan>(path, context, std::move(avro_scan_info));
 }
 

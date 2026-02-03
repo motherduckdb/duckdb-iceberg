@@ -2,6 +2,7 @@
 #include "iceberg_avro_multi_file_list.hpp"
 #include "duckdb/common/exception.hpp"
 #include "metadata/iceberg_manifest_list.hpp"
+#include "iceberg_utils.hpp"
 
 namespace duckdb {
 
@@ -379,16 +380,21 @@ bool IcebergAvroMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &
 
 	// Determine if we're reading manifest-list or manifest based on context
 	auto &scan_info = iceberg_avro_list.info->Cast<IcebergAvroScanInfo>();
-	auto &is_manifest_list = scan_info.is_manifest_list;
+	auto &type = scan_info.type;
 	auto &metadata = scan_info.metadata;
 	auto &snapshot = scan_info.snapshot;
-	auto &partition_spec_ids = scan_info.partition_spec_ids;
 
 	// Build the expected schema with field IDs
 	vector<MultiFileColumnDefinition> schema;
-	if (is_manifest_list) {
+	if (type == AvroScanInfoType::MANIFEST_LIST) {
 		schema = BuildManifestListSchema(metadata);
 	} else {
+		auto &manifest_file_scan = scan_info.Cast<IcebergManifestFileScanInfo>();
+		auto &manifest_files = manifest_file_scan.manifest_files;
+		unordered_set<int32_t> partition_spec_ids;
+		for (auto &manifest_file : manifest_files) {
+			partition_spec_ids.insert(manifest_file.partition_spec_id);
+		}
 		schema = BuildManifestSchema(snapshot, metadata, partition_spec_ids);
 	}
 
@@ -410,8 +416,10 @@ shared_ptr<MultiFileList> IcebergAvroMultiFileReader::CreateFileList(ClientConte
                                                                      const FileGlobInput &glob_input) {
 	auto scan_info = shared_ptr_cast<TableFunctionInfo, IcebergAvroScanInfo>(function_info);
 	vector<OpenFileInfo> open_files;
-	for (auto &path : paths) {
-		open_files.emplace_back(path);
+
+	if (scan_info->type == AvroScanInfoType::MANIFEST_LIST) {
+		D_ASSERT(paths.size() == 1);
+		open_files.emplace_back(paths[0]);
 		auto &file_info = open_files.back();
 		file_info.extended_info = make_uniq<ExtendedOpenFileInfo>();
 		file_info.extended_info->options["validate_external_file_cache"] = Value::BOOLEAN(false);
@@ -421,6 +429,25 @@ shared_ptr<MultiFileList> IcebergAvroMultiFileReader::CreateFileList(ClientConte
 		// file_info.extended_info->options["file_size"] = Value::UBIGINT(manifest.manifest_length);
 		file_info.extended_info->options["etag"] = Value("");
 		file_info.extended_info->options["last_modified"] = Value::TIMESTAMP(timestamp_t(0));
+	} else {
+		auto &manifest_files_scan = scan_info->Cast<IcebergManifestFileScanInfo>();
+		auto &manifest_files = manifest_files_scan.manifest_files;
+		auto &options = manifest_files_scan.options;
+		auto &fs = manifest_files_scan.fs;
+		auto &iceberg_path = manifest_files_scan.iceberg_path;
+		for (auto &manifest : manifest_files) {
+			auto full_path = options.allow_moved_paths
+			                     ? IcebergUtils::GetFullPath(iceberg_path, manifest.manifest_path, fs)
+			                     : manifest.manifest_path;
+			open_files.emplace_back(full_path);
+			auto &file_info = open_files.back();
+			file_info.extended_info = make_uniq<ExtendedOpenFileInfo>();
+			file_info.extended_info->options["validate_external_file_cache"] = Value::BOOLEAN(false);
+			file_info.extended_info->options["force_full_download"] = Value::BOOLEAN(true);
+			file_info.extended_info->options["file_size"] = Value::UBIGINT(manifest.manifest_length);
+			file_info.extended_info->options["etag"] = Value("");
+			file_info.extended_info->options["last_modified"] = Value::TIMESTAMP(timestamp_t(0));
+		}
 	}
 
 	auto res = make_uniq<IcebergAvroMultiFileList>(scan_info, std::move(open_files));

@@ -454,9 +454,10 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 			//! Load the next manifest file
 			if (current_data_manifest != data_manifests.end()) {
 				auto &manifest = *current_data_manifest;
-				auto full_path = options.allow_moved_paths ? IcebergUtils::GetFullPath(path, manifest.manifest_path, fs)
-				                                           : manifest.manifest_path;
-				auto scan = AvroScan::ScanManifest(*snapshot, data_manifests, metadata, context, full_path);
+				// auto full_path = options.allow_moved_paths ? IcebergUtils::GetFullPath(path, manifest.manifest_path,
+				// fs)
+				//                                           : manifest.manifest_path;
+				auto scan = AvroScan::ScanManifest(*snapshot, data_manifests, options, fs, path, metadata, context);
 				data_manifest_reader->Initialize(std::move(scan));
 				data_manifest_reader->SetSequenceNumber(manifest.sequence_number);
 				data_manifest_reader->SetPartitionSpecID(manifest.partition_spec_id);
@@ -713,15 +714,16 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 
 	while (current_delete_manifest != delete_manifests.end()) {
 		auto &manifest = *current_delete_manifest;
-		auto full_path = options.allow_moved_paths ? IcebergUtils::GetFullPath(iceberg_path, manifest.manifest_path, fs)
-		                                           : manifest.manifest_path;
-		auto scan = AvroScan::ScanManifest(*snapshot, delete_manifests, metadata, context, full_path);
+		// auto full_path = options.allow_moved_paths ? IcebergUtils::GetFullPath(iceberg_path, manifest.manifest_path,
+		// fs)
+		//                                           : manifest.manifest_path;
+		auto scan = AvroScan::ScanManifest(*snapshot, delete_manifests, options, fs, iceberg_path, metadata, context);
 
 		delete_manifest_reader->Initialize(std::move(scan));
 		delete_manifest_reader->SetSequenceNumber(manifest.sequence_number);
 		delete_manifest_reader->SetPartitionSpecID(manifest.partition_spec_id);
 
-		IcebergManifest manifest_file(full_path);
+		IcebergManifest manifest_file("???");
 		while (!delete_manifest_reader->Finished()) {
 			delete_manifest_reader->Read(STANDARD_VECTOR_SIZE, manifest_file.entries);
 		}
