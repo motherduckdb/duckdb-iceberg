@@ -442,7 +442,15 @@ unique_ptr<Expression> IcebergAvroMultiFileReader::GetVirtualColumnExpression(
 		return make_uniq<BoundConstantExpression>(entry->second);
 	}
 	if (column_id == MANIFEST_FILE_INDEX_FIELD_ID) {
-		return make_uniq<BoundConstantExpression>(Value::UBIGINT(local_idx.GetIndex()));
+		if (!reader_data.file_to_be_opened.extended_info) {
+			throw InternalException("Extended info not found for manifest_file_index column");
+		}
+		auto &options = reader_data.file_to_be_opened.extended_info->options;
+		auto entry = options.find("manifest_file_index");
+		if (entry == options.end()) {
+			throw InternalException("'manifest_file_index' not set when initializing the FileList");
+		}
+		return make_uniq<BoundConstantExpression>(entry->second);
 	}
 	return MultiFileReader::GetVirtualColumnExpression(context, reader_data, local_columns, column_id, type, local_idx,
 	                                                   global_column_reference);
@@ -461,9 +469,6 @@ shared_ptr<MultiFileList> IcebergAvroMultiFileReader::CreateFileList(ClientConte
 		file_info.extended_info = make_uniq<ExtendedOpenFileInfo>();
 		file_info.extended_info->options["validate_external_file_cache"] = Value::BOOLEAN(false);
 		file_info.extended_info->options["force_full_download"] = Value::BOOLEAN(true);
-		//! TODO: lookup or assign the associated 'IcebergManifestFile' entry for each manifest (if not scanning a
-		//! manifest-list)
-		// file_info.extended_info->options["file_size"] = Value::UBIGINT(manifest.manifest_length);
 		file_info.extended_info->options["etag"] = Value("");
 		file_info.extended_info->options["last_modified"] = Value::TIMESTAMP(timestamp_t(0));
 	} else {
@@ -472,7 +477,8 @@ shared_ptr<MultiFileList> IcebergAvroMultiFileReader::CreateFileList(ClientConte
 		auto &options = manifest_files_scan.options;
 		auto &fs = manifest_files_scan.fs;
 		auto &iceberg_path = manifest_files_scan.iceberg_path;
-		for (auto &manifest : manifest_files) {
+		for (idx_t i = 0; i < manifest_files.size(); i++) {
+			auto &manifest = manifest_files[i];
 			auto full_path = options.allow_moved_paths
 			                     ? IcebergUtils::GetFullPath(iceberg_path, manifest.manifest_path, fs)
 			                     : manifest.manifest_path;
@@ -486,6 +492,7 @@ shared_ptr<MultiFileList> IcebergAvroMultiFileReader::CreateFileList(ClientConte
 			file_info.extended_info->options["last_modified"] = Value::TIMESTAMP(timestamp_t(0));
 			file_info.extended_info->options["partition_spec_id"] = Value::INTEGER(manifest.partition_spec_id);
 			file_info.extended_info->options["sequence_number"] = Value::BIGINT(manifest.sequence_number);
+			file_info.extended_info->options["manifest_file_index"] = Value::UBIGINT(i);
 		}
 	}
 

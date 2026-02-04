@@ -259,6 +259,7 @@ idx_t ManifestFileReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergMan
 		}
 
 		entry.partition_spec_id = partition_spec_id_data[index];
+		entry.manifest_file_idx = manifest_file_index_data[index];
 		for (auto &it : partition_vectors) {
 			auto field_id = it.first;
 			auto &partition_vector = it.second.get();
