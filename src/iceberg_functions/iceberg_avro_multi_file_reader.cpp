@@ -186,33 +186,10 @@ static vector<MultiFileColumnDefinition> BuildManifestSchema(const IcebergSnapsh
 	auto partition_field_id_to_type = IcebergDataFile::GetFieldIdToTypeMapping(snapshot, metadata, partition_spec_ids);
 	auto partition_type = IcebergDataFile::PartitionStructType(partition_field_id_to_type);
 
-	{
-		// data_file struct (field-id 2)
-		MultiFileColumnDefinition data_file("data_file", IcebergDataFile::GetType(metadata, partition_type));
-		data_file.identifier = Value::INTEGER(2);
-		schema.push_back(data_file);
-	}
-	auto data_file_idx = schema.size() - 1;
+	// data_file struct (field-id 2)
+	MultiFileColumnDefinition data_file("data_file", IcebergDataFile::GetType(metadata, partition_type));
+	data_file.identifier = Value::INTEGER(2);
 
-	//! FIXME: how should these be added so they can be found by lookup
-	//! Virtual columns
-	// MultiFileColumnDefinition partition_spec_id("partition_spec_id", LogicalType::INTEGER);
-	// partition_spec_id.identifier = Value::INTEGER(IcebergAvroMultiFileReader::PARTITION_SPEC_ID_FIELD_ID);
-	// partition_spec_id.default_expression = make_uniq<ConstantExpression>(Value(partition_spec_id.type));
-	// schema.push_back(partition_spec_id);
-
-	// MultiFileColumnDefinition manifest_file_sequence_number("sequence_number", LogicalType::BIGINT);
-	// manifest_file_sequence_number.identifier = Value::INTEGER(IcebergAvroMultiFileReader::SEQUENCE_NUMBER_FIELD_ID);
-	// manifest_file_sequence_number.default_expression =
-	// make_uniq<ConstantExpression>(Value(manifest_file_sequence_number.type));
-	// schema.push_back(manifest_file_sequence_number);
-
-	// MultiFileColumnDefinition manifest_file_index("manifest_file_index", LogicalType::UBIGINT);
-	// manifest_file_index.identifier = Value::INTEGER(IcebergAvroMultiFileReader::MANIFEST_FILE_INDEX_FIELD_ID);
-	// manifest_file_index.default_expression = make_uniq<ConstantExpression>(Value(manifest_file_index.type));
-	// schema.push_back(manifest_file_index);
-
-	auto &data_file = schema[data_file_idx];
 	// Add children with their field IDs
 	if (iceberg_version >= 2) {
 		MultiFileColumnDefinition content("content", LogicalType::INTEGER);

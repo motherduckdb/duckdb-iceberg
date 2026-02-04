@@ -141,6 +141,10 @@ idx_t ManifestFileReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergMan
 	auto &file_sequence_number = chunk.data[vector_index++];
 	auto &data_file = chunk.data[vector_index++];
 
+	auto &partition_spec_id = chunk.data[vector_index++];
+	auto &manifest_file_sequence_number = chunk.data[vector_index++];
+	auto &manifest_file_index = chunk.data[vector_index++];
+
 	idx_t entry_index = 0;
 	auto &data_file_entries = StructVector::GetEntries(data_file);
 	optional_ptr<Vector> content;
@@ -180,6 +184,9 @@ idx_t ManifestFileReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergMan
 	auto snapshot_id_data = FlatVector::GetData<int64_t>(snapshot_id);
 	auto sequence_number_data = FlatVector::GetData<int64_t>(sequence_number);
 	auto file_sequence_number_data = FlatVector::GetData<int64_t>(file_sequence_number);
+	auto partition_spec_id_data = FlatVector::GetData<int32_t>(partition_spec_id);
+	auto manifest_file_sequence_number_data = FlatVector::GetData<int64_t>(manifest_file_sequence_number);
+	auto manifest_file_index_data = FlatVector::GetData<uint64_t>(manifest_file_index);
 
 	int32_t *content_data;
 	if (iceberg_version >= 2) {
@@ -244,14 +251,14 @@ idx_t ManifestFileReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergMan
 			} else {
 				//! Value should only be NULL for ADDED manifest entries, to support inheritance
 				D_ASSERT(entry.status == IcebergManifestEntryStatusType::ADDED);
-				throw InternalException("INHERIT SEQUENCE NUMBER");
+				entry.sequence_number = manifest_file_sequence_number_data[index];
 			}
 		} else {
-			throw InternalException("INHERIT SEQUENCE NUMBER");
+			entry.sequence_number = manifest_file_sequence_number_data[index];
 			data_file.content = IcebergManifestEntryContentType::DATA;
 		}
 
-		throw InternalException("INHERIT PARTITION SPEC ID");
+		entry.partition_spec_id = partition_spec_id_data[index];
 		for (auto &it : partition_vectors) {
 			auto field_id = it.first;
 			auto &partition_vector = it.second.get();
