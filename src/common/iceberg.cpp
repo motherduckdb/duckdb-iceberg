@@ -35,22 +35,17 @@ unique_ptr<IcebergTable> IcebergTable::Load(const string &iceberg_path, const Ic
 		manifest_list_reader->Read(STANDARD_VECTOR_SIZE, manifest_list_entries);
 	}
 
-	for (auto &manifest : manifest_list_entries) {
-		auto scan =
-		    AvroScan::ScanManifest(snapshot, manifest_list_entries, options, fs, iceberg_path, metadata, context);
-
-		manifest_file_reader->Initialize(std::move(scan));
-		// manifest_file_reader->SetSequenceNumber(manifest.sequence_number);
-		// manifest_file_reader->SetPartitionSpecID(manifest.partition_spec_id);
-
-		IcebergManifest manifest_file("???");
-		while (!manifest_file_reader->Finished()) {
-			manifest_file_reader->Read(STANDARD_VECTOR_SIZE, manifest_file.entries);
-		}
-
-		IcebergTableManifestEntry table_entry(std::move(manifest), std::move(manifest_file));
-		ret->entries.push_back(table_entry);
+	auto manifest_scan =
+	    AvroScan::ScanManifest(snapshot, manifest_list_entries, options, fs, iceberg_path, metadata, context);
+	manifest_file_reader->Initialize(std::move(manifest_scan));
+	IcebergManifest manifest_file("???");
+	while (!manifest_file_reader->Finished()) {
+		manifest_file_reader->Read(STANDARD_VECTOR_SIZE, manifest_file.entries);
 	}
+	//! TODO: fix this
+	IcebergManifestFile manifest("???");
+	IcebergTableManifestEntry table_entry(std::move(manifest), std::move(manifest_file));
+	ret->entries.push_back(table_entry);
 	return ret;
 }
 

@@ -57,6 +57,14 @@ const IcebergTableSchema &IcebergMultiFileList::GetSchema() const {
 	return scan_info->schema;
 }
 
+bool IcebergMultiFileList::FinishedScanningDeletes() const {
+	return !delete_manifest_reader || delete_manifest_reader->Finished();
+}
+
+bool IcebergMultiFileList::FinishedScanningData() const {
+	return !data_manifest_reader || data_manifest_reader->Finished();
+}
+
 optional_ptr<const TableFilter> IcebergMultiFileList::GetFilterForColumnIndex(const TableFilterSet &filter_set,
                                                                               const ColumnIndex &column_index) const {
 	auto primary_index = column_index.GetPrimaryIndex();
@@ -452,20 +460,8 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 		if (current_manifest_entries.empty() || manifest_entry_idx >= current_manifest_entries.size()) {
 			current_manifest_entries.clear();
 			//! Load the next manifest file
-			if (current_data_manifest != data_manifests.end()) {
-				auto &manifest = *current_data_manifest;
-				// auto full_path = options.allow_moved_paths ? IcebergUtils::GetFullPath(path, manifest.manifest_path,
-				// fs)
-				//                                           : manifest.manifest_path;
-				auto scan = AvroScan::ScanManifest(*snapshot, data_manifests, options, fs, path, metadata, context);
-				data_manifest_reader->Initialize(std::move(scan));
-				// data_manifest_reader->SetSequenceNumber(manifest.sequence_number);
-				// data_manifest_reader->SetPartitionSpecID(manifest.partition_spec_id);
-
-				while (!data_manifest_reader->Finished()) {
-					data_manifest_reader->Read(STANDARD_VECTOR_SIZE, current_manifest_entries);
-				}
-				current_data_manifest++;
+			if (!FinishedScanningData()) {
+				data_manifest_reader->Read(STANDARD_VECTOR_SIZE, current_manifest_entries);
 			} else if (!transaction_data_manifests.empty() &&
 			           transaction_data_idx < transaction_data_manifests.size()) {
 				auto &manifest_file = transaction_data_manifests[transaction_data_idx].get();
@@ -661,6 +657,15 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 				delete_manifests.push_back(manifest);
 			}
 		}
+		if (!data_manifests.empty()) {
+			auto scan = AvroScan::ScanManifest(snapshot, data_manifests, options, fs, path, metadata, context);
+			data_manifest_reader->Initialize(std::move(scan));
+		}
+		if (!delete_manifests.empty()) {
+			auto scan =
+			    AvroScan::ScanManifest(snapshot, delete_manifests, options, fs, iceberg_path, metadata, context);
+			delete_manifest_reader->Initialize(std::move(scan));
+		}
 	}
 
 	if (HasTransactionData()) {
@@ -690,8 +695,6 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 		}
 	}
 
-	current_data_manifest = data_manifests.begin();
-	current_delete_manifest = delete_manifests.begin();
 	transaction_delete_idx = 0;
 	transaction_data_idx = 0;
 }
@@ -712,25 +715,11 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 	auto snapshot = GetSnapshot();
 	auto &fs = FileSystem::GetFileSystem(context);
 
-	while (current_delete_manifest != delete_manifests.end()) {
-		auto &manifest = *current_delete_manifest;
-		// auto full_path = options.allow_moved_paths ? IcebergUtils::GetFullPath(iceberg_path, manifest.manifest_path,
-		// fs)
-		//                                           : manifest.manifest_path;
-		auto scan = AvroScan::ScanManifest(*snapshot, delete_manifests, options, fs, iceberg_path, metadata, context);
+	while (!FinishedScanningDeletes()) {
+		vector<IcebergManifestEntry> entries;
+		delete_manifest_reader->Read(STANDARD_VECTOR_SIZE, entries);
 
-		delete_manifest_reader->Initialize(std::move(scan));
-		// delete_manifest_reader->SetSequenceNumber(manifest.sequence_number);
-		// delete_manifest_reader->SetPartitionSpecID(manifest.partition_spec_id);
-
-		IcebergManifest manifest_file("???");
-		while (!delete_manifest_reader->Finished()) {
-			delete_manifest_reader->Read(STANDARD_VECTOR_SIZE, manifest_file.entries);
-		}
-
-		current_delete_manifest++;
-
-		for (auto &manifest_entry : manifest_file.entries) {
+		for (auto &manifest_entry : entries) {
 			auto &data_file = manifest_entry.data_file;
 			// Check whether current data file is filtered out.
 			if (!table_filters.filters.empty() && !FileMatchesFilter(manifest_entry)) {
@@ -772,7 +761,7 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 		transaction_delete_idx++;
 	}
 
-	D_ASSERT(current_delete_manifest == delete_manifests.end());
+	D_ASSERT(FinishedScanningDeletes());
 }
 
 void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &manifest_entry,
