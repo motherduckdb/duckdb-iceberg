@@ -8,14 +8,6 @@ ManifestFileReader::ManifestFileReader(idx_t iceberg_version, bool skip_deleted)
     : BaseManifestReader(iceberg_version), skip_deleted(skip_deleted) {
 }
 
-// void ManifestFileReader::SetSequenceNumber(sequence_number_t sequence_number_p) {
-//	sequence_number = sequence_number_p;
-//}
-
-// void ManifestFileReader::SetPartitionSpecID(int32_t partition_spec_id_p) {
-//	partition_spec_id = partition_spec_id_p;
-//}
-
 idx_t ManifestFileReader::Read(idx_t count, vector<IcebergManifestEntry> &result) {
 	if (!scan || finished) {
 		return 0;
