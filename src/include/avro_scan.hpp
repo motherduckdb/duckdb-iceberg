@@ -17,6 +17,8 @@
 
 namespace duckdb {
 
+class BaseManifestReader;
+
 class AvroScan {
 public:
 	AvroScan(const string &path, ClientContext &context, shared_ptr<IcebergAvroScanInfo> avro_scan_info);
@@ -30,9 +32,9 @@ public:
 	                                         const IcebergTableMetadata &metadata, ClientContext &context);
 
 public:
-	bool GetNext(DataChunk &chunk);
 	void InitializeChunk(DataChunk &chunk);
 	bool Finished() const;
+	const vector<column_t> &GetColumnIds() const;
 
 public:
 	string path;
@@ -40,9 +42,10 @@ public:
 	ClientContext &context;
 	unique_ptr<FunctionData> bind_data;
 	unique_ptr<GlobalTableFunctionState> global_state;
-	unique_ptr<LocalTableFunctionState> local_state;
 	vector<LogicalType> return_types;
 	vector<string> return_names;
+	idx_t iceberg_version;
+	vector<column_t> column_ids;
 
 	bool finished = false;
 };

@@ -5,11 +5,14 @@ namespace duckdb {
 
 namespace manifest_list {
 
-ManifestListReader::ManifestListReader(idx_t iceberg_version) : BaseManifestReader(iceberg_version) {
+ManifestListReader::ManifestListReader(AvroScan &scan) : BaseManifestReader(scan) {
+}
+
+ManifestListReader::~ManifestListReader() {
 }
 
 idx_t ManifestListReader::Read(idx_t count, vector<IcebergManifestFile> &result) {
-	if (!scan || finished) {
+	if (finished) {
 		return 0;
 	}
 
@@ -138,10 +141,6 @@ idx_t ManifestListReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergMan
 		result.push_back(manifest);
 	}
 	return count;
-}
-
-bool ManifestListReader::ValidateVectorMapping() {
-	return true;
 }
 
 void ManifestListReader::CreateVectorMapping(idx_t column_id, MultiFileColumnDefinition &column) {

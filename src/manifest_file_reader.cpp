@@ -4,12 +4,15 @@ namespace duckdb {
 
 namespace manifest_file {
 
-ManifestFileReader::ManifestFileReader(idx_t iceberg_version, bool skip_deleted)
-    : BaseManifestReader(iceberg_version), skip_deleted(skip_deleted) {
+ManifestFileReader::ManifestFileReader(AvroScan &scan, bool skip_deleted)
+    : BaseManifestReader(scan), skip_deleted(skip_deleted) {
+}
+
+ManifestFileReader::~ManifestFileReader() {
 }
 
 idx_t ManifestFileReader::Read(idx_t count, vector<IcebergManifestEntry> &result) {
-	if (!scan || finished) {
+	if (finished) {
 		return 0;
 	}
 
@@ -55,10 +58,6 @@ void ManifestFileReader::CreateVectorMapping(idx_t column_id, MultiFileColumnDef
 		auto partition_field_id = partition_field.identifier.GetValue<int32_t>();
 		partition_fields.emplace(partition_field_id, partition_idx);
 	}
-}
-
-bool ManifestFileReader::ValidateVectorMapping() {
-	return true;
 }
 
 static unordered_map<int32_t, Value> GetBounds(Vector &bounds, idx_t index) {

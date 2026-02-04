@@ -1,42 +1,46 @@
 #include "manifest_reader.hpp"
 #include "duckdb/common/multi_file/multi_file_states.hpp"
+#include "avro_scan.hpp"
 
 namespace duckdb {
 
-void BaseManifestReader::Initialize(unique_ptr<AvroScan> scan_p) {
-	const bool first_init = scan == nullptr;
-	scan = std::move(scan_p);
-	if (!first_init) {
-		chunk.Destroy();
-	}
-	//! Reinitialize for every new scan, the schema isn't guaranteed to be the same for every scan
-	//! the 'partition' of the 'data_file' is based on the partition spec referenced by the manifest
-	scan->InitializeChunk(chunk);
+BaseManifestReader::BaseManifestReader(AvroScan &scan_p) : scan(scan_p), iceberg_version(scan.iceberg_version) {
+}
 
-	finished = false;
-	offset = 0;
-	partition_fields.clear();
+BaseManifestReader::~BaseManifestReader() {
+}
 
-	auto &multi_file_bind_data = scan->bind_data->Cast<MultiFileBindData>();
+void BaseManifestReader::Initialize() {
+	ThreadContext thread_context(scan.context);
+	ExecutionContext execution_context(scan.context, thread_context, nullptr);
+	TableFunctionInitInput input(scan.bind_data.get(), scan.GetColumnIds(), vector<idx_t>(), nullptr);
+	local_state = scan.avro_scan->init_local(execution_context, input, scan.global_state.get());
+
+	scan.InitializeChunk(chunk);
+
+	auto &multi_file_bind_data = scan.bind_data->Cast<MultiFileBindData>();
 	auto &columns = multi_file_bind_data.reader_bind.schema;
 	for (idx_t i = 0; i < columns.size(); i++) {
 		auto &column = columns[i];
 		CreateVectorMapping(i, column);
 	}
-
-	if (!ValidateVectorMapping()) {
-		throw InvalidInputException("Invalid schema detected in a manifest/manifest entry");
-	}
+	finished = false;
 }
 
 idx_t BaseManifestReader::ScanInternal(idx_t remaining) {
-	if (!scan || finished) {
+	if (finished) {
 		return 0;
 	}
 
 	if (offset >= chunk.size()) {
-		scan->GetNext(chunk);
-		if (chunk.size() == 0) {
+		TableFunctionInput function_input(scan.bind_data.get(), local_state.get(), scan.global_state.get());
+		scan.avro_scan->function(scan.context, function_input, chunk);
+		auto count = chunk.size();
+		for (auto &vec : chunk.data) {
+			vec.Flatten(count);
+		}
+
+		if (count == 0) {
 			finished = true;
 			return 0;
 		}
@@ -46,10 +50,7 @@ idx_t BaseManifestReader::ScanInternal(idx_t remaining) {
 }
 
 bool BaseManifestReader::Finished() const {
-	if (!scan) {
-		return true;
-	}
-	return scan->Finished();
+	return finished;
 }
 
 } // namespace duckdb

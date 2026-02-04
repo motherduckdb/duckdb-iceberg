@@ -25,8 +25,28 @@
 #include "deletes/equality_delete.hpp"
 #include "deletes/positional_delete.hpp"
 #include "deletes/iceberg_delete_data.hpp"
+#include "avro_scan.hpp"
+#include "duckdb/parallel/task_executor.hpp"
 
 namespace duckdb {
+
+struct IcebergManifestReadingState {
+public:
+	IcebergManifestReadingState(ClientContext &context, unique_ptr<AvroScan> scan, mutex &lock,
+	                            vector<IcebergManifestEntry> &entries, atomic<bool> &finished,
+	                            atomic<bool> &has_buffered_entries)
+	    : executor(context), scan(std::move(scan)), lock(lock), entries(entries), finished(finished),
+	      has_buffered_entries(has_buffered_entries) {
+	}
+
+public:
+	TaskExecutor executor;
+	unique_ptr<AvroScan> scan;
+	mutex &lock;
+	vector<IcebergManifestEntry> &entries;
+	atomic<bool> &finished;
+	atomic<bool> &has_buffered_entries;
+};
 
 struct IcebergMultiFileList : public MultiFileList {
 public:
@@ -42,7 +62,6 @@ public:
 	optional_ptr<IcebergSnapshot> GetSnapshot() const;
 	const IcebergTableSchema &GetSchema() const;
 	bool FinishedScanningDeletes() const;
-	bool FinishedScanningData() const;
 
 	void Bind(vector<LogicalType> &return_types, vector<string> &names);
 	unique_ptr<IcebergMultiFileList> PushdownInternal(ClientContext &context, TableFilterSet &new_filters) const;
@@ -103,6 +122,7 @@ public:
 	vector<LogicalType> types;
 	TableFilterSet table_filters;
 
+	mutable mutex entry_lock;
 	mutable vector<IcebergManifestEntry> manifest_entries;
 	//! For each file that has a delete file, the state for processing that/those delete file(s)
 	mutable case_insensitive_map_t<shared_ptr<IcebergDeleteData>> positional_delete_data;
@@ -117,8 +137,12 @@ public:
 	mutable vector<IcebergManifestFile> data_manifests;
 	mutable vector<reference<IcebergManifest>> transaction_data_manifests;
 	mutable idx_t transaction_data_idx = 0;
+	mutable unique_ptr<IcebergManifestReadingState> manifest_read_state;
+	mutable atomic<bool> finished;
+	mutable atomic<bool> has_buffered_entries;
 
 	//! State used for pre-processing delete files
+	mutable unique_ptr<AvroScan> delete_manifest_scan;
 	mutable unique_ptr<manifest_file::ManifestFileReader> delete_manifest_reader;
 	mutable vector<IcebergManifestFile> delete_manifests;
 	mutable vector<reference<IcebergManifest>> transaction_delete_manifests;
