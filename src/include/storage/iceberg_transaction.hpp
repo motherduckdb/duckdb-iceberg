@@ -2,12 +2,12 @@
 #pragma once
 
 #include "duckdb/transaction/transaction.hpp"
-#include "storage/irc_schema_set.hpp"
+#include "storage/catalog/iceberg_schema_set.hpp"
 
 namespace duckdb {
-class IRCatalog;
-class IRCSchemaEntry;
-class ICTableEntry;
+class IcebergCatalog;
+class IcebergSchemaEntry;
+class IcebergTableEntry;
 
 struct TableTransactionInfo {
 	TableTransactionInfo() {};
@@ -30,23 +30,22 @@ struct TableInfoCache {
 	bool exists;
 };
 
-class IRCTransaction : public Transaction {
+class IcebergTransaction : public Transaction {
 public:
-	IRCTransaction(IRCatalog &ic_catalog, TransactionManager &manager, ClientContext &context);
-	~IRCTransaction() override;
+	IcebergTransaction(IcebergCatalog &ic_catalog, TransactionManager &manager, ClientContext &context);
+	~IcebergTransaction() override;
 
 public:
 	void Start();
 	void Commit();
 	void Rollback();
-	static IRCTransaction &Get(ClientContext &context, Catalog &catalog);
+	static IcebergTransaction &Get(ClientContext &context, Catalog &catalog);
 	AccessMode GetAccessMode() const {
 		return access_mode;
 	}
 	void DoTableUpdates(ClientContext &context);
 	void DoTableDeletes(ClientContext &context);
-	bool DirtyTablesHaveUpdates();
-	IRCatalog &GetCatalog();
+	IcebergCatalog &GetCatalog();
 	void DropSecrets(ClientContext &context);
 	TableTransactionInfo GetTransactionRequest(ClientContext &context);
 
@@ -55,7 +54,7 @@ private:
 
 private:
 	DatabaseInstance &db;
-	IRCatalog &catalog;
+	IcebergCatalog &catalog;
 	AccessMode access_mode;
 
 public:
@@ -80,12 +79,12 @@ public:
 };
 
 template <typename Callback>
-void ApplyTableUpdate(IcebergTableInformation &table_info, IRCTransaction &irc_transaction, Callback callback) {
-	if (table_info.IsTransactionLocalTable(irc_transaction)) {
+void ApplyTableUpdate(IcebergTableInformation &table_info, IcebergTransaction &iceberg_transaction, Callback callback) {
+	if (table_info.IsTransactionLocalTable(iceberg_transaction)) {
 		callback(table_info);
 	} else {
-		irc_transaction.updated_tables.emplace(table_info.GetTableKey(), table_info.Copy(irc_transaction));
-		auto &updated_table = irc_transaction.updated_tables.at(table_info.GetTableKey());
+		iceberg_transaction.updated_tables.emplace(table_info.GetTableKey(), table_info.Copy(iceberg_transaction));
+		auto &updated_table = iceberg_transaction.updated_tables.at(table_info.GetTableKey());
 		updated_table.InitSchemaVersions();
 		callback(updated_table);
 	}

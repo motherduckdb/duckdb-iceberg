@@ -9,7 +9,7 @@ namespace duckdb {
 
 enum class IcebergEndpointType : uint8_t { AWS_S3TABLES, AWS_GLUE, INVALID };
 
-enum class IRCAuthorizationType : uint8_t { OAUTH2, SIGV4, NONE, INVALID };
+enum class IcebergAuthorizationType : uint8_t { OAUTH2, SIGV4, NONE, INVALID };
 
 enum class IRCAccessDelegationMode : uint8_t { NONE, VENDED_CREDENTIALS };
 
@@ -26,21 +26,21 @@ struct IcebergAttachOptions {
 	// in rest api spec, purge requested defaults to false.
 	bool purge_requested = false;
 	IRCAccessDelegationMode access_mode = IRCAccessDelegationMode::VENDED_CREDENTIALS;
-	IRCAuthorizationType authorization_type = IRCAuthorizationType::INVALID;
+	IcebergAuthorizationType authorization_type = IcebergAuthorizationType::INVALID;
 	unordered_map<string, Value> options;
 	// max staleness for cached table metadata in minutes (optional - if not set, always request fresh metadata)
 	optional_idx max_table_staleness_micros;
 };
 
-struct IRCAuthorization {
+struct IcebergAuthorization {
 public:
-	IRCAuthorization(IRCAuthorizationType type) : type(type) {
+	IcebergAuthorization(IcebergAuthorizationType type) : type(type) {
 	}
-	virtual ~IRCAuthorization() {
+	virtual ~IcebergAuthorization() {
 	}
 
 public:
-	static IRCAuthorizationType TypeFromString(const string &type);
+	static IcebergAuthorizationType TypeFromString(const string &type);
 
 public:
 	virtual unique_ptr<HTTPResponse> Request(RequestType request_type, ClientContext &context,
@@ -51,7 +51,7 @@ public:
 	template <class TARGET>
 	TARGET &Cast() {
 		if (type != TARGET::TYPE) {
-			throw InternalException("Failed to cast IRCAuthorization to type - IRCAuthorization type mismatch");
+			throw InternalException("Failed to cast IcebergAuthorization to type - IcebergAuthorization type mismatch");
 		}
 		return reinterpret_cast<TARGET &>(*this);
 	}
@@ -59,13 +59,13 @@ public:
 	template <class TARGET>
 	const TARGET &Cast() const {
 		if (type != TARGET::TYPE) {
-			throw InternalException("Failed to cast IRCAuthorization to type - IRCAuthorization type mismatch");
+			throw InternalException("Failed to cast IcebergAuthorization to type - IcebergAuthorization type mismatch");
 		}
 		return reinterpret_cast<const TARGET &>(*this);
 	}
 
 public:
-	IRCAuthorizationType type;
+	IcebergAuthorizationType type;
 	unique_ptr<HTTPClient> client;
 };
 
