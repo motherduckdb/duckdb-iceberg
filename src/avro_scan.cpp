@@ -11,20 +11,15 @@
 
 namespace duckdb {
 
-static virtual_column_map_t GetManifestVirtualColumns(ClientContext &context, optional_ptr<FunctionData> bind_data_p) {
-	auto &bind_data = bind_data_p->Cast<MultiFileBindData>();
-	virtual_column_map_t result;
-	result.insert(make_pair(IcebergAvroMultiFileReader::PARTITION_SPEC_ID_FIELD_ID,
-	                        TableColumn("partition_spec_id", LogicalType::INTEGER)));
+namespace {
 
-	result.insert(make_pair(IcebergAvroMultiFileReader::SEQUENCE_NUMBER_FIELD_ID,
-	                        TableColumn("sequence_number", LogicalType::BIGINT)));
+struct ManifestFileVirtualColumn {
+	column_t id;
+	const char *name;
+	LogicalType type;
+};
 
-	result.insert(make_pair(IcebergAvroMultiFileReader::MANIFEST_FILE_INDEX_FIELD_ID,
-	                        TableColumn("manifest_file_index", LogicalType::UBIGINT)));
-	bind_data.virtual_columns = result;
-	return result;
-}
+} // namespace
 
 AvroScan::AvroScan(const string &path, ClientContext &context, shared_ptr<IcebergAvroScanInfo> avro_scan_info)
     : context(context) {
@@ -58,10 +53,6 @@ AvroScan::AvroScan(const string &path, ClientContext &context, shared_ptr<Iceber
 	TableFunctionBindInput bind_input(children, named_params, input_types, input_names, nullptr, nullptr,
 	                                  dummy_table_function, empty);
 	bind_data = avro_scan->bind(context, bind_input, return_types, return_names);
-	virtual_column_map_t virtual_columns;
-	if (!is_manifest_list) {
-		virtual_columns = GetManifestVirtualColumns(context, bind_data.get());
-	}
 
 	vector<column_t> column_ids;
 	for (idx_t i = 0; i < return_types.size(); i++) {
@@ -69,21 +60,22 @@ AvroScan::AvroScan(const string &path, ClientContext &context, shared_ptr<Iceber
 	}
 
 	if (!is_manifest_list) {
-		vector<column_t> virtual_column_ids {
-		    IcebergAvroMultiFileReader::PARTITION_SPEC_ID_FIELD_ID,
-		    IcebergAvroMultiFileReader::SEQUENCE_NUMBER_FIELD_ID,
-		    IcebergAvroMultiFileReader::MANIFEST_FILE_INDEX_FIELD_ID,
-		};
-		for (auto &id : virtual_column_ids) {
-			auto it = virtual_columns.find(id);
-			if (it == virtual_columns.end()) {
-				throw InternalException("virtual columns is missing an id that should be there!");
-			}
-			column_ids.push_back(id);
-			auto &column = it->second;
+		const ManifestFileVirtualColumn columns[] = {
+		    {IcebergAvroMultiFileReader::PARTITION_SPEC_ID_FIELD_ID, "partition_spec_id", LogicalType::INTEGER},
+		    {IcebergAvroMultiFileReader::SEQUENCE_NUMBER_FIELD_ID, "sequence_number", LogicalType::BIGINT},
+		    {IcebergAvroMultiFileReader::MANIFEST_FILE_INDEX_FIELD_ID, "manifest_file_index", LogicalType::UBIGINT}};
+		const idx_t columns_size = sizeof(columns) / sizeof(ManifestFileVirtualColumn);
+		auto &multi_file_bind_data = bind_data->Cast<MultiFileBindData>();
+
+		virtual_column_map_t result;
+		for (idx_t i = 0; i < columns_size; i++) {
+			auto &column = columns[i];
+			result.emplace(column.id, TableColumn(column.name, column.type));
+			column_ids.push_back(column.id);
 			return_types.push_back(column.type);
 			return_names.push_back(column.name);
 		}
+		multi_file_bind_data.virtual_columns = result;
 	}
 
 	ThreadContext thread_context(context);
