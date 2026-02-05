@@ -66,6 +66,11 @@ void IcebergSchemaSet::AddEntry(const string &name, unique_ptr<IcebergSchemaEntr
 	entries.insert(make_pair(name, std::move(entry)));
 }
 
+void IcebergSchemaSet::RemoveEntry(const string &name) {
+	lock_guard<mutex> l(entry_lock);
+	entries.erase(name);
+}
+
 CatalogEntry &IcebergSchemaSet::GetEntry(const string &name) {
 	auto entry_it = entries.find(name);
 	if (entry_it == entries.end()) {

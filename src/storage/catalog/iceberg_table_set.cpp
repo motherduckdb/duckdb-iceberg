@@ -223,7 +223,7 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetEntry(ClientContext &context, con
 	if (!FillEntry(context, entry->second)) {
 		// Table doesn't exist
 		entries.erase(entry);
-		irc_transaction.requested_tables.emplace(table_name, TableInfoCache(false));
+		iceberg_transaction.requested_tables.emplace(table_name, TableInfoCache(false));
 		return nullptr;
 	}
 	auto ret = entry->second.GetSchemaVersion(lookup.GetAtClause());

@@ -125,38 +125,32 @@ optional_ptr<CatalogEntry> IcebergCatalog::CreateSchema(CatalogTransaction trans
 	}
 
 	D_ASSERT(context);
-	rest_api_objects::CreateNamespaceRequest request;
-	request.has_properties = false;
-	auto namespace_identifiers = IRCAPI::ParseSchemaName(info.schema);
-	for (auto &identifier : namespace_identifiers) {
-		request._namespace.value.push_back(identifier);
-	}
-	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-	auto doc = doc_p.get();
-	auto root_object = yyjson_mut_obj(doc);
-	yyjson_mut_doc_set_root(doc, root_object);
-	auto namespace_arr = yyjson_mut_obj_add_arr(doc, root_object, "namespace");
-	for (auto &name : request._namespace.value) {
-		yyjson_mut_arr_add_strcpy(doc, namespace_arr, name.c_str());
-	}
-	// properties object is also requeried. Empty for now since we don't support properties
-	auto properties_obj = yyjson_mut_obj_add_obj(doc, root_object, "properties");
-	auto create_body = ICUtils::JsonToString(std::move(doc_p));
 
-	if (info.on_conflict == OnCreateConflict::IGNORE_ON_CONFLICT) {
-		auto schema_lookup = EntryLookupInfo(CatalogType::SCHEMA_ENTRY, info.schema);
-		auto schema_exists = LookupSchema(transaction, schema_lookup, OnEntryNotFound::RETURN_NULL);
-		if (schema_exists) {
-			return nullptr;
+	// Verify schema existence on the server first
+	bool schema_exists = IRCAPI::VerifySchemaExistence(*context, *this, info.schema);
+
+	if (schema_exists) {
+		if (info.on_conflict == OnCreateConflict::IGNORE_ON_CONFLICT) {
+			// Schema already exists on the server - get or create a local entry and return it
+			auto entry = schemas.GetEntry(*context, info.schema, OnEntryNotFound::RETURN_NULL);
+			if (entry) {
+				return entry;
+			}
+			auto new_schema = make_uniq<IcebergSchemaEntry>(*this, info);
+			auto schema_name = new_schema->name;
+			schemas.AddEntry(schema_name, std::move(new_schema));
+			return &schemas.GetEntry(info.schema);
 		}
+		throw CatalogException("Schema with name \"%s\" already exists", info.schema);
 	}
 
-	IRCAPI::CommitNamespaceCreate(*context, *this, create_body);
+	// Schema does not exist - create it locally and defer the server creation to commit
+	auto &iceberg_transaction = IcebergTransaction::Get(*context, *this);
 	auto new_schema = make_uniq<IcebergSchemaEntry>(*this, info);
 	auto schema_name = new_schema->name;
 	schemas.AddEntry(schema_name, std::move(new_schema));
-	auto &ret = schemas.GetEntry(info.schema);
-	return ret;
+	iceberg_transaction.created_schemas.insert(info.schema);
+	return &schemas.GetEntry(info.schema);
 }
 
 void IcebergCatalog::DropSchema(ClientContext &context, DropInfo &info) {
@@ -164,18 +158,20 @@ void IcebergCatalog::DropSchema(ClientContext &context, DropInfo &info) {
 		throw NotImplementedException(
 		    "DROP SCHEMA <schema_name> CASCADE is not supported for Iceberg schemas currently");
 	}
-	vector<string> namespace_items;
-	auto namespace_identifier = IRCAPI::ParseSchemaName(info.name);
-	namespace_items.push_back(IRCAPI::GetEncodedSchemaName(namespace_identifier));
-	if (info.if_not_found == OnEntryNotFound::RETURN_NULL) {
-		auto schema_lookup = EntryLookupInfo(CatalogType::SCHEMA_ENTRY, info.name);
-		auto transaction = CatalogTransaction::GetSystemCatalogTransaction(context);
-		auto schema_exists = LookupSchema(transaction, schema_lookup, info.if_not_found);
-		if (!schema_exists) {
+
+	// Verify schema existence on the server first
+	bool schema_exists = IRCAPI::VerifySchemaExistence(context, *this, info.name);
+
+	if (!schema_exists) {
+		if (info.if_not_found == OnEntryNotFound::RETURN_NULL) {
 			return;
 		}
+		throw CatalogException("Schema with name \"%s\" does not exist", info.name);
 	}
-	IRCAPI::CommitNamespaceDrop(context, *this, namespace_items, OnEntryNotFound::RETURN_NULL);
+
+	// Schema exists - defer the server deletion to commit
+	auto &iceberg_transaction = IcebergTransaction::Get(context, *this);
+	iceberg_transaction.deleted_schemas.insert(info.name);
 }
 
 unique_ptr<LogicalOperator> IcebergCatalog::BindCreateIndex(Binder &binder, CreateStatement &stmt,

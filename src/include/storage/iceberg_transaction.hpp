@@ -45,6 +45,8 @@ public:
 	}
 	void DoTableUpdates(ClientContext &context);
 	void DoTableDeletes(ClientContext &context);
+	void DoSchemaCreates(ClientContext &context);
+	void DoSchemaDeletes(ClientContext &context);
 	IcebergCatalog &GetCatalog();
 	void DropSecrets(ClientContext &context);
 	TableTransactionInfo GetTransactionRequest(ClientContext &context);
@@ -70,6 +72,8 @@ public:
 	//! (with no updates), we can return table information at that snapshot
 	//! while other transactions can still request up to date tables
 	case_insensitive_map_t<TableInfoCache> requested_tables;
+	unordered_set<string> created_schemas;
+	unordered_set<string> deleted_schemas;
 
 	bool called_list_schemas = false;
 	case_insensitive_set_t listed_schemas;
