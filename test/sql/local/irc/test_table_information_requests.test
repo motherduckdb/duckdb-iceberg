@@ -315,3 +315,52 @@ DETACH my_datalake_standard;
 
 statement ok
 DROP SECRET iceberg_secret_standard_check;
+
+statement ok
+call truncate_duckdb_logs();
+
+# Test DuckDB Bearer token overrides custom Authorization header
+statement ok
+CREATE SECRET iceberg_secret_auth_override (
+    TYPE ICEBERG,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    OAUTH2_SERVER_URI 'http://127.0.0.1:8181/v1/oauth/tokens',
+    EXTRA_HTTP_HEADERS MAP {'Authorization': 'CustomAuth token123'}
+);
+
+statement ok
+ATTACH '' AS my_datalake_override (
+    TYPE ICEBERG,
+    SECRET iceberg_secret_auth_override,
+    ENDPOINT 'http://127.0.0.1:8181'
+);
+
+query I
+SELECT count(*) FROM my_datalake_override.default.supplier;
+----
+10000
+
+# Verify DuckDB's Bearer token is present (overrides custom Authorization)
+query I
+SELECT count(*) > 0
+FROM duckdb_logs_parsed('HTTP')
+WHERE request.url LIKE '%v1/namespaces%'
+  AND request.headers['Authorization'] LIKE 'Bearer %';
+----
+1
+
+# Verify the custom Authorization is NOT present (was overridden)
+query I
+SELECT count(*) = 0
+FROM duckdb_logs_parsed('HTTP')
+WHERE request.url LIKE '%v1/namespaces%'
+  AND request.headers['Authorization'] = 'CustomAuth token123';
+----
+1
+
+statement ok
+DETACH my_datalake_override;
+
+statement ok
+DROP SECRET iceberg_secret_auth_override;

@@ -282,13 +282,13 @@ unique_ptr<BaseSecret> OAuth2Authorization::CreateCatalogSecretFunction(ClientCo
 unique_ptr<HTTPResponse> OAuth2Authorization::Request(RequestType request_type, ClientContext &context,
                                                       const IRCEndpointBuilder &endpoint_builder, HTTPHeaders &headers,
                                                       const string &data) {
-	if (!token.empty()) {
-		headers.Insert("Authorization", StringUtil::Format("Bearer %s", token));
-	}
-
-	// Merge extra HTTP headers from secret
 	for (auto &entry : extra_http_headers) {
 		headers.Insert(entry.first, entry.second);
+	}
+
+	// DuckDB's Bearer token always takes precedence over custom Authorization headers
+	if (!token.empty()) {
+		headers["Authorization"] = StringUtil::Format("Bearer %s", token);
 	}
 
 	return APIUtils::Request(request_type, context, endpoint_builder, client, headers, data);

@@ -266,7 +266,7 @@ vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IcebergCatalog &
 	string page_token = "";
 	do {
 		auto endpoint_builder = catalog.GetBaseUrl();
-		endpoint_builder.AddPathComponent(catalog.prefix);
+		endpoint_builder.AddPrefixComponent(catalog.prefix);
 		endpoint_builder.AddPathComponent("namespaces");
 		if (!parent.empty()) {
 			auto parent_name = GetSchemaName(parent);
