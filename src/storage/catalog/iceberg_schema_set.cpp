@@ -15,8 +15,23 @@ optional_ptr<CatalogEntry> IcebergSchemaSet::GetEntry(ClientContext &context, co
                                                       OnEntryNotFound if_not_found) {
 	lock_guard<mutex> l(entry_lock);
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
-
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
+
+	// If the schema was deleted in this transaction, treat it as non-existent
+	if (iceberg_transaction.deleted_schemas.count(name)) {
+		if (if_not_found == OnEntryNotFound::RETURN_NULL) {
+			return nullptr;
+		}
+		throw CatalogException("Schema '%s' does not exist", name);
+	}
+
+	// If the schema was created in this transaction, return the local entry directly
+	if (iceberg_transaction.created_schemas.count(name)) {
+		auto entry = entries.find(name);
+		if (entry != entries.end()) {
+			return entry->second.get();
+		}
+	}
 
 	auto verify_existence = iceberg_transaction.looked_up_entries.insert(name).second;
 	auto entry = entries.find(name);
