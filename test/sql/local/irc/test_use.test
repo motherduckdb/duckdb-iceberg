@@ -14,9 +14,6 @@ require httpfs
 
 require aws
 
-statement ok
-set threads = 1;
-
 # Do not ignore 'HTTP' error messages!
 set ignore_error_messages
 
@@ -49,12 +46,11 @@ select * from non_existend_table;
 statement ok
 select * from my_datalake.default.table_unpartitioned;
 
-# for some reason, this now works
 statement ok
-use my_datalake;
+select * from table_unpartitioned;
 
 statement ok
-call enable_logging('http');
+use my_datalake;
 
 statement error
 select * from table_unpartitioned;

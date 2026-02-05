@@ -187,9 +187,6 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetEntry(ClientContext &context, con
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
 	const auto table_name = lookup.GetEntryName();
-	if (table_name == "duckdb_tables") {
-		auto break_here = 0;
-	}
 	// first check transaction entries
 	auto table_key = IcebergTableInformation::GetTableKey(schema.namespace_items, table_name);
 	// Check if table has been deleted within in the transaction.

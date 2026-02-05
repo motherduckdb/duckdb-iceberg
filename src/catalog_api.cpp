@@ -407,8 +407,7 @@ void IRCAPI::CommitNamespaceCreate(ClientContext &context, IcebergCatalog &catal
 	}
 }
 
-void IRCAPI::CommitNamespaceDrop(ClientContext &context, IcebergCatalog &catalog, vector<string> namespace_items,
-                                 OnEntryNotFound on_4xx) {
+void IRCAPI::CommitNamespaceDrop(ClientContext &context, IcebergCatalog &catalog, vector<string> namespace_items) {
 	auto url_builder = catalog.GetBaseUrl();
 	auto schema_name = GetEncodedSchemaName(namespace_items);
 	url_builder.AddPathComponent(catalog.prefix);
@@ -420,19 +419,6 @@ void IRCAPI::CommitNamespaceDrop(ClientContext &context, IcebergCatalog &catalog
 	auto response = catalog.auth_handler->Request(RequestType::DELETE_REQUEST, context, url_builder, headers, body);
 	// Glue/S3Tables follow spec and return 204, apache/iceberg-rest-fixture docker image returns 200
 	if (response->status != HTTPStatusCode::NoContent_204 && response->status != HTTPStatusCode::OK_200) {
-		switch (response->status) {
-		case HTTPStatusCode::NotFound_404:
-		case HTTPStatusCode::Forbidden_403:
-		case HTTPStatusCode::Unauthorized_401: {
-			// entry doesn't exist, ignore drop error
-			if (on_4xx == OnEntryNotFound::RETURN_NULL) {
-				return;
-			}
-			break;
-		}
-		default:
-			break;
-		}
 		throw InvalidConfigurationException(
 		    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s",
 		    url_builder.GetURLEncoded(), EnumUtil::ToString(response->status), response->reason, response->body);

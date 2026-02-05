@@ -63,8 +63,7 @@ public:
 	                              const string &table_name);
 	static void CommitMultiTableUpdate(ClientContext &context, IcebergCatalog &catalog, const string &body);
 	static void CommitNamespaceCreate(ClientContext &context, IcebergCatalog &catalog, string body);
-	static void CommitNamespaceDrop(ClientContext &context, IcebergCatalog &catalog, vector<string> namespace_items,
-	                                OnEntryNotFound on_4xx);
+	static void CommitNamespaceDrop(ClientContext &context, IcebergCatalog &catalog, vector<string> namespace_items);
 	//! stage create = false, table is created immediately in the IRC
 	//! stage create = true, table is not created, but metadata is initialized and returned
 	static rest_api_objects::LoadTableResult CommitNewTable(ClientContext &context, IcebergCatalog &catalog,
