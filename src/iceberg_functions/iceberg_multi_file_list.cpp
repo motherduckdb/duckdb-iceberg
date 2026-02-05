@@ -29,10 +29,10 @@ class ManifestReadTask : public BaseExecutorTask {
 public:
 	ManifestReadTask(IcebergManifestReadingState &state)
 	    : BaseExecutorTask(state.executor), state(state), reader(*state.scan, true) {
-		reader.Initialize();
 	}
 
 	void ExecuteTask() override {
+		reader.Initialize();
 		vector<IcebergManifestEntry> local_entries;
 		while (!reader.Finished()) {
 			local_entries.clear();
@@ -470,6 +470,19 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &manifes
 	return true;
 }
 
+void IcebergMultiFileList::FinishScanTasks(lock_guard<mutex> &guard) const {
+	if (!initialized) {
+		return;
+	}
+	if (!manifest_read_state) {
+		return;
+	}
+	auto &read_state = *manifest_read_state;
+	auto &executor = read_state.executor;
+	//! Make sure all tasks are done before shutting down
+	executor.WorkOnTasks();
+};
+
 optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t file_id,
                                                                            lock_guard<mutex> &guard) const {
 	D_ASSERT(initialized);
@@ -477,12 +490,19 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 		//! Have we already scanned this data file and returned it? If so, return it
 		return manifest_entries[file_id];
 	}
-	auto &metadata = GetMetadata();
-	auto snapshot = GetSnapshot();
 
 	while (file_id >= manifest_entries.size()) {
 		if (!has_buffered_entries) {
 			if (finished) {
+				{
+					lock_guard<mutex> guard(entry_lock);
+					if (!current_manifest_entries.empty()) {
+						D_ASSERT(has_buffered_entries);
+						continue;
+					}
+				}
+				D_ASSERT(current_manifest_entries.empty());
+				FinishScanTasks(guard);
 				return nullptr;
 			}
 			vector<IcebergManifestEntry> new_entries;
@@ -732,7 +752,6 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 		for (idx_t i = 0; i < num_threads; i++) {
 			executor.ScheduleTask(make_uniq<ManifestReadTask>(*manifest_read_state));
 		}
-		executor.WorkOnTasks();
 	} else {
 		//! Nothing to scan, already finished
 		finished = true;
@@ -748,12 +767,6 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 	// is targeting before we open it, and there can only be one deletion vector per data file.
 
 	// From the spec: "At most one deletion vector is allowed per data file in a snapshot"
-
-	//! NOTE: The lock is required because we're reading from the 'data_files' vector
-	auto iceberg_path = GetPath();
-	auto &metadata = GetMetadata();
-	auto snapshot = GetSnapshot();
-	auto &fs = FileSystem::GetFileSystem(context);
 
 	while (!FinishedScanningDeletes()) {
 		vector<IcebergManifestEntry> entries;

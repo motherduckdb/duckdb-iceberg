@@ -4,7 +4,7 @@
 
 namespace duckdb {
 
-BaseManifestReader::BaseManifestReader(AvroScan &scan_p) : scan(scan_p), iceberg_version(scan.iceberg_version) {
+BaseManifestReader::BaseManifestReader(const AvroScan &scan_p) : scan(scan_p), iceberg_version(scan.iceberg_version) {
 }
 
 BaseManifestReader::~BaseManifestReader() {

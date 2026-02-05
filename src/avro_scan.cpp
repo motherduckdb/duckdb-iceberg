@@ -96,7 +96,7 @@ unique_ptr<AvroScan> AvroScan::ScanManifestList(const IcebergSnapshot &snapshot,
 	return make_uniq<AvroScan>(path, context, std::move(avro_scan_info));
 }
 
-void AvroScan::InitializeChunk(DataChunk &chunk) {
+void AvroScan::InitializeChunk(DataChunk &chunk) const {
 	chunk.Initialize(context, return_types, STANDARD_VECTOR_SIZE);
 }
 

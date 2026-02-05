@@ -4,7 +4,7 @@ namespace duckdb {
 
 namespace manifest_file {
 
-ManifestFileReader::ManifestFileReader(AvroScan &scan, bool skip_deleted)
+ManifestFileReader::ManifestFileReader(const AvroScan &scan, bool skip_deleted)
     : BaseManifestReader(scan), skip_deleted(skip_deleted) {
 }
 

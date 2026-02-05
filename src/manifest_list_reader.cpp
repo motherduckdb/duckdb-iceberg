@@ -5,7 +5,7 @@ namespace duckdb {
 
 namespace manifest_list {
 
-ManifestListReader::ManifestListReader(AvroScan &scan) : BaseManifestReader(scan) {
+ManifestListReader::ManifestListReader(const AvroScan &scan) : BaseManifestReader(scan) {
 }
 
 ManifestListReader::~ManifestListReader() {

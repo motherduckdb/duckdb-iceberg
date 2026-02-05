@@ -13,7 +13,7 @@ class AvroScan;
 
 class BaseManifestReader {
 public:
-	BaseManifestReader(AvroScan &scan);
+	BaseManifestReader(const AvroScan &scan);
 	virtual ~BaseManifestReader();
 
 public:
@@ -25,7 +25,7 @@ protected:
 	idx_t ScanInternal(idx_t remaining);
 
 protected:
-	AvroScan &scan;
+	const AvroScan &scan;
 	DataChunk chunk;
 	unordered_map<int32_t, idx_t> partition_fields;
 	unique_ptr<LocalTableFunctionState> local_state;
@@ -39,7 +39,7 @@ namespace manifest_list {
 //! Produces IcebergManifests read, from the 'manifest_list'
 class ManifestListReader : public BaseManifestReader {
 public:
-	ManifestListReader(AvroScan &scan);
+	ManifestListReader(const AvroScan &scan);
 	~ManifestListReader() override;
 
 public:
@@ -57,7 +57,7 @@ namespace manifest_file {
 //! Produces IcebergManifestEntries read, from the 'manifest_file'
 class ManifestFileReader : public BaseManifestReader {
 public:
-	ManifestFileReader(AvroScan &scan, bool skip_deleted);
+	ManifestFileReader(const AvroScan &scan, bool skip_deleted);
 	~ManifestFileReader() override;
 
 public:

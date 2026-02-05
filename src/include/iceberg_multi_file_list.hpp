@@ -108,6 +108,9 @@ protected:
 	optional_ptr<const TableFilter> GetFilterForColumnIndex(const TableFilterSet &filter_set,
 	                                                        const ColumnIndex &column_index) const;
 
+private:
+	void FinishScanTasks(lock_guard<mutex> &guard) const;
+
 public:
 	ClientContext &context;
 	FileSystem &fs;

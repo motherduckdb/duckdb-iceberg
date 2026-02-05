@@ -32,7 +32,7 @@ public:
 	                                         const IcebergTableMetadata &metadata, ClientContext &context);
 
 public:
-	void InitializeChunk(DataChunk &chunk);
+	void InitializeChunk(DataChunk &chunk) const;
 	bool Finished() const;
 	const vector<column_t> &GetColumnIds() const;
 
