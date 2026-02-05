@@ -33,10 +33,8 @@ namespace duckdb {
 struct IcebergManifestReadingState {
 public:
 	IcebergManifestReadingState(ClientContext &context, unique_ptr<AvroScan> scan, mutex &lock,
-	                            vector<IcebergManifestEntry> &entries, atomic<bool> &finished,
-	                            atomic<bool> &has_buffered_entries)
-	    : executor(context), scan(std::move(scan)), lock(lock), entries(entries), finished(finished),
-	      has_buffered_entries(has_buffered_entries), started(0) {
+	                            vector<IcebergManifestEntry> &entries)
+	    : executor(context), scan(std::move(scan)), lock(lock), entries(entries), started(0) {
 	}
 
 public:
@@ -47,8 +45,6 @@ public:
 	unique_ptr<AvroScan> scan;
 	mutex &lock;
 	vector<IcebergManifestEntry> &entries;
-	atomic<bool> &finished;
-	atomic<bool> &has_buffered_entries;
 	//! The amount of tasks that have at least been picked up
 	atomic<idx_t> started;
 	idx_t total_tasks = 0;

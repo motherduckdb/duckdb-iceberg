@@ -762,8 +762,8 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 		auto &fs = FileSystem::GetFileSystem(context);
 
 		auto data_scan = AvroScan::ScanManifest(snapshot, data_manifests, options, fs, iceberg_path, metadata, context);
-		manifest_read_state = make_uniq<IcebergManifestReadingState>(
-		    context, std::move(data_scan), entry_lock, current_manifest_entries, finished, has_buffered_entries);
+		manifest_read_state =
+		    make_uniq<IcebergManifestReadingState>(context, std::move(data_scan), entry_lock, current_manifest_entries);
 		data_manifest_reader = make_uniq<manifest_file::ManifestFileReader>(*manifest_read_state->scan, true);
 
 		auto &scheduler = TaskScheduler::GetScheduler(context);
