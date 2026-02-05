@@ -36,8 +36,11 @@ public:
 	                            vector<IcebergManifestEntry> &entries, atomic<bool> &finished,
 	                            atomic<bool> &has_buffered_entries)
 	    : executor(context), scan(std::move(scan)), lock(lock), entries(entries), finished(finished),
-	      has_buffered_entries(has_buffered_entries) {
+	      has_buffered_entries(has_buffered_entries), started(0) {
 	}
+
+public:
+	void AddTask();
 
 public:
 	TaskExecutor executor;
@@ -46,12 +49,16 @@ public:
 	vector<IcebergManifestEntry> &entries;
 	atomic<bool> &finished;
 	atomic<bool> &has_buffered_entries;
+	//! The amount of tasks that have at least been picked up
+	atomic<idx_t> started;
+	idx_t total_tasks = 0;
 };
 
 struct IcebergMultiFileList : public MultiFileList {
 public:
 	IcebergMultiFileList(ClientContext &context, shared_ptr<IcebergScanInfo> scan_info, const string &path,
 	                     const IcebergOptions &options);
+	virtual ~IcebergMultiFileList() override;
 
 public:
 	static string ToDuckDBPath(const string &raw_path);
@@ -109,6 +116,7 @@ protected:
 	                                                        const ColumnIndex &column_index) const;
 
 private:
+	bool PopulateEntryBuffer(lock_guard<mutex> &guard) const;
 	void FinishScanTasks(lock_guard<mutex> &guard) const;
 
 public:

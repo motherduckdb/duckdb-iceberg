@@ -10,7 +10,7 @@ BaseManifestReader::BaseManifestReader(const AvroScan &scan_p) : scan(scan_p), i
 BaseManifestReader::~BaseManifestReader() {
 }
 
-void BaseManifestReader::Initialize() {
+void BaseManifestReader::InitializeInternal() {
 	ThreadContext thread_context(scan.context);
 	ExecutionContext execution_context(scan.context, thread_context, nullptr);
 	TableFunctionInitInput input(scan.bind_data.get(), scan.GetColumnIds(), vector<idx_t>(), nullptr);
@@ -24,10 +24,13 @@ void BaseManifestReader::Initialize() {
 		auto &column = columns[i];
 		CreateVectorMapping(i, column);
 	}
-	finished = false;
+	initialized = true;
 }
 
 idx_t BaseManifestReader::ScanInternal(idx_t remaining) {
+	if (!initialized) {
+		InitializeInternal();
+	}
 	if (finished) {
 		return 0;
 	}
@@ -50,7 +53,7 @@ idx_t BaseManifestReader::ScanInternal(idx_t remaining) {
 }
 
 bool BaseManifestReader::Finished() const {
-	return finished;
+	return initialized && finished;
 }
 
 } // namespace duckdb

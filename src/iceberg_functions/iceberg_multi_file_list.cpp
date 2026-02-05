@@ -32,16 +32,15 @@ public:
 	}
 
 	void ExecuteTask() override {
-		reader.Initialize();
+		++state.started;
 		vector<IcebergManifestEntry> local_entries;
+		local_entries.reserve(STANDARD_VECTOR_SIZE);
 		while (!reader.Finished()) {
 			local_entries.clear();
 			reader.Read(STANDARD_VECTOR_SIZE, local_entries);
 			lock_guard<mutex> guard(state.lock);
 			state.entries.insert(state.entries.end(), local_entries.begin(), local_entries.end());
-			state.has_buffered_entries = true;
 		}
-		state.finished = true;
 	}
 
 private:
@@ -51,10 +50,21 @@ private:
 
 } // namespace
 
+void IcebergManifestReadingState::AddTask() {
+	executor.ScheduleTask(make_uniq<ManifestReadTask>(*this));
+	total_tasks++;
+}
+
 IcebergMultiFileList::IcebergMultiFileList(ClientContext &context_p, shared_ptr<IcebergScanInfo> scan_info,
                                            const string &path, const IcebergOptions &options)
     : context(context_p), fs(FileSystem::GetFileSystem(context)), scan_info(scan_info), path(path), table(nullptr),
       finished(false), has_buffered_entries(false), options(options) {
+}
+
+IcebergMultiFileList::~IcebergMultiFileList() {
+	lock_guard<mutex> guard(lock);
+	//! FIXME: this could throw, if the tasks encountered an error
+	FinishScanTasks(guard);
 }
 
 string IcebergMultiFileList::ToDuckDBPath(const string &raw_path) {
@@ -470,10 +480,43 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &manifes
 	return true;
 }
 
-void IcebergMultiFileList::FinishScanTasks(lock_guard<mutex> &guard) const {
-	if (!initialized) {
-		return;
+bool IcebergMultiFileList::PopulateEntryBuffer(lock_guard<mutex> &guard) const {
+	{
+		lock_guard<mutex> entry_guard(entry_lock);
+		if (!current_manifest_entries.empty()) {
+			return true;
+		}
 	}
+	if (!manifest_read_state) {
+		return false;
+	}
+	auto &read_state = *manifest_read_state;
+	auto &executor = read_state.executor;
+	while (!executor.IsFinished()) {
+		{
+			vector<IcebergManifestEntry> new_entries;
+			(void)data_manifest_reader->Read(STANDARD_VECTOR_SIZE, new_entries);
+			lock_guard<mutex> entry_guard(entry_lock);
+			current_manifest_entries.insert(current_manifest_entries.end(),
+			                                std::make_move_iterator(new_entries.begin()),
+			                                std::make_move_iterator(new_entries.end()));
+			if (!current_manifest_entries.empty()) {
+				//! We have entries to read, return
+				return true;
+			}
+		}
+		if (read_state.started == 0) {
+			//! There is no other reader active, so if our read returned 0, there can't be anything still waiting to be
+			//! added
+			return false;
+		}
+	}
+	(void)data_manifest_reader->Read(STANDARD_VECTOR_SIZE, current_manifest_entries);
+	//! NOTE: we don't need the lock here because this is only reached if all tasks are complete
+	return !current_manifest_entries.empty();
+}
+
+void IcebergMultiFileList::FinishScanTasks(lock_guard<mutex> &guard) const {
 	if (!manifest_read_state) {
 		return;
 	}
@@ -492,32 +535,12 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 	}
 
 	while (file_id >= manifest_entries.size()) {
-		if (!has_buffered_entries) {
-			if (finished) {
-				{
-					lock_guard<mutex> guard(entry_lock);
-					if (!current_manifest_entries.empty()) {
-						D_ASSERT(has_buffered_entries);
-						continue;
-					}
-				}
-				D_ASSERT(current_manifest_entries.empty());
-				FinishScanTasks(guard);
-				return nullptr;
-			}
-			vector<IcebergManifestEntry> new_entries;
-			auto read = data_manifest_reader->Read(STANDARD_VECTOR_SIZE, new_entries);
-			if (!read) {
-				finished = true;
-			}
-			lock_guard<mutex> guard(entry_lock);
-			current_manifest_entries.insert(current_manifest_entries.end(),
-			                                std::make_move_iterator(new_entries.begin()),
-			                                std::make_move_iterator(new_entries.end()));
-			has_buffered_entries = !current_manifest_entries.empty();
+		if (!PopulateEntryBuffer(guard)) {
+			FinishScanTasks(guard);
+			return nullptr;
 		}
 
-		lock_guard<mutex> guard(entry_lock);
+		lock_guard<mutex> entry_guard(entry_lock);
 		while (manifest_entry_idx < current_manifest_entries.size()) {
 			auto &manifest_entry = current_manifest_entries[manifest_entry_idx];
 			auto &data_file = manifest_entry.data_file;
@@ -669,7 +692,6 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 		//! Read the manifest list
 		auto scan = AvroScan::ScanManifestList(snapshot, metadata, context, manifest_list_full_path);
 		auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
-		manifest_list_reader->Initialize();
 
 		vector<IcebergManifestFile> manifest_files;
 		while (!manifest_list_reader->Finished()) {
@@ -696,7 +718,6 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 			delete_manifest_scan =
 			    AvroScan::ScanManifest(snapshot, delete_manifests, options, fs, iceberg_path, metadata, context);
 			delete_manifest_reader = make_uniq<manifest_file::ManifestFileReader>(*delete_manifest_scan, true);
-			delete_manifest_reader->Initialize();
 		}
 	}
 
@@ -743,14 +764,12 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 		auto data_scan = AvroScan::ScanManifest(snapshot, data_manifests, options, fs, iceberg_path, metadata, context);
 		manifest_read_state = make_uniq<IcebergManifestReadingState>(
 		    context, std::move(data_scan), entry_lock, current_manifest_entries, finished, has_buffered_entries);
-		auto &executor = manifest_read_state->executor;
 		data_manifest_reader = make_uniq<manifest_file::ManifestFileReader>(*manifest_read_state->scan, true);
-		data_manifest_reader->Initialize();
 
 		auto &scheduler = TaskScheduler::GetScheduler(context);
 		auto num_threads = MinValue<idx_t>(scheduler.NumberOfThreads(), data_manifests.size());
 		for (idx_t i = 0; i < num_threads; i++) {
-			executor.ScheduleTask(make_uniq<ManifestReadTask>(*manifest_read_state));
+			manifest_read_state->AddTask();
 		}
 	} else {
 		//! Nothing to scan, already finished

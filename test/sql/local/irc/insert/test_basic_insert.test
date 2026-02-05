@@ -82,7 +82,7 @@ insert into my_datalake.default.insert_test select
 
 # Read the new data before committing
 query III
-select * from my_datalake.default.insert_test;
+select * from my_datalake.default.insert_test order by all;
 ----
 2010-06-11	42	test
 1980-11-25	-3434	this is a long string

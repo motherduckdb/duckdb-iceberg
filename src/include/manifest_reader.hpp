@@ -17,12 +17,14 @@ public:
 	virtual ~BaseManifestReader();
 
 public:
-	void Initialize();
 	bool Finished() const;
 	virtual void CreateVectorMapping(idx_t i, MultiFileColumnDefinition &column) = 0;
 
 protected:
 	idx_t ScanInternal(idx_t remaining);
+
+private:
+	void InitializeInternal();
 
 protected:
 	const AvroScan &scan;
@@ -31,7 +33,8 @@ protected:
 	unique_ptr<LocalTableFunctionState> local_state;
 	idx_t iceberg_version;
 	idx_t offset = 0;
-	bool finished = true;
+	bool initialized = false;
+	bool finished = false;
 };
 
 namespace manifest_list {
