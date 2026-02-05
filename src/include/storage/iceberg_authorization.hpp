@@ -23,10 +23,12 @@ struct IcebergAttachOptions {
 	// if the catalog allows manual cleaning up of storage files.
 	bool allows_deletes = true;
 	bool support_nested_namespaces = false;
+	bool encode_entire_prefix = false;
 	// in rest api spec, purge requested defaults to false.
 	bool purge_requested = false;
 	IRCAccessDelegationMode access_mode = IRCAccessDelegationMode::VENDED_CREDENTIALS;
 	IcebergAuthorizationType authorization_type = IcebergAuthorizationType::INVALID;
+	IcebergEndpointType endpoint_type = IcebergEndpointType::INVALID;
 	unordered_map<string, Value> options;
 };
 

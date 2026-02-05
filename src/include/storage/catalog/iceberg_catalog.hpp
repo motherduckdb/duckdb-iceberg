@@ -43,6 +43,7 @@ public:
 public:
 	static unique_ptr<SecretEntry> GetStorageSecret(ClientContext &context, const string &secret_name);
 	static unique_ptr<SecretEntry> GetIcebergSecret(ClientContext &context, const string &secret_name);
+	void ParsePrefix();
 	void GetConfig(ClientContext &context, IcebergEndpointType &endpoint_type);
 	IRCEndpointBuilder GetBaseUrl() const;
 	static void SetAWSCatalogOptions(IcebergAttachOptions &attach_options,
@@ -108,7 +109,6 @@ public:
 public:
 	AccessMode access_mode;
 	unique_ptr<IcebergAuthorization> auth_handler;
-	IRCEndpointBuilder endpoint_builder;
 	//! warehouse
 	string warehouse;
 	//! host of the REST catalog
@@ -117,6 +117,7 @@ public:
 	const string version;
 	//! optional prefix
 	string prefix;
+	bool prefix_is_one_component = true;
 	//! attach options
 	IcebergAttachOptions attach_options;
 	string default_schema;
