@@ -4,11 +4,11 @@ namespace duckdb {
 
 namespace manifest_file {
 
-ManifestFileReader::ManifestFileReader(idx_t iceberg_version, bool skip_deleted)
+ManifestReader::ManifestReader(idx_t iceberg_version, bool skip_deleted)
     : BaseManifestReader(iceberg_version), skip_deleted(skip_deleted) {
 }
 
-idx_t ManifestFileReader::Read(idx_t count, vector<IcebergManifestEntry> &result) {
+idx_t ManifestReader::Read(idx_t count, vector<IcebergManifestEntry> &result) {
 	if (!scan || finished) {
 		return 0;
 	}
@@ -88,7 +88,7 @@ static vector<int32_t> GetEqualityIds(Vector &equality_ids, idx_t index) {
 	return result;
 }
 
-idx_t ManifestFileReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergManifestEntry> &result) {
+idx_t ManifestReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergManifestEntry> &result) {
 	D_ASSERT(offset < chunk.size());
 	D_ASSERT(offset + count <= chunk.size());
 	auto &scan_info = GetScanInfo().Cast<IcebergManifestFileScanInfo>();

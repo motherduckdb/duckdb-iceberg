@@ -623,8 +623,8 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 		auto &metadata = GetMetadata();
 		auto &fs = FileSystem::GetFileSystem(context);
 
-		data_manifest_reader = make_uniq<manifest_file::ManifestFileReader>(metadata.iceberg_version);
-		delete_manifest_reader = make_uniq<manifest_file::ManifestFileReader>(metadata.iceberg_version);
+		data_manifest_reader = make_uniq<manifest_file::ManifestReader>(metadata.iceberg_version);
+		delete_manifest_reader = make_uniq<manifest_file::ManifestReader>(metadata.iceberg_version);
 
 		// Read the manifest list, we need all the manifests to determine if we've seen all deletes
 		auto manifest_list_full_path = options.allow_moved_paths

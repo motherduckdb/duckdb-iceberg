@@ -57,10 +57,10 @@ private:
 namespace manifest_file {
 
 //! Produces IcebergManifestEntries read, from the 'manifest_file'
-class ManifestFileReader : public BaseManifestReader {
+class ManifestReader : public BaseManifestReader {
 public:
-	ManifestFileReader(idx_t iceberg_version, bool skip_deleted = true);
-	~ManifestFileReader() override {
+	ManifestReader(idx_t iceberg_version, bool skip_deleted = true);
+	~ManifestReader() override {
 	}
 
 public:
