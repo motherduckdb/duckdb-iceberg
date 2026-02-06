@@ -28,6 +28,11 @@ IcebergManifestFileScanInfo::IcebergManifestFileScanInfo(const IcebergTableMetad
 	for (auto &manifest_file : manifest_files) {
 		partition_spec_ids.insert(manifest_file.partition_spec_id);
 	}
+	//! The schema of a manifest is affected by the 'partition_spec_id' of the 'manifest_file',
+	//! because the 'partition' struct has a field for every partition field in that partition spec.
+
+	//! Since we are now reading *all* manifests in one reader, we have to merge these schemas,
+	//! and to do that we create a map of all relevant partition fields
 	partition_field_id_to_type = IcebergDataFile::GetFieldIdToTypeMapping(snapshot, metadata, partition_spec_ids);
 }
 
