@@ -28,7 +28,7 @@ set(EXTENSION_SOURCES
     src/hash_utils.cpp
     src/base_manifest_reader.cpp
     src/manifest_list_reader.cpp
-    src/manifest_file_reader.cpp
+    src/manifest_reader.cpp
     src/deletes/equality_delete.cpp
     src/deletes/positional_delete.cpp
     src/deletes/deletion_vector.cpp

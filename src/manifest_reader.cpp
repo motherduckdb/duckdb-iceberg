@@ -93,6 +93,8 @@ idx_t ManifestReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergManifes
 	D_ASSERT(offset + count <= chunk.size());
 	auto &scan_info = GetScanInfo().Cast<IcebergManifestFileScanInfo>();
 
+	//! NOTE: the order of these columns is defined by the order that they are produced in BuildManifestSchema
+	//! see `iceberg_avro_multi_file_reader.cpp`
 	idx_t vector_index = 0;
 	auto &status = chunk.data[vector_index++];
 	auto &snapshot_id = chunk.data[vector_index++];
