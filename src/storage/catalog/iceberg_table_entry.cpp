@@ -73,6 +73,10 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 			D_ASSERT(substrings.size() == 6);
 			auto region = substrings[3];
 			auto endpoint = "s3." + region + ".amazonaws.com";
+
+			auto http_secret_entry = IcebergCatalog::GetHTTPSecret(context, sigv4_auth.secret);
+			auto http_kv_secret = dynamic_cast<const KeyValueSecret &>(*http_secret_entry->secret);
+
 			info.options = {
 			                {"key_id", kv_secret.TryGetValue("key_id").ToString()},
 			                {"secret", kv_secret.TryGetValue("secret").ToString()},
@@ -81,7 +85,8 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 			                                      : kv_secret.TryGetValue("session_token").ToString()},
 			                {"region", region},
 						    {"endpoint", endpoint},
-						    {"HTTP_PROXY", kv_secret.TryGetValue("HTTP_PROXY").IsNull() ? "" : kv_secret.TryGetValue("HTTP_PROXY").ToString()},
+						    {"http_proxy", http_kv_secret.TryGetValue("http_proxy").IsNull() ? "" : http_kv_secret.TryGetValue("http_proxy").ToString()},
+						    {"verify_ssl", http_kv_secret.TryGetValue("verify_ssl").IsNull() ? true : http_kv_secret.TryGetValue("verify_ssl").DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>()}
 			};
 		};
 

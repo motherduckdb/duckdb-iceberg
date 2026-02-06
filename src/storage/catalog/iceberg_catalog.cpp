@@ -241,6 +241,21 @@ unique_ptr<SecretEntry> IcebergCatalog::GetIcebergSecret(ClientContext &context,
 	}
 	return secret_entry;
 }
+unique_ptr<SecretEntry> IcebergCatalog::GetHTTPSecret(ClientContext &context, const string &secret_name) {
+	auto transaction = CatalogTransaction::GetSystemCatalogTransaction(context);
+	unique_ptr<SecretEntry> secret_entry = nullptr;
+	if (secret_name.empty()) {
+		//! Try to find any secret with type 'iceberg'
+		auto secret_match = context.db->GetSecretManager().LookupSecret(transaction, "", "http");
+		if (!secret_match.HasMatch()) {
+			return nullptr;
+		}
+		secret_entry = std::move(secret_match.secret_entry);
+	} else {
+		secret_entry = context.db->GetSecretManager().GetSecretByName(transaction, secret_name);
+	}
+	return secret_entry;
+}
 
 void IcebergCatalog::AddDefaultSupportedEndpoints() {
 	// insert namespaces based on REST API spec.

@@ -43,6 +43,7 @@ public:
 public:
 	static unique_ptr<SecretEntry> GetStorageSecret(ClientContext &context, const string &secret_name);
 	static unique_ptr<SecretEntry> GetIcebergSecret(ClientContext &context, const string &secret_name);
+	static unique_ptr<SecretEntry> GetHTTPSecret(ClientContext &context, const string &secret_name);
 	void GetConfig(ClientContext &context, IcebergEndpointType &endpoint_type);
 	IRCEndpointBuilder GetBaseUrl() const;
 	static void SetAWSCatalogOptions(IcebergAttachOptions &attach_options,
