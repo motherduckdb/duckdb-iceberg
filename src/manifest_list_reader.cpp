@@ -140,14 +140,6 @@ idx_t ManifestListReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergMan
 	return count;
 }
 
-bool ManifestListReader::ValidateVectorMapping() {
-	return true;
-}
-
-void ManifestListReader::CreateVectorMapping(idx_t column_id, MultiFileColumnDefinition &column) {
-	return;
-}
-
 } // namespace manifest_list
 
 } // namespace duckdb

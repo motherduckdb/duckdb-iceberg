@@ -22,7 +22,7 @@ struct ManifestFileVirtualColumn {
 } // namespace
 
 AvroScan::AvroScan(const string &path, ClientContext &context, shared_ptr<IcebergAvroScanInfo> avro_scan_info)
-    : context(context) {
+    : context(context), scan_info(avro_scan_info) {
 	auto &instance = DatabaseInstance::GetDatabase(context);
 	auto &system_catalog = Catalog::GetSystemCatalog(instance);
 	auto data = CatalogTransaction::GetSystemTransaction(instance);

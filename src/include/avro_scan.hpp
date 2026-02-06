@@ -44,6 +44,7 @@ public:
 	vector<LogicalType> return_types;
 	vector<string> return_names;
 
+	shared_ptr<IcebergAvroScanInfo> scan_info;
 	bool finished = false;
 };
 

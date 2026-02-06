@@ -152,9 +152,9 @@ static MultiFileColumnDefinition CreateManifestPartitionColumn(const map<idx_t, 
 	return partition;
 }
 
-static vector<MultiFileColumnDefinition> BuildManifestSchema(const IcebergSnapshot &snapshot,
-                                                             const IcebergTableMetadata &metadata,
-                                                             const unordered_set<int32_t> &partition_spec_ids) {
+static vector<MultiFileColumnDefinition>
+BuildManifestSchema(const IcebergSnapshot &snapshot, const IcebergTableMetadata &metadata,
+                    const map<idx_t, LogicalType> &partition_field_id_to_type) {
 	vector<MultiFileColumnDefinition> schema;
 
 	auto &iceberg_version = metadata.iceberg_version;
@@ -183,7 +183,6 @@ static vector<MultiFileColumnDefinition> BuildManifestSchema(const IcebergSnapsh
 
 	//! Map all the referenced partition spec ids to the partition fields that *could* be referenced,
 	//! any missing fields will be NULL
-	auto partition_field_id_to_type = IcebergDataFile::GetFieldIdToTypeMapping(snapshot, metadata, partition_spec_ids);
 	auto partition_type = IcebergDataFile::PartitionStructType(partition_field_id_to_type);
 
 	// data_file struct (field-id 2)
@@ -383,7 +382,7 @@ bool IcebergAvroMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &
 	auto &iceberg_avro_list = dynamic_cast<IcebergAvroMultiFileList &>(files);
 
 	// Determine if we're reading manifest-list or manifest based on context
-	auto &scan_info = iceberg_avro_list.info->Cast<IcebergAvroScanInfo>();
+	auto &scan_info = *iceberg_avro_list.info;
 	auto &type = scan_info.type;
 	auto &metadata = scan_info.metadata;
 	auto &snapshot = scan_info.snapshot;
@@ -395,11 +394,8 @@ bool IcebergAvroMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &
 	} else {
 		auto &manifest_file_scan = scan_info.Cast<IcebergManifestFileScanInfo>();
 		auto &manifest_files = manifest_file_scan.manifest_files;
-		unordered_set<int32_t> partition_spec_ids;
-		for (auto &manifest_file : manifest_files) {
-			partition_spec_ids.insert(manifest_file.partition_spec_id);
-		}
-		schema = BuildManifestSchema(snapshot, metadata, partition_spec_ids);
+		auto &partition_field_id_to_type = manifest_file_scan.partition_field_id_to_type;
+		schema = BuildManifestSchema(snapshot, metadata, partition_field_id_to_type);
 	}
 
 	// Populate return_types and names from schema

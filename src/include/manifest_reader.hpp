@@ -23,15 +23,13 @@ public:
 public:
 	void Initialize(unique_ptr<AvroScan> scan_p);
 	bool Finished() const;
-	virtual void CreateVectorMapping(idx_t i, MultiFileColumnDefinition &column) = 0;
-	virtual bool ValidateVectorMapping() = 0;
 
 protected:
 	idx_t ScanInternal(idx_t remaining);
+	const IcebergAvroScanInfo &GetScanInfo() const;
 
 protected:
 	DataChunk chunk;
-	unordered_map<int32_t, idx_t> partition_fields;
 	const idx_t iceberg_version;
 	unique_ptr<AvroScan> scan;
 	idx_t offset = 0;
@@ -49,8 +47,6 @@ public:
 
 public:
 	idx_t Read(idx_t count, vector<IcebergManifestFile> &result);
-	void CreateVectorMapping(idx_t i, MultiFileColumnDefinition &column) override;
-	bool ValidateVectorMapping() override;
 
 private:
 	idx_t ReadChunk(idx_t offset, idx_t count, vector<IcebergManifestFile> &result);
@@ -69,8 +65,6 @@ public:
 
 public:
 	idx_t Read(idx_t count, vector<IcebergManifestEntry> &result);
-	void CreateVectorMapping(idx_t i, MultiFileColumnDefinition &column) override;
-	bool ValidateVectorMapping() override;
 
 public:
 private:

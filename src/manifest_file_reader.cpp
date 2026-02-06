@@ -27,40 +27,6 @@ idx_t ManifestFileReader::Read(idx_t count, vector<IcebergManifestEntry> &result
 	return total_added;
 }
 
-void ManifestFileReader::CreateVectorMapping(idx_t column_id, MultiFileColumnDefinition &column) {
-	if (column.identifier.IsNull()) {
-		throw InvalidConfigurationException("Column '%s' of the manifest file is missing a field_id!", column.name);
-	}
-	D_ASSERT(column.identifier.type().id() == LogicalTypeId::INTEGER);
-
-	auto field_id = column.identifier.GetValue<int32_t>();
-	if (field_id != DATA_FILE) {
-		return;
-	}
-
-	auto &type = column.type;
-	if (type.id() != LogicalTypeId::STRUCT) {
-		throw InvalidInputException("The 'data_file' of the manifest should be a STRUCT");
-	}
-	auto &children = column.children;
-	idx_t column_index = 2;
-	if (iceberg_version >= 2) {
-		column_index++;
-	}
-	auto &partition = children[column_index];
-	D_ASSERT(partition.identifier.GetValue<int32_t>() == PARTITION);
-
-	for (idx_t partition_idx = 0; partition_idx < partition.children.size(); partition_idx++) {
-		auto &partition_field = partition.children[partition_idx];
-		auto partition_field_id = partition_field.identifier.GetValue<int32_t>();
-		partition_fields.emplace(partition_field_id, partition_idx);
-	}
-}
-
-bool ManifestFileReader::ValidateVectorMapping() {
-	return true;
-}
-
 static unordered_map<int32_t, Value> GetBounds(Vector &bounds, idx_t index) {
 	auto &bounds_child = ListVector::GetEntry(bounds);
 	auto keys = FlatVector::GetData<int32_t>(*StructVector::GetEntries(bounds_child)[0]);
@@ -125,6 +91,7 @@ static vector<int32_t> GetEqualityIds(Vector &equality_ids, idx_t index) {
 idx_t ManifestFileReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergManifestEntry> &result) {
 	D_ASSERT(offset < chunk.size());
 	D_ASSERT(offset + count <= chunk.size());
+	auto &scan_info = GetScanInfo().Cast<IcebergManifestFileScanInfo>();
 
 	idx_t vector_index = 0;
 	auto &status = chunk.data[vector_index++];
@@ -190,12 +157,13 @@ idx_t ManifestFileReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergMan
 	auto record_count_data = FlatVector::GetData<int64_t>(record_count);
 	auto file_size_in_bytes_data = FlatVector::GetData<int64_t>(file_size_in_bytes);
 
-	unordered_map<int32_t, reference<Vector>> partition_vectors;
+	vector<std::pair<int32_t, reference<Vector>>> partition_vectors;
 	if (partition.GetType().id() != LogicalTypeId::SQLNULL) {
 		auto &partition_children = StructVector::GetEntries(partition);
-		for (auto &it : partition_fields) {
-			auto partition_field_idx = it.second;
-			partition_vectors.emplace(it.first, *partition_children[partition_field_idx]);
+		D_ASSERT(partition_children.size() == scan_info.partition_field_id_to_type.size());
+		idx_t child_index = 0;
+		for (auto &it : scan_info.partition_field_id_to_type) {
+			partition_vectors.emplace_back(it.first, *partition_children[child_index++]);
 		}
 	}
 
