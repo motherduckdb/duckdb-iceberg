@@ -37,8 +37,9 @@ bool IcebergTableSet::FillEntry(ClientContext &context, IcebergTableInformation 
 
 	// Only check cache if MAX_TABLE_STALENESS option is set
 	if (ic_catalog.attach_options.max_table_staleness_micros.IsValid()) {
-		auto cached_result = ic_catalog.TryGetValidCachedLoadTableResult(table_key);
-		if (cached_result && cached_result->expires_at > system_clock::now()) {
+		lock_guard<std::mutex> cache_lock(ic_catalog.GetMetadataCacheLock());
+		auto cached_result = ic_catalog.TryGetValidCachedLoadTableResult(table_key, cache_lock);
+		if (cached_result) {
 			// Use the cached result instead of making a new request
 			table.table_metadata = IcebergTableMetadata::FromLoadTableResult(*cached_result->load_table_result);
 			auto &schemas = table.table_metadata.schemas;
@@ -57,7 +58,6 @@ bool IcebergTableSet::FillEntry(ClientContext &context, IcebergTableInformation 
 			return false;
 		}
 		if (get_table_result.status_ == HTTPStatusCode::Forbidden_403 ||
-		    get_table_result.status_ == HTTPStatusCode::Unauthorized_401 ||
 		    get_table_result.status_ == HTTPStatusCode::NotFound_404) {
 			return false;
 		}

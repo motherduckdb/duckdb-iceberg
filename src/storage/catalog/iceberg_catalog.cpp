@@ -95,8 +95,13 @@ MetadataCacheValue &IcebergCatalog::GetLoadTableResult(const string &table_key) 
 	return *res->second;
 }
 
-optional_ptr<MetadataCacheValue> IcebergCatalog::TryGetValidCachedLoadTableResult(const string &table_key) {
-	std::lock_guard<std::mutex> g(metadata_cache_mutex);
+std::mutex &IcebergCatalog::GetMetadataCacheLock() {
+	return metadata_cache_mutex;
+}
+
+optional_ptr<MetadataCacheValue> IcebergCatalog::TryGetValidCachedLoadTableResult(const string &table_key,
+                                                                                  lock_guard<std::mutex> &lock) {
+	(void)lock;
 	auto it = metadata_cache.find(table_key);
 	if (it == metadata_cache.end()) {
 		return nullptr;
@@ -109,7 +114,7 @@ optional_ptr<MetadataCacheValue> IcebergCatalog::TryGetValidCachedLoadTableResul
 	return &cached_value;
 }
 
-void IcebergCatalog::RemoveLoadTableResult(string table_key) {
+void IcebergCatalog::RemoveLoadTableResult(const string &table_key) {
 	std::lock_guard<std::mutex> g(metadata_cache_mutex);
 	if (metadata_cache.find(table_key) == metadata_cache.end()) {
 		throw InternalException("Attempting to remove table information that was never stored");

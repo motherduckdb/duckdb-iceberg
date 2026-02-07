@@ -77,7 +77,7 @@ s_comment	VARCHAR
 query I
 select count(*) from duckdb_logs_parsed('HTTP');
 ----
-2
+3
 
 statement ok
 begin;

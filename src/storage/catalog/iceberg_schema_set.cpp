@@ -31,6 +31,8 @@ optional_ptr<CatalogEntry> IcebergSchemaSet::GetEntry(ClientContext &context, co
 		if (entry != entries.end()) {
 			return entry->second.get();
 		}
+		throw InternalException("Schema '%s' was created in this transaction, but was no found in the local cache",
+		                        name);
 	}
 
 	auto verify_existence = iceberg_transaction.looked_up_entries.insert(name).second;
@@ -52,7 +54,7 @@ optional_ptr<CatalogEntry> IcebergSchemaSet::GetEntry(ClientContext &context, co
 				if (if_not_found == OnEntryNotFound::RETURN_NULL) {
 					return nullptr;
 				}
-				throw CatalogException("Schema '%s' does not exist", name);
+				throw CatalogException("default schema '%s' does not exist", name);
 			}
 		}
 		info.schema = name;
