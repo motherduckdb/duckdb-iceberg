@@ -555,24 +555,25 @@ unique_ptr<Catalog> IcebergCatalog::Attach(optional_ptr<StorageExtensionInfo> st
 			attach_options.options.emplace(std::move(entry));
 		}
 	}
+	IcebergEndpointType endpoint_type = IcebergEndpointType::INVALID;
 	//! Then check any if the 'endpoint_type' is set, for any well known catalogs
 	if (!endpoint_type_string.empty()) {
-		attach_options.endpoint_type = EndpointTypeFromString(endpoint_type_string);
-		switch (attach_options.endpoint_type) {
+		endpoint_type = EndpointTypeFromString(endpoint_type_string);
+		switch (endpoint_type) {
 		case IcebergEndpointType::AWS_GLUE: {
 			GlueAttach(context, attach_options);
-			attach_options.endpoint_type = IcebergEndpointType::AWS_GLUE;
+			endpoint_type = IcebergEndpointType::AWS_GLUE;
 			SetAWSCatalogOptions(attach_options, set_by_attach_options);
 			break;
 		}
 		case IcebergEndpointType::AWS_S3TABLES: {
 			S3TablesAttach(attach_options);
-			attach_options.endpoint_type = IcebergEndpointType::AWS_S3TABLES;
+			endpoint_type = IcebergEndpointType::AWS_S3TABLES;
 			SetAWSCatalogOptions(attach_options, set_by_attach_options);
 			break;
 		}
 		default:
-			throw InternalException("Endpoint type (%s) not implemented", attach_options.endpoint_type);
+			throw InternalException("Endpoint type (%s) not implemented", endpoint_type_string);
 		}
 	}
 
@@ -637,7 +638,7 @@ unique_ptr<Catalog> IcebergCatalog::Attach(optional_ptr<StorageExtensionInfo> st
 	D_ASSERT(auth_handler);
 	auto catalog =
 	    make_uniq<IcebergCatalog>(db, options.access_mode, std::move(auth_handler), attach_options, default_schema);
-	catalog->GetConfig(context, attach_options.endpoint_type);
+	catalog->GetConfig(context, endpoint_type);
 	return std::move(catalog);
 }
 

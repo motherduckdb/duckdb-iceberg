@@ -28,7 +28,6 @@ struct IcebergAttachOptions {
 	bool purge_requested = false;
 	IRCAccessDelegationMode access_mode = IRCAccessDelegationMode::VENDED_CREDENTIALS;
 	IcebergAuthorizationType authorization_type = IcebergAuthorizationType::INVALID;
-	IcebergEndpointType endpoint_type = IcebergEndpointType::INVALID;
 	unordered_map<string, Value> options;
 };
 
