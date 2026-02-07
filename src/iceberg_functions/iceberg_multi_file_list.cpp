@@ -768,10 +768,15 @@ void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &manifest_e
                                           const vector<MultiFileColumnDefinition> &global_columns,
                                           const vector<ColumnIndex> &column_indexes) const {
 	auto &data_file = manifest_entry.data_file;
-	const auto &delete_file_path = data_file.file_path;
+	auto delete_file_path = data_file.file_path;
 	auto iceberg_deletes_scan = IcebergFunctions::GetIcebergDeletesScanFunction(context);
 	auto &delete_scan_function = iceberg_deletes_scan.functions[0];
 
+	if (options.allow_moved_paths) {
+		auto iceberg_path = GetPath();
+		auto &fs = FileSystem::GetFileSystem(context);
+		delete_file_path = IcebergUtils::GetFullPath(iceberg_path, delete_file_path, fs);
+	}
 	// Prepare the inputs for the bind
 	vector<Value> children;
 	children.reserve(1);
