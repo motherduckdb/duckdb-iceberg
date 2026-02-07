@@ -35,6 +35,7 @@ public:
 	void InitializeChunk(DataChunk &chunk) const;
 	bool Finished() const;
 	const vector<column_t> &GetColumnIds() const;
+	const idx_t IcebergVersion() const;
 
 public:
 	string path;
@@ -44,9 +45,9 @@ public:
 	unique_ptr<GlobalTableFunctionState> global_state;
 	vector<LogicalType> return_types;
 	vector<string> return_names;
-	idx_t iceberg_version;
 	vector<column_t> column_ids;
 
+	shared_ptr<IcebergAvroScanInfo> scan_info;
 	bool finished = false;
 };
 

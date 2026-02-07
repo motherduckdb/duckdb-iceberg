@@ -137,7 +137,7 @@ public:
 	mutable map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> equality_delete_data;
 
 	//! State used for lazy-loading the data files
-	mutable unique_ptr<manifest_file::ManifestFileReader> data_manifest_reader;
+	mutable unique_ptr<manifest_file::ManifestReader> data_manifest_reader;
 	mutable idx_t manifest_entry_idx = 0;
 	//! The data files of the manifest file that we last scanned
 	mutable vector<IcebergManifestEntry> current_manifest_entries;
@@ -150,7 +150,7 @@ public:
 
 	//! State used for pre-processing delete files
 	mutable unique_ptr<AvroScan> delete_manifest_scan;
-	mutable unique_ptr<manifest_file::ManifestFileReader> delete_manifest_reader;
+	mutable unique_ptr<manifest_file::ManifestReader> delete_manifest_reader;
 	mutable vector<IcebergManifestFile> delete_manifests;
 	mutable vector<reference<IcebergManifest>> transaction_delete_manifests;
 	mutable idx_t transaction_delete_idx = 0;

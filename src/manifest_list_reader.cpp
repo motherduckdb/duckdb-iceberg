@@ -34,6 +34,8 @@ idx_t ManifestListReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergMan
 	D_ASSERT(offset < chunk.size());
 	D_ASSERT(offset + count <= chunk.size());
 
+	//! NOTE: the order of these columns is defined by the order that they are produced in BuildManifestListSchema
+	//! see `iceberg_avro_multi_file_reader.cpp`
 	idx_t vector_index = 0;
 	auto &manifest_path = chunk.data[vector_index++];
 	auto &manifest_length = chunk.data[vector_index++];
@@ -141,10 +143,6 @@ idx_t ManifestListReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergMan
 		result.push_back(manifest);
 	}
 	return count;
-}
-
-void ManifestListReader::CreateVectorMapping(idx_t column_id, MultiFileColumnDefinition &column) {
-	return;
 }
 
 } // namespace manifest_list

@@ -4,7 +4,7 @@
 
 namespace duckdb {
 
-BaseManifestReader::BaseManifestReader(const AvroScan &scan_p) : scan(scan_p), iceberg_version(scan.iceberg_version) {
+BaseManifestReader::BaseManifestReader(const AvroScan &scan_p) : scan(scan_p), iceberg_version(scan.IcebergVersion()) {
 }
 
 BaseManifestReader::~BaseManifestReader() {
@@ -20,11 +20,11 @@ void BaseManifestReader::InitializeInternal() {
 
 	auto &multi_file_bind_data = scan.bind_data->Cast<MultiFileBindData>();
 	auto &columns = multi_file_bind_data.reader_bind.schema;
-	for (idx_t i = 0; i < columns.size(); i++) {
-		auto &column = columns[i];
-		CreateVectorMapping(i, column);
-	}
 	initialized = true;
+}
+
+const IcebergAvroScanInfo &BaseManifestReader::GetScanInfo() const {
+	return *scan.scan_info;
 }
 
 idx_t BaseManifestReader::ScanInternal(idx_t remaining) {

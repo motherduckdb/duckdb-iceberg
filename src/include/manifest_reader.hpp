@@ -6,6 +6,7 @@
 
 #include "metadata/iceberg_manifest.hpp"
 #include "metadata/iceberg_manifest_list.hpp"
+#include "iceberg_avro_multi_file_list.hpp"
 
 namespace duckdb {
 
@@ -18,10 +19,10 @@ public:
 
 public:
 	bool Finished() const;
-	virtual void CreateVectorMapping(idx_t i, MultiFileColumnDefinition &column) = 0;
 
 protected:
 	idx_t ScanInternal(idx_t remaining);
+	const IcebergAvroScanInfo &GetScanInfo() const;
 
 private:
 	void InitializeInternal();
@@ -29,9 +30,8 @@ private:
 protected:
 	const AvroScan &scan;
 	DataChunk chunk;
-	unordered_map<int32_t, idx_t> partition_fields;
 	unique_ptr<LocalTableFunctionState> local_state;
-	idx_t iceberg_version;
+	const idx_t iceberg_version;
 	idx_t offset = 0;
 	bool initialized = false;
 	bool finished = false;
@@ -47,7 +47,6 @@ public:
 
 public:
 	idx_t Read(idx_t count, vector<IcebergManifestFile> &result);
-	void CreateVectorMapping(idx_t i, MultiFileColumnDefinition &column) override;
 
 private:
 	idx_t ReadChunk(idx_t offset, idx_t count, vector<IcebergManifestFile> &result);
@@ -58,14 +57,13 @@ private:
 namespace manifest_file {
 
 //! Produces IcebergManifestEntries read, from the 'manifest_file'
-class ManifestFileReader : public BaseManifestReader {
+class ManifestReader : public BaseManifestReader {
 public:
-	ManifestFileReader(const AvroScan &scan, bool skip_deleted);
-	~ManifestFileReader() override;
+	ManifestReader(const AvroScan &scan, bool skip_deleted);
+	~ManifestReader() override;
 
 public:
 	idx_t Read(idx_t count, vector<IcebergManifestEntry> &result);
-	void CreateVectorMapping(idx_t i, MultiFileColumnDefinition &column) override;
 
 private:
 	idx_t ReadChunk(idx_t offset, idx_t count, vector<IcebergManifestEntry> &result);

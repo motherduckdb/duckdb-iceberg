@@ -35,7 +35,7 @@ unique_ptr<IcebergTable> IcebergTable::Load(const string &iceberg_path, const Ic
 
 	//! Read all manifest files, producing 'manifest_entry' items
 	auto manifest_scan = AvroScan::ScanManifest(snapshot, manifest_files, options, fs, iceberg_path, metadata, context);
-	auto manifest_file_reader = make_uniq<manifest_file::ManifestFileReader>(*manifest_scan, false);
+	auto manifest_file_reader = make_uniq<manifest_file::ManifestReader>(*manifest_scan, false);
 
 	vector<IcebergManifestEntry> manifest_entries;
 	while (!manifest_file_reader->Finished()) {

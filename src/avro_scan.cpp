@@ -22,7 +22,7 @@ struct ManifestFileVirtualColumn {
 } // namespace
 
 AvroScan::AvroScan(const string &path, ClientContext &context, shared_ptr<IcebergAvroScanInfo> avro_scan_info)
-    : context(context), iceberg_version(avro_scan_info->IcebergVersion()) {
+    : context(context), scan_info(avro_scan_info) {
 	auto &instance = DatabaseInstance::GetDatabase(context);
 	auto &system_catalog = Catalog::GetSystemCatalog(instance);
 	auto data = CatalogTransaction::GetSystemTransaction(instance);
@@ -106,6 +106,10 @@ bool AvroScan::Finished() const {
 
 const vector<column_t> &AvroScan::GetColumnIds() const {
 	return column_ids;
+}
+
+const idx_t AvroScan::IcebergVersion() const {
+	return scan_info->IcebergVersion();
 }
 
 } // namespace duckdb

@@ -45,7 +45,7 @@ public:
 
 private:
 	IcebergManifestReadingState &state;
-	manifest_file::ManifestFileReader reader;
+	manifest_file::ManifestReader reader;
 };
 
 } // namespace
@@ -717,7 +717,7 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 		if (!delete_manifests.empty()) {
 			delete_manifest_scan =
 			    AvroScan::ScanManifest(snapshot, delete_manifests, options, fs, iceberg_path, metadata, context);
-			delete_manifest_reader = make_uniq<manifest_file::ManifestFileReader>(*delete_manifest_scan, true);
+			delete_manifest_reader = make_uniq<manifest_file::ManifestReader>(*delete_manifest_scan, true);
 		}
 	}
 
@@ -764,7 +764,7 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 		auto data_scan = AvroScan::ScanManifest(snapshot, data_manifests, options, fs, iceberg_path, metadata, context);
 		manifest_read_state =
 		    make_uniq<IcebergManifestReadingState>(context, std::move(data_scan), entry_lock, current_manifest_entries);
-		data_manifest_reader = make_uniq<manifest_file::ManifestFileReader>(*manifest_read_state->scan, true);
+		data_manifest_reader = make_uniq<manifest_file::ManifestReader>(*manifest_read_state->scan, true);
 
 		auto &scheduler = TaskScheduler::GetScheduler(context);
 		auto num_threads = MinValue<idx_t>(scheduler.NumberOfThreads(), data_manifests.size());
