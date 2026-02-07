@@ -13,6 +13,8 @@
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/execution/execution_context.hpp"
 #include "duckdb/parallel/thread_context.hpp"
+#include "duckdb/parallel/event.hpp"
+#include "duckdb/parallel/task_notifier.hpp"
 #include "duckdb/parser/tableref/table_function_ref.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/planner/filter/struct_filter.hpp"
@@ -29,31 +31,57 @@ class ManifestReadTask : public BaseExecutorTask {
 public:
 	ManifestReadTask(IcebergManifestReadingState &state)
 	    : BaseExecutorTask(state.executor), state(state), reader(*state.scan, true) {
+		local_entries.reserve(STANDARD_VECTOR_SIZE);
 	}
 
 	void ExecuteTask() override {
-		++state.started;
-		vector<IcebergManifestEntry> local_entries;
-		local_entries.reserve(STANDARD_VECTOR_SIZE);
+		throw InternalException("Simple ExecuteTask should never be called!");
+	}
+
+	TaskExecutionResult ExecuteTaskIncremental() {
 		while (!reader.Finished()) {
 			local_entries.clear();
 			reader.Read(STANDARD_VECTOR_SIZE, local_entries);
 			lock_guard<mutex> guard(state.lock);
 			state.entries.insert(state.entries.end(), local_entries.begin(), local_entries.end());
+			return TaskExecutionResult::TASK_NOT_FINISHED;
 		}
+		--state.in_progress_tasks;
+		return TaskExecutionResult::TASK_FINISHED;
+	}
+
+	TaskExecutionResult Execute(TaskExecutionMode mode) override {
+		if (executor.HasError()) {
+			// another task encountered an error - bailout
+			executor.FinishTask();
+			return TaskExecutionResult::TASK_FINISHED;
+		}
+		try {
+			{
+				TaskNotifier task_notifier {state.context};
+				auto res = ExecuteTaskIncremental();
+				if (res == TaskExecutionResult::TASK_NOT_FINISHED) {
+					return res;
+				}
+			}
+			executor.FinishTask();
+			return TaskExecutionResult::TASK_FINISHED;
+		} catch (std::exception &ex) {
+			executor.PushError(ErrorData(ex));
+		} catch (...) { // LCOV_EXCL_START
+			executor.PushError(ErrorData("Unknown exception during Checkpoint!"));
+		} // LCOV_EXCL_STOP
+		executor.FinishTask();
+		return TaskExecutionResult::TASK_ERROR;
 	}
 
 private:
 	IcebergManifestReadingState &state;
 	manifest_file::ManifestReader reader;
+	vector<IcebergManifestEntry> local_entries;
 };
 
 } // namespace
-
-void IcebergManifestReadingState::AddTask() {
-	executor.ScheduleTask(make_uniq<ManifestReadTask>(*this));
-	total_tasks++;
-}
 
 IcebergMultiFileList::IcebergMultiFileList(ClientContext &context_p, shared_ptr<IcebergScanInfo> scan_info,
                                            const string &path, const IcebergOptions &options)
@@ -490,29 +518,38 @@ bool IcebergMultiFileList::PopulateEntryBuffer(lock_guard<mutex> &guard) const {
 	if (!manifest_read_state) {
 		return false;
 	}
+	auto &scheduler = TaskScheduler::GetScheduler(context);
+	auto worker_thread_count = scheduler.NumberOfThreads();
+	if (worker_thread_count == 0) {
+		//! NOTE: no 'entry_lock' needed here because there are no concurrent tasks
+		(void)data_manifest_reader->Read(STANDARD_VECTOR_SIZE, current_manifest_entries);
+		return !current_manifest_entries.empty();
+	}
 	auto &read_state = *manifest_read_state;
 	auto &executor = read_state.executor;
-	while (!executor.IsFinished()) {
-		{
-			vector<IcebergManifestEntry> new_entries;
-			(void)data_manifest_reader->Read(STANDARD_VECTOR_SIZE, new_entries);
-			lock_guard<mutex> entry_guard(entry_lock);
-			current_manifest_entries.insert(current_manifest_entries.end(),
-			                                std::make_move_iterator(new_entries.begin()),
-			                                std::make_move_iterator(new_entries.end()));
-			if (!current_manifest_entries.empty()) {
-				//! We have entries to read, return
-				return true;
+	shared_ptr<Task> task_to_execute;
+	while (read_state.in_progress_tasks) {
+		if (executor.GetTask(task_to_execute)) {
+			auto res = task_to_execute->Execute(TaskExecutionMode::PROCESS_PARTIAL);
+			if (res == TaskExecutionResult::TASK_NOT_FINISHED) {
+				auto &token = *task_to_execute->token;
+				scheduler.ScheduleTask(token, std::move(task_to_execute));
 			}
+			{
+				lock_guard<mutex> entry_guard(entry_lock);
+				if (!current_manifest_entries.empty()) {
+					return true;
+				}
+			}
+			//! We didn't manage to populate the buffer with our scan
+			//! But another task might be in the process of scanning
+			//! Have to wait for everything to finish to conclusively say we're done
 		}
-		if (read_state.started == 0) {
-			//! There is no other reader active, so if our read returned 0, there can't be anything still waiting to be
-			//! added
-			return false;
-		}
+		executor.WorkOnTasks();
+		return !current_manifest_entries.empty();
 	}
-	(void)data_manifest_reader->Read(STANDARD_VECTOR_SIZE, current_manifest_entries);
-	//! NOTE: we don't need the lock here because this is only reached if all tasks are complete
+
+	//! NOTE: no 'entry_lock' needed here because all tasks are finished
 	return !current_manifest_entries.empty();
 }
 
@@ -767,9 +804,11 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 		data_manifest_reader = make_uniq<manifest_file::ManifestReader>(*manifest_read_state->scan, true);
 
 		auto &scheduler = TaskScheduler::GetScheduler(context);
+		auto &executor = manifest_read_state->executor;
 		auto num_threads = MinValue<idx_t>(scheduler.NumberOfThreads(), data_manifests.size());
+		manifest_read_state->in_progress_tasks = num_threads;
 		for (idx_t i = 0; i < num_threads; i++) {
-			manifest_read_state->AddTask();
+			executor.ScheduleTask(make_uniq<ManifestReadTask>(*manifest_read_state));
 		}
 	} else {
 		//! Nothing to scan, already finished

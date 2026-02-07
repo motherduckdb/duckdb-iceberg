@@ -34,20 +34,17 @@ struct IcebergManifestReadingState {
 public:
 	IcebergManifestReadingState(ClientContext &context, unique_ptr<AvroScan> scan, mutex &lock,
 	                            vector<IcebergManifestEntry> &entries)
-	    : executor(context), scan(std::move(scan)), lock(lock), entries(entries), started(0) {
+	    : context(context), executor(context), scan(std::move(scan)), lock(lock), entries(entries),
+	      in_progress_tasks(0) {
 	}
 
 public:
-	void AddTask();
-
-public:
+	ClientContext &context;
 	TaskExecutor executor;
 	unique_ptr<AvroScan> scan;
 	mutex &lock;
 	vector<IcebergManifestEntry> &entries;
-	//! The amount of tasks that have at least been picked up
-	atomic<idx_t> started;
-	idx_t total_tasks = 0;
+	atomic<idx_t> in_progress_tasks;
 };
 
 struct IcebergMultiFileList : public MultiFileList {
