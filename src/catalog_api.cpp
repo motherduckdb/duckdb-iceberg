@@ -231,7 +231,9 @@ vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &conte
 		}
 		auto response = catalog.auth_handler->Request(RequestType::GET_REQUEST, context, url_builder, headers);
 		if (!response->Success()) {
-			if (response->status == HTTPStatusCode::Forbidden_403 || response->status == HTTPStatusCode::NotFound_404) {
+			if (response->status == HTTPStatusCode::Forbidden_403 ||
+			    response->status == HTTPStatusCode::Unauthorized_401 ||
+			    response->status == HTTPStatusCode::NotFound_404) {
 				// return empty result if user cannot list tables for a schema.
 				vector<rest_api_objects::TableIdentifier> ret;
 				return ret;
@@ -278,7 +280,8 @@ vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IcebergCatalog &
 		HTTPHeaders headers(*context.db);
 		auto response = catalog.auth_handler->Request(RequestType::GET_REQUEST, context, endpoint_builder, headers);
 		if (!response->Success()) {
-			if (response->status == HTTPStatusCode::Forbidden_403) {
+			if (response->status == HTTPStatusCode::Forbidden_403 ||
+			    response->status == HTTPStatusCode::Unauthorized_401) {
 				// return empty result if user cannot list schemas.
 				return result;
 			}

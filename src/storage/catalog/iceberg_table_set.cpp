@@ -58,6 +58,7 @@ bool IcebergTableSet::FillEntry(ClientContext &context, IcebergTableInformation 
 			return false;
 		}
 		if (get_table_result.status_ == HTTPStatusCode::Forbidden_403 ||
+		    get_table_result.status_ == HTTPStatusCode::Unauthorized_401 ||
 		    get_table_result.status_ == HTTPStatusCode::NotFound_404) {
 			return false;
 		}
