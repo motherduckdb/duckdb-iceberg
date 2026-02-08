@@ -18,6 +18,7 @@
 #include "include/storage/catalog/iceberg_catalog.hpp"
 
 #include "rest_catalog/objects/list.hpp"
+#include "rest_catalog/objects/iceberg_error_response.hpp"
 
 using namespace duckdb_yyjson;
 namespace duckdb {
@@ -231,7 +232,8 @@ vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &conte
 		auto response = catalog.auth_handler->Request(RequestType::GET_REQUEST, context, url_builder, headers);
 		if (!response->Success()) {
 			if (response->status == HTTPStatusCode::Forbidden_403 ||
-			    response->status == HTTPStatusCode::Unauthorized_401) {
+			    response->status == HTTPStatusCode::Unauthorized_401 ||
+			    response->status == HTTPStatusCode::NotFound_404) {
 				// return empty result if user cannot list tables for a schema.
 				vector<rest_api_objects::TableIdentifier> ret;
 				return ret;
@@ -329,9 +331,23 @@ void IRCAPI::CommitMultiTableUpdate(ClientContext &context, IcebergCatalog &cata
 	headers.Insert("Content-Type", "application/json");
 	auto response = catalog.auth_handler->Request(RequestType::POST_REQUEST, context, url_builder, headers, body);
 	if (response->status != HTTPStatusCode::OK_200 && response->status != HTTPStatusCode::NoContent_204) {
+		yyjson_val *error_obj = ICUtils::get_error_message(response->body);
+		if (error_obj == nullptr) {
+			throw InvalidConfigurationException(response->body);
+		}
+		auto error = rest_api_objects::IcebergErrorResponse::FromJSON(error_obj);
+		string stack_trace;
+		for (const auto &str : error._error.stack) {
+			stack_trace.append(str + "\n");
+		}
+		DUCKDB_LOG(context, IcebergLogType, stack_trace);
+
+		// Omit stack from error output
+		error._error.stack = vector<string>();
 		throw InvalidConfigurationException(
-		    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s",
-		    url_builder.GetURLEncoded(), EnumUtil::ToString(response->status), response->reason, response->body);
+		    "Request to '%s' returned a non-200 status code (%s). \n message: %s\n type: %s\n reason: %s\n",
+		    url_builder.GetURLEncoded(), EnumUtil::ToString(response->status), error._error.message, error._error.type,
+		    response->reason);
 	}
 }
 
