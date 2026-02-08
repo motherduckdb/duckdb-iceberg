@@ -206,6 +206,7 @@ IRCEndpointBuilder IcebergCatalog::GetBaseUrl() const {
 	auto base_url = IRCEndpointBuilder();
 	base_url.SetHost(uri);
 	base_url.AddPathComponent(version);
+
 	return base_url;
 }
 
@@ -351,29 +352,53 @@ void IcebergCatalog::AddGlueEndpoints() {
 	supported_urls.insert("DELETE /v1/{prefix}/namespaces/{namespace}/tables/{table}");
 }
 
-void IcebergCatalog::GetConfig(ClientContext &context, IcebergEndpointType &endpoint_type) {
-	// set the prefix to be empty. To get the config endpoint,
-	// we cannot add a default prefix.
-	D_ASSERT(prefix.empty());
-	auto catalog_config = IRCAPI::GetCatalogConfig(context, *this);
-
-	overrides = catalog_config.overrides;
-	defaults = catalog_config.defaults;
+void IcebergCatalog::ParsePrefix() {
 	// save overrides and defaults.
 	// See https://iceberg.apache.org/docs/latest/configuration/#catalog-properties for sometimes used catalog
 	// properties
 	auto default_prefix_it = defaults.find("prefix");
 	auto override_prefix_it = overrides.find("prefix");
 
+	string decoded_prefix = "";
 	if (default_prefix_it != defaults.end()) {
-		// sometimes there is a prefix in the defaults
-		prefix = StringUtil::URLDecode(default_prefix_it->second);
-		defaults.erase(default_prefix_it);
+		decoded_prefix = StringUtil::URLDecode(default_prefix_it->second);
+		prefix = decoded_prefix;
+		if (!StringUtil::Equals(decoded_prefix, default_prefix_it->second)) {
+			// decoded prefix contains a slash AND is not equal to the original
+			// means prefix was encoded, and is one URL component
+			prefix_is_one_component = true;
+		} else {
+			prefix_is_one_component = false;
+		}
 	}
+
+	// sometimes the prefix in the overrides. Prefer the override prefix
 	if (override_prefix_it != overrides.end()) {
-		// sometimes the prefix in the overrides. Prefer the override prefix
-		prefix = StringUtil::URLDecode(override_prefix_it->second);
-		overrides.erase(override_prefix_it);
+		decoded_prefix = StringUtil::URLDecode(override_prefix_it->second);
+		prefix = decoded_prefix;
+
+		if (!StringUtil::Equals(decoded_prefix, override_prefix_it->second)) {
+			// decoded prefix is not equal to the original
+			// means prefix was encoded, and is one URL component
+			prefix_is_one_component = true;
+		} else {
+			// decoded prefix contains a '/' or is equal
+			prefix_is_one_component = false;
+		}
+	}
+}
+
+void IcebergCatalog::GetConfig(ClientContext &context, IcebergEndpointType &endpoint_type) {
+	// set the prefix to be empty. To get the config endpoint,
+	// we cannot add a default prefix.
+	D_ASSERT(prefix.empty());
+	auto catalog_config = IRCAPI::GetCatalogConfig(context, *this);
+	overrides = catalog_config.overrides;
+	defaults = catalog_config.defaults;
+	ParsePrefix();
+
+	if (attach_options.encode_entire_prefix) {
+		prefix_is_one_component = true;
 	}
 
 	if (catalog_config.has_endpoints) {
@@ -549,6 +574,8 @@ unique_ptr<Catalog> IcebergCatalog::Attach(optional_ptr<StorageExtensionInfo> st
 			set_by_attach_options.insert("purge_requested");
 		} else if (lower_name == "default_schema") {
 			default_schema = entry.second.ToString();
+		} else if (lower_name == "encode_entire_prefix") {
+			attach_options.encode_entire_prefix = true;
 		} else if (lower_name == "max_table_staleness") {
 			auto interval_option = entry.second.DefaultCastAs(LogicalType::INTERVAL);
 			auto interval_value = interval_option.GetValue<interval_t>();
