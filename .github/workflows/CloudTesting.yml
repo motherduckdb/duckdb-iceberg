@@ -20,6 +20,7 @@ jobs:
       VCPKG_FEATURE_FLAGS: "-binarycaching"
       VCPKG_TOOLCHAIN_PATH: ${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
       PIP_BREAK_SYSTEM_PACKAGES: 1
+      HTTP_PROXY_PUBLIC: localhost:8878
 
     steps:
       - name: Install required ubuntu packages
@@ -50,6 +51,12 @@ jobs:
       - name: install python packages
         run: |
           python3 -m pip install -r scripts/requirements.txt
+
+      - name: Install and run mitmproxy
+        shell: bash
+        run: |
+          python3 mitmdump --mode regular@8878 --flow-detail 2 > mitm.log 2>&1
+          sleep 2
 
       - name: Set up cloud testing
         env:

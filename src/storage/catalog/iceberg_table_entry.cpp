@@ -78,16 +78,20 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 			auto http_kv_secret = dynamic_cast<const KeyValueSecret &>(*http_secret_entry->secret);
 
 			info.options = {
-			                {"key_id", kv_secret.TryGetValue("key_id").ToString()},
-			                {"secret", kv_secret.TryGetValue("secret").ToString()},
-			                {"session_token", kv_secret.TryGetValue("session_token").IsNull()
-			                                      ? ""
-			                                      : kv_secret.TryGetValue("session_token").ToString()},
-			                {"region", region},
-						    {"endpoint", endpoint},
-						    {"http_proxy", http_kv_secret.TryGetValue("http_proxy").IsNull() ? "" : http_kv_secret.TryGetValue("http_proxy").ToString()},
-						    {"verify_ssl", http_kv_secret.TryGetValue("verify_ssl").IsNull() ? true : http_kv_secret.TryGetValue("verify_ssl").DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>()}
-			};
+			    {"key_id", kv_secret.TryGetValue("key_id").ToString()},
+			    {"secret", kv_secret.TryGetValue("secret").ToString()},
+			    {"session_token", kv_secret.TryGetValue("session_token").IsNull()
+			                          ? ""
+			                          : kv_secret.TryGetValue("session_token").ToString()},
+			    {"region", region},
+			    {"endpoint", endpoint},
+			    {"http_proxy", http_kv_secret.TryGetValue("http_proxy").IsNull()
+			                       ? ""
+			                       : http_kv_secret.TryGetValue("http_proxy").ToString()},
+			    {"verify_ssl",
+			     http_kv_secret.TryGetValue("verify_ssl").IsNull()
+			         ? true
+			         : http_kv_secret.TryGetValue("verify_ssl").DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>()}};
 		};
 
 		(void)secret_manager.CreateSecret(context, info);
