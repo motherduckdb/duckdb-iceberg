@@ -318,7 +318,8 @@ IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(const Value &lowe
 	return res;
 }
 
-bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &manifest_entry) const {
+bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &manifest_entry,
+                                             IcebergDataFileType file_type) const {
 	D_ASSERT(!table_filters.filters.empty());
 
 	auto &filters = table_filters.filters;
@@ -335,7 +336,6 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &manifes
 		auto &data_file = manifest_entry.data_file;
 		// First check if there are partitions
 		if (!data_file.partition_values.empty()) {
-			// check if the index is in the parititon value thing.
 			auto partition_spec_it = metadata.partition_specs.find(manifest_entry.partition_spec_id);
 			if (partition_spec_it == metadata.partition_specs.end()) {
 				throw InvalidConfigurationException(
@@ -396,8 +396,10 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &manifes
 				}
 			}
 		}
-		if (data_file.lower_bounds.empty() || data_file.upper_bounds.empty()) {
-			//! There are no bounds statistics for the file, can't filter
+		if (data_file.lower_bounds.empty() || data_file.upper_bounds.empty() ||
+		    file_type == IcebergDataFileType::DELETE) {
+			// There are no bounds statistics for the file, can't filter,
+			// or it is a delete file, which should only be filtered on partitions
 			continue;
 		}
 
@@ -484,7 +486,7 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 			auto &data_file = manifest_entry.data_file;
 			manifest_entry_idx++;
 			// Check whether current data file is filtered out.
-			if (!table_filters.filters.empty() && !FileMatchesFilter(manifest_entry)) {
+			if (!table_filters.filters.empty() && !FileMatchesFilter(manifest_entry, IcebergDataFileType::DATA)) {
 				DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'data_file': '%s'",
 				           data_file.file_path);
 				//! Skip this file
@@ -722,7 +724,7 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 		for (auto &manifest_entry : entries) {
 			auto &data_file = manifest_entry.data_file;
 			// Check whether current data file is filtered out.
-			if (!table_filters.filters.empty() && !FileMatchesFilter(manifest_entry)) {
+			if (!table_filters.filters.empty() && !FileMatchesFilter(manifest_entry, IcebergDataFileType::DELETE)) {
 				DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'data_file': '%s'",
 				           data_file.file_path);
 				//! Skip this file
