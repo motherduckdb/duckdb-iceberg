@@ -264,6 +264,10 @@ optional_ptr<CatalogEntry> IcebergTableInformation::GetSchemaVersion(optional_pt
 	return schema_versions[schema_id].get();
 }
 
+idx_t IcebergTableInformation::GetIcebergVersion() const {
+	return table_metadata.iceberg_version;
+}
+
 optional_ptr<CatalogEntry> IcebergTableInformation::GetLatestSchema() {
 	return GetSchemaVersion(nullptr);
 }

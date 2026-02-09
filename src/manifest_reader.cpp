@@ -149,9 +149,15 @@ idx_t ManifestReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergManifes
 	auto manifest_file_sequence_number_data = FlatVector::GetData<int64_t>(manifest_file_sequence_number);
 	auto manifest_file_index_data = FlatVector::GetData<uint64_t>(manifest_file_index);
 
-	int32_t *content_data;
+	int32_t *content_data = nullptr;
+	int64_t *first_row_id_data = nullptr;
+	optional_ptr<ValidityMask> first_row_id_validity;
 	if (iceberg_version >= 2) {
 		content_data = FlatVector::GetData<int32_t>(*content);
+	}
+	if (iceberg_version >= 3) {
+		first_row_id_data = FlatVector::GetData<int64_t>(*first_row_id);
+		first_row_id_validity = FlatVector::Validity(*first_row_id);
 	}
 	auto file_path_data = FlatVector::GetData<string_t>(file_path);
 	auto file_format_data = FlatVector::GetData<string_t>(file_format);
@@ -218,6 +224,12 @@ idx_t ManifestReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergManifes
 		} else {
 			entry.sequence_number = manifest_file_sequence_number_data[index];
 			data_file.content = IcebergManifestEntryContentType::DATA;
+		}
+		if (iceberg_version >= 3) {
+			data_file.has_first_row_id = first_row_id_validity->RowIsValid(index);
+			if (data_file.has_first_row_id) {
+				data_file.first_row_id = first_row_id_data[index];
+			}
 		}
 
 		entry.partition_spec_id = partition_spec_id_data[index];
