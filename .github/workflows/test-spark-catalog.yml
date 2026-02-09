@@ -11,6 +11,8 @@ jobs:
   test-spark:
     name: Test against Spark Catalog
     runs-on: ubuntu-latest
+    env:
+      HTTP_PROXY_PUBLIC: localhost:8878
 
     steps:
       - name: Checkout repository
@@ -52,11 +54,16 @@ jobs:
       - name: Install required python packages
         run: |
           python3 -m pip install -r scripts/requirements.txt
-          
+
       - name: Generate data
         run: |
           make data
-          
+
+      - name: Run mitmproxy
+        shell: bash
+        run: |
+          python3 mitmdump --mode regular@8878 --flow-detail 2 > mitmproxy.log 2>&1 &
+
       - name: Test with rest catalog
         env:
           ICEBERG_SERVER_AVAILABLE: 1
