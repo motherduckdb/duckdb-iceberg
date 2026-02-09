@@ -50,8 +50,6 @@ string Type::TryFromJSON(yyjson_val *obj) {
 }
 
 yyjson_mut_val *Type::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-
 	if (has_primitive_type) {
 		return primitive_type.ToJSON(doc);
 	} else if (has_struct_type) {

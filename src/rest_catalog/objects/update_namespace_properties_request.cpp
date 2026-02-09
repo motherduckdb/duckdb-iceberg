@@ -87,7 +87,9 @@ yyjson_mut_val *UpdateNamespacePropertiesRequest::ToJSON(yyjson_mut_doc *doc) co
 	// Serialize: updates
 	if (has_updates) {
 		yyjson_mut_val *updates_obj = yyjson_mut_obj(doc);
-		for (const auto &[key, value] : updates) {
+		for (const auto &it : updates) {
+			auto &key = it.first;
+			auto &value = it.second;
 			yyjson_mut_obj_add_str(doc, updates_obj, key.c_str(), value.c_str());
 		}
 		yyjson_mut_obj_add_val(doc, obj, "updates", updates_obj);

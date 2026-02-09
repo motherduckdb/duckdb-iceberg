@@ -186,7 +186,9 @@ yyjson_mut_val *ScanReport::ToJSON(yyjson_mut_doc *doc) const {
 	// Serialize: metadata
 	if (has_metadata) {
 		yyjson_mut_val *metadata_obj = yyjson_mut_obj(doc);
-		for (const auto &[key, value] : metadata) {
+		for (const auto &it : metadata) {
+			auto &key = it.first;
+			auto &value = it.second;
 			yyjson_mut_obj_add_str(doc, metadata_obj, key.c_str(), value.c_str());
 		}
 		yyjson_mut_obj_add_val(doc, obj, "metadata", metadata_obj);

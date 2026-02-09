@@ -94,9 +94,11 @@ string SnapshotLog::TryFromJSON(yyjson_val *obj) {
 }
 
 yyjson_mut_val *SnapshotLog::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-
-	return obj;
+	yyjson_mut_val *arr = yyjson_mut_arr(doc);
+	for (const auto &item : value) {
+		yyjson_mut_arr_append(arr, item.ToJSON(doc));
+	}
+	return arr;
 }
 
 } // namespace rest_api_objects

@@ -65,8 +65,6 @@ string Expression::TryFromJSON(yyjson_val *obj) {
 }
 
 yyjson_mut_val *Expression::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-
 	if (has_true_expression) {
 		return true_expression.ToJSON(doc);
 	} else if (has_false_expression) {

@@ -35,8 +35,6 @@ string ViewRepresentation::TryFromJSON(yyjson_val *obj) {
 }
 
 yyjson_mut_val *ViewRepresentation::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-
 	if (has_sqlview_representation) {
 		return sqlview_representation.ToJSON(doc);
 	}

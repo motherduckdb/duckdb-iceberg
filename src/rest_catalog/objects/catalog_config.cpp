@@ -99,14 +99,18 @@ yyjson_mut_val *CatalogConfig::ToJSON(yyjson_mut_doc *doc) const {
 
 	// Serialize: defaults
 	yyjson_mut_val *defaults_obj = yyjson_mut_obj(doc);
-	for (const auto &[key, value] : defaults) {
+	for (const auto &it : defaults) {
+		auto &key = it.first;
+		auto &value = it.second;
 		yyjson_mut_obj_add_str(doc, defaults_obj, key.c_str(), value.c_str());
 	}
 	yyjson_mut_obj_add_val(doc, obj, "defaults", defaults_obj);
 
 	// Serialize: overrides
 	yyjson_mut_val *overrides_obj = yyjson_mut_obj(doc);
-	for (const auto &[key, value] : overrides) {
+	for (const auto &it : overrides) {
+		auto &key = it.first;
+		auto &value = it.second;
 		yyjson_mut_obj_add_str(doc, overrides_obj, key.c_str(), value.c_str());
 	}
 	yyjson_mut_obj_add_val(doc, obj, "overrides", overrides_obj);

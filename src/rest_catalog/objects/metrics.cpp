@@ -41,7 +41,9 @@ yyjson_mut_val *Metrics::ToJSON(yyjson_mut_doc *doc) const {
 	yyjson_mut_val *obj = yyjson_mut_obj(doc);
 
 	// Serialize additional properties
-	for (const auto &[key, value] : additional_properties) {
+	for (const auto &it : additional_properties) {
+		auto &key = it.first;
+		auto &value = it.second;
 		yyjson_mut_val *value_obj = value.ToJSON(doc);
 		yyjson_mut_obj_add_val(doc, obj, key.c_str(), value_obj);
 	}

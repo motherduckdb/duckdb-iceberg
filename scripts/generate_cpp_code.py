@@ -876,14 +876,74 @@ class CPPClass:
 
     def generate_to_json_method(self, qualified_name: str) -> List[str]:
         """Generate ToJSON method implementation"""
-        
+
+        root_schema = self.parse_info.parsed_schemas.get(self.name)
+
+        if root_schema and root_schema.type == Property.Type.PRIMITIVE:
+            prim = cast(PrimitiveProperty, root_schema)
+            prim_type = prim.primitive_type
+
+            lines = [
+                f"yyjson_mut_val* {qualified_name}::ToJSON(yyjson_mut_doc *doc) const {{"
+            ]
+
+            if prim_type == 'string':
+                lines.append("\treturn yyjson_mut_strcpy(doc, value.c_str());")
+            elif prim_type == 'integer':
+                if prim.format == 'int64':
+                    lines.append("\treturn yyjson_mut_sint(doc, value);")
+                else:
+                    lines.append("\treturn yyjson_mut_int(doc, value);")
+            elif prim_type == 'boolean':
+                lines.append("\treturn yyjson_mut_bool(doc, value);")
+            elif prim_type == 'number':
+                lines.append("\treturn yyjson_mut_real(doc, value);")
+            else:
+                lines.append('\tthrow InternalException("Unsupported primitive serialization");')
+
+            lines.append("}")
+            return lines
+
+        if root_schema and root_schema.type == Property.Type.ARRAY:
+            array_schema = cast(ArrayProperty, root_schema)
+            lines = [
+                f"yyjson_mut_val* {qualified_name}::ToJSON(yyjson_mut_doc *doc) const {{",
+                "\tyyjson_mut_val *arr = yyjson_mut_arr(doc);",
+                "\tfor (const auto &item : value) {"
+            ]
+
+            item_type = array_schema.item_type
+            if item_type.type == Property.Type.PRIMITIVE:
+                prim_item = cast(PrimitiveProperty, item_type)
+                if prim_item.primitive_type == 'string':
+                    lines.append("\t\tyyjson_mut_arr_append(arr, yyjson_mut_str(doc, item.c_str()));")
+                elif prim_item.primitive_type == 'integer':
+                    if prim_item.format == 'int64':
+                        lines.append("\t\tyyjson_mut_arr_append(arr, yyjson_mut_sint(doc, item));")
+                    else:
+                        lines.append("\t\tyyjson_mut_arr_append(arr, yyjson_mut_int(doc, item));")
+                elif prim_item.primitive_type == 'boolean':
+                    lines.append("\t\tyyjson_mut_arr_append(arr, yyjson_mut_bool(doc, item));")
+                elif prim_item.primitive_type == 'number':
+                    lines.append("\t\tyyjson_mut_arr_append(arr, yyjson_mut_real(doc, item));")
+            elif item_type.type == Property.Type.SCHEMA_REFERENCE:
+                schema_ref = cast(SchemaReferenceProperty, item_type)
+                if schema_ref.ref in self.parse_info.recursive_schemas:
+                    lines.append("\t\tyyjson_mut_arr_append(arr, item->ToJSON(doc));")
+                else:
+                    lines.append("\t\tyyjson_mut_arr_append(arr, item.ToJSON(doc));")
+
+            lines.extend([
+                "\t}",
+                "\treturn arr;",
+                "}"
+            ])
+            return lines
+
         lines = []
-        
         # Generate main ToJSON method
         lines.extend([
             f"yyjson_mut_val* {qualified_name}::ToJSON(yyjson_mut_doc *doc) const {{",
-            "\tyyjson_mut_val *obj = yyjson_mut_obj(doc);",
-            ""
         ])
 
         if self.one_of:
@@ -907,6 +967,11 @@ class CPPClass:
             ])
             return lines
 
+        lines.extend([
+            "\tyyjson_mut_val *obj = yyjson_mut_obj(doc);",
+            ""
+        ])
+
         # Serialize allOf base classes first
         if self.all_of:
             for base in self.all_of:
@@ -924,7 +989,7 @@ class CPPClass:
                         "\t}",
                         ""
                     ])
-        
+
         # Serialize required properties
         for prop_name, prop in self.required_properties.items():
             lines.extend(self._generate_property_serialization(
@@ -1230,7 +1295,9 @@ class CPPClass:
         """Serialize map with primitive values"""
         
         lines = [
-            f'{prefix}for (const auto &[key, value] : item) {{'
+            f'{prefix}for (const auto &it : item) {{',
+            f'{prefix}\tauto &key = it.first;',
+            f'{prefix}\tauto &value = it.second;',
         ]
         
         prim_type = prim_prop.primitive_type
@@ -1268,7 +1335,9 @@ class CPPClass:
         """Serialize map with schema reference values"""
         
         lines = [
-            f'{prefix}for (const auto &[key, value] : item) {{'
+            f'{prefix}for (const auto &it : item) {{',
+            f'{prefix}\tauto &key = it.first;',
+            f'{prefix}\tauto &value = it.second;',
         ]
         
         if schema_ref.ref in self.parse_info.recursive_schemas:
@@ -1583,7 +1652,9 @@ class CPPClass:
             # Map type - iterate and add
             lines = [
                 f'{prefix}yyjson_mut_val *{var_name}_obj = yyjson_mut_obj(doc);',
-                f'{prefix}for (const auto &[key, value] : {var_name}) {{'
+                f'{prefix}for (const auto &it : {var_name}) {{',
+                f'{prefix}\tauto &key = it.first;',
+                f'{prefix}\tauto &value = it.second;',
             ]
             
             # Serialize map values based on their type
@@ -1629,7 +1700,9 @@ class CPPClass:
         
         lines = [
             "\t// Serialize additional properties",
-            "\tfor (const auto &[key, value] : additional_properties) {"
+            "\tfor (const auto &it : additional_properties) {",
+            '\tauto &key = it.first;',
+            '\tauto &value = it.second;',
         ]
         
         add_prop = self.additional_properties.schema

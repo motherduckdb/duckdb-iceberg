@@ -45,8 +45,6 @@ string FetchPlanningResult::TryFromJSON(yyjson_val *obj) {
 }
 
 yyjson_mut_val *FetchPlanningResult::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-
 	if (has_completed_planning_result) {
 		return completed_planning_result.ToJSON(doc);
 	} else if (has_failed_planning_result) {

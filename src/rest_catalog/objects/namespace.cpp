@@ -44,9 +44,11 @@ string Namespace::TryFromJSON(yyjson_val *obj) {
 }
 
 yyjson_mut_val *Namespace::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-
-	return obj;
+	yyjson_mut_val *arr = yyjson_mut_arr(doc);
+	for (const auto &item : value) {
+		yyjson_mut_arr_append(arr, yyjson_mut_str(doc, item.c_str()));
+	}
+	return arr;
 }
 
 } // namespace rest_api_objects

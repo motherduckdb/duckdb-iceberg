@@ -40,8 +40,6 @@ string Term::TryFromJSON(yyjson_val *obj) {
 }
 
 yyjson_mut_val *Term::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-
 	if (has_reference) {
 		return reference.ToJSON(doc);
 	} else if (has_transform_term) {

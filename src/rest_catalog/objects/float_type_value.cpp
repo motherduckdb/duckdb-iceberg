@@ -33,9 +33,7 @@ string FloatTypeValue::TryFromJSON(yyjson_val *obj) {
 }
 
 yyjson_mut_val *FloatTypeValue::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-
-	return obj;
+	return yyjson_mut_real(doc, value);
 }
 
 } // namespace rest_api_objects

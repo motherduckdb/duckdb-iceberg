@@ -68,7 +68,9 @@ yyjson_mut_val *StorageCredential::ToJSON(yyjson_mut_doc *doc) const {
 
 	// Serialize: config
 	yyjson_mut_val *config_obj = yyjson_mut_obj(doc);
-	for (const auto &[key, value] : config) {
+	for (const auto &it : config) {
+		auto &key = it.first;
+		auto &value = it.second;
 		yyjson_mut_obj_add_str(doc, config_obj, key.c_str(), value.c_str());
 	}
 	yyjson_mut_obj_add_val(doc, obj, "config", config_obj);

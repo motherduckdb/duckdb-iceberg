@@ -61,7 +61,9 @@ yyjson_mut_val *Object2::ToJSON(yyjson_mut_doc *doc) const {
 	yyjson_mut_obj_add_str(doc, obj, "operation", operation.c_str());
 
 	// Serialize additional properties
-	for (const auto &[key, value] : additional_properties) {
+	for (const auto &it : additional_properties) {
+		auto &key = it.first;
+		auto &value = it.second;
 		yyjson_mut_obj_add_str(doc, obj, key.c_str(), value.c_str());
 	}
 

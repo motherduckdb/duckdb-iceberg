@@ -40,8 +40,6 @@ string DeleteFile::TryFromJSON(yyjson_val *obj) {
 }
 
 yyjson_mut_val *DeleteFile::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-
 	if (has_position_delete_file) {
 		return position_delete_file.ToJSON(doc);
 	} else if (has_equality_delete_file) {

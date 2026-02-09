@@ -139,7 +139,9 @@ yyjson_mut_val *ViewVersion::ToJSON(yyjson_mut_doc *doc) const {
 
 	// Serialize: summary
 	yyjson_mut_val *summary_obj = yyjson_mut_obj(doc);
-	for (const auto &[key, value] : summary) {
+	for (const auto &it : summary) {
+		auto &key = it.first;
+		auto &value = it.second;
 		yyjson_mut_obj_add_str(doc, summary_obj, key.c_str(), value.c_str());
 	}
 	yyjson_mut_obj_add_val(doc, obj, "summary", summary_obj);

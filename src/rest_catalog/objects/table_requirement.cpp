@@ -70,8 +70,6 @@ string TableRequirement::TryFromJSON(yyjson_val *obj) {
 }
 
 yyjson_mut_val *TableRequirement::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-
 	if (has_assert_create) {
 		return assert_create.ToJSON(doc);
 	} else if (has_assert_table_uuid) {

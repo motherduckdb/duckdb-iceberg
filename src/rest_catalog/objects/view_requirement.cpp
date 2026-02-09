@@ -35,8 +35,6 @@ string ViewRequirement::TryFromJSON(yyjson_val *obj) {
 }
 
 yyjson_mut_val *ViewRequirement::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-
 	if (has_assert_view_uuid) {
 		return assert_view_uuid.ToJSON(doc);
 	}
