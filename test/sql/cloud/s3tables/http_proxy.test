@@ -50,7 +50,8 @@ select * from s3_catalog.test_inserts.basic_insert_test order by id;
 2	Bob	Jones	1985-06-15
 3	Charlie	Brown	2000-12-31
 
+# Proxy should see a GET request to a manifest file
 query I
-SELECT regexp_matches((SELECT content FROM read_text("mitm.log")), '\.avro');
+SELECT regexp_matches((SELECT content FROM read_text("mitmproxy.log")), 'GET.*\/metadata\/snap.*avro');
 ----
 true
