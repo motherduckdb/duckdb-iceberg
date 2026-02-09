@@ -1,0 +1,51 @@
+# name: test/sql/cloud/r2_catalog/http_proxy.test
+# description: Test http proxy
+# group: [r2_catalog]
+
+require-env HTTP_PROXY_PUBLIC
+
+require-env ICEBERG_AWS_REMOTE_AVAILABLE
+
+require-env R2_TOKEN
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+require aws
+
+# override the default behaviour of skipping HTTP errors and connection failures: this test fails on connection issues
+set ignore_error_messages
+
+statement ok
+CREATE SECRET r2_secret (
+    TYPE ICEBERG,
+    TOKEN '${R2_TOKEN}'
+);
+
+statement ok
+CREATE SECRET http_proxy (
+    TYPE HTTP,
+    http_proxy '${HTTP_PROXY_PUBLIC}',
+    VERIFY_SSL 0
+);
+
+statement ok
+attach '6b17833f308abc1e1cc343c552b51f51_r2-catalog' AS my_datalake (
+    TYPE ICEBERG,
+    ENDPOINT 'https://catalog.cloudflarestorage.com/6b17833f308abc1e1cc343c552b51f51/r2-catalog'
+);
+
+
+statement ok
+select * from my_datalake.default.people;
+
+# Proxy should see a GET request to a manifest file
+query I
+SELECT regexp_matches((SELECT content FROM read_text("mitmproxy.log")), 'GET.*\/metadata\/snap.*avro');
+----
+true

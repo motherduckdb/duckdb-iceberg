@@ -1,8 +1,11 @@
-# name: test/sql/cloud/s3tables/http_proxy_old_local_REMOVEME.test
+# name: test/sql/local/irc/http_proxy.test
 # description: Test http proxy
-# group: [s3tables]
+# group: [irc]
 
 require-env HTTP_PROXY_PUBLIC
+
+# shouldn't run on cloud testing
+require-env ICEBERG_SERVER_AVAILABLE
 
 require avro
 
