@@ -15,19 +15,13 @@ namespace rest_api_objects {
 
 class ValueMap {
 public:
-	ValueMap();
-	ValueMap(const ValueMap &) = delete;
-	ValueMap &operator=(const ValueMap &) = delete;
-	ValueMap(ValueMap &&) = default;
-	ValueMap &operator=(ValueMap &&) = default;
-
-public:
+	// Deserialization
 	static ValueMap FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	vector<IntegerTypeValue> keys;
 	bool has_keys = false;
 	vector<PrimitiveTypeValue> values;

@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class AssertTableUUID {
 public:
-	AssertTableUUID();
-	AssertTableUUID(const AssertTableUUID &) = delete;
-	AssertTableUUID &operator=(const AssertTableUUID &) = delete;
-	AssertTableUUID(AssertTableUUID &&) = default;
-	AssertTableUUID &operator=(AssertTableUUID &&) = default;
-
-public:
+	// Deserialization
 	static AssertTableUUID FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	TableRequirementType type;
 	string uuid;
 };

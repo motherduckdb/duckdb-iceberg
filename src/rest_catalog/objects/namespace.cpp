@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-Namespace::Namespace() {
-}
-
 Namespace Namespace::FromJSON(yyjson_val *obj) {
 	Namespace res;
 	auto error = res.TryFromJSON(obj);
@@ -43,7 +40,13 @@ string Namespace::TryFromJSON(yyjson_val *obj) {
 		return StringUtil::Format("Namespace property 'value' is not of type 'array', found '%s' instead",
 		                          yyjson_get_type_desc(obj));
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *Namespace::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

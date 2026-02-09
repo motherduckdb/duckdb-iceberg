@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-PrimitiveTypeValue::PrimitiveTypeValue() {
-}
-
 PrimitiveTypeValue PrimitiveTypeValue::FromJSON(yyjson_val *obj) {
 	PrimitiveTypeValue res;
 	auto error = res.TryFromJSON(obj);
@@ -97,7 +94,13 @@ string PrimitiveTypeValue::TryFromJSON(yyjson_val *obj) {
 	    !has_uuidtype_value) {
 		return "PrimitiveTypeValue failed to parse, none of the anyOf candidates matched";
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *PrimitiveTypeValue::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-LoadCredentialsResponse::LoadCredentialsResponse() {
-}
-
 LoadCredentialsResponse LoadCredentialsResponse::FromJSON(yyjson_val *obj) {
 	LoadCredentialsResponse res;
 	auto error = res.TryFromJSON(obj);
@@ -47,7 +44,21 @@ string LoadCredentialsResponse::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(storage_credentials_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *LoadCredentialsResponse::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: storage-credentials
+	yyjson_mut_val *storage_credentials_arr = yyjson_mut_arr(doc);
+	for (const auto &item : storage_credentials) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(storage_credentials_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "storage-credentials", storage_credentials_arr);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -15,19 +15,13 @@ namespace rest_api_objects {
 
 class SetPartitionStatisticsUpdate {
 public:
-	SetPartitionStatisticsUpdate();
-	SetPartitionStatisticsUpdate(const SetPartitionStatisticsUpdate &) = delete;
-	SetPartitionStatisticsUpdate &operator=(const SetPartitionStatisticsUpdate &) = delete;
-	SetPartitionStatisticsUpdate(SetPartitionStatisticsUpdate &&) = default;
-	SetPartitionStatisticsUpdate &operator=(SetPartitionStatisticsUpdate &&) = default;
-
-public:
+	// Deserialization
 	static SetPartitionStatisticsUpdate FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	BaseUpdate base_update;
 	PartitionStatisticsFile partition_statistics;
 	string action;

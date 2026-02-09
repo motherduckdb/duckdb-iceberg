@@ -13,19 +13,13 @@ namespace rest_api_objects {
 
 class FixedTypeValue {
 public:
-	FixedTypeValue();
-	FixedTypeValue(const FixedTypeValue &) = delete;
-	FixedTypeValue &operator=(const FixedTypeValue &) = delete;
-	FixedTypeValue(FixedTypeValue &&) = default;
-	FixedTypeValue &operator=(FixedTypeValue &&) = default;
-
-public:
+	// Deserialization
 	static FixedTypeValue FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	string value;
 };
 

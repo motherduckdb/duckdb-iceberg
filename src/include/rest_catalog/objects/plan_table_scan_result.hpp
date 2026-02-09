@@ -17,19 +17,13 @@ namespace rest_api_objects {
 
 class PlanTableScanResult {
 public:
-	PlanTableScanResult();
-	PlanTableScanResult(const PlanTableScanResult &) = delete;
-	PlanTableScanResult &operator=(const PlanTableScanResult &) = delete;
-	PlanTableScanResult(PlanTableScanResult &&) = default;
-	PlanTableScanResult &operator=(PlanTableScanResult &&) = default;
-
-public:
+	// Deserialization
 	static PlanTableScanResult FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	CompletedPlanningWithIDResult completed_planning_with_idresult;
 	bool has_completed_planning_with_idresult = false;
 	FailedPlanningResult failed_planning_result;

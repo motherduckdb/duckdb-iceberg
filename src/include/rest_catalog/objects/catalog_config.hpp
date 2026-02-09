@@ -13,19 +13,13 @@ namespace rest_api_objects {
 
 class CatalogConfig {
 public:
-	CatalogConfig();
-	CatalogConfig(const CatalogConfig &) = delete;
-	CatalogConfig &operator=(const CatalogConfig &) = delete;
-	CatalogConfig(CatalogConfig &&) = default;
-	CatalogConfig &operator=(CatalogConfig &&) = default;
-
-public:
+	// Deserialization
 	static CatalogConfig FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	case_insensitive_map_t<string> defaults;
 	case_insensitive_map_t<string> overrides;
 	vector<string> endpoints;

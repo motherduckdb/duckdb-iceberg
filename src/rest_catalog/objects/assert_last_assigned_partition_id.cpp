@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-AssertLastAssignedPartitionId::AssertLastAssignedPartitionId() {
-}
-
 AssertLastAssignedPartitionId AssertLastAssignedPartitionId::FromJSON(yyjson_val *obj) {
 	AssertLastAssignedPartitionId res;
 	auto error = res.TryFromJSON(obj);
@@ -47,7 +44,20 @@ string AssertLastAssignedPartitionId::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(last_assigned_partition_id_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *AssertLastAssignedPartitionId::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: type
+	yyjson_mut_val *type_val = type.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+
+	// Serialize: last-assigned-partition-id
+	yyjson_mut_obj_add_int(doc, obj, "last-assigned-partition-id", last_assigned_partition_id);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

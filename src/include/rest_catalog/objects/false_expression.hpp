@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class FalseExpression {
 public:
-	FalseExpression();
-	FalseExpression(const FalseExpression &) = delete;
-	FalseExpression &operator=(const FalseExpression &) = delete;
-	FalseExpression(FalseExpression &&) = default;
-	FalseExpression &operator=(FalseExpression &&) = default;
-
-public:
+	// Deserialization
 	static FalseExpression FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	ExpressionType type;
 };
 

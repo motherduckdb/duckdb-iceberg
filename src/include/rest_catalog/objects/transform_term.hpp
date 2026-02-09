@@ -15,19 +15,13 @@ namespace rest_api_objects {
 
 class TransformTerm {
 public:
-	TransformTerm();
-	TransformTerm(const TransformTerm &) = delete;
-	TransformTerm &operator=(const TransformTerm &) = delete;
-	TransformTerm(TransformTerm &&) = default;
-	TransformTerm &operator=(TransformTerm &&) = default;
-
-public:
+	// Deserialization
 	static TransformTerm FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	string type;
 	Transform transform;
 	Reference term;

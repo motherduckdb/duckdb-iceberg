@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-ListTablesResponse::ListTablesResponse() {
-}
-
 ListTablesResponse ListTablesResponse::FromJSON(yyjson_val *obj) {
 	ListTablesResponse res;
 	auto error = res.TryFromJSON(obj);
@@ -54,7 +51,29 @@ string ListTablesResponse::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(identifiers_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *ListTablesResponse::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: next-page-token
+	if (has_next_page_token) {
+		yyjson_mut_val *next_page_token_val = next_page_token.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "next-page-token", next_page_token_val);
+	}
+
+	// Serialize: identifiers
+	if (has_identifiers) {
+		yyjson_mut_val *identifiers_arr = yyjson_mut_arr(doc);
+		for (const auto &item : identifiers) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(identifiers_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "identifiers", identifiers_arr);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

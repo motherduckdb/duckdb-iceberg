@@ -16,19 +16,13 @@ class Expression;
 
 class FileScanTask {
 public:
-	FileScanTask();
-	FileScanTask(const FileScanTask &) = delete;
-	FileScanTask &operator=(const FileScanTask &) = delete;
-	FileScanTask(FileScanTask &&) = default;
-	FileScanTask &operator=(FileScanTask &&) = default;
-
-public:
+	// Deserialization
 	static FileScanTask FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	DataFile data_file;
 	vector<int32_t> delete_file_references;
 	bool has_delete_file_references = false;

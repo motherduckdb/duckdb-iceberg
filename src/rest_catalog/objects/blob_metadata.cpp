@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-BlobMetadata::BlobMetadata() {
-}
-
 BlobMetadata BlobMetadata::FromJSON(yyjson_val *obj) {
 	BlobMetadata res;
 	auto error = res.TryFromJSON(obj);
@@ -109,7 +106,39 @@ string BlobMetadata::TryFromJSON(yyjson_val *obj) {
 			return "BlobMetadata property 'properties' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *BlobMetadata::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: type
+	yyjson_mut_obj_add_str(doc, obj, "type", type.c_str());
+
+	// Serialize: snapshot-id
+	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+
+	// Serialize: sequence-number
+	yyjson_mut_obj_add_sint(doc, obj, "sequence-number", sequence_number);
+
+	// Serialize: fields
+	yyjson_mut_val *fields_arr = yyjson_mut_arr(doc);
+	for (const auto &item : fields) {
+		yyjson_mut_val *item_val = yyjson_mut_int(doc, item);
+		yyjson_mut_arr_append(fields_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "fields", fields_arr);
+
+	// Serialize: properties
+	if (has_properties) {
+		yyjson_mut_val *properties_obj = yyjson_mut_obj(doc);
+		for (const auto &[key, value] : properties) {
+			yyjson_mut_obj_add_str(doc, properties_obj, key.c_str(), value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

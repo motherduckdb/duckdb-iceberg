@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class AssignUUIDUpdate {
 public:
-	AssignUUIDUpdate();
-	AssignUUIDUpdate(const AssignUUIDUpdate &) = delete;
-	AssignUUIDUpdate &operator=(const AssignUUIDUpdate &) = delete;
-	AssignUUIDUpdate(AssignUUIDUpdate &&) = default;
-	AssignUUIDUpdate &operator=(AssignUUIDUpdate &&) = default;
-
-public:
+	// Deserialization
 	static AssignUUIDUpdate FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	BaseUpdate base_update;
 	string uuid;
 	string action;

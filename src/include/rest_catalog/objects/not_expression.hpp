@@ -16,19 +16,13 @@ class Expression;
 
 class NotExpression {
 public:
-	NotExpression();
-	NotExpression(const NotExpression &) = delete;
-	NotExpression &operator=(const NotExpression &) = delete;
-	NotExpression(NotExpression &&) = default;
-	NotExpression &operator=(NotExpression &&) = default;
-
-public:
+	// Deserialization
 	static NotExpression FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	ExpressionType type;
 	unique_ptr<Expression> child;
 };

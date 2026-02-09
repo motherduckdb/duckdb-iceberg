@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-CreateViewRequest::CreateViewRequest() {
-}
-
 CreateViewRequest CreateViewRequest::FromJSON(yyjson_val *obj) {
 	CreateViewRequest res;
 	auto error = res.TryFromJSON(obj);
@@ -89,7 +86,36 @@ string CreateViewRequest::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(location_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *CreateViewRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: name
+	yyjson_mut_obj_add_str(doc, obj, "name", name.c_str());
+
+	// Serialize: schema
+	yyjson_mut_val *schema_val = schema.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "schema", schema_val);
+
+	// Serialize: view-version
+	yyjson_mut_val *view_version_val = view_version.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "view-version", view_version_val);
+
+	// Serialize: properties
+	yyjson_mut_val *properties_obj = yyjson_mut_obj(doc);
+	for (const auto &[key, value] : properties) {
+		yyjson_mut_obj_add_str(doc, properties_obj, key.c_str(), value.c_str());
+	}
+	yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
+
+	// Serialize: location
+	if (has_location) {
+		yyjson_mut_obj_add_str(doc, obj, "location", location.c_str());
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-CountMap::CountMap() {
-}
-
 CountMap CountMap::FromJSON(yyjson_val *obj) {
 	CountMap res;
 	auto error = res.TryFromJSON(obj);
@@ -64,7 +61,33 @@ string CountMap::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(values_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *CountMap::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: keys
+	if (has_keys) {
+		yyjson_mut_val *keys_arr = yyjson_mut_arr(doc);
+		for (const auto &item : keys) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(keys_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "keys", keys_arr);
+	}
+
+	// Serialize: values
+	if (has_values) {
+		yyjson_mut_val *values_arr = yyjson_mut_arr(doc);
+		for (const auto &item : values) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(values_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "values", values_arr);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

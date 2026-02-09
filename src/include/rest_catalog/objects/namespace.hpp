@@ -13,19 +13,13 @@ namespace rest_api_objects {
 
 class Namespace {
 public:
-	Namespace();
-	Namespace(const Namespace &) = delete;
-	Namespace &operator=(const Namespace &) = delete;
-	Namespace(Namespace &&) = default;
-	Namespace &operator=(Namespace &&) = default;
-
-public:
+	// Deserialization
 	static Namespace FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	vector<string> value;
 };
 

@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-Type::Type() {
-}
-
 Type Type::FromJSON(yyjson_val *obj) {
 	Type res;
 	auto error = res.TryFromJSON(obj);
@@ -49,7 +46,23 @@ string Type::TryFromJSON(yyjson_val *obj) {
 		}
 		return "Type failed to parse, none of the oneOf candidates matched";
 	} while (false);
-	return string();
+	return "";
+}
+
+yyjson_mut_val *Type::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	if (has_primitive_type) {
+		return primitive_type.ToJSON(doc);
+	} else if (has_struct_type) {
+		return struct_type.ToJSON(doc);
+	} else if (has_list_type) {
+		return list_type.ToJSON(doc);
+	} else if (has_map_type) {
+		return map_type.ToJSON(doc);
+	}
+	// No variant is active - return empty object
+	return yyjson_mut_obj(doc);
 }
 
 } // namespace rest_api_objects

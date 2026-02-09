@@ -13,19 +13,13 @@ namespace rest_api_objects {
 
 class StringTypeValue {
 public:
-	StringTypeValue();
-	StringTypeValue(const StringTypeValue &) = delete;
-	StringTypeValue &operator=(const StringTypeValue &) = delete;
-	StringTypeValue(StringTypeValue &&) = default;
-	StringTypeValue &operator=(StringTypeValue &&) = default;
-
-public:
+	// Deserialization
 	static StringTypeValue FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	string value;
 };
 

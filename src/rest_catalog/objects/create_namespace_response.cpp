@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-CreateNamespaceResponse::CreateNamespaceResponse() {
-}
-
 CreateNamespaceResponse CreateNamespaceResponse::FromJSON(yyjson_val *obj) {
 	CreateNamespaceResponse res;
 	auto error = res.TryFromJSON(obj);
@@ -57,7 +54,26 @@ string CreateNamespaceResponse::TryFromJSON(yyjson_val *obj) {
 			return "CreateNamespaceResponse property 'properties' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *CreateNamespaceResponse::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: namespace
+	yyjson_mut_val *_namespace_val = _namespace.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "namespace", _namespace_val);
+
+	// Serialize: properties
+	if (has_properties) {
+		yyjson_mut_val *properties_obj = yyjson_mut_obj(doc);
+		for (const auto &[key, value] : properties) {
+			yyjson_mut_obj_add_str(doc, properties_obj, key.c_str(), value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

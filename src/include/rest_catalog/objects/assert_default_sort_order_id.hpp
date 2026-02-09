@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class AssertDefaultSortOrderId {
 public:
-	AssertDefaultSortOrderId();
-	AssertDefaultSortOrderId(const AssertDefaultSortOrderId &) = delete;
-	AssertDefaultSortOrderId &operator=(const AssertDefaultSortOrderId &) = delete;
-	AssertDefaultSortOrderId(AssertDefaultSortOrderId &&) = default;
-	AssertDefaultSortOrderId &operator=(AssertDefaultSortOrderId &&) = default;
-
-public:
+	// Deserialization
 	static AssertDefaultSortOrderId FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	TableRequirementType type;
 	int32_t default_sort_order_id;
 };

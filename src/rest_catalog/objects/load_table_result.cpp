@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-LoadTableResult::LoadTableResult() {
-}
-
 LoadTableResult LoadTableResult::FromJSON(yyjson_val *obj) {
 	LoadTableResult res;
 	auto error = res.TryFromJSON(obj);
@@ -90,7 +87,41 @@ string LoadTableResult::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(storage_credentials_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *LoadTableResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: metadata
+	yyjson_mut_val *metadata_val = metadata.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "metadata", metadata_val);
+
+	// Serialize: metadata-location
+	if (has_metadata_location) {
+		yyjson_mut_obj_add_str(doc, obj, "metadata-location", metadata_location.c_str());
+	}
+
+	// Serialize: config
+	if (has_config) {
+		yyjson_mut_val *config_obj = yyjson_mut_obj(doc);
+		for (const auto &[key, value] : config) {
+			yyjson_mut_obj_add_str(doc, config_obj, key.c_str(), value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "config", config_obj);
+	}
+
+	// Serialize: storage-credentials
+	if (has_storage_credentials) {
+		yyjson_mut_val *storage_credentials_arr = yyjson_mut_arr(doc);
+		for (const auto &item : storage_credentials) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(storage_credentials_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "storage-credentials", storage_credentials_arr);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

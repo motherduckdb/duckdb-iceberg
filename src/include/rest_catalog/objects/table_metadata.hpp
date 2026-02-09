@@ -23,19 +23,13 @@ namespace rest_api_objects {
 
 class TableMetadata {
 public:
-	TableMetadata();
-	TableMetadata(const TableMetadata &) = delete;
-	TableMetadata &operator=(const TableMetadata &) = delete;
-	TableMetadata(TableMetadata &&) = default;
-	TableMetadata &operator=(TableMetadata &&) = default;
-
-public:
+	// Deserialization
 	static TableMetadata FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	int32_t format_version;
 	string table_uuid;
 	string location;

@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-SQLViewRepresentation::SQLViewRepresentation() {
-}
-
 SQLViewRepresentation SQLViewRepresentation::FromJSON(yyjson_val *obj) {
 	SQLViewRepresentation res;
 	auto error = res.TryFromJSON(obj);
@@ -62,7 +59,22 @@ string SQLViewRepresentation::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(dialect_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *SQLViewRepresentation::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: type
+	yyjson_mut_obj_add_str(doc, obj, "type", type.c_str());
+
+	// Serialize: sql
+	yyjson_mut_obj_add_str(doc, obj, "sql", sql.c_str());
+
+	// Serialize: dialect
+	yyjson_mut_obj_add_str(doc, obj, "dialect", dialect.c_str());
+
+	return obj;
 }
 
 } // namespace rest_api_objects

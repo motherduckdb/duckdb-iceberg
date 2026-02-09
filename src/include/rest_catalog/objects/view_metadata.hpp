@@ -16,19 +16,13 @@ namespace rest_api_objects {
 
 class ViewMetadata {
 public:
-	ViewMetadata();
-	ViewMetadata(const ViewMetadata &) = delete;
-	ViewMetadata &operator=(const ViewMetadata &) = delete;
-	ViewMetadata(ViewMetadata &&) = default;
-	ViewMetadata &operator=(ViewMetadata &&) = default;
-
-public:
+	// Deserialization
 	static ViewMetadata FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	string view_uuid;
 	int32_t format_version;
 	string location;

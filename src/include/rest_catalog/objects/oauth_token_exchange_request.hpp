@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class OAuthTokenExchangeRequest {
 public:
-	OAuthTokenExchangeRequest();
-	OAuthTokenExchangeRequest(const OAuthTokenExchangeRequest &) = delete;
-	OAuthTokenExchangeRequest &operator=(const OAuthTokenExchangeRequest &) = delete;
-	OAuthTokenExchangeRequest(OAuthTokenExchangeRequest &&) = default;
-	OAuthTokenExchangeRequest &operator=(OAuthTokenExchangeRequest &&) = default;
-
-public:
+	// Deserialization
 	static OAuthTokenExchangeRequest FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	string grant_type;
 	string subject_token;
 	TokenType subject_token_type;

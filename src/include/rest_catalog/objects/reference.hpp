@@ -13,19 +13,13 @@ namespace rest_api_objects {
 
 class Reference {
 public:
-	Reference();
-	Reference(const Reference &) = delete;
-	Reference &operator=(const Reference &) = delete;
-	Reference(Reference &&) = default;
-	Reference &operator=(Reference &&) = default;
-
-public:
+	// Deserialization
 	static Reference FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	string value;
 };
 

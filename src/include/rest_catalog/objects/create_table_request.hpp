@@ -16,19 +16,13 @@ namespace rest_api_objects {
 
 class CreateTableRequest {
 public:
-	CreateTableRequest();
-	CreateTableRequest(const CreateTableRequest &) = delete;
-	CreateTableRequest &operator=(const CreateTableRequest &) = delete;
-	CreateTableRequest(CreateTableRequest &&) = default;
-	CreateTableRequest &operator=(CreateTableRequest &&) = default;
-
-public:
+	// Deserialization
 	static CreateTableRequest FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	string name;
 	Schema schema;
 	string location;

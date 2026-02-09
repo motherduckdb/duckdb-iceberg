@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class AssertCreate {
 public:
-	AssertCreate();
-	AssertCreate(const AssertCreate &) = delete;
-	AssertCreate &operator=(const AssertCreate &) = delete;
-	AssertCreate(AssertCreate &&) = default;
-	AssertCreate &operator=(AssertCreate &&) = default;
-
-public:
+	// Deserialization
 	static AssertCreate FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	TableRequirementType type;
 };
 

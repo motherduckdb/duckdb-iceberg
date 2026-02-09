@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-AssignUUIDUpdate::AssignUUIDUpdate() {
-}
-
 AssignUUIDUpdate AssignUUIDUpdate::FromJSON(yyjson_val *obj) {
 	AssignUUIDUpdate res;
 	auto error = res.TryFromJSON(obj);
@@ -51,7 +48,32 @@ string AssignUUIDUpdate::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(action_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *AssignUUIDUpdate::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize base class: BaseUpdate
+	yyjson_mut_val *base_updatebase_obj = base_update.ToJSON(doc);
+	// Merge base properties into this object
+	{
+		size_t idx, max;
+		yyjson_mut_val *key, *val;
+		yyjson_mut_obj_foreach(base_updatebase_obj, idx, max, key, val) {
+			yyjson_mut_obj_add(obj, key, val);
+		}
+	}
+
+	// Serialize: uuid
+	yyjson_mut_obj_add_str(doc, obj, "uuid", uuid.c_str());
+
+	// Serialize: action
+	if (has_action) {
+		yyjson_mut_obj_add_str(doc, obj, "action", action.c_str());
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

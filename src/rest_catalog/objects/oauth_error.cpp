@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-OAuthError::OAuthError() {
-}
-
 OAuthError OAuthError::FromJSON(yyjson_val *obj) {
 	OAuthError res;
 	auto error = res.TryFromJSON(obj);
@@ -58,7 +55,26 @@ string OAuthError::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(error_uri_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *OAuthError::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: error
+	yyjson_mut_obj_add_str(doc, obj, "error", _error.c_str());
+
+	// Serialize: error_description
+	if (has_error_description) {
+		yyjson_mut_obj_add_str(doc, obj, "error_description", error_description.c_str());
+	}
+
+	// Serialize: error_uri
+	if (has_error_uri) {
+		yyjson_mut_obj_add_str(doc, obj, "error_uri", error_uri.c_str());
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class SetDefaultSortOrderUpdate {
 public:
-	SetDefaultSortOrderUpdate();
-	SetDefaultSortOrderUpdate(const SetDefaultSortOrderUpdate &) = delete;
-	SetDefaultSortOrderUpdate &operator=(const SetDefaultSortOrderUpdate &) = delete;
-	SetDefaultSortOrderUpdate(SetDefaultSortOrderUpdate &&) = default;
-	SetDefaultSortOrderUpdate &operator=(SetDefaultSortOrderUpdate &&) = default;
-
-public:
+	// Deserialization
 	static SetDefaultSortOrderUpdate FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	BaseUpdate base_update;
 	int32_t sort_order_id;
 	string action;

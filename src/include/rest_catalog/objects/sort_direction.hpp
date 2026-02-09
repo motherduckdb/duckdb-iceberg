@@ -13,19 +13,13 @@ namespace rest_api_objects {
 
 class SortDirection {
 public:
-	SortDirection();
-	SortDirection(const SortDirection &) = delete;
-	SortDirection &operator=(const SortDirection &) = delete;
-	SortDirection(SortDirection &&) = default;
-	SortDirection &operator=(SortDirection &&) = default;
-
-public:
+	// Deserialization
 	static SortDirection FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	string value;
 };
 

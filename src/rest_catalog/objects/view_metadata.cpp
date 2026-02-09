@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-ViewMetadata::ViewMetadata() {
-}
-
 ViewMetadata ViewMetadata::FromJSON(yyjson_val *obj) {
 	ViewMetadata res;
 	auto error = res.TryFromJSON(obj);
@@ -153,7 +150,58 @@ string ViewMetadata::TryFromJSON(yyjson_val *obj) {
 			return "ViewMetadata property 'properties' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *ViewMetadata::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: view-uuid
+	yyjson_mut_obj_add_str(doc, obj, "view-uuid", view_uuid.c_str());
+
+	// Serialize: format-version
+	yyjson_mut_obj_add_int(doc, obj, "format-version", format_version);
+
+	// Serialize: location
+	yyjson_mut_obj_add_str(doc, obj, "location", location.c_str());
+
+	// Serialize: current-version-id
+	yyjson_mut_obj_add_int(doc, obj, "current-version-id", current_version_id);
+
+	// Serialize: versions
+	yyjson_mut_val *versions_arr = yyjson_mut_arr(doc);
+	for (const auto &item : versions) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(versions_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "versions", versions_arr);
+
+	// Serialize: version-log
+	yyjson_mut_val *version_log_arr = yyjson_mut_arr(doc);
+	for (const auto &item : version_log) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(version_log_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "version-log", version_log_arr);
+
+	// Serialize: schemas
+	yyjson_mut_val *schemas_arr = yyjson_mut_arr(doc);
+	for (const auto &item : schemas) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(schemas_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "schemas", schemas_arr);
+
+	// Serialize: properties
+	if (has_properties) {
+		yyjson_mut_val *properties_obj = yyjson_mut_obj(doc);
+		for (const auto &[key, value] : properties) {
+			yyjson_mut_obj_add_str(doc, properties_obj, key.c_str(), value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

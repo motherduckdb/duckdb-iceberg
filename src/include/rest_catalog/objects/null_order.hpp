@@ -13,19 +13,13 @@ namespace rest_api_objects {
 
 class NullOrder {
 public:
-	NullOrder();
-	NullOrder(const NullOrder &) = delete;
-	NullOrder &operator=(const NullOrder &) = delete;
-	NullOrder(NullOrder &&) = default;
-	NullOrder &operator=(NullOrder &&) = default;
-
-public:
+	// Deserialization
 	static NullOrder FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	string value;
 };
 

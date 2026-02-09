@@ -16,19 +16,13 @@ namespace rest_api_objects {
 
 class DataFile {
 public:
-	DataFile();
-	DataFile(const DataFile &) = delete;
-	DataFile &operator=(const DataFile &) = delete;
-	DataFile(DataFile &&) = default;
-	DataFile &operator=(DataFile &&) = default;
-
-public:
+	// Deserialization
 	static DataFile FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	ContentFile content_file;
 	string content;
 	int64_t first_row_id;

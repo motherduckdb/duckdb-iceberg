@@ -13,19 +13,13 @@ namespace rest_api_objects {
 
 class OAuthError {
 public:
-	OAuthError();
-	OAuthError(const OAuthError &) = delete;
-	OAuthError &operator=(const OAuthError &) = delete;
-	OAuthError(OAuthError &&) = default;
-	OAuthError &operator=(OAuthError &&) = default;
-
-public:
+	// Deserialization
 	static OAuthError FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	string _error;
 	string error_description;
 	bool has_error_description = false;

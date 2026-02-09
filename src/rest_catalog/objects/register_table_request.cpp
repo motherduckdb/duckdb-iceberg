@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-RegisterTableRequest::RegisterTableRequest() {
-}
-
 RegisterTableRequest RegisterTableRequest::FromJSON(yyjson_val *obj) {
 	RegisterTableRequest res;
 	auto error = res.TryFromJSON(obj);
@@ -61,7 +58,24 @@ string RegisterTableRequest::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(overwrite_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *RegisterTableRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: name
+	yyjson_mut_obj_add_str(doc, obj, "name", name.c_str());
+
+	// Serialize: metadata-location
+	yyjson_mut_obj_add_str(doc, obj, "metadata-location", metadata_location.c_str());
+
+	// Serialize: overwrite
+	if (has_overwrite) {
+		yyjson_mut_obj_add_bool(doc, obj, "overwrite", overwrite);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

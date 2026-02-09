@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-StorageCredential::StorageCredential() {
-}
-
 StorageCredential StorageCredential::FromJSON(yyjson_val *obj) {
 	StorageCredential res;
 	auto error = res.TryFromJSON(obj);
@@ -60,7 +57,23 @@ string StorageCredential::TryFromJSON(yyjson_val *obj) {
 			return "StorageCredential property 'config' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *StorageCredential::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: prefix
+	yyjson_mut_obj_add_str(doc, obj, "prefix", prefix.c_str());
+
+	// Serialize: config
+	yyjson_mut_val *config_obj = yyjson_mut_obj(doc);
+	for (const auto &[key, value] : config) {
+		yyjson_mut_obj_add_str(doc, config_obj, key.c_str(), value.c_str());
+	}
+	yyjson_mut_obj_add_val(doc, obj, "config", config_obj);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class AssertDefaultSpecId {
 public:
-	AssertDefaultSpecId();
-	AssertDefaultSpecId(const AssertDefaultSpecId &) = delete;
-	AssertDefaultSpecId &operator=(const AssertDefaultSpecId &) = delete;
-	AssertDefaultSpecId(AssertDefaultSpecId &&) = default;
-	AssertDefaultSpecId &operator=(AssertDefaultSpecId &&) = default;
-
-public:
+	// Deserialization
 	static AssertDefaultSpecId FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	TableRequirementType type;
 	int32_t default_spec_id;
 };

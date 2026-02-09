@@ -15,19 +15,13 @@ namespace rest_api_objects {
 
 class LoadTableResult {
 public:
-	LoadTableResult();
-	LoadTableResult(const LoadTableResult &) = delete;
-	LoadTableResult &operator=(const LoadTableResult &) = delete;
-	LoadTableResult(LoadTableResult &&) = default;
-	LoadTableResult &operator=(LoadTableResult &&) = default;
-
-public:
+	// Deserialization
 	static LoadTableResult FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	TableMetadata metadata;
 	string metadata_location;
 	bool has_metadata_location = false;

@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class OAuthTokenResponse {
 public:
-	OAuthTokenResponse();
-	OAuthTokenResponse(const OAuthTokenResponse &) = delete;
-	OAuthTokenResponse &operator=(const OAuthTokenResponse &) = delete;
-	OAuthTokenResponse(OAuthTokenResponse &&) = default;
-	OAuthTokenResponse &operator=(OAuthTokenResponse &&) = default;
-
-public:
+	// Deserialization
 	static OAuthTokenResponse FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	string access_token;
 	string token_type;
 	int32_t expires_in;

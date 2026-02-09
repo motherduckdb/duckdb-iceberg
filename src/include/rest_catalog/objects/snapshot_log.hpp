@@ -11,39 +11,28 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+class Object3 {
+public:
+	// Deserialization
+	static Object3 FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
+
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+
+	int64_t snapshot_id;
+	int64_t timestamp_ms;
+};
+
 class SnapshotLog {
 public:
-	SnapshotLog();
-	SnapshotLog(const SnapshotLog &) = delete;
-	SnapshotLog &operator=(const SnapshotLog &) = delete;
-	SnapshotLog(SnapshotLog &&) = default;
-	SnapshotLog &operator=(SnapshotLog &&) = default;
-	class Object3 {
-	public:
-		Object3();
-		Object3(const Object3 &) = delete;
-		Object3 &operator=(const Object3 &) = delete;
-		Object3(Object3 &&) = default;
-		Object3 &operator=(Object3 &&) = default;
-
-	public:
-		static Object3 FromJSON(yyjson_val *obj);
-
-	public:
-		string TryFromJSON(yyjson_val *obj);
-
-	public:
-		int64_t snapshot_id;
-		int64_t timestamp_ms;
-	};
-
-public:
+	// Deserialization
 	static SnapshotLog FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	vector<Object3> value;
 };
 

@@ -12,12 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-Snapshot::Snapshot() {
-}
-Snapshot::Object2::Object2() {
-}
-
-Snapshot::Object2 Snapshot::Object2::FromJSON(yyjson_val *obj) {
+Object2 Object2::FromJSON(yyjson_val *obj) {
 	Object2 res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -26,7 +21,7 @@ Snapshot::Object2 Snapshot::Object2::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string Snapshot::Object2::TryFromJSON(yyjson_val *obj) {
+string Object2::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto operation_val = yyjson_obj_get(obj, "operation");
 	if (!operation_val) {
@@ -56,7 +51,21 @@ string Snapshot::Object2::TryFromJSON(yyjson_val *obj) {
 		}
 		additional_properties.emplace(key_str, std::move(tmp));
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *Object2::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: operation
+	yyjson_mut_obj_add_str(doc, obj, "operation", operation.c_str());
+
+	// Serialize additional properties
+	for (const auto &[key, value] : additional_properties) {
+		yyjson_mut_obj_add_str(doc, obj, key.c_str(), value.c_str());
+	}
+
+	return obj;
 }
 
 Snapshot Snapshot::FromJSON(yyjson_val *obj) {
@@ -164,7 +173,46 @@ string Snapshot::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(schema_id_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *Snapshot::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: snapshot-id
+	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+
+	// Serialize: timestamp-ms
+	yyjson_mut_obj_add_sint(doc, obj, "timestamp-ms", timestamp_ms);
+
+	// Serialize: manifest-list
+	yyjson_mut_obj_add_str(doc, obj, "manifest-list", manifest_list.c_str());
+
+	// Serialize: summary
+	yyjson_mut_val *summary_val = summary.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "summary", summary_val);
+
+	// Serialize: parent-snapshot-id
+	if (has_parent_snapshot_id) {
+		yyjson_mut_obj_add_sint(doc, obj, "parent-snapshot-id", parent_snapshot_id);
+	}
+
+	// Serialize: sequence-number
+	if (has_sequence_number) {
+		yyjson_mut_obj_add_sint(doc, obj, "sequence-number", sequence_number);
+	}
+
+	// Serialize: first-row-id
+	if (has_first_row_id) {
+		yyjson_mut_obj_add_sint(doc, obj, "first-row-id", first_row_id);
+	}
+
+	// Serialize: schema-id
+	if (has_schema_id) {
+		yyjson_mut_obj_add_int(doc, obj, "schema-id", schema_id);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

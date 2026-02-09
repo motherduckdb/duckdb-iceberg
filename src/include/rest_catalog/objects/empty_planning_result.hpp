@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class EmptyPlanningResult {
 public:
-	EmptyPlanningResult();
-	EmptyPlanningResult(const EmptyPlanningResult &) = delete;
-	EmptyPlanningResult &operator=(const EmptyPlanningResult &) = delete;
-	EmptyPlanningResult(EmptyPlanningResult &&) = default;
-	EmptyPlanningResult &operator=(EmptyPlanningResult &&) = default;
-
-public:
+	// Deserialization
 	static EmptyPlanningResult FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	PlanStatus status;
 };
 

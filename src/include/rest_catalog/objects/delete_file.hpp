@@ -15,19 +15,13 @@ namespace rest_api_objects {
 
 class DeleteFile {
 public:
-	DeleteFile();
-	DeleteFile(const DeleteFile &) = delete;
-	DeleteFile &operator=(const DeleteFile &) = delete;
-	DeleteFile(DeleteFile &&) = default;
-	DeleteFile &operator=(DeleteFile &&) = default;
-
-public:
+	// Deserialization
 	static DeleteFile FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	PositionDeleteFile position_delete_file;
 	bool has_position_delete_file = false;
 	EqualityDeleteFile equality_delete_file;

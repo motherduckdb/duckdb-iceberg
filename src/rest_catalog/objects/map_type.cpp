@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-MapType::MapType() {
-}
-
 MapType MapType::FromJSON(yyjson_val *obj) {
 	MapType res;
 	auto error = res.TryFromJSON(obj);
@@ -90,7 +87,33 @@ string MapType::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(value_required_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *MapType::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: type
+	yyjson_mut_obj_add_str(doc, obj, "type", type.c_str());
+
+	// Serialize: key-id
+	yyjson_mut_obj_add_int(doc, obj, "key-id", key_id);
+
+	// Serialize: key
+	yyjson_mut_val *key_val = key->ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "key", key_val);
+
+	// Serialize: value-id
+	yyjson_mut_obj_add_int(doc, obj, "value-id", value_id);
+
+	// Serialize: value
+	yyjson_mut_val *value_val = value->ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "value", value_val);
+
+	// Serialize: value-required
+	yyjson_mut_obj_add_bool(doc, obj, "value-required", value_required);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-UpdateNamespacePropertiesRequest::UpdateNamespacePropertiesRequest() {
-}
-
 UpdateNamespacePropertiesRequest UpdateNamespacePropertiesRequest::FromJSON(yyjson_val *obj) {
 	UpdateNamespacePropertiesRequest res;
 	auto error = res.TryFromJSON(obj);
@@ -71,7 +68,32 @@ string UpdateNamespacePropertiesRequest::TryFromJSON(yyjson_val *obj) {
 			return "UpdateNamespacePropertiesRequest property 'updates' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *UpdateNamespacePropertiesRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: removals
+	if (has_removals) {
+		yyjson_mut_val *removals_arr = yyjson_mut_arr(doc);
+		for (const auto &item : removals) {
+			yyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());
+			yyjson_mut_arr_append(removals_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "removals", removals_arr);
+	}
+
+	// Serialize: updates
+	if (has_updates) {
+		yyjson_mut_val *updates_obj = yyjson_mut_obj(doc);
+		for (const auto &[key, value] : updates) {
+			yyjson_mut_obj_add_str(doc, updates_obj, key.c_str(), value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "updates", updates_obj);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -12,12 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-MetadataLog::MetadataLog() {
-}
-MetadataLog::Object4::Object4() {
-}
-
-MetadataLog::Object4 MetadataLog::Object4::FromJSON(yyjson_val *obj) {
+Object4 Object4::FromJSON(yyjson_val *obj) {
 	Object4 res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -26,7 +21,7 @@ MetadataLog::Object4 MetadataLog::Object4::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string MetadataLog::Object4::TryFromJSON(yyjson_val *obj) {
+string Object4::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto metadata_file_val = yyjson_obj_get(obj, "metadata-file");
 	if (!metadata_file_val) {
@@ -52,7 +47,19 @@ string MetadataLog::Object4::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(timestamp_ms_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *Object4::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: metadata-file
+	yyjson_mut_obj_add_str(doc, obj, "metadata-file", metadata_file.c_str());
+
+	// Serialize: timestamp-ms
+	yyjson_mut_obj_add_sint(doc, obj, "timestamp-ms", timestamp_ms);
+
+	return obj;
 }
 
 MetadataLog MetadataLog::FromJSON(yyjson_val *obj) {
@@ -81,7 +88,13 @@ string MetadataLog::TryFromJSON(yyjson_val *obj) {
 		return StringUtil::Format("MetadataLog property 'value' is not of type 'array', found '%s' instead",
 		                          yyjson_get_type_desc(obj));
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *MetadataLog::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

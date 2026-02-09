@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-ErrorModel::ErrorModel() {
-}
-
 ErrorModel ErrorModel::FromJSON(yyjson_val *obj) {
 	ErrorModel res;
 	auto error = res.TryFromJSON(obj);
@@ -61,6 +58,7 @@ string ErrorModel::TryFromJSON(yyjson_val *obj) {
 	}
 	auto stack_val = yyjson_obj_get(obj, "stack");
 	if (stack_val) {
+		has_stack = true;
 		if (yyjson_is_arr(stack_val)) {
 			size_t idx, max;
 			yyjson_val *val;
@@ -79,7 +77,32 @@ string ErrorModel::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(stack_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *ErrorModel::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: message
+	yyjson_mut_obj_add_str(doc, obj, "message", message.c_str());
+
+	// Serialize: type
+	yyjson_mut_obj_add_str(doc, obj, "type", type.c_str());
+
+	// Serialize: code
+	yyjson_mut_obj_add_int(doc, obj, "code", code);
+
+	// Serialize: stack
+	if (has_stack) {
+		yyjson_mut_val *stack_arr = yyjson_mut_arr(doc);
+		for (const auto &item : stack) {
+			yyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());
+			yyjson_mut_arr_append(stack_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "stack", stack_arr);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

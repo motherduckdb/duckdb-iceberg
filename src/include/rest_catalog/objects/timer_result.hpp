@@ -13,19 +13,13 @@ namespace rest_api_objects {
 
 class TimerResult {
 public:
-	TimerResult();
-	TimerResult(const TimerResult &) = delete;
-	TimerResult &operator=(const TimerResult &) = delete;
-	TimerResult(TimerResult &&) = default;
-	TimerResult &operator=(TimerResult &&) = default;
-
-public:
+	// Deserialization
 	static TimerResult FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	string time_unit;
 	int64_t count;
 	int64_t total_duration;

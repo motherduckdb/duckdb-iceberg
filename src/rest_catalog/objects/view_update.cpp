@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-ViewUpdate::ViewUpdate() {
-}
-
 ViewUpdate ViewUpdate::FromJSON(yyjson_val *obj) {
 	ViewUpdate res;
 	auto error = res.TryFromJSON(obj);
@@ -63,7 +60,13 @@ string ViewUpdate::TryFromJSON(yyjson_val *obj) {
 	    !has_set_properties_update && !has_upgrade_format_version_update) {
 		return "ViewUpdate failed to parse, none of the anyOf candidates matched";
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *ViewUpdate::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

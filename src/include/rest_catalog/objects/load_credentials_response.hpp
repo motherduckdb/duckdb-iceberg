@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class LoadCredentialsResponse {
 public:
-	LoadCredentialsResponse();
-	LoadCredentialsResponse(const LoadCredentialsResponse &) = delete;
-	LoadCredentialsResponse &operator=(const LoadCredentialsResponse &) = delete;
-	LoadCredentialsResponse(LoadCredentialsResponse &&) = default;
-	LoadCredentialsResponse &operator=(LoadCredentialsResponse &&) = default;
-
-public:
+	// Deserialization
 	static LoadCredentialsResponse FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	vector<StorageCredential> storage_credentials;
 };
 

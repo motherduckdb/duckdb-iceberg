@@ -15,19 +15,13 @@ namespace rest_api_objects {
 
 class ListTablesResponse {
 public:
-	ListTablesResponse();
-	ListTablesResponse(const ListTablesResponse &) = delete;
-	ListTablesResponse &operator=(const ListTablesResponse &) = delete;
-	ListTablesResponse(ListTablesResponse &&) = default;
-	ListTablesResponse &operator=(ListTablesResponse &&) = default;
-
-public:
+	// Deserialization
 	static ListTablesResponse FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	PageToken next_page_token;
 	bool has_next_page_token = false;
 	vector<TableIdentifier> identifiers;

@@ -13,38 +13,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+class Object5 {
+public:
+	// Deserialization
+	static Object5 FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
+
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+
+	PlanStatus status;
+};
+
 class CompletedPlanningResult {
 public:
-	CompletedPlanningResult();
-	CompletedPlanningResult(const CompletedPlanningResult &) = delete;
-	CompletedPlanningResult &operator=(const CompletedPlanningResult &) = delete;
-	CompletedPlanningResult(CompletedPlanningResult &&) = default;
-	CompletedPlanningResult &operator=(CompletedPlanningResult &&) = default;
-	class Object5 {
-	public:
-		Object5();
-		Object5(const Object5 &) = delete;
-		Object5 &operator=(const Object5 &) = delete;
-		Object5(Object5 &&) = default;
-		Object5 &operator=(Object5 &&) = default;
-
-	public:
-		static Object5 FromJSON(yyjson_val *obj);
-
-	public:
-		string TryFromJSON(yyjson_val *obj);
-
-	public:
-		PlanStatus status;
-	};
-
-public:
+	// Deserialization
 	static CompletedPlanningResult FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	ScanTasks scan_tasks;
 	Object5 object_5;
 };

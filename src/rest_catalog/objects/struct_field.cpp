@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-StructField::StructField() {
-}
-
 StructField StructField::FromJSON(yyjson_val *obj) {
 	StructField res;
 	auto error = res.TryFromJSON(obj);
@@ -69,14 +66,14 @@ string StructField::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(required_val));
 		}
 	}
-	auto doc_val = yyjson_obj_get(obj, "doc");
-	if (doc_val) {
-		has_doc = true;
-		if (yyjson_is_str(doc_val)) {
-			doc = yyjson_get_str(doc_val);
+	auto _doc_val = yyjson_obj_get(obj, "doc");
+	if (_doc_val) {
+		has__doc = true;
+		if (yyjson_is_str(_doc_val)) {
+			_doc = yyjson_get_str(_doc_val);
 		} else {
-			return StringUtil::Format("StructField property 'doc' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(doc_val));
+			return StringUtil::Format("StructField property '_doc' is not of type 'string', found '%s' instead",
+			                          yyjson_get_type_desc(_doc_val));
 		}
 	}
 	auto initial_default_val = yyjson_obj_get(obj, "initial-default");
@@ -95,7 +92,43 @@ string StructField::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *StructField::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: id
+	yyjson_mut_obj_add_int(doc, obj, "id", id);
+
+	// Serialize: name
+	yyjson_mut_obj_add_str(doc, obj, "name", name.c_str());
+
+	// Serialize: type
+	yyjson_mut_val *type_val = type->ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+
+	// Serialize: required
+	yyjson_mut_obj_add_bool(doc, obj, "required", required);
+
+	// Serialize: doc
+	if (has__doc) {
+		yyjson_mut_obj_add_str(doc, obj, "doc", _doc.c_str());
+	}
+
+	// Serialize: initial-default
+	if (has_initial_default) {
+		yyjson_mut_val *initial_default_val = initial_default.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "initial-default", initial_default_val);
+	}
+
+	// Serialize: write-default
+	if (has_write_default) {
+		yyjson_mut_val *write_default_val = write_default.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "write-default", write_default_val);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -15,19 +15,13 @@ class Type;
 
 class ListType {
 public:
-	ListType();
-	ListType(const ListType &) = delete;
-	ListType &operator=(const ListType &) = delete;
-	ListType(ListType &&) = default;
-	ListType &operator=(ListType &&) = default;
-
-public:
+	// Deserialization
 	static ListType FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	string type;
 	int32_t element_id;
 	unique_ptr<Type> element;

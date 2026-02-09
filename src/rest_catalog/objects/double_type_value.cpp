@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-DoubleTypeValue::DoubleTypeValue() {
-}
-
 DoubleTypeValue DoubleTypeValue::FromJSON(yyjson_val *obj) {
 	DoubleTypeValue res;
 	auto error = res.TryFromJSON(obj);
@@ -32,7 +29,13 @@ string DoubleTypeValue::TryFromJSON(yyjson_val *obj) {
 		return StringUtil::Format("DoubleTypeValue property 'value' is not of type 'number', found '%s' instead",
 		                          yyjson_get_type_desc(obj));
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *DoubleTypeValue::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

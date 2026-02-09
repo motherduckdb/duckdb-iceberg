@@ -13,38 +13,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+class Object7 {
+public:
+	// Deserialization
+	static Object7 FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
+
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+
+	PlanStatus status;
+};
+
 class FailedPlanningResult {
 public:
-	FailedPlanningResult();
-	FailedPlanningResult(const FailedPlanningResult &) = delete;
-	FailedPlanningResult &operator=(const FailedPlanningResult &) = delete;
-	FailedPlanningResult(FailedPlanningResult &&) = default;
-	FailedPlanningResult &operator=(FailedPlanningResult &&) = default;
-	class Object7 {
-	public:
-		Object7();
-		Object7(const Object7 &) = delete;
-		Object7 &operator=(const Object7 &) = delete;
-		Object7(Object7 &&) = default;
-		Object7 &operator=(Object7 &&) = default;
-
-	public:
-		static Object7 FromJSON(yyjson_val *obj);
-
-	public:
-		string TryFromJSON(yyjson_val *obj);
-
-	public:
-		PlanStatus status;
-	};
-
-public:
+	// Deserialization
 	static FailedPlanningResult FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	IcebergErrorResponse iceberg_error_response;
 	Object7 object_7;
 };

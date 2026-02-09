@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-SnapshotReferences::SnapshotReferences() {
-}
-
 SnapshotReferences SnapshotReferences::FromJSON(yyjson_val *obj) {
 	SnapshotReferences res;
 	auto error = res.TryFromJSON(obj);
@@ -37,7 +34,19 @@ string SnapshotReferences::TryFromJSON(yyjson_val *obj) {
 		}
 		additional_properties.emplace(key_str, std::move(tmp));
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *SnapshotReferences::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize additional properties
+	for (const auto &[key, value] : additional_properties) {
+		yyjson_mut_val *value_obj = value.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, key.c_str(), value_obj);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

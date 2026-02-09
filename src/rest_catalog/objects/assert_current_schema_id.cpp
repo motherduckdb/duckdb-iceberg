@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-AssertCurrentSchemaId::AssertCurrentSchemaId() {
-}
-
 AssertCurrentSchemaId AssertCurrentSchemaId::FromJSON(yyjson_val *obj) {
 	AssertCurrentSchemaId res;
 	auto error = res.TryFromJSON(obj);
@@ -47,7 +44,20 @@ string AssertCurrentSchemaId::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(current_schema_id_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *AssertCurrentSchemaId::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: type
+	yyjson_mut_val *type_val = type.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+
+	// Serialize: current-schema-id
+	yyjson_mut_obj_add_int(doc, obj, "current-schema-id", current_schema_id);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

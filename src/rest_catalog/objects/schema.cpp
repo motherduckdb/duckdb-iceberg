@@ -12,12 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-Schema::Schema() {
-}
-Schema::Object1::Object1() {
-}
-
-Schema::Object1 Schema::Object1::FromJSON(yyjson_val *obj) {
+Object1 Object1::FromJSON(yyjson_val *obj) {
 	Object1 res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -26,7 +21,7 @@ Schema::Object1 Schema::Object1::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string Schema::Object1::TryFromJSON(yyjson_val *obj) {
+string Object1::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto schema_id_val = yyjson_obj_get(obj, "schema-id");
 	if (schema_id_val) {
@@ -60,7 +55,28 @@ string Schema::Object1::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(identifier_field_ids_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *Object1::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: schema-id
+	if (has_schema_id) {
+		yyjson_mut_obj_add_int(doc, obj, "schema-id", schema_id);
+	}
+
+	// Serialize: identifier-field-ids
+	if (has_identifier_field_ids) {
+		yyjson_mut_val *identifier_field_ids_arr = yyjson_mut_arr(doc);
+		for (const auto &item : identifier_field_ids) {
+			yyjson_mut_val *item_val = yyjson_mut_int(doc, item);
+			yyjson_mut_arr_append(identifier_field_ids_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "identifier-field-ids", identifier_field_ids_arr);
+	}
+
+	return obj;
 }
 
 Schema Schema::FromJSON(yyjson_val *obj) {
@@ -82,7 +98,35 @@ string Schema::TryFromJSON(yyjson_val *obj) {
 	if (!error.empty()) {
 		return error;
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *Schema::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize base class: StructType
+	yyjson_mut_val *struct_typebase_obj = struct_type.ToJSON(doc);
+	// Merge base properties into this object
+	{
+		size_t idx, max;
+		yyjson_mut_val *key, *val;
+		yyjson_mut_obj_foreach(struct_typebase_obj, idx, max, key, val) {
+			yyjson_mut_obj_add(obj, key, val);
+		}
+	}
+
+	// Serialize base class: Object1
+	yyjson_mut_val *object_1base_obj = object_1.ToJSON(doc);
+	// Merge base properties into this object
+	{
+		size_t idx, max;
+		yyjson_mut_val *key, *val;
+		yyjson_mut_obj_foreach(object_1base_obj, idx, max, key, val) {
+			yyjson_mut_obj_add(obj, key, val);
+		}
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

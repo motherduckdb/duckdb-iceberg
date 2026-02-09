@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-EmptyPlanningResult::EmptyPlanningResult() {
-}
-
 EmptyPlanningResult EmptyPlanningResult::FromJSON(yyjson_val *obj) {
 	EmptyPlanningResult res;
 	auto error = res.TryFromJSON(obj);
@@ -35,7 +32,17 @@ string EmptyPlanningResult::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *EmptyPlanningResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: status
+	yyjson_mut_val *status_val = status.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "status", status_val);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

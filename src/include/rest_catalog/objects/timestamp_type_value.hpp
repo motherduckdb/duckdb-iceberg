@@ -13,19 +13,13 @@ namespace rest_api_objects {
 
 class TimestampTypeValue {
 public:
-	TimestampTypeValue();
-	TimestampTypeValue(const TimestampTypeValue &) = delete;
-	TimestampTypeValue &operator=(const TimestampTypeValue &) = delete;
-	TimestampTypeValue(TimestampTypeValue &&) = default;
-	TimestampTypeValue &operator=(TimestampTypeValue &&) = default;
-
-public:
+	// Deserialization
 	static TimestampTypeValue FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	string value;
 };
 

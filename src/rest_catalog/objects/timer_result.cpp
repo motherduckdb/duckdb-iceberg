@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-TimerResult::TimerResult() {
-}
-
 TimerResult TimerResult::FromJSON(yyjson_val *obj) {
 	TimerResult res;
 	auto error = res.TryFromJSON(obj);
@@ -64,7 +61,22 @@ string TimerResult::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(total_duration_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *TimerResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: time-unit
+	yyjson_mut_obj_add_str(doc, obj, "time-unit", time_unit.c_str());
+
+	// Serialize: count
+	yyjson_mut_obj_add_sint(doc, obj, "count", count);
+
+	// Serialize: total-duration
+	yyjson_mut_obj_add_sint(doc, obj, "total-duration", total_duration);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

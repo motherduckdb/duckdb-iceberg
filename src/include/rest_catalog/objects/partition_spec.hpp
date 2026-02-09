@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class PartitionSpec {
 public:
-	PartitionSpec();
-	PartitionSpec(const PartitionSpec &) = delete;
-	PartitionSpec &operator=(const PartitionSpec &) = delete;
-	PartitionSpec(PartitionSpec &&) = default;
-	PartitionSpec &operator=(PartitionSpec &&) = default;
-
-public:
+	// Deserialization
 	static PartitionSpec FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	vector<PartitionField> fields;
 	int32_t spec_id;
 	bool has_spec_id = false;

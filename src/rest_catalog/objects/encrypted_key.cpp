@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-EncryptedKey::EncryptedKey() {
-}
-
 EncryptedKey EncryptedKey::FromJSON(yyjson_val *obj) {
 	EncryptedKey res;
 	auto error = res.TryFromJSON(obj);
@@ -81,7 +78,33 @@ string EncryptedKey::TryFromJSON(yyjson_val *obj) {
 			return "EncryptedKey property 'properties' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *EncryptedKey::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: key-id
+	yyjson_mut_obj_add_str(doc, obj, "key-id", key_id.c_str());
+
+	// Serialize: encrypted-key-metadata
+	yyjson_mut_obj_add_str(doc, obj, "encrypted-key-metadata", encrypted_key_metadata.c_str());
+
+	// Serialize: encrypted-by-id
+	if (has_encrypted_by_id) {
+		yyjson_mut_obj_add_str(doc, obj, "encrypted-by-id", encrypted_by_id.c_str());
+	}
+
+	// Serialize: properties
+	if (has_properties) {
+		yyjson_mut_val *properties_obj = yyjson_mut_obj(doc);
+		for (const auto &[key, value] : properties) {
+			yyjson_mut_obj_add_str(doc, properties_obj, key.c_str(), value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

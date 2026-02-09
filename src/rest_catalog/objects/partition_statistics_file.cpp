@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-PartitionStatisticsFile::PartitionStatisticsFile() {
-}
-
 PartitionStatisticsFile PartitionStatisticsFile::FromJSON(yyjson_val *obj) {
 	PartitionStatisticsFile res;
 	auto error = res.TryFromJSON(obj);
@@ -66,7 +63,22 @@ string PartitionStatisticsFile::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(file_size_in_bytes_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *PartitionStatisticsFile::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: snapshot-id
+	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+
+	// Serialize: statistics-path
+	yyjson_mut_obj_add_str(doc, obj, "statistics-path", statistics_path.c_str());
+
+	// Serialize: file-size-in-bytes
+	yyjson_mut_obj_add_sint(doc, obj, "file-size-in-bytes", file_size_in_bytes);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

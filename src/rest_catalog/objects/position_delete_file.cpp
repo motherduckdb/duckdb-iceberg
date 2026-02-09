@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-PositionDeleteFile::PositionDeleteFile() {
-}
-
 PositionDeleteFile PositionDeleteFile::FromJSON(yyjson_val *obj) {
 	PositionDeleteFile res;
 	auto error = res.TryFromJSON(obj);
@@ -68,7 +65,37 @@ string PositionDeleteFile::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(content_size_in_bytes_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *PositionDeleteFile::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize base class: ContentFile
+	yyjson_mut_val *content_filebase_obj = content_file.ToJSON(doc);
+	// Merge base properties into this object
+	{
+		size_t idx, max;
+		yyjson_mut_val *key, *val;
+		yyjson_mut_obj_foreach(content_filebase_obj, idx, max, key, val) {
+			yyjson_mut_obj_add(obj, key, val);
+		}
+	}
+
+	// Serialize: content
+	yyjson_mut_obj_add_str(doc, obj, "content", content.c_str());
+
+	// Serialize: content-offset
+	if (has_content_offset) {
+		yyjson_mut_obj_add_sint(doc, obj, "content-offset", content_offset);
+	}
+
+	// Serialize: content-size-in-bytes
+	if (has_content_size_in_bytes) {
+		yyjson_mut_obj_add_sint(doc, obj, "content-size-in-bytes", content_size_in_bytes);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

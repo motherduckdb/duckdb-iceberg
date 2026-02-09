@@ -16,19 +16,13 @@ namespace rest_api_objects {
 
 class CommitTableRequest {
 public:
-	CommitTableRequest();
-	CommitTableRequest(const CommitTableRequest &) = delete;
-	CommitTableRequest &operator=(const CommitTableRequest &) = delete;
-	CommitTableRequest(CommitTableRequest &&) = default;
-	CommitTableRequest &operator=(CommitTableRequest &&) = default;
-
-public:
+	// Deserialization
 	static CommitTableRequest FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	vector<TableRequirement> requirements;
 	vector<TableUpdate> updates;
 	TableIdentifier identifier;

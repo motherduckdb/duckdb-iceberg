@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-TableRequirement::TableRequirement() {
-}
-
 TableRequirement TableRequirement::FromJSON(yyjson_val *obj) {
 	TableRequirement res;
 	auto error = res.TryFromJSON(obj);
@@ -69,7 +66,31 @@ string TableRequirement::TryFromJSON(yyjson_val *obj) {
 		}
 		return "TableRequirement failed to parse, none of the oneOf candidates matched";
 	} while (false);
-	return string();
+	return "";
+}
+
+yyjson_mut_val *TableRequirement::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	if (has_assert_create) {
+		return assert_create.ToJSON(doc);
+	} else if (has_assert_table_uuid) {
+		return assert_table_uuid.ToJSON(doc);
+	} else if (has_assert_ref_snapshot_id) {
+		return assert_ref_snapshot_id.ToJSON(doc);
+	} else if (has_assert_last_assigned_field_id) {
+		return assert_last_assigned_field_id.ToJSON(doc);
+	} else if (has_assert_current_schema_id) {
+		return assert_current_schema_id.ToJSON(doc);
+	} else if (has_assert_last_assigned_partition_id) {
+		return assert_last_assigned_partition_id.ToJSON(doc);
+	} else if (has_assert_default_spec_id) {
+		return assert_default_spec_id.ToJSON(doc);
+	} else if (has_assert_default_sort_order_id) {
+		return assert_default_sort_order_id.ToJSON(doc);
+	}
+	// No variant is active - return empty object
+	return yyjson_mut_obj(doc);
 }
 
 } // namespace rest_api_objects

@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-MetricResult::MetricResult() {
-}
-
 MetricResult MetricResult::FromJSON(yyjson_val *obj) {
 	MetricResult res;
 	auto error = res.TryFromJSON(obj);
@@ -37,7 +34,13 @@ string MetricResult::TryFromJSON(yyjson_val *obj) {
 	if (!has_counter_result && !has_timer_result) {
 		return "MetricResult failed to parse, none of the anyOf candidates matched";
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *MetricResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

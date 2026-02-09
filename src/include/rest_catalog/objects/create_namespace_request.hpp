@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class CreateNamespaceRequest {
 public:
-	CreateNamespaceRequest();
-	CreateNamespaceRequest(const CreateNamespaceRequest &) = delete;
-	CreateNamespaceRequest &operator=(const CreateNamespaceRequest &) = delete;
-	CreateNamespaceRequest(CreateNamespaceRequest &&) = default;
-	CreateNamespaceRequest &operator=(CreateNamespaceRequest &&) = default;
-
-public:
+	// Deserialization
 	static CreateNamespaceRequest FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	Namespace _namespace;
 	case_insensitive_map_t<string> properties;
 	bool has_properties = false;

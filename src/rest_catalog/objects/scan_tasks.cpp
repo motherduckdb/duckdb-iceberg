@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-ScanTasks::ScanTasks() {
-}
-
 ScanTasks ScanTasks::FromJSON(yyjson_val *obj) {
 	ScanTasks res;
 	auto error = res.TryFromJSON(obj);
@@ -83,7 +80,43 @@ string ScanTasks::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(plan_tasks_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *ScanTasks::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: delete-files
+	if (has_delete_files) {
+		yyjson_mut_val *delete_files_arr = yyjson_mut_arr(doc);
+		for (const auto &item : delete_files) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(delete_files_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "delete-files", delete_files_arr);
+	}
+
+	// Serialize: file-scan-tasks
+	if (has_file_scan_tasks) {
+		yyjson_mut_val *file_scan_tasks_arr = yyjson_mut_arr(doc);
+		for (const auto &item : file_scan_tasks) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(file_scan_tasks_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "file-scan-tasks", file_scan_tasks_arr);
+	}
+
+	// Serialize: plan-tasks
+	if (has_plan_tasks) {
+		yyjson_mut_val *plan_tasks_arr = yyjson_mut_arr(doc);
+		for (const auto &item : plan_tasks) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(plan_tasks_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "plan-tasks", plan_tasks_arr);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

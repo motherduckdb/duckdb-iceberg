@@ -13,19 +13,13 @@ namespace rest_api_objects {
 
 class UpdateNamespacePropertiesResponse {
 public:
-	UpdateNamespacePropertiesResponse();
-	UpdateNamespacePropertiesResponse(const UpdateNamespacePropertiesResponse &) = delete;
-	UpdateNamespacePropertiesResponse &operator=(const UpdateNamespacePropertiesResponse &) = delete;
-	UpdateNamespacePropertiesResponse(UpdateNamespacePropertiesResponse &&) = default;
-	UpdateNamespacePropertiesResponse &operator=(UpdateNamespacePropertiesResponse &&) = default;
-
-public:
+	// Deserialization
 	static UpdateNamespacePropertiesResponse FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	vector<string> updated;
 	vector<string> removed;
 	vector<string> missing;

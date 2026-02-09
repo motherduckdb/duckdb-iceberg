@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-TransformTerm::TransformTerm() {
-}
-
 TransformTerm TransformTerm::FromJSON(yyjson_val *obj) {
 	TransformTerm res;
 	auto error = res.TryFromJSON(obj);
@@ -55,7 +52,24 @@ string TransformTerm::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *TransformTerm::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: type
+	yyjson_mut_obj_add_str(doc, obj, "type", type.c_str());
+
+	// Serialize: transform
+	yyjson_mut_val *transform_val = transform.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "transform", transform_val);
+
+	// Serialize: term
+	yyjson_mut_val *term_val = term.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "term", term_val);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

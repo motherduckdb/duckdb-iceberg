@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-CommitTableResponse::CommitTableResponse() {
-}
-
 CommitTableResponse CommitTableResponse::FromJSON(yyjson_val *obj) {
 	CommitTableResponse res;
 	auto error = res.TryFromJSON(obj);
@@ -47,7 +44,20 @@ string CommitTableResponse::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *CommitTableResponse::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: metadata-location
+	yyjson_mut_obj_add_str(doc, obj, "metadata-location", metadata_location.c_str());
+
+	// Serialize: metadata
+	yyjson_mut_val *metadata_val = metadata.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "metadata", metadata_val);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

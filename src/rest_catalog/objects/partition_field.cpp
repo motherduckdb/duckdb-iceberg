@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-PartitionField::PartitionField() {
-}
-
 PartitionField PartitionField::FromJSON(yyjson_val *obj) {
 	PartitionField res;
 	auto error = res.TryFromJSON(obj);
@@ -68,7 +65,28 @@ string PartitionField::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(field_id_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *PartitionField::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: source-id
+	yyjson_mut_obj_add_int(doc, obj, "source-id", source_id);
+
+	// Serialize: transform
+	yyjson_mut_val *transform_val = transform.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "transform", transform_val);
+
+	// Serialize: name
+	yyjson_mut_obj_add_str(doc, obj, "name", name.c_str());
+
+	// Serialize: field-id
+	if (has_field_id) {
+		yyjson_mut_obj_add_int(doc, obj, "field-id", field_id);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

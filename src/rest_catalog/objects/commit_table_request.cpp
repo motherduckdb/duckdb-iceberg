@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-CommitTableRequest::CommitTableRequest() {
-}
-
 CommitTableRequest CommitTableRequest::FromJSON(yyjson_val *obj) {
 	CommitTableRequest res;
 	auto error = res.TryFromJSON(obj);
@@ -76,7 +73,35 @@ string CommitTableRequest::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *CommitTableRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: requirements
+	yyjson_mut_val *requirements_arr = yyjson_mut_arr(doc);
+	for (const auto &item : requirements) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(requirements_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "requirements", requirements_arr);
+
+	// Serialize: updates
+	yyjson_mut_val *updates_arr = yyjson_mut_arr(doc);
+	for (const auto &item : updates) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(updates_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "updates", updates_arr);
+
+	// Serialize: identifier
+	if (has_identifier) {
+		yyjson_mut_val *identifier_val = identifier.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "identifier", identifier_val);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

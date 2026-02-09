@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-TrueExpression::TrueExpression() {
-}
-
 TrueExpression TrueExpression::FromJSON(yyjson_val *obj) {
 	TrueExpression res;
 	auto error = res.TryFromJSON(obj);
@@ -35,7 +32,17 @@ string TrueExpression::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *TrueExpression::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: type
+	yyjson_mut_val *type_val = type.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

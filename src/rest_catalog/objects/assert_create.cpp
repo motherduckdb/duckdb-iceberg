@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-AssertCreate::AssertCreate() {
-}
-
 AssertCreate AssertCreate::FromJSON(yyjson_val *obj) {
 	AssertCreate res;
 	auto error = res.TryFromJSON(obj);
@@ -35,7 +32,17 @@ string AssertCreate::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *AssertCreate::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: type
+	yyjson_mut_val *type_val = type.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

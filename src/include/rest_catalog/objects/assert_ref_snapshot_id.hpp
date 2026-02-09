@@ -14,23 +14,17 @@ namespace rest_api_objects {
 
 class AssertRefSnapshotId {
 public:
-	AssertRefSnapshotId();
-	AssertRefSnapshotId(const AssertRefSnapshotId &) = delete;
-	AssertRefSnapshotId &operator=(const AssertRefSnapshotId &) = delete;
-	AssertRefSnapshotId(AssertRefSnapshotId &&) = default;
-	AssertRefSnapshotId &operator=(AssertRefSnapshotId &&) = default;
-
-public:
+	// Deserialization
 	static AssertRefSnapshotId FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	TableRequirementType type;
 	string ref;
 	int64_t snapshot_id;
-	bool has_snapshot_id = false;
+	bool has_snapshot_id;
 };
 
 } // namespace rest_api_objects

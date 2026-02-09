@@ -13,19 +13,13 @@ namespace rest_api_objects {
 
 class EncryptedKey {
 public:
-	EncryptedKey();
-	EncryptedKey(const EncryptedKey &) = delete;
-	EncryptedKey &operator=(const EncryptedKey &) = delete;
-	EncryptedKey(EncryptedKey &&) = default;
-	EncryptedKey &operator=(EncryptedKey &&) = default;
-
-public:
+	// Deserialization
 	static EncryptedKey FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	string key_id;
 	string encrypted_key_metadata;
 	string encrypted_by_id;

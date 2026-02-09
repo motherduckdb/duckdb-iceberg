@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-SetCurrentSchemaUpdate::SetCurrentSchemaUpdate() {
-}
-
 SetCurrentSchemaUpdate SetCurrentSchemaUpdate::FromJSON(yyjson_val *obj) {
 	SetCurrentSchemaUpdate res;
 	auto error = res.TryFromJSON(obj);
@@ -53,7 +50,32 @@ string SetCurrentSchemaUpdate::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(action_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *SetCurrentSchemaUpdate::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize base class: BaseUpdate
+	yyjson_mut_val *base_updatebase_obj = base_update.ToJSON(doc);
+	// Merge base properties into this object
+	{
+		size_t idx, max;
+		yyjson_mut_val *key, *val;
+		yyjson_mut_obj_foreach(base_updatebase_obj, idx, max, key, val) {
+			yyjson_mut_obj_add(obj, key, val);
+		}
+	}
+
+	// Serialize: schema-id
+	yyjson_mut_obj_add_int(doc, obj, "schema-id", schema_id);
+
+	// Serialize: action
+	if (has_action) {
+		yyjson_mut_obj_add_str(doc, obj, "action", action.c_str());
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-PlanTableScanResult::PlanTableScanResult() {
-}
-
 PlanTableScanResult PlanTableScanResult::FromJSON(yyjson_val *obj) {
 	PlanTableScanResult res;
 	auto error = res.TryFromJSON(obj);
@@ -49,7 +46,23 @@ string PlanTableScanResult::TryFromJSON(yyjson_val *obj) {
 		}
 		return "PlanTableScanResult failed to parse, none of the oneOf candidates matched";
 	} while (false);
-	return string();
+	return "";
+}
+
+yyjson_mut_val *PlanTableScanResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	if (has_completed_planning_with_idresult) {
+		return completed_planning_with_idresult.ToJSON(doc);
+	} else if (has_failed_planning_result) {
+		return failed_planning_result.ToJSON(doc);
+	} else if (has_async_planning_result) {
+		return async_planning_result.ToJSON(doc);
+	} else if (has_empty_planning_result) {
+		return empty_planning_result.ToJSON(doc);
+	}
+	// No variant is active - return empty object
+	return yyjson_mut_obj(doc);
 }
 
 } // namespace rest_api_objects

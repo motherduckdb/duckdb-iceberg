@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class RemoveSnapshotRefUpdate {
 public:
-	RemoveSnapshotRefUpdate();
-	RemoveSnapshotRefUpdate(const RemoveSnapshotRefUpdate &) = delete;
-	RemoveSnapshotRefUpdate &operator=(const RemoveSnapshotRefUpdate &) = delete;
-	RemoveSnapshotRefUpdate(RemoveSnapshotRefUpdate &&) = default;
-	RemoveSnapshotRefUpdate &operator=(RemoveSnapshotRefUpdate &&) = default;
-
-public:
+	// Deserialization
 	static RemoveSnapshotRefUpdate FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	BaseUpdate base_update;
 	string ref_name;
 	string action;

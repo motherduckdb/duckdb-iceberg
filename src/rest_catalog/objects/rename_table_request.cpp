@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-RenameTableRequest::RenameTableRequest() {
-}
-
 RenameTableRequest RenameTableRequest::FromJSON(yyjson_val *obj) {
 	RenameTableRequest res;
 	auto error = res.TryFromJSON(obj);
@@ -44,7 +41,21 @@ string RenameTableRequest::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *RenameTableRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: source
+	yyjson_mut_val *source_val = source.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "source", source_val);
+
+	// Serialize: destination
+	yyjson_mut_val *destination_val = destination.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "destination", destination_val);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

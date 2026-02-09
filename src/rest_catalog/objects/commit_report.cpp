@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-CommitReport::CommitReport() {
-}
-
 CommitReport CommitReport::FromJSON(yyjson_val *obj) {
 	CommitReport res;
 	auto error = res.TryFromJSON(obj);
@@ -106,7 +103,38 @@ string CommitReport::TryFromJSON(yyjson_val *obj) {
 			return "CommitReport property 'metadata' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *CommitReport::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: table-name
+	yyjson_mut_obj_add_str(doc, obj, "table-name", table_name.c_str());
+
+	// Serialize: snapshot-id
+	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+
+	// Serialize: sequence-number
+	yyjson_mut_obj_add_sint(doc, obj, "sequence-number", sequence_number);
+
+	// Serialize: operation
+	yyjson_mut_obj_add_str(doc, obj, "operation", operation.c_str());
+
+	// Serialize: metrics
+	yyjson_mut_val *metrics_val = metrics.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "metrics", metrics_val);
+
+	// Serialize: metadata
+	if (has_metadata) {
+		yyjson_mut_val *metadata_obj = yyjson_mut_obj(doc);
+		for (const auto &[key, value] : metadata) {
+			yyjson_mut_obj_add_str(doc, metadata_obj, key.c_str(), value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "metadata", metadata_obj);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

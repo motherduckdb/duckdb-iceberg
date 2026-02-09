@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class RenameTableRequest {
 public:
-	RenameTableRequest();
-	RenameTableRequest(const RenameTableRequest &) = delete;
-	RenameTableRequest &operator=(const RenameTableRequest &) = delete;
-	RenameTableRequest(RenameTableRequest &&) = default;
-	RenameTableRequest &operator=(RenameTableRequest &&) = default;
-
-public:
+	// Deserialization
 	static RenameTableRequest FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	TableIdentifier source;
 	TableIdentifier destination;
 };

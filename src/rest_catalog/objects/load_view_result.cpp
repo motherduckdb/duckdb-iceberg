@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-LoadViewResult::LoadViewResult() {
-}
-
 LoadViewResult LoadViewResult::FromJSON(yyjson_val *obj) {
 	LoadViewResult res;
 	auto error = res.TryFromJSON(obj);
@@ -69,7 +66,29 @@ string LoadViewResult::TryFromJSON(yyjson_val *obj) {
 			return "LoadViewResult property 'config' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *LoadViewResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: metadata-location
+	yyjson_mut_obj_add_str(doc, obj, "metadata-location", metadata_location.c_str());
+
+	// Serialize: metadata
+	yyjson_mut_val *metadata_val = metadata.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "metadata", metadata_val);
+
+	// Serialize: config
+	if (has_config) {
+		yyjson_mut_val *config_obj = yyjson_mut_obj(doc);
+		for (const auto &[key, value] : config) {
+			yyjson_mut_obj_add_str(doc, config_obj, key.c_str(), value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "config", config_obj);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

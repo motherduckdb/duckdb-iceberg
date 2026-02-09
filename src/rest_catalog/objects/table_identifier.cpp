@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-TableIdentifier::TableIdentifier() {
-}
-
 TableIdentifier TableIdentifier::FromJSON(yyjson_val *obj) {
 	TableIdentifier res;
 	auto error = res.TryFromJSON(obj);
@@ -48,7 +45,20 @@ string TableIdentifier::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(name_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *TableIdentifier::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: namespace
+	yyjson_mut_val *_namespace_val = _namespace.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "namespace", _namespace_val);
+
+	// Serialize: name
+	yyjson_mut_obj_add_str(doc, obj, "name", name.c_str());
+
+	return obj;
 }
 
 } // namespace rest_api_objects

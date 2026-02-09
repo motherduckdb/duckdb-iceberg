@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-OAuthClientCredentialsRequest::OAuthClientCredentialsRequest() {
-}
-
 OAuthClientCredentialsRequest OAuthClientCredentialsRequest::FromJSON(yyjson_val *obj) {
 	OAuthClientCredentialsRequest res;
 	auto error = res.TryFromJSON(obj);
@@ -73,7 +70,27 @@ string OAuthClientCredentialsRequest::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(scope_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *OAuthClientCredentialsRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: grant_type
+	yyjson_mut_obj_add_str(doc, obj, "grant_type", grant_type.c_str());
+
+	// Serialize: client_id
+	yyjson_mut_obj_add_str(doc, obj, "client_id", client_id.c_str());
+
+	// Serialize: client_secret
+	yyjson_mut_obj_add_str(doc, obj, "client_secret", client_secret.c_str());
+
+	// Serialize: scope
+	if (has_scope) {
+		yyjson_mut_obj_add_str(doc, obj, "scope", scope.c_str());
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

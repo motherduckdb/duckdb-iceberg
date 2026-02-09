@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-SortField::SortField() {
-}
-
 SortField SortField::FromJSON(yyjson_val *obj) {
 	SortField res;
 	auto error = res.TryFromJSON(obj);
@@ -64,7 +61,28 @@ string SortField::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *SortField::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: source-id
+	yyjson_mut_obj_add_int(doc, obj, "source-id", source_id);
+
+	// Serialize: transform
+	yyjson_mut_val *transform_val = transform.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "transform", transform_val);
+
+	// Serialize: direction
+	yyjson_mut_val *direction_val = direction.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "direction", direction_val);
+
+	// Serialize: null-order
+	yyjson_mut_val *null_order_val = null_order.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "null-order", null_order_val);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

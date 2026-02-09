@@ -12,12 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-SnapshotLog::SnapshotLog() {
-}
-SnapshotLog::Object3::Object3() {
-}
-
-SnapshotLog::Object3 SnapshotLog::Object3::FromJSON(yyjson_val *obj) {
+Object3 Object3::FromJSON(yyjson_val *obj) {
 	Object3 res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -26,7 +21,7 @@ SnapshotLog::Object3 SnapshotLog::Object3::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string SnapshotLog::Object3::TryFromJSON(yyjson_val *obj) {
+string Object3::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
 	if (!snapshot_id_val) {
@@ -54,7 +49,19 @@ string SnapshotLog::Object3::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(timestamp_ms_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *Object3::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: snapshot-id
+	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+
+	// Serialize: timestamp-ms
+	yyjson_mut_obj_add_sint(doc, obj, "timestamp-ms", timestamp_ms);
+
+	return obj;
 }
 
 SnapshotLog SnapshotLog::FromJSON(yyjson_val *obj) {
@@ -83,7 +90,13 @@ string SnapshotLog::TryFromJSON(yyjson_val *obj) {
 		return StringUtil::Format("SnapshotLog property 'value' is not of type 'array', found '%s' instead",
 		                          yyjson_get_type_desc(obj));
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *SnapshotLog::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -15,19 +15,13 @@ namespace rest_api_objects {
 
 class ListNamespacesResponse {
 public:
-	ListNamespacesResponse();
-	ListNamespacesResponse(const ListNamespacesResponse &) = delete;
-	ListNamespacesResponse &operator=(const ListNamespacesResponse &) = delete;
-	ListNamespacesResponse(ListNamespacesResponse &&) = default;
-	ListNamespacesResponse &operator=(ListNamespacesResponse &&) = default;
-
-public:
+	// Deserialization
 	static ListNamespacesResponse FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	PageToken next_page_token;
 	bool has_next_page_token = false;
 	vector<Namespace> namespaces;

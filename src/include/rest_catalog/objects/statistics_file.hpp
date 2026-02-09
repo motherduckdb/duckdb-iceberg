@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class StatisticsFile {
 public:
-	StatisticsFile();
-	StatisticsFile(const StatisticsFile &) = delete;
-	StatisticsFile &operator=(const StatisticsFile &) = delete;
-	StatisticsFile(StatisticsFile &&) = default;
-	StatisticsFile &operator=(StatisticsFile &&) = default;
-
-public:
+	// Deserialization
 	static StatisticsFile FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	int64_t snapshot_id;
 	string statistics_path;
 	int64_t file_size_in_bytes;

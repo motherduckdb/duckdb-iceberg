@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-LiteralExpression::LiteralExpression() {
-}
-
 LiteralExpression LiteralExpression::FromJSON(yyjson_val *obj) {
 	LiteralExpression res;
 	auto error = res.TryFromJSON(obj);
@@ -54,7 +51,11 @@ string LiteralExpression::TryFromJSON(yyjson_val *obj) {
 			return "LiteralExpression property 'value' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *LiteralExpression::ToJSON(yyjson_mut_doc *doc) const {
+	throw InternalException("Can't serialize this class (LiteralExpression)");
 }
 
 } // namespace rest_api_objects

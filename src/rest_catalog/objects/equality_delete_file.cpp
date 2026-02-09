@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-EqualityDeleteFile::EqualityDeleteFile() {
-}
-
 EqualityDeleteFile EqualityDeleteFile::FromJSON(yyjson_val *obj) {
 	EqualityDeleteFile res;
 	auto error = res.TryFromJSON(obj);
@@ -65,7 +62,37 @@ string EqualityDeleteFile::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(equality_ids_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *EqualityDeleteFile::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize base class: ContentFile
+	yyjson_mut_val *content_filebase_obj = content_file.ToJSON(doc);
+	// Merge base properties into this object
+	{
+		size_t idx, max;
+		yyjson_mut_val *key, *val;
+		yyjson_mut_obj_foreach(content_filebase_obj, idx, max, key, val) {
+			yyjson_mut_obj_add(obj, key, val);
+		}
+	}
+
+	// Serialize: content
+	yyjson_mut_obj_add_str(doc, obj, "content", content.c_str());
+
+	// Serialize: equality-ids
+	if (has_equality_ids) {
+		yyjson_mut_val *equality_ids_arr = yyjson_mut_arr(doc);
+		for (const auto &item : equality_ids) {
+			yyjson_mut_val *item_val = yyjson_mut_int(doc, item);
+			yyjson_mut_arr_append(equality_ids_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "equality-ids", equality_ids_arr);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

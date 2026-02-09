@@ -12,41 +12,30 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+class Object1 {
+public:
+	// Deserialization
+	static Object1 FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
+
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+
+	int32_t schema_id;
+	bool has_schema_id = false;
+	vector<int32_t> identifier_field_ids;
+	bool has_identifier_field_ids = false;
+};
+
 class Schema {
 public:
-	Schema();
-	Schema(const Schema &) = delete;
-	Schema &operator=(const Schema &) = delete;
-	Schema(Schema &&) = default;
-	Schema &operator=(Schema &&) = default;
-	class Object1 {
-	public:
-		Object1();
-		Object1(const Object1 &) = delete;
-		Object1 &operator=(const Object1 &) = delete;
-		Object1(Object1 &&) = default;
-		Object1 &operator=(Object1 &&) = default;
-
-	public:
-		static Object1 FromJSON(yyjson_val *obj);
-
-	public:
-		string TryFromJSON(yyjson_val *obj);
-
-	public:
-		int32_t schema_id;
-		bool has_schema_id = false;
-		vector<int32_t> identifier_field_ids;
-		bool has_identifier_field_ids = false;
-	};
-
-public:
+	// Deserialization
 	static Schema FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	StructType struct_type;
 	Object1 object_1;
 };

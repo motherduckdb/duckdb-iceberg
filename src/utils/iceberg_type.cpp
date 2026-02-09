@@ -84,7 +84,7 @@ rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(const LogicalTyp
 			struct_child->id = get_next_id();
 			struct_child->type =
 			    make_uniq<rest_api_objects::Type>(IcebergTypeHelper::CreateIcebergRestType(child.second, get_next_id));
-			struct_child->has_doc = false;
+			struct_child->has__doc = false;
 			struct_child->required = false;
 			struct_child->has_initial_default = false;
 			rest_type.struct_type.fields.push_back(std::move(struct_child));

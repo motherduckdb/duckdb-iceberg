@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class PositionDeleteFile {
 public:
-	PositionDeleteFile();
-	PositionDeleteFile(const PositionDeleteFile &) = delete;
-	PositionDeleteFile &operator=(const PositionDeleteFile &) = delete;
-	PositionDeleteFile(PositionDeleteFile &&) = default;
-	PositionDeleteFile &operator=(PositionDeleteFile &&) = default;
-
-public:
+	// Deserialization
 	static PositionDeleteFile FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	ContentFile content_file;
 	string content;
 	int64_t content_offset;

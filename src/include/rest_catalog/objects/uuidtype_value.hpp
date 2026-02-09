@@ -13,19 +13,13 @@ namespace rest_api_objects {
 
 class UUIDTypeValue {
 public:
-	UUIDTypeValue();
-	UUIDTypeValue(const UUIDTypeValue &) = delete;
-	UUIDTypeValue &operator=(const UUIDTypeValue &) = delete;
-	UUIDTypeValue(UUIDTypeValue &&) = default;
-	UUIDTypeValue &operator=(UUIDTypeValue &&) = default;
-
-public:
+	// Deserialization
 	static UUIDTypeValue FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	string value;
 };
 

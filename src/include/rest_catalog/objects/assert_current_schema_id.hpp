@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class AssertCurrentSchemaId {
 public:
-	AssertCurrentSchemaId();
-	AssertCurrentSchemaId(const AssertCurrentSchemaId &) = delete;
-	AssertCurrentSchemaId &operator=(const AssertCurrentSchemaId &) = delete;
-	AssertCurrentSchemaId(AssertCurrentSchemaId &&) = default;
-	AssertCurrentSchemaId &operator=(AssertCurrentSchemaId &&) = default;
-
-public:
+	// Deserialization
 	static AssertCurrentSchemaId FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	TableRequirementType type;
 	int32_t current_schema_id;
 };

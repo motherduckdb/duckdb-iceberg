@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-ReportMetricsRequest::ReportMetricsRequest() {
-}
-
 ReportMetricsRequest ReportMetricsRequest::FromJSON(yyjson_val *obj) {
 	ReportMetricsRequest res;
 	auto error = res.TryFromJSON(obj);
@@ -49,7 +46,16 @@ string ReportMetricsRequest::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(report_type_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *ReportMetricsRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: report-type
+	yyjson_mut_obj_add_str(doc, obj, "report-type", report_type.c_str());
+
+	return obj;
 }
 
 } // namespace rest_api_objects

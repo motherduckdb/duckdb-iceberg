@@ -15,19 +15,13 @@ namespace rest_api_objects {
 
 class CountMap {
 public:
-	CountMap();
-	CountMap(const CountMap &) = delete;
-	CountMap &operator=(const CountMap &) = delete;
-	CountMap(CountMap &&) = default;
-	CountMap &operator=(CountMap &&) = default;
-
-public:
+	// Deserialization
 	static CountMap FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	vector<IntegerTypeValue> keys;
 	bool has_keys = false;
 	vector<LongTypeValue> values;

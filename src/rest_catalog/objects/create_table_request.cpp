@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-CreateTableRequest::CreateTableRequest() {
-}
-
 CreateTableRequest CreateTableRequest::FromJSON(yyjson_val *obj) {
 	CreateTableRequest res;
 	auto error = res.TryFromJSON(obj);
@@ -106,7 +103,51 @@ string CreateTableRequest::TryFromJSON(yyjson_val *obj) {
 			return "CreateTableRequest property 'properties' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *CreateTableRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: name
+	yyjson_mut_obj_add_str(doc, obj, "name", name.c_str());
+
+	// Serialize: schema
+	yyjson_mut_val *schema_val = schema.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "schema", schema_val);
+
+	// Serialize: location
+	if (has_location) {
+		yyjson_mut_obj_add_str(doc, obj, "location", location.c_str());
+	}
+
+	// Serialize: partition-spec
+	if (has_partition_spec) {
+		yyjson_mut_val *partition_spec_val = partition_spec.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "partition-spec", partition_spec_val);
+	}
+
+	// Serialize: write-order
+	if (has_write_order) {
+		yyjson_mut_val *write_order_val = write_order.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "write-order", write_order_val);
+	}
+
+	// Serialize: stage-create
+	if (has_stage_create) {
+		yyjson_mut_obj_add_bool(doc, obj, "stage-create", stage_create);
+	}
+
+	// Serialize: properties
+	if (has_properties) {
+		yyjson_mut_val *properties_obj = yyjson_mut_obj(doc);
+		for (const auto &[key, value] : properties) {
+			yyjson_mut_obj_add_str(doc, properties_obj, key.c_str(), value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

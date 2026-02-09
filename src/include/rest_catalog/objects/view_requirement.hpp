@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class ViewRequirement {
 public:
-	ViewRequirement();
-	ViewRequirement(const ViewRequirement &) = delete;
-	ViewRequirement &operator=(const ViewRequirement &) = delete;
-	ViewRequirement(ViewRequirement &&) = default;
-	ViewRequirement &operator=(ViewRequirement &&) = default;
-
-public:
+	// Deserialization
 	static ViewRequirement FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	AssertViewUUID assert_view_uuid;
 	bool has_assert_view_uuid = false;
 };

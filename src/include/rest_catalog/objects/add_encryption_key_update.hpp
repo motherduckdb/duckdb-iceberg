@@ -15,19 +15,13 @@ namespace rest_api_objects {
 
 class AddEncryptionKeyUpdate {
 public:
-	AddEncryptionKeyUpdate();
-	AddEncryptionKeyUpdate(const AddEncryptionKeyUpdate &) = delete;
-	AddEncryptionKeyUpdate &operator=(const AddEncryptionKeyUpdate &) = delete;
-	AddEncryptionKeyUpdate(AddEncryptionKeyUpdate &&) = default;
-	AddEncryptionKeyUpdate &operator=(AddEncryptionKeyUpdate &&) = default;
-
-public:
+	// Deserialization
 	static AddEncryptionKeyUpdate FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	BaseUpdate base_update;
 	EncryptedKey encryption_key;
 	string action;

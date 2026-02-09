@@ -34,19 +34,13 @@ namespace rest_api_objects {
 
 class TableUpdate {
 public:
-	TableUpdate();
-	TableUpdate(const TableUpdate &) = delete;
-	TableUpdate &operator=(const TableUpdate &) = delete;
-	TableUpdate(TableUpdate &&) = default;
-	TableUpdate &operator=(TableUpdate &&) = default;
-
-public:
+	// Deserialization
 	static TableUpdate FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	AssignUUIDUpdate assign_uuidupdate;
 	bool has_assign_uuidupdate = false;
 	UpgradeFormatVersionUpdate upgrade_format_version_update;

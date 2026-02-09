@@ -16,19 +16,13 @@ namespace rest_api_objects {
 
 class FetchPlanningResult {
 public:
-	FetchPlanningResult();
-	FetchPlanningResult(const FetchPlanningResult &) = delete;
-	FetchPlanningResult &operator=(const FetchPlanningResult &) = delete;
-	FetchPlanningResult(FetchPlanningResult &&) = default;
-	FetchPlanningResult &operator=(FetchPlanningResult &&) = default;
-
-public:
+	// Deserialization
 	static FetchPlanningResult FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	CompletedPlanningResult completed_planning_result;
 	bool has_completed_planning_result = false;
 	FailedPlanningResult failed_planning_result;

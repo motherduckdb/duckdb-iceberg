@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-NotExpression::NotExpression() {
-}
-
 NotExpression NotExpression::FromJSON(yyjson_val *obj) {
 	NotExpression res;
 	auto error = res.TryFromJSON(obj);
@@ -45,7 +42,21 @@ string NotExpression::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *NotExpression::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: type
+	yyjson_mut_val *type_val = type.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+
+	// Serialize: child
+	yyjson_mut_val *child_val = child->ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "child", child_val);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

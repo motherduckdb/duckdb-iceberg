@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-AddSchemaUpdate::AddSchemaUpdate() {
-}
-
 AddSchemaUpdate AddSchemaUpdate::FromJSON(yyjson_val *obj) {
 	AddSchemaUpdate res;
 	auto error = res.TryFromJSON(obj);
@@ -60,7 +57,38 @@ string AddSchemaUpdate::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(last_column_id_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *AddSchemaUpdate::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize base class: BaseUpdate
+	yyjson_mut_val *base_updatebase_obj = base_update.ToJSON(doc);
+	// Merge base properties into this object
+	{
+		size_t idx, max;
+		yyjson_mut_val *key, *val;
+		yyjson_mut_obj_foreach(base_updatebase_obj, idx, max, key, val) {
+			yyjson_mut_obj_add(obj, key, val);
+		}
+	}
+
+	// Serialize: schema
+	yyjson_mut_val *schema_val = schema.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "schema", schema_val);
+
+	// Serialize: action
+	if (has_action) {
+		yyjson_mut_obj_add_str(doc, obj, "action", action.c_str());
+	}
+
+	// Serialize: last-column-id
+	if (has_last_column_id) {
+		yyjson_mut_obj_add_int(doc, obj, "last-column-id", last_column_id);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

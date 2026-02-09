@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-AssertRefSnapshotId::AssertRefSnapshotId() {
-}
-
 AssertRefSnapshotId AssertRefSnapshotId::FromJSON(yyjson_val *obj) {
 	AssertRefSnapshotId res;
 	auto error = res.TryFromJSON(obj);
@@ -50,21 +47,33 @@ string AssertRefSnapshotId::TryFromJSON(yyjson_val *obj) {
 	if (!snapshot_id_val) {
 		return "AssertRefSnapshotId required property 'snapshot-id' is missing";
 	} else {
-		if (yyjson_is_null(snapshot_id_val)) {
-			has_snapshot_id = false;
-		} else if (yyjson_is_sint(snapshot_id_val)) {
+		if (yyjson_is_sint(snapshot_id_val)) {
 			snapshot_id = yyjson_get_sint(snapshot_id_val);
-			has_snapshot_id = true;
 		} else if (yyjson_is_uint(snapshot_id_val)) {
 			snapshot_id = yyjson_get_uint(snapshot_id_val);
-			has_snapshot_id = true;
 		} else {
 			return StringUtil::Format(
 			    "AssertRefSnapshotId property 'snapshot_id' is not of type 'integer', found '%s' instead",
 			    yyjson_get_type_desc(snapshot_id_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *AssertRefSnapshotId::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: type
+	yyjson_mut_val *type_val = type.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+
+	// Serialize: ref
+	yyjson_mut_obj_add_str(doc, obj, "ref", ref.c_str());
+
+	// Serialize: snapshot-id
+	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

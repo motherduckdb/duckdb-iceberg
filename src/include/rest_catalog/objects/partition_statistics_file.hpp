@@ -13,19 +13,13 @@ namespace rest_api_objects {
 
 class PartitionStatisticsFile {
 public:
-	PartitionStatisticsFile();
-	PartitionStatisticsFile(const PartitionStatisticsFile &) = delete;
-	PartitionStatisticsFile &operator=(const PartitionStatisticsFile &) = delete;
-	PartitionStatisticsFile(PartitionStatisticsFile &&) = default;
-	PartitionStatisticsFile &operator=(PartitionStatisticsFile &&) = default;
-
-public:
+	// Deserialization
 	static PartitionStatisticsFile FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	int64_t snapshot_id;
 	string statistics_path;
 	int64_t file_size_in_bytes;

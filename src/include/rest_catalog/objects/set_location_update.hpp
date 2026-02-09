@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class SetLocationUpdate {
 public:
-	SetLocationUpdate();
-	SetLocationUpdate(const SetLocationUpdate &) = delete;
-	SetLocationUpdate &operator=(const SetLocationUpdate &) = delete;
-	SetLocationUpdate(SetLocationUpdate &&) = default;
-	SetLocationUpdate &operator=(SetLocationUpdate &&) = default;
-
-public:
+	// Deserialization
 	static SetLocationUpdate FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	BaseUpdate base_update;
 	string location;
 	string action;

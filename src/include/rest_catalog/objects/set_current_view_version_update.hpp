@@ -14,19 +14,13 @@ namespace rest_api_objects {
 
 class SetCurrentViewVersionUpdate {
 public:
-	SetCurrentViewVersionUpdate();
-	SetCurrentViewVersionUpdate(const SetCurrentViewVersionUpdate &) = delete;
-	SetCurrentViewVersionUpdate &operator=(const SetCurrentViewVersionUpdate &) = delete;
-	SetCurrentViewVersionUpdate(SetCurrentViewVersionUpdate &&) = default;
-	SetCurrentViewVersionUpdate &operator=(SetCurrentViewVersionUpdate &&) = default;
-
-public:
+	// Deserialization
 	static SetCurrentViewVersionUpdate FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	BaseUpdate base_update;
 	int32_t view_version_id;
 	string action;

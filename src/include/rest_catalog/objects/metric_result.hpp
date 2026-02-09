@@ -15,19 +15,13 @@ namespace rest_api_objects {
 
 class MetricResult {
 public:
-	MetricResult();
-	MetricResult(const MetricResult &) = delete;
-	MetricResult &operator=(const MetricResult &) = delete;
-	MetricResult(MetricResult &&) = default;
-	MetricResult &operator=(MetricResult &&) = default;
-
-public:
+	// Deserialization
 	static MetricResult FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	CounterResult counter_result;
 	bool has_counter_result = false;
 	TimerResult timer_result;

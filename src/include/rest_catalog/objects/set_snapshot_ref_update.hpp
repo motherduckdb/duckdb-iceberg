@@ -15,19 +15,13 @@ namespace rest_api_objects {
 
 class SetSnapshotRefUpdate {
 public:
-	SetSnapshotRefUpdate();
-	SetSnapshotRefUpdate(const SetSnapshotRefUpdate &) = delete;
-	SetSnapshotRefUpdate &operator=(const SetSnapshotRefUpdate &) = delete;
-	SetSnapshotRefUpdate(SetSnapshotRefUpdate &&) = default;
-	SetSnapshotRefUpdate &operator=(SetSnapshotRefUpdate &&) = default;
-
-public:
+	// Deserialization
 	static SetSnapshotRefUpdate FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	BaseUpdate base_update;
 	SnapshotReference snapshot_reference;
 	string ref_name;

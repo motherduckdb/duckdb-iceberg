@@ -17,19 +17,13 @@ namespace rest_api_objects {
 
 class Type {
 public:
-	Type();
-	Type(const Type &) = delete;
-	Type &operator=(const Type &) = delete;
-	Type(Type &&) = default;
-	Type &operator=(Type &&) = default;
-
-public:
+	// Deserialization
 	static Type FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	PrimitiveType primitive_type;
 	bool has_primitive_type = false;
 	StructType struct_type;

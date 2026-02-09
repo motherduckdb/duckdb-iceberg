@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-DeleteFile::DeleteFile() {
-}
-
 DeleteFile DeleteFile::FromJSON(yyjson_val *obj) {
 	DeleteFile res;
 	auto error = res.TryFromJSON(obj);
@@ -39,7 +36,19 @@ string DeleteFile::TryFromJSON(yyjson_val *obj) {
 		}
 		return "DeleteFile failed to parse, none of the oneOf candidates matched";
 	} while (false);
-	return string();
+	return "";
+}
+
+yyjson_mut_val *DeleteFile::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	if (has_position_delete_file) {
+		return position_delete_file.ToJSON(doc);
+	} else if (has_equality_delete_file) {
+		return equality_delete_file.ToJSON(doc);
+	}
+	// No variant is active - return empty object
+	return yyjson_mut_obj(doc);
 }
 
 } // namespace rest_api_objects

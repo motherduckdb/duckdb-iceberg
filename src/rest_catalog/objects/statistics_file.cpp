@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-StatisticsFile::StatisticsFile() {
-}
-
 StatisticsFile StatisticsFile::FromJSON(yyjson_val *obj) {
 	StatisticsFile res;
 	auto error = res.TryFromJSON(obj);
@@ -101,7 +98,33 @@ string StatisticsFile::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(blob_metadata_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *StatisticsFile::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: snapshot-id
+	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+
+	// Serialize: statistics-path
+	yyjson_mut_obj_add_str(doc, obj, "statistics-path", statistics_path.c_str());
+
+	// Serialize: file-size-in-bytes
+	yyjson_mut_obj_add_sint(doc, obj, "file-size-in-bytes", file_size_in_bytes);
+
+	// Serialize: file-footer-size-in-bytes
+	yyjson_mut_obj_add_sint(doc, obj, "file-footer-size-in-bytes", file_footer_size_in_bytes);
+
+	// Serialize: blob-metadata
+	yyjson_mut_val *blob_metadata_arr = yyjson_mut_arr(doc);
+	for (const auto &item : blob_metadata) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(blob_metadata_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "blob-metadata", blob_metadata_arr);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

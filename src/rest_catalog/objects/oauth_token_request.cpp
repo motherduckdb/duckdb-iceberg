@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-OAuthTokenRequest::OAuthTokenRequest() {
-}
-
 OAuthTokenRequest OAuthTokenRequest::FromJSON(yyjson_val *obj) {
 	OAuthTokenRequest res;
 	auto error = res.TryFromJSON(obj);
@@ -37,7 +34,13 @@ string OAuthTokenRequest::TryFromJSON(yyjson_val *obj) {
 	if (!has_oauth_client_credentials_request && !has_oauth_token_exchange_request) {
 		return "OAuthTokenRequest failed to parse, none of the anyOf candidates matched";
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *OAuthTokenRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

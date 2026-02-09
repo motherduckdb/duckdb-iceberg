@@ -13,19 +13,13 @@ namespace rest_api_objects {
 
 class CounterResult {
 public:
-	CounterResult();
-	CounterResult(const CounterResult &) = delete;
-	CounterResult &operator=(const CounterResult &) = delete;
-	CounterResult(CounterResult &&) = default;
-	CounterResult &operator=(CounterResult &&) = default;
-
-public:
+	// Deserialization
 	static CounterResult FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	string unit;
 	int64_t value;
 };

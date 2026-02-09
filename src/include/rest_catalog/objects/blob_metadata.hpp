@@ -13,19 +13,13 @@ namespace rest_api_objects {
 
 class BlobMetadata {
 public:
-	BlobMetadata();
-	BlobMetadata(const BlobMetadata &) = delete;
-	BlobMetadata &operator=(const BlobMetadata &) = delete;
-	BlobMetadata(BlobMetadata &&) = default;
-	BlobMetadata &operator=(BlobMetadata &&) = default;
-
-public:
+	// Deserialization
 	static BlobMetadata FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	string type;
 	int64_t snapshot_id;
 	int64_t sequence_number;

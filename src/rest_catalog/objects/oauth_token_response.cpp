@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-OAuthTokenResponse::OAuthTokenResponse() {
-}
-
 OAuthTokenResponse OAuthTokenResponse::FromJSON(yyjson_val *obj) {
 	OAuthTokenResponse res;
 	auto error = res.TryFromJSON(obj);
@@ -90,7 +87,40 @@ string OAuthTokenResponse::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(scope_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *OAuthTokenResponse::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: access_token
+	yyjson_mut_obj_add_str(doc, obj, "access_token", access_token.c_str());
+
+	// Serialize: token_type
+	yyjson_mut_obj_add_str(doc, obj, "token_type", token_type.c_str());
+
+	// Serialize: expires_in
+	if (has_expires_in) {
+		yyjson_mut_obj_add_int(doc, obj, "expires_in", expires_in);
+	}
+
+	// Serialize: issued_token_type
+	if (has_issued_token_type) {
+		yyjson_mut_val *issued_token_type_val = issued_token_type.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "issued_token_type", issued_token_type_val);
+	}
+
+	// Serialize: refresh_token
+	if (has_refresh_token) {
+		yyjson_mut_obj_add_str(doc, obj, "refresh_token", refresh_token.c_str());
+	}
+
+	// Serialize: scope
+	if (has_scope) {
+		yyjson_mut_obj_add_str(doc, obj, "scope", scope.c_str());
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

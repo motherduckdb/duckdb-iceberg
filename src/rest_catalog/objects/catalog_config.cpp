@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-CatalogConfig::CatalogConfig() {
-}
-
 CatalogConfig CatalogConfig::FromJSON(yyjson_val *obj) {
 	CatalogConfig res;
 	auto error = res.TryFromJSON(obj);
@@ -94,7 +91,37 @@ string CatalogConfig::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(endpoints_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *CatalogConfig::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: defaults
+	yyjson_mut_val *defaults_obj = yyjson_mut_obj(doc);
+	for (const auto &[key, value] : defaults) {
+		yyjson_mut_obj_add_str(doc, defaults_obj, key.c_str(), value.c_str());
+	}
+	yyjson_mut_obj_add_val(doc, obj, "defaults", defaults_obj);
+
+	// Serialize: overrides
+	yyjson_mut_val *overrides_obj = yyjson_mut_obj(doc);
+	for (const auto &[key, value] : overrides) {
+		yyjson_mut_obj_add_str(doc, overrides_obj, key.c_str(), value.c_str());
+	}
+	yyjson_mut_obj_add_val(doc, obj, "overrides", overrides_obj);
+
+	// Serialize: endpoints
+	if (has_endpoints) {
+		yyjson_mut_val *endpoints_arr = yyjson_mut_arr(doc);
+		for (const auto &item : endpoints) {
+			yyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());
+			yyjson_mut_arr_append(endpoints_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "endpoints", endpoints_arr);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

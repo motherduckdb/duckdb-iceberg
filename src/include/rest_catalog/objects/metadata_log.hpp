@@ -11,39 +11,28 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+class Object4 {
+public:
+	// Deserialization
+	static Object4 FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
+
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+
+	string metadata_file;
+	int64_t timestamp_ms;
+};
+
 class MetadataLog {
 public:
-	MetadataLog();
-	MetadataLog(const MetadataLog &) = delete;
-	MetadataLog &operator=(const MetadataLog &) = delete;
-	MetadataLog(MetadataLog &&) = default;
-	MetadataLog &operator=(MetadataLog &&) = default;
-	class Object4 {
-	public:
-		Object4();
-		Object4(const Object4 &) = delete;
-		Object4 &operator=(const Object4 &) = delete;
-		Object4(Object4 &&) = default;
-		Object4 &operator=(Object4 &&) = default;
-
-	public:
-		static Object4 FromJSON(yyjson_val *obj);
-
-	public:
-		string TryFromJSON(yyjson_val *obj);
-
-	public:
-		string metadata_file;
-		int64_t timestamp_ms;
-	};
-
-public:
+	// Deserialization
 	static MetadataLog FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	vector<Object4> value;
 };
 

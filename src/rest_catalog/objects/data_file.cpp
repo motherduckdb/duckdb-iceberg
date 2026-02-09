@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-DataFile::DataFile() {
-}
-
 DataFile DataFile::FromJSON(yyjson_val *obj) {
 	DataFile res;
 	auto error = res.TryFromJSON(obj);
@@ -101,7 +98,68 @@ string DataFile::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *DataFile::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize base class: ContentFile
+	yyjson_mut_val *content_filebase_obj = content_file.ToJSON(doc);
+	// Merge base properties into this object
+	{
+		size_t idx, max;
+		yyjson_mut_val *key, *val;
+		yyjson_mut_obj_foreach(content_filebase_obj, idx, max, key, val) {
+			yyjson_mut_obj_add(obj, key, val);
+		}
+	}
+
+	// Serialize: content
+	yyjson_mut_obj_add_str(doc, obj, "content", content.c_str());
+
+	// Serialize: first-row-id
+	if (has_first_row_id) {
+		yyjson_mut_obj_add_sint(doc, obj, "first-row-id", first_row_id);
+	}
+
+	// Serialize: column-sizes
+	if (has_column_sizes) {
+		yyjson_mut_val *column_sizes_val = column_sizes.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "column-sizes", column_sizes_val);
+	}
+
+	// Serialize: value-counts
+	if (has_value_counts) {
+		yyjson_mut_val *value_counts_val = value_counts.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "value-counts", value_counts_val);
+	}
+
+	// Serialize: null-value-counts
+	if (has_null_value_counts) {
+		yyjson_mut_val *null_value_counts_val = null_value_counts.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "null-value-counts", null_value_counts_val);
+	}
+
+	// Serialize: nan-value-counts
+	if (has_nan_value_counts) {
+		yyjson_mut_val *nan_value_counts_val = nan_value_counts.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "nan-value-counts", nan_value_counts_val);
+	}
+
+	// Serialize: lower-bounds
+	if (has_lower_bounds) {
+		yyjson_mut_val *lower_bounds_val = lower_bounds.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "lower-bounds", lower_bounds_val);
+	}
+
+	// Serialize: upper-bounds
+	if (has_upper_bounds) {
+		yyjson_mut_val *upper_bounds_val = upper_bounds.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "upper-bounds", upper_bounds_val);
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

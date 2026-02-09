@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-StructType::StructType() {
-}
-
 StructType StructType::FromJSON(yyjson_val *obj) {
 	StructType res;
 	auto error = res.TryFromJSON(obj);
@@ -58,7 +55,24 @@ string StructType::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(fields_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *StructType::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: type
+	yyjson_mut_obj_add_str(doc, obj, "type", type.c_str());
+
+	// Serialize: fields
+	yyjson_mut_val *fields_arr = yyjson_mut_arr(doc);
+	for (const auto &item : fields) {
+		yyjson_mut_val *item_val = item->ToJSON(doc);
+		yyjson_mut_arr_append(fields_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "fields", fields_arr);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

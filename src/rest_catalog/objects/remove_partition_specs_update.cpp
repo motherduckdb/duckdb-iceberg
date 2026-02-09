@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-RemovePartitionSpecsUpdate::RemovePartitionSpecsUpdate() {
-}
-
 RemovePartitionSpecsUpdate RemovePartitionSpecsUpdate::FromJSON(yyjson_val *obj) {
 	RemovePartitionSpecsUpdate res;
 	auto error = res.TryFromJSON(obj);
@@ -65,7 +62,37 @@ string RemovePartitionSpecsUpdate::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(action_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *RemovePartitionSpecsUpdate::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize base class: BaseUpdate
+	yyjson_mut_val *base_updatebase_obj = base_update.ToJSON(doc);
+	// Merge base properties into this object
+	{
+		size_t idx, max;
+		yyjson_mut_val *key, *val;
+		yyjson_mut_obj_foreach(base_updatebase_obj, idx, max, key, val) {
+			yyjson_mut_obj_add(obj, key, val);
+		}
+	}
+
+	// Serialize: spec-ids
+	yyjson_mut_val *spec_ids_arr = yyjson_mut_arr(doc);
+	for (const auto &item : spec_ids) {
+		yyjson_mut_val *item_val = yyjson_mut_int(doc, item);
+		yyjson_mut_arr_append(spec_ids_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "spec-ids", spec_ids_arr);
+
+	// Serialize: action
+	if (has_action) {
+		yyjson_mut_obj_add_str(doc, obj, "action", action.c_str());
+	}
+
+	return obj;
 }
 
 } // namespace rest_api_objects

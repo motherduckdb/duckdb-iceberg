@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-Expression::Expression() {
-}
-
 Expression Expression::FromJSON(yyjson_val *obj) {
 	Expression res;
 	auto error = res.TryFromJSON(obj);
@@ -64,7 +61,29 @@ string Expression::TryFromJSON(yyjson_val *obj) {
 		}
 		return "Expression failed to parse, none of the oneOf candidates matched";
 	} while (false);
-	return string();
+	return "";
+}
+
+yyjson_mut_val *Expression::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	if (has_true_expression) {
+		return true_expression.ToJSON(doc);
+	} else if (has_false_expression) {
+		return false_expression.ToJSON(doc);
+	} else if (has_and_or_expression) {
+		return and_or_expression.ToJSON(doc);
+	} else if (has_not_expression) {
+		return not_expression.ToJSON(doc);
+	} else if (has_set_expression) {
+		return set_expression.ToJSON(doc);
+	} else if (has_literal_expression) {
+		return literal_expression.ToJSON(doc);
+	} else if (has_unary_expression) {
+		return unary_expression.ToJSON(doc);
+	}
+	// No variant is active - return empty object
+	return yyjson_mut_obj(doc);
 }
 
 } // namespace rest_api_objects

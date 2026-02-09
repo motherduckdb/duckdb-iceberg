@@ -13,19 +13,13 @@ namespace rest_api_objects {
 
 class FileFormat {
 public:
-	FileFormat();
-	FileFormat(const FileFormat &) = delete;
-	FileFormat &operator=(const FileFormat &) = delete;
-	FileFormat(FileFormat &&) = default;
-	FileFormat &operator=(FileFormat &&) = default;
-
-public:
+	// Deserialization
 	static FileFormat FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	string value;
 };
 

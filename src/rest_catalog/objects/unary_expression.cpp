@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-UnaryExpression::UnaryExpression() {
-}
-
 UnaryExpression UnaryExpression::FromJSON(yyjson_val *obj) {
 	UnaryExpression res;
 	auto error = res.TryFromJSON(obj);
@@ -54,7 +51,11 @@ string UnaryExpression::TryFromJSON(yyjson_val *obj) {
 			return "UnaryExpression property 'value' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *UnaryExpression::ToJSON(yyjson_mut_doc *doc) const {
+	throw InternalException("Can't serialize this class (UnaryExpression)");
 }
 
 } // namespace rest_api_objects

@@ -13,19 +13,13 @@ namespace rest_api_objects {
 
 class TokenType {
 public:
-	TokenType();
-	TokenType(const TokenType &) = delete;
-	TokenType &operator=(const TokenType &) = delete;
-	TokenType(TokenType &&) = default;
-	TokenType &operator=(TokenType &&) = default;
-
-public:
+	// Deserialization
 	static TokenType FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *val);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
-public:
 	string value;
 };
 

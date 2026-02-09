@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-FetchScanTasksRequest::FetchScanTasksRequest() {
-}
-
 FetchScanTasksRequest FetchScanTasksRequest::FromJSON(yyjson_val *obj) {
 	FetchScanTasksRequest res;
 	auto error = res.TryFromJSON(obj);
@@ -35,7 +32,17 @@ string FetchScanTasksRequest::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *FetchScanTasksRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: plan-task
+	yyjson_mut_val *plan_task_val = plan_task.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "plan-task", plan_task_val);
+
+	return obj;
 }
 
 } // namespace rest_api_objects

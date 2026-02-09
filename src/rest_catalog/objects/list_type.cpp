@@ -12,9 +12,6 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-ListType::ListType() {
-}
-
 ListType ListType::FromJSON(yyjson_val *obj) {
 	ListType res;
 	auto error = res.TryFromJSON(obj);
@@ -70,7 +67,26 @@ string ListType::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(element_required_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *ListType::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+
+	// Serialize: type
+	yyjson_mut_obj_add_str(doc, obj, "type", type.c_str());
+
+	// Serialize: element-id
+	yyjson_mut_obj_add_int(doc, obj, "element-id", element_id);
+
+	// Serialize: element
+	yyjson_mut_val *element_val = element->ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "element", element_val);
+
+	// Serialize: element-required
+	yyjson_mut_obj_add_bool(doc, obj, "element-required", element_required);
+
+	return obj;
 }
 
 } // namespace rest_api_objects
