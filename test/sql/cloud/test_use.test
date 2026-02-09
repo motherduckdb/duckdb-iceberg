@@ -2,11 +2,11 @@
 # description: test use
 # group: [cloud]
 
-require-env ICEBERG_AWS_REMOTE_AVAILABLE
-
-require-env AWS_ACCESS_KEY_ID
-
-require-env AWS_SECRET_ACCESS_KEY
+# require-env ICEBERG_AWS_REMOTE_AVAILABLE
+#
+# require-env AWS_ACCESS_KEY_ID
+#
+# require-env AWS_SECRET_ACCESS_KEY
 
 require avro
 
@@ -38,21 +38,27 @@ set ignore_error_messages
 statement ok
 use glue_lake.myblognamespace;
 
-statement error
+statement ok
 use glue_lake;
-----
-Catalog Error
 
 statement error
-use glue_secret;
+select * from some_table;
 ----
-Catalog Error
+<REGEX>:.*some_table.*does not exist.*
+
+statement ok
+use glue_secret;
+
+statement error
+select * from some_table
+----
+<REGEX>:.*some_table.*does not exist.*
+
+mode output_result
 
 # even after showing all tables. use statement needs catalog + schema.
 statement ok
 show all tables;
 
-statement error
+statement ok
 use glue_lake;
-----
-Catalog Error
