@@ -59,9 +59,12 @@ public:
 		try {
 			{
 				TaskNotifier task_notifier {state.context};
-				auto res = ExecuteTaskIncremental();
-				if (res == TaskExecutionResult::TASK_NOT_FINISHED) {
-					return res;
+				auto res = TaskExecutionResult::TASK_NOT_FINISHED;
+				while (res == TaskExecutionResult::TASK_NOT_FINISHED) {
+					res = ExecuteTaskIncremental();
+					if (res == TaskExecutionResult::TASK_NOT_FINISHED && mode == TaskExecutionMode::PROCESS_PARTIAL) {
+						return res;
+					}
 				}
 			}
 			executor.FinishTask();
