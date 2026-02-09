@@ -56,7 +56,6 @@ jobs:
         shell: bash
         run: |
           python3 mitmdump --mode regular@8878 --flow-detail 2 > mitm.log 2>&1 &
-          sleep 2
 
       - name: Set up cloud testing
         env:
