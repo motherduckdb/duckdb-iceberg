@@ -226,10 +226,9 @@ idx_t ManifestReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergManifes
 			data_file.content = IcebergManifestEntryContentType::DATA;
 		}
 		if (iceberg_version >= 3) {
-			data_file.has_first_row_id = first_row_id_validity->RowIsValid(index);
-			if (data_file.has_first_row_id) {
-				data_file.first_row_id = first_row_id_data[index];
-			}
+			D_ASSERT(first_row_id_validity->RowIsValid(index));
+			data_file.has_first_row_id = true;
+			data_file.first_row_id = first_row_id_data[index];
 		}
 
 		entry.partition_spec_id = partition_spec_id_data[index];
