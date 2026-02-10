@@ -169,6 +169,9 @@ void IcebergCatalog::DropSchema(ClientContext &context, DropInfo &info) {
 
 	if (!schema_exists) {
 		if (info.if_not_found == OnEntryNotFound::RETURN_NULL) {
+			// remove the entry if it exists locally
+			// it could have been created during the bind phase.
+			GetSchemas().RemoveEntry(info.name);
 			return;
 		}
 		throw CatalogException("Schema with name \"%s\" does not exist", info.name);
