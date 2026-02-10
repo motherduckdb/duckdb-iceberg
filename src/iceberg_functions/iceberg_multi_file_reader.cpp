@@ -478,6 +478,8 @@ unique_ptr<Expression> IcebergMultiFileReader::GetVirtualColumnExpression(
 			if (col.identifier.IsNull()) {
 				continue;
 			}
+			//! FIXME: this means the column is present, not that it's always non-null
+			//! Don't we need to push a COALESCE(_row_id, ...) - or deal with it in FinalizeChunk ?
 			if (col.identifier.GetValue<int32_t>() == MultiFileReader::ROW_ID_FIELD_ID) {
 				// it is! return a reference to the global row id column so we can read it from the file directly
 				global_column_reference = row_id_column.get();
