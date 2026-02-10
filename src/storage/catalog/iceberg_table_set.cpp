@@ -199,8 +199,8 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetEntry(ClientContext &context, con
 	if (transaction_entry != iceberg_transaction.updated_tables.end()) {
 		return transaction_entry->second.GetSchemaVersion(lookup.GetAtClause());
 	}
-	auto previous_requested_snapshot = iceberg_transaction.requested_tables.find(table_name);
-	if (previous_requested_snapshot != iceberg_transaction.requested_tables.end()) {
+	auto previous_request_info = iceberg_transaction.GetTableRequestResult(table_key);
+	if (previous_request_info.exists) {
 		// transaction has already looked up this table, find it in entries
 		auto entry = entries.find(table_name);
 		if (entry == entries.end()) {
@@ -221,7 +221,7 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetEntry(ClientContext &context, con
 	if (!FillEntry(context, entry->second)) {
 		// Table doesn't exist
 		entries.erase(entry);
-		iceberg_transaction.requested_tables.emplace(table_name, TableInfoCache(false));
+		iceberg_transaction.RecordTableRequest(table_key);
 		return nullptr;
 	}
 	auto ret = entry->second.GetSchemaVersion(lookup.GetAtClause());
@@ -239,8 +239,7 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetEntry(ClientContext &context, con
 		latest_snapshot_id = -1;
 	}
 
-	iceberg_transaction.requested_tables.emplace(table_name,
-	                                             TableInfoCache(latest_sequence_number, latest_snapshot_id));
+	iceberg_transaction.RecordTableRequest(table_key, latest_sequence_number, latest_snapshot_id);
 	return ret;
 }
 
