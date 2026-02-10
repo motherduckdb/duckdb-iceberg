@@ -54,11 +54,11 @@ select * from some_table
 ----
 <REGEX>:.*some_table.*does not exist.*
 
-mode output_result
-
 # even after showing all tables. use statement needs catalog + schema.
 statement ok
 show all tables;
 
-statement ok
+statement error
 use glue_lake;
+----
+<REGEX>:.*No.*glue_lake.*found.*
