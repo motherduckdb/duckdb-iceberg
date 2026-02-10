@@ -49,11 +49,11 @@ select * from my_datalake.default.row_lineage_test order by data, id;
 1	replaced
 6	replaced
 
-query III
-select rowid, id, data from my_datalake.default.row_lineage_test order by data, id;
+query IIII
+select sequence_number, rowid, id, data from my_datalake.default.row_lineage_test order by data, id;
 ----
-1	2	b_u1
-3	4	d_u1
-16	7	g_new
-0	1	replaced
-11	6	replaced
+2	1	2	b_u1
+2	3	4	d_u1
+7	16	7	g_new
+5	0	1	replaced
+5	11	6	replaced

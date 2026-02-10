@@ -16,11 +16,13 @@
 #include "storage/authorization/sigv4.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
 #include "duckdb/planner/tableref/bound_at_clause.hpp"
+#include "iceberg_multi_file_reader.hpp"
 
 #include "rest_catalog/objects/list.hpp"
 #include "storage/iceberg_table_information.hpp"
 
 namespace duckdb {
+constexpr column_t IcebergMultiFileReader::COLUMN_IDENTIFIER_LAST_SEQUENCE_NUMBER;
 
 IcebergTableEntry::IcebergTableEntry(IcebergTableInformation &table_info, Catalog &catalog, SchemaCatalogEntry &schema,
                                      CreateTableInfo &info)
@@ -192,6 +194,8 @@ virtual_column_map_t IcebergTableEntry::VirtualColumns() {
 	result.insert(make_pair(COLUMN_IDENTIFIER_ROW_ID, TableColumn("rowid", LogicalType::BIGINT)));
 	result.insert(make_pair(MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER,
 	                        TableColumn("file_row_number", LogicalType::BIGINT)));
+	result.insert(make_pair(IcebergMultiFileReader::COLUMN_IDENTIFIER_LAST_SEQUENCE_NUMBER,
+	                        TableColumn("sequence_number", LogicalType::BIGINT)));
 	return result;
 }
 
