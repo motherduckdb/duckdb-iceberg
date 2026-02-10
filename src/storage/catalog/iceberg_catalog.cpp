@@ -85,16 +85,6 @@ void IcebergCatalog::StoreLoadTableResult(const string &table_key,
 	metadata_cache.emplace(table_key, std::move(val));
 }
 
-// MetadataCacheValue &IcebergCatalog::GetLoadTableResult(const string &table_key) {
-// 	std::lock_guard<std::mutex> g(metadata_cache_mutex);
-// 	if (metadata_cache.find(table_key) == metadata_cache.end()) {
-// 		throw InternalException("Attempting to retrieve table information that was never stored");
-// 	}
-// 	auto res = metadata_cache.find(table_key);
-// 	D_ASSERT(res != metadata_cache.end());
-// 	return *res->second;
-// }
-
 std::mutex &IcebergCatalog::GetMetadataCacheLock() {
 	return metadata_cache_mutex;
 }

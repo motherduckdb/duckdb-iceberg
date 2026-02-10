@@ -324,8 +324,8 @@ IcebergTableInformation IcebergTableInformation::Copy() const {
 	auto table_key = ret.GetTableKey();
 	{
 		lock_guard<std::mutex> cache_lock(catalog.GetMetadataCacheLock());
-		auto cached_result = catalog.TryGetValidCachedLoadTableResult(table_key, cache_lock);
-		D_ASSERT(cached_table_result);
+		auto cached_result = catalog.TryGetValidCachedLoadTableResult(table_key, cache_lock, false);
+		D_ASSERT(cached_result);
 		auto &cached_table_result = *cached_result->load_table_result;
 		ret.table_metadata = IcebergTableMetadata::FromTableMetadata(cached_table_result.metadata);
 		ret.table_metadata.latest_metadata_json = cached_table_result.metadata_location;
