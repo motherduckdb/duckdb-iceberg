@@ -52,8 +52,8 @@ select * from my_datalake.default.row_lineage_test order by data, id;
 query III
 select rowid, id, data from my_datalake.default.row_lineage_test order by data, id;
 ----
-6	2	b_u1
-5	4	d_u1
+1	2	b_u1
+3	4	d_u1
 16	7	g_new
-14	1	replaced
-13	6	replaced
+0	1	replaced
+11	6	replaced
