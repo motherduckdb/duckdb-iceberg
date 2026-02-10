@@ -189,6 +189,7 @@ virtual_column_map_t IcebergTableEntry::VirtualColumns() {
 	virtual_column_map_t result;
 	result.insert(
 	    make_pair(MultiFileReader::COLUMN_IDENTIFIER_FILENAME, TableColumn("filename", LogicalType::VARCHAR)));
+	result.insert(make_pair(COLUMN_IDENTIFIER_ROW_ID, TableColumn("rowid", LogicalType::BIGINT)));
 	result.insert(make_pair(MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER,
 	                        TableColumn("file_row_number", LogicalType::BIGINT)));
 	return result;
@@ -196,6 +197,7 @@ virtual_column_map_t IcebergTableEntry::VirtualColumns() {
 
 vector<column_t> IcebergTableEntry::GetRowIdColumns() const {
 	vector<column_t> result;
+	result.push_back(COLUMN_IDENTIFIER_ROW_ID);
 	result.push_back(MultiFileReader::COLUMN_IDENTIFIER_FILENAME);
 	result.push_back(MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER);
 	return result;
