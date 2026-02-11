@@ -564,8 +564,7 @@ void OAuth2Authorization::UpdateTokenState(const string &new_token, int32_t expi
 bool OAuth2Authorization::IsTokenExpiredUnlocked(ClientContext &context) const {
 	// Internal method - caller must hold token_mutex
 
-#ifdef DEBUG
-	// Test hook to force token expiry (debug builds only)
+	// Test hook to force token expiry (for test infrastructure)
 	Value force_expiry_val;
 	if (context.TryGetCurrentSetting("iceberg_test_force_token_expiry", force_expiry_val)) {
 		if (!force_expiry_val.IsNull() && force_expiry_val.type().id() == LogicalTypeId::BOOLEAN &&
@@ -573,7 +572,6 @@ bool OAuth2Authorization::IsTokenExpiredUnlocked(ClientContext &context) const {
 			return true;
 		}
 	}
-#endif
 
 	// Check normal expiry
 	if (token_expires_at == 0) {
