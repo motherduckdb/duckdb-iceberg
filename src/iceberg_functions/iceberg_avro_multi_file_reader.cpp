@@ -454,6 +454,10 @@ void IcebergAvroMultiFileReader::FinalizeChunk(ClientContext &context, const Mul
 		//! No row-lineage applies, just return
 		return;
 	}
+	if (manifest_file.content == IcebergManifestContentType::DELETE) {
+		//! No need to inherit first-row-id for DELETE manifests
+		return;
+	}
 
 	auto &global_state = global_state_p->Cast<IcebergAvroMultiFileReaderGlobalState>();
 
