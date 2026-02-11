@@ -133,25 +133,39 @@ static rest_api_objects::OAuthTokenResponse FetchOAuth2TokenResponse(ClientConte
 	vector<string> parameters;
 	parameters.push_back(StringUtil::Format("%s=%s", XWWWFormUrlEncode("grant_type"), XWWWFormUrlEncode(grant_type)));
 
+	// Google requires client credentials in POST body for refresh_token grant (not Basic Auth)
+	// RFC 6749 Section 2.3.1 allows either method; we use POST body for refresh_token (Google),
+	// Basic Auth for client_credentials (Keycloak/Polaris standard)
+	bool use_body_auth = (grant_type == "refresh_token");
+
 	if (grant_type == "refresh_token") {
 		// RFC 6749 Section 6: Refreshing an Access Token
+		// Google requires client credentials in POST body (not Basic Auth) for this grant
 		parameters.push_back(
 		    StringUtil::Format("%s=%s", XWWWFormUrlEncode("refresh_token"), XWWWFormUrlEncode(refresh_token_param)));
-		// Include scope for broader server compatibility (optional per RFC 6749 Section 6)
+		parameters.push_back(StringUtil::Format("%s=%s", XWWWFormUrlEncode("client_id"), XWWWFormUrlEncode(client_id)));
+		parameters.push_back(
+		    StringUtil::Format("%s=%s", XWWWFormUrlEncode("client_secret"), XWWWFormUrlEncode(client_secret)));
+		// Scope is optional for refresh_token grant. Only include if non-empty.
+		// Omitting scope uses the original grant's scopes (Google requires this for user OAuth refresh_tokens).
 		if (!scope.empty()) {
 			parameters.push_back(StringUtil::Format("%s=%s", XWWWFormUrlEncode("scope"), XWWWFormUrlEncode(scope)));
 		}
 	} else {
-		// client_credentials or other grant types
+		// client_credentials or other grant types - scope is required (always provided by caller)
 		parameters.push_back(StringUtil::Format("%s=%s", XWWWFormUrlEncode("scope"), XWWWFormUrlEncode(scope)));
 	}
 
-	string credentials = StringUtil::Format("%s:%s", client_id, client_secret);
-	string_t credentials_blob(credentials.data(), credentials.size());
-
 	HTTPHeaders headers(*context.db);
-	headers.Insert("Authorization", StringUtil::Format("Basic %s", Blob::ToBase64(credentials_blob)));
 	headers.Insert("Content-Type", "application/x-www-form-urlencoded");
+
+	// Use Basic Auth for client_credentials, POST body credentials for refresh_token
+	if (!use_body_auth) {
+		string credentials = StringUtil::Format("%s:%s", client_id, client_secret);
+		string_t credentials_blob(credentials.data(), credentials.size());
+		headers.Insert("Authorization", StringUtil::Format("Basic %s", Blob::ToBase64(credentials_blob)));
+	}
+
 	string post_data = StringUtil::Join(parameters, "&");
 
 	unique_ptr<HTTPResponse> response;
@@ -160,49 +174,23 @@ static rest_api_objects::OAuthTokenResponse FetchOAuth2TokenResponse(ClientConte
 		unique_ptr<HTTPClient> placeholder_client;
 		response = APIUtils::Request(RequestType::POST_REQUEST, context, endpoint_builder, placeholder_client, headers,
 		                             post_data);
+	} catch (HTTPException &http_ex) {
+		// APIUtils::Request throws HTTPException for non-2xx responses.
+		throw InvalidConfigurationException("Could not get token from %s: HTTP error: %s", uri, http_ex.what());
 	} catch (std::exception &ex) {
+		// Other transport errors
 		ErrorData error(ex);
-		throw InvalidConfigurationException("Could not get token from %s, captured error message: %s", uri,
-		                                    error.RawMessage());
+		throw InvalidConfigurationException("Could not get token from %s: %s", uri, error.RawMessage());
 	}
 
-	// Check HTTP status code first -- non-2xx is always an error
-	auto status_code = static_cast<uint16_t>(response->status);
-	if (status_code < 200 || status_code >= 300) {
-		// Non-2xx response. Try to parse RFC 6749 Section 5.2 error response for details.
-		std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc;
-		string error_msg;
-		try {
-			doc = std::unique_ptr<yyjson_doc, YyjsonDocDeleter>(ICUtils::api_result_to_doc(response->body));
-			auto *root = yyjson_doc_get_root(doc.get());
-			auto *error_val = yyjson_obj_get(root, "error");
-			if (error_val && yyjson_is_str(error_val)) {
-				string oauth_error = yyjson_get_str(error_val);
-				auto *error_desc_val = yyjson_obj_get(root, "error_description");
-				string oauth_desc =
-				    (error_desc_val && yyjson_is_str(error_desc_val)) ? yyjson_get_str(error_desc_val) : "";
-				error_msg = !oauth_desc.empty() ? StringUtil::Format("OAuth2 error '%s': %s", oauth_error, oauth_desc)
-				                                : StringUtil::Format("OAuth2 error '%s'", oauth_error);
-			} else {
-				// JSON but no "error" field
-				error_msg = StringUtil::Format("HTTP %d", status_code);
-			}
-		} catch (...) {
-			// Body is not valid JSON (e.g., HTML error page)
-			error_msg = StringUtil::Format("HTTP %d (non-JSON response)", status_code);
-		}
-		throw InvalidConfigurationException("Could not get token from %s: %s", uri, error_msg);
+	// Parse successful 2xx token response (APIUtils::Request throws for non-2xx, handled in catch above)
+	// Note: Use yyjson_read directly, NOT ICUtils::api_result_to_doc (which expects Iceberg catalog format)
+	auto *doc = yyjson_read(response->body.c_str(), response->body.size(), 0);
+	if (!doc) {
+		throw InvalidConfigurationException("Could not get token from %s: server returned invalid JSON", uri);
 	}
-
-	// Parse successful 2xx token response
-	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc;
-	try {
-		doc = std::unique_ptr<yyjson_doc, YyjsonDocDeleter>(ICUtils::api_result_to_doc(response->body));
-	} catch (...) {
-		throw InvalidConfigurationException(
-		    "Could not get token from %s: server returned HTTP %d with invalid JSON body", uri, status_code);
-	}
-	auto *root = yyjson_doc_get_root(doc.get());
+	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc_ptr(doc);
+	auto *root = yyjson_doc_get_root(doc);
 	auto token_response = rest_api_objects::OAuthTokenResponse::FromJSON(root);
 
 	// Validate token_type is bearer
@@ -415,32 +403,47 @@ unique_ptr<BaseSecret> OAuth2Authorization::CreateCatalogSecretFunction(ClientCo
 		}
 	}
 
-	//! ---- Grant Type ----
-	auto grant_type_it = result->secret_map.find("oauth2_grant_type");
-	if (grant_type_it != result->secret_map.end()) {
-		auto grant_type = grant_type_it->second.ToString();
-		if (!StringUtil::CIEquals(grant_type, "client_credentials")) {
-			throw InvalidInputException(
-			    "Unsupported option ('%s') for 'oauth2_grant_type', only supports 'client_credentials' currently",
-			    grant_type);
-		}
-	} else {
-		//! Default to client_credentials
-		result->secret_map["oauth2_grant_type"] = "client_credentials";
-	}
+	//! ---- Grant Type and Token Acquisition ----
+	// Determine which grant type to use for initial token acquisition
+	string grant_type_to_use;
+	string refresh_token_param;
+	string scope_to_use;
 
-	//! ---- Scope ----
-	if (!result->secret_map.count("oauth2_scope")) {
-		//! Default to default Polaris role
-		result->secret_map["oauth2_scope"] = "PRINCIPAL_ROLE:ALL";
+	// Check if refresh_token was provided
+	auto refresh_token_it = result->secret_map.find("refresh_token");
+	if (refresh_token_it != result->secret_map.end()) {
+		// User provided a refresh_token - use refresh_token grant
+		grant_type_to_use = "refresh_token";
+		refresh_token_param = refresh_token_it->second.ToString();
+		// Don't send scope in refresh_token grant (use original token scopes)
+		// Per RFC 6749 Section 6, scope is optional and if omitted, is treated as equal to original scope
+		auto scope_it = result->secret_map.find("oauth2_scope");
+		scope_to_use = (scope_it != result->secret_map.end()) ? scope_it->second.ToString() : "";
+	} else {
+		// No refresh_token - use client_credentials grant
+		auto grant_type_it = result->secret_map.find("oauth2_grant_type");
+		if (grant_type_it != result->secret_map.end()) {
+			grant_type_to_use = grant_type_it->second.ToString();
+			if (!StringUtil::CIEquals(grant_type_to_use, "client_credentials")) {
+				throw InvalidInputException(
+				    "Unsupported option ('%s') for 'oauth2_grant_type', only supports 'client_credentials' currently",
+				    grant_type_to_use);
+			}
+		} else {
+			grant_type_to_use = "client_credentials";
+		}
+		// Default scope for client_credentials grant
+		if (!result->secret_map.count("oauth2_scope")) {
+			result->secret_map["oauth2_scope"] = "PRINCIPAL_ROLE:ALL";
+		}
+		scope_to_use = result->secret_map["oauth2_scope"].ToString();
 	}
 
 	// Make a request to the oauth2 server uri to get the (bearer) token
 	// Store the full response to capture expires_in and refresh_token
-	auto token_response = FetchOAuth2TokenResponse(context, result->secret_map["oauth2_grant_type"].ToString(),
-	                                               server_uri, result->secret_map["client_id"].ToString(),
-	                                               result->secret_map["client_secret"].ToString(),
-	                                               result->secret_map["oauth2_scope"].ToString());
+	auto token_response =
+	    FetchOAuth2TokenResponse(context, grant_type_to_use, server_uri, result->secret_map["client_id"].ToString(),
+	                             result->secret_map["client_secret"].ToString(), scope_to_use, refresh_token_param);
 
 	result->secret_map["token"] = token_response.access_token;
 
