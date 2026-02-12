@@ -5,6 +5,7 @@
 #include "iceberg_logging.hpp"
 #include "iceberg_predicate.hpp"
 #include "iceberg_value.hpp"
+#include "../include/manifest_reader.hpp"
 #include "metadata/iceberg_manifest.hpp"
 #include "storage/iceberg_transaction.hpp"
 
@@ -233,12 +234,9 @@ FileExpandResult IcebergMultiFileList::GetExpandResult() const {
 	lock_guard<mutex> guard(lock);
 	GetFileInternal(1, guard);
 
-	if (manifest_entries.size() > 1) {
-		return FileExpandResult::MULTIPLE_FILES;
-	} else if (manifest_entries.size() == 1) {
-		return FileExpandResult::SINGLE_FILE;
-	}
-
+	// always return multiple files, In the case there is only 1 data file,
+	// we only lose performance if it is small
+	return FileExpandResult::MULTIPLE_FILES;
 	return FileExpandResult::NO_FILES;
 }
 
