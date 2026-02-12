@@ -38,10 +38,12 @@ CREATE SECRET (
 );
 
 statement ok
+SET ca_cert_file = '~/.mitmproxy/mitmproxy-ca-cert.pem';
+
+statement ok
 CREATE SECRET http_proxy (
     TYPE HTTP,
-    http_proxy '${HTTP_PROXY_PUBLIC}',
-    VERIFY_SSL 0
+    http_proxy '${HTTP_PROXY_PUBLIC}'
 );
 
 statement ok
