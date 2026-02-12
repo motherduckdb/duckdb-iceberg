@@ -15,7 +15,7 @@ CLIENT_SECRET = "2OR3eRvYfSZzzZ16MlPd95jhLnOaLM52"
 
 SPARK_VERSION = pyspark.__version__
 SPARK_MINOR_VERSION = '.'.join(SPARK_VERSION.split('.')[:2])
-ICEBERG_VERSION = "1.7.0"
+ICEBERG_VERSION = "1.10.0"
 
 # Get an access token from keycloak (the idP server)
 response = requests.post(
@@ -72,6 +72,31 @@ response = requests.post(
 )
 response.raise_for_status()
 
+# Grant access to DuckDB
+
+duckdb_client_id = "duckdb"
+duckdb_client_secret = "r2dHUlb7XrkSRcvrRqG5XZwQfnUS5NlL"
+
+response = requests.post(
+    url=KEYCLOAK_TOKEN_URL,
+    data={
+        "grant_type": "client_credentials",
+        "client_id": duckdb_client_id,
+        "client_secret": duckdb_client_secret,
+        "scope": "lakekeeper"
+    },
+    headers={"Content-type": "application/x-www-form-urlencoded"},
+)
+response.raise_for_status()
+access_token_client = response.json()['access_token']
+
+response = requests.post(
+    url=f"{MANAGEMENT_URL}/v1/user",
+    headers={"Authorization": f"Bearer {access_token_client}"},
+    json={"update-if-exists": True}
+)
+response.raise_for_status()
+
 # Check the users, should have a result
 
 response = requests.get(
@@ -81,11 +106,28 @@ response = requests.get(
 response.raise_for_status()
 print(response.json())
 
+# Makes DuckDB admin (as the above request should print duckdb having id `oidc~7a5da0c5-24e2-4148-a8d9-71c748275928`)
+response = requests.post(
+    url=f"{MANAGEMENT_URL}/v1/permissions/project/assignments",
+    headers={"Authorization": f"Bearer {access_token}"},
+    json={
+        "writes": [
+            {
+                "type": "project_admin",
+                "user": "oidc~7a5da0c5-24e2-4148-a8d9-71c748275928"
+            }
+        ]
+    }
+)
+response.raise_for_status()
+
 # Create a warehouse
 
 response = requests.post(
     url=f"{MANAGEMENT_URL}/v1/warehouse",
-    headers={"Authorization": f"Bearer {access_token}"},
+    headers={
+        "Authorization": f"Bearer {access_token}"
+    },
     json={
         "warehouse-name": WAREHOUSE,
         "storage-profile": {
@@ -95,19 +137,19 @@ response = requests.post(
             "endpoint": "http://localhost:9000",
             "region": "local-01",
             "path-style-access": True,
-            "flavor": "minio",
-            "sts-enabled": True,
+            "flavor": "s3-compat",
+            "sts-enabled": True
         },
         "storage-credential": {
             "type": "s3",
             "credential-type": "access-key",
             "aws-access-key-id": "minio-root-user",
-            "aws-secret-access-key": "minio-root-password",
-        },
-    },
+            "aws-secret-access-key": "minio-root-password"
+        }
+    }
 )
-response.raise_for_status()
 print(response.json())
+response.raise_for_status()
 
 # Populate the warehouse with Spark
 
