@@ -299,13 +299,9 @@ FileExpandResult IcebergMultiFileList::GetExpandResult() const {
 	lock_guard<mutex> guard(lock);
 	GetFileInternal(1, guard);
 
-	if (manifest_entries.size() > 1) {
-		return FileExpandResult::MULTIPLE_FILES;
-	} else if (manifest_entries.size() == 1) {
-		return FileExpandResult::SINGLE_FILE;
-	}
-
-	return FileExpandResult::NO_FILES;
+	// always return multiple files, In the case there is only 1 data file,
+	// we only lose performance if it is small
+	return FileExpandResult::MULTIPLE_FILES;
 }
 
 idx_t IcebergMultiFileList::GetTotalFileCount() const {
