@@ -85,20 +85,22 @@ jobs:
           cd lakekeeper
           git apply ../.github/patches/lakekeeper_docker_compose.patch
 
-      - name: Set up Lakekeeper
+      - name: Start Lakekeeper
         run: |
           cd lakekeeper/examples/access-control-simple
           docker compose up -d
 
-      - name: Populate Lakekeeper
-        env:
-          JAVA_HOME: /usr/lib/jvm/java-21-openjdk-amd64
+      - name: Bootstrap, Create Warehouse and Populate Lakekeeper
         run: |
           cd lakekeeper/examples/access-control-simple
           docker compose exec jupyter start.sh bash -lc "\
             jupyter nbconvert --to notebook --execute --output-dir=/tmp /home/jovyan/examples/01-Bootstrap.ipynb && \
             jupyter nbconvert --to notebook --execute --output-dir=/tmp /home/jovyan/examples/02-Create-Warehouse.ipynb && \
             jupyter nbconvert --to notebook --execute --output-dir=/tmp /home/jovyan/examples/03-01-Spark.ipynb"
+
+      - name: Generate Data
+        run: |
+          python3 -m scripts.data_generators.generate_data lakekeeper
 
       - name: Build extension
         env:
