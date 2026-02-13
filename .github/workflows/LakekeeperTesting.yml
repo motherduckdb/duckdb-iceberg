@@ -73,13 +73,18 @@ jobs:
         run: |
           echo "127.0.0.1 minio" | sudo tee -a /etc/hosts
 
-      - name: Clone Lakekeeper
-        run: |
-          git clone https://github.com/lakekeeper/lakekeeper.git
+#      - name: Clone Lakekeeper
+#        run: |
+#          git clone https://github.com/lakekeeper/lakekeeper.git
+#
+#      - name: Set up for Lakekeeper
+#        run: |
+#          cd lakekeeper/examples/access-control-simple
+#          docker compose up -d
 
       - name: Set up for Lakekeeper
         run: |
-          cd lakekeeper/examples/access-control-simple
+          cd scripts/lakekeeper/access-control-simple
           docker compose up -d
 
       - name: Wait for Keycloak
@@ -111,7 +116,6 @@ jobs:
             attempt=$((attempt + 1))
           done
           echo "Lakekeeper is healthy"
-          
 
       - name: Wait for Minio
         run: |
