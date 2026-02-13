@@ -1,11 +1,12 @@
 name: Local Lakekeeper Testing
 on:
-  workflow_call:
-    inputs:
-      artifact-name:
-        description: "Name of the DuckDB-Iceberg artifact to download"
-        required: true
-        type: string
+  push:
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref || '' }}-${{ github.base_ref || '' }}-${{ github.ref != 'refs/heads/main' || github.sha }}
+  cancel-in-progress: true
+
 env:
   BASE_BRANCH: ${{ github.base_ref || (endsWith(github.ref, '_feature') && 'feature' || 'main') }}
 
