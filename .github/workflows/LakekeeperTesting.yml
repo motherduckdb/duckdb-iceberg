@@ -80,7 +80,7 @@ jobs:
       - name: Set up for Lakekeeper
         run: |
           cd lakekeeper/examples/access-control-simple
-          docker compose up
+          docker compose up -d
 
       - name: Wait for Keycloak
         run: |
