@@ -78,6 +78,7 @@ jobs:
         with:
           repository: lakekeeper/lakekeeper
           ref: f6aaa4570cf62d54943581e7a00b9f882d9c992d
+          path: lakekeeper
 
       - name: Apply lakekeeper patch
         run: |
