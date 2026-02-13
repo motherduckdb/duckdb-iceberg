@@ -36,14 +36,12 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Set up Docker Compose
-        uses: docker/setup-compose-action@v1
-
-
-      - name: Install Python venv
+      - name: Update Docker Engine and install python
         run: |
           sudo apt update -y -qq
+          sudo apt-get install -y docker-ce docker-ce-cli containerd.io
           sudo apt install -y -qq python3-venv
+
 
       - name: Wait for polaris initialization
         run: |
