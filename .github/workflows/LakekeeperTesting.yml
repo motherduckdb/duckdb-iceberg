@@ -121,7 +121,7 @@ jobs:
         run: |
           max_attempts=30
           attempt=1
-          while ! curl -sf "http://localhost:9000"; do
+          while ! curl -sf "http://localhost:9001"; do
             if [ $attempt -gt $max_attempts ]; then
               echo "Minio failed to initialize after $max_attempts attempts"
               exit 1
