@@ -136,7 +136,7 @@ jobs:
         env:
           JAVA_HOME: /usr/lib/jvm/java-21-openjdk-amd64
         run: |
-          cd lakekeeper/examples/access-control-simple
+          cd scripts/lakekeeper/access-control-simple
           docker compose exec jupyter start.sh bash -lc "jupyter nbconvert --to notebook --execute /home/jovyan/examples/01-Bootstrap.ipynb --inplace && jupyter nbconvert --to notebook --execute /home/jovyan/examples/02-Create-Warehouse.ipynb --inplace && jupyter nbconvert --to notebook --execute /home/jovyan/examples/03-01-Spark.ipynb --inplace"
 
       - name: Build extension
