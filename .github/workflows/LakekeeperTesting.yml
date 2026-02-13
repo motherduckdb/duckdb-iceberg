@@ -73,74 +73,32 @@ jobs:
         run: |
           echo "127.0.0.1 minio" | sudo tee -a /etc/hosts
 
-#      - name: Clone Lakekeeper
-#        run: |
-#          git clone https://github.com/lakekeeper/lakekeeper.git
-#
-#      - name: Set up for Lakekeeper
-#        run: |
-#          cd lakekeeper/examples/access-control-simple
-#          docker compose up -d
+      - name: Clone Lakekeeper
+        uses: actions/checkout@v4
+        with:
+          repository: lakekeeper/lakekeeper
+          ref: f6aaa4570cf62d54943581e7a00b9f882d9c992d
+
+      - name: Apply lakekeeper patch
+        run: |
+          cd lakekeeper
+          git apply ../.github/patches/lakekeeper_docker_compose.patch
 
       - name: Set up for Lakekeeper
         run: |
-          cd scripts/lakekeeper/access-control-simple
+          cd lakekeeper/examples/access-control-simple
           docker compose up -d
-
-      - name: Wait for Keycloak
-        run: |
-          max_attempts=30
-          attempt=1
-          while ! curl -sf "http://localhost:30080/realms/master/.well-known/openid-configuration"; do
-            if [ $attempt -gt $max_attempts ]; then
-              echo "Keycloak failed to initialize after $max_attempts attempts"
-              exit 1
-            fi
-            echo "Waiting for Keycloak to initialize (attempt $attempt/$max_attempts)..."
-            sleep 5
-            attempt=$((attempt + 1))
-          done
-          echo "Keycloak is healthy"
-
-      - name: Wait for Lakekeeper
-        run: |
-          max_attempts=30
-          attempt=1
-          while ! curl -sf "http://localhost:8181/health"; do
-            if [ $attempt -gt $max_attempts ]; then
-              echo "Lakekeeper failed to initialize after $max_attempts attempts"
-              exit 1
-            fi
-            echo "Waiting for Lakekeeper to initialize (attempt $attempt/$max_attempts)..."
-            sleep 5
-            attempt=$((attempt + 1))
-          done
-          echo "Lakekeeper is healthy"
-
-      - name: Wait for Minio
-        run: |
-          max_attempts=30
-          attempt=1
-          while ! curl -sf "http://localhost:9001"; do
-            if [ $attempt -gt $max_attempts ]; then
-              echo "Minio failed to initialize after $max_attempts attempts"
-              exit 1
-            fi
-            echo "Waiting for Minio to initialize (attempt $attempt/$max_attempts)..."
-            sleep 5
-            attempt=$((attempt + 1))
-          done
-          echo "Minio is healthy"
 
       - name: Populate Lakekeeper
         env:
           JAVA_HOME: /usr/lib/jvm/java-21-openjdk-amd64
         run: |
-          cd scripts/lakekeeper/access-control-simple
+          cd lakekeeper/examples/access-control-simple
           docker compose exec jupyter start.sh bash -lc "\
             jupyter nbconvert --to notebook --execute --output-dir=/tmp /home/jovyan/examples/01-Bootstrap.ipynb && \
             jupyter nbconvert --to notebook --execute --output-dir=/tmp /home/jovyan/examples/02-Create-Warehouse.ipynb && \
             jupyter nbconvert --to notebook --execute --output-dir=/tmp /home/jovyan/examples/03-01-Spark.ipynb"
+
       - name: Build extension
         env:
           GEN: ninja
