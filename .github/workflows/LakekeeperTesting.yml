@@ -1,20 +1,16 @@
 name: Local Lakekeeper Testing
 on:
-  push:
-  pull_request:
-  workflow_dispatch:
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref || '' }}-${{ github.base_ref || '' }}-${{ github.ref != 'refs/heads/main' || github.sha }}
-  cancel-in-progress: true
-
-env:
-  BASE_BRANCH: ${{ github.base_ref || (endsWith(github.ref, '_feature') && 'feature' || 'main') }}
+  workflow_call:
+    inputs:
+      artifact-name:
+        description: "Name of the DuckDB-Iceberg artifact to download"
+        required: true
+        type: string
 
 jobs:
   rest:
     name: Test against Lakekeeper Catalog
     runs-on: ubuntu-latest
-    if: false
     env:
       VCPKG_TARGET_TRIPLET: 'x64-linux-release'
       GEN: ninja
@@ -81,9 +77,13 @@ jobs:
         run: |
           echo "127.0.0.1 minio" | sudo tee -a /etc/hosts
 
+      - name: Clone Lakekeeper
+        run: |
+          git clone https://github.com/lakekeeper/lakekeeper.git
+
       - name: Set up for Lakekeeper
         run: |
-          cd scripts/lakekeeper/access-control-simple
+          cd lakekeeper/examples/access-control-simple
           docker compose up
 
       - name: Wait for Keycloak
@@ -136,6 +136,7 @@ jobs:
         env:
           JAVA_HOME: /usr/lib/jvm/java-21-openjdk-amd64
         run: |
+          cd lakekeeper/examples/access-control-simple
           docker compose exec jupyter start.sh bash -lc "jupyter nbconvert --to notebook --execute /home/jovyan/examples/01-Bootstrap.ipynb --inplace && jupyter nbconvert --to notebook --execute /home/jovyan/examples/02-Create-Warehouse.ipynb --inplace && jupyter nbconvert --to notebook --execute /home/jovyan/examples/03-01-Spark.ipynb --inplace"
 
       - name: Test with rest catalog
