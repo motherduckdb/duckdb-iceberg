@@ -84,7 +84,7 @@ jobs:
           cd lakekeeper
           git apply ../.github/patches/lakekeeper_docker_compose.patch
 
-      - name: Set up for Lakekeeper
+      - name: Set up Lakekeeper
         run: |
           cd lakekeeper/examples/access-control-simple
           docker compose up -d
