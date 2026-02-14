@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/test_oauth2_edge_cases.test
+# name: test/sql/local/irc/oauth2/test_oauth2_edge_cases.test
 # description: Test OAuth2 edge cases: small expires_in, refresh_token rotation, and omission
-# group: [irc]
+# group: [oauth2]
 
 require-env NESSIE_SERVER_AVAILABLE
 

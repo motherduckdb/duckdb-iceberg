@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/test_oauth2_token_reacquire.test
+# name: test/sql/local/irc/oauth2/test_oauth2_token_reacquire.test
 # description: Test that credentials are stored for token refresh capability
-# group: [irc]
+# group: [oauth2]
 
 require-env ICEBERG_SERVER_AVAILABLE
 

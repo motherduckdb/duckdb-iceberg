@@ -45,9 +45,9 @@ private:
 	void UpdateTokenState(const string &new_token, int32_t expires_in, const string &new_refresh_token);
 
 	//! Internal methods -- caller must hold token_mutex
-	bool IsTokenExpiredUnlocked(ClientContext &context) const;
-	bool CanRefreshUnlocked() const;
-	void RefreshAccessTokenUnlocked(ClientContext &context);
+	bool IsTokenExpiredUnlocked(ClientContext &context, std::lock_guard<std::mutex> &lock) const;
+	bool CanRefreshUnlocked(std::lock_guard<std::mutex> &lock) const;
+	void RefreshAccessTokenUnlocked(ClientContext &context, std::lock_guard<std::mutex> &lock);
 
 	//! Mutex to serialize token refresh. Held during check+refresh+copy, released before catalog I/O.
 	//! At most one thread refreshes at a time; others queue and re-check expiry after acquiring.

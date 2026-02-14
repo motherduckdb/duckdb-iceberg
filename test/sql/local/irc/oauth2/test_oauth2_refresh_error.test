@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/test_oauth2_refresh_error.test
+# name: test/sql/local/irc/oauth2/test_oauth2_refresh_error.test
 # description: Test OAuth2 error handling when refresh fails (e.g., 401, invalid_grant)
-# group: [irc]
+# group: [oauth2]
 
 # NOTE: This test uses the Nessie/Keycloak infrastructure to test refresh failures
 # Scenarios tested:

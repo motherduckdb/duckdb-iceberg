@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/test_oauth2_refresh_token.test
+# name: test/sql/local/irc/oauth2/test_oauth2_refresh_token.test
 # description: Test RFC 6749 Section 6 refresh_token grant flow
-# group: [irc]
+# group: [oauth2]
 
 require-env NESSIE_SERVER_AVAILABLE
 

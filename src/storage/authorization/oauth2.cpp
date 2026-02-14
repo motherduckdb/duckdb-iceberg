@@ -10,6 +10,7 @@
 #include "duckdb/common/types/blob.hpp"
 #include "duckdb/common/types/value.hpp"
 #include "rest_catalog/objects/oauth_token_response.hpp"
+#include "rest_catalog/objects/oauth_error.hpp"
 #include "duckdb/main/config.hpp"
 #include <chrono>
 
@@ -64,10 +65,6 @@ static string XWWWFormUrlEncode(const string &input) {
 	}
 	return result;
 }
-
-} // namespace
-
-namespace {
 
 static void ExtractOAuth2CredentialsFromSecret(const KeyValueSecret &kv_secret, OAuth2Authorization &result) {
 	auto client_id_val = kv_secret.TryGetValue("client_id");
@@ -174,33 +171,61 @@ static rest_api_objects::OAuthTokenResponse FetchOAuth2TokenResponse(ClientConte
 		unique_ptr<HTTPClient> placeholder_client;
 		response = APIUtils::Request(RequestType::POST_REQUEST, context, endpoint_builder, placeholder_client, headers,
 		                             post_data);
-	} catch (HTTPException &http_ex) {
-		// APIUtils::Request throws HTTPException for non-2xx responses.
-		throw InvalidConfigurationException("Could not get token from %s: HTTP error: %s", uri, http_ex.what());
 	} catch (std::exception &ex) {
-		// Other transport errors
+		// Only catch actual transport/network errors (not HTTP errors)
 		ErrorData error(ex);
 		throw InvalidConfigurationException("Could not get token from %s: %s", uri, error.RawMessage());
 	}
 
-	// Parse successful 2xx token response (APIUtils::Request throws for non-2xx, handled in catch above)
-	// Note: Use yyjson_read directly, NOT ICUtils::api_result_to_doc (which expects Iceberg catalog format)
-	auto *doc = yyjson_read(response->body.c_str(), response->body.size(), 0);
-	if (!doc) {
-		throw InvalidConfigurationException("Could not get token from %s: server returned invalid JSON", uri);
-	}
-	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc_ptr(doc);
-	auto *root = yyjson_doc_get_root(doc);
-	auto token_response = rest_api_objects::OAuthTokenResponse::FromJSON(root);
+	// Check HTTP status code
+	if (response->status >= HTTPStatusCode::OK_200 && response->status < HTTPStatusCode::MultipleChoices_300) {
+		// Success: Parse OAuthTokenResponse
+		auto *doc = yyjson_read(response->body.c_str(), response->body.size(), 0);
+		if (!doc) {
+			throw InvalidConfigurationException("Could not get token from %s: server returned invalid JSON", uri);
+		}
+		std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc_ptr(doc);
+		auto *root = yyjson_doc_get_root(doc);
+		auto token_response = rest_api_objects::OAuthTokenResponse::FromJSON(root);
 
-	// Validate token_type is bearer
-	if (!StringUtil::CIEquals(token_response.token_type, "bearer")) {
-		throw NotImplementedException(
-		    "token_type return value '%s' is not supported, only supports 'bearer' currently.",
-		    token_response.token_type);
-	}
+		// Validate token_type is bearer
+		if (!StringUtil::CIEquals(token_response.token_type, "bearer")) {
+			throw NotImplementedException(
+			    "token_type return value '%s' is not supported, only supports 'bearer' currently.",
+			    token_response.token_type);
+		}
 
-	return token_response;
+		return token_response;
+	} else if (response->status >= HTTPStatusCode::BadRequest_400 &&
+	           response->status < HTTPStatusCode::InternalServerError_500) {
+		// Client error: Try to parse OAuth2 error response (RFC 6749 Section 5.2)
+		auto *doc = yyjson_read(response->body.c_str(), response->body.size(), 0);
+		if (doc) {
+			std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc_ptr(doc);
+			auto *root = yyjson_doc_get_root(doc);
+			try {
+				auto oauth_error = rest_api_objects::OAuthError::FromJSON(root);
+				string error_msg = StringUtil::Format("OAuth2 token request failed (%s): %s",
+				                                      EnumUtil::ToString(response->status), oauth_error._error);
+				if (oauth_error.has_error_description) {
+					error_msg += StringUtil::Format(" - %s", oauth_error.error_description);
+				}
+				if (oauth_error.has_error_uri) {
+					error_msg += StringUtil::Format(" (see %s)", oauth_error.error_uri);
+				}
+				throw InvalidConfigurationException(error_msg);
+			} catch (InvalidInputException &) {
+				// Not a valid OAuth error response, fall through to generic error
+			}
+		}
+		// Generic client error
+		throw InvalidConfigurationException("Could not get token from %s: HTTP %s - %s", uri,
+		                                    EnumUtil::ToString(response->status), response->body);
+	} else {
+		// Server error or other status
+		throw InvalidConfigurationException("Could not get token from %s: HTTP %s - %s", uri,
+		                                    EnumUtil::ToString(response->status), response->reason);
+	}
 }
 
 } // namespace
@@ -474,8 +499,8 @@ unique_ptr<HTTPResponse> OAuth2Authorization::Request(RequestType request_type, 
 	string bearer_token;
 	{
 		std::lock_guard<std::mutex> lock(token_mutex);
-		if (IsTokenExpiredUnlocked(context) && CanRefreshUnlocked()) {
-			RefreshAccessTokenUnlocked(context);
+		if (IsTokenExpiredUnlocked(context, lock) && CanRefreshUnlocked(lock)) {
+			RefreshAccessTokenUnlocked(context, lock);
 		}
 		bearer_token = token;
 	}
@@ -498,8 +523,8 @@ unique_ptr<HTTPResponse> OAuth2Authorization::Request(RequestType request_type, 
 		bool should_retry = false;
 		{
 			std::lock_guard<std::mutex> lock(token_mutex);
-			if (CanRefreshUnlocked()) {
-				RefreshAccessTokenUnlocked(context);
+			if (CanRefreshUnlocked(lock)) {
+				RefreshAccessTokenUnlocked(context, lock);
 				bearer_token = token;
 				should_retry = true;
 			}
@@ -564,8 +589,9 @@ void OAuth2Authorization::UpdateTokenState(const string &new_token, int32_t expi
 	}
 }
 
-bool OAuth2Authorization::IsTokenExpiredUnlocked(ClientContext &context) const {
+bool OAuth2Authorization::IsTokenExpiredUnlocked(ClientContext &context, std::lock_guard<std::mutex> &lock) const {
 	// Internal method - caller must hold token_mutex
+	(void)lock;
 
 	// Test hook to force token expiry (for test infrastructure)
 	Value force_expiry_val;
@@ -587,15 +613,17 @@ bool OAuth2Authorization::IsTokenExpiredUnlocked(ClientContext &context) const {
 	return now_seconds >= token_expires_at;
 }
 
-bool OAuth2Authorization::CanRefreshUnlocked() const {
+bool OAuth2Authorization::CanRefreshUnlocked(std::lock_guard<std::mutex> &lock) const {
 	// Internal method - caller must hold token_mutex
+	(void)lock;
 	// Can refresh if we have a refresh_token or if we have client credentials
 	return !refresh_token.empty() || (!client_id.empty() && !client_secret.empty() && !uri.empty());
 }
 
-void OAuth2Authorization::RefreshAccessTokenUnlocked(ClientContext &context) {
+void OAuth2Authorization::RefreshAccessTokenUnlocked(ClientContext &context, std::lock_guard<std::mutex> &lock) {
 	// Internal method - caller must hold token_mutex
-	if (!CanRefreshUnlocked()) {
+	(void)lock;
+	if (!CanRefreshUnlocked(lock)) {
 		throw HTTPException("Cannot refresh access token: no refresh_token and no client credentials available");
 	}
 

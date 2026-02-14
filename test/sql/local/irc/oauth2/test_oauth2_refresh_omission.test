@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/test_oauth2_refresh_omission.test
+# name: test/sql/local/irc/oauth2/test_oauth2_refresh_omission.test
 # description: Test that OAuth2 preserves refresh_token when server omits it in refresh response
-# group: [irc]
+# group: [oauth2]
 
 # NOTE: This test uses Keycloak which returns refresh_token in the initial grant.
 # Per RFC 6749 Section 6, when the server omits refresh_token in subsequent responses:

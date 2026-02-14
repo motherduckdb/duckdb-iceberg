@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/test_oauth2_no_refresh_static.test
+# name: test/sql/local/irc/oauth2/test_oauth2_no_refresh_static.test
 # description: Verify static tokens work without triggering new OAuth2 token fetches
-# group: [irc]
+# group: [oauth2]
 
 require-env ICEBERG_SERVER_AVAILABLE
 

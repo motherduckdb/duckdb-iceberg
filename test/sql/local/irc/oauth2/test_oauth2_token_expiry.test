@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/test_oauth2_token_expiry.test
+# name: test/sql/local/irc/oauth2/test_oauth2_token_expiry.test
 # description: Test that OAuth2 token expiry is tracked from the token response
-# group: [irc]
+# group: [oauth2]
 
 require-env ICEBERG_SERVER_AVAILABLE
 
