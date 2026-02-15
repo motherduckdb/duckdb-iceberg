@@ -5,11 +5,14 @@ namespace duckdb {
 
 namespace manifest_list {
 
-ManifestListReader::ManifestListReader(idx_t iceberg_version) : BaseManifestReader(iceberg_version) {
+ManifestListReader::ManifestListReader(const AvroScan &scan) : BaseManifestReader(scan) {
+}
+
+ManifestListReader::~ManifestListReader() {
 }
 
 idx_t ManifestListReader::Read(idx_t count, vector<IcebergManifestFile> &result) {
-	if (!scan || finished) {
+	if (finished) {
 		return 0;
 	}
 

@@ -4,12 +4,15 @@ namespace duckdb {
 
 namespace manifest_file {
 
-ManifestReader::ManifestReader(idx_t iceberg_version, bool skip_deleted)
-    : BaseManifestReader(iceberg_version), skip_deleted(skip_deleted) {
+ManifestReader::ManifestReader(const AvroScan &scan, bool skip_deleted)
+    : BaseManifestReader(scan), skip_deleted(skip_deleted) {
+}
+
+ManifestReader::~ManifestReader() {
 }
 
 idx_t ManifestReader::Read(idx_t count, vector<IcebergManifestEntry> &result) {
-	if (!scan || finished) {
+	if (finished) {
 		return 0;
 	}
 
