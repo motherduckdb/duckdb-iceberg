@@ -654,6 +654,10 @@ OpenFileInfo IcebergMultiFileList::GetFileInternal(idx_t file_id, lock_guard<mut
 	// etag / last modified time can be set to dummy values
 	extended_info->options["etag"] = Value("");
 	extended_info->options["last_modified"] = Value::TIMESTAMP(timestamp_t(0));
+	if (data_file.has_first_row_id) {
+		extended_info->options["first_row_id"] = Value::BIGINT(data_file.first_row_id);
+	}
+	extended_info->options["sequence_number"] = Value::BIGINT(manifest_entry.sequence_number);
 	res.extended_info = extended_info;
 	return res;
 }
