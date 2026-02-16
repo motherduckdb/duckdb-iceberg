@@ -10,7 +10,7 @@ import sys
 import os
 
 CONNECTION_KEY = 'polaris'
-SPARK_RUNTIME_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'iceberg-spark-runtime-3.5_2.12-1.9.0.jar')
+SPARK_RUNTIME_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'iceberg-spark-runtime-4.0_2.13-1.10.0.jar')
 
 
 @IcebergConnection.register(CONNECTION_KEY)
@@ -21,7 +21,7 @@ class IcebergSparkLocal(IcebergConnection):
 
     def get_connection(self):
         os.environ["PYSPARK_SUBMIT_ARGS"] = (
-            "--packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.9.0,org.apache.iceberg:iceberg-aws-bundle:1.9.0 pyspark-shell"
+            "--packages org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0,org.apache.iceberg:iceberg-aws-bundle:1.9.0 pyspark-shell"
         )
 
         client_id = os.getenv('POLARIS_CLIENT_ID', '')
@@ -37,7 +37,7 @@ class IcebergSparkLocal(IcebergConnection):
         config = SparkConf()
         config.set(
             "spark.jars.packages",
-            "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.9.0,org.apache.hadoop:hadoop-aws:3.4.0,software.amazon.awssdk:bundle:2.23.19,software.amazon.awssdk:url-connection-client:2.23.19",
+            "org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0,org.apache.hadoop:hadoop-aws:3.4.0,software.amazon.awssdk:bundle:2.23.19,software.amazon.awssdk:url-connection-client:2.23.19",
         )
         config.set('spark.sql.iceberg.vectorization.enabled', 'false')
         # Configure the 'polaris' catalog as an Iceberg rest catalog
