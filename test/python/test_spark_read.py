@@ -26,7 +26,21 @@ class IcebergRuntimeConfig:
 
 # List of runtimes you want to test
 ICEBERG_RUNTIMES = [
-    IcebergRuntimeConfig(spark_version='4.0', scala_binary_version='2.13', iceberg_library_version='1.10.0')
+    IcebergRuntimeConfig(
+        spark_version="3.5",
+        scala_binary_version="2.12",
+        iceberg_library_version="1.4.1",
+    ),
+    IcebergRuntimeConfig(
+        spark_version="3.5",
+        scala_binary_version="2.12",
+        iceberg_library_version="1.9.0",
+    ),
+    IcebergRuntimeConfig(
+        spark_version="3.5",
+        scala_binary_version="2.13",
+        iceberg_library_version="1.9.1",
+    ),
 ]
 
 
