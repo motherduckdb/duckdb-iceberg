@@ -299,13 +299,9 @@ FileExpandResult IcebergMultiFileList::GetExpandResult() const {
 	lock_guard<mutex> guard(lock);
 	GetFileInternal(1, guard);
 
-	if (manifest_entries.size() > 1) {
-		return FileExpandResult::MULTIPLE_FILES;
-	} else if (manifest_entries.size() == 1) {
-		return FileExpandResult::SINGLE_FILE;
-	}
-
-	return FileExpandResult::NO_FILES;
+	// always return multiple files, In the case there is only 1 data file,
+	// we only lose performance if it is small
+	return FileExpandResult::MULTIPLE_FILES;
 }
 
 idx_t IcebergMultiFileList::GetTotalFileCount() const {
@@ -658,6 +654,10 @@ OpenFileInfo IcebergMultiFileList::GetFileInternal(idx_t file_id, lock_guard<mut
 	// etag / last modified time can be set to dummy values
 	extended_info->options["etag"] = Value("");
 	extended_info->options["last_modified"] = Value::TIMESTAMP(timestamp_t(0));
+	if (data_file.has_first_row_id) {
+		extended_info->options["first_row_id"] = Value::BIGINT(data_file.first_row_id);
+	}
+	extended_info->options["sequence_number"] = Value::BIGINT(manifest_entry.sequence_number);
 	res.extended_info = extended_info;
 	return res;
 }
