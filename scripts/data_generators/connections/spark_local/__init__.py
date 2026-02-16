@@ -8,7 +8,7 @@ from ..spark_settings import iceberg_runtime_configuration
 
 RUNTIME_CONFIG = iceberg_runtime_configuration()
 SPARK_VERSION = RUNTIME_CONFIG['spark_version']
-SCALAR_BINARY_VERSION = RUNTIME_CONFIG['scala_binary_version']
+SCALA_BINARY_VERSION = RUNTIME_CONFIG['scala_binary_version']
 ICEBERG_LIBRARY_VERSION = RUNTIME_CONFIG['iceberg_library_version']
 
 import sys
@@ -18,7 +18,7 @@ CONNECTION_KEY = 'local'
 
 SCRIPT_DIR = os.path.dirname(__file__)
 DATA_GENERATION_DIR = os.path.join(SCRIPT_DIR, '..', '..', '..', '..', 'data', 'generated', 'iceberg', 'spark-local')
-SPARK_RUNTIME_PATH = os.path.join(SCRIPT_DIR, '..', '..', f'iceberg-spark-runtime-{SPARK_VERSION}_{SCALAR_BINARY_VERSION}-{ICEBERG_LIBRARY_VERSION}.jar')
+SPARK_RUNTIME_PATH = os.path.join(SCRIPT_DIR, '..', '..', f'iceberg-spark-runtime-{SPARK_VERSION}_{SCALA_BINARY_VERSION}-{ICEBERG_LIBRARY_VERSION}.jar')
 
 
 @IcebergConnection.register(CONNECTION_KEY)

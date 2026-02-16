@@ -9,7 +9,7 @@ from ..spark_settings import iceberg_runtime_configuration
 
 RUNTIME_CONFIG = iceberg_runtime_configuration()
 SPARK_VERSION = RUNTIME_CONFIG['spark_version']
-SCALAR_BINARY_VERSION = RUNTIME_CONFIG['scala_binary_version']
+SCALA_BINARY_VERSION = RUNTIME_CONFIG['scala_binary_version']
 ICEBERG_LIBRARY_VERSION = RUNTIME_CONFIG['iceberg_library_version']
 
 import sys
@@ -37,7 +37,7 @@ class IcebergSparkLocal(IcebergConnection):
 
     def get_connection(self):
         conf = {
-            "spark.jars.packages": f"org.apache.iceberg:iceberg-spark-runtime-{SPARK_VERSION}_{SCALAR_BINARY_VERSION}:{ICEBERG_LIBRARY_VERSION},org.apache.iceberg:iceberg-aws-bundle:{ICEBERG_LIBRARY_VERSION}",
+            "spark.jars.packages": f"org.apache.iceberg:iceberg-spark-runtime-{SPARK_VERSION}_{SCALA_BINARY_VERSION}:{ICEBERG_LIBRARY_VERSION},org.apache.iceberg:iceberg-aws-bundle:{ICEBERG_LIBRARY_VERSION}",
             "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
             "spark.sql.catalog.lakekeeper": "org.apache.iceberg.spark.SparkCatalog",
             "spark.sql.catalog.lakekeeper.type": "rest",

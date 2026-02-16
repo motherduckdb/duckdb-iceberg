@@ -27,7 +27,7 @@ from ..spark_settings import iceberg_runtime_configuration
 
 RUNTIME_CONFIG = iceberg_runtime_configuration()
 SPARK_VERSION = RUNTIME_CONFIG['spark_version']
-SCALAR_BINARY_VERSION = RUNTIME_CONFIG['scala_binary_version']
+SCALA_BINARY_VERSION = RUNTIME_CONFIG['scala_binary_version']
 ICEBERG_LIBRARY_VERSION = RUNTIME_CONFIG['iceberg_library_version']
 
 import sys

@@ -14,10 +14,10 @@ CONNECTION_KEY = 'polaris'
 
 RUNTIME_CONFIG = iceberg_runtime_configuration()
 SPARK_VERSION = RUNTIME_CONFIG['spark_version']
-SCALAR_BINARY_VERSION = RUNTIME_CONFIG['scala_binary_version']
+SCALA_BINARY_VERSION = RUNTIME_CONFIG['scala_binary_version']
 ICEBERG_LIBRARY_VERSION = RUNTIME_CONFIG['iceberg_library_version']
 
-ICEBERG_SPARK_RUNTIME = f'iceberg-spark-runtime-{SPARK_VERSION}_{SCALAR_BINARY_VERSION}-{ICEBERG_LIBRARY_VERSION}'
+ICEBERG_SPARK_RUNTIME = f'iceberg-spark-runtime-{SPARK_VERSION}_{SCALA_BINARY_VERSION}-{ICEBERG_LIBRARY_VERSION}'
 
 SPARK_RUNTIME_PATH = os.path.join(os.path.dirname(__file__), '..', '..', f'{ICEBERG_SPARK_RUNTIME}.jar')
 
@@ -29,7 +29,7 @@ class IcebergSparkLocal(IcebergConnection):
 
     def get_connection(self):
         os.environ["PYSPARK_SUBMIT_ARGS"] = (
-            f"--packages org.apache.iceberg:iceberg-spark-runtime-{SPARK_VERSION}_{SCALAR_BINARY_VERSION}:{ICEBERG_LIBRARY_VERSION},org.apache.iceberg:iceberg-aws-bundle:{ICEBERG_LIBRARY_VERSION} pyspark-shell"
+            f"--packages org.apache.iceberg:iceberg-spark-runtime-{SPARK_VERSION}_{SCALA_BINARY_VERSION}:{ICEBERG_LIBRARY_VERSION},org.apache.iceberg:iceberg-aws-bundle:{ICEBERG_LIBRARY_VERSION} pyspark-shell"
         )
 
         client_id = os.getenv('POLARIS_CLIENT_ID', '')
@@ -45,7 +45,7 @@ class IcebergSparkLocal(IcebergConnection):
         config = SparkConf()
         config.set(
             "spark.jars.packages",
-            f"org.apache.iceberg:iceberg-spark-runtime-{SPARK_VERSION}_{SCALAR_BINARY_VERSION}:{ICEBERG_LIBRARY_VERSION},org.apache.hadoop:hadoop-aws:3.4.0,software.amazon.awssdk:bundle:2.23.19,software.amazon.awssdk:url-connection-client:2.23.19",
+            f"org.apache.iceberg:iceberg-spark-runtime-{SPARK_VERSION}_{SCALA_BINARY_VERSION}:{ICEBERG_LIBRARY_VERSION},org.apache.hadoop:hadoop-aws:3.4.0,software.amazon.awssdk:bundle:2.23.19,software.amazon.awssdk:url-connection-client:2.23.19",
         )
         config.set('spark.sql.iceberg.vectorization.enabled', 'false')
         # Configure the 'polaris' catalog as an Iceberg rest catalog
