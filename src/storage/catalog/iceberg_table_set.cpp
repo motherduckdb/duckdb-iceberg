@@ -145,41 +145,22 @@ void IcebergTableSet::LoadEntries(ClientContext &context) {
 	iceberg_transaction.listed_schemas.insert(schema.name);
 }
 
-static case_insensitive_map_t<Value> ParseTableProperties(ClientContext &context, const ParsedExpression &expr_ref) {
-	auto binder = Binder::CreateBinder(context);
+static int32_t ParseFormatVersionProperty(TableFunctionBinder &binder, ClientContext &context,
+                                          const ParsedExpression &expr_ref) {
 	auto expr = expr_ref.Copy();
-	TableFunctionBinder option_binder(*binder, context, "tblproperties");
-	auto bound_expr = option_binder.Bind(expr);
+	auto bound_expr = binder.Bind(expr);
 	if (bound_expr->HasParameter()) {
 		throw ParameterNotResolvedException();
 	}
 
 	auto val = ExpressionExecutor::EvaluateScalar(context, *bound_expr, true);
 	if (val.IsNull()) {
-		throw BinderException("NULL is not supported as a valid option for TBLPROPERTIES");
+		throw BinderException("NULL is not supported as a valid option for 'format-version'");
 	}
-	auto &type = val.type();
-	if (type.id() != LogicalTypeId::STRUCT || StructType::IsUnnamed(type)) {
-		throw BinderException("TBLPROPERTIES value should be of type STRUCT(<key1>: <value1>, ..., <keyN>: <valueN>)");
-	}
-	auto &children = StructValue::GetChildren(val);
-	case_insensitive_map_t<Value> result;
-	auto &child_types = StructType::GetChildTypes(type);
-	D_ASSERT(children.size() == child_types.size());
-	for (idx_t i = 0; i < children.size(); i++) {
-		auto &val = children[i];
-		auto &name = child_types[i].first;
-		result.emplace(name, val);
-	}
-	return result;
-}
-
-static int32_t ParseFormatVersionProperty(const Value &val) {
-	auto value = val;
-	if (!value.DefaultTryCastAs(LogicalType::INTEGER, true)) {
+	if (!val.DefaultTryCastAs(LogicalType::INTEGER, true)) {
 		throw InvalidInputException("Can't cast 'format-version' property (%s) to INTEGER", val.ToString());
 	}
-	return value.GetValue<int32_t>();
+	return val.GetValue<int32_t>();
 }
 
 bool IcebergTableSet::CreateNewEntry(ClientContext &context, IcebergCatalog &catalog, IcebergSchemaEntry &schema,
@@ -187,20 +168,14 @@ bool IcebergTableSet::CreateNewEntry(ClientContext &context, IcebergCatalog &cat
 	auto table_name = info.table;
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
 
-	case_insensitive_map_t<Value> table_properties;
-	auto it = info.options.find("tblproperties");
-	if (it != info.options.end()) {
-		table_properties = ParseTableProperties(context, *it->second);
-	}
+	auto binder = Binder::CreateBinder(context);
+	TableFunctionBinder property_binder(*binder, context, "format-version");
 
 	optional_idx iceberg_version;
-	for (auto &entry : table_properties) {
-		auto &name = entry.first;
-		auto &value = entry.second;
-
-		if (StringUtil::CIEquals(name, "format-version")) {
-			iceberg_version = ParseFormatVersionProperty(value);
-		}
+	case_insensitive_map_t<Value> table_properties;
+	auto format_version_it = info.options.find("format-version");
+	if (format_version_it != info.options.end()) {
+		iceberg_version = ParseFormatVersionProperty(property_binder, context, *format_version_it->second);
 	}
 
 	auto key = IcebergTableInformation::GetTableKey(schema.namespace_items, info.table);
