@@ -19,7 +19,7 @@ struct IcebergTableInformation;
 class IcebergTableEntry;
 
 struct IcebergCreateTableRequest {
-	IcebergCreateTableRequest(shared_ptr<IcebergTableSchema> schema, string table_name);
+	IcebergCreateTableRequest(shared_ptr<IcebergTableSchema> schema, const string &table_name, idx_t iceberg_version);
 
 public:
 	static shared_ptr<IcebergTableSchema> CreateIcebergSchema(const IcebergTableEntry *table_entry);
@@ -29,6 +29,7 @@ public:
 private:
 	string table_name;
 	shared_ptr<IcebergTableSchema> initial_schema;
+	idx_t iceberg_version;
 };
 
 } // namespace duckdb
