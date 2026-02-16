@@ -16,8 +16,9 @@
 using namespace duckdb_yyjson;
 namespace duckdb {
 
-IcebergCreateTableRequest::IcebergCreateTableRequest(shared_ptr<IcebergTableSchema> schema, string table_name)
-    : table_name(table_name), initial_schema(schema) {
+IcebergCreateTableRequest::IcebergCreateTableRequest(shared_ptr<IcebergTableSchema> schema, const string &table_name,
+                                                     idx_t iceberg_version)
+    : table_name(table_name), initial_schema(schema), iceberg_version(iceberg_version) {
 }
 
 static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, IcebergColumnDefinition &column);
@@ -171,6 +172,7 @@ string IcebergCreateTableRequest::CreateTableToJSON(std::unique_ptr<yyjson_mut_d
 	// unused, but we want to add teh objects
 	auto write_order_fields = yyjson_mut_obj_add_arr(doc, write_order, "fields");
 	auto properties = yyjson_mut_obj_add_obj(doc, root_object, "properties");
+	yyjson_mut_obj_add_strcpy(doc, properties, "format-version", std::to_string(iceberg_version).c_str());
 
 	return ICUtils::JsonToString(std::move(doc_p));
 }

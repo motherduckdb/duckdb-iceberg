@@ -21,6 +21,7 @@
 #include "duckdb/parser/parsed_data/create_table_info.hpp"
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/planner/tableref/bound_at_clause.hpp"
+#include "duckdb/planner/expression_binder/table_function_binder.hpp"
 
 namespace duckdb {
 
@@ -144,10 +145,63 @@ void IcebergTableSet::LoadEntries(ClientContext &context) {
 	iceberg_transaction.listed_schemas.insert(schema.name);
 }
 
+static case_insensitive_map_t<Value> ParseTableProperties(ClientContext &context, const ParsedExpression &expr_ref) {
+	auto binder = Binder::CreateBinder(context);
+	auto expr = expr_ref.Copy();
+	TableFunctionBinder option_binder(*binder, context, "tblproperties");
+	auto bound_expr = option_binder.Bind(expr);
+	if (bound_expr->HasParameter()) {
+		throw ParameterNotResolvedException();
+	}
+
+	auto val = ExpressionExecutor::EvaluateScalar(context, *bound_expr, true);
+	if (val.IsNull()) {
+		throw BinderException("NULL is not supported as a valid option for TBLPROPERTIES");
+	}
+	auto &type = val.type();
+	if (type.id() != LogicalTypeId::STRUCT || StructType::IsUnnamed(type)) {
+		throw BinderException("TBLPROPERTIES value should be of type STRUCT(<key1>: <value1>, ..., <keyN>: <valueN>)");
+	}
+	auto &children = StructValue::GetChildren(val);
+	case_insensitive_map_t<Value> result;
+	auto &child_types = StructType::GetChildTypes(type);
+	D_ASSERT(children.size() == child_types.size());
+	for (idx_t i = 0; i < children.size(); i++) {
+		auto &val = children[i];
+		auto &name = child_types[i].first;
+		result.emplace(name, val);
+	}
+	return result;
+}
+
+static int32_t ParseFormatVersionProperty(const Value &val) {
+	auto value = val;
+	if (!value.DefaultTryCastAs(LogicalType::INTEGER, true)) {
+		throw InvalidInputException("Can't cast 'format-version' property (%s) to INTEGER", val.ToString());
+	}
+	return value.GetValue<int32_t>();
+}
+
 bool IcebergTableSet::CreateNewEntry(ClientContext &context, IcebergCatalog &catalog, IcebergSchemaEntry &schema,
                                      CreateTableInfo &info) {
 	auto table_name = info.table;
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
+
+	case_insensitive_map_t<Value> table_properties;
+	auto it = info.options.find("tblproperties");
+	if (it != info.options.end()) {
+		table_properties = ParseTableProperties(context, *it->second);
+	}
+
+	optional_idx iceberg_version;
+	for (auto &entry : table_properties) {
+		auto &name = entry.first;
+		auto &value = entry.second;
+
+		if (StringUtil::CIEquals(name, "format-version")) {
+			iceberg_version = ParseFormatVersionProperty(value);
+		}
+	}
 
 	auto key = IcebergTableInformation::GetTableKey(schema.namespace_items, info.table);
 	iceberg_transaction.updated_tables.emplace(key, IcebergTableInformation(catalog, schema, info.table));
@@ -159,6 +213,12 @@ bool IcebergTableSet::CreateNewEntry(ClientContext &context, IcebergCatalog &cat
 	table_ptr->table_info.table_metadata.schemas[0] = IcebergCreateTableRequest::CreateIcebergSchema(table_ptr);
 	table_ptr->table_info.table_metadata.current_schema_id = 0;
 	table_ptr->table_info.table_metadata.schemas[0]->schema_id = 0;
+	if (iceberg_version.IsValid()) {
+		table_ptr->table_info.table_metadata.iceberg_version = iceberg_version.GetIndex();
+	} else {
+		//! Default 'format-version' value
+		table_ptr->table_info.table_metadata.iceberg_version = 2;
+	}
 
 	// Immediately create the table with stage_create = true to get metadata & data location(s)
 	// transaction commit will either commit with data (OR) create the table with stage_create = false

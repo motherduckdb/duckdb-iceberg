@@ -192,6 +192,10 @@ DatabaseSize IcebergCatalog::GetDatabaseSize(ClientContext &context) {
 	return size;
 }
 
+ErrorData IcebergCatalog::SupportsCreateTable(BoundCreateTableInfo &info) {
+	return ErrorData();
+}
+
 //===--------------------------------------------------------------------===//
 // Iceberg REST Catalog
 //===--------------------------------------------------------------------===//
