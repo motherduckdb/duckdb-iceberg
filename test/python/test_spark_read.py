@@ -20,7 +20,7 @@ Row = pyspark_sql.Row
 ICEBERG_RUNTIMES = [
     "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.4.1",
     "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.9.0",
-    "org.apache.iceberg:iceberg-spark-runtime-3.5_2.13:1.9.1"
+    "org.apache.iceberg:iceberg-spark-runtime-3.5_2.13:1.9.1",
 ]
 
 

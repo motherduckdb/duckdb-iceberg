@@ -442,7 +442,8 @@ rest_api_objects::LoadTableResult IRCAPI::CommitNewTable(ClientContext &context,
 
 	auto initial_schema = table->table_info.table_metadata.schemas[table->table_info.table_metadata.current_schema_id];
 	auto create_transaction = make_uniq<IcebergCreateTableRequest>(initial_schema, table->table_info.name,
-	                                                               table->table_info.table_metadata.iceberg_version);
+	                                                               table->table_info.table_metadata.iceberg_version,
+	                                                               table->table_info.table_metadata.location);
 	// if stage create is supported, create the table with stage_create = true and the table update will
 	// commit the table.
 	auto support_stage_create = catalog.attach_options.supports_stage_create;
