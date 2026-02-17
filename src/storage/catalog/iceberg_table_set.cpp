@@ -145,8 +145,8 @@ void IcebergTableSet::LoadEntries(ClientContext &context) {
 	iceberg_transaction.listed_schemas.insert(schema.name);
 }
 
-static int32_t ParseFormatVersionProperty(TableFunctionBinder &binder, ClientContext &context,
-                                          const ParsedExpression &expr_ref) {
+static Value ParseFormatVersionProperty(TableFunctionBinder &binder, ClientContext &context,
+                                        const ParsedExpression &expr_ref, string property_name, LogicalType type) {
 	auto expr = expr_ref.Copy();
 	auto bound_expr = binder.Bind(expr);
 	if (bound_expr->HasParameter()) {
@@ -155,12 +155,13 @@ static int32_t ParseFormatVersionProperty(TableFunctionBinder &binder, ClientCon
 
 	auto val = ExpressionExecutor::EvaluateScalar(context, *bound_expr, true);
 	if (val.IsNull()) {
-		throw BinderException("NULL is not supported as a valid option for 'format-version'");
+		throw BinderException("NULL is not supported as a valid option for '%s'", property_name);
 	}
-	if (!val.DefaultTryCastAs(LogicalType::INTEGER, true)) {
-		throw InvalidInputException("Can't cast 'format-version' property (%s) to INTEGER", val.ToString());
+	if (!val.DefaultTryCastAs(type, true)) {
+		throw InvalidInputException("Can't cast '%s' property (%s) to %s", property_name, val.ToString(),
+		                            type.ToString());
 	}
-	return val.GetValue<int32_t>();
+	return val;
 }
 
 bool IcebergTableSet::CreateNewEntry(ClientContext &context, IcebergCatalog &catalog, IcebergSchemaEntry &schema,
@@ -173,9 +174,25 @@ bool IcebergTableSet::CreateNewEntry(ClientContext &context, IcebergCatalog &cat
 
 	optional_idx iceberg_version;
 	case_insensitive_map_t<Value> table_properties;
+	// format version must be verified
 	auto format_version_it = info.options.find("format-version");
 	if (format_version_it != info.options.end()) {
-		iceberg_version = ParseFormatVersionProperty(property_binder, context, *format_version_it->second);
+		iceberg_version = ParseFormatVersionProperty(property_binder, context, *format_version_it->second,
+		                                             "format-version", LogicalType::INTEGER)
+		                      .GetValue<int32_t>();
+		if (iceberg_version.GetIndex() < 1) {
+			throw InvalidInputException("The lowest supported iceberg version is 1!");
+		}
+	} else {
+		iceberg_version = 2;
+	}
+
+	string location;
+	auto location_it = info.options.find("location");
+	if (location_it != info.options.end()) {
+		location =
+		    ParseFormatVersionProperty(property_binder, context, *location_it->second, "location", LogicalType::VARCHAR)
+		        .GetValue<string>();
 	}
 
 	auto key = IcebergTableInformation::GetTableKey(schema.namespace_items, info.table);
@@ -188,11 +205,20 @@ bool IcebergTableSet::CreateNewEntry(ClientContext &context, IcebergCatalog &cat
 	table_ptr->table_info.table_metadata.schemas[0] = IcebergCreateTableRequest::CreateIcebergSchema(table_ptr);
 	table_ptr->table_info.table_metadata.current_schema_id = 0;
 	table_ptr->table_info.table_metadata.schemas[0]->schema_id = 0;
-	if (iceberg_version.IsValid()) {
-		table_ptr->table_info.table_metadata.iceberg_version = iceberg_version.GetIndex();
-	} else {
-		//! Default 'format-version' value
-		table_ptr->table_info.table_metadata.iceberg_version = 2;
+	table_ptr->table_info.table_metadata.iceberg_version = iceberg_version.GetIndex();
+
+	// Get Location
+	if (!location.empty()) {
+		table_ptr->table_info.table_metadata.location = location;
+	}
+	for (auto &option : info.options) {
+		if (option.first == "format-version" || option.first == "location") {
+			continue;
+		}
+		auto option_val =
+		    ParseFormatVersionProperty(property_binder, context, *option.second, option.first, LogicalType::VARCHAR)
+		        .GetValue<string>();
+		table_ptr->table_info.table_metadata.table_properties.emplace(option.first, option_val);
 	}
 
 	// Immediately create the table with stage_create = true to get metadata & data location(s)
