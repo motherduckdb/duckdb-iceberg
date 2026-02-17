@@ -57,27 +57,24 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 			DUCKDB_LOG_INFO(context, "Creating Iceberg Table secret with no scope. Returned metadata location is %s",
 			                lc_storage_location);
 		}
+		auto &sigv4_auth = ic_catalog.auth_handler->Cast<SIGV4Authorization>();
+		auto http_secret_entry = IcebergCatalog::GetHTTPSecret(context, sigv4_auth.secret);
+		auto http_kv_secret = dynamic_cast<const KeyValueSecret &>(*http_secret_entry->secret);
+
+		auto secret_entry = IcebergCatalog::GetStorageSecret(context, sigv4_auth.secret);
+		auto kv_secret = dynamic_cast<const KeyValueSecret &>(*secret_entry->secret);
 
 		if (StringUtil::StartsWith(ic_catalog.uri, "glue")) {
-			auto &sigv4_auth = ic_catalog.auth_handler->Cast<SIGV4Authorization>();
 			//! Override the endpoint if 'glue' is the host of the catalog
-			auto secret_entry = IcebergCatalog::GetStorageSecret(context, sigv4_auth.secret);
-			auto kv_secret = dynamic_cast<const KeyValueSecret &>(*secret_entry->secret);
 			auto region = kv_secret.TryGetValue("region").ToString();
 			auto endpoint = "s3." + region + ".amazonaws.com";
 			info.options["endpoint"] = endpoint;
 		} else if (StringUtil::StartsWith(ic_catalog.uri, "s3tables")) {
-			auto &sigv4_auth = ic_catalog.auth_handler->Cast<SIGV4Authorization>();
 			//! Override all the options if 's3tables' is the host of the catalog
-			auto secret_entry = IcebergCatalog::GetStorageSecret(context, sigv4_auth.secret);
-			auto kv_secret = dynamic_cast<const KeyValueSecret &>(*secret_entry->secret);
 			auto substrings = StringUtil::Split(ic_catalog.warehouse, ":");
 			D_ASSERT(substrings.size() == 6);
 			auto region = substrings[3];
 			auto endpoint = "s3." + region + ".amazonaws.com";
-
-			auto http_secret_entry = IcebergCatalog::GetHTTPSecret(context, sigv4_auth.secret);
-			auto http_kv_secret = dynamic_cast<const KeyValueSecret &>(*http_secret_entry->secret);
 
 			info.options = {
 			    {"key_id", kv_secret.TryGetValue("key_id").ToString()},
@@ -86,15 +83,14 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 			                          ? ""
 			                          : kv_secret.TryGetValue("session_token").ToString()},
 			    {"region", region},
-			    {"endpoint", endpoint},
-			    {"http_proxy", http_kv_secret.TryGetValue("http_proxy").IsNull()
-			                       ? ""
-			                       : http_kv_secret.TryGetValue("http_proxy").ToString()},
-			    {"verify_ssl",
-			     http_kv_secret.TryGetValue("verify_ssl").IsNull()
-			         ? true
-			         : http_kv_secret.TryGetValue("verify_ssl").DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>()}};
-		};
+			    {"endpoint", endpoint}};
+		}
+		info.options["http_proxy"] = http_kv_secret.TryGetValue("http_proxy").IsNull()
+								   ? ""
+								   : http_kv_secret.TryGetValue("http_proxy").ToString();
+		info.options["verify_ssl"] =  http_kv_secret.TryGetValue("verify_ssl").IsNull()
+					 ? true
+					 : http_kv_secret.TryGetValue("verify_ssl").DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
 
 		(void)secret_manager.CreateSecret(context, info);
 		// if there is no key_id, secret, or token in the info. log that vended credentials has not worked
