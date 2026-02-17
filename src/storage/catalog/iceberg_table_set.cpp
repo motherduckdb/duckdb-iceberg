@@ -173,11 +173,15 @@ bool IcebergTableSet::CreateNewEntry(ClientContext &context, IcebergCatalog &cat
 
 	optional_idx iceberg_version;
 	case_insensitive_map_t<Value> table_properties;
+	// format version must be verified
 	auto format_version_it = info.options.find("format-version");
 	if (format_version_it != info.options.end()) {
 		iceberg_version = ParseFormatVersionProperty(property_binder, context, *format_version_it->second,
 		                                             "format-version", LogicalType::INTEGER)
 		                      .GetValue<int32_t>();
+		if (iceberg_version.GetIndex() != 2) {
+			throw InvalidInputException("DuckDB-Iceberg only supports creating version 2 Iceberg tables");
+		}
 	}
 	string location;
 	auto location_it = info.options.find("location");
@@ -197,12 +201,6 @@ bool IcebergTableSet::CreateNewEntry(ClientContext &context, IcebergCatalog &cat
 	table_ptr->table_info.table_metadata.schemas[0] = IcebergCreateTableRequest::CreateIcebergSchema(table_ptr);
 	table_ptr->table_info.table_metadata.current_schema_id = 0;
 	table_ptr->table_info.table_metadata.schemas[0]->schema_id = 0;
-	// Get Iceberg version from table options
-	if (iceberg_version.IsValid()) {
-		if (iceberg_version.GetIndex() != 2) {
-			throw InvalidInputException("DuckDB-Iceberg only supports creating version 2 Iceberg tables");
-		}
-	}
 	table_ptr->table_info.table_metadata.iceberg_version = 2;
 
 	// Get Location
