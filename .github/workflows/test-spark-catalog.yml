@@ -70,7 +70,7 @@ jobs:
       - name: Run mitmproxy
         shell: bash
         run: |
-          python3 mitmdump --mode regular@8878 --flow-detail 2 > mitmproxy.log 2>&1 &
+          mitmdump --mode regular@8878 --flow-detail 2 > mitmproxy.log 2>&1 &
 
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3
