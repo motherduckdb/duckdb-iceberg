@@ -1,5 +1,6 @@
 #include "deletes/deletion_vector.hpp"
 #include "iceberg_multi_file_list.hpp"
+#include "storage/iceberg_table_information.hpp"
 
 #include "duckdb/storage/caching_file_system.hpp"
 #include "duckdb/common/bswap.hpp"
@@ -75,6 +76,11 @@ void IcebergMultiFileList::ScanPuffinFile(const IcebergDataFile &entry) const {
 	auto buf_handle = caching_file_handle->Read(data, length, offset);
 	auto buffer_data = buf_handle.Ptr();
 
+	if (table && table->table_info.table_metadata.iceberg_version >= 3 &&
+	    positional_delete_data.count(entry.referenced_data_file)) {
+		throw InvalidConfigurationException(
+		    "Table is corrupt, two or more positional deletes exist for the same referenced_data_file");
+	}
 	positional_delete_data.emplace(entry.referenced_data_file,
 	                               IcebergDeletionVectorData::FromBlob(buffer_data, length));
 }
