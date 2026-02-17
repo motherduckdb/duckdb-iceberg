@@ -265,7 +265,7 @@ unique_ptr<SecretEntry> IcebergCatalog::GetHTTPSecret(ClientContext &context, co
 	auto transaction = CatalogTransaction::GetSystemCatalogTransaction(context);
 	unique_ptr<SecretEntry> secret_entry = nullptr;
 	if (secret_name.empty()) {
-		//! Try to find any secret with type 'iceberg'
+		//! Try to find any secret with type 'http'
 		auto secret_match = context.db->GetSecretManager().LookupSecret(transaction, "", "http");
 		if (!secret_match.HasMatch()) {
 			return nullptr;
