@@ -18,7 +18,11 @@ IcebergUpdate::IcebergUpdate(PhysicalPlan &physical_plan, IcebergTableEntry &tab
     : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, {LogicalType::BIGINT}, 1), table(table),
       columns(std::move(columns_p)), copy_op(copy_op), delete_op(delete_op), insert_op(insert_op) {
 	children.push_back(child);
-	row_id_index = columns.size();
+	auto &table_metadata = table.table_info.table_metadata;
+	if (table_metadata.iceberg_version >= 3) {
+		//! Only write _row_id for table version 3 and up
+		row_id_index = columns.size();
+	}
 }
 
 //===--------------------------------------------------------------------===//
@@ -59,7 +63,9 @@ unique_ptr<LocalSinkState> IcebergUpdate::GetLocalSinkState(ExecutionContext &co
 
 	// updates also write the row id to the file
 	auto insert_types = table.GetTypes();
-	insert_types.insert(insert_types.begin() + insert_types.size(), LogicalType::BIGINT);
+	if (row_id_index.IsValid()) {
+		insert_types.insert(insert_types.begin() + insert_types.size(), LogicalType::BIGINT);
+	}
 
 	result->insert_chunk.Initialize(context.client, insert_types);
 	result->delete_chunk.Initialize(context.client, delete_types);
@@ -80,7 +86,9 @@ SinkResultType IcebergUpdate::Sink(ExecutionContext &context, DataChunk &chunk, 
 		insert_chunk.data[columns[i].index].Reference(chunk.data[i]);
 	}
 	// reference the row id right after the physical columns
-	insert_chunk.data[columns.size()].Reference(chunk.data[row_id_index]);
+	if (row_id_index.IsValid()) {
+		insert_chunk.data[columns.size()].Reference(chunk.data[row_id_index.GetIndex()]);
+	}
 
 	OperatorSinkInput copy_input {*copy_op.sink_state, *lstate.copy_local_state, input.interrupt_state};
 	copy_op.Sink(context, insert_chunk, copy_input);
@@ -211,21 +219,6 @@ InsertionOrderPreservingMap<string> IcebergUpdate::ParamsToString() const {
 	InsertionOrderPreservingMap<string> result;
 	result["Table Name"] = table.name;
 	return result;
-}
-
-static Value GetFieldIdValue(const IcebergColumnDefinition &column) {
-	auto column_value = Value::BIGINT(column.id);
-	if (column.children.empty()) {
-		// primitive type - return the field-id directly
-		return column_value;
-	}
-	// nested type - generate a struct and recurse into children
-	child_list_t<Value> values;
-	values.emplace_back("__duckdb_field_id", std::move(column_value));
-	for (auto &child : column.children) {
-		values.emplace_back(child->name, GetFieldIdValue(*child));
-	}
-	return Value::STRUCT(std::move(values));
 }
 
 PhysicalOperator &IcebergCatalog::PlanUpdate(ClientContext &context, PhysicalPlanGenerator &planner, LogicalUpdate &op,
