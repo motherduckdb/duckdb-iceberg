@@ -2,11 +2,11 @@
 # description: test createing a table in glue
 # group: [glue]
 
-# require-env ICEBERG_AWS_REMOTE_AVAILABLE
-#
-# require-env AWS_ACCESS_KEY_ID
-#
-# require-env AWS_SECRET_ACCESS_KEY
+require-env ICEBERG_AWS_REMOTE_AVAILABLE
+
+require-env AWS_ACCESS_KEY_ID
+
+require-env AWS_SECRET_ACCESS_KEY
 
 require avro
 
@@ -34,12 +34,6 @@ attach '840140254803' as my_datalake (
     purge_requested false
 );
 
-mode output_result
-
-
-# statement ok
-# show all tables;
-
 statement ok
 drop table if exists my_datalake.simple_glue_database.duckdb_created_table;
 
@@ -54,5 +48,15 @@ WITH (
 statement ok
 insert into my_datalake.simple_glue_database.duckdb_created_table values (1), (2);
 
-statement ok
-select * from iceberg_table_properties(my_datalake.simple_glue_database.duckdb_created_table);
+query I
+select * from  my_datalake.simple_glue_database.duckdb_created_table;
+----
+1
+2
+
+query II
+select * from iceberg_table_properties(my_datalake.simple_glue_database.duckdb_created_table) order by all;
+----
+property1	value2
+property2	value3
+write.parquet.compression-codec	zstd
