@@ -461,7 +461,6 @@ void IcebergTransaction::CleanupFiles() {
 		return;
 	}
 	auto &fs = FileSystem::GetFileSystem(db);
-	vector<string> to_be_removed;
 	for (auto &up_table : updated_tables) {
 		auto &table = up_table.second;
 		if (!table.transaction_data) {
@@ -480,13 +479,11 @@ void IcebergTransaction::CleanupFiles() {
 			for (const auto &manifest : manifest_list_entries) {
 				for (auto &manifest_entry : manifest.manifest_file.entries) {
 					auto &data_file = manifest_entry.data_file;
-					to_be_removed.push_back(data_file.file_path);
+					fs.TryRemoveFile(data_file.file_path);
 				}
 			}
 		}
 	}
-
-	fs.RemoveFiles(to_be_removed);
 }
 
 void IcebergTransaction::Rollback() {
