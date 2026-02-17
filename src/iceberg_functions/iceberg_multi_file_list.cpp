@@ -843,6 +843,10 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 
 	// From the spec: "At most one deletion vector is allowed per data file in a snapshot"
 
+	optional_ptr<const unordered_set<string>> data_file_paths;
+	if (HasTransactionData()) {
+		data_file_paths = GetTransactionData().invalidated_delete_files;
+	}
 	while (!FinishedScanningDeletes()) {
 		vector<IcebergManifestEntry> entries;
 		delete_manifest_reader->Read(STANDARD_VECTOR_SIZE, entries);
@@ -857,6 +861,11 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 				continue;
 			}
 
+			auto &referenced_data_file = data_file.referenced_data_file;
+			if (!referenced_data_file.empty() && data_file_paths && data_file_paths->count(referenced_data_file)) {
+				//! Skip this delete file, there's a transaction-local delete that makes it obsolete
+				continue;
+			}
 			if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
 				ScanDeleteFile(manifest_entry, global_columns, column_indexes);
 			} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
@@ -875,7 +884,6 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 			auto &data_file = manifest_entry.data_file;
 
 			//! FIXME: no file pruning for uncommitted data?
-
 			if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
 				ScanDeleteFile(manifest_entry, global_columns, column_indexes);
 			} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {

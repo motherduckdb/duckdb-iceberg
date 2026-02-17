@@ -18,6 +18,26 @@ namespace duckdb {
 struct IcebergTableInformation;
 struct IcebergCreateTableRequest;
 
+struct IcebergManifestDeletionVector {
+public:
+	IcebergManifestDeletionVector() {
+	}
+
+public:
+	SelectionVector sel;
+	idx_t sel_size = 0;
+};
+
+struct IcebergManifestListDeletionVector {
+public:
+	IcebergManifestListDeletionVector() {
+	}
+
+public:
+	SelectionVector sel;
+	idx_t sel_size = 0;
+};
+
 struct IcebergTransactionData {
 public:
 	IcebergTransactionData(ClientContext &context, IcebergTableInformation &table_info);
@@ -53,6 +73,8 @@ public:
 
 	//! Every insert/update/delete creates an alter of the table data
 	vector<reference<IcebergAddSnapshot>> alters;
+	//! The 'referenced_data_file' of the delete files to skip
+	unordered_set<string> invalidated_delete_files;
 	//! Track the current row id for this transaction
 	int64_t next_row_id = 0;
 };

@@ -39,6 +39,9 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 	auto &avro_copy = avro_copy_p->Cast<CopyFunctionCatalogEntry>().function;
 
 	D_ASSERT(manifest_list.GetManifestListEntriesCount() != 0);
+	//! TODO: keep transaction-state for the existing manifests,
+	//! to monitor for "dirty" manifests that need to be rewritten.
+
 	//! Write the avro files for the new manifests
 	auto manifest_list_entries_size = manifest_list.GetManifestListEntriesCount();
 	for (idx_t manifest_index = 0; manifest_index < manifest_list_entries_size; manifest_index++) {

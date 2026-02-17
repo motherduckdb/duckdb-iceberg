@@ -246,6 +246,7 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 		} else {
 			file_format = "parquet";
 		}
+
 		string delete_filename = UUID::ToString(UUID::GenerateRandomUUID()) + "-deletes." + file_format;
 		string delete_file_path =
 		    fs.JoinPath(table.table_info.table_metadata.location, fs.JoinPath("data", delete_filename));
@@ -314,6 +315,12 @@ SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, Clien
 	if (!global_state.written_files.empty()) {
 		ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTableInformation &tbl) {
 			tbl.AddDeleteSnapshot(iceberg_transaction, std::move(iceberg_delete_files));
+
+			auto &transaction_data = *tbl.transaction_data;
+			for (auto &entry : global_state.written_files) {
+				auto &delete_file = entry.second;
+				transaction_data.invalidated_delete_files.emplace(delete_file.data_file_path);
+			}
 		});
 	}
 	return SinkFinalizeType::READY;
