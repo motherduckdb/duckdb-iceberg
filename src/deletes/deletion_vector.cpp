@@ -131,4 +131,49 @@ unique_ptr<DeleteFilter> IcebergDeletionVectorData::ToFilter() const {
 	return make_uniq<IcebergDeletionVector>(shared_from_this());
 }
 
+vector<data_t> IcebergDeletionVectorData::ToBlob() const {
+	//! https://iceberg.apache.org/puffin-spec/#deletion-vector-v1-blob-type
+
+	// Calculate total size needed
+	idx_t total_size = 0;
+	total_size += sizeof(uint32_t); // vector_size field
+	total_size += sizeof(uint32_t); // magic bytes
+	total_size += sizeof(uint64_t); // amount of bitmaps
+	for (const auto &entry : bitmaps) {
+		total_size += sizeof(int32_t);                   // key
+		total_size += entry.second.getSizeInBytes(true); // portable serialized bitmap
+	}
+	total_size += sizeof(uint32_t); // CRC checksum
+
+	vector<data_t> blob_output;
+	blob_output.resize(total_size);
+	data_ptr_t blob_ptr = blob_output.data();
+
+	// Write vector_size (total size minus the vector_size field itself)
+	uint32_t vector_size = BSwap(static_cast<uint32_t>(total_size - sizeof(uint32_t)));
+	Store<uint32_t>(vector_size, blob_ptr);
+	blob_ptr += sizeof(uint32_t);
+
+	constexpr uint8_t DELETION_VECTOR_MAGIC[4] = {0xD1, 0xD3, 0x39, 0x64};
+	memcpy(blob_ptr, DELETION_VECTOR_MAGIC, 4);
+	blob_ptr += sizeof(uint32_t);
+
+	// Write each bitmap
+	Store<uint64_t>(bitmaps.size(), blob_ptr);
+	blob_ptr += sizeof(uint64_t);
+	for (const auto &entry : bitmaps) {
+		// Write key
+		Store<int32_t>(entry.first, blob_ptr);
+		blob_ptr += sizeof(int32_t);
+
+		// Write bitmap
+		size_t bitmap_size = entry.second.write((char *)blob_ptr, true);
+		blob_ptr += bitmap_size;
+	}
+
+	// Write CRC checksum (placeholder - set to 0)
+	Store<uint32_t>(0, blob_ptr);
+	return blob_output;
+}
+
 } // namespace duckdb

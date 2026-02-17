@@ -18,6 +18,7 @@
 #include "duckdb/function/copy_function.hpp"
 #include "duckdb/common/types/uuid.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
+#include "deletes/deletion_vector.hpp"
 
 namespace duckdb {
 class IcebergDeleteLocalState;
@@ -96,6 +97,43 @@ static optional_ptr<CopyFunctionCatalogEntry> TryGetCopyFunction(DatabaseInstanc
 //===--------------------------------------------------------------------===//
 // Finalize
 //===--------------------------------------------------------------------===//
+
+void IcebergDelete::WriteDeletionVectorFile(ClientContext &context, IcebergDeleteGlobalState &global_state,
+                                            const string &filename, IcebergDeleteFileInfo delete_file,
+                                            set<idx_t> sorted_deletes) const {
+	auto delete_file_path = delete_file.file_name;
+
+	// Build deletion vector data
+	auto dv_data = make_shared_ptr<IcebergDeletionVectorData>();
+
+	// Group row indices by high 32 bits
+	for (auto row_idx : sorted_deletes) {
+		int64_t row_id = static_cast<int64_t>(row_idx);
+		int32_t high_bits = static_cast<int32_t>(row_id >> 32);
+		uint32_t low_bits = static_cast<uint32_t>(row_id & 0xFFFFFFFF);
+
+		auto &bitmap = dv_data->bitmaps[high_bits];
+		bitmap.add(low_bits);
+	}
+
+	// Serialize to blob
+	auto blob_data = dv_data->ToBlob();
+
+	// Write blob to file
+	auto &fs = FileSystem::GetFileSystem(context);
+	auto file_handle =
+	    fs.OpenFile(delete_file_path, FileOpenFlags::FILE_FLAGS_WRITE | FileOpenFlags::FILE_FLAGS_FILE_CREATE);
+	file_handle->Write(blob_data.data(), blob_data.size());
+	file_handle->Close();
+
+	delete_file.file_name = delete_file_path;
+	delete_file.file_format = "puffin";
+	delete_file.delete_count = sorted_deletes.size();
+	delete_file.content_offset = 0;
+	delete_file.content_size_in_bytes = blob_data.size();
+	global_state.written_files.emplace(filename, std::move(delete_file));
+}
+
 void IcebergDelete::WritePositionalDeleteFile(ClientContext &context, IcebergDeleteGlobalState &global_state,
                                               const string &filename, IcebergDeleteFileInfo delete_file,
                                               set<idx_t> sorted_deletes) const {
@@ -167,6 +205,7 @@ void IcebergDelete::WritePositionalDeleteFile(ClientContext &context, IcebergDel
 	copy_fun->function.copy_to_finalize(context, *function_data, *copy_global_state);
 
 	delete_file.file_name = delete_file_path;
+	delete_file.file_format = "parquet";
 	delete_file.delete_count = stats.row_count;
 	delete_file.file_size_bytes = stats.file_size_bytes;
 	delete_file.footer_size = stats.footer_size_bytes.GetValue<idx_t>();
@@ -200,12 +239,24 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 		delete_file.data_file_path = filename;
 
 		auto &fs = FileSystem::GetFileSystem(context);
-		string delete_filename = UUID::ToString(UUID::GenerateRandomUUID()) + "-deletes.parquet";
+
+		string file_format;
+		if (table.table_info.table_metadata.iceberg_version >= 3) {
+			file_format = "puffin";
+		} else {
+			file_format = "parquet";
+		}
+		string delete_filename = UUID::ToString(UUID::GenerateRandomUUID()) + "-deletes." + file_format;
 		string delete_file_path =
 		    fs.JoinPath(table.table_info.table_metadata.location, fs.JoinPath("data", delete_filename));
 
 		delete_file.file_name = delete_file_path;
-		WritePositionalDeleteFile(context, global_state, filename, delete_file, sorted_deletes);
+
+		if (file_format == "parquet") {
+			WritePositionalDeleteFile(context, global_state, filename, delete_file, sorted_deletes);
+		} else {
+			WriteDeletionVectorFile(context, global_state, filename, delete_file, sorted_deletes);
+		}
 	}
 }
 
@@ -222,9 +273,15 @@ vector<IcebergManifestEntry> IcebergDelete::GenerateDeleteManifestEntries(Iceber
 		auto &data_file = manifest_entry.data_file;
 		data_file.content = IcebergManifestEntryContentType::POSITION_DELETES;
 		data_file.file_path = delete_file.file_name;
-		data_file.file_format = "parquet";
+		data_file.file_format = delete_file.file_format;
 		data_file.record_count = delete_file.delete_count;
 		data_file.file_size_in_bytes = delete_file.file_size_bytes;
+		if (delete_file.content_size_in_bytes.IsValid()) {
+			data_file.content_size_in_bytes = Value::BIGINT(delete_file.content_size_in_bytes.GetIndex());
+		}
+		if (delete_file.content_offset.IsValid()) {
+			data_file.content_offset = Value::BIGINT(delete_file.content_offset.GetIndex());
+		}
 
 		// set lower and upper bound for the filename column
 		data_file.lower_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB(data_file_name);

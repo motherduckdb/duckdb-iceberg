@@ -26,7 +26,7 @@ enum class IcebergManifestEntryStatusType : uint8_t { EXISTING = 0, ADDED = 1, D
 
 struct IcebergDataFile {
 public:
-	Value ToValue(const LogicalType &type) const;
+	Value ToValue(const IcebergTableMetadata &table_metadata, const LogicalType &type) const;
 
 public:
 	static map<idx_t, LogicalType> GetFieldIdToTypeMapping(const IcebergSnapshot &snapshot,

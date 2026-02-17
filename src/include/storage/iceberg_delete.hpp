@@ -114,6 +114,8 @@ private:
 	void WritePositionalDeleteFile(ClientContext &context, IcebergDeleteGlobalState &global_state,
 	                               const string &filename, IcebergDeleteFileInfo delete_file,
 	                               set<idx_t> sorted_deletes) const;
+	void WriteDeletionVectorFile(ClientContext &context, IcebergDeleteGlobalState &global_state, const string &filename,
+	                             IcebergDeleteFileInfo delete_file, set<idx_t> sorted_deletes) const;
 };
 
 } // namespace duckdb

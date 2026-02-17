@@ -15,6 +15,7 @@ public:
 
 public:
 	static shared_ptr<IcebergDeletionVectorData> FromBlob(data_ptr_t blob_start, idx_t blob_length);
+	vector<data_t> ToBlob() const;
 
 public:
 	unique_ptr<DeleteFilter> ToFilter() const override;
