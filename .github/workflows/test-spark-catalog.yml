@@ -6,6 +6,7 @@ on:
         description: "Name of the DuckDB-Iceberg artifact to download"
         required: true
         type: string
+  workflow_dispatch:
 
 jobs:
   test-spark:
