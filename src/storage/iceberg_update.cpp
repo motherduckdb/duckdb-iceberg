@@ -260,8 +260,7 @@ PhysicalOperator &IcebergCatalog::PlanUpdate(ClientContext &context, PhysicalPla
 			throw NotImplementedException("Update on a sorted iceberg table is not supported yet");
 		}
 	}
-	// Verify Iceberg table version is v2
-	if (table.table_info.table_metadata.iceberg_version != 2) {
+	if (table.table_info.table_metadata.iceberg_version < 2) {
 		throw NotImplementedException("Update Iceberg V%d tables", table.table_info.table_metadata.iceberg_version);
 	}
 

@@ -468,6 +468,7 @@ void IcebergAvroMultiFileReader::FinalizeChunk(ClientContext &context, const Mul
 	auto &data_struct_children = StructVector::GetEntries(data_file_column);
 
 	auto &first_row_id_column = *data_struct_children[15];
+	first_row_id_column.Flatten(count);
 
 	auto &first_row_id_validity = FlatVector::Validity(first_row_id_column);
 	auto first_row_id_data = FlatVector::GetData<int64_t>(first_row_id_column);
