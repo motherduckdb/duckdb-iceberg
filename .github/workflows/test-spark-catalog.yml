@@ -72,6 +72,9 @@ jobs:
         run: |
           python3 mitmdump --mode regular@8878 --flow-detail 2 > mitmproxy.log 2>&1 &
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+
       - name: Test with rest catalog
         env:
           ICEBERG_SERVER_AVAILABLE: 1
