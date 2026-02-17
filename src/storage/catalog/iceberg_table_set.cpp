@@ -197,12 +197,15 @@ bool IcebergTableSet::CreateNewEntry(ClientContext &context, IcebergCatalog &cat
 	table_ptr->table_info.table_metadata.schemas[0] = IcebergCreateTableRequest::CreateIcebergSchema(table_ptr);
 	table_ptr->table_info.table_metadata.current_schema_id = 0;
 	table_ptr->table_info.table_metadata.schemas[0]->schema_id = 0;
+	// Get Iceberg version from table options
 	if (iceberg_version.IsValid()) {
-		table_ptr->table_info.table_metadata.iceberg_version = iceberg_version.GetIndex();
-	} else {
-		//! Default 'format-version' value
-		table_ptr->table_info.table_metadata.iceberg_version = 2;
+		if (iceberg_version.GetIndex() != 2) {
+			throw InvalidInputException("DuckDB-Iceberg only supports creating version 2 Iceberg tables");
+		}
 	}
+	table_ptr->table_info.table_metadata.iceberg_version = 2;
+
+	// Get Location
 	if (!location.empty()) {
 		table_ptr->table_info.table_metadata.location = location;
 	}
