@@ -40,7 +40,7 @@ ICEBERG_RUNTIMES = [
         spark_version="3.5",
         scala_binary_version="2.13",
         iceberg_library_version="1.9.1",
-    )
+    ),
 ]
 
 
