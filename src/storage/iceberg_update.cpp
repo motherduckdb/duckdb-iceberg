@@ -250,7 +250,9 @@ PhysicalOperator &IcebergCatalog::PlanUpdate(ClientContext &context, PhysicalPla
 	}
 
 	IcebergCopyInput copy_input(context, table, table_schema);
-	copy_input.virtual_columns = IcebergInsertVirtualColumns::WRITE_ROW_ID;
+	if (table.table_info.table_metadata.iceberg_version >= 3) {
+		copy_input.virtual_columns = IcebergInsertVirtualColumns::WRITE_ROW_ID;
+	}
 	auto &copy_op = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, nullptr);
 	// plan the delete
 	vector<idx_t> row_id_indexes;
