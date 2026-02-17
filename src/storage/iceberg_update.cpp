@@ -59,6 +59,7 @@ unique_ptr<LocalSinkState> IcebergUpdate::GetLocalSinkState(ExecutionContext &co
 
 	// updates also write the row id to the file
 	auto insert_types = table.GetTypes();
+	insert_types.insert(insert_types.begin() + insert_types.size(), LogicalType::BIGINT);
 
 	result->insert_chunk.Initialize(context.client, insert_types);
 	result->delete_chunk.Initialize(context.client, delete_types);
@@ -78,6 +79,8 @@ SinkResultType IcebergUpdate::Sink(ExecutionContext &context, DataChunk &chunk, 
 	for (idx_t i = 0; i < columns.size(); i++) {
 		insert_chunk.data[columns[i].index].Reference(chunk.data[i]);
 	}
+	// reference the row id right after the physical columns
+	insert_chunk.data[columns.size()].Reference(chunk.data[row_id_index]);
 
 	OperatorSinkInput copy_input {*copy_op.sink_state, *lstate.copy_local_state, input.interrupt_state};
 	copy_op.Sink(context, insert_chunk, copy_input);
@@ -225,16 +228,16 @@ static Value GetFieldIdValue(const IcebergColumnDefinition &column) {
 	return Value::STRUCT(std::move(values));
 }
 
-static Value WrittenFieldIds(const IcebergTableSchema &schema) {
-	auto &columns = schema.columns;
+// static Value WrittenFieldIds(const IcebergTableSchema &schema) {
+//	auto &columns = schema.columns;
 
-	child_list_t<Value> values;
-	for (idx_t c_idx = 0; c_idx < columns.size(); c_idx++) {
-		auto &column = columns[c_idx];
-		values.emplace_back(column->name, GetFieldIdValue(*column));
-	}
-	return Value::STRUCT(std::move(values));
-}
+//	child_list_t<Value> values;
+//	for (idx_t c_idx = 0; c_idx < columns.size(); c_idx++) {
+//		auto &column = columns[c_idx];
+//		values.emplace_back(column->name, GetFieldIdValue(*column));
+//	}
+//	return Value::STRUCT(std::move(values));
+//}
 
 PhysicalOperator &IcebergCatalog::PlanUpdate(ClientContext &context, PhysicalPlanGenerator &planner, LogicalUpdate &op,
                                              PhysicalOperator &child_plan) {
@@ -264,17 +267,15 @@ PhysicalOperator &IcebergCatalog::PlanUpdate(ClientContext &context, PhysicalPla
 		throw NotImplementedException("Update Iceberg V%d tables", table.table_info.table_metadata.iceberg_version);
 	}
 
-	IcebergCopyInput copy_input(context, table);
-	vector<Value> field_input;
-	field_input.push_back(WrittenFieldIds(table_schema));
-	copy_input.options["field_ids"] = std::move(field_input);
-
+	IcebergCopyInput copy_input(context, table, table_schema);
+	copy_input.virtual_columns = IcebergInsertVirtualColumns::WRITE_ROW_ID;
 	auto &copy_op = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, nullptr);
 	// plan the delete
 	vector<idx_t> row_id_indexes;
 	for (idx_t i = 0; i < 2; i++) {
 		row_id_indexes.push_back(i);
 	}
+
 	auto &delete_op = IcebergDelete::PlanDelete(context, planner, table, child_plan, std::move(row_id_indexes));
 	// plan the actual insert
 	auto &insert_op = IcebergInsert::PlanInsert(context, planner, table);
