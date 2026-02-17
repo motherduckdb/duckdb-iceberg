@@ -73,7 +73,7 @@ static bool IsAwsRegion(const string &token) {
 	if (!has_prefix) {
 		return false;
 	}
-	if (token.empty() || !std::isdigit(token.back())) {
+	if (token.empty() || !StringUtil::CharacterIsDigit(token.back())) {
 		return false;
 	}
 	return true;
