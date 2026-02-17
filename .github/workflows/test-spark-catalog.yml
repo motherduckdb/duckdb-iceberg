@@ -12,7 +12,7 @@ jobs:
     name: Test against Spark Catalog
     runs-on: ubuntu-latest
     env:
-      HTTP_PROXY_PUBLIC: localhost:8878
+      HTTP_PROXY_PUBLIC: http://localhost:8878
 
     steps:
       - name: Checkout repository
