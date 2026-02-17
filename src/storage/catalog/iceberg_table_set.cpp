@@ -206,6 +206,15 @@ bool IcebergTableSet::CreateNewEntry(ClientContext &context, IcebergCatalog &cat
 	if (!location.empty()) {
 		table_ptr->table_info.table_metadata.location = location;
 	}
+	for (auto &option : info.options) {
+		if (option.first == "format-version" || option.first == "location") {
+			continue;
+		}
+		auto option_val =
+		    ParseFormatVersionProperty(property_binder, context, *option.second, option.first, LogicalType::VARCHAR)
+		        .GetValue<string>();
+		table_ptr->table_info.table_metadata.table_properties.emplace(option.first, option_val);
+	}
 
 	// Immediately create the table with stage_create = true to get metadata & data location(s)
 	// transaction commit will either commit with data (OR) create the table with stage_create = false
