@@ -228,17 +228,6 @@ static Value GetFieldIdValue(const IcebergColumnDefinition &column) {
 	return Value::STRUCT(std::move(values));
 }
 
-// static Value WrittenFieldIds(const IcebergTableSchema &schema) {
-//	auto &columns = schema.columns;
-
-//	child_list_t<Value> values;
-//	for (idx_t c_idx = 0; c_idx < columns.size(); c_idx++) {
-//		auto &column = columns[c_idx];
-//		values.emplace_back(column->name, GetFieldIdValue(*column));
-//	}
-//	return Value::STRUCT(std::move(values));
-//}
-
 PhysicalOperator &IcebergCatalog::PlanUpdate(ClientContext &context, PhysicalPlanGenerator &planner, LogicalUpdate &op,
                                              PhysicalOperator &child_plan) {
 	if (op.return_chunk) {
