@@ -134,6 +134,11 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 	auto manifest_content_type = IcebergManifestContentType::DATA;
 	switch (operation) {
 	case IcebergSnapshotOperationType::DELETE:
+		if (table_metadata.has_next_row_id) {
+			//! IRC requires this for a successful commit..
+			new_snapshot.has_added_rows = true;
+			new_snapshot.added_rows = 0;
+		}
 		manifest_content_type = IcebergManifestContentType::DELETE;
 		break;
 	case IcebergSnapshotOperationType::APPEND: {
