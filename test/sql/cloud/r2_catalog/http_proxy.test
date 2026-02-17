@@ -21,6 +21,10 @@ require aws
 # override the default behaviour of skipping HTTP errors and connection failures: this test fails on connection issues
 set ignore_error_messages
 
+# Keep track of where the log file will start writing, as proxy logs from previous tests are irrelevant
+statement ok
+CREATE TABLE logs_tracker AS SELECT len(content) AS log_length FROM read_text('mitmproxy.log');
+
 statement ok
 CREATE SECRET r2_secret (
     TYPE ICEBERG,
@@ -48,6 +52,9 @@ select * from my_datalake.default.people;
 
 # Proxy should see a GET request to a manifest file
 query I
-SELECT regexp_matches((SELECT content FROM read_text("mitmproxy.log")), 'GET.*\/metadata\/snap.*avro');
+SELECT regexp_matches(
+    substr((SELECT content FROM read_text("mitmproxy.log")), (SELECT log_length FROM logs_tracker) + 1),
+    'GET.*\/metadata\/snap.*avro'
+);
 ----
 true

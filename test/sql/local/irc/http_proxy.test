@@ -24,6 +24,10 @@ CALL enable_logging('HTTP');
 statement ok
 set logging_level='debug';
 
+# Keep track of where the log file will start writing, as proxy logs from previous tests are irrelevant
+statement ok
+CREATE TABLE logs_tracker AS SELECT len(content) AS log_length FROM read_text('mitmproxy.log');
+
 # Extra proxy parameters neded here because of local MinIO testing
 statement ok
 CREATE SECRET (
@@ -73,6 +77,9 @@ select * from my_datalake.default.table_unpartitioned order by all;
 
 # Proxy should see a GET request to a manifest file
 query I
-SELECT regexp_matches((SELECT content FROM read_text("mitmproxy.log")), 'GET.*\/metadata\/snap.*avro');
+SELECT regexp_matches(
+    substr((SELECT content FROM read_text("mitmproxy.log")), (SELECT log_length FROM logs_tracker) + 1),
+    'GET.*\/metadata\/snap.*avro'
+);
 ----
 true
