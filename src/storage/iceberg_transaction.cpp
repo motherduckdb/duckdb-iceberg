@@ -295,6 +295,7 @@ TableTransactionInfo IcebergTransaction::GetTransactionRequest(ClientContext &co
 
 		auto &metadata = table_info.table_metadata;
 		auto current_snapshot = metadata.GetLatestSnapshot();
+		//! We want to copy over all the existing manifests from the existing manifest list
 		if (current_snapshot) {
 			auto &manifest_list_path = current_snapshot->manifest_list;
 			//! Read the manifest list

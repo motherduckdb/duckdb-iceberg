@@ -39,16 +39,19 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 	auto &avro_copy = avro_copy_p->Cast<CopyFunctionCatalogEntry>().function;
 
 	D_ASSERT(manifest_list.GetManifestListEntriesCount() != 0);
+	//! Write the avro files for the new manifests
 	auto manifest_list_entries_size = manifest_list.GetManifestListEntriesCount();
 	for (idx_t manifest_index = 0; manifest_index < manifest_list_entries_size; manifest_index++) {
 		manifest_list.WriteManifestListEntry(table_info, manifest_index, avro_copy, db, context);
 	}
 
-	// Add manifest files from previous snapshots
+	//! Add manifest_file entries from the previous snapshot (if any)
+	//! These are not rewritten, the existing manifests are untouched
 	manifest_list.AddToManifestEntries(commit_state.manifests);
 	manifest_list::WriteToFile(table_info.table_metadata, manifest_list, avro_copy, db, context);
 	commit_state.manifests = manifest_list.GetManifestListEntries();
 
+	//! Finally add a Iceberg REST Catalog 'TableUpdate' to commit
 	commit_state.table_change.updates.push_back(CreateAddSnapshotUpdate(table_info, snapshot));
 }
 
