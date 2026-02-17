@@ -70,6 +70,7 @@ jobs:
       - name: Run mitmproxy
         shell: bash
         run: |
+          python3 -m pip install mitmproxy
           mitmdump --mode regular@8878 --flow-detail 2 > mitmproxy.log 2>&1 &
 
       - name: Test with rest catalog
