@@ -41,7 +41,24 @@ statement ok
 create schema if not exists my_datalake.test_create_schema;
 
 statement ok
+drop table if exists my_datalake.test_create_schema.test_create_table_with_properties;
+
+statement ok
 use my_datalake.test_create_schema;
+
+statement ok
+create table test_create_table_with_properties (a int)
+WITH (
+    'format-version'='2',
+    'property1'='value1',
+    'property2'='value2'
+);
+
+query II
+select * from iceberg_table_properties(my_datalake.test_create_schema.test_create_table_with_properties) where key like '%property%' order by key;
+----
+property1	value1
+property2	value2
 
 statement error
 create table invalid_table_format_version (a int) 

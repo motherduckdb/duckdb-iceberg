@@ -17,7 +17,7 @@
 
 namespace duckdb {
 
-enum class IcebergInsertVirtualColumns { NONE, WRITE_ROW_ID, WRITE_SNAPSHOT_ID, WRITE_ROW_ID_AND_SNAPSHOT_ID };
+enum class IcebergInsertVirtualColumns { NONE, WRITE_ROW_ID, WRITE_SEQUENCE_NUMBER, WRITE_ROW_ID_AND_SEQUENCE_NUMBER };
 
 struct IcebergCopyInput {
 	explicit IcebergCopyInput(ClientContext &context, IcebergTableEntry &table, const IcebergTableSchema &schema);
