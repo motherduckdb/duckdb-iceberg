@@ -322,9 +322,10 @@ SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, Clien
 			tbl.AddDeleteSnapshot(iceberg_transaction, std::move(iceberg_delete_files));
 
 			auto &transaction_data = *tbl.transaction_data;
+			//! Add or overwrite the currently active transaction-local delete files
 			for (auto &entry : global_state.written_files) {
 				auto &delete_file = entry.second;
-				transaction_data.invalidated_delete_files.emplace(delete_file.data_file_path);
+				transaction_data.transactional_delete_files[delete_file.data_file_path] = delete_file.file_name;
 			}
 		});
 	}

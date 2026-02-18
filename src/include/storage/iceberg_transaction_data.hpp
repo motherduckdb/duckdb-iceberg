@@ -73,8 +73,8 @@ public:
 
 	//! Every insert/update/delete creates an alter of the table data
 	vector<reference<IcebergAddSnapshot>> alters;
-	//! The 'referenced_data_file' of the delete files to skip
-	unordered_set<string> invalidated_delete_files;
+	//! The 'referenced_data_file' -> 'data_file.file_path' of the currently active transaction-local deletes
+	case_insensitive_map_t<string> transactional_delete_files;
 	//! Track the current row id for this transaction
 	int64_t next_row_id = 0;
 };

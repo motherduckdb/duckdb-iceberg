@@ -843,9 +843,9 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 
 	// From the spec: "At most one deletion vector is allowed per data file in a snapshot"
 
-	optional_ptr<const unordered_set<string>> data_file_paths;
+	optional_ptr<const case_insensitive_map_t<string>> transactional_delete_files;
 	if (HasTransactionData()) {
-		data_file_paths = GetTransactionData().invalidated_delete_files;
+		transactional_delete_files = GetTransactionData().transactional_delete_files;
 	}
 	while (!FinishedScanningDeletes()) {
 		vector<IcebergManifestEntry> entries;
@@ -862,7 +862,8 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 			}
 
 			auto &referenced_data_file = data_file.referenced_data_file;
-			if (!referenced_data_file.empty() && data_file_paths && data_file_paths->count(referenced_data_file)) {
+			if (!referenced_data_file.empty() && transactional_delete_files &&
+			    transactional_delete_files->count(referenced_data_file)) {
 				//! Skip this delete file, there's a transaction-local delete that makes it obsolete
 				continue;
 			}
@@ -882,6 +883,16 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 		auto &delete_manifest = transaction_delete_manifests[transaction_delete_idx];
 		for (auto &manifest_entry : delete_manifest.get().entries) {
 			auto &data_file = manifest_entry.data_file;
+
+			auto &referenced_data_file = data_file.referenced_data_file;
+			if (!referenced_data_file.empty() && transactional_delete_files) {
+				auto it = transactional_delete_files->find(referenced_data_file);
+				//! Check if this is the currently active (last) delete file for this referenced_data_file
+				if (it != transactional_delete_files->end() && it->second != data_file.file_path) {
+					//! It's not, skip the delete
+					continue;
+				}
+			}
 
 			//! FIXME: no file pruning for uncommitted data?
 			if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
