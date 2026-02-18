@@ -35,16 +35,14 @@ unique_ptr<BaseStatistics> IcebergTableEntry::GetStatistics(ClientContext &conte
 	return nullptr;
 }
 
-void AddHTTPSecretsToOptions(SecretEntry &http_secret_entry,
-                                                      case_insensitive_map_t<Value> &options) {
+void AddHTTPSecretsToOptions(SecretEntry &http_secret_entry, case_insensitive_map_t<Value> &options) {
 	auto http_kv_secret = dynamic_cast<const KeyValueSecret &>(*http_secret_entry.secret);
 
 	options["http_proxy"] =
 	    http_kv_secret.TryGetValue("http_proxy").IsNull() ? "" : http_kv_secret.TryGetValue("http_proxy").ToString();
-	options["verify_ssl"] =
-	    http_kv_secret.TryGetValue("verify_ssl").IsNull()
-	        ? Value::BOOLEAN(true)
-	        : http_kv_secret.TryGetValue("verify_ssl").DefaultCastAs(LogicalType::BOOLEAN);
+	options["verify_ssl"] = http_kv_secret.TryGetValue("verify_ssl").IsNull()
+	                            ? Value::BOOLEAN(true)
+	                            : http_kv_secret.TryGetValue("verify_ssl").DefaultCastAs(LogicalType::BOOLEAN);
 }
 
 void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) const {
