@@ -155,8 +155,6 @@ public:
 
 public:
 	string path;
-
-private:
 	vector<IcebergManifestFile> manifest_entries;
 };
 
