@@ -66,6 +66,7 @@ public:
 	string GetDefaultSchema() const override {
 		return default_schema;
 	}
+	ErrorData SupportsCreateTable(BoundCreateTableInfo &info) override;
 
 public:
 	static unique_ptr<Catalog> Attach(optional_ptr<StorageExtensionInfo> storage_info, ClientContext &context,
