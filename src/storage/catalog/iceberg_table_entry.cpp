@@ -60,11 +60,14 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 	auto metadata_path = table_info.table_metadata.GetMetadataPath();
 
 	unique_ptr<SecretEntry> http_secret_entry;
+	unique_ptr<SIGV4Authorization> sigv4_auth;
 
 	switch (ic_catalog.auth_handler->type) {
 	case IcebergAuthorizationType::SIGV4: {
-		auto &sigv4_auth = ic_catalog.auth_handler->Cast<SIGV4Authorization>();
-		http_secret_entry = IcebergCatalog::GetHTTPSecret(context, sigv4_auth.secret);
+		auto &sigv4 = ic_catalog.auth_handler->Cast<SIGV4Authorization>();
+		sigv4_auth = make_uniq<SIGV4Authorization>(sigv4.secret);
+
+		http_secret_entry = IcebergCatalog::GetHTTPSecret(context, sigv4_auth->secret);
 		break;
 	}
 	case IcebergAuthorizationType::OAUTH2: {
@@ -82,6 +85,7 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 	default:
 		break;
 	}
+
 	if (table_credentials.config) {
 		auto &info = *table_credentials.config;
 		D_ASSERT(info.scope.empty());
@@ -93,17 +97,22 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 			DUCKDB_LOG_INFO(context, "Creating Iceberg Table secret with no scope. Returned metadata location is %s",
 			                lc_storage_location);
 		}
-		auto &sigv4_auth = ic_catalog.auth_handler->Cast<SIGV4Authorization>();
 
-		auto secret_entry = IcebergCatalog::GetStorageSecret(context, sigv4_auth.secret);
-		auto kv_secret = dynamic_cast<const KeyValueSecret &>(*secret_entry->secret);
 
 		if (StringUtil::StartsWith(ic_catalog.uri, "glue")) {
+			D_ASSERT(sigv4_auth);
+			auto secret_entry = IcebergCatalog::GetStorageSecret(context, sigv4_auth->secret);
+			auto kv_secret = dynamic_cast<const KeyValueSecret &>(*secret_entry->secret);
+
 			//! Override the endpoint if 'glue' is the host of the catalog
 			auto region = kv_secret.TryGetValue("region").ToString();
 			auto endpoint = "s3." + region + ".amazonaws.com";
 			info.options["endpoint"] = endpoint;
 		} else if (StringUtil::StartsWith(ic_catalog.uri, "s3tables")) {
+			D_ASSERT(sigv4_auth);
+			auto secret_entry = IcebergCatalog::GetStorageSecret(context, sigv4_auth->secret);
+			auto kv_secret = dynamic_cast<const KeyValueSecret &>(*secret_entry->secret);
+
 			//! Override all the options if 's3tables' is the host of the catalog
 			auto substrings = StringUtil::Split(ic_catalog.warehouse, ":");
 			D_ASSERT(substrings.size() == 6);
@@ -130,15 +139,15 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 			DUCKDB_LOG_INFO(context, "Failed to create valid secret from Vendend Credentials for table '%s'",
 			                table_info.name);
 		}
-		return;
+	} else {
+		for (auto &info : table_credentials.storage_credentials) {
+			if (http_secret_entry != nullptr) {
+				info.options = AddHTTPSecretsToOptions(*http_secret_entry, info.options);
+			}
+			(void)secret_manager.CreateSecret(context, info);
+		}
 	}
 
-	for (auto &info : table_credentials.storage_credentials) {
-		if (http_secret_entry != nullptr) {
-			info.options = AddHTTPSecretsToOptions(*http_secret_entry, info.options);
-		}
-		(void)secret_manager.CreateSecret(context, info);
-	}
 }
 
 TableFunction IcebergTableEntry::GetScanFunction(ClientContext &context, unique_ptr<FunctionData> &bind_data,
