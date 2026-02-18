@@ -58,8 +58,6 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 			                lc_storage_location);
 		}
 		auto &sigv4_auth = ic_catalog.auth_handler->Cast<SIGV4Authorization>();
-		auto http_secret_entry = IcebergCatalog::GetHTTPSecret(context, sigv4_auth.secret);
-		auto http_kv_secret = dynamic_cast<const KeyValueSecret &>(*http_secret_entry->secret);
 
 		auto secret_entry = IcebergCatalog::GetStorageSecret(context, sigv4_auth.secret);
 		auto kv_secret = dynamic_cast<const KeyValueSecret &>(*secret_entry->secret);
@@ -85,12 +83,18 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 			    {"region", region},
 			    {"endpoint", endpoint}};
 		}
-		info.options["http_proxy"] = http_kv_secret.TryGetValue("http_proxy").IsNull()
-								   ? ""
-								   : http_kv_secret.TryGetValue("http_proxy").ToString();
-		info.options["verify_ssl"] =  http_kv_secret.TryGetValue("verify_ssl").IsNull()
-					 ? true
-					 : http_kv_secret.TryGetValue("verify_ssl").DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+
+		auto http_secret_entry = IcebergCatalog::GetHTTPSecret(context, sigv4_auth.secret);
+		if (http_secret_entry != nullptr) {
+			auto http_kv_secret = dynamic_cast<const KeyValueSecret &>(*http_secret_entry->secret);
+
+			info.options["http_proxy"] = http_kv_secret.TryGetValue("http_proxy").IsNull()
+									   ? ""
+									   : http_kv_secret.TryGetValue("http_proxy").ToString();
+			info.options["verify_ssl"] =  http_kv_secret.TryGetValue("verify_ssl").IsNull()
+						 ? true
+						 : http_kv_secret.TryGetValue("verify_ssl").DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+		}
 
 		(void)secret_manager.CreateSecret(context, info);
 		// if there is no key_id, secret, or token in the info. log that vended credentials has not worked
