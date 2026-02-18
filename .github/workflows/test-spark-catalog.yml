@@ -11,6 +11,8 @@ jobs:
   test-spark:
     name: Test against Spark Catalog
     runs-on: ubuntu-latest
+    env:
+      HTTP_PROXY_PUBLIC: http://localhost:8878
 
     steps:
       - name: Checkout repository
@@ -63,6 +65,12 @@ jobs:
         run: |
           source .venv-spark4/bin/activate
           make data
+
+      - name: Run mitmproxy
+        shell: bash
+        run: |
+          source .venv-spark4/bin/activate
+          mitmdump --mode regular@8878 --flow-detail 2 > mitmproxy.log 2>&1 &
 
       - name: Test with rest catalog
         env:
