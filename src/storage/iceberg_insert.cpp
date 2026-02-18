@@ -23,7 +23,7 @@ namespace duckdb {
 
 static bool WriteRowId(IcebergInsertVirtualColumns virtual_columns) {
 	return virtual_columns == IcebergInsertVirtualColumns::WRITE_ROW_ID ||
-	       virtual_columns == IcebergInsertVirtualColumns::WRITE_ROW_ID_AND_SNAPSHOT_ID;
+	       virtual_columns == IcebergInsertVirtualColumns::WRITE_ROW_ID_AND_SEQUENCE_NUMBER;
 }
 
 IcebergInsert::IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op, TableCatalogEntry &table,
