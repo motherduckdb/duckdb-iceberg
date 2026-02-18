@@ -22,6 +22,7 @@
 #include "storage/iceberg_table_information.hpp"
 
 namespace duckdb {
+class OAuth2Authorization;
 constexpr column_t IcebergMultiFileReader::COLUMN_IDENTIFIER_LAST_SEQUENCE_NUMBER;
 
 IcebergTableEntry::IcebergTableEntry(IcebergTableInformation &table_info, Catalog &catalog, SchemaCatalogEntry &schema,
@@ -34,6 +35,18 @@ unique_ptr<BaseStatistics> IcebergTableEntry::GetStatistics(ClientContext &conte
 	return nullptr;
 }
 
+case_insensitive_map_t<Value> AddHTTPSecretsToOptions(SecretEntry &http_secret_entry,
+                                                case_insensitive_map_t<Value> options) {
+	auto http_kv_secret = dynamic_cast<const KeyValueSecret &>(*http_secret_entry.secret);
+
+	options["http_proxy"] =
+	    http_kv_secret.TryGetValue("http_proxy").IsNull() ? "" : http_kv_secret.TryGetValue("http_proxy").ToString();
+	options["verify_ssl"] =
+	    http_kv_secret.TryGetValue("verify_ssl").IsNull()
+	        ? true
+	        : http_kv_secret.TryGetValue("verify_ssl").DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+	return options;
+}
 void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) const {
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	auto &secret_manager = SecretManager::Get(context);
@@ -46,6 +59,29 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 	auto table_credentials = table_info.GetVendedCredentials(context);
 	auto metadata_path = table_info.table_metadata.GetMetadataPath();
 
+	unique_ptr<SecretEntry> http_secret_entry;
+
+	switch (ic_catalog.auth_handler->type) {
+	case IcebergAuthorizationType::SIGV4: {
+		auto &sigv4_auth = ic_catalog.auth_handler->Cast<SIGV4Authorization>();
+		http_secret_entry = IcebergCatalog::GetHTTPSecret(context, sigv4_auth.secret);
+		break;
+	}
+	case IcebergAuthorizationType::OAUTH2: {
+		http_secret_entry = IcebergCatalog::GetHTTPSecret(context, "");
+
+		if (!http_secret_entry || http_secret_entry->secret->GetScope().size() == 0) {
+			break;
+		}
+		for (auto scope : http_secret_entry->secret->GetScope()) {
+			if (scope.find(ic_catalog.GetBaseUrl().GetHost()) != string::npos) {
+				break;
+			}
+		}
+	}
+	default:
+		break;
+	}
 	if (table_credentials.config) {
 		auto &info = *table_credentials.config;
 		D_ASSERT(info.scope.empty());
@@ -84,16 +120,8 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 			    {"endpoint", endpoint}};
 		}
 
-		auto http_secret_entry = IcebergCatalog::GetHTTPSecret(context, sigv4_auth.secret);
 		if (http_secret_entry != nullptr) {
-			auto http_kv_secret = dynamic_cast<const KeyValueSecret &>(*http_secret_entry->secret);
-
-			info.options["http_proxy"] = http_kv_secret.TryGetValue("http_proxy").IsNull()
-									   ? ""
-									   : http_kv_secret.TryGetValue("http_proxy").ToString();
-			info.options["verify_ssl"] =  http_kv_secret.TryGetValue("verify_ssl").IsNull()
-						 ? true
-						 : http_kv_secret.TryGetValue("verify_ssl").DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+			info.options = AddHTTPSecretsToOptions(*http_secret_entry, info.options);
 		}
 
 		(void)secret_manager.CreateSecret(context, info);
@@ -103,9 +131,13 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 			DUCKDB_LOG_INFO(context, "Failed to create valid secret from Vendend Credentials for table '%s'",
 			                table_info.name);
 		}
+		return;
 	}
 
 	for (auto &info : table_credentials.storage_credentials) {
+		if (http_secret_entry != nullptr) {
+			info.options = AddHTTPSecretsToOptions(*http_secret_entry, info.options);
+		}
 		(void)secret_manager.CreateSecret(context, info);
 	}
 }
