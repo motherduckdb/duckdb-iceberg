@@ -286,7 +286,7 @@ TableTransactionInfo IcebergTransaction::GetTransactionRequest(ClientContext &co
 		if (!table_info.transaction_data) {
 			continue;
 		}
-		IcebergCommitState commit_state;
+		IcebergCommitState commit_state(*table_info.transaction_data);
 		auto &table_change = commit_state.table_change;
 		auto &schema = table_info.schema.Cast<IcebergSchemaEntry>();
 		table_change.identifier._namespace.value = schema.namespace_items;
@@ -306,7 +306,7 @@ TableTransactionInfo IcebergTransaction::GetTransactionRequest(ClientContext &co
 			}
 		}
 
-		auto &transaction_data = *table_info.transaction_data;
+		auto &transaction_data = commit_state.transaction_data;
 		for (auto &update : transaction_data.updates) {
 			if (update->type == IcebergTableUpdateType::ADD_SNAPSHOT) {
 				// we need to recreate the keys in the current context.

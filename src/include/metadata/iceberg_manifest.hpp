@@ -68,6 +68,7 @@ public:
 	//! Inherited from the 'manifest_file'
 	int32_t partition_spec_id = 0xDEADBEEF;
 	//! The index into the manifest_file vector where the entry originated from
+	//! TODO: turn this into a string 'manifest_file_path', that also works for transaction-local stuff
 	idx_t manifest_file_idx = DConstants::INVALID_INDEX;
 	IcebergDataFile data_file;
 

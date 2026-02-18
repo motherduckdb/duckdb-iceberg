@@ -105,7 +105,7 @@ void IcebergDelete::WriteDeletionVectorFile(ClientContext &context, IcebergDelet
 	auto delete_file_path = delete_file.file_name;
 
 	// Build deletion vector data
-	auto dv_data = make_shared_ptr<IcebergDeletionVectorData>();
+	auto dv_data = make_shared_ptr<IcebergDeletionVectorData>("unused");
 
 	// Group row indices by high 32 bits
 	for (auto row_idx : sorted_deletes) {
@@ -317,9 +317,12 @@ SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, Clien
 	auto &table_info = irc_table.table_info;
 	auto &transaction = IcebergTransaction::Get(context, table.catalog);
 	auto iceberg_delete_files = GenerateDeleteManifestEntries(global_state);
+
+	//! TODO: populate with the data_files (delete files) that are invalidated by the new delete(s)
+	case_insensitive_map_t<IcebergManifestDeletes> altered_manifests;
 	if (!global_state.written_files.empty()) {
 		ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTableInformation &tbl) {
-			tbl.AddDeleteSnapshot(iceberg_transaction, std::move(iceberg_delete_files));
+			tbl.AddDeleteSnapshot(iceberg_transaction, std::move(iceberg_delete_files), std::move(altered_manifests));
 
 			auto &transaction_data = *tbl.transaction_data;
 			//! Add or overwrite the currently active transaction-local delete files
@@ -408,7 +411,7 @@ PhysicalOperator &IcebergCatalog::PlanDelete(ClientContext &context, PhysicalPla
 		row_id_indexes.push_back(bound_ref.index);
 	}
 	auto &ic_table_entry = op.table.Cast<IcebergTableEntry>();
-	if (ic_table_entry.table_info.table_metadata.iceberg_version != 2) {
+	if (ic_table_entry.table_info.table_metadata.iceberg_version < 2) {
 		throw NotImplementedException("Delete from Iceberg V%d tables",
 		                              ic_table_entry.table_info.table_metadata.iceberg_version);
 	}

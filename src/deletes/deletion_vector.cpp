@@ -7,7 +7,8 @@
 
 namespace duckdb {
 
-shared_ptr<IcebergDeletionVectorData> IcebergDeletionVectorData::FromBlob(data_ptr_t blob_start, idx_t blob_length) {
+shared_ptr<IcebergDeletionVectorData> IcebergDeletionVectorData::FromBlob(const string &manifest_file_path,
+                                                                          data_ptr_t blob_start, idx_t blob_length) {
 	//! https://iceberg.apache.org/puffin-spec/#deletion-vector-v1-blob-type
 
 	auto blob_end = blob_start + blob_length;
@@ -36,7 +37,7 @@ shared_ptr<IcebergDeletionVectorData> IcebergDeletionVectorData::FromBlob(data_p
 	vector_size -= sizeof(int64_t);
 	D_ASSERT(blob_start < blob_end);
 
-	auto result_p = make_shared_ptr<IcebergDeletionVectorData>();
+	auto result_p = make_shared_ptr<IcebergDeletionVectorData>(manifest_file_path);
 	auto &result = *result_p;
 	result.bitmaps.reserve(amount_of_bitmaps);
 	for (int64_t i = 0; i < amount_of_bitmaps; i++) {
@@ -58,7 +59,7 @@ shared_ptr<IcebergDeletionVectorData> IcebergDeletionVectorData::FromBlob(data_p
 	return result_p;
 }
 
-void IcebergMultiFileList::ScanPuffinFile(const IcebergDataFile &entry) const {
+void IcebergMultiFileList::ScanPuffinFile(const string &manifest_file_path, const IcebergDataFile &entry) const {
 	auto file_path = entry.file_path;
 	D_ASSERT(!entry.referenced_data_file.empty());
 
@@ -82,7 +83,7 @@ void IcebergMultiFileList::ScanPuffinFile(const IcebergDataFile &entry) const {
 		    "Table is corrupt, two or more positional deletes exist for the same referenced_data_file");
 	}
 	positional_delete_data.emplace(entry.referenced_data_file,
-	                               IcebergDeletionVectorData::FromBlob(buffer_data, length));
+	                               IcebergDeletionVectorData::FromBlob(manifest_file_path, buffer_data, length));
 }
 
 idx_t IcebergDeletionVector::Filter(row_t start_row_index, idx_t count, SelectionVector &result_sel) {

@@ -12,31 +12,12 @@
 #include "storage/iceberg_table_requirement.hpp"
 #include "storage/table_update/iceberg_add_snapshot.hpp"
 #include "storage/table_create/iceberg_create_table_request.hpp"
+#include "storage/iceberg_transaction_metadata.hpp"
 
 namespace duckdb {
 
 struct IcebergTableInformation;
 struct IcebergCreateTableRequest;
-
-struct IcebergManifestDeletionVector {
-public:
-	IcebergManifestDeletionVector() {
-	}
-
-public:
-	SelectionVector sel;
-	idx_t sel_size = 0;
-};
-
-struct IcebergManifestListDeletionVector {
-public:
-	IcebergManifestListDeletionVector() {
-	}
-
-public:
-	SelectionVector sel;
-	idx_t sel_size = 0;
-};
 
 struct IcebergTransactionData {
 public:
@@ -46,7 +27,8 @@ public:
 	void CreateManifestListEntry(IcebergAddSnapshot &add_snapshot, IcebergTableMetadata &table_metadata,
 	                             IcebergManifestContentType manifest_content_type,
 	                             vector<IcebergManifestEntry> &&data_files);
-	void AddSnapshot(IcebergSnapshotOperationType operation, vector<IcebergManifestEntry> &&data_files);
+	void AddSnapshot(IcebergSnapshotOperationType operation, vector<IcebergManifestEntry> &&data_files,
+	                 case_insensitive_map_t<IcebergManifestDeletes> &&altered_manifests);
 	void AddUpdateSnapshot(vector<IcebergManifestEntry> &&delete_files, vector<IcebergManifestEntry> &&data_files);
 	// add a schema update for a table
 	void TableAddSchema();

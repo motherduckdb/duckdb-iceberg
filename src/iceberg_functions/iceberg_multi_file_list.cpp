@@ -861,6 +861,7 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 				continue;
 			}
 
+			auto &manifest_file = delete_manifests[manifest_entry.manifest_file_idx];
 			auto &referenced_data_file = data_file.referenced_data_file;
 			if (!referenced_data_file.empty() && transactional_delete_files &&
 			    transactional_delete_files->count(referenced_data_file)) {
@@ -868,9 +869,9 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 				continue;
 			}
 			if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
-				ScanDeleteFile(manifest_entry, global_columns, column_indexes);
+				ScanDeleteFile(manifest_file.manifest_path, manifest_entry, global_columns, column_indexes);
 			} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
-				ScanPuffinFile(manifest_entry.data_file);
+				ScanPuffinFile(manifest_file.manifest_path, manifest_entry.data_file);
 			} else {
 				throw NotImplementedException(
 				    "File format '%s' not supported for deletes, only supports 'parquet' and 'puffin' currently",
@@ -880,8 +881,8 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 	}
 
 	while (transaction_delete_idx < transaction_delete_manifests.size()) {
-		auto &delete_manifest = transaction_delete_manifests[transaction_delete_idx];
-		for (auto &manifest_entry : delete_manifest.get().entries) {
+		auto &delete_manifest = transaction_delete_manifests[transaction_delete_idx].get();
+		for (auto &manifest_entry : delete_manifest.entries) {
 			auto &data_file = manifest_entry.data_file;
 
 			auto &referenced_data_file = data_file.referenced_data_file;
@@ -896,9 +897,9 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 
 			//! FIXME: no file pruning for uncommitted data?
 			if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
-				ScanDeleteFile(manifest_entry, global_columns, column_indexes);
+				ScanDeleteFile(delete_manifest.path, manifest_entry, global_columns, column_indexes);
 			} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
-				ScanPuffinFile(manifest_entry.data_file);
+				ScanPuffinFile(delete_manifest.path, manifest_entry.data_file);
 			} else {
 				throw NotImplementedException(
 				    "File format '%s' not supported for deletes, only supports 'parquet' and 'puffin' currently",
@@ -911,7 +912,7 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 	D_ASSERT(FinishedScanningDeletes());
 }
 
-void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &manifest_entry,
+void IcebergMultiFileList::ScanDeleteFile(const string &manifest_file_path, const IcebergManifestEntry &manifest_entry,
                                           const vector<MultiFileColumnDefinition> &global_columns,
                                           const vector<ColumnIndex> &column_indexes) const {
 	auto &data_file = manifest_entry.data_file;
@@ -975,7 +976,7 @@ void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &manifest_e
 			result.Reset();
 			delete_scan_function.function(context, function_input, result);
 			result.Flatten();
-			ScanPositionalDeleteFile(result);
+			ScanPositionalDeleteFile(manifest_file_path, result);
 		} while (result.size() != 0);
 	} else if (data_file.content == IcebergManifestEntryContentType::EQUALITY_DELETES) {
 		do {

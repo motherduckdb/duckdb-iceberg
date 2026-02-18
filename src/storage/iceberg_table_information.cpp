@@ -384,14 +384,17 @@ void IcebergTableInformation::InitTransactionData(IcebergTransaction &transactio
 void IcebergTableInformation::AddSnapshot(IcebergTransaction &transaction, vector<IcebergManifestEntry> &&data_files) {
 	D_ASSERT(!data_files.empty());
 	InitTransactionData(transaction);
-	transaction_data->AddSnapshot(IcebergSnapshotOperationType::APPEND, std::move(data_files));
+	case_insensitive_map_t<IcebergManifestDeletes> empty_manifest_deletes;
+	transaction_data->AddSnapshot(IcebergSnapshotOperationType::APPEND, std::move(data_files),
+	                              std::move(empty_manifest_deletes));
 }
 
 void IcebergTableInformation::AddDeleteSnapshot(IcebergTransaction &transaction,
-                                                vector<IcebergManifestEntry> &&data_files) {
+                                                vector<IcebergManifestEntry> &&data_files,
+                                                case_insensitive_map_t<IcebergManifestDeletes> &&altered_manifests) {
 	InitTransactionData(transaction);
-
-	transaction_data->AddSnapshot(IcebergSnapshotOperationType::DELETE, std::move(data_files));
+	transaction_data->AddSnapshot(IcebergSnapshotOperationType::DELETE, std::move(data_files),
+	                              std::move(altered_manifests));
 }
 
 void IcebergTableInformation::AddUpdateSnapshot(IcebergTransaction &transaction,
