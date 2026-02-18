@@ -19,6 +19,7 @@ public:
 
 public:
 	unique_ptr<DeleteFilter> ToFilter() const override;
+	void ToSet(set<idx_t> &out) const override;
 
 public:
 	unordered_map<int32_t, roaring::Roaring> bitmaps;

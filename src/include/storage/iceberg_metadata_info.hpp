@@ -30,17 +30,4 @@ struct IcebergDeleteFileInfo {
 	optional_idx content_offset;
 };
 
-struct IcebergFileData {
-	string path;
-	idx_t file_size_in_bytes = 0;
-	optional_idx footer_size;
-};
-
-struct IcebergFileListExtendedEntry {
-	IcebergFileData file;
-	IcebergDeleteFileInfo delete_file;
-	idx_t row_count;
-	idx_t delete_count = 0;
-};
-
 } // namespace duckdb

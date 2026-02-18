@@ -137,6 +137,31 @@ unique_ptr<DeleteFilter> IcebergDeletionVectorData::ToFilter() const {
 	return make_uniq<IcebergDeletionVector>(shared_from_this());
 }
 
+namespace {
+
+struct RoaringIterateContext {
+	set<idx_t> *out;
+	idx_t high;
+};
+
+} // namespace
+
+void IcebergDeletionVectorData::ToSet(set<idx_t> &out) const {
+	for (auto &entry : bitmaps) {
+		RoaringIterateContext ctx {&out, static_cast<idx_t>(entry.first)};
+		auto &bitmap = entry.second;
+
+		bitmap.iterate(
+		    [](uint32_t value, void *ptr) -> bool {
+			    auto *ctx = static_cast<RoaringIterateContext *>(ptr);
+			    idx_t full_value = (ctx->high << 32) | static_cast<idx_t>(value);
+			    ctx->out->insert(full_value);
+			    return true;
+		    },
+		    &ctx);
+	}
+}
+
 vector<data_t> IcebergDeletionVectorData::ToBlob() const {
 	//! https://iceberg.apache.org/puffin-spec/#deletion-vector-v1-blob-type
 

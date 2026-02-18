@@ -25,10 +25,11 @@ class IcebergDeleteLocalState;
 class IcebergDeleteGlobalState;
 class IcebergTableEntry;
 
-IcebergDelete::IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table, PhysicalOperator &child,
+IcebergDelete::IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table,
+                             IcebergMultiFileList &multi_file_list, PhysicalOperator &child,
                              vector<idx_t> row_id_indexes)
     : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, {LogicalType::BIGINT}, 1), table(table),
-      row_id_indexes(std::move(row_id_indexes)) {
+      multi_file_list(multi_file_list), row_id_indexes(std::move(row_id_indexes)) {
 	children.push_back(child);
 }
 
@@ -225,14 +226,17 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 	for (auto &entry : global_state.deleted_rows) {
 		auto &filename = entry.first;
 		auto &deleted_rows = entry.second;
+
 		// sort and duplicate eliminate the deletes
 		set<idx_t> sorted_deletes;
+		//! First add the existing delete we're replacing
+		auto it = multi_file_list.positional_delete_data.find(filename);
+		if (it != multi_file_list.positional_delete_data.end()) {
+			auto &delete_data = *it->second;
+			delete_data.ToSet(sorted_deletes);
+		}
 		for (auto &row_idx : deleted_rows) {
 			sorted_deletes.insert(row_idx);
-		}
-		if (sorted_deletes.size() != deleted_rows.size()) {
-			throw NotImplementedException("The same row was updated multiple times - this is not (yet) supported in "
-			                              "Iceberg. Eliminate duplicate matches prior to running the UPDATE");
 		}
 
 		IcebergDeleteFileInfo delete_file;
@@ -352,10 +356,42 @@ InsertionOrderPreservingMap<string> IcebergDelete::ParamsToString() const {
 	return result;
 }
 
+static optional_ptr<PhysicalTableScan> FindDeleteSource(PhysicalOperator &plan) {
+	if (plan.type == PhysicalOperatorType::TABLE_SCAN) {
+		// does this emit the virtual columns?
+		auto &scan = plan.Cast<PhysicalTableScan>();
+		bool found = false;
+		for (auto &col : scan.column_ids) {
+			if (col.GetPrimaryIndex() == MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER) {
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			return nullptr;
+		}
+		return scan;
+	}
+	for (auto &children : plan.children) {
+		auto result = FindDeleteSource(children.get());
+		if (result) {
+			return result;
+		}
+	}
+	return nullptr;
+}
+
 PhysicalOperator &IcebergDelete::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner,
                                             IcebergTableEntry &table, PhysicalOperator &child_plan,
                                             vector<idx_t> row_id_indexes) {
-	return planner.Make<IcebergDelete>(table, child_plan, std::move(row_id_indexes));
+	auto table_scan = FindDeleteSource(child_plan);
+	if (!table_scan) {
+		throw InternalException("Couldn't locate the scan that feeds the delete information");
+	}
+	auto &bind_data = table_scan->bind_data->Cast<MultiFileBindData>();
+	auto &reader = bind_data.multi_file_reader->Cast<IcebergMultiFileReader>();
+	auto &file_list = bind_data.file_list->Cast<IcebergMultiFileList>();
+	return planner.Make<IcebergDelete>(table, file_list, child_plan, std::move(row_id_indexes));
 }
 
 PhysicalOperator &IcebergCatalog::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,

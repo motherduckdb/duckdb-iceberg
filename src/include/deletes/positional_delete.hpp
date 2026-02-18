@@ -17,6 +17,7 @@ public:
 		invalid_rows.insert(row_id);
 	}
 	unique_ptr<DeleteFilter> ToFilter() const override;
+	void ToSet(set<idx_t> &out) const override;
 
 public:
 	//! Store invalid rows here before finalizing into a SelectionVector

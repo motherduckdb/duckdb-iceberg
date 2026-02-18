@@ -17,6 +17,8 @@
 
 namespace duckdb {
 
+struct IcebergMultiFileList;
+
 struct WrittenColumnInfo {
 	WrittenColumnInfo() = default;
 	WrittenColumnInfo(LogicalType type_p, int32_t field_id) : type(std::move(type_p)), field_id(field_id) {
@@ -66,11 +68,12 @@ public:
 
 class IcebergDelete : public PhysicalOperator {
 public:
-	IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table, PhysicalOperator &child,
-	              vector<idx_t> row_id_indexes);
+	IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table, IcebergMultiFileList &multi_file_list,
+	              PhysicalOperator &child, vector<idx_t> row_id_indexes);
 
 	//! The table to delete from
 	IcebergTableEntry &table;
+	IcebergMultiFileList &multi_file_list;
 	//! The column indexes for the relevant row-id columns
 	vector<idx_t> row_id_indexes;
 

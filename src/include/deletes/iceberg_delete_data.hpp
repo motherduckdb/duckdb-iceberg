@@ -13,6 +13,7 @@ public:
 
 public:
 	virtual unique_ptr<DeleteFilter> ToFilter() const = 0;
+	virtual void ToSet(set<idx_t> &out) const = 0;
 };
 
 } // namespace duckdb
