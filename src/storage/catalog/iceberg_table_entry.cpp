@@ -43,8 +43,8 @@ case_insensitive_map_t<Value> AddHTTPSecretsToOptions(SecretEntry &http_secret_e
 	    http_kv_secret.TryGetValue("http_proxy").IsNull() ? "" : http_kv_secret.TryGetValue("http_proxy").ToString();
 	options["verify_ssl"] =
 	    http_kv_secret.TryGetValue("verify_ssl").IsNull()
-	        ? true
-	        : http_kv_secret.TryGetValue("verify_ssl").DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+	        ? Value::BOOLEAN(true)
+	        : http_kv_secret.TryGetValue("verify_ssl").DefaultCastAs(LogicalType::BOOLEAN);
 	return options;
 }
 void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) const {
