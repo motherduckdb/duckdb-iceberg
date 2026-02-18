@@ -245,6 +245,7 @@ bool IcebergTableSet::CreateNewEntry(ClientContext &context, IcebergCatalog &cat
 	table_info.AddSortOrder(iceberg_transaction);
 	table_info.SetDefaultSortOrder(iceberg_transaction);
 	table_info.SetLocation(iceberg_transaction);
+	table_info.SetProperties(iceberg_transaction, table_info.table_metadata.table_properties);
 	return true;
 }
 
