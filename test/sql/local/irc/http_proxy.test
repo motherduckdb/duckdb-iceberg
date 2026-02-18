@@ -4,7 +4,6 @@
 
 require-env HTTP_PROXY_PUBLIC
 
-# shouldn't run on cloud testing
 require-env ICEBERG_SERVER_AVAILABLE
 
 require avro

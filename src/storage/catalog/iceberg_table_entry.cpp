@@ -35,8 +35,8 @@ unique_ptr<BaseStatistics> IcebergTableEntry::GetStatistics(ClientContext &conte
 	return nullptr;
 }
 
-case_insensitive_map_t<Value> AddHTTPSecretsToOptions(SecretEntry &http_secret_entry,
-                                                      case_insensitive_map_t<Value> options) {
+void AddHTTPSecretsToOptions(SecretEntry &http_secret_entry,
+                                                      case_insensitive_map_t<Value> &options) {
 	auto http_kv_secret = dynamic_cast<const KeyValueSecret &>(*http_secret_entry.secret);
 
 	options["http_proxy"] =
@@ -45,8 +45,8 @@ case_insensitive_map_t<Value> AddHTTPSecretsToOptions(SecretEntry &http_secret_e
 	    http_kv_secret.TryGetValue("verify_ssl").IsNull()
 	        ? Value::BOOLEAN(true)
 	        : http_kv_secret.TryGetValue("verify_ssl").DefaultCastAs(LogicalType::BOOLEAN);
-	return options;
 }
+
 void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) const {
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	auto &secret_manager = SecretManager::Get(context);
@@ -127,8 +127,8 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 			                {"endpoint", endpoint}};
 		}
 
-		if (http_secret_entry != nullptr) {
-			info.options = AddHTTPSecretsToOptions(*http_secret_entry, info.options);
+		if (http_secret_entry) {
+			AddHTTPSecretsToOptions(*http_secret_entry, info.options);
 		}
 
 		(void)secret_manager.CreateSecret(context, info);
@@ -140,8 +140,8 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 		}
 	} else {
 		for (auto &info : table_credentials.storage_credentials) {
-			if (http_secret_entry != nullptr) {
-				info.options = AddHTTPSecretsToOptions(*http_secret_entry, info.options);
+			if (http_secret_entry) {
+				AddHTTPSecretsToOptions(*http_secret_entry, info.options);
 			}
 			(void)secret_manager.CreateSecret(context, info);
 		}
