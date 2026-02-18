@@ -63,23 +63,22 @@ WITH (
     'property4'='value4'
 );
 
-
-# For some reason, no properties are stored on table create using the apache/iceberg-rest-fixture image 
-#query II
-#select * from iceberg_table_properties(my_datalake.default.create_table_with_properties) order by all
-#----
-#property1	value1
-#property2	value2
-#property3	value3
-#property4	value4
-
-statement ok
-call set_iceberg_table_properties(my_datalake.default.create_table_with_properties, {'property1':'value1', 'property2':'value2'});
-
 query II
-select * from iceberg_table_properties(my_datalake.default.create_table_with_properties) order by all
+select * from iceberg_table_properties(my_datalake.default.create_table_with_properties) where key like '%property%' order by all;
 ----
 property1	value1
 property2	value2
+property3	value3
+property4	value4
 
+statement ok
+call set_iceberg_table_properties(my_datalake.default.create_table_with_properties, {'property1':'value10', 'property2':'value20'});
+
+query II
+select * from iceberg_table_properties(my_datalake.default.create_table_with_properties) where key like '%property%' order by all;
+----
+property1	value10
+property2	value20
+property3	value3
+property4	value4
 
