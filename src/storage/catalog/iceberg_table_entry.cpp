@@ -98,7 +98,6 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 			                lc_storage_location);
 		}
 
-
 		if (StringUtil::StartsWith(ic_catalog.uri, "glue")) {
 			D_ASSERT(sigv4_auth);
 			auto secret_entry = IcebergCatalog::GetStorageSecret(context, sigv4_auth->secret);
@@ -147,7 +146,6 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 			(void)secret_manager.CreateSecret(context, info);
 		}
 	}
-
 }
 
 TableFunction IcebergTableEntry::GetScanFunction(ClientContext &context, unique_ptr<FunctionData> &bind_data,
