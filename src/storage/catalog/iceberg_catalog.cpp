@@ -275,22 +275,29 @@ unique_ptr<SecretEntry> IcebergCatalog::GetIcebergSecret(ClientContext &context,
 	}
 	return secret_entry;
 }
+
 unique_ptr<SecretEntry> IcebergCatalog::GetHTTPSecret(ClientContext &context, const string &secret_name) {
 	auto transaction = CatalogTransaction::GetSystemCatalogTransaction(context);
 	unique_ptr<SecretEntry> secret_entry = nullptr;
-	if (secret_name.empty()) {
-		//! Try to find any secret with type 'http'
-		auto secret_match = context.db->GetSecretManager().LookupSecret(transaction, "", "http");
-		if (!secret_match.HasMatch()) {
-			return nullptr;
-		}
-		secret_entry = std::move(secret_match.secret_entry);
-	} else {
+
+	if (!secret_name.empty()) {
 		secret_entry = context.db->GetSecretManager().GetSecretByName(transaction, secret_name);
+		if (!secret_entry) {
+			throw InternalException("Secret '%s' not found", secret_name);
+		}
+		auto http_kv_secret = dynamic_cast<const KeyValueSecret &>(*secret_entry->secret);
+		bool has_proxy = !http_kv_secret.TryGetValue("http_proxy").IsNull();
+		if (has_proxy) {
+			return secret_entry;
+		}
 	}
+	auto secret_match = context.db->GetSecretManager().LookupSecret(transaction, "", "http");
+	if (!secret_match.HasMatch()) {
+		return nullptr;
+	}
+	secret_entry = std::move(secret_match.secret_entry);
 	return secret_entry;
 }
-
 void IcebergCatalog::AddDefaultSupportedEndpoints() {
 	// insert namespaces based on REST API spec.
 	// List namespaces
