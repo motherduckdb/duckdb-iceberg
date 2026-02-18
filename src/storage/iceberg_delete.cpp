@@ -240,8 +240,9 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 
 		auto &fs = FileSystem::GetFileSystem(context);
 
+		bool write_deletion_vector = table.table_info.table_metadata.iceberg_version >= 3;
 		string file_format;
-		if (table.table_info.table_metadata.iceberg_version >= 3) {
+		if (write_deletion_vector) {
 			file_format = "puffin";
 		} else {
 			file_format = "parquet";
@@ -253,7 +254,7 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 
 		delete_file.file_name = delete_file_path;
 
-		if (file_format == "parquet") {
+		if (!write_deletion_vector) {
 			WritePositionalDeleteFile(context, global_state, filename, delete_file, sorted_deletes);
 		} else {
 			WriteDeletionVectorFile(context, global_state, filename, delete_file, sorted_deletes);
