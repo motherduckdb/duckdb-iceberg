@@ -8,7 +8,8 @@ namespace duckdb {
 
 struct IcebergDeletionVectorData : public enable_shared_from_this<IcebergDeletionVectorData>, IcebergDeleteData {
 public:
-	IcebergDeletionVectorData(const string &manifest_file_path) : IcebergDeleteData(manifest_file_path) {
+	IcebergDeletionVectorData(const string &manifest_file_path)
+	    : IcebergDeleteData(IcebergDeleteType::DELETION_VECTOR, manifest_file_path) {
 	}
 	virtual ~IcebergDeletionVectorData() override {
 	}

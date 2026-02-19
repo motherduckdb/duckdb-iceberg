@@ -60,6 +60,11 @@ shared_ptr<IcebergDeletionVectorData> IcebergDeletionVectorData::FromBlob(const 
 }
 
 void IcebergMultiFileList::ScanPuffinFile(const string &manifest_file_path, const IcebergDataFile &entry) const {
+	auto &table_metadata = GetMetadata();
+	auto iceberg_version = table_metadata.iceberg_version;
+	if (iceberg_version < 3) {
+		throw InvalidConfigurationException("DeletionVector not supported in Iceberg V%d", iceberg_version);
+	}
 	auto file_path = entry.file_path;
 	D_ASSERT(!entry.referenced_data_file.empty());
 
@@ -77,13 +82,18 @@ void IcebergMultiFileList::ScanPuffinFile(const string &manifest_file_path, cons
 	auto buf_handle = caching_file_handle->Read(data, length, offset);
 	auto buffer_data = buf_handle.Ptr();
 
-	if (table && table->table_info.table_metadata.iceberg_version >= 3 &&
-	    positional_delete_data.count(entry.referenced_data_file)) {
-		throw InvalidConfigurationException(
-		    "Table is corrupt, two or more positional deletes exist for the same referenced_data_file");
+	auto it = positional_delete_data.find(entry.referenced_data_file);
+	if (it != positional_delete_data.end()) {
+		//! Another delete already exists for this table
+		auto &existing_delete = *it->second;
+		if (existing_delete.type == IcebergDeleteType::DELETION_VECTOR) {
+			throw InvalidConfigurationException(
+			    "Table is corrupt, two or more deletion vectors exist for the same referenced_data_file");
+		}
 	}
-	positional_delete_data.emplace(entry.referenced_data_file,
-	                               IcebergDeletionVectorData::FromBlob(manifest_file_path, buffer_data, length));
+	//! NOTE: assign, don't emplace, deletion vectors take priority over any remaining positional delete files
+	positional_delete_data[entry.referenced_data_file] =
+	    IcebergDeletionVectorData::FromBlob(manifest_file_path, buffer_data, length);
 }
 
 idx_t IcebergDeletionVector::Filter(row_t start_row_index, idx_t count, SelectionVector &result_sel) {

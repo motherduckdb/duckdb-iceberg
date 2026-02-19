@@ -4,9 +4,12 @@
 
 namespace duckdb {
 
+enum class IcebergDeleteType : uint8_t { POSITIONAL_DELETE, DELETION_VECTOR };
+
 struct IcebergDeleteData {
 public:
-	IcebergDeleteData(const string &manifest_file_path) : manifest_file_path(manifest_file_path) {
+	IcebergDeleteData(IcebergDeleteType type, const string &manifest_file_path)
+	    : type(type), manifest_file_path(manifest_file_path) {
 	}
 	virtual ~IcebergDeleteData() {
 	}
@@ -16,6 +19,7 @@ public:
 	virtual void ToSet(set<idx_t> &out) const = 0;
 
 public:
+	IcebergDeleteType type;
 	//! The 'manifest_file.manifest_path' that this delete came from
 	string manifest_file_path;
 };

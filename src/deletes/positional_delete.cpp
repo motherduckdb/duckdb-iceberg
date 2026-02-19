@@ -29,7 +29,10 @@ void IcebergMultiFileList::ScanPositionalDeleteFile(const string &manifest_file_
 		         .emplace(initial_key, make_shared_ptr<IcebergPositionalDeleteData>(manifest_file_path))
 		         .first;
 	}
-	reference<IcebergPositionalDeleteData> deletes = reinterpret_cast<IcebergPositionalDeleteData &>(*it->second);
+	optional_ptr<IcebergPositionalDeleteData> deletes;
+	if (it->second->type == IcebergDeleteType::POSITIONAL_DELETE) {
+		deletes = reinterpret_cast<IcebergPositionalDeleteData &>(*it->second);
+	}
 
 	for (idx_t i = 0; i < count; i++) {
 		auto &name = names[i];
@@ -44,10 +47,14 @@ void IcebergMultiFileList::ScanPositionalDeleteFile(const string &manifest_file_
 				         .emplace(key, make_shared_ptr<IcebergPositionalDeleteData>(manifest_file_path))
 				         .first;
 			}
-			deletes = reinterpret_cast<IcebergPositionalDeleteData &>(*it->second);
+			if (it->second->type == IcebergDeleteType::POSITIONAL_DELETE) {
+				deletes = reinterpret_cast<IcebergPositionalDeleteData &>(*it->second);
+			}
 		}
-
-		deletes.get().AddRow(row_id);
+		if (!deletes) {
+			continue;
+		}
+		deletes->AddRow(row_id);
 	}
 }
 
