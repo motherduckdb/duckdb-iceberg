@@ -573,9 +573,6 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 		auto &manifest_entry = manifest_file.entries[i];
 		idx_t col_idx = 0;
 
-		//! We rely on inheriting the snapshot_id, this is only acceptable for ADDED data files
-		D_ASSERT(manifest_entry.status == IcebergManifestEntryStatusType::ADDED);
-
 		// status: int
 		chunk.SetValue(col_idx++, i, Value::INTEGER(static_cast<int32_t>(manifest_entry.status)));
 		// snapshot_id: long

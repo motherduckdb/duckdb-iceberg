@@ -56,6 +56,7 @@ void IcebergTransactionData::CreateManifestListEntry(IcebergAddSnapshot &add_sna
 	manifest_list_delete_entry.deleted_files_count = 0;
 	manifest_list_delete_entry.existing_files_count = 0;
 	manifest_list_delete_entry.added_rows_count = 0;
+	manifest_list_delete_entry.deleted_rows_count = 0;
 	manifest_list_delete_entry.existing_rows_count = 0;
 	//! TODO: support partitions
 	manifest_list_delete_entry.partition_spec_id = 0;

@@ -52,6 +52,12 @@ void IcebergAddSnapshot::ConstructManifest(CopyFunction &avro_copy, DatabaseInst
 		manifest_file_reader->Read(STANDARD_VECTOR_SIZE, rewritten_manifest.entries);
 	}
 	auto &rewritten_manifest_file = manifest_files[0];
+	rewritten_manifest_file.manifest_path = manifest_file_path;
+	rewritten_manifest_file.added_files_count = 0;
+	rewritten_manifest_file.deleted_files_count = 0;
+	rewritten_manifest_file.existing_files_count = 0;
+	rewritten_manifest_file.added_rows_count = 0;
+	rewritten_manifest_file.deleted_rows_count = 0;
 	rewritten_manifest_file.existing_rows_count = 0;
 
 	bool removed_any_entries = false;
@@ -60,6 +66,8 @@ void IcebergAddSnapshot::ConstructManifest(CopyFunction &avro_copy, DatabaseInst
 		manifest_entry.status = IcebergManifestEntryStatusType::EXISTING;
 		auto delete_it = deletes.altered_data_files.find(manifest_entry.data_file.file_path);
 		if (delete_it == deletes.altered_data_files.end()) {
+			rewritten_manifest_file.existing_rows_count += manifest_entry.data_file.record_count;
+			rewritten_manifest_file.existing_files_count++;
 			continue;
 		}
 		handled_entries++;
@@ -68,6 +76,8 @@ void IcebergAddSnapshot::ConstructManifest(CopyFunction &avro_copy, DatabaseInst
 			//! This is a positional delete,
 			//! we can't remove the file because we can't be sure
 			//! that it doesn't contain deletes for other data files.
+			rewritten_manifest_file.existing_rows_count += manifest_entry.data_file.record_count;
+			rewritten_manifest_file.existing_files_count++;
 			continue;
 		}
 		removed_any_entries = true;
@@ -75,6 +85,8 @@ void IcebergAddSnapshot::ConstructManifest(CopyFunction &avro_copy, DatabaseInst
 		D_ASSERT(manifest_entry.data_file.referenced_data_file == delete_file_state.referenced_data_files[0]);
 		//! Remove the entry
 		manifest_entry.status = IcebergManifestEntryStatusType::DELETED;
+		rewritten_manifest_file.deleted_rows_count += manifest_entry.data_file.record_count;
+		rewritten_manifest_file.deleted_files_count++;
 	}
 	if (handled_entries != deletes.altered_data_files.size()) {
 		throw InternalException("(ConstructManifest) We expected to find %d invalidated entries, but only found %d",
@@ -84,6 +96,8 @@ void IcebergAddSnapshot::ConstructManifest(CopyFunction &avro_copy, DatabaseInst
 		return;
 	}
 
+	//! Finally overwrite the input 'manifest_file' with our edited copy
+	manifest_file = rewritten_manifest_file;
 	auto manifest_length =
 	    manifest_file::WriteToFile(table_metadata, rewritten_manifest, avro_copy, db, commit_state.context);
 	manifest_file.manifest_length = manifest_length;
@@ -103,16 +117,24 @@ void IcebergAddSnapshot::ConstructManifestList(CopyFunction &avro_copy, Database
 		manifest_file_path_to_idx.emplace(manifest_file.manifest_path, i);
 	}
 
-	for (auto &entry : altered_manifests) {
-		auto it = manifest_file_path_to_idx.find(entry.first);
-		if (it == manifest_file_path_to_idx.end()) {
-			throw InternalException("Can't find path '%s' in ConstructManifestList", entry.first);
+	idx_t handled_entries = 0;
+	for (auto &manifest_file : commit_state.manifests) {
+		auto it = altered_manifests.find(manifest_file.manifest_path);
+		if (it == altered_manifests.end()) {
+			manifest_list.manifest_entries.push_back(std::move(manifest_file));
+			continue;
 		}
-		auto &manifest_file = commit_state.manifests[it->second];
-		auto &altered_manifest = entry.second;
-
+		handled_entries++;
+		auto &altered_manifest = it->second;
 		ConstructManifest(avro_copy, db, commit_state, manifest_file, altered_manifest);
+		manifest_list.manifest_entries.push_back(std::move(manifest_file));
 	}
+	if (handled_entries != altered_manifests.size()) {
+		throw InternalException("(ConstructManifestList) We expected to find %d invalidated entries, but only found %d",
+		                        altered_manifests.size(), handled_entries);
+	}
+	//! FIXME: 'AddToManifestEntries' also does a move, this will need to change to make retries work
+	commit_state.manifests.clear();
 }
 
 void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state) {
