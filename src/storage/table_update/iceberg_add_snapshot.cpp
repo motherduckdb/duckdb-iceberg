@@ -111,12 +111,6 @@ void IcebergAddSnapshot::ConstructManifestList(CopyFunction &avro_copy, Database
 		return;
 	}
 
-	case_insensitive_map_t<idx_t> manifest_file_path_to_idx;
-	for (idx_t i = 0; i < commit_state.manifests.size(); i++) {
-		auto &manifest_file = commit_state.manifests[i];
-		manifest_file_path_to_idx.emplace(manifest_file.manifest_path, i);
-	}
-
 	idx_t handled_entries = 0;
 	for (auto &manifest_file : commit_state.manifests) {
 		auto it = altered_manifests.find(manifest_file.manifest_path);
