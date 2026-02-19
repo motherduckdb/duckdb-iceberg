@@ -63,6 +63,7 @@ void IcebergTransactionData::CreateManifestListEntry(IcebergAddSnapshot &add_sna
 
 	//! Add the delete files to the manifest
 	for (auto &manifest_entry : manifest_entries) {
+		manifest_entry.manifest_file_path = manifest_file_path;
 		auto &data_file = manifest_entry.data_file;
 		switch (manifest_content_type) {
 		case IcebergManifestContentType::DATA:

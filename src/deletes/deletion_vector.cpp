@@ -59,30 +59,31 @@ shared_ptr<IcebergDeletionVectorData> IcebergDeletionVectorData::FromBlob(const 
 	return result_p;
 }
 
-void IcebergMultiFileList::ScanPuffinFile(const string &manifest_file_path, const IcebergDataFile &entry) const {
+void IcebergMultiFileList::ScanPuffinFile(const IcebergManifestEntry &entry) const {
+	auto &data_file = entry.data_file;
 	auto &table_metadata = GetMetadata();
 	auto iceberg_version = table_metadata.iceberg_version;
 	if (iceberg_version < 3) {
 		throw InvalidConfigurationException("DeletionVector not supported in Iceberg V%d", iceberg_version);
 	}
-	auto file_path = entry.file_path;
-	D_ASSERT(!entry.referenced_data_file.empty());
+	auto file_path = data_file.file_path;
+	D_ASSERT(!data_file.referenced_data_file.empty());
 
 	auto caching_file_system = CachingFileSystem::Get(context);
 
 	auto caching_file_handle = caching_file_system.OpenFile(file_path, FileOpenFlags::FILE_FLAGS_READ);
 	data_ptr_t data = nullptr;
 
-	D_ASSERT(!entry.content_offset.IsNull());
-	D_ASSERT(!entry.content_size_in_bytes.IsNull());
+	D_ASSERT(!data_file.content_offset.IsNull());
+	D_ASSERT(!data_file.content_size_in_bytes.IsNull());
 
-	auto offset = entry.content_offset.GetValue<int64_t>();
-	auto length = entry.content_size_in_bytes.GetValue<int64_t>();
+	auto offset = data_file.content_offset.GetValue<int64_t>();
+	auto length = data_file.content_size_in_bytes.GetValue<int64_t>();
 
 	auto buf_handle = caching_file_handle->Read(data, length, offset);
 	auto buffer_data = buf_handle.Ptr();
 
-	auto it = positional_delete_data.find(entry.referenced_data_file);
+	auto it = positional_delete_data.find(data_file.referenced_data_file);
 	if (it != positional_delete_data.end()) {
 		//! Another delete already exists for this table
 		auto &existing_delete = *it->second;
@@ -92,8 +93,8 @@ void IcebergMultiFileList::ScanPuffinFile(const string &manifest_file_path, cons
 		}
 	}
 	//! NOTE: assign, don't emplace, deletion vectors take priority over any remaining positional delete files
-	positional_delete_data[entry.referenced_data_file] =
-	    IcebergDeletionVectorData::FromBlob(manifest_file_path, buffer_data, length);
+	positional_delete_data[data_file.referenced_data_file] =
+	    IcebergDeletionVectorData::FromBlob(entry.manifest_file_path, buffer_data, length);
 }
 
 idx_t IcebergDeletionVector::Filter(row_t start_row_index, idx_t count, SelectionVector &result_sel) {

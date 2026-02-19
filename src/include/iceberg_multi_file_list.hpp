@@ -72,10 +72,9 @@ public:
 	                            vector<MultiFileColumnDefinition> &columns,
 	                            const vector<MultiFileColumnDefinition> &global_columns,
 	                            const vector<ColumnIndex> &column_indexes) const;
-	void ScanDeleteFile(const string &manifest_file_path, const IcebergManifestEntry &entry,
-	                    const vector<MultiFileColumnDefinition> &global_columns,
+	void ScanDeleteFile(const IcebergManifestEntry &entry, const vector<MultiFileColumnDefinition> &global_columns,
 	                    const vector<ColumnIndex> &column_indexes) const;
-	void ScanPuffinFile(const string &manifest_file_path, const IcebergDataFile &entry) const;
+	void ScanPuffinFile(const IcebergManifestEntry &entry) const;
 	unique_ptr<DeleteFilter> GetPositionalDeletesForFile(const string &file_path) const;
 	void ProcessDeletes(const vector<MultiFileColumnDefinition> &global_columns,
 	                    const vector<ColumnIndex> &column_indexes) const;
