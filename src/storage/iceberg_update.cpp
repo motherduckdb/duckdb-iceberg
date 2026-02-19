@@ -196,7 +196,9 @@ SinkFinalizeType IcebergUpdate::Finalize(Pipeline &pipeline, Event &event, Clien
 			//! Add or overwrite the currently active transaction-local delete files
 			for (auto &entry : delete_global_state.written_files) {
 				auto &delete_file = entry.second;
-				transaction_data.transactional_delete_files[delete_file.data_file_path] = delete_file.file_name;
+				if (table_info.table_metadata.iceberg_version >= 3) {
+					transaction_data.transactional_delete_files[delete_file.data_file_path] = delete_file.file_name;
+				}
 			}
 		});
 	}

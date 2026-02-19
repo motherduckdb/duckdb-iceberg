@@ -234,6 +234,8 @@ static void PopulateAlteredManifests(case_insensitive_map_t<IcebergManifestDelet
 
 void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext &context,
                                  IcebergDeleteGlobalState &global_state) const {
+	bool write_deletion_vector = table.table_info.table_metadata.iceberg_version >= 3;
+
 	lock_guard<mutex> guard(global_state.lock);
 	for (auto &entry : global_state.deleted_rows) {
 		auto &filename = entry.first;
@@ -248,12 +250,14 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 			throw NotImplementedException("The same row was updated multiple times - this is not (yet) supported in "
 			                              "Iceberg. Eliminate duplicate matches prior to running the UPDATE");
 		}
-		//! First add the existing delete we're replacing
-		auto it = multi_file_list.positional_delete_data.find(filename);
-		if (it != multi_file_list.positional_delete_data.end()) {
-			auto &delete_data = *it->second;
-			PopulateAlteredManifests(global_state.altered_manifests, delete_data, filename);
-			delete_data.ToSet(sorted_deletes);
+		if (write_deletion_vector) {
+			//! Addd the existing delete we're replacing
+			auto it = multi_file_list.positional_delete_data.find(filename);
+			if (it != multi_file_list.positional_delete_data.end()) {
+				auto &delete_data = *it->second;
+				PopulateAlteredManifests(global_state.altered_manifests, delete_data, filename);
+				delete_data.ToSet(sorted_deletes);
+			}
 		}
 
 		IcebergDeleteFileInfo delete_file;
@@ -261,7 +265,6 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 
 		auto &fs = FileSystem::GetFileSystem(context);
 
-		bool write_deletion_vector = table.table_info.table_metadata.iceberg_version >= 3;
 		string file_format;
 		if (write_deletion_vector) {
 			file_format = "puffin";
@@ -344,7 +347,9 @@ SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, Clien
 			//! Add or overwrite the currently active transaction-local delete files
 			for (auto &entry : global_state.written_files) {
 				auto &delete_file = entry.second;
-				transaction_data.transactional_delete_files[delete_file.data_file_path] = delete_file.file_name;
+				if (table_info.table_metadata.iceberg_version >= 3) {
+					transaction_data.transactional_delete_files[delete_file.data_file_path] = delete_file.file_name;
+				}
 			}
 		});
 	}
