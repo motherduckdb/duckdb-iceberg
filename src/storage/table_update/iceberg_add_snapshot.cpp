@@ -133,7 +133,6 @@ void IcebergAddSnapshot::ConstructManifestList(CopyFunction &avro_copy, Database
 		throw InternalException("(ConstructManifestList) We expected to find %d invalidated entries, but only found %d",
 		                        altered_manifests.size(), handled_entries);
 	}
-	//! FIXME: 'AddToManifestEntries' also does a move, this will need to change to make retries work
 	commit_state.manifests.clear();
 }
 
