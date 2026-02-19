@@ -39,6 +39,7 @@ public:
 
 public:
 	const IcebergTableInformation &table_info;
+	optional_ptr<const IcebergSnapshot> latest_snapshot;
 	ClientContext &context;
 
 	//! All the 'manifest_file' entries we will write to the new manifest list

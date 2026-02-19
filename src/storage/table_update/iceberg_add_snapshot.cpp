@@ -40,7 +40,7 @@ void IcebergAddSnapshot::ConstructManifest(CopyFunction &avro_copy, DatabaseInst
 	IcebergOptions options;
 	auto &fs = FileSystem::GetFileSystem(commit_state.context);
 	auto &table_metadata = commit_state.table_info.table_metadata;
-	auto &snapshot = *table_metadata.GetLatestSnapshot();
+	auto &snapshot = *commit_state.latest_snapshot;
 	auto manifest_scan =
 	    AvroScan::ScanManifest(snapshot, manifest_files, options, fs, "", table_metadata, commit_state.context);
 	auto manifest_file_reader = make_uniq<manifest_file::ManifestReader>(*manifest_scan, true);
@@ -156,6 +156,7 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 	ConstructManifestList(avro_copy, db, commit_state);
 	manifest_list::WriteToFile(table_info.table_metadata, manifest_list, avro_copy, db, context);
 	commit_state.manifests = manifest_list.GetManifestListEntries();
+	commit_state.latest_snapshot = snapshot;
 
 	//! Finally add a Iceberg REST Catalog 'TableUpdate' to commit
 	commit_state.table_change.updates.push_back(CreateAddSnapshotUpdate(table_info, snapshot));
