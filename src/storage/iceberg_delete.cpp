@@ -105,7 +105,8 @@ void IcebergDelete::WriteDeletionVectorFile(ClientContext &context, IcebergDelet
 	auto delete_file_path = delete_file.file_name;
 
 	// Build deletion vector data
-	auto dv_data = make_shared_ptr<IcebergDeletionVectorData>("unused");
+	IcebergManifestEntry unused;
+	auto dv_data = make_shared_ptr<IcebergDeletionVectorData>(unused);
 
 	// Group row indices by high 32 bits
 	for (auto row_idx : sorted_deletes) {
@@ -220,6 +221,17 @@ void IcebergDelete::WritePositionalDeleteFile(ClientContext &context, IcebergDel
 	global_state.written_files.emplace(filename, std::move(delete_file));
 }
 
+static void PopulateAlteredManifests(case_insensitive_map_t<IcebergManifestDeletes> &out,
+                                     IcebergDeleteData &delete_data, const string &referenced_data_file) {
+	for (auto &entry_p : delete_data.entries) {
+		auto &entry = entry_p.get();
+		auto &manifest_file = out[entry.manifest_file_path];
+		auto it = manifest_file.altered_data_files.emplace(entry.data_file.file_path, delete_data.type).first;
+		auto &delete_file = it->second;
+		delete_file.referenced_data_files.push_back(referenced_data_file);
+	}
+}
+
 void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext &context,
                                  IcebergDeleteGlobalState &global_state) const {
 	lock_guard<mutex> guard(global_state.lock);
@@ -233,6 +245,7 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 		auto it = multi_file_list.positional_delete_data.find(filename);
 		if (it != multi_file_list.positional_delete_data.end()) {
 			auto &delete_data = *it->second;
+			PopulateAlteredManifests(global_state.altered_manifests, delete_data, filename);
 			delete_data.ToSet(sorted_deletes);
 		}
 		for (auto &row_idx : deleted_rows) {
@@ -318,11 +331,10 @@ SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, Clien
 	auto &transaction = IcebergTransaction::Get(context, table.catalog);
 	auto iceberg_delete_files = GenerateDeleteManifestEntries(global_state);
 
-	//! TODO: populate with the data_files (delete files) that are invalidated by the new delete(s)
-	case_insensitive_map_t<IcebergManifestDeletes> altered_manifests;
 	if (!global_state.written_files.empty()) {
 		ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTableInformation &tbl) {
-			tbl.AddDeleteSnapshot(iceberg_transaction, std::move(iceberg_delete_files), std::move(altered_manifests));
+			tbl.AddDeleteSnapshot(iceberg_transaction, std::move(iceberg_delete_files),
+			                      std::move(global_state.altered_manifests));
 
 			auto &transaction_data = *tbl.transaction_data;
 			//! Add or overwrite the currently active transaction-local delete files

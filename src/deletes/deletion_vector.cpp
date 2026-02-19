@@ -7,7 +7,7 @@
 
 namespace duckdb {
 
-shared_ptr<IcebergDeletionVectorData> IcebergDeletionVectorData::FromBlob(const string &manifest_file_path,
+shared_ptr<IcebergDeletionVectorData> IcebergDeletionVectorData::FromBlob(const IcebergManifestEntry &entry,
                                                                           data_ptr_t blob_start, idx_t blob_length) {
 	//! https://iceberg.apache.org/puffin-spec/#deletion-vector-v1-blob-type
 
@@ -37,7 +37,7 @@ shared_ptr<IcebergDeletionVectorData> IcebergDeletionVectorData::FromBlob(const 
 	vector_size -= sizeof(int64_t);
 	D_ASSERT(blob_start < blob_end);
 
-	auto result_p = make_shared_ptr<IcebergDeletionVectorData>(manifest_file_path);
+	auto result_p = make_shared_ptr<IcebergDeletionVectorData>(entry);
 	auto &result = *result_p;
 	result.bitmaps.reserve(amount_of_bitmaps);
 	for (int64_t i = 0; i < amount_of_bitmaps; i++) {
@@ -94,7 +94,7 @@ void IcebergMultiFileList::ScanPuffinFile(const IcebergManifestEntry &entry) con
 	}
 	//! NOTE: assign, don't emplace, deletion vectors take priority over any remaining positional delete files
 	positional_delete_data[data_file.referenced_data_file] =
-	    IcebergDeletionVectorData::FromBlob(entry.manifest_file_path, buffer_data, length);
+	    IcebergDeletionVectorData::FromBlob(entry, buffer_data, length);
 }
 
 idx_t IcebergDeletionVector::Filter(row_t start_row_index, idx_t count, SelectionVector &result_sel) {

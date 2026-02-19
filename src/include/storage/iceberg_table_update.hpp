@@ -35,10 +35,12 @@ enum class IcebergTableUpdateType : uint8_t {
 
 struct IcebergCommitState {
 public:
-	IcebergCommitState(IcebergTransactionData &transaction_data);
+	IcebergCommitState(const IcebergTableInformation &table_info, ClientContext &context);
 
 public:
-	IcebergTransactionData &transaction_data;
+	const IcebergTableInformation &table_info;
+	ClientContext &context;
+
 	//! All the 'manifest_file' entries we will write to the new manifest list
 	vector<IcebergManifestFile> manifests;
 	rest_api_objects::CommitTableRequest table_change;

@@ -3,7 +3,8 @@
 
 namespace duckdb {
 
-IcebergCommitState::IcebergCommitState(IcebergTransactionData &transaction_data) : transaction_data(transaction_data) {
+IcebergCommitState::IcebergCommitState(const IcebergTableInformation &table_info, ClientContext &context)
+    : table_info(table_info), context(context) {
 }
 
 IcebergTableUpdate::IcebergTableUpdate(IcebergTableUpdateType type, IcebergTableInformation &table_info)

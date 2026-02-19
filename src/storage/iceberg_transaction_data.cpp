@@ -164,8 +164,7 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 	}
 	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info, manifest_list_path, std::move(new_snapshot));
 	CreateManifestListEntry(*add_snapshot, table_metadata, manifest_content_type, std::move(data_files));
-	//! TODO: push to the 'altered_manifests' for this alter,
-	//! to inform the 'CreateUpdate' method which manifests have to be rewritten for this snapshot.
+	add_snapshot->altered_manifests = std::move(altered_manifests);
 
 	if (table_metadata.iceberg_version >= 3) {
 		auto &snapshot = add_snapshot->snapshot;

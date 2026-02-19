@@ -119,7 +119,7 @@ const IcebergTransactionData &IcebergMultiFileList::GetTransactionData() const {
 	return *scan_info->transaction_data;
 }
 
-optional_ptr<IcebergSnapshot> IcebergMultiFileList::GetSnapshot() const {
+optional_ptr<const IcebergSnapshot> IcebergMultiFileList::GetSnapshot() const {
 	return scan_info->snapshot;
 }
 
@@ -860,22 +860,26 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 				//! Skip this file
 				continue;
 			}
-
 			auto &referenced_data_file = data_file.referenced_data_file;
 			if (!referenced_data_file.empty() && transactional_delete_files &&
 			    transactional_delete_files->count(referenced_data_file)) {
 				//! Skip this delete file, there's a transaction-local delete that makes it obsolete
 				continue;
 			}
-			if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
-				ScanDeleteFile(manifest_entry, global_columns, column_indexes);
-			} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
-				ScanPuffinFile(manifest_entry);
-			} else {
-				throw NotImplementedException(
-				    "File format '%s' not supported for deletes, only supports 'parquet' and 'puffin' currently",
-				    data_file.file_format);
-			}
+			delete_manifest_entries.push_back(std::move(manifest_entry));
+		}
+	}
+
+	for (auto &manifest_entry : delete_manifest_entries) {
+		auto &data_file = manifest_entry.data_file;
+		if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
+			ScanDeleteFile(manifest_entry, global_columns, column_indexes);
+		} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
+			ScanPuffinFile(manifest_entry);
+		} else {
+			throw NotImplementedException(
+			    "File format '%s' not supported for deletes, only supports 'parquet' and 'puffin' currently",
+			    data_file.file_format);
 		}
 	}
 
@@ -975,7 +979,7 @@ void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &manifest_e
 			result.Reset();
 			delete_scan_function.function(context, function_input, result);
 			result.Flatten();
-			ScanPositionalDeleteFile(manifest_entry.manifest_file_path, result);
+			ScanPositionalDeleteFile(manifest_entry, result);
 		} while (result.size() != 0);
 	} else if (data_file.content == IcebergManifestEntryContentType::EQUALITY_DELETES) {
 		do {

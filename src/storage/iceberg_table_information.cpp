@@ -344,7 +344,7 @@ IcebergTableInformation IcebergTableInformation::Copy(IcebergTransaction &iceber
 	// this is to ensure when the transaction commits, the assert ref snapshot id is the one closest to the start of
 	// this
 	auto snapshot_lookup = GetSnapshotLookup(iceberg_transaction);
-	optional_ptr<IcebergSnapshot> snapshot = nullptr;
+	optional_ptr<const IcebergSnapshot> snapshot = nullptr;
 	try {
 		snapshot = ret.table_metadata.GetSnapshot(snapshot_lookup);
 	} catch (InvalidConfigurationException &e) {
