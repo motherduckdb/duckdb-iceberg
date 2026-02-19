@@ -29,7 +29,8 @@ public:
 	                             vector<IcebergManifestEntry> &&data_files);
 	void AddSnapshot(IcebergSnapshotOperationType operation, vector<IcebergManifestEntry> &&data_files,
 	                 case_insensitive_map_t<IcebergManifestDeletes> &&altered_manifests);
-	void AddUpdateSnapshot(vector<IcebergManifestEntry> &&delete_files, vector<IcebergManifestEntry> &&data_files);
+	void AddUpdateSnapshot(vector<IcebergManifestEntry> &&delete_files, vector<IcebergManifestEntry> &&data_files,
+	                       case_insensitive_map_t<IcebergManifestDeletes> &&altered_manifests);
 	// add a schema update for a table
 	void TableAddSchema();
 	void TableAddAssertCreate();

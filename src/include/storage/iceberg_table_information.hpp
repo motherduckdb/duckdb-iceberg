@@ -35,7 +35,8 @@ public:
 	void AddDeleteSnapshot(IcebergTransaction &transaction, vector<IcebergManifestEntry> &&data_files,
 	                       case_insensitive_map_t<IcebergManifestDeletes> &&altered_manifests);
 	void AddUpdateSnapshot(IcebergTransaction &transaction, vector<IcebergManifestEntry> &&delete_files,
-	                       vector<IcebergManifestEntry> &&data_files);
+	                       vector<IcebergManifestEntry> &&data_files,
+	                       case_insensitive_map_t<IcebergManifestDeletes> &&altered_manifests);
 	void AddSchema(IcebergTransaction &transaction);
 	void AddAssertCreate(IcebergTransaction &transaction);
 	void AddAssignUUID(IcebergTransaction &transaction);

@@ -241,15 +241,19 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 
 		// sort and duplicate eliminate the deletes
 		set<idx_t> sorted_deletes;
+		for (auto &row_idx : deleted_rows) {
+			sorted_deletes.insert(row_idx);
+		}
+		if (sorted_deletes.size() != deleted_rows.size()) {
+			throw NotImplementedException("The same row was updated multiple times - this is not (yet) supported in "
+			                              "Iceberg. Eliminate duplicate matches prior to running the UPDATE");
+		}
 		//! First add the existing delete we're replacing
 		auto it = multi_file_list.positional_delete_data.find(filename);
 		if (it != multi_file_list.positional_delete_data.end()) {
 			auto &delete_data = *it->second;
 			PopulateAlteredManifests(global_state.altered_manifests, delete_data, filename);
 			delete_data.ToSet(sorted_deletes);
-		}
-		for (auto &row_idx : deleted_rows) {
-			sorted_deletes.insert(row_idx);
 		}
 
 		IcebergDeleteFileInfo delete_file;

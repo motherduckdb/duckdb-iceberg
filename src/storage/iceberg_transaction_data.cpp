@@ -182,7 +182,8 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 }
 
 void IcebergTransactionData::AddUpdateSnapshot(vector<IcebergManifestEntry> &&delete_files,
-                                               vector<IcebergManifestEntry> &&data_files) {
+                                               vector<IcebergManifestEntry> &&data_files,
+                                               case_insensitive_map_t<IcebergManifestDeletes> &&altered_manifests) {
 	//! Generate a new snapshot id
 	auto &table_metadata = table_info.table_metadata;
 	auto snapshot_id = NewSnapshotId();
@@ -238,6 +239,8 @@ void IcebergTransactionData::AddUpdateSnapshot(vector<IcebergManifestEntry> &&de
 
 	// Add a manifest list entry for the new insert data
 	CreateManifestListEntry(*add_snapshot, table_metadata, IcebergManifestContentType::DATA, std::move(data_files));
+	add_snapshot->altered_manifests = std::move(altered_manifests);
+
 	if (table_metadata.iceberg_version >= 3) {
 		auto &snapshot = add_snapshot->snapshot;
 		snapshot.has_first_row_id = true;
