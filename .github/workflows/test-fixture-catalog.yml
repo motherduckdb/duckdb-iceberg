@@ -82,7 +82,8 @@ jobs:
           DUCKDB_ICEBERG_HAVE_GENERATED_DATA: 1
           SECRETS_CREATED_AND_CATALOG_ATTACHED: 1
         run: |
-          build/release/test/unittest --test-config test/configs/fixture.json --test-dir duckdb
+          ./build/release/test/unittest "$PWD/test/sql/local/irc_any_catalog/*" --list-test-names-only || true
+          ./build/release/test/unittest "$PWD/test/sql/local/irc_any_catalog/*" --test-config test/configs/fixture.json
 
       - name: Test reads with PyIceberg
         env:
