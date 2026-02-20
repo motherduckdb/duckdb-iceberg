@@ -115,7 +115,7 @@ requires_iceberg_server = pytest.mark.skipif(
 
 @requires_iceberg_server
 class TestSparkRead:
-    def test_spark_read(self, spark_con):
+    def test_spark_read_insert_test(self, spark_con):
         df = spark_con.sql(
             """
             select * from default.insert_test order by col1, col2, col3
@@ -131,10 +131,7 @@ class TestSparkRead:
             Row(col1=datetime.date(2020, 8, 16), col2=4, col3='insert 4'),
         ]
 
-
-@requires_iceberg_server
-class TestSparkReadDuckDBTable:
-    def test_spark_read(self, spark_con):
+    def test_spark_read_duckdb_table(self, spark_con):
         df = spark_con.sql(
             """
             select * from default.duckdb_written_table order by a
@@ -154,10 +151,7 @@ class TestSparkReadDuckDBTable:
             Row(a=9),
         ]
 
-
-@requires_iceberg_server
-class TestSparkReadDuckDBTableWithDeletes:
-    def test_spark_read(self, spark_con):
+    def test_spark_read_table_with_deletes(self, spark_con):
         df = spark_con.sql(
             """
             select * from default.duckdb_deletes_for_other_engines order by a
@@ -177,10 +171,7 @@ class TestSparkReadDuckDBTableWithDeletes:
             Row(a=59),
         ]
 
-
-@requires_iceberg_server
-class TestSparkReadUpperLowerBounds:
-    def test_spark_read(self, spark_con):
+    def test_spark_read_upper_and_lower_bounds(self, spark_con):
         df = spark_con.sql(
             """
             select * from default.lower_upper_bounds_test;
@@ -227,10 +218,7 @@ class TestSparkReadUpperLowerBounds:
             ),
         ]
 
-
-@requires_iceberg_server
-class TestSparkReadInfinities:
-    def test_spark_read(self, spark_con):
+    def test_spark_read_infinities(self, spark_con):
         df = spark_con.sql(
             """
             select * from default.test_infinities;
@@ -243,10 +231,7 @@ class TestSparkReadInfinities:
             Row(float_type=-inf, double_type=-inf),
         ]
 
-
-@requires_iceberg_server
-class TestSparkReadDuckDBNestedTypes:
-    def test_spark_read(self, spark_con):
+    def test_duckdb_written_nested_types(self, spark_con):
         df = spark_con.sql(
             """
             select * from default.duckdb_nested_types;
@@ -262,4 +247,22 @@ class TestSparkReadDuckDBNestedTypes:
                 phone_numbers=['123-456-7890', '987-654-3210'],
                 metadata={'age': '30', 'membership': 'gold'},
             ),
+        ]
+
+    def test_duckdb_written_row_lineage(self, spark_con):
+        df = spark_con.sql(
+            """
+            select _row_id, _last_updated_sequence_number, * from default.duckdb_row_lineage order by _row_id;
+            """
+        )
+        res = df.collect()
+        assert res == [
+            Row(_row_id=0, _last_updated_sequence_number=1, id=1, data='a'),
+            Row(_row_id=1, _last_updated_sequence_number=1, id=2, data='b'),
+            Row(_row_id=2, _last_updated_sequence_number=1, id=3, data='c'),
+            Row(_row_id=3, _last_updated_sequence_number=1, id=4, data='d'),
+            Row(_row_id=4, _last_updated_sequence_number=1, id=5, data='e'),
+            Row(_row_id=5, _last_updated_sequence_number=2, id=6, data='f'),
+            Row(_row_id=6, _last_updated_sequence_number=2, id=7, data='g'),
+            Row(_row_id=7, _last_updated_sequence_number=3, id=7, data='g_new'),
         ]
