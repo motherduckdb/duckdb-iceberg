@@ -483,10 +483,11 @@ void IcebergAvroMultiFileReader::FinalizeChunk(ClientContext &context, const Mul
 			//! First row id is explicitly set
 			continue;
 		}
-		first_row_id_validity.SetValid(i);
-		D_ASSERT(manifest_file.has_first_row_id);
-		first_row_id_data[i] = manifest_file.first_row_id + start_row_id;
-		start_row_id += record_count_data[i];
+		if (manifest_file.has_first_row_id) {
+			first_row_id_validity.SetValid(i);
+			first_row_id_data[i] = manifest_file.first_row_id + start_row_id;
+			start_row_id += record_count_data[i];
+		}
 	}
 	(void)output_chunk;
 	count += 1;
