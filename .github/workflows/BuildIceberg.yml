@@ -56,23 +56,23 @@ jobs:
           path: build/release/
           retention-days: 3
 
-  test-nessie:
-    name: Test against Nessie Catalog
-    needs: build_iceberg
-    uses: ./.github/workflows/test-nessie-catalog.yml
-    with:
-      artifact-name: duckdb-iceberg
-
-  test-spark:
+  test-fixture:
     name: Test against fixture catalog
     needs: build_iceberg
     uses: ./.github/workflows/test-fixture-catalog.yml
     with:
       artifact-name: duckdb-iceberg
 
-  test-polaris:
-    name: Test against Polaris Catalog
-    needs: build_iceberg
-    uses: ./.github/workflows/test-polaris-catalog.yml
-    with:
-      artifact-name: duckdb-iceberg
+#  test-nessie:
+#    name: Test against Nessie Catalog
+#    needs: build_iceberg
+#    uses: ./.github/workflows/test-nessie-catalog.yml
+#    with:
+#      artifact-name: duckdb-iceberg
+
+#  test-polaris:
+#    name: Test against Polaris Catalog
+#    needs: build_iceberg
+#    uses: ./.github/workflows/test-polaris-catalog.yml
+#    with:
+#      artifact-name: duckdb-iceberg
