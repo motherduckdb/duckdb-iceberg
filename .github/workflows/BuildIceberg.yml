@@ -46,6 +46,8 @@ jobs:
         env:
           GEN: ninja
           STATIC_LIBCPP: 1
+          ENABLE_EXTENSION_AUTOLOADING: 1
+          ENABLE_EXTENSION_AUTOINSTALL: 1
         run: |
           make release
 
