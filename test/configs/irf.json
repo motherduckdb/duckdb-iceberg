@@ -5,6 +5,7 @@
     "iceberg",
     "avro",
     "parquet",
-    "httpfs"
+    "httpfs",
+    "core_functions"
   ]
 }
