@@ -4,7 +4,6 @@
   "statically_loaded_extensions": [
     "iceberg",
     "avro",
-    "parquet",
     "httpfs",
     "core_functions"
   ]
