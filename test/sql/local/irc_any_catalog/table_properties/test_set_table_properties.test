@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/table_properties/test_set_table_properties.test
+# name: test/sql/local/irc_any_catalog/table_properties/test_set_table_properties.test
 # group: [table_properties]
 
 require-env ICEBERG_SERVER_AVAILABLE

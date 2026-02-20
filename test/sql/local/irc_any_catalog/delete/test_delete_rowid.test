@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/delete/test_delete_rowid.test
+# name: test/sql/local/irc_any_catalog/delete/test_delete_rowid.test
 # description: test integration with iceberg catalog read
 # group: [delete]
 

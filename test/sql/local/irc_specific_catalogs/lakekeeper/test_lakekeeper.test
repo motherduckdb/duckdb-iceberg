@@ -1,5 +1,5 @@
-# name: test/sql/local/irc/test_lakekeeper.test
-# group: [irc]
+# name: test/sql/local/irc_specific_catalogs/lakekeeper/test_lakekeeper.test
+# group: [lakekeeper]
 
 require httpfs
 

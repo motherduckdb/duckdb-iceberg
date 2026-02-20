@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/update/update_rollback.test
+# name: test/sql/local/irc_any_catalog/update/update_rollback.test
 # description: Test ducklake update rollback
 # group: [update]
 

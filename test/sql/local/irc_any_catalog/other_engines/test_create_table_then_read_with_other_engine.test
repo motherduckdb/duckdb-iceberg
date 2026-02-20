@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/other_engines/test_create_table_then_read_with_other_engine.test
+# name: test/sql/local/irc_any_catalog/other_engines/test_create_table_then_read_with_other_engine.test
 # description: test create table
 # group: [other_engines]
 

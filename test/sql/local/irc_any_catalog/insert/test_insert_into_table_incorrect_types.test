@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/insert/test_insert_into_table_incorrect_types.test
+# name: test/sql/local/irc_any_catalog/insert/test_insert_into_table_incorrect_types.test
 # description: test integration with iceberg catalog read
 # group: [insert]
 

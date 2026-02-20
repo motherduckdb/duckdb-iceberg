@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/insert/test_write_upper_and_lower_bounds_single_values.test
+# name: test/sql/local/irc_any_catalog/insert/test_write_upper_and_lower_bounds_single_values.test
 # group: [insert]
 
 require-env ICEBERG_SERVER_AVAILABLE

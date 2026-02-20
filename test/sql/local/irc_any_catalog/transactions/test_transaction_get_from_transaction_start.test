@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/transactions/test_transaction_get_from_transaction_start.test
+# name: test/sql/local/irc_any_catalog/transactions/test_transaction_get_from_transaction_start.test
 # group: [transactions]
 
 require-env ICEBERG_SERVER_AVAILABLE

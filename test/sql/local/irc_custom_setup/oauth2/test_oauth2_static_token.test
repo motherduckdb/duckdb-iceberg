@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/oauth2/test_oauth2_static_token.test
+# name: test/sql/local/irc_custom_setup/oauth2/test_oauth2_static_token.test
 # description: Ensure static tokens without expiry info continue to work
 # group: [oauth2]
 

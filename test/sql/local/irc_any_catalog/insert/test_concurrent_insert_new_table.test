@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/insert/test_concurrent_insert_new_table.test
+# name: test/sql/local/irc_any_catalog/insert/test_concurrent_insert_new_table.test
 # description: Test concurrent inserts to a newly created table with no snapshots
 # group: [insert]
 

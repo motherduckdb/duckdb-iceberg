@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/delete/test_deletes_from_multiple_files.test
+# name: test/sql/local/irc_any_catalog/delete/test_deletes_from_multiple_files.test
 # description: Test ducklake deleting multiple batches
 # group: [delete]
 

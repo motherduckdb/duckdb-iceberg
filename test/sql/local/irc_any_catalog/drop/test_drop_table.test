@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/drop/test_drop_table.test
+# name: test/sql/local/irc_any_catalog/drop/test_drop_table.test
 # description: test drop table with iceberg catalog read
 # group: [drop]
 

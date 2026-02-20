@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/test_show_table_duplicates.test
+# name: test/sql/local/irc_any_catalog/test_show_table_duplicates.test
 # description: test integration with iceberg catalog read
-# group: [irc]
+# group: [irc_any_catalog]
 
 require-env ICEBERG_SERVER_AVAILABLE
 

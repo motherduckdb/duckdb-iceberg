@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/oauth2/test_oauth2_token_reacquire.test
+# name: test/sql/local/irc_custom_setup/oauth2/test_oauth2_token_reacquire.test
 # description: Test that credentials are stored for token refresh capability
 # group: [oauth2]
 

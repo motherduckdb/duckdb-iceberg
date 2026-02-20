@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/transactions/test_transactional_updates.test
+# name: test/sql/local/irc_any_catalog/transactions/test_transactional_updates.test
 # group: [transactions]
 
 require-env ICEBERG_SERVER_AVAILABLE

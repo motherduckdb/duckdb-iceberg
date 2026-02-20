@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/iceberg_catalog_read.test
+# name: test/sql/local/irc_custom_setup/enable_logging_http/iceberg_catalog_read.test
 # description: test integration with iceberg catalog read
-# group: [irc]
+# group: [enable_logging_http]
 
 require-env ICEBERG_SERVER_AVAILABLE
 

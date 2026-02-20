@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/http_proxy.test
+# name: test/sql/local/irc_custom_setup/http_proxy.test
 # description: Test http proxy
-# group: [irc]
+# group: [irc_custom_setup]
 
 require-env HTTP_PROXY_PUBLIC
 

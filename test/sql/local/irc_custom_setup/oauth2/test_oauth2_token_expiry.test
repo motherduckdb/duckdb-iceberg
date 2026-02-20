@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/oauth2/test_oauth2_token_expiry.test
+# name: test/sql/local/irc_custom_setup/oauth2/test_oauth2_token_expiry.test
 # description: Test that OAuth2 token expiry is tracked from the token response
 # group: [oauth2]
 

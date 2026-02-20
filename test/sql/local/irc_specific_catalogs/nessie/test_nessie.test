@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/test_nessie.test
+# name: test/sql/local/irc_specific_catalogs/nessie/test_nessie.test
 # description: test nessie integration
-# group: [irc]
+# group: [nessie]
 
 require-env NESSIE_SERVER_AVAILABLE
 

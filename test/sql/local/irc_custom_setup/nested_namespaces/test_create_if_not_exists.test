@@ -1,5 +1,5 @@
-# name: test/sql/local/irc/test_create_if_not_exists.test
-# group: [irc]
+# name: test/sql/local/irc_custom_setup/nested_namespaces/test_create_if_not_exists.test
+# group: [nested_namespaces]
 
 require-env ICEBERG_SERVER_AVAILABLE
 

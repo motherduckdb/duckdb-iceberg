@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/delete/delete_join.test
+# name: test/sql/local/irc_any_catalog/delete/delete_join.test
 # description: Test iceberg delete using a join
 # group: [delete]
 

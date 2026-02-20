@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/create/test_create_and_delete_schema_table.test
+# name: test/sql/local/irc_any_catalog/create/test_create_and_delete_schema_table.test
 # description: test integration with iceberg catalog read
 # group: [create]
 

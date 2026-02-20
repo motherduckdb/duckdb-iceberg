@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/delete/delete_rollback_cleanup.test
+# name: test/sql/local/irc_any_catalog/delete/delete_rollback_cleanup.test
 # description: Test ducklake cleaning up files after rollback of delete
 # group: [delete]
 

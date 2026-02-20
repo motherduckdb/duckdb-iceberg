@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/test_mutliple_keys.test
+# name: test/sql/local/irc_custom_setup/setup_errors/test_mutliple_keys.test
 # description: test integration with iceberg catalog read
-# group: [irc]
+# group: [setup_errors]
 
 require-env ICEBERG_SERVER_AVAILABLE
 

@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/test_lakekeeper_tpch.test
+# name: test/sql/local/irc_specific_catalogs/lakekeeper/test_lakekeeper_tpch.test
 # description: test integration with iceberg catalog read
-# group: [irc]
+# group: [lakekeeper]
 
 require avro
 

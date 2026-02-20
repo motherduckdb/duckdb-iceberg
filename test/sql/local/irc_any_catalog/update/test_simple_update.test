@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/update/test_simple_update.test
+# name: test/sql/local/irc_any_catalog/update/test_simple_update.test
 # description: Test iceberg deletes
 # group: [update]
 

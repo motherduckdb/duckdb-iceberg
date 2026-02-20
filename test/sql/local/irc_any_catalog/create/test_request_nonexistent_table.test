@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/create/test_request_nonexistent_table.test
+# name: test/sql/local/irc_any_catalog/create/test_request_nonexistent_table.test
 # description: test create table
 # group: [create]
 

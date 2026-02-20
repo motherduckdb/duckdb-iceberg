@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/update/update_same_transaction.test
+# name: test/sql/local/irc_any_catalog/update/update_same_transaction.test
 # description: Test running updates the same transaction
 # group: [update]
 

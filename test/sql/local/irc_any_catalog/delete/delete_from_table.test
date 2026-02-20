@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/delete/delete_from_table.test
+# name: test/sql/local/irc_any_catalog/delete/delete_from_table.test
 # description: test integration with iceberg catalog read
 # group: [delete]
 

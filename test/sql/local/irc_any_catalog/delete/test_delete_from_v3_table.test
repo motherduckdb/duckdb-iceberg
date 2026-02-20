@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/delete/test_delete_from_v3_table.test
+# name: test/sql/local/irc_any_catalog/delete/test_delete_from_v3_table.test
 # group: [delete]
 
 require-env ICEBERG_SERVER_AVAILABLE

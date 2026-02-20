@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/insert/test_insert_into_sorted_table_fails.test
+# name: test/sql/local/irc_any_catalog/insert/test_insert_into_sorted_table_fails.test
 # group: [insert]
 
 require-env ICEBERG_SERVER_AVAILABLE

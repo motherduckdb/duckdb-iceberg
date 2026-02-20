@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/oauth2/test_oauth2_refresh_error.test
+# name: test/sql/local/irc_specific_catalogs/nessie/oauth2/test_oauth2_refresh_error.test
 # description: Test OAuth2 error handling when refresh fails (e.g., 401, invalid_grant)
 # group: [oauth2]
 

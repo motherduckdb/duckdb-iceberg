@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/insert/test_insert_to_v3_tables.test
+# name: test/sql/local/irc_any_catalog/insert/test_insert_to_v3_tables.test
 # group: [insert]
 
 require-env DUCKDB_ICEBERG_HAVE_GENERATED_DATA

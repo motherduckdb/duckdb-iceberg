@@ -1,5 +1,5 @@
-# name: test/sql/local/irc/errors/unrecognized_attach_options.test
-# group: [errors]
+# name: test/sql/local/irc_custom_setup/setup_errors/unrecognized_attach_options.test
+# group: [setup_errors]
 
 require-env ICEBERG_SERVER_AVAILABLE
 

@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/oauth2/test_oauth2_refresh_omission.test
+# name: test/sql/local/irc_specific_catalogs/nessie/oauth2/test_oauth2_refresh_omission.test
 # description: Test that OAuth2 preserves refresh_token when server omits it in refresh response
 # group: [oauth2]
 

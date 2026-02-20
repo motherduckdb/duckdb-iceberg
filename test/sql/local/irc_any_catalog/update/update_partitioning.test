@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/update/update_partitioning.test
+# name: test/sql/local/irc_any_catalog/update/update_partitioning.test
 # description: Update a partitioned table
 # group: [update]
 

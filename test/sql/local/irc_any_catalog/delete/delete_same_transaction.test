@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/delete/delete_same_transaction.test
+# name: test/sql/local/irc_any_catalog/delete/delete_same_transaction.test
 # description: Test ducklake deleting and creating in the same transaction
 # group: [delete]
 

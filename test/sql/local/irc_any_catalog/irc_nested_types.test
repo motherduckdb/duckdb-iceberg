@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/irc_nested_types.test
+# name: test/sql/local/irc_any_catalog/irc_nested_types.test
 # description: test integration with iceberg catalog read
-# group: [irc]
+# group: [irc_any_catalog]
 
 require-env ICEBERG_SERVER_AVAILABLE
 

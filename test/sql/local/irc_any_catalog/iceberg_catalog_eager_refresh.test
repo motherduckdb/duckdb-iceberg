@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/iceberg_catalog_eager_refresh.test
+# name: test/sql/local/irc_any_catalog/iceberg_catalog_eager_refresh.test
 # description: test integration with iceberg catalog read
-# group: [irc]
+# group: [irc_any_catalog]
 
 require-env ICEBERG_SERVER_AVAILABLE
 

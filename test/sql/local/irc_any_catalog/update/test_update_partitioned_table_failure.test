@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/update/test_update_partitioned_table_failure.test
+# name: test/sql/local/irc_any_catalog/update/test_update_partitioned_table_failure.test
 # description: Test there are no new snapshots if there are no new updates
 # group: [update]
 

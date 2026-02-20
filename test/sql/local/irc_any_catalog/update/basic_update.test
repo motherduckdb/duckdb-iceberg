@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/update/basic_update.test
+# name: test/sql/local/irc_any_catalog/update/basic_update.test
 # description: Test ducklake updates
 # group: [update]
 

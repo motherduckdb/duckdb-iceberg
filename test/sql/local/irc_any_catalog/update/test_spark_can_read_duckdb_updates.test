@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/update/test_spark_can_read_duckdb_updates.test
+# name: test/sql/local/irc_any_catalog/update/test_spark_can_read_duckdb_updates.test
 # description: Test iceberg deletes
 # group: [update]
 

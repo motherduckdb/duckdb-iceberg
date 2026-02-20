@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/update/test_no_update_no_new_snapshot.test
+# name: test/sql/local/irc_any_catalog/update/test_no_update_no_new_snapshot.test
 # description: Test there are no new snapshots if there are no new updates
 # group: [update]
 

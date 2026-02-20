@@ -1,5 +1,5 @@
-# name: test/sql/local/irc/test_basic_deletion_vectors.test
-# group: [irc]
+# name: test/sql/local/irc_custom_setup/memory/test_basic_deletion_vectors.test
+# group: [memory]
 
 require-env DUCKDB_ICEBERG_HAVE_GENERATED_DATA
 

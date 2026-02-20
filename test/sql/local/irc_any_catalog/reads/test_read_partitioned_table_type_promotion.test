@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/reads/test_read_partitioned_table_type_promotion.test
+# name: test/sql/local/irc_any_catalog/reads/test_read_partitioned_table_type_promotion.test
 # group: [reads]
 
 require-env ICEBERG_SERVER_AVAILABLE

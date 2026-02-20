@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/reads/partitioned_reads/test_read_from_month_partitioned_date.test
+# name: test/sql/local/irc_any_catalog/reads/partitioned_reads/test_read_from_month_partitioned_date.test
 # group: [partitioned_reads]
 
 require-env ICEBERG_SERVER_AVAILABLE

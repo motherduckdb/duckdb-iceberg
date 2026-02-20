@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/update/test_update_deleted_rows.test
+# name: test/sql/local/irc_any_catalog/update/test_update_deleted_rows.test
 # description: Test iceberg deletes
 # group: [update]
 

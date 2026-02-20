@@ -1,5 +1,5 @@
-# name: test/sql/local/irc/test_cascade.test
-# group: [irc]
+# name: test/sql/local/irc_any_catalog/test_cascade.test
+# group: [irc_any_catalog]
 
 require-env ICEBERG_SERVER_AVAILABLE
 

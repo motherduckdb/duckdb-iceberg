@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/test_polaris_tpch.test
+# name: test/sql/local/irc_specific_catalogs/polaris/test_polaris_tpch.test
 # description: test integration with iceberg catalog read
-# group: [irc]
+# group: [polaris]
 
 require-env POLARIS_CLIENT_ID
 

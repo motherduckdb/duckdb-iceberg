@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/errors/cant_infer_endpoint.test
+# name: test/sql/local/irc_custom_setup/setup_errors/cant_infer_endpoint.test
 # description: test combinations of create secret and attah
-# group: [errors]
+# group: [setup_errors]
 
 require-env ICEBERG_SERVER_AVAILABLE
 

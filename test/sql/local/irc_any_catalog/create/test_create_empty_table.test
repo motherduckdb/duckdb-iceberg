@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/create/test_create_empty_table.test
+# name: test/sql/local/irc_any_catalog/create/test_create_empty_table.test
 # group: [create]
 
 require-env ICEBERG_SERVER_AVAILABLE

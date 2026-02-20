@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/delete/empty_delete.test
+# name: test/sql/local/irc_any_catalog/delete/empty_delete.test
 # description: Test delete iceberg empty delete
 # group: [delete]
 
