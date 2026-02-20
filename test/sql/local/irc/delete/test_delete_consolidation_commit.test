@@ -41,10 +41,10 @@ ATTACH '' AS my_datalake (
 );
 
 statement ok
-drop table if exists my_datalake.default.tbl;
+drop table if exists my_datalake.default.write_v3_update_and_delete;
 
 statement ok
-create table my_datalake.default.tbl (
+create table my_datalake.default.write_v3_update_and_delete (
 	id INTEGER,
 	data VARCHAR
 ) WITH (
@@ -55,7 +55,7 @@ statement ok
 begin transaction;
 
 statement ok
-insert into my_datalake.default.tbl values
+insert into my_datalake.default.write_v3_update_and_delete values
 	(1, 'a'),
 	(2, 'b'),
 	(3, 'c'),
@@ -63,7 +63,7 @@ insert into my_datalake.default.tbl values
 	(5, 'e');
 
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.tbl order by rowid;
+select sequence_number, rowid, id, data from my_datalake.default.write_v3_update_and_delete order by rowid;
 ----
 1	0	1	a
 1	1	2	b
@@ -73,11 +73,11 @@ select sequence_number, rowid, id, data from my_datalake.default.tbl order by ro
 
 # Create the first delete on the table
 statement ok
-DELETE FROM my_datalake.default.tbl
+DELETE FROM my_datalake.default.write_v3_update_and_delete
 WHERE id IN (2, 4);
 
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.tbl order by rowid;
+select sequence_number, rowid, id, data from my_datalake.default.write_v3_update_and_delete order by rowid;
 ----
 1	0	1	a
 1	2	3	c
@@ -85,22 +85,22 @@ select sequence_number, rowid, id, data from my_datalake.default.tbl order by ro
 
 # Create a new delete that needs to invalidate the existing delete and include its contents
 statement ok
-DELETE FROM my_datalake.default.tbl
+DELETE FROM my_datalake.default.write_v3_update_and_delete
 WHERE id = 5;
 
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.tbl order by rowid;
+select sequence_number, rowid, id, data from my_datalake.default.write_v3_update_and_delete order by rowid;
 ----
 1	0	1	a
 1	2	3	c
 
 # Create a new delete that needs to invalidate the existing delete and include its contents
 statement ok
-DELETE FROM my_datalake.default.tbl
+DELETE FROM my_datalake.default.write_v3_update_and_delete
 WHERE id = 3;
 
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.tbl order by rowid;
+select sequence_number, rowid, id, data from my_datalake.default.write_v3_update_and_delete order by rowid;
 ----
 1	0	1	a
 
@@ -108,6 +108,6 @@ statement ok
 commit;
 
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.tbl order by rowid;
+select sequence_number, rowid, id, data from my_datalake.default.write_v3_update_and_delete order by rowid;
 ----
 1	0	1	a

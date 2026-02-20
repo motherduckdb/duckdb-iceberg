@@ -87,7 +87,8 @@ shared_ptr<IcebergDeletionVectorData> IcebergDeletionVectorData::FromBlob(const 
 	vector_size -= 4;
 	D_ASSERT(blob_start < blob_end);
 
-	if (memcmp(DELETION_VECTOR_MAGIC, magic_bytes, 4)) {
+	auto memcmp_res = memcmp(DELETION_VECTOR_MAGIC, magic_bytes, 4);
+	if (memcmp_res != 0) {
 		throw InvalidInputException("Magic bytes mismatch, deletion vector is corrupt!");
 	}
 
@@ -113,7 +114,7 @@ shared_ptr<IcebergDeletionVectorData> IcebergDeletionVectorData::FromBlob(const 
 		D_ASSERT(blob_start < blob_end);
 		result.bitmaps.emplace(key, std::move(bitmap));
 	}
-	//! The CRC checksum we ignore
+	//! Compute and compare the checksum
 	auto checksummed_data_length = blob_start - checksummed_data_start;
 	auto stored_checksum = BSwap(Load<uint32_t>(blob_start));
 	blob_start += sizeof(uint32_t);
@@ -263,8 +264,8 @@ vector<data_t> IcebergDeletionVectorData::ToBlob() const {
 	blob_output.resize(total_size);
 	data_ptr_t blob_ptr = blob_output.data();
 
-	// Write vector_size (total size minus the vector_size field itself)
-	uint32_t vector_size = BSwap(static_cast<uint32_t>(total_size - sizeof(uint32_t)));
+	// Write vector_size (total_size - (CRC checksum + vector_size field))
+	uint32_t vector_size = BSwap(static_cast<uint32_t>(total_size - sizeof(uint32_t) - sizeof(uint32_t)));
 	Store<uint32_t>(vector_size, blob_ptr);
 	blob_ptr += sizeof(uint32_t);
 
