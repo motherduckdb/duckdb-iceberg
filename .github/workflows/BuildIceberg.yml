@@ -64,9 +64,9 @@ jobs:
       artifact-name: duckdb-iceberg
 
   test-spark:
-    name: Test against Spark Catalog
+    name: Test against fixture catalog
     needs: build_iceberg
-    uses: ./.github/workflows/test-spark-catalog.yml
+    uses: ./.github/workflows/test-fixture-catalog.yml
     with:
       artifact-name: duckdb-iceberg
 
