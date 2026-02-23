@@ -11,7 +11,7 @@ CORE_EXTENSIONS='httpfs;parquet;tpch'
 include extension-ci-tools/makefiles/duckdb_extension.Makefile
 
 start-fixture-rest-catalog: install_requirements
-	./scripts/start-fixture-rest-catalog
+	./scripts/start-fixture-rest-catalog.sh
 
 install_requirements:
 	python3 -m pip install -r scripts/requirements.txt
