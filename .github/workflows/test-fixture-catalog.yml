@@ -67,6 +67,7 @@ jobs:
           S3_SECRET: password
           S3_ENDPOINT: http://127.0.0.1:9000
           ICEBERG_ENDPOINT: http://127.0.0.1:8181
+          WAREHOUSE: s3://warehouse/wh/
         run: |
           source .venv-spark4/bin/activate
           make data

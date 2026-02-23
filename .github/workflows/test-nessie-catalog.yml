@@ -87,6 +87,7 @@ jobs:
           ICEBERG_CLIENT_SECRET: s3cr3t
           ICEBERG_ENDPOINT: http://127.0.0.1:19120/iceberg/main/
           OAUTH2_SERVER_URI: http://127.0.0.1:8080/realms/iceberg/protocol/openid-connect/token
+          WAREHOUSE: warehouse
         run: |
           make data_clean 
           source .venv-spark4/bin/activate

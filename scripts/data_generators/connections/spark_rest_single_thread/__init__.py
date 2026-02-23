@@ -64,7 +64,7 @@ class IcebergSparkRestSingleThreaded(IcebergConnection):
             .config("spark.sql.catalog.demo", "org.apache.iceberg.spark.SparkCatalog")
             .config("spark.sql.catalog.demo.type", "rest")
             .config("spark.sql.catalog.demo.uri", os.environ["ICEBERG_ENDPOINT"])
-            .config("spark.sql.catalog.demo.warehouse", "s3://warehouse/wh/")
+            .config("spark.sql.catalog.demo.warehouse", os.environ["WAREHOUSE"])
             .config("spark.sql.catalog.demo.s3.endpoint", os.environ["S3_ENDPOINT"])
             .config("spark.sql.catalog.demo.s3.path-style-access", "true")
             .config('spark.driver.memory', '10g')
