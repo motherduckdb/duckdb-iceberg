@@ -249,6 +249,7 @@ class TestSparkRead:
             ),
         ]
 
+    @pytest.mark.requires_spark(">=4.0")
     def test_duckdb_written_row_lineage(self, spark_con):
         df = spark_con.sql(
             """
