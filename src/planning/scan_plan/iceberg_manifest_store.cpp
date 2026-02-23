@@ -52,7 +52,7 @@ public:
 	}
 
 	string TaskType() const override {
-		return "IcebergManifestReadTask";
+		return "iceberg_read_manifest";
 	}
 
 private:
