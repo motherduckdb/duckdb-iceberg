@@ -10,14 +10,14 @@ CORE_EXTENSIONS='httpfs;parquet;tpch'
 # Include the Makefile from extension-ci-tools
 include extension-ci-tools/makefiles/duckdb_extension.Makefile
 
-start-fixture-rest-catalog: install_requirements
+start-fixture-rest-catalog: install_requirements data_clean
 	./scripts/start-fixture-rest-catalog.sh
 
 install_requirements:
 	python3 -m pip install -r scripts/requirements.txt
 
 # Custom makefile targets
-data: data_clean
+data:
 	python3 -m scripts.data_generators.generate_data spark-rest local
 
 data_large: data data_clean
