@@ -80,8 +80,9 @@ jobs:
 
       - name: Generate data
         run: |
+          make data_clean 
           source .venv-spark4/bin/activate
-          make data
+          python3 -m scripts.data_generators.generate_data nessie
 
       - name: Run Generic Tests With Nessie
         env:
