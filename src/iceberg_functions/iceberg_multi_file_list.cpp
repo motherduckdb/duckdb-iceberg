@@ -58,7 +58,7 @@ public:
 		}
 		try {
 			{
-				TaskNotifier task_notifier {state.context};
+				TaskNotifier task_notifier {state.context, "iceberg_read_manifest"};
 				auto res = TaskExecutionResult::TASK_NOT_FINISHED;
 				while (res == TaskExecutionResult::TASK_NOT_FINISHED) {
 					res = ExecuteTaskIncremental();
