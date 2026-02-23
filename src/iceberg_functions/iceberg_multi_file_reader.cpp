@@ -416,9 +416,23 @@ void IcebergMultiFileReader::FinalizeChunk(ClientContext &context, const MultiFi
 	auto file_id = reader.file_list_idx.GetIndex();
 	auto &manifest_entry = multi_file_list.manifest_entries[file_id];
 
+	auto input_column_count = input_chunk.ColumnCount();
+	auto output_column_count = output_chunk.ColumnCount();
+
 	idx_t count = output_chunk.size();
 	if (sequence_number_col.IsValid()) {
-		auto &sequence_number_column = output_chunk.data[sequence_number_col.GetIndex()];
+		auto global_column_index = sequence_number_col.GetIndex();
+		if (input_column_count != output_column_count) {
+			D_ASSERT(row_id_col.IsValid());
+			if (global_column_index > row_id_col.GetIndex()) {
+				//! _row_id caused 2 local columns to be emitted,
+				//! 'sequence_number_col' contains the local column index.
+				//! So if it was placed behind '_row_id', we need to account for this offset
+				global_column_index--;
+			}
+		}
+
+		auto &sequence_number_column = output_chunk.data[global_column_index];
 		sequence_number_column.Flatten(count);
 		auto &sequence_number_validity = FlatVector::Validity(sequence_number_column);
 		auto sequence_number_data = FlatVector::GetData<int64_t>(sequence_number_column);
@@ -429,6 +443,30 @@ void IcebergMultiFileReader::FinalizeChunk(ClientContext &context, const MultiFi
 			}
 			sequence_number_validity.SetValid(i);
 			sequence_number_data[i] = manifest_entry.sequence_number;
+		}
+	}
+	if (row_id_col.IsValid() && input_column_count != output_column_count) {
+		//! This column is populated with the MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER virtual column data
+		//! BUT the local schema contains a '_row_id' column, which we emitted directly after it
+		auto &input_row_id_column = input_chunk.data[row_id_col.GetIndex() + 1];
+		auto &output_row_id_column = output_chunk.data[row_id_col.GetIndex()];
+		output_row_id_column.Flatten(count);
+		input_row_id_column.Flatten(count);
+
+		auto &input_row_id_column_validity = FlatVector::Validity(input_row_id_column);
+		auto input_row_id_column_data = FlatVector::GetData<int64_t>(input_row_id_column);
+
+		auto &output_row_id_column_validity = FlatVector::Validity(output_row_id_column);
+		auto output_row_id_column_data = FlatVector::GetData<int64_t>(output_row_id_column);
+		for (idx_t i = 0; i < count; i++) {
+			if (input_row_id_column_validity.RowIsValid(i)) {
+				output_row_id_column_data[i] = static_cast<int64_t>(input_row_id_column_data[i]);
+				continue;
+			}
+			//! Not set in the file, add the 'first_row_id' from the parent to the file row number we read
+			D_ASSERT(output_row_id_column_validity.RowIsValid(i));
+			D_ASSERT(manifest_entry.data_file.has_first_row_id);
+			output_row_id_column_data[i] += manifest_entry.data_file.first_row_id;
 		}
 	}
 
@@ -487,6 +525,7 @@ unique_ptr<Expression> IcebergMultiFileReader::GetVirtualColumnExpression(
     idx_t &column_id, const LogicalType &type, MultiFileLocalIndex local_idx,
     optional_ptr<MultiFileColumnDefinition> &global_column_reference) {
 	if (column_id == COLUMN_IDENTIFIER_ROW_ID) {
+		row_id_col = local_idx.GetIndex();
 		// row id column
 		// this is computed as row_id_start + file_row_number OR read from the file
 		// first check if the row id is explicitly defined in this file
@@ -497,7 +536,28 @@ unique_ptr<Expression> IcebergMultiFileReader::GetVirtualColumnExpression(
 			//! FIXME: this means the column is present, not that it's always non-null
 			//! Don't we need to push a COALESCE(_row_id, ...) - or deal with it in FinalizeChunk ?
 			if (col.identifier.GetValue<int32_t>() == MultiFileReader::ROW_ID_FIELD_ID) {
+				if (!reader_data.file_to_be_opened.extended_info) {
+					throw InternalException("Extended info not found for reading row id column");
+				}
+
+				auto &options = reader_data.file_to_be_opened.extended_info->options;
+				auto entry = options.find("first_row_id");
+				if (entry == options.end()) {
+					//! There is no parent 'first_row_id' to inherit, simply reference the existing column
+					global_column_reference = row_id_column.get();
+					return nullptr;
+				}
 				// it is! return a reference to the global row id column so we can read it from the file directly
+				auto &reader = *reader_data.reader;
+
+				// add the virtual column to the reader
+				MultiFileLocalColumnId local_id(reader.columns.size());
+				ColumnIndex local_index(local_id.GetId());
+				reader.columns.emplace_back("_row_id", type);
+				reader.AddVirtualColumn(MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER);
+				reader.column_ids.push_back(local_id);
+				reader.column_indexes.push_back(std::move(local_index));
+
 				global_column_reference = row_id_column.get();
 				return nullptr;
 			}
