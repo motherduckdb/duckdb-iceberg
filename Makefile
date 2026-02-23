@@ -17,7 +17,7 @@ install_requirements:
 	python3 -m pip install -r scripts/requirements.txt
 
 # Custom makefile targets
-data:
+data: data_clean
 	python3 -m scripts.data_generators.generate_data spark-rest local
 
 data_large: data data_clean
