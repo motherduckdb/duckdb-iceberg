@@ -36,6 +36,10 @@ namespace {
 
 class ManifestReadTask : public BaseExecutorTask {
 public:
+	string TaskType() const override {
+		return "iceberg_read_manifest";
+	}
+
 	ManifestReadTask(IcebergManifestScanningState &state)
 	    : BaseExecutorTask(state.executor), state(state), reader(*state.scan) {
 	}
