@@ -1,3 +1,4 @@
+#include "include/metadata/iceberg_manifest_list.hpp"
 #include "metadata/iceberg_manifest_list.hpp"
 #include "duckdb/main/database.hpp"
 
@@ -5,9 +6,37 @@
 
 namespace duckdb {
 
-namespace manifest_list {
+vector<IcebergManifestFile> &IcebergManifestList::GetManifestFilesMutable() {
+	return manifest_entries;
+}
 
-static LogicalType FieldSummaryType() {
+const vector<IcebergManifestFile> &IcebergManifestList::GetManifestFilesConst() const {
+	return manifest_entries;
+}
+
+void IcebergManifestList::WriteManifestListEntry(IcebergTableInformation &table_info, idx_t manifest_index,
+                                                 CopyFunction &avro_copy, DatabaseInstance &db,
+                                                 ClientContext &context) {
+	D_ASSERT(manifest_index < manifest_entries.size());
+	auto &manifest_file = manifest_entries[manifest_index];
+	auto manifest_length = manifest_file::WriteToFile(table_info, manifest_file.manifest_file, avro_copy, db, context);
+	manifest_file.manifest_length = manifest_length;
+}
+
+idx_t IcebergManifestList::GetManifestListEntriesCount() const {
+	return manifest_entries.size();
+}
+
+void IcebergManifestList::AddToManifestEntries(vector<IcebergManifestFile> &manifest_list_entries) {
+	manifest_entries.insert(manifest_entries.begin(), std::make_move_iterator(manifest_list_entries.begin()),
+	                        std::make_move_iterator(manifest_list_entries.end()));
+}
+
+vector<IcebergManifestFile> IcebergManifestList::GetManifestListEntries() {
+	return std::move(manifest_entries);
+}
+
+LogicalType IcebergManifestList::FieldSummaryType() {
 	child_list_t<LogicalType> children;
 	children.emplace_back("contains_null", LogicalType::BOOLEAN);
 	children.emplace_back("contains_nan", LogicalType::BOOLEAN);
@@ -17,6 +46,8 @@ static LogicalType FieldSummaryType() {
 
 	return LogicalType::LIST(field_summary);
 }
+
+namespace manifest_list {
 
 static Value FieldSummaryFieldIds() {
 	child_list_t<Value> children;
@@ -28,7 +59,7 @@ static Value FieldSummaryFieldIds() {
 	auto field_summary = Value::STRUCT(children);
 
 	child_list_t<Value> list_children;
-	list_children.emplace_back("element", field_summary);
+	list_children.emplace_back("list", field_summary);
 	list_children.emplace_back("__duckdb_field_id", Value::INTEGER(PARTITIONS));
 	return Value::STRUCT(list_children);
 }
@@ -110,16 +141,16 @@ void WriteToFile(const IcebergManifestList &manifest_list, CopyFunction &copy, D
 
 	// partitions: list<508: field_summary> - 507
 	names.push_back("partitions");
-	types.push_back(FieldSummaryType());
+	types.push_back(IcebergManifestList::FieldSummaryType());
 	field_ids.emplace_back("partitions", FieldSummaryFieldIds());
 
 	//! Populate the DataChunk with the manifests
-
+	auto manifest_files = manifest_list.GetManifestFilesConst();
 	DataChunk data;
-	data.Initialize(allocator, types, manifest_list.manifests.size());
+	data.Initialize(allocator, types, manifest_files.size());
 
-	for (idx_t i = 0; i < manifest_list.manifests.size(); i++) {
-		auto &manifest = manifest_list.manifests[i];
+	for (idx_t i = 0; i < manifest_files.size(); i++) {
+		const auto &manifest = manifest_files[i];
 		idx_t col_idx = 0;
 
 		// manifest_path: string - 500
@@ -169,7 +200,7 @@ void WriteToFile(const IcebergManifestList &manifest_list, CopyFunction &copy, D
 		// partitions: list<508: field_summary> - 507
 		data.SetValue(col_idx++, i, manifest.partitions.ToValue());
 	}
-	data.SetCardinality(manifest_list.manifests.size());
+	data.SetCardinality(manifest_files.size());
 
 	CopyInfo copy_info;
 	copy_info.is_from = false;
@@ -192,5 +223,9 @@ void WriteToFile(const IcebergManifestList &manifest_list, CopyFunction &copy, D
 }
 
 } // namespace manifest_list
+
+Value IcebergManifestList::FieldSummaryFieldIds() {
+	return manifest_list::FieldSummaryFieldIds();
+}
 
 } // namespace duckdb

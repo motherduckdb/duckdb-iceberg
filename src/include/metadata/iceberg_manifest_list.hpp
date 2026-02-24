@@ -4,6 +4,7 @@
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/types/value.hpp"
+#include "metadata/iceberg_manifest.hpp"
 
 #include "duckdb/function/copy_function.hpp"
 #include "duckdb/execution/execution_context.hpp"
@@ -66,19 +67,22 @@ enum class IcebergManifestContentType : uint8_t {
 	DELETE = 1,
 };
 
-//! An entry in the manifest list file (top level AVRO file)
-struct IcebergManifest {
+struct IcebergManifestFile {
 public:
 	//! Path to the manifest AVRO file
 	string manifest_path;
 	//! Length of the manifest file in bytes
 	int64_t manifest_length;
+	//! The id of the partition spec referenced by this manifest (and the data files that are part of it)
+	int32_t partition_spec_id;
+	bool has_first_row_id = false;
+	sequence_number_t first_row_id = 0xDEADBEEF;
+	//! either data or deletes
+	IcebergManifestContentType content;
 	//! sequence_number when manifest was added to table (0 for Iceberg v1)
 	sequence_number_t sequence_number = 0;
 	bool has_min_sequence_number = false;
 	sequence_number_t min_sequence_number = 0;
-	//! either data or deletes
-	IcebergManifestContentType content;
 	int64_t added_snapshot_id = -1;
 	//! added files count
 	idx_t added_files_count = 0;
@@ -92,12 +96,15 @@ public:
 	idx_t existing_rows_count = 0;
 	//! deleted rows in the manifest
 	idx_t deleted_rows_count = 0;
-	//! The id of the partition spec referenced by this manifest (and the data files that are part of it)
-	int32_t partition_spec_id;
 	//! The field summaries of the partition (if present)
 	ManifestPartitions partitions;
+	//! the actual manifest file information
+	IcebergManifest manifest_file;
 
 public:
+	IcebergManifestFile(string manifest_path) : manifest_path(manifest_path), manifest_file(manifest_path) {
+	}
+
 	static vector<LogicalType> Types() {
 		return {
 		    LogicalType::VARCHAR,
@@ -128,8 +135,28 @@ public:
 	}
 
 public:
+	vector<IcebergManifestFile> &GetManifestFilesMutable();
+	const vector<IcebergManifestFile> &GetManifestFilesConst() const;
+
+	void AddManifestFile(IcebergManifestFile &&manifest_file) {
+		manifest_entries.push_back(std::move(manifest_file));
+	}
+	idx_t GetManifestListEntriesCount() const;
+
+	void WriteManifestListEntry(IcebergTableInformation &table_info, idx_t manifest_index, CopyFunction &avro_copy,
+	                            DatabaseInstance &db, ClientContext &context);
+	void AddToManifestEntries(vector<IcebergManifestFile> &manifest_list_entries);
+	vector<IcebergManifestFile> GetManifestListEntries();
+
+public:
+	static LogicalType FieldSummaryType();
+	static Value FieldSummaryFieldIds();
+
+public:
 	string path;
-	vector<IcebergManifest> manifests;
+
+private:
+	vector<IcebergManifestFile> manifest_entries;
 };
 
 namespace manifest_list {

@@ -39,6 +39,7 @@ public:
 	}
 
 	LogicalType GetSerializedType(const LogicalType &input) const;
+	LogicalType GetBoundsType(const LogicalType &input) const;
 
 private:
 	//! Preserve the input for debugging
@@ -116,17 +117,18 @@ struct MonthTransform {
 		switch (constant.type().id()) {
 		case LogicalTypeId::TIMESTAMP: {
 			auto val = constant.GetValue<timestamp_t>();
-			auto diff = Interval::GetDifference(val, timestamp_t::epoch());
+			auto diff = Interval::GetAge(val, timestamp_t::epoch());
 			return Value::INTEGER(diff.months);
 		}
 		case LogicalTypeId::TIMESTAMP_TZ: {
 			auto val = constant.GetValue<timestamp_tz_t>();
-			auto diff = Interval::GetDifference(val, timestamp_t::epoch());
+			auto diff = Interval::GetAge(val, timestamp_t::epoch());
 			return Value::INTEGER(diff.months);
 		}
 		case LogicalTypeId::DATE: {
-			auto val = constant.GetValue<date_t>();
-			return Value::INTEGER(val.days / Interval::DAYS_PER_MONTH);
+			int32_t year, month, day;
+			Date::Convert(constant.GetValue<date_t>(), year, month, day);
+			return Value::INTEGER((year - 1970) * 12 + (month - 1));
 		}
 		default:
 			throw NotImplementedException("'month' transform for type %s", constant.type().ToString());
@@ -156,18 +158,12 @@ struct DayTransform {
 		case LogicalTypeId::TIMESTAMP: {
 			auto val = constant.GetValue<timestamp_t>();
 			auto diff = Interval::GetDifference(val, timestamp_t::epoch());
-			int32_t days = 0;
-			days += diff.months * Interval::DAYS_PER_MONTH;
-			days += diff.days;
-			return Value::INTEGER(days);
+			return Value::INTEGER(diff.days);
 		}
 		case LogicalTypeId::TIMESTAMP_TZ: {
 			auto val = constant.GetValue<timestamp_tz_t>();
 			auto diff = Interval::GetDifference(val, timestamp_t::epoch());
-			int32_t days = 0;
-			days += diff.months * Interval::DAYS_PER_MONTH;
-			days += diff.days;
-			return Value::INTEGER(days);
+			return Value::INTEGER(diff.days);
 		}
 		case LogicalTypeId::DATE: {
 			auto val = constant.GetValue<date_t>();
@@ -200,21 +196,11 @@ struct HourTransform {
 		switch (constant.type().id()) {
 		case LogicalTypeId::TIMESTAMP: {
 			auto val = constant.GetValue<timestamp_t>();
-			auto diff = Interval::GetDifference(val, timestamp_t::epoch());
-			int32_t hours = 0;
-			hours += diff.months * (Interval::HOURS_PER_DAY * Interval::DAYS_PER_MONTH);
-			hours += diff.days * (Interval::HOURS_PER_DAY);
-			hours += diff.micros / Interval::MICROS_PER_HOUR;
-			return Value::INTEGER(hours);
+			return Value::INTEGER(static_cast<int32_t>(val.value / Interval::MICROS_PER_HOUR));
 		}
 		case LogicalTypeId::TIMESTAMP_TZ: {
 			auto val = constant.GetValue<timestamp_tz_t>();
-			auto diff = Interval::GetDifference(val, timestamp_t::epoch());
-			int32_t hours = 0;
-			hours += diff.months * (Interval::HOURS_PER_DAY * Interval::DAYS_PER_MONTH);
-			hours += diff.days * (Interval::HOURS_PER_DAY);
-			hours += diff.micros / Interval::MICROS_PER_HOUR;
-			return Value::INTEGER(hours);
+			return Value::INTEGER(static_cast<int32_t>(val.value / Interval::MICROS_PER_HOUR));
 		}
 		default:
 			throw NotImplementedException("'hour' transform for type %s", constant.type().ToString());

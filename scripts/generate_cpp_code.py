@@ -155,6 +155,7 @@ class RequiredProperty:
     # The property name in the JSON code
     property_name: str
     body: List[str]
+    default: Optional[List[str]]
 
 
 @dataclass
@@ -282,7 +283,7 @@ class CPPClass:
         assert not schema.one_of
         assert not schema.any_of
 
-        self.try_from_json_body = self.generate_assignment(schema, 'value', 'obj')
+        self.try_from_json_body = self.generate_assignment(schema, 'value', 'obj', True)
 
         variable_type = self.generate_variable_type(schema)
         self.variables.append(f'\t{variable_type} value;')
@@ -304,8 +305,19 @@ class CPPClass:
             [
                 f'auto {required_property.variable_name}_val = yyjson_obj_get(obj, "{required_property.property_name}");',
                 f'if (!{required_property.variable_name}_val) {{',
-                f"""\treturn "{self.name} required property '{required_property.property_name}' is missing";""",
-                '} else {',
+            ]
+        )
+        if required_property.default is not None:
+            res.extend([f'\t{x}' for x in required_property.default])
+        else:
+            res.extend(
+                [
+                    f"""\treturn "{self.name} required property '{required_property.property_name}' is missing";"""
+                ]
+            )
+        res.extend(
+            [
+                '} else {'
             ]
         )
         res.extend([f'\t{x}' for x in required_property.body])
@@ -552,7 +564,7 @@ class CPPClass:
         assignment = 'std::move(tmp)'
         if item_type.type != Property.Type.SCHEMA_REFERENCE:
             body.append(f'{self.generate_variable_type(item_type)} tmp;')
-            body.extend(self.generate_item_parse(item_type, 'val', 'tmp'))
+            body.extend(self.generate_item_parse(item_type, 'val', 'tmp', True))
         else:
             schema_property = cast(SchemaReferenceProperty, item_type)
             self.referenced_schemas.add(schema_property.ref)
@@ -594,13 +606,20 @@ class CPPClass:
 
         return res
 
-    def generate_item_parse(self, property: Property, source: str, target: str) -> List[str]:
+    def generate_item_parse(self, property: Property, source: str, target: str, is_required: bool) -> List[str]:
         res = []
         prefix = ''
         if property.nullable is not None:
             prefix = '} else '
             if property.nullable == True:
-                res.extend([f'if (yyjson_is_null({source})) {{', '\t//! do nothing, property is explicitly nullable'])
+                res.extend([
+                    f'if (yyjson_is_null({source})) {{',
+                    '\t//! do nothing, property is explicitly nullable',
+                ])
+                if not is_required:
+                    res.extend([
+                        f'\thas_{target} = false;'
+                    ])
             else:
                 res.extend(
                     [
@@ -689,7 +708,7 @@ class CPPClass:
             res.append(f'\t\t{self.generate_variable_type(additional_properties)} tmp;')
 
             if additional_properties.type != Property.Type.SCHEMA_REFERENCE:
-                item_definition = [f'\t\t{x}' for x in self.generate_item_parse(additional_properties, 'val', 'tmp')]
+                item_definition = [f'\t\t{x}' for x in self.generate_item_parse(additional_properties, 'val', 'tmp', True)]
                 res.extend(item_definition)
             else:
                 schema_property = cast(SchemaReferenceProperty, additional_properties)
@@ -718,7 +737,7 @@ class CPPClass:
             exit(1)
         return res
 
-    def generate_assignment(self, schema: Property, target: str, source: str) -> List[str]:
+    def generate_assignment(self, schema: Property, target: str, source: str, is_required: bool) -> List[str]:
         if schema.type == Property.Type.ARRAY:
             array_property = cast(ArrayProperty, schema)
             return self.generate_array_loop(source, target, array_property)
@@ -740,7 +759,7 @@ class CPPClass:
             )
             return result
         else:
-            return self.generate_item_parse(schema, source, target)
+            return self.generate_item_parse(schema, source, target, is_required)
 
     def generate_optional_properties(self, name: str, properties: Dict[str, Property]):
         if not properties:
@@ -748,7 +767,7 @@ class CPPClass:
         res = []
         for item, optional_property in properties.items():
             variable_name = safe_cpp_name(item)
-            body = self.generate_assignment(optional_property, variable_name, f'{variable_name}_val')
+            body = self.generate_assignment(optional_property, variable_name, f'{variable_name}_val', False)
             self.optional_properties[item] = OptionalProperty(
                 property_name=item, variable_name=variable_name, body=body
             )
@@ -762,9 +781,15 @@ class CPPClass:
         res = []
         for item, required_property in properties.items():
             variable_name = safe_cpp_name(item)
-            body = self.generate_assignment(required_property, variable_name, f'{variable_name}_val')
+            body = self.generate_assignment(required_property, variable_name, f'{variable_name}_val', True)
+            if required_property.default is not None:
+                default = [
+                    f'{variable_name} = "{str(required_property.default)}";'
+                ]
+            else:
+                default = None
             self.required_properties[item] = RequiredProperty(
-                property_name=item, variable_name=variable_name, body=body
+                property_name=item, variable_name=variable_name, body=body, default=default
             )
             variable_type = self.generate_variable_type(required_property)
             self.variables.append(f'\t{variable_type} {variable_name};')
@@ -789,7 +814,7 @@ class CPPClass:
         body = []
         if additional_properties.type != Property.Type.SCHEMA_REFERENCE:
             body.append(f'\t{self.generate_variable_type(additional_properties)} tmp;')
-            body.extend(self.generate_item_parse(additional_properties, 'val', 'tmp'))
+            body.extend(self.generate_item_parse(additional_properties, 'val', 'tmp', True))
         else:
             schema_property = cast(SchemaReferenceProperty, additional_properties)
             self.referenced_schemas.add(schema_property.ref)
