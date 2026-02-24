@@ -24,7 +24,7 @@
 #include "iceberg_utils.hpp"
 #include "iceberg_multi_file_reader.hpp"
 #include "iceberg_functions.hpp"
-#include "storage/irc_table_entry.hpp"
+#include "storage/catalog/iceberg_table_entry.hpp"
 
 #include <string>
 #include <numeric>
@@ -43,7 +43,7 @@ static void AddNamedParameters(TableFunction &fun) {
 
 virtual_column_map_t IcebergVirtualColumns(ClientContext &context, optional_ptr<FunctionData> bind_data_p) {
 	auto &bind_data = bind_data_p->Cast<MultiFileBindData>();
-	auto result = ICTableEntry::VirtualColumns();
+	auto result = IcebergTableEntry::VirtualColumns();
 	bind_data.virtual_columns = result;
 	return result;
 }
@@ -51,6 +51,15 @@ virtual_column_map_t IcebergVirtualColumns(ClientContext &context, optional_ptr<
 static void IcebergScanSerialize(Serializer &serializer, const optional_ptr<FunctionData> bind_data,
                                  const TableFunction &function) {
 	throw NotImplementedException("IcebergScan serialization not implemented");
+}
+
+BindInfo IcebergBindInfo(const optional_ptr<FunctionData> bind_data) {
+	auto &multi_file_data = bind_data->Cast<MultiFileBindData>();
+	auto &file_list = multi_file_data.file_list->Cast<IcebergMultiFileList>();
+	if (!file_list.table) {
+		return BindInfo(ScanType::EXTERNAL);
+	}
+	return BindInfo(*file_list.table);
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergScanFunction(ExtensionLoader &loader) {
@@ -72,7 +81,7 @@ TableFunctionSet IcebergFunctions::GetIcebergScanFunction(ExtensionLoader &loade
 
 		function.statistics = nullptr;
 		function.table_scan_progress = nullptr;
-		function.get_bind_info = nullptr;
+		function.get_bind_info = IcebergBindInfo;
 		function.get_virtual_columns = IcebergVirtualColumns;
 		function.get_partition_stats = IcebergMultiFileReader::IcebergGetPartitionStats;
 

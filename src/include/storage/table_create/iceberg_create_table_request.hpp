@@ -16,20 +16,18 @@ namespace duckdb {
 
 struct YyjsonDocDeleter;
 struct IcebergTableInformation;
-class ICTableEntry;
+class IcebergTableEntry;
 
 struct IcebergCreateTableRequest {
-
-	IcebergCreateTableRequest(shared_ptr<IcebergTableSchema> schema, string table_name);
+	explicit IcebergCreateTableRequest(const IcebergTableInformation &table_info);
 
 public:
-	static shared_ptr<IcebergTableSchema> CreateIcebergSchema(const ICTableEntry *table_entry);
+	static shared_ptr<IcebergTableSchema> CreateIcebergSchema(const IcebergTableEntry *table_entry);
 	string CreateTableToJSON(std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p);
 	static void PopulateSchema(yyjson_mut_doc *doc, yyjson_mut_val *schema_json, IcebergTableSchema &schema);
 
 private:
-	string table_name;
-	shared_ptr<IcebergTableSchema> initial_schema;
+	const IcebergTableInformation &table_info;
 };
 
 } // namespace duckdb

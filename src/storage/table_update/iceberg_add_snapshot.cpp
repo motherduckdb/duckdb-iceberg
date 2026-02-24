@@ -1,8 +1,6 @@
 #include "storage/table_update/iceberg_add_snapshot.hpp"
-
-#include "../../include/metadata/iceberg_manifest_list.hpp"
 #include "metadata/iceberg_manifest_list.hpp"
-#include "storage/irc_table_set.hpp"
+#include "storage/catalog/iceberg_table_set.hpp"
 
 #include "duckdb/common/enums/catalog_type.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
@@ -19,7 +17,8 @@ IcebergAddSnapshot::IcebergAddSnapshot(IcebergTableInformation &table_info, cons
       snapshot(std::move(snapshot)) {
 }
 
-rest_api_objects::TableUpdate CreateAddSnapshotUpdate(const IcebergSnapshot &snapshot) {
+static rest_api_objects::TableUpdate CreateAddSnapshotUpdate(const IcebergTableInformation &table_info,
+                                                             const IcebergSnapshot &snapshot) {
 	rest_api_objects::TableUpdate table_update;
 
 	table_update.has_add_snapshot_update = true;
@@ -27,7 +26,7 @@ rest_api_objects::TableUpdate CreateAddSnapshotUpdate(const IcebergSnapshot &sna
 	update.base_update.action = "add-snapshot";
 	update.has_action = true;
 	update.action = "add-snapshot";
-	update.snapshot = snapshot.ToRESTObject();
+	update.snapshot = snapshot.ToRESTObject(table_info);
 	return table_update;
 }
 
@@ -50,7 +49,7 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 	manifest_list::WriteToFile(manifest_list, avro_copy, db, context);
 	commit_state.manifests = manifest_list.GetManifestListEntries();
 
-	commit_state.table_change.updates.push_back(CreateAddSnapshotUpdate(snapshot));
+	commit_state.table_change.updates.push_back(CreateAddSnapshotUpdate(table_info, snapshot));
 }
 
 } // namespace duckdb

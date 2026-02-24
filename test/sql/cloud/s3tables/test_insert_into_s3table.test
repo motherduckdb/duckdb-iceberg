@@ -29,7 +29,7 @@ CREATE SECRET s1 (
 set ignore_error_messages
 
 statement ok
-attach 'arn:aws:s3tables:us-east-2:840140254803:bucket/iceberg-testing' as s3_catalog (
+attach or replace 'arn:aws:s3tables:us-east-2:840140254803:bucket/iceberg-testing' as s3_catalog (
     TYPE ICEBERG,
     secret s1,
     ENDPOINT_TYPE 'S3_TABLES'
@@ -96,7 +96,7 @@ insert into s3_catalog.test_inserts.basic_insert_test select * from VALUES
 
 # con1 only sees con1
 query IIII con1
-select * from s3_catalog.test_inserts.basic_insert_test;
+select * from s3_catalog.test_inserts.basic_insert_test order by id;
 ----
 1	Alice	Smith	1990-01-01
 2	Bob	Jones	1985-06-15
@@ -105,7 +105,7 @@ select * from s3_catalog.test_inserts.basic_insert_test;
 
 # con2 only sees con2
 query IIII con2
-select * from s3_catalog.test_inserts.basic_insert_test;
+select * from s3_catalog.test_inserts.basic_insert_test order by id;
 ----
 1	Alice	Smith	1990-01-01
 2	Bob	Jones	1985-06-15
@@ -136,7 +136,7 @@ select 1;
 
 # we see the con2 update
 query IIII
-select * from s3_catalog.test_inserts.basic_insert_test;
+select * from s3_catalog.test_inserts.basic_insert_test order by id;
 ----
 1	Alice	Smith	1990-01-01
 2	Bob	Jones	1985-06-15
@@ -176,7 +176,7 @@ statement ok con3
 commit
 
 query IIII
-select * from s3_catalog.test_inserts.basic_insert_test;
+select * from s3_catalog.test_inserts.basic_insert_test order by id;
 ----
 1	Alice	Smith	1990-01-01
 2	Bob	Jones	1985-06-15

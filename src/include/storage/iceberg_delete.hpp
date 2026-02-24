@@ -12,9 +12,8 @@
 #include "duckdb/planner/operator/logical_delete.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
 #include "storage/iceberg_metadata_info.hpp"
-#include "storage/iceberg_delete_filter.hpp"
-#include "storage/irc_table_entry.hpp"
-#include "storage/irc_schema_entry.hpp"
+#include "storage/catalog/iceberg_table_entry.hpp"
+#include "storage/catalog/iceberg_schema_entry.hpp"
 
 namespace duckdb {
 
@@ -38,12 +37,13 @@ public:
 	explicit IcebergDeleteGlobalState() {
 		written_columns["file_path"] = WrittenColumnInfo(LogicalType::VARCHAR, MultiFileReader::FILENAME_FIELD_ID);
 		written_columns["pos"] = WrittenColumnInfo(LogicalType::BIGINT, MultiFileReader::ORDINAL_FIELD_ID);
+		total_deleted_count = 0;
 	}
 
 	mutex lock;
 	unordered_map<string, IcebergDeleteFileInfo> written_files;
 	unordered_map<string, WrittenColumnInfo> written_columns;
-	idx_t total_deleted_count = 0;
+	atomic<idx_t> total_deleted_count;
 	// data file name -> newly deleted rows.
 	unordered_map<string, vector<idx_t>> deleted_rows;
 
@@ -66,24 +66,26 @@ public:
 
 class IcebergDelete : public PhysicalOperator {
 public:
-	IcebergDelete(PhysicalPlan &physical_plan, ICTableEntry &table, PhysicalOperator &child,
+	IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table, PhysicalOperator &child,
 	              vector<idx_t> row_id_indexes);
 
 	//! The table to delete from
-	ICTableEntry &table;
+	IcebergTableEntry &table;
 	//! The column indexes for the relevant row-id columns
 	vector<idx_t> row_id_indexes;
 
 public:
 	// // Source interface
-	SourceResultType GetData(ExecutionContext &context, DataChunk &chunk, OperatorSourceInput &input) const override;
+	SourceResultType GetDataInternal(ExecutionContext &context, DataChunk &chunk,
+	                                 OperatorSourceInput &input) const override;
 
 	bool IsSource() const override {
 		return true;
 	}
 
-	static PhysicalOperator &PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, ICTableEntry &table,
-	                                    PhysicalOperator &child_plan, vector<idx_t> row_id_indexes);
+	static PhysicalOperator &PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner,
+	                                    IcebergTableEntry &table, PhysicalOperator &child_plan,
+	                                    vector<idx_t> row_id_indexes);
 
 public:
 	// Sink interface
@@ -93,8 +95,7 @@ public:
 	                          OperatorSinkFinalizeInput &input) const override;
 	unique_ptr<GlobalSinkState> GetGlobalSinkState(ClientContext &context) const override;
 	unique_ptr<LocalSinkState> GetLocalSinkState(ExecutionContext &context) const override;
-	static vector<IcebergManifestEntry>
-	GenerateDeleteManifestEntries(unordered_map<string, IcebergDeleteFileInfo> &delete_files);
+	static vector<IcebergManifestEntry> GenerateDeleteManifestEntries(IcebergDeleteGlobalState &global_state);
 
 	bool IsSink() const override {
 		return true;
@@ -106,8 +107,8 @@ public:
 
 	string GetName() const override;
 	InsertionOrderPreservingMap<string> ParamsToString() const override;
-	void FlushDelete(IRCTransaction &transaction, ClientContext &context, IcebergDeleteGlobalState &global_state,
-	                 const string &filename, vector<idx_t> &deleted_rows) const;
+	void FlushDeletes(IcebergTransaction &transaction, ClientContext &context,
+	                  IcebergDeleteGlobalState &global_state) const;
 
 private:
 	void WritePositionalDeleteFile(ClientContext &context, IcebergDeleteGlobalState &global_state,

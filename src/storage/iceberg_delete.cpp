@@ -1,13 +1,14 @@
 #include "storage/iceberg_delete.hpp"
-#include "storage/irc_catalog.hpp"
-#include "storage/irc_transaction.hpp"
-#include "storage/irc_table_entry.hpp"
+#include "storage/iceberg_delete.hpp"
+#include "storage/catalog/iceberg_catalog.hpp"
+#include "storage/iceberg_transaction.hpp"
+#include "storage/catalog/iceberg_table_entry.hpp"
 #include "storage/iceberg_table_information.hpp"
 #include "iceberg_multi_file_reader.hpp"
 #include "iceberg_multi_file_list.hpp"
+#include "metadata/iceberg_snapshot.hpp"
 #include "metadata/iceberg_manifest.hpp"
 #include "storage/iceberg_metadata_info.hpp"
-
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
@@ -21,9 +22,9 @@
 namespace duckdb {
 class IcebergDeleteLocalState;
 class IcebergDeleteGlobalState;
-class ICTableEntry;
+class IcebergTableEntry;
 
-IcebergDelete::IcebergDelete(PhysicalPlan &physical_plan, ICTableEntry &table, PhysicalOperator &child,
+IcebergDelete::IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table, PhysicalOperator &child,
                              vector<idx_t> row_id_indexes)
     : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, {LogicalType::BIGINT}, 1), table(table),
       row_id_indexes(std::move(row_id_indexes)) {
@@ -114,32 +115,25 @@ void IcebergDelete::WritePositionalDeleteFile(ClientContext &context, IcebergDel
 	field_input.push_back(std::move(field_ids));
 	info->options["field_ids"] = std::move(field_input);
 
-	// get the actual copy function and bind it
-	auto copy_fun = TryGetCopyFunction(*context.db, "parquet");
-
-	CopyFunctionBindInput bind_input(*info);
-
 	vector<string> names_to_write {"file_path", "pos"};
 	vector<LogicalType> types_to_write {LogicalType::VARCHAR, LogicalType::BIGINT};
 
+	auto copy_fun = TryGetCopyFunction(*context.db, "parquet");
+	CopyFunctionBindInput bind_input(*info);
+
 	auto function_data = copy_fun->function.copy_to_bind(context, bind_input, names_to_write, types_to_write);
+	auto copy_global_state = copy_fun->function.copy_to_initialize_global(context, *function_data, delete_file_path);
 
 	// generate the physical copy to file
 	auto copy_return_types = GetCopyFunctionReturnLogicalTypes(CopyFunctionReturnType::WRITTEN_FILE_STATISTICS);
 	PhysicalPlan plan(Allocator::Get(context));
-	PhysicalCopyToFile copy_to_file(plan, copy_return_types, copy_fun->function, std::move(function_data), 1);
 
-	copy_to_file.use_tmp_file = false;
-	copy_to_file.file_path = delete_file_path;
-	copy_to_file.partition_output = false;
-	copy_to_file.write_empty_file = false;
-	copy_to_file.file_extension = "parquet";
-	copy_to_file.overwrite_mode = CopyOverwriteMode::COPY_OVERWRITE_OR_IGNORE;
-	copy_to_file.per_thread_output = false;
-	copy_to_file.rotate = false;
-	copy_to_file.return_type = CopyFunctionReturnType::WRITTEN_FILE_STATISTICS;
-	copy_to_file.write_partition_columns = false;
-	copy_to_file.expected_types = {LogicalType::VARCHAR, LogicalType::BIGINT};
+	ThreadContext thread_context(context);
+	ExecutionContext execution_context(context, thread_context, nullptr);
+	auto copy_local_state = copy_fun->function.copy_to_initialize_local(execution_context, *function_data);
+
+	CopyFunctionFileStatistics stats;
+	copy_fun->function.copy_to_get_written_statistics(context, *function_data, *copy_global_state, stats);
 
 	// run the copy to file
 	vector<LogicalType> write_types;
@@ -148,85 +142,76 @@ void IcebergDelete::WritePositionalDeleteFile(ClientContext &context, IcebergDel
 
 	DataChunk write_chunk;
 	write_chunk.Initialize(context, write_types);
-
 	// the first vector is constant (the file name)
 	Value filename_val(filename);
 	write_chunk.data[0].Reference(filename_val);
 
-	ThreadContext thread_context(context);
-	ExecutionContext execution_context(context, thread_context, nullptr);
-	InterruptState interrupt_state;
-
-	// run the PhysicalCopyToFile Sink pipeline
-	auto gstate = copy_to_file.GetGlobalSinkState(context);
-	auto lstate = copy_to_file.GetLocalSinkState(execution_context);
-
-	OperatorSinkInput sink_input {*gstate, *lstate, interrupt_state};
 	idx_t row_count = 0;
 	auto row_data = FlatVector::GetData<int64_t>(write_chunk.data[1]);
 	for (auto &row_idx : sorted_deletes) {
 		row_data[row_count++] = NumericCast<int64_t>(row_idx);
 		if (row_count >= STANDARD_VECTOR_SIZE) {
 			write_chunk.SetCardinality(row_count);
-			copy_to_file.Sink(execution_context, write_chunk, sink_input);
+			copy_fun->function.copy_to_sink(execution_context, *function_data, *copy_global_state, *copy_local_state,
+			                                write_chunk);
 			row_count = 0;
 		}
 	}
 	if (row_count > 0) {
 		write_chunk.SetCardinality(row_count);
-		copy_to_file.Sink(execution_context, write_chunk, sink_input);
+		copy_fun->function.copy_to_sink(execution_context, *function_data, *copy_global_state, *copy_local_state,
+		                                write_chunk);
 	}
-	OperatorSinkCombineInput combine_input {*gstate, *lstate, interrupt_state};
-	copy_to_file.Combine(execution_context, combine_input);
-	copy_to_file.FinalizeInternal(context, *gstate);
 
-	// now read the stats data
-	copy_to_file.sink_state = std::move(gstate);
-	auto source_state = copy_to_file.GetGlobalSourceState(context);
-	auto local_state = copy_to_file.GetLocalSourceState(execution_context, *source_state);
-	DataChunk stats_chunk;
-	stats_chunk.Initialize(context, copy_to_file.types);
+	copy_fun->function.copy_to_combine(execution_context, *function_data, *copy_global_state, *copy_local_state);
+	copy_fun->function.copy_to_finalize(context, *function_data, *copy_global_state);
 
-	OperatorSourceInput source_input {*source_state, *local_state, interrupt_state};
-	copy_to_file.GetData(execution_context, stats_chunk, source_input);
-
-	if (stats_chunk.size() != 1) {
-		throw InternalException("Expected a single delete file to be written here");
-	}
-	delete_file.file_name = stats_chunk.GetValue(0, 0).GetValue<string>();
-	delete_file.delete_count = stats_chunk.GetValue(1, 0).GetValue<idx_t>();
-	delete_file.file_size_bytes = stats_chunk.GetValue(2, 0).GetValue<idx_t>();
-	delete_file.footer_size = stats_chunk.GetValue(3, 0).GetValue<idx_t>();
+	delete_file.file_name = delete_file_path;
+	delete_file.delete_count = stats.row_count;
+	delete_file.file_size_bytes = stats.file_size_bytes;
+	delete_file.footer_size = stats.footer_size_bytes.GetValue<idx_t>();
+	auto pos_stats = stats.column_statistics.find("\"pos\"");
+	auto pos_min = pos_stats->second.find("min");
+	auto pos_min_value = pos_min->second.GetValue<idx_t>();
+	auto pos_max = pos_stats->second.find("max");
+	auto pos_max_value = pos_max->second.GetValue<idx_t>();
+	delete_file.pos_min_value = pos_min_value;
+	delete_file.pos_max_value = pos_max_value;
 	global_state.written_files.emplace(filename, std::move(delete_file));
 }
 
-void IcebergDelete::FlushDelete(IRCTransaction &transaction, ClientContext &context,
-                                IcebergDeleteGlobalState &global_state, const string &filename,
-                                vector<idx_t> &deleted_rows) const {
-	// sort and duplicate eliminate the deletes
-	set<idx_t> sorted_deletes;
-	for (auto &row_idx : deleted_rows) {
-		sorted_deletes.insert(row_idx);
+void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext &context,
+                                 IcebergDeleteGlobalState &global_state) const {
+	lock_guard<mutex> guard(global_state.lock);
+	for (auto &entry : global_state.deleted_rows) {
+		auto &filename = entry.first;
+		auto &deleted_rows = entry.second;
+		// sort and duplicate eliminate the deletes
+		set<idx_t> sorted_deletes;
+		for (auto &row_idx : deleted_rows) {
+			sorted_deletes.insert(row_idx);
+		}
+		if (sorted_deletes.size() != deleted_rows.size()) {
+			throw NotImplementedException("The same row was updated multiple times - this is not (yet) supported in "
+			                              "Iceberg. Eliminate duplicate matches prior to running the UPDATE");
+		}
+
+		IcebergDeleteFileInfo delete_file;
+		delete_file.data_file_path = filename;
+
+		auto &fs = FileSystem::GetFileSystem(context);
+		string delete_filename = UUID::ToString(UUID::GenerateRandomUUID()) + "-deletes.parquet";
+		string delete_file_path =
+		    fs.JoinPath(table.table_info.table_metadata.location, fs.JoinPath("data", delete_filename));
+
+		delete_file.file_name = delete_file_path;
+		WritePositionalDeleteFile(context, global_state, filename, delete_file, sorted_deletes);
 	}
-	if (sorted_deletes.size() != deleted_rows.size()) {
-		throw NotImplementedException("The same row was updated multiple times - this is not (yet) supported in "
-		                              "Iceberg. Eliminate duplicate matches prior to running the UPDATE");
-	}
-
-	IcebergDeleteFileInfo delete_file;
-	delete_file.data_file_path = filename;
-
-	auto &fs = FileSystem::GetFileSystem(context);
-	string delete_filename = UUID::ToString(UUID::GenerateRandomUUID()) + "-deletes.parquet";
-	string delete_file_path =
-	    fs.JoinPath(table.table_info.table_metadata.location, fs.JoinPath("data", delete_filename));
-
-	delete_file.file_name = delete_file_path;
-	WritePositionalDeleteFile(context, global_state, filename, delete_file, sorted_deletes);
 }
 
-vector<IcebergManifestEntry>
-IcebergDelete::GenerateDeleteManifestEntries(unordered_map<string, IcebergDeleteFileInfo> &delete_files) {
+vector<IcebergManifestEntry> IcebergDelete::GenerateDeleteManifestEntries(IcebergDeleteGlobalState &global_state) {
+	lock_guard<mutex> guard(global_state.lock);
+	auto &delete_files = global_state.written_files;
 	vector<IcebergManifestEntry> iceberg_delete_files;
 	for (auto &delete_entry : delete_files) {
 		auto data_file_name = delete_entry.first;
@@ -234,17 +219,18 @@ IcebergDelete::GenerateDeleteManifestEntries(unordered_map<string, IcebergDelete
 
 		IcebergManifestEntry manifest_entry;
 		manifest_entry.status = IcebergManifestEntryStatusType::ADDED;
-		manifest_entry.content = IcebergManifestEntryContentType::POSITION_DELETES;
-		manifest_entry.file_path = delete_file.file_name;
-		manifest_entry.file_format = "parquet";
-		manifest_entry.record_count = delete_file.delete_count;
-		manifest_entry.file_size_in_bytes = delete_file.file_size_bytes;
+		auto &data_file = manifest_entry.data_file;
+		data_file.content = IcebergManifestEntryContentType::POSITION_DELETES;
+		data_file.file_path = delete_file.file_name;
+		data_file.file_format = "parquet";
+		data_file.record_count = delete_file.delete_count;
+		data_file.file_size_in_bytes = delete_file.file_size_bytes;
 
 		// set lower and upper bound for the filename column
-		manifest_entry.lower_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB(data_file_name);
-		manifest_entry.upper_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB(data_file_name);
+		data_file.lower_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB(data_file_name);
+		data_file.upper_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB(data_file_name);
 		// set referenced_data_file
-		manifest_entry.referenced_data_file = data_file_name;
+		data_file.referenced_data_file = data_file_name;
 		iceberg_delete_files.push_back(manifest_entry);
 	}
 	return iceberg_delete_files;
@@ -253,32 +239,36 @@ IcebergDelete::GenerateDeleteManifestEntries(unordered_map<string, IcebergDelete
 SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
                                          OperatorSinkFinalizeInput &input) const {
 	auto &global_state = input.global_state.Cast<IcebergDeleteGlobalState>();
+
+	// FIXME: replace with get deleted rows
 	if (global_state.deleted_rows.empty()) {
 		return SinkFinalizeType::READY;
 	}
 
-	auto &irc_transaction = IRCTransaction::Get(context, table.catalog);
+	auto &iceberg_transaction = IcebergTransaction::Get(context, table.catalog);
 	// write out the delete rows
-	for (auto &entry : global_state.deleted_rows) {
-		FlushDelete(irc_transaction, context, global_state, entry.first, entry.second);
-	}
+	FlushDeletes(iceberg_transaction, context, global_state);
 
 	// write out the new manifest file
-	auto &irc_table = table.Cast<ICTableEntry>();
+	auto &irc_table = table.Cast<IcebergTableEntry>();
 	auto &table_info = irc_table.table_info;
-	auto &transaction = IRCTransaction::Get(context, table.catalog);
-	auto iceberg_delete_files = GenerateDeleteManifestEntries(global_state.written_files);
-	table_info.AddDeleteSnapshot(transaction, std::move(iceberg_delete_files));
-	transaction.MarkTableAsDirty(irc_table);
+	auto &transaction = IcebergTransaction::Get(context, table.catalog);
+	auto iceberg_delete_files = GenerateDeleteManifestEntries(global_state);
+	if (!global_state.written_files.empty()) {
+		ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTableInformation &tbl) {
+			tbl.AddDeleteSnapshot(iceberg_transaction, std::move(iceberg_delete_files));
+		});
+	}
 	return SinkFinalizeType::READY;
 }
 
 //===--------------------------------------------------------------------===//
 // GetData
 //===--------------------------------------------------------------------===//
-SourceResultType IcebergDelete::GetData(ExecutionContext &context, DataChunk &chunk, OperatorSourceInput &input) const {
+SourceResultType IcebergDelete::GetDataInternal(ExecutionContext &context, DataChunk &chunk,
+                                                OperatorSourceInput &input) const {
 	auto &global_state = sink_state->Cast<IcebergDeleteGlobalState>();
-	auto value = Value::BIGINT(NumericCast<int64_t>(global_state.total_deleted_count));
+	auto value = Value::BIGINT(NumericCast<int64_t>(global_state.total_deleted_count.load()));
 	chunk.SetCardinality(1);
 	chunk.SetValue(0, 0, value);
 	return SourceResultType::FINISHED;
@@ -297,13 +287,14 @@ InsertionOrderPreservingMap<string> IcebergDelete::ParamsToString() const {
 	return result;
 }
 
-PhysicalOperator &IcebergDelete::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, ICTableEntry &table,
-                                            PhysicalOperator &child_plan, vector<idx_t> row_id_indexes) {
+PhysicalOperator &IcebergDelete::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner,
+                                            IcebergTableEntry &table, PhysicalOperator &child_plan,
+                                            vector<idx_t> row_id_indexes) {
 	return planner.Make<IcebergDelete>(table, child_plan, std::move(row_id_indexes));
 }
 
-PhysicalOperator &IRCatalog::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,
-                                        PhysicalOperator &plan) {
+PhysicalOperator &IcebergCatalog::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,
+                                             PhysicalOperator &plan) {
 	if (op.return_chunk) {
 		throw BinderException("RETURNING clause not yet supported for deletion from Iceberg table");
 	}
@@ -311,10 +302,24 @@ PhysicalOperator &IRCatalog::PlanDelete(ClientContext &context, PhysicalPlanGene
 	vector<idx_t> row_id_indexes;
 	// we only push 2 columns for positional deletes
 	for (idx_t i = 0; i < 2; i++) {
-		auto &bound_ref = op.expressions[i]->Cast<BoundReferenceExpression>();
+		auto &bound_ref = op.expressions[1 + i]->Cast<BoundReferenceExpression>();
 		row_id_indexes.push_back(bound_ref.index);
 	}
-	auto &ic_table_entry = op.table.Cast<ICTableEntry>();
+	auto &ic_table_entry = op.table.Cast<IcebergTableEntry>();
+	// Verify Iceberg table version is v2
+	if (ic_table_entry.table_info.table_metadata.iceberg_version != 2) {
+		throw NotImplementedException("Delete from Iceberg V%d tables",
+		                              ic_table_entry.table_info.table_metadata.iceberg_version);
+	}
+
+	auto allows_positional_deletes =
+	    ic_table_entry.table_info.table_metadata.PropertiesAllowPositionalDeletes(IcebergSnapshotOperationType::DELETE);
+	if (!allows_positional_deletes) {
+		auto delete_table_property = ic_table_entry.table_info.table_metadata.GetTableProperty(WRITE_DELETE_MODE);
+		auto error_message = IcebergCatalog::GetOnlyMergeOnReadSupportedErrorMessage(
+		    ic_table_entry.name, WRITE_DELETE_MODE, delete_table_property);
+		throw NotImplementedException(error_message);
+	}
 
 	auto &partition_spec = ic_table_entry.table_info.table_metadata.GetLatestPartitionSpec();
 	if (!partition_spec.IsUnpartitioned()) {
