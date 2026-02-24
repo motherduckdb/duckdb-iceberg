@@ -251,6 +251,7 @@ class TestSparkRead:
             ),
         ]
 
+    @pytest.mark.requires_spark(">=4.0")
     def test_duckdb_written_deletion_vectors(self, spark_con):
         res = spark_con.sql(
             """
@@ -260,6 +261,7 @@ class TestSparkRead:
 
         assert str(res) == "[Row(id=1, data='a')]"
 
+    @pytest.mark.requires_spark(">=4.0")
     def test_duckdb_written_row_lineage(self, spark_con):
         df = spark_con.sql(
             """
