@@ -20,9 +20,7 @@ struct IcebergCreateTableRequest;
 
 struct IcebergTransactionData {
 public:
-	IcebergTransactionData(ClientContext &context, IcebergTableInformation &table_info)
-	    : context(context), table_info(table_info), is_deleted(false) {
-	}
+	IcebergTransactionData(ClientContext &context, IcebergTableInformation &table_info);
 
 public:
 	IcebergManifestFile CreateManifestFile(int64_t snapshot_id, sequence_number_t sequence_number,
