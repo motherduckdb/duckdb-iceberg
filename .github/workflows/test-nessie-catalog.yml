@@ -89,8 +89,8 @@ jobs:
           OAUTH2_SERVER_URI: http://127.0.0.1:8080/realms/iceberg/protocol/openid-connect/token
           WAREHOUSE: warehouse
         run: |
-          make data_clean 
           source .venv-spark4/bin/activate
+          rm -rf data/generated
           python3 -m scripts.data_generators.generate_data nessie
 
       - name: Run Generic IRC tests
