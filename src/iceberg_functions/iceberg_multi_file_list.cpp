@@ -738,18 +738,21 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 		auto &metadata = GetMetadata();
 		auto &fs = FileSystem::GetFileSystem(context);
 
-		// Read the manifest list, we need all the manifests to determine if we've seen all deletes
-		auto manifest_list_full_path = options.allow_moved_paths
-		                                   ? IcebergUtils::GetFullPath(iceberg_path, snapshot.manifest_list, fs)
-		                                   : snapshot.manifest_list;
-
-		//! Read the manifest list
-		auto scan = AvroScan::ScanManifestList(snapshot, metadata, context, manifest_list_full_path);
-		auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
-
 		vector<IcebergManifestFile> manifest_files;
-		while (!manifest_list_reader->Finished()) {
-			manifest_list_reader->Read(STANDARD_VECTOR_SIZE, manifest_files);
+		if (HasTransactionData() && !GetTransactionData().alters.empty()) {
+			auto &transaction_data = GetTransactionData();
+			manifest_files = transaction_data.existing_manifest_list;
+		} else {
+			// Read the manifest list, we need all the manifests to determine if we've seen all deletes
+			auto manifest_list_full_path = options.allow_moved_paths
+			                                   ? IcebergUtils::GetFullPath(iceberg_path, snapshot.manifest_list, fs)
+			                                   : snapshot.manifest_list;
+			//! Read the manifest list
+			auto scan = AvroScan::ScanManifestList(snapshot, metadata, context, manifest_list_full_path);
+			auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
+			while (!manifest_list_reader->Finished()) {
+				manifest_list_reader->Read(STANDARD_VECTOR_SIZE, manifest_files);
+			}
 		}
 
 		for (auto &manifest_file : manifest_files) {

@@ -279,7 +279,7 @@ class TestSparkRead:
     def test_spark_read_row_lineage_from_upgraded(self, spark_con):
         df = spark_con.sql(
             """
-            select _last_updated_sequence_number, _row_id, * from default.row_lineage_test_upgraded order by id;
+            select _last_updated_sequence_number, _row_id, * from default.row_lineage_test_upgraded_insert order by id;
             """
         )
         res = df.collect()
