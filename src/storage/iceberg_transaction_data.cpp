@@ -96,6 +96,10 @@ IcebergManifestFile IcebergTransactionData::CreateManifestFile(int64_t snapshot_
 		switch (manifest_content_type) {
 		case IcebergManifestContentType::DATA: {
 			if (table_metadata.iceberg_version >= 3) {
+				//! FIXME: this is required because we don't apply inheritance to uncommitted manifests
+				//! But this does result in serializing this to the avro file, which *should* be NULL
+				//! To fix this we should probably remove the inheritance application in the "manifest_reader"
+				//! and instead do the inheritance in a path that is used by both committed and uncommitted manifests
 				data_file.has_first_row_id = true;
 				data_file.first_row_id = next_row_id;
 				next_row_id += data_file.record_count;
@@ -180,7 +184,6 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 
 		new_snapshot.has_added_rows = true;
 		new_snapshot.added_rows = manifest_file.added_rows_count;
-		next_row_id += manifest_file.added_rows_count;
 	}
 
 	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info, manifest_list_path, std::move(new_snapshot));
@@ -256,11 +259,10 @@ void IcebergTransactionData::AddUpdateSnapshot(vector<IcebergManifestEntry> &&de
 	}
 	if (table_metadata.iceberg_version >= 3) {
 		new_snapshot.has_first_row_id = true;
-		new_snapshot.first_row_id = next_row_id;
+		new_snapshot.first_row_id = first_row_id;
 
 		new_snapshot.has_added_rows = true;
 		new_snapshot.added_rows = data_manifest_file.added_rows_count;
-		next_row_id += data_manifest_file.added_rows_count;
 	}
 
 	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info, manifest_list_path, std::move(new_snapshot));
