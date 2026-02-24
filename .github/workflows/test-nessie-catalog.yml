@@ -93,7 +93,7 @@ jobs:
           source .venv-spark4/bin/activate
           python3 -m scripts.data_generators.generate_data nessie
 
-      - name: Run Generic Tests With Nessie
+      - name: Run Generic IRC tests
         env:
           ICEBERG_SERVER_AVAILABLE: 1
           DUCKDB_ICEBERG_HAVE_GENERATED_DATA: 1
@@ -107,5 +107,5 @@ jobs:
         env:
           NESSIE_SERVER_AVAILABLE: 1
         run: |
-          ./build/release/test/unittest "$PWD/test/*" --list-test-names-only || true
-          ./build/release/test/unittest "$PWD/test/*"
+          ./build/release/test/unittest "$PWD/test/local/irc_specific_catalogs/nessie/*" --list-test-names-only || true
+          ./build/release/test/unittest "$PWD/test/local/irc_specific_catalogs/nessie/*"

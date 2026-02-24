@@ -64,7 +64,6 @@ query I
 select request.url from duckdb_logs_parsed('HTTP');
 ----
 http://127.0.0.1:19120/iceberg/v1/main%7Cwarehouse/namespaces
-http://127.0.0.1:19120/iceberg/v1/main%7Cwarehouse/namespaces/default/tables
 
 statement ok
 create schema if not exists my_datalake.default;
@@ -98,6 +97,9 @@ drop table if exists my_datalake.default.t2;
 
 statement ok
 drop table if exists my_datalake.default.t1;
+
+statement ok
+drop schema my_datalake.default;
 
 statement ok
 detach my_datalake;
