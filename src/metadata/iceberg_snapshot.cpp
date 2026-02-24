@@ -18,7 +18,14 @@ static string OperationTypeToString(IcebergSnapshotOperationType type) {
 	}
 }
 
-static const std::map<SnapshotMetricType, string> kSnapshotMetricKeys = {
+namespace {
+
+struct SnapshotMetricItem {
+	SnapshotMetricType type;
+	const char *name;
+};
+
+static const SnapshotMetricItem SNAPSHOT_METRIC_KEYS[] = {
     {SnapshotMetricType::ADDED_DATA_FILES, "added-data-files"},
     {SnapshotMetricType::ADDED_RECORDS, "added-records"},
     {SnapshotMetricType::DELETED_DATA_FILES, "deleted-data-files"},
@@ -26,18 +33,25 @@ static const std::map<SnapshotMetricType, string> kSnapshotMetricKeys = {
     {SnapshotMetricType::TOTAL_DATA_FILES, "total-data-files"},
     {SnapshotMetricType::TOTAL_RECORDS, "total-records"}};
 
+static const idx_t SNAPSHOT_METRIC_KEYS_SIZE = sizeof(SNAPSHOT_METRIC_KEYS) / sizeof(SnapshotMetricItem);
+
+} // namespace
+
 static string MetricsTypeToString(SnapshotMetricType type) {
-	auto entry = kSnapshotMetricKeys.find(type);
-	if (entry == kSnapshotMetricKeys.end()) {
-		throw InvalidConfigurationException("Metrics type not implemented: %d", static_cast<uint8_t>(type));
+	for (idx_t i = 0; i < SNAPSHOT_METRIC_KEYS_SIZE; i++) {
+		auto &item = SNAPSHOT_METRIC_KEYS[i];
+		if (item.type == type) {
+			return item.name;
+		}
 	}
-	return entry->second;
+	throw InvalidConfigurationException("Metrics type not implemented: %d", static_cast<uint8_t>(type));
 }
 
 static IcebergSnapshot::metrics_map_t MetricsFromSummary(const case_insensitive_map_t<string> &snapshot_summary) {
 	IcebergSnapshot::metrics_map_t metrics;
-	for (auto &entry : kSnapshotMetricKeys) {
-		auto it = snapshot_summary.find(entry.second);
+	for (idx_t i = 0; i < SNAPSHOT_METRIC_KEYS_SIZE; i++) {
+		auto &item = SNAPSHOT_METRIC_KEYS[i];
+		auto it = snapshot_summary.find(item.name);
 		if (it != snapshot_summary.end()) {
 			int64_t value;
 			try {
@@ -46,7 +60,7 @@ static IcebergSnapshot::metrics_map_t MetricsFromSummary(const case_insensitive_
 				// Skip invalid metrics
 				continue;
 			}
-			metrics[entry.first] = value;
+			metrics[item.type] = value;
 		}
 	}
 	return metrics;

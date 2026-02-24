@@ -25,7 +25,7 @@ public:
 	}
 	static IcebergSnapshot ParseSnapshot(rest_api_objects::Snapshot &snapshot, IcebergTableMetadata &metadata);
 	rest_api_objects::Snapshot ToRESTObject() const;
-	using metrics_map_t = std::map<SnapshotMetricType, int64_t>;
+	using metrics_map_t = map<SnapshotMetricType, int64_t>;
 
 public:
 	//! Snapshot metadata

@@ -17,8 +17,10 @@ static int64_t NewSnapshotId() {
 	return random_number;
 }
 
-static const IcebergSnapshot::metrics_map_t kMetricsWithEmptyTotals {{SnapshotMetricType::TOTAL_DATA_FILES, 0},
-                                                                     {SnapshotMetricType::TOTAL_RECORDS, 0}};
+static IcebergSnapshot::metrics_map_t EmptyMetrics() {
+	return IcebergSnapshot::metrics_map_t(
+	    {{SnapshotMetricType::TOTAL_DATA_FILES, 0}, {SnapshotMetricType::TOTAL_RECORDS, 0}});
+}
 
 static IcebergSnapshot::metrics_map_t GetSnapshotMetrics(const IcebergManifest &manifest,
                                                          const IcebergSnapshot::metrics_map_t &previous_metrics) {
@@ -121,7 +123,7 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 		}
 	} else {
 		// If there was no previous snapshot, default the metrics to start totals at 0
-		new_snapshot.metrics = GetSnapshotMetrics(manifest, kMetricsWithEmptyTotals);
+		new_snapshot.metrics = GetSnapshotMetrics(manifest, EmptyMetrics());
 	}
 
 	new_manifest_file.data_files.insert(new_manifest_file.data_files.end(), std::make_move_iterator(data_files.begin()),
