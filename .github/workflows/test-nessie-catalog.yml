@@ -106,5 +106,5 @@ jobs:
         env:
           NESSIE_SERVER_AVAILABLE: 1
         run: |
-          ./build/release/test/unittest "$PWD/test/local/irc_specific_catalogs/nessie/*" --list-test-names-only || true
-          ./build/release/test/unittest "$PWD/test/local/irc_specific_catalogs/nessie/*"
+          ./build/release/test/unittest "$PWD/test/sql/local/irc_specific_catalogs/nessie/*" --list-test-names-only || true
+          ./build/release/test/unittest "$PWD/test/sql/local/irc_specific_catalogs/nessie/*"
