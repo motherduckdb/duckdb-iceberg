@@ -1,4 +1,4 @@
-name: Test Fixture Catalog Reusable
+name: Test Local Catalog Reusable
 on:
   workflow_call:
     inputs:
@@ -9,10 +9,8 @@ on:
 
 jobs:
   test-spark:
-    name: Test against fixture catalog
+    name: Test against local catalog
     runs-on: ubuntu-latest
-    env:
-      HTTP_PROXY_PUBLIC: http://localhost:8878
 
     steps:
       - name: Checkout repository
