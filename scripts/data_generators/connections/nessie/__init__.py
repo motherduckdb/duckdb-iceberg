@@ -47,8 +47,8 @@ class IcebergSparkRest(IcebergConnection):
             f"--packages org.apache.iceberg:iceberg-spark-runtime-{SPARK_VERSION}_{SCALA_BINARY_VERSION}:{ICEBERG_LIBRARY_VERSION},org.apache.iceberg:iceberg-aws-bundle:{ICEBERG_LIBRARY_VERSION} pyspark-shell"
         )
         os.environ["AWS_REGION"] = "us-east-1"
-        os.environ["AWS_ACCESS_KEY_ID"] = os.environ["S3_KEY_ID"]
-        os.environ["AWS_SECRET_ACCESS_KEY"] = os.environ["S3_SECRET"]
+        os.environ["AWS_ACCESS_KEY_ID"] = os.getenv("S3_KEY_ID", "minioadmin")
+        os.environ["AWS_SECRET_ACCESS_KEY"] = os.getenv("S3_SECRET", "minioadmin")
 
         spark = (
             SparkSession.builder.appName("DuckDB REST Integration test")
@@ -58,9 +58,9 @@ class IcebergSparkRest(IcebergConnection):
             )
             .config("spark.sql.catalog.demo", "org.apache.iceberg.spark.SparkCatalog")
             .config("spark.sql.catalog.demo.type", "rest")
-            .config("spark.sql.catalog.demo.uri", os.environ["ICEBERG_ENDPOINT"])
-            .config("spark.sql.catalog.demo.warehouse", os.environ["WAREHOUSE"])
-            .config("spark.sql.catalog.demo.s3.endpoint", os.environ["S3_ENDPOINT"])
+            .config("spark.sql.catalog.demo.uri", os.getenv("ICEBERG_ENDPOINT", "http://127.0.0.1:19120/iceberg/main/"))
+            .config("spark.sql.catalog.demo.warehouse", os.getenv("WAREHOUSE", "warehouse"))
+            .config("spark.sql.catalog.demo.s3.endpoint", os.getenv("S3_ENDPOINT", "http://127.0.0.1:9002"))
             .config("spark.sql.catalog.demo.s3.path-style-access", "true")
             .config('spark.driver.memory', '10g')
             .config('spark.sql.session.timeZone', 'UTC')
@@ -68,8 +68,8 @@ class IcebergSparkRest(IcebergConnection):
             .config("spark.sql.catalog.demo.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
             .config('spark.jars', SPARK_RUNTIME_PATH)
             .config("spark.sql.catalog.demo.scope", "catalog sign")
-            .config("spark.sql.catalog.demo.oauth2-server-uri", os.environ["OAUTH2_SERVER_URI"])
-            .config("spark.sql.catalog.demo.credential", f"{os.environ["ICEBERG_CLIENT_ID"]}:{os.environ["ICEBERG_CLIENT_SECRET"]}")
+            .config("spark.sql.catalog.demo.oauth2-server-uri", os.getenv("OAUTH2_SERVER_URI", "http://127.0.0.1:8080/realms/iceberg/protocol/openid-connect/token"))
+            .config("spark.sql.catalog.demo.credential", f"{os.getenv("ICEBERG_CLIENT_ID", "client1")}:{os.getenv("ICEBERG_CLIENT_SECRET", "s3cr3t")}")
             .config("spark.sql.catalog.demo.rest.auth.type", "oauth2")
             .getOrCreate()
         )
