@@ -13,6 +13,13 @@
 
 namespace duckdb {
 
+IcebergTransactionData::IcebergTransactionData(ClientContext &context, IcebergTableInformation &table_info)
+    : context(context), table_info(table_info), is_deleted(false) {
+	if (table_info.table_metadata.has_next_row_id) {
+		next_row_id = table_info.table_metadata.next_row_id;
+	}
+}
+
 static int64_t NewSnapshotId() {
 	auto random_number = UUID::GenerateRandomUUID().upper;
 	if (random_number < 0) {
@@ -22,11 +29,37 @@ static int64_t NewSnapshotId() {
 	return random_number;
 }
 
-IcebergTransactionData::IcebergTransactionData(ClientContext &context, IcebergTableInformation &table_info)
-    : context(context), table_info(table_info), is_deleted(false) {
-	if (table_info.table_metadata.has_next_row_id) {
-		next_row_id = table_info.table_metadata.next_row_id;
+static IcebergSnapshot::metrics_map_t EmptyMetrics() {
+	return IcebergSnapshot::metrics_map_t(
+	    {{SnapshotMetricType::TOTAL_DATA_FILES, 0}, {SnapshotMetricType::TOTAL_RECORDS, 0}});
+}
+
+static IcebergSnapshot::metrics_map_t GetSnapshotMetrics(const IcebergManifestFile &manifest_file,
+                                                         const IcebergSnapshot::metrics_map_t &previous_metrics) {
+	IcebergSnapshot::metrics_map_t metrics {{SnapshotMetricType::ADDED_DATA_FILES, manifest_file.added_files_count},
+	                                        {SnapshotMetricType::ADDED_RECORDS, manifest_file.added_rows_count},
+	                                        {SnapshotMetricType::DELETED_DATA_FILES, manifest_file.deleted_files_count},
+	                                        {SnapshotMetricType::DELETED_RECORDS, manifest_file.deleted_rows_count}};
+
+	auto previous_total_files = previous_metrics.find(SnapshotMetricType::TOTAL_DATA_FILES);
+	if (previous_total_files != previous_metrics.end()) {
+		int64_t total_files =
+		    previous_total_files->second + manifest_file.added_files_count - manifest_file.deleted_files_count;
+		if (total_files >= 0) {
+			metrics[SnapshotMetricType::TOTAL_DATA_FILES] = total_files;
+		}
 	}
+
+	auto previous_total_records = previous_metrics.find(SnapshotMetricType::TOTAL_RECORDS);
+	if (previous_total_records != previous_metrics.end()) {
+		int64_t total_records =
+		    previous_total_records->second + manifest_file.added_rows_count - manifest_file.deleted_rows_count;
+		if (total_records >= 0) {
+			metrics[SnapshotMetricType::TOTAL_RECORDS] = total_records;
+		}
+	}
+
+	return metrics;
 }
 
 IcebergManifestFile IcebergTransactionData::CreateManifestFile(int64_t snapshot_id, sequence_number_t sequence_number,
@@ -144,10 +177,16 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 			auto &last_alter = alters.back().get();
 			auto &last_snapshot = last_alter.snapshot;
 			new_snapshot.parent_snapshot_id = last_snapshot.snapshot_id;
+			new_snapshot.metrics = GetSnapshotMetrics(manifest_file, last_snapshot.metrics);
 		} else {
 			D_ASSERT(table_metadata.has_current_snapshot);
 			new_snapshot.parent_snapshot_id = table_metadata.current_snapshot_id;
+			auto &last_snapshot = *table_metadata.GetSnapshotById(new_snapshot.parent_snapshot_id);
+			new_snapshot.metrics = GetSnapshotMetrics(manifest_file, last_snapshot.metrics);
 		}
+	} else {
+		// If there was no previous snapshot, default the metrics to start totals at 0
+		new_snapshot.metrics = GetSnapshotMetrics(manifest_file, EmptyMetrics());
 	}
 
 	if (table_metadata.iceberg_version >= 3) {
@@ -213,6 +252,7 @@ void IcebergTransactionData::AddUpdateSnapshot(vector<IcebergManifestEntry> &&de
 	}
 
 	new_snapshot.has_parent_snapshot = table_info.table_metadata.has_current_snapshot || !alters.empty();
+	//! FIXME: correctly set metrics for an UPDATE
 	if (new_snapshot.has_parent_snapshot) {
 		if (!alters.empty()) {
 			auto &last_alter = alters.back().get();
