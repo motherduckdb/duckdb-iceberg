@@ -45,8 +45,9 @@ static IcebergSnapshot::metrics_map_t GetSnapshotMetrics(const IcebergManifestFi
 	if (previous_total_files != previous_metrics.end()) {
 		int64_t total_files =
 		    previous_total_files->second + manifest_file.added_files_count - manifest_file.deleted_files_count;
-		if (total_files >= 0)
+		if (total_files >= 0) {
 			metrics[SnapshotMetricType::TOTAL_DATA_FILES] = total_files;
+		}
 	}
 
 	auto previous_total_records = previous_metrics.find(SnapshotMetricType::TOTAL_RECORDS);
