@@ -82,7 +82,7 @@ IcebergManifestFile IcebergTransactionData::CreateManifestFile(int64_t snapshot_
 	manifest_file.manifest_path = manifest_file_path;
 	manifest_file.sequence_number = sequence_number;
 	manifest_file.content = manifest_content_type;
-	manifest_file.added_files_count = manifest_entries.size();
+	manifest_file.added_files_count = 0;
 	manifest_file.deleted_files_count = 0;
 	manifest_file.existing_files_count = 0;
 	manifest_file.added_rows_count = 0;
@@ -95,24 +95,33 @@ IcebergManifestFile IcebergTransactionData::CreateManifestFile(int64_t snapshot_
 	//! Add the files to the manifest
 	for (auto &manifest_entry : manifest_entries) {
 		auto &data_file = manifest_entry.data_file;
-		switch (manifest_content_type) {
-		case IcebergManifestContentType::DATA: {
-			if (table_metadata.iceberg_version >= 3) {
-				//! FIXME: this is required because we don't apply inheritance to uncommitted manifests
-				//! But this does result in serializing this to the avro file, which *should* be NULL
-				//! To fix this we should probably remove the inheritance application in the "manifest_reader"
-				//! and instead do the inheritance in a path that is used by both committed and uncommitted manifests
-				data_file.has_first_row_id = true;
-				data_file.first_row_id = next_row_id;
-				next_row_id += data_file.record_count;
-			}
+		if (data_file.content == IcebergManifestEntryContentType::DATA) {
+			//! FIXME: this is required because we don't apply inheritance to uncommitted manifests
+			//! But this does result in serializing this to the avro file, which *should* be NULL
+			//! To fix this we should probably remove the inheritance application in the "manifest_reader"
+			//! and instead do the inheritance in a path that is used by both committed and uncommitted manifests
+			data_file.has_first_row_id = true;
+			data_file.first_row_id = next_row_id;
+			next_row_id += data_file.record_count;
+		}
+		switch (manifest_entry.status) {
+		case IcebergManifestEntryStatusType::ADDED: {
+			manifest_file.added_files_count++;
 			manifest_file.added_rows_count += data_file.record_count;
 			break;
 		}
-		case IcebergManifestContentType::DELETE:
+		case IcebergManifestEntryStatusType::DELETED: {
+			manifest_file.deleted_files_count++;
 			manifest_file.deleted_rows_count += data_file.record_count;
 			break;
 		}
+		case IcebergManifestEntryStatusType::EXISTING: {
+			manifest_file.existing_files_count++;
+			manifest_file.existing_rows_count += data_file.record_count;
+			break;
+		}
+		}
+
 		manifest_entry.sequence_number = sequence_number;
 		manifest_entry.snapshot_id = snapshot_id;
 		manifest_entry.partition_spec_id = manifest_file.partition_spec_id;
