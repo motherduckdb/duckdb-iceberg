@@ -54,6 +54,7 @@ IcebergManifestFile IcebergTransactionData::CreateManifestFile(int64_t snapshot_
 	manifest_file.existing_files_count = 0;
 	manifest_file.added_rows_count = 0;
 	manifest_file.existing_rows_count = 0;
+	manifest_file.deleted_rows_count = 0;
 	//! TODO: support partitions
 	manifest_file.partition_spec_id = 0;
 	//! manifest.partitions = CreateManifestPartition();
@@ -115,8 +116,17 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 	auto manifest_list_path =
 	    table_metadata.GetMetadataPath() + "/snap-" + std::to_string(snapshot_id) + "-" + manifest_list_uuid + ".avro";
 
-	auto manifest_content_type = IcebergManifestContentType::DATA;
-
+	IcebergManifestContentType manifest_content_type;
+	switch (operation) {
+	case IcebergSnapshotOperationType::DELETE:
+		manifest_content_type = IcebergManifestContentType::DELETE;
+		break;
+	case IcebergSnapshotOperationType::APPEND:
+		manifest_content_type = IcebergManifestContentType::DATA;
+		break;
+	default:
+		throw NotImplementedException("Cannot have use snapshot operation type REPLACE or OVERWRITE here");
+	};
 	auto manifest_file =
 	    CreateManifestFile(snapshot_id, sequence_number, table_metadata, manifest_content_type, std::move(data_files));
 
@@ -127,7 +137,6 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 	new_snapshot.sequence_number = sequence_number;
 	new_snapshot.schema_id = table_metadata.current_schema_id;
 	new_snapshot.manifest_list = manifest_list_path;
-	new_snapshot.operation = operation;
 	new_snapshot.timestamp_ms = Timestamp::GetEpochMs(Timestamp::GetCurrentTimestamp());
 	new_snapshot.has_parent_snapshot = table_metadata.has_current_snapshot || !alters.empty();
 	if (new_snapshot.has_parent_snapshot) {
