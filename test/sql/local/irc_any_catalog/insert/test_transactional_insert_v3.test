@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/insert/test_transactional_insert_v3.test
+# name: test/sql/local/irc_any_catalog/insert/test_transactional_insert_v3.test
 # description: test integration with iceberg catalog read
 # group: [insert]
 

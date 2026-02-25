@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/insert/count_star_optimizer.test
+# name: test/sql/local/irc_any_catalog/insert/count_star_optimizer.test
 # description: Test count star optimizer in an iceberg scan
 # group: [insert]
 

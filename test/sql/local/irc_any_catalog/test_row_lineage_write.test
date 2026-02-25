@@ -1,6 +1,6 @@
-# name: test/sql/local/irc/test_row_lineage_write.test
+# name: test/sql/local/irc_any_catalog/test_row_lineage_write.test
 # description: test integration with iceberg catalog read
-# group: [irc]
+# group: [irc_any_catalog]
 
 require-env ICEBERG_SERVER_AVAILABLE
 
