@@ -99,9 +99,6 @@ statement ok
 drop table if exists my_datalake.default.t1;
 
 statement ok
-drop schema my_datalake.default;
-
-statement ok
 detach my_datalake;
 
 statement ok
