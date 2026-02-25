@@ -1,6 +1,8 @@
 # name: test/sql/local/partitioning/in_filter.test
 # group: [partitioning]
 
+require-env ICEBERG_SERVER_AVAILABLE
+
 require httpfs
 
 require avro
@@ -14,6 +16,10 @@ set enable_logging=true
 
 statement ok
 set logging_level='debug'
+
+#FIXME: logging types are not registered to extensions
+statement ok
+LOAD iceberg;
 
 statement ok
 CALL enable_logging('Iceberg');

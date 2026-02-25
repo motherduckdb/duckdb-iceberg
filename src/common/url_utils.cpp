@@ -3,6 +3,9 @@
 
 namespace duckdb {
 
+IRCEndpointBuilder::IRCEndpointBuilder() {
+}
+
 string AddHttpHostIfMissing(const string &url) {
 	auto lower_url = StringUtil::Lower(url);
 	if (StringUtil::StartsWith(lower_url, "http://") || StringUtil::StartsWith(lower_url, "https://")) {
@@ -12,7 +15,27 @@ string AddHttpHostIfMissing(const string &url) {
 }
 
 void IRCEndpointBuilder::AddPathComponent(const string &component) {
-	if (!component.empty()) {
+	if (component.empty()) {
+		return;
+	}
+	path_components.push_back(component);
+}
+
+void IRCEndpointBuilder::AddPrefixComponent(const string &component, const bool &prefix_is_one_component) {
+	if (component.empty()) {
+		return;
+	}
+
+	// If the component contains slashes, split it into multiple segments
+	if (component.find('/') != string::npos && !prefix_is_one_component) {
+		auto segments = StringUtil::Split(component, '/');
+		for (const auto &segment : segments) {
+			if (!segment.empty()) {
+				path_components.push_back(segment);
+			}
+		}
+	} else {
+		// Single component without slashes
 		path_components.push_back(component);
 	}
 }
@@ -40,11 +63,11 @@ const std::unordered_map<string, string> IRCEndpointBuilder::GetParams() const {
 	return params;
 }
 
-string IRCEndpointBuilder::GetURL() const {
+string IRCEndpointBuilder::GetURLEncoded() const {
 	//! {host}[/{version}][/{prefix}]/{path_component[0]}/{path_component[1]}
 	string ret = host;
 	for (auto &component : path_components) {
-		ret += "/" + component;
+		ret += "/" + StringUtil::URLEncode(component);
 	}
 
 	// encode params

@@ -44,8 +44,20 @@ template <class TRANSFORM>
 static bool MatchBoundsConstant(const Value &constant, ExpressionType comparison_type,
                                 const IcebergPredicateStats &stats, const IcebergTransform &transform) {
 	auto constant_value = TRANSFORM::ApplyTransform(constant, transform);
-	if (constant_value.IsNull() || stats.lower_bound.IsNull() || stats.upper_bound.IsNull()) {
-		//! Can't compare when there are no bounds
+
+	if (stats.BoundsAreNull()) {
+		// bounds are actually null, expression is not a null comparison expression
+		// those are handled in MatchBoundsTemplated
+		// So we can return false since no remaining expression type will match a null value
+		D_ASSERT(comparison_type != ExpressionType::OPERATOR_IS_NOT_NULL);
+		D_ASSERT(comparison_type != ExpressionType::OPERATOR_IS_NULL);
+		D_ASSERT(comparison_type != ExpressionType::COMPARE_DISTINCT_FROM);
+		D_ASSERT(comparison_type != ExpressionType::COMPARE_NOT_DISTINCT_FROM);
+		return false;
+	}
+
+	if (!stats.has_upper_bounds || !stats.has_lower_bounds) {
+		// we do not have upper or lower bounds, assume the file matches.
 		return true;
 	}
 

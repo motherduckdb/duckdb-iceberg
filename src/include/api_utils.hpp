@@ -13,7 +13,7 @@
 #include "url_utils.hpp"
 #include "aws.hpp"
 #include "duckdb/common/http_util.hpp"
-#include "storage/irc_authorization.hpp"
+#include "storage/iceberg_authorization.hpp"
 
 namespace duckdb {
 
@@ -35,8 +35,8 @@ static string certFileLocations[] = {
 class APIUtils {
 public:
 	static unique_ptr<HTTPResponse> Request(RequestType request_type, ClientContext &context,
-	                                        const IRCEndpointBuilder &endpoint_builder, HTTPHeaders &headers,
-	                                        const string &data);
+	                                        const IRCEndpointBuilder &endpoint_builder, unique_ptr<HTTPClient> &client,
+	                                        HTTPHeaders &headers, const string &data);
 
 	//! We use a singleton here to store the path, set by SelectCurlCertPath
 	static const string &GetCURLCertPath();

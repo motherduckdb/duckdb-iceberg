@@ -33,10 +33,14 @@ public:
 
 struct IcebergMultiFileReader : public MultiFileReader {
 public:
+	static constexpr column_t COLUMN_IDENTIFIER_LAST_SEQUENCE_NUMBER = UINT64_C(10000000000000000000);
+
+public:
 	IcebergMultiFileReader(shared_ptr<TableFunctionInfo> function_info);
 
 public:
 	static unique_ptr<MultiFileReader> CreateInstance(const TableFunction &table);
+	static vector<PartitionStatistics> IcebergGetPartitionStats(ClientContext &context, GetPartitionStatsInput &input);
 
 public:
 	shared_ptr<MultiFileList> CreateFileList(ClientContext &context, const vector<string> &paths,
@@ -63,13 +67,25 @@ public:
 	                   const MultiFileReaderData &reader_data, DataChunk &input_chunk, DataChunk &output_chunk,
 	                   ExpressionExecutor &executor, optional_ptr<MultiFileReaderGlobalState> global_state) override;
 	void ApplyEqualityDeletes(ClientContext &context, DataChunk &output_chunk,
-	                          const IcebergMultiFileList &multi_file_list, const IcebergManifestEntry &data_file,
+	                          const IcebergMultiFileList &multi_file_list, const IcebergManifestEntry &manifest_entry,
 	                          const vector<MultiFileColumnDefinition> &local_columns);
 	bool ParseOption(const string &key, const Value &val, MultiFileOptions &options, ClientContext &context) override;
+
+	unique_ptr<Expression>
+	GetVirtualColumnExpression(ClientContext &context, MultiFileReaderData &reader_data,
+	                           const vector<MultiFileColumnDefinition> &local_columns, idx_t &column_id,
+	                           const LogicalType &type, MultiFileLocalIndex local_idx,
+	                           optional_ptr<MultiFileColumnDefinition> &global_column_reference) override;
 
 public:
 	shared_ptr<TableFunctionInfo> function_info;
 	IcebergOptions options;
+
+private:
+	unique_ptr<MultiFileColumnDefinition> row_id_column;
+	unique_ptr<MultiFileColumnDefinition> last_updated_sequence_number_column;
+	//! Track which output column is sequence_number (if the virtual column is requested)
+	optional_idx sequence_number_col;
 };
 
 } // namespace duckdb

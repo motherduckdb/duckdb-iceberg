@@ -25,12 +25,12 @@
 #include "duckdb/common/types/uuid.hpp"
 #include "duckdb/common/numeric_utils.hpp"
 
-#include "storage/irc_catalog.hpp"
-#include "storage/irc_transaction.hpp"
-#include "storage/irc_schema_entry.hpp"
-#include "storage/irc_schema_set.hpp"
-#include "storage/irc_table_set.hpp"
-#include "storage/irc_table_entry.hpp"
+#include "storage/catalog/iceberg_catalog.hpp"
+#include "storage/iceberg_transaction.hpp"
+#include "storage/catalog/iceberg_schema_entry.hpp"
+#include "storage/catalog/iceberg_schema_set.hpp"
+#include "storage/catalog/iceberg_table_set.hpp"
+#include "storage/catalog/iceberg_table_entry.hpp"
 #include "storage/iceberg_table_information.hpp"
 
 #include "metadata/iceberg_table_metadata.hpp"
@@ -409,16 +409,18 @@ public:
 
 struct DuckLakeDataFile {
 public:
-	DuckLakeDataFile(const IcebergManifestEntry &entry, DuckLakePartition &partition, const string &table_name)
-	    : manifest_entry(entry), partition(partition) {
-		path = entry.file_path;
-		if (!StringUtil::CIEquals(entry.file_format, "parquet")) {
+	DuckLakeDataFile(const IcebergManifestEntry &manifest_entry_p, DuckLakePartition &partition,
+	                 const string &table_name)
+	    : manifest_entry(manifest_entry_p), partition(partition) {
+		auto &data_file = manifest_entry.data_file;
+		path = data_file.file_path;
+		if (!StringUtil::CIEquals(data_file.file_format, "parquet")) {
 			throw InvalidInputException("Can't convert Iceberg table (name: %s) to DuckLake, because it contains a "
 			                            "data file with file_format '%s'",
-			                            table_name, entry.file_format);
+			                            table_name, data_file.file_format);
 		}
-		record_count = entry.record_count;
-		file_size_bytes = entry.file_size_in_bytes;
+		record_count = data_file.record_count;
+		file_size_bytes = data_file.file_size_in_bytes;
 	}
 
 public:
@@ -459,22 +461,25 @@ public:
 
 struct DuckLakeDeleteFile {
 public:
-	DuckLakeDeleteFile(const IcebergManifestEntry &entry, const string &table_name) {
-		path = entry.file_path;
-		if (!StringUtil::CIEquals(entry.file_format, "parquet")) {
+	DuckLakeDeleteFile(const IcebergManifestEntry &manifest_entry, const string &table_name) {
+		auto &data_file = manifest_entry.data_file;
+		path = data_file.file_path;
+		if (!StringUtil::CIEquals(data_file.file_format, "parquet")) {
 			throw InvalidInputException("Can't convert Iceberg table (name: %s) to DuckLake, as it contains a delete "
 			                            "files with file_format '%s'",
-			                            table_name, entry.file_format);
+			                            table_name, data_file.file_format);
 		}
-		record_count = entry.record_count;
-		file_size_bytes = entry.file_size_in_bytes;
+		record_count = data_file.record_count;
+		file_size_bytes = data_file.file_size_in_bytes;
 
 		//! Find lower and upper bounds for the 'file_path' of the position delete file
-		auto lower_bound_it = entry.lower_bounds.find(2147483546);
-		auto upper_bound_it = entry.upper_bounds.find(2147483546);
-		if (lower_bound_it == entry.lower_bounds.end() || upper_bound_it == entry.upper_bounds.end()) {
-			throw InvalidInputException("No lower/upper bounds are available for the Position Delete File, this is "
-			                            "required for export to DuckLake");
+		auto lower_bound_it = data_file.lower_bounds.find(2147483546);
+		auto upper_bound_it = data_file.upper_bounds.find(2147483546);
+		if (lower_bound_it == data_file.lower_bounds.end() || upper_bound_it == data_file.upper_bounds.end()) {
+			throw InvalidInputException(
+			    "No lower/upper bounds are available for the Position Delete File for table %s, this is "
+			    "required for export to DuckLake",
+			    table_name);
 		}
 
 		auto &lower_bound = lower_bound_it->second;
@@ -584,7 +589,7 @@ public:
 public:
 	//! ----- Partition Updates -----
 
-	DuckLakePartition &AddPartition(DuckLakePartition &new_partition, DuckLakeSnapshot &begin_snapshot) {
+	DuckLakePartition &AddPartition(unique_ptr<DuckLakePartition> new_partition, DuckLakeSnapshot &begin_snapshot) {
 		if (current_partition) {
 			auto &old_partition = *current_partition;
 			old_partition.end_snapshot = begin_snapshot.snapshot_time;
@@ -592,9 +597,9 @@ public:
 			current_partition = nullptr;
 		}
 		begin_snapshot.AlterTable(table_uuid);
-		new_partition.start_snapshot = begin_snapshot.snapshot_time;
-		all_partitions.push_back(new_partition);
-		current_partition = all_partitions.back();
+		new_partition->start_snapshot = begin_snapshot.snapshot_time;
+		all_partitions.push_back(std::move(new_partition));
+		current_partition = all_partitions.back().get();
 
 		return *current_partition;
 	}
@@ -698,7 +703,7 @@ public:
 	vector<DuckLakeColumn> all_columns;
 	unordered_map<int64_t, idx_t> current_columns;
 
-	vector<DuckLakePartition> all_partitions;
+	vector<unique_ptr<DuckLakePartition>> all_partitions;
 	optional_ptr<DuckLakePartition> current_partition;
 
 	vector<DuckLakeDataFile> all_data_files;
@@ -927,15 +932,16 @@ public:
 				if (!current_partition_spec_id.IsValid() ||
 				    static_cast<idx_t>(manifest.partition_spec_id) > current_partition_spec_id.GetIndex()) {
 					auto &partition_spec = *metadata.FindPartitionSpecById(manifest.partition_spec_id);
-					auto new_partition = DuckLakePartition(partition_spec);
-					current_partition = table.AddPartition(new_partition, ducklake_snapshot);
+					auto new_partition = make_uniq<DuckLakePartition>(partition_spec);
+					current_partition = table.AddPartition(std::move(new_partition), ducklake_snapshot);
 					current_partition_spec_id = manifest.partition_spec_id;
 				}
 
 				switch (manifest.content) {
 				case IcebergManifestContentType::DATA: {
-					for (auto &manifest_entry : manifest_file.data_files) {
-						D_ASSERT(manifest_entry.content == IcebergManifestEntryContentType::DATA);
+					for (auto &manifest_entry : manifest_file.entries) {
+						auto &data_file = manifest_entry.data_file;
+						D_ASSERT(data_file.content == IcebergManifestEntryContentType::DATA);
 						if (manifest_entry.status == IcebergManifestEntryStatusType::EXISTING) {
 							//! We don't care about existing entries
 							continue;
@@ -945,14 +951,15 @@ public:
 							    DuckLakeDataFile(manifest_entry, *current_partition, table.table_name));
 						} else {
 							D_ASSERT(manifest_entry.status == IcebergManifestEntryStatusType::DELETED);
-							deleted_data_files.push_back(manifest_entry.file_path);
+							deleted_data_files.push_back(data_file.file_path);
 						}
 					}
 					break;
 				}
 				case IcebergManifestContentType::DELETE: {
-					for (auto &manifest_entry : manifest_file.data_files) {
-						if (manifest_entry.content == IcebergManifestEntryContentType::EQUALITY_DELETES) {
+					for (auto &manifest_entry : manifest_file.entries) {
+						auto &data_file = manifest_entry.data_file;
+						if (data_file.content == IcebergManifestEntryContentType::EQUALITY_DELETES) {
 							throw InvalidInputException(
 							    "Can't convert a table with equality deletes to a DuckLake table");
 						}
@@ -964,7 +971,7 @@ public:
 							new_delete_files.push_back(DuckLakeDeleteFile(manifest_entry, table.table_name));
 						} else {
 							D_ASSERT(manifest_entry.status == IcebergManifestEntryStatusType::DELETED);
-							deleted_delete_files.push_back(manifest_entry.file_path);
+							deleted_delete_files.push_back(data_file.file_path);
 						}
 					}
 					break;
@@ -1064,13 +1071,13 @@ public:
 			int64_t table_id = table.table_id.GetIndex();
 			//! ducklake_partition_info
 			for (auto &partition : table.all_partitions) {
-				auto values = partition.FinalizeEntry(table_id, serializer, snapshots);
+				auto values = partition->FinalizeEntry(table_id, serializer, snapshots);
 				sql.push_back(StringUtil::Format("INSERT INTO {METADATA_CATALOG}.ducklake_partition_info %s", values));
-
-				auto partition_id = partition.partition_id.GetIndex();
+				D_ASSERT(partition->partition_id.IsValid());
+				auto partition_id = partition->partition_id.GetIndex();
 				//! ducklake_partition_column
-				for (idx_t i = 0; i < partition.columns.size(); i++) {
-					auto &column = partition.columns[i];
+				for (idx_t i = 0; i < partition->columns.size(); i++) {
+					auto &column = partition->columns[i];
 					auto values = column.FinalizeEntry(table_id, partition_id, i);
 					sql.push_back(
 					    StringUtil::Format("INSERT INTO {METADATA_CATALOG}.ducklake_partition_column %s", values));
@@ -1099,20 +1106,21 @@ public:
 					auto column_id = it.first;
 					auto &column = it.second.get();
 					auto &manifest_entry = data_file.manifest_entry;
+					auto &iceberg_data_file = manifest_entry.data_file;
 
-					auto column_size_bytes = GetNumericStats(manifest_entry.column_sizes, column_id);
-					auto value_count = GetNumericStats(manifest_entry.value_counts, column_id);
+					auto column_size_bytes = GetNumericStats(iceberg_data_file.column_sizes, column_id);
+					auto value_count = GetNumericStats(iceberg_data_file.value_counts, column_id);
 
 					Value lower_bound;
 					Value upper_bound;
 					Value null_count;
 
-					auto lower_bound_it = manifest_entry.lower_bounds.find(column.column_id);
-					auto upper_bound_it = manifest_entry.upper_bounds.find(column.column_id);
-					if (lower_bound_it != manifest_entry.lower_bounds.end()) {
+					auto lower_bound_it = iceberg_data_file.lower_bounds.find(column.column_id);
+					auto upper_bound_it = iceberg_data_file.upper_bounds.find(column.column_id);
+					if (lower_bound_it != iceberg_data_file.lower_bounds.end()) {
 						lower_bound = lower_bound_it->second;
 					}
-					if (upper_bound_it != manifest_entry.upper_bounds.end()) {
+					if (upper_bound_it != iceberg_data_file.upper_bounds.end()) {
 						upper_bound = upper_bound_it->second;
 					}
 
@@ -1126,13 +1134,13 @@ public:
 					//! Transform the stats stored in the iceberg metadata
 					auto stats = IcebergPredicateStats::DeserializeBounds(lower_bound, upper_bound, column.column_name,
 					                                                      logical_type);
-					auto null_counts_it = manifest_entry.null_value_counts.find(column.column_id);
-					if (null_counts_it != manifest_entry.null_value_counts.end()) {
+					auto null_counts_it = iceberg_data_file.null_value_counts.find(column.column_id);
+					if (null_counts_it != iceberg_data_file.null_value_counts.end()) {
 						null_count = null_counts_it->second;
 						stats.has_null = null_count != 0;
 					}
-					auto nan_counts_it = manifest_entry.nan_value_counts.find(column.column_id);
-					if (nan_counts_it != manifest_entry.nan_value_counts.end()) {
+					auto nan_counts_it = iceberg_data_file.nan_value_counts.find(column.column_id);
+					if (nan_counts_it != iceberg_data_file.nan_value_counts.end()) {
 						auto &nan_count = nan_counts_it->second;
 						stats.has_nan = nan_count != 0;
 					}
@@ -1158,7 +1166,7 @@ public:
 				}
 
 				//! ducklake_file_partition_value
-				auto &partition_values = data_file.manifest_entry.partition_values;
+				auto &partition_values = data_file.manifest_entry.data_file.partition_values;
 				auto &partition = data_file.partition;
 
 				unordered_map<int32_t, idx_t> field_id_to_index;
@@ -1364,9 +1372,9 @@ static unique_ptr<FunctionData> IcebergToDuckLakeBind(ClientContext &context, Ta
 	if (catalog_type != "iceberg") {
 		throw InvalidInputException("First parameter must be the name of an attached Iceberg catalog");
 	}
-	auto &irc_catalog = catalog.Cast<IRCatalog>();
-	auto &irc_transaction = IRCTransaction::Get(context, irc_catalog);
-	auto &schema_set = irc_transaction.schemas;
+	auto &iceberg_catalog = catalog.Cast<IcebergCatalog>();
+	auto &iceberg_transaction = IcebergTransaction::Get(context, iceberg_catalog);
+	auto &schema_set = iceberg_catalog.GetSchemas();
 
 	IcebergOptions options;
 	for (auto &kv : input.named_parameters) {
@@ -1380,10 +1388,10 @@ static unique_ptr<FunctionData> IcebergToDuckLakeBind(ClientContext &context, Ta
 			options.table_version = StringValue::Get(val);
 		} else if (loption == "version_name_format") {
 			auto value = StringValue::Get(kv.second);
-			auto string_substitutions = IcebergUtils::CountOccurrences(value, "%s");
+			int string_substitutions = IcebergUtils::CountOccurrences(value, "%s");
 			if (string_substitutions != 2) {
 				throw InvalidInputException(
-				    "'version_name_format' has to contain two occurrences of '%s' in it, found %d", "%s",
+				    "'version_name_format' has to contain two occurrences of '%%s' in it, found %d",
 				    string_substitutions);
 			}
 			options.version_name_format = value;
@@ -1404,12 +1412,11 @@ static unique_ptr<FunctionData> IcebergToDuckLakeBind(ClientContext &context, Ta
 	}
 
 	schema_set.LoadEntries(context);
-	for (auto &it : schema_set.entries) {
-		auto &schema_entry = it.second->Cast<IRCSchemaEntry>();
-
+	for (auto &it : schema_set.GetEntries()) {
+		auto &schema_entry = it.second->Cast<IcebergSchemaEntry>();
 		auto &tables = schema_entry.tables;
 		tables.LoadEntries(context);
-		for (auto &it : tables.entries) {
+		for (auto &it : tables.GetEntriesMutable()) {
 			auto &table = it.second;
 			tables.FillEntry(context, table);
 			ret->AddTable(table, context, options);
@@ -1463,9 +1470,9 @@ public:
 			    "DuckLake version metadata is corrupt, the value can't be NULL and has to be of type VARCHAR");
 		}
 		auto version_string = value.GetValue<string>();
-		if (!StringUtil::StartsWith(version_string, "0.3")) {
+		if (!StringUtil::StartsWith(version_string, "0.4")) {
 			throw InvalidInputException(
-			    "'iceberg_to_ducklake' only support version 0.3 currently, detected '%s' instead", version_string);
+			    "'iceberg_to_ducklake' only support version 0.4 currently, detected '%s' instead", version_string);
 		}
 	}
 

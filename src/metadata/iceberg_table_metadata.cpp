@@ -2,6 +2,9 @@
 
 #include "iceberg_utils.hpp"
 #include "catalog_utils.hpp"
+#include "iceberg_metadata.hpp"
+#include "metadata/iceberg_snapshot.hpp"
+#include "duckdb/common/exception.hpp"
 #include "rest_catalog/objects/list.hpp"
 
 namespace duckdb {
@@ -44,6 +47,20 @@ optional_ptr<const IcebergPartitionSpec> IcebergTableMetadata::FindPartitionSpec
 	return it->second;
 }
 
+optional_ptr<const IcebergSortOrder> IcebergTableMetadata::FindSortOrderById(int32_t sort_id) const {
+	auto it = sort_specs.find(sort_id);
+	D_ASSERT(it != sort_specs.end());
+	return it->second;
+}
+
+const unordered_map<int32_t, IcebergSortOrder> &IcebergTableMetadata::GetSortOrderSpecs() const {
+	return sort_specs;
+}
+
+const unordered_map<int32_t, IcebergPartitionSpec> &IcebergTableMetadata::GetPartitionSpecs() const {
+	return partition_specs;
+}
+
 optional_ptr<IcebergSnapshot> IcebergTableMetadata::GetLatestSnapshot() {
 	if (!has_current_snapshot) {
 		return nullptr;
@@ -58,8 +75,25 @@ const IcebergTableSchema &IcebergTableMetadata::GetLatestSchema() const {
 	return *res;
 }
 
+bool IcebergTableMetadata::HasPartitionSpec() const {
+	auto spec = GetLatestPartitionSpec();
+	return !spec.fields.empty();
+}
+
 const IcebergPartitionSpec &IcebergTableMetadata::GetLatestPartitionSpec() const {
 	auto res = FindPartitionSpecById(default_spec_id);
+	D_ASSERT(res);
+	return *res;
+}
+
+bool IcebergTableMetadata::HasSortOrder() const {
+	return default_sort_order_id.IsValid();
+}
+
+const IcebergSortOrder &IcebergTableMetadata::GetLatestSortOrder() const {
+	D_ASSERT(HasSortOrder());
+	auto sort_order_id = default_sort_order_id.GetIndex();
+	auto res = FindSortOrderById(sort_order_id);
 	D_ASSERT(res);
 	return *res;
 }
@@ -225,6 +259,14 @@ string IcebergTableMetadata::GetMetaDataPath(ClientContext &context, const strin
 	return GuessTableVersion(meta_path, fs, options);
 }
 
+bool IcebergTableMetadata::HasLastColumnId() const {
+	return last_column_id.IsValid();
+}
+
+idx_t IcebergTableMetadata::GetLastColumnId() const {
+	return last_column_id.GetIndex();
+}
+
 //! ----------- Parse the Metadata JSON -----------
 
 rest_api_objects::TableMetadata IcebergTableMetadata::Parse(const string &path, FileSystem &fs,
@@ -244,12 +286,20 @@ rest_api_objects::TableMetadata IcebergTableMetadata::Parse(const string &path, 
 	return rest_api_objects::TableMetadata::FromJSON(root);
 }
 
-IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(rest_api_objects::TableMetadata &table_metadata) {
+IcebergTableMetadata
+IcebergTableMetadata::FromLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result) {
+	auto res = FromTableMetadata(load_table_result.metadata);
+	res.latest_metadata_json = load_table_result.metadata_location;
+	return res;
+}
+
+IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_objects::TableMetadata &table_metadata) {
 	IcebergTableMetadata res;
 
 	res.table_uuid = table_metadata.table_uuid;
 	res.location = table_metadata.location;
 	res.iceberg_version = table_metadata.format_version;
+	res.last_updated_ms = table_metadata.last_updated_ms;
 	for (auto &schema : table_metadata.schemas) {
 		res.schemas.emplace(schema.object_1.schema_id, IcebergTableSchema::ParseSchema(schema));
 	}
@@ -259,6 +309,9 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(rest_api_objects::T
 	for (auto &spec : table_metadata.partition_specs) {
 		res.partition_specs.emplace(spec.spec_id, IcebergPartitionSpec::ParseFromJson(spec));
 	}
+	for (auto &sort_order : table_metadata.sort_orders) {
+		res.sort_specs.emplace(sort_order.order_id, IcebergSortOrder::ParseFromJson(sort_order));
+	}
 	if (!table_metadata.has_current_schema_id) {
 		if (res.iceberg_version == 1) {
 			throw NotImplementedException("Reading of the V1 'schema' field is not currently supported");
@@ -266,6 +319,15 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(rest_api_objects::T
 		throw InvalidConfigurationException("'current_schema_id' field is missing from the metadata.json file");
 	}
 	res.current_schema_id = table_metadata.current_schema_id;
+	if (table_metadata.has_next_row_id) {
+		res.has_next_row_id = true;
+		res.next_row_id = table_metadata.next_row_id;
+	} else if (res.iceberg_version >= 3) {
+		//! When upgrading to v3, initialize next_row_id to 0
+		res.has_next_row_id = true;
+		res.next_row_id = 0;
+	}
+
 	if (table_metadata.has_current_snapshot_id && table_metadata.current_snapshot_id != -1) {
 		res.has_current_snapshot = true;
 		res.current_snapshot_id = table_metadata.current_snapshot_id;
@@ -274,6 +336,9 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(rest_api_objects::T
 	}
 	res.last_sequence_number = table_metadata.last_sequence_number;
 	res.default_spec_id = table_metadata.default_spec_id;
+	if (table_metadata.has_default_sort_order_id) {
+		res.default_sort_order_id = table_metadata.default_sort_order_id;
+	}
 
 	auto &properties = table_metadata.properties;
 	auto name_mapping = properties.find("schema.name-mapping.default");
@@ -289,7 +354,74 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(rest_api_objects::T
 		mapping_index++;
 		IcebergFieldMapping::ParseFieldMappings(root, res.mappings, mapping_index, 0);
 	}
+
+	// parse all table properties
+	for (auto &property : properties) {
+		res.table_properties.emplace(property.first, property.second);
+	}
+
+	if (table_metadata.has_last_column_id) {
+		res.last_column_id = table_metadata.last_column_id;
+	}
+
 	return res;
+}
+
+const case_insensitive_map_t<string> &IcebergTableMetadata::GetTableProperties() const {
+	return table_properties;
+}
+
+const string &IcebergTableMetadata::GetLatestMetadataJson() const {
+	return latest_metadata_json;
+}
+
+const string &IcebergTableMetadata::GetLocation() const {
+	return location;
+}
+
+const string IcebergTableMetadata::GetDataPath() const {
+	auto write_path = table_properties.find("write.data.path");
+	// If write.data.path property is set, use it; otherwise use default location + "/data"
+	if (write_path != table_properties.end()) {
+		return write_path->second;
+	}
+	return location + "/data";
+}
+
+const string IcebergTableMetadata::GetMetadataPath() const {
+	// If write.metadata.path property is set, use it; otherwise use default location + "/metadata"
+	auto metadata_path = table_properties.find("write.metadata.path");
+	// If write.data.path property is set, use it; otherwise use default location + "/metadata"
+	if (metadata_path != table_properties.end()) {
+		return metadata_path->second;
+	}
+	return location + "/metadata";
+}
+
+string IcebergTableMetadata::GetTableProperty(string property_string) const {
+	auto prop = table_properties.find(property_string);
+	if (prop != table_properties.end()) {
+		return prop->second;
+	}
+	return "";
+}
+
+bool IcebergTableMetadata::PropertiesAllowPositionalDeletes(IcebergSnapshotOperationType operation_type) const {
+	// first check write.delete.mode. If not present go to write.update.mode
+	switch (operation_type) {
+	case IcebergSnapshotOperationType::DELETE: {
+		auto delete_mode = GetTableProperty("write.delete.mode");
+		// if unset or merge-on-read, it supports positional deletes
+		return delete_mode == "merge-on-read" || delete_mode.empty();
+	}
+	case IcebergSnapshotOperationType::OVERWRITE: {
+		// if unset or merge-on-read, it supports positional deletes
+		auto update_mode = GetTableProperty("write.update.mode");
+		return update_mode == "merge-on-read" || update_mode.empty();
+	}
+	default:
+		throw NotImplementedException("Operation type not supported");
+	}
 }
 
 } // namespace duckdb
