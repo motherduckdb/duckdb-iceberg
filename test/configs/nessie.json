@@ -8,12 +8,6 @@
     "iceberg",
     "httpfs"
   ],
-  "test_env": [
-    {
-      "env_name":  "SECRETS_CREATED_AND_CATALOG_ATTACHED",
-      "env_value": "1"
-    }
-  ],
   "skip_tests": [
     {
       "reason": "Not yet supported with Nessie",
