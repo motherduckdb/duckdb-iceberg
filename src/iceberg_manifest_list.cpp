@@ -210,7 +210,7 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
 		bool has_first_row_id = manifest.has_first_row_id;
 		int64_t first_row_id = manifest.first_row_id;
 		if (!has_first_row_id && manifest.content == IcebergManifestContentType::DATA) {
-			//! Assign first_row_id to old manifest_file entries on
+			//! Assign first_row_id to old manifest_file entries
 			first_row_id = next_row_id;
 			has_first_row_id = true;
 			next_row_id += manifest.added_rows_count;
