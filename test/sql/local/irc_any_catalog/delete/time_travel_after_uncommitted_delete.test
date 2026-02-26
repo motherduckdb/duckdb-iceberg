@@ -1,4 +1,4 @@
-# name: test/sql/local/irc/delete/time_travel_after_uncommitted_delete.test
+# name: test/sql/local/irc_any_catalog/delete/time_travel_after_uncommitted_delete.test
 # description: test integration with iceberg catalog read
 # group: [delete]
 
