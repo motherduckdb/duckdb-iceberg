@@ -18,6 +18,8 @@ SparkSession = pyspark_sql.SparkSession
 SparkContext = pyspark.SparkContext
 Row = pyspark_sql.Row
 
+PYSPARK_VERSION = Version(pyspark.__version__)
+
 
 @dataclass
 class IcebergRuntimeConfig:
@@ -250,20 +252,28 @@ class TestSparkRead:
         ]
 
     @pytest.mark.requires_spark(">=4.0")
+    def test_duckdb_written_deletion_vectors(self, spark_con):
+        res = spark_con.sql(
+            """
+            select * from default.write_v3_update_and_delete order by all
+            """
+        ).collect()
+
+        assert str(res) == "[Row(id=1, data='a')]"
+
+    @pytest.mark.requires_spark(">=4.0")
     def test_duckdb_written_row_lineage(self, spark_con):
         df = spark_con.sql(
             """
-            select _row_id, _last_updated_sequence_number, * from default.duckdb_row_lineage order by _row_id;
+            select _last_updated_sequence_number, _row_id, * from default.duckdb_row_lineage order by _row_id;
             """
         )
         res = df.collect()
+        print(res)
         assert res == [
-            Row(_row_id=0, _last_updated_sequence_number=1, id=1, data='a'),
-            Row(_row_id=1, _last_updated_sequence_number=1, id=2, data='b'),
-            Row(_row_id=2, _last_updated_sequence_number=1, id=3, data='c'),
-            Row(_row_id=3, _last_updated_sequence_number=1, id=4, data='d'),
-            Row(_row_id=4, _last_updated_sequence_number=1, id=5, data='e'),
-            Row(_row_id=5, _last_updated_sequence_number=2, id=6, data='f'),
-            Row(_row_id=6, _last_updated_sequence_number=2, id=7, data='g'),
-            Row(_row_id=7, _last_updated_sequence_number=3, id=7, data='g_new'),
+            Row(_last_updated_sequence_number=5, _row_id=0, id=1, data='replaced'),
+            Row(_last_updated_sequence_number=2, _row_id=1, id=2, data='b_u1'),
+            Row(_last_updated_sequence_number=2, _row_id=3, id=4, data='d_u1'),
+            Row(_last_updated_sequence_number=5, _row_id=7, id=6, data='replaced'),
+            Row(_last_updated_sequence_number=7, _row_id=11, id=7, data='g_new'),
         ]

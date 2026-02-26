@@ -104,6 +104,7 @@ IcebergManifestFile IcebergTransactionData::CreateManifestFile(int64_t snapshot_
 
 	//! Add the files to the manifest
 	for (auto &manifest_entry : manifest_entries) {
+		manifest_entry.manifest_file_path = manifest_file_path;
 		auto &data_file = manifest_entry.data_file;
 		if (data_file.content == IcebergManifestEntryContentType::DATA) {
 			//! FIXME: this is required because we don't apply inheritance to uncommitted manifests
@@ -148,7 +149,8 @@ IcebergManifestFile IcebergTransactionData::CreateManifestFile(int64_t snapshot_
 }
 
 void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
-                                         vector<IcebergManifestEntry> &&data_files) {
+                                         vector<IcebergManifestEntry> &&data_files,
+                                         case_insensitive_map_t<IcebergManifestDeletes> &&altered_manifests) {
 	D_ASSERT(!data_files.empty());
 
 	//! Generate a new snapshot id
@@ -214,18 +216,24 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 		new_snapshot.first_row_id = first_row_id;
 
 		new_snapshot.has_added_rows = true;
-		new_snapshot.added_rows = manifest_file.added_rows_count;
+		if (manifest_file.content == IcebergManifestContentType::DATA) {
+			new_snapshot.added_rows = manifest_file.added_rows_count;
+		} else {
+			new_snapshot.added_rows = 0;
+		}
 	}
 
 	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info, manifest_list_path, std::move(new_snapshot));
 	add_snapshot->manifest_list.AddManifestFile(std::move(manifest_file));
+	add_snapshot->altered_manifests = std::move(altered_manifests);
 
 	alters.push_back(*add_snapshot);
 	updates.push_back(std::move(add_snapshot));
 }
 
 void IcebergTransactionData::AddUpdateSnapshot(vector<IcebergManifestEntry> &&delete_files,
-                                               vector<IcebergManifestEntry> &&data_files) {
+                                               vector<IcebergManifestEntry> &&data_files,
+                                               case_insensitive_map_t<IcebergManifestDeletes> &&altered_manifests) {
 	//! Generate a new snapshot id
 	auto &table_metadata = table_info.table_metadata;
 	auto last_sequence_number = table_metadata.last_sequence_number;
@@ -257,19 +265,6 @@ void IcebergTransactionData::AddUpdateSnapshot(vector<IcebergManifestEntry> &&de
 	new_snapshot.schema_id = table_metadata.current_schema_id;
 	new_snapshot.manifest_list = manifest_list_path;
 	new_snapshot.timestamp_ms = Timestamp::GetEpochMs(Timestamp::GetCurrentTimestamp());
-	if (table_metadata.iceberg_version >= 3) {
-		D_ASSERT(table_metadata.has_next_row_id);
-		new_snapshot.has_added_rows = true;
-		new_snapshot.added_rows = 0;
-		for (auto &manifest_entry : data_files) {
-			D_ASSERT(manifest_entry.status != IcebergManifestEntryStatusType::DELETED);
-			auto &data_file = manifest_entry.data_file;
-			new_snapshot.added_rows += data_file.record_count;
-		}
-
-		new_snapshot.has_first_row_id = true;
-		new_snapshot.first_row_id = next_row_id;
-	}
 
 	new_snapshot.has_parent_snapshot = table_info.table_metadata.has_current_snapshot || !alters.empty();
 	if (new_snapshot.has_parent_snapshot) {
@@ -302,6 +297,7 @@ void IcebergTransactionData::AddUpdateSnapshot(vector<IcebergManifestEntry> &&de
 	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info, manifest_list_path, std::move(new_snapshot));
 	add_snapshot->manifest_list.AddManifestFile(std::move(delete_manifest_file));
 	add_snapshot->manifest_list.AddManifestFile(std::move(data_manifest_file));
+	add_snapshot->altered_manifests = std::move(altered_manifests);
 
 	alters.push_back(*add_snapshot);
 	updates.push_back(std::move(add_snapshot));

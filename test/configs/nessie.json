@@ -36,7 +36,10 @@
         "test/sql/local/irc_any_catalog/transactions/test_transactional_updates.test",
         "test/sql/local/irc_any_catalog/transactions/test_transactional_updates_error_omits_stacktrace.test",
         "test/sql/local/irc_any_catalog/update/test_one_update_one_snapshot.test",
-        "test/sql/local/irc_any_catalog/update/test_update_v3_table.test"
+        "test/sql/local/irc_any_catalog/update/test_update_v3_table.test",
+        "test/sql/local/irc_any_catalog/delete/test_delete_consolidation_transactional.test",
+        "test/sql/local/irc_any_catalog/delete/test_delete_consolidation_commit.test",
+        "test/sql/local/irc_any_catalog/update/test_update_deletion_vector_consolidation_commit.test"
       ]
     }
   ]
