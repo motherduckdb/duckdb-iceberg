@@ -207,6 +207,10 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
 		// partitions: list<508: field_summary> - 507
 		data.SetValue(col_idx++, i, manifest.partitions.ToValue());
 
+		if (table_metadata.iceberg_version < 3) {
+			continue;
+		}
+
 		bool has_first_row_id = manifest.has_first_row_id;
 		int64_t first_row_id = manifest.first_row_id;
 		if (!has_first_row_id && manifest.content == IcebergManifestContentType::DATA) {
