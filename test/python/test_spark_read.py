@@ -279,6 +279,7 @@ class TestSparkRead:
         ]
 
     # Written by Spark, read by Spark
+    @pytest.mark.requires_spark(">=4.0")
     def test_spark_read_row_lineage_from_upgraded(self, spark_con):
         df = spark_con.sql(
             """
@@ -295,6 +296,7 @@ class TestSparkRead:
         ]
 
     # Written by DuckDB (after upgrading with Spark), read by Spark
+    @pytest.mark.requires_spark(">=4.0")
     def test_spark_read_row_lineage_from_upgraded_by_duckdb(self, spark_con):
         df = spark_con.sql(
             """
