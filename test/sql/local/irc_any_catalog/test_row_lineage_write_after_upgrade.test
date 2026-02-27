@@ -34,34 +34,47 @@ INSERT into my_datalake.default.row_lineage_test_upgraded VALUES
 	(8, 'not_replaced'),
 	(9, 'also_not_replaced');
 
-query IIII
-select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded order by id;
+query II
+select DISTINCT ON(rowid) id, data from my_datalake.default.row_lineage_test_upgraded order by id;
 ----
-1	5	1	replaced
-4	2	2	b_u1
-5	2	4	d_u1
-2	5	6	replaced
-0	7	7	g_new
-11	8	8	not_replaced
-12	8	9	also_not_replaced
+1	replaced
+2	b_u1
+4	d_u1
+6	replaced
+7	g_new
+8	not_replaced
+9	also_not_replaced
 
 statement ok
 abort;
+
+# Capture the rowids of these rows
+statement ok
+set variable id2_rowid = (select rowid from my_datalake.default.row_lineage_test_upgraded where id == 2);
+
+statement ok
+set variable id6_rowid = (select rowid from my_datalake.default.row_lineage_test_upgraded where id == 6);
 
 # DELETE as the first V3 snapshot
 statement ok
 begin transaction
 
+
 statement ok
 DELETE FROM my_datalake.default.row_lineage_test_upgraded
 	WHERE (id IN (2,6))
 
-query IIII
-select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded order by id;
+query II
+select id, data from my_datalake.default.row_lineage_test_upgraded order by id;
 ----
-1	5	1	replaced
-5	2	4	d_u1
-0	7	7	g_new
+1	replaced
+4	d_u1
+7	g_new
+
+# Now verify that these rowids are not present on the table anymore
+query I
+select id from my_datalake.default.row_lineage_test_upgraded where rowid in (getvariable('id2_rowid'),getvariable('id6_rowid'))
+----
 
 statement ok
 abort;
@@ -75,14 +88,20 @@ UPDATE my_datalake.default.row_lineage_test_upgraded
 SET data = 'replaced_again'
 WHERE id IN (2, 6);
 
-query IIII
-select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded order by id;
+query II
+select id, data from my_datalake.default.row_lineage_test_upgraded order by id;
 ----
-1	5	1	replaced
-4	8	2	replaced_again
-5	2	4	d_u1
-2	8	6	replaced_again
-0	7	7	g_new
+1	replaced
+2	replaced_again
+4	d_u1
+6	replaced_again
+7	g_new
+
+query I
+select id from my_datalake.default.row_lineage_test_upgraded where rowid in (getvariable('id2_rowid'),getvariable('id6_rowid')) order by id;
+----
+2
+6
 
 statement ok
 abort;
@@ -96,25 +115,31 @@ UPDATE my_datalake.default.row_lineage_test_upgraded
 SET data = 'replaced_again'
 WHERE id IN (2, 6);
 
-query IIII
-select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded order by id;
+query II
+select id, data from my_datalake.default.row_lineage_test_upgraded order by id;
 ----
-1	5	1	replaced
-4	8	2	replaced_again
-5	2	4	d_u1
-2	8	6	replaced_again
-0	7	7	g_new
+1	replaced
+2	replaced_again
+4	d_u1
+6	replaced_again
+7	g_new
 
 statement ok
 DELETE FROM my_datalake.default.row_lineage_test_upgraded
 WHERE id IN (4, 1);
 
-query IIII
-select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded order by id;
+query II
+select id, data from my_datalake.default.row_lineage_test_upgraded order by id;
 ----
-4	8	2	replaced_again
-2	8	6	replaced_again
-0	7	7	g_new
+2	replaced_again
+6	replaced_again
+7	g_new
+
+query I
+select id from my_datalake.default.row_lineage_test_upgraded where rowid in (getvariable('id2_rowid'),getvariable('id6_rowid')) order by id;
+----
+2
+6
 
 statement ok
 DELETE FROM my_datalake.default.row_lineage_test_upgraded
@@ -126,6 +151,11 @@ select rowid, sequence_number, id, data from my_datalake.default.row_lineage_tes
 4	8	2	replaced_again
 0	7	7	g_new
 
+query I
+select id from my_datalake.default.row_lineage_test_upgraded where rowid in (getvariable('id2_rowid'),getvariable('id6_rowid')) order by id;
+----
+2
+
 statement ok
 commit;
 
@@ -134,3 +164,8 @@ select rowid, sequence_number, id, data from my_datalake.default.row_lineage_tes
 ----
 4	8	2	replaced_again
 0	7	7	g_new
+
+query I
+select id from my_datalake.default.row_lineage_test_upgraded where rowid in (getvariable('id2_rowid'),getvariable('id6_rowid')) order by id;
+----
+2
