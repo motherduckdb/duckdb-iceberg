@@ -40,10 +40,8 @@ set variable snapshot${i} = (
 
 endloop
 
-# FIXME: the rowid should be NULL here, but we backfill row lineage for UPDATE purposes
-# Insert rows 0-4
 query IIII
-select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded_insert AT (VERSION=>getvariable('snapshot0').snapshot_id) order by id;
+select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded_insert AT (VERSION=>getvariable('snapshot0').snapshot_id) order by rowid;
 ----
 0	1	1	a
 1	1	2	b
@@ -51,69 +49,67 @@ select rowid, sequence_number, id, data from my_datalake.default.row_lineage_tes
 3	1	4	d
 4	1	5	e
 
-# Update row_ids 1 and 3
 query IIII
-select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded_insert AT (VERSION=>getvariable('snapshot1').snapshot_id) order by id;
+select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded_insert AT (VERSION=>getvariable('snapshot1').snapshot_id) order by rowid;
 ----
-2	1	1	a
 0	2	2	b_u1
-3	1	3	c
 1	2	4	d_u1
-4	1	5	e
+2	1	1	a
+4	1	3	c
+6	1	5	e
 
-# Delete row_ids 2 and 4
 query IIII
-select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded_insert AT (VERSION=>getvariable('snapshot2').snapshot_id) order by id;
+select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded_insert AT (VERSION=>getvariable('snapshot2').snapshot_id) order by rowid;
 ----
-2	1	1	a
 0	2	2	b_u1
 1	2	4	d_u1
+2	1	1	a
 
 # Insert 2 new rows (because of various rewrites this starts with a much higher row_id)
 query IIII
-select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded_insert AT (VERSION=>getvariable('snapshot3').snapshot_id) order by id;
+select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded_insert AT (VERSION=>getvariable('snapshot3').snapshot_id) order by rowid;
 ----
-4	1	1	a
-2	2	2	b_u1
-3	2	4	d_u1
 0	4	6	f
 1	4	7	g
+2	2	2	b_u1
+3	2	4	d_u1
+4	1	1	a
 
 # UPDATE row_ids 0 and 11
 query IIII
-select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded_insert AT (VERSION=>getvariable('snapshot4').snapshot_id) order by id;
+select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded_insert AT (VERSION=>getvariable('snapshot4').snapshot_id) order by rowid;
 ----
-0	5	1	replaced
-3	2	2	b_u1
-4	2	4	d_u1
-1	5	6	replaced
-2	4	7	g
+0	5	6	replaced
+1	5	1	replaced
+3	4	7	g
+4	2	2	b_u1
+5	2	4	d_u1
 
 # DELETE row_id 12
 query IIII
-select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded_insert AT (VERSION=>getvariable('snapshot5').snapshot_id) order by id;
+select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded_insert AT (VERSION=>getvariable('snapshot5').snapshot_id) order by rowid;
 ----
-0	5	1	replaced
-2	2	2	b_u1
-3	2	4	d_u1
-1	5	6	replaced
-
-# INSERT row_id 16 (again, because of various rewrites this starts with a much higher row_id)
-query IIII
-select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded_insert AT (VERSION=>getvariable('snapshot6').snapshot_id) order by id;
-----
+0	5	6	replaced
 1	5	1	replaced
 3	2	2	b_u1
 4	2	4	d_u1
-2	5	6	replaced
+
+# INSERT row_id 16 (again, because of various rewrites this starts with a much higher row_id)
+query IIII
+select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded_insert AT (VERSION=>getvariable('snapshot6').snapshot_id) order by rowid;
+----
 0	7	7	g_new
+1	5	6	replaced
+2	5	1	replaced
+4	2	2	b_u1
+5	2	4	d_u1
 
 # Latest state of the table, after upgrading to V3 and creating a new snapshot
 query IIII
-select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded_insert order by id;
+select rowid, sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded_insert order by rowid;
 ----
-3	5	1	replaced
-1	8	2	replaced_again
-6	2	4	d_u1
 0	8	6	replaced_again
+1	8	2	replaced_again
 2	7	7	g_new
+4	5	1	replaced
+7	2	4	d_u1
