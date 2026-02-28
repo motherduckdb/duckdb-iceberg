@@ -45,7 +45,7 @@ insert into my_datalake.default.write_v3_update_and_delete values
 	(5, 'e');
 
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.write_v3_update_and_delete order by rowid;
+select _last_updated_sequence_number, _row_id, id, data from my_datalake.default.write_v3_update_and_delete order by _row_id;
 ----
 1	0	1	a
 1	1	2	b
@@ -60,7 +60,7 @@ SET data = data || '_u1'
 WHERE id IN (2, 4);
 
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.write_v3_update_and_delete order by rowid;
+select _last_updated_sequence_number, _row_id, id, data from my_datalake.default.write_v3_update_and_delete order by _row_id;
 ----
 1	0	1	a
 2	1	2	b_u1
@@ -77,7 +77,7 @@ DELETE FROM my_datalake.default.write_v3_update_and_delete
 WHERE id IN (3, 5);
 
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.write_v3_update_and_delete order by rowid;
+select _last_updated_sequence_number, _row_id, id, data from my_datalake.default.write_v3_update_and_delete order by _row_id;
 ----
 1	0	1	a
 2	1	2	b_u1
@@ -90,7 +90,7 @@ WHERE id = 2;
 
 # The first transaction's delete should now be skipped, and only the last delete should be used
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.write_v3_update_and_delete order by rowid;
+select _last_updated_sequence_number, _row_id, id, data from my_datalake.default.write_v3_update_and_delete order by _row_id;
 ----
 1	0	1	a
 2	3	4	d_u1

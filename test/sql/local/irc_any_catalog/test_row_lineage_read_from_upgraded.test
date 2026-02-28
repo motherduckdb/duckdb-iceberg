@@ -107,7 +107,7 @@ select _last_updated_sequence_number, _row_id, id, data from my_datalake.default
 # FIXME: need duckdb 1.5.1 to "fix" this, so we can disable pushdown for _row_id
 # Latest state of the table, after upgrading to V3 and creating a new snapshot
 query II
-select id, data from my_datalake.default.row_lineage_test_upgraded_insert where _row_id is NULL;
+select id, data from my_datalake.default.row_lineage_test_upgraded_insert where _row_id is NULL order by id;
 ----
 2	replaced_again
 6	replaced_again

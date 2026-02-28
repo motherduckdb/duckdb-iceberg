@@ -43,7 +43,7 @@ insert into my_datalake.default.duckdb_row_lineage values
 	(5, 'e');
 
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.duckdb_row_lineage order by rowid;
+select _last_updated_sequence_number, _row_id, id, data from my_datalake.default.duckdb_row_lineage order by _row_id;
 ----
 1	0	1	a
 1	1	2	b
@@ -57,7 +57,7 @@ SET data = data || '_u1'
 WHERE id IN (2, 4);
 
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.duckdb_row_lineage order by rowid;
+select _last_updated_sequence_number, _row_id, id, data from my_datalake.default.duckdb_row_lineage order by _row_id;
 ----
 1	0	1	a
 2	1	2	b_u1
@@ -70,7 +70,7 @@ DELETE FROM my_datalake.default.duckdb_row_lineage
 WHERE id IN (3, 5);
 
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.duckdb_row_lineage order by rowid;
+select _last_updated_sequence_number, _row_id, id, data from my_datalake.default.duckdb_row_lineage order by _row_id;
 ----
 1	0	1	a
 2	1	2	b_u1
@@ -82,7 +82,7 @@ insert into my_datalake.default.duckdb_row_lineage values
 	(7, 'g');
 
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.duckdb_row_lineage order by rowid;
+select _last_updated_sequence_number, _row_id, id, data from my_datalake.default.duckdb_row_lineage order by _row_id;
 ----
 1	0	1	a
 2	1	2	b_u1
@@ -96,7 +96,7 @@ SET data = 'replaced'
 WHERE id IN (1, 6);
 
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.duckdb_row_lineage order by rowid;
+select _last_updated_sequence_number, _row_id, id, data from my_datalake.default.duckdb_row_lineage order by _row_id;
 ----
 5	0	1	replaced
 2	1	2	b_u1
@@ -109,7 +109,7 @@ DELETE FROM my_datalake.default.duckdb_row_lineage
 WHERE id = 7;
 
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.duckdb_row_lineage order by rowid;
+select _last_updated_sequence_number, _row_id, id, data from my_datalake.default.duckdb_row_lineage order by _row_id;
 ----
 5	0	1	replaced
 2	1	2	b_u1
@@ -121,7 +121,7 @@ insert into my_datalake.default.duckdb_row_lineage values
 	(7, 'g_new');
 
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.duckdb_row_lineage order by rowid;
+select _last_updated_sequence_number, _row_id, id, data from my_datalake.default.duckdb_row_lineage order by _row_id;
 ----
 5	0	1	replaced
 2	1	2	b_u1

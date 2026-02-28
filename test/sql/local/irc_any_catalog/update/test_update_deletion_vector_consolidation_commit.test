@@ -48,7 +48,7 @@ insert into my_datalake.default.tbl values
 	(5, 'e');
 
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.tbl order by rowid;
+select _last_updated_sequence_number, _row_id, id, data from my_datalake.default.tbl order by _row_id;
 ----
 1	0	1	a
 1	1	2	b
@@ -63,7 +63,7 @@ SET data = data || '_u1'
 WHERE id IN (2, 4);
 
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.tbl order by rowid;
+select _last_updated_sequence_number, _row_id, id, data from my_datalake.default.tbl order by _row_id;
 ----
 1	0	1	a
 2	1	2	b_u1
@@ -77,7 +77,7 @@ DELETE FROM my_datalake.default.tbl
 WHERE id = 5;
 
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.tbl order by rowid;
+select _last_updated_sequence_number, _row_id, id, data from my_datalake.default.tbl order by _row_id;
 ----
 1	0	1	a
 2	1	2	b_u1
@@ -91,7 +91,7 @@ SET data = data || '_u3'
 WHERE id IN (1, 4);
 
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.tbl order by rowid;
+select _last_updated_sequence_number, _row_id, id, data from my_datalake.default.tbl order by _row_id;
 ----
 4	0	1	a_u3
 2	1	2	b_u1
@@ -102,7 +102,7 @@ statement ok
 commit;
 
 query IIII
-select sequence_number, rowid, id, data from my_datalake.default.tbl order by rowid;
+select _last_updated_sequence_number, _row_id, id, data from my_datalake.default.tbl order by _row_id;
 ----
 4	0	1	a_u3
 2	1	2	b_u1
