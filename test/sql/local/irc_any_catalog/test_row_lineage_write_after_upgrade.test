@@ -161,7 +161,7 @@ true
 statement ok
 commit;
 
-query II
+query III
 select _last_updated_sequence_number, id, data from my_datalake.default.row_lineage_test_upgraded order by id;
 ----
 8	2	replaced_again
