@@ -149,7 +149,6 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
 	data.Initialize(allocator, types, manifest_files.size());
 
 	idx_t next_row_id;
-	auto latest_snapshot = table_metadata.GetLatestSnapshot();
 	if (table_metadata.has_next_row_id) {
 		next_row_id = table_metadata.next_row_id;
 	} else {
