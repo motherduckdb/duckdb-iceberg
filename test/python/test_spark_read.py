@@ -277,3 +277,34 @@ class TestSparkRead:
             Row(_last_updated_sequence_number=5, _row_id=7, id=6, data='replaced'),
             Row(_last_updated_sequence_number=7, _row_id=11, id=7, data='g_new'),
         ]
+
+    # Written by Spark, read by Spark
+    @pytest.mark.requires_spark(">=4.0")
+    def test_spark_read_row_lineage_from_upgraded(self, spark_con):
+        df = spark_con.sql(
+            """
+            select _last_updated_sequence_number, _row_id, * from default.row_lineage_test_upgraded_insert order by id;
+            """
+        )
+        res = df.collect()
+        assert res == [
+            Row(_last_updated_sequence_number=5, _row_id=3, id=1, data='replaced'),
+            Row(_last_updated_sequence_number=8, _row_id=0, id=2, data='replaced_again'),
+            Row(_last_updated_sequence_number=2, _row_id=6, id=4, data='d_u1'),
+            Row(_last_updated_sequence_number=8, _row_id=1, id=6, data='replaced_again'),
+            Row(_last_updated_sequence_number=7, _row_id=2, id=7, data='g_new'),
+        ]
+
+    # Written by DuckDB (after upgrading with Spark), read by Spark
+    @pytest.mark.requires_spark(">=4.0")
+    def test_spark_read_row_lineage_from_upgraded_by_duckdb(self, spark_con):
+        df = spark_con.sql(
+            """
+            select _last_updated_sequence_number, _row_id, * from default.row_lineage_test_upgraded order by id;
+            """
+        )
+        res = df.collect()
+        assert res == [
+            Row(_last_updated_sequence_number=8, _row_id=3, id=2, data='replaced_again'),
+            Row(_last_updated_sequence_number=7, _row_id=0, id=7, data='g_new'),
+        ]

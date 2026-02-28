@@ -223,8 +223,9 @@ unique_ptr<IcebergMultiFileList> IcebergMultiFileList::PushdownInternal(ClientCo
 
 	// Add new filters
 	for (auto &entry : new_filters.filters) {
-		if (entry.first < names.size()) {
-			result_filter_set.PushFilter(ColumnIndex(entry.first), entry.second->Copy());
+		auto &column_id = entry.first;
+		if (column_id < names.size()) {
+			result_filter_set.PushFilter(ColumnIndex(column_id), entry.second->Copy());
 		}
 	}
 
@@ -801,18 +802,21 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 		auto &metadata = GetMetadata();
 		auto &fs = FileSystem::GetFileSystem(context);
 
-		// Read the manifest list, we need all the manifests to determine if we've seen all deletes
-		auto manifest_list_full_path = options.allow_moved_paths
-		                                   ? IcebergUtils::GetFullPath(iceberg_path, snapshot.manifest_list, fs)
-		                                   : snapshot.manifest_list;
-
-		//! Read the manifest list
-		auto scan = AvroScan::ScanManifestList(snapshot, metadata, context, manifest_list_full_path);
-		auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
-
 		vector<IcebergManifestFile> manifest_files;
-		while (!manifest_list_reader->Finished()) {
-			manifest_list_reader->Read(STANDARD_VECTOR_SIZE, manifest_files);
+		if (HasTransactionData() && !GetTransactionData().alters.empty()) {
+			auto &transaction_data = GetTransactionData();
+			manifest_files = transaction_data.existing_manifest_list;
+		} else {
+			// Read the manifest list, we need all the manifests to determine if we've seen all deletes
+			auto manifest_list_full_path = options.allow_moved_paths
+			                                   ? IcebergUtils::GetFullPath(iceberg_path, snapshot.manifest_list, fs)
+			                                   : snapshot.manifest_list;
+			//! Read the manifest list
+			auto scan = AvroScan::ScanManifestList(snapshot, metadata, context, manifest_list_full_path);
+			auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
+			while (!manifest_list_reader->Finished()) {
+				manifest_list_reader->Read(STANDARD_VECTOR_SIZE, manifest_files);
+			}
 		}
 
 		for (auto &manifest_file : manifest_files) {
