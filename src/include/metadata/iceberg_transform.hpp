@@ -38,6 +38,18 @@ public:
 	const string &RawType() const {
 		return raw_transform;
 	}
+	// When posting partition spec updates, the transform is posted as truncate[width], bucket[modulo], or year/date
+	// etc.
+	const string TransformAsString() const {
+		switch (type) {
+		case IcebergTransformType::BUCKET:
+			return StringUtil::Format("%s[%d]", RawType(), modulo);
+		case IcebergTransformType::TRUNCATE:
+			return StringUtil::Format("%s[%d]", RawType(), width);
+		default:
+			return RawType();
+		}
+	}
 
 	LogicalType GetSerializedType(const LogicalType &input) const;
 	LogicalType GetBoundsType(const LogicalType &input) const;
