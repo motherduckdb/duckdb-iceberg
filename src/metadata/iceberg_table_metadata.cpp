@@ -369,8 +369,8 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_obje
 		res.last_column_id = table_metadata.last_column_id;
 	}
 
-	if (table_metadata.has_last_partition_field_id) {
-		res.last_partition_field_id = table_metadata.last_partition_field_id;
+	if (table_metadata.has_last_partition_id) {
+		res.last_partition_field_id = table_metadata.last_partition_id;
 	}
 
 	return res;

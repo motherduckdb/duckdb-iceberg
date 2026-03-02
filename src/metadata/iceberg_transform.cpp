@@ -73,7 +73,7 @@ LogicalType IcebergTransform::GetSerializedType(const LogicalType &input) const 
 	}
 }
 
-void IcebergTransform::SetBucketOrModuloValue(idx_t value) {
+void IcebergTransform::SetBucketOrTruncateValue(idx_t value) {
 	switch (type) {
 	case IcebergTransformType::BUCKET:
 		modulo = value;

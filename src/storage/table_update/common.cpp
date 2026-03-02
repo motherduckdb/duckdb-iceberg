@@ -113,7 +113,8 @@ AssertLastAssignedPartitionIdRequirement::AssertLastAssignedPartitionIdRequireme
 	if (table_info.table_metadata.HasLastPartitionId()) {
 		last_assigned_partition_id = table_info.table_metadata.GetLastPartitionFieldId();
 	} else {
-		// If no partition field IDs have been assigned, use 999 as the base (partition fields start at 1000)
+		// If no partition field IDs have been assigned, use 999 as the last assigned so 1000 becomes the
+		// next partition id. Based on assignments in v1 in https://iceberg.apache.org/spec/#partition-evolution
 		last_assigned_partition_id = 999;
 	}
 }

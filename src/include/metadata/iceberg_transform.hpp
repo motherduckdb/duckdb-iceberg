@@ -53,7 +53,7 @@ public:
 
 	LogicalType GetSerializedType(const LogicalType &input) const;
 	LogicalType GetBoundsType(const LogicalType &input) const;
-	void SetBucketOrModuloValue(idx_t value);
+	void SetBucketOrTruncateValue(idx_t value);
 
 private:
 	//! Preserve the input for debugging

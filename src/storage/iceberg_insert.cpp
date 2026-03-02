@@ -132,7 +132,7 @@ static string GetPartitionExpressionName(const IcebergPartitionSpecField &field)
 	if (field.transform.Type() == IcebergTransformType::IDENTITY) {
 		return field.name;
 	}
-	return field.name + "_" + field.transform.RawType();
+	return field.name + "_" + field.transform.TransformAsString();
 }
 
 IcebergColumnStats IcebergInsert::ParseColumnStats(const LogicalType &type, const vector<Value> &col_stats,
@@ -178,6 +178,30 @@ static bool IsMapType(string col_name, IcebergTableSchema &table_schema) {
 	return false;
 }
 
+static idx_t GetColumnIndexBySourceId(vector<unique_ptr<IcebergColumnDefinition>> &columns, idx_t source_id) {
+	for (idx_t col_idx = 0; col_idx < columns.size(); col_idx++) {
+		if (columns[col_idx]->id == source_id) {
+			return col_idx;
+		}
+	}
+	throw InvalidInputException("Partition source column with id %d not found in schema", source_id);
+}
+
+//! Find the column index for a given source_id in the table schema
+static idx_t GetColumnIndexBySourceId(IcebergCopyInput &copy_input, uint64_t source_id) {
+	if (!copy_input.table_schema) {
+		throw InvalidInputException("Partitioning requires table schema");
+	}
+	return GetColumnIndexBySourceId(copy_input.table_schema->columns, source_id);
+	// auto &columns = copy_input.table_schema->columns;
+	// for (idx_t col_idx = 0; col_idx < columns.size(); col_idx++) {
+	// 	if (columns[col_idx]->id == static_cast<int32_t>(source_id)) {
+	// 		return col_idx;
+	// 	}
+	// }
+	// throw InvalidInputException("Partition source column with id %d not found in schema", source_id);
+}
+
 void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &chunk,
                                     optional_ptr<TableCatalogEntry> table) {
 	D_ASSERT(table);
@@ -194,6 +218,8 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 			manifest_entry.partition_spec_id = 0;
 		}
 
+		// returned chunk has data as defined in
+		// GetCopyFunctionReturnLogicalTypes(CopyFunctionReturnType::WRITTEN_FILE_STATISTICS)
 		auto &data_file = manifest_entry.data_file;
 		data_file.file_path = chunk.GetValue(0, r).GetValue<string>();
 		data_file.record_count = static_cast<int64_t>(chunk.GetValue(1, r).GetValue<idx_t>());
@@ -223,17 +249,19 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 		for (auto &partition_field : ic_partition_info.fields) {
 			auto partition_col_name = GetPartitionExpressionName(partition_field);
 			bool partition_col_found = false;
-			for (auto &column : ic_schema->columns) {
-				if (column->id == partition_field.source_id) {
-					partition_col_found = true;
-					break;
-				}
-			}
-			if (!partition_col_found) {
-				throw InvalidConfigurationException(
-				    "Could not find original column with source id %d for partition column %s",
-				    partition_field.source_id, partition_field.name);
-			}
+			// verify the partition field source id is in the iceberg table schema
+			auto column_index = GetColumnIndexBySourceId(ic_schema->columns, partition_field.source_id);
+			// for (auto &column : ic_schema->columns) {
+			// 	if (column->id == partition_field.source_id) {
+			// 		partition_col_found = true;
+			// 		break;
+			// 	}
+			// }
+			// if (!partition_col_found) {
+			// 	throw InvalidConfigurationException(
+			// 	    "Could not find original column with source id %d for partition column %s",
+			// 	    partition_field.source_id, partition_field.name);
+			// }
 			partition_colname_to_field.emplace(partition_col_name, partition_field);
 		}
 
@@ -438,20 +466,6 @@ unique_ptr<CopyInfo> GetBindInput(IcebergCopyInput &input) {
 //===--------------------------------------------------------------------===//
 // Partition Expression Generation
 //===--------------------------------------------------------------------===//
-
-//! Find the column index for a given source_id in the table schema
-static idx_t GetColumnIndexBySourceId(IcebergCopyInput &copy_input, uint64_t source_id) {
-	if (!copy_input.table_schema) {
-		throw InvalidInputException("Partitioning requires table schema");
-	}
-	auto &columns = copy_input.table_schema->columns;
-	for (idx_t col_idx = 0; col_idx < columns.size(); col_idx++) {
-		if (columns[col_idx]->id == static_cast<int32_t>(source_id)) {
-			return col_idx;
-		}
-	}
-	throw InvalidInputException("Partition source column with id %d not found in schema", source_id);
-}
 
 //! Get the logical type for a source column by source_id
 static LogicalType GetSourceColumnType(IcebergCopyInput &copy_input, uint64_t source_id) {

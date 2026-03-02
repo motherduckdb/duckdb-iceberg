@@ -380,7 +380,7 @@ void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
 		switch (field.transform.Type()) {
 		case IcebergTransformType::BUCKET:
 		case IcebergTransformType::TRUNCATE:
-			field.transform.SetBucketOrModuloValue(bucket_modulo_val);
+			field.transform.SetBucketOrTruncateValue(bucket_modulo_val);
 			break;
 		default:
 			break;
