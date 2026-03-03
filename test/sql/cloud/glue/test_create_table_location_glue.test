@@ -41,6 +41,8 @@ attach '840140254803' as my_datalake (
 statement ok
 drop table if exists my_datalake.simple_glue_database.duckdb_created_table;
 
+sleep 10 second
+
 statement ok
 create table my_datalake.simple_glue_database.duckdb_created_table (a int)
 WITH (
