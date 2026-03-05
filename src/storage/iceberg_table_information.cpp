@@ -17,6 +17,7 @@
 #include "storage/authorization/sigv4.hpp"
 #include "storage/authorization/none.hpp"
 #include "metadata/iceberg_transform.hpp"
+#include <climits>
 
 namespace duckdb {
 
@@ -357,6 +358,9 @@ void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
 				}
 				auto &const_expr = param_expr.Cast<ConstantExpression>();
 				bucket_modulo_val = const_expr.value.GetValue<int32_t>();
+				transform_name = StringUtil::Format("%s[%d]", transform_name, bucket_modulo_val);
+			} else {
+				throw NotImplementedException("Transform function %s not supported in Iceberg", transform_name);
 			}
 		} else {
 			throw NotImplementedException("Unsupported partition key type: %s", key->ToString());
