@@ -21,13 +21,17 @@ static rest_api_objects::Schema CopySchema(const IcebergTableSchema &schema) {
 	return rest_api_objects::Schema::FromJSON(val);
 }
 
-AddSchemaUpdate::AddSchemaUpdate(IcebergTableInformation &table_info)
+AddSchemaUpdate::AddSchemaUpdate(const IcebergTableInformation &table_info)
     : IcebergTableUpdate(IcebergTableUpdateType::ADD_SCHEMA, table_info) {
 	auto current_schema_id = table_info.table_metadata.current_schema_id;
 	if (table_info.table_metadata.schemas.find(current_schema_id) == table_info.table_metadata.schemas.end()) {
 		throw InvalidConfigurationException("cannot assign a current schema id for a schema that does not yet exist");
 	};
-	table_schema = table_info.table_metadata.schemas[current_schema_id];
+	auto it = table_info.table_metadata.schemas.find(current_schema_id);
+	if (it == table_info.table_metadata.schemas.end()) {
+		throw InternalException("(AddSchemaUpdate) Could not find schema with id: %d", current_schema_id);
+	}
+	table_schema = it->second.get();
 	if (table_info.table_metadata.HasLastAssignedColumnFieldId()) {
 		last_column_id = table_info.table_metadata.GetLastAssignedColumnFieldId();
 	}
@@ -40,10 +44,13 @@ void AddSchemaUpdate::CreateUpdate(DatabaseInstance &db, ClientContext &context,
 	update.has_add_schema_update = true;
 	update.add_schema_update.has_action = true;
 	update.add_schema_update.action = "add-schema";
-
-	auto &schema_to_copy = table_schema ? *table_schema : table_info.table_metadata.GetLatestSchema();
-	update.add_schema_update.schema = CopySchema(schema_to_copy);
-
+	auto &current_schema = table_info.table_metadata.GetLatestSchema();
+	auto it = table_info.table_metadata.schemas.find(current_schema.schema_id);
+	if (it == table_info.table_metadata.schemas.end()) {
+		throw InternalException("(AddSchemaUpdate) Couldn't find schema with id: %d", current_schema.schema_id);
+	}
+	auto &schema = it->second;
+	update.add_schema_update.schema = CopySchema(*schema.get());
 	// last column id is technically deprecated, but some catalogs still use it (nessie).
 	if (last_column_id.IsValid()) {
 		update.add_schema_update.has_last_column_id = true;
@@ -51,7 +58,7 @@ void AddSchemaUpdate::CreateUpdate(DatabaseInstance &db, ClientContext &context,
 	}
 }
 
-AssignUUIDUpdate::AssignUUIDUpdate(IcebergTableInformation &table_info)
+AssignUUIDUpdate::AssignUUIDUpdate(const IcebergTableInformation &table_info)
     : IcebergTableUpdate(IcebergTableUpdateType::ADD_SCHEMA, table_info) {
 }
 
@@ -66,7 +73,7 @@ void AssignUUIDUpdate::CreateUpdate(DatabaseInstance &db, ClientContext &context
 	update.assign_uuidupdate.uuid = table_info.table_metadata.table_uuid;
 }
 
-AssertCreateRequirement::AssertCreateRequirement(IcebergTableInformation &table_info)
+AssertCreateRequirement::AssertCreateRequirement(const IcebergTableInformation &table_info)
     : IcebergTableRequirement(IcebergTableRequirementType::ASSERT_CREATE, table_info) {
 }
 
@@ -78,7 +85,7 @@ void AssertCreateRequirement::CreateRequirement(DatabaseInstance &db, ClientCont
 	req.has_assert_create = true;
 }
 
-AssertCurrentSchemaIdRequirement::AssertCurrentSchemaIdRequirement(IcebergTableInformation &table_info)
+AssertCurrentSchemaIdRequirement::AssertCurrentSchemaIdRequirement(const IcebergTableInformation &table_info)
     : IcebergTableRequirement(IcebergTableRequirementType::ASSERT_CURRENT_SCHEMA_ID, table_info) {
 	current_schema_id = table_info.table_metadata.current_schema_id;
 }
@@ -93,7 +100,7 @@ void AssertCurrentSchemaIdRequirement::CreateRequirement(DatabaseInstance &db, C
 }
 
 AssertLastAssignedColumnFieldIdRequirement::AssertLastAssignedColumnFieldIdRequirement(
-    IcebergTableInformation &table_info)
+    const IcebergTableInformation &table_info)
     : IcebergTableRequirement(IcebergTableRequirementType::ASSERT_LAST_ASSIGNED_FIELD_ID, table_info) {
 	D_ASSERT(table_info.table_metadata.HasLastAssignedColumnFieldId());
 	last_assigned_column_field_id = static_cast<int32_t>(table_info.table_metadata.GetLastAssignedColumnFieldId());
@@ -108,7 +115,8 @@ void AssertLastAssignedColumnFieldIdRequirement::CreateRequirement(DatabaseInsta
 	req.assert_last_assigned_field_id.last_assigned_field_id = last_assigned_column_field_id;
 }
 
-AssertLastAssignedPartitionIdRequirement::AssertLastAssignedPartitionIdRequirement(IcebergTableInformation &table_info)
+AssertLastAssignedPartitionIdRequirement::AssertLastAssignedPartitionIdRequirement(
+    const IcebergTableInformation &table_info)
     : IcebergTableRequirement(IcebergTableRequirementType::ASSERT_LAST_ASSIGNED_PARTITION_ID, table_info) {
 	if (table_info.table_metadata.HasLastPartitionId()) {
 		last_assigned_partition_id = table_info.table_metadata.GetLastPartitionFieldId();
@@ -128,7 +136,7 @@ void AssertLastAssignedPartitionIdRequirement::CreateRequirement(DatabaseInstanc
 	req.assert_last_assigned_partition_id.last_assigned_partition_id = last_assigned_partition_id;
 }
 
-AssertDefaultSpecIdRequirement::AssertDefaultSpecIdRequirement(IcebergTableInformation &table_info)
+AssertDefaultSpecIdRequirement::AssertDefaultSpecIdRequirement(const IcebergTableInformation &table_info)
     : IcebergTableRequirement(IcebergTableRequirementType::ASSERT_DEFAULT_SPEC_ID, table_info) {
 	default_spec_id = table_info.table_metadata.default_spec_id;
 }
@@ -142,7 +150,7 @@ void AssertDefaultSpecIdRequirement::CreateRequirement(DatabaseInstance &db, Cli
 	req.assert_default_spec_id.default_spec_id = default_spec_id;
 }
 
-UpgradeFormatVersion::UpgradeFormatVersion(IcebergTableInformation &table_info)
+UpgradeFormatVersion::UpgradeFormatVersion(const IcebergTableInformation &table_info)
     : IcebergTableUpdate(IcebergTableUpdateType::UPGRADE_FORMAT_VERSION, table_info) {
 }
 
@@ -156,7 +164,7 @@ void UpgradeFormatVersion::CreateUpdate(DatabaseInstance &db, ClientContext &con
 	req.upgrade_format_version_update.format_version = table_info.table_metadata.iceberg_version;
 }
 
-SetCurrentSchema::SetCurrentSchema(IcebergTableInformation &table_info)
+SetCurrentSchema::SetCurrentSchema(const IcebergTableInformation &table_info)
     : IcebergTableUpdate(IcebergTableUpdateType::SET_CURRENT_SCHEMA, table_info) {
 }
 
@@ -170,7 +178,7 @@ void SetCurrentSchema::CreateUpdate(DatabaseInstance &db, ClientContext &context
 	req.set_current_schema_update.schema_id = table_info.table_metadata.current_schema_id;
 }
 
-AddPartitionSpec::AddPartitionSpec(IcebergTableInformation &table_info)
+AddPartitionSpec::AddPartitionSpec(const IcebergTableInformation &table_info)
     : IcebergTableUpdate(IcebergTableUpdateType::ADD_PARTITION_SPEC, table_info) {
 }
 
@@ -199,7 +207,7 @@ void AddPartitionSpec::CreateUpdate(DatabaseInstance &db, ClientContext &context
 	}
 }
 
-AddSortOrder::AddSortOrder(IcebergTableInformation &table_info)
+AddSortOrder::AddSortOrder(const IcebergTableInformation &table_info)
     : IcebergTableUpdate(IcebergTableUpdateType::ADD_SORT_ORDER, table_info) {
 }
 
@@ -228,7 +236,7 @@ void AddSortOrder::CreateUpdate(DatabaseInstance &db, ClientContext &context, Ic
 	}
 }
 
-SetDefaultSortOrder::SetDefaultSortOrder(IcebergTableInformation &table_info)
+SetDefaultSortOrder::SetDefaultSortOrder(const IcebergTableInformation &table_info)
     : IcebergTableUpdate(IcebergTableUpdateType::SET_DEFAULT_SORT_ORDER, table_info) {
 }
 
@@ -243,7 +251,7 @@ void SetDefaultSortOrder::CreateUpdate(DatabaseInstance &db, ClientContext &cont
 	req.set_default_sort_order_update.sort_order_id = table_info.table_metadata.GetLatestSortOrder().sort_order_id;
 }
 
-SetDefaultSpec::SetDefaultSpec(IcebergTableInformation &table_info)
+SetDefaultSpec::SetDefaultSpec(const IcebergTableInformation &table_info)
     : IcebergTableUpdate(IcebergTableUpdateType::SET_DEFAULT_SPEC, table_info) {
 }
 
@@ -257,7 +265,8 @@ void SetDefaultSpec::CreateUpdate(DatabaseInstance &db, ClientContext &context,
 	req.set_default_spec_update.spec_id = table_info.table_metadata.default_spec_id;
 }
 
-SetProperties::SetProperties(IcebergTableInformation &table_info, case_insensitive_map_t<string> properties)
+SetProperties::SetProperties(const IcebergTableInformation &table_info,
+                             const case_insensitive_map_t<string> &properties)
     : IcebergTableUpdate(IcebergTableUpdateType::SET_PROPERTIES, table_info), properties(properties) {
 }
 
@@ -269,7 +278,7 @@ void SetProperties::CreateUpdate(DatabaseInstance &db, ClientContext &context, I
 	req.set_properties_update.updates = properties;
 }
 
-RemoveProperties::RemoveProperties(IcebergTableInformation &table_info, vector<string> properties)
+RemoveProperties::RemoveProperties(const IcebergTableInformation &table_info, const vector<string> &properties)
     : IcebergTableUpdate(IcebergTableUpdateType::SET_PROPERTIES, table_info), properties(properties) {
 }
 
@@ -282,7 +291,7 @@ void RemoveProperties::CreateUpdate(DatabaseInstance &db, ClientContext &context
 	req.remove_properties_update.removals = properties;
 }
 
-SetLocation::SetLocation(IcebergTableInformation &table_info)
+SetLocation::SetLocation(const IcebergTableInformation &table_info)
     : IcebergTableUpdate(IcebergTableUpdateType::SET_LOCATION, table_info) {
 }
 
