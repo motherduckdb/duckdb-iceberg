@@ -70,6 +70,49 @@ struct IdentityTransform {
 	}
 };
 
+struct TruncateTransform {
+	static Value ApplyTransform(const Value &constant, const IcebergTransform &transform) {
+		switch (constant.type().id()) {
+		case LogicalTypeId::INTEGER:
+		case LogicalTypeId::BIGINT:
+		case LogicalTypeId::SMALLINT:
+		case LogicalTypeId::TINYINT:
+		{
+			auto val = constant.GetValue<int64_t>();
+			auto width = transform.GetTruncateWidth();
+			return Value::Numeric(constant.type(), val - (val % width));
+		}
+		case LogicalTypeId::UINTEGER:
+		case LogicalTypeId::UBIGINT:
+		case LogicalTypeId::USMALLINT:
+		case LogicalTypeId::UTINYINT:
+		{
+			auto val = constant.GetValue<uint64_t>();
+			auto width = transform.GetTruncateWidth();
+			return Value::Numeric(constant.type(), val - (val % width));
+		}
+		default:
+			throw NotImplementedException("'truncate' transform for type %s", constant.type().ToString());
+		}
+		return constant;
+	}
+	static bool CompareEqual(const Value &constant, const IcebergPredicateStats &stats) {
+		return constant >= stats.lower_bound && constant <= stats.upper_bound;
+	}
+	static bool CompareLessThan(const Value &constant, const IcebergPredicateStats &stats) {
+		return stats.lower_bound <= constant;
+	}
+	static bool CompareLessThanOrEqual(const Value &constant, const IcebergPredicateStats &stats) {
+		return stats.lower_bound <= constant;
+	}
+	static bool CompareGreaterThan(const Value &constant, const IcebergPredicateStats &stats) {
+		return stats.upper_bound >= constant;
+	}
+	static bool CompareGreaterThanOrEqual(const Value &constant, const IcebergPredicateStats &stats) {
+		return stats.upper_bound >= constant;
+	}
+};
+
 struct YearTransform {
 	static Value ApplyTransform(const Value &constant, const IcebergTransform &transform) {
 		switch (constant.type().id()) {
