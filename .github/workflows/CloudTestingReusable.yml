@@ -10,6 +10,16 @@ on:
         description: 'duckdb-iceberg branch name or commit hash'
         required: true
         type: string
+      httpfs_fork:
+        description: 'URL of a duckdb-httpfs fork (e.g. https://github.com/myfork/duckdb-httpfs). Leave empty to use the default duckdb/duckdb-httpfs.'
+        required: false
+        default: 'https://github.com/duckdb/duckdb-httpfs'
+        type: string
+      httpfs_ref:
+        description: 'Commit hash or branch of the httpfs fork to use. Leave empty to use the default.'
+        required: false
+        default: ''
+        type: string
     secrets:
       S3_ICEBERG_TEST_USER_KEY_ID:
         required: false
@@ -71,6 +81,17 @@ jobs:
           cd duckdb
           git fetch
           git checkout ${{ inputs.duckdb_ref }}
+
+      - name: Checkout selected httpfs
+        if: ${{ inputs.httpfs_ref != '' }}
+        run: |
+          cat > duckdb/.github/config/extensions/httpfs.cmake << 'EOF'
+          duckdb_extension_load(httpfs
+            LOAD_TESTS
+            GIT_URL ${{ inputs.httpfs_fork }}
+            GIT_TAG ${{ inputs.httpfs_ref }}
+          )
+          EOF
 
       - name: Build extension
         env:
