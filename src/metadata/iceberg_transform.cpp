@@ -8,6 +8,14 @@ IcebergTransform::IcebergTransform() : raw_transform() {
 	type = IcebergTransformType::INVALID;
 }
 
+bool IcebergTransform::TransformFunctionSupported(const string &transform_name) {
+	if (transform_name == "day" || transform_name == "month" || transform_name == "year" || transform_name == "hour" ||
+	    transform_name == "truncate" || transform_name == "bucket") {
+		return true;
+	}
+	return false;
+}
+
 IcebergTransform::IcebergTransform(const string &transform) : raw_transform(transform) {
 	if (transform == "identity") {
 		type = IcebergTransformType::IDENTITY;
@@ -84,14 +92,6 @@ LogicalType IcebergTransform::GetSerializedType(const LogicalType &input) const 
 		throw InvalidConfigurationException("Can't produce a result type for transform %s and input type %s",
 		                                    raw_transform, input.ToString());
 	}
-}
-
-bool IcebergTransform::TransformFunctionSupported(const string &function_name) {
-	if (function_name == "day" || function_name == "year" || function_name == "hour" || function_name == "month" ||
-	    StringUtil::StartsWith(function_name, "bucket") || StringUtil::StartsWith(function_name, "truncate")) {
-		return true;
-	}
-	return false;
 }
 
 void IcebergTransform::SetBucketOrTruncateValue(idx_t value) {

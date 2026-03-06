@@ -50,8 +50,8 @@ public:
 			return RawType();
 		}
 	}
-	static bool TransformFunctionSupported(const string &function_name);
 
+	static bool TransformFunctionSupported(const string &transform_name);
 	LogicalType GetSerializedType(const LogicalType &input) const;
 	LogicalType GetBoundsType(const LogicalType &input) const;
 	void SetBucketOrTruncateValue(idx_t value);

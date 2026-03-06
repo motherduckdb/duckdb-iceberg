@@ -126,15 +126,6 @@ static void AddToColDefMap(case_insensitive_map_t<reference<const IcebergColumnD
 	}
 }
 
-//! Get the name for a partition expression (used in hive-style paths)
-static string GetPartitionExpressionName(const IcebergPartitionSpecField &field) {
-	// Use the partition field name directly
-	if (field.transform.Type() == IcebergTransformType::IDENTITY) {
-		return field.name;
-	}
-	return field.name + "_" + field.transform.TransformAsString();
-}
-
 IcebergColumnStats IcebergInsert::ParseColumnStats(const LogicalType &type, const vector<Value> &col_stats,
                                                    ClientContext &context) {
 	IcebergColumnStats column_stats(type);
@@ -194,19 +185,32 @@ static idx_t GetColumnIndexBySourceId(vector<unique_ptr<IcebergColumnDefinition>
 	throw InvalidInputException("Partition source column with id %d not found in schema", source_id);
 }
 
+static string GetColumnNameBySourceId(vector<unique_ptr<IcebergColumnDefinition>> &columns, idx_t source_id) {
+	for (idx_t col_idx = 0; col_idx < columns.size(); col_idx++) {
+		if (columns[col_idx]->id == source_id) {
+			return columns[col_idx]->name;
+		}
+	}
+	throw InvalidInputException("Partition source column with id %d not found in schema", source_id);
+}
+
 //! Find the column index for a given source_id in the table schema
 static idx_t GetColumnIndexBySourceId(IcebergCopyInput &copy_input, uint64_t source_id) {
 	if (!copy_input.table_schema) {
 		throw InvalidInputException("Partitioning requires table schema");
 	}
 	return GetColumnIndexBySourceId(copy_input.table_schema->columns, source_id);
-	// auto &columns = copy_input.table_schema->columns;
-	// for (idx_t col_idx = 0; col_idx < columns.size(); col_idx++) {
-	// 	if (columns[col_idx]->id == static_cast<int32_t>(source_id)) {
-	// 		return col_idx;
-	// 	}
-	// }
-	// throw InvalidInputException("Partition source column with id %d not found in schema", source_id);
+}
+
+//! Check if all partition fields use identity transforms
+static bool AllIdentityTransforms(const IcebergPartitionSpec &spec) {
+	for (auto &field : spec.fields) {
+		if (field.transform.Type() != IcebergTransformType::IDENTITY &&
+		    field.transform.Type() != IcebergTransformType::VOID) {
+			return false;
+		}
+	}
+	return true;
 }
 
 void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &chunk,
@@ -253,23 +257,24 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 		// Build a map from partition column name to its partition spec field
 		// To be used later to add partitioning info to the data file
 		case_insensitive_map_t<reference<const IcebergPartitionSpecField>> partition_colname_to_field;
-		for (auto &partition_field : ic_partition_info.fields) {
-			auto partition_col_name = GetPartitionExpressionName(partition_field);
-			bool partition_col_found = false;
-			// verify the partition field source id is in the iceberg table schema
-			auto column_index = GetColumnIndexBySourceId(ic_schema->columns, partition_field.source_id);
-			// for (auto &column : ic_schema->columns) {
-			// 	if (column->id == partition_field.source_id) {
-			// 		partition_col_found = true;
-			// 		break;
-			// 	}
-			// }
-			// if (!partition_col_found) {
-			// 	throw InvalidConfigurationException(
-			// 	    "Could not find original column with source id %d for partition column %s",
-			// 	    partition_field.source_id, partition_field.name);
-			// }
-			partition_colname_to_field.emplace(partition_col_name, partition_field);
+
+		// this is a weird case with partitioned inserts.
+		// Lakekeeper requires paritition fields to not have the same names as the columns (if there is a transform)
+		// So now our partition field names always include the transform name TODO: This should be some name hash
+		// But if there are only identity transforms, we don't add a projection to the insert, so we can just use
+		// regular column names. So here when we populate our map, if there are transforms present, we need to use our
+		// transform partition column names. If not, we should use the identify names.
+		if (!AllIdentityTransforms(ic_partition_info)) {
+			for (auto &partition_field : ic_partition_info.fields) {
+				// auto column_index = GetColumnIndexBySourceId(ic_schema->columns, partition_field.source_id);
+				partition_colname_to_field.emplace(partition_field.name, partition_field);
+			}
+		} else {
+			for (auto &partition_field : ic_partition_info.fields) {
+				// auto column_index = GetColumnIndexBySourceId(ic_schema->columns, partition_field.source_id);
+				auto actual_col_name = GetColumnNameBySourceId(ic_schema->columns, partition_field.source_id);
+				partition_colname_to_field.emplace(actual_col_name, partition_field);
+			}
 		}
 
 		if (!partition_values.IsNull()) {
@@ -278,6 +283,7 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 			for (auto &partition_val : partition_children) {
 				auto &struct_val = StructValue::GetChildren(partition_val);
 				auto &partition_name = StringValue::Get(struct_val[0]);
+
 				auto field_it = partition_colname_to_field.find(partition_name);
 				D_ASSERT(field_it != partition_colname_to_field.end());
 				auto &partition_field = field_it->second.get();
@@ -569,17 +575,6 @@ static unique_ptr<Expression> GetPartitionExpression(ClientContext &context, Ice
 	}
 }
 
-//! Check if all partition fields use identity transforms
-static bool AllIdentityTransforms(const IcebergPartitionSpec &spec) {
-	for (auto &field : spec.fields) {
-		if (field.transform.Type() != IcebergTransformType::IDENTITY &&
-		    field.transform.Type() != IcebergTransformType::VOID) {
-			return false;
-		}
-	}
-	return true;
-}
-
 //! Generate partition expressions and configure copy options for partitioned writes
 static void GeneratePartitionExpressions(ClientContext &context, IcebergCopyInput &copy_input,
                                          vector<idx_t> &partition_columns,
@@ -635,7 +630,7 @@ static void GeneratePartitionExpressions(ClientContext &context, IcebergCopyInpu
 		partition_columns.push_back(partition_column_start++);
 
 		auto expr = GetPartitionExpression(context, copy_input, field);
-		projection_names.push_back(GetPartitionExpressionName(field));
+		projection_names.push_back(field.name);
 		projection_types.push_back(expr->return_type);
 		projection_expressions.push_back(std::move(expr));
 	}

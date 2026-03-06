@@ -2,6 +2,7 @@
 
 #include "catalog_api.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/parser/expression/columnref_expression.hpp"
 #include "duckdb/parser/expression/function_expression.hpp"
@@ -341,10 +342,11 @@ void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
 		} else if (key->type == ExpressionType::FUNCTION) {
 			auto &funcexpr = key->Cast<FunctionExpression>();
 			transform_name = funcexpr.function_name;
-			if (!IcebergTransform::TransformFunctionSupported(transform_name)) {
-				throw NotImplementedException("Transform function %s not supported", transform_name);
-			}
-			if (funcexpr.children.empty() || funcexpr.children[0]->type != ExpressionType::COLUMN_REF) {
+			if (funcexpr.children.empty()) {
+				throw NotImplementedException("Unrecognized transform ('%s')", transform_name);
+			} else if (!IcebergTransform::TransformFunctionSupported(transform_name)) {
+				throw NotImplementedException("Unrecognized transform ('%s')", transform_name);
+			} else if (funcexpr.children[0]->type != ExpressionType::COLUMN_REF) {
 				throw NotImplementedException("Transforms are only supported on column references, not %s",
 				                              EnumUtil::ToChars(funcexpr.children[0]->type));
 			}
@@ -380,7 +382,6 @@ void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
 		}
 
 		IcebergPartitionSpecField field;
-		field.name = column_name;
 		field.transform = IcebergTransform(transform_name);
 		switch (field.transform.Type()) {
 		case IcebergTransformType::BUCKET:
@@ -392,6 +393,8 @@ void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
 		}
 		field.source_id = source_id;
 		field.partition_field_id = base_partition_field_id + new_spec.fields.size();
+		// transform field names cannot be the column name. Otherwise Lakekeeper complains
+		field.name = column_name + "_" + field.transform.TransformAsString();
 		new_spec.fields.push_back(std::move(field));
 	}
 
