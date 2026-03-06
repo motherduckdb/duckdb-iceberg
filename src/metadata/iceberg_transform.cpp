@@ -1,6 +1,5 @@
 #include "metadata/iceberg_transform.hpp"
 #include "iceberg_hash.hpp"
-#include "string_util.hpp"
 #include "duckdb/common/string_util.hpp"
 
 namespace duckdb {
@@ -165,9 +164,12 @@ Value TruncateTransform::ApplyTransform(const Value &constant, const IcebergTran
 	case LogicalTypeId::BLOB:
 	{
 		// truncate to L bytes
-		auto hex_string = constant.GetValue<string>().substr(0, 2*transform.GetTruncateWidth());
-		auto bytes = HexStringToBytes(hex_string);
-		return Value::BLOB(const_data_ptr_cast<uint8_t>(bytes.data()), bytes.size());
+		auto bytes = StringValue::Get(constant);
+		return Value::BLOB(
+			(uint8_t*)bytes.data(),
+			bytes.size() < transform.GetTruncateWidth()
+			? bytes.size(): transform.GetTruncateWidth()
+		);
 	}
 	case LogicalTypeId::VARCHAR:
 	{

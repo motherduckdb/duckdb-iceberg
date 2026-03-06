@@ -1,5 +1,4 @@
 #include "iceberg_value.hpp"
-#include "string_util.hpp"
 #include "utf8proc_wrapper.hpp"
 #include "duckdb/common/helper.hpp"
 #include "duckdb/common/types/uuid.hpp"
@@ -297,6 +296,18 @@ string IcebergValue::TruncateAndIncrementString(const string &input) {
 	}
 	// Convert back to string
 	return std::string(bytes.begin(), bytes.end());
+}
+
+std::vector<uint8_t> HexStringToBytes(const std::string &hex) {
+	std::vector<uint8_t> bytes;
+	D_ASSERT(hex.size() % 2 == 0);
+	bytes.reserve(hex.size() / 2);
+
+	for (size_t i = 0; i < hex.size(); i += 2) {
+		uint8_t byte = std::stoi(hex.substr(i, 2), nullptr, 16);
+		bytes.push_back(byte);
+	}
+	return bytes;
 }
 
 SerializeResult IcebergValue::SerializeValue(Value input_value, const LogicalType &column_type,

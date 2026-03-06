@@ -78,7 +78,6 @@ set(EXTENSION_SOURCES
     src/storage/table_update/common.cpp
     src/storage/iceberg_table_information.cpp
     src/storage/create_table/iceberg_create_table_request.cpp
-    src/string_util.cpp
 )
 
 add_subdirectory(src/rest_catalog/objects)
