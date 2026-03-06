@@ -1,6 +1,7 @@
 #include "metadata/iceberg_transform.hpp"
 #include "iceberg_hash.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "utf8proc_wrapper.hpp"
 
 namespace duckdb {
 
@@ -176,14 +177,10 @@ Value TruncateTransform::ApplyTransform(const Value &constant, const IcebergTran
 		// truncate to at most L code points, assuming UTF-8 encoding
 		auto v = constant.GetValue<string>();
 		auto L = transform.GetTruncateWidth();
-		size_t count = 0;
-		for (size_t i = 0; i < v.size(); i++) {
-			if (count >= L) {
-				return Value(v.substr(0, i));
-			}
-			// skip continuation bytes
-			if ((v[i] & 0xC0) != 0x80) {
-				count++;
+		size_t num_characters = 0;
+		for (auto cluster : Utf8Proc::GraphemeClusters(v.data(), v.size())) {
+			if (++num_characters >= L) {
+				return Value(v.substr(0, cluster.end));
 			}
 		}
 		return constant;
