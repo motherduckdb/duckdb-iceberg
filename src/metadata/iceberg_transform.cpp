@@ -86,6 +86,14 @@ LogicalType IcebergTransform::GetSerializedType(const LogicalType &input) const 
 	}
 }
 
+bool IcebergTransform::TransformFunctionSupported(const string &function_name) {
+	if (function_name == "day" || function_name == "year" || function_name == "hour" || function_name == "month" ||
+	    StringUtil::StartsWith(function_name, "bucket") || StringUtil::StartsWith(function_name, "truncate")) {
+		return true;
+	}
+	return false;
+}
+
 void IcebergTransform::SetBucketOrTruncateValue(idx_t value) {
 	switch (type) {
 	case IcebergTransformType::BUCKET:

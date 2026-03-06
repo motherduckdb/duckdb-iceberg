@@ -341,6 +341,9 @@ void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
 		} else if (key->type == ExpressionType::FUNCTION) {
 			auto &funcexpr = key->Cast<FunctionExpression>();
 			transform_name = funcexpr.function_name;
+			if (!IcebergTransform::TransformFunctionSupported(transform_name)) {
+				throw NotImplementedException("Transform function %s not supported", transform_name);
+			}
 			if (funcexpr.children.empty() || funcexpr.children[0]->type != ExpressionType::COLUMN_REF) {
 				throw NotImplementedException("Transforms are only supported on column references, not %s",
 				                              EnumUtil::ToChars(funcexpr.children[0]->type));
@@ -359,8 +362,6 @@ void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
 				auto &const_expr = param_expr.Cast<ConstantExpression>();
 				bucket_modulo_val = const_expr.value.GetValue<int32_t>();
 				transform_name = StringUtil::Format("%s[%d]", transform_name, bucket_modulo_val);
-			} else {
-				throw NotImplementedException("Transform function %s not supported in Iceberg", transform_name);
 			}
 		} else {
 			throw NotImplementedException("Unsupported partition key type: %s", key->ToString());

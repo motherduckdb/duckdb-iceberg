@@ -50,6 +50,7 @@ public:
 			return RawType();
 		}
 	}
+	static bool TransformFunctionSupported(const string &function_name);
 
 	LogicalType GetSerializedType(const LogicalType &input) const;
 	LogicalType GetBoundsType(const LogicalType &input) const;
