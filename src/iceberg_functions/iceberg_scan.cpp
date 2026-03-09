@@ -26,10 +26,93 @@
 #include "iceberg_functions.hpp"
 #include "storage/catalog/iceberg_table_entry.hpp"
 
+#include "duckdb/common/multi_file/multi_file_states.hpp"
+#include "duckdb/function/partition_stats.hpp"
+#include "duckdb/storage/statistics/numeric_stats.hpp"
+#include "duckdb/storage/statistics/string_stats.hpp"
+#include "metadata/iceberg_column_definition.hpp"
+#include "metadata/iceberg_predicate_stats.hpp"
+#include "iceberg_value.hpp"
+
 #include <string>
 #include <numeric>
 
 namespace duckdb {
+
+struct IcebergPartitionRowGroup : public PartitionRowGroup {
+	//! Schema columns for mapping column_index -> field_id
+	const vector<unique_ptr<IcebergColumnDefinition>> &schema;
+	//! Reference to the data file with bounds
+	const IcebergDataFile &data_file;
+
+	IcebergPartitionRowGroup(const vector<unique_ptr<IcebergColumnDefinition>> &schema,
+	                         const IcebergDataFile &data_file)
+	    : schema(schema), data_file(data_file) {
+	}
+
+	unique_ptr<BaseStatistics> GetColumnStatistics(const StorageIndex &storage_index) override {
+		auto col_idx = storage_index.GetPrimaryIndex();
+		if (col_idx >= schema.size()) {
+			return nullptr;
+		}
+		auto &column = *schema[col_idx];
+		auto field_id = column.id;
+
+		auto lower_it = data_file.lower_bounds.find(field_id);
+		auto upper_it = data_file.upper_bounds.find(field_id);
+		if (lower_it == data_file.lower_bounds.end() && upper_it == data_file.upper_bounds.end()) {
+			return nullptr;
+		}
+
+		Value lower_bound, upper_bound;
+		if (lower_it != data_file.lower_bounds.end()) {
+			lower_bound = lower_it->second;
+		}
+		if (upper_it != data_file.upper_bounds.end()) {
+			upper_bound = upper_it->second;
+		}
+
+		// DeserializeBounds converts from BLOB to typed values
+		IcebergPredicateStats pred_stats;
+		try {
+			pred_stats = IcebergPredicateStats::DeserializeBounds(lower_bound, upper_bound, column.name, column.type);
+		} catch (...) {
+			return nullptr;
+		}
+
+		if (!pred_stats.has_lower_bounds && !pred_stats.has_upper_bounds) {
+			return nullptr;
+		}
+
+		auto &type = column.type;
+		if (type.IsNumeric() || type.IsTemporal()) {
+			auto stats = NumericStats::CreateEmpty(type);
+			if (pred_stats.has_lower_bounds) {
+				NumericStats::SetMin(stats, pred_stats.lower_bound);
+			}
+			if (pred_stats.has_upper_bounds) {
+				NumericStats::SetMax(stats, pred_stats.upper_bound);
+			}
+			return stats.ToUnique();
+		} else if (type.id() == LogicalTypeId::VARCHAR) {
+			auto stats = StringStats::CreateEmpty(type);
+			if (pred_stats.has_lower_bounds) {
+				StringStats::SetMin(stats, pred_stats.lower_bound.GetValueUnsafe<string_t>());
+			}
+			if (pred_stats.has_upper_bounds) {
+				StringStats::SetMax(stats, pred_stats.upper_bound.GetValueUnsafe<string_t>());
+			}
+			return stats.ToUnique();
+		}
+		return nullptr;
+	}
+
+	bool MinMaxIsExact(const BaseStatistics &stats, const StorageIndex &storage_index) override {
+		// File-level bounds are not exact (they are min/max across the file, not single values)
+		// This is fine for partition pruning but not for eager MIN/MAX aggregates
+		return false;
+	}
+};
 
 static void AddNamedParameters(TableFunction &fun) {
 	fun.named_parameters["allow_moved_paths"] = LogicalType::BOOLEAN;
@@ -62,6 +145,36 @@ BindInfo IcebergBindInfo(const optional_ptr<FunctionData> bind_data) {
 	return BindInfo(*file_list.table);
 }
 
+vector<PartitionStatistics> IcebergGetPartitionStats(ClientContext &context, GetPartitionStatsInput &input) {
+	vector<PartitionStatistics> result;
+	auto &bind_data = input.bind_data->Cast<MultiFileBindData>();
+	auto &file_list = bind_data.file_list->Cast<IcebergMultiFileList>();
+
+	// V1 tables lack reliable per-file row counts
+	if (file_list.GetMetadata().iceberg_version == 1) {
+		return result;
+	}
+
+	// Force all files to be loaded
+	(void)file_list.GetTotalFileCount();
+
+	// When delete files are present, record_count is a gross count (before deletions)
+	CountType count_type = file_list.delete_manifests.empty() ? CountType::COUNT_EXACT : CountType::COUNT_APPROXIMATE;
+
+	auto &schema = file_list.GetSchema().columns;
+
+	for (auto &entry : file_list.manifest_entries) {
+		PartitionStatistics stats;
+		stats.count = NumericCast<idx_t>(entry.data_file.record_count);
+		stats.count_type = count_type;
+		if (!entry.data_file.lower_bounds.empty() || !entry.data_file.upper_bounds.empty()) {
+			stats.partition_row_group = make_shared_ptr<IcebergPartitionRowGroup>(schema, entry.data_file);
+		}
+		result.push_back(std::move(stats));
+	}
+	return result;
+}
+
 TableFunctionSet IcebergFunctions::GetIcebergScanFunction(ExtensionLoader &loader) {
 	// The iceberg_scan function is constructed by grabbing the parquet scan from the Catalog, then injecting the
 	// IcebergMultiFileReader into it to create a Iceberg-based multi file read
@@ -83,6 +196,7 @@ TableFunctionSet IcebergFunctions::GetIcebergScanFunction(ExtensionLoader &loade
 		function.table_scan_progress = nullptr;
 		function.get_bind_info = IcebergBindInfo;
 		function.get_virtual_columns = IcebergVirtualColumns;
+		function.get_partition_stats = IcebergGetPartitionStats;
 
 		// Schema param is just confusing here
 		function.named_parameters.erase("schema");
