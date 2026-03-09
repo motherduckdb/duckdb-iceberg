@@ -9,13 +9,12 @@
 #include "iceberg_metadata.hpp"
 #include "iceberg_functions.hpp"
 #include "iceberg_utils.hpp"
-#include "storage/irc_table_entry.hpp"
+#include "storage/catalog/iceberg_table_entry.hpp"
 #include "duckdb/main/client_context.hpp"
-#include "storage/irc_catalog.hpp"
+#include "storage/catalog/iceberg_catalog.hpp"
 #include "storage/iceberg_table_information.hpp"
 #include "storage/iceberg_transaction_data.hpp"
-#include "storage/irc_transaction.hpp"
-#include "storage/iceberg_table_information.hpp"
+#include "storage/iceberg_transaction.hpp"
 #include "metadata/iceberg_table_metadata.hpp"
 
 #include <string>
@@ -23,7 +22,7 @@
 namespace duckdb {
 
 struct SetIcebergTablePropertiesBindData : public TableFunctionData {
-	optional_ptr<ICTableEntry> iceberg_table;
+	optional_ptr<IcebergTableEntry> iceberg_table;
 	case_insensitive_map_t<string> properties;
 	vector<string> remove_properties;
 };
@@ -81,7 +80,7 @@ static unique_ptr<FunctionData> SetIcebergTablePropertiesBind(ClientContext &con
 	if (!CheckTableIsIcebergTable(iceberg_table)) {
 		throw InvalidInputException("Cannot call set_iceberg_table_properties on non-iceberg table");
 	}
-	ret->iceberg_table = iceberg_table->Cast<ICTableEntry>();
+	ret->iceberg_table = iceberg_table->Cast<IcebergTableEntry>();
 	auto map = Value(input.inputs[1]).DefaultCastAs(LogicalType::MAP(LogicalType::VARCHAR, LogicalType::VARCHAR));
 
 	auto &map_children = MapValue::GetChildren(map);
@@ -108,7 +107,7 @@ static unique_ptr<FunctionData> RemoveIcebergTablePropertiesBind(ClientContext &
 	if (!CheckTableIsIcebergTable(iceberg_table)) {
 		throw InvalidInputException("Cannot call set_iceberg_table_properties on non-iceberg table");
 	}
-	ret->iceberg_table = iceberg_table->Cast<ICTableEntry>();
+	ret->iceberg_table = iceberg_table->Cast<IcebergTableEntry>();
 
 	auto &remove_values = input.inputs[1];
 	auto &list_children = ListValue::GetChildren(remove_values);
@@ -133,7 +132,7 @@ static unique_ptr<FunctionData> GetIcebergTablePropertiesBind(ClientContext &con
 	if (!CheckTableIsIcebergTable(iceberg_table)) {
 		throw InvalidInputException("Cannot call set_iceberg_table_properties on non-iceberg table");
 	}
-	ret->iceberg_table = iceberg_table->Cast<ICTableEntry>();
+	ret->iceberg_table = iceberg_table->Cast<IcebergTableEntry>();
 
 	return_types.insert(return_types.end(), LogicalType::VARCHAR);
 	return_types.insert(return_types.end(), LogicalType::VARCHAR);
@@ -160,17 +159,18 @@ static void SetIcebergTablePropertiesFunction(ClientContext &context, TableFunct
 	}
 
 	auto iceberg_table = bind_data.iceberg_table;
-	auto &irc_transaction = IRCTransaction::Get(context, iceberg_table->catalog);
-	if (!iceberg_table->table_info.transaction_data) {
-		iceberg_table->table_info.transaction_data =
-		    make_uniq<IcebergTransactionData>(context, iceberg_table->table_info);
+	auto &table_info = iceberg_table->table_info;
+	auto &iceberg_transaction = IcebergTransaction::Get(context, iceberg_table->catalog);
+	iceberg_transaction.updated_tables.emplace(table_info.GetTableKey(), table_info.Copy(iceberg_transaction));
+	auto &entry = iceberg_transaction.updated_tables.at(table_info.GetTableKey());
+	if (!entry.transaction_data) {
+		entry.InitTransactionData(iceberg_transaction);
 	}
-	IcebergTransactionData &transaction_data = *(iceberg_table->table_info.transaction_data);
+	auto &transaction_data = entry.transaction_data;
 
 	auto schema = iceberg_table->schema.name;
 	auto table_name = iceberg_table->name;
-	transaction_data.TableSetProperties(bind_data.properties);
-	irc_transaction.dirty_tables.emplace(iceberg_table.get());
+	transaction_data->TableSetProperties(bind_data.properties);
 	global_state.properties_set = true;
 	// set success output, failure happens during transaction commit.
 	FlatVector::GetData<int64_t>(output.data[0])[0] = bind_data.properties.size();
@@ -191,17 +191,18 @@ static void RemoveIcebergTablePropertiesFunction(ClientContext &context, TableFu
 	}
 
 	auto iceberg_table = bind_data.iceberg_table;
-	auto &irc_transaction = IRCTransaction::Get(context, iceberg_table->catalog);
-	if (!iceberg_table->table_info.transaction_data) {
-		iceberg_table->table_info.transaction_data =
-		    make_uniq<IcebergTransactionData>(context, iceberg_table->table_info);
+	auto &table_info = iceberg_table->table_info;
+	auto &iceberg_transaction = IcebergTransaction::Get(context, iceberg_table->catalog);
+	iceberg_transaction.updated_tables.emplace(table_info.GetTableKey(), table_info.Copy(iceberg_transaction));
+	auto &entry = iceberg_transaction.updated_tables.at(table_info.GetTableKey());
+	if (!entry.transaction_data) {
+		entry.InitTransactionData(iceberg_transaction);
 	}
-	IcebergTransactionData &transaction_data = *(iceberg_table->table_info.transaction_data);
+	auto &transaction_data = entry.transaction_data;
 
 	auto schema = iceberg_table->schema.name;
 	auto table_name = iceberg_table->name;
-	transaction_data.TableRemoveProperties(bind_data.remove_properties);
-	irc_transaction.dirty_tables.emplace(iceberg_table.get());
+	transaction_data->TableRemoveProperties(bind_data.remove_properties);
 	global_state.properties_removed = true;
 	// set success output, failure happens during transaction commit.
 	FlatVector::GetData<int64_t>(output.data[0])[0] = bind_data.properties.size();
@@ -218,12 +219,12 @@ static void GetIcebergTablePropertiesFunction(ClientContext &context, TableFunct
 	}
 	auto iceberg_table = bind_data.iceberg_table;
 	auto &table_info = iceberg_table->table_info;
-	if (!table_info.load_table_result.metadata.has_properties) {
+	if (table_info.table_metadata.GetTableProperties().empty()) {
 		output.SetCardinality(0);
 		return;
 	}
 	if (!global_state.all_properties_initialized) {
-		for (auto &property : table_info.load_table_result.metadata.properties) {
+		for (auto &property : table_info.table_metadata.GetTableProperties()) {
 			global_state.all_properties.push_back(make_pair(property.first, property.second));
 		}
 		global_state.all_properties_initialized = true;

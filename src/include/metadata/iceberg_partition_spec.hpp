@@ -14,7 +14,7 @@ namespace duckdb {
 
 struct IcebergPartitionSpecField {
 public:
-	static IcebergPartitionSpecField ParseFromJson(rest_api_objects::PartitionField &field);
+	static IcebergPartitionSpecField ParseFromJson(const rest_api_objects::PartitionField &field);
 
 public:
 	string name;
@@ -29,13 +29,14 @@ public:
 
 struct IcebergPartitionSpec {
 public:
-	static IcebergPartitionSpec ParseFromJson(rest_api_objects::PartitionSpec &spec);
+	static IcebergPartitionSpec ParseFromJson(const rest_api_objects::PartitionSpec &spec);
 
 public:
 	bool IsUnpartitioned() const;
 	bool IsPartitioned() const;
 	const IcebergPartitionSpecField &GetFieldBySourceId(idx_t field_id) const;
 	string FieldsToJSON() const;
+	const vector<IcebergPartitionSpecField> &GetFields() const;
 
 public:
 	int32_t spec_id;

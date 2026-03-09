@@ -30,7 +30,7 @@ jobs:
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11.1
         with:
-          vcpkgGitCommitId: ce613c41372b23b1f51333815feb3edd87ef8a8b
+          vcpkgGitCommitId: 84bab45d415d22042bd0b9081aea57f362da3f35
 
       - name: Install Ninja
         shell: bash
@@ -59,20 +59,20 @@ jobs:
   test-nessie:
     name: Test against Nessie Catalog
     needs: build_iceberg
-    uses: duckdb/duckdb-iceberg/.github/workflows/test-nessie-catalog.yml@main
+    uses: ./.github/workflows/test-nessie-catalog.yml
     with:
       artifact-name: duckdb-iceberg
 
   test-spark:
     name: Test against Spark Catalog
     needs: build_iceberg
-    uses: duckdb/duckdb-iceberg/.github/workflows/test-spark-catalog.yml@main
+    uses: ./.github/workflows/test-spark-catalog.yml
     with:
       artifact-name: duckdb-iceberg
 
   test-polaris:
     name: Test against Polaris Catalog
     needs: build_iceberg
-    uses: duckdb/duckdb-iceberg/.github/workflows/test-polaris-catalog.yml@main
+    uses: ./.github/workflows/test-polaris-catalog.yml
     with:
       artifact-name: duckdb-iceberg

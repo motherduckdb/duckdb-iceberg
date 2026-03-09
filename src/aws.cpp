@@ -8,7 +8,7 @@
 #include "duckdb/main/database.hpp"
 #include "duckdb/function/scalar/strftime_format.hpp"
 #include "duckdb/main/client_data.hpp"
-#include "include/storage/irc_authorization.hpp"
+#include "include/storage/iceberg_authorization.hpp"
 
 #include <aws/core/auth/AWSCredentialsProviderChain.h>
 #include <aws/core/http/HttpClient.h>
@@ -132,6 +132,7 @@ static string GetPayloadHash(const char *buffer, idx_t buffer_len) {
 std::shared_ptr<Aws::Http::HttpRequest> AWSInput::CreateSignedRequest(Aws::Http::HttpMethod method,
                                                                       const Aws::Http::URI &uri, HTTPHeaders &headers,
                                                                       const string &body) {
+#ifndef EMSCRIPTEN
 	auto request = Aws::Http::CreateHttpRequest(uri, method, Aws::Utils::Stream::DefaultResponseStreamFactoryMethod);
 	request->SetUserAgent(user_agent);
 
@@ -153,10 +154,14 @@ std::shared_ptr<Aws::Http::HttpRequest> AWSInput::CreateSignedRequest(Aws::Http:
 	}
 
 	return request;
+#else
+	return nullptr;
+#endif
 }
 
 unique_ptr<HTTPResponse> AWSInput::ExecuteRequestLegacy(ClientContext &context, Aws::Http::HttpMethod method,
                                                         HTTPHeaders &headers, const string &body) {
+#ifndef EMSCRIPTEN
 	InitAWSAPI();
 	auto clientConfig = BuildClientConfig();
 	auto uri = BuildURI();
@@ -191,6 +196,9 @@ unique_ptr<HTTPResponse> AWSInput::ExecuteRequestLegacy(ClientContext &context, 
 		throw HTTPException(*result, result->reason);
 	}
 	return result;
+#else
+	throw NotImplementedException("ExecuteRequestLegacy is not implemented in duckdb-wasm");
+#endif
 }
 
 unique_ptr<HTTPResponse> AWSInput::ExecuteRequest(ClientContext &context, Aws::Http::HttpMethod method,

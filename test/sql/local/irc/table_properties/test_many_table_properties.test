@@ -36,7 +36,6 @@ ATTACH '' AS my_datalake (
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
-
 statement ok
 drop table if exists my_datalake.default.many_properties;
 
@@ -56,7 +55,9 @@ CALL set_iceberg_table_properties(my_datalake.default.many_properties,
 endloop
 
 # Check all properties returned and none are duplicated
+# the iceberg-rest-fixture adds 2 properties on table creation
+# created-at and write.parquet.compression-codec
 query I
 select count(*) from iceberg_table_properties(my_datalake.default.many_properties) group by all;
 ----
-2050
+2052

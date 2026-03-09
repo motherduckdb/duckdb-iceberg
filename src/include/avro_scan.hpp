@@ -13,17 +13,29 @@
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/parser/tableref/table_function_ref.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
+#include "iceberg_avro_multi_file_list.hpp"
 
 namespace duckdb {
 
+class BaseManifestReader;
+
 class AvroScan {
 public:
-	AvroScan(const string &scan_name, ClientContext &context, const string &path);
+	AvroScan(const string &path, ClientContext &context, shared_ptr<IcebergAvroScanInfo> avro_scan_info);
 
 public:
-	bool GetNext(DataChunk &chunk);
-	void InitializeChunk(DataChunk &chunk);
+	static unique_ptr<AvroScan> ScanManifestList(const IcebergSnapshot &snapshot, const IcebergTableMetadata &metadata,
+	                                             ClientContext &context, const string &path);
+	static unique_ptr<AvroScan> ScanManifest(const IcebergSnapshot &snapshot,
+	                                         const vector<IcebergManifestFile> &manifest_files,
+	                                         const IcebergOptions &options, FileSystem &fs, const string &iceberg_path,
+	                                         const IcebergTableMetadata &metadata, ClientContext &context);
+
+public:
+	void InitializeChunk(DataChunk &chunk) const;
 	bool Finished() const;
+	const vector<column_t> &GetColumnIds() const;
+	const idx_t IcebergVersion() const;
 
 public:
 	string path;
@@ -31,10 +43,11 @@ public:
 	ClientContext &context;
 	unique_ptr<FunctionData> bind_data;
 	unique_ptr<GlobalTableFunctionState> global_state;
-	unique_ptr<LocalTableFunctionState> local_state;
 	vector<LogicalType> return_types;
 	vector<string> return_names;
+	vector<column_t> column_ids;
 
+	shared_ptr<IcebergAvroScanInfo> scan_info;
 	bool finished = false;
 };
 

@@ -1,6 +1,9 @@
 import pytest
 import os
 import datetime
+from decimal import Decimal
+from math import inf
+from dataclasses import dataclass
 
 from pprint import pprint
 
@@ -14,22 +17,52 @@ SparkContext = pyspark.SparkContext
 Row = pyspark_sql.Row
 
 
+@dataclass
+class IcebergRuntimeConfig:
+    spark_version: str
+    scala_binary_version: str
+    iceberg_library_version: str
+
+
 # List of runtimes you want to test
 ICEBERG_RUNTIMES = [
-    "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.4.1",
-    "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.9.0",
-    "org.apache.iceberg:iceberg-spark-runtime-3.5_2.13:1.9.1",
+    IcebergRuntimeConfig(
+        spark_version="3.5",
+        scala_binary_version="2.12",
+        iceberg_library_version="1.4.1",
+    ),
+    IcebergRuntimeConfig(
+        spark_version="3.5",
+        scala_binary_version="2.12",
+        iceberg_library_version="1.9.0",
+    ),
+    IcebergRuntimeConfig(
+        spark_version="3.5",
+        scala_binary_version="2.13",
+        iceberg_library_version="1.9.1",
+    ),
 ]
+
+
+# uses {spark}_{scala}-{iceberg}
+def generate_jar_location(config: IcebergRuntimeConfig) -> str:
+    return f"iceberg-spark-runtime-{config.spark_version}_{config.scala_binary_version}-{config.iceberg_library_version}.jar"
+
+
+# uses {spark}_{scala}:{iceberg}
+def generate_package(config: IcebergRuntimeConfig) -> str:
+    return f'org.apache.iceberg:iceberg-spark-runtime-{config.spark_version}_{config.scala_binary_version}:{config.iceberg_library_version}'
 
 
 @pytest.fixture(params=ICEBERG_RUNTIMES, scope="session")
 def spark_con(request):
-    runtime_pkg = request.param
-    runtime_pkg_jar = (runtime_pkg[len("org.apache.iceberg:") :] + ".jar").replace(":", "-")
-    runtime_path = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..', 'scripts', 'data_generators', runtime_pkg_jar))
+    runtime_config = request.param
+    runtime_jar = generate_jar_location(runtime_config)
+    runtime_pkg = generate_package(runtime_config)
+    runtime_path = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..', 'scripts', 'data_generators', runtime_jar))
 
     os.environ["PYSPARK_SUBMIT_ARGS"] = (
-        f"--packages {runtime_pkg},org.apache.iceberg:iceberg-aws-bundle:1.9.0 pyspark-shell"
+        f"--packages {runtime_pkg},org.apache.iceberg:iceberg-aws-bundle:{runtime_config.iceberg_library_version} pyspark-shell"
     )
     os.environ["AWS_REGION"] = "us-east-1"
     os.environ["AWS_ACCESS_KEY_ID"] = "admin"
@@ -136,33 +169,93 @@ class TestSparkReadDuckDBTableWithDeletes:
     os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None,
     reason="Test data wasn't generated, run tests in test/sql/local/irc first",
 )
-class TestSparkReadDuckDBTableWithDeletes:
+class TestSparkReadUpperLowerBounds:
     def test_spark_read(self, spark_con):
         df = spark_con.sql(
             """
-            select * from default.duckdb_updates_for_other_engines order by a
+            select * from default.lower_upper_bounds_test;
             """
         )
         res = df.collect()
+        assert len(res) == 3
         assert res == [
-            Row(a=1),
-            Row(a=3),
-            Row(a=5),
-            Row(a=7),
-            Row(a=9),
-            Row(a=51),
-            Row(a=53),
-            Row(a=55),
-            Row(a=57),
-            Row(a=59),
-            Row(a=100),
-            Row(a=100),
-            Row(a=100),
-            Row(a=100),
-            Row(a=100),
-            Row(a=100),
-            Row(a=100),
-            Row(a=100),
-            Row(a=100),
-            Row(a=100),
+            Row(
+                int_type=-2147483648,
+                long_type=-9223372036854775808,
+                varchar_type='',
+                bool_type=False,
+                float_type=-3.4028234663852886e38,
+                double_type=-1.7976931348623157e308,
+                decimal_type_18_3=Decimal('-9999999999999.999'),
+                date_type=datetime.date(1, 1, 1),
+                timestamp_type=datetime.datetime(1, 1, 1, 0, 0),
+                binary_type=bytearray(b''),
+            ),
+            Row(
+                int_type=2147483647,
+                long_type=9223372036854775807,
+                varchar_type='ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ',
+                bool_type=True,
+                float_type=3.4028234663852886e38,
+                double_type=1.7976931348623157e308,
+                decimal_type_18_3=Decimal('9999999999999.999'),
+                date_type=datetime.date(9999, 12, 31),
+                timestamp_type=datetime.datetime(9999, 12, 31, 23, 59, 59, 999999),
+                binary_type=bytearray(b'\xff\xff\xff\xff\xff\xff\xff\xff'),
+            ),
+            Row(
+                int_type=None,
+                long_type=None,
+                varchar_type=None,
+                bool_type=None,
+                float_type=None,
+                double_type=None,
+                decimal_type_18_3=None,
+                date_type=None,
+                timestamp_type=None,
+                binary_type=None,
+            ),
+        ]
+
+
+@pytest.mark.skipif(
+    os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None,
+    reason="Test data wasn't generated, run tests in test/sql/local/irc first",
+)
+class TestSparkReadInfinities:
+    def test_spark_read(self, spark_con):
+        df = spark_con.sql(
+            """
+            select * from default.test_infinities;
+            """
+        )
+        res = df.collect()
+        assert len(res) == 2
+        assert res == [
+            Row(float_type=inf, double_type=inf),
+            Row(float_type=-inf, double_type=-inf),
+        ]
+
+
+@pytest.mark.skipif(
+    os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None,
+    reason="Test data wasn't generated, run tests in test/sql/local/irc first",
+)
+class TestSparkReadDuckDBNestedTypes:
+    def test_spark_read(self, spark_con):
+        df = spark_con.sql(
+            """
+            select * from default.duckdb_nested_types;
+            """
+        )
+        res = df.collect()
+        assert len(res) == 1
+        assert res == [
+            Row(
+                id=1,
+                name='Alice',
+                address=Row(street='123 Main St', city='Metropolis', zip='12345'),
+                phone_numbers=['123-456-7890', '987-654-3210'],
+                metadata={'age': '30', 'membership': 'gold'},
+            ),
         ]

@@ -1,13 +1,13 @@
 #include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
 #include "iceberg_functions/iceberg_deletes_file_reader.hpp"
 #include "iceberg_functions.hpp"
-#include "storage/irc_table_entry.hpp"
+#include "storage/catalog/iceberg_table_entry.hpp"
 
 namespace duckdb {
 
 virtual_column_map_t IcebergDeleteVirtualColumns(ClientContext &context, optional_ptr<FunctionData> bind_data_p) {
 	auto &bind_data = bind_data_p->Cast<MultiFileBindData>();
-	auto result = ICTableEntry::VirtualColumns();
+	auto result = IcebergTableEntry::VirtualColumns();
 	bind_data.virtual_columns = result;
 	return result;
 }
@@ -15,6 +15,9 @@ virtual_column_map_t IcebergDeleteVirtualColumns(ClientContext &context, optiona
 static void IcebergDeletesScanSerialize(Serializer &serializer, const optional_ptr<FunctionData> bind_data,
                                         const TableFunction &function) {
 	throw NotImplementedException("IcebergDeletesScan serialization not implemented");
+}
+static unique_ptr<FunctionData> IcebergDeletesScanDeserialize(Deserializer &deserializer, TableFunction &function) {
+	throw NotImplementedException("IcebergDeletesScan deserialization not implemented");
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergDeletesScanFunction(ClientContext &context) {
@@ -41,7 +44,7 @@ TableFunctionSet IcebergFunctions::GetIcebergDeletesScanFunction(ClientContext &
 		// Unset all of these: they are either broken, very inefficient.
 		// TODO: implement/fix these
 		function.serialize = IcebergDeletesScanSerialize;
-		function.deserialize = nullptr;
+		function.deserialize = IcebergDeletesScanDeserialize;
 
 		function.statistics = nullptr;
 		function.table_scan_progress = nullptr;

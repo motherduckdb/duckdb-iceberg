@@ -47,6 +47,7 @@ public:
 public:
 	ClientContext &context;
 	IcebergTableInformation &table_info;
+	//! schema updates etc.
 	vector<unique_ptr<IcebergTableUpdate>> updates;
 	//! has the table been deleted in the current transaction
 	bool is_deleted;
@@ -54,6 +55,8 @@ public:
 
 	//! Every insert/update/delete creates an alter of the table data
 	vector<reference<IcebergAddSnapshot>> alters;
+	//! Track the current row id for this transaction
+	int64_t next_row_id = 0;
 };
 
 } // namespace duckdb
