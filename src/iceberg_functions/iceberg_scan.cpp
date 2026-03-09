@@ -36,6 +36,7 @@
 
 #include <string>
 #include <numeric>
+#include <unordered_map>
 
 namespace duckdb {
 
@@ -158,15 +159,52 @@ vector<PartitionStatistics> IcebergGetPartitionStats(ClientContext &context, Get
 	// Force all files to be loaded
 	(void)file_list.GetTotalFileCount();
 
-	// When delete files are present, record_count is a gross count (before deletions)
-	CountType count_type = file_list.delete_manifests.empty() ? CountType::COUNT_EXACT : CountType::COUNT_APPROXIMATE;
+	// Build per-data-file delete counts from delete manifest entries.
+	// For positional deletes with a referenced_data_file (deletion vectors and optimized V2
+	// positional deletes), we know exactly which data file is targeted and how many rows are
+	// deleted, so we can compute exact net counts from manifest metadata alone.
+	std::unordered_map<string, int64_t> deletes_per_file;
+	bool has_inexact_deletes = false;
+
+	if (!file_list.delete_manifests.empty()) {
+		auto iceberg_path = file_list.GetPath();
+		auto &fs = FileSystem::GetFileSystem(context);
+		auto &options = file_list.options;
+		auto &metadata = file_list.GetMetadata();
+		auto &snapshot = *file_list.GetSnapshot();
+
+		// Re-scan delete manifests independently (don't consume the shared delete_manifest_reader)
+		auto delete_scan =
+		    AvroScan::ScanManifest(snapshot, file_list.delete_manifests, options, fs, iceberg_path, metadata, context);
+		manifest_file::ManifestReader reader(*delete_scan, true);
+
+		vector<IcebergManifestEntry> entries;
+		while (!reader.Finished()) {
+			entries.clear();
+			reader.Read(STANDARD_VECTOR_SIZE, entries);
+			for (auto &e : entries) {
+				if (e.data_file.content == IcebergManifestEntryContentType::POSITION_DELETES &&
+				    !e.data_file.referenced_data_file.empty()) {
+					deletes_per_file[e.data_file.referenced_data_file] += e.data_file.record_count;
+				} else {
+					// Equality deletes or V2 positional without a specific target — genuinely approximate
+					has_inexact_deletes = true;
+				}
+			}
+		}
+	}
 
 	auto &schema = file_list.GetSchema().columns;
 
 	for (auto &entry : file_list.manifest_entries) {
 		PartitionStatistics stats;
-		stats.count = NumericCast<idx_t>(entry.data_file.record_count);
-		stats.count_type = count_type;
+		int64_t deleted = 0;
+		auto it = deletes_per_file.find(entry.data_file.file_path);
+		if (it != deletes_per_file.end()) {
+			deleted = it->second;
+		}
+		stats.count = NumericCast<idx_t>(entry.data_file.record_count - deleted);
+		stats.count_type = has_inexact_deletes ? CountType::COUNT_APPROXIMATE : CountType::COUNT_EXACT;
 		if (!entry.data_file.lower_bounds.empty() || !entry.data_file.upper_bounds.empty()) {
 			stats.partition_row_group = make_shared_ptr<IcebergPartitionRowGroup>(schema, entry.data_file);
 		}
