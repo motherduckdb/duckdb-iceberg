@@ -402,9 +402,9 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 
 		auto partition_struct = yyjson_mut_obj_add_obj(doc, field_obj, "type");
 		yyjson_mut_obj_add_strcpy(doc, partition_struct, "type", "struct");
-		auto partition_fields = yyjson_mut_obj_add_arr(doc, partition_struct, "fields");
 		auto &first_entry = manifest_file.entries.front();
 		auto &data_file = first_entry.data_file;
+		auto partition_fields = yyjson_mut_obj_add_arr(doc, partition_struct, "fields");
 		if (!data_file.partition_info.empty()) {
 			for (auto &entry : data_file.partition_info) {
 				auto field_obj = yyjson_mut_arr_add_obj(doc, partition_fields);
@@ -649,7 +649,11 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 		// sequence_number: long
 		chunk.SetValue(col_idx++, i, Value::BIGINT(manifest_entry.sequence_number));
 		// file_sequence_number: long
-		chunk.SetValue(col_idx++, i, Value(LogicalType::BIGINT));
+		if (manifest_entry.status == IcebergManifestEntryStatusType::ADDED) {
+			chunk.SetValue(col_idx++, i, Value(LogicalType::BIGINT));
+		} else {
+			chunk.SetValue(col_idx++, i, Value::BIGINT(manifest_entry.file_sequence_number));
+		}
 
 		auto &data_file = manifest_entry.data_file;
 		// data_file: struct(...)

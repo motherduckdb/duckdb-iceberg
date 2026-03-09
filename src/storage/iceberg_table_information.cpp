@@ -394,7 +394,7 @@ void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
 		field.source_id = source_id;
 		field.partition_field_id = base_partition_field_id + new_spec.fields.size();
 		// transform field names cannot be the column name. Otherwise Lakekeeper complains
-		field.name = column_name + "_" + field.transform.TransformAsString();
+		field.name = column_name + "_" + field.transform.RawType();
 		new_spec.fields.push_back(std::move(field));
 	}
 

@@ -62,6 +62,7 @@ string IcebergPartitionSpec::FieldsToJSON() const {
 
 	for (auto &field : fields) {
 		auto field_obj = yyjson_mut_arr_add_obj(doc, root_arr);
+		auto wat = field.transform.RawType();
 		yyjson_mut_obj_add_strcpy(doc, field_obj, "name", field.name.c_str());
 		yyjson_mut_obj_add_strcpy(doc, field_obj, "transform", field.transform.RawType().c_str());
 		yyjson_mut_obj_add_uint(doc, field_obj, "source-id", field.source_id);

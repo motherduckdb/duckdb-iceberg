@@ -111,21 +111,6 @@ static vector<string> ParseQuotedList(const string &input, char list_separator) 
 	return result;
 }
 
-static void AddToColDefMap(case_insensitive_map_t<reference<const IcebergColumnDefinition>> &name_to_coldef,
-                           string col_name_prefix, const IcebergColumnDefinition &column_def) {
-	string column_name = column_def.name;
-	if (!col_name_prefix.empty()) {
-		column_name = col_name_prefix + "." + column_def.name;
-	}
-	if (column_def.IsIcebergPrimitiveType()) {
-		name_to_coldef.emplace(column_name, column_def);
-	} else {
-		for (auto &child : column_def.children) {
-			AddToColDefMap(name_to_coldef, column_name, *child);
-		}
-	}
-}
-
 IcebergColumnStats IcebergInsert::ParseColumnStats(const LogicalType &type, const vector<Value> &col_stats,
                                                    ClientContext &context) {
 	IcebergColumnStats column_stats(type);
@@ -247,10 +232,10 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 		auto table_current_schema_id = ic_table.table_info.table_metadata.current_schema_id;
 		auto ic_schema = ic_table.table_info.table_metadata.schemas[table_current_schema_id];
 
-		case_insensitive_map_t<reference<const IcebergColumnDefinition>> column_info;
-		for (auto &column : ic_schema->columns) {
-			AddToColDefMap(column_info, "", *column.get());
-		}
+		//	case_insensitive_map_t<reference<const IcebergColumnDefinition>> column_info;
+		//	for (auto &column : ic_schema->columns) {
+		//		AddToColDefMap(column_info, "", *column.get());
+		//	}
 
 		auto ic_partition_info = ic_table.table_info.table_metadata.GetLatestPartitionSpec();
 
