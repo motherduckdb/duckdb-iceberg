@@ -232,11 +232,6 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 		auto table_current_schema_id = ic_table.table_info.table_metadata.current_schema_id;
 		auto ic_schema = ic_table.table_info.table_metadata.schemas[table_current_schema_id];
 
-		//	case_insensitive_map_t<reference<const IcebergColumnDefinition>> column_info;
-		//	for (auto &column : ic_schema->columns) {
-		//		AddToColDefMap(column_info, "", *column.get());
-		//	}
-
 		auto ic_partition_info = ic_table.table_info.table_metadata.GetLatestPartitionSpec();
 
 		// Build a map from partition column name to its partition spec field
@@ -256,7 +251,6 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 			}
 		} else {
 			for (auto &partition_field : ic_partition_info.fields) {
-				// auto column_index = GetColumnIndexBySourceId(ic_schema->columns, partition_field.source_id);
 				auto actual_col_name = GetColumnNameBySourceId(ic_schema->columns, partition_field.source_id);
 				partition_colname_to_field.emplace(actual_col_name, partition_field);
 			}
