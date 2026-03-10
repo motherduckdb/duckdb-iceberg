@@ -30,3 +30,8 @@ query II
 explain analyze select * from scan where nested.value >= 10001000003000;
 ----
 analyzed_plan	<REGEX>:.*Total Files Read: 2\s+.*
+
+query II
+explain analyze select * from scan where nested.value >= 10001000003000 AND nested.value < 10001000004000;
+----
+analyzed_plan	<REGEX>:.*Total Files Read: 1\s+.*
