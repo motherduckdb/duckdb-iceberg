@@ -99,6 +99,13 @@ static void ParseConfigOptions(const case_insensitive_map_t<string> &config, cas
 	} else {
 		// Default to S3 parsing for backward compatibility
 		ParseS3ConfigOptions(config, options);
+		//TODO: region
+		// was a region included?
+		// if not, check dbconfig for a region
+		// or env variables for a region
+		// if no region, then trow "No region provided in vended credentials, no default region passed for the catalog,
+		// and no region found via environment variables"
+
 	}
 
 	auto it = config.find("s3.path-style-access");
