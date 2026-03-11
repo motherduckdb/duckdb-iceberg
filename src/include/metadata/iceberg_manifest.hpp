@@ -12,7 +12,6 @@
 #include "duckdb/common/insertion_order_preserving_map.hpp"
 
 #include "metadata/iceberg_table_schema.hpp"
-#include "metadata/iceberg_transform.hpp"
 #include "metadata/iceberg_table_metadata.hpp"
 
 namespace duckdb {

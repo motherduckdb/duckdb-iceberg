@@ -179,14 +179,6 @@ static string GetColumnNameBySourceId(vector<unique_ptr<IcebergColumnDefinition>
 	throw InvalidInputException("Partition source column with id %d not found in schema", source_id);
 }
 
-//! Find the column index for a given source_id in the table schema
-static idx_t GetColumnIndexBySourceId(IcebergCopyInput &copy_input, uint64_t source_id) {
-	if (!copy_input.table_schema) {
-		throw InvalidInputException("Partitioning requires table schema");
-	}
-	return GetColumnIndexBySourceId(copy_input.table_schema->columns, source_id);
-}
-
 //! Check if all partition fields use identity transforms
 static bool AllIdentityTransforms(const IcebergPartitionSpec &spec) {
 	for (auto &field : spec.fields) {
@@ -227,6 +219,7 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 		auto column_stats = chunk.GetValue(4, r);
 		auto &map_children = MapValue::GetChildren(column_stats);
 
+		// column 5 is stats, which we can also use for partition information
 		auto partition_values = chunk.GetValue(5, r);
 
 		auto table_current_schema_id = ic_table.table_info.table_metadata.current_schema_id;
@@ -240,13 +233,12 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 
 		// this is a weird case with partitioned inserts.
 		// Lakekeeper requires paritition fields to not have the same names as the columns (if there is a transform)
-		// So now our partition field names always include the transform name TODO: This should be some name hash
+		// So now our partition field names always include the transform name
 		// But if there are only identity transforms, we don't add a projection to the insert, so we can just use
 		// regular column names. So here when we populate our map, if there are transforms present, we need to use our
 		// transform partition column names. If not, we should use the identify names.
 		if (!AllIdentityTransforms(ic_partition_info)) {
 			for (auto &partition_field : ic_partition_info.fields) {
-				// auto column_index = GetColumnIndexBySourceId(ic_schema->columns, partition_field.source_id);
 				partition_colname_to_field.emplace(partition_field.name, partition_field);
 			}
 		} else {
@@ -502,7 +494,7 @@ static unique_ptr<Expression> CreateColumnReference(IcebergCopyInput &copy_input
 //! - hours: date_diff('hour', TIMESTAMP '1970-01-01', source_column)
 static unique_ptr<Expression> GetDateDiffFunction(ClientContext &context, IcebergCopyInput &copy_input,
                                                   const string &date_part, uint64_t source_id) {
-	auto col_idx = GetColumnIndexBySourceId(copy_input, source_id);
+	auto col_idx = GetColumnIndexBySourceId(copy_input.table_schema->columns, source_id);
 	auto col_type = GetSourceColumnType(copy_input, source_id);
 
 	vector<unique_ptr<Expression>> children;
@@ -529,7 +521,7 @@ static unique_ptr<Expression> GetDateDiffFunction(ClientContext &context, Iceber
 //! Get the partition expression for a partition field based on its transform type
 static unique_ptr<Expression> GetPartitionExpression(ClientContext &context, IcebergCopyInput &copy_input,
                                                      const IcebergPartitionSpecField &field) {
-	auto col_idx = GetColumnIndexBySourceId(copy_input, field.source_id);
+	auto col_idx = GetColumnIndexBySourceId(copy_input.table_schema->columns, field.source_id);
 	auto col_type = GetSourceColumnType(copy_input, field.source_id);
 
 	switch (field.transform.Type()) {
@@ -584,7 +576,7 @@ static void GeneratePartitionExpressions(ClientContext &context, IcebergCopyInpu
 			if (field.transform.Type() == IcebergTransformType::VOID) {
 				continue;
 			}
-			auto col_idx = GetColumnIndexBySourceId(copy_input, field.source_id);
+			auto col_idx = GetColumnIndexBySourceId(copy_input.table_schema->columns, field.source_id);
 			partition_columns.push_back(col_idx);
 		}
 		write_partition_columns = true;

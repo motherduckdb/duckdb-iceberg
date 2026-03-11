@@ -135,6 +135,7 @@ Value IcebergDataFile::ToValue(const IcebergTableMetadata &table_metadata, const
 			case IcebergTransformType::IDENTITY: {
 				if (entry.source_type == LogicalTypeId::TIMESTAMP) {
 					partition_result_type = LogicalType::BIGINT;
+					break;
 				}
 				if (entry.source_type.IsNested()) {
 					throw InvalidInputException("Cannot use identify partition on a nested column");
@@ -153,16 +154,21 @@ Value IcebergDataFile::ToValue(const IcebergTableMetadata &table_metadata, const
 				partition_result_type = LogicalType::BIGINT;
 				break;
 			case IcebergTransformType::INVALID:
-			case IcebergTransformType::VOID:
-				throw InvalidInputException("Cannot use this transform type");
+			case IcebergTransformType::VOID: {
+				throw InvalidInputException("Cannot use transform type %s in IcebergDataFile::ToValue %s",
+				                            entry.transform.RawType());
 				break;
+			}
 			default:
-				throw InvalidInputException("Unrecognized transform");
+				throw InvalidInputException("Unrecognized transform %s", entry.transform.RawType());
 			}
 			const LogicalType actual_type = partition_result_type;
 			bool cast_worked = entry.value.DefaultTryCastAs(actual_type, new_value, &error_message, true);
 			if (cast_worked) {
 				partition_children.emplace_back(entry.name, new_value);
+			} else {
+				throw InvalidInputException("Could not cast %s to %s", entry.value.type().ToString(),
+				                            actual_type.ToString());
 			}
 		}
 		children.push_back(Value::STRUCT(partition_children));
