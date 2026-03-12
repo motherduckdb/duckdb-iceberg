@@ -99,6 +99,8 @@ static void ParseConfigOptions(const case_insensitive_map_t<string> &config, cas
 	} else {
 		// Default to S3 parsing for backward compatibility
 		ParseS3ConfigOptions(config, options);
+		// Value default_region = options["default_region"];
+
 		//TODO: region
 		// was a region included?
 		// if not, check dbconfig for a region
