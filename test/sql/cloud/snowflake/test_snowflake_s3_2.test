@@ -31,7 +31,6 @@ create secret polaris_secret (
 statement ok
 attach 's3-catalog' as my_datalake (
     type ICEBERG,
-    default_region 'eu-west-2',
     ENDPOINT '${SNOWFLAKE_CATALOG_URI_GCS}'
  );
 
