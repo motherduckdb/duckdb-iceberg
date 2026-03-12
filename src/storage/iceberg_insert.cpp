@@ -9,8 +9,8 @@
 #include "utils/iceberg_type.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
 #include "duckdb/main/client_data.hpp"
-#include "duckdb/planner/operator/logical_copy_to_file.hpp"
 #include "duckdb/execution/physical_operator_states.hpp"
+#include "duckdb/planner/operator/logical_copy_to_file.hpp"
 #include "duckdb/planner/operator/logical_insert.hpp"
 #include "duckdb/planner/operator/logical_create_table.hpp"
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
@@ -294,11 +294,15 @@ SinkFinalizeType IcebergInsert::Finalize(Pipeline &pipeline, Event &event, Clien
 	auto &transaction = IcebergTransaction::Get(context, table->catalog);
 	auto &iceberg_transaction = transaction.Cast<IcebergTransaction>();
 
-	lock_guard<mutex> guard(global_state.lock);
-	if (!global_state.written_files.empty()) {
-		ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTableInformation &tbl) {
-			tbl.AddSnapshot(transaction, std::move(global_state.written_files));
-		});
+	vector<IcebergManifestEntry> written_files;
+	{
+		lock_guard<mutex> guard(global_state.lock);
+		written_files = std::move(global_state.written_files);
+	}
+
+	if (!written_files.empty()) {
+		ApplyTableUpdate(table_info, iceberg_transaction,
+		                 [&](IcebergTableInformation &tbl) { tbl.AddSnapshot(transaction, std::move(written_files)); });
 	}
 	return SinkFinalizeType::READY;
 }
