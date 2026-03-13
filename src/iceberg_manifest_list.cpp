@@ -152,6 +152,7 @@ static Value FieldSummaryFieldIds() {
 	children.emplace_back("lower_bound", Value::INTEGER(FIELD_SUMMARY_LOWER_BOUND));
 	children.emplace_back("upper_bound", Value::INTEGER(FIELD_SUMMARY_UPPER_BOUND));
 	children.emplace_back("__duckdb_field_id", Value::INTEGER(PARTITIONS_ELEMENT));
+	children.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
 	auto field_summary = Value::STRUCT(children);
 
 	child_list_t<Value> list_children;
