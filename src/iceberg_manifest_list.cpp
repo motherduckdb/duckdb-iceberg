@@ -147,7 +147,13 @@ namespace manifest_list {
 
 static Value FieldSummaryFieldIds() {
 	child_list_t<Value> children;
-	children.emplace_back("contains_null", Value::INTEGER(FIELD_SUMMARY_CONTAINS_NULL));
+	child_list_t<Value> contains_null;
+
+	contains_null.emplace_back("__duckdb_field_id", Value::INTEGER(FIELD_SUMMARY_CONTAINS_NULL));
+	contains_null.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
+
+	children.emplace_back("contains_null", Value::STRUCT(contains_null));
+
 	children.emplace_back("contains_nan", Value::INTEGER(FIELD_SUMMARY_CONTAINS_NAN));
 	children.emplace_back("lower_bound", Value::INTEGER(FIELD_SUMMARY_LOWER_BOUND));
 	children.emplace_back("upper_bound", Value::INTEGER(FIELD_SUMMARY_UPPER_BOUND));
