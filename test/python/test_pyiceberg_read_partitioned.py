@@ -310,12 +310,8 @@ class TestPyIcebergReadPartitioned:
 
     # ------------------------------------------------------------ TIMESTAMP
     def test_timestamp_identity_v2(self, rest_catalog):
-        table = rest_catalog.load_table(
-            "default.test_table_partitioned_by_timestamp_format_version_2"
-        )
-        assert _collected(table.scan().to_arrow()) == _sorted(
-            TIMESTAMP_V2_IDENTITY_ROWS
-        )
+        table = rest_catalog.load_table("default.test_table_partitioned_by_timestamp_format_version_2")
+        assert _collected(table.scan().to_arrow()) == _sorted(TIMESTAMP_V2_IDENTITY_ROWS)
 
     @pytest.mark.parametrize(
         "table_name",
