@@ -1,4 +1,5 @@
 #include "metadata/iceberg_column_definition.hpp"
+#include "duckdb/common/types.hpp"
 
 namespace duckdb {
 
@@ -140,6 +141,9 @@ LogicalType IcebergColumnDefinition::ParsePrimitiveTypeString(const string &type
 	}
 	if (type_str == "timestamptz") {
 		return LogicalType::TIMESTAMP_TZ;
+	}
+	if (type_str == "timestamp_ns") {
+		return LogicalType::TIMESTAMP_NS;
 	}
 	if (type_str == "string") {
 		return LogicalType::VARCHAR;

@@ -133,10 +133,6 @@ Value IcebergDataFile::ToValue(const IcebergTableMetadata &table_metadata, const
 			LogicalType partition_result_type;
 			switch (entry.transform.Type()) {
 			case IcebergTransformType::IDENTITY: {
-				if (entry.source_type == LogicalTypeId::TIMESTAMP) {
-					partition_result_type = LogicalType::BIGINT;
-					break;
-				}
 				if (entry.source_type.IsNested()) {
 					throw InvalidInputException("Cannot use identify partition on a nested column");
 				}
