@@ -120,8 +120,9 @@ static void ParseConfigOptions(const case_insensitive_map_t<string> &config, cas
 			const string region = RetrieveRegion(DBConfig::GetConfig(context));
 
 			if (region.empty()) {
-				throw InvalidConfigurationException("No region provided in vended credentials, no default region passed for the "
-				                        "catalog, and no region found via environment variables");
+				throw InvalidConfigurationException(
+				    "No region provided in vended credentials, no default region passed for the "
+				    "catalog, and no region found via environment variables");
 			}
 			options["region"] = Value(region);
 		}
