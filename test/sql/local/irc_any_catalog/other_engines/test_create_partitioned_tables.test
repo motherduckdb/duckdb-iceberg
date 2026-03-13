@@ -22,7 +22,6 @@ SET timezone='UTC';
 # Do not ignore 'HTTP' error messages!
 set ignore_error_messages
 
-
 statement ok
 create schema if not exists my_datalake.default;
 
@@ -607,18 +606,6 @@ INSERT INTO my_datalake.default.test_table_partitioned_by_timestamptz_hour_forma
 # ============================================================
 # TIMESTAMP_NS — identity + year/month/day/hour transforms
 # ============================================================
-
-statement ok
-drop table if exists my_datalake.default.test_table_partitioned_by_timestampns_format_version_2;
-
-# timestamp ns not supported for version 2 tables
-statement error
-CREATE TABLE my_datalake.default.test_table_partitioned_by_timestampns_format_version_2 (id INT, val TIMESTAMP_NS)
-PARTITIONED BY (val)
-WITH ('format-version' = 2);
-----
-<REGEX>:.*not supported.*
-
 
 statement ok
 drop table if exists my_datalake.default.test_table_partitioned_by_timestampns_format_version_3;
