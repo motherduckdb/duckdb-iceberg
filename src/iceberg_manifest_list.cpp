@@ -10,38 +10,35 @@
 
 namespace duckdb {
 
-vector<IcebergManifestFile> &IcebergManifestList::GetManifestFilesMutable() {
-	return manifest_entries;
-}
-
-void IcebergManifestFile::AddPartitions(const IcebergPartitionSpec &partition_spec) {
-	if (manifest_file.entries.empty() || partition_spec.fields.empty()) {
+void ManifestPartitions::Create(const IcebergPartitionSpec &partition_spec,
+                                const vector<IcebergManifestEntry> &manifest_entries) {
+	if (manifest_entries.empty() || partition_spec.fields.empty()) {
 		return;
 	}
 
 	// Check if any entry has partition info
-	for (auto &entry : manifest_file.entries) {
+	for (auto &entry : manifest_entries) {
 		if (entry.data_file.partition_info.empty()) {
 			throw InvalidInputException(
 			    "Manifest file contains entries without partition info even though there is a partition spec");
 		}
 	}
 
-	partitions.has_partitions = true;
+	has_partitions = true;
 
 	auto num_fields = partition_spec.fields.size();
-	partitions.field_summary.resize(num_fields);
+	field_summary.resize(num_fields);
 	vector<Value> min_values(num_fields);
 	vector<Value> max_values(num_fields);
 	vector<bool> initialized(num_fields, false);
 
-	for (auto &entry : manifest_file.entries) {
+	for (auto &entry : manifest_entries) {
 		auto &data_file = entry.data_file;
 		for (idx_t i = 0; i < num_fields; i++) {
 			auto &spec_field = partition_spec.fields[i];
 
 			// Find the partition info entry matching this field's partition_field_id
-			const DataFilePartitionInfo *info_ptr = nullptr;
+			optional_ptr<const DataFilePartitionInfo> info_ptr;
 			for (auto &pi : data_file.partition_info) {
 				if (pi.field_id == spec_field.partition_field_id) {
 					info_ptr = &pi;
@@ -50,7 +47,7 @@ void IcebergManifestFile::AddPartitions(const IcebergPartitionSpec &partition_sp
 			}
 
 			if (!info_ptr || info_ptr->value.IsNull()) {
-				partitions.field_summary[i].contains_null = true;
+				field_summary[i].contains_null = true;
 				continue;
 			}
 
@@ -79,14 +76,14 @@ void IcebergManifestFile::AddPartitions(const IcebergPartitionSpec &partition_sp
 	for (idx_t i = 0; i < num_fields; i++) {
 		if (!initialized[i]) {
 			// All values for this field are null - set bounds to null BLOBs
-			partitions.field_summary[i].lower_bound = Value(LogicalType::BLOB);
-			partitions.field_summary[i].upper_bound = Value(LogicalType::BLOB);
+			field_summary[i].lower_bound = Value(LogicalType::BLOB);
+			field_summary[i].upper_bound = Value(LogicalType::BLOB);
 			continue;
 		}
 		auto &spec_field = partition_spec.fields[i];
 		// Find one DataFilePartitionInfo entry to get the type info
-		const DataFilePartitionInfo *info_ptr = nullptr;
-		for (auto &entry : manifest_file.entries) {
+		optional_ptr<const DataFilePartitionInfo> info_ptr;
+		for (auto &entry : manifest_entries) {
 			for (auto &pi : entry.data_file.partition_info) {
 				if (pi.field_id == spec_field.partition_field_id && !pi.value.IsNull()) {
 					info_ptr = &pi;
@@ -103,19 +100,23 @@ void IcebergManifestFile::AddPartitions(const IcebergPartitionSpec &partition_sp
 		auto upper_result = IcebergValue::SerializeValue(max_values[i], serialized_type, SerializeBound::UPPER_BOUND);
 
 		if (lower_result.HasValue()) {
-			partitions.field_summary[i].lower_bound = lower_result.GetValue();
+			field_summary[i].lower_bound = lower_result.GetValue();
 		} else {
-			partitions.field_summary[i].lower_bound = Value(LogicalType::BLOB);
+			field_summary[i].lower_bound = Value(LogicalType::BLOB);
 		}
 		if (upper_result.HasValue()) {
-			partitions.field_summary[i].upper_bound = upper_result.GetValue();
+			field_summary[i].upper_bound = upper_result.GetValue();
 		} else {
-			partitions.field_summary[i].upper_bound = Value(LogicalType::BLOB);
+			field_summary[i].upper_bound = Value(LogicalType::BLOB);
 		}
 	}
 }
 
-const vector<IcebergManifestFile> &IcebergManifestList::GetManifestFilesConst() const {
+vector<IcebergManifestListEntry> &IcebergManifestList::GetManifestFilesMutable() {
+	return manifest_entries;
+}
+
+const vector<IcebergManifestListEntry> &IcebergManifestList::GetManifestFilesConst() const {
 	return manifest_entries;
 }
 
@@ -123,12 +124,12 @@ idx_t IcebergManifestList::GetManifestListEntriesCount() const {
 	return manifest_entries.size();
 }
 
-void IcebergManifestList::AddToManifestEntries(vector<IcebergManifestFile> &manifest_list_entries) {
+void IcebergManifestList::AddToManifestEntries(vector<IcebergManifestListEntry> &manifest_list_entries) {
 	manifest_entries.insert(manifest_entries.begin(), std::make_move_iterator(manifest_list_entries.begin()),
 	                        std::make_move_iterator(manifest_list_entries.end()));
 }
 
-vector<IcebergManifestFile> IcebergManifestList::GetManifestListEntries() {
+vector<IcebergManifestListEntry> IcebergManifestList::GetManifestListEntries() {
 	return std::move(manifest_entries);
 }
 
@@ -267,7 +268,8 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
 	}
 
 	for (idx_t i = 0; i < manifest_files.size(); i++) {
-		const auto &manifest = manifest_files[i];
+		const auto &manifest_entry = manifest_files[i];
+		const auto &manifest = manifest_entry.file;
 		idx_t col_idx = 0;
 
 		// manifest_path: string - 500
