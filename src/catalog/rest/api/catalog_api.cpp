@@ -470,10 +470,13 @@ rest_api_objects::LoadTableResult IRCAPI::CommitNewTable(ClientContext &context,
 	}
 }
 
-rest_api_objects::CatalogConfig IRCAPI::GetCatalogConfig(ClientContext &context, IcebergCatalog &catalog) {
+rest_api_objects::CatalogConfig IRCAPI::GetCatalogConfig(ClientContext &context, IcebergCatalog &catalog,
+                                                         const string &warehouse) {
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPathComponent("config");
-	url_builder.SetParam("warehouse", catalog.warehouse);
+	if (!warehouse.empty()) {
+		url_builder.SetParam("warehouse", warehouse);
+	}
 	string body = "";
 	HTTPHeaders headers(*context.db);
 	auto response = catalog.auth_handler->Request(RequestType::GET_REQUEST, context, url_builder, headers, body);

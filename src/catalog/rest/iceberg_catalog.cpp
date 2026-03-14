@@ -419,7 +419,13 @@ void IcebergCatalog::GetConfig(ClientContext &context, IcebergEndpointType &endp
 	// set the prefix to be empty. To get the config endpoint,
 	// we cannot add a default prefix.
 	D_ASSERT(prefix.empty());
-	auto catalog_config = IRCAPI::GetCatalogConfig(context, *this);
+
+	// For AWS Glue, ":" means "default account catalog" — omit the warehouse param
+	string effective_warehouse = warehouse;
+	if (endpoint_type == IcebergEndpointType::AWS_GLUE && warehouse == ":") {
+		effective_warehouse = "";
+	}
+	auto catalog_config = IRCAPI::GetCatalogConfig(context, *this, effective_warehouse);
 	overrides = catalog_config.overrides;
 	defaults = catalog_config.defaults;
 	ParsePrefix();
