@@ -309,7 +309,7 @@ IcebergSnapshotLookup IcebergTableInformation::GetSnapshotLookup(ClientContext &
 bool IcebergTableInformation::TableIsEmpty(const IcebergSnapshotLookup &snapshot_lookup) const {
 	// edge case tables before data is inserted. There is no snapshot information, so we defer to latest.
 	if (table_metadata.snapshots.empty() && snapshot_lookup.snapshot_source == SnapshotSource::FROM_TIMESTAMP) {
-		auto timestamp_millis = Timestamp::GetEpochMs(snapshot_lookup.snapshot_timestamp);
+		auto timestamp_millis = timestamp_t(Timestamp::GetEpochMs(snapshot_lookup.snapshot_timestamp));
 		if (timestamp_millis >= table_metadata.last_updated_ms) {
 			// current table was made before the transaction but is empty.
 			// you can return current table information in an as-is form

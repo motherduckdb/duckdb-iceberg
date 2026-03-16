@@ -151,16 +151,10 @@ static void WriteIcebergMetadata(ClientContext &context, CopyIcebergBindData &bi
 		throw MissingExtensionException("Did not find avro copy function required to write iceberg metadata");
 	}
 
-	// Create a snapshot from the written files
-	IcebergSnapshot snapshot;
-	snapshot.snapshot_id = 1; // First snapshot
-	snapshot.has_parent_snapshot = false;
-	snapshot.sequence_number = 1;
-	snapshot.timestamp_ms =
-	    std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
-	        .count();
-	snapshot.operation = IcebergSnapshotOperationType::APPEND;
-	snapshot.metrics = {{SnapshotMetricType::ADDED_DATA_FILES, written_files.size()}};
+	int64_t next_row_id = 0;
+	auto snapshot_id = IcebergSnapshot::NewSnapshotId();
+	const auto sequence_number = 0;
+	const auto first_row_id = next_row_id;
 
 	auto metadata_path = table_metadata.GetMetadataPath();
 	auto &fs = FileSystem::GetFileSystem(context);
@@ -172,52 +166,62 @@ static void WriteIcebergMetadata(ClientContext &context, CopyIcebergBindData &bi
 		}
 	}
 
+	//! Construct the manifest list
+	auto manifest_list_uuid = UUID::ToString(UUID::GenerateRandomUUID());
+	auto manifest_list_path =
+	    metadata_path + "/snap-" + std::to_string(snapshot_id) + "-" + manifest_list_uuid + ".avro";
+
+	auto manifest_file = IcebergManifestListEntry::CreateFromEntries(snapshot_id, sequence_number, table_metadata,
+	                                                                 IcebergManifestContentType::DATA,
+	                                                                 std::move(written_files), next_row_id);
+
+	// Create a snapshot from the written files
+	IcebergSnapshot snapshot;
+	snapshot.operation = IcebergSnapshotOperationType::APPEND;
+	snapshot.snapshot_id = snapshot_id;
+	snapshot.sequence_number = sequence_number;
+	snapshot.schema_id = 0;
+	snapshot.manifest_list = manifest_list_path;
+	snapshot.timestamp_ms = Timestamp::GetEpochMs(Timestamp::GetCurrentTimestamp());
+	snapshot.has_parent_snapshot = false;
+
+	snapshot.metrics.AddManifestFile(manifest_file.file);
+
+	if (table_metadata.iceberg_version >= 3) {
+		snapshot.has_first_row_id = true;
+		snapshot.first_row_id = first_row_id;
+
+		snapshot.has_added_rows = true;
+		if (manifest_file.file.content == IcebergManifestContentType::DATA) {
+			snapshot.added_rows = manifest_file.file.added_rows_count;
+		} else {
+			snapshot.added_rows = 0;
+		}
+	}
+
 	// Write manifest file(s)
-	auto manifest_path = table_metadata.location + "/manifest-" + UUID::ToString(UUID::GenerateRandomUUID()) + ".avro";
+	auto manifest_path = metadata_path + "/manifest-" + UUID::ToString(UUID::GenerateRandomUUID()) + ".avro";
 	auto manifest_length =
 	    manifest_file::WriteToFile(table_metadata, manifest_path, written_files, copy_fun->function, db, context);
 
-	throw InternalException("TODO: write manifest list, manifest and metadata.json");
+	IcebergManifestList manifest_list(manifest_list_path);
+	manifest_list.AddManifestFile(std::move(manifest_file));
+	manifest_list::WriteToFile(table_metadata, manifest_list, copy_fun->function, db, context);
 
-	//// Create manifest list entry
-	// vector<IcebergManifestListEntry> manifest_entries;
-	// manifest_entries.emplace_back();
-	// manifest_entry.file.manifest_path = manifest_path;
-	// manifest_entry.file.manifest_length = manifest_length;
-	// manifest_entry.file.partition_spec_id = 0;
-	// manifest_entry.file.added_snapshot_id = snapshot.snapshot_id;
-	// manifest_entry.file.added_files_count = written_files.size();
-	// manifest_entry.manifest_entries = written_files;
+	// Update table metadata with snapshot
+	table_metadata.current_snapshot_id = snapshot.snapshot_id;
+	table_metadata.last_sequence_number = snapshot.sequence_number;
+	table_metadata.last_updated_ms = snapshot.timestamp_ms;
+	table_metadata.snapshots[0] = std::move(snapshot);
 
-	//// Write manifest list
-	// auto manifest_list_path = metadata_path + "/snap-" +
-	//                          std::to_string(snapshot.snapshot_id) + "-1-" +
-	//                          UUID::ToString(UUID::GenerateRandomUUID()) + ".avro";
-	// snapshot.manifest_list = manifest_list_path;
+	// Write metadata.json
+	auto metadata_file_path = metadata_path + UUID::ToString(UUID::GenerateRandomUUID()) + ".metadata.json";
 
-	// IcebergManifestList manifest_list(manifest_list_path);
-	// manifest_list.AddToManifestEntries({manifest_entry});
-	// manifest_list::WriteToFile(table_metadata, manifest_list, copy_fun->function, db, context);
-
-	//// Update table metadata with snapshot
-	// table_metadata.current_snapshot_id = snapshot.snapshot_id;
-	// table_metadata.last_sequence_number = snapshot.sequence_number;
-	// table_metadata.last_updated_ms = snapshot.timestamp_ms;
-	// table_metadata.snapshots[0] = std::move(snapshot);
-
-	//// Add schema to metadata if not already present
-	// if (table_metadata.schemas.empty()) {
-	//	table_metadata.schemas[0] = table_schema;
-	//}
-
-	//// Write metadata.json
-	// auto metadata_path = metadata_path + UUID::ToString(UUID::GenerateRandomUUID()) + ".metadata.json";
-
-	// IcebergTableMetadata::WriteMetadata(context, metadata_path, table_metadata);
+	// IcebergTableMetadata::WriteMetadata(context, metadata_file_path, table_metadata);
 
 	//// Write version-hint.text pointing to the latest metadata
 	// auto version_hint_path = metadata_path + "/version-hint.text";
-	// IcebergTableMetadata::WriteVersionHint(context, version_hint_path, metadata_path);
+	// IcebergTableMetadata::WriteVersionHint(context, version_hint_path, metadata_file_path);
 }
 
 SinkFinalizeType IcebergPhysicalCopy::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
