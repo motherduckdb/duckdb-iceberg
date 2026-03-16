@@ -70,6 +70,9 @@ static void LoadInternal(ExtensionLoader &loader) {
 		loader.RegisterFunction(fun);
 	}
 
+	// Iceberg COPY Function
+	loader.RegisterFunction(IcebergCopyFunction::Create());
+
 	SecretType secret_type;
 	secret_type.name = "iceberg";
 	secret_type.deserializer = KeyValueSecret::Deserialize<KeyValueSecret>;
