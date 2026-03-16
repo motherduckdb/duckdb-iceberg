@@ -42,10 +42,10 @@ IcebergInsert::IcebergInsert(PhysicalPlan &physical_plan, const vector<LogicalTy
     : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, types, 1), table(&table), schema(nullptr) {
 }
 
-IcebergCopyInput::IcebergCopyInput(ClientContext &context, IcebergTableEntry &table, const IcebergTableSchema &schema)
-    : catalog(table.catalog.Cast<IcebergCatalog>()), columns(table.GetColumns()), table_info(table.table_info),
-      schema(schema) {
-	data_path = table.table_info.table_metadata.GetDataPath();
+IcebergCopyInput::IcebergCopyInput(ClientContext &context, const IcebergTableMetadata &table_metadata,
+                                   const IcebergTableSchema &schema)
+    : table_metadata(table_metadata), schema(schema) {
+	data_path = table_metadata.GetDataPath();
 }
 
 IcebergInsertGlobalState::IcebergInsertGlobalState(ClientContext &context)
@@ -418,15 +418,16 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 		throw MissingExtensionException("Did not find parquet copy function required to write to iceberg table");
 	}
 
-	auto names_to_write = copy_input.columns.GetColumnNames();
-	auto types_to_write = copy_input.columns.GetColumnTypes();
+	vector<string> names_to_write;
+	vector<LogicalType> types_to_write;
+	copy_input.schema.GetColumnNamesAndTypes(names_to_write, types_to_write);
 	if (WriteRowId(copy_input.virtual_columns)) {
 		names_to_write.push_back("_row_id");
 		types_to_write.push_back(LogicalType::BIGINT);
 	}
 
 	const auto copy_info = GetBindInput(copy_input);
-	const auto table_properties = copy_input.table_info.table_metadata.GetTableProperties();
+	const auto &table_properties = copy_input.table_metadata.GetTableProperties();
 
 	// Map Iceberg write properties to DuckDB parquet copy options
 	for (idx_t i = 0; i < ICEBERG_TABLE_PROPERTY_MAPPING_SIZE; i++) {
@@ -532,22 +533,22 @@ PhysicalOperator &IcebergCatalog::PlanInsert(ClientContext &context, PhysicalPla
 
 	auto &table_entry = op.table.Cast<IcebergTableEntry>();
 	table_entry.PrepareIcebergScanFromEntry(context);
-	auto &table_info = table_entry.table_info;
-	auto &schema = table_info.table_metadata.GetLatestSchema();
+	auto &table_metadata = table_entry.table_info.table_metadata;
+	auto &schema = table_metadata.GetLatestSchema();
 
-	auto &partition_spec = table_info.table_metadata.GetLatestPartitionSpec();
+	auto &partition_spec = table_metadata.GetLatestPartitionSpec();
 	if (!partition_spec.IsUnpartitioned()) {
 		throw NotImplementedException("INSERT into a partitioned table is not supported yet");
 	}
-	if (table_info.table_metadata.HasSortOrder()) {
-		auto &sort_spec = table_info.table_metadata.GetLatestSortOrder();
+	if (table_metadata.HasSortOrder()) {
+		auto &sort_spec = table_metadata.GetLatestSortOrder();
 		if (sort_spec.IsSorted()) {
 			throw NotImplementedException("INSERT into a sorted iceberg table is not supported yet");
 		}
 	}
 
 	// Create Copy Info
-	IcebergCopyInput info(context, table_entry, schema);
+	IcebergCopyInput info(context, table_metadata, schema);
 	auto &insert = planner.Make<IcebergInsert>(op, op.table, op.column_index_map);
 	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, info, plan);
 	insert.children.push_back(physical_copy);
@@ -571,13 +572,14 @@ PhysicalOperator &IcebergCatalog::PlanCreateTableAs(ClientContext &context, Phys
 		throw InternalException("Table could not be created");
 	}
 	auto &ic_table = table->Cast<IcebergTableEntry>();
+	auto &table_metadata = ic_table.table_info.table_metadata;
 	// We need to load table credentials into our secrets for when we copy files
 	ic_table.PrepareIcebergScanFromEntry(context);
 
-	auto &table_schema = ic_table.table_info.table_metadata.GetLatestSchema();
+	auto &table_schema = table_metadata.GetLatestSchema();
 
 	// Create Copy Info
-	IcebergCopyInput info(context, ic_table, table_schema);
+	IcebergCopyInput info(context, table_metadata, table_schema);
 	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, info, plan);
 	physical_index_vector_t<idx_t> column_index_map;
 	auto &insert = planner.Make<IcebergInsert>(op, ic_table, column_index_map);
