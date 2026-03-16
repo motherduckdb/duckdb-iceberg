@@ -10,6 +10,55 @@
 
 namespace duckdb {
 
+optional_ptr<CopyFunctionCatalogEntry> IcebergUtils::TryGetCopyFunction(DatabaseInstance &db, const string &name) {
+	D_ASSERT(!name.empty());
+	auto &system_catalog = Catalog::GetSystemCatalog(db);
+	auto data = CatalogTransaction::GetSystemTransaction(db);
+	auto &schema = system_catalog.GetSchema(data, DEFAULT_SCHEMA);
+	return schema.GetEntry(data, CatalogType::COPY_FUNCTION_ENTRY, name)->Cast<CopyFunctionCatalogEntry>();
+}
+
+static string ParseQuotedValue(const string &input, idx_t &pos) {
+	if (pos >= input.size() || input[pos] != '"') {
+		throw InvalidInputException("Failed to parse quoted value - expected a quote");
+	}
+	string result;
+	pos++;
+	for (; pos < input.size(); pos++) {
+		if (input[pos] == '"') {
+			pos++;
+			// check if this is an escaped quote
+			if (pos < input.size() && input[pos] == '"') {
+				// escaped quote
+				result += '"';
+				continue;
+			}
+			return result;
+		}
+		result += input[pos];
+	}
+	throw InvalidInputException("Failed to parse quoted value - unterminated quote");
+}
+
+vector<string> IcebergUtils::ParseQuotedList(const string &input, char list_separator) {
+	vector<string> result;
+	if (input.empty()) {
+		return result;
+	}
+	idx_t pos = 0;
+	while (true) {
+		result.push_back(ParseQuotedValue(input, pos));
+		if (pos >= input.size()) {
+			break;
+		}
+		if (input[pos] != list_separator) {
+			throw InvalidInputException("Failed to parse list - expected a %s", string(1, list_separator));
+		}
+		pos++;
+	}
+	return result;
+}
+
 idx_t IcebergUtils::CountOccurrences(const string &input, const string &to_find) {
 	size_t pos = input.find(to_find);
 	idx_t count = 0;

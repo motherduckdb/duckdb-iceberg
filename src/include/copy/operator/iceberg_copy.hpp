@@ -4,8 +4,24 @@
 #include "metadata/iceberg_table_metadata.hpp"
 #include "metadata/iceberg_table_schema.hpp"
 #include "duckdb/execution/physical_plan_generator.hpp"
+#include "metadata/iceberg_manifest.hpp"
 
 namespace duckdb {
+
+struct CopyIcebergGlobalState : public GlobalSinkState {
+public:
+	explicit CopyIcebergGlobalState(ClientContext &context);
+
+	ClientContext &context;
+	mutex lock;
+	vector<IcebergManifestEntry> written_files;
+	atomic<idx_t> rows_copied;
+};
+
+struct CopyIcebergLocalState : public LocalSinkState {
+public:
+	explicit CopyIcebergLocalState(ClientContext &context);
+};
 
 struct IcebergPhysicalCopy : public PhysicalOperator {
 public:
@@ -17,7 +33,33 @@ public:
 	unique_ptr<FunctionData> bind_data;
 
 public:
-	SinkResultType Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const;
+	// Sink interface
+	SinkResultType Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const override;
+	SinkFinalizeType Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
+	                          OperatorSinkFinalizeInput &input) const override;
+	unique_ptr<GlobalSinkState> GetGlobalSinkState(ClientContext &context) const override;
+	unique_ptr<LocalSinkState> GetLocalSinkState(ExecutionContext &context) const override;
+
+	bool IsSink() const override {
+		return true;
+	}
+
+	bool ParallelSink() const override {
+		return false;
+	}
+
+public:
+	// Source interface
+	SourceResultType GetDataInternal(ExecutionContext &context, DataChunk &chunk,
+	                                 OperatorSourceInput &input) const override;
+
+	bool IsSource() const override {
+		return true;
+	}
+
+public:
+	string GetName() const override;
+	InsertionOrderPreservingMap<string> ParamsToString() const override;
 };
 
 struct IcebergLogicalCopy : public LogicalExtensionOperator {

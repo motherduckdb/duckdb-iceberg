@@ -15,10 +15,8 @@ IcebergPartitionSpecField IcebergPartitionSpecField::ParseFromJson(const rest_ap
 }
 
 IcebergPartitionSpec IcebergPartitionSpec::ParseFromJson(const rest_api_objects::PartitionSpec &partition_spec) {
-	IcebergPartitionSpec result;
-
 	D_ASSERT(partition_spec.has_spec_id);
-	result.spec_id = partition_spec.spec_id;
+	IcebergPartitionSpec result(partition_spec.spec_id);
 	for (auto &field : partition_spec.fields) {
 		result.fields.push_back(IcebergPartitionSpecField::ParseFromJson(field));
 	}

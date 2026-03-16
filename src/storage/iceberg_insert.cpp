@@ -18,6 +18,7 @@
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 #include "duckdb/common/types/uuid.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
+#include "iceberg_utils.hpp"
 
 namespace duckdb {
 
@@ -59,47 +60,6 @@ unique_ptr<GlobalSinkState> IcebergInsert::GetGlobalSinkState(ClientContext &con
 //===--------------------------------------------------------------------===//
 // Sink
 //===--------------------------------------------------------------------===//
-static string ParseQuotedValue(const string &input, idx_t &pos) {
-	if (pos >= input.size() || input[pos] != '"') {
-		throw InvalidInputException("Failed to parse quoted value - expected a quote");
-	}
-	string result;
-	pos++;
-	for (; pos < input.size(); pos++) {
-		if (input[pos] == '"') {
-			pos++;
-			// check if this is an escaped quote
-			if (pos < input.size() && input[pos] == '"') {
-				// escaped quote
-				result += '"';
-				continue;
-			}
-			return result;
-		}
-		result += input[pos];
-	}
-	throw InvalidInputException("Failed to parse quoted value - unterminated quote");
-}
-
-static vector<string> ParseQuotedList(const string &input, char list_separator) {
-	vector<string> result;
-	if (input.empty()) {
-		return result;
-	}
-	idx_t pos = 0;
-	while (true) {
-		result.push_back(ParseQuotedValue(input, pos));
-		if (pos >= input.size()) {
-			break;
-		}
-		if (input[pos] != list_separator) {
-			throw InvalidInputException("Failed to parse list - expected a %s", string(1, list_separator));
-		}
-		pos++;
-	}
-	return result;
-}
-
 IcebergColumnStats IcebergInsert::ParseColumnStats(const LogicalType &type, const vector<Value> &col_stats,
                                                    ClientContext &context) {
 	IcebergColumnStats column_stats(type);
@@ -186,7 +146,7 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 			auto &struct_children = StructValue::GetChildren(map_children[col_idx]);
 			auto &col_name = StringValue::Get(struct_children[0]);
 			auto &col_stats = MapValue::GetChildren(struct_children[1]);
-			auto column_names = ParseQuotedList(col_name, '.');
+			auto column_names = IcebergUtils::ParseQuotedList(col_name, '.');
 			if (column_names[0] == "_row_id") {
 				continue;
 			}
@@ -325,14 +285,6 @@ InsertionOrderPreservingMap<string> IcebergInsert::ParamsToString() const {
 //===--------------------------------------------------------------------===//
 // Plan
 //===--------------------------------------------------------------------===//
-static optional_ptr<CopyFunctionCatalogEntry> TryGetCopyFunction(DatabaseInstance &db, const string &name) {
-	D_ASSERT(!name.empty());
-	auto &system_catalog = Catalog::GetSystemCatalog(db);
-	auto data = CatalogTransaction::GetSystemTransaction(db);
-	auto &schema = system_catalog.GetSchema(data, DEFAULT_SCHEMA);
-	return schema.GetEntry(data, CatalogType::COPY_FUNCTION_ENTRY, name)->Cast<CopyFunctionCatalogEntry>();
-}
-
 static Value GetFieldIdValue(const IcebergColumnDefinition &column) {
 	auto column_value = Value::BIGINT(column.id);
 	if (column.children.empty()) {
@@ -413,7 +365,7 @@ static const idx_t ICEBERG_TABLE_PROPERTY_MAPPING_SIZE =
 PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, PhysicalPlanGenerator &planner,
                                                    IcebergCopyInput &copy_input, optional_ptr<PhysicalOperator> plan) {
 	// Get Parquet Copy function
-	auto copy_fun = TryGetCopyFunction(*context.db, "parquet");
+	auto copy_fun = IcebergUtils::TryGetCopyFunction(*context.db, "parquet");
 	if (!copy_fun) {
 		throw MissingExtensionException("Did not find parquet copy function required to write to iceberg table");
 	}

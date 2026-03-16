@@ -1,6 +1,9 @@
 #include "copy/operator/iceberg_copy.hpp"
 #include "copy/function/iceberg_copy_function.hpp"
 #include "storage/iceberg_insert.hpp"
+#include "iceberg_utils.hpp"
+#include "iceberg_value.hpp"
+#include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
 
 namespace duckdb {
 
@@ -19,6 +22,15 @@ PhysicalOperator &IcebergLogicalCopy::CreatePlan(ClientContext &context, Physica
 	// Create IcebergCopyInput with the metadata from bind data
 	IcebergCopyInput copy_input(context, *copy_bind_data.table_metadata, *copy_bind_data.table_schema);
 
+	auto &fs = FileSystem::GetFileSystem(context);
+	if (!fs.IsRemoteFile(copy_input.data_path)) {
+		// create data path if it does not yet exist
+		try {
+			fs.CreateDirectoriesRecursive(copy_input.data_path);
+		} catch (...) {
+		}
+	}
+
 	// Create a parquet copy operator as the child
 	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, &child_plan);
 
@@ -31,15 +43,236 @@ PhysicalOperator &IcebergLogicalCopy::CreatePlan(ClientContext &context, Physica
 	return op;
 }
 
+CopyIcebergGlobalState::CopyIcebergGlobalState(ClientContext &context)
+    : GlobalSinkState(), context(context), rows_copied(0) {
+}
+
+CopyIcebergLocalState::CopyIcebergLocalState(ClientContext &context) : LocalSinkState() {
+}
+
+unique_ptr<GlobalSinkState> IcebergPhysicalCopy::GetGlobalSinkState(ClientContext &context) const {
+	return make_uniq<CopyIcebergGlobalState>(context);
+}
+
+unique_ptr<LocalSinkState> IcebergPhysicalCopy::GetLocalSinkState(ExecutionContext &context) const {
+	return make_uniq<CopyIcebergLocalState>(context.client);
+}
+
 SinkResultType IcebergPhysicalCopy::Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const {
 	auto &gstate = input.global_state.Cast<CopyIcebergGlobalState>();
-	auto &lstate = input.local_state.Cast<CopyIcebergLocalState>();
+	auto &copy_bind_data = bind_data->Cast<CopyIcebergBindData>();
 
-	// Write data files (similar to IcebergInsert)
-	// Write to parquet files in data/ subdirectory
-	// Track manifest entries
+	// grab lock for written files vector
+	lock_guard<mutex> guard(gstate.lock);
+
+	for (idx_t r = 0; r < chunk.size(); r++) {
+		IcebergManifestEntry manifest_entry;
+		manifest_entry.status = IcebergManifestEntryStatusType::ADDED;
+		manifest_entry.partition_spec_id = 0;
+
+		auto &data_file = manifest_entry.data_file;
+		data_file.file_path = chunk.GetValue(0, r).GetValue<string>();
+		data_file.record_count = static_cast<int64_t>(chunk.GetValue(1, r).GetValue<idx_t>());
+		data_file.file_size_in_bytes = static_cast<int64_t>(chunk.GetValue(2, r).GetValue<idx_t>());
+		data_file.content = IcebergManifestEntryContentType::DATA;
+		data_file.file_format = "parquet";
+
+		// extract the column stats
+		auto column_stats = chunk.GetValue(4, r);
+		auto &map_children = MapValue::GetChildren(column_stats);
+
+		gstate.rows_copied += data_file.record_count;
+
+		auto &table_schema = *copy_bind_data.table_schema;
+
+		for (idx_t col_idx = 0; col_idx < map_children.size(); col_idx++) {
+			auto &struct_children = StructValue::GetChildren(map_children[col_idx]);
+			auto &col_name = StringValue::Get(struct_children[0]);
+			auto &col_stats = MapValue::GetChildren(struct_children[1]);
+			auto column_names = IcebergUtils::ParseQuotedList(col_name, '.');
+
+			optional_idx name_offset;
+			auto column_info_p = table_schema.GetFromPath(column_names, &name_offset);
+			if (!column_info_p) {
+				auto normalized_col_name = StringUtil::Join(column_names, ".");
+				throw InternalException("Column '%s' can not be found in the schema, but returned by RETURN_STATS",
+				                        normalized_col_name);
+			}
+			if (name_offset.IsValid()) {
+				//! FIXME: deal with variant stats
+				continue;
+			}
+			auto &column_info = *column_info_p;
+
+			auto stats = IcebergInsert::ParseColumnStats(column_info.type, col_stats, gstate.context);
+
+			// go through stats and add upper and lower bounds
+			if (stats.has_min) {
+				auto serialized_value =
+				    IcebergValue::SerializeValue(stats.min, column_info.type, SerializeBound::LOWER_BOUND);
+				if (serialized_value.HasError()) {
+					throw InvalidConfigurationException(serialized_value.GetError());
+				} else if (serialized_value.HasValue()) {
+					data_file.lower_bounds[column_info.id] = serialized_value.GetValue();
+				}
+			}
+			if (stats.has_max) {
+				auto serialized_value =
+				    IcebergValue::SerializeValue(stats.max, column_info.type, SerializeBound::UPPER_BOUND);
+				if (serialized_value.HasError()) {
+					throw InvalidConfigurationException(serialized_value.GetError());
+				} else if (serialized_value.HasValue()) {
+					data_file.upper_bounds[column_info.id] = serialized_value.GetValue();
+				}
+			}
+			if (stats.has_column_size_bytes) {
+				data_file.column_sizes[column_info.id] = stats.column_size_bytes;
+			}
+			if (stats.has_null_count) {
+				data_file.null_value_counts[column_info.id] = stats.null_count;
+			}
+		}
+
+		gstate.written_files.push_back(std::move(manifest_entry));
+	}
 
 	return SinkResultType::NEED_MORE_INPUT;
+}
+
+static void WriteIcebergMetadata(ClientContext &context, CopyIcebergBindData &bind_data,
+                                 vector<IcebergManifestEntry> &written_files) {
+	auto &table_metadata = *bind_data.table_metadata;
+	auto &table_schema = *bind_data.table_schema;
+
+	// Get the avro copy function for writing manifest files
+	auto &db = DatabaseInstance::GetDatabase(context);
+	auto copy_fun = IcebergUtils::TryGetCopyFunction(db, "avro");
+	if (!copy_fun) {
+		throw MissingExtensionException("Did not find avro copy function required to write iceberg metadata");
+	}
+
+	// Create a snapshot from the written files
+	IcebergSnapshot snapshot;
+	snapshot.snapshot_id = 1; // First snapshot
+	snapshot.has_parent_snapshot = false;
+	snapshot.sequence_number = 1;
+	snapshot.timestamp_ms =
+	    std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+	        .count();
+	snapshot.operation = IcebergSnapshotOperationType::APPEND;
+	snapshot.metrics = {{SnapshotMetricType::ADDED_DATA_FILES, written_files.size()}};
+
+	auto metadata_path = table_metadata.GetMetadataPath();
+	auto &fs = FileSystem::GetFileSystem(context);
+	if (!fs.IsRemoteFile(metadata_path)) {
+		// create data path if it does not yet exist
+		try {
+			fs.CreateDirectoriesRecursive(metadata_path);
+		} catch (...) {
+		}
+	}
+
+	// Write manifest file(s)
+	auto manifest_path = table_metadata.location + "/manifest-" + UUID::ToString(UUID::GenerateRandomUUID()) + ".avro";
+	auto manifest_length =
+	    manifest_file::WriteToFile(table_metadata, manifest_path, written_files, copy_fun->function, db, context);
+
+	throw InternalException("TODO: write manifest list, manifest and metadata.json");
+
+	//// Create manifest list entry
+	// vector<IcebergManifestListEntry> manifest_entries;
+	// manifest_entries.emplace_back();
+	// manifest_entry.file.manifest_path = manifest_path;
+	// manifest_entry.file.manifest_length = manifest_length;
+	// manifest_entry.file.partition_spec_id = 0;
+	// manifest_entry.file.added_snapshot_id = snapshot.snapshot_id;
+	// manifest_entry.file.added_files_count = written_files.size();
+	// manifest_entry.manifest_entries = written_files;
+
+	//// Write manifest list
+	// auto manifest_list_path = metadata_path + "/snap-" +
+	//                          std::to_string(snapshot.snapshot_id) + "-1-" +
+	//                          UUID::ToString(UUID::GenerateRandomUUID()) + ".avro";
+	// snapshot.manifest_list = manifest_list_path;
+
+	// IcebergManifestList manifest_list(manifest_list_path);
+	// manifest_list.AddToManifestEntries({manifest_entry});
+	// manifest_list::WriteToFile(table_metadata, manifest_list, copy_fun->function, db, context);
+
+	//// Update table metadata with snapshot
+	// table_metadata.current_snapshot_id = snapshot.snapshot_id;
+	// table_metadata.last_sequence_number = snapshot.sequence_number;
+	// table_metadata.last_updated_ms = snapshot.timestamp_ms;
+	// table_metadata.snapshots[0] = std::move(snapshot);
+
+	//// Add schema to metadata if not already present
+	// if (table_metadata.schemas.empty()) {
+	//	table_metadata.schemas[0] = table_schema;
+	//}
+
+	//// Write metadata.json
+	// auto metadata_path = metadata_path + UUID::ToString(UUID::GenerateRandomUUID()) + ".metadata.json";
+
+	// IcebergTableMetadata::WriteMetadata(context, metadata_path, table_metadata);
+
+	//// Write version-hint.text pointing to the latest metadata
+	// auto version_hint_path = metadata_path + "/version-hint.text";
+	// IcebergTableMetadata::WriteVersionHint(context, version_hint_path, metadata_path);
+}
+
+SinkFinalizeType IcebergPhysicalCopy::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
+                                               OperatorSinkFinalizeInput &input) const {
+	auto &gstate = input.global_state.Cast<CopyIcebergGlobalState>();
+	auto &copy_bind_data = bind_data->Cast<CopyIcebergBindData>();
+
+	vector<IcebergManifestEntry> written_files;
+	{
+		lock_guard<mutex> guard(gstate.lock);
+		written_files = std::move(gstate.written_files);
+	}
+
+	if (!written_files.empty()) {
+		// Write manifest files, manifest list, and metadata.json
+		// This is where we differ from IcebergInsert - we write a complete metadata.json
+		// instead of updating a catalog entry
+		WriteIcebergMetadata(context, copy_bind_data, written_files);
+	}
+
+	return SinkFinalizeType::READY;
+}
+
+SourceResultType IcebergPhysicalCopy::GetDataInternal(ExecutionContext &context, DataChunk &chunk,
+                                                      OperatorSourceInput &input) const {
+	auto &gstate = sink_state->Cast<CopyIcebergGlobalState>();
+	auto value = Value::BIGINT(gstate.rows_copied);
+	chunk.SetCardinality(1);
+	chunk.SetValue(0, 0, value);
+	return SourceResultType::FINISHED;
+}
+
+string IcebergPhysicalCopy::GetName() const {
+	return "ICEBERG_COPY";
+}
+
+InsertionOrderPreservingMap<string> IcebergPhysicalCopy::ParamsToString() const {
+	InsertionOrderPreservingMap<string> result;
+	auto &copy_bind_data = bind_data->Cast<CopyIcebergBindData>();
+	result["File Path"] = copy_bind_data.file_path;
+	return result;
+}
+
+static void ParseColumnStats(IcebergDataFile &data_file, const Value &column_stats, const IcebergTableSchema &schema) {
+	auto &map_children = MapValue::GetChildren(column_stats);
+
+	for (idx_t col_idx = 0; col_idx < map_children.size(); col_idx++) {
+		auto &struct_children = StructValue::GetChildren(map_children[col_idx]);
+		auto &col_name = StringValue::Get(struct_children[0]);
+		auto &col_stats = MapValue::GetChildren(struct_children[1]);
+
+		// Find column in schema and parse stats
+		// Similar logic to IcebergInsert::AddWrittenFiles
+		// ...
+	}
 }
 
 } // namespace duckdb

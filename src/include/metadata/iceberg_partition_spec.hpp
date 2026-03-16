@@ -29,6 +29,10 @@ public:
 
 struct IcebergPartitionSpec {
 public:
+	IcebergPartitionSpec(int32_t spec_id) : spec_id(spec_id) {
+	}
+
+public:
 	static IcebergPartitionSpec ParseFromJson(const rest_api_objects::PartitionSpec &spec);
 
 public:
