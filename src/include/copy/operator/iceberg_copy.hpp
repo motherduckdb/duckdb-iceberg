@@ -1,18 +1,20 @@
 #pragma once
 
 #include "duckdb/planner/operator/logical_extension_operator.hpp"
+#include "metadata/iceberg_table_metadata.hpp"
+#include "metadata/iceberg_table_schema.hpp"
+#include "duckdb/execution/physical_plan_generator.hpp"
 
 namespace duckdb {
 
 struct IcebergPhysicalCopy : public PhysicalOperator {
 public:
-	IcebergPhysicalCopy(vector<LogicalType> types, idx_t estimated_cardinality)
-	    : PhysicalOperator(PhysicalOperatorType::EXTENSION, std::move(types), estimated_cardinality) {
+	IcebergPhysicalCopy(PhysicalPlan &plan, vector<LogicalType> types, idx_t estimated_cardinality)
+	    : PhysicalOperator(plan, PhysicalOperatorType::EXTENSION, std::move(types), estimated_cardinality) {
 	}
 
-	// Keep table information alive throughout execution
-	IcebergTableInformation table_info;
-	shared_ptr<IcebergTableSchema> table_schema;
+	// Keep bind data alive throughout execution (contains metadata and schema)
+	unique_ptr<FunctionData> bind_data;
 
 public:
 	SinkResultType Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const;
@@ -23,16 +25,12 @@ public:
 	IcebergLogicalCopy() : LogicalExtensionOperator() {
 	}
 
-	unique_ptr<FunctionData> bind_data;
-
 public:
 	PhysicalOperator &CreatePlan(ClientContext &context, PhysicalPlanGenerator &planner);
+	void ResolveTypes();
 
-private:
-	unique_ptr<IcebergTableMetadata> CreateTableMetadata(ClientContext &context, const vector<LogicalType> &types,
-	                                                     const vector<string> &names, FunctionData &bind_data);
-	shared_ptr<IcebergTableSchema> CreateTableSchema(ClientContext &context, const vector<LogicalType> &types,
-	                                                 const vector<string> &names);
+public:
+	unique_ptr<FunctionData> bind_data;
 };
 
 } // namespace duckdb

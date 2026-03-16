@@ -18,6 +18,7 @@
 #include "storage/authorization/sigv4.hpp"
 #include "iceberg_utils.hpp"
 #include "iceberg_logging.hpp"
+#include "copy/function/iceberg_copy_function.hpp"
 
 namespace duckdb {
 

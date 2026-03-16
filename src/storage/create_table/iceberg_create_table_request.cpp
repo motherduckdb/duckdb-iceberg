@@ -214,8 +214,8 @@ static Value ExtractInitialValue(ConstantBinder &binder, ClientContext &context,
 
 shared_ptr<IcebergTableSchema>
 IcebergCreateTableRequest::CreateIcebergSchema(ClientContext &context, const IcebergTableMetadata &table_metadata,
-                                               ColumnList &columns,
-                                               optional_ptr<vector<unique_ptr<Constraint>>> constraints_p) {
+                                               const ColumnList &columns,
+                                               optional_ptr<const vector<unique_ptr<Constraint>>> constraints_p) {
 	auto schema = make_shared_ptr<IcebergTableSchema>();
 	// should this be a different schema id?
 	schema->schema_id = table_metadata.current_schema_id;
@@ -234,14 +234,14 @@ IcebergCreateTableRequest::CreateIcebergSchema(ClientContext &context, const Ice
 	if (constraints_p) {
 		auto &constraints = *constraints_p;
 		for (auto &constraint : constraints) {
-			if (constraint->type != ConstraintType::NOT_NUL) {
+			if (constraint->type != ConstraintType::NOT_NULL) {
 				continue;
 			}
 			auto &not_null_constraint = constraint->Cast<NotNullConstraint>();
 			if (!not_null_constraint.index.IsValid()) {
 				continue;
 			}
-			required_columns.insert(not_null_constraint.index.GetIndex());
+			required_columns.insert(not_null_constraint.index.index);
 		}
 	}
 

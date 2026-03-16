@@ -22,10 +22,9 @@ struct IcebergCreateTableRequest {
 	explicit IcebergCreateTableRequest(const IcebergTableInformation &table_info);
 
 public:
-	static shared_ptr<IcebergTableSchema> CreateIcebergSchema(ClientContext &context,
-	                                                          const IcebergTableMetadata &table_metadata,
-	                                                          ColumnList &columns,
-	                                                          optional_ptr<vector<unique_ptr<Constraint>>> constraints);
+	static shared_ptr<IcebergTableSchema>
+	CreateIcebergSchema(ClientContext &context, const IcebergTableMetadata &table_metadata, const ColumnList &columns,
+	                    optional_ptr<const vector<unique_ptr<Constraint>>> constraints);
 	string CreateTableToJSON(std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p);
 	static void PopulateSchema(yyjson_mut_doc *doc, yyjson_mut_val *schema_json, const IcebergTableSchema &schema);
 
