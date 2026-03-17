@@ -95,9 +95,7 @@ def spark_con(request):
 
     runtime_jar = generate_jar_location(runtime_config)
     runtime_pkg = generate_package(runtime_config)
-    runtime_path = os.path.abspath(
-        os.path.join(SCRIPT_DIR, "..", "..", "scripts", "data_generators", runtime_jar)
-    )
+    runtime_path = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", "scripts", "data_generators", runtime_jar))
 
     os.environ["PYSPARK_SUBMIT_ARGS"] = (
         f"--packages {runtime_pkg},org.apache.iceberg:iceberg-aws-bundle:{runtime_config.iceberg_library_version} pyspark-shell"
@@ -257,9 +255,7 @@ class TestSparkReadPartitionedTables:
     )
     def test_int_partitioned(self, spark_con, table_name):
         spark = _get_spark(spark_con, table_name)
-        res = spark.sql(
-            f"SELECT * FROM default.{table_name} ORDER BY id, val"
-        ).collect()
+        res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == INT_ROWS
 
     # --------------------------------------------------------------- BIGINT
@@ -272,9 +268,7 @@ class TestSparkReadPartitionedTables:
     )
     def test_bigint_partitioned(self, spark_con, table_name):
         spark = _get_spark(spark_con, table_name)
-        res = spark.sql(
-            f"SELECT * FROM default.{table_name} ORDER BY id, val"
-        ).collect()
+        res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == BIGINT_ROWS
 
     # -------------------------------------------------------------- VARCHAR
@@ -287,9 +281,7 @@ class TestSparkReadPartitionedTables:
     )
     def test_varchar_partitioned(self, spark_con, table_name):
         spark = _get_spark(spark_con, table_name)
-        res = spark.sql(
-            f"SELECT * FROM default.{table_name} ORDER BY id, val"
-        ).collect()
+        res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == VARCHAR_ROWS
 
     # -------------------------------------------------------------- DECIMAL
@@ -302,9 +294,7 @@ class TestSparkReadPartitionedTables:
     )
     def test_decimal_partitioned(self, spark_con, table_name):
         spark = _get_spark(spark_con, table_name)
-        res = spark.sql(
-            f"SELECT * FROM default.{table_name} ORDER BY id, val"
-        ).collect()
+        res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == DECIMAL_ROWS
 
     # ---------------------------------------------------------------- FLOAT
@@ -317,9 +307,7 @@ class TestSparkReadPartitionedTables:
     )
     def test_float_partitioned(self, spark_con, table_name):
         spark = _get_spark(spark_con, table_name)
-        res = spark.sql(
-            f"SELECT * FROM default.{table_name} ORDER BY id, val"
-        ).collect()
+        res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == FLOAT_ROWS
 
     # --------------------------------------------------------------- DOUBLE
@@ -332,9 +320,7 @@ class TestSparkReadPartitionedTables:
     )
     def test_double_partitioned(self, spark_con, table_name):
         spark = _get_spark(spark_con, table_name)
-        res = spark.sql(
-            f"SELECT * FROM default.{table_name} ORDER BY id, val"
-        ).collect()
+        res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == DOUBLE_ROWS
 
     # ----------------------------------------------------------------- UUID
@@ -384,9 +370,7 @@ class TestSparkReadPartitionedTables:
     )
     def test_date_partitioned(self, spark_con, table_name):
         spark = _get_spark(spark_con, table_name)
-        res = spark.sql(
-            f"SELECT * FROM default.{table_name} ORDER BY id, val"
-        ).collect()
+        res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == DATE_ROWS
 
     # ------------------------------------------------------------ TIMESTAMP
@@ -414,9 +398,7 @@ class TestSparkReadPartitionedTables:
     )
     def test_timestamp_partitioned(self, spark_con, table_name):
         spark = _get_spark(spark_con, table_name)
-        res = spark.sql(
-            f"SELECT * FROM default.{table_name} ORDER BY id, val"
-        ).collect()
+        res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == TIMESTAMP_ROWS
 
     # --------------------------------------------------------- TIMESTAMPTZ
@@ -437,9 +419,7 @@ class TestSparkReadPartitionedTables:
     )
     def test_timestamptz_partitioned(self, spark_con, table_name):
         spark = _get_spark(spark_con, table_name)
-        res = spark.sql(
-            f"SELECT * FROM default.{table_name} ORDER BY id, val"
-        ).collect()
+        res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == TIMESTAMPTZ_ROWS
 
     # --------------------------------------------------------- TIMESTAMP_NS

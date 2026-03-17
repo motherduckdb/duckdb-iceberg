@@ -46,17 +46,16 @@ IcebergInsert::IcebergInsert(PhysicalPlan &physical_plan, const vector<LogicalTy
     : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, types, 1), table(&table), schema(nullptr) {
 }
 
-IcebergCopyInput::IcebergCopyInput(ClientContext &context, IcebergTableEntry &table, const IcebergTableSchema &schema)
-    : catalog(table.catalog.Cast<IcebergCatalog>()), columns(table.GetColumns()), table_info(table.table_info),
-      schema(schema) {
-	data_path = table.table_info.table_metadata.GetDataPath();
+IcebergCopyInput::IcebergCopyInput(ClientContext &context, const IcebergTableMetadata &table_metadata,
+                                   const IcebergTableSchema &schema)
+    : table_metadata(table_metadata), schema(schema) {
+	data_path = table_metadata.GetDataPath();
 
 	// Get partition spec if the table is partitioned
-	auto &metadata = table.table_info.table_metadata;
-	table_schema = table.table_info.table_metadata.GetSchemaFromId(table.table_info.table_metadata.current_schema_id);
+	auto &metadata = table_metadata;
+	table_schema = table_metadata.GetSchemaFromId(table_metadata.current_schema_id);
 	if (metadata.GetLatestPartitionSpec().IsPartitioned()) {
-		partition_spec =
-		    table.table_info.table_metadata.FindPartitionSpecById(table.table_info.table_metadata.default_spec_id);
+		partition_spec = table_metadata.FindPartitionSpecById(table_metadata.default_spec_id);
 	}
 }
 
@@ -590,12 +589,12 @@ static void GeneratePartitionExpressions(ClientContext &context, IcebergCopyInpu
 
 	// If we have partition columns with non-identity transforms, we need to compute them separately
 	// and NOT write the computed partition columns to the data files
-	idx_t partition_column_start = copy_input.columns.PhysicalColumnCount();
+	idx_t partition_column_start = copy_input.table_schema->columns.size();
 
 	// First, add projections for all the original columns
 	idx_t col_idx = 0;
-	for (auto &col : copy_input.columns.Physical()) {
-		projection_expressions.push_back(CreateColumnReference(copy_input, col.Type(), col_idx++));
+	for (auto &col : copy_input.table_schema->columns) {
+		projection_expressions.push_back(CreateColumnReference(copy_input, col->type, col_idx++));
 	}
 
 	// Then add the partition expressions
@@ -654,8 +653,9 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 		throw MissingExtensionException("Did not find parquet copy function required to write to iceberg table");
 	}
 
-	auto names_to_write = copy_input.columns.GetColumnNames();
-	auto types_to_write = copy_input.columns.GetColumnTypes();
+	vector<string> names_to_write;
+	vector<LogicalType> types_to_write;
+	copy_input.schema.GetColumnNamesAndTypes(names_to_write, types_to_write);
 	if (WriteRowId(copy_input.virtual_columns)) {
 		names_to_write.push_back("_row_id");
 		types_to_write.push_back(LogicalType::BIGINT);
@@ -687,7 +687,7 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 	}
 
 	auto copy_info = GetBindInput(copy_input);
-	const auto table_properties = copy_input.table_info.table_metadata.GetTableProperties();
+	const auto table_properties = copy_input.table_metadata.GetTableProperties();
 
 	// Map Iceberg write properties to DuckDB parquet copy options
 	// TODO: Iceberg properties for bloom filter are per column, duckdb's seems to be per table.
@@ -784,18 +784,18 @@ PhysicalOperator &IcebergCatalog::PlanInsert(ClientContext &context, PhysicalPla
 
 	auto &table_entry = op.table.Cast<IcebergTableEntry>();
 	table_entry.PrepareIcebergScanFromEntry(context);
-	auto &table_info = table_entry.table_info;
-	auto &schema = table_info.table_metadata.GetLatestSchema();
+	auto &table_metadata = table_entry.table_info.table_metadata;
+	auto &schema = table_metadata.GetLatestSchema();
 
-	if (table_info.table_metadata.HasSortOrder()) {
-		auto &sort_spec = table_info.table_metadata.GetLatestSortOrder();
+	if (table_metadata.HasSortOrder()) {
+		auto &sort_spec = table_metadata.GetLatestSortOrder();
 		if (sort_spec.IsSorted()) {
 			throw NotImplementedException("INSERT into a sorted iceberg table is not supported yet");
 		}
 	}
 
 	// Create Copy Info
-	IcebergCopyInput info(context, table_entry, schema);
+	IcebergCopyInput info(context, table_metadata, schema);
 	auto &insert = planner.Make<IcebergInsert>(op, op.table, op.column_index_map);
 	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, info, plan);
 	insert.children.push_back(physical_copy);
@@ -819,13 +819,14 @@ PhysicalOperator &IcebergCatalog::PlanCreateTableAs(ClientContext &context, Phys
 		throw InternalException("Table could not be created");
 	}
 	auto &ic_table = table->Cast<IcebergTableEntry>();
+	auto &table_metadata = ic_table.table_info.table_metadata;
 	// We need to load table credentials into our secrets for when we copy files
 	ic_table.PrepareIcebergScanFromEntry(context);
 
-	auto &table_schema = ic_table.table_info.table_metadata.GetLatestSchema();
+	auto &table_schema = table_metadata.GetLatestSchema();
 
 	// Create Copy Info
-	IcebergCopyInput info(context, ic_table, table_schema);
+	IcebergCopyInput info(context, table_metadata, table_schema);
 	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, info, plan);
 	physical_index_vector_t<idx_t> column_index_map;
 	auto &insert = planner.Make<IcebergInsert>(op, ic_table, column_index_map);

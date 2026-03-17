@@ -598,7 +598,7 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const string &path
 		auto field_obj = yyjson_mut_arr_add_obj(doc, child_fields_arr);
 		yyjson_mut_obj_add_uint(doc, field_obj, "id", REFERENCED_DATA_FILE);
 		yyjson_mut_obj_add_strcpy(doc, field_obj, "name", "referenced_data_file");
-		 yyjson_mut_obj_add_bool(doc, field_obj, "required", false);
+		yyjson_mut_obj_add_bool(doc, field_obj, "required", false);
 		yyjson_mut_obj_add_strcpy(doc, field_obj, "type", "string");
 	}
 	// content_size_in_bytes
