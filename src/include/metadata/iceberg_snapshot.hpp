@@ -41,7 +41,8 @@ public:
 	}
 	static int64_t NewSnapshotId();
 	static IcebergSnapshot ParseSnapshot(const rest_api_objects::Snapshot &snapshot, IcebergTableMetadata &metadata);
-	rest_api_objects::Snapshot ToRESTObject(const IcebergTableInformation &table_info) const;
+	rest_api_objects::Snapshot ToRESTObject(const IcebergTableMetadata &table_metadata) const;
+	static yyjson_mut_val *ToJSON(const rest_api_objects::Snapshot &snapshot, yyjson_mut_doc *doc);
 
 public:
 	//! Snapshot metadata

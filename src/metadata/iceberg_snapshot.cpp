@@ -124,7 +124,7 @@ static IcebergSnapshotMetrics MetricsFromSummary(const case_insensitive_map_t<st
 	return ret;
 }
 
-rest_api_objects::Snapshot IcebergSnapshot::ToRESTObject(const IcebergTableInformation &table_info) const {
+rest_api_objects::Snapshot IcebergSnapshot::ToRESTObject(const IcebergTableMetadata &table_metadata) const {
 	rest_api_objects::Snapshot res;
 
 	res.snapshot_id = snapshot_id;
@@ -158,7 +158,7 @@ rest_api_objects::Snapshot IcebergSnapshot::ToRESTObject(const IcebergTableInfor
 	if (has_first_row_id) {
 		res.has_first_row_id = true;
 		res.first_row_id = first_row_id;
-	} else if (table_info.GetIcebergVersion() >= 3) {
+	} else if (table_metadata.iceberg_version >= 3) {
 		throw InternalException("first-row-id required for V3 tables!");
 	}
 
@@ -189,6 +189,34 @@ IcebergSnapshot IcebergSnapshot::ParseSnapshot(const rest_api_objects::Snapshot 
 	ret.has_added_rows = snapshot.has_added_rows;
 	ret.added_rows = snapshot.added_rows;
 	return ret;
+}
+
+yyjson_mut_val *IcebergSnapshot::ToJSON(const rest_api_objects::Snapshot &snapshot, yyjson_mut_doc *doc) {
+	auto snapshot_obj = yyjson_mut_obj(doc);
+
+	yyjson_mut_obj_add_uint(doc, snapshot_obj, "snapshot-id", snapshot.snapshot_id);
+	if (snapshot.has_parent_snapshot_id) {
+		yyjson_mut_obj_add_uint(doc, snapshot_obj, "parent-snapshot-id", snapshot.parent_snapshot_id);
+	}
+	yyjson_mut_obj_add_uint(doc, snapshot_obj, "sequence-number", snapshot.sequence_number);
+	yyjson_mut_obj_add_uint(doc, snapshot_obj, "timestamp-ms", snapshot.timestamp_ms);
+	yyjson_mut_obj_add_strcpy(doc, snapshot_obj, "manifest-list", snapshot.manifest_list.c_str());
+	auto summary_json = yyjson_mut_obj_add_obj(doc, snapshot_obj, "summary");
+	yyjson_mut_obj_add_strcpy(doc, summary_json, "operation", snapshot.summary.operation.c_str());
+	for (auto &prop : snapshot.summary.additional_properties) {
+		//! Register the string as part of the document, to ensure lifetime correctness
+		auto &key = prop.first;
+		auto key_val = unsafe_yyjson_mut_strncpy(doc, key.c_str(), key.size());
+		yyjson_mut_obj_add_strcpy(doc, summary_json, key_val, prop.second.c_str());
+	}
+	yyjson_mut_obj_add_uint(doc, snapshot_obj, "schema-id", snapshot.schema_id);
+	if (snapshot.has_first_row_id) {
+		yyjson_mut_obj_add_uint(doc, snapshot_obj, "first-row-id", snapshot.first_row_id);
+	}
+	if (snapshot.has_added_rows) {
+		yyjson_mut_obj_add_uint(doc, snapshot_obj, "added-rows", snapshot.added_rows);
+	}
+	return snapshot_obj;
 }
 
 } // namespace duckdb

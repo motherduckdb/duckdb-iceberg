@@ -39,8 +39,12 @@ public:
 	bool IsUnpartitioned() const;
 	bool IsPartitioned() const;
 	const IcebergPartitionSpecField &GetFieldBySourceId(idx_t field_id) const;
-	string FieldsToJSON() const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+	string FieldsToJSONString() const;
 	const vector<IcebergPartitionSpecField> &GetFields() const;
+
+private:
+	yyjson_mut_val *FieldsToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	int32_t spec_id;

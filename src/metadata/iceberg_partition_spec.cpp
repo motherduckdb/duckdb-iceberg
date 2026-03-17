@@ -52,21 +52,31 @@ const IcebergPartitionSpecField &IcebergPartitionSpec::GetFieldBySourceId(idx_t 
 	                                    source_id, spec_id);
 }
 
-string IcebergPartitionSpec::FieldsToJSON() const {
-	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-	auto doc = doc_p.get();
-	auto root_arr = yyjson_mut_arr(doc);
-	yyjson_mut_doc_set_root(doc, root_arr);
-
+yyjson_mut_val *IcebergPartitionSpec::FieldsToJSON(yyjson_mut_doc *doc) const {
+	auto fields_array = yyjson_mut_arr(doc);
 	for (auto &field : fields) {
-		auto field_obj = yyjson_mut_arr_add_obj(doc, root_arr);
+		auto field_obj = yyjson_mut_arr_add_obj(doc, fields_array);
 		yyjson_mut_obj_add_strcpy(doc, field_obj, "name", field.name.c_str());
 		yyjson_mut_obj_add_strcpy(doc, field_obj, "transform", field.transform.RawType().c_str());
 		yyjson_mut_obj_add_uint(doc, field_obj, "source-id", field.source_id);
 		yyjson_mut_obj_add_uint(doc, field_obj, "field-id", field.partition_field_id);
 	}
+	return fields_array;
+}
 
+string IcebergPartitionSpec::FieldsToJSONString() const {
+	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
+	auto doc = doc_p.get();
+	auto root_arr = FieldsToJSON(doc);
+	yyjson_mut_doc_set_root(doc, root_arr);
 	return ICUtils::JsonToString(std::move(doc_p));
+}
+
+yyjson_mut_val *IcebergPartitionSpec::ToJSON(yyjson_mut_doc *doc) const {
+	auto partition_obj = yyjson_mut_obj(doc);
+	yyjson_mut_obj_add_val(doc, partition_obj, "spec-id", yyjson_mut_int(doc, spec_id));
+	yyjson_mut_obj_add_val(doc, partition_obj, "fields", FieldsToJSON(doc));
+	return partition_obj;
 }
 
 } // namespace duckdb

@@ -205,10 +205,12 @@ IcebergTableInformation &IcebergTableSet::CreateNewEntry(ClientContext &context,
 	auto table_ptr = table_entry.get();
 	table_entry->table_info.schema_versions[0] = std::move(table_entry);
 	table_metadata.iceberg_version = iceberg_version.GetIndex();
+	int32_t last_column_id;
 	table_metadata.schemas[0] = IcebergCreateTableRequest::CreateIcebergSchema(
-	    context, table_metadata, table_entry->GetColumns(), table_entry->GetConstraints());
+	    context, table_metadata, table_entry->GetColumns(), table_entry->GetConstraints(), last_column_id);
 	table_metadata.current_schema_id = 0;
 	table_metadata.schemas[0]->schema_id = 0;
+	table_metadata.last_column_id = last_column_id;
 
 	// Get Location
 	if (!location.empty()) {

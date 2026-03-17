@@ -53,11 +53,17 @@ CopyIcebergBindData::CopyIcebergBindData(const CopyInfo &info, vector<string> &&
 		columns.AddColumn(ColumnDefinition(names[i], types[i]));
 	}
 
-	table_schema = IcebergCreateTableRequest::CreateIcebergSchema(context, *table_metadata, columns, nullptr);
+	int32_t last_column_id;
+	table_schema =
+	    IcebergCreateTableRequest::CreateIcebergSchema(context, *table_metadata, columns, nullptr, last_column_id);
 	table_metadata->schemas[0] = table_schema;
+	table_metadata->current_schema_id = 0;
 	//! FIXME: adapt when we have partitioning support
 	table_metadata->partition_specs.emplace(0, IcebergPartitionSpec(0));
 	table_metadata->default_spec_id = 0;
+	table_metadata->last_column_id = last_column_id;
+	table_metadata->last_partition_id = 0;
+	table_metadata->default_sort_order_id = 0;
 
 	//! TODO: Parse any iceberg-specific options from info.options if needed
 }

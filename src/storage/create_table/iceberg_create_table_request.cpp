@@ -212,10 +212,9 @@ static Value ExtractInitialValue(ConstantBinder &binder, ClientContext &context,
 	return ExpressionExecutor::EvaluateScalar(context, *bound_expr).DefaultCastAs(type);
 }
 
-shared_ptr<IcebergTableSchema>
-IcebergCreateTableRequest::CreateIcebergSchema(ClientContext &context, const IcebergTableMetadata &table_metadata,
-                                               const ColumnList &columns,
-                                               optional_ptr<const vector<unique_ptr<Constraint>>> constraints_p) {
+shared_ptr<IcebergTableSchema> IcebergCreateTableRequest::CreateIcebergSchema(
+    ClientContext &context, const IcebergTableMetadata &table_metadata, const ColumnList &columns,
+    optional_ptr<const vector<unique_ptr<Constraint>>> constraints_p, int32_t &last_column_id) {
 	auto schema = make_shared_ptr<IcebergTableSchema>();
 	// should this be a different schema id?
 	schema->schema_id = table_metadata.current_schema_id;
@@ -224,7 +223,7 @@ IcebergCreateTableRequest::CreateIcebergSchema(ClientContext &context, const Ice
 	//  this makes the IcebergTableSchema, and we use that to dump data to JSON.
 	//  we can just directly dump it to json.
 	auto column_iterator = columns.Logical();
-	idx_t field_id = 1;
+	int32_t field_id = 1;
 
 	auto next_field_id = [&field_id]() -> idx_t {
 		return field_id++;
@@ -274,6 +273,7 @@ IcebergCreateTableRequest::CreateIcebergSchema(ClientContext &context, const Ice
 		}
 		schema->columns.push_back(std::move(iceberg_column_def));
 	}
+	last_column_id = field_id - 1;
 	return schema;
 }
 

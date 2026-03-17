@@ -142,7 +142,6 @@ SinkResultType IcebergPhysicalCopy::Sink(ExecutionContext &context, DataChunk &c
 static void WriteIcebergMetadata(ClientContext &context, CopyIcebergBindData &bind_data,
                                  vector<IcebergManifestEntry> &written_files) {
 	auto &table_metadata = *bind_data.table_metadata;
-	auto &table_schema = *bind_data.table_schema;
 
 	// Get the avro copy function for writing manifest files
 	auto &db = DatabaseInstance::GetDatabase(context);
@@ -200,9 +199,9 @@ static void WriteIcebergMetadata(ClientContext &context, CopyIcebergBindData &bi
 	}
 
 	// Write manifest file(s)
-	auto manifest_path = metadata_path + "/manifest-" + UUID::ToString(UUID::GenerateRandomUUID()) + ".avro";
-	auto manifest_length =
-	    manifest_file::WriteToFile(table_metadata, manifest_path, written_files, copy_fun->function, db, context);
+	manifest_file.file.manifest_length =
+	    manifest_file::WriteToFile(table_metadata, manifest_file.file.manifest_path, manifest_file.manifest_entries,
+	                               copy_fun->function, db, context);
 
 	IcebergManifestList manifest_list(manifest_list_path);
 	manifest_list.AddManifestFile(std::move(manifest_file));
@@ -214,14 +213,15 @@ static void WriteIcebergMetadata(ClientContext &context, CopyIcebergBindData &bi
 	table_metadata.last_updated_ms = snapshot.timestamp_ms;
 	table_metadata.snapshots[0] = std::move(snapshot);
 
+	auto version_hint = UUID::ToString(UUID::GenerateRandomUUID());
+
 	// Write metadata.json
-	auto metadata_file_path = metadata_path + UUID::ToString(UUID::GenerateRandomUUID()) + ".metadata.json";
+	auto metadata_file_path = metadata_path + "/" + version_hint + ".metadata.json";
+	table_metadata.WriteMetadata(context, metadata_file_path);
 
-	// IcebergTableMetadata::WriteMetadata(context, metadata_file_path, table_metadata);
-
-	//// Write version-hint.text pointing to the latest metadata
-	// auto version_hint_path = metadata_path + "/version-hint.text";
-	// IcebergTableMetadata::WriteVersionHint(context, version_hint_path, metadata_file_path);
+	// Write version-hint.text pointing to the latest metadata
+	auto version_hint_path = metadata_path + "/version-hint.text";
+	table_metadata.WriteVersionHint(context, version_hint_path, version_hint);
 }
 
 SinkFinalizeType IcebergPhysicalCopy::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
