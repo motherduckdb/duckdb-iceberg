@@ -1,6 +1,6 @@
 CREATE OR REPLACE TABLE default.truncate_partitioned_bigint (
     id BIGINT,
-    nested STRUCT<value: BIGINT>,
+    nested STRUCT<value: BIGINT, name: STRING>,
     name STRING
 )
 USING iceberg

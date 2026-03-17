@@ -131,7 +131,17 @@ bool IcebergMultiFileList::FinishedScanningDeletes() const {
 	return !delete_manifest_reader || delete_manifest_reader->Finished();
 }
 
-unique_ptr<TableFilter> FlattenStructFilters(const TableFilter &filter, const idx_t index) {
+static unique_ptr<ConjunctionFilter> EmptyConjunctionFilter(const TableFilter &filter) {
+	if (filter.filter_type == TableFilterType::CONJUNCTION_AND) {
+		return make_uniq<ConjunctionAndFilter>();
+	}
+	if (filter.filter_type == TableFilterType::CONJUNCTION_OR) {
+		return make_uniq<ConjunctionOrFilter>();
+	}
+	return nullptr;
+}
+
+static unique_ptr<TableFilter> ExtractColumnFilter(const TableFilter &filter, const idx_t index) {
 	switch (filter.filter_type) {
 	case TableFilterType::STRUCT_EXTRACT: {
 		auto &struct_extract = filter.Cast<StructFilter>();
@@ -143,15 +153,18 @@ unique_ptr<TableFilter> FlattenStructFilters(const TableFilter &filter, const id
 	}
 	case TableFilterType::CONJUNCTION_AND:
 	case TableFilterType::CONJUNCTION_OR: {
-		auto filter_copy = filter.Copy();
-		auto &conjunction_filter = reinterpret_cast<ConjunctionFilter &>(*filter_copy);
+		auto filter_copy = EmptyConjunctionFilter(filter);
+		auto &conjunction_filter = reinterpret_cast<const ConjunctionFilter &>(filter);
 		for (auto &child : conjunction_filter.child_filters) {
-			child = FlattenStructFilters(*child, index);
-			if (!child) {
-				return nullptr;
+			auto column_filter = ExtractColumnFilter(*child, index);
+			if (column_filter) {
+				filter_copy->child_filters.emplace_back(std::move(column_filter));
 			}
 		}
-		return filter_copy;
+		//! This conjunction contains at least one clause targeting a partition column
+		if (!filter_copy->child_filters.empty()) {
+			return filter_copy;
+		}
 	}
 	default:
 		return nullptr;
@@ -174,11 +187,11 @@ unique_ptr<TableFilter> IcebergMultiFileList::GetFilterForColumnIndex(const Tabl
 		auto &table_filter = *current_filter;
 		auto &child_index = child_indexes[i];
 		auto index = child_index.GetPrimaryIndex();
-		auto flattened_filter = FlattenStructFilters(table_filter, index);
-		if (!flattened_filter) {
+		auto column_filter = ExtractColumnFilter(table_filter, index);
+		if (!column_filter) {
 			return nullptr;
 		}
-		current_filter = std::move(flattened_filter);
+		current_filter = std::move(column_filter);
 	}
 	return current_filter;
 }
