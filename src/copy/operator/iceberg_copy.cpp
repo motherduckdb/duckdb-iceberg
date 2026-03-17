@@ -265,18 +265,4 @@ InsertionOrderPreservingMap<string> IcebergPhysicalCopy::ParamsToString() const 
 	return result;
 }
 
-static void ParseColumnStats(IcebergDataFile &data_file, const Value &column_stats, const IcebergTableSchema &schema) {
-	auto &map_children = MapValue::GetChildren(column_stats);
-
-	for (idx_t col_idx = 0; col_idx < map_children.size(); col_idx++) {
-		auto &struct_children = StructValue::GetChildren(map_children[col_idx]);
-		auto &col_name = StringValue::Get(struct_children[0]);
-		auto &col_stats = MapValue::GetChildren(struct_children[1]);
-
-		// Find column in schema and parse stats
-		// Similar logic to IcebergInsert::AddWrittenFiles
-		// ...
-	}
-}
-
 } // namespace duckdb
