@@ -353,10 +353,6 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_obje
 		res.default_sort_order_id = table_metadata.default_sort_order_id;
 	}
 
-	if (table_metadata.has_last_partition_id) {
-		res.last_partition_id = table_metadata.last_partition_id;
-	}
-
 	auto &properties = table_metadata.properties;
 	auto name_mapping = properties.find("schema.name-mapping.default");
 	if (name_mapping != properties.end()) {
@@ -526,7 +522,7 @@ string IcebergTableMetadata::ToJSON() const {
 	yyjson_mut_obj_add_val(doc, root_obj, "current-schema-id", yyjson_mut_int(doc, current_schema_id));
 	yyjson_mut_obj_add_val(doc, root_obj, "partition-specs", PartitionsToJSON(doc));
 	yyjson_mut_obj_add_val(doc, root_obj, "default-spec-id", yyjson_mut_int(doc, default_spec_id));
-	yyjson_mut_obj_add_val(doc, root_obj, "last-partition-id", yyjson_mut_int(doc, last_partition_id));
+	yyjson_mut_obj_add_val(doc, root_obj, "last-partition-id", yyjson_mut_int(doc, last_partition_field_id.GetIndex()));
 	yyjson_mut_obj_add_val(doc, root_obj, "properties", TablePropertiesToJSON(doc));
 	yyjson_mut_obj_add_val(doc, root_obj, "current-snapshot-id", yyjson_mut_int(doc, current_snapshot_id));
 	yyjson_mut_obj_add_val(doc, root_obj, "snapshots", SnapshotsToJSON(doc));

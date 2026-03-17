@@ -406,7 +406,7 @@ void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
 		return;
 	}
 
-	table_metadata.partition_specs.emplace(new_spec_id, new_spec_id);
+	table_metadata.partition_specs.emplace(new_spec_id, std::move(new_spec));
 	table_metadata.default_spec_id = new_spec_id;
 	if (!first_partition_spec) {
 		AddPartitionSpec(transaction);

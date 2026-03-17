@@ -62,7 +62,7 @@ CopyIcebergBindData::CopyIcebergBindData(const CopyInfo &info, vector<string> &&
 	table_metadata->partition_specs.emplace(0, IcebergPartitionSpec(0));
 	table_metadata->default_spec_id = 0;
 	table_metadata->last_column_id = last_column_id;
-	table_metadata->last_partition_id = 0;
+	table_metadata->last_partition_field_id = 0;
 	table_metadata->default_sort_order_id = 0;
 
 	//! TODO: Parse any iceberg-specific options from info.options if needed
