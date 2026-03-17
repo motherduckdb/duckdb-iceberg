@@ -85,6 +85,18 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(int64_t sna
 		manifest_file.has_min_sequence_number = true;
 	}
 	manifest_file.added_snapshot_id = snapshot_id;
+
+	// Compute partition field summaries (upper/lower bounds) for the manifest list entry
+	if (table_metadata.HasPartitionSpec() && table_metadata.GetLatestPartitionSpec().IsPartitioned()) {
+		auto partition_spec_it = table_metadata.partition_specs.find(table_metadata.default_spec_id);
+		if (partition_spec_it == table_metadata.partition_specs.end()) {
+			throw InternalException("Cannot find partition spec with id " +
+			                        std::to_string(table_metadata.default_spec_id));
+		}
+		auto &partition_spec = partition_spec_it->second;
+		manifest_file.partitions.Create(partition_spec, manifest_entries);
+	}
+
 	manifest_list_entry.manifest_entries.insert(manifest_list_entry.manifest_entries.end(),
 	                                            std::make_move_iterator(manifest_entries.begin()),
 	                                            std::make_move_iterator(manifest_entries.end()));
