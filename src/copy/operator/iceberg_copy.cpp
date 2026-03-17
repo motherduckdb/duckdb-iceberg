@@ -43,15 +43,11 @@ PhysicalOperator &IcebergLogicalCopy::CreatePlan(ClientContext &context, Physica
 	return op;
 }
 
-CopyIcebergGlobalState::CopyIcebergGlobalState(ClientContext &context)
-    : GlobalSinkState(), context(context), rows_copied(0) {
-}
-
 CopyIcebergLocalState::CopyIcebergLocalState(ClientContext &context) : LocalSinkState() {
 }
 
 unique_ptr<GlobalSinkState> IcebergPhysicalCopy::GetGlobalSinkState(ClientContext &context) const {
-	return make_uniq<CopyIcebergGlobalState>(context);
+	return make_uniq<IcebergInsertGlobalState>(context);
 }
 
 unique_ptr<LocalSinkState> IcebergPhysicalCopy::GetLocalSinkState(ExecutionContext &context) const {
@@ -59,83 +55,10 @@ unique_ptr<LocalSinkState> IcebergPhysicalCopy::GetLocalSinkState(ExecutionConte
 }
 
 SinkResultType IcebergPhysicalCopy::Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const {
-	auto &gstate = input.global_state.Cast<CopyIcebergGlobalState>();
+	auto &gstate = input.global_state.Cast<IcebergInsertGlobalState>();
 	auto &copy_bind_data = bind_data->Cast<CopyIcebergBindData>();
 
-	// grab lock for written files vector
-	lock_guard<mutex> guard(gstate.lock);
-
-	for (idx_t r = 0; r < chunk.size(); r++) {
-		IcebergManifestEntry manifest_entry;
-		manifest_entry.status = IcebergManifestEntryStatusType::ADDED;
-		manifest_entry.partition_spec_id = 0;
-
-		auto &data_file = manifest_entry.data_file;
-		data_file.file_path = chunk.GetValue(0, r).GetValue<string>();
-		data_file.record_count = static_cast<int64_t>(chunk.GetValue(1, r).GetValue<idx_t>());
-		data_file.file_size_in_bytes = static_cast<int64_t>(chunk.GetValue(2, r).GetValue<idx_t>());
-		data_file.content = IcebergManifestEntryContentType::DATA;
-		data_file.file_format = "parquet";
-
-		// extract the column stats
-		auto column_stats = chunk.GetValue(4, r);
-		auto &map_children = MapValue::GetChildren(column_stats);
-
-		gstate.rows_copied += data_file.record_count;
-
-		auto &table_schema = *copy_bind_data.table_schema;
-
-		for (idx_t col_idx = 0; col_idx < map_children.size(); col_idx++) {
-			auto &struct_children = StructValue::GetChildren(map_children[col_idx]);
-			auto &col_name = StringValue::Get(struct_children[0]);
-			auto &col_stats = MapValue::GetChildren(struct_children[1]);
-			auto column_names = IcebergUtils::ParseQuotedList(col_name, '.');
-
-			optional_idx name_offset;
-			auto column_info_p = table_schema.GetFromPath(column_names, &name_offset);
-			if (!column_info_p) {
-				auto normalized_col_name = StringUtil::Join(column_names, ".");
-				throw InternalException("Column '%s' can not be found in the schema, but returned by RETURN_STATS",
-				                        normalized_col_name);
-			}
-			if (name_offset.IsValid()) {
-				//! FIXME: deal with variant stats
-				continue;
-			}
-			auto &column_info = *column_info_p;
-
-			auto stats = IcebergInsert::ParseColumnStats(column_info.type, col_stats, gstate.context);
-
-			// go through stats and add upper and lower bounds
-			if (stats.has_min) {
-				auto serialized_value =
-				    IcebergValue::SerializeValue(stats.min, column_info.type, SerializeBound::LOWER_BOUND);
-				if (serialized_value.HasError()) {
-					throw InvalidConfigurationException(serialized_value.GetError());
-				} else if (serialized_value.HasValue()) {
-					data_file.lower_bounds[column_info.id] = serialized_value.GetValue();
-				}
-			}
-			if (stats.has_max) {
-				auto serialized_value =
-				    IcebergValue::SerializeValue(stats.max, column_info.type, SerializeBound::UPPER_BOUND);
-				if (serialized_value.HasError()) {
-					throw InvalidConfigurationException(serialized_value.GetError());
-				} else if (serialized_value.HasValue()) {
-					data_file.upper_bounds[column_info.id] = serialized_value.GetValue();
-				}
-			}
-			if (stats.has_column_size_bytes) {
-				data_file.column_sizes[column_info.id] = stats.column_size_bytes;
-			}
-			if (stats.has_null_count) {
-				data_file.null_value_counts[column_info.id] = stats.null_count;
-			}
-		}
-
-		gstate.written_files.push_back(std::move(manifest_entry));
-	}
-
+	gstate.AddFiles(chunk, "local_iceberg_table", *copy_bind_data.table_metadata);
 	return SinkResultType::NEED_MORE_INPUT;
 }
 
@@ -226,7 +149,7 @@ static void WriteIcebergMetadata(ClientContext &context, CopyIcebergBindData &bi
 
 SinkFinalizeType IcebergPhysicalCopy::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
                                                OperatorSinkFinalizeInput &input) const {
-	auto &gstate = input.global_state.Cast<CopyIcebergGlobalState>();
+	auto &gstate = input.global_state.Cast<IcebergInsertGlobalState>();
 	auto &copy_bind_data = bind_data->Cast<CopyIcebergBindData>();
 
 	vector<IcebergManifestEntry> written_files;
@@ -247,8 +170,8 @@ SinkFinalizeType IcebergPhysicalCopy::Finalize(Pipeline &pipeline, Event &event,
 
 SourceResultType IcebergPhysicalCopy::GetDataInternal(ExecutionContext &context, DataChunk &chunk,
                                                       OperatorSourceInput &input) const {
-	auto &gstate = sink_state->Cast<CopyIcebergGlobalState>();
-	auto value = Value::BIGINT(gstate.rows_copied);
+	auto &gstate = sink_state->Cast<IcebergInsertGlobalState>();
+	auto value = Value::BIGINT(gstate.insert_count);
 	chunk.SetCardinality(1);
 	chunk.SetValue(0, 0, value);
 	return SourceResultType::FINISHED;

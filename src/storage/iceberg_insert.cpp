@@ -60,8 +60,8 @@ unique_ptr<GlobalSinkState> IcebergInsert::GetGlobalSinkState(ClientContext &con
 //===--------------------------------------------------------------------===//
 // Sink
 //===--------------------------------------------------------------------===//
-IcebergColumnStats IcebergInsert::ParseColumnStats(const LogicalType &type, const vector<Value> &col_stats,
-                                                   ClientContext &context) {
+static IcebergColumnStats ParseColumnStats(const LogicalType &type, const vector<Value> &col_stats,
+                                           ClientContext &context) {
 	IcebergColumnStats column_stats(type);
 	for (idx_t stats_idx = 0; stats_idx < col_stats.size(); stats_idx++) {
 		auto &stats_children = StructValue::GetChildren(col_stats[stats_idx]);
@@ -110,13 +110,11 @@ static bool IsMapType(string col_name, IcebergTableSchema &table_schema) {
 	return false;
 }
 
-void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &chunk,
-                                    optional_ptr<TableCatalogEntry> table) {
-	D_ASSERT(table);
+void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_name,
+                                        const IcebergTableMetadata &table_metadata) {
 	// grab lock for written files vector
-	lock_guard<mutex> guard(global_state.lock);
-	auto &ic_table = table->Cast<IcebergTableEntry>();
-	auto partition_id = ic_table.table_info.table_metadata.default_spec_id;
+	lock_guard<mutex> guard(lock);
+	auto partition_id = table_metadata.default_spec_id;
 	for (idx_t r = 0; r < chunk.size(); r++) {
 		IcebergManifestEntry manifest_entry;
 		manifest_entry.status = IcebergManifestEntryStatusType::ADDED;
@@ -137,10 +135,10 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 		auto column_stats = chunk.GetValue(4, r);
 		auto &map_children = MapValue::GetChildren(column_stats);
 
-		global_state.insert_count += data_file.record_count;
+		insert_count += data_file.record_count;
 
-		auto table_current_schema_id = ic_table.table_info.table_metadata.current_schema_id;
-		auto ic_schema = ic_table.table_info.table_metadata.schemas[table_current_schema_id];
+		auto table_current_schema_id = table_metadata.current_schema_id;
+		auto &ic_schema = table_metadata.schemas.at(table_current_schema_id);
 
 		for (idx_t col_idx = 0; col_idx < map_children.size(); col_idx++) {
 			auto &struct_children = StructValue::GetChildren(map_children[col_idx]);
@@ -163,14 +161,14 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 				continue;
 			}
 			auto &column_info = *column_info_p;
-			auto stats = ParseColumnStats(column_info.type, col_stats, global_state.context);
+			auto stats = ParseColumnStats(column_info.type, col_stats, context);
 
 			// a map type cannot violate not null constraints.
 			// Null value counts can be off since an empty map is the same as a null map.
 			bool is_map = IsMapType(column_names[0], *ic_schema);
 			if (!is_map && column_info.required && stats.has_null_count && stats.null_count > 0) {
 				auto normalized_col_name = StringUtil::Join(column_names, ".");
-				throw ConstraintException("NOT NULL constraint failed: %s.%s", table->name, normalized_col_name);
+				throw ConstraintException("NOT NULL constraint failed: %s.%s", table_name, normalized_col_name);
 			}
 			// go through stats and add upper and lower bounds
 			// Do serialization of values here in case we read transaction updates
@@ -218,8 +216,16 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 		//	}
 		//}
 
-		global_state.written_files.push_back(std::move(manifest_entry));
+		written_files.push_back(std::move(manifest_entry));
 	}
+}
+
+void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &chunk,
+                                    optional_ptr<TableCatalogEntry> table) {
+	D_ASSERT(table);
+	auto &ic_table = table->Cast<IcebergTableEntry>();
+	auto &table_metadata = ic_table.table_info.table_metadata;
+	global_state.AddFiles(chunk, ic_table.name, table_metadata);
 }
 
 SinkResultType IcebergInsert::Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const {

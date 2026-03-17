@@ -8,16 +8,6 @@
 
 namespace duckdb {
 
-struct CopyIcebergGlobalState : public GlobalSinkState {
-public:
-	explicit CopyIcebergGlobalState(ClientContext &context);
-
-	ClientContext &context;
-	mutex lock;
-	vector<IcebergManifestEntry> written_files;
-	atomic<idx_t> rows_copied;
-};
-
 struct CopyIcebergLocalState : public LocalSinkState {
 public:
 	explicit CopyIcebergLocalState(ClientContext &context);
