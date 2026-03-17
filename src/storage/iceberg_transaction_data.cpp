@@ -121,7 +121,7 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 			parent_snapshot = last_alter.snapshot;
 		} else {
 			D_ASSERT(table_metadata.has_current_snapshot);
-			parent_snapshot = table_metadata.GetSnapshotById(new_snapshot.parent_snapshot_id);
+			parent_snapshot = table_metadata.GetSnapshotById(table_metadata.current_snapshot_id);
 		}
 	}
 
@@ -201,7 +201,7 @@ void IcebergTransactionData::AddUpdateSnapshot(vector<IcebergManifestEntry> &&de
 			parent_snapshot = last_alter.snapshot;
 		} else {
 			D_ASSERT(table_metadata.has_current_snapshot);
-			parent_snapshot = table_metadata.GetSnapshotById(new_snapshot.parent_snapshot_id);
+			parent_snapshot = table_metadata.GetSnapshotById(table_metadata.current_snapshot_id);
 		}
 	}
 
