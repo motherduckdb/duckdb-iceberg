@@ -79,4 +79,22 @@ yyjson_mut_val *IcebergPartitionSpec::ToJSON(yyjson_mut_doc *doc) const {
 	return partition_obj;
 }
 
+yyjson_mut_val *IcebergPartitionSpec::ToJSON(yyjson_mut_doc *doc, const rest_api_objects::PartitionSpec &spec) {
+	auto res = yyjson_mut_obj(doc);
+	yyjson_mut_obj_add_int(doc, res, "spec-id", spec.spec_id);
+	auto &fields = spec.fields;
+	auto fields_array = yyjson_mut_arr(doc);
+
+	for (auto &field : fields) {
+		auto field_obj = yyjson_mut_obj(doc);
+		yyjson_mut_obj_add_strcpy(doc, field_obj, "name", field.name.c_str());
+		yyjson_mut_obj_add_strcpy(doc, field_obj, "transform", field.transform.value.c_str());
+		yyjson_mut_obj_add_int(doc, field_obj, "source-id", field.source_id);
+		yyjson_mut_obj_add_int(doc, field_obj, "field-id", field.field_id);
+		yyjson_mut_arr_add_val(fields_array, field_obj);
+	}
+	yyjson_mut_obj_add_val(doc, res, "fields", fields_array);
+	return res;
+}
+
 } // namespace duckdb

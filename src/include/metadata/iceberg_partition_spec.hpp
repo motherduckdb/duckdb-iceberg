@@ -42,6 +42,7 @@ public:
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 	string FieldsToJSONString() const;
 	const vector<IcebergPartitionSpecField> &GetFields() const;
+	static yyjson_mut_val *ToJSON(yyjson_mut_doc *doc, const rest_api_objects::PartitionSpec &spec);
 
 private:
 	yyjson_mut_val *FieldsToJSON(yyjson_mut_doc *doc) const;
