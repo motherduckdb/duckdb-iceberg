@@ -110,6 +110,47 @@ static bool IsMapType(string col_name, IcebergTableSchema &table_schema) {
 	return false;
 }
 
+static string ParseQuotedValue(const string &input, idx_t &pos) {
+	if (pos >= input.size() || input[pos] != '"') {
+		throw InvalidInputException("Failed to parse quoted value - expected a quote");
+	}
+	string result;
+	pos++;
+	for (; pos < input.size(); pos++) {
+		if (input[pos] == '"') {
+			pos++;
+			// check if this is an escaped quote
+			if (pos < input.size() && input[pos] == '"') {
+				// escaped quote
+				result += '"';
+				continue;
+			}
+			return result;
+		}
+		result += input[pos];
+	}
+	throw InvalidInputException("Failed to parse quoted value - unterminated quote");
+}
+
+static vector<string> ParseQuotedList(const string &input, char list_separator) {
+	vector<string> result;
+	if (input.empty()) {
+		return result;
+	}
+	idx_t pos = 0;
+	while (true) {
+		result.push_back(ParseQuotedValue(input, pos));
+		if (pos >= input.size()) {
+			break;
+		}
+		if (input[pos] != list_separator) {
+			throw InvalidInputException("Failed to parse list - expected a %s", string(1, list_separator));
+		}
+		pos++;
+	}
+	return result;
+}
+
 void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_name,
                                         const IcebergTableMetadata &table_metadata) {
 	// grab lock for written files vector
@@ -144,7 +185,7 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 			auto &struct_children = StructValue::GetChildren(map_children[col_idx]);
 			auto &col_name = StringValue::Get(struct_children[0]);
 			auto &col_stats = MapValue::GetChildren(struct_children[1]);
-			auto column_names = IcebergUtils::ParseQuotedList(col_name, '.');
+			auto column_names = ParseQuotedList(col_name, '.');
 			if (column_names[0] == "_row_id") {
 				continue;
 			}
