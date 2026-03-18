@@ -2,6 +2,8 @@
 #include "duckdb/common/gzip_file_system.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
+#include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
+#include "duckdb/main/extension_helper.hpp"
 
 #include "iceberg_utils.hpp"
 #include "storage/catalog/iceberg_table_entry.hpp"
@@ -9,6 +11,28 @@
 #include "metadata/iceberg_table_metadata.hpp"
 
 namespace duckdb {
+
+CopyFunctionCatalogEntry &IcebergUtils::GetCopyFunction(ClientContext &context, const string &name) {
+	// Logic is partially duplicated from Catalog::AutoLoadExtensionByCatalogEntry(db, CatalogType::COPY_FUNCTION_ENTRY,
+	// name), but that do not offer enough control
+	auto &db = *context.db;
+	string extension_name = ExtensionHelper::FindExtensionInEntries(name, EXTENSION_COPY_FUNCTIONS);
+	if (!extension_name.empty() && Settings::Get<AutoloadKnownExtensionsSetting>(context) &&
+	    ExtensionHelper::CanAutoloadExtension(extension_name)) {
+		// This will either succeed or throw
+		ExtensionHelper::AutoLoadExtension(db, extension_name);
+	}
+	D_ASSERT(!name.empty());
+	auto &system_catalog = Catalog::GetSystemCatalog(db);
+
+	auto entry =
+	    system_catalog.GetEntry<CopyFunctionCatalogEntry>(context, DEFAULT_SCHEMA, name, OnEntryNotFound::RETURN_NULL);
+	if (!entry) {
+		throw MissingExtensionException(
+		    "Could not load the copy function for \"%s\". Try explicitly loading the \"%s\" extension", name, name);
+	}
+	return *entry;
+}
 
 idx_t IcebergUtils::CountOccurrences(const string &input, const string &to_find) {
 	size_t pos = input.find(to_find);
