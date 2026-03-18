@@ -8,6 +8,7 @@
 namespace duckdb {
 
 struct IcebergTableInformation;
+struct IcebergTransactionData;
 
 enum class IcebergTableUpdateType : uint8_t {
 	ASSIGN_UUID,
@@ -33,20 +34,27 @@ enum class IcebergTableUpdateType : uint8_t {
 };
 
 struct IcebergCommitState {
-	vector<IcebergManifestFile> manifests;
+public:
+	IcebergCommitState(const IcebergTableInformation &table_info, ClientContext &context);
+
+public:
+	const IcebergTableInformation &table_info;
+	optional_ptr<const IcebergSnapshot> latest_snapshot;
+	ClientContext &context;
+
+	//! All the 'manifest_file' entries we will write to the new manifest list
+	vector<IcebergManifestListEntry> manifests;
 	rest_api_objects::CommitTableRequest table_change;
 };
 
 struct IcebergTableUpdate {
 public:
-	IcebergTableUpdate(IcebergTableUpdateType type, IcebergTableInformation &table_info)
-	    : type(type), table_info(table_info) {
-	}
+	IcebergTableUpdate(IcebergTableUpdateType type, const IcebergTableInformation &table_info);
 	virtual ~IcebergTableUpdate() {
 	}
 
 public:
-	virtual void CreateUpdate(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state) = 0;
+	virtual void CreateUpdate(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state) const = 0;
 
 public:
 	template <class TARGET>
@@ -59,7 +67,7 @@ public:
 
 public:
 	IcebergTableUpdateType type;
-	IcebergTableInformation &table_info;
+	const IcebergTableInformation &table_info;
 };
 
 } // namespace duckdb

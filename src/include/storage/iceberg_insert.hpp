@@ -14,19 +14,30 @@
 #include "duckdb/common/index_vector.hpp"
 #include "storage/catalog/iceberg_table_entry.hpp"
 #include "storage/catalog/iceberg_schema_entry.hpp"
+#include "metadata/iceberg_partition_spec.hpp"
+#include "metadata/iceberg_table_schema.hpp"
 
 namespace duckdb {
 
-struct IcebergCopyInput {
-	explicit IcebergCopyInput(ClientContext &context, IcebergTableEntry &table);
-	IcebergCopyInput(ClientContext &context, IcebergSchemaEntry &schema, const ColumnList &columns,
-	                 const string &data_path_p);
+enum class IcebergInsertVirtualColumns { NONE, WRITE_ROW_ID, WRITE_SEQUENCE_NUMBER, WRITE_ROW_ID_AND_SEQUENCE_NUMBER };
 
-	IcebergCatalog &catalog;
-	const ColumnList &columns;
+struct IcebergCopyInput {
+	explicit IcebergCopyInput(ClientContext &context, const IcebergTableMetadata &table_metadata,
+	                          const IcebergTableSchema &schema);
+
+public:
+	const IcebergTableMetadata &table_metadata;
+	const IcebergTableSchema &schema;
 	string data_path;
 	//! Set of (key, value) options
 	case_insensitive_map_t<vector<Value>> options;
+	//! Partition specification for the table (if partitioned)
+	optional_ptr<const IcebergPartitionSpec> partition_spec;
+	//! Table schema for looking up source columns by ID
+	optional_ptr<IcebergTableSchema> table_schema;
+	//! Table index for logical plan generation (used when generating partition expressions)
+	optional_idx get_table_index;
+	IcebergInsertVirtualColumns virtual_columns = IcebergInsertVirtualColumns::NONE;
 };
 
 class IcebergInsertGlobalState : public GlobalSinkState {
@@ -52,9 +63,11 @@ struct IcebergColumnStats {
 	string min;
 	string max;
 	idx_t null_count = 0;
+	idx_t num_values = 0;
 	idx_t column_size_bytes = 0;
 	bool contains_nan = false;
 	bool has_null_count = false;
+	bool has_num_values = false;
 	bool has_min = false;
 	bool has_max = false;
 	bool any_valid = true;

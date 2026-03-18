@@ -119,7 +119,7 @@ const IcebergTransactionData &IcebergMultiFileList::GetTransactionData() const {
 	return *scan_info->transaction_data;
 }
 
-optional_ptr<IcebergSnapshot> IcebergMultiFileList::GetSnapshot() const {
+optional_ptr<const IcebergSnapshot> IcebergMultiFileList::GetSnapshot() const {
 	return scan_info->snapshot;
 }
 
@@ -223,8 +223,9 @@ unique_ptr<IcebergMultiFileList> IcebergMultiFileList::PushdownInternal(ClientCo
 
 	// Add new filters
 	for (auto &entry : new_filters.filters) {
-		if (entry.first < names.size()) {
-			result_filter_set.PushFilter(ColumnIndex(entry.first), entry.second->Copy());
+		auto &column_id = entry.first;
+		if (column_id < names.size()) {
+			result_filter_set.PushFilter(ColumnIndex(column_id), entry.second->Copy());
 		}
 	}
 
@@ -329,13 +330,46 @@ unique_ptr<NodeStatistics> IcebergMultiFileList::GetCardinality(ClientContext &c
 	//! FIXME: doesn't this need to take the transaction-local data/delete manifests into account?
 	idx_t cardinality = 0;
 	for (idx_t i = 0; i < data_manifests.size(); i++) {
-		cardinality += data_manifests[i].added_rows_count;
-		cardinality += data_manifests[i].existing_rows_count;
+		auto &manifest = data_manifests[i].file;
+		cardinality += manifest.added_rows_count;
+		cardinality += manifest.existing_rows_count;
 	}
 	for (idx_t i = 0; i < delete_manifests.size(); i++) {
-		cardinality -= delete_manifests[i].added_rows_count;
+		auto &manifest = delete_manifests[i].file;
+		cardinality -= manifest.added_rows_count;
 	}
 	return make_uniq<NodeStatistics>(cardinality, cardinality);
+}
+
+void IcebergMultiFileList::GetStatistics(vector<PartitionStatistics> &result) const {
+	if (GetMetadata().iceberg_version == 1) {
+		//! We collect no statistics information from manifests for V1 tables.
+		return;
+	}
+
+	if (!transaction_delete_manifests.empty() || !delete_manifests.empty()) {
+		//! if exist delete_manifests , return;
+		return;
+	}
+
+	idx_t count = 0;
+	for (idx_t i = 0; i < data_manifests.size(); i++) {
+		auto &manifest = data_manifests[i].file;
+		count += manifest.existing_rows_count;
+		count += manifest.added_rows_count;
+	}
+
+	for (idx_t i = 0; i < transaction_data_manifests.size(); i++) {
+		auto files = transaction_data_manifests[i].get().manifest_entries;
+		for (idx_t j = 0; j < files.size(); j++) {
+			count += files[j].data_file.record_count;
+		}
+	}
+
+	PartitionStatistics partition_stats;
+	partition_stats.count = count;
+	partition_stats.count_type = CountType::COUNT_EXACT;
+	result.push_back(partition_stats);
 }
 
 void IcebergPredicateStats::SetLowerBound(const Value &new_lower_bound) {
@@ -397,7 +431,8 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &manifes
 		auto &metadata = GetMetadata();
 		auto &data_file = manifest_entry.data_file;
 		// First check if there are partitions
-		if (!data_file.partition_values.empty()) {
+		if (!data_file.partition_info.empty()) {
+			// check if the index is in the partition info.
 			auto partition_spec_it = metadata.partition_specs.find(manifest_entry.partition_spec_id);
 			if (partition_spec_it == metadata.partition_specs.end()) {
 				throw InvalidConfigurationException(
@@ -422,16 +457,15 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestEntry &manifes
 				// initialize dummy stats
 				auto stats = IcebergPredicateStats();
 				bool found_partition_field = false;
-				for (auto &partition_val : data_file.partition_values) {
-					auto partition_field_id = partition_val.first;
-					if (field.partition_field_id == partition_field_id) {
+				for (auto &partition_val : data_file.partition_info) {
+					if (field.partition_field_id == partition_val.field_id) {
 						found_partition_field = true;
-						stats.lower_bound = partition_val.second;
-						stats.upper_bound = partition_val.second;
+						stats.lower_bound = partition_val.value;
+						stats.upper_bound = partition_val.value;
 						stats.has_upper_bounds = true;
 						stats.has_lower_bounds = true;
 						// set null stats for partitioned column.
-						if (partition_val.second.IsNull()) {
+						if (partition_val.value.IsNull()) {
 							// partition values can be null
 							stats.has_null = true;
 						} else {
@@ -725,6 +759,39 @@ bool IcebergMultiFileList::ManifestMatchesFilter(const IcebergManifestFile &mani
 	return true;
 }
 
+vector<reference<const IcebergEqualityDeleteRow>>
+IcebergMultiFileList::GetEqualityDeletesForFile(const IcebergManifestEntry &manifest_entry) const {
+	vector<reference<const IcebergEqualityDeleteRow>> result;
+
+	//! Look through all the equality delete files with a *higher* sequence number
+	auto &data_file = manifest_entry.data_file;
+	auto &metadata = GetMetadata();
+	auto it = equality_delete_data.upper_bound(manifest_entry.sequence_number);
+	for (; it != equality_delete_data.end(); it++) {
+		auto &files = it->second->files;
+		for (auto &file : files) {
+			auto &partition_spec = metadata.partition_specs.at(file.partition_spec_id);
+			if (partition_spec.IsPartitioned()) {
+				if (file.partition_spec_id != manifest_entry.partition_spec_id) {
+					//! Not unpartitioned and the data does not share the same partition spec as the delete, skip the
+					//! delete file.
+					continue;
+				}
+				D_ASSERT(file.partition_info.size() == data_file.partition_info.size());
+				for (idx_t i = 0; i < file.partition_info.size(); i++) {
+					if (file.partition_info[i] != data_file.partition_info[i]) {
+						//! Same partition spec id, but the partitioning information doesn't match, delete file doesn't
+						//! apply.
+						continue;
+					}
+				}
+			}
+			result.insert(result.end(), file.rows.begin(), file.rows.end());
+		}
+	}
+	return result;
+}
+
 void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 	if (initialized) {
 		return;
@@ -738,21 +805,25 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 		auto &metadata = GetMetadata();
 		auto &fs = FileSystem::GetFileSystem(context);
 
-		// Read the manifest list, we need all the manifests to determine if we've seen all deletes
-		auto manifest_list_full_path = options.allow_moved_paths
-		                                   ? IcebergUtils::GetFullPath(iceberg_path, snapshot.manifest_list, fs)
-		                                   : snapshot.manifest_list;
-
-		//! Read the manifest list
-		auto scan = AvroScan::ScanManifestList(snapshot, metadata, context, manifest_list_full_path);
-		auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
-
-		vector<IcebergManifestFile> manifest_files;
-		while (!manifest_list_reader->Finished()) {
-			manifest_list_reader->Read(STANDARD_VECTOR_SIZE, manifest_files);
+		vector<IcebergManifestListEntry> manifest_list_entries;
+		if (HasTransactionData() && !GetTransactionData().alters.empty()) {
+			auto &transaction_data = GetTransactionData();
+			manifest_list_entries = transaction_data.existing_manifest_list;
+		} else {
+			// Read the manifest list, we need all the manifests to determine if we've seen all deletes
+			auto manifest_list_full_path = options.allow_moved_paths
+			                                   ? IcebergUtils::GetFullPath(iceberg_path, snapshot.manifest_list, fs)
+			                                   : snapshot.manifest_list;
+			//! Read the manifest list
+			auto scan = AvroScan::ScanManifestList(snapshot, metadata, context, manifest_list_full_path);
+			auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
+			while (!manifest_list_reader->Finished()) {
+				manifest_list_reader->Read(STANDARD_VECTOR_SIZE, manifest_list_entries);
+			}
 		}
 
-		for (auto &manifest_file : manifest_files) {
+		for (auto &manifest_list_entry : manifest_list_entries) {
+			auto &manifest_file = manifest_list_entry.file;
 			if (!ManifestMatchesFilter(manifest_file)) {
 				DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'manifest_file': '%s'",
 				           manifest_file.manifest_path);
@@ -761,10 +832,10 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 			}
 
 			if (manifest_file.content == IcebergManifestContentType::DATA) {
-				data_manifests.push_back(manifest_file);
+				data_manifests.push_back(manifest_list_entry);
 			} else {
 				D_ASSERT(manifest_file.content == IcebergManifestContentType::DELETE);
-				delete_manifests.push_back(manifest_file);
+				delete_manifests.push_back(manifest_list_entry);
 			}
 		}
 
@@ -780,7 +851,8 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 		for (auto &alter_p : transaction_data.alters) {
 			auto &alter = alter_p.get();
 			auto &manifest_list_entries = alter.manifest_list.GetManifestFilesMutable();
-			for (auto &manifest : manifest_list_entries) {
+			for (auto &manifest_list_entry : manifest_list_entries) {
+				auto &manifest = manifest_list_entry.file;
 				if (!ManifestMatchesFilter(manifest)) {
 					DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'manifest_file': '%s'",
 					           manifest.manifest_path);
@@ -789,10 +861,10 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 				}
 				switch (manifest.content) {
 				case IcebergManifestContentType::DATA:
-					transaction_data_manifests.push_back(manifest.manifest_file);
+					transaction_data_manifests.push_back(manifest_list_entry);
 					break;
 				case IcebergManifestContentType::DELETE:
-					transaction_delete_manifests.push_back(manifest.manifest_file);
+					transaction_delete_manifests.push_back(manifest_list_entry);
 					break;
 				default:
 					throw NotImplementedException("IcebergManifestContentType: %d",
@@ -803,7 +875,7 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 	}
 
 	for (auto &manifest : transaction_data_manifests) {
-		for (auto &entry : manifest.get().entries) {
+		for (auto &entry : manifest.get().manifest_entries) {
 			current_manifest_entries.push_back(entry);
 		}
 	}
@@ -843,6 +915,10 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 
 	// From the spec: "At most one deletion vector is allowed per data file in a snapshot"
 
+	optional_ptr<const case_insensitive_map_t<string>> transactional_delete_files;
+	if (HasTransactionData()) {
+		transactional_delete_files = GetTransactionData().transactional_delete_files;
+	}
 	while (!FinishedScanningDeletes()) {
 		vector<IcebergManifestEntry> entries;
 		delete_manifest_reader->Read(STANDARD_VECTOR_SIZE, entries);
@@ -856,30 +932,49 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 				//! Skip this file
 				continue;
 			}
-
-			if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
-				ScanDeleteFile(manifest_entry, global_columns, column_indexes);
-			} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
-				ScanPuffinFile(manifest_entry.data_file);
-			} else {
-				throw NotImplementedException(
-				    "File format '%s' not supported for deletes, only supports 'parquet' and 'puffin' currently",
-				    data_file.file_format);
+			auto &referenced_data_file = data_file.referenced_data_file;
+			if (!referenced_data_file.empty() && transactional_delete_files &&
+			    transactional_delete_files->count(referenced_data_file)) {
+				//! Skip this delete file, there's a transaction-local delete that makes it obsolete
+				continue;
 			}
+			delete_manifest_entries.push_back(std::move(manifest_entry));
+		}
+	}
+
+	for (auto &manifest_entry : delete_manifest_entries) {
+		auto &data_file = manifest_entry.data_file;
+		if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
+			ScanDeleteFile(manifest_entry, global_columns, column_indexes);
+		} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
+			ScanPuffinFile(manifest_entry);
+		} else {
+			throw NotImplementedException(
+			    "File format '%s' not supported for deletes, only supports 'parquet' and 'puffin' currently",
+			    data_file.file_format);
 		}
 	}
 
 	while (transaction_delete_idx < transaction_delete_manifests.size()) {
-		auto &delete_manifest = transaction_delete_manifests[transaction_delete_idx];
-		for (auto &manifest_entry : delete_manifest.get().entries) {
+		auto &delete_manifest = transaction_delete_manifests[transaction_delete_idx].get();
+		for (auto &manifest_entry : delete_manifest.manifest_entries) {
 			auto &data_file = manifest_entry.data_file;
 
-			//! FIXME: no file pruning for uncommitted data?
+			auto &referenced_data_file = data_file.referenced_data_file;
+			if (!referenced_data_file.empty() && transactional_delete_files) {
+				auto it = transactional_delete_files->find(referenced_data_file);
+				//! Check if this is the currently active (last) delete file for this referenced_data_file
+				if (it != transactional_delete_files->end() && it->second != data_file.file_path) {
+					//! It's not, skip the delete
+					continue;
+				}
+			}
 
+			//! FIXME: no file pruning for uncommitted data?
 			if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
 				ScanDeleteFile(manifest_entry, global_columns, column_indexes);
 			} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
-				ScanPuffinFile(manifest_entry.data_file);
+				ScanPuffinFile(manifest_entry);
 			} else {
 				throw NotImplementedException(
 				    "File format '%s' not supported for deletes, only supports 'parquet' and 'puffin' currently",
@@ -956,7 +1051,7 @@ void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &manifest_e
 			result.Reset();
 			delete_scan_function.function(context, function_input, result);
 			result.Flatten();
-			ScanPositionalDeleteFile(result);
+			ScanPositionalDeleteFile(manifest_entry, result);
 		} while (result.size() != 0);
 	} else if (data_file.content == IcebergManifestEntryContentType::EQUALITY_DELETES) {
 		do {

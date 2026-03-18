@@ -130,9 +130,15 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 		}
 
 		(void)secret_manager.CreateSecret(context, info);
-		// if there is no key_id, secret, or token in the info. log that vended credentials has not worked
-		if (info.options.find("key_id") == info.options.end() && info.options.find("secret") == info.options.end() &&
-		    info.options.find("token") == info.options.end()) {
+		// if there is no key_id, secret, token (S3/GCS) or account_name, connection_string (Azure) in the info,
+		// log that vended credentials has not worked
+		bool has_s3_creds = info.options.find("key_id") != info.options.end() ||
+		                    info.options.find("secret") != info.options.end() ||
+		                    info.options.find("token") != info.options.end();
+		bool has_azure_creds = info.options.find("account_name") != info.options.end() ||
+		                       info.options.find("connection_string") != info.options.end();
+		bool has_gcs_creds = info.options.find("bearer_token") != info.options.end();
+		if (!has_s3_creds && !has_azure_creds && !has_gcs_creds) {
 			DUCKDB_LOG_INFO(context, "Failed to create valid secret from Vendend Credentials for table '%s'",
 			                table_info.name);
 		}
@@ -180,7 +186,7 @@ TableFunction IcebergTableEntry::GetScanFunction(ClientContext &context, unique_
 		snapshot_lookup = IcebergSnapshotLookup::FromAtClause(at);
 	}
 	auto &metadata = table_info.table_metadata;
-	optional_ptr<IcebergSnapshot> snapshot = nullptr;
+	optional_ptr<const IcebergSnapshot> snapshot = nullptr;
 	try {
 		snapshot = metadata.GetSnapshot(snapshot_lookup);
 	} catch (InvalidConfigurationException &e) {
@@ -209,7 +215,7 @@ TableFunction IcebergTableEntry::GetScanFunction(ClientContext &context, unique_
 
 	auto iceberg_schema = metadata.GetSchemaFromId(schema_id);
 	auto scan_info = make_shared_ptr<IcebergScanInfo>(metadata.GetMetadataPath(), metadata, snapshot, *iceberg_schema);
-	if (table_info.transaction_data) {
+	if (table_info.transaction_data && snapshot_lookup.IsLatest()) {
 		scan_info->transaction_data = table_info.transaction_data.get();
 	}
 
@@ -239,17 +245,22 @@ virtual_column_map_t IcebergTableEntry::GetVirtualColumns() const {
 virtual_column_map_t IcebergTableEntry::VirtualColumns() {
 	virtual_column_map_t result;
 	result.emplace(MultiFileReader::COLUMN_IDENTIFIER_FILENAME, TableColumn("filename", LogicalType::VARCHAR));
-	result.emplace(COLUMN_IDENTIFIER_ROW_ID, TableColumn("rowid", LogicalType::BIGINT));
+	result.emplace(COLUMN_IDENTIFIER_ROW_ID, TableColumn("_row_id", LogicalType::BIGINT));
 	result.emplace(MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER,
 	               TableColumn("file_row_number", LogicalType::BIGINT));
 	result.emplace(IcebergMultiFileReader::COLUMN_IDENTIFIER_LAST_SEQUENCE_NUMBER,
-	               TableColumn("sequence_number", LogicalType::BIGINT));
+	               TableColumn("_last_updated_sequence_number", LogicalType::BIGINT));
 	return result;
 }
 
 vector<column_t> IcebergTableEntry::GetRowIdColumns() const {
 	vector<column_t> result;
-	result.push_back(COLUMN_IDENTIFIER_ROW_ID);
+	auto &table_metadata = table_info.table_metadata;
+	if (table_metadata.iceberg_version >= 3) {
+		//! Project the _row_id column as part of the row-id-columns
+		result.push_back(COLUMN_IDENTIFIER_ROW_ID);
+	}
+
 	result.push_back(MultiFileReader::COLUMN_IDENTIFIER_FILENAME);
 	result.push_back(MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER);
 	return result;

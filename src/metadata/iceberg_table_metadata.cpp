@@ -11,7 +11,7 @@ namespace duckdb {
 
 //! ----------- Select Snapshot -----------
 
-optional_ptr<IcebergSnapshot> IcebergTableMetadata::FindSnapshotByIdInternal(int64_t target_id) {
+optional_ptr<const IcebergSnapshot> IcebergTableMetadata::FindSnapshotByIdInternal(int64_t target_id) const {
 	auto it = snapshots.find(target_id);
 	if (it == snapshots.end()) {
 		return nullptr;
@@ -19,9 +19,10 @@ optional_ptr<IcebergSnapshot> IcebergTableMetadata::FindSnapshotByIdInternal(int
 	return it->second;
 }
 
-optional_ptr<IcebergSnapshot> IcebergTableMetadata::FindSnapshotByIdTimestampInternal(timestamp_t timestamp) {
+optional_ptr<const IcebergSnapshot>
+IcebergTableMetadata::FindSnapshotByIdTimestampInternal(timestamp_t timestamp) const {
 	uint64_t max_millis = NumericLimits<uint64_t>::Minimum();
-	optional_ptr<IcebergSnapshot> max_snapshot = nullptr;
+	optional_ptr<const IcebergSnapshot> max_snapshot = nullptr;
 
 	auto timestamp_millis = Timestamp::GetEpochMs(timestamp);
 	for (auto &it : snapshots) {
@@ -61,12 +62,11 @@ const unordered_map<int32_t, IcebergPartitionSpec> &IcebergTableMetadata::GetPar
 	return partition_specs;
 }
 
-optional_ptr<IcebergSnapshot> IcebergTableMetadata::GetLatestSnapshot() {
+optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetLatestSnapshot() const {
 	if (!has_current_snapshot) {
 		return nullptr;
 	}
-	auto latest_snapshot = GetSnapshotById(current_snapshot_id);
-	return latest_snapshot;
+	return GetSnapshotById(current_snapshot_id);
 }
 
 const IcebergTableSchema &IcebergTableMetadata::GetLatestSchema() const {
@@ -98,7 +98,7 @@ const IcebergSortOrder &IcebergTableMetadata::GetLatestSortOrder() const {
 	return *res;
 }
 
-optional_ptr<IcebergSnapshot> IcebergTableMetadata::GetSnapshotById(int64_t snapshot_id) {
+optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetSnapshotById(int64_t snapshot_id) const {
 	auto snapshot = FindSnapshotByIdInternal(snapshot_id);
 	if (!snapshot) {
 		throw InvalidConfigurationException("Could not find snapshot with id " + to_string(snapshot_id));
@@ -106,7 +106,7 @@ optional_ptr<IcebergSnapshot> IcebergTableMetadata::GetSnapshotById(int64_t snap
 	return snapshot;
 }
 
-optional_ptr<IcebergSnapshot> IcebergTableMetadata::GetSnapshotByTimestamp(timestamp_t timestamp) {
+optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetSnapshotByTimestamp(timestamp_t timestamp) const {
 	auto snapshot = FindSnapshotByIdTimestampInternal(timestamp);
 	if (!snapshot) {
 		throw InvalidConfigurationException("Could not find latest snapshots for timestamp " +
@@ -115,7 +115,7 @@ optional_ptr<IcebergSnapshot> IcebergTableMetadata::GetSnapshotByTimestamp(times
 	return snapshot;
 }
 
-optional_ptr<IcebergSnapshot> IcebergTableMetadata::GetSnapshot(const IcebergSnapshotLookup &lookup) {
+optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetSnapshot(const IcebergSnapshotLookup &lookup) const {
 	switch (lookup.snapshot_source) {
 	case SnapshotSource::LATEST:
 		return GetLatestSnapshot();
@@ -259,12 +259,21 @@ string IcebergTableMetadata::GetMetaDataPath(ClientContext &context, const strin
 	return GuessTableVersion(meta_path, fs, options);
 }
 
-bool IcebergTableMetadata::HasLastColumnId() const {
+bool IcebergTableMetadata::HasLastAssignedColumnFieldId() const {
 	return last_column_id.IsValid();
 }
 
-idx_t IcebergTableMetadata::GetLastColumnId() const {
+idx_t IcebergTableMetadata::GetLastAssignedColumnFieldId() const {
 	return last_column_id.GetIndex();
+}
+
+bool IcebergTableMetadata::HasLastPartitionId() const {
+	return last_partition_field_id.IsValid();
+}
+
+int32_t IcebergTableMetadata::GetLastPartitionFieldId() const {
+	D_ASSERT(HasLastPartitionId());
+	return static_cast<int32_t>(last_partition_field_id.GetIndex());
 }
 
 //! ----------- Parse the Metadata JSON -----------
@@ -322,10 +331,6 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_obje
 	if (table_metadata.has_next_row_id) {
 		res.has_next_row_id = true;
 		res.next_row_id = table_metadata.next_row_id;
-	} else if (res.iceberg_version >= 3) {
-		//! When upgrading to v3, initialize next_row_id to 0
-		res.has_next_row_id = true;
-		res.next_row_id = 0;
 	}
 
 	if (table_metadata.has_current_snapshot_id && table_metadata.current_snapshot_id != -1) {
@@ -334,7 +339,14 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_obje
 	} else {
 		res.has_current_snapshot = false;
 	}
-	res.last_sequence_number = table_metadata.last_sequence_number;
+
+	if (table_metadata.has_last_sequence_number) {
+		res.last_sequence_number = table_metadata.last_sequence_number;
+	} else {
+		//! SPEC: Table metadata field last-sequence-number must default to 0
+		res.last_sequence_number = 0;
+	}
+
 	res.default_spec_id = table_metadata.default_spec_id;
 	if (table_metadata.has_default_sort_order_id) {
 		res.default_sort_order_id = table_metadata.default_sort_order_id;
@@ -362,6 +374,10 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_obje
 
 	if (table_metadata.has_last_column_id) {
 		res.last_column_id = table_metadata.last_column_id;
+	}
+
+	if (table_metadata.has_last_partition_id) {
+		res.last_partition_field_id = table_metadata.last_partition_id;
 	}
 
 	return res;

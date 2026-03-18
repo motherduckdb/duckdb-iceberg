@@ -31,7 +31,7 @@
 namespace duckdb {
 
 struct IcebergPartitionStatsBindData : public TableFunctionData {
-	optional_ptr<IcebergSnapshot> snapshot_to_scan;
+	optional_ptr<const IcebergSnapshot> snapshot_to_scan;
 	IcebergTableMetadata metadata;
 	shared_ptr<IcebergTableSchema> schema;
 	unordered_map<uint64_t, ColumnIndex> source_to_column_id;
@@ -171,7 +171,7 @@ static void IcebergPartitionStatsFunction(ClientContext &context, TableFunctionI
 	auto &metadata = bind_data.metadata;
 	for (; global_state.current_manifest_idx < table_entries.size(); global_state.current_manifest_idx++) {
 		auto &table_entry = table_entries[global_state.current_manifest_idx];
-		auto &manifest = table_entry.manifest;
+		auto &manifest = table_entry.file;
 		auto &field_summaries = manifest.partitions.field_summary;
 
 		auto spec_id = manifest.partition_spec_id;

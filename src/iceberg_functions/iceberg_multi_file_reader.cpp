@@ -48,10 +48,10 @@ shared_ptr<MultiFileList> IcebergMultiFileReader::CreateFileList(ClientContext &
 
 static MultiFileColumnDefinition TransformColumn(const IcebergColumnDefinition &input) {
 	MultiFileColumnDefinition column(input.name, input.type);
-	if (input.initial_default.IsNull()) {
+	if (!input.initial_default || input.initial_default->IsNull()) {
 		column.default_expression = make_uniq<ConstantExpression>(Value(input.type));
 	} else {
-		column.default_expression = make_uniq<ConstantExpression>(input.initial_default);
+		column.default_expression = make_uniq<ConstantExpression>(*input.initial_default);
 	}
 	column.identifier = Value::INTEGER(input.id);
 	for (auto &child : input.children) {
@@ -150,6 +150,15 @@ static Value TransformPartitionValueTemplated(const Value &value, const LogicalT
 
 static Value TransformPartitionValue(const Value &value, const LogicalType &type) {
 	D_ASSERT(!value.type().IsNested());
+	// DECIMAL partition values are already decoded as proper DuckDB DECIMALs by the Avro reader.
+	// The blob round-trip below misinterprets the little-endian internal representation as
+	// big-endian Iceberg bytes, producing garbage. Return directly (or cast if params differ).
+	if (value.type().id() == LogicalTypeId::DECIMAL) {
+		if (value.type() == type) {
+			return value;
+		}
+		return value.DefaultCastAs(type);
+	}
 	switch (value.type().InternalType()) {
 	case PhysicalType::BOOL:
 		return TransformPartitionValueTemplated<bool>(value, type);
@@ -235,15 +244,14 @@ static void ApplyPartitionConstants(const IcebergMultiFileList &multi_file_list,
 			continue; // Skip non-identity transforms
 		}
 
-		// Get the partition value from the data file's partition struct
-		auto &partition_values = data_file.partition_values;
-		if (partition_values.empty()) {
-			continue; // No partition value available
+		// Get the partition value from the data file's partition info
+		if (data_file.partition_info.empty()) {
+			continue; // No partition info available
 		}
 		optional_ptr<const Value> partition_value;
-		for (auto &it : partition_values) {
-			if (static_cast<uint64_t>(it.first) == field.partition_field_id && !it.second.IsNull()) {
-				partition_value = it.second;
+		for (auto &partition_info : data_file.partition_info) {
+			if (partition_info.field_id == field.partition_field_id && !partition_info.value.IsNull()) {
+				partition_value = partition_info.value;
 				break;
 			}
 		}
@@ -254,6 +262,54 @@ static void ApplyPartitionConstants(const IcebergMultiFileList &multi_file_list,
 		auto global_idx = MultiFileGlobalIndex(i);
 		reader_data.constant_map.Add(global_idx, TransformPartitionValue(*partition_value, global_column.type));
 	}
+}
+
+ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderData &reader_data,
+                                                              const MultiFileBindData &bind_data,
+                                                              const vector<MultiFileColumnDefinition> &global_columns,
+                                                              const vector<ColumnIndex> &global_column_ids,
+                                                              optional_ptr<TableFilterSet> table_filters,
+                                                              ClientContext &context, MultiFileGlobalState &gstate) {
+	FinalizeBind(reader_data, bind_data.file_options, bind_data.reader_bind, global_columns, global_column_ids, context,
+	             gstate.multi_file_reader_state.get());
+
+	//! Create a mapping from field_id -> column index
+	unordered_map<int32_t, column_t> id_to_global_column;
+	for (column_t i = 0; i < global_columns.size(); i++) {
+		auto &col = global_columns[i];
+		D_ASSERT(!col.identifier.IsNull());
+		id_to_global_column[col.identifier.GetValue<int32_t>()] = i;
+	}
+
+	//! Get the data file that we're preparing to scan
+	const auto &multi_file_list = gstate.file_list.Cast<IcebergMultiFileList>();
+	auto &reader = *reader_data.reader;
+	auto file_id = reader.file_list_idx.GetIndex();
+	auto &manifest_entry = multi_file_list.manifest_entries[file_id];
+
+	//! Collect all the equality delete ids needed
+	unordered_set<int32_t> equality_delete_ids;
+	auto delete_rows = multi_file_list.GetEqualityDeletesForFile(manifest_entry);
+	for (auto &row : delete_rows) {
+		auto &filters = row.get().filters;
+		for (auto &filter : filters) {
+			equality_delete_ids.insert(filter.first);
+		}
+	}
+
+	//! Add the columns needed by the equality deletes if not present
+	auto new_global_column_ids = global_column_ids;
+	auto &equality_to_result_id = multi_file_list.equality_id_to_result_id;
+	new_global_column_ids.resize(global_column_ids.size() + equality_to_result_id.size());
+
+	for (auto it : equality_to_result_id) {
+		auto global_column_id = id_to_global_column[it.first];
+		ColumnIndex equality_index(global_column_id);
+		new_global_column_ids[it.second] = equality_index;
+	}
+
+	return CreateMapping(context, reader_data, global_columns, new_global_column_ids, table_filters, gstate.file_list,
+	                     bind_data.reader_bind, bind_data.virtual_columns);
 }
 
 void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, const MultiFileOptions &file_options,
@@ -280,7 +336,7 @@ void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, cons
 		    multi_file_list.transaction_delete_idx < multi_file_list.transaction_delete_manifests.size()) {
 			multi_file_list.ProcessDeletes(global_columns, global_column_ids);
 		}
-		reader.deletion_filter = std::move(multi_file_list.GetPositionalDeletesForFile(file_path));
+		reader.deletion_filter = multi_file_list.GetPositionalDeletesForFile(file_path);
 	}
 
 	auto &local_columns = reader_data.reader->columns;
@@ -299,34 +355,7 @@ void IcebergMultiFileReader::ApplyEqualityDeletes(ClientContext &context, DataCh
                                                   const IcebergMultiFileList &multi_file_list,
                                                   const IcebergManifestEntry &manifest_entry,
                                                   const vector<MultiFileColumnDefinition> &local_columns) {
-	vector<reference<IcebergEqualityDeleteRow>> delete_rows;
-
-	auto &data_file = manifest_entry.data_file;
-	auto &metadata = multi_file_list.GetMetadata();
-	auto delete_data_it = multi_file_list.equality_delete_data.upper_bound(manifest_entry.sequence_number);
-	//! Look through all the equality delete files with a *higher* sequence number
-	for (; delete_data_it != multi_file_list.equality_delete_data.end(); delete_data_it++) {
-		auto &files = delete_data_it->second->files;
-		for (auto &file : files) {
-			auto &partition_spec = metadata.partition_specs.at(file.partition_spec_id);
-			if (partition_spec.IsPartitioned()) {
-				if (file.partition_spec_id != manifest_entry.partition_spec_id) {
-					//! Not unpartitioned and the data does not share the same partition spec as the delete, skip the
-					//! delete file.
-					continue;
-				}
-				D_ASSERT(file.partition_values.size() == data_file.partition_values.size());
-				for (idx_t i = 0; i < file.partition_values.size(); i++) {
-					if (file.partition_values[i] != data_file.partition_values[i]) {
-						//! Same partition spec id, but the partitioning information doesn't match, delete file doesn't
-						//! apply.
-						continue;
-					}
-				}
-			}
-			delete_rows.insert(delete_rows.end(), file.rows.begin(), file.rows.end());
-		}
-	}
+	auto delete_rows = multi_file_list.GetEqualityDeletesForFile(manifest_entry);
 
 	if (delete_rows.empty()) {
 		return;
@@ -367,9 +396,9 @@ void IcebergMultiFileReader::ApplyEqualityDeletes(ClientContext &context, DataCh
 				} else {
 					equalities.push_back(make_uniq<BoundConstantExpression>(Value::BOOLEAN(true)));
 				}
-			} else {
-				equalities.push_back(expression->Copy());
+				continue;
 			}
+			equalities.push_back(expression->Copy());
 		}
 
 		unique_ptr<Expression> filter;
@@ -407,33 +436,36 @@ void IcebergMultiFileReader::FinalizeChunk(ClientContext &context, const MultiFi
                                            DataChunk &input_chunk, DataChunk &output_chunk,
                                            ExpressionExecutor &executor,
                                            optional_ptr<MultiFileReaderGlobalState> global_state) {
-	// Base class finalization first
+	D_ASSERT(global_state);
+	// Get the metadata for this file
+	const auto &multi_file_list = global_state->file_list->Cast<IcebergMultiFileList>();
+
+	//! Add the extra equality delete fields to output chunk.
+	idx_t diff = executor.expressions.size() - output_chunk.ColumnCount();
+	(void)diff;
+	D_ASSERT(diff == multi_file_list.equality_id_to_result_id.size());
+	if (diff > 0) {
+		int32_t start = input_chunk.ColumnCount() - diff;
+		for (int32_t i = 0; i < diff; i++) {
+			output_chunk.data.emplace_back(input_chunk.data[start + i]);
+		}
+	}
+
+	//! Base class finalization first
 	MultiFileReader::FinalizeChunk(context, bind_data, reader, reader_data, input_chunk, output_chunk, executor,
 	                               global_state);
 	D_ASSERT(global_state);
 	// Get the metadata for this file
-	const auto &multi_file_list = dynamic_cast<const IcebergMultiFileList &>(*global_state->file_list);
 	auto file_id = reader.file_list_idx.GetIndex();
 	auto &manifest_entry = multi_file_list.manifest_entries[file_id];
 
-	idx_t count = output_chunk.size();
-	if (sequence_number_col.IsValid()) {
-		auto &sequence_number_column = output_chunk.data[sequence_number_col.GetIndex()];
-		sequence_number_column.Flatten(count);
-		auto &sequence_number_validity = FlatVector::Validity(sequence_number_column);
-		auto sequence_number_data = FlatVector::GetData<int64_t>(sequence_number_column);
-		for (idx_t i = 0; i < count; i++) {
-			if (sequence_number_validity.RowIsValid(i)) {
-				//! Explicitly set in the file
-				continue;
-			}
-			sequence_number_validity.SetValid(i);
-			sequence_number_data[i] = manifest_entry.sequence_number;
-		}
-	}
-
 	auto &local_columns = reader.columns;
 	ApplyEqualityDeletes(context, output_chunk, multi_file_list, manifest_entry, local_columns);
+
+	//! Remove the extra columns we added to perform the equality delete filtering
+	for (idx_t i = 0; i < diff; i++) {
+		output_chunk.data.pop_back();
+	}
 }
 
 bool IcebergMultiFileReader::ParseOption(const string &key, const Value &val, MultiFileOptions &options,
@@ -482,6 +514,25 @@ bool IcebergMultiFileReader::ParseOption(const string &key, const Value &val, Mu
 	return MultiFileReader::ParseOption(key, val, options, context);
 }
 
+static unique_ptr<Expression> ConstructVirtualRowIdExpression(ClientContext &context, const LogicalType &type,
+                                                              const Value &val, idx_t local_idx) {
+	auto row_id_expr = make_uniq<BoundConstantExpression>(val);
+	auto file_row_number = make_uniq<BoundReferenceExpression>(type, local_idx);
+
+	// generate the addition
+	vector<unique_ptr<Expression>> children;
+	children.push_back(std::move(row_id_expr));
+	children.push_back(std::move(file_row_number));
+
+	FunctionBinder binder(context);
+	ErrorData error;
+	auto function_expr = binder.BindScalarFunction(DEFAULT_SCHEMA, "+", std::move(children), error, true, nullptr);
+	if (error.HasError()) {
+		error.Throw();
+	}
+	return function_expr;
+}
+
 unique_ptr<Expression> IcebergMultiFileReader::GetVirtualColumnExpression(
     ClientContext &context, MultiFileReaderData &reader_data, const vector<MultiFileColumnDefinition> &local_columns,
     idx_t &column_id, const LogicalType &type, MultiFileLocalIndex local_idx,
@@ -490,74 +541,103 @@ unique_ptr<Expression> IcebergMultiFileReader::GetVirtualColumnExpression(
 		// row id column
 		// this is computed as row_id_start + file_row_number OR read from the file
 		// first check if the row id is explicitly defined in this file
-		for (auto &col : local_columns) {
-			if (col.identifier.IsNull()) {
-				continue;
-			}
-			//! FIXME: this means the column is present, not that it's always non-null
-			//! Don't we need to push a COALESCE(_row_id, ...) - or deal with it in FinalizeChunk ?
-			if (col.identifier.GetValue<int32_t>() == MultiFileReader::ROW_ID_FIELD_ID) {
-				// it is! return a reference to the global row id column so we can read it from the file directly
-				global_column_reference = row_id_column.get();
-				return nullptr;
-			}
-		}
 		// get the row id start for this file
 		if (!reader_data.file_to_be_opened.extended_info) {
 			throw InternalException("Extended info not found for reading row id column");
 		}
-
 		auto &options = reader_data.file_to_be_opened.extended_info->options;
 		auto entry = options.find("first_row_id");
+		for (idx_t i = 0; i < local_columns.size(); i++) {
+			auto &col = local_columns[i];
+			if (col.identifier.IsNull()) {
+				continue;
+			}
+			if (col.identifier.GetValue<int32_t>() == MultiFileReader::ROW_ID_FIELD_ID) {
+				if (entry == options.end()) {
+					//! There is no parent 'first_row_id' to inherit, simply reference the existing column
+					global_column_reference = row_id_column.get();
+					return nullptr;
+				}
+				auto &reader = *reader_data.reader;
+				// add a projection for the _row_id column we found in the local schema
+				reader.column_ids.push_back(MultiFileLocalColumnId(i));
+				reader.column_indexes.push_back(ColumnIndex(i));
+
+				auto computed_row_id =
+				    ConstructVirtualRowIdExpression(context, type, entry->second, local_idx.GetIndex() + 1);
+				// Create COALESCE(_row_id, computed_row_id)
+				auto coalesce_expr = make_uniq<BoundOperatorExpression>(ExpressionType::OPERATOR_COALESCE, type);
+				auto file_row_id = make_uniq<BoundReferenceExpression>(type, local_idx.GetIndex());
+				coalesce_expr->children.push_back(std::move(file_row_id));
+				coalesce_expr->children.push_back(std::move(computed_row_id));
+
+				// Transform virtual column to file_row_number for the reference
+				column_id = MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER;
+				return coalesce_expr;
+			}
+		}
 		if (entry == options.end()) {
 			//! No first-row-id can be found, version must be <3, just return null
 			return make_uniq<BoundConstantExpression>(Value(LogicalType::BIGINT));
 		}
-		auto row_id_expr = make_uniq<BoundConstantExpression>(entry->second);
-		auto file_row_number = make_uniq<BoundReferenceExpression>(type, local_idx.GetIndex());
 
 		// transform this virtual column to file_row_number
 		column_id = MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER;
-
-		// generate the addition
-		vector<unique_ptr<Expression>> children;
-		children.push_back(std::move(row_id_expr));
-		children.push_back(std::move(file_row_number));
-
-		FunctionBinder binder(context);
-		ErrorData error;
-		auto function_expr = binder.BindScalarFunction(DEFAULT_SCHEMA, "+", std::move(children), error, true, nullptr);
-		if (error.HasError()) {
-			error.Throw();
-		}
-		return function_expr;
+		return ConstructVirtualRowIdExpression(context, type, entry->second, local_idx.GetIndex());
 	}
 	if (column_id == COLUMN_IDENTIFIER_LAST_SEQUENCE_NUMBER) {
-		sequence_number_col = local_idx.GetIndex();
 		// get the row id start for this file
 		if (!reader_data.file_to_be_opened.extended_info) {
 			throw InternalException("Missing extended info for data file");
 		}
 		auto &options = reader_data.file_to_be_opened.extended_info->options;
 		auto entry = options.find("sequence_number");
-		if (entry == options.end()) {
-			throw InvalidInputException("Extended info not found for reading sequence_number column");
-		}
-		for (auto &col : local_columns) {
+		for (idx_t i = 0; i < local_columns.size(); i++) {
+			auto &col = local_columns[i];
 			if (col.identifier.IsNull()) {
 				continue;
 			}
 			if (col.identifier.GetValue<int32_t>() == MultiFileReader::LAST_UPDATED_SEQUENCE_NUMBER_ID) {
-				// it is! return a reference to the global sequence_number column so we can read it from the file
-				// directly
-				global_column_reference = last_updated_sequence_number_column.get();
-				return nullptr;
+				if (entry == options.end()) {
+					//! There is no parent 'sequence_number' to inherit, simply reference the existing column
+					global_column_reference = last_updated_sequence_number_column.get();
+					return nullptr;
+				}
+				auto &reader = *reader_data.reader;
+				// add a projection for the _row_id column we found in the local schema
+				reader.column_ids.push_back(MultiFileLocalColumnId(i));
+				reader.column_indexes.push_back(ColumnIndex(i));
+
+				column_id = MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER;
+
+				auto computed_sequence_number = make_uniq<BoundConstantExpression>(entry->second);
+				// Create COALESCE(_last_updated_sequence_number, computed_sequence_number)
+				auto coalesce_expr = make_uniq<BoundOperatorExpression>(ExpressionType::OPERATOR_COALESCE, type);
+				auto sequence_number = make_uniq<BoundReferenceExpression>(type, local_idx.GetIndex());
+				coalesce_expr->children.push_back(std::move(sequence_number));
+				coalesce_expr->children.push_back(std::move(computed_sequence_number));
+
+				// Transform virtual column to file_row_number for the reference
+				column_id = MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER;
+				return coalesce_expr;
 			}
+		}
+		if (entry == options.end()) {
+			return make_uniq<BoundConstantExpression>(Value(LogicalType::BIGINT));
 		}
 		return make_uniq<BoundConstantExpression>(entry->second);
 	}
 	return MultiFileReader::GetVirtualColumnExpression(context, reader_data, local_columns, column_id, type, local_idx,
 	                                                   global_column_reference);
+}
+
+vector<PartitionStatistics> IcebergMultiFileReader::IcebergGetPartitionStats(ClientContext &context,
+                                                                             GetPartitionStatsInput &input) {
+	auto &bind_data = input.bind_data->Cast<MultiFileBindData>();
+	vector<PartitionStatistics> result;
+	auto &multi_file_list = bind_data.file_list->Cast<IcebergMultiFileList>();
+	multi_file_list.GetStatistics(result);
+	return result;
 }
 
 } // namespace duckdb

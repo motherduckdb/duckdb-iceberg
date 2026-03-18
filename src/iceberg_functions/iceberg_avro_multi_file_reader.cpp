@@ -9,7 +9,7 @@
 namespace duckdb {
 constexpr column_t IcebergAvroMultiFileReader::PARTITION_SPEC_ID_FIELD_ID;
 constexpr column_t IcebergAvroMultiFileReader::SEQUENCE_NUMBER_FIELD_ID;
-constexpr column_t IcebergAvroMultiFileReader::MANIFEST_FILE_INDEX_FIELD_ID;
+constexpr column_t IcebergAvroMultiFileReader::MANIFEST_FILE_PATH_FIELD_ID;
 
 unique_ptr<MultiFileReader> IcebergAvroMultiFileReader::CreateInstance(const TableFunction &table) {
 	return make_uniq<IcebergAvroMultiFileReader>(table.function_info);
@@ -200,6 +200,8 @@ BuildManifestSchema(const IcebergSnapshot &snapshot, const IcebergTableMetadata 
 	if (iceberg_version >= 2) {
 		MultiFileColumnDefinition content("content", LogicalType::INTEGER);
 		content.identifier = Value::INTEGER(CONTENT);
+		//! Default to 0 if missing (V1 compatibility)
+		content.default_expression = make_uniq<ConstantExpression>(Value::INTEGER(0));
 		data_file.children.push_back(content);
 	}
 
@@ -402,7 +404,6 @@ bool IcebergAvroMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &
 		schema = manifest_list::BuildManifestListSchema(metadata);
 	} else {
 		auto &manifest_file_scan = scan_info.Cast<IcebergManifestFileScanInfo>();
-		auto &manifest_files = manifest_file_scan.manifest_files;
 		auto &partition_field_id_to_type = manifest_file_scan.partition_field_id_to_type;
 		schema = manifest_file::BuildManifestSchema(snapshot, metadata, partition_field_id_to_type);
 	}
@@ -438,23 +439,27 @@ void IcebergAvroMultiFileReader::FinalizeChunk(ClientContext &context, const Mul
 	auto &manifest_file = manifest_scan_info.manifest_files[manifest_file_idx];
 
 	idx_t count = output_chunk.size();
+	auto &status_column = output_chunk.data[0];
+	status_column.Flatten(count);
+
 	auto &sequence_number_column = output_chunk.data[2];
 	sequence_number_column.Flatten(count);
 	auto &sequence_number_validity = FlatVector::Validity(sequence_number_column);
 	auto sequence_number_data = FlatVector::GetData<int64_t>(sequence_number_column);
+	auto status_column_data = FlatVector::GetData<int32_t>(status_column);
 	for (idx_t i = 0; i < count; i++) {
 		if (sequence_number_validity.RowIsValid(i)) {
 			//! Sequence number is explicitly set
 			continue;
 		}
 		sequence_number_validity.SetValid(i);
-		sequence_number_data[i] = manifest_file.sequence_number;
+		sequence_number_data[i] = manifest_file.file.sequence_number;
 	}
 	if (scan_info->metadata.iceberg_version < 3) {
 		//! No row-lineage applies, just return
 		return;
 	}
-	if (manifest_file.content == IcebergManifestContentType::DELETE) {
+	if (manifest_file.file.content == IcebergManifestContentType::DELETE) {
 		//! No need to inherit first-row-id for DELETE manifests
 		return;
 	}
@@ -464,22 +469,34 @@ void IcebergAvroMultiFileReader::FinalizeChunk(ClientContext &context, const Mul
 	auto res = global_state.added_rows_per_manifest.emplace(manifest_file_idx, 0);
 	auto &start_row_id = res.first->second;
 
+	//! NOTE: the order of these columns is defined by the order that they are produced in BuildManifestSchema
+	//! see `iceberg_avro_multi_file_reader.cpp`
 	auto &data_file_column = output_chunk.data[4];
 	auto &data_struct_children = StructVector::GetEntries(data_file_column);
 
 	auto &first_row_id_column = *data_struct_children[15];
+	first_row_id_column.Flatten(count);
+
+	auto &record_count_column = *data_struct_children[4];
+	record_count_column.Flatten(count);
 
 	auto &first_row_id_validity = FlatVector::Validity(first_row_id_column);
 	auto first_row_id_data = FlatVector::GetData<int64_t>(first_row_id_column);
+	auto record_count_data = FlatVector::GetData<int64_t>(record_count_column);
 	for (idx_t i = 0; i < count; i++) {
 		if (first_row_id_validity.RowIsValid(i)) {
 			//! First row id is explicitly set
 			continue;
 		}
-		first_row_id_validity.SetValid(i);
-		D_ASSERT(manifest_file.has_first_row_id);
-		first_row_id_data[i] = manifest_file.first_row_id + start_row_id;
-		start_row_id++;
+		if (status_column_data[i] == 2) {
+			// Manifest entry is deleted, skip
+			continue;
+		}
+		if (manifest_file.file.has_first_row_id) {
+			first_row_id_validity.SetValid(i);
+			first_row_id_data[i] = manifest_file.file.first_row_id + start_row_id;
+			start_row_id += record_count_data[i];
+		}
 	}
 	(void)output_chunk;
 	count += 1;
@@ -512,14 +529,14 @@ unique_ptr<Expression> IcebergAvroMultiFileReader::GetVirtualColumnExpression(
 		}
 		return make_uniq<BoundConstantExpression>(entry->second);
 	}
-	if (column_id == MANIFEST_FILE_INDEX_FIELD_ID) {
+	if (column_id == MANIFEST_FILE_PATH_FIELD_ID) {
 		if (!reader_data.file_to_be_opened.extended_info) {
-			throw InternalException("Extended info not found for manifest_file_index column");
+			throw InternalException("Extended info not found for manifest_file_path column");
 		}
 		auto &options = reader_data.file_to_be_opened.extended_info->options;
-		auto entry = options.find("manifest_file_index");
+		auto entry = options.find("manifest_file_path");
 		if (entry == options.end()) {
-			throw InternalException("'manifest_file_index' not set when initializing the FileList");
+			throw InternalException("'manifest_file_path' not set when initializing the FileList");
 		}
 		return make_uniq<BoundConstantExpression>(entry->second);
 	}
@@ -560,19 +577,19 @@ shared_ptr<MultiFileList> IcebergAvroMultiFileReader::CreateFileList(ClientConte
 		for (idx_t i = 0; i < manifest_files.size(); i++) {
 			auto &manifest = manifest_files[i];
 			auto full_path = options.allow_moved_paths
-			                     ? IcebergUtils::GetFullPath(iceberg_path, manifest.manifest_path, fs)
-			                     : manifest.manifest_path;
+			                     ? IcebergUtils::GetFullPath(iceberg_path, manifest.file.manifest_path, fs)
+			                     : manifest.file.manifest_path;
 			open_files.emplace_back(full_path);
 			auto &file_info = open_files.back();
 			file_info.extended_info = make_uniq<ExtendedOpenFileInfo>();
 			file_info.extended_info->options["validate_external_file_cache"] = Value::BOOLEAN(false);
 			file_info.extended_info->options["force_full_download"] = Value::BOOLEAN(true);
-			file_info.extended_info->options["file_size"] = Value::UBIGINT(manifest.manifest_length);
+			file_info.extended_info->options["file_size"] = Value::UBIGINT(manifest.file.manifest_length);
 			file_info.extended_info->options["etag"] = Value("");
 			file_info.extended_info->options["last_modified"] = Value::TIMESTAMP(timestamp_t(0));
-			file_info.extended_info->options["partition_spec_id"] = Value::INTEGER(manifest.partition_spec_id);
-			file_info.extended_info->options["sequence_number"] = Value::BIGINT(manifest.sequence_number);
-			file_info.extended_info->options["manifest_file_index"] = Value::UBIGINT(i);
+			file_info.extended_info->options["partition_spec_id"] = Value::INTEGER(manifest.file.partition_spec_id);
+			file_info.extended_info->options["sequence_number"] = Value::BIGINT(manifest.file.sequence_number);
+			file_info.extended_info->options["manifest_file_path"] = Value(manifest.file.manifest_path);
 		}
 	}
 

@@ -17,9 +17,14 @@ public:
 	                                optional_ptr<ColumnIndex> parent);
 	static const IcebergColumnDefinition &GetFromColumnIndex(const vector<unique_ptr<IcebergColumnDefinition>> &columns,
 	                                                         const ColumnIndex &column_index, idx_t depth);
+	optional_ptr<const IcebergColumnDefinition> GetFromPath(const vector<string> &path,
+	                                                        optional_ptr<optional_idx> names_offset);
 
 	static void SchemaToJson(yyjson_mut_doc *doc, yyjson_mut_val *root_object, const rest_api_objects::Schema &schema);
+	shared_ptr<IcebergTableSchema> Copy() const;
 	const LogicalType &GetColumnTypeFromFieldId(idx_t field_id) const;
+
+	void GetColumnNamesAndTypes(vector<string> &names, vector<LogicalType> &types) const;
 
 public:
 	int32_t schema_id;

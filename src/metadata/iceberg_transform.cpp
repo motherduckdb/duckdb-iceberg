@@ -1,10 +1,19 @@
 #include "metadata/iceberg_transform.hpp"
+#include "iceberg_hash.hpp"
 #include "duckdb/common/string_util.hpp"
 
 namespace duckdb {
 
 IcebergTransform::IcebergTransform() : raw_transform() {
 	type = IcebergTransformType::INVALID;
+}
+
+bool IcebergTransform::TransformFunctionSupported(const string &transform_name) {
+	if (transform_name == "day" || transform_name == "month" || transform_name == "year" || transform_name == "hour" ||
+	    transform_name == "truncate" || transform_name == "bucket") {
+		return true;
+	}
+	return false;
 }
 
 IcebergTransform::IcebergTransform(const string &transform) : raw_transform(transform) {
@@ -45,32 +54,16 @@ LogicalType IcebergTransform::GetBoundsType(const LogicalType &input) const {
 	switch (type) {
 	case IcebergTransformType::IDENTITY: {
 		//! Appendix A: Avro Data Type Mappings
-		switch (input.id()) {
-		case LogicalTypeId::DATE:
-			return LogicalType::INTEGER;
-		case LogicalTypeId::TIME:
-			return LogicalType::BIGINT;
-		case LogicalTypeId::TIMESTAMP:
-			return LogicalType::BIGINT;
-		case LogicalTypeId::TIMESTAMP_TZ:
-			return LogicalType::BIGINT;
-		case LogicalTypeId::TIMESTAMP_NS:
-			return LogicalType::BIGINT;
-		case LogicalTypeId::DECIMAL:
-			return LogicalType::BLOB;
-		case LogicalTypeId::UUID:
-			return LogicalType::BLOB;
-		default:
-			return input;
-		}
+		//! The avro reader return will return the correct identity types now
+		return input;
 	}
 	case IcebergTransformType::BUCKET:
 		return LogicalType::INTEGER;
 	case IcebergTransformType::TRUNCATE:
 		return input;
+	case IcebergTransformType::DAY:
 	case IcebergTransformType::YEAR:
 	case IcebergTransformType::MONTH:
-	case IcebergTransformType::DAY:
 	case IcebergTransformType::HOUR:
 		return LogicalType::INTEGER;
 	case IcebergTransformType::VOID:
@@ -85,14 +78,13 @@ LogicalType IcebergTransform::GetSerializedType(const LogicalType &input) const 
 	switch (type) {
 	case IcebergTransformType::IDENTITY:
 		return input;
-	case IcebergTransformType::BUCKET:
-		return LogicalType::INTEGER;
 	case IcebergTransformType::TRUNCATE:
 		return input;
+	case IcebergTransformType::BUCKET:
 	case IcebergTransformType::YEAR:
 	case IcebergTransformType::MONTH:
-	case IcebergTransformType::DAY:
 	case IcebergTransformType::HOUR:
+	case IcebergTransformType::DAY:
 		return LogicalType::INTEGER;
 	case IcebergTransformType::VOID:
 		return input;
@@ -100,6 +92,55 @@ LogicalType IcebergTransform::GetSerializedType(const LogicalType &input) const 
 		throw InvalidConfigurationException("Can't produce a result type for transform %s and input type %s",
 		                                    raw_transform, input.ToString());
 	}
+}
+
+void IcebergTransform::SetBucketOrTruncateValue(idx_t value) {
+	switch (type) {
+	case IcebergTransformType::BUCKET:
+		modulo = value;
+		return;
+	case IcebergTransformType::TRUNCATE:
+		width = value;
+		return;
+	default:
+		throw InvalidInputException("Cannot set bucket or modulo value for transform '%s'", raw_transform);
+	}
+}
+
+Value BucketTransform::ApplyTransform(const Value &constant, const IcebergTransform &transform) {
+	if (constant.IsNull()) {
+		// Iceberg spec: "All transforms must return null for a null input value"
+		return Value(LogicalType::INTEGER);
+	}
+
+	// Check if this type is supported for bucket pushdown.
+	// Supported types: integer, long, decimal, date, timestamp, timestamptz, string, binary.
+	auto type_id = constant.type().id();
+	switch (type_id) {
+	case LogicalTypeId::INTEGER:
+	case LogicalTypeId::BIGINT:
+	case LogicalTypeId::DECIMAL:
+	case LogicalTypeId::DATE:
+	case LogicalTypeId::TIMESTAMP:
+	case LogicalTypeId::TIMESTAMP_TZ:
+	case LogicalTypeId::VARCHAR:
+	case LogicalTypeId::BLOB:
+		break;
+	default:
+		// Unsupported type: return a null Value so CompareEqual skips filtering
+		return Value(LogicalType::INTEGER);
+	}
+
+	auto num_buckets = static_cast<int32_t>(transform.GetBucketModulo());
+	if (num_buckets <= 0) {
+		throw InvalidInputException("Invalid bucket count: %d (must be > 0)", num_buckets);
+	}
+
+	int32_t hash_value = IcebergHash::HashValue(constant);
+	// Iceberg spec: (hash & 0x7FFFFFFF) % num_buckets
+	int32_t bucket_id = (hash_value & 0x7FFFFFFF) % num_buckets;
+
+	return Value::INTEGER(bucket_id);
 }
 
 } // namespace duckdb

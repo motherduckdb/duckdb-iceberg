@@ -1,4 +1,4 @@
-#include "../include/storage/iceberg_transaction.hpp"
+#include "storage/iceberg_transaction.hpp"
 
 #include "duckdb/common/assert.hpp"
 #include "duckdb/parser/parsed_data/create_view_info.hpp"
@@ -19,8 +19,10 @@
 #include "storage/catalog/iceberg_catalog.hpp"
 #include "duckdb/storage/table/update_state.hpp"
 #include "duckdb/parser/parsed_data/drop_info.hpp"
+#include "duckdb/main/client_data.hpp"
 #include "storage/catalog/iceberg_schema_entry.hpp"
 #include "avro_scan.hpp"
+#include "iceberg_logging.hpp"
 
 namespace duckdb {
 
@@ -56,6 +58,30 @@ void CommitTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
 			auto &assert_create = requirement.assert_create;
 			auto requirement_json = yyjson_mut_arr_add_obj(doc, requirements_array);
 			yyjson_mut_obj_add_strcpy(doc, requirement_json, "type", assert_create.type.value.c_str());
+		} else if (requirement.has_assert_current_schema_id) {
+			auto &assert_current_schema_id = requirement.assert_current_schema_id;
+			auto requirement_json = yyjson_mut_arr_add_obj(doc, requirements_array);
+			yyjson_mut_obj_add_strcpy(doc, requirement_json, "type", assert_current_schema_id.type.value.c_str());
+			yyjson_mut_obj_add_int(doc, requirement_json, "current-schema-id",
+			                       assert_current_schema_id.current_schema_id);
+		} else if (requirement.has_assert_last_assigned_field_id) {
+			auto &assert_last_assigned_field_id = requirement.assert_last_assigned_field_id;
+			auto requirement_json = yyjson_mut_arr_add_obj(doc, requirements_array);
+			yyjson_mut_obj_add_strcpy(doc, requirement_json, "type", assert_last_assigned_field_id.type.value.c_str());
+			yyjson_mut_obj_add_int(doc, requirement_json, "last-assigned-field-id",
+			                       assert_last_assigned_field_id.last_assigned_field_id);
+		} else if (requirement.has_assert_last_assigned_partition_id) {
+			auto &assert_last_assigned_partition_id = requirement.assert_last_assigned_partition_id;
+			auto requirement_json = yyjson_mut_arr_add_obj(doc, requirements_array);
+			yyjson_mut_obj_add_strcpy(doc, requirement_json, "type",
+			                          assert_last_assigned_partition_id.type.value.c_str());
+			yyjson_mut_obj_add_int(doc, requirement_json, "last-assigned-partition-id",
+			                       assert_last_assigned_partition_id.last_assigned_partition_id);
+		} else if (requirement.has_assert_default_spec_id) {
+			auto &assert_default_spec_id = requirement.assert_default_spec_id;
+			auto requirement_json = yyjson_mut_arr_add_obj(doc, requirements_array);
+			yyjson_mut_obj_add_strcpy(doc, requirement_json, "type", assert_default_spec_id.type.value.c_str());
+			yyjson_mut_obj_add_int(doc, requirement_json, "default-spec-id", assert_default_spec_id.default_spec_id);
 		} else {
 			throw NotImplementedException("Can't serialize this TableRequirement type to JSON");
 		}
@@ -81,7 +107,16 @@ void CommitTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
 			yyjson_mut_obj_add_strcpy(doc, snapshot_json, "manifest-list", snapshot.manifest_list.c_str());
 			auto summary_json = yyjson_mut_obj_add_obj(doc, snapshot_json, "summary");
 			yyjson_mut_obj_add_strcpy(doc, summary_json, "operation", snapshot.summary.operation.c_str());
+			for (auto &prop : snapshot.summary.additional_properties) {
+				yyjson_mut_obj_add_strcpy(doc, summary_json, prop.first.c_str(), prop.second.c_str());
+			}
 			yyjson_mut_obj_add_uint(doc, snapshot_json, "schema-id", snapshot.schema_id);
+			if (snapshot.has_first_row_id) {
+				yyjson_mut_obj_add_uint(doc, snapshot_json, "first-row-id", snapshot.first_row_id);
+			}
+			if (snapshot.has_added_rows) {
+				yyjson_mut_obj_add_uint(doc, snapshot_json, "added-rows", snapshot.added_rows);
+			}
 		} else if (update.has_set_snapshot_ref_update) {
 			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
 			auto &ref_update = update.set_snapshot_ref_update;
@@ -153,8 +188,8 @@ void CommitTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
 			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
 			auto spec_json = yyjson_mut_obj_add_obj(doc, update_json, "spec");
 			yyjson_mut_obj_add_int(doc, spec_json, "spec-id", ref_update.spec.spec_id);
-			// Add fields array, later we can add the fields
-			auto fields_arr = yyjson_mut_obj_add_arr(doc, spec_json, "fields");
+			// add fields
+			IcebergPartitionSpec::FieldsToJson(doc, spec_json, ref_update.spec.fields);
 		} else if (update.has_set_default_sort_order_update) {
 			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
 			auto &ref_update = update.set_default_sort_order_update;
@@ -170,6 +205,7 @@ void CommitTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
 			yyjson_mut_obj_add_int(doc, sort_order_json, "order-id", ref_update.sort_order.order_id);
 			// Add fields array, later we can add the fields
 			auto fields_arr = yyjson_mut_obj_add_arr(doc, sort_order_json, "fields");
+			(void)fields_arr;
 		} else if (update.has_set_location_update) {
 			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
 			auto &ref_update = update.set_location_update;
@@ -227,7 +263,7 @@ static string ConstructTableUpdateJSON(rest_api_objects::CommitTableRequest &tab
 	return JsonDocToString(std::move(doc_p));
 }
 
-static rest_api_objects::TableRequirement CreateAssertRefSnapshotIdRequirement(IcebergSnapshot &old_snapshot) {
+static rest_api_objects::TableRequirement CreateAssertRefSnapshotIdRequirement(const IcebergSnapshot &old_snapshot) {
 	rest_api_objects::TableRequirement req;
 	req.has_assert_ref_snapshot_id = true;
 
@@ -280,26 +316,21 @@ TableTransactionInfo IcebergTransaction::GetTransactionRequest(ClientContext &co
 		if (!table_info.transaction_data) {
 			continue;
 		}
-		IcebergCommitState commit_state;
+		IcebergCommitState commit_state(table_info, context);
 		auto &table_change = commit_state.table_change;
 		auto &schema = table_info.schema.Cast<IcebergSchemaEntry>();
 		table_change.identifier._namespace.value = schema.namespace_items;
 		table_change.identifier.name = table_info.name;
 		table_change.has_identifier = true;
 
-		auto &metadata = table_info.table_metadata;
+		auto &metadata = commit_state.table_info.table_metadata;
 		auto current_snapshot = metadata.GetLatestSnapshot();
-		if (current_snapshot) {
-			auto &manifest_list_path = current_snapshot->manifest_list;
-			//! Read the manifest list
-			auto scan = AvroScan::ScanManifestList(*current_snapshot, metadata, context, manifest_list_path);
-			auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
-			while (!manifest_list_reader->Finished()) {
-				manifest_list_reader->Read(STANDARD_VECTOR_SIZE, commit_state.manifests);
-			}
+		auto &transaction_data = *commit_state.table_info.transaction_data;
+		if (!transaction_data.alters.empty()) {
+			commit_state.manifests = transaction_data.existing_manifest_list;
 		}
+		commit_state.latest_snapshot = current_snapshot;
 
-		auto &transaction_data = *table_info.transaction_data;
 		for (auto &update : transaction_data.updates) {
 			if (update->type == IcebergTableUpdateType::ADD_SNAPSHOT) {
 				// we need to recreate the keys in the current context.
@@ -320,19 +351,32 @@ TableTransactionInfo IcebergTransaction::GetTransactionRequest(ClientContext &co
 			commit_state.table_change.updates.push_back(std::move(set_snapshot_ref_update));
 		}
 
-		if (current_snapshot) {
+		if (current_snapshot && !transaction_data.alters.empty()) {
 			//! If any changes were made to the state of the table, we should assert that our parent snapshot has
 			//! not changed. We don't want to change the table location if someone has added a snapshot
 			commit_state.table_change.requirements.push_back(CreateAssertRefSnapshotIdRequirement(*current_snapshot));
-		} else if (!info.has_assert_create) {
-			//! If the table had no snapshots and isn't created by this transaction, we should assert that no snapshot
-			//! has been added in the meantime
+		} else if (!current_snapshot && !transaction_data.alters.empty() && !info.has_assert_create) {
+			//! If the table had no snapshots, is not created in this transaction, and has some kind of update
+			//! we should ensure no snapshots have been added in the meantime
 			commit_state.table_change.requirements.push_back(CreateAssertNoSnapshotRequirement());
 		}
 
 		transaction.table_changes.push_back(std::move(table_change));
 	}
 	return info;
+}
+
+IcebergTableInformation &IcebergTransaction::GetTableInfoForTransaction(IcebergTableInformation &table_info) {
+	lock_guard<mutex> guard(lock);
+
+	auto table_key = table_info.GetTableKey();
+	auto it = updated_tables.find(table_key);
+	if (it != updated_tables.end()) {
+		return it->second;
+	}
+	auto &updated_table = updated_tables.emplace(table_key, table_info.Copy(*this)).first->second;
+	updated_table.InitSchemaVersions();
+	return updated_table;
 }
 
 void IcebergTransaction::Commit() {
@@ -453,7 +497,10 @@ void IcebergTransaction::CleanupFiles() {
 		// on the aws side will result in an error.
 		return;
 	}
-	auto &fs = FileSystem::GetFileSystem(db);
+	Connection temp_con(db);
+	temp_con.BeginTransaction();
+	auto &temp_con_context = temp_con.context;
+	auto &fs = FileSystem::GetFileSystem(*temp_con_context);
 	for (auto &up_table : updated_tables) {
 		auto &table = up_table.second;
 		if (!table.transaction_data) {
@@ -467,12 +514,19 @@ void IcebergTransaction::CleanupFiles() {
 			if (update->type != IcebergTableUpdateType::ADD_SNAPSHOT) {
 				continue;
 			}
+			// we need to recreate the keys in the current context.
+			auto &ic_table_entry = table.GetLatestSchema()->Cast<IcebergTableEntry>();
+			ic_table_entry.PrepareIcebergScanFromEntry(*temp_con_context);
+
 			auto &add_snapshot = update->Cast<IcebergAddSnapshot>();
 			auto manifest_list_entries = add_snapshot.manifest_list.GetManifestFilesConst();
 			for (const auto &manifest : manifest_list_entries) {
-				for (auto &manifest_entry : manifest.manifest_file.entries) {
+				for (auto &manifest_entry : manifest.manifest_entries) {
 					auto &data_file = manifest_entry.data_file;
-					fs.TryRemoveFile(data_file.file_path);
+					if (fs.TryRemoveFile(data_file.file_path)) {
+						DUCKDB_LOG(*temp_con_context, IcebergLogType,
+						           "Iceberg Transaction Cleanup, deleted 'data_file': '%s'", data_file.file_path);
+					}
 				}
 			}
 		}

@@ -1,38 +1,135 @@
 #include "include/metadata/iceberg_manifest_list.hpp"
 #include "metadata/iceberg_manifest_list.hpp"
+#include "metadata/iceberg_partition_spec.hpp"
+#include "iceberg_value.hpp"
+#include "duckdb/common/exception/conversion_exception.hpp"
 #include "duckdb/main/database.hpp"
-
+#include "include/storage/iceberg_table_information.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
+#include "include/metadata/iceberg_transform.hpp"
 
 namespace duckdb {
 
-vector<IcebergManifestFile> &IcebergManifestList::GetManifestFilesMutable() {
+void ManifestPartitions::Create(const IcebergPartitionSpec &partition_spec,
+                                const vector<IcebergManifestEntry> &manifest_entries) {
+	if (manifest_entries.empty() || partition_spec.fields.empty()) {
+		return;
+	}
+
+	// Check if any entry has partition info
+	for (auto &entry : manifest_entries) {
+		if (entry.data_file.partition_info.empty()) {
+			throw InvalidInputException(
+			    "Manifest file contains entries without partition info even though there is a partition spec");
+		}
+	}
+
+	has_partitions = true;
+
+	auto num_fields = partition_spec.fields.size();
+	field_summary.resize(num_fields);
+	vector<Value> min_values(num_fields);
+	vector<Value> max_values(num_fields);
+	vector<bool> initialized(num_fields, false);
+
+	for (auto &entry : manifest_entries) {
+		auto &data_file = entry.data_file;
+		for (idx_t i = 0; i < num_fields; i++) {
+			auto &spec_field = partition_spec.fields[i];
+
+			// Find the partition info entry matching this field's partition_field_id
+			optional_ptr<const DataFilePartitionInfo> info_ptr;
+			for (auto &pi : data_file.partition_info) {
+				if (pi.field_id == spec_field.partition_field_id) {
+					info_ptr = &pi;
+					break;
+				}
+			}
+
+			if (!info_ptr || info_ptr->value.IsNull()) {
+				field_summary[i].contains_null = true;
+				continue;
+			}
+
+			// Get the serialized type from the DataFilePartitionInfo's transform and source_type
+			auto serialized_type = info_ptr->transform.GetSerializedType(info_ptr->source_type);
+
+			// Cast the partition value (stored as VARCHAR) to the correct serialized type
+			auto typed_value = info_ptr->value.DefaultCastAs(serialized_type);
+
+			if (!initialized[i]) {
+				min_values[i] = typed_value;
+				max_values[i] = typed_value;
+				initialized[i] = true;
+			} else {
+				if (typed_value < min_values[i]) {
+					min_values[i] = typed_value;
+				}
+				if (typed_value > max_values[i]) {
+					max_values[i] = typed_value;
+				}
+			}
+		}
+	}
+
+	// Serialize the min/max values as bounds
+	for (idx_t i = 0; i < num_fields; i++) {
+		if (!initialized[i]) {
+			// All values for this field are null - set bounds to null BLOBs
+			field_summary[i].lower_bound = Value(LogicalType::BLOB);
+			field_summary[i].upper_bound = Value(LogicalType::BLOB);
+			continue;
+		}
+		auto &spec_field = partition_spec.fields[i];
+		// Find one DataFilePartitionInfo entry to get the type info
+		optional_ptr<const DataFilePartitionInfo> info_ptr;
+		for (auto &entry : manifest_entries) {
+			for (auto &pi : entry.data_file.partition_info) {
+				if (pi.field_id == spec_field.partition_field_id && !pi.value.IsNull()) {
+					info_ptr = &pi;
+					break;
+				}
+			}
+			if (info_ptr) {
+				break;
+			}
+		}
+		D_ASSERT(info_ptr);
+		auto serialized_type = info_ptr->transform.GetSerializedType(info_ptr->source_type);
+		auto lower_result = IcebergValue::SerializeValue(min_values[i], serialized_type, SerializeBound::LOWER_BOUND);
+		auto upper_result = IcebergValue::SerializeValue(max_values[i], serialized_type, SerializeBound::UPPER_BOUND);
+
+		if (lower_result.HasValue()) {
+			field_summary[i].lower_bound = lower_result.GetValue();
+		} else {
+			field_summary[i].lower_bound = Value(LogicalType::BLOB);
+		}
+		if (upper_result.HasValue()) {
+			field_summary[i].upper_bound = upper_result.GetValue();
+		} else {
+			field_summary[i].upper_bound = Value(LogicalType::BLOB);
+		}
+	}
+}
+
+vector<IcebergManifestListEntry> &IcebergManifestList::GetManifestFilesMutable() {
 	return manifest_entries;
 }
 
-const vector<IcebergManifestFile> &IcebergManifestList::GetManifestFilesConst() const {
+const vector<IcebergManifestListEntry> &IcebergManifestList::GetManifestFilesConst() const {
 	return manifest_entries;
-}
-
-void IcebergManifestList::WriteManifestListEntry(IcebergTableInformation &table_info, idx_t manifest_index,
-                                                 CopyFunction &avro_copy, DatabaseInstance &db,
-                                                 ClientContext &context) {
-	D_ASSERT(manifest_index < manifest_entries.size());
-	auto &manifest_file = manifest_entries[manifest_index];
-	auto manifest_length = manifest_file::WriteToFile(table_info, manifest_file.manifest_file, avro_copy, db, context);
-	manifest_file.manifest_length = manifest_length;
 }
 
 idx_t IcebergManifestList::GetManifestListEntriesCount() const {
 	return manifest_entries.size();
 }
 
-void IcebergManifestList::AddToManifestEntries(vector<IcebergManifestFile> &manifest_list_entries) {
+void IcebergManifestList::AddToManifestEntries(vector<IcebergManifestListEntry> &manifest_list_entries) {
 	manifest_entries.insert(manifest_entries.begin(), std::make_move_iterator(manifest_list_entries.begin()),
 	                        std::make_move_iterator(manifest_list_entries.end()));
 }
 
-vector<IcebergManifestFile> IcebergManifestList::GetManifestListEntries() {
+vector<IcebergManifestListEntry> IcebergManifestList::GetManifestListEntries() {
 	return std::move(manifest_entries);
 }
 
@@ -51,11 +148,18 @@ namespace manifest_list {
 
 static Value FieldSummaryFieldIds() {
 	child_list_t<Value> children;
-	children.emplace_back("contains_null", Value::INTEGER(FIELD_SUMMARY_CONTAINS_NULL));
+	child_list_t<Value> contains_null;
+
+	contains_null.emplace_back("__duckdb_field_id", Value::INTEGER(FIELD_SUMMARY_CONTAINS_NULL));
+	contains_null.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
+
+	children.emplace_back("contains_null", Value::STRUCT(contains_null));
+
 	children.emplace_back("contains_nan", Value::INTEGER(FIELD_SUMMARY_CONTAINS_NAN));
 	children.emplace_back("lower_bound", Value::INTEGER(FIELD_SUMMARY_LOWER_BOUND));
 	children.emplace_back("upper_bound", Value::INTEGER(FIELD_SUMMARY_UPPER_BOUND));
 	children.emplace_back("__duckdb_field_id", Value::INTEGER(PARTITIONS_ELEMENT));
+	children.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
 	auto field_summary = Value::STRUCT(children);
 
 	child_list_t<Value> list_children;
@@ -64,8 +168,8 @@ static Value FieldSummaryFieldIds() {
 	return Value::STRUCT(list_children);
 }
 
-void WriteToFile(const IcebergManifestList &manifest_list, CopyFunction &copy, DatabaseInstance &db,
-                 ClientContext &context) {
+void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManifestList &manifest_list,
+                 CopyFunction &copy, DatabaseInstance &db, ClientContext &context) {
 	auto &allocator = db.GetBufferManager().GetBufferAllocator();
 
 	//! Create the types for the DataChunk
@@ -144,13 +248,28 @@ void WriteToFile(const IcebergManifestList &manifest_list, CopyFunction &copy, D
 	types.push_back(IcebergManifestList::FieldSummaryType());
 	field_ids.emplace_back("partitions", FieldSummaryFieldIds());
 
+	if (table_metadata.iceberg_version >= 3) {
+		//! first_row_id: long - 520
+		names.push_back("first_row_id");
+		types.push_back(LogicalType::BIGINT);
+		field_ids.emplace_back("first_row_id", Value::INTEGER(FIRST_ROW_ID));
+	}
+
 	//! Populate the DataChunk with the manifests
-	auto manifest_files = manifest_list.GetManifestFilesConst();
+	auto &manifest_files = manifest_list.GetManifestFilesConst();
 	DataChunk data;
 	data.Initialize(allocator, types, manifest_files.size());
 
+	idx_t next_row_id;
+	if (table_metadata.has_next_row_id) {
+		next_row_id = table_metadata.next_row_id;
+	} else {
+		next_row_id = 0;
+	}
+
 	for (idx_t i = 0; i < manifest_files.size(); i++) {
-		const auto &manifest = manifest_files[i];
+		const auto &manifest_entry = manifest_files[i];
+		const auto &manifest = manifest_entry.file;
 		idx_t col_idx = 0;
 
 		// manifest_path: string - 500
@@ -199,6 +318,24 @@ void WriteToFile(const IcebergManifestList &manifest_list, CopyFunction &copy, D
 
 		// partitions: list<508: field_summary> - 507
 		data.SetValue(col_idx++, i, manifest.partitions.ToValue());
+
+		if (table_metadata.iceberg_version < 3) {
+			continue;
+		}
+
+		bool has_first_row_id = manifest.has_first_row_id;
+		int64_t first_row_id = manifest.first_row_id;
+		if (!has_first_row_id && manifest.content == IcebergManifestContentType::DATA) {
+			//! Assign first_row_id to old manifest_file entries
+			first_row_id = next_row_id;
+			has_first_row_id = true;
+			next_row_id += manifest.added_rows_count;
+			next_row_id += manifest.existing_rows_count;
+		}
+
+		if (has_first_row_id) {
+			data.SetValue(col_idx++, i, first_row_id);
+		}
 	}
 	data.SetCardinality(manifest_files.size());
 
@@ -214,7 +351,7 @@ void WriteToFile(const IcebergManifestList &manifest_list, CopyFunction &copy, D
 	ExecutionContext execution_context(context, thread_context, nullptr);
 	auto bind_data = copy.copy_to_bind(context, input, names, types);
 
-	auto global_state = copy.copy_to_initialize_global(context, *bind_data, manifest_list.path);
+	auto global_state = copy.copy_to_initialize_global(context, *bind_data, manifest_list.GetPath());
 	auto local_state = copy.copy_to_initialize_local(execution_context, *bind_data);
 
 	copy.copy_to_sink(execution_context, *bind_data, *global_state, *local_state, data);

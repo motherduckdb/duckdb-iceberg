@@ -24,9 +24,32 @@ enum class IcebergManifestEntryContentType : uint8_t { DATA = 0, POSITION_DELETE
 
 enum class IcebergManifestEntryStatusType : uint8_t { EXISTING = 0, ADDED = 1, DELETED = 2 };
 
+//! Combined partition information for a single partition field in a data file
+struct DataFilePartitionInfo {
+	//! The partition column name
+	string name;
+	//! The source column id from the table schema
+	uint64_t source_id = 0;
+	//! The partition field id (unique within a partition spec)
+	uint64_t field_id = 0;
+	//! The partition transform applied to the source column
+	IcebergTransform transform;
+	//! The source column type from the table schema
+	LogicalType source_type;
+	//! The actual partition value for this data file
+	Value value;
+
+	bool operator==(const DataFilePartitionInfo &other) const {
+		return field_id == other.field_id && value == other.value;
+	}
+	bool operator!=(const DataFilePartitionInfo &other) const {
+		return !(*this == other);
+	}
+};
+
 struct IcebergDataFile {
 public:
-	Value ToValue(const LogicalType &type) const;
+	Value ToValue(const IcebergTableMetadata &table_metadata, const LogicalType &type) const;
 
 public:
 	static map<idx_t, LogicalType> GetFieldIdToTypeMapping(const IcebergSnapshot &snapshot,
@@ -39,7 +62,9 @@ public:
 	IcebergManifestEntryContentType content;
 	string file_path;
 	string file_format;
-	vector<pair<int32_t, Value>> partition_values;
+	//! Combined partition information in partition spec order.
+	//! Contains name, source_id, field_id, transform, source_type, and the actual partition value.
+	vector<DataFilePartitionInfo> partition_info;
 	int64_t record_count;
 	bool has_first_row_id = false;
 	int64_t first_row_id = 0xDEADBEEF;
@@ -52,6 +77,9 @@ public:
 	unordered_map<int32_t, Value> lower_bounds;
 	unordered_map<int32_t, Value> upper_bounds;
 	vector<int32_t> equality_ids;
+	vector<int64_t> split_offsets;
+	bool has_sort_order_id = false;
+	int32_t sort_order_id;
 	string referenced_data_file;
 	Value content_offset;
 	Value content_size_in_bytes;
@@ -64,11 +92,12 @@ public:
 	//! ----- Data File Struct ------
 	//! Inherited from the 'manifest_file' if NULL and 'status == EXISTING'
 	sequence_number_t sequence_number = 0xDEADBEEF;
-	int64_t snapshot_id = 0xDEADBEEF;
+	sequence_number_t file_sequence_number = 0xDEADBEEF;
+	bool has_snapshot_id = false;
+	int64_t snapshot_id;
 	//! Inherited from the 'manifest_file'
 	int32_t partition_spec_id = 0xDEADBEEF;
-	//! The index into the manifest_file vector where the entry originated from
-	idx_t manifest_file_idx = DConstants::INVALID_INDEX;
+	string manifest_file_path;
 	IcebergDataFile data_file;
 
 public:
@@ -109,14 +138,7 @@ public:
 	}
 };
 
-struct IcebergManifest {
-	IcebergManifest(const string &path) : path(path) {
-	}
-
-public:
-	string path;
-	vector<IcebergManifestEntry> entries;
-};
+struct IcebergManifestListEntry;
 
 namespace manifest_file {
 
@@ -165,8 +187,9 @@ static constexpr const int32_t REFERENCED_DATA_FILE = 143;
 static constexpr const int32_t CONTENT_OFFSET = 144;
 static constexpr const int32_t CONTENT_SIZE_IN_BYTES = 145;
 
-idx_t WriteToFile(IcebergTableInformation &table_info, const IcebergManifest &manifest_file,
-                  CopyFunction &copy_function, DatabaseInstance &db, ClientContext &context);
+idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const string &path,
+                  const vector<IcebergManifestEntry> &entries, CopyFunction &copy_function, DatabaseInstance &db,
+                  ClientContext &context);
 
 } // namespace manifest_file
 

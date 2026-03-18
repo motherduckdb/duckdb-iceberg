@@ -31,7 +31,7 @@
 namespace duckdb {
 
 struct IcebergColumnStatsBindData : public TableFunctionData {
-	optional_ptr<IcebergSnapshot> snapshot_to_scan;
+	optional_ptr<const IcebergSnapshot> snapshot_to_scan;
 	IcebergTableMetadata metadata;
 	shared_ptr<IcebergTableSchema> schema;
 	unordered_map<uint64_t, ColumnIndex> source_to_column_id;
@@ -169,7 +169,7 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 	auto &table_entries = bind_data.iceberg_table->entries;
 	for (; global_state.current_manifest_idx < table_entries.size(); global_state.current_manifest_idx++) {
 		auto &table_entry = table_entries[global_state.current_manifest_idx];
-		auto &entries = table_entry.manifest_file.entries;
+		auto &entries = table_entry.manifest_entries;
 		for (; global_state.current_manifest_entry_idx < entries.size(); global_state.current_manifest_entry_idx++) {
 			auto &manifest_entry = entries[global_state.current_manifest_entry_idx];
 			auto &data_file = manifest_entry.data_file;
