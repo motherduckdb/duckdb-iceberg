@@ -34,7 +34,7 @@ attach ':' as glue_catalog (
 );
 
 
-query III 
+query III
 select database, schema, name from (show all tables) where name = 'metrics';
 ----
 glue_catalog	simple_glue_database	metrics
