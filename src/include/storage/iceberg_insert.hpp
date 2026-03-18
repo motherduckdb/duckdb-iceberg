@@ -75,6 +75,11 @@ public:
 class IcebergInsertGlobalState : public GlobalSinkState {
 public:
 	explicit IcebergInsertGlobalState(ClientContext &context);
+
+public:
+	void AddFiles(DataChunk &chunk, const string &table_name, const IcebergTableMetadata &table_metadata);
+
+public:
 	ClientContext &context;
 	mutex lock;
 	vector<IcebergManifestEntry> written_files;
@@ -160,8 +165,6 @@ public:
 	static PhysicalOperator &PlanInsert(ClientContext &context, PhysicalPlanGenerator &planner,
 	                                    IcebergTableEntry &table);
 	static vector<IcebergManifestEntry> GetInsertManifestEntries(IcebergInsertGlobalState &global_state);
-	static IcebergColumnStats ParseColumnStats(const LogicalType &type, const vector<Value> &col_stats,
-	                                           ClientContext &context);
 	static void AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &chunk,
 	                            optional_ptr<TableCatalogEntry> table);
 

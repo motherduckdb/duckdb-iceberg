@@ -22,6 +22,7 @@
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
+#include "iceberg_utils.hpp"
 
 namespace duckdb {
 
@@ -58,7 +59,8 @@ IcebergCopyOptions::IcebergCopyOptions(unique_ptr<CopyInfo> info_p, CopyFunction
 IcebergCopyInput::IcebergCopyInput(ClientContext &context, const IcebergTableMetadata &table_metadata,
                                    const IcebergTableSchema &schema)
     : table_metadata(table_metadata), schema(schema) {
-	data_path = table_metadata.GetDataPath();
+	auto &fs = FileSystem::GetFileSystem(context);
+	data_path = table_metadata.GetDataPath(fs);
 
 	// Get partition spec if the table is partitioned
 	auto &metadata = table_metadata;
@@ -87,49 +89,8 @@ unique_ptr<GlobalSinkState> IcebergInsert::GetGlobalSinkState(ClientContext &con
 //===--------------------------------------------------------------------===//
 // Sink
 //===--------------------------------------------------------------------===//
-static string ParseQuotedValue(const string &input, idx_t &pos) {
-	if (pos >= input.size() || input[pos] != '"') {
-		throw InvalidInputException("Failed to parse quoted value - expected a quote");
-	}
-	string result;
-	pos++;
-	for (; pos < input.size(); pos++) {
-		if (input[pos] == '"') {
-			pos++;
-			// check if this is an escaped quote
-			if (pos < input.size() && input[pos] == '"') {
-				// escaped quote
-				result += '"';
-				continue;
-			}
-			return result;
-		}
-		result += input[pos];
-	}
-	throw InvalidInputException("Failed to parse quoted value - unterminated quote");
-}
-
-static vector<string> ParseQuotedList(const string &input, char list_separator) {
-	vector<string> result;
-	if (input.empty()) {
-		return result;
-	}
-	idx_t pos = 0;
-	while (true) {
-		result.push_back(ParseQuotedValue(input, pos));
-		if (pos >= input.size()) {
-			break;
-		}
-		if (input[pos] != list_separator) {
-			throw InvalidInputException("Failed to parse list - expected a %s", string(1, list_separator));
-		}
-		pos++;
-	}
-	return result;
-}
-
-IcebergColumnStats IcebergInsert::ParseColumnStats(const LogicalType &type, const vector<Value> &col_stats,
-                                                   ClientContext &context) {
+static IcebergColumnStats ParseColumnStats(const LogicalType &type, const vector<Value> &col_stats,
+                                           ClientContext &context) {
 	IcebergColumnStats column_stats(type);
 	for (idx_t stats_idx = 0; stats_idx < col_stats.size(); stats_idx++) {
 		auto &stats_children = StructValue::GetChildren(col_stats[stats_idx]);
@@ -207,13 +168,52 @@ static bool AllIdentityTransforms(const IcebergPartitionSpec &spec) {
 	return true;
 }
 
-void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &chunk,
-                                    optional_ptr<TableCatalogEntry> table) {
-	D_ASSERT(table);
+static string ParseQuotedValue(const string &input, idx_t &pos) {
+	if (pos >= input.size() || input[pos] != '"') {
+		throw InvalidInputException("Failed to parse quoted value - expected a quote");
+	}
+	string result;
+	pos++;
+	for (; pos < input.size(); pos++) {
+		if (input[pos] == '"') {
+			pos++;
+			// check if this is an escaped quote
+			if (pos < input.size() && input[pos] == '"') {
+				// escaped quote
+				result += '"';
+				continue;
+			}
+			return result;
+		}
+		result += input[pos];
+	}
+	throw InvalidInputException("Failed to parse quoted value - unterminated quote");
+}
+
+static vector<string> ParseQuotedList(const string &input, char list_separator) {
+	vector<string> result;
+	if (input.empty()) {
+		return result;
+	}
+	idx_t pos = 0;
+	while (true) {
+		result.push_back(ParseQuotedValue(input, pos));
+		if (pos >= input.size()) {
+			break;
+		}
+		if (input[pos] != list_separator) {
+			throw InvalidInputException("Failed to parse list - expected a %s", string(1, list_separator));
+		}
+		pos++;
+	}
+	return result;
+}
+
+void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_name,
+                                        const IcebergTableMetadata &table_metadata) {
 	// grab lock for written files vector
-	lock_guard<mutex> guard(global_state.lock);
-	auto &ic_table = table->Cast<IcebergTableEntry>();
-	auto partition_id = ic_table.table_info.table_metadata.default_spec_id;
+	lock_guard<mutex> guard(lock);
+	auto partition_id = table_metadata.default_spec_id;
 	for (idx_t r = 0; r < chunk.size(); r++) {
 		IcebergManifestEntry manifest_entry;
 		manifest_entry.status = IcebergManifestEntryStatusType::ADDED;
@@ -239,10 +239,10 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 		// column 5 is stats, which we can also use for partition information
 		auto partition_values = chunk.GetValue(5, r);
 
-		auto table_current_schema_id = ic_table.table_info.table_metadata.current_schema_id;
-		auto ic_schema = ic_table.table_info.table_metadata.schemas[table_current_schema_id];
+		auto table_current_schema_id = table_metadata.current_schema_id;
+		auto &ic_schema = table_metadata.schemas.at(table_current_schema_id);
 
-		auto ic_partition_info = ic_table.table_info.table_metadata.GetLatestPartitionSpec();
+		auto ic_partition_info = table_metadata.GetLatestPartitionSpec();
 
 		// Build a map from partition column name to its partition spec field
 		// To be used later to add partitioning info to the data file
@@ -292,7 +292,7 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 			}
 		}
 
-		global_state.insert_count += data_file.record_count;
+		insert_count += data_file.record_count;
 
 		for (idx_t col_idx = 0; col_idx < map_children.size(); col_idx++) {
 			auto &struct_children = StructValue::GetChildren(map_children[col_idx]);
@@ -315,14 +315,14 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 				continue;
 			}
 			auto &column_info = *column_info_p;
-			auto stats = ParseColumnStats(column_info.type, col_stats, global_state.context);
+			auto stats = ParseColumnStats(column_info.type, col_stats, context);
 
 			// a map type cannot violate not null constraints.
 			// Null value counts can be off since an empty map is the same as a null map.
 			bool is_map = IsMapType(column_names[0], *ic_schema);
 			if (!is_map && column_info.required && stats.has_null_count && stats.null_count > 0) {
 				auto normalized_col_name = StringUtil::Join(column_names, ".");
-				throw ConstraintException("NOT NULL constraint failed: %s.%s", table->name, normalized_col_name);
+				throw ConstraintException("NOT NULL constraint failed: %s.%s", table_name, normalized_col_name);
 			}
 			// go through stats and add upper and lower bounds
 			// Do serialization of values here in case we read transaction updates
@@ -355,8 +355,16 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 			//! TODO: revisit when duckdb/duckdb can record nan_value_counts
 		}
 
-		global_state.written_files.push_back(std::move(manifest_entry));
+		written_files.push_back(std::move(manifest_entry));
 	}
+}
+
+void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &chunk,
+                                    optional_ptr<TableCatalogEntry> table) {
+	D_ASSERT(table);
+	auto &ic_table = table->Cast<IcebergTableEntry>();
+	auto &table_metadata = ic_table.table_info.table_metadata;
+	global_state.AddFiles(chunk, ic_table.name, table_metadata);
 }
 
 SinkResultType IcebergInsert::Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const {
@@ -422,14 +430,6 @@ InsertionOrderPreservingMap<string> IcebergInsert::ParamsToString() const {
 //===--------------------------------------------------------------------===//
 // Plan
 //===--------------------------------------------------------------------===//
-static optional_ptr<CopyFunctionCatalogEntry> TryGetCopyFunction(DatabaseInstance &db, const string &name) {
-	D_ASSERT(!name.empty());
-	auto &system_catalog = Catalog::GetSystemCatalog(db);
-	auto data = CatalogTransaction::GetSystemTransaction(db);
-	auto &schema = system_catalog.GetSchema(data, DEFAULT_SCHEMA);
-	return schema.GetEntry(data, CatalogType::COPY_FUNCTION_ENTRY, name)->Cast<CopyFunctionCatalogEntry>();
-}
-
 static Value GetFieldIdValue(const IcebergColumnDefinition &column) {
 	auto column_value = Value::BIGINT(column.id);
 	if (column.children.empty()) {
