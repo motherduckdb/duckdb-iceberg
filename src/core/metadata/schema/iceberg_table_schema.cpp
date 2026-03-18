@@ -1,8 +1,9 @@
-#include "metadata/iceberg_table_schema.hpp"
+#include "core/metadata/schema/iceberg_table_schema.hpp"
 
-#include "iceberg_metadata.hpp"
-#include "iceberg_utils.hpp"
 #include "duckdb/common/exception.hpp"
+
+#include "function/metadata/iceberg_metadata.hpp"
+#include "common/iceberg_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
 
 namespace duckdb {

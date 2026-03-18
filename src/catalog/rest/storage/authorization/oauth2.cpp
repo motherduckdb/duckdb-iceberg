@@ -1,17 +1,21 @@
-#include "iceberg_extension.hpp"
-#include "iceberg_utils.hpp"
-#include "iceberg_logging.hpp"
+#include "catalog/rest/storage/authorization/oauth2.hpp"
+
 #include "duckdb/main/extension_helper.hpp"
-#include "storage/authorization/oauth2.hpp"
-#include "storage/catalog/iceberg_catalog.hpp"
-#include "api_utils.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
 #include "duckdb/logging/logger.hpp"
 #include "duckdb/common/types/blob.hpp"
 #include "duckdb/common/types/value.hpp"
+#include "duckdb/main/config.hpp"
+
+#include "iceberg_extension.hpp"
+#include "common/iceberg_utils.hpp"
+#include "iceberg_logging.hpp"
+#include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/api/api_utils.hpp"
+
 #include "rest_catalog/objects/oauth_token_response.hpp"
 #include "rest_catalog/objects/oauth_error.hpp"
-#include "duckdb/main/config.hpp"
+
 #include <chrono>
 
 namespace duckdb {

@@ -1,4 +1,5 @@
 #pragma once
+
 #include "duckdb/common/types/value.hpp"
 
 namespace duckdb {

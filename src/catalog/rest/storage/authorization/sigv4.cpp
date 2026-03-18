@@ -1,10 +1,12 @@
-#include "storage/authorization/sigv4.hpp"
-#include "api_utils.hpp"
+#include "catalog/rest/storage/authorization/sigv4.hpp"
+
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/main/setting_info.hpp"
-#include "storage/catalog/iceberg_catalog.hpp"
 #include "duckdb/common/types/value.hpp"
+
+#include "catalog/rest/api/api_utils.hpp"
+#include "catalog/rest/iceberg_catalog.hpp"
 
 namespace duckdb {
 

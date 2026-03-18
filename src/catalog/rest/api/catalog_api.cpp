@@ -1,21 +1,21 @@
-#include "catalog_api.hpp"
-#include "include/catalog_api.hpp"
+#include "catalog/rest/api/catalog_api.hpp"
 
-#include "catalog_utils.hpp"
-#include "iceberg_logging.hpp"
-#include "storage/catalog/iceberg_catalog.hpp"
-#include "storage/catalog/iceberg_schema_entry.hpp"
-#include "yyjson.hpp"
-#include "iceberg_utils.hpp"
-#include "api_utils.hpp"
-#include <sys/stat.h>
-#include <duckdb/main/secret/secret.hpp>
-#include <duckdb/main/secret/secret_manager.hpp>
+#include "duckdb/main/secret/secret.hpp"
+#include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/common/error_data.hpp"
 #include "duckdb/common/http_util.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
-#include "include/storage/iceberg_authorization.hpp"
-#include "include/storage/catalog/iceberg_catalog.hpp"
+#include "yyjson.hpp"
+
+#include "catalog/rest/api/catalog_utils.hpp"
+#include "iceberg_logging.hpp"
+#include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/catalog_entry/iceberg_schema_entry.hpp"
+#include "common/iceberg_utils.hpp"
+#include "catalog/rest/api/api_utils.hpp"
+#include "catalog/rest/storage/iceberg_authorization.hpp"
+
+#include <sys/stat.h>
 
 #include "rest_catalog/objects/list.hpp"
 #include "rest_catalog/objects/iceberg_error_response.hpp"

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "rest_catalog/objects/list.hpp"
 #include "duckdb/main/database.hpp"
+#include "rest_catalog/objects/list.hpp"
 
 namespace duckdb {
 

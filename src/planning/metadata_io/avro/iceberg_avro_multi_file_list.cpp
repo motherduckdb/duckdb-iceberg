@@ -1,5 +1,5 @@
-#include "iceberg_avro_multi_file_list.hpp"
-#include "metadata/iceberg_manifest.hpp"
+#include "planning/metadata_io/avro/iceberg_avro_multi_file_list.hpp"
+#include "core/metadata/manifest/iceberg_manifest.hpp"
 
 namespace duckdb {
 

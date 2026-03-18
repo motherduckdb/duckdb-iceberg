@@ -1,16 +1,16 @@
 #pragma once
 
-#include "rest_catalog/objects/struct_field.hpp"
-#include "rest_catalog/objects/primitive_type.hpp"
-#include "rest_catalog/objects/type.hpp"
-#include "rest_catalog/objects/primitive_type_value.hpp"
-
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/common/helper.hpp"
 #include "duckdb/parser/column_definition.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
+
+#include "rest_catalog/objects/struct_field.hpp"
+#include "rest_catalog/objects/primitive_type.hpp"
+#include "rest_catalog/objects/type.hpp"
+#include "rest_catalog/objects/primitive_type_value.hpp"
 
 namespace duckdb {
 

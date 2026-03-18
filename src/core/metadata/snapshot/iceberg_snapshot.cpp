@@ -1,7 +1,9 @@
-#include "metadata/iceberg_snapshot.hpp"
-#include "metadata/iceberg_table_metadata.hpp"
-#include "storage/iceberg_table_information.hpp"
+#include "core/metadata/snapshot/iceberg_snapshot.hpp"
+
 #include "duckdb/common/types/uuid.hpp"
+
+#include "core/metadata/iceberg_table_metadata.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 
 namespace duckdb {
 

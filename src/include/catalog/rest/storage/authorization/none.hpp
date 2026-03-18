@@ -1,6 +1,6 @@
 #pragma once
 
-#include "storage/iceberg_authorization.hpp"
+#include "catalog/rest/storage/iceberg_authorization.hpp"
 
 namespace duckdb {
 

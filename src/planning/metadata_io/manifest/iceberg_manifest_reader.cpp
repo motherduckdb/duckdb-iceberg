@@ -1,4 +1,4 @@
-#include "manifest_reader.hpp"
+#include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
 
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/types/string.hpp"

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "duckdb/common/case_insensitive_map.hpp"
-#include "deletes/iceberg_delete_data.hpp"
+#include "core/deletes/iceberg_delete_data.hpp"
 
 namespace duckdb {
 

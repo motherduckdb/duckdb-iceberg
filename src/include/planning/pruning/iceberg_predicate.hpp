@@ -1,7 +1,9 @@
 #pragma once
-#include "metadata/iceberg_transform.hpp"
-#include "metadata/iceberg_predicate_stats.hpp"
+
 #include "duckdb/planner/table_filter.hpp"
+
+#include "core/expression/iceberg_transform.hpp"
+#include "core/expression/iceberg_predicate_stats.hpp"
 
 namespace duckdb {
 

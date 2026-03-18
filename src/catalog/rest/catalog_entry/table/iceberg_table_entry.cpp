@@ -1,6 +1,5 @@
-#include "storage/catalog/iceberg_catalog.hpp"
-#include "storage/catalog/iceberg_schema_entry.hpp"
-#include "storage/catalog/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+
 #include "duckdb/storage/statistics/base_statistics.hpp"
 #include "duckdb/storage/table_storage_info.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
@@ -8,18 +7,20 @@
 #include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
 #include "duckdb/parser/tableref/table_function_ref.hpp"
-#include "catalog_api.hpp"
-#include "iceberg_multi_file_reader.hpp"
 #include "duckdb/planner/binder.hpp"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
-#include "storage/authorization/sigv4.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
 #include "duckdb/planner/tableref/bound_at_clause.hpp"
-#include "iceberg_multi_file_reader.hpp"
 
+#include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/catalog_entry/iceberg_schema_entry.hpp"
+#include "catalog/rest/api/catalog_api.hpp"
+#include "planning/iceberg_multi_file_reader.hpp"
+#include "planning/iceberg_multi_file_reader.hpp"
+#include "catalog/rest/storage/authorization/sigv4.hpp"
 #include "rest_catalog/objects/list.hpp"
-#include "storage/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 
 namespace duckdb {
 class OAuth2Authorization;

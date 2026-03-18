@@ -1,8 +1,8 @@
 #pragma once
 
-#include "metadata/iceberg_transform.hpp"
 #include "duckdb/common/types/vector.hpp"
 
+#include "core/expression/iceberg_transform.hpp"
 #include "rest_catalog/objects/sort_order.hpp"
 #include "rest_catalog/objects/sort_field.hpp"
 

@@ -1,9 +1,10 @@
 #pragma once
 
-#include "metadata/iceberg_column_definition.hpp"
+#include "duckdb/common/column_index.hpp"
+
+#include "core/metadata/schema/iceberg_column_definition.hpp"
 #include "rest_catalog/objects/schema.hpp"
 #include "rest_catalog/objects/add_schema_update.hpp"
-#include "duckdb/common/column_index.hpp"
 
 namespace duckdb {
 

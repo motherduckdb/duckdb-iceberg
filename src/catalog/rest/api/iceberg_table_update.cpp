@@ -1,5 +1,5 @@
-#include "storage/iceberg_table_update.hpp"
-#include "storage/iceberg_transaction_data.hpp"
+#include "catalog/rest/api/iceberg_table_update.hpp"
+#include "catalog/rest/transaction/iceberg_transaction_data.hpp"
 
 namespace duckdb {
 

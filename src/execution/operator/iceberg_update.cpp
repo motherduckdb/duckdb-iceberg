@@ -1,15 +1,17 @@
-#include "storage/iceberg_update.hpp"
-#include "storage/iceberg_delete.hpp"
-#include "storage/iceberg_insert.hpp"
-#include "storage/iceberg_transaction.hpp"
-#include "storage/catalog/iceberg_catalog.hpp"
-#include "storage/catalog/iceberg_table_entry.hpp"
-#include "storage/iceberg_table_information.hpp"
+#include "execution/operator/iceberg_update.hpp"
+
 #include "duckdb/planner/operator/logical_update.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
+
+#include "execution/operator/iceberg_delete.hpp"
+#include "execution/operator/iceberg_insert.hpp"
+#include "catalog/rest/transaction/iceberg_transaction.hpp"
+#include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 
 namespace duckdb {
 

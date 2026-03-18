@@ -1,5 +1,5 @@
-#include "deletes/positional_delete.hpp"
-#include "iceberg_multi_file_list.hpp"
+#include "core/deletes/iceberg_positional_delete.hpp"
+#include "planning/iceberg_multi_file_list.hpp"
 
 namespace duckdb {
 

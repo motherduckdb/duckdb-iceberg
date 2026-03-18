@@ -1,8 +1,10 @@
 
-#include "storage/iceberg_authorization.hpp"
-#include "api_utils.hpp"
-#include "storage/authorization/oauth2.hpp"
+#include "catalog/rest/storage/iceberg_authorization.hpp"
+
 #include "duckdb/common/types/value.hpp"
+
+#include "catalog/rest/api/api_utils.hpp"
+#include "catalog/rest/storage/authorization/oauth2.hpp"
 
 namespace duckdb {
 

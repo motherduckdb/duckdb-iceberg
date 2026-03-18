@@ -1,6 +1,4 @@
-#include "storage/table_update/iceberg_add_snapshot.hpp"
-#include "metadata/iceberg_manifest_list.hpp"
-#include "storage/catalog/iceberg_table_set.hpp"
+#include "catalog/rest/api/iceberg_add_snapshot.hpp"
 
 #include "duckdb/common/enums/catalog_type.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
@@ -8,9 +6,12 @@
 #include "duckdb/main/extension_helper.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
 #include "duckdb/storage/caching_file_system.hpp"
-#include "avro_scan.hpp"
-#include "manifest_reader.hpp"
 #include "duckdb/common/types/uuid.hpp"
+
+#include "core/metadata/manifest/iceberg_manifest_list.hpp"
+#include "catalog/rest/iceberg_table_set.hpp"
+#include "planning/metadata_io/avro/avro_scan.hpp"
+#include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
 
 namespace duckdb {
 

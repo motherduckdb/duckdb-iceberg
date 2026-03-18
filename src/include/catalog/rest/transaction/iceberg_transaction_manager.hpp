@@ -2,8 +2,8 @@
 #pragma once
 
 #include "duckdb/transaction/transaction_manager.hpp"
-#include "storage/catalog/iceberg_catalog.hpp"
-#include "storage/iceberg_transaction.hpp"
+#include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/transaction/iceberg_transaction.hpp"
 
 namespace duckdb {
 

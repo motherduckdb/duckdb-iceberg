@@ -1,7 +1,7 @@
 //===----------------------------------------------------------------------===//
 //                         DuckDB
 //
-// iceberg_hash.hpp
+// core/expression/iceberg_hash.hpp
 //
 // Iceberg-compatible hashing functions for bucket partitioning
 // Based on Apache Iceberg specification:

@@ -6,14 +6,14 @@
 #include "duckdb/common/types/string_type.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
-
 #include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/execution/execution_context.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/parser/tableref/table_function_ref.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
-#include "iceberg_avro_multi_file_list.hpp"
+
+#include "planning/metadata_io/avro/iceberg_avro_multi_file_list.hpp"
 
 namespace duckdb {
 

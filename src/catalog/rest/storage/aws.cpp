@@ -1,13 +1,15 @@
-#include "iceberg_logging.hpp"
-#include "mbedtls_wrapper.hpp"
-#include "aws.hpp"
+#include "catalog/rest/storage/aws.hpp"
+
 #include "duckdb/common/http_util.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/function/scalar/strftime_format.hpp"
 #include "duckdb/main/client_data.hpp"
-#include "include/storage/iceberg_authorization.hpp"
+#include "mbedtls_wrapper.hpp"
+
+#include "iceberg_logging.hpp"
+#include "catalog/rest/storage/iceberg_authorization.hpp"
 
 #include <aws/core/auth/AWSCredentialsProviderChain.h>
 #include <aws/core/http/HttpClient.h>

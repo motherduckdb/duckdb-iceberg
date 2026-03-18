@@ -1,10 +1,12 @@
-#include "iceberg_avro_multi_file_reader.hpp"
-#include "iceberg_avro_multi_file_list.hpp"
+#include "planning/metadata_io/avro/iceberg_avro_multi_file_reader.hpp"
+
 #include "duckdb/common/exception.hpp"
-#include "metadata/iceberg_manifest_list.hpp"
-#include "metadata/iceberg_manifest.hpp"
-#include "iceberg_utils.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
+
+#include "planning/metadata_io/avro/iceberg_avro_multi_file_list.hpp"
+#include "core/metadata/manifest/iceberg_manifest_list.hpp"
+#include "core/metadata/manifest/iceberg_manifest.hpp"
+#include "common/iceberg_utils.hpp"
 
 namespace duckdb {
 constexpr column_t IcebergAvroMultiFileReader::PARTITION_SPEC_ID_FIELD_ID;

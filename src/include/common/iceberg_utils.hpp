@@ -1,7 +1,7 @@
 //===----------------------------------------------------------------------===//
 //                         DuckDB
 //
-// iceberg_utils.hpp
+// common/iceberg_utils.hpp
 //
 //
 //===----------------------------------------------------------------------===//
@@ -9,9 +9,10 @@
 #pragma once
 
 #include "duckdb/common/printer.hpp"
-#include "yyjson.hpp"
-#include "storage/catalog/iceberg_table_entry.hpp"
 #include "duckdb/common/file_system.hpp"
+#include "yyjson.hpp"
+
+#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
 
 using namespace duckdb_yyjson;
 

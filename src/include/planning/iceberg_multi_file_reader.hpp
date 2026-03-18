@@ -9,18 +9,18 @@
 #pragma once
 
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
-#include "iceberg_multi_file_list.hpp"
-
 #include "duckdb/common/types/batched_data_collection.hpp"
-#include "iceberg_metadata.hpp"
-#include "iceberg_utils.hpp"
-#include "manifest_reader.hpp"
 #include "duckdb/common/multi_file/multi_file_data.hpp"
 #include "duckdb/common/list.hpp"
 #include "duckdb/common/unordered_map.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/filter/null_filter.hpp"
 #include "duckdb/planner/table_filter.hpp"
+
+#include "planning/iceberg_multi_file_list.hpp"
+#include "function/metadata/iceberg_metadata.hpp"
+#include "common/iceberg_utils.hpp"
+#include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
 
 namespace duckdb {
 

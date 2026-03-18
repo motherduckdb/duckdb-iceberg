@@ -1,10 +1,11 @@
-#include "metadata/iceberg_manifest.hpp"
-#include "storage/catalog/iceberg_table_set.hpp"
+#include "core/metadata/manifest/iceberg_manifest.hpp"
 
 #include "duckdb/storage/caching_file_system.hpp"
-#include "catalog_utils.hpp"
-#include "iceberg_value.hpp"
-#include "storage/iceberg_table_information.hpp"
+
+#include "catalog/rest/iceberg_table_set.hpp"
+#include "catalog/rest/api/catalog_utils.hpp"
+#include "core/expression/iceberg_value.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 
 namespace duckdb {
 

@@ -4,15 +4,14 @@
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/types/value.hpp"
-
 #include "duckdb/function/copy_function.hpp"
 #include "duckdb/execution/execution_context.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/common/insertion_order_preserving_map.hpp"
 
-#include "metadata/iceberg_table_schema.hpp"
-#include "metadata/iceberg_table_metadata.hpp"
+#include "core/metadata/schema/iceberg_table_schema.hpp"
+#include "core/metadata/iceberg_table_metadata.hpp"
 
 namespace duckdb {
 

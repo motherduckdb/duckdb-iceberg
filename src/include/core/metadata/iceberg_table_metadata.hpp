@@ -1,15 +1,15 @@
 #pragma once
 
-#include "metadata/iceberg_column_definition.hpp"
-#include "metadata/iceberg_snapshot.hpp"
-#include "metadata/iceberg_partition_spec.hpp"
-#include "metadata/iceberg_sort_order.hpp"
-#include "metadata/iceberg_table_schema.hpp"
-#include "metadata/iceberg_field_mapping.hpp"
+#include "duckdb/common/file_system.hpp"
 
+#include "core/metadata/schema/iceberg_column_definition.hpp"
+#include "core/metadata/schema/iceberg_table_schema.hpp"
+#include "core/metadata/schema/iceberg_field_mapping.hpp"
+#include "core/metadata/snapshot/iceberg_snapshot.hpp"
+#include "core/metadata/partition/iceberg_partition_spec.hpp"
+#include "core/metadata/sort/iceberg_sort_order.hpp"
 #include "iceberg_options.hpp"
 #include "rest_catalog/objects/list.hpp"
-#include "duckdb/common/file_system.hpp"
 
 namespace duckdb {
 

@@ -2,7 +2,7 @@
 #pragma once
 
 #include "rest_catalog/objects/type.hpp"
-#include "functional"
+#include <functional>
 
 namespace duckdb {
 

@@ -1,4 +1,5 @@
-#include "iceberg_hash.hpp"
+#include "core/expression/iceberg_hash.hpp"
+
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/types/hugeint.hpp"
 

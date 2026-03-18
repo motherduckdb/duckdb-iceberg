@@ -1,7 +1,7 @@
 //===----------------------------------------------------------------------===//
 //                         DuckDB
 //
-// iceberg_functions/iceberg_deletes_file_reader.hpp
+// planning/metadata_io/deletes/iceberg_deletes_file_reader.hpp
 //
 //
 //===----------------------------------------------------------------------===//

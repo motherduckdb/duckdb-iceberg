@@ -19,21 +19,21 @@
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/common/file_opener.hpp"
 #include "duckdb/common/file_system.hpp"
-#include "iceberg_metadata.hpp"
-#include "iceberg_functions.hpp"
-#include "iceberg_utils.hpp"
 #include "duckdb/common/types/uuid.hpp"
 #include "duckdb/common/numeric_utils.hpp"
 
-#include "storage/catalog/iceberg_catalog.hpp"
-#include "storage/iceberg_transaction.hpp"
-#include "storage/catalog/iceberg_schema_entry.hpp"
-#include "storage/catalog/iceberg_schema_set.hpp"
-#include "storage/catalog/iceberg_table_set.hpp"
-#include "storage/catalog/iceberg_table_entry.hpp"
-#include "storage/iceberg_table_information.hpp"
+#include "function/metadata/iceberg_metadata.hpp"
+#include "function/iceberg_functions.hpp"
+#include "common/iceberg_utils.hpp"
+#include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/transaction/iceberg_transaction.hpp"
+#include "catalog/rest/catalog_entry/iceberg_schema_entry.hpp"
+#include "catalog/rest/iceberg_schema_set.hpp"
+#include "catalog/rest/iceberg_table_set.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 
-#include "metadata/iceberg_table_metadata.hpp"
+#include "core/metadata/iceberg_table_metadata.hpp"
 
 namespace duckdb {
 

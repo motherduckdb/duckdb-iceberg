@@ -1,4 +1,4 @@
-#include "url_utils.hpp"
+#include "catalog/rest/api/url_utils.hpp"
 #include "duckdb/common/string_util.hpp"
 
 namespace duckdb {

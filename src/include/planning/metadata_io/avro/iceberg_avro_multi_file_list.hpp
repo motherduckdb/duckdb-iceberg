@@ -1,9 +1,10 @@
 #pragma once
 
 #include "duckdb/common/multi_file/multi_file_list.hpp"
-#include "metadata/iceberg_table_metadata.hpp"
-#include "metadata/iceberg_manifest_list.hpp"
 #include "duckdb/common/file_system.hpp"
+
+#include "core/metadata/iceberg_table_metadata.hpp"
+#include "core/metadata/manifest/iceberg_manifest_list.hpp"
 #include "iceberg_options.hpp"
 
 namespace duckdb {

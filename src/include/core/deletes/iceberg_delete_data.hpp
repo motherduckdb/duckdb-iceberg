@@ -1,7 +1,7 @@
 #pragma once
 
 #include "duckdb/common/multi_file/multi_file_data.hpp"
-#include "metadata/iceberg_manifest.hpp"
+#include "core/metadata/manifest/iceberg_manifest.hpp"
 
 namespace duckdb {
 

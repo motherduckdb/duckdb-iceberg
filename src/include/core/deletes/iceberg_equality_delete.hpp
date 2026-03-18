@@ -5,7 +5,8 @@
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/common/typedefs.hpp"
 #include "duckdb/planner/expression.hpp"
-#include "metadata/iceberg_manifest.hpp"
+
+#include "core/metadata/manifest/iceberg_manifest.hpp"
 
 namespace duckdb {
 

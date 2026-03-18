@@ -1,10 +1,6 @@
-#include "storage/table_update/iceberg_add_snapshot.hpp"
-#include "storage/table_create/iceberg_create_table_request.hpp"
-#include "metadata/iceberg_partition_spec.hpp"
-#include "storage/catalog/iceberg_table_set.hpp"
-#include "storage/iceberg_table_information.hpp"
+#include "catalog/rest/api/iceberg_create_table_request.hpp"
+
 #include "duckdb/parser/constraints/not_null_constraint.hpp"
-#include "utils/iceberg_type.hpp"
 #include "duckdb/common/enums/catalog_type.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
 #include "duckdb/parser/parsed_data/copy_info.hpp"
@@ -16,6 +12,12 @@
 #include "duckdb/common/types/blob.hpp"
 #include "duckdb/planner/expression_binder/constant_binder.hpp"
 #include "duckdb/planner/binder.hpp"
+
+#include "catalog/rest/api/iceberg_add_snapshot.hpp"
+#include "core/metadata/partition/iceberg_partition_spec.hpp"
+#include "catalog/rest/iceberg_table_set.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/api/iceberg_type.hpp"
 
 using namespace duckdb_yyjson;
 namespace duckdb {

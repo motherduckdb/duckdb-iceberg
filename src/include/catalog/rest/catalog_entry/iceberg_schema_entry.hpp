@@ -1,10 +1,11 @@
 
 #pragma once
 
-#include "catalog_api.hpp"
 #include "duckdb/catalog/catalog_entry/schema_catalog_entry.hpp"
-#include "storage/catalog/iceberg_table_set.hpp"
 #include "duckdb/common/enums/on_entry_not_found.hpp"
+
+#include "catalog/rest/api/catalog_api.hpp"
+#include "catalog/rest/iceberg_table_set.hpp"
 
 namespace duckdb {
 class IcebergTransaction;

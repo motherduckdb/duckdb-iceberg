@@ -1,7 +1,7 @@
 #pragma once
 
 #include "duckdb/common/multi_file/multi_file_data.hpp"
-#include "deletes/iceberg_delete_data.hpp"
+#include "core/deletes/iceberg_delete_data.hpp"
 #include <roaring/roaring.hh>
 
 namespace duckdb {

@@ -1,8 +1,10 @@
-#include "copy/function/iceberg_copy_function.hpp"
-#include "copy/operator/iceberg_copy.hpp"
-#include "storage/table_create/iceberg_create_table_request.hpp"
+#include "function/copy/iceberg_copy_function.hpp"
+
 #include "duckdb/common/types/uuid.hpp"
 #include "duckdb/parser/column_list.hpp"
+
+#include "execution/operator/copy/iceberg_copy.hpp"
+#include "catalog/rest/api/iceberg_create_table_request.hpp"
 
 namespace duckdb {
 

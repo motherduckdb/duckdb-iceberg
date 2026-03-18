@@ -10,10 +10,11 @@
 
 #include "duckdb/common/printer.hpp"
 #include "duckdb/common/file_system.hpp"
-#include "url_utils.hpp"
-#include "aws.hpp"
 #include "duckdb/common/http_util.hpp"
-#include "storage/iceberg_authorization.hpp"
+
+#include "catalog/rest/api/url_utils.hpp"
+#include "catalog/rest/storage/aws.hpp"
+#include "catalog/rest/storage/iceberg_authorization.hpp"
 
 namespace duckdb {
 

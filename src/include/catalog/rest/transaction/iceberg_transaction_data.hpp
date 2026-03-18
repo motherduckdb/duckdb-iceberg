@@ -1,18 +1,17 @@
 #pragma once
 
-#include "metadata/iceberg_manifest_list.hpp"
-#include "metadata/iceberg_manifest.hpp"
-#include "metadata/iceberg_snapshot.hpp"
-#include "rest_catalog/objects/add_snapshot_update.hpp"
-
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/function/copy_function.hpp"
-#include "storage/iceberg_table_update.hpp"
-#include "storage/iceberg_metadata_info.hpp"
-#include "storage/iceberg_table_requirement.hpp"
-#include "storage/table_update/iceberg_add_snapshot.hpp"
-#include "storage/table_create/iceberg_create_table_request.hpp"
-#include "storage/iceberg_transaction_metadata.hpp"
+
+#include "core/metadata/manifest/iceberg_manifest_list.hpp"
+#include "core/metadata/manifest/iceberg_manifest.hpp"
+#include "core/metadata/snapshot/iceberg_snapshot.hpp"
+#include "rest_catalog/objects/add_snapshot_update.hpp"
+#include "catalog/rest/api/iceberg_table_update.hpp"
+#include "catalog/rest/api/iceberg_table_requirement.hpp"
+#include "catalog/rest/api/iceberg_add_snapshot.hpp"
+#include "catalog/rest/api/iceberg_create_table_request.hpp"
+#include "catalog/rest/transaction/iceberg_transaction_metadata.hpp"
 
 namespace duckdb {
 

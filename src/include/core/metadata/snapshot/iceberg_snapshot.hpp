@@ -1,6 +1,6 @@
 #pragma once
 
-#include "metadata/iceberg_column_definition.hpp"
+#include "core/metadata/schema/iceberg_column_definition.hpp"
 #include "rest_catalog/objects/snapshot.hpp"
 
 namespace duckdb {

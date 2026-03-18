@@ -1,5 +1,5 @@
-#include "iceberg_value.hpp"
-#include "utf8proc_wrapper.hpp"
+#include "core/expression/iceberg_value.hpp"
+
 #include "duckdb/common/helper.hpp"
 #include "duckdb/common/types/uuid.hpp"
 #include "duckdb/common/bswap.hpp"
@@ -7,6 +7,7 @@
 #include "duckdb/common/types/date.hpp"
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/common/types/value.hpp"
+#include "utf8proc_wrapper.hpp"
 
 namespace duckdb {
 

@@ -1,17 +1,18 @@
-#include "storage/iceberg_transaction_data.hpp"
+#include "catalog/rest/transaction/iceberg_transaction_data.hpp"
 
-#include "metadata/iceberg_manifest_list.hpp"
-#include "metadata/iceberg_manifest.hpp"
-#include "metadata/iceberg_snapshot.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
-#include "storage/catalog/iceberg_table_set.hpp"
-#include "storage/table_update/iceberg_add_snapshot.hpp"
-#include "storage/table_update/common.hpp"
-#include "storage/iceberg_table_information.hpp"
-
 #include "duckdb/common/types/uuid.hpp"
-#include "avro_scan.hpp"
-#include "manifest_reader.hpp"
+
+#include "core/metadata/manifest/iceberg_manifest_list.hpp"
+#include "core/metadata/manifest/iceberg_manifest.hpp"
+#include "core/metadata/snapshot/iceberg_snapshot.hpp"
+#include "catalog/rest/iceberg_table_set.hpp"
+#include "catalog/rest/api/iceberg_add_snapshot.hpp"
+#include "catalog/rest/api/table_update.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "planning/metadata_io/avro/avro_scan.hpp"
+#include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
+#include "planning/metadata_io/manifest_list/iceberg_manifest_list_reader.hpp"
 
 namespace duckdb {
 

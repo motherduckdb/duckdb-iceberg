@@ -4,9 +4,10 @@
 #include "duckdb/common/types.hpp"
 #include "duckdb/parser/parsed_data/create_table_info.hpp"
 #include "duckdb/parser/parsed_data/create_secret_info.hpp"
-#include "iceberg_metadata.hpp"
-#include "url_utils.hpp"
-#include "storage/catalog/iceberg_table_entry.hpp"
+
+#include "function/metadata/iceberg_metadata.hpp"
+#include "catalog/rest/api/url_utils.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
 #include "rest_catalog/objects/table_identifier.hpp"
 #include "rest_catalog/objects/load_table_result.hpp"
 

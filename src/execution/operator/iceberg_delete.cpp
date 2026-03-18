@@ -1,14 +1,5 @@
-#include "storage/iceberg_delete.hpp"
-#include "storage/iceberg_delete.hpp"
-#include "storage/catalog/iceberg_catalog.hpp"
-#include "storage/iceberg_transaction.hpp"
-#include "storage/catalog/iceberg_table_entry.hpp"
-#include "storage/iceberg_table_information.hpp"
-#include "iceberg_multi_file_reader.hpp"
-#include "iceberg_multi_file_list.hpp"
-#include "metadata/iceberg_snapshot.hpp"
-#include "metadata/iceberg_manifest.hpp"
-#include "storage/iceberg_metadata_info.hpp"
+#include "execution/operator/iceberg_delete.hpp"
+
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
@@ -18,7 +9,17 @@
 #include "duckdb/function/copy_function.hpp"
 #include "duckdb/common/types/uuid.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
-#include "deletes/deletion_vector.hpp"
+
+#include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/transaction/iceberg_transaction.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "planning/iceberg_multi_file_reader.hpp"
+#include "planning/iceberg_multi_file_list.hpp"
+#include "core/metadata/snapshot/iceberg_snapshot.hpp"
+#include "core/metadata/manifest/iceberg_manifest.hpp"
+
+#include "core/deletes/iceberg_deletion_vector.hpp"
 
 namespace duckdb {
 class IcebergDeleteLocalState;

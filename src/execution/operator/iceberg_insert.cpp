@@ -1,13 +1,5 @@
-#include "storage/iceberg_insert.hpp"
-#include "storage/catalog/iceberg_catalog.hpp"
-#include "storage/catalog/iceberg_table_entry.hpp"
-#include "storage/iceberg_table_information.hpp"
-#include "metadata/iceberg_column_definition.hpp"
-#include "iceberg_multi_file_list.hpp"
-#include "storage/iceberg_transaction.hpp"
-#include "iceberg_value.hpp"
-#include "metadata/iceberg_transform.hpp"
-#include "utils/iceberg_type.hpp"
+#include "execution/operator/iceberg_insert.hpp"
+
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
 #include "duckdb/main/client_data.hpp"
 #include "duckdb/execution/physical_operator_states.hpp"
@@ -22,7 +14,17 @@
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
-#include "iceberg_utils.hpp"
+
+#include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "core/metadata/schema/iceberg_column_definition.hpp"
+#include "planning/iceberg_multi_file_list.hpp"
+#include "catalog/rest/transaction/iceberg_transaction.hpp"
+#include "core/expression/iceberg_value.hpp"
+#include "core/expression/iceberg_transform.hpp"
+#include "catalog/rest/api/iceberg_type.hpp"
+#include "common/iceberg_utils.hpp"
 
 namespace duckdb {
 

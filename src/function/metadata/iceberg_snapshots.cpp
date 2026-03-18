@@ -1,10 +1,11 @@
 #include "duckdb/common/file_opener.hpp"
 #include "duckdb/common/file_system.hpp"
-#include "iceberg_functions.hpp"
-#include "iceberg_metadata.hpp"
+
+#include "function/iceberg_functions.hpp"
+#include "function/metadata/iceberg_metadata.hpp"
 #include "iceberg_options.hpp"
-#include "iceberg_utils.hpp"
-#include "metadata/iceberg_table_metadata.hpp"
+#include "common/iceberg_utils.hpp"
+#include "core/metadata/iceberg_table_metadata.hpp"
 
 #include <string>
 

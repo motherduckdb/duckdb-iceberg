@@ -6,16 +6,17 @@
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/common/file_system.hpp"
-#include "iceberg_metadata.hpp"
-#include "iceberg_functions.hpp"
-#include "iceberg_utils.hpp"
-#include "storage/catalog/iceberg_table_entry.hpp"
 #include "duckdb/main/client_context.hpp"
-#include "storage/catalog/iceberg_catalog.hpp"
-#include "storage/iceberg_table_information.hpp"
-#include "storage/iceberg_transaction_data.hpp"
-#include "storage/iceberg_transaction.hpp"
-#include "metadata/iceberg_table_metadata.hpp"
+
+#include "function/metadata/iceberg_metadata.hpp"
+#include "function/iceberg_functions.hpp"
+#include "common/iceberg_utils.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/transaction/iceberg_transaction_data.hpp"
+#include "catalog/rest/transaction/iceberg_transaction.hpp"
+#include "core/metadata/iceberg_table_metadata.hpp"
 
 #include <string>
 

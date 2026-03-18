@@ -1,6 +1,7 @@
-#include "manifest_reader.hpp"
+#include "planning/metadata_io/base_manifest_reader.hpp"
+
 #include "duckdb/common/multi_file/multi_file_states.hpp"
-#include "avro_scan.hpp"
+#include "planning/metadata_io/avro/avro_scan.hpp"
 
 namespace duckdb {
 

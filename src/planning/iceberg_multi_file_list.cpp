@@ -1,12 +1,4 @@
-#include "iceberg_functions.hpp"
-#include "iceberg_multi_file_reader.hpp"
-#include "iceberg_functions/iceberg_deletes_file_reader.hpp"
-#include "iceberg_utils.hpp"
-#include "iceberg_logging.hpp"
-#include "iceberg_predicate.hpp"
-#include "iceberg_value.hpp"
-#include "metadata/iceberg_manifest.hpp"
-#include "storage/iceberg_transaction.hpp"
+#include "planning/iceberg_multi_file_list.hpp"
 
 #include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
 #include "duckdb/common/exception.hpp"
@@ -20,8 +12,19 @@
 #include "duckdb/planner/filter/struct_filter.hpp"
 #include "duckdb/execution/executor.hpp"
 
-#include "metadata/iceberg_predicate_stats.hpp"
-#include "metadata/iceberg_table_metadata.hpp"
+#include "planning/iceberg_multi_file_reader.hpp"
+#include "function/iceberg_functions.hpp"
+#include "planning/metadata_io/deletes/iceberg_deletes_file_reader.hpp"
+#include "common/iceberg_utils.hpp"
+#include "iceberg_logging.hpp"
+#include "planning/pruning/iceberg_predicate.hpp"
+#include "core/expression/iceberg_value.hpp"
+#include "core/metadata/manifest/iceberg_manifest.hpp"
+#include "catalog/rest/transaction/iceberg_transaction.hpp"
+#include "core/expression/iceberg_predicate_stats.hpp"
+#include "core/metadata/iceberg_table_metadata.hpp"
+#include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
+#include "planning/metadata_io/manifest_list/iceberg_manifest_list_reader.hpp"
 
 namespace duckdb {
 

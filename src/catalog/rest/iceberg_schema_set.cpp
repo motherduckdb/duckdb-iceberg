@@ -1,10 +1,12 @@
-#include "catalog_api.hpp"
+#include "catalog/rest/iceberg_schema_set.hpp"
+
 #include "duckdb/parser/parsed_data/create_schema_info.hpp"
 #include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/catalog/catalog.hpp"
-#include "storage/catalog/iceberg_catalog.hpp"
-#include "storage/catalog/iceberg_schema_set.hpp"
-#include "storage/iceberg_transaction.hpp"
+
+#include "catalog/rest/api/catalog_api.hpp"
+#include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/transaction/iceberg_transaction.hpp"
 
 namespace duckdb {
 

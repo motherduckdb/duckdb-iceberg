@@ -4,11 +4,11 @@
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/types/value.hpp"
-#include "metadata/iceberg_manifest.hpp"
-
 #include "duckdb/function/copy_function.hpp"
 #include "duckdb/execution/execution_context.hpp"
 #include "duckdb/parallel/thread_context.hpp"
+
+#include "core/metadata/manifest/iceberg_manifest.hpp"
 
 namespace duckdb {
 

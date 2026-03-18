@@ -1,4 +1,4 @@
-#include "api_utils.hpp"
+#include "catalog/rest/api/api_utils.hpp"
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/http_util.hpp"

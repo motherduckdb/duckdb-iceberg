@@ -2,8 +2,9 @@
 #pragma once
 
 #include "duckdb.hpp"
-#include "catalog_api.hpp"
 #include "yyjson.hpp"
+
+#include "catalog/rest/api/catalog_api.hpp"
 
 using namespace duckdb_yyjson;
 namespace duckdb {

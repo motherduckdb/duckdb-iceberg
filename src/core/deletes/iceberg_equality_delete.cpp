@@ -1,11 +1,12 @@
-#include "deletes/equality_delete.hpp"
-#include "iceberg_multi_file_list.hpp"
+#include "core/deletes/iceberg_equality_delete.hpp"
 
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
+
+#include "planning/iceberg_multi_file_list.hpp"
 
 namespace duckdb {
 

@@ -3,10 +3,9 @@
 #include "duckdb/common/multi_file/multi_file_data.hpp"
 
 #include "iceberg_options.hpp"
-
-#include "metadata/iceberg_manifest.hpp"
-#include "metadata/iceberg_manifest_list.hpp"
-#include "iceberg_avro_multi_file_list.hpp"
+#include "core/metadata/manifest/iceberg_manifest.hpp"
+#include "core/metadata/manifest/iceberg_manifest_list.hpp"
+#include "planning/metadata_io/avro/iceberg_avro_multi_file_list.hpp"
 
 namespace duckdb {
 

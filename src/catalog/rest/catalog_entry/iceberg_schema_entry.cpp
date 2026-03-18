@@ -1,9 +1,5 @@
-#include "storage/catalog/iceberg_schema_entry.hpp"
-#include "storage/iceberg_table_information.hpp"
-#include "storage/catalog/iceberg_catalog.hpp"
-#include "storage/iceberg_transaction.hpp"
-#include "storage/catalog/iceberg_table_entry.hpp"
-#include "utils/iceberg_type.hpp"
+#include "catalog/rest/catalog_entry/iceberg_schema_entry.hpp"
+
 #include "duckdb/parser/column_list.hpp"
 #include "duckdb/parser/constraints/list.hpp"
 #include "duckdb/parser/parsed_data/alter_info.hpp"
@@ -13,6 +9,13 @@
 #include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/parser/parsed_expression_iterator.hpp"
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
+
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/transaction/iceberg_transaction.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/api/iceberg_type.hpp"
+
 namespace duckdb {
 
 IcebergSchemaEntry::IcebergSchemaEntry(Catalog &catalog, CreateSchemaInfo &info)

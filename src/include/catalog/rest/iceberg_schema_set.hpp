@@ -1,11 +1,10 @@
 
 #pragma once
 
-#include "iceberg_schema_entry.hpp"
 #include "duckdb/common/string.hpp"
-
 #include "duckdb/common/unique_ptr.hpp"
-#include "storage/catalog/iceberg_schema_entry.hpp"
+
+#include "catalog/rest/catalog_entry/iceberg_schema_entry.hpp"
 
 namespace duckdb {
 struct CreateSchemaInfo;

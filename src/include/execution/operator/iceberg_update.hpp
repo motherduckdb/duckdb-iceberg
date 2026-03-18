@@ -1,20 +1,20 @@
 //===----------------------------------------------------------------------===//
 //                         DuckDB
 //
-// storage/iceberg_update.hpp
+// execution/operator/iceberg_update.hpp
 //
 //
 //===----------------------------------------------------------------------===//
 
 #pragma once
 
-#include "storage/iceberg_insert.hpp"
 #include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/planner/operator/logical_delete.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
-#include "storage/iceberg_metadata_info.hpp"
-#include "storage/catalog/iceberg_table_entry.hpp"
-#include "storage/catalog/iceberg_schema_entry.hpp"
+
+#include "execution/operator/iceberg_insert.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/iceberg_schema_entry.hpp"
 
 namespace duckdb {
 

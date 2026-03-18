@@ -1,7 +1,7 @@
 //===----------------------------------------------------------------------===//
 //                         DuckDB
 //
-// storage/iceberg_insert.hpp
+// execution/operator/iceberg_insert.hpp
 //
 //
 //===----------------------------------------------------------------------===//
@@ -12,10 +12,11 @@
 #include "duckdb/execution/operator/persistent/physical_copy_to_file.hpp"
 #include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/common/index_vector.hpp"
-#include "storage/catalog/iceberg_table_entry.hpp"
-#include "storage/catalog/iceberg_schema_entry.hpp"
-#include "metadata/iceberg_partition_spec.hpp"
-#include "metadata/iceberg_table_schema.hpp"
+
+#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/iceberg_schema_entry.hpp"
+#include "core/metadata/partition/iceberg_partition_spec.hpp"
+#include "core/metadata/schema/iceberg_table_schema.hpp"
 
 namespace duckdb {
 

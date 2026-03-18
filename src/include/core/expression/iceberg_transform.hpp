@@ -1,5 +1,6 @@
 #pragma once
-#include "metadata/iceberg_predicate_stats.hpp"
+
+#include "core/expression/iceberg_predicate_stats.hpp"
 
 namespace duckdb {
 

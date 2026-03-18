@@ -1,9 +1,10 @@
 #pragma once
 
 #include "duckdb/main/secret/secret.hpp"
-#include "catalog_utils.hpp"
-#include "url_utils.hpp"
 #include "duckdb/common/http_util.hpp"
+
+#include "catalog/rest/api/catalog_utils.hpp"
+#include "catalog/rest/api/url_utils.hpp"
 
 namespace duckdb {
 

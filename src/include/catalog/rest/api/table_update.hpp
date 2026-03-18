@@ -1,17 +1,16 @@
 #pragma once
 
-#include "storage/iceberg_table_update.hpp"
-
-#include "metadata/iceberg_manifest.hpp"
-#include "metadata/iceberg_manifest_list.hpp"
-#include "metadata/iceberg_snapshot.hpp"
-
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/types.hpp"
-#include "storage/iceberg_table_requirement.hpp"
 #include "duckdb/common/types/value.hpp"
-#include "metadata/iceberg_table_schema.hpp"
+
+#include "catalog/rest/api/iceberg_table_update.hpp"
+#include "catalog/rest/api/iceberg_table_requirement.hpp"
+#include "core/metadata/manifest/iceberg_manifest.hpp"
+#include "core/metadata/schema/iceberg_table_schema.hpp"
+#include "core/metadata/manifest/iceberg_manifest_list.hpp"
+#include "core/metadata/snapshot/iceberg_snapshot.hpp"
 
 namespace duckdb {
 

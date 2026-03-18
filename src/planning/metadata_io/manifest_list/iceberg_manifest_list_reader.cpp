@@ -1,5 +1,6 @@
-#include "manifest_reader.hpp"
-#include "include/metadata/iceberg_manifest_list.hpp"
+#include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
+#include "planning/metadata_io/manifest_list/iceberg_manifest_list_reader.hpp"
+#include "core/metadata/manifest/iceberg_manifest_list.hpp"
 
 namespace duckdb {
 

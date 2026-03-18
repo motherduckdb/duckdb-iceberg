@@ -1,11 +1,14 @@
+#include "function/metadata/iceberg_metadata.hpp"
+
 #include "duckdb.hpp"
-#include "iceberg_metadata.hpp"
-#include "avro_scan.hpp"
-#include "iceberg_utils.hpp"
-#include "metadata/iceberg_manifest.hpp"
-#include "metadata/iceberg_manifest_list.hpp"
-#include "manifest_reader.hpp"
-#include "catalog_utils.hpp"
+
+#include "planning/metadata_io/avro/avro_scan.hpp"
+#include "common/iceberg_utils.hpp"
+#include "core/metadata/manifest/iceberg_manifest.hpp"
+#include "core/metadata/manifest/iceberg_manifest_list.hpp"
+#include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
+#include "planning/metadata_io/manifest_list/iceberg_manifest_list_reader.hpp"
+#include "catalog/rest/api/catalog_utils.hpp"
 
 namespace duckdb {
 

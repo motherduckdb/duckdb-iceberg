@@ -1,7 +1,8 @@
+#include "planning/metadata_io/deletes/iceberg_deletes_file_reader.hpp"
+
 #include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
-#include "iceberg_functions/iceberg_deletes_file_reader.hpp"
-#include "iceberg_functions.hpp"
-#include "storage/catalog/iceberg_table_entry.hpp"
+#include "function/iceberg_functions.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
 
 namespace duckdb {
 

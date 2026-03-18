@@ -1,7 +1,7 @@
 //===----------------------------------------------------------------------===//
 //                         DuckDB
 //
-// iceberg_multi_file_list.hpp
+// planning/iceberg_multi_file_list.hpp
 //
 //
 //===----------------------------------------------------------------------===//
@@ -10,23 +10,21 @@
 
 #include "duckdb/common/multi_file/multi_file_list.hpp"
 #include "duckdb/common/types/batched_data_collection.hpp"
-#include "storage/iceberg_metadata_info.hpp"
-#include "iceberg_metadata.hpp"
-#include "iceberg_utils.hpp"
-#include "manifest_reader.hpp"
-
 #include "duckdb/common/multi_file/multi_file_data.hpp"
 #include "duckdb/common/list.hpp"
 #include "duckdb/common/unordered_map.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/filter/null_filter.hpp"
 #include "duckdb/planner/table_filter.hpp"
-
-#include "deletes/equality_delete.hpp"
-#include "deletes/positional_delete.hpp"
-#include "deletes/iceberg_delete_data.hpp"
-#include "avro_scan.hpp"
 #include "duckdb/parallel/task_executor.hpp"
+
+#include "function/metadata/iceberg_metadata.hpp"
+#include "common/iceberg_utils.hpp"
+#include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
+#include "planning/metadata_io/avro/avro_scan.hpp"
+#include "core/deletes/iceberg_equality_delete.hpp"
+#include "core/deletes/iceberg_positional_delete.hpp"
+#include "core/deletes/iceberg_delete_data.hpp"
 
 namespace duckdb {
 

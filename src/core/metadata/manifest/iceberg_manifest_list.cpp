@@ -1,13 +1,14 @@
-#include "include/metadata/iceberg_manifest_list.hpp"
-#include "metadata/iceberg_manifest_list.hpp"
-#include "metadata/iceberg_partition_spec.hpp"
-#include "iceberg_value.hpp"
+#include "core/metadata/manifest/iceberg_manifest_list.hpp"
+
 #include "duckdb/common/exception/conversion_exception.hpp"
 #include "duckdb/main/database.hpp"
-#include "include/storage/iceberg_table_information.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/common/types/uuid.hpp"
-#include "include/metadata/iceberg_transform.hpp"
+
+#include "core/metadata/partition/iceberg_partition_spec.hpp"
+#include "core/expression/iceberg_value.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "core/expression/iceberg_transform.hpp"
 
 namespace duckdb {
 

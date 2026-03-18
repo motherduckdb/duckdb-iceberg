@@ -1,5 +1,5 @@
-#include "metadata/iceberg_partition_spec.hpp"
-#include "catalog_utils.hpp"
+#include "core/metadata/partition/iceberg_partition_spec.hpp"
+#include "catalog/rest/api/catalog_utils.hpp"
 
 namespace duckdb {
 

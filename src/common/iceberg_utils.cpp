@@ -1,12 +1,13 @@
+#include "common/iceberg_utils.hpp"
+
 #include "duckdb.hpp"
 #include "duckdb/common/gzip_file_system.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
 
-#include "iceberg_utils.hpp"
-#include "storage/catalog/iceberg_table_entry.hpp"
-#include "storage/iceberg_table_information.hpp"
-#include "metadata/iceberg_table_metadata.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "core/metadata/iceberg_table_metadata.hpp"
 
 namespace duckdb {
 

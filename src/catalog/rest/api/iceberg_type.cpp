@@ -1,8 +1,10 @@
+#include "catalog/rest/api/iceberg_type.hpp"
+
 #include "duckdb/common/string_util.hpp"
-#include "utils/iceberg_type.hpp"
 #include "duckdb/common/extra_type_info.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/parser/column_definition.hpp"
+
 #include "rest_catalog/objects/list_type.hpp"
 #include "rest_catalog/objects/map_type.hpp"
 #include "rest_catalog/objects/struct_type.hpp"

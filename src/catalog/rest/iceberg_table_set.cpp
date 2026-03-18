@@ -1,17 +1,4 @@
-#include "catalog_api.hpp"
-#include "catalog_utils.hpp"
-#include "iceberg_logging.hpp"
-
-#include "storage/catalog/iceberg_catalog.hpp"
-#include "storage/catalog/iceberg_table_set.hpp"
-
-#include "storage/catalog/iceberg_table_entry.hpp"
-#include "storage/iceberg_transaction.hpp"
-#include "storage/authorization/sigv4.hpp"
-#include "storage/iceberg_table_information.hpp"
-#include "storage/authorization/oauth2.hpp"
-#include "storage/catalog/iceberg_schema_entry.hpp"
-#include "metadata/iceberg_partition_spec.hpp"
+#include "catalog/rest/iceberg_table_set.hpp"
 
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
@@ -22,6 +9,18 @@
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/planner/tableref/bound_at_clause.hpp"
 #include "duckdb/planner/expression_binder/table_function_binder.hpp"
+
+#include "catalog/rest/api/catalog_api.hpp"
+#include "catalog/rest/api/catalog_utils.hpp"
+#include "iceberg_logging.hpp"
+#include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/transaction/iceberg_transaction.hpp"
+#include "catalog/rest/storage/authorization/sigv4.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/storage/authorization/oauth2.hpp"
+#include "catalog/rest/catalog_entry/iceberg_schema_entry.hpp"
+#include "core/metadata/partition/iceberg_partition_spec.hpp"
 
 namespace duckdb {
 

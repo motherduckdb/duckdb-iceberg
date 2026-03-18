@@ -1,9 +1,11 @@
-#include "copy/operator/iceberg_copy.hpp"
-#include "copy/function/iceberg_copy_function.hpp"
-#include "storage/iceberg_insert.hpp"
-#include "iceberg_utils.hpp"
-#include "iceberg_value.hpp"
+#include "execution/operator/copy/iceberg_copy.hpp"
+
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
+
+#include "function/copy/iceberg_copy_function.hpp"
+#include "execution/operator/iceberg_insert.hpp"
+#include "common/iceberg_utils.hpp"
+#include "core/expression/iceberg_value.hpp"
 
 namespace duckdb {
 

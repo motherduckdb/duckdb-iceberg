@@ -1,9 +1,10 @@
-#include "deletes/deletion_vector.hpp"
-#include "iceberg_multi_file_list.hpp"
-#include "storage/iceberg_table_information.hpp"
+#include "core/deletes/iceberg_deletion_vector.hpp"
 
 #include "duckdb/storage/caching_file_system.hpp"
 #include "duckdb/common/bswap.hpp"
+
+#include "planning/iceberg_multi_file_list.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 
 namespace duckdb {
 

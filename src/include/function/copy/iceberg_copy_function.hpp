@@ -2,8 +2,9 @@
 
 #include "duckdb/function/copy_function.hpp"
 #include "duckdb/common/file_system.hpp"
-#include "metadata/iceberg_table_metadata.hpp"
-#include "metadata/iceberg_table_schema.hpp"
+
+#include "core/metadata/iceberg_table_metadata.hpp"
+#include "core/metadata/schema/iceberg_table_schema.hpp"
 
 namespace duckdb {
 

@@ -1,8 +1,4 @@
-#include "iceberg_multi_file_reader.hpp"
-#include "iceberg_utils.hpp"
-#include "iceberg_logging.hpp"
-#include "iceberg_predicate.hpp"
-#include "iceberg_value.hpp"
+#include "planning/iceberg_multi_file_reader.hpp"
 
 #include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
 #include "duckdb/common/exception.hpp"
@@ -17,8 +13,12 @@
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 
-#include "metadata/iceberg_predicate_stats.hpp"
-#include "metadata/iceberg_table_metadata.hpp"
+#include "common/iceberg_utils.hpp"
+#include "iceberg_logging.hpp"
+#include "planning/pruning/iceberg_predicate.hpp"
+#include "core/expression/iceberg_value.hpp"
+#include "core/expression/iceberg_predicate_stats.hpp"
+#include "core/metadata/iceberg_table_metadata.hpp"
 
 namespace duckdb {
 

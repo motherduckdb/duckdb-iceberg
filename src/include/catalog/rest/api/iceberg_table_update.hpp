@@ -1,9 +1,9 @@
 #pragma once
 
-#include "rest_catalog/objects/list.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/client_context.hpp"
-#include "metadata/iceberg_manifest_list.hpp"
+#include "rest_catalog/objects/list.hpp"
+#include "core/metadata/manifest/iceberg_manifest_list.hpp"
 
 namespace duckdb {
 

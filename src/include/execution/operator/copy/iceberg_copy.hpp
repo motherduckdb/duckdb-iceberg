@@ -1,10 +1,11 @@
 #pragma once
 
 #include "duckdb/planner/operator/logical_extension_operator.hpp"
-#include "metadata/iceberg_table_metadata.hpp"
-#include "metadata/iceberg_table_schema.hpp"
 #include "duckdb/execution/physical_plan_generator.hpp"
-#include "metadata/iceberg_manifest.hpp"
+
+#include "core/metadata/iceberg_table_metadata.hpp"
+#include "core/metadata/schema/iceberg_table_schema.hpp"
+#include "core/metadata/manifest/iceberg_manifest.hpp"
 
 namespace duckdb {
 

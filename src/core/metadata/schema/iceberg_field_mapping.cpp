@@ -1,4 +1,4 @@
-#include "metadata/iceberg_field_mapping.hpp"
+#include "core/metadata/schema/iceberg_field_mapping.hpp"
 
 namespace duckdb {
 

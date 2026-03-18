@@ -20,11 +20,12 @@
 #include "duckdb/common/file_opener.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
-#include "iceberg_metadata.hpp"
-#include "iceberg_utils.hpp"
-#include "iceberg_multi_file_reader.hpp"
-#include "iceberg_functions.hpp"
-#include "storage/catalog/iceberg_table_entry.hpp"
+
+#include "function/metadata/iceberg_metadata.hpp"
+#include "common/iceberg_utils.hpp"
+#include "planning/iceberg_multi_file_reader.hpp"
+#include "function/iceberg_functions.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
 
 #include <string>
 #include <numeric>
