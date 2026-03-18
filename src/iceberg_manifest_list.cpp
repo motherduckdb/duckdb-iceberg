@@ -39,7 +39,7 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(int64_t sna
 	manifest_file.added_rows_count = 0;
 	manifest_file.existing_rows_count = 0;
 	manifest_file.deleted_rows_count = 0;
-	manifest_file.partition_spec_id = 0;
+	manifest_file.partition_spec_id = table_metadata.default_spec_id;
 
 	//! Add the files to the manifest
 	for (auto &manifest_entry : manifest_entries) {
