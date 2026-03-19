@@ -18,7 +18,7 @@ nessie: nessie-clone nessie-stop
 	(cd .catalogs/nessie/docker/catalog-auth-s3 && docker compose up -d)
 	$(call set_active_catalog,nessie)
 
-nessie-data_only:
+nessie-data-only:
 	@echo "Setting up venv-spark4 and generating data..."
 	python3 -m venv .venv-spark4 && \
 	. .venv-spark4/bin/activate && \
