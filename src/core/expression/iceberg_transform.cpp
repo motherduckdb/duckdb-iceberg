@@ -148,37 +148,27 @@ Value BucketTransform::ApplyTransform(const Value &constant, const IcebergTransf
 Value TruncateTransform::ApplyTransform(const Value &constant, const IcebergTransform &transform) {
 	switch (constant.type().id()) {
 	case LogicalTypeId::INTEGER:
-	case LogicalTypeId::BIGINT:
-	{
+	case LogicalTypeId::BIGINT: {
 		auto v = constant.GetValue<int64_t>();
 		auto W = transform.GetTruncateWidth();
 		return Value::Numeric(constant.type(), v - (((v % W) + W) % W));
 	}
-	case LogicalTypeId::DECIMAL:
-	{
+	case LogicalTypeId::DECIMAL: {
 		// Truncate the unscaled value, keeping the same scale and width
 		auto scaled_constant = constant.Copy();
 		scaled_constant.Reinterpret(LogicalType::BIGINT);
 		auto v = scaled_constant.GetValue<int64_t>();
 		auto W = transform.GetTruncateWidth();
-		return Value::DECIMAL(
-			int64_t(v - (((v % W) + W) % W)),
-			DecimalType::GetWidth(constant.type()),
-			DecimalType::GetScale(constant.type())
-		);
+		return Value::DECIMAL(int64_t(v - (((v % W) + W) % W)), DecimalType::GetWidth(constant.type()),
+		                      DecimalType::GetScale(constant.type()));
 	}
-	case LogicalTypeId::BLOB:
-	{
+	case LogicalTypeId::BLOB: {
 		// truncate to L bytes
 		auto bytes = StringValue::Get(constant);
-		return Value::BLOB(
-			(uint8_t*)bytes.data(),
-			bytes.size() < transform.GetTruncateWidth()
-			? bytes.size(): transform.GetTruncateWidth()
-		);
+		return Value::BLOB((uint8_t *)bytes.data(),
+		                   bytes.size() < transform.GetTruncateWidth() ? bytes.size() : transform.GetTruncateWidth());
 	}
-	case LogicalTypeId::VARCHAR:
-	{
+	case LogicalTypeId::VARCHAR: {
 		// truncate to at most L code points, assuming UTF-8 encoding
 		auto v = constant.GetValue<string>();
 		auto L = transform.GetTruncateWidth();
