@@ -7,6 +7,8 @@ require parquet
 
 require iceberg
 
+require-env DUCKDB_ICEBERG_HAVE_GENERATED_DATA
+
 statement ok
 create view scan as select * from ICEBERG_SCAN('__WORKING_DIRECTORY__/data/generated/iceberg/spark-local/default/truncate_partitioned_bigint');
 
