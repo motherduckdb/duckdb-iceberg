@@ -131,47 +131,7 @@ bool IcebergMultiFileList::FinishedScanningDeletes() const {
 	return !delete_manifest_reader || delete_manifest_reader->Finished();
 }
 
-static unique_ptr<ConjunctionFilter> EmptyConjunctionFilter(const TableFilter &filter) {
-	if (filter.filter_type == TableFilterType::CONJUNCTION_AND) {
-		return make_uniq<ConjunctionAndFilter>();
-	}
-	if (filter.filter_type == TableFilterType::CONJUNCTION_OR) {
-		return make_uniq<ConjunctionOrFilter>();
-	}
-	return nullptr;
-}
-
-static unique_ptr<TableFilter> ExtractColumnFilter(const TableFilter &filter, const idx_t index) {
-	switch (filter.filter_type) {
-	case TableFilterType::STRUCT_EXTRACT: {
-		auto &struct_extract = filter.Cast<StructFilter>();
-		if (struct_extract.child_idx != index) {
-			//! This filter is not targeting the column on which a partition exists
-			return nullptr;
-		}
-		return struct_extract.child_filter->Copy();
-	}
-	case TableFilterType::CONJUNCTION_AND:
-	case TableFilterType::CONJUNCTION_OR: {
-		auto filter_copy = EmptyConjunctionFilter(filter);
-		auto &conjunction_filter = reinterpret_cast<const ConjunctionFilter &>(filter);
-		for (auto &child : conjunction_filter.child_filters) {
-			auto column_filter = ExtractColumnFilter(*child, index);
-			if (column_filter) {
-				filter_copy->child_filters.emplace_back(std::move(column_filter));
-			}
-		}
-		//! This conjunction contains at least one clause targeting a partition column
-		if (!filter_copy->child_filters.empty()) {
-			return filter_copy;
-		}
-	}
-	default:
-		return nullptr;
-	}
-}
-
-unique_ptr<TableFilter> IcebergMultiFileList::GetFilterForColumnIndex(const TableFilterSet &filter_set,
+optional_ptr<const TableFilter> IcebergMultiFileList::GetFilterForColumnIndex(const TableFilterSet &filter_set,
                                                                               const ColumnIndex &column_index) const {
 	auto primary_index = column_index.GetPrimaryIndex();
 	auto filter_it = filter_set.filters.find(primary_index);
@@ -182,18 +142,22 @@ unique_ptr<TableFilter> IcebergMultiFileList::GetFilterForColumnIndex(const Tabl
 	auto &parent_filter = *filter_it->second;
 	auto &child_indexes = column_index.GetChildIndexes();
 
-	auto current_filter = parent_filter.Copy();
+	reference<const TableFilter> current_filter(parent_filter);
 	for (idx_t i = 0; i < child_indexes.size(); i++) {
-		auto &table_filter = *current_filter;
+		auto &table_filter = current_filter.get();
 		auto &child_index = child_indexes[i];
 		auto index = child_index.GetPrimaryIndex();
-		auto column_filter = ExtractColumnFilter(table_filter, index);
-		if (!column_filter) {
+		if (table_filter.filter_type != TableFilterType::STRUCT_EXTRACT) {
 			return nullptr;
 		}
-		current_filter = std::move(column_filter);
+		auto &struct_extract = table_filter.Cast<StructFilter>();
+		if (struct_extract.child_idx != index) {
+			//! This filter is not targeting the column on which a partition exists
+			return nullptr;
+		}
+		current_filter = *struct_extract.child_filter;
 	}
-	return current_filter;
+	return current_filter.get();
 }
 
 void IcebergMultiFileList::Bind(vector<LogicalType> &return_types, vector<string> &names) {

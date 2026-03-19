@@ -30,16 +30,3 @@ query II
 explain analyze select * from scan where nested.value >= 10001000003000;
 ----
 analyzed_plan	<REGEX>:.*Total Files Read: 2\s+.*
-
-# conjunction filter should lead to more files being filtered
-query II
-explain analyze select * from scan where nested.value >= 10001000003000 AND nested.value < 10001000004000;
-----
-analyzed_plan	<REGEX>:.*Total Files Read: 1\s+.*
-
-# unrelated clause in conjunction filter should not affect filtering
-query II
-explain analyze select * from scan where nested.value >= 10001000003000 AND nested.value < 10001000004000 AND nested.name >= 'row_1';
-----
-analyzed_plan	<REGEX>:.*Total Files Read: 1\s+.*
-
