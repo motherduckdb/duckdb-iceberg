@@ -41,7 +41,7 @@ This will build both the separate loadable extension and a duckdb binary with th
 
 #### Generating test data
 
-To generate the test data, run:
+To generate the test data, run: 
 ```shell
 make data
 ```
@@ -72,7 +72,7 @@ make lakekeeper   # Lakekeeper catalog (Docker)
 make polaris      # Apache Polaris catalog (Gradle/local)
 ```
 
-For starting the server and generating data:
+For starting the service AND generating data (to run tests that need it):
 
 ```shell
 make fixture-data   
