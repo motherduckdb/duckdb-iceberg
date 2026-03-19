@@ -58,4 +58,4 @@ polaris-data: polaris
 	if [ -f "$(POLARIS_ENV_FILE)" ]; then echo "Loading env from $(POLARIS_ENV_FILE)"; set -a; . ./$(POLARIS_ENV_FILE); set +a; fi && \
 	export POLARIS_CLIENT_ID=$$(cat tmp/polaris_client_id.txt) && \
 	export POLARIS_CLIENT_SECRET=$$(cat tmp/polaris_client_secret.txt) && \
-	python3 -m scripts.data_generators.generate_data polaris
+	python3 -m scripts.data_generators.generate_data polaris $(if $(TEST),--test $(TEST))

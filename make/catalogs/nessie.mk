@@ -24,6 +24,6 @@ nessie-data_only:
 	. .venv-spark4/bin/activate && \
 	python3 -m pip install -r scripts/requirements.txt && \
 	if [ -f "$(NESSIE_ENV_FILE)" ]; then echo "Loading env from $(NESSIE_ENV_FILE)"; set -a; . ./$(NESSIE_ENV_FILE); set +a; fi && \
-	python3 -m scripts.data_generators.generate_data nessie
+	python3 -m scripts.data_generators.generate_data nessie $(if $(TEST),--test $(TEST))
 
 nessie-data: nessie nessie-data_only
