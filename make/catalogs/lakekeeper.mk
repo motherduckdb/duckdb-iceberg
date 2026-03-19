@@ -1,6 +1,6 @@
 LAKEKEEPER_ENV_FILE ?= scripts/envs/lakekeeper.env
 
-lakekeeper_clone:
+lakekeeper-clone:
 	@if [ ! -d ".catalogs/lakekeeper" ]; then \
 		echo "Cloning Lakekeeper repository..."; \
 		mkdir -p .catalogs && git clone https://github.com/lakekeeper/lakekeeper.git .catalogs/lakekeeper; \
@@ -9,11 +9,11 @@ lakekeeper_clone:
 		echo "Lakekeeper repository exists."; \
 	fi
 
-lakekeeper_stop:
+lakekeeper-stop:
 	@echo "Stopping Lakekeeper catalog..."
 	(cd .catalogs/lakekeeper/examples/access-control-simple && docker compose down -v)
 
-lakekeeper: lakekeeper_clone lakekeeper_stop
+lakekeeper: lakekeeper-clone lakekeeper-stop
 	$(call stop_active_catalog)
 	@echo "Starting Lakekeeper catalog..."
 	@grep -q '127.0.0.1 minio' /etc/hosts || (echo "Adding minio host entry..." && echo "127.0.0.1 minio" | sudo tee -a /etc/hosts)
@@ -26,7 +26,7 @@ lakekeeper: lakekeeper_clone lakekeeper_stop
 		jupyter nbconvert --to notebook --execute --output-dir=/tmp /home/jovyan/examples/03-01-Spark.ipynb"
 	$(call set_active_catalog,lakekeeper)
 
-lakekeeper_data: lakekeeper
+lakekeeper-data: lakekeeper
 	@echo "Setting up venv-spark4 and generating data..."
 	python3 -m venv .venv-spark4 && \
 	. .venv-spark4/bin/activate && \

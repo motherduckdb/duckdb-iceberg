@@ -44,7 +44,7 @@ jobs:
 
       - name: Setup Polaris
         run: |
-          make polaris_data
+          make polaris-data
 
       - name: Run Polaris Specific Tests
         env:

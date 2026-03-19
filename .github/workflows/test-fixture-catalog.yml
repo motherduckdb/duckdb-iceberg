@@ -57,7 +57,7 @@ jobs:
 
       - name: Setup fixture
         run: |
-          make fixture_data
+          make fixture-data
 
       - name: Run mitmproxy
         shell: bash
