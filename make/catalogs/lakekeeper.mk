@@ -13,7 +13,7 @@ lakekeeper_stop:
 	@echo "Stopping Lakekeeper catalog..."
 	(cd .catalogs/lakekeeper/examples/access-control-simple && docker compose down -v)
 
-lakekeeper_start: lakekeeper_clone lakekeeper_stop
+lakekeeper: lakekeeper_clone lakekeeper_stop
 	$(call stop_active_catalog)
 	@echo "Starting Lakekeeper catalog..."
 	@grep -q '127.0.0.1 minio' /etc/hosts || (echo "Adding minio host entry..." && echo "127.0.0.1 minio" | sudo tee -a /etc/hosts)
@@ -26,11 +26,9 @@ lakekeeper_start: lakekeeper_clone lakekeeper_stop
 		jupyter nbconvert --to notebook --execute --output-dir=/tmp /home/jovyan/examples/03-01-Spark.ipynb"
 	$(call set_active_catalog,lakekeeper)
 
-lakekeeper_data:
+lakekeeper_data: lakekeeper
 	@echo "Setting up venv-spark4 and generating data..."
 	python3 -m venv .venv-spark4 && \
 	. .venv-spark4/bin/activate && \
 	python3 -m pip install -r scripts/requirements.txt && \
 	python3 -m scripts.data_generators.generate_data lakekeeper
-
-lakekeeper: lakekeeper_start lakekeeper_data

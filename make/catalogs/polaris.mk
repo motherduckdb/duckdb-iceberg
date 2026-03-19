@@ -25,7 +25,7 @@ polaris_stop:
 	@echo "Stopping Polaris server..."
 	cd .catalogs/polaris && ./gradlew --stop
 
-polaris_start: polaris_clone polaris_build polaris_stop
+polaris: polaris_clone polaris_build polaris_stop
 	$(call stop_active_catalog)
 	@echo "Starting Polaris server..."
 	cd .catalogs/polaris && nohup ./gradlew :polaris-server:run > polaris-server.log 2> polaris-error.log &
@@ -50,7 +50,7 @@ polaris_start: polaris_clone polaris_build polaris_stop
 	envsubst '$$POLARIS_CLIENT_ID $$POLARIS_CLIENT_SECRET' < test/configs/polaris.json.template > test/configs/polaris.json
 	$(call set_active_catalog,polaris)
 
-polaris_data:
+polaris_data: polaris
 	@echo "Setting up venv-spark4 and generating data..."
 	python3 -m venv .venv-spark4 && \
 	. .venv-spark4/bin/activate && \
@@ -59,5 +59,3 @@ polaris_data:
 	export POLARIS_CLIENT_ID=$$(cat tmp/polaris_client_id.txt) && \
 	export POLARIS_CLIENT_SECRET=$$(cat tmp/polaris_client_secret.txt) && \
 	python3 -m scripts.data_generators.generate_data polaris
-
-polaris: polaris_start polaris_data
