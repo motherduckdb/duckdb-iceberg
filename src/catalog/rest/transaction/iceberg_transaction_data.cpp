@@ -253,8 +253,8 @@ void IcebergTransactionData::TableAddAssertCurrentSchemaId() {
 	requirements.push_back(make_uniq<AssertCurrentSchemaIdRequirement>(table_info));
 }
 
-void IcebergTransactionData::TableAddAssertLastAssignedColumnFieldId() {
-	requirements.push_back(make_uniq<AssertLastAssignedColumnFieldIdRequirement>(table_info));
+void IcebergTransactionData::TableAddAssertLastAssignedFieldId() {
+	requirements.push_back(make_uniq<AssertLastAssignedFieldIdRequirement>(table_info));
 }
 
 void IcebergTransactionData::TableAddAssertLastAssignedPartitionId() {
