@@ -9,8 +9,10 @@ require iceberg
 
 require-env DUCKDB_ICEBERG_HAVE_GENERATED_DATA
 
+require-env SECRETS_CREATED_AND_CATALOG_ATTACHED
+
 statement ok
-create view scan as select * from ICEBERG_SCAN('__WORKING_DIRECTORY__/data/generated/iceberg/spark-local/default/truncate_partitioned_bigint');
+create view scan as select * from my_datalake.default.truncate_partitioned_bigint;
 
 query I
 select count(*) from scan;
