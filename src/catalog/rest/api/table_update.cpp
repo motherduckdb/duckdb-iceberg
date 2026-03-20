@@ -98,15 +98,14 @@ void AssertCurrentSchemaIdRequirement::CreateRequirement(DatabaseInstance &db, C
 	req.assert_current_schema_id.current_schema_id = current_schema_id;
 }
 
-AssertLastAssignedFieldIdRequirement::AssertLastAssignedFieldIdRequirement(
-    const IcebergTableInformation &table_info)
+AssertLastAssignedFieldIdRequirement::AssertLastAssignedFieldIdRequirement(const IcebergTableInformation &table_info)
     : IcebergTableRequirement(IcebergTableRequirementType::ASSERT_LAST_ASSIGNED_FIELD_ID, table_info) {
 	D_ASSERT(table_info.table_metadata.HasLastColumnId());
 	last_assigned_field_id = static_cast<int32_t>(table_info.table_metadata.GetLastColumnId());
 }
 
 void AssertLastAssignedFieldIdRequirement::CreateRequirement(DatabaseInstance &db, ClientContext &context,
-                                                                   IcebergCommitState &commit_state) {
+                                                             IcebergCommitState &commit_state) {
 	commit_state.table_change.requirements.push_back(rest_api_objects::TableRequirement());
 	auto &req = commit_state.table_change.requirements.back();
 	req.has_assert_last_assigned_field_id = true;
