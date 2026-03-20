@@ -191,7 +191,7 @@ static void ApplyPartitionConstants(const IcebergMultiFileList &multi_file_list,
 	// Get the metadata for this file
 	auto &reader = *reader_data.reader;
 	auto file_id = reader.file_list_idx.GetIndex();
-	auto &manifest_entry = multi_file_list.manifest_entries[file_id];
+	auto &manifest_entry = multi_file_list.GetManifestEntry(file_id);
 	auto &data_file = manifest_entry.data_file;
 
 	// Get the partition spec for this file
@@ -285,7 +285,7 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
 	const auto &multi_file_list = gstate.file_list.Cast<IcebergMultiFileList>();
 	auto &reader = *reader_data.reader;
 	auto file_id = reader.file_list_idx.GetIndex();
-	auto &manifest_entry = multi_file_list.manifest_entries[file_id];
+	auto &manifest_entry = multi_file_list.GetManifestEntry(file_id);
 
 	//! Collect all the equality delete ids needed
 	unordered_set<int32_t> equality_delete_ids;
@@ -327,7 +327,7 @@ void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, cons
 
 	{
 		lock_guard<mutex> guard(multi_file_list.lock);
-		const auto &manifest_entry = multi_file_list.manifest_entries[file_id];
+		const auto &manifest_entry = multi_file_list.GetManifestEntry(file_id);
 		const auto &data_file = manifest_entry.data_file;
 		// The path of the data file where this chunk was read from
 		const auto &file_path = data_file.file_path;
@@ -457,7 +457,7 @@ void IcebergMultiFileReader::FinalizeChunk(ClientContext &context, const MultiFi
 	D_ASSERT(global_state);
 	// Get the metadata for this file
 	auto file_id = reader.file_list_idx.GetIndex();
-	auto &manifest_entry = multi_file_list.manifest_entries[file_id];
+	auto &manifest_entry = multi_file_list.GetManifestEntry(file_id);
 
 	auto &local_columns = reader.columns;
 	ApplyEqualityDeletes(context, output_chunk, multi_file_list, manifest_entry, local_columns);
