@@ -30,9 +30,9 @@ namespace duckdb {
 IcebergCatalog::IcebergCatalog(AttachedDatabase &db_p, AccessMode access_mode,
                                unique_ptr<IcebergAuthorization> auth_handler, IcebergAttachOptions &attach_options,
                                const string &default_schema)
-    : Catalog(db_p), access_mode(access_mode), auth_handler(std::move(auth_handler)),
-      warehouse(attach_options.warehouse), uri(attach_options.endpoint), version("v1"), attach_options(attach_options),
-      default_schema(default_schema), schemas(*this), metadata_cache() {
+    : Catalog(db_p), access_mode(access_mode), auth_handler(std::move(auth_handler)), uri(attach_options.endpoint),
+      version("v1"), attach_options(attach_options), default_schema(default_schema),
+      warehouse(attach_options.warehouse), schemas(*this), metadata_cache() {
 }
 
 IcebergCatalog::~IcebergCatalog() = default;
