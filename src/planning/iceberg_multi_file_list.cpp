@@ -899,7 +899,6 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 				}
 				case IcebergManifestContentType::DELETE: {
 					transaction_delete_manifests.push_back(manifest_list_entry);
-					delete_manifests.push_back(transaction_delete_manifests.back());
 					break;
 				}
 				default:
