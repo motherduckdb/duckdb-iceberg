@@ -36,10 +36,10 @@ void IcebergTransactionData::CacheExistingManifestList(lock_guard<mutex> &guard,
 
 	auto &manifest_list_path = snapshot.manifest_list;
 	//! Read the manifest list
-	auto scan = AvroScan::ScanManifestList(snapshot, metadata, context, manifest_list_path);
+	auto scan = AvroScan::ScanManifestList(snapshot, metadata, context, manifest_list_path, existing_manifest_list);
 	auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
 	while (!manifest_list_reader->Finished()) {
-		manifest_list_reader->Read(STANDARD_VECTOR_SIZE, existing_manifest_list);
+		manifest_list_reader->Read();
 	}
 
 	if (metadata.iceberg_version < 3) {

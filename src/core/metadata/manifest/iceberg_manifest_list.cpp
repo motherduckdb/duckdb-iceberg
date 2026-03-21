@@ -476,36 +476,20 @@ unique_ptr<IcebergManifestList> IcebergManifestList::Load(const string &iceberg_
 	                                   : snapshot.manifest_list;
 
 	//! Read the entire manifest list, producing 'manifest_file' items
-	auto scan = AvroScan::ScanManifestList(snapshot, metadata, context, manifest_list_full_path);
+	auto scan = AvroScan::ScanManifestList(snapshot, metadata, context, manifest_list_full_path, ret->manifest_entries);
 	auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
 
-	vector<IcebergManifestListEntry> manifest_files;
 	while (!manifest_list_reader->Finished()) {
-		manifest_list_reader->Read(STANDARD_VECTOR_SIZE, manifest_files);
+		manifest_list_reader->Read();
 	}
 
 	//! Read all manifest files, producing 'manifest_entry' items
-	auto manifest_scan = AvroScan::ScanManifest(snapshot, manifest_files, options, fs, iceberg_path, metadata, context);
-	auto manifest_file_reader = make_uniq<manifest_file::ManifestReader>(*manifest_scan, false);
+	auto manifest_scan =
+	    AvroScan::ScanManifest(snapshot, ret->manifest_entries, options, fs, iceberg_path, metadata, context);
+	auto manifest_file_reader = make_uniq<manifest_file::ManifestReader>(*manifest_scan);
 
-	vector<IcebergManifestEntry> manifest_entries;
 	while (!manifest_file_reader->Finished()) {
-		manifest_file_reader->Read(STANDARD_VECTOR_SIZE, manifest_entries);
-	}
-
-	//! Create the table entries, then populate them
-	unordered_map<string, idx_t> manifest_file_idx_map;
-	for (idx_t i = 0; i < manifest_files.size(); i++) {
-		auto &manifest_file = manifest_files[i];
-		manifest_file_idx_map[manifest_file.file.manifest_path] = i;
-		ret->manifest_entries.push_back(std::move(manifest_file));
-	}
-
-	auto &entries = ret->manifest_entries;
-	for (auto &manifest_entry : manifest_entries) {
-		auto manifest_file_idx = manifest_file_idx_map[manifest_entry.manifest_file_path];
-		auto &manifest = entries[manifest_file_idx];
-		manifest.manifest_entries.push_back(std::move(manifest_entry));
+		manifest_file_reader->Read();
 	}
 	return ret;
 }

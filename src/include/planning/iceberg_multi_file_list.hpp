@@ -25,23 +25,22 @@
 #include "core/deletes/iceberg_positional_delete.hpp"
 #include "core/deletes/iceberg_delete_data.hpp"
 #include "planning/snapshot/iceberg_scan_info.hpp"
+#include "planning/iceberg_manifest_read_state.hpp"
 
 namespace duckdb {
 
-struct IcebergManifestReadingState {
+struct IcebergManifestScanningState {
 public:
-	IcebergManifestReadingState(ClientContext &context, unique_ptr<AvroScan> scan, mutex &lock,
-	                            vector<IcebergManifestEntry> &entries)
-	    : context(context), executor(context), scan(std::move(scan)), lock(lock), entries(entries),
-	      in_progress_tasks(0) {
+	IcebergManifestScanningState(ClientContext &context, unique_ptr<AvroScan> scan,
+	                             vector<IcebergManifestListEntry> &list_entries)
+	    : context(context), executor(context), scan(std::move(scan)), list_entries(list_entries), in_progress_tasks(0) {
 	}
 
 public:
 	ClientContext &context;
 	TaskExecutor executor;
 	unique_ptr<AvroScan> scan;
-	mutex &lock;
-	vector<IcebergManifestEntry> &entries;
+	vector<IcebergManifestListEntry> &list_entries;
 	atomic<idx_t> in_progress_tasks;
 };
 
@@ -79,6 +78,7 @@ public:
 	vector<reference<const IcebergEqualityDeleteRow>>
 	GetEqualityDeletesForFile(const IcebergManifestEntry &manifest_entry) const;
 	void GetStatistics(vector<PartitionStatistics> &result) const;
+	const IcebergManifestEntry &GetManifestEntry(idx_t file_id) const;
 
 public:
 	//! MultiFileList API
@@ -112,7 +112,7 @@ protected:
 	                                                        const ColumnIndex &column_index) const;
 
 private:
-	bool PopulateEntryBuffer(lock_guard<mutex> &guard) const;
+	optional_ptr<ManifestReadBatch> TryGetNextBatch(lock_guard<mutex> &guard) const;
 	void FinishScanTasks(lock_guard<mutex> &guard) const;
 
 public:
@@ -129,41 +129,46 @@ public:
 	vector<LogicalType> types;
 	TableFilterSet table_filters;
 
-	mutable mutex entry_lock;
-	mutable vector<IcebergManifestEntry> manifest_entries;
-	mutable vector<IcebergManifestEntry> delete_manifest_entries;
+	mutable ManifestEntryReadState read_state;
+
 	//! For each file that has a delete file, the state for processing that/those delete file(s)
 	mutable case_insensitive_map_t<shared_ptr<IcebergDeleteData>> positional_delete_data;
 	//! All equality deletes with sequence numbers higher than that of the data_file apply to that data_file
 	mutable map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> equality_delete_data;
-
-	//! State used for lazy-loading the data files
-	mutable unique_ptr<manifest_file::ManifestReader> data_manifest_reader;
-	mutable idx_t manifest_entry_idx = 0;
-	//! The data files of the manifest file that we last scanned
-	mutable vector<IcebergManifestEntry> current_manifest_entries;
-	mutable vector<IcebergManifestListEntry> data_manifests;
-	mutable vector<reference<IcebergManifestListEntry>> transaction_data_manifests;
-	mutable idx_t transaction_data_idx = 0;
-	mutable unique_ptr<IcebergManifestReadingState> manifest_read_state;
-	mutable atomic<bool> finished;
-	mutable atomic<bool> has_buffered_entries;
-
-	//! State used for pre-processing delete files
-	mutable unique_ptr<AvroScan> delete_manifest_scan;
-	mutable unique_ptr<manifest_file::ManifestReader> delete_manifest_reader;
-	mutable vector<IcebergManifestListEntry> delete_manifests;
-	mutable vector<reference<IcebergManifestListEntry>> transaction_delete_manifests;
-	mutable idx_t transaction_delete_idx = 0;
 
 	//! FIXME: this is only used in 'FinalizeBind',
 	//! shouldn't this be used to protect all the variable accesses that are accessed there while the lock is held?
 	mutable mutex delete_lock;
 	//! The columns needed by the equality deletes that aren't referenced by the scan
 	mutable unordered_map<int32_t, column_t> equality_id_to_result_id;
+	mutable idx_t transaction_delete_idx = 0;
 
 	mutable bool initialized = false;
 	const IcebergOptions &options;
+
+public:
+	//! References to items inside the 'manifest_entries' of the list entries in the 'delete_manifests'
+	mutable vector<reference<const IcebergManifestEntry>> delete_manifest_entries;
+	//! Combination of committed + transaction delete manifests
+	mutable vector<reference<IcebergManifestListEntry>> delete_manifests;
+	//! Scanned delete manifests of the snapshot being scanned
+	mutable unique_ptr<AvroScan> delete_manifest_scan;
+	mutable unique_ptr<manifest_file::ManifestReader> delete_manifest_reader;
+	mutable vector<IcebergManifestListEntry> committed_delete_manifests;
+	//! Cached, uncommitted delete manifests created by earlier statements in the transaction
+	mutable vector<reference<IcebergManifestListEntry>> transaction_delete_manifests;
+
+private:
+	//! References to items inside the 'manifest_entries' of the list entries in the 'data_manifests'
+	mutable vector<reference<const IcebergManifestEntry>> data_manifest_entries;
+	//! Combination of committed + transaction data manifests
+	mutable vector<reference<IcebergManifestListEntry>> data_manifests;
+	//! Scanned data manifests of the snapshot being scanned
+	mutable unique_ptr<IcebergManifestScanningState> data_manifest_read_state;
+	mutable unique_ptr<manifest_file::ManifestReader> data_manifest_reader;
+	mutable vector<IcebergManifestListEntry> committed_data_manifests;
+	//! Cached, uncommitted data manifests created by earlier statements in the transaction
+	mutable vector<reference<IcebergManifestListEntry>> transaction_data_manifests;
 };
 
 } // namespace duckdb
