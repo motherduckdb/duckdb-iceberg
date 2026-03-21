@@ -25,46 +25,21 @@
 #include "core/deletes/iceberg_positional_delete.hpp"
 #include "core/deletes/iceberg_delete_data.hpp"
 #include "planning/snapshot/iceberg_scan_info.hpp"
+#include "planning/iceberg_manifest_read_state.hpp"
 
 namespace duckdb {
 
-//! A batch of scanned/cached IcebergManifestEntry items to read
-struct ManifestReadBatch {
-	idx_t manifest_list_entry_idx;
-	idx_t start_index;
-	idx_t end_index;
-};
-
-struct ManifestEntryReadState {
-public:
-	void PushBatch(ManifestReadBatch &&batch);
-	bool HasCurrentBatch() const;
-	optional_ptr<ManifestReadBatch> GetCurrentBatch();
-	void FinishBatch();
-
-private:
-	bool has_batch = false;
-	ManifestReadBatch current_batch;
-
-private:
-	//! Lock guarding the batches against concurrent access
-	mutex lock;
-	queue<ManifestReadBatch> batches;
-};
-
 struct IcebergManifestScanningState {
 public:
-	IcebergManifestScanningState(ClientContext &context, unique_ptr<AvroScan> scan, ManifestEntryReadState &read_state,
+	IcebergManifestScanningState(ClientContext &context, unique_ptr<AvroScan> scan,
 	                             vector<IcebergManifestListEntry> &list_entries)
-	    : context(context), executor(context), scan(std::move(scan)), read_state(read_state),
-	      list_entries(list_entries) {
+	    : context(context), executor(context), scan(std::move(scan)), list_entries(list_entries), in_progress_tasks(0) {
 	}
 
 public:
 	ClientContext &context;
 	TaskExecutor executor;
 	unique_ptr<AvroScan> scan;
-	ManifestEntryReadState &read_state;
 	vector<IcebergManifestListEntry> &list_entries;
 	atomic<idx_t> in_progress_tasks;
 };

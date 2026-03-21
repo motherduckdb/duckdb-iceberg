@@ -45,7 +45,7 @@ IcebergManifestListEntry IcebergAddSnapshot::ConstructManifest(CopyFunction &avr
 	auto &snapshot = *commit_state.latest_snapshot;
 	auto manifest_scan =
 	    AvroScan::ScanManifest(snapshot, manifest_files, options, fs, "", table_metadata, commit_state.context);
-	auto manifest_file_reader = make_uniq<manifest_file::ManifestReader>(*manifest_scan, true);
+	auto manifest_file_reader = make_uniq<manifest_file::ManifestReader>(*manifest_scan);
 
 	auto manifest_file_uuid = UUID::ToString(UUID::GenerateRandomUUID());
 	auto manifest_file_path = fs.JoinPath(table_metadata.GetMetadataPath(fs), manifest_file_uuid + "-m0.avro");
@@ -53,7 +53,7 @@ IcebergManifestListEntry IcebergAddSnapshot::ConstructManifest(CopyFunction &avr
 	auto &rewritten_list_entry = manifest_files[0];
 	auto &manifest_entries = rewritten_list_entry.manifest_entries;
 	while (!manifest_file_reader->Finished()) {
-		manifest_file_reader->Read(STANDARD_VECTOR_SIZE, manifest_entries);
+		manifest_file_reader->Read();
 	}
 	auto &rewritten_manifest_file = rewritten_list_entry.file;
 	rewritten_manifest_file.manifest_path = manifest_file_path;

@@ -7,30 +7,17 @@ namespace duckdb {
 
 namespace manifest_file {
 
-ManifestReader::ManifestReader(const AvroScan &scan, bool skip_deleted)
-    : BaseManifestReader(scan), skip_deleted(skip_deleted) {
+ManifestReader::ManifestReader(const AvroScan &scan) : BaseManifestReader(scan) {
 }
 
 ManifestReader::~ManifestReader() {
 }
 
-idx_t ManifestReader::Read(idx_t count, vector<IcebergManifestEntry> &result) {
+void ManifestReader::Read() {
 	if (finished) {
-		return 0;
+		return;
 	}
-
-	idx_t total_read = 0;
-	idx_t total_added = 0;
-	while (total_read < count && !finished) {
-		auto tuples = ScanInternal(count - total_read);
-		if (finished) {
-			break;
-		}
-		total_added += ReadChunk(offset, tuples, result);
-		offset += tuples;
-		total_read += tuples;
-	}
-	return total_added;
+	ScanInternal();
 }
 
 static unordered_map<int32_t, Value> GetBounds(Vector &bounds, idx_t index) {
@@ -103,10 +90,9 @@ static vector<int64_t> GetSplitOffsets(Vector &split_offsets, idx_t index) {
 	return GetListTemplated<int64_t>(split_offsets, index);
 }
 
-idx_t ManifestReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergManifestEntry> &result) {
-	D_ASSERT(offset < chunk.size());
-	D_ASSERT(offset + count <= chunk.size());
-	auto &scan_info = GetScanInfo().Cast<IcebergManifestFileScanInfo>();
+void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &partition_field_id_to_type,
+                               idx_t iceberg_version, vector<IcebergManifestEntry> &result) {
+	idx_t count = chunk.size();
 
 	//! NOTE: the order of these columns is defined by the order that they are produced in BuildManifestSchema
 	//! see `iceberg_avro_multi_file_reader.cpp`
@@ -194,24 +180,22 @@ idx_t ManifestReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergManifes
 	vector<std::pair<int32_t, reference<Vector>>> partition_vectors;
 	if (partition.GetType().id() != LogicalTypeId::SQLNULL) {
 		auto &partition_children = StructVector::GetEntries(partition);
-		D_ASSERT(partition_children.size() == scan_info.partition_field_id_to_type.size());
+		D_ASSERT(partition_children.size() == partition_field_id_to_type.size());
 		idx_t child_index = 0;
-		for (auto &it : scan_info.partition_field_id_to_type) {
+		for (auto &it : partition_field_id_to_type) {
 			partition_vectors.emplace_back(it.first, *partition_children[child_index++]);
 		}
 	}
 
-	idx_t produced = 0;
 	for (idx_t i = 0; i < count; i++) {
-		idx_t index = i + offset;
-
+		idx_t index = i;
 		IcebergManifestEntry entry;
 
 		entry.status = (IcebergManifestEntryStatusType)status_data[index];
-		if (this->skip_deleted && entry.status == IcebergManifestEntryStatusType::DELETED) {
-			//! Skip this entry, we don't care about deleted entries
-			continue;
-		}
+		// if (this->skip_deleted && entry.status == IcebergManifestEntryStatusType::DELETED) {
+		//	//! Skip this entry, we don't care about deleted entries
+		//	continue;
+		//}
 
 		auto &data_file = entry.data_file;
 		data_file.file_path = file_path_data[index].GetString();
@@ -294,16 +278,13 @@ idx_t ManifestReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergManifes
 			auto &partition_vector = it.second.get();
 
 			DataFilePartitionInfo info;
-			auto name_it = partition_field_names.find(field_id);
-			info.name = name_it != partition_field_names.end() ? name_it->second : std::to_string(field_id);
+			info.name = std::to_string(field_id);
 			info.field_id = static_cast<uint64_t>(field_id);
 			info.value = partition_vector.GetValue(index);
 			data_file.partition_info.push_back(std::move(info));
 		}
-		produced++;
 		result.push_back(entry);
 	}
-	return produced;
 }
 
 } // namespace manifest_file
