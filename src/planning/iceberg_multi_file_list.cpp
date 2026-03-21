@@ -376,7 +376,7 @@ void IcebergMultiFileList::GetStatistics(vector<PartitionStatistics> &result) co
 	}
 
 	if (!transaction_delete_manifests.empty() || !delete_manifests.empty()) {
-		//! if exist delete_manifests , return;
+		//! if exist delete_manifests, return;
 		return;
 	}
 
@@ -385,13 +385,6 @@ void IcebergMultiFileList::GetStatistics(vector<PartitionStatistics> &result) co
 		auto &manifest = data_manifests[i].get().file;
 		count += manifest.existing_rows_count;
 		count += manifest.added_rows_count;
-	}
-
-	for (idx_t i = 0; i < transaction_data_manifests.size(); i++) {
-		auto files = transaction_data_manifests[i].get().manifest_entries;
-		for (idx_t j = 0; j < files.size(); j++) {
-			count += files[j].data_file.record_count;
-		}
 	}
 
 	PartitionStatistics partition_stats;
