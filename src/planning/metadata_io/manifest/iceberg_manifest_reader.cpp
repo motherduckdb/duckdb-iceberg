@@ -192,10 +192,6 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 		IcebergManifestEntry entry;
 
 		entry.status = (IcebergManifestEntryStatusType)status_data[index];
-		// if (this->skip_deleted && entry.status == IcebergManifestEntryStatusType::DELETED) {
-		//	//! Skip this entry, we don't care about deleted entries
-		//	continue;
-		//}
 
 		auto &data_file = entry.data_file;
 		data_file.file_path = file_path_data[index].GetString();
