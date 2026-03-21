@@ -26,6 +26,7 @@
 #include "core/deletes/iceberg_delete_data.hpp"
 #include "planning/snapshot/iceberg_scan_info.hpp"
 #include "planning/iceberg_manifest_read_state.hpp"
+#include "planning/metadata_io/manifest/bound_iceberg_manifest_entry.hpp"
 
 namespace duckdb {
 
@@ -43,8 +44,6 @@ public:
 	vector<IcebergManifestListEntry> &list_entries;
 	atomic<idx_t> in_progress_tasks;
 };
-
-enum class IcebergDataFileType : uint8_t { DATA, DELETE };
 
 struct IcebergMultiFileList : public MultiFileList {
 public:
@@ -76,9 +75,9 @@ public:
 	void ProcessDeletes(const vector<MultiFileColumnDefinition> &global_columns,
 	                    const vector<ColumnIndex> &column_indexes) const;
 	vector<reference<const IcebergEqualityDeleteRow>>
-	GetEqualityDeletesForFile(const IcebergManifestEntry &manifest_entry) const;
+	GetEqualityDeletesForFile(const BoundIcebergManifestEntry &manifest_entry) const;
 	void GetStatistics(vector<PartitionStatistics> &result) const;
-	const IcebergManifestEntry &GetManifestEntry(idx_t file_id) const;
+	const BoundIcebergManifestEntry &GetManifestEntry(idx_t file_id) const;
 
 public:
 	//! MultiFileList API
@@ -101,12 +100,13 @@ protected:
 
 protected:
 	bool ManifestMatchesFilter(const IcebergManifestFile &manifest) const;
-	bool FileMatchesFilter(const IcebergManifestEntry &file, IcebergDataFileType file_type) const;
+	bool FileMatchesFilter(const IcebergManifestFile &manifest_file, const IcebergManifestEntry &manifest_entry,
+	                       IcebergManifestContentType file_type) const;
 	// TODO: How to guarantee we only call this after the filter pushdown?
 	void InitializeFiles(lock_guard<mutex> &guard) const;
 
 	//! NOTE: this requires the lock because it modifies the 'data_files' vector, potentially invalidating references
-	optional_ptr<const IcebergManifestEntry> GetDataFile(idx_t file_id, lock_guard<mutex> &guard) const;
+	optional_ptr<const BoundIcebergManifestEntry> GetDataFile(idx_t file_id, lock_guard<mutex> &guard) const;
 
 	optional_ptr<const TableFilter> GetFilterForColumnIndex(const TableFilterSet &filter_set,
 	                                                        const ColumnIndex &column_index) const;
@@ -148,7 +148,7 @@ public:
 
 public:
 	//! References to items inside the 'manifest_entries' of the list entries in the 'delete_manifests'
-	mutable vector<reference<const IcebergManifestEntry>> delete_manifest_entries;
+	mutable vector<BoundIcebergManifestEntry> delete_manifest_entries;
 	//! Combination of committed + transaction delete manifests
 	mutable vector<reference<IcebergManifestListEntry>> delete_manifests;
 	//! Scanned delete manifests of the snapshot being scanned
@@ -160,7 +160,7 @@ public:
 
 private:
 	//! References to items inside the 'manifest_entries' of the list entries in the 'data_manifests'
-	mutable vector<reference<const IcebergManifestEntry>> data_manifest_entries;
+	mutable vector<BoundIcebergManifestEntry> data_manifest_entries;
 	//! Combination of committed + transaction data manifests
 	mutable vector<reference<IcebergManifestListEntry>> data_manifests;
 	//! Scanned data manifests of the snapshot being scanned
