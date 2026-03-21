@@ -220,6 +220,38 @@ Value IcebergDataFile::ToValue(const IcebergTableMetadata &table_metadata, const
 	return Value::STRUCT(type, children);
 }
 
+void IcebergManifestEntry::SetSequenceNumber(sequence_number_t value) {
+	has_sequence_number = true;
+	sequence_number = value;
+}
+
+void IcebergManifestEntry::SetFileSequenceNumber(sequence_number_t value) {
+	has_file_sequence_number = true;
+	file_sequence_number = value;
+}
+
+sequence_number_t IcebergManifestEntry::GetSequenceNumber(const IcebergManifestFile &manifest_file) const {
+	if (!has_sequence_number) {
+		if (status != IcebergManifestEntryStatusType::ADDED) {
+			throw InvalidConfigurationException(
+			    "'manifest_entry.sequence_number' is only allowed to be NULL for ADDED entries");
+		}
+		return manifest_file.sequence_number;
+	}
+	return sequence_number;
+}
+
+sequence_number_t IcebergManifestEntry::GetFileSequenceNumber(const IcebergManifestFile &manifest_file) const {
+	if (!has_file_sequence_number) {
+		if (status != IcebergManifestEntryStatusType::ADDED) {
+			throw InvalidConfigurationException(
+			    "'manifest_entry.file_sequence_number' is only allowed to be NULL for ADDED entries");
+		}
+		return manifest_file.sequence_number;
+	}
+	return file_sequence_number;
+}
+
 namespace manifest_file {
 
 static LogicalType PartitionStructType(const vector<IcebergManifestEntry> &entries) {
@@ -257,11 +289,12 @@ static LogicalType PartitionStructType(const vector<IcebergManifestEntry> &entri
 	return LogicalType::STRUCT(children);
 }
 
-idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const string &path,
+idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManifestFile &manifest_file,
                   const vector<IcebergManifestEntry> &manifest_entries, CopyFunction &copy, DatabaseInstance &db,
                   ClientContext &context) {
 	D_ASSERT(!manifest_entries.empty());
 	auto &allocator = db.GetBufferManager().GetBufferAllocator();
+	auto &path = manifest_file.manifest_path;
 
 	//! We need to create an iceberg-schema for the manifest file, written in the metadata of the Avro file.
 	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
@@ -665,12 +698,12 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const string &path
 		// snapshot_id: long
 		chunk.SetValue(col_idx++, i, Value::BIGINT(manifest_entry.snapshot_id));
 		// sequence_number: long
-		chunk.SetValue(col_idx++, i, Value::BIGINT(manifest_entry.sequence_number));
+		chunk.SetValue(col_idx++, i, Value::BIGINT(manifest_entry.GetSequenceNumber(manifest_file)));
 		// file_sequence_number: long
 		if (manifest_entry.status == IcebergManifestEntryStatusType::ADDED) {
 			chunk.SetValue(col_idx++, i, Value(LogicalType::BIGINT));
 		} else {
-			chunk.SetValue(col_idx++, i, Value::BIGINT(manifest_entry.file_sequence_number));
+			chunk.SetValue(col_idx++, i, Value::BIGINT(manifest_entry.GetFileSequenceNumber(manifest_file)));
 		}
 
 		auto &data_file = manifest_entry.data_file;

@@ -67,6 +67,10 @@ IcebergManifestListEntry IcebergAddSnapshot::ConstructManifest(CopyFunction &avr
 	bool removed_any_entries = false;
 	idx_t handled_entries = 0;
 	for (auto &manifest_entry : manifest_entries) {
+		auto sequence_number = manifest_entry.GetSequenceNumber(rewritten_manifest_file);
+		auto file_sequence_number = manifest_entry.GetFileSequenceNumber(rewritten_manifest_file);
+		manifest_entry.SetSequenceNumber(sequence_number);
+		manifest_entry.SetFileSequenceNumber(file_sequence_number);
 		if (manifest_entry.status == IcebergManifestEntryStatusType::ADDED) {
 			manifest_entry.status = IcebergManifestEntryStatusType::EXISTING;
 		}
@@ -109,8 +113,8 @@ IcebergManifestListEntry IcebergAddSnapshot::ConstructManifest(CopyFunction &avr
 	}
 
 	//! Finally overwrite the input 'manifest_file' with our edited copy
-	auto manifest_length = manifest_file::WriteToFile(table_metadata, manifest_file_path, manifest_entries, avro_copy,
-	                                                  db, commit_state.context);
+	auto manifest_length = manifest_file::WriteToFile(table_metadata, rewritten_manifest_file, manifest_entries,
+	                                                  avro_copy, db, commit_state.context);
 	rewritten_manifest_file.manifest_length = manifest_length;
 	return std::move(rewritten_list_entry);
 }
@@ -149,7 +153,7 @@ static IcebergManifestListEntry WriteManifestListEntry(const IcebergTableInforma
                                                        const IcebergManifestListEntry &list_entry,
                                                        CopyFunction &avro_copy, DatabaseInstance &db,
                                                        ClientContext &context) {
-	auto manifest_length = manifest_file::WriteToFile(table_info.table_metadata, list_entry.file.manifest_path,
+	auto manifest_length = manifest_file::WriteToFile(table_info.table_metadata, list_entry.file,
 	                                                  list_entry.manifest_entries, avro_copy, db, context);
 	IcebergManifestListEntry new_entry(list_entry.file);
 	new_entry.manifest_entries = list_entry.manifest_entries;

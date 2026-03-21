@@ -16,6 +16,7 @@
 namespace duckdb {
 
 struct IcebergTableInformation;
+struct IcebergManifestFile;
 
 using sequence_number_t = int64_t;
 
@@ -88,16 +89,16 @@ public:
 struct IcebergManifestEntry {
 public:
 	IcebergManifestEntryStatusType status;
-	//! ----- Data File Struct ------
-	//! Inherited from the 'manifest_file' if NULL and 'status == EXISTING'
-	sequence_number_t sequence_number = 0xDEADBEEF;
-	sequence_number_t file_sequence_number = 0xDEADBEEF;
 	bool has_snapshot_id = false;
 	int64_t snapshot_id;
-	//! Inherited from the 'manifest_file'
-	int32_t partition_spec_id = 0xDEADBEEF;
 	string manifest_file_path;
 	IcebergDataFile data_file;
+
+public:
+	void SetSequenceNumber(sequence_number_t value);
+	void SetFileSequenceNumber(sequence_number_t value);
+	sequence_number_t GetSequenceNumber(const IcebergManifestFile &manifest_file) const;
+	sequence_number_t GetFileSequenceNumber(const IcebergManifestFile &manifest_file) const;
 
 public:
 	static vector<LogicalType> Types() {
@@ -135,6 +136,13 @@ public:
 	static vector<string> Names() {
 		return {"status", "content", "file_path", "file_format", "record_count"};
 	}
+
+private:
+	bool has_sequence_number = false;
+	sequence_number_t sequence_number;
+
+	bool has_file_sequence_number = false;
+	sequence_number_t file_sequence_number;
 };
 
 struct IcebergManifestListEntry;
@@ -186,7 +194,7 @@ static constexpr const int32_t REFERENCED_DATA_FILE = 143;
 static constexpr const int32_t CONTENT_OFFSET = 144;
 static constexpr const int32_t CONTENT_SIZE_IN_BYTES = 145;
 
-idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const string &path,
+idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManifestFile &manifest_file,
                   const vector<IcebergManifestEntry> &entries, CopyFunction &copy_function, DatabaseInstance &db,
                   ClientContext &context);
 
