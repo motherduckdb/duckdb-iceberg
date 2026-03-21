@@ -645,7 +645,8 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 
 		auto &current_batch = *batch;
 		auto &manifest_entries = data_manifests[current_batch.manifest_list_entry_idx].get().manifest_entries;
-		for (; current_batch.start_index < current_batch.end_index; current_batch.start_index++) {
+		for (; current_batch.start_index < current_batch.end_index && file_id >= data_manifest_entries.size();
+		     current_batch.start_index++) {
 			auto &manifest_entry = manifest_entries[current_batch.start_index];
 			if (manifest_entry.status == IcebergManifestEntryStatusType::DELETED) {
 				continue;
@@ -667,9 +668,7 @@ optional_ptr<const IcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t
 			}
 
 			data_manifest_entries.push_back(manifest_entry);
-			break;
 		}
-		read_state.FinishBatch();
 		if (current_batch.start_index >= current_batch.end_index) {
 			read_state.FinishBatch();
 		}
