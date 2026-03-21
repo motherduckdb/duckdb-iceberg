@@ -81,7 +81,6 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 		}
 
 		//! FIXME: these should be inherited - left NULL - for newly added data
-		manifest_entry.SetSequenceNumber(manifest_file.sequence_number);
 		manifest_entry.snapshot_id = snapshot_id;
 		if (!manifest_file.has_min_sequence_number ||
 		    manifest_file.sequence_number < manifest_file.min_sequence_number) {

@@ -67,6 +67,10 @@ IcebergManifestListEntry IcebergAddSnapshot::ConstructManifest(CopyFunction &avr
 	bool removed_any_entries = false;
 	idx_t handled_entries = 0;
 	for (auto &manifest_entry : manifest_entries) {
+		auto sequence_number = manifest_entry.GetSequenceNumber(rewritten_manifest_file);
+		auto file_sequence_number = manifest_entry.GetFileSequenceNumber(rewritten_manifest_file);
+		manifest_entry.SetSequenceNumber(sequence_number);
+		manifest_entry.SetFileSequenceNumber(file_sequence_number);
 		if (manifest_entry.status == IcebergManifestEntryStatusType::ADDED) {
 			manifest_entry.status = IcebergManifestEntryStatusType::EXISTING;
 		}
