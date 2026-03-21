@@ -375,7 +375,7 @@ void IcebergMultiFileList::GetStatistics(vector<PartitionStatistics> &result) co
 		return;
 	}
 
-	if (!transaction_delete_manifests.empty() || !delete_manifests.empty()) {
+	if (!delete_manifests.empty()) {
 		//! if exist delete_manifests, return;
 		return;
 	}
