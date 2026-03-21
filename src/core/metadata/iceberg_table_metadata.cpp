@@ -260,11 +260,11 @@ string IcebergTableMetadata::GetMetaDataPath(ClientContext &context, const strin
 	return GuessTableVersion(meta_path, fs, options);
 }
 
-bool IcebergTableMetadata::HasLastAssignedColumnFieldId() const {
+bool IcebergTableMetadata::HasLastColumnId() const {
 	return last_column_id.IsValid();
 }
 
-idx_t IcebergTableMetadata::GetLastAssignedColumnFieldId() const {
+idx_t IcebergTableMetadata::GetLastColumnId() const {
 	return last_column_id.GetIndex();
 }
 
