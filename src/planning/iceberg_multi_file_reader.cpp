@@ -192,12 +192,14 @@ static void ApplyPartitionConstants(const IcebergMultiFileList &multi_file_list,
 	auto &reader = *reader_data.reader;
 	auto file_id = reader.file_list_idx.GetIndex();
 	auto &bound_manifest_entry = multi_file_list.GetManifestEntry(file_id);
+	auto &manifest_file =
+	    multi_file_list.GetManifestFileForEntry(bound_manifest_entry, IcebergManifestContentType::DATA);
 	auto &manifest_entry = bound_manifest_entry.entry;
 	auto &data_file = manifest_entry.data_file;
 
 	// Get the partition spec for this file
 	auto &partition_specs = multi_file_list.GetMetadata().partition_specs;
-	auto spec_id = manifest_entry.partition_spec_id;
+	auto spec_id = manifest_file.partition_spec_id;
 	auto partition_spec_it = partition_specs.find(spec_id);
 	if (partition_spec_it == partition_specs.end()) {
 		throw InvalidConfigurationException("'partition_spec_id' %d doesn't exist in the metadata", spec_id);

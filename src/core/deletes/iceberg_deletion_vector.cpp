@@ -132,7 +132,8 @@ shared_ptr<IcebergDeletionVectorData> IcebergDeletionVectorData::FromBlob(const 
 	return result_p;
 }
 
-void IcebergMultiFileList::ScanPuffinFile(const IcebergManifestEntry &entry) const {
+void IcebergMultiFileList::ScanPuffinFile(const BoundIcebergManifestEntry &bound_entry) const {
+	auto &entry = bound_entry.entry;
 	auto &data_file = entry.data_file;
 	auto &table_metadata = GetMetadata();
 	auto iceberg_version = table_metadata.iceberg_version;

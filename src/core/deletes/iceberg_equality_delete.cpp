@@ -39,11 +39,13 @@ static void ColumnsReferencedByEqualityIds(DataChunk &source, DataChunk &result,
 	result.ReferenceColumns(source, column_ids);
 }
 
-void IcebergMultiFileList::ScanEqualityDeleteFile(const IcebergManifestEntry &manifest_entry, DataChunk &source,
-                                                  vector<MultiFileColumnDefinition> &local_columns,
+void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntry &bound_manifest_entry,
+                                                  DataChunk &source, vector<MultiFileColumnDefinition> &local_columns,
                                                   const vector<MultiFileColumnDefinition> &global_columns,
                                                   const vector<ColumnIndex> &column_indexes) const {
+	auto &manifest_entry = bound_manifest_entry.entry;
 	auto &data_file = manifest_entry.data_file;
+	auto &manifest_file = GetManifestFileForEntry(bound_manifest_entry, IcebergManifestContentType::DELETE);
 	D_ASSERT(!data_file.equality_ids.empty());
 	D_ASSERT(source.ColumnCount() == local_columns.size());
 
@@ -55,13 +57,11 @@ void IcebergMultiFileList::ScanEqualityDeleteFile(const IcebergManifestEntry &ma
 	DataChunk result;
 	ColumnsReferencedByEqualityIds(source, result, local_columns, data_file.equality_ids);
 
+	const auto sequence_number = manifest_entry.GetSequenceNumber(manifest_file);
 	//! Get or create the equality delete data for this sequence number
-	auto it = equality_delete_data.find(manifest_entry.sequence_number);
+	auto it = equality_delete_data.find(sequence_number);
 	if (it == equality_delete_data.end()) {
-		it = equality_delete_data
-		         .emplace(manifest_entry.sequence_number,
-		                  make_uniq<IcebergEqualityDeleteData>(manifest_entry.sequence_number))
-		         .first;
+		it = equality_delete_data.emplace(sequence_number, make_uniq<IcebergEqualityDeleteData>(sequence_number)).first;
 	}
 	auto &deletes = *it->second;
 
@@ -95,7 +95,7 @@ void IcebergMultiFileList::ScanEqualityDeleteFile(const IcebergManifestEntry &ma
 		auto result_id = equality_id_to_result_id.emplace(field_id, new_result_id).first->second;
 		global_id_to_result_id[global_column_id] = result_id;
 	}
-	deletes.files.emplace_back(data_file.partition_info, manifest_entry.partition_spec_id);
+	deletes.files.emplace_back(data_file.partition_info, manifest_file.partition_spec_id);
 	auto &rows = deletes.files.back().rows;
 	rows.resize(count);
 	D_ASSERT(result.ColumnCount() == data_file.equality_ids.size());

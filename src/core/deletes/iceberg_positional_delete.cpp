@@ -26,7 +26,9 @@ TryGetOrCreate(case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &deletes, c
 	return reinterpret_cast<IcebergPositionalDeleteData &>(*it->second);
 }
 
-void IcebergMultiFileList::ScanPositionalDeleteFile(const IcebergManifestEntry &entry, DataChunk &result) const {
+void IcebergMultiFileList::ScanPositionalDeleteFile(const BoundIcebergManifestEntry &bound_entry,
+                                                    DataChunk &result) const {
+	auto &entry = bound_entry.entry;
 	//! FIXME: might want to check the 'columns' of the 'reader' to check, field-ids are:
 	auto names = FlatVector::GetData<string_t>(result.data[0]);  //! 2147483546
 	auto row_ids = FlatVector::GetData<int64_t>(result.data[1]); //! 2147483545

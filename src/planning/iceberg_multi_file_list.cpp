@@ -369,6 +369,12 @@ const BoundIcebergManifestEntry &IcebergMultiFileList::GetManifestEntry(idx_t fi
 	return data_manifest_entries[file_id];
 }
 
+const IcebergManifestFile &IcebergMultiFileList::GetManifestFileForEntry(const BoundIcebergManifestEntry &entry,
+                                                                         IcebergManifestContentType type) const {
+	auto &manifests = type == IcebergManifestContentType::DATA ? data_manifests : delete_manifests;
+	return manifests[entry.manifest_file_idx].get().file;
+}
+
 void IcebergMultiFileList::GetStatistics(vector<PartitionStatistics> &result) const {
 	if (GetMetadata().iceberg_version == 1) {
 		//! We collect no statistics information from manifests for V1 tables.
@@ -684,6 +690,7 @@ OpenFileInfo IcebergMultiFileList::GetFileInternal(idx_t file_id, lock_guard<mut
 	}
 
 	const auto &bound_manifest_entry = *found_manifest_entry;
+	auto &manifest_file = GetManifestFileForEntry(bound_manifest_entry, IcebergManifestContentType::DATA);
 	auto &manifest_entry = bound_manifest_entry.entry;
 	auto &data_file = manifest_entry.data_file;
 	const auto &path = data_file.file_path;
@@ -710,7 +717,7 @@ OpenFileInfo IcebergMultiFileList::GetFileInternal(idx_t file_id, lock_guard<mut
 	if (data_file.has_first_row_id) {
 		extended_info->options["first_row_id"] = Value::BIGINT(data_file.first_row_id);
 	}
-	extended_info->options["sequence_number"] = Value::BIGINT(manifest_entry.sequence_number);
+	extended_info->options["sequence_number"] = Value::BIGINT(manifest_entry.GetSequenceNumber(manifest_file));
 	res.extended_info = extended_info;
 	return res;
 }
@@ -787,7 +794,7 @@ IcebergMultiFileList::GetEqualityDeletesForFile(const BoundIcebergManifestEntry 
 	auto &manifest_file = data_manifests[bound_manifest_entry.manifest_file_idx].get().file;
 	auto &data_file = manifest_entry.data_file;
 	auto &metadata = GetMetadata();
-	auto it = equality_delete_data.upper_bound(manifest_entry.sequence_number);
+	auto it = equality_delete_data.upper_bound(manifest_entry.GetSequenceNumber(manifest_file));
 	for (; it != equality_delete_data.end(); it++) {
 		auto &files = it->second->files;
 		for (auto &file : files) {
@@ -1003,9 +1010,9 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 		auto &manifest_entry = bound_manifest_entry.entry;
 		auto &data_file = manifest_entry.data_file;
 		if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
-			ScanDeleteFile(manifest_entry, global_columns, column_indexes);
+			ScanDeleteFile(bound_manifest_entry, global_columns, column_indexes);
 		} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
-			ScanPuffinFile(manifest_entry);
+			ScanPuffinFile(bound_manifest_entry);
 		} else {
 			throw NotImplementedException(
 			    "File format '%s' not supported for deletes, only supports 'parquet' and 'puffin' currently",
@@ -1028,11 +1035,13 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 				}
 			}
 
+			BoundIcebergManifestEntry bound_manifest_entry(committed_delete_manifests.size() + transaction_delete_idx,
+			                                               manifest_entry);
 			//! FIXME: no file pruning for uncommitted data?
 			if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
-				ScanDeleteFile(manifest_entry, global_columns, column_indexes);
+				ScanDeleteFile(bound_manifest_entry, global_columns, column_indexes);
 			} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
-				ScanPuffinFile(manifest_entry);
+				ScanPuffinFile(bound_manifest_entry);
 			} else {
 				throw NotImplementedException(
 				    "File format '%s' not supported for deletes, only supports 'parquet' and 'puffin' currently",
@@ -1045,9 +1054,10 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 	D_ASSERT(FinishedScanningDeletes());
 }
 
-void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &manifest_entry,
+void IcebergMultiFileList::ScanDeleteFile(const BoundIcebergManifestEntry &bound_manifest_entry,
                                           const vector<MultiFileColumnDefinition> &global_columns,
                                           const vector<ColumnIndex> &column_indexes) const {
+	auto &manifest_entry = bound_manifest_entry.entry;
 	auto &data_file = manifest_entry.data_file;
 	auto delete_file_path = data_file.file_path;
 	auto iceberg_deletes_scan = IcebergFunctions::GetIcebergDeletesScanFunction(context);
@@ -1109,7 +1119,7 @@ void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &manifest_e
 			result.Reset();
 			delete_scan_function.function(context, function_input, result);
 			result.Flatten();
-			ScanPositionalDeleteFile(manifest_entry, result);
+			ScanPositionalDeleteFile(bound_manifest_entry, result);
 		} while (result.size() != 0);
 	} else if (data_file.content == IcebergManifestEntryContentType::EQUALITY_DELETES) {
 		do {
@@ -1117,7 +1127,7 @@ void IcebergMultiFileList::ScanDeleteFile(const IcebergManifestEntry &manifest_e
 			result.Reset();
 			delete_scan_function.function(context, function_input, result);
 			result.Flatten();
-			ScanEqualityDeleteFile(manifest_entry, result, multi_file_local_state.reader->columns, global_columns,
+			ScanEqualityDeleteFile(bound_manifest_entry, result, multi_file_local_state.reader->columns, global_columns,
 			                       column_indexes);
 		} while (result.size() != 0);
 	}

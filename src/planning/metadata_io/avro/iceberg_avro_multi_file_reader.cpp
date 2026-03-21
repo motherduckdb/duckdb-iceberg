@@ -11,7 +11,6 @@
 #include "planning/metadata_io/manifest_list/iceberg_manifest_list_reader.hpp"
 
 namespace duckdb {
-constexpr column_t IcebergAvroMultiFileReader::PARTITION_SPEC_ID_FIELD_ID;
 constexpr column_t IcebergAvroMultiFileReader::SEQUENCE_NUMBER_FIELD_ID;
 constexpr column_t IcebergAvroMultiFileReader::MANIFEST_FILE_PATH_FIELD_ID;
 
@@ -531,17 +530,6 @@ unique_ptr<Expression> IcebergAvroMultiFileReader::GetVirtualColumnExpression(
     ClientContext &context, MultiFileReaderData &reader_data, const vector<MultiFileColumnDefinition> &local_columns,
     idx_t &column_id, const LogicalType &type, MultiFileLocalIndex local_idx,
     optional_ptr<MultiFileColumnDefinition> &global_column_reference) {
-	if (column_id == PARTITION_SPEC_ID_FIELD_ID) {
-		if (!reader_data.file_to_be_opened.extended_info) {
-			throw InternalException("Extended info not found for partition_spec_id column");
-		}
-		auto &options = reader_data.file_to_be_opened.extended_info->options;
-		auto entry = options.find("partition_spec_id");
-		if (entry == options.end()) {
-			throw InternalException("'partition_spec_id' not set when initializing the FileList");
-		}
-		return make_uniq<BoundConstantExpression>(entry->second);
-	}
 	if (column_id == SEQUENCE_NUMBER_FIELD_ID) {
 		if (!reader_data.file_to_be_opened.extended_info) {
 			throw InternalException("Extended info not found for sequence number column");

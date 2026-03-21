@@ -81,12 +81,11 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 		}
 
 		//! FIXME: these should be inherited - left NULL - for newly added data
-		manifest_entry.sequence_number = sequence_number;
+		manifest_entry.SetSequenceNumber(manifest_file.sequence_number);
 		manifest_entry.snapshot_id = snapshot_id;
-		manifest_entry.partition_spec_id = manifest_file.partition_spec_id;
 		if (!manifest_file.has_min_sequence_number ||
-		    manifest_entry.sequence_number < manifest_file.min_sequence_number) {
-			manifest_file.min_sequence_number = manifest_entry.sequence_number;
+		    manifest_file.sequence_number < manifest_file.min_sequence_number) {
+			manifest_file.min_sequence_number = manifest_file.sequence_number;
 		}
 		manifest_file.has_min_sequence_number = true;
 	}

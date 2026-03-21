@@ -108,7 +108,6 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 
 	auto &data_file = chunk.data[vector_index++];
 
-	auto &partition_spec_id = chunk.data[vector_index++];
 	auto &manifest_file_sequence_number = chunk.data[vector_index++];
 	auto &manifest_file_path = chunk.data[vector_index++];
 
@@ -154,7 +153,6 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 
 	auto sequence_number_data = FlatVector::GetData<int64_t>(sequence_number);
 	auto file_sequence_number_data = FlatVector::GetData<int64_t>(file_sequence_number);
-	auto partition_spec_id_data = FlatVector::GetData<int32_t>(partition_spec_id);
 	auto manifest_file_sequence_number_data = FlatVector::GetData<int64_t>(manifest_file_sequence_number);
 	auto manifest_file_path_data = FlatVector::GetData<string_t>(manifest_file_path);
 
@@ -226,31 +224,27 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 			data_file.equality_ids = GetEqualityIds(equality_ids, index);
 
 			if (sequence_number_validity.RowIsValid(index)) {
-				entry.sequence_number = sequence_number_data[index];
+				entry.SetSequenceNumber(sequence_number_data[index]);
 			} else {
 				//! Value should only be NULL for ADDED manifest entries, to support inheritance
 				if (entry.status != IcebergManifestEntryStatusType::ADDED) {
 					throw InvalidConfigurationException(
 					    "'manifest_entry.sequence_number' is only allowed to be NULL for ADDED entries");
 				}
-				entry.sequence_number = manifest_file_sequence_number_data[index];
+				entry.SetSequenceNumber(manifest_file_sequence_number_data[index]);
 			}
 
 			if (file_sequence_number_validity.RowIsValid(index)) {
-				entry.file_sequence_number = file_sequence_number_data[index];
+				entry.SetFileSequenceNumber(file_sequence_number_data[index]);
 			} else {
 				//! Value should only be NULL for ADDED manifest entries, to support inheritance
 				if (entry.status != IcebergManifestEntryStatusType::ADDED) {
 					throw InvalidConfigurationException(
 					    "'manifest_entry.file_sequence_number' is only allowed to be NULL for ADDED entries");
 				}
-				entry.file_sequence_number = manifest_file_sequence_number_data[index];
+				entry.SetFileSequenceNumber(manifest_file_sequence_number_data[index]);
 			}
 		} else {
-			//! SPEC: Manifest entry field sequence_number must default to 0
-			entry.sequence_number = manifest_file_sequence_number_data[index];
-			//! SPEC: Manifest entry field file_sequence_number must default to 0
-			entry.file_sequence_number = manifest_file_sequence_number_data[index];
 			//! SPEC: Data file field content must default to 0 (data)
 			data_file.content = IcebergManifestEntryContentType::DATA;
 		}
@@ -267,7 +261,6 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 		if (entry.has_snapshot_id) {
 			entry.snapshot_id = snapshot_id_data[index];
 		}
-		entry.partition_spec_id = partition_spec_id_data[index];
 		entry.manifest_file_path = manifest_file_path_data[index].GetString();
 		for (auto &it : partition_vectors) {
 			auto field_id = it.first;

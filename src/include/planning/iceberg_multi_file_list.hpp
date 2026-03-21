@@ -63,14 +63,14 @@ public:
 
 	void Bind(vector<LogicalType> &return_types, vector<string> &names);
 	unique_ptr<IcebergMultiFileList> PushdownInternal(ClientContext &context, TableFilterSet &new_filters) const;
-	void ScanPositionalDeleteFile(const IcebergManifestEntry &manifest_entry, DataChunk &result) const;
-	void ScanEqualityDeleteFile(const IcebergManifestEntry &manifest_entry, DataChunk &result,
+	void ScanPositionalDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result) const;
+	void ScanEqualityDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result,
 	                            vector<MultiFileColumnDefinition> &columns,
 	                            const vector<MultiFileColumnDefinition> &global_columns,
 	                            const vector<ColumnIndex> &column_indexes) const;
-	void ScanDeleteFile(const IcebergManifestEntry &entry, const vector<MultiFileColumnDefinition> &global_columns,
+	void ScanDeleteFile(const BoundIcebergManifestEntry &entry, const vector<MultiFileColumnDefinition> &global_columns,
 	                    const vector<ColumnIndex> &column_indexes) const;
-	void ScanPuffinFile(const IcebergManifestEntry &entry) const;
+	void ScanPuffinFile(const BoundIcebergManifestEntry &entry) const;
 	unique_ptr<DeleteFilter> GetPositionalDeletesForFile(const string &file_path) const;
 	void ProcessDeletes(const vector<MultiFileColumnDefinition> &global_columns,
 	                    const vector<ColumnIndex> &column_indexes) const;
@@ -78,6 +78,8 @@ public:
 	GetEqualityDeletesForFile(const BoundIcebergManifestEntry &manifest_entry) const;
 	void GetStatistics(vector<PartitionStatistics> &result) const;
 	const BoundIcebergManifestEntry &GetManifestEntry(idx_t file_id) const;
+	const IcebergManifestFile &GetManifestFileForEntry(const BoundIcebergManifestEntry &entry,
+	                                                   IcebergManifestContentType type) const;
 
 public:
 	//! MultiFileList API
