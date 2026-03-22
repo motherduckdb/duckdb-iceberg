@@ -237,9 +237,8 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 			}
 		}
 
-		entry.has_snapshot_id = snapshot_id_validity.RowIsValid(index);
-		if (entry.has_snapshot_id) {
-			entry.snapshot_id = snapshot_id_data[index];
+		if (snapshot_id_validity.RowIsValid(index)) {
+			entry.SetSnapshotId(snapshot_id_data[index]);
 		}
 		for (auto &it : partition_vectors) {
 			auto field_id = it.first;

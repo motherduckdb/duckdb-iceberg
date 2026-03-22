@@ -184,10 +184,10 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 				idx_t col = 0;
 				//! status
 				AddString(output.data[col++], out,
-				          string_t(IcebergManifestEntry::StatusTypeToString(manifest_entry.status)));
+				          string_t(IcebergManifestEntryStatusTypeToString(manifest_entry.status)));
 				//! content
 				AddString(output.data[col++], out,
-				          string_t(IcebergManifestEntry::ContentTypeToString(data_file.content)));
+				          string_t(IcebergManifestEntryContentTypeToString(data_file.content)));
 				//! file_path
 				AddString(output.data[col++], out, string_t(data_file.file_path));
 

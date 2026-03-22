@@ -72,6 +72,8 @@ enum class IcebergManifestContentType : uint8_t {
 	DELETE = 1,
 };
 
+string IcebergManifestContentTypeToString(IcebergManifestContentType type);
+
 struct IcebergManifestFile {
 public:
 	//! Path to the manifest AVRO file
@@ -106,29 +108,6 @@ public:
 
 public:
 	IcebergManifestFile(const string &manifest_path) : manifest_path(manifest_path) {
-	}
-
-	static vector<LogicalType> Types() {
-		return {
-		    LogicalType::VARCHAR,
-		    LogicalType::BIGINT,
-		    LogicalType::VARCHAR,
-		};
-	}
-
-	static string ContentTypeToString(IcebergManifestContentType type) {
-		switch (type) {
-		case IcebergManifestContentType::DATA:
-			return "DATA";
-		case IcebergManifestContentType::DELETE:
-			return "DELETE";
-		default:
-			throw InvalidConfigurationException("Invalid Manifest Content Type");
-		}
-	}
-
-	static vector<string> Names() {
-		return {"manifest_path", "manifest_sequence_number", "manifest_content"};
 	}
 };
 
