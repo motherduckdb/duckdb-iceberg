@@ -108,8 +108,6 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 
 	auto &data_file = chunk.data[vector_index++];
 
-	auto &manifest_file_path = chunk.data[vector_index++];
-
 	idx_t entry_index = 0;
 	auto &data_file_entries = StructVector::GetEntries(data_file);
 	optional_ptr<Vector> content;
@@ -152,7 +150,6 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 
 	auto sequence_number_data = FlatVector::GetData<int64_t>(sequence_number);
 	auto file_sequence_number_data = FlatVector::GetData<int64_t>(file_sequence_number);
-	auto manifest_file_path_data = FlatVector::GetData<string_t>(manifest_file_path);
 
 	auto &sort_order_id_validity = FlatVector::Validity(sort_order_id);
 	auto sort_order_id_data = FlatVector::GetData<int32_t>(sort_order_id);
@@ -244,7 +241,6 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 		if (entry.has_snapshot_id) {
 			entry.snapshot_id = snapshot_id_data[index];
 		}
-		entry.manifest_file_path = manifest_file_path_data[index].GetString();
 		for (auto &it : partition_vectors) {
 			auto field_id = it.first;
 			auto &partition_vector = it.second.get();

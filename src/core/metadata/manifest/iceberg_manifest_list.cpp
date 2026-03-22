@@ -51,7 +51,6 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 
 	//! Add the files to the manifest
 	for (auto &manifest_entry : manifest_entries) {
-		manifest_entry.manifest_file_path = manifest_file_path;
 		auto &data_file = manifest_entry.data_file;
 		if (data_file.content == IcebergManifestEntryContentType::DATA) {
 			//! FIXME: this is required because we don't apply inheritance to uncommitted manifests
