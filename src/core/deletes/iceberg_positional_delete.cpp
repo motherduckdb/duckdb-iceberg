@@ -12,7 +12,7 @@ void IcebergPositionalDeleteData::ToSet(set<idx_t> &out) const {
 }
 
 static optional_ptr<IcebergPositionalDeleteData>
-TryGetOrCreate(case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &deletes, const IcebergManifestEntry &entry,
+TryGetOrCreate(case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &deletes, const BoundIcebergManifestEntry &entry,
                const string &file_path) {
 	auto it = deletes.find(file_path);
 	if (it == deletes.end()) {
@@ -28,7 +28,6 @@ TryGetOrCreate(case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &deletes, c
 
 void IcebergMultiFileList::ScanPositionalDeleteFile(const BoundIcebergManifestEntry &bound_entry,
                                                     DataChunk &result) const {
-	auto &entry = bound_entry.entry;
 	//! FIXME: might want to check the 'columns' of the 'reader' to check, field-ids are:
 	auto names = FlatVector::GetData<string_t>(result.data[0]);  //! 2147483546
 	auto row_ids = FlatVector::GetData<int64_t>(result.data[1]); //! 2147483545
@@ -39,7 +38,7 @@ void IcebergMultiFileList::ScanPositionalDeleteFile(const BoundIcebergManifestEn
 	}
 	reference<string_t> current_file_path = names[0];
 	auto initial_key = current_file_path.get().GetString();
-	auto deletes = TryGetOrCreate(positional_delete_data, entry, initial_key);
+	auto deletes = TryGetOrCreate(positional_delete_data, bound_entry, initial_key);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto &name = names[i];
@@ -48,7 +47,7 @@ void IcebergMultiFileList::ScanPositionalDeleteFile(const BoundIcebergManifestEn
 		if (name != current_file_path.get()) {
 			current_file_path = name;
 			auto key = current_file_path.get().GetString();
-			deletes = TryGetOrCreate(positional_delete_data, entry, key);
+			deletes = TryGetOrCreate(positional_delete_data, bound_entry, key);
 		}
 		if (!deletes) {
 			continue;

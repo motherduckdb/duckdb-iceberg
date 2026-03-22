@@ -91,7 +91,6 @@ public:
 	IcebergManifestEntryStatusType status;
 	bool has_snapshot_id = false;
 	int64_t snapshot_id;
-	string manifest_file_path;
 	IcebergDataFile data_file;
 
 public:

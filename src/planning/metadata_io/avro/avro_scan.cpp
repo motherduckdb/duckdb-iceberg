@@ -58,23 +58,6 @@ AvroScan::AvroScan(const string &path, ClientContext &context, shared_ptr<Iceber
 		column_ids.push_back(i);
 	}
 
-	if (!is_manifest_list) {
-		const ManifestFileVirtualColumn columns[] = {
-		    {IcebergAvroMultiFileReader::MANIFEST_FILE_PATH_FIELD_ID, "manifest_file_path", LogicalType::VARCHAR}};
-		const idx_t columns_size = sizeof(columns) / sizeof(ManifestFileVirtualColumn);
-		auto &multi_file_bind_data = bind_data->Cast<MultiFileBindData>();
-
-		virtual_column_map_t result;
-		for (idx_t i = 0; i < columns_size; i++) {
-			auto &column = columns[i];
-			result.emplace(column.id, TableColumn(column.name, column.type));
-			column_ids.push_back(column.id);
-			return_types.push_back(column.type);
-			return_names.push_back(column.name);
-		}
-		multi_file_bind_data.virtual_columns = result;
-	}
-
 	TableFunctionInitInput input(bind_data.get(), column_ids, vector<idx_t>(), nullptr);
 	global_state = avro_scan->init_global(context, input);
 }
