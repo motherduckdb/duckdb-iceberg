@@ -229,11 +229,8 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 			data_file.content = IcebergManifestEntryContentType::DATA;
 		}
 		if (iceberg_version >= 3) {
-			if (!first_row_id_validity->RowIsValid(index)) {
-				data_file.has_first_row_id = false;
-			} else {
-				data_file.has_first_row_id = true;
-				data_file.first_row_id = first_row_id_data[index];
+			if (first_row_id_validity->RowIsValid(index)) {
+				data_file.SetFirstRowId(first_row_id_data[index]);
 			}
 		}
 

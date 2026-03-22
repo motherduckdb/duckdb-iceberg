@@ -64,12 +64,6 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 	for (auto &manifest_entry : manifest_entries) {
 		auto &data_file = manifest_entry.data_file;
 		if (data_file.content == IcebergManifestEntryContentType::DATA) {
-			//! FIXME: this is required because we don't apply inheritance to uncommitted manifests
-			//! But this does result in serializing this to the avro file, which *should* be NULL
-			//! To fix this we should probably remove the inheritance application in the "manifest_reader"
-			//! and instead do the inheritance in a path that is used by both committed and uncommitted manifests
-			data_file.has_first_row_id = true;
-			data_file.first_row_id = next_row_id;
 			next_row_id += data_file.record_count;
 		}
 		switch (manifest_entry.status) {

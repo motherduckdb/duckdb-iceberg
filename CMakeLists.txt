@@ -73,6 +73,7 @@ set(EXTENSION_SOURCES
 	src/planning/metadata_io/avro/iceberg_avro_multi_file_reader.cpp
 	src/planning/metadata_io/base_manifest_reader.cpp
 	src/planning/metadata_io/deletes/iceberg_deletes_file_reader.cpp
+	src/planning/metadata_io/manifest/bound_iceberg_manifest_entry.cpp
 	src/planning/metadata_io/manifest/iceberg_manifest_reader.cpp
 	src/planning/metadata_io/manifest_list/iceberg_manifest_list_reader.cpp
 	src/planning/pruning/iceberg_predicate.cpp

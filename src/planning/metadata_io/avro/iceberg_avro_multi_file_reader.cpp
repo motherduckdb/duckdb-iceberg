@@ -438,69 +438,6 @@ void IcebergAvroMultiFileReader::FinalizeChunk(ClientContext &context, const Mul
 		auto manifest_file_idx = reader.file_list_idx.GetIndex();
 		auto &manifest_file = manifest_scan_info.manifest_files[manifest_file_idx];
 
-		idx_t count = output_chunk.size();
-		auto &status_column = output_chunk.data[0];
-		status_column.Flatten(count);
-
-		auto &sequence_number_column = output_chunk.data[2];
-		sequence_number_column.Flatten(count);
-		auto &sequence_number_validity = FlatVector::Validity(sequence_number_column);
-		auto sequence_number_data = FlatVector::GetData<int64_t>(sequence_number_column);
-		auto status_column_data = FlatVector::GetData<int32_t>(status_column);
-		for (idx_t i = 0; i < count; i++) {
-			if (sequence_number_validity.RowIsValid(i)) {
-				//! Sequence number is explicitly set
-				continue;
-			}
-			sequence_number_validity.SetValid(i);
-			sequence_number_data[i] = manifest_file.file.sequence_number;
-		}
-		do {
-			if (scan_info->metadata.iceberg_version < 3) {
-				//! No row-lineage applies, just return
-				break;
-			}
-			if (manifest_file.file.content == IcebergManifestContentType::DELETE) {
-				//! No need to inherit first-row-id for DELETE manifests
-				break;
-			}
-
-			auto &global_state = global_state_p->Cast<IcebergAvroMultiFileReaderGlobalState>();
-
-			auto res = global_state.added_rows_per_manifest.emplace(manifest_file_idx, 0);
-			auto &start_row_id = res.first->second;
-
-			//! NOTE: the order of these columns is defined by the order that they are produced in BuildManifestSchema
-			//! see `iceberg_avro_multi_file_reader.cpp`
-			auto &data_file_column = output_chunk.data[4];
-			auto &data_struct_children = StructVector::GetEntries(data_file_column);
-
-			auto &first_row_id_column = *data_struct_children[15];
-			first_row_id_column.Flatten(count);
-
-			auto &record_count_column = *data_struct_children[4];
-			record_count_column.Flatten(count);
-
-			auto &first_row_id_validity = FlatVector::Validity(first_row_id_column);
-			auto first_row_id_data = FlatVector::GetData<int64_t>(first_row_id_column);
-			auto record_count_data = FlatVector::GetData<int64_t>(record_count_column);
-			for (idx_t i = 0; i < count; i++) {
-				if (first_row_id_validity.RowIsValid(i)) {
-					//! First row id is explicitly set
-					continue;
-				}
-				if (status_column_data[i] == 2) {
-					// Manifest entry is deleted, skip
-					continue;
-				}
-				if (manifest_file.file.has_first_row_id) {
-					first_row_id_validity.SetValid(i);
-					first_row_id_data[i] = manifest_file.file.first_row_id + start_row_id;
-					start_row_id += record_count_data[i];
-				}
-			}
-		} while (false);
-
 		output_chunk.Flatten();
 		idx_t start_index = manifest_file.manifest_entries.size();
 		manifest_file::ManifestReader::ReadChunk(output_chunk, manifest_scan_info.partition_field_id_to_type,

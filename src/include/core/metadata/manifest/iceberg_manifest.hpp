@@ -62,6 +62,11 @@ public:
 	static LogicalType GetType(const IcebergTableMetadata &metadata, const LogicalType &partition_type);
 
 public:
+	void SetFirstRowId(int64_t first_row_id);
+	bool HasFirstRowId() const;
+	int64_t GetFirstRowId() const;
+
+public:
 	IcebergManifestEntryContentType content;
 	string file_path;
 	string file_format;
@@ -69,9 +74,6 @@ public:
 	//! Contains name, source_id, field_id, transform, source_type, and the actual partition value.
 	vector<DataFilePartitionInfo> partition_info;
 	int64_t record_count;
-
-	bool has_first_row_id = false;
-	int64_t first_row_id = 0xDEADBEEF;
 
 	int64_t file_size_in_bytes;
 	unordered_map<int32_t, int64_t> column_sizes;
@@ -90,6 +92,10 @@ public:
 	string referenced_data_file;
 	Value content_offset;
 	Value content_size_in_bytes;
+
+private:
+	bool has_first_row_id = false;
+	int64_t first_row_id = 0xDEADBEEF;
 };
 
 //! An entry in a manifest file

@@ -70,6 +70,20 @@ LogicalType IcebergDataFile::PartitionStructType(const map<idx_t, LogicalType> &
 	return LogicalType::STRUCT(children);
 }
 
+void IcebergDataFile::SetFirstRowId(int64_t value) {
+	has_first_row_id = true;
+	first_row_id = value;
+}
+
+bool IcebergDataFile::HasFirstRowId() const {
+	return has_first_row_id;
+}
+
+int64_t IcebergDataFile::GetFirstRowId() const {
+	D_ASSERT(has_first_row_id);
+	return first_row_id;
+}
+
 LogicalType IcebergDataFile::GetType(const IcebergTableMetadata &metadata, const LogicalType &partition_type) {
 	auto &iceberg_version = metadata.iceberg_version;
 
