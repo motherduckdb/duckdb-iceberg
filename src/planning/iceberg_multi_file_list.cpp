@@ -920,7 +920,7 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 		auto manifest_list_entry_idx = data_manifests.size();
 		// reserve upfront → guarantees no reallocation
 		auto &file = manifest.file;
-		idx_t reserve_size = file.existing_files_count + file.added_files_count;
+		idx_t reserve_size = file.existing_files_count + file.added_files_count + file.deleted_files_count;
 		manifest.manifest_entries.reserve(reserve_size);
 
 		data_manifests.emplace_back(manifest_list_entry_idx, manifest);
