@@ -248,7 +248,7 @@ void IcebergDeletionVectorData::ToSet(set<idx_t> &out) const {
 	}
 }
 
-vector<data_t> IcebergDeletionVectorData::ToBlob() const {
+vector<data_t> IcebergDeletionVectorData::ToBlob(const unordered_map<int32_t, roaring::Roaring> &bitmaps) {
 	//! https://iceberg.apache.org/puffin-spec/#deletion-vector-v1-blob-type
 
 	// Calculate total size needed

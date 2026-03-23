@@ -17,7 +17,7 @@ public:
 public:
 	static shared_ptr<IcebergDeletionVectorData> FromBlob(const BoundIcebergManifestEntry &entry, data_ptr_t blob_start,
 	                                                      idx_t blob_length);
-	vector<data_t> ToBlob() const;
+	static vector<data_t> ToBlob(const unordered_map<int32_t, roaring::Roaring> &bitmaps);
 
 public:
 	unique_ptr<DeleteFilter> ToFilter() const override;

@@ -45,22 +45,6 @@ public:
 	atomic<idx_t> in_progress_tasks;
 };
 
-struct BoundIcebergManifestListEntry {
-public:
-	BoundIcebergManifestListEntry(IcebergManifestListEntry &entry) : entry(entry) {
-		has_next_row_id = entry.file.has_first_row_id;
-		if (has_next_row_id) {
-			//! 'first_row_id' is NULL for pre-V3 manifests
-			next_row_id = entry.file.first_row_id;
-		}
-	}
-
-public:
-	IcebergManifestListEntry &entry;
-	bool has_next_row_id = false;
-	idx_t next_row_id;
-};
-
 struct IcebergMultiFileList : public MultiFileList {
 public:
 	IcebergMultiFileList(ClientContext &context, shared_ptr<IcebergScanInfo> scan_info, const string &path,
@@ -168,7 +152,7 @@ public:
 	//! References to items inside the 'manifest_entries' of the list entries in the 'delete_manifests'
 	mutable vector<BoundIcebergManifestEntry> delete_manifest_entries;
 	//! Combination of committed + transaction delete manifests
-	mutable vector<reference<IcebergManifestListEntry>> delete_manifests;
+	mutable vector<BoundIcebergManifestListEntry> delete_manifests;
 	//! Scanned delete manifests of the snapshot being scanned
 	mutable unique_ptr<AvroScan> delete_manifest_scan;
 	mutable unique_ptr<manifest_file::ManifestReader> delete_manifest_reader;
