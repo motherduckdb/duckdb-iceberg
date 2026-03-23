@@ -503,7 +503,7 @@ void IcebergTransaction::CleanupFiles() {
 			ic_table_entry.PrepareIcebergScanFromEntry(*temp_con_context);
 
 			auto &add_snapshot = update->Cast<IcebergAddSnapshot>();
-			const auto manifest_list_entries = add_snapshot.manifest_files;
+			const auto manifest_list_entries = add_snapshot.GetManifestFiles();
 			for (const auto &manifest : manifest_list_entries) {
 				for (auto &manifest_entry : manifest.manifest_entries) {
 					auto &data_file = manifest_entry.data_file;

@@ -233,4 +233,12 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 	commit_state.table_change.updates.push_back(CreateAddSnapshotUpdate(table_info, *commit_state.latest_snapshot));
 }
 
+void IcebergAddSnapshot::AddManifestFile(IcebergManifestListEntry &&manifest_file) {
+	manifest_files.push_back(std::move(manifest_file));
+}
+
+const vector<IcebergManifestListEntry> &IcebergAddSnapshot::GetManifestFiles() const {
+	return manifest_files;
+}
+
 } // namespace duckdb

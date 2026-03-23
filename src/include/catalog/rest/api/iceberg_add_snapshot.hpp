@@ -30,9 +30,13 @@ public:
 	                                           const IcebergManifestListEntry &manifest_file,
 	                                           const IcebergManifestDeletes &deletes) const;
 	void CreateUpdate(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state) const override;
+	const vector<IcebergManifestListEntry> &GetManifestFiles() const;
+	void AddManifestFile(IcebergManifestListEntry &&manifest_file);
 
 public:
 	case_insensitive_map_t<IcebergManifestDeletes> altered_manifests;
+
+private:
 	vector<IcebergManifestListEntry> manifest_files;
 };
 
