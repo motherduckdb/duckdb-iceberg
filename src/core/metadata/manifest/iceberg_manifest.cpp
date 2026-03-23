@@ -9,6 +9,32 @@
 
 namespace duckdb {
 
+string IcebergManifestEntryContentTypeToString(IcebergManifestEntryContentType type) {
+	switch (type) {
+	case IcebergManifestEntryContentType::DATA:
+		return "EXISTING";
+	case IcebergManifestEntryContentType::POSITION_DELETES:
+		return "POSITION_DELETES";
+	case IcebergManifestEntryContentType::EQUALITY_DELETES:
+		return "EQUALITY_DELETES";
+	default:
+		throw InvalidConfigurationException("Invalid Manifest Entry Content Type");
+	}
+}
+
+string IcebergManifestEntryStatusTypeToString(IcebergManifestEntryStatusType type) {
+	switch (type) {
+	case IcebergManifestEntryStatusType::EXISTING:
+		return "EXISTING";
+	case IcebergManifestEntryStatusType::ADDED:
+		return "ADDED";
+	case IcebergManifestEntryStatusType::DELETED:
+		return "DELETED";
+	default:
+		throw InvalidConfigurationException("Invalid matifest entry type");
+	}
+}
+
 map<idx_t, LogicalType> IcebergDataFile::GetFieldIdToTypeMapping(const IcebergSnapshot &snapshot,
                                                                  const IcebergTableMetadata &metadata,
                                                                  const unordered_set<int32_t> &partition_spec_ids) {
@@ -42,6 +68,20 @@ LogicalType IcebergDataFile::PartitionStructType(const map<idx_t, LogicalType> &
 		}
 	}
 	return LogicalType::STRUCT(children);
+}
+
+void IcebergDataFile::SetFirstRowId(int64_t value) {
+	has_first_row_id = true;
+	first_row_id = value;
+}
+
+bool IcebergDataFile::HasFirstRowId() const {
+	return has_first_row_id;
+}
+
+int64_t IcebergDataFile::GetFirstRowId() const {
+	D_ASSERT(has_first_row_id);
+	return first_row_id;
 }
 
 LogicalType IcebergDataFile::GetType(const IcebergTableMetadata &metadata, const LogicalType &partition_type) {
@@ -250,6 +290,20 @@ sequence_number_t IcebergManifestEntry::GetFileSequenceNumber(const IcebergManif
 		return manifest_file.sequence_number;
 	}
 	return file_sequence_number;
+}
+
+void IcebergManifestEntry::SetSnapshotId(int64_t value) {
+	has_snapshot_id = true;
+	snapshot_id = value;
+}
+
+bool IcebergManifestEntry::HasSnapshotId() const {
+	return has_snapshot_id;
+}
+
+int64_t IcebergManifestEntry::GetSnapshotId() const {
+	D_ASSERT(HasSnapshotId());
+	return snapshot_id;
 }
 
 namespace manifest_file {
@@ -696,7 +750,11 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 		// status: int
 		chunk.SetValue(col_idx++, i, Value::INTEGER(static_cast<int32_t>(manifest_entry.status)));
 		// snapshot_id: long
-		chunk.SetValue(col_idx++, i, Value::BIGINT(manifest_entry.snapshot_id));
+		if (manifest_entry.HasSnapshotId()) {
+			chunk.SetValue(col_idx++, i, Value::BIGINT(manifest_entry.GetSnapshotId()));
+		} else {
+			chunk.SetValue(col_idx++, i, Value(LogicalType::BIGINT));
+		}
 		// sequence_number: long
 		chunk.SetValue(col_idx++, i, Value::BIGINT(manifest_entry.GetSequenceNumber(manifest_file)));
 		// file_sequence_number: long

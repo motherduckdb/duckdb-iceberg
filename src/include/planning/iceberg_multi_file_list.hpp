@@ -45,6 +45,22 @@ public:
 	atomic<idx_t> in_progress_tasks;
 };
 
+struct BoundIcebergManifestListEntry {
+public:
+	BoundIcebergManifestListEntry(IcebergManifestListEntry &entry) : entry(entry) {
+		has_next_row_id = entry.file.has_first_row_id;
+		if (has_next_row_id) {
+			//! 'first_row_id' is NULL for pre-V3 manifests
+			next_row_id = entry.file.first_row_id;
+		}
+	}
+
+public:
+	IcebergManifestListEntry &entry;
+	bool has_next_row_id = false;
+	idx_t next_row_id;
+};
+
 struct IcebergMultiFileList : public MultiFileList {
 public:
 	IcebergMultiFileList(ClientContext &context, shared_ptr<IcebergScanInfo> scan_info, const string &path,
@@ -164,7 +180,7 @@ private:
 	//! References to items inside the 'manifest_entries' of the list entries in the 'data_manifests'
 	mutable vector<BoundIcebergManifestEntry> data_manifest_entries;
 	//! Combination of committed + transaction data manifests
-	mutable vector<reference<IcebergManifestListEntry>> data_manifests;
+	mutable vector<BoundIcebergManifestListEntry> data_manifests;
 	//! Scanned data manifests of the snapshot being scanned
 	mutable unique_ptr<IcebergManifestScanningState> data_manifest_read_state;
 	mutable unique_ptr<manifest_file::ManifestReader> data_manifest_reader;

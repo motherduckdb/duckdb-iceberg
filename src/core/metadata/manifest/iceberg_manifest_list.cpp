@@ -19,6 +19,17 @@
 
 namespace duckdb {
 
+string IcebergManifestContentTypeToString(IcebergManifestContentType type) {
+	switch (type) {
+	case IcebergManifestContentType::DATA:
+		return "DATA";
+	case IcebergManifestContentType::DELETE:
+		return "DELETE";
+	default:
+		throw InvalidConfigurationException("Invalid Manifest Content Type");
+	}
+}
+
 IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem &fs, int64_t snapshot_id,
                                                                      sequence_number_t sequence_number,
                                                                      const IcebergTableMetadata &table_metadata,
@@ -53,12 +64,6 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 	for (auto &manifest_entry : manifest_entries) {
 		auto &data_file = manifest_entry.data_file;
 		if (data_file.content == IcebergManifestEntryContentType::DATA) {
-			//! FIXME: this is required because we don't apply inheritance to uncommitted manifests
-			//! But this does result in serializing this to the avro file, which *should* be NULL
-			//! To fix this we should probably remove the inheritance application in the "manifest_reader"
-			//! and instead do the inheritance in a path that is used by both committed and uncommitted manifests
-			data_file.has_first_row_id = true;
-			data_file.first_row_id = next_row_id;
 			next_row_id += data_file.record_count;
 		}
 		switch (manifest_entry.status) {
@@ -79,8 +84,6 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 		}
 		}
 
-		//! FIXME: these should be inherited - left NULL - for newly added data
-		manifest_entry.snapshot_id = snapshot_id;
 		if (!manifest_file.has_min_sequence_number ||
 		    manifest_file.sequence_number < manifest_file.min_sequence_number) {
 			manifest_file.min_sequence_number = manifest_file.sequence_number;

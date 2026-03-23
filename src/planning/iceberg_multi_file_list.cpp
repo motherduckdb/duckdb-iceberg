@@ -354,7 +354,7 @@ unique_ptr<NodeStatistics> IcebergMultiFileList::GetCardinality(ClientContext &c
 
 	idx_t cardinality = 0;
 	for (idx_t i = 0; i < data_manifests.size(); i++) {
-		auto &manifest = data_manifests[i].get().file;
+		auto &manifest = data_manifests[i].entry.file;
 		cardinality += manifest.added_rows_count;
 		cardinality += manifest.existing_rows_count;
 	}
@@ -371,8 +371,11 @@ const BoundIcebergManifestEntry &IcebergMultiFileList::GetManifestEntry(idx_t fi
 
 const IcebergManifestFile &IcebergMultiFileList::GetManifestFileForEntry(const BoundIcebergManifestEntry &entry,
                                                                          IcebergManifestContentType type) const {
-	auto &manifests = type == IcebergManifestContentType::DATA ? data_manifests : delete_manifests;
-	return manifests[entry.manifest_file_idx].get().file;
+	if (type == IcebergManifestContentType::DATA) {
+		return data_manifests[entry.manifest_file_idx].entry.file;
+	} else {
+		return delete_manifests[entry.manifest_file_idx].get().file;
+	}
 }
 
 void IcebergMultiFileList::GetStatistics(vector<PartitionStatistics> &result) const {
@@ -388,7 +391,7 @@ void IcebergMultiFileList::GetStatistics(vector<PartitionStatistics> &result) co
 
 	idx_t count = 0;
 	for (idx_t i = 0; i < data_manifests.size(); i++) {
-		auto &manifest = data_manifests[i].get().file;
+		auto &manifest = data_manifests[i].entry.file;
 		count += manifest.existing_rows_count;
 		count += manifest.added_rows_count;
 	}
@@ -643,7 +646,8 @@ optional_ptr<const BoundIcebergManifestEntry> IcebergMultiFileList::GetDataFile(
 		}
 
 		auto &current_batch = *batch;
-		auto &manifest_list_entry = data_manifests[current_batch.manifest_list_entry_idx].get();
+		auto &bound_manifest_list_entry = data_manifests[current_batch.manifest_list_entry_idx];
+		auto &manifest_list_entry = bound_manifest_list_entry.entry;
 		auto &manifest_entries = manifest_list_entry.manifest_entries;
 		auto &manifest_file = manifest_list_entry.file;
 		for (; current_batch.start_index < current_batch.end_index && file_id >= data_manifest_entries.size();
@@ -669,8 +673,16 @@ optional_ptr<const BoundIcebergManifestEntry> IcebergMultiFileList::GetDataFile(
 				continue;
 			}
 
-			data_manifest_entries.push_back(
-			    BoundIcebergManifestEntry(current_batch.manifest_list_entry_idx, manifest_entry));
+			BoundIcebergManifestEntry bound_entry(current_batch.manifest_list_entry_idx, manifest_entry);
+			if (data_file.HasFirstRowId()) {
+				bound_entry.SetFirstRowId(data_file.GetFirstRowId());
+			} else if (bound_manifest_list_entry.has_next_row_id) {
+				auto &next_row_id = bound_manifest_list_entry.next_row_id;
+				auto materialized_row_id = next_row_id;
+				bound_entry.SetFirstRowId(materialized_row_id);
+				next_row_id += data_file.record_count;
+			}
+			data_manifest_entries.push_back(bound_entry);
 		}
 		if (current_batch.start_index >= current_batch.end_index) {
 			read_state.FinishBatch();
@@ -714,8 +726,8 @@ OpenFileInfo IcebergMultiFileList::GetFileInternal(idx_t file_id, lock_guard<mut
 	// etag / last modified time can be set to dummy values
 	extended_info->options["etag"] = Value("");
 	extended_info->options["last_modified"] = Value::TIMESTAMP(timestamp_t(0));
-	if (data_file.has_first_row_id) {
-		extended_info->options["first_row_id"] = Value::BIGINT(data_file.first_row_id);
+	if (bound_manifest_entry.HasFirstRowId()) {
+		extended_info->options["first_row_id"] = Value::BIGINT(bound_manifest_entry.GetFirstRowId());
 	}
 	extended_info->options["sequence_number"] = Value::BIGINT(manifest_entry.GetSequenceNumber(manifest_file));
 	res.extended_info = extended_info;
@@ -791,7 +803,7 @@ IcebergMultiFileList::GetEqualityDeletesForFile(const BoundIcebergManifestEntry 
 
 	//! Look through all the equality delete files with a *higher* sequence number
 	auto &manifest_entry = bound_manifest_entry.entry;
-	auto &manifest_file = data_manifests[bound_manifest_entry.manifest_file_idx].get().file;
+	auto &manifest_file = data_manifests[bound_manifest_entry.manifest_file_idx].entry.file;
 	auto &data_file = manifest_entry.data_file;
 	auto &metadata = GetMetadata();
 	auto it = equality_delete_data.upper_bound(manifest_entry.GetSequenceNumber(manifest_file));
@@ -917,11 +929,11 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 		idx_t reserve_size = file.existing_files_count + file.added_files_count;
 		manifest.manifest_entries.reserve(reserve_size);
 
-		data_manifests.push_back(manifest);
+		data_manifests.emplace_back(manifest);
 	}
 	for (auto &manifest : transaction_data_manifests) {
 		auto manifest_list_entry_idx = data_manifests.size();
-		data_manifests.push_back(manifest);
+		data_manifests.emplace_back(manifest);
 		read_state.PushBatch(ManifestReadBatch {manifest_list_entry_idx, 0, manifest.get().manifest_entries.size()});
 	}
 
