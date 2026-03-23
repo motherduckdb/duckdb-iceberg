@@ -94,13 +94,11 @@ SinkCombineResultType IcebergDelete::Combine(ExecutionContext &context, Operator
 
 void IcebergDelete::WriteDeletionVectorFile(ClientContext &context, IcebergDeleteGlobalState &global_state,
                                             const string &filename, IcebergDeleteFileInfo delete_file,
-                                            set<idx_t> sorted_deletes) const {
+                                            const set<idx_t> &sorted_deletes) const {
 	auto delete_file_path = delete_file.file_name;
 
 	// Build deletion vector data
-	IcebergManifestEntry unused;
-	BoundIcebergManifestEntry bound_unused(0, unused);
-	auto dv_data = make_shared_ptr<IcebergDeletionVectorData>(bound_unused);
+	unordered_map<int32_t, roaring::Roaring> bitmaps;
 
 	// Group row indices by high 32 bits
 	for (auto row_idx : sorted_deletes) {
@@ -108,12 +106,12 @@ void IcebergDelete::WriteDeletionVectorFile(ClientContext &context, IcebergDelet
 		int32_t high_bits = static_cast<int32_t>(row_id >> 32);
 		uint32_t low_bits = static_cast<uint32_t>(row_id & 0xFFFFFFFF);
 
-		auto &bitmap = dv_data->bitmaps[high_bits];
+		auto &bitmap = bitmaps[high_bits];
 		bitmap.add(low_bits);
 	}
 
 	// Serialize to blob
-	auto blob_data = dv_data->ToBlob();
+	auto blob_data = IcebergDeletionVectorData::ToBlob(bitmaps);
 
 	// Write blob to file
 	auto &fs = FileSystem::GetFileSystem(context);
