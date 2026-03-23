@@ -884,7 +884,7 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 		auto &transaction_data = GetTransactionData();
 		for (auto &alter_p : transaction_data.alters) {
 			auto &alter = alter_p.get();
-			auto &manifest_list_entries = alter.manifest_list.GetManifestFilesMutable();
+			const auto &manifest_list_entries = alter.GetManifestFiles();
 			for (auto &manifest_list_entry : manifest_list_entries) {
 				auto &manifest = manifest_list_entry.file;
 				if (!ManifestMatchesFilter(manifest)) {
