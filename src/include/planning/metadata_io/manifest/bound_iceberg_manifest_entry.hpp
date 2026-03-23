@@ -4,14 +4,17 @@
 
 namespace duckdb {
 
+struct BoundIcebergManifestListEntry;
+
 struct BoundIcebergManifestEntry {
-public:
-	BoundIcebergManifestEntry(idx_t file_idx, const IcebergManifestEntry &entry)
-	    : manifest_file_idx(file_idx), entry(entry) {
-	}
+	friend struct BoundIcebergManifestListEntry;
+
+private:
+	//! Can only be constructed by BoundIcebergManifestListEntry
+	BoundIcebergManifestEntry(idx_t file_idx, const IcebergManifestEntry &entry);
+	BoundIcebergManifestEntry(idx_t file_idx, const IcebergManifestEntry &entry, int64_t first_row_id);
 
 public:
-	void SetFirstRowId(int64_t first_row_id);
 	int64_t GetFirstRowId() const;
 	bool HasFirstRowId() const;
 

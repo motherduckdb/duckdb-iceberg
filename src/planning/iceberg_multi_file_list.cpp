@@ -25,6 +25,7 @@
 #include "core/metadata/iceberg_table_metadata.hpp"
 #include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
 #include "planning/metadata_io/manifest_list/iceberg_manifest_list_reader.hpp"
+#include "planning/metadata_io/manifest_list/bound_iceberg_manifest_list_entry.hpp"
 
 namespace duckdb {
 
@@ -359,7 +360,7 @@ unique_ptr<NodeStatistics> IcebergMultiFileList::GetCardinality(ClientContext &c
 		cardinality += manifest.existing_rows_count;
 	}
 	for (idx_t i = 0; i < delete_manifests.size(); i++) {
-		auto &manifest = delete_manifests[i].get().file;
+		auto &manifest = delete_manifests[i].entry.file;
 		cardinality -= manifest.added_rows_count;
 	}
 	return make_uniq<NodeStatistics>(cardinality, cardinality);
@@ -374,7 +375,7 @@ const IcebergManifestFile &IcebergMultiFileList::GetManifestFileForEntry(const B
 	if (type == IcebergManifestContentType::DATA) {
 		return data_manifests[entry.manifest_file_idx].entry.file;
 	} else {
-		return delete_manifests[entry.manifest_file_idx].get().file;
+		return delete_manifests[entry.manifest_file_idx].entry.file;
 	}
 }
 
@@ -673,15 +674,7 @@ optional_ptr<const BoundIcebergManifestEntry> IcebergMultiFileList::GetDataFile(
 				continue;
 			}
 
-			BoundIcebergManifestEntry bound_entry(current_batch.manifest_list_entry_idx, manifest_entry);
-			if (data_file.HasFirstRowId()) {
-				bound_entry.SetFirstRowId(data_file.GetFirstRowId());
-			} else if (bound_manifest_list_entry.has_next_row_id) {
-				auto &next_row_id = bound_manifest_list_entry.next_row_id;
-				auto materialized_row_id = next_row_id;
-				bound_entry.SetFirstRowId(materialized_row_id);
-				next_row_id += data_file.record_count;
-			}
+			auto bound_entry = bound_manifest_list_entry.BindEntry(manifest_entry);
 			data_manifest_entries.push_back(bound_entry);
 		}
 		if (current_batch.start_index >= current_batch.end_index) {
@@ -924,16 +917,17 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 
 	//! Add all data manifests
 	for (auto &manifest : committed_data_manifests) {
+		auto manifest_list_entry_idx = data_manifests.size();
 		// reserve upfront → guarantees no reallocation
 		auto &file = manifest.file;
 		idx_t reserve_size = file.existing_files_count + file.added_files_count;
 		manifest.manifest_entries.reserve(reserve_size);
 
-		data_manifests.emplace_back(manifest);
+		data_manifests.emplace_back(manifest_list_entry_idx, manifest);
 	}
 	for (auto &manifest : transaction_data_manifests) {
 		auto manifest_list_entry_idx = data_manifests.size();
-		data_manifests.emplace_back(manifest);
+		data_manifests.emplace_back(manifest_list_entry_idx, manifest);
 		read_state.PushBatch(ManifestReadBatch {manifest_list_entry_idx, 0, manifest.get().manifest_entries.size()});
 	}
 
@@ -944,10 +938,12 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 
 	//! Add all delete manifests
 	for (auto &manifest : committed_delete_manifests) {
-		delete_manifests.push_back(manifest);
+		auto index = delete_manifests.size();
+		delete_manifests.emplace_back(index, manifest);
 	}
 	for (auto &manifest : transaction_delete_manifests) {
-		delete_manifests.push_back(manifest);
+		auto index = delete_manifests.size();
+		delete_manifests.emplace_back(index, manifest);
 	}
 
 	if (!committed_data_manifests.empty()) {
@@ -992,9 +988,9 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 		delete_manifest_reader->Read();
 	}
 	for (idx_t i = 0; i < committed_delete_manifests.size(); i++) {
-		auto &manifest = committed_delete_manifests[i];
-		auto &entries = manifest.manifest_entries;
-		auto &manifest_file = manifest.file;
+		auto &manifest = delete_manifests[i];
+		auto &entries = manifest.entry.manifest_entries;
+		auto &manifest_file = manifest.entry.file;
 		for (auto &manifest_entry : entries) {
 			if (manifest_entry.status == IcebergManifestEntryStatusType::DELETED) {
 				continue;
@@ -1014,7 +1010,8 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 				//! Skip this delete file, there's a transaction-local delete that makes it obsolete
 				continue;
 			}
-			delete_manifest_entries.push_back(BoundIcebergManifestEntry(i, manifest_entry));
+			auto bound_entry = manifest.BindEntry(manifest_entry);
+			delete_manifest_entries.push_back(std::move(bound_entry));
 		}
 	}
 
@@ -1032,9 +1029,10 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 		}
 	}
 
+	auto offset = committed_delete_manifests.size();
 	while (transaction_delete_idx < transaction_delete_manifests.size()) {
-		auto &delete_manifest = transaction_delete_manifests[transaction_delete_idx].get();
-		for (auto &manifest_entry : delete_manifest.manifest_entries) {
+		auto &delete_manifest = delete_manifests[offset + transaction_delete_idx];
+		for (auto &manifest_entry : delete_manifest.entry.manifest_entries) {
 			auto &data_file = manifest_entry.data_file;
 
 			auto &referenced_data_file = data_file.referenced_data_file;
@@ -1047,8 +1045,7 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 				}
 			}
 
-			BoundIcebergManifestEntry bound_manifest_entry(committed_delete_manifests.size() + transaction_delete_idx,
-			                                               manifest_entry);
+			auto bound_manifest_entry = delete_manifest.BindEntry(manifest_entry);
 			//! FIXME: no file pruning for uncommitted data?
 			if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
 				ScanDeleteFile(bound_manifest_entry, global_columns, column_indexes);
