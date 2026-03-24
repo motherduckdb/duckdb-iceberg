@@ -60,6 +60,9 @@ jobs:
         run: |
           make fixture_local
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+
       - name: Run local tests
         env:
           DUCKDB_ICEBERG_HAVE_GENERATED_DATA: 1

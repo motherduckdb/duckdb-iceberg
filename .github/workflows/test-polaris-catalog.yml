@@ -54,6 +54,9 @@ jobs:
           export POLARIS_CLIENT_SECRET=$(cat tmp/polaris_client_secret.txt)
           ./build/release/test/unittest "$PWD/test/*" --list-test-names-only || true
           ./build/release/test/unittest "$PWD/test/*"
+ 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
 
       - name: Run Generic IRC tests
         env:

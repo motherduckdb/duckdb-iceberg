@@ -86,6 +86,9 @@ jobs:
           ./build/release/test/unittest "$PWD/test/sql/local/irc_specific_catalogs/nessie/*" --list-test-names-only || true
           ./build/release/test/unittest "$PWD/test/sql/local/irc_specific_catalogs/nessie/*"
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+
       - name: Generate data
         run: |
           make nessie_data
