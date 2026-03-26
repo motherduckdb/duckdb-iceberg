@@ -525,7 +525,6 @@ unique_ptr<Expression> IcebergAvroMultiFileReader::GetVirtualColumnExpression(
 	                                                   global_column_reference);
 }
 
-
 void IcebergAvroMultiFileReader::FinalizeChunk(ClientContext &context, const MultiFileBindData &bind_data,
                                                BaseFileReader &reader, const MultiFileReaderData &reader_data,
                                                DataChunk &input_chunk, DataChunk &output_chunk,
@@ -611,9 +610,9 @@ shared_ptr<MultiFileList> IcebergAvroMultiFileReader::CreateFileList(ClientConte
 }
 
 unique_ptr<MultiFileReaderGlobalState> IcebergAvroMultiFileReader::InitializeGlobalState(
-	ClientContext &context, const MultiFileOptions &file_options, const MultiFileReaderBindData &bind_data,
-	const MultiFileList &file_list, const vector<MultiFileColumnDefinition> &global_columns,
-	const vector<ColumnIndex> &global_column_ids) {
+    ClientContext &context, const MultiFileOptions &file_options, const MultiFileReaderBindData &bind_data,
+    const MultiFileList &file_list, const vector<MultiFileColumnDefinition> &global_columns,
+    const vector<ColumnIndex> &global_column_ids) {
 	vector<LogicalType> extra_columns;
 	auto res = make_uniq<IcebergAvroMultiFileReaderGlobalState>(extra_columns, file_list);
 	return std::move(res);
