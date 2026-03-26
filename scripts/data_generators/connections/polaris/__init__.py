@@ -44,6 +44,7 @@ class IcebergSparkLocal(IcebergConnection):
             f"org.apache.iceberg:iceberg-spark-runtime-{SPARK_VERSION}_{SCALA_BINARY_VERSION}:{ICEBERG_LIBRARY_VERSION},org.apache.iceberg:iceberg-aws-bundle:{ICEBERG_LIBRARY_VERSION} pyspark-shell"
         )
         config.set('spark.sql.iceberg.vectorization.enabled', 'false')
+        config.set("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
         # Configure the 'polaris' catalog as an Iceberg rest catalog
         config.set("spark.sql.catalog.quickstart_catalog.type", "rest")
         config.set('spark.driver.memory', '10g')
