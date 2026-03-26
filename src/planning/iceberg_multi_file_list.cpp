@@ -452,6 +452,14 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 	auto &filters = table_filters.filters;
 	auto &schema = GetSchema().columns;
 
+	auto &metadata = GetMetadata();
+	unordered_set<int32_t> mapping_field_ids;
+	for (auto &mapping : metadata.mappings) {
+		if (mapping.field_id != NumericLimits<int32_t>::Maximum()) {
+			mapping_field_ids.insert(mapping.field_id);
+		}
+	}
+
 	for (idx_t index = 0; index < schema.size(); index++) {
 		auto &column = *schema[index];
 		auto it = filters.find(index);
@@ -459,7 +467,6 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 		if (it == filters.end()) {
 			continue;
 		}
-		auto &metadata = GetMetadata();
 		auto &data_file = manifest_entry.data_file;
 		// First check if there are partitions
 		if (!data_file.partition_info.empty()) {
@@ -531,6 +538,13 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 		}
 
 		auto &column_id = column.id;
+		if (!metadata.mappings.empty() && mapping_field_ids.find(column_id) == mapping_field_ids.end()) {
+			// Column field-id is not resolvable through the name mapping, so the column
+			// cannot be read from the Parquet file. The manifest statistics refer to
+			// the physical data which is unreachable — skip this filter.
+			continue;
+		}
+
 		auto lower_bound_it = data_file.lower_bounds.find(column_id);
 		auto upper_bound_it = data_file.upper_bounds.find(column_id);
 		Value lower_bound;
