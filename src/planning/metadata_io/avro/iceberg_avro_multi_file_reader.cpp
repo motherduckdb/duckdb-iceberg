@@ -484,47 +484,6 @@ ReaderInitializeType IcebergAvroMultiFileReader::InitializeReader(
 	return result;
 }
 
-unique_ptr<Expression> IcebergAvroMultiFileReader::GetVirtualColumnExpression(
-    ClientContext &context, MultiFileReaderData &reader_data, const vector<MultiFileColumnDefinition> &local_columns,
-    idx_t &column_id, const LogicalType &type, MultiFileLocalIndex local_idx,
-    optional_ptr<MultiFileColumnDefinition> &global_column_reference) {
-	if (column_id == PARTITION_SPEC_ID_FIELD_ID) {
-		if (!reader_data.file_to_be_opened.extended_info) {
-			throw InternalException("Extended info not found for partition_spec_id column");
-		}
-		auto &options = reader_data.file_to_be_opened.extended_info->options;
-		auto entry = options.find("partition_spec_id");
-		if (entry == options.end()) {
-			throw InternalException("'partition_spec_id' not set when initializing the FileList");
-		}
-		return make_uniq<BoundConstantExpression>(entry->second);
-	}
-	if (column_id == SEQUENCE_NUMBER_FIELD_ID) {
-		if (!reader_data.file_to_be_opened.extended_info) {
-			throw InternalException("Extended info not found for sequence number column");
-		}
-		auto &options = reader_data.file_to_be_opened.extended_info->options;
-		auto entry = options.find("sequence_number");
-		if (entry == options.end()) {
-			throw InternalException("'sequence_number' not set when initializing the FileList");
-		}
-		return make_uniq<BoundConstantExpression>(entry->second);
-	}
-	if (column_id == MANIFEST_FILE_PATH_FIELD_ID) {
-		if (!reader_data.file_to_be_opened.extended_info) {
-			throw InternalException("Extended info not found for manifest_file_path column");
-		}
-		auto &options = reader_data.file_to_be_opened.extended_info->options;
-		auto entry = options.find("manifest_file_path");
-		if (entry == options.end()) {
-			throw InternalException("'manifest_file_path' not set when initializing the FileList");
-		}
-		return make_uniq<BoundConstantExpression>(entry->second);
-	}
-	return MultiFileReader::GetVirtualColumnExpression(context, reader_data, local_columns, column_id, type, local_idx,
-	                                                   global_column_reference);
-}
-
 void IcebergAvroMultiFileReader::FinalizeChunk(ClientContext &context, const MultiFileBindData &bind_data,
                                                BaseFileReader &reader, const MultiFileReaderData &reader_data,
                                                DataChunk &input_chunk, DataChunk &output_chunk,
@@ -606,15 +565,6 @@ shared_ptr<MultiFileList> IcebergAvroMultiFileReader::CreateFileList(ClientConte
 	}
 
 	auto res = make_uniq<IcebergAvroMultiFileList>(scan_info, std::move(open_files));
-	return std::move(res);
-}
-
-unique_ptr<MultiFileReaderGlobalState> IcebergAvroMultiFileReader::InitializeGlobalState(
-    ClientContext &context, const MultiFileOptions &file_options, const MultiFileReaderBindData &bind_data,
-    const MultiFileList &file_list, const vector<MultiFileColumnDefinition> &global_columns,
-    const vector<ColumnIndex> &global_column_ids) {
-	vector<LogicalType> extra_columns;
-	auto res = make_uniq<IcebergAvroMultiFileReaderGlobalState>(extra_columns, file_list);
 	return std::move(res);
 }
 
