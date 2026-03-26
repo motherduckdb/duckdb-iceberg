@@ -119,8 +119,7 @@ static void ApplyFieldMapping(MultiFileColumnDefinition &col, const vector<Icebe
 
 	auto it = fields.find(name);
 	if (it == fields.end()) {
-		throw InvalidConfigurationException("Column '%s' does not have a field-id, and no field-mapping exists for it!",
-		                                    name);
+		return;
 	}
 	auto &mapping = mappings[it->second];
 
@@ -220,6 +219,9 @@ static void ApplyPartitionConstants(const IcebergMultiFileList &multi_file_list,
 	unordered_map<uint64_t, idx_t> local_field_id_to_index;
 	for (idx_t i = 0; i < local_columns.size(); i++) {
 		auto &local_column = local_columns[i];
+		if (local_column.identifier.IsNull()) {
+			continue;
+		}
 		auto field_identifier = local_column.identifier.GetValue<int32_t>();
 		auto field_id = static_cast<uint64_t>(field_identifier);
 		local_field_id_to_index[field_id] = i;
@@ -231,6 +233,9 @@ static void ApplyPartitionConstants(const IcebergMultiFileList &multi_file_list,
 			continue;
 		}
 		auto &global_column = global_columns[global_id.GetPrimaryIndex()];
+		if (global_column.identifier.IsNull()) {
+			continue;
+		}
 		auto field_id = static_cast<uint64_t>(global_column.identifier.GetValue<int32_t>());
 		if (local_field_id_to_index.count(field_id)) {
 			//! Column exists in the local columns of the file
