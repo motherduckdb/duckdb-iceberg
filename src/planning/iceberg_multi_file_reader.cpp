@@ -233,9 +233,6 @@ static void ApplyPartitionConstants(const IcebergMultiFileList &multi_file_list,
 			continue;
 		}
 		auto &global_column = global_columns[global_id.GetPrimaryIndex()];
-		if (global_column.identifier.IsNull()) {
-			continue;
-		}
 		auto field_id = static_cast<uint64_t>(global_column.identifier.GetValue<int32_t>());
 		if (local_field_id_to_index.count(field_id)) {
 			//! Column exists in the local columns of the file
