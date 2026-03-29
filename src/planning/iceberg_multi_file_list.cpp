@@ -539,9 +539,14 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 
 		auto &column_id = column.id;
 		if (!metadata.mappings.empty() && mapping_field_ids.find(column_id) == mapping_field_ids.end()) {
-			// Column field-id is not resolvable through the name mapping, so the column
-			// cannot be read from the Parquet file. The manifest statistics refer to
-			// the physical data which is unreachable — skip this filter.
+			// The name-mapping isn't empty, but it doesn't contain this field.
+			// We take the conservative approach and assume that the name mapping is required to resolve this field.
+			// i.e: assume all of these are true:
+			// 1. parquet file doesn't contain field ids for this column.
+			// 2. no identity transform exists for this field.
+			// 3. the column has no initial-default
+			// When we assume that, the column becomes unreachable (entirely NULL), voiding the stats in the iceberg
+			// metadata. So we have to ignore this filter.
 			continue;
 		}
 
