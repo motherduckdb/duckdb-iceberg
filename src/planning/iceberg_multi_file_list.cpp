@@ -121,7 +121,14 @@ IcebergMultiFileList::IcebergMultiFileList(ClientContext &context_p, shared_ptr<
 IcebergMultiFileList::~IcebergMultiFileList() {
 	lock_guard<mutex> guard(lock);
 	//! FIXME: this could throw, if the tasks encountered an error
-	FinishScanTasks(guard);
+	try {
+		FinishScanTasks(guard);
+	} catch (duckdb::Exception &e) {
+		// temporary fix for the FIX ME. Not having this in place causes crashes on the server because we throw
+		// an exception during stack unwinding. I unfortunately dont even know which exception we throw because this
+		// second exception crashes the duckling
+                std::cerr << e.what() << std::endl;
+	}
 }
 
 string IcebergMultiFileList::ToDuckDBPath(const string &raw_path) {
