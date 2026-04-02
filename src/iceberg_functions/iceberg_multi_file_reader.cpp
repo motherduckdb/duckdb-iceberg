@@ -283,19 +283,6 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
 
 	//! Get the data file that we're preparing to scan
 	const auto &multi_file_list = gstate.file_list.Cast<IcebergMultiFileList>();
-	auto &reader = *reader_data.reader;
-	auto file_id = reader.file_list_idx.GetIndex();
-	auto &manifest_entry = multi_file_list.manifest_entries[file_id];
-
-	//! Collect all the equality delete ids needed
-	unordered_set<int32_t> equality_delete_ids;
-	auto delete_rows = multi_file_list.GetEqualityDeletesForFile(manifest_entry);
-	for (auto &row : delete_rows) {
-		auto &filters = row.get().filters;
-		for (auto &filter : filters) {
-			equality_delete_ids.insert(filter.first);
-		}
-	}
 
 	//! Add the columns needed by the equality deletes if not present
 	auto new_global_column_ids = global_column_ids;
@@ -379,7 +366,11 @@ void IcebergMultiFileReader::ApplyEqualityDeletes(ClientContext &context, DataCh
 	vector<unique_ptr<Expression>> rows;
 	for (auto &row : delete_rows) {
 		vector<unique_ptr<Expression>> equalities;
-		for (auto &item : row.get().filters) {
+		auto &filters = row.get().filters;
+		if (filters.empty()) {
+			continue;
+		}
+		for (auto &item : filters) {
 			auto &field_id = item.first;
 			auto &expression = item.second;
 
@@ -411,6 +402,9 @@ void IcebergMultiFileReader::ApplyEqualityDeletes(ClientContext &context, DataCh
 			filter = std::move(equalities[0]);
 		}
 		rows.push_back(std::move(filter));
+	}
+	if (rows.empty()) {
+		return;
 	}
 
 	unique_ptr<Expression> equality_delete_filter;
@@ -573,7 +567,7 @@ unique_ptr<Expression> IcebergMultiFileReader::GetVirtualColumnExpression(
 
 				// Transform virtual column to file_row_number for the reference
 				column_id = MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER;
-				return coalesce_expr;
+				return std::move(coalesce_expr);
 			}
 		}
 		if (entry == options.end()) {
@@ -619,7 +613,7 @@ unique_ptr<Expression> IcebergMultiFileReader::GetVirtualColumnExpression(
 
 				// Transform virtual column to file_row_number for the reference
 				column_id = MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER;
-				return coalesce_expr;
+				return std::move(coalesce_expr);
 			}
 		}
 		if (entry == options.end()) {
