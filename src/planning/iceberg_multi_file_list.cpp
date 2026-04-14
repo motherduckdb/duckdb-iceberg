@@ -1007,6 +1007,12 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 		for (idx_t i = 0; i < num_threads; i++) {
 			executor.ScheduleTask(make_uniq<ManifestReadTask>(*data_manifest_read_state));
 		}
+
+		// Wait for all manifest-read tasks to complete before returning. Without this,
+		// tasks are left in-flight and GetDataFile -> TryGetNextBatch -> WorkOnTasks may
+		// spin while holding the lock, deadlocking when all worker threads are blocked on
+		// the same lock from their pipeline tasks.
+		executor.WorkOnTasks();
 	}
 }
 
