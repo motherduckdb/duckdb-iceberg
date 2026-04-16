@@ -1,12 +1,23 @@
 {
   "description": "Use apache/iceberg-rest-fixture as Iceberg Rest Catalog",
-  "on_init": "CREATE SECRET (TYPE S3,KEY_ID 'admin',SECRET 'password',ENDPOINT '127.0.0.1:9000',URL_STYLE 'path',USE_SSL 0); ATTACH '' AS my_datalake (TYPE ICEBERG,CLIENT_ID 'admin',CLIENT_SECRET 'password',ENDPOINT 'http://127.0.0.1:8181'); Create schema if not exists my_datalake.default;",
+  "on_init": "CREATE SECRET (TYPE S3,KEY_ID 'admin',SECRET 'password',ENDPOINT '127.0.0.1:9000',URL_STYLE 'path',USE_SSL 0); ATTACH '' AS my_datalake (TYPE ICEBERG,CLIENT_ID 'admin',CLIENT_SECRET 'password',ENDPOINT 'http://127.0.0.1:8181'); Create schema if not exists my_datalake.\"{BASE_TEST_NAME}\"; Set timezone = 'UTC'",
+  "on_new_connection": "use my_datalake.\"{BASE_TEST_NAME}\";",
   "statically_loaded_extensions": [
     "core_functions",
     "parquet",
     "avro",
     "iceberg",
-    "httpfs"
+    "httpfs",
+    "icu"
+  ],
+  "skip_error_messages": [
+    "not a valid Iceberg Type",
+    "Iceberg databases do not support creating sequences",
+    "Not implemented Error",
+    "only supported for DuckDB database files",
+    "Referenced column \"rowid\" not found in FROM clause",
+    "Iceberg databases do not support creating functions",
+    "Iceberg databases do not support creating types"
   ],
   "skip_tests": [
     {
@@ -144,6 +155,27 @@
         "test/sql/table_function/sqlite_master.test",
         "test/sql/table_function/sqlite_master_quotes.test",
         "test/sql/types/bignum/test_bignum_sum.test_slow"
+      ]
+    },
+    {
+      "reason": "DuckDB type is not Iceberg Type  i.e hugeint is stored as decimal(38,0)",
+      "paths": [
+        "test/sql/aggregate/aggregates/test_arg_min_max.test",
+      ]
+    },
+    {
+      "reason": "DuckDB-Iceberg does not check column constraints",
+      "paths": [
+        "test/sql/alter/rename_table/test_rename_table_constraints.test",
+        "test/sql/alter/rename_col/test_rename_col_unique.test",
+        "test/sql/alter/rename_col/test_rename_col_check.test",
+        "test/sql/alter/drop_col/test_drop_col_pk.test"
+      ]
+    },
+    {
+      "reason": "Incompatible transaction support",
+      "paths": [
+        "test/sql/alter/drop_col/test_drop_col_transactions.test"
       ]
     }
   ]
