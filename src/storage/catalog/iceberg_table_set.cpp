@@ -22,6 +22,7 @@
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/planner/tableref/bound_at_clause.hpp"
 #include "duckdb/planner/expression_binder/table_function_binder.hpp"
+#include "duckdb/execution/expression_executor.hpp"
 
 namespace duckdb {
 

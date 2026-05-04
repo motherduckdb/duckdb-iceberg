@@ -483,7 +483,7 @@ static unique_ptr<Expression> CreateColumnReference(IcebergCopyInput &copy_input
                                                     idx_t column_index) {
 	if (copy_input.get_table_index.IsValid()) {
 		// logical plan generation: generate a bound column ref
-		ColumnBinding column_binding(copy_input.get_table_index.GetIndex(), column_index);
+		ColumnBinding column_binding(TableIndex(copy_input.get_table_index.GetIndex()), ProjectionIndex(column_index));
 		return make_uniq<BoundColumnRefExpression>(type, column_binding);
 	}
 	// physical plan generation: generate a reference directly
@@ -606,7 +606,7 @@ static void GeneratePartitionExpressions(ClientContext &context, IcebergCopyInpu
 
 		auto expr = GetPartitionExpression(context, copy_input, field);
 		projection_names.push_back(field.name);
-		projection_types.push_back(expr->return_type);
+		projection_types.push_back(expr->GetReturnType());
 		projection_expressions.push_back(std::move(expr));
 	}
 
@@ -677,7 +677,7 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 			// Build the projection types from the expressions
 			vector<LogicalType> proj_types;
 			for (auto &expr : projection_expressions) {
-				proj_types.push_back(expr->return_type);
+				proj_types.push_back(expr->GetReturnType());
 			}
 			auto &proj = planner.Make<PhysicalProjection>(std::move(proj_types), std::move(projection_expressions),
 			                                              plan->estimated_cardinality);
@@ -723,7 +723,6 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 		physical_copy_ref.partition_columns = partition_columns;
 		physical_copy_ref.write_partition_columns = write_partition_columns;
 		physical_copy_ref.write_empty_file = true;
-		physical_copy_ref.rotate = false;
 	} else {
 		physical_copy_ref.filename_pattern.SetFilenamePattern("{uuidv7}");
 		physical_copy_ref.file_path = copy_input.data_path;
@@ -731,7 +730,6 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 		physical_copy_ref.write_partition_columns = false;
 		physical_copy_ref.write_empty_file = false;
 		physical_copy_ref.file_size_bytes = IcebergCatalog::DEFAULT_TARGET_FILE_SIZE;
-		physical_copy_ref.rotate = true;
 	}
 
 	physical_copy_ref.file_extension = "parquet";

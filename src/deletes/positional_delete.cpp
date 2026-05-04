@@ -35,7 +35,7 @@ void IcebergMultiFileList::ScanPositionalDeleteFile(const IcebergManifestEntry &
 	if (count == 0) {
 		return;
 	}
-	reference<string_t> current_file_path = names[0];
+	reference<const string_t> current_file_path = names[0];
 	auto initial_key = current_file_path.get().GetString();
 	auto deletes = TryGetOrCreate(positional_delete_data, entry, initial_key);
 

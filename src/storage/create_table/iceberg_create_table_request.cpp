@@ -12,10 +12,11 @@
 #include "duckdb/execution/execution_context.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
-#include "duckdb/storage/caching_file_system.hpp"
+#include "duckdb/storage/external_file_cache/caching_file_system.hpp"
 #include "duckdb/common/types/blob.hpp"
 #include "duckdb/planner/expression_binder/constant_binder.hpp"
 #include "duckdb/planner/binder.hpp"
+#include "duckdb/execution/expression_executor.hpp"
 
 using namespace duckdb_yyjson;
 namespace duckdb {

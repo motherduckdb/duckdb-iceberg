@@ -7,7 +7,6 @@
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/main/extension_helper.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
-#include "duckdb/storage/caching_file_system.hpp"
 #include "avro_scan.hpp"
 #include "manifest_reader.hpp"
 #include "duckdb/common/types/uuid.hpp"

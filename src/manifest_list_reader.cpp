@@ -1,3 +1,6 @@
+#include "duckdb/common/vector/list_vector.hpp"
+#include "duckdb/common/vector/map_vector.hpp"
+#include "duckdb/common/vector/struct_vector.hpp"
 #include "manifest_reader.hpp"
 #include "include/metadata/iceberg_manifest_list.hpp"
 
@@ -62,10 +65,10 @@ idx_t ManifestListReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergMan
 	auto &child_vectors = StructVector::GetEntries(field_summary_vec);
 
 	idx_t partition_index = 0;
-	auto &contains_null = *child_vectors[partition_index++];
-	auto &contains_nan = *child_vectors[partition_index++];
-	auto &lower_bound = *child_vectors[partition_index++];
-	auto &upper_bound = *child_vectors[partition_index++];
+	auto &contains_null = child_vectors[partition_index++];
+	auto &contains_nan = child_vectors[partition_index++];
+	auto &lower_bound = child_vectors[partition_index++];
+	auto &upper_bound = child_vectors[partition_index++];
 
 	optional_ptr<Vector> first_row_id;
 	if (iceberg_version >= 3) {
@@ -75,10 +78,10 @@ idx_t ManifestListReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergMan
 	auto manifest_path_data = FlatVector::GetData<string_t>(manifest_path);
 	auto manifest_length_data = FlatVector::GetData<int64_t>(manifest_length);
 	auto partition_spec_id_data = FlatVector::GetData<int32_t>(partition_spec_id);
-	int32_t *content_data = nullptr;
-	int64_t *sequence_number_data = nullptr;
-	int64_t *min_sequence_number_data = nullptr;
-	int64_t *first_row_id_data = nullptr;
+	const int32_t *content_data = nullptr;
+	const int64_t *sequence_number_data = nullptr;
+	const int64_t *min_sequence_number_data = nullptr;
+	const int64_t *first_row_id_data = nullptr;
 	if (iceberg_version >= 2) {
 		content_data = FlatVector::GetData<int32_t>(*content);
 		sequence_number_data = FlatVector::GetData<int64_t>(*sequence_number);

@@ -152,7 +152,7 @@ static unique_ptr<FunctionData> IcebergColumnStatsBind(ClientContext &context, T
 }
 
 static void AddString(Vector &vec, idx_t index, string_t &&str) {
-	FlatVector::GetData<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
+	FlatVector::GetDataMutable<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
 }
 
 static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {

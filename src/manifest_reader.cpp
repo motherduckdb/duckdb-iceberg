@@ -1,3 +1,6 @@
+#include "duckdb/common/vector/list_vector.hpp"
+#include "duckdb/common/vector/map_vector.hpp"
+#include "duckdb/common/vector/struct_vector.hpp"
 #include "manifest_reader.hpp"
 
 #include "duckdb/common/string_util.hpp"
@@ -35,8 +38,8 @@ idx_t ManifestReader::Read(idx_t count, vector<IcebergManifestEntry> &result) {
 
 static unordered_map<int32_t, Value> GetBounds(Vector &bounds, idx_t index) {
 	auto &bounds_child = ListVector::GetEntry(bounds);
-	auto keys = FlatVector::GetData<int32_t>(*StructVector::GetEntries(bounds_child)[0]);
-	auto &values = *StructVector::GetEntries(bounds_child)[1];
+	auto keys = FlatVector::GetData<int32_t>(StructVector::GetEntries(bounds_child)[0]);
+	auto &values = StructVector::GetEntries(bounds_child)[1];
 	auto bounds_list = FlatVector::GetData<list_entry_t>(bounds);
 
 	unordered_map<int32_t, Value> parsed_bounds;
@@ -56,8 +59,8 @@ static unordered_map<int32_t, Value> GetBounds(Vector &bounds, idx_t index) {
 
 static unordered_map<int32_t, int64_t> GetCounts(Vector &counts, idx_t index) {
 	auto &counts_child = ListVector::GetEntry(counts);
-	auto keys = FlatVector::GetData<int32_t>(*StructVector::GetEntries(counts_child)[0]);
-	auto values = FlatVector::GetData<int64_t>(*StructVector::GetEntries(counts_child)[1]);
+	auto keys = FlatVector::GetData<int32_t>(StructVector::GetEntries(counts_child)[0]);
+	auto values = FlatVector::GetData<int64_t>(StructVector::GetEntries(counts_child)[1]);
 	auto counts_list = FlatVector::GetData<list_entry_t>(counts);
 
 	unordered_map<int32_t, int64_t> parsed_counts;
@@ -130,35 +133,35 @@ idx_t ManifestReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergManifes
 	auto &data_file_entries = StructVector::GetEntries(data_file);
 	optional_ptr<Vector> content;
 	if (iceberg_version >= 2) {
-		content = *data_file_entries[entry_index++];
+		content = data_file_entries[entry_index++];
 	}
-	auto &file_path = *data_file_entries[entry_index++];
-	auto &file_format = *data_file_entries[entry_index++];
-	auto &partition = *data_file_entries[entry_index++];
-	auto &record_count = *data_file_entries[entry_index++];
-	auto &file_size_in_bytes = *data_file_entries[entry_index++];
-	auto &column_sizes = *data_file_entries[entry_index++];
-	auto &value_counts = *data_file_entries[entry_index++];
-	auto &null_value_counts = *data_file_entries[entry_index++];
-	auto &nan_value_counts = *data_file_entries[entry_index++];
-	auto &lower_bounds = *data_file_entries[entry_index++];
-	auto &upper_bounds = *data_file_entries[entry_index++];
-	auto &split_offsets = *data_file_entries[entry_index++];
-	auto &equality_ids = *data_file_entries[entry_index++];
-	auto &sort_order_id = *data_file_entries[entry_index++];
+	auto &file_path = data_file_entries[entry_index++];
+	auto &file_format = data_file_entries[entry_index++];
+	auto &partition = data_file_entries[entry_index++];
+	auto &record_count = data_file_entries[entry_index++];
+	auto &file_size_in_bytes = data_file_entries[entry_index++];
+	auto &column_sizes = data_file_entries[entry_index++];
+	auto &value_counts = data_file_entries[entry_index++];
+	auto &null_value_counts = data_file_entries[entry_index++];
+	auto &nan_value_counts = data_file_entries[entry_index++];
+	auto &lower_bounds = data_file_entries[entry_index++];
+	auto &upper_bounds = data_file_entries[entry_index++];
+	auto &split_offsets = data_file_entries[entry_index++];
+	auto &equality_ids = data_file_entries[entry_index++];
+	auto &sort_order_id = data_file_entries[entry_index++];
 	optional_ptr<Vector> first_row_id;
 	if (iceberg_version >= 3) {
-		first_row_id = *data_file_entries[entry_index++];
+		first_row_id = data_file_entries[entry_index++];
 	}
 	optional_ptr<Vector> referenced_data_file;
 	if (iceberg_version >= 2) {
-		referenced_data_file = *data_file_entries[entry_index++];
+		referenced_data_file = data_file_entries[entry_index++];
 	}
 	optional_ptr<Vector> content_offset;
 	optional_ptr<Vector> content_size_in_bytes;
 	if (iceberg_version >= 3) {
-		content_offset = *data_file_entries[entry_index++];
-		content_size_in_bytes = *data_file_entries[entry_index++];
+		content_offset = data_file_entries[entry_index++];
+		content_size_in_bytes = data_file_entries[entry_index++];
 	}
 
 	auto status_data = FlatVector::GetData<int32_t>(status);
@@ -175,9 +178,9 @@ idx_t ManifestReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergManifes
 	auto &sort_order_id_validity = FlatVector::Validity(sort_order_id);
 	auto sort_order_id_data = FlatVector::GetData<int32_t>(sort_order_id);
 
-	int32_t *content_data = nullptr;
-	int64_t *first_row_id_data = nullptr;
-	optional_ptr<ValidityMask> first_row_id_validity;
+	const int32_t *content_data = nullptr;
+	const int64_t *first_row_id_data = nullptr;
+	optional_ptr<const ValidityMask> first_row_id_validity;
 	if (iceberg_version >= 2) {
 		content_data = FlatVector::GetData<int32_t>(*content);
 	}
@@ -197,7 +200,7 @@ idx_t ManifestReader::ReadChunk(idx_t offset, idx_t count, vector<IcebergManifes
 		D_ASSERT(partition_children.size() == scan_info.partition_field_id_to_type.size());
 		idx_t child_index = 0;
 		for (auto &it : scan_info.partition_field_id_to_type) {
-			partition_vectors.emplace_back(it.first, *partition_children[child_index++]);
+			partition_vectors.emplace_back(it.first, partition_children[child_index++]);
 		}
 	}
 

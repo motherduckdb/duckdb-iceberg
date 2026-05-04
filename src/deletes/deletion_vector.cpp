@@ -2,8 +2,10 @@
 #include "iceberg_multi_file_list.hpp"
 #include "storage/iceberg_table_information.hpp"
 
-#include "duckdb/storage/caching_file_system.hpp"
+#include "duckdb/common/allocator.hpp"
 #include "duckdb/common/bswap.hpp"
+#include "duckdb/common/file_system.hpp"
+#include "duckdb/common/vector_operations/unary_executor.hpp"
 
 namespace duckdb {
 
@@ -141,10 +143,9 @@ void IcebergMultiFileList::ScanPuffinFile(const IcebergManifestEntry &entry) con
 	auto file_path = data_file.file_path;
 	D_ASSERT(!data_file.referenced_data_file.empty());
 
-	auto caching_file_system = CachingFileSystem::Get(context);
-
-	auto caching_file_handle = caching_file_system.OpenFile(file_path, FileOpenFlags::FILE_FLAGS_READ);
-	data_ptr_t data = nullptr;
+	FileOpenFlags flags = FileFlags::FILE_FLAGS_READ;
+	flags.SetCachingMode(CachingMode::CACHE_REMOTE_ONLY);
+	auto file_handle = fs.OpenFile(file_path, flags);
 
 	D_ASSERT(!data_file.content_offset.IsNull());
 	D_ASSERT(!data_file.content_size_in_bytes.IsNull());
@@ -152,8 +153,8 @@ void IcebergMultiFileList::ScanPuffinFile(const IcebergManifestEntry &entry) con
 	auto offset = data_file.content_offset.GetValue<int64_t>();
 	auto length = data_file.content_size_in_bytes.GetValue<int64_t>();
 
-	auto buf_handle = caching_file_handle->Read(data, length, offset);
-	auto buffer_data = buf_handle.Ptr();
+	auto local_buffer = Allocator::DefaultAllocator().Allocate(length);
+	fs.Read(*file_handle, local_buffer.get(), length, offset);
 
 	auto it = positional_delete_data.find(data_file.referenced_data_file);
 	if (it != positional_delete_data.end()) {
@@ -166,7 +167,7 @@ void IcebergMultiFileList::ScanPuffinFile(const IcebergManifestEntry &entry) con
 	}
 	//! NOTE: assign, don't emplace, deletion vectors take priority over any remaining positional delete files
 	positional_delete_data[data_file.referenced_data_file] =
-	    IcebergDeletionVectorData::FromBlob(entry, buffer_data, length);
+	    IcebergDeletionVectorData::FromBlob(entry, local_buffer.get(), length);
 }
 
 idx_t IcebergDeletionVector::Filter(row_t start_row_index, idx_t count, SelectionVector &result_sel) {

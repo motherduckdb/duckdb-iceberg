@@ -1,3 +1,5 @@
+#include "duckdb/common/vector/map_vector.hpp"
+#include "duckdb/common/vector/struct_vector.hpp"
 #include "iceberg_avro_multi_file_reader.hpp"
 #include "iceberg_avro_multi_file_list.hpp"
 #include "duckdb/common/exception.hpp"
@@ -444,9 +446,9 @@ void IcebergAvroMultiFileReader::FinalizeChunk(ClientContext &context, const Mul
 
 	auto &sequence_number_column = output_chunk.data[2];
 	sequence_number_column.Flatten(count);
-	auto &sequence_number_validity = FlatVector::Validity(sequence_number_column);
-	auto sequence_number_data = FlatVector::GetData<int64_t>(sequence_number_column);
-	auto status_column_data = FlatVector::GetData<int32_t>(status_column);
+	auto &sequence_number_validity = FlatVector::ValidityMutable(sequence_number_column);
+	auto sequence_number_data = FlatVector::GetDataMutable<int64_t>(sequence_number_column);
+	auto status_column_data = FlatVector::GetDataMutable<int32_t>(status_column);
 	for (idx_t i = 0; i < count; i++) {
 		if (sequence_number_validity.RowIsValid(i)) {
 			//! Sequence number is explicitly set
@@ -474,15 +476,15 @@ void IcebergAvroMultiFileReader::FinalizeChunk(ClientContext &context, const Mul
 	auto &data_file_column = output_chunk.data[4];
 	auto &data_struct_children = StructVector::GetEntries(data_file_column);
 
-	auto &first_row_id_column = *data_struct_children[15];
+	auto &first_row_id_column = data_struct_children[15];
 	first_row_id_column.Flatten(count);
 
-	auto &record_count_column = *data_struct_children[4];
+	auto &record_count_column = data_struct_children[4];
 	record_count_column.Flatten(count);
 
-	auto &first_row_id_validity = FlatVector::Validity(first_row_id_column);
-	auto first_row_id_data = FlatVector::GetData<int64_t>(first_row_id_column);
-	auto record_count_data = FlatVector::GetData<int64_t>(record_count_column);
+	auto &first_row_id_validity = FlatVector::ValidityMutable(first_row_id_column);
+	auto first_row_id_data = FlatVector::GetDataMutable<int64_t>(first_row_id_column);
+	auto record_count_data = FlatVector::GetDataMutable<int64_t>(record_count_column);
 	for (idx_t i = 0; i < count; i++) {
 		if (first_row_id_validity.RowIsValid(i)) {
 			//! First row id is explicitly set

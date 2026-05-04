@@ -49,7 +49,7 @@ public:
 		vector<LogicalType> update_types;
 		update_types.reserve(expressions.size());
 		for (auto &expr : expressions) {
-			update_types.push_back(expr->return_type);
+			update_types.push_back(expr->GetReturnType());
 		}
 		update_chunk.Initialize(allocator, update_types);
 	}
@@ -349,9 +349,9 @@ void IcebergTableEntry::BindUpdateConstraints(Binder &binder, LogicalGet &get, L
 		}
 		// column is not projected yet: project it by adding the clause "i=i" to the set of updated columns
 		update.expressions.push_back(make_uniq<BoundColumnRefExpression>(
-		    column.Type(), ColumnBinding(proj.table_index, proj.expressions.size())));
+		    column.Type(), ColumnBinding(proj.table_index, ProjectionIndex(proj.expressions.size()))));
 		proj.expressions.push_back(make_uniq<BoundColumnRefExpression>(
-		    column.Type(), ColumnBinding(get.table_index, column_id_index.GetIndex())));
+		    column.Type(), ColumnBinding(get.table_index, ProjectionIndex(column_id_index.GetIndex()))));
 		get.AddColumnId(physical_index.index);
 		update.columns.push_back(physical_index);
 	}

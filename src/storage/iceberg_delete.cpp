@@ -184,10 +184,10 @@ void IcebergDelete::WritePositionalDeleteFile(ClientContext &context, IcebergDel
 	write_chunk.Initialize(context, write_types);
 	// the first vector is constant (the file name)
 	Value filename_val(filename);
-	write_chunk.data[0].Reference(filename_val);
+	write_chunk.data[0].Reference(filename_val, count_t(STANDARD_VECTOR_SIZE));
 
 	idx_t row_count = 0;
-	auto row_data = FlatVector::GetData<int64_t>(write_chunk.data[1]);
+	auto row_data = FlatVector::GetDataMutable<int64_t>(write_chunk.data[1]);
 	for (auto &row_idx : sorted_deletes) {
 		row_data[row_count++] = NumericCast<int64_t>(row_idx);
 		if (row_count >= STANDARD_VECTOR_SIZE) {

@@ -27,7 +27,7 @@ public:
 		if (expr.index != 0) {
 			return nullptr;
 		}
-		auto &return_type = expr.return_type;
+		auto &return_type = expr.GetReturnType();
 		return make_uniq<BoundConstantExpression>(val.DefaultCastAs(return_type, true));
 	}
 
@@ -185,7 +185,7 @@ bool MatchBoundsTemplated(ClientContext &context, const TableFilter &filter, con
 		auto &expression_filter = filter.Cast<ExpressionFilter>();
 		auto &expr = *expression_filter.expr;
 
-		switch (expr.type) {
+		switch (expr.GetExpressionType()) {
 		case ExpressionType::OPERATOR_IS_NULL:
 		case ExpressionType::OPERATOR_IS_NOT_NULL: {
 			D_ASSERT(expr.GetExpressionClass() == ExpressionClass::BOUND_OPERATOR);
@@ -193,15 +193,15 @@ bool MatchBoundsTemplated(ClientContext &context, const TableFilter &filter, con
 
 			D_ASSERT(bound_operator_expr.children.size() == 1);
 			auto &child_expr = bound_operator_expr.children[0];
-			if (child_expr->type != ExpressionType::BOUND_REF) {
+			if (child_expr->GetExpressionType() != ExpressionType::BOUND_REF) {
 				//! We can't evaluate expressions that aren't direct column references
 				return true;
 			}
 
-			if (expr.type == ExpressionType::OPERATOR_IS_NULL) {
+			if (expr.GetExpressionType() == ExpressionType::OPERATOR_IS_NULL) {
 				return MatchBoundsIsNullFilter<TRANSFORM>(stats, transform);
 			}
-			D_ASSERT(expr.type == ExpressionType::OPERATOR_IS_NOT_NULL);
+			D_ASSERT(expr.GetExpressionType() == ExpressionType::OPERATOR_IS_NOT_NULL);
 			return MatchBoundsIsNotNullFilter<TRANSFORM>(stats, transform);
 		}
 		case ExpressionType::COMPARE_GREATERTHAN:
@@ -224,9 +224,9 @@ bool MatchBoundsTemplated(ClientContext &context, const TableFilter &filter, con
 				}
 
 				if (left_foldable) {
-					return MatchTransformedBounds<TRANSFORM>(context, expr.type, right, left, stats, transform);
+					return MatchTransformedBounds<TRANSFORM>(context, expr.GetExpressionType(), right, left, stats, transform);
 				} else {
-					return MatchTransformedBounds<TRANSFORM>(context, expr.type, left, right, stats, transform);
+					return MatchTransformedBounds<TRANSFORM>(context, expr.GetExpressionType(), left, right, stats, transform);
 				}
 				return true;
 			}
