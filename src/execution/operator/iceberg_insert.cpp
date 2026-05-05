@@ -18,8 +18,12 @@
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
 #include "execution/operator/iceberg_delete.hpp"
+#include "execution/operator/physical_iceberg_create_table.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "core/metadata/schema/iceberg_column_definition.hpp"
+#include "core/metadata/schema/iceberg_table_schema.hpp"
+#include "core/metadata/iceberg_table_metadata.hpp"
+#include "core/metadata/partition/iceberg_partition_spec.hpp"
 #include "planning/iceberg_multi_file_list.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 #include "core/expression/iceberg_value.hpp"
@@ -360,11 +364,26 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 	global_state.AddFiles(chunk, ic_table.name, table_metadata);
 }
 
+optional_ptr<TableCatalogEntry> IcebergInsert::GetEffectiveTable() const {
+	if (table) {
+		return table;
+	}
+	if (create_state) {
+		lock_guard<mutex> guard(create_state->lock);
+		return create_state->table_entry ? create_state->table_entry.get() : nullptr;
+	}
+	return nullptr;
+}
+
 SinkResultType IcebergInsert::Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const {
 	auto &global_state = input.global_state.Cast<IcebergInsertGlobalState>();
 
-	// TODO: pass through the partition id?
-	AddWrittenFiles(global_state, chunk, table);
+	// For CTAS, `table` is null at planning time and the catalog entry is
+	// produced by an upstream PhysicalIcebergCreateTable on the first chunk.
+	// By the time Sink runs that upstream operator has already populated
+	// `create_state->table_entry`, so resolve the effective table here.
+	auto effective_table = GetEffectiveTable();
+	AddWrittenFiles(global_state, chunk, effective_table);
 
 	return SinkResultType::NEED_MORE_INPUT;
 }
@@ -388,9 +407,15 @@ SinkFinalizeType IcebergInsert::Finalize(Pipeline &pipeline, Event &event, Clien
                                          OperatorSinkFinalizeInput &input) const {
 	auto &global_state = input.global_state.Cast<IcebergInsertGlobalState>();
 
-	auto &irc_table = table->Cast<IcebergTableEntry>();
+	auto effective_table = GetEffectiveTable();
+	if (!effective_table) {
+		// No data was sunk and no CTAS table was created (e.g. the upstream
+		// pipeline produced zero chunks for an empty CTAS). Nothing to commit.
+		return SinkFinalizeType::READY;
+	}
+	auto &irc_table = effective_table->Cast<IcebergTableEntry>();
 	auto &table_info = irc_table.table_info;
-	auto &transaction = IcebergTransaction::Get(context, table->catalog);
+	auto &transaction = IcebergTransaction::Get(context, effective_table->catalog);
 	auto &iceberg_transaction = transaction.Cast<IcebergTransaction>();
 
 	vector<IcebergManifestEntry> written_files;
@@ -434,13 +459,21 @@ SinkFinalizeType IcebergInsert::Finalize(Pipeline &pipeline, Event &event, Clien
 // Helpers
 //===--------------------------------------------------------------------===//
 string IcebergInsert::GetName() const {
-	D_ASSERT(table);
 	return "ICEBERG_INSERT";
 }
 
 InsertionOrderPreservingMap<string> IcebergInsert::ParamsToString() const {
 	InsertionOrderPreservingMap<string> result;
-	result["Table Name"] = table ? table->name : info->Base().table;
+	if (table) {
+		result["Table Name"] = table->name;
+	} else if (info) {
+		result["Table Name"] = info->Base().table;
+	} else if (create_state) {
+		lock_guard<mutex> guard(create_state->lock);
+		if (create_state->table_entry) {
+			result["Table Name"] = create_state->table_entry->name;
+		}
+	}
 	return result;
 }
 
@@ -925,34 +958,60 @@ PhysicalOperator &IcebergCatalog::PlanInsert(ClientContext &context, PhysicalPla
 	return insert;
 }
 
+static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(BoundCreateTableInfo &info) {
+	auto metadata = make_uniq<IcebergTableMetadata>();
+	metadata->iceberg_version = 2;
+	metadata->default_spec_id = 0;
+	metadata->partition_specs.emplace(0, IcebergPartitionSpec(0));
+
+	auto schema = make_shared_ptr<IcebergTableSchema>();
+	schema->schema_id = 0;
+	int32_t next_field_id = 1;
+	auto &create_info = info.Base().Cast<CreateTableInfo>();
+	for (auto &col : create_info.columns.Logical()) {
+		auto col_def = make_uniq<IcebergColumnDefinition>();
+		col_def->id = next_field_id++;
+		col_def->name = col.Name();
+		col_def->type = col.Type();
+		col_def->required = false;
+		schema->columns.push_back(std::move(col_def));
+	}
+	schema->last_column_id = static_cast<idx_t>(next_field_id - 1);
+	metadata->AddSchemaOrGetExisting(schema);
+	metadata->SetCurrentSchemaId(0);
+	return metadata;
+}
+
 PhysicalOperator &IcebergCatalog::PlanCreateTableAs(ClientContext &context, PhysicalPlanGenerator &planner,
                                                     LogicalCreateTable &op, PhysicalOperator &plan) {
-	// TODO: parse partition information here.
 	auto &schema = op.schema;
-
 	auto &ic_schema_entry = schema.Cast<IcebergSchemaEntry>();
-	auto &catalog = ic_schema_entry.catalog;
-	auto transaction = catalog.GetCatalogTransaction(context);
 
-	// create the table. Takes care of committing to rest catalog and getting the metadata location etc.
-	// setting the schema
-	auto table = ic_schema_entry.CreateTable(transaction, context, *op.info);
-	if (!table) {
-		throw InternalException("Table could not be created");
-	}
-	auto &ic_table = table->Cast<IcebergTableEntry>();
-	auto &table_metadata = ic_table.table_info.table_metadata;
-	// We need to load table credentials into our secrets for when we copy files
-	ic_table.PrepareIcebergScanFromEntry(context);
+	// create a fake local iceberg table with desired columns
+	auto placeholder_metadata = BuildPlaceholderMetadata(*op.info);
+	auto &placeholder_schema = placeholder_metadata->GetLatestSchema();
+	IcebergCopyInput copy_input(context, *placeholder_metadata, placeholder_schema);
+	auto &physical_copy_op = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, &plan);
+	auto &physical_copy = physical_copy_op.Cast<PhysicalCopyToFile>();
 
-	auto &table_schema = table_metadata.GetLatestSchema();
+	D_ASSERT(physical_copy.children.size() == 1);
+	auto &upstream = physical_copy.children[0].get();
+	auto upstream_types = upstream.types;
+	auto upstream_card = upstream.estimated_cardinality;
 
-	// Create Copy Info
-	IcebergCopyInput info(context, table_metadata, table_schema);
-	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, info, plan);
-	physical_index_vector_t<idx_t> column_index_map;
-	auto &insert = planner.Make<IcebergInsert>(op, ic_table, column_index_map);
+	// create shared state to be used between IcebergTableCreate and IcebergInsert
+	auto create_state = make_shared_ptr<IcebergCTASCreateState>();
+	// create a pass through IcebergCTASCrecateStatement operator to make the
+	// CreateTable API call when the operator is executed.
+	auto &create_op = planner.Make<PhysicalIcebergCreateTable>(ic_schema_entry, std::move(op.info), create_state,
+	                                                            physical_copy, std::move(upstream_types), upstream_card);
+	create_op.children.push_back(upstream);
+	physical_copy.children[0] = create_op;
 
+
+	auto &insert =
+	    planner.Make<IcebergInsert>(op, schema, unique_ptr<BoundCreateTableInfo>()).Cast<IcebergInsert>();
+	insert.create_state = std::move(create_state);
 	insert.children.push_back(physical_copy);
 	return insert;
 }

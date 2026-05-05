@@ -57,6 +57,7 @@ set(EXTENSION_SOURCES
 	src/execution/operator/iceberg_delete.cpp
 	src/execution/operator/iceberg_insert.cpp
 	src/execution/operator/iceberg_update.cpp
+	src/execution/operator/physical_iceberg_create_table.cpp
 	src/execution/operator/merge_into/iceberg_merge_into.cpp
 	src/execution/operator/merge_into/iceberg_merge_insert.cpp
 	src/execution/operator/merge_into/iceberg_merge_update.cpp
