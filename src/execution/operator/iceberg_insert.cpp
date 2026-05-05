@@ -1004,13 +1004,11 @@ PhysicalOperator &IcebergCatalog::PlanCreateTableAs(ClientContext &context, Phys
 	// create a pass through IcebergCTASCrecateStatement operator to make the
 	// CreateTable API call when the operator is executed.
 	auto &create_op = planner.Make<PhysicalIcebergCreateTable>(ic_schema_entry, std::move(op.info), create_state,
-	                                                            physical_copy, std::move(upstream_types), upstream_card);
+	                                                           physical_copy, std::move(upstream_types), upstream_card);
 	create_op.children.push_back(upstream);
 	physical_copy.children[0] = create_op;
 
-
-	auto &insert =
-	    planner.Make<IcebergInsert>(op, schema, unique_ptr<BoundCreateTableInfo>()).Cast<IcebergInsert>();
+	auto &insert = planner.Make<IcebergInsert>(op, schema, unique_ptr<BoundCreateTableInfo>()).Cast<IcebergInsert>();
 	insert.create_state = std::move(create_state);
 	insert.children.push_back(physical_copy);
 	return insert;

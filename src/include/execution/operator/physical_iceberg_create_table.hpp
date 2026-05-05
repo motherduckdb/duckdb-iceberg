@@ -45,9 +45,9 @@ public:
 
 public:
 	PhysicalIcebergCreateTable(PhysicalPlan &physical_plan, IcebergSchemaEntry &schema_entry,
-	                            unique_ptr<BoundCreateTableInfo> info,
-	                            shared_ptr<IcebergCTASCreateState> create_state, PhysicalCopyToFile &copy_to_file_op,
-	                            vector<LogicalType> types, idx_t estimated_cardinality);
+	                           unique_ptr<BoundCreateTableInfo> info, shared_ptr<IcebergCTASCreateState> create_state,
+	                           PhysicalCopyToFile &copy_to_file_op, vector<LogicalType> types,
+	                           idx_t estimated_cardinality);
 
 public:
 	// Operator interface
