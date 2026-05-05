@@ -9,7 +9,7 @@ import pytest
 # SQL PREPARE does not accept CTAS, but ADBC prepares and executes CTAS through
 # DuckDB's C API. Exercise that path directly to cover issue #595 without dbt.
 pytestmark = pytest.mark.skipif(
-    os.getenv("ICEBERG_SERVER_AVAILABLE") is None,
+    os.getenv("FIXTURE_SERVER_AVAILABLE") is None,
     reason="Iceberg test catalog is not available",
 )
 
@@ -157,12 +157,12 @@ def test_iceberg_ctas_prepared_statement_rebinds_at_execute(duckdb_capi):
     duckdb_capi.query("DROP TABLE my_datalake.default.ctas_prepared_rebind_595")
 
 
-# def test_iceberg_duplicate_ctas_in_transaction_still_errors(duckdb_capi):
-#     duckdb_capi.query("DROP TABLE IF EXISTS my_datalake.default.ctas_duplicate_guard_595")
-#     duckdb_capi.query("BEGIN")
-#     duckdb_capi.query("CREATE TABLE my_datalake.default.ctas_duplicate_guard_595 AS SELECT 1 AS id")
-#     state, _ = duckdb_capi.query(
-#         "CREATE TABLE my_datalake.default.ctas_duplicate_guard_595 AS SELECT 2 AS id", expect_ok=False
-#     )
-#     assert state != 0
-#     duckdb_capi.query("ROLLBACK")
+def test_iceberg_duplicate_ctas_in_transaction_still_errors(duckdb_capi):
+    duckdb_capi.query("DROP TABLE IF EXISTS my_datalake.default.ctas_duplicate_guard_595")
+    duckdb_capi.query("BEGIN")
+    duckdb_capi.query("CREATE TABLE my_datalake.default.ctas_duplicate_guard_595 AS SELECT 1 AS id")
+    state, _ = duckdb_capi.query(
+        "CREATE TABLE my_datalake.default.ctas_duplicate_guard_595 AS SELECT 2 AS id", expect_ok=False
+    )
+    assert state != 0
+    duckdb_capi.query("ROLLBACK")
