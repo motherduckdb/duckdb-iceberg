@@ -42,3 +42,15 @@ select * from should_not_exist;
 ----
 <REGEX>:.*does not exist.*
 
+statement ok
+drop table if exists should_exist;
+
+# table with no rows should still create
+statement ok
+create table should_exist as select range a from range(100) limit 0;
+
+query I
+select count(*) from should_exist;
+----
+0
+

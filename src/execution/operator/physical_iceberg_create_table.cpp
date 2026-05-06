@@ -25,11 +25,8 @@ unique_ptr<GlobalOperatorState> PhysicalIcebergCreateTable::GetGlobalOperatorSta
 	return make_uniq<IcebergCreateTableGlobalState>();
 }
 
-OperatorResultType PhysicalIcebergCreateTable::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
-                                                       GlobalOperatorState &gstate_p, OperatorState &state) const {
-	auto &gstate = gstate_p.Cast<IcebergCreateTableGlobalState>();
-
-	// Create the table in the IRC, record the field ids (columns ids) and update the binding in the
+void PhysicalIcebergCreateTable::MakeCreateTableRequest(ExecutionContext &context,
+                                                        IcebergCreateTableGlobalState &gstate) const {
 	std::call_once(gstate.init_flag, [&]() {
 		auto &client_context = context.client;
 		auto &catalog = schema_entry.catalog;
@@ -72,7 +69,21 @@ OperatorResultType PhysicalIcebergCreateTable::Execute(ExecutionContext &context
 			create_state->created = true;
 		}
 	});
+}
 
+OperatorFinalizeResultType PhysicalIcebergCreateTable::FinalExecute(ExecutionContext &context, DataChunk &chunk,
+                                                                    GlobalOperatorState &gstate,
+                                                                    OperatorState &state) const {
+	auto &global_state = gstate.Cast<IcebergCreateTableGlobalState>();
+	MakeCreateTableRequest(context, global_state);
+	return OperatorFinalizeResultType::FINISHED;
+}
+
+OperatorResultType PhysicalIcebergCreateTable::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+                                                       GlobalOperatorState &gstate_p, OperatorState &state) const {
+	auto &global_state = gstate_p.Cast<IcebergCreateTableGlobalState>();
+	// Create the table in the IRC, record the field ids (columns ids) and update the binding in the
+	MakeCreateTableRequest(context, global_state);
 	// Pass the chunk through unmodified.
 	chunk.Reference(input);
 	return OperatorResultType::NEED_MORE_INPUT;
