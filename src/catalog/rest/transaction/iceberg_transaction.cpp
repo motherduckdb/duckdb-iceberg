@@ -596,7 +596,7 @@ void IcebergTransaction::DoSchemaPropertyUpdates(ClientContext &context) {
 		}
 		auto create_body = JsonDocToString(std::move(doc_p));
 
-		IRCAPI::CommitNamespacePropertiesUpdate(context, ic_catalog, create_body, schema_name_no_catalog);
+		IRCAPI::CommitNamespacePropertiesUpdate(context, ic_catalog, create_body, namespace_identifiers);
 	}
 	created_schemas.clear();
 }

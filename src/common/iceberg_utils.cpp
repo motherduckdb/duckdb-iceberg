@@ -127,20 +127,21 @@ optional_ptr<SchemaCatalogEntry> IcebergUtils::GetSchemaEntry(ClientContext &con
 	auto default_db = DatabaseManager::GetDefaultDatabase(context);
 
 	switch (qualified_name.size()) {
-	case 2: {
-		// input: catalog.schema
-		auto lookup_info = EntryLookupInfo(CatalogType::SCHEMA_ENTRY, qualified_name[1]);
-		auto retriever = CatalogEntryRetriever(context);
-		return retriever.GetSchema(qualified_name[0], lookup_info, OnEntryNotFound::THROW_EXCEPTION);
-	}
 	case 1: {
 		// input: schema
 		// we assume the catalog from context
 		auto &catalog = Catalog::GetCatalog(context, default_db);
 		return catalog.GetSchema(context, qualified_name[0], OnEntryNotFound::THROW_EXCEPTION);
 	}
-	default:
-		throw InvalidInputException("Too many identifiers in schema name %s", input_string);
+	default: {
+		// input: catalog.schema (schema may contain dots for nested namespaces)
+		auto catalog_name = qualified_name[0];
+		vector<string> schema_parts(qualified_name.begin() + 1, qualified_name.end());
+		auto schema_name = StringUtil::Join(schema_parts, ".");
+		auto lookup_info = EntryLookupInfo(CatalogType::SCHEMA_ENTRY, schema_name);
+		auto retriever = CatalogEntryRetriever(context);
+		return retriever.GetSchema(catalog_name, lookup_info, OnEntryNotFound::THROW_EXCEPTION);
+	}
 	}
 }
 

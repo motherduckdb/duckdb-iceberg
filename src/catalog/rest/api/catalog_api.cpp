@@ -469,7 +469,7 @@ void IRCAPI::CommitNamespaceDrop(ClientContext &context, IcebergCatalog &catalog
 }
 
 void IRCAPI::CommitNamespacePropertiesUpdate(ClientContext &context, IcebergCatalog &catalog, string body,
-                                             string _namespace) {
+                                             const vector<string> &namespace_items) {
 	if (catalog.supported_urls.find("POST /v1/{prefix}/namespaces/{namespace}/properties") ==
 	    catalog.supported_urls.end()) {
 		throw NotImplementedException("This Iceberg REST catalog server does not support this operation");
@@ -477,7 +477,7 @@ void IRCAPI::CommitNamespacePropertiesUpdate(ClientContext &context, IcebergCata
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPrefixComponent(catalog.prefix, catalog.prefix_is_one_component);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
-	url_builder.AddPathComponent(IRCPathComponent::RegularComponent(_namespace));
+	url_builder.AddPathComponent(IRCPathComponent::NamespaceComponent(namespace_items));
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("properties"));
 
 	HTTPHeaders headers(*context.db);
