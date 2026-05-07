@@ -409,9 +409,8 @@ SinkFinalizeType IcebergInsert::Finalize(Pipeline &pipeline, Event &event, Clien
 
 	auto effective_table = GetEffectiveTable();
 	if (!effective_table) {
-		// No data was sunk and no CTAS table was created (e.g. the upstream
-		// pipeline produced zero chunks for an empty CTAS). Nothing to commit.
-		return SinkFinalizeType::READY;
+		// Table does not exist (INSERT INTO) or was not created in Physical Create Iceberg table (CTAS). Throw Error
+		throw InternalException("Table to insert into does not exist.");
 	}
 	auto &irc_table = effective_table->Cast<IcebergTableEntry>();
 	auto &table_info = irc_table.table_info;
