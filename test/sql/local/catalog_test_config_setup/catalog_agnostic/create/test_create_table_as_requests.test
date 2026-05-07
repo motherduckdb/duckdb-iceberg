@@ -54,3 +54,36 @@ select count(*) from should_exist;
 ----
 0
 
+statement ok
+drop table if exists ctas_partitioned_with_options;
+
+# partitioned CTAS with a non-identity transform should create the table
+# at execution time, then rebind COPY options using the real table metadata.
+statement ok
+create table ctas_partitioned_with_options
+PARTITIONED BY (category, year(ts))
+WITH (
+    'write.parquet.row-group-size-bytes'='200KB'
+) AS
+select range as id,
+       case range % 2 when 0 then 'even' else 'odd' end as category,
+       make_timestamp(2020 + (range % 2), 6, 15, 12, 0, 0) as ts
+from range(40);
+
+query I
+select count(*) from ctas_partitioned_with_options;
+----
+40
+
+query II
+select * from iceberg_table_properties(my_datalake.default.ctas_partitioned_with_options)
+where key = 'write.parquet.row-group-size-bytes';
+----
+write.parquet.row-group-size-bytes	200KB
+
+query I
+select count(*) from iceberg_metadata(my_datalake.default.ctas_partitioned_with_options)
+where file_path like '%identity_category_2=%'
+  and file_path like '%year_ts_3=%';
+----
+4
