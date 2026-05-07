@@ -63,11 +63,11 @@ statement ok
 create table ctas_partitioned_with_options
 PARTITIONED BY (category, year(ts))
 WITH (
-    'write.parquet.row-group-size-bytes'='200KB'
+    'foo'='buzz'
 ) AS
 select range as id,
        case range % 2 when 0 then 'even' else 'odd' end as category,
-       make_timestamp(2020 + (range % 2), 6, 15, 12, 0, 0) as ts
+       make_timestamp(2020 + (range % 4), 6, 15, 12, 0, 0) as ts
 from range(40);
 
 query I
@@ -77,9 +77,9 @@ select count(*) from ctas_partitioned_with_options;
 
 query II
 select * from iceberg_table_properties(my_datalake.default.ctas_partitioned_with_options)
-where key = 'write.parquet.row-group-size-bytes';
+where key = 'foo';
 ----
-write.parquet.row-group-size-bytes	200KB
+foo	buzz
 
 query I
 select count(*) from iceberg_metadata(my_datalake.default.ctas_partitioned_with_options)

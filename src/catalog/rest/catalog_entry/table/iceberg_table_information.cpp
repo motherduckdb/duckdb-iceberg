@@ -336,21 +336,12 @@ int64_t IcebergTableInformation::GetExistingSpecId(IcebergPartitionSpec &spec) {
 	}
 	return existing_spec_id;
 }
-void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
-                                               const vector<unique_ptr<ParsedExpression>> &partition_keys,
-                                               const IcebergTableSchema &schema, bool first_partition_spec) {
-	idx_t base_partition_field_id = 1000;
-	if (!first_partition_spec && table_metadata.HasLastPartitionId()) {
-		base_partition_field_id = table_metadata.GetLastPartitionFieldId() + 1;
-	}
 
-	idx_t new_spec_id = 0;
-	if (!first_partition_spec) {
-		new_spec_id = GetNextPartitionSpecId();
-	}
-	auto &transaction_data = GetOrCreateTransactionData(transaction);
-
-	IcebergPartitionSpec new_spec(new_spec_id);
+IcebergPartitionSpec
+IcebergTableInformation::BuildPartitionSpec(const vector<unique_ptr<ParsedExpression>> &partition_keys,
+                                            const IcebergTableSchema &schema, int32_t spec_id,
+                                            idx_t base_partition_field_id) {
+	IcebergPartitionSpec new_spec(spec_id);
 
 	for (auto &key : partition_keys) {
 		string column_name;
@@ -432,6 +423,26 @@ void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
 		field.SetPartitionSpecFieldName(column_name);
 		new_spec.fields.push_back(std::move(field));
 	}
+
+	return new_spec;
+}
+
+void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
+                                               const vector<unique_ptr<ParsedExpression>> &partition_keys,
+                                               const IcebergTableSchema &schema, bool first_partition_spec) {
+	idx_t base_partition_field_id = 1000;
+	if (!first_partition_spec && table_metadata.HasLastPartitionId()) {
+		base_partition_field_id = table_metadata.GetLastPartitionFieldId() + 1;
+	}
+
+	idx_t new_spec_id = 0;
+	if (!first_partition_spec) {
+		new_spec_id = GetNextPartitionSpecId();
+	}
+	auto &transaction_data = GetOrCreateTransactionData(transaction);
+
+	auto new_spec =
+	    BuildPartitionSpec(partition_keys, schema, static_cast<int32_t>(new_spec_id), base_partition_field_id);
 
 	// if spec definition already exists in a previous spec definition, set it to that spec id
 	// (some catalog may allow duplicate definitions, others not)

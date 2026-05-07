@@ -962,7 +962,6 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(BoundCreateTabl
 	auto metadata = make_uniq<IcebergTableMetadata>();
 	metadata->iceberg_version = 2;
 	metadata->default_spec_id = 0;
-	metadata->partition_specs.emplace(0, IcebergPartitionSpec(0));
 
 	auto schema = make_shared_ptr<IcebergTableSchema>();
 	schema->schema_id = 0;
@@ -979,6 +978,13 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(BoundCreateTabl
 	schema->last_column_id = static_cast<idx_t>(next_field_id - 1);
 	metadata->AddSchemaOrGetExisting(schema);
 	metadata->SetCurrentSchemaId(0);
+
+	// Build a placeholder partition spec from the parsed PARTITIONED BY clause so that
+	// PlanCopyForInsert appends the partition projection at plan time. The real spec is
+	// applied during PhysicalIcebergCreateTable::MakeCreateTableRequest, but the projection
+	// indices are derived from the same partition_keys/schema and so remain consistent.
+	auto placeholder_spec = IcebergTableInformation::BuildPartitionSpec(create_info.partition_keys, *schema, 0, 1000);
+	metadata->partition_specs.emplace(0, std::move(placeholder_spec));
 	return metadata;
 }
 
