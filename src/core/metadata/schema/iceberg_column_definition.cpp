@@ -204,6 +204,17 @@ unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::ParseStructField(re
 	                 field_write_default);
 }
 
+vector<unique_ptr<IcebergColumnDefinition>>::const_iterator
+IcebergColumnDefinition::GetChildIterator(const string &child_name) const {
+	for (auto it = children.begin(); it != children.end(); it++) {
+		auto &child = *(*it);
+		if (StringUtil::CIEquals(child.name, child_name)) {
+			return it;
+		}
+	}
+	return children.end();
+}
+
 bool IcebergColumnDefinition::IsIcebergPrimitiveType() const {
 	switch (type.id()) {
 	case LogicalTypeId::TINYINT:
