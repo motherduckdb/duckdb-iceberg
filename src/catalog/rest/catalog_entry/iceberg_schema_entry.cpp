@@ -606,7 +606,10 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		auto &parent = *parent_p;
 
 		auto column_p = new_schema->GetMutableFromPath(column_path, nullptr);
-		if (column_p && !if_field_not_exists) {
+		if (column_p) {
+			if (if_field_not_exists) {
+				return;
+			}
 			throw CatalogException(
 			    "The column ('%s') already exists on the table '%s', ADD COLUMN failed to add a new field",
 			    StringUtil::Join(column_path, "."), table_entry.name);
@@ -617,7 +620,22 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			                       new_field.GetName(), StringUtil::Join(parent_path, "."), parent.type.ToString());
 		}
 
-		// parent.children.push_back(new_struct_field);
+		auto &last_column_id = updated_table.table_metadata.last_column_id;
+		if (!last_column_id.IsValid()) {
+			throw InternalException("No last_column_id when trying to ADD COLUMN %s",
+			                        StringUtil::Join(column_path, "."));
+		}
+		auto field_id = last_column_id.GetIndex() + 1;
+		auto next_field_id = [&field_id]() -> idx_t {
+			return field_id++;
+		};
+
+		IcebergDefaultBinder binder(context);
+		auto new_iceberg_column = IcebergCreateTableRequest::CreateIcebergColumn(
+		    new_field, binder, false, next_field_id, updated_table.table_metadata.iceberg_version);
+		last_column_id = field_id - 1;
+
+		parent.children.push_back(std::move(new_iceberg_column));
 
 		IntroduceNewSchema(updated_table, transaction_data, new_schema);
 		return;

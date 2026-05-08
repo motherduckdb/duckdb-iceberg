@@ -299,6 +299,16 @@ bool IcebergColumnDefinition::Equals(const IcebergColumnDefinition &other) const
 	if (doc != other.doc) {
 		return false;
 	}
+	if (children.size() != other.children.size()) {
+		return false;
+	}
+	for (idx_t i = 0; i < children.size(); i++) {
+		auto &a_child = children[i];
+		auto &b_child = other.children[i];
+		if (!a_child->Equals(*b_child)) {
+			return false;
+		}
+	}
 
 	if (!DefaultsAreEqual(initial_default, other.initial_default)) {
 		return false;
