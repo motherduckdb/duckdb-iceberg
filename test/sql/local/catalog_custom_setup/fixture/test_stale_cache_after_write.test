@@ -1,0 +1,178 @@
+# name: test/sql/local/catalog_custom_setup/fixture/test_stale_cache_after_write.test
+# description: Test that metadata cache is invalidated after writes
+# group: [fixture]
+
+require-env FIXTURE_SERVER_AVAILABLE
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+set enable_logging=true
+
+statement ok
+set logging_level='debug'
+
+statement ok
+CALL enable_logging('HTTP');
+
+statement ok
+CREATE SECRET (
+    TYPE S3,
+    KEY_ID 'admin',
+    SECRET 'password',
+    ENDPOINT '127.0.0.1:9000',
+    URL_STYLE 'path',
+    USE_SSL 0
+);
+
+# Attach with a long staleness TTL so the cache does not expire naturally
+statement ok
+ATTACH '' AS my_datalake (
+    TYPE ICEBERG,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    ENDPOINT 'http://127.0.0.1:8181',
+    MAX_TABLE_STALENESS '5 minutes'
+);
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS my_datalake.default;
+
+# Clean up any leftover from previous runs
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.cache_invalidation_test;
+
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.merge_source;
+
+# Create a fresh table for this test
+statement ok
+CREATE TABLE my_datalake.default.cache_invalidation_test (a INTEGER, b VARCHAR);
+
+# ---------- INSERT ----------
+
+statement ok
+INSERT INTO my_datalake.default.cache_invalidation_test VALUES (1, 'first');
+
+# Read in a new transaction — should see the inserted row.
+# With the bug: the cache holds pre-INSERT metadata and returns 0 rows.
+query II
+SELECT * FROM my_datalake.default.cache_invalidation_test;
+----
+1	first
+
+statement ok
+INSERT INTO my_datalake.default.cache_invalidation_test VALUES (2, 'second');
+
+query II
+SELECT * FROM my_datalake.default.cache_invalidation_test ORDER BY a;
+----
+1	first
+2	second
+
+# ---------- UPDATE ----------
+
+statement ok
+UPDATE my_datalake.default.cache_invalidation_test SET b = 'updated' WHERE a = 1;
+
+query II
+SELECT * FROM my_datalake.default.cache_invalidation_test ORDER BY a;
+----
+1	updated
+2	second
+
+# ---------- DELETE ----------
+
+statement ok
+DELETE FROM my_datalake.default.cache_invalidation_test WHERE a = 2;
+
+query II
+SELECT * FROM my_datalake.default.cache_invalidation_test ORDER BY a;
+----
+1	updated
+
+# ---------- MERGE ----------
+
+# Insert a target row to merge against
+statement ok
+INSERT INTO my_datalake.default.cache_invalidation_test VALUES (3, 'target');
+
+query II
+SELECT * FROM my_datalake.default.cache_invalidation_test ORDER BY a;
+----
+1	updated
+3	target
+
+statement ok
+CREATE TABLE my_datalake.default.merge_source (a INTEGER, b VARCHAR);
+
+statement ok
+INSERT INTO my_datalake.default.merge_source VALUES (3, 'merged'), (4, 'new');
+
+statement ok
+MERGE INTO my_datalake.default.cache_invalidation_test AS t
+USING my_datalake.default.merge_source AS s
+ON t.a = s.a
+WHEN MATCHED THEN UPDATE SET b = s.b
+WHEN NOT MATCHED THEN INSERT VALUES (s.a, s.b);
+
+query II
+SELECT * FROM my_datalake.default.cache_invalidation_test ORDER BY a;
+----
+1	updated
+3	merged
+4	new
+
+# ---------- ALTER TABLE ----------
+
+statement ok
+ALTER TABLE my_datalake.default.cache_invalidation_test ADD COLUMN c INTEGER;
+
+# The new column should be visible immediately after the ALTER commits.
+# With the bug: the cache holds the old schema (only a, b) and the new column is missing.
+query III
+SELECT * FROM my_datalake.default.cache_invalidation_test ORDER BY a;
+----
+1	updated	NULL
+3	merged	NULL
+4	new	NULL
+
+statement ok
+INSERT INTO my_datalake.default.cache_invalidation_test VALUES (5, 'with_c', 99);
+
+query III
+SELECT * FROM my_datalake.default.cache_invalidation_test ORDER BY a;
+----
+1	updated	NULL
+3	merged	NULL
+4	new	NULL
+5	with_c	99
+
+# ---------- RENAME TABLE ----------
+
+statement ok
+ALTER TABLE my_datalake.default.cache_invalidation_test RENAME TO cache_invalidation_renamed;
+
+query III
+SELECT * FROM my_datalake.default.cache_invalidation_renamed ORDER BY a;
+----
+1	updated	NULL
+3	merged	NULL
+4	new	NULL
+5	with_c	99
+
+# Cleanup
+statement ok
+DROP TABLE my_datalake.default.cache_invalidation_renamed;
+
+statement ok
+DROP TABLE my_datalake.default.merge_source;
