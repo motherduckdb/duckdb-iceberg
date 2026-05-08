@@ -474,6 +474,20 @@ void IcebergTransaction::DoTableUpdates(IcebergTransactionAlterUpdate &alter_upd
 			alter_update.committed_tables.insert(it.first);
 		}
 	}
+	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
+	for (auto &it : alter_update.committed_tables) {
+		auto table_it = alter_update.updated_tables.find(it);
+		if (table_it == alter_update.updated_tables.end()) {
+			continue;
+		}
+		auto &table_info = table_it->second;
+		auto get_table_result = IRCAPI::GetTable(context, ic_catalog, table_info.schema, table_info.name);
+		if (!get_table_result.has_error) {
+			ic_catalog.table_request_cache.SetOrOverwrite(context, it, std::move(get_table_result.result_));
+		} else {
+			ic_catalog.table_request_cache.Expire(context, it);
+		}
+	}
 	DropSecrets(context);
 }
 
