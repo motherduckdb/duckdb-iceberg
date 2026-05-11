@@ -42,22 +42,21 @@ FROM my_datalake.default.alter_add_column_table;
 8	NULL
 9	NULL
 
-# Nessie mistakingly accepts this query and poulates the column with NULLs, even though the query specifies `DEFAULT 42`.
-# This test is a mere documentation of this result, and not an assertion of correct behavior.
-# This test should be corrected when nessie fixes this.
-statement ok
+statement error
 ALTER TABLE my_datalake.default.alter_add_column_table ADD COLUMN c int DEFAULT 42;
+----
+Invalid Input Error: non-null DEFAULT values are not supported for <V3 tables
 
 query III
 FROM my_datalake.default.alter_add_column_table;
 ----
-0	NULL	NULL
-1	NULL	NULL
-2	NULL	NULL
-3	NULL	NULL
-4	NULL	NULL
-5	NULL	NULL
-6	NULL	NULL
-7	NULL	NULL
-8	NULL	NULL
-9	NULL	NULL
+0	NULL
+1	NULL
+2	NULL
+3	NULL
+4	NULL
+5	NULL
+6	NULL
+7	NULL
+8	NULL
+9	NULL
