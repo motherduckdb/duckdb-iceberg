@@ -23,7 +23,7 @@ statement ok
 drop table if exists my_datalake.default.alter_add_column_table;
 
 statement ok
-CREATE TABLE my_datalake.default.alter_add_column_table WITH ('format-version' = 3) AS (select range a FROM range(10));
+CREATE TABLE my_datalake.default.alter_add_column_table WITH ('format-version' = 2) AS (select range a FROM range(10));
 
 statement ok
 ALTER TABLE my_datalake.default.alter_add_column_table ADD COLUMN b int;
@@ -43,19 +43,21 @@ FROM my_datalake.default.alter_add_column_table;
 9	NULL
 
 # Lakekeeper somehow supports non-null default values with Iceberg v2 tables. This differs from fixture's behavior.
-statement ok
+statement error
 ALTER TABLE my_datalake.default.alter_add_column_table ADD COLUMN c int DEFAULT 42;
+----
+Invalid Input Error: non-null DEFAULT values are not supported for <V3 tables
 
-query III
+query II
 FROM my_datalake.default.alter_add_column_table;
 ----
-0	NULL	42
-1	NULL	42
-2	NULL	42
-3	NULL	42
-4	NULL	42
-5	NULL	42
-6	NULL	42
-7	NULL	42
-8	NULL	42
-9	NULL	42
+0	NULL
+1	NULL
+2	NULL
+3	NULL
+4	NULL
+5	NULL
+6	NULL
+7	NULL
+8	NULL
+9	NULL

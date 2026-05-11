@@ -335,30 +335,19 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			}
 		}
 
-		// Add the new column
-		auto new_iceberg_column = make_uniq<IcebergColumnDefinition>();
 		auto &last_column_id = updated_table.table_metadata.last_column_id;
 		if (!last_column_id.IsValid()) {
 			throw InternalException("No last_column_id when trying to ADD COLUMN %s", add_column_info.name);
 		}
-		new_iceberg_column->id = last_column_id.GetIndex() + 1;
-		last_column_id = optional_idx(new_iceberg_column->id);
+		auto field_id = last_column_id.GetIndex() + 1;
+		auto next_field_id = [&field_id]() -> idx_t {
+			return field_id++;
+		};
 
-		new_iceberg_column->name = column_definition.GetName();
-		new_iceberg_column->type = column_definition.GetType();
-
-		if (column_definition.HasDefaultValue()) {
-			auto &default_value = column_definition.DefaultValue();
-
-			IcebergDefaultBinder binder(context);
-			auto default_constant_value = binder.Evaluate(default_value, new_iceberg_column->type);
-			new_iceberg_column->initial_default = make_uniq<Value>(default_constant_value);
-			if (updated_table.table_metadata.iceberg_version >= 3) {
-				new_iceberg_column->write_default = make_uniq<Value>(default_constant_value);
-			}
-		}
-
-		new_iceberg_column->required = false;
+		IcebergDefaultBinder binder(context);
+		auto new_iceberg_column = IcebergCreateTableRequest::CreateIcebergColumn(
+		    column_definition, binder, false, next_field_id, updated_table.table_metadata.iceberg_version);
+		last_column_id = field_id - 1;
 
 		auto new_schema = current_schema.Copy();
 		new_schema->schema_id++;
@@ -594,6 +583,61 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			transaction_data.TableSetCurrentSchema();
 		}
 		updated_table.table_metadata.SetCurrentSchemaId(result_schema.schema_id);
+		return;
+	}
+	case AlterTableType::ADD_FIELD: {
+		auto &add_field_info = alter_table_info.Cast<AddFieldInfo>();
+		auto &column_path = add_field_info.column_path;
+		auto &new_field = add_field_info.new_field;
+		auto &if_field_not_exists = add_field_info.if_field_not_exists;
+
+		auto new_schema = current_schema.Copy();
+		new_schema->schema_id++;
+
+		auto parent_path = column_path;
+		column_path.push_back(new_field.GetName());
+
+		auto parent_p = new_schema->GetMutableFromPath(parent_path, nullptr);
+		if (!parent_p) {
+			throw CatalogException(
+			    "The parent column ('%s') does not exist on the table '%s', ADD COLUMN failed to add a new field",
+			    StringUtil::Join(parent_path, "."), table_entry.name);
+		}
+		auto &parent = *parent_p;
+
+		auto column_p = new_schema->GetMutableFromPath(column_path, nullptr);
+		if (column_p) {
+			if (if_field_not_exists) {
+				return;
+			}
+			throw CatalogException(
+			    "The column ('%s') already exists on the table '%s', ADD COLUMN failed to add a new field",
+			    StringUtil::Join(column_path, "."), table_entry.name);
+		}
+
+		if (parent.type.id() != LogicalTypeId::STRUCT) {
+			throw CatalogException("Can't add field '%s' to column '%s', because the parent is not a struct (type: %s)",
+			                       new_field.GetName(), StringUtil::Join(parent_path, "."), parent.type.ToString());
+		}
+
+		auto &last_column_id = updated_table.table_metadata.last_column_id;
+		if (!last_column_id.IsValid()) {
+			throw InternalException("No last_column_id when trying to ADD COLUMN %s",
+			                        StringUtil::Join(column_path, "."));
+		}
+		auto field_id = last_column_id.GetIndex() + 1;
+		auto next_field_id = [&field_id]() -> idx_t {
+			return field_id++;
+		};
+
+		IcebergDefaultBinder binder(context);
+		auto new_iceberg_column = IcebergCreateTableRequest::CreateIcebergColumn(
+		    new_field, binder, false, next_field_id, updated_table.table_metadata.iceberg_version);
+		last_column_id = field_id - 1;
+
+		parent.children.push_back(std::move(new_iceberg_column));
+
+		IntroduceNewSchema(updated_table, transaction_data, new_schema);
 		return;
 	}
 	default: {
