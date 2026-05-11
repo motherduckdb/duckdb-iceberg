@@ -47,7 +47,7 @@ ALTER TABLE my_datalake.default.alter_add_column_table ADD COLUMN c int DEFAULT 
 ----
 Invalid Input Error: non-null DEFAULT values are not supported for <V3 tables
 
-query III
+query II
 FROM my_datalake.default.alter_add_column_table;
 ----
 0	NULL
