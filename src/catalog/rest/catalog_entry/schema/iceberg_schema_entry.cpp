@@ -641,6 +641,50 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		IntroduceNewSchema(updated_table, transaction_data, new_schema);
 		return;
 	}
+	case AlterTableType::REMOVE_FIELD: {
+		auto &remove_field_info = alter_table_info.Cast<RemoveFieldInfo>();
+		auto &column_path = remove_field_info.column_path;
+		auto &cascade = remove_field_info.cascade;
+		auto &if_column_exists = remove_field_info.if_column_exists;
+
+		auto new_schema = current_schema.Copy();
+		new_schema->schema_id++;
+
+		D_ASSERT(column_path.size() > 1);
+		auto parent_path = column_path;
+		parent_path.pop_back();
+
+		if (cascade) {
+			throw NotImplementedException("DROP COLUMN with CASCADE is not implemented for Iceberg tables");
+		}
+
+		auto parent_p = new_schema->GetMutableFromPath(parent_path, nullptr);
+		if (!parent_p) {
+			if (if_column_exists) {
+				return;
+			}
+			throw CatalogException(
+			    "The column ('%s') doesnt exist on the table '%s', DROP COLUMN failed to remove the field",
+			    StringUtil::Join(column_path, "."), table_entry.name);
+		}
+		auto &parent = *parent_p;
+		auto child_it = parent.GetChildIterator(column_path.back());
+		if (child_it == parent.children.end()) {
+			if (if_column_exists) {
+				return;
+			}
+			throw CatalogException(
+			    "The column ('%s') doesnt exist on the table '%s', DROP COLUMN failed to remove the field",
+			    StringUtil::Join(column_path, "."), table_entry.name);
+		}
+		if (parent.children.size() == 1) {
+			throw CatalogException("Can't drop field '%s' because it's the last field of the STRUCT!",
+			                       StringUtil::Join(column_path, "."));
+		}
+		parent.children.erase(child_it);
+		IntroduceNewSchema(updated_table, transaction_data, new_schema);
+		return;
+	}
 	default: {
 		throw NotImplementedException("Alter table type not supported: %s",
 		                              EnumUtil::ToString(alter_table_info.alter_table_type));
