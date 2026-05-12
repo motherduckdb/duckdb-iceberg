@@ -53,22 +53,12 @@ public:
 	// Operator interface
 	OperatorResultType Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
 	                           GlobalOperatorState &gstate, OperatorState &state) const override;
-	// If no rows are returned in the CTAS, Execute never runs. We still want to create a
-	// table, so FinaleExecute will take care of that
-	OperatorFinalizeResultType FinalExecute(ExecutionContext &context, DataChunk &chunk, GlobalOperatorState &gstate,
-	                                        OperatorState &state) const override;
-	void MakeCreateTableRequest(ExecutionContext &context, IcebergCreateTableGlobalState &gstate) const;
+	void MakeCreateTableRequest(ClientContext &context, IcebergCreateTableGlobalState &gstate) const;
 	unique_ptr<GlobalOperatorState> GetGlobalOperatorState(ClientContext &context) const override;
 
 	bool ParallelOperator() const override {
-		return false;
-	}
-
-	bool RequiresFinalExecute() const override {
-		// in case a 0 row table is created, FinalExecute can
-		// make the Create Table API request
 		return true;
-	};
+	}
 
 	string GetName() const override;
 	InsertionOrderPreservingMap<string> ParamsToString() const override;

@@ -22,13 +22,14 @@ PhysicalIcebergCreateTable::PhysicalIcebergCreateTable(PhysicalPlan &physical_pl
 }
 
 unique_ptr<GlobalOperatorState> PhysicalIcebergCreateTable::GetGlobalOperatorState(ClientContext &context) const {
-	return make_uniq<IcebergCreateTableGlobalState>();
+	auto global_state = make_uniq<IcebergCreateTableGlobalState>();
+	MakeCreateTableRequest(context, *global_state);
+	return global_state;
 }
 
-void PhysicalIcebergCreateTable::MakeCreateTableRequest(ExecutionContext &context,
+void PhysicalIcebergCreateTable::MakeCreateTableRequest(ClientContext &client_context,
                                                         IcebergCreateTableGlobalState &gstate) const {
 	std::call_once(gstate.init_flag, [&]() {
-		auto &client_context = context.client;
 		auto &catalog = schema_entry.catalog;
 		auto transaction = catalog.GetCatalogTransaction(client_context);
 
@@ -71,20 +72,8 @@ void PhysicalIcebergCreateTable::MakeCreateTableRequest(ExecutionContext &contex
 	});
 }
 
-OperatorFinalizeResultType PhysicalIcebergCreateTable::FinalExecute(ExecutionContext &context, DataChunk &chunk,
-                                                                    GlobalOperatorState &gstate,
-                                                                    OperatorState &state) const {
-	auto &global_state = gstate.Cast<IcebergCreateTableGlobalState>();
-	MakeCreateTableRequest(context, global_state);
-	return OperatorFinalizeResultType::FINISHED;
-}
-
 OperatorResultType PhysicalIcebergCreateTable::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
                                                        GlobalOperatorState &gstate_p, OperatorState &state) const {
-	auto &global_state = gstate_p.Cast<IcebergCreateTableGlobalState>();
-	// Create the table in the IRC, record the field ids (columns ids) and update the binding in the
-	MakeCreateTableRequest(context, global_state);
-	// Pass the chunk through unmodified.
 	chunk.Reference(input);
 	return OperatorResultType::NEED_MORE_INPUT;
 }

@@ -1006,7 +1006,7 @@ PhysicalOperator &IcebergCatalog::PlanCreateTableAs(ClientContext &context, Phys
 
 	// create shared state to be used between IcebergTableCreate and IcebergInsert
 	auto create_state = make_shared_ptr<IcebergCTASCreateState>();
-	// create a pass through IcebergCTASCrecateStatement operator to make the
+	// create a pass through IcebergCTASCreateStatement operator to make the
 	// CreateTable API call when the operator is executed.
 	auto &create_op = planner.Make<PhysicalIcebergCreateTable>(ic_schema_entry, std::move(op.info), create_state,
 	                                                           physical_copy, std::move(upstream_types), upstream_card);
