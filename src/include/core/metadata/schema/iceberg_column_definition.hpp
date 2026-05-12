@@ -26,6 +26,8 @@ public:
 	          const string &doc, optional_ptr<rest_api_objects::PrimitiveTypeValue> initial_default = nullptr,
 	          optional_ptr<rest_api_objects::PrimitiveTypeValue> write_default = nullptr);
 	bool IsIcebergPrimitiveType() const;
+	vector<unique_ptr<IcebergColumnDefinition>>::const_iterator GetChildIterator(const string &child_name) const;
+
 	ColumnDefinition GetColumnDefinition() const;
 	unique_ptr<IcebergColumnDefinition> Copy() const;
 	bool Equals(const IcebergColumnDefinition &other) const;
