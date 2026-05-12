@@ -83,8 +83,8 @@ jobs:
         env:
           NESSIE_SERVER_AVAILABLE: 1
         run: |
-          ./build/release/test/unittest --order lex "$PWD/test/sql/local/irc_specific_catalogs/nessie/*" --list-test-names-only || true
-          ./build/release/test/unittest --order lex "$PWD/test/sql/local/irc_specific_catalogs/nessie/*"
+          ./build/release/test/unittest --order lex "$PWD/test/sql/local/catalog_custom_setup/nessie/*" --list-test-names-only || true
+          ./build/release/test/unittest --order lex "$PWD/test/sql/local/catalog_custom_setup/nessie/*"
 
       - name: Generate data
         run: |
@@ -92,9 +92,8 @@ jobs:
 
       - name: Run Generic IRC tests
         env:
-          ICEBERG_SERVER_AVAILABLE: 1
-          SECRETS_CREATED_AND_CATALOG_ATTACHED: 1
+          CATALOG_TEST_CONFIG_SETUP: 1
           NESSIE_SERVER_AVAILABLE: 1
         run: |
-          ./build/release/test/unittest --order lex "$PWD/test/sql/local/irc_any_catalog/*" --list-test-names-only || true
-          ./build/release/test/unittest --order lex "$PWD/test/sql/local/irc_any_catalog/*" --test-config test/configs/nessie.json
+          ./build/release/test/unittest --order lex "$PWD/test/sql/local/catalog_test_config_setup/*" --list-test-names-only || true
+          ./build/release/test/unittest --order lex "$PWD/test/sql/local/catalog_test_config_setup/*" --test-config test/configs/nessie.json

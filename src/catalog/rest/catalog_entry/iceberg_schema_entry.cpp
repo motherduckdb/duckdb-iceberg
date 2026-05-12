@@ -9,14 +9,17 @@
 #include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/parser/parsed_expression_iterator.hpp"
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
+#include "duckdb/planner/binder.hpp"
+#include "duckdb/planner/expression_binder/table_function_binder.hpp"
+#include "duckdb/execution/expression_executor.hpp"
 
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
 #include "catalog/rest/api/iceberg_type.hpp"
-#include "common/iceberg_default.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
+#include "common/iceberg_default.hpp"
 
 namespace duckdb {
 
@@ -49,7 +52,7 @@ bool IcebergSchemaEntry::HandleCreateConflict(CatalogTransaction &transaction, C
 		auto &iceberg_transaction = GetICTransaction(transaction);
 		auto table_key = IcebergTableInformation::GetTableKey(namespace_items, entry_name);
 		auto latest_state = iceberg_transaction.GetLatestTableState(table_key);
-		if (latest_state && latest_state->status == IcebergTableStatus::DROPPED) {
+		if (latest_state && latest_state->IsDroppedOrRenamed()) {
 			auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 			vector<string> qualified_name = {ic_catalog.GetName()};
 			qualified_name.insert(qualified_name.end(), namespace_items.begin(), namespace_items.end());
@@ -76,6 +79,10 @@ bool IcebergSchemaEntry::HandleCreateConflict(CatalogTransaction &transaction, C
 
 optional_ptr<CatalogEntry> IcebergSchemaEntry::CreateTable(CatalogTransaction &transaction, ClientContext &context,
                                                            BoundCreateTableInfo &info) {
+	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
+	if (!exists && iceberg_transaction.created_schemas.find(name) == iceberg_transaction.created_schemas.end()) {
+		throw InvalidInputException("Schema with name \"%s\" does not exist", name);
+	}
 	auto &base_info = info.Base();
 	auto &ir_catalog = catalog.Cast<IcebergCatalog>();
 	// check if we have an existing entry with this name
@@ -252,6 +259,34 @@ static void VerifySchemaEvolution(const IcebergTableMetadata &table_metadata, co
 	throw CatalogException(error);
 }
 
+void IntroduceNewSchema(IcebergTableInformation &updated_table, IcebergTransactionData &transaction_data,
+                        shared_ptr<IcebergTableSchema> new_schema) {
+	auto new_schema_id = new_schema->schema_id;
+
+	auto &result_schema = updated_table.table_metadata.AddSchemaOrGetExisting(std::move(new_schema));
+	if (result_schema.schema_id == new_schema_id) {
+		// Update the Table Metadata to have our new schema
+		updated_table.CreateSchemaVersion(result_schema);
+		transaction_data.TableAddSchema(new_schema_id);
+	} else {
+		transaction_data.TableSetCurrentSchema();
+	}
+	updated_table.table_metadata.SetCurrentSchemaId(result_schema.schema_id);
+}
+
+template <typename T>
+IcebergColumnDefinition &ResolveColumn(T &alter_table_info, const shared_ptr<IcebergTableSchema> &new_schema) {
+	auto &column_name = alter_table_info.column_name;
+
+	auto column_p = new_schema->GetMutableFromPath({column_name}, nullptr);
+	if (!column_p) {
+		throw CatalogException("Column with name '%s' does not exist on the table '%s'", column_name,
+		                       alter_table_info.GetAlterEntryData().name);
+	}
+	auto &column = *column_p;
+	return column;
+}
+
 void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) {
 	if (info.type != AlterType::ALTER_TABLE) {
 		throw NotImplementedException("Only ALTER TABLE is supported for Iceberg");
@@ -300,41 +335,26 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			}
 		}
 
-		// Add the new column
-		auto new_iceberg_column = make_uniq<IcebergColumnDefinition>();
 		auto &last_column_id = updated_table.table_metadata.last_column_id;
 		if (!last_column_id.IsValid()) {
 			throw InternalException("No last_column_id when trying to ADD COLUMN %s", add_column_info.name);
 		}
-		new_iceberg_column->id = last_column_id.GetIndex() + 1;
-		last_column_id = optional_idx(new_iceberg_column->id);
+		auto field_id = last_column_id.GetIndex() + 1;
+		auto next_field_id = [&field_id]() -> idx_t {
+			return field_id++;
+		};
 
-		new_iceberg_column->name = column_definition.GetName();
-		new_iceberg_column->type = column_definition.GetType();
-
-		if (column_definition.HasDefaultValue()) {
-			auto &default_value = column_definition.DefaultValue();
-
-			IcebergDefaultBinder binder(context);
-			auto default_constant_value = binder.Evaluate(default_value, new_iceberg_column->type);
-			new_iceberg_column->initial_default = make_uniq<Value>(default_constant_value);
-			if (updated_table.table_metadata.iceberg_version >= 3) {
-				new_iceberg_column->write_default = make_uniq<Value>(default_constant_value);
-			}
-		}
-
-		new_iceberg_column->required = false;
+		IcebergDefaultBinder binder(context);
+		auto new_iceberg_column = IcebergCreateTableRequest::CreateIcebergColumn(
+		    column_definition, binder, false, next_field_id, updated_table.table_metadata.iceberg_version);
+		last_column_id = field_id - 1;
 
 		auto new_schema = current_schema.Copy();
 		new_schema->schema_id++;
 		new_schema->columns.push_back(std::move(new_iceberg_column));
-		auto new_schema_id = new_schema->schema_id;
-		// Update the Table Metadata to have our new schema
-		updated_table.CreateSchemaVersion(*new_schema);
-		transaction_data.TableAddSchema(new_schema_id);
 
-		updated_table.table_metadata.AddSchema(std::move(new_schema));
-		updated_table.table_metadata.SetCurrentSchemaId(new_schema_id);
+		IntroduceNewSchema(updated_table, transaction_data, new_schema);
+
 		return;
 	}
 	case AlterTableType::REMOVE_COLUMN: {
@@ -371,40 +391,163 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			throw CatalogException("Cannot drop column: table '%s' only has one column remaining!", table_entry.name);
 		}
 
-		auto new_schema_id = new_schema->schema_id;
-		// Update the Table Metadata to have our new schema
-		updated_table.CreateSchemaVersion(*new_schema);
-		transaction_data.TableAddSchema(new_schema_id);
-		updated_table.table_metadata.AddSchema(std::move(new_schema));
-		updated_table.table_metadata.SetCurrentSchemaId(new_schema_id);
+		IntroduceNewSchema(updated_table, transaction_data, new_schema);
+
 		return;
 	}
 	case AlterTableType::ALTER_COLUMN_TYPE: {
 		auto &change_type_info = alter_table_info.Cast<ChangeColumnTypeInfo>();
-		auto &column_name = change_type_info.column_name;
 
 		auto new_schema = current_schema.Copy();
 		new_schema->schema_id++;
 
-		auto column_p = new_schema->GetMutableFromPath({column_name}, nullptr);
-		if (!column_p) {
-			throw CatalogException("Column with name '%s' does not exist on the table '%s', ALTER TYPE failed",
-			                       column_name, table_entry.name);
-		}
-		auto &column = *column_p;
+		auto &column = ResolveColumn<ChangeColumnTypeInfo>(change_type_info, new_schema);
+
 		if (change_type_info.expression->type != ExpressionType::OPERATOR_CAST) {
 			throw NotImplementedException("ALTER TYPE with a USING expression is not supported for Iceberg tables");
 		}
 		VerifySchemaEvolution(updated_table.table_metadata, column, change_type_info.target_type);
 		column.type = change_type_info.target_type;
 
-		auto new_schema_id = new_schema->schema_id;
-		// Update the Table Metadata to have our new schema
-		updated_table.CreateSchemaVersion(*new_schema);
-		transaction_data.TableAddSchema(new_schema_id);
+		IntroduceNewSchema(updated_table, transaction_data, new_schema);
+		return;
+	}
+	case AlterTableType::SET_NOT_NULL: {
+		// Column integrity is not transactionally guaranteed by Iceberg catalogs during SET NOT NULL
+		throw InvalidInputException("Cannot change nullable column to non-nullable");
+	}
+	case AlterTableType::DROP_NOT_NULL: {
+		auto &drop_not_null_info = alter_table_info.Cast<DropNotNullInfo>();
 
-		updated_table.table_metadata.AddSchema(std::move(new_schema));
-		updated_table.table_metadata.SetCurrentSchemaId(new_schema_id);
+		auto new_schema = current_schema.Copy();
+		new_schema->schema_id++;
+
+		auto &column = ResolveColumn<DropNotNullInfo>(drop_not_null_info, new_schema);
+
+		column.required = false;
+
+		IntroduceNewSchema(updated_table, transaction_data, new_schema);
+		return;
+	}
+	case AlterTableType::RENAME_TABLE: {
+		auto &rename_table_info = alter_table_info.Cast<RenameTableInfo>();
+		auto &new_name = rename_table_info.new_table_name;
+
+		EntryLookupInfo lookup(CatalogType::TABLE_ENTRY, new_name);
+		auto other_catalog_entry = tables.GetEntry(context, lookup);
+		if (other_catalog_entry) {
+			//! The table exists at this point, check if it was deleted/renamed in the transaction
+			auto &other_table_entry = other_catalog_entry->Cast<IcebergTableEntry>();
+			auto &other_table_info = other_table_entry.table_info;
+			auto other_table_key = other_table_info.GetTableKey();
+			auto state = irc_transaction.GetLatestTableState(other_table_key);
+			if (!state || state->IsAlive()) {
+				throw CatalogException("Table with name \"%s\" already exists!", new_name);
+			}
+			//! The table is dropped or renamed by this transaction, so it's not a conflict anymore
+			D_ASSERT(state && state->IsDroppedOrRenamed());
+		}
+		irc_transaction.RenameTable(updated_table, new_name);
+		break;
+	}
+	case AlterTableType::RENAME_COLUMN: {
+		auto &rename_info = alter_table_info.Cast<RenameColumnInfo>();
+		auto &column_name = rename_info.old_name;
+		auto &new_name = rename_info.new_name;
+
+		auto new_schema = current_schema.Copy();
+		new_schema->schema_id++;
+
+		auto column_p = new_schema->GetMutableFromPath({column_name}, nullptr);
+		if (!column_p) {
+			throw CatalogException("Column with name '%s' does not exist on the table '%s', RENAME COLUMN failed",
+			                       column_name, table_entry.name);
+		}
+		auto collision_column_p = new_schema->GetMutableFromPath({new_name}, nullptr);
+		if (collision_column_p) {
+			throw CatalogException("Column with name '%s' already exists on the table '%s', RENAME COLUMN failed",
+			                       new_name, table_entry.name);
+		}
+		auto &column = *column_p;
+		column.name = new_name;
+
+		auto new_schema_id = new_schema->schema_id;
+
+		auto &result_schema = updated_table.table_metadata.AddSchemaOrGetExisting(std::move(new_schema));
+		if (result_schema.schema_id == new_schema_id) {
+			// Update the Table Metadata to have our new schema
+			updated_table.CreateSchemaVersion(result_schema);
+			transaction_data.TableAddSchema(new_schema_id);
+		} else {
+			transaction_data.TableSetCurrentSchema();
+		}
+		updated_table.table_metadata.SetCurrentSchemaId(result_schema.schema_id);
+		return;
+	}
+	case AlterTableType::SET_TABLE_OPTIONS: {
+		auto &set_options_info = alter_table_info.Cast<SetTableOptionsInfo>();
+
+		auto binder_ptr = Binder::CreateBinder(context);
+		TableFunctionBinder property_binder(*binder_ptr, context, "SET TABLE OPTIONS");
+
+		optional_idx new_format_version;
+		case_insensitive_map_t<string> new_properties;
+
+		for (auto &option : set_options_info.table_options) {
+			auto &key = option.first;
+			auto expr_copy = option.second->Copy();
+			auto bound_expr = property_binder.Bind(expr_copy);
+			if (bound_expr->HasParameter()) {
+				throw ParameterNotResolvedException();
+			}
+			auto val = ExpressionExecutor::EvaluateScalar(context, *bound_expr, true);
+			if (val.IsNull()) {
+				throw BinderException("NULL is not supported as a valid option for '%s'", key);
+			}
+
+			if (StringUtil::CIEquals(key, "format-version")) {
+				if (!val.DefaultTryCastAs(LogicalType::INTEGER, true)) {
+					throw InvalidInputException("Can't cast 'format-version' property (%s) to INTEGER", val.ToString());
+				}
+				new_format_version = val.GetValue<int32_t>();
+			} else {
+				if (!val.DefaultTryCastAs(LogicalType::VARCHAR, true)) {
+					throw InvalidInputException("Can't cast '%s' property (%s) to VARCHAR", key, val.ToString());
+				}
+				new_properties[key] = val.GetValue<string>();
+			}
+		}
+
+		if (new_format_version.IsValid()) {
+			auto current_version = updated_table.table_metadata.iceberg_version;
+			if ((int32_t)new_format_version.GetIndex() < current_version) {
+				throw InvalidInputException("Cannot downgrade format-version from %d to %d", current_version,
+				                            new_format_version.GetIndex());
+			}
+			updated_table.table_metadata.iceberg_version = (int32_t)new_format_version.GetIndex();
+			transaction_data.TableAddUpradeFormatVersion();
+		}
+
+		if (!new_properties.empty()) {
+			transaction_data.TableSetProperties(new_properties);
+			for (auto &prop : new_properties) {
+				updated_table.table_metadata.table_properties[prop.first] = prop.second;
+			}
+		}
+
+		return;
+	}
+	case AlterTableType::RESET_TABLE_OPTIONS: {
+		auto &reset_options_info = alter_table_info.Cast<ResetTableOptionsInfo>();
+
+		vector<string> properties_to_remove(reset_options_info.table_options.begin(),
+		                                    reset_options_info.table_options.end());
+		if (!properties_to_remove.empty()) {
+			transaction_data.TableRemoveProperties(properties_to_remove);
+			for (auto &key : properties_to_remove) {
+				updated_table.table_metadata.table_properties.erase(key);
+			}
+		}
 		return;
 	}
 	case AlterTableType::SET_DEFAULT: {
@@ -430,12 +573,143 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		column.write_default = make_uniq<Value>(default_constant_value);
 
 		auto new_schema_id = new_schema->schema_id;
-		// Update the Table Metadata to have our new schema
-		updated_table.CreateSchemaVersion(*new_schema);
-		transaction_data.TableAddSchema(new_schema_id);
 
-		updated_table.table_metadata.AddSchema(std::move(new_schema));
-		updated_table.table_metadata.SetCurrentSchemaId(new_schema_id);
+		auto &result_schema = updated_table.table_metadata.AddSchemaOrGetExisting(std::move(new_schema));
+		if (result_schema.schema_id == new_schema_id) {
+			// Update the Table Metadata to have our new schema
+			updated_table.CreateSchemaVersion(result_schema);
+			transaction_data.TableAddSchema(new_schema_id);
+		} else {
+			transaction_data.TableSetCurrentSchema();
+		}
+		updated_table.table_metadata.SetCurrentSchemaId(result_schema.schema_id);
+		return;
+	}
+	case AlterTableType::ADD_FIELD: {
+		auto &add_field_info = alter_table_info.Cast<AddFieldInfo>();
+		auto &column_path = add_field_info.column_path;
+		auto &new_field = add_field_info.new_field;
+		auto &if_field_not_exists = add_field_info.if_field_not_exists;
+
+		auto new_schema = current_schema.Copy();
+		new_schema->schema_id++;
+
+		auto parent_path = column_path;
+		column_path.push_back(new_field.GetName());
+
+		auto parent_p = new_schema->GetMutableFromPath(parent_path, nullptr);
+		if (!parent_p) {
+			throw CatalogException(
+			    "The parent column ('%s') does not exist on the table '%s', ADD COLUMN failed to add a new field",
+			    StringUtil::Join(parent_path, "."), table_entry.name);
+		}
+		auto &parent = *parent_p;
+
+		auto column_p = new_schema->GetMutableFromPath(column_path, nullptr);
+		if (column_p) {
+			if (if_field_not_exists) {
+				return;
+			}
+			throw CatalogException(
+			    "The column ('%s') already exists on the table '%s', ADD COLUMN failed to add a new field",
+			    StringUtil::Join(column_path, "."), table_entry.name);
+		}
+
+		if (parent.type.id() != LogicalTypeId::STRUCT) {
+			throw CatalogException("Can't add field '%s' to column '%s', because the parent is not a struct (type: %s)",
+			                       new_field.GetName(), StringUtil::Join(parent_path, "."), parent.type.ToString());
+		}
+
+		auto &last_column_id = updated_table.table_metadata.last_column_id;
+		if (!last_column_id.IsValid()) {
+			throw InternalException("No last_column_id when trying to ADD COLUMN %s",
+			                        StringUtil::Join(column_path, "."));
+		}
+		auto field_id = last_column_id.GetIndex() + 1;
+		auto next_field_id = [&field_id]() -> idx_t {
+			return field_id++;
+		};
+
+		IcebergDefaultBinder binder(context);
+		auto new_iceberg_column = IcebergCreateTableRequest::CreateIcebergColumn(
+		    new_field, binder, false, next_field_id, updated_table.table_metadata.iceberg_version);
+		last_column_id = field_id - 1;
+
+		parent.children.push_back(std::move(new_iceberg_column));
+
+		IntroduceNewSchema(updated_table, transaction_data, new_schema);
+		return;
+	}
+	case AlterTableType::RENAME_FIELD: {
+		auto &rename_field_info = alter_table_info.Cast<RenameFieldInfo>();
+		auto &column_path = rename_field_info.column_path;
+		auto &new_name = rename_field_info.new_name;
+
+		auto new_schema = current_schema.Copy();
+		new_schema->schema_id++;
+
+		auto column_p = new_schema->GetMutableFromPath(column_path, nullptr);
+		if (!column_p) {
+			throw CatalogException("The column ('%s') doesn't exist on the table '%s', RENAME COLUMN failed",
+			                       StringUtil::Join(column_path, "."), table_entry.name);
+		}
+
+		auto new_path = column_path;
+		new_path.pop_back();
+		new_path.push_back(new_name);
+
+		auto existing_column = new_schema->GetMutableFromPath(new_path, nullptr);
+		if (existing_column) {
+			throw CatalogException(
+			    "The column ('%s') already exists on the table '%s', RENAME COLUMN failed to rename the field",
+			    StringUtil::Join(new_path, "."), table_entry.name);
+		}
+		column_p->name = new_name;
+		IntroduceNewSchema(updated_table, transaction_data, new_schema);
+		return;
+	}
+	case AlterTableType::REMOVE_FIELD: {
+		auto &remove_field_info = alter_table_info.Cast<RemoveFieldInfo>();
+		auto &column_path = remove_field_info.column_path;
+		auto &cascade = remove_field_info.cascade;
+		auto &if_column_exists = remove_field_info.if_column_exists;
+
+		auto new_schema = current_schema.Copy();
+		new_schema->schema_id++;
+
+		D_ASSERT(column_path.size() > 1);
+		auto parent_path = column_path;
+		parent_path.pop_back();
+
+		if (cascade) {
+			throw NotImplementedException("DROP COLUMN with CASCADE is not implemented for Iceberg tables");
+		}
+
+		auto parent_p = new_schema->GetMutableFromPath(parent_path, nullptr);
+		if (!parent_p) {
+			if (if_column_exists) {
+				return;
+			}
+			throw CatalogException(
+			    "The column ('%s') doesnt exist on the table '%s', DROP COLUMN failed to remove the field",
+			    StringUtil::Join(column_path, "."), table_entry.name);
+		}
+		auto &parent = *parent_p;
+		auto child_it = parent.GetChildIterator(column_path.back());
+		if (child_it == parent.children.end()) {
+			if (if_column_exists) {
+				return;
+			}
+			throw CatalogException(
+			    "The column ('%s') doesnt exist on the table '%s', DROP COLUMN failed to remove the field",
+			    StringUtil::Join(column_path, "."), table_entry.name);
+		}
+		if (parent.children.size() == 1) {
+			throw CatalogException("Can't drop field '%s' because it's the last field of the STRUCT!",
+			                       StringUtil::Join(column_path, "."));
+		}
+		parent.children.erase(child_it);
+		IntroduceNewSchema(updated_table, transaction_data, new_schema);
 		return;
 	}
 	default: {

@@ -1,5 +1,6 @@
 #include "core/metadata/schema/iceberg_column_definition.hpp"
 #include "duckdb/common/types.hpp"
+#include "common/iceberg_constants.hpp"
 #include "duckdb/common/value_operations/value_operations.hpp"
 
 namespace duckdb {
@@ -178,9 +179,20 @@ LogicalType IcebergColumnDefinition::ParsePrimitiveTypeString(const string &type
 	if (type_str == "variant") {
 		return LogicalType::VARIANT();
 	}
-	if (type_str == "geometry") {
-		// Geometry is an Iceberg v3 type stored as WKB binary in parquet
-		return LogicalType::GEOMETRY();
+	if (StringUtil::StartsWith(type_str, "geometry")) {
+		// Geometry is an Iceberg v3 type stored as WKB binary in parquet.
+		// The type string may include a CRS parameter: geometry(<crs>)
+		if (type_str == "geometry") {
+			return LogicalType::GEOMETRY(IcebergConstants::DefaultGeometryCRS);
+		}
+		if (type_str.size() > 9 && type_str[8] == '(' && type_str.back() == ')') {
+			auto crs_str = type_str.substr(9, type_str.size() - 10);
+			return LogicalType::GEOMETRY(crs_str);
+		}
+		throw InvalidConfigurationException("Invalid geometry type format: %s", type_str);
+	}
+	if (StringUtil::StartsWith(type_str, "geography")) {
+		throw NotImplementedException("Geography support");
 	}
 	throw InvalidConfigurationException("Unrecognized primitive type: %s", type_str);
 }
@@ -190,6 +202,17 @@ unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::ParseStructField(re
 	auto field_write_default = field.has_write_default ? &field.write_default : nullptr;
 	return ParseType(field.name, field.id, field.required, *field.type, field.doc, field_initial_default,
 	                 field_write_default);
+}
+
+vector<unique_ptr<IcebergColumnDefinition>>::const_iterator
+IcebergColumnDefinition::GetChildIterator(const string &child_name) const {
+	for (auto it = children.begin(); it != children.end(); it++) {
+		auto &child = *(*it);
+		if (StringUtil::CIEquals(child.name, child_name)) {
+			return it;
+		}
+	}
+	return children.end();
 }
 
 bool IcebergColumnDefinition::IsIcebergPrimitiveType() const {
@@ -286,6 +309,16 @@ bool IcebergColumnDefinition::Equals(const IcebergColumnDefinition &other) const
 	}
 	if (doc != other.doc) {
 		return false;
+	}
+	if (children.size() != other.children.size()) {
+		return false;
+	}
+	for (idx_t i = 0; i < children.size(); i++) {
+		auto &a_child = children[i];
+		auto &b_child = other.children[i];
+		if (!a_child->Equals(*b_child)) {
+			return false;
+		}
 	}
 
 	if (!DefaultsAreEqual(initial_default, other.initial_default)) {
