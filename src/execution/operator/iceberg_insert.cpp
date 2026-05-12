@@ -27,6 +27,7 @@
 #include "catalog/rest/api/iceberg_type.hpp"
 #include "common/iceberg_utils.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
+#include "iceberg_logging.hpp"
 
 namespace duckdb {
 
@@ -347,6 +348,9 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 			//! nan_value_counts won't work, we can only indicate if they exist.
 			//! TODO: revisit when duckdb/duckdb can record nan_value_counts
 		}
+		DUCKDB_LOG(context, IcebergLogType,
+		   "Iceberg INSERT, wrote data_file '%s', record_count=%lld, file_size=%lld bytes", data_file.file_path,
+		   data_file.record_count, data_file.file_size_in_bytes);
 
 		written_files.push_back(std::move(manifest_entry));
 	}
