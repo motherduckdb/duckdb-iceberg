@@ -30,7 +30,7 @@ statement ok
 DROP TABLE IF EXISTS my_datalake.default.random_lineitem;
 
 statement ok
-CREATE TABLE my_datalake.default.random_lineitem AS FROM lineitem LIMIT 0
+CREATE TABLE my_datalake.default.random_lineitem AS FROM lineitem LIMIT 0;
 
 # create lineitem but with a random subset of the rows
 statement ok
