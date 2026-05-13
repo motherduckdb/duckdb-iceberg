@@ -308,7 +308,8 @@
         "test/sql/copy/csv/rejects/csv_rejects_read.test",
         "test/sql/copy/csv/test_export_force_quotes.test",
         "test/sql/copy/csv/test_export_not_null.test",
-        "test/sql/copy/csv/test_timestamptz_12926.test"
+        "test/sql/copy/csv/test_timestamptz_12926.test",
+        "test/sql/copy/csv/test_insert_into_types.test"
       ]
     },
     {
@@ -1207,7 +1208,8 @@
     {
       "reason": "Test references main.<table> or another non-iceberg schema via on_new_connection",
       "paths": [
-        "test/sql/binder/test_implicit_struct_pack.test"
+        "test/sql/binder/test_implicit_struct_pack.test",
+        "test/sql/catalog/function/attached_macro.test"
       ]
     },
     {
