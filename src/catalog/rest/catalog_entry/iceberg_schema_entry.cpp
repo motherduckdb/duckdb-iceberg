@@ -145,10 +145,6 @@ optional_ptr<CatalogEntry> IcebergSchemaEntry::CreateIndex(CatalogTransaction tr
 	throw NotImplementedException("Create Index");
 }
 
-static string GetUCCreateView(CreateViewInfo &info) {
-	throw NotImplementedException("Get Create View");
-}
-
 optional_ptr<CatalogEntry> IcebergSchemaEntry::CreateView(CatalogTransaction transaction, CreateViewInfo &info) {
 	throw NotImplementedException("Create View");
 }

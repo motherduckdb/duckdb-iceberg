@@ -785,28 +785,28 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 		idx_t col_idx = 0;
 
 		// status: int
-		chunk.SetValue(col_idx++, i, Value::INTEGER(static_cast<int32_t>(manifest_entry.status)));
+		chunk.data[col_idx++].Append(Value::INTEGER(static_cast<int32_t>(manifest_entry.status)));
 		//! FIXME: this is missing logic, needs to be looked into
 		//! SPEC: Snapshot id where the file was added, or deleted if status is 2. Inherited when null.
 		// snapshot_id: long
 		if (manifest_entry.HasSnapshotId()) {
-			chunk.SetValue(col_idx++, i, Value::BIGINT(manifest_entry.GetSnapshotId()));
+			chunk.data[col_idx++].Append(Value::BIGINT(manifest_entry.GetSnapshotId()));
 		} else {
-			chunk.SetValue(col_idx++, i, Value(LogicalType::BIGINT));
+			chunk.data[col_idx++].Append(Value(LogicalType::BIGINT));
 		}
 		// sequence_number: long
 		// file_sequence_number: long
 		if (manifest_entry.status == IcebergManifestEntryStatusType::ADDED) {
-			chunk.SetValue(col_idx++, i, Value(LogicalType::BIGINT));
-			chunk.SetValue(col_idx++, i, Value(LogicalType::BIGINT));
+			chunk.data[col_idx++].Append(Value(LogicalType::BIGINT));
+			chunk.data[col_idx++].Append(Value(LogicalType::BIGINT));
 		} else {
-			chunk.SetValue(col_idx++, i, Value::BIGINT(manifest_entry.GetFileSequenceNumber(manifest_file)));
-			chunk.SetValue(col_idx++, i, Value::BIGINT(manifest_entry.GetSequenceNumber(manifest_file)));
+			chunk.data[col_idx++].Append(Value::BIGINT(manifest_entry.GetFileSequenceNumber(manifest_file)));
+			chunk.data[col_idx++].Append(Value::BIGINT(manifest_entry.GetSequenceNumber(manifest_file)));
 		}
 
 		auto &data_file = manifest_entry.data_file;
 		// data_file: struct(...)
-		chunk.SetValue(col_idx, i, data_file.ToValue(table_metadata, chunk.data[col_idx].GetType()));
+		chunk.data[col_idx].Append(data_file.ToValue(table_metadata, chunk.data[col_idx].GetType()));
 		col_idx++;
 	}
 	chunk.SetCardinality(manifest_entries.size());

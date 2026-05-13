@@ -55,15 +55,15 @@ void ManifestListReader::ReadChunk(DataChunk &chunk, idx_t iceberg_version, vect
 
 	auto &manifest_path = chunk.data[vector_index++];
 	UnifiedVectorFormat manifest_path_format;
-	manifest_path.ToUnifiedFormat(count, manifest_path_format);
+	manifest_path.ToUnifiedFormat(manifest_path_format);
 
 	auto &manifest_length = chunk.data[vector_index++];
 	UnifiedVectorFormat manifest_length_format;
-	manifest_length.ToUnifiedFormat(count, manifest_length_format);
+	manifest_length.ToUnifiedFormat(manifest_length_format);
 
 	auto &partition_spec_id = chunk.data[vector_index++];
 	UnifiedVectorFormat partition_spec_id_format;
-	partition_spec_id.ToUnifiedFormat(count, partition_spec_id_format);
+	partition_spec_id.ToUnifiedFormat(partition_spec_id_format);
 
 	UnifiedVectorFormat content_format;
 	optional_ptr<Vector> content;
@@ -78,43 +78,43 @@ void ManifestListReader::ReadChunk(DataChunk &chunk, idx_t iceberg_version, vect
 		sequence_number = chunk.data[vector_index++];
 		min_sequence_number = chunk.data[vector_index++];
 
-		content->ToUnifiedFormat(count, content_format);
-		sequence_number->ToUnifiedFormat(count, sequence_number_format);
-		min_sequence_number->ToUnifiedFormat(count, min_sequence_number_format);
+		content->ToUnifiedFormat(content_format);
+		sequence_number->ToUnifiedFormat(sequence_number_format);
+		min_sequence_number->ToUnifiedFormat(min_sequence_number_format);
 	}
 
 	auto &added_snapshot_id = chunk.data[vector_index++];
 	UnifiedVectorFormat added_snapshot_id_format;
-	added_snapshot_id.ToUnifiedFormat(count, added_snapshot_id_format);
+	added_snapshot_id.ToUnifiedFormat(added_snapshot_id_format);
 
 	auto &added_files_count = chunk.data[vector_index++];
 	UnifiedVectorFormat added_files_count_format;
-	added_files_count.ToUnifiedFormat(count, added_files_count_format);
+	added_files_count.ToUnifiedFormat(added_files_count_format);
 
 	auto &existing_files_count = chunk.data[vector_index++];
 	UnifiedVectorFormat existing_files_count_format;
-	existing_files_count.ToUnifiedFormat(count, existing_files_count_format);
+	existing_files_count.ToUnifiedFormat(existing_files_count_format);
 
 	auto &deleted_files_count = chunk.data[vector_index++];
 	UnifiedVectorFormat deleted_files_count_format;
-	deleted_files_count.ToUnifiedFormat(count, deleted_files_count_format);
+	deleted_files_count.ToUnifiedFormat(deleted_files_count_format);
 
 	auto &added_rows_count = chunk.data[vector_index++];
 	UnifiedVectorFormat added_rows_count_format;
-	added_rows_count.ToUnifiedFormat(count, added_rows_count_format);
+	added_rows_count.ToUnifiedFormat(added_rows_count_format);
 
 	auto &existing_rows_count = chunk.data[vector_index++];
 	UnifiedVectorFormat existing_rows_count_format;
-	existing_rows_count.ToUnifiedFormat(count, existing_rows_count_format);
+	existing_rows_count.ToUnifiedFormat(existing_rows_count_format);
 
 	auto &deleted_rows_count = chunk.data[vector_index++];
 	UnifiedVectorFormat deleted_rows_count_format;
-	deleted_rows_count.ToUnifiedFormat(count, deleted_rows_count_format);
+	deleted_rows_count.ToUnifiedFormat(deleted_rows_count_format);
 
 	//! 'partitions'
 	auto &partitions = chunk.data[vector_index++];
 	RecursiveUnifiedVectorFormat partitions_format;
-	Vector::RecursiveToUnifiedFormat(partitions, count, partitions_format);
+	Vector::RecursiveToUnifiedFormat(partitions, partitions_format);
 
 	auto &field_summary_format = partitions_format.children[0];
 	auto list_data = partitions_format.unified.GetData<list_entry_t>(partitions_format.unified);
@@ -136,7 +136,7 @@ void ManifestListReader::ReadChunk(DataChunk &chunk, idx_t iceberg_version, vect
 	optional_ptr<Vector> first_row_id;
 	if (iceberg_version >= 3) {
 		first_row_id = chunk.data[vector_index++];
-		first_row_id->ToUnifiedFormat(count, first_row_id_format);
+		first_row_id->ToUnifiedFormat(first_row_id_format);
 	}
 
 	//! Conversion logic

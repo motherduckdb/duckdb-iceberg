@@ -53,11 +53,11 @@ SinkResultType IcebergDelete::Sink(ExecutionContext &context, DataChunk &chunk, 
 	auto &file_row_number = chunk.data[row_id_indexes[1]];
 
 	UnifiedVectorFormat row_data;
-	file_row_number.ToUnifiedFormat(chunk.size(), row_data);
+	file_row_number.ToUnifiedFormat(row_data);
 	auto file_row_data = UnifiedVectorFormat::GetData<int64_t>(row_data);
 
 	UnifiedVectorFormat file_name_vdata;
-	file_name_vector.ToUnifiedFormat(chunk.size(), file_name_vdata);
+	file_name_vector.ToUnifiedFormat(file_name_vdata);
 	for (idx_t i = 0; i < chunk.size(); i++) {
 		auto row_idx = row_data.sel->get_index(i);
 		auto file_name_idx = file_name_vdata.sel->get_index(i);
@@ -366,7 +366,7 @@ SourceResultType IcebergDelete::GetDataInternal(ExecutionContext &context, DataC
 	auto &global_state = sink_state->Cast<IcebergDeleteGlobalState>();
 	auto value = Value::BIGINT(NumericCast<int64_t>(global_state.total_deleted_count.load()));
 	chunk.SetCardinality(1);
-	chunk.SetValue(0, 0, value);
+	chunk.data[0].Append(value);
 	return SourceResultType::FINISHED;
 }
 

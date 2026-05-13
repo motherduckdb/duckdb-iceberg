@@ -22,6 +22,7 @@
 #include "duckdb/common/types/uuid.hpp"
 #include "duckdb/common/numeric_utils.hpp"
 #include "duckdb/common/printer.hpp"
+#include "duckdb/common/sql_identifier.hpp"
 
 #include "function/iceberg_functions.hpp"
 #include "common/iceberg_utils.hpp"
@@ -672,7 +673,7 @@ public:
 
 			vector<string> changes;
 			for (auto &schema_name : snapshot.created_schema) {
-				auto escaped_name = KeywordHelper::WriteQuoted(schema_name, '"');
+				auto escaped_name = SQLString::ToString(schema_name);
 
 				changes.push_back(StringUtil::Format("created_schema:%s", escaped_name));
 			}
@@ -680,8 +681,8 @@ public:
 			for (auto &table_uuid : snapshot.created_table) {
 				auto &table = tables.at(table_uuid);
 
-				auto schema_name = KeywordHelper::WriteQuoted(table.schema_name, '"');
-				auto table_name = KeywordHelper::WriteQuoted(table.table_name, '"');
+				auto schema_name = SQLString::ToString(table.schema_name);
+				auto table_name = SQLString::ToString(table.table_name);
 
 				changes.push_back(StringUtil::Format("created_table:%s.%s", schema_name, table_name));
 			}
