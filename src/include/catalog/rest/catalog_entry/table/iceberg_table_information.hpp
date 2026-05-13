@@ -47,6 +47,10 @@ public:
 	int64_t GetExistingSpecId(IcebergPartitionSpec &spec);
 	void SetPartitionedBy(IcebergTransaction &transaction, const vector<unique_ptr<ParsedExpression>> &partition_keys,
 	                      const IcebergTableSchema &schema, bool first_partition_spec = false);
+	//! Build an IcebergPartitionSpec from parsed PARTITIONED BY expressions and a schema.
+	static IcebergPartitionSpec BuildPartitionSpec(const vector<unique_ptr<ParsedExpression>> &partition_keys,
+	                                               const IcebergTableSchema &schema, int32_t spec_id,
+	                                               idx_t base_partition_field_id);
 	IRCAPITableCredentials GetVendedCredentials(ClientContext &context);
 	const string &BaseFilePath() const;
 

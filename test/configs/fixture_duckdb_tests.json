@@ -1236,6 +1236,16 @@
       "paths": [
         "test/sql/aggregate/aggregates/approx_top_k_big.test_slow"
       ]
+    },
+    {
+      "reason": "changing secret manager settings after the secret manager is used is not allowed",
+      "paths": [
+        "test/sql/secrets/create_secret_filesystem_logging.test",
+        "test/sql/settings/test_disabled_local_filesystem_metadata.test",
+        "test/sql/settings/test_disabled_local_filesystem_secrets.test",
+        "test/sql/settings/test_external_access_metadata.test",
+        "test/sql/settings/test_external_access_secrets.test"
+      ]
     }
   ]
 }
