@@ -2,6 +2,10 @@
 #include "planning/metadata_io/manifest_list/iceberg_manifest_list_reader.hpp"
 #include "core/metadata/manifest/iceberg_manifest_list.hpp"
 
+#include "duckdb/common/vector/list_vector.hpp"
+#include "duckdb/common/vector/map_vector.hpp"
+#include "duckdb/common/vector/struct_vector.hpp"
+
 namespace duckdb {
 
 namespace manifest_list {

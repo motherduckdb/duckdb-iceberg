@@ -365,19 +365,20 @@ void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
 		string transform_name = "identity";
 		idx_t bucket_modulo_val;
 
-		if (key->type == ExpressionType::COLUMN_REF) {
+		auto key_type = key->GetExpressionType();
+		if (key_type == ExpressionType::COLUMN_REF) {
 			auto &colref = key->Cast<ColumnRefExpression>();
 			column_name = colref.column_names.back();
-		} else if (key->type == ExpressionType::FUNCTION) {
+		} else if (key_type == ExpressionType::FUNCTION) {
 			auto &funcexpr = key->Cast<FunctionExpression>();
 			transform_name = funcexpr.function_name;
 			if (funcexpr.children.empty()) {
 				throw NotImplementedException("Unrecognized transform ('%s')", transform_name);
 			} else if (!IcebergTransform::TransformFunctionSupported(transform_name)) {
 				throw NotImplementedException("Unrecognized transform ('%s')", transform_name);
-			} else if (funcexpr.children[0]->type != ExpressionType::COLUMN_REF) {
+			} else if (funcexpr.children[0]->GetExpressionType() != ExpressionType::COLUMN_REF) {
 				throw NotImplementedException("Transforms are only supported on column references, not %s",
-				                              EnumUtil::ToChars(funcexpr.children[0]->type));
+				                              EnumUtil::ToChars(funcexpr.children[0]->GetExpressionType()));
 			}
 			auto &colref = funcexpr.children[0]->Cast<ColumnRefExpression>();
 			column_name = colref.column_names.back();
@@ -387,11 +388,11 @@ void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
 					                            transform_name);
 				}
 				auto &param_expr = *funcexpr.children[1];
-				if (param_expr.type != ExpressionType::VALUE_CONSTANT) {
+				if (param_expr.GetExpressionType() != ExpressionType::VALUE_CONSTANT) {
 					throw InvalidInputException("%s second argument must be a constant integer", transform_name);
 				}
 				auto &const_expr = param_expr.Cast<ConstantExpression>();
-				bucket_modulo_val = const_expr.value.GetValue<int32_t>();
+				bucket_modulo_val = const_expr.GetValue().GetValue<int32_t>();
 				transform_name = StringUtil::Format("%s[%d]", transform_name, bucket_modulo_val);
 			}
 		} else {

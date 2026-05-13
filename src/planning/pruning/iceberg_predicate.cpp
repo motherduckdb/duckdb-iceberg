@@ -27,7 +27,7 @@ public:
 		if (expr.index != 0) {
 			return nullptr;
 		}
-		auto &return_type = expr.return_type;
+		auto &return_type = expr.GetReturnType();
 		return make_uniq<BoundConstantExpression>(val.DefaultCastAs(return_type, true));
 	}
 
@@ -185,7 +185,8 @@ bool MatchBoundsTemplated(ClientContext &context, const TableFilter &filter, con
 		auto &expression_filter = filter.Cast<ExpressionFilter>();
 		auto &expr = *expression_filter.expr;
 
-		switch (expr.type) {
+		auto expression_type = GetExpressionType();
+		switch (expression_type) {
 		case ExpressionType::OPERATOR_IS_NULL:
 		case ExpressionType::OPERATOR_IS_NOT_NULL: {
 			D_ASSERT(expr.GetExpressionClass() == ExpressionClass::BOUND_OPERATOR);
@@ -198,10 +199,10 @@ bool MatchBoundsTemplated(ClientContext &context, const TableFilter &filter, con
 				return true;
 			}
 
-			if (expr.type == ExpressionType::OPERATOR_IS_NULL) {
+			if (expression_type == ExpressionType::OPERATOR_IS_NULL) {
 				return MatchBoundsIsNullFilter<TRANSFORM>(stats, transform);
 			}
-			D_ASSERT(expr.type == ExpressionType::OPERATOR_IS_NOT_NULL);
+			D_ASSERT(expression_type == ExpressionType::OPERATOR_IS_NOT_NULL);
 			return MatchBoundsIsNotNullFilter<TRANSFORM>(stats, transform);
 		}
 		case ExpressionType::COMPARE_GREATERTHAN:
@@ -214,12 +215,12 @@ bool MatchBoundsTemplated(ClientContext &context, const TableFilter &filter, con
 			if (stats.lower_bound.type() == LogicalType::VARCHAR) {
 				return true;
 			}
-			D_ASSERT(expr.GetExpressionClass() == ExpressionClass::BOUND_COMPARISON);
-			auto &compare_expr = expr.Cast<BoundComparisonExpression>();
+			D_ASSERT(BoundComparisonExpression::IsComparison(expr));
+			auto &compare_expr = expr.Cast<BoundFunctionExpression>();
 			if (transform.Type() == IcebergTransformType::IDENTITY) {
 				//! No further processing has been done on the stats (lower/upper bounds)
-				auto &left = *compare_expr.left;
-				auto &right = *compare_expr.right;
+				auto &left = BoundComparisonExpression::Left(compare_expr);
+				auto &right = BoundComparisonExpression::Right(compare_expr);
 
 				bool left_foldable = left.IsFoldable();
 				bool right_foldable = right.IsFoldable();
@@ -229,9 +230,9 @@ bool MatchBoundsTemplated(ClientContext &context, const TableFilter &filter, con
 				}
 
 				if (left_foldable) {
-					return MatchTransformedBounds<TRANSFORM>(context, expr.type, right, left, stats, transform);
+					return MatchTransformedBounds<TRANSFORM>(context, expression_type, right, left, stats, transform);
 				} else {
-					return MatchTransformedBounds<TRANSFORM>(context, expr.type, left, right, stats, transform);
+					return MatchTransformedBounds<TRANSFORM>(context, expression_type, left, right, stats, transform);
 				}
 				return true;
 			}

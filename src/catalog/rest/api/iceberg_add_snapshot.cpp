@@ -5,7 +5,7 @@
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/main/extension_helper.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
-#include "duckdb/storage/caching_file_system.hpp"
+#include "duckdb/storage/external_file_cache/caching_file_system.hpp"
 #include "duckdb/common/types/uuid.hpp"
 
 #include "core/metadata/manifest/iceberg_manifest_list.hpp"

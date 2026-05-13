@@ -493,7 +493,7 @@ static unique_ptr<Expression> CreateColumnReference(IcebergCopyInput &copy_input
                                                     idx_t column_index) {
 	if (copy_input.get_table_index.IsValid()) {
 		// logical plan generation: generate a bound column ref
-		ColumnBinding column_binding(copy_input.get_table_index.GetIndex(), column_index);
+		ColumnBinding column_binding(TableIndex(copy_input.get_table_index.GetIndex()), ProjectionIndex(column_index));
 		return make_uniq<BoundColumnRefExpression>(type, column_binding);
 	}
 	// physical plan generation: generate a reference directly
@@ -633,7 +633,7 @@ static void GeneratePartitionExpressions(ClientContext &context, IcebergCopyInpu
 
 		auto expr = GetPartitionExpression(context, copy_input, field);
 		projection_names.push_back(field.name);
-		projection_types.push_back(expr->return_type);
+		projection_types.push_back(expr->GetReturnType());
 		projection_expressions.push_back(std::move(expr));
 	}
 
@@ -727,7 +727,6 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, Iceberg
 		result.filename_pattern.SetFilenamePattern("{uuidv7}");
 		result.partition_output = true;
 		result.write_empty_file = true;
-		result.rotate = false;
 	} else {
 		result.filename_pattern.SetFilenamePattern("{uuidv7}");
 		result.partition_output = false;
@@ -739,7 +738,6 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, Iceberg
 		} else {
 			result.file_size_bytes = IcebergCatalog::DEFAULT_TARGET_FILE_SIZE;
 		}
-		result.rotate = true;
 	}
 
 	result.file_path = copy_input.data_path;

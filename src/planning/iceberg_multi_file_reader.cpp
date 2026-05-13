@@ -390,7 +390,7 @@ void IcebergMultiFileReader::ApplyEqualityDeletes(ClientContext &context, DataCh
 
 				//! This means that if the expression is 'IS_NOT_NULL', the result is False for this column, otherwise
 				//! it's True (because nothing compares equal to NULL)
-				if (expression->type == ExpressionType::OPERATOR_IS_NOT_NULL) {
+				if (expression->GetExpressionType() == ExpressionType::OPERATOR_IS_NOT_NULL) {
 					equalities.push_back(make_uniq<BoundConstantExpression>(Value::BOOLEAN(false)));
 				} else {
 					equalities.push_back(make_uniq<BoundConstantExpression>(Value::BOOLEAN(true)));
@@ -449,7 +449,7 @@ void IcebergMultiFileReader::FinalizeChunk(ClientContext &context, const MultiFi
 	if (diff > 0) {
 		int32_t start = input_chunk.ColumnCount() - diff;
 		for (int32_t i = 0; i < diff; i++) {
-			output_chunk.data.emplace_back(input_chunk.data[start + i]);
+			output_chunk.data.emplace_back(Vector::Ref(input_chunk.data[start + i]));
 		}
 	}
 

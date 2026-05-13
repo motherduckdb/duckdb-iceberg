@@ -1,6 +1,7 @@
 #include "core/metadata/manifest/iceberg_manifest.hpp"
 
-#include "duckdb/storage/caching_file_system.hpp"
+#include "duckdb/storage/external_file_cache/caching_file_system.hpp"
+#include "duckdb/storage/buffer_manager.hpp"
 
 #include "catalog/rest/iceberg_table_set.hpp"
 #include "catalog/rest/api/catalog_utils.hpp"

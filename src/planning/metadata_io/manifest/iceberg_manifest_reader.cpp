@@ -171,75 +171,75 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 	UnifiedVectorFormat content_format;
 	optional_ptr<Vector> content;
 	if (iceberg_version >= 2) {
-		content = *data_file_entries[entry_index++];
+		content = data_file_entries[entry_index++];
 		content->ToUnifiedFormat(count, content_format);
 	}
 
-	auto &file_path = *data_file_entries[entry_index++];
+	auto &file_path = data_file_entries[entry_index++];
 	UnifiedVectorFormat file_path_format;
 	file_path.ToUnifiedFormat(count, file_path_format);
 
-	auto &file_format = *data_file_entries[entry_index++];
+	auto &file_format = data_file_entries[entry_index++];
 	UnifiedVectorFormat file_format_format;
 	file_format.ToUnifiedFormat(count, file_format_format);
 
-	auto &partition = *data_file_entries[entry_index++];
+	auto &partition = data_file_entries[entry_index++];
 
-	auto &record_count = *data_file_entries[entry_index++];
+	auto &record_count = data_file_entries[entry_index++];
 	UnifiedVectorFormat record_count_format;
 	record_count.ToUnifiedFormat(count, record_count_format);
 
-	auto &file_size_in_bytes = *data_file_entries[entry_index++];
+	auto &file_size_in_bytes = data_file_entries[entry_index++];
 	UnifiedVectorFormat file_size_in_bytes_format;
 	file_size_in_bytes.ToUnifiedFormat(count, file_size_in_bytes_format);
 
-	auto &column_sizes = *data_file_entries[entry_index++];
+	auto &column_sizes = data_file_entries[entry_index++];
 	RecursiveUnifiedVectorFormat column_sizes_format;
 	Vector::RecursiveToUnifiedFormat(column_sizes, count, column_sizes_format);
 
-	auto &value_counts = *data_file_entries[entry_index++];
+	auto &value_counts = data_file_entries[entry_index++];
 	RecursiveUnifiedVectorFormat value_counts_format;
 	Vector::RecursiveToUnifiedFormat(value_counts, count, value_counts_format);
 
-	auto &null_value_counts = *data_file_entries[entry_index++];
+	auto &null_value_counts = data_file_entries[entry_index++];
 	RecursiveUnifiedVectorFormat null_value_counts_format;
 	Vector::RecursiveToUnifiedFormat(null_value_counts, count, null_value_counts_format);
 
-	auto &nan_value_counts = *data_file_entries[entry_index++];
+	auto &nan_value_counts = data_file_entries[entry_index++];
 	RecursiveUnifiedVectorFormat nan_value_counts_format;
 	Vector::RecursiveToUnifiedFormat(nan_value_counts, count, nan_value_counts_format);
 
-	auto &lower_bounds = *data_file_entries[entry_index++];
+	auto &lower_bounds = data_file_entries[entry_index++];
 	RecursiveUnifiedVectorFormat lower_bounds_format;
 	Vector::RecursiveToUnifiedFormat(lower_bounds, count, lower_bounds_format);
 
-	auto &upper_bounds = *data_file_entries[entry_index++];
+	auto &upper_bounds = data_file_entries[entry_index++];
 	RecursiveUnifiedVectorFormat upper_bounds_format;
 	Vector::RecursiveToUnifiedFormat(upper_bounds, count, upper_bounds_format);
 
-	auto &split_offsets = *data_file_entries[entry_index++];
+	auto &split_offsets = data_file_entries[entry_index++];
 	RecursiveUnifiedVectorFormat split_offsets_format;
 	Vector::RecursiveToUnifiedFormat(split_offsets, count, split_offsets_format);
 
-	auto &equality_ids = *data_file_entries[entry_index++];
+	auto &equality_ids = data_file_entries[entry_index++];
 	RecursiveUnifiedVectorFormat equality_ids_format;
 	Vector::RecursiveToUnifiedFormat(equality_ids, count, equality_ids_format);
 
-	auto &sort_order_id = *data_file_entries[entry_index++];
+	auto &sort_order_id = data_file_entries[entry_index++];
 	UnifiedVectorFormat sort_order_id_format;
 	sort_order_id.ToUnifiedFormat(count, sort_order_id_format);
 
 	UnifiedVectorFormat first_row_id_format;
 	optional_ptr<Vector> first_row_id;
 	if (iceberg_version >= 3) {
-		first_row_id = *data_file_entries[entry_index++];
+		first_row_id = data_file_entries[entry_index++];
 		first_row_id->ToUnifiedFormat(count, first_row_id_format);
 	}
 
 	UnifiedVectorFormat referenced_data_file_format;
 	optional_ptr<Vector> referenced_data_file;
 	if (iceberg_version >= 2) {
-		referenced_data_file = *data_file_entries[entry_index++];
+		referenced_data_file = data_file_entries[entry_index++];
 		referenced_data_file->ToUnifiedFormat(count, referenced_data_file_format);
 	}
 	UnifiedVectorFormat content_offset_format;
@@ -248,8 +248,8 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 	UnifiedVectorFormat content_size_in_bytes_format;
 	optional_ptr<Vector> content_size_in_bytes;
 	if (iceberg_version >= 3) {
-		content_offset = *data_file_entries[entry_index++];
-		content_size_in_bytes = *data_file_entries[entry_index++];
+		content_offset = data_file_entries[entry_index++];
+		content_size_in_bytes = data_file_entries[entry_index++];
 
 		content_offset->ToUnifiedFormat(count, content_offset_format);
 		content_size_in_bytes->ToUnifiedFormat(count, content_size_in_bytes_format);
@@ -261,7 +261,7 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 		D_ASSERT(partition_children.size() == partition_field_id_to_type.size());
 		idx_t child_index = 0;
 		for (auto &it : partition_field_id_to_type) {
-			partition_vectors.emplace_back(it.first, *partition_children[child_index++]);
+			partition_vectors.emplace_back(it.first, partition_children[child_index++]);
 		}
 	}
 

@@ -30,6 +30,43 @@
 
 namespace duckdb {
 
+struct IcebergTableFilters {
+	using filter_set_t = unordered_map<idx_t, unique_ptr<TableFilter>>;
+	using iterator = filter_set_t::iterator;
+	using const_iterator = filter_set_t::const_iterator;
+
+public:
+	bool HasFilters() const {
+		return !table_filters.empty();
+	}
+	void PushFilter(column_t column_idx, unique_ptr<TableFilter> table_filter) {
+		table_filters[column_idx] = std::move(table_filter);
+	}
+	optional_ptr<const TableFilter> TryGetFilterByColumnIndex(column_t column_idx) const {
+		auto entry = table_filters.find(column_idx);
+		if (entry == table_filters.end()) {
+			return nullptr;
+		}
+		return entry->second.get();
+	}
+
+	iterator begin() { // NOLINT: match stl API
+		return table_filters.begin();
+	}
+	iterator end() { // NOLINT: match stl API
+		return table_filters.end();
+	}
+	const_iterator begin() const { // NOLINT: match stl API
+		return table_filters.begin();
+	}
+	const_iterator end() const { // NOLINT: match stl API
+		return table_filters.end();
+	}
+
+private:
+	filter_set_t table_filters;
+};
+
 struct IcebergManifestScanningState {
 public:
 	IcebergManifestScanningState(ClientContext &context, unique_ptr<AvroScan> scan,
@@ -62,7 +99,8 @@ public:
 	bool FinishedScanningDeletes() const;
 
 	void Bind(vector<LogicalType> &return_types, vector<string> &names);
-	unique_ptr<IcebergMultiFileList> PushdownInternal(ClientContext &context, TableFilterSet &new_filters) const;
+	unique_ptr<IcebergMultiFileList> PushdownInternal(ClientContext &context, TableFilterSet &new_filters,
+	                                                  vector<column_t> column_indexes) const;
 	void ScanPositionalDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result) const;
 	void ScanEqualityDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result,
 	                            vector<MultiFileColumnDefinition> &columns,
@@ -111,7 +149,7 @@ protected:
 	//! NOTE: this requires the lock because it modifies the 'data_files' vector, potentially invalidating references
 	optional_ptr<const BoundIcebergManifestEntry> GetDataFile(idx_t file_id, lock_guard<mutex> &guard) const;
 
-	optional_ptr<const TableFilter> GetFilterForColumnIndex(const TableFilterSet &filter_set,
+	optional_ptr<const TableFilter> GetFilterForColumnIndex(const IcebergTableFilters &filter_set,
 	                                                        const ColumnIndex &column_index) const;
 
 private:
@@ -130,7 +168,7 @@ public:
 	bool have_bound = false;
 	vector<string> names;
 	vector<LogicalType> types;
-	TableFilterSet table_filters;
+	IcebergTableFilters table_filters;
 
 	mutable ManifestEntryReadState read_state;
 
