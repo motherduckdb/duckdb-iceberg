@@ -641,6 +641,34 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		IntroduceNewSchema(updated_table, transaction_data, new_schema);
 		return;
 	}
+	case AlterTableType::RENAME_FIELD: {
+		auto &rename_field_info = alter_table_info.Cast<RenameFieldInfo>();
+		auto &column_path = rename_field_info.column_path;
+		auto &new_name = rename_field_info.new_name;
+
+		auto new_schema = current_schema.Copy();
+		new_schema->schema_id++;
+
+		auto column_p = new_schema->GetMutableFromPath(column_path, nullptr);
+		if (!column_p) {
+			throw CatalogException("The column ('%s') doesn't exist on the table '%s', RENAME COLUMN failed",
+			                       StringUtil::Join(column_path, "."), table_entry.name);
+		}
+
+		auto new_path = column_path;
+		new_path.pop_back();
+		new_path.push_back(new_name);
+
+		auto existing_column = new_schema->GetMutableFromPath(new_path, nullptr);
+		if (existing_column) {
+			throw CatalogException(
+			    "The column ('%s') already exists on the table '%s', RENAME COLUMN failed to rename the field",
+			    StringUtil::Join(new_path, "."), table_entry.name);
+		}
+		column_p->name = new_name;
+		IntroduceNewSchema(updated_table, transaction_data, new_schema);
+		return;
+	}
 	case AlterTableType::REMOVE_FIELD: {
 		auto &remove_field_info = alter_table_info.Cast<RemoveFieldInfo>();
 		auto &column_path = remove_field_info.column_path;
