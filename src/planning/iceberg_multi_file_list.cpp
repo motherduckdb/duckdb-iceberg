@@ -1053,9 +1053,6 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 			// Check whether current data file is filtered out.
 			if (!table_filters.filters.empty() &&
 			    !FileMatchesFilter(manifest_file, manifest_entry, IcebergManifestContentType::DELETE)) {
-				throw InternalException("Must log delete file prune. should deletes be pruned here?");
-				DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'data_file': '%s'",
-				           data_file.file_path);
 				//! Skip this file
 				continue;
 			}
