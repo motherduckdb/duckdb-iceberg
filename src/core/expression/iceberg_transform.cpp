@@ -97,7 +97,7 @@ LogicalType IcebergTransform::GetSerializedType(const LogicalType &input) const 
 }
 
 string IcebergTransform::PartitionValueToString(const Value &partition_value) const {
-	if (partition_value.IsNull() || partition_value.ToString() == "NULL") {
+	if (partition_value.IsNull()) {
 		return "NULL";
 	}
 	switch (type) {

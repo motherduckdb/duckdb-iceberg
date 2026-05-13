@@ -40,5 +40,7 @@ select count(*) >= 10 from (from iceberg_metadata(my_datalake.default.filtering_
 1
 
 # verify 8+ have been filtered out. (On CI many more are filtered out)
-statement ok
+query I
 select count(*) > 8 from duckdb_logs() where type = 'Iceberg' and regexp_matches(message, '.*col1.*did not match filter.*');
+----
+1

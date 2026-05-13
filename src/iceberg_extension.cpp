@@ -75,6 +75,11 @@ static void LoadInternal(ExtensionLoader &loader) {
 	    "ignore_row_group_size_bytes_for_partitioned_tables",
 	    "Ignore unsupported write.parquet.row-group-size-bytes table property for partitioned tables",
 	    LogicalType::BOOLEAN, Value::BOOLEAN(false));
+	config.AddExtensionOption(
+	    "iceberg_logging_post_body_truncate_limit",
+	    "Maximum number of characters of a REST catalog POST body to include in Iceberg log messages. "
+	    "Bodies longer than this are truncated with a trailing '... (truncated)' marker. Set to 0 to omit the body.",
+	    LogicalType::UBIGINT, Value::UBIGINT(10000));
 
 	// Iceberg Table Functions
 	for (auto &fun : IcebergFunctions::GetTableFunctions(loader)) {

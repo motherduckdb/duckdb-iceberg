@@ -264,8 +264,8 @@ static void ApplyPartitionConstants(const IcebergMultiFileList &multi_file_list,
 		}
 		if (!partition_value) {
 			DUCKDB_LOG(context, IcebergLogType,
-					   "Iceberg partition constant missing for data_file '%s', partition field_id=%llu column '%s'",
-					   data_file.file_path, field.partition_field_id, global_column.name);
+			           "Iceberg partition constant missing for data_file '%s', partition field_id=%llu column '%s'",
+			           data_file.file_path, field.partition_field_id, global_column.name);
 			//! This data file doesn't have a value for this partition field (is that an error ??)
 			continue;
 		}

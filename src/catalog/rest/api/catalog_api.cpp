@@ -59,8 +59,23 @@ vector<string> IRCAPI::ParseSchemaName(const string &namespace_name) {
 }
 
 static void LogPostBody(ClientContext &context, const IRCEndpointBuilder &url_builder, const string &body) {
-	auto message = StringUtil::Format("POST %s", url_builder.GetURLEncoded().c_str());
-	DUCKDB_LOG(context, IcebergLogType, message);
+	if (!Logger::Get(context).ShouldLog(IcebergLogType::NAME, IcebergLogType::LEVEL)) {
+		return;
+	}
+	idx_t truncate_limit = 10000;
+	Value limit_value;
+	if (context.TryGetCurrentSetting("iceberg_logging_post_body_truncate_limit", limit_value)) {
+		truncate_limit = limit_value.GetValue<idx_t>();
+	}
+	string body_to_log;
+	if (truncate_limit == 0) {
+		body_to_log = "<body omitted>";
+	} else if (body.size() > truncate_limit) {
+		body_to_log = body.substr(0, truncate_limit) + "... (truncated)";
+	} else {
+		body_to_log = body;
+	}
+	DUCKDB_LOG(context, IcebergLogType, "POST %s body=%s", url_builder.GetURLEncoded(), body_to_log);
 }
 
 static IRCEntryLookupStatus CheckVerificationResponse(ClientContext &context, HTTPStatusCode &status) {
