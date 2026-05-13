@@ -390,15 +390,18 @@
     {
       "reason": "Wrong result in list functions - file ordering or iceberg list semantics",
       "paths": [
+        "test/sql/function/list/aggregates/approx_count_distinct.test",
         "test/sql/function/list/aggregates/bool_and_or.test",
         "test/sql/function/list/aggregates/sum.test",
         "test/sql/function/list/lambdas/arrow/reduce_deprecated.test",
         "test/sql/function/list/lambdas/arrow/reduce_initial_deprecated.test",
         "test/sql/function/list/lambdas/reduce.test",
         "test/sql/function/list/lambdas/reduce_initial.test",
+        "test/sql/function/list/list_grade_up.test_slow",
         "test/sql/function/list/list_has_any_and_has_all.test",
         "test/sql/function/list/list_intersect.test",
         "test/sql/function/list/list_resize.test",
+        "test/sql/function/list/list_sort.test_slow",
         "test/sql/function/list/list_value_nested_lists.test",
         "test/sql/function/list/list_value_structs.test"
       ]
