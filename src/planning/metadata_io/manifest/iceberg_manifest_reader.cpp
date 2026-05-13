@@ -2,6 +2,9 @@
 
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/types/string.hpp"
+#include "duckdb/common/vector/string_vector.hpp"
+#include "duckdb/common/vector/struct_vector.hpp"
+#include "duckdb/common/vector/list_vector.hpp"
 
 namespace duckdb {
 

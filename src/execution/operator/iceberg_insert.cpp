@@ -780,11 +780,13 @@ static void GenerateProjection(ClientContext &context, PhysicalPlanGenerator &pl
 	// push the projection
 	vector<LogicalType> types;
 	for (auto &expr : expressions) {
-		auto &type = expr->return_type;
+		auto &type = expr->GetReturnType();
 		if (type.id() == LogicalTypeId::HUGEINT) {
-			type = LogicalType::DECIMAL(38, 0);
+			expr->SetReturnType(LogicalType::DECIMAL(38, 0));
+			types.push_back(expr->GetReturnType());
+		} else {
+			types.push_back(type);
 		}
-		types.push_back(type);
 	}
 	auto &proj =
 	    planner.Make<PhysicalProjection>(std::move(types), std::move(expressions), plan->estimated_cardinality);
@@ -815,7 +817,6 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 	physical_copy.overwrite_mode = copy_options.overwrite_mode;
 	physical_copy.per_thread_output = copy_options.per_thread_output;
 	physical_copy.file_size_bytes = copy_options.file_size_bytes;
-	physical_copy.rotate = copy_options.rotate;
 	physical_copy.return_type = copy_options.return_type;
 
 	physical_copy.partition_output = copy_options.partition_output;

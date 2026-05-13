@@ -434,18 +434,18 @@ bool IcebergAvroMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &
 // Manifests, and does not happen in any other reads
 static void FixSamePhysicalTypeCasts(BoundCastInfo &cast_info, const LogicalType &source_type,
                                      const LogicalType &target_type) {
-	if (cast_info.function == DefaultCasts::TryVectorNullCast &&
-	    source_type.InternalType() == target_type.InternalType()) {
-		cast_info.function = DefaultCasts::ReinterpretCast;
+	if (cast_info.IsTryNullCast() && source_type.InternalType() == target_type.InternalType()) {
+		cast_info.SetFunction(DefaultCasts::ReinterpretCast);
 		return;
 	}
-	if (!cast_info.cast_data) {
+	auto cast_data = cast_info.GetCastData();
+	if (!cast_data) {
 		return;
 	}
 	if (source_type.id() != LogicalTypeId::STRUCT || target_type.id() != LogicalTypeId::STRUCT) {
 		return;
 	}
-	auto &struct_data = cast_info.cast_data->Cast<StructBoundCastData>();
+	auto &struct_data = cast_data->Cast<StructBoundCastData>();
 	auto &src_children = StructType::GetChildTypes(source_type);
 	auto &tgt_children = StructType::GetChildTypes(target_type);
 	for (idx_t i = 0; i < struct_data.child_cast_info.size(); i++) {
@@ -460,10 +460,11 @@ static void FixSamePhysicalTypeCasts(BoundCastInfo &cast_info, const LogicalType
 }
 
 static void FixSamePhysicalTypeCastsInExpr(Expression &expr) {
-	if (expr.type == ExpressionType::OPERATOR_CAST) {
+	auto expression_type = expr.GetExpressionType();
+	if (expression_type == ExpressionType::OPERATOR_CAST) {
 		auto &cast_expr = expr.Cast<BoundCastExpression>();
-		FixSamePhysicalTypeCasts(cast_expr.bound_cast, cast_expr.source_type(), cast_expr.return_type);
-	} else if (expr.type == ExpressionType::BOUND_FUNCTION) {
+		FixSamePhysicalTypeCasts(cast_expr.bound_cast, cast_expr.source_type(), cast_expr.GetReturnType());
+	} else if (expression_type == ExpressionType::BOUND_FUNCTION) {
 		for (auto &child : expr.Cast<BoundFunctionExpression>().children) {
 			if (child) {
 				FixSamePhysicalTypeCastsInExpr(*child);

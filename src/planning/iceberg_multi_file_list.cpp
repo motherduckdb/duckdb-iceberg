@@ -475,6 +475,7 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 	}
 
 	for (auto &entry : table_filters) {
+		auto index = entry.first;
 		auto &column = *schema[index];
 
 		auto &data_file = manifest_entry.data_file;
@@ -608,7 +609,7 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 			stats.has_nan = nan_counts != 0;
 		}
 
-		auto &filter = *it->second;
+		auto &filter = *entry.second;
 		if (!IcebergPredicate::MatchBounds(context, filter, stats, IcebergTransform::Identity())) {
 			//! If any predicate fails, exclude the file
 			return false;

@@ -185,7 +185,7 @@ bool MatchBoundsTemplated(ClientContext &context, const TableFilter &filter, con
 		auto &expression_filter = filter.Cast<ExpressionFilter>();
 		auto &expr = *expression_filter.expr;
 
-		auto expression_type = GetExpressionType();
+		auto expression_type = expr.GetExpressionType();
 		switch (expression_type) {
 		case ExpressionType::OPERATOR_IS_NULL:
 		case ExpressionType::OPERATOR_IS_NOT_NULL: {
@@ -194,7 +194,7 @@ bool MatchBoundsTemplated(ClientContext &context, const TableFilter &filter, con
 
 			D_ASSERT(bound_operator_expr.children.size() == 1);
 			auto &child_expr = bound_operator_expr.children[0];
-			if (child_expr->type != ExpressionType::BOUND_REF) {
+			if (child_expr->GetExpressionType() != ExpressionType::BOUND_REF) {
 				//! We can't evaluate expressions that aren't direct column references
 				return true;
 			}
