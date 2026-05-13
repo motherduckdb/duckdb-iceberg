@@ -13,7 +13,7 @@
 #include "duckdb/common/multi_file/multi_file_data.hpp"
 #include "duckdb/common/list.hpp"
 #include "duckdb/common/unordered_map.hpp"
-#include "duckdb/planner/filter/constant_filter.hpp"
+#include "duckdb/planner/filter/expression_filter.hpp"
 #include "duckdb/planner/filter/null_filter.hpp"
 #include "duckdb/planner/table_filter.hpp"
 #include "duckdb/parallel/task_executor.hpp"
@@ -31,7 +31,7 @@
 namespace duckdb {
 
 struct IcebergTableFilters {
-	using filter_set_t = unordered_map<idx_t, unique_ptr<TableFilter>>;
+	using filter_set_t = unordered_map<idx_t, unique_ptr<ExpressionFilter>>;
 	using iterator = filter_set_t::iterator;
 	using const_iterator = filter_set_t::const_iterator;
 
@@ -39,10 +39,10 @@ public:
 	bool HasFilters() const {
 		return !table_filters.empty();
 	}
-	void PushFilter(column_t column_idx, unique_ptr<TableFilter> table_filter) {
+	void PushFilter(column_t column_idx, unique_ptr<ExpressionFilter> table_filter) {
 		table_filters[column_idx] = std::move(table_filter);
 	}
-	optional_ptr<const TableFilter> TryGetFilterByColumnIndex(column_t column_idx) const {
+	optional_ptr<const ExpressionFilter> TryGetFilterByColumnIndex(column_t column_idx) const {
 		auto entry = table_filters.find(column_idx);
 		if (entry == table_filters.end()) {
 			return nullptr;
@@ -149,8 +149,8 @@ protected:
 	//! NOTE: this requires the lock because it modifies the 'data_files' vector, potentially invalidating references
 	optional_ptr<const BoundIcebergManifestEntry> GetDataFile(idx_t file_id, lock_guard<mutex> &guard) const;
 
-	optional_ptr<const TableFilter> GetFilterForColumnIndex(const IcebergTableFilters &filter_set,
-	                                                        const ColumnIndex &column_index) const;
+	unique_ptr<ExpressionFilter> GetFilterForColumnIndex(const IcebergTableFilters &filter_set,
+	                                                     const ColumnIndex &column_index) const;
 
 private:
 	optional_ptr<ManifestReadBatch> TryGetNextBatch(lock_guard<mutex> &guard) const;
