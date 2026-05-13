@@ -8,9 +8,16 @@ if (NOT EMSCRIPTEN)
 endif()
 
 # Extension from this repo
+if (DONT_LINK OR "$ENV{DONT_LINK}")
+    set(ICEBERG_DONT_LINK "DONT_LINK")
+else()
+    set(ICEBERG_DONT_LINK "")
+endif()
+
 duckdb_extension_load(iceberg
     SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}
     LOAD_TESTS
+    ${ICEBERG_DONT_LINK}
 )
 
 if (NOT EMSCRIPTEN)
@@ -26,7 +33,7 @@ if (NOT EMSCRIPTEN)
     duckdb_extension_load(aws
             LOAD_TESTS
             GIT_URL https://github.com/duckdb/duckdb-aws
-            GIT_TAG 18803d5e55b9f9f6dda5047d0fdb4f4238b6801d
+            GIT_TAG ebce8e46e9a02576cfd0296fe29c23aeeddaa937
     )
   endif()
 endif()

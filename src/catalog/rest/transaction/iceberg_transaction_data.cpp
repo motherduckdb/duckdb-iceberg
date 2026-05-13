@@ -17,10 +17,11 @@
 namespace duckdb {
 
 IcebergTransactionData::IcebergTransactionData(ClientContext &context, const IcebergTableInformation &table_info)
-    : context(context), table_info(table_info), is_deleted(false) {
+    : context(context), table_info(table_info) {
 	if (table_info.table_metadata.has_next_row_id) {
 		next_row_id = table_info.table_metadata.next_row_id;
 	}
+	initial_schema_id = table_info.table_metadata.GetCurrentSchemaId();
 }
 
 void IcebergTransactionData::CacheExistingManifestList(lock_guard<mutex> &guard, const IcebergTableMetadata &metadata) {
@@ -146,8 +147,15 @@ void IcebergTransactionData::AddUpdateSnapshot(vector<IcebergManifestEntry> &&de
 	updates.push_back(std::move(add_snapshot));
 }
 
-void IcebergTransactionData::TableAddSchema() {
-	updates.push_back(make_uniq<AddSchemaUpdate>(table_info));
+void IcebergTransactionData::TableAddSchema(int32_t schema_id) {
+	auto add_schema_update = make_uniq<AddSchemaUpdate>(table_info, schema_id);
+	updates.push_back(std::move(add_schema_update));
+	assert_schema_id = true;
+	set_schema_id = true;
+}
+
+void IcebergTransactionData::TableSetCurrentSchema() {
+	set_schema_id = true;
 }
 
 void IcebergTransactionData::TableAssignUUID() {
@@ -158,8 +166,12 @@ void IcebergTransactionData::TableAddAssertCreate() {
 	requirements.push_back(make_uniq<AssertCreateRequirement>(table_info));
 }
 
+void IcebergTransactionData::TableAddAssertUUID() {
+	requirements.push_back(make_uniq<AssertTableUUIDRequirement>(table_info));
+}
+
 void IcebergTransactionData::TableAddAssertCurrentSchemaId() {
-	requirements.push_back(make_uniq<AssertCurrentSchemaIdRequirement>(table_info));
+	assert_schema_id = true;
 }
 
 void IcebergTransactionData::TableAddAssertLastAssignedFieldId() {
@@ -176,10 +188,6 @@ void IcebergTransactionData::TableAddAssertDefaultSpecId() {
 
 void IcebergTransactionData::TableAddUpradeFormatVersion() {
 	updates.push_back(make_uniq<UpgradeFormatVersion>(table_info));
-}
-
-void IcebergTransactionData::TableAddSetCurrentSchema() {
-	updates.push_back(make_uniq<SetCurrentSchema>(table_info));
 }
 
 void IcebergTransactionData::TableAddPartitionSpec() {

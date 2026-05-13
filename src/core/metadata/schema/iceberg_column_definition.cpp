@@ -1,5 +1,7 @@
 #include "core/metadata/schema/iceberg_column_definition.hpp"
 #include "duckdb/common/types.hpp"
+#include "common/iceberg_constants.hpp"
+#include "duckdb/common/value_operations/value_operations.hpp"
 
 namespace duckdb {
 
@@ -47,6 +49,7 @@ static Value ParseDefaultForType(const LogicalType &type, rest_api_objects::Prim
 	case LogicalTypeId::TIME:
 	case LogicalTypeId::TIMESTAMP:
 	case LogicalTypeId::TIMESTAMP_TZ:
+	case LogicalTypeId::TIMESTAMP_NS:
 	case LogicalTypeId::VARCHAR:
 	case LogicalTypeId::UUID: {
 		D_ASSERT(default_value.has_string_type_value);
@@ -63,6 +66,7 @@ static Value ParseDefaultForType(const LogicalType &type, rest_api_objects::Prim
 
 unique_ptr<IcebergColumnDefinition>
 IcebergColumnDefinition::ParseType(const string &name, int32_t field_id, bool required, rest_api_objects::Type &type,
+                                   const string &doc,
                                    optional_ptr<rest_api_objects::PrimitiveTypeValue> initial_default,
                                    optional_ptr<rest_api_objects::PrimitiveTypeValue> write_default) {
 	auto res = make_uniq<IcebergColumnDefinition>();
@@ -84,14 +88,15 @@ IcebergColumnDefinition::ParseType(const string &name, int32_t field_id, bool re
 		res->type = LogicalType::STRUCT(std::move(struct_children));
 	} else if (type.has_list_type) {
 		auto &list_type = type.list_type;
-		auto child = ParseType("element", list_type.element_id, list_type.element_required, *list_type.element, nullptr,
-		                       nullptr);
+		auto child = ParseType("element", list_type.element_id, list_type.element_required, *list_type.element, "",
+		                       nullptr, nullptr);
 		res->type = LogicalType::LIST(child->type);
 		res->children.push_back(std::move(child));
 	} else if (type.has_map_type) {
 		auto &map_type = type.map_type;
-		auto key = ParseType("key", map_type.key_id, true, *map_type.key, nullptr);
-		auto value = ParseType("value", map_type.value_id, map_type.value_required, *map_type.value, nullptr, nullptr);
+		auto key = ParseType("key", map_type.key_id, true, *map_type.key, "", nullptr);
+		auto value =
+		    ParseType("value", map_type.value_id, map_type.value_required, *map_type.value, "", nullptr, nullptr);
 		res->type = LogicalType::MAP(key->type, value->type);
 		res->children.push_back(std::move(key));
 		res->children.push_back(std::move(value));
@@ -174,13 +179,40 @@ LogicalType IcebergColumnDefinition::ParsePrimitiveTypeString(const string &type
 	if (type_str == "variant") {
 		return LogicalType::VARIANT();
 	}
+	if (StringUtil::StartsWith(type_str, "geometry")) {
+		// Geometry is an Iceberg v3 type stored as WKB binary in parquet.
+		// The type string may include a CRS parameter: geometry(<crs>)
+		if (type_str == "geometry") {
+			return LogicalType::GEOMETRY(IcebergConstants::DefaultGeometryCRS);
+		}
+		if (type_str.size() > 9 && type_str[8] == '(' && type_str.back() == ')') {
+			auto crs_str = type_str.substr(9, type_str.size() - 10);
+			return LogicalType::GEOMETRY(crs_str);
+		}
+		throw InvalidConfigurationException("Invalid geometry type format: %s", type_str);
+	}
+	if (StringUtil::StartsWith(type_str, "geography")) {
+		throw NotImplementedException("Geography support");
+	}
 	throw InvalidConfigurationException("Unrecognized primitive type: %s", type_str);
 }
 
 unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::ParseStructField(rest_api_objects::StructField &field) {
 	auto field_initial_default = field.has_initial_default ? &field.initial_default : nullptr;
 	auto field_write_default = field.has_write_default ? &field.write_default : nullptr;
-	return ParseType(field.name, field.id, field.required, *field.type, field_initial_default, field_write_default);
+	return ParseType(field.name, field.id, field.required, *field.type, field.doc, field_initial_default,
+	                 field_write_default);
+}
+
+vector<unique_ptr<IcebergColumnDefinition>>::const_iterator
+IcebergColumnDefinition::GetChildIterator(const string &child_name) const {
+	for (auto it = children.begin(); it != children.end(); it++) {
+		auto &child = *(*it);
+		if (StringUtil::CIEquals(child.name, child_name)) {
+			return it;
+		}
+	}
+	return children.end();
 }
 
 bool IcebergColumnDefinition::IsIcebergPrimitiveType() const {
@@ -201,7 +233,9 @@ bool IcebergColumnDefinition::IsIcebergPrimitiveType() const {
 	case LogicalTypeId::TIME:
 	case LogicalTypeId::TIMESTAMP:
 	case LogicalTypeId::TIMESTAMP_TZ:
+	case LogicalTypeId::TIMESTAMP_NS:
 	case LogicalTypeId::VARIANT:
+	case LogicalTypeId::GEOMETRY:
 		return true;
 	default:
 		return false;
@@ -215,10 +249,10 @@ unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::Copy() const {
 	res->type = type;
 	// TODO: initial default and write default need more support here
 	if (initial_default) {
-		res->initial_default = make_uniq<Value>(initial_default.get());
+		res->initial_default = make_uniq<Value>(initial_default->Copy());
 	}
 	if (write_default) {
-		res->write_default = make_uniq<Value>(write_default.get());
+		res->write_default = make_uniq<Value>(write_default->Copy());
 	}
 	res->required = required;
 	for (auto &child : children) {
@@ -245,6 +279,55 @@ ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
 	} else {
 		return ColumnDefinition(name, type);
 	}
+}
+
+static bool DefaultsAreEqual(const unique_ptr<Value> &a, const unique_ptr<Value> &b) {
+	const bool a_is_null = !a || a->IsNull();
+	const bool b_is_null = !b || b->IsNull();
+
+	if (a_is_null && b_is_null) {
+		return true;
+	}
+	if (a_is_null != b_is_null) {
+		return false;
+	}
+	return ValueOperations::NotDistinctFrom(*a, *b);
+}
+
+bool IcebergColumnDefinition::Equals(const IcebergColumnDefinition &other) const {
+	if (id != other.id) {
+		return false;
+	}
+	if (name != other.name) {
+		return false;
+	}
+	if (type != other.type) {
+		return false;
+	}
+	if (required != other.required) {
+		return false;
+	}
+	if (doc != other.doc) {
+		return false;
+	}
+	if (children.size() != other.children.size()) {
+		return false;
+	}
+	for (idx_t i = 0; i < children.size(); i++) {
+		auto &a_child = children[i];
+		auto &b_child = other.children[i];
+		if (!a_child->Equals(*b_child)) {
+			return false;
+		}
+	}
+
+	if (!DefaultsAreEqual(initial_default, other.initial_default)) {
+		return false;
+	}
+	if (!DefaultsAreEqual(write_default, other.write_default)) {
+		return false;
+	}
+	return true;
 }
 
 } // namespace duckdb

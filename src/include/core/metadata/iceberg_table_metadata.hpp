@@ -1,6 +1,7 @@
 #pragma once
 
 #include "duckdb/common/file_system.hpp"
+#include "duckdb/storage/external_file_cache/caching_file_system_wrapper.hpp"
 
 #include "core/metadata/schema/iceberg_column_definition.hpp"
 #include "core/metadata/schema/iceberg_table_schema.hpp"
@@ -18,17 +19,29 @@ namespace duckdb {
 const string WRITE_UPDATE_MODE = "write.update.mode";
 const string WRITE_DELETE_MODE = "write.delete.mode";
 
+struct IcebergMetadataLogItem {
+public:
+	IcebergMetadataLogItem(const string &path, int64_t timestamp_ms) : metadata_file(path), timestamp_ms(timestamp_ms) {
+	}
+
+public:
+	string metadata_file;
+	int64_t timestamp_ms;
+};
+
 //! A structure to store "LoadTableResult" information that changes as a transaction goes on
 //! Everything is parsed from a load table result, but if a transaction changes a schema, those schema
 //! updates are reflected here and never within the catalog that lives beyond transactions
 struct IcebergTableMetadata {
 public:
-	IcebergTableMetadata() = default;
+	IcebergTableMetadata(const IcebergTableMetadata &) = delete;
+	IcebergTableMetadata &operator=(const IcebergTableMetadata &) = delete;
+	IcebergTableMetadata(IcebergTableMetadata &&) = default;
+	IcebergTableMetadata &operator=(IcebergTableMetadata &&) = default;
 
 public:
 	static rest_api_objects::TableMetadata Parse(const string &path, FileSystem &fs,
 	                                             const string &metadata_compression_codec);
-	static IcebergTableMetadata FromLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result);
 	static IcebergTableMetadata FromTableMetadata(const rest_api_objects::TableMetadata &table_metadata);
 	static string GetMetaDataPath(ClientContext &context, const string &path, FileSystem &fs,
 	                              const IcebergOptions &options);
@@ -53,14 +66,11 @@ public:
 
 	//! Internal JSON parsing functions
 	optional_ptr<const IcebergSnapshot> FindSnapshotByIdInternal(int64_t target_id) const;
-	optional_ptr<const IcebergSnapshot> FindSnapshotByIdTimestampInternal(timestamp_t timestamp) const;
 	shared_ptr<IcebergTableSchema> GetSchemaFromId(int32_t schema_id) const;
 	optional_ptr<const IcebergPartitionSpec> FindPartitionSpecById(int32_t spec_id) const;
 	optional_ptr<const IcebergSortOrder> FindSortOrderById(int32_t sort_id) const;
 	IcebergSnapshotScanInfo GetSnapshot(const IcebergSnapshotLookup &lookup) const;
 
-	//! Get the data and metadata paths, falling back to default if not set
-	const string &GetLatestMetadataJson() const;
 	const string &GetLocation() const;
 	const string GetDataPath(FileSystem &fs) const;
 	const string GetMetadataPath(FileSystem &fs) const;
@@ -82,6 +92,9 @@ public:
 	void SetCurrentSchemaId(int32_t schema_id);
 	int32_t GetCurrentSchemaId() const;
 
+	IcebergTableSchema &AddSchemaOrGetExisting(shared_ptr<IcebergTableSchema> schema);
+	const unordered_map<int32_t, shared_ptr<IcebergTableSchema>> &GetSchemas() const;
+
 private:
 	yyjson_mut_val *SchemasToJSON(yyjson_mut_doc *doc) const;
 	yyjson_mut_val *PartitionsToJSON(yyjson_mut_doc *doc) const;
@@ -92,8 +105,6 @@ private:
 
 public:
 	string table_uuid;
-	// when loading table metadata, store the path to the metadata.json for extension functions like iceberg_metadata()
-	string latest_metadata_json;
 	string location;
 
 	int32_t iceberg_version;
@@ -116,8 +127,6 @@ public:
 	unordered_map<int32_t, IcebergSortOrder> sort_specs;
 	//! snapshot_id -> snapshot
 	unordered_map<int64_t, IcebergSnapshot> snapshots;
-	//! schema_id -> schema
-	unordered_map<int32_t, shared_ptr<IcebergTableSchema>> schemas;
 	vector<IcebergFieldMapping> mappings;
 
 	//! Custom write paths from table properties
@@ -127,8 +136,15 @@ public:
 	//! table properties
 	case_insensitive_map_t<string> table_properties;
 
+	vector<IcebergMetadataLogItem> metadata_log;
+
+public:
+	IcebergTableMetadata() = default;
+
 private:
 	int32_t current_schema_id;
+	//! schema_id -> schema
+	unordered_map<int32_t, shared_ptr<IcebergTableSchema>> schemas;
 };
 
 } // namespace duckdb
