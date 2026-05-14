@@ -77,9 +77,10 @@ static void LoadInternal(ExtensionLoader &loader) {
 	    LogicalType::BOOLEAN, Value::BOOLEAN(false));
 	config.AddExtensionOption(
 	    "unsafe_iceberg_ignore_sort_order",
-	    "Allow INSERT/UPDATE on iceberg tables that declare a sort order, without preserving that sort order. "
-	    "Unsafe: writes will not be sorted, so downstream readers relying on the declared sort order may "
-	    "produce incorrect results until the table is rewritten/compacted.",
+	    "Allow INSERT/UPDATE on iceberg tables that declare a sort order, without applying that sort order to "
+	    "the written data. The Iceberg spec permits this (writers are not required to honour a declared sort "
+	    "order, and readers do not assume files are sorted), but skipping the sort may reduce later file-pruning "
+	    "effectiveness and compression.",
 	    LogicalType::BOOLEAN, Value::BOOLEAN(false));
 
 	// Iceberg Table Functions
