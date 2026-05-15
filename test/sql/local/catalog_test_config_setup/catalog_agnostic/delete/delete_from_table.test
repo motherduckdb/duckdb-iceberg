@@ -30,7 +30,7 @@ create table my_datalake.default.test_delete_table (a int);
 loop i 0 5
 
 statement ok
-insert into my_datalake.default.test_delete_table values ((${i}*2)), ((${i}*2) + 1);
+insert into my_datalake.default.test_delete_table values (({i}*2)), (({i}*2) + 1);
 
 endloop
 

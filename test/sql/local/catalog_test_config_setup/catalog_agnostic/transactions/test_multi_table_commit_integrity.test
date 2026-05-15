@@ -23,13 +23,13 @@ set threads=1;
 loop i 0 20
 
 statement ok
-drop table if exists my_datalake.default.cleanup_tbl_${i};
+drop table if exists my_datalake.default.cleanup_tbl_{i};
 
 statement ok
-create table my_datalake.default.cleanup_tbl_${i} (id int, val varchar);
+create table my_datalake.default.cleanup_tbl_{i} (id int, val varchar);
 
 statement ok
-insert into my_datalake.default.cleanup_tbl_${i} values (0, 'seed');
+insert into my_datalake.default.cleanup_tbl_{i} values (0, 'seed');
 
 endloop
 
@@ -47,7 +47,7 @@ begin
 loop i 0 20
 
 statement ok con1
-insert into my_datalake.default.cleanup_tbl_${i} values (1, 'from_con1');
+insert into my_datalake.default.cleanup_tbl_{i} values (1, 'from_con1');
 
 endloop
 
@@ -98,7 +98,7 @@ onlyif i=10
 continue
 
 query I
-select id from my_datalake.default.cleanup_tbl_${i} where val = 'seed' order by id;
+select id from my_datalake.default.cleanup_tbl_{i} where val = 'seed' order by id;
 ----
 0
 
@@ -118,7 +118,7 @@ select * from my_datalake.default.cleanup_tbl_10 order by id;
 loop i 0 20
 
 statement ok
-drop table if exists my_datalake.default.cleanup_tbl_${i};
+drop table if exists my_datalake.default.cleanup_tbl_{i};
 
 endloop
 

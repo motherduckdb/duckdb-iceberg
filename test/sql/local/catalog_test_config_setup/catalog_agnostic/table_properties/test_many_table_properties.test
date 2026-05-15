@@ -30,7 +30,7 @@ loop i 0 2050
 statement ok
 CALL set_iceberg_table_properties(my_datalake.default.many_properties,
        {
-        'new_property_${i}': 'value',
+        'new_property_{i}': 'value',
        });
 
 endloop
