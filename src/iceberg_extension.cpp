@@ -22,6 +22,8 @@
 #include "common/iceberg_utils.hpp"
 #include "iceberg_logging.hpp"
 #include "function/copy/iceberg_copy_function.hpp"
+#include "duckdb/optimizer/optimizer_extension.hpp"
+#include "planning/iceberg_optimizer.hpp"
 
 namespace duckdb {
 
@@ -102,6 +104,10 @@ static void LoadInternal(ExtensionLoader &loader) {
 	auto &log_manager = instance.GetLogManager();
 	log_manager.RegisterLogType(make_uniq<IcebergLogType>());
 	StorageExtension::Register(config, "iceberg", make_shared_ptr<IRCStorageExtension>());
+
+	// Re-introduces equality-delete columns onto iceberg_scan LogicalGets after the built-in
+	// optimizers have run; see planning/iceberg_optimizer.hpp for the why.
+	OptimizerExtension::Register(config, IcebergOptimizer::Create());
 }
 
 void IcebergExtension::Load(ExtensionLoader &loader) {
