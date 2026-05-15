@@ -53,7 +53,14 @@
         "test/sql/types/nested/map/map_from_entries/column_null_entry.test",
         "test/sql/types/nested/map/test_map_nested_keys.test",
         "test/sql/types/struct/nested_structs.test",
-        "test/sql/types/variant/implicit_cast_from_variant.test"
+        "test/sql/types/variant/implicit_cast_from_variant.test",
+        "test/sql/function/list/aggregates/entropy.test",
+        "test/sql/function/list/list_unique.test",
+        "test/sql/function/timestamp/test_icu_datediff.test",
+        "test/sql/insert/test_insert_query.test",
+        "test/sql/storage/catalog/test_prepared_storage.test",
+        "test/sql/storage/wal/wal_prepared_storage.test",
+        "test/sql/types/decimal/test_decimal_2975.test"
       ]
     },
     {
@@ -182,7 +189,8 @@
         "test/sql/constraints/primarykey/test_primary_key.test",
         "test/sql/constraints/test_constraint_with_updates.test",
         "test/sql/constraints/unique/test_unique.test",
-        "test/sql/constraints/unique/test_unique_multi_constraint.test"
+        "test/sql/constraints/unique/test_unique_multi_constraint.test",
+        "test/sql/merge/merge_into_constraint.test"
       ]
     },
     {
