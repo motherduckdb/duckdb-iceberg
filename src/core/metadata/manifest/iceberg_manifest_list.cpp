@@ -430,7 +430,6 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
 		data.data[col_idx++].Append(manifest.partitions.ToValue());
 
 		if (table_metadata.iceberg_version < 3) {
-			data.data[col_idx++].Append(Value());
 			continue;
 		}
 
