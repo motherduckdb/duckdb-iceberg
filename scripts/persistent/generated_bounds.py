@@ -78,17 +78,17 @@ for i in range(TOTAL_ROWS):
     entries.append(ManifestEntry(ManifestEntryStatus.ADDED, SNAPSHOT_ID, None, None, df))
 
 manifest_path = os.path.join(META_DIR, "manifest-m0.avro")
-with ManifestWriterV2(spec, schema, io.new_output(f"file://{manifest_path}"), SNAPSHOT_ID, "null") as writer:
+with ManifestWriterV2(spec, schema, io.new_output(f"{manifest_path}"), SNAPSHOT_ID, "null") as writer:
     for e in entries:
         writer.add_entry(e)
     manifest_file = writer.to_manifest_file()
 
 ml_path = os.path.join(META_DIR, f"snap-{SNAPSHOT_ID}.avro")
-with ManifestListWriterV2(io.new_output(f"file://{ml_path}"), SNAPSHOT_ID, None, 1, "null") as ml_writer:
+with ManifestListWriterV2(io.new_output(f"{ml_path}"), SNAPSHOT_ID, None, 1, "null") as ml_writer:
     ml_writer.add_manifests([manifest_file])
 
 metadata = TableMetadataV2(
-    location=f"file://{OUT_DIR}",
+    location=f"{OUT_DIR}",
     table_uuid=uuid.UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
     last_updated_ms=1700000000000,
     last_column_id=2,
@@ -105,7 +105,7 @@ metadata = TableMetadataV2(
         snapshot_id=SNAPSHOT_ID,
         sequence_number=1,
         timestamp_ms=1700000000000,
-        manifest_list=f"file://{ml_path}",
+        manifest_list=f"{ml_path}",
         summary={"operation": "append"},
         schema_id=0,
     )],
