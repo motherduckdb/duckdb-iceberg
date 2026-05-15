@@ -69,6 +69,23 @@ select count(*) from my_datalake.default.test_triple_partition where region = 'U
 ----
 12
 
+# Verify the status is 0 for all these rows
+query I
+select status from my_datalake.default.test_triple_partition where region = 'US';
+----
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+
 # Filter on two partition columns
 query I
 select count(*) from my_datalake.default.test_triple_partition where region = 'US' and status = 0;

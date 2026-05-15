@@ -653,8 +653,7 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 				}
 
 				// if the filter doesn't match the partition value, we don't need to scan the data file
-				auto &filter = *entry.second;
-				if (!IcebergPredicate::MatchBounds(context, filter, stats, field.transform)) {
+				if (!IcebergPredicate::MatchBounds(context, *table_filter, stats, field.transform)) {
 					return false;
 				}
 			}

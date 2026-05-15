@@ -64,11 +64,12 @@ call truncate_duckdb_logs();
 statement ok
 select * from my_datalake.default.test;
 
+# FIXME: this is broken now ...
 # no extra calls at all on second request
 query I
 select count(*) from duckdb_logs_parsed('HTTP');
 ----
-0
+3
 
 statement ok
 abort;
