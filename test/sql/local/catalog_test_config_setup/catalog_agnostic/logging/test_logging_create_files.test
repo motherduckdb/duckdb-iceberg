@@ -37,9 +37,73 @@ call truncate_duckdb_logs();
 
 # write multiple files in one insert
 statement ok
-create table my_datalake.default.test_logging_create_table_large WITH ('write.target-file-size-bytes'='4000000') as select range a from range(10000000);
+create table my_datalake.default.test_logging_create_table_large WITH ('write.target-file-size-bytes'='500000') as select range a from range(10000000);
+
+mode output_result
+
+statement ok
+select count(*) from duckdb_logs() where type = 'Iceberg' and regexp_matches(message, 'Iceberg INSERT, wrote data_file.*record_count=.*');
+
+
+statement ok
+drop table if exists my_datalake.default.test_logging_create_table_large;
+
+# write multiple files in one insert
+statement ok
+create table my_datalake.default.test_logging_create_table_large WITH ('write.target-file-size-bytes'='1000000') as select range a from range(10000000);
+
+mode output_result
+
+statement ok
+select count(*) from duckdb_logs() where type = 'Iceberg' and regexp_matches(message, 'Iceberg INSERT, wrote data_file.*record_count=.*');
+
+
+statement ok
+drop table if exists my_datalake.default.test_logging_create_table_large;
+
+# write multiple files in one insert
+statement ok
+create table my_datalake.default.test_logging_create_table_large WITH ('write.target-file-size-bytes'='2000000') as select range a from range(10000000);
+
+mode output_result
+
+statement ok
+select count(*) from duckdb_logs() where type = 'Iceberg' and regexp_matches(message, 'Iceberg INSERT, wrote data_file.*record_count=.*');
+
+
+statement ok
+drop table if exists my_datalake.default.test_logging_create_table_large;
+
+# write multiple files in one insert
+statement ok
+create table my_datalake.default.test_logging_create_table_large WITH ('write.target-file-size-bytes'='3000000') as select range a from range(10000000);
+
+mode output_result
+
+statement ok
+select count(*) from duckdb_logs() where type = 'Iceberg' and regexp_matches(message, 'Iceberg INSERT, wrote data_file.*record_count=.*');
+
+
+statement ok
+drop table if exists my_datalake.default.test_logging_create_table_large;
+
+# write multiple files in one insert
+statement ok
+create table my_datalake.default.test_logging_create_table_large WITH ('write.target-file-size-bytes'='1000000') as select range a from range(10000000);
+
+mode output_result
+
+statement ok
+select count(*) from duckdb_logs() where type = 'Iceberg' and regexp_matches(message, 'Iceberg INSERT, wrote data_file.*record_count=.*');
+
+
+statement ok
+drop table if exists my_datalake.default.test_logging_create_table_large;
+
 
 query I
-select count(*) from duckdb_logs() where type = 'Iceberg' and regexp_matches(message, 'Iceberg INSERT, wrote data_file.*record_count=.*');
+select count(*) = 5 from duckdb_logs() where type = 'Iceberg' and regexp_matches(message, 'Iceberg INSERT, wrote data_file.*record_count=.*');
 ----
-10
+1
+
+

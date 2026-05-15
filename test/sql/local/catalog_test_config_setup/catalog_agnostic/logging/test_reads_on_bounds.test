@@ -51,6 +51,12 @@ select count(*) from my_datalake.default.filtering_on_bounds where col1 >= 50 an
 50
 
 
+mode output_result
+
+statement ok
+select * from (from iceberg_metadata(my_datalake.default.filtering_on_bounds) select manifest_sequence_number, file_path group by all order by manifest_sequence_number);
+
+
 # verify there are 5 files
 query I
 select count(*) = 5 from (from iceberg_metadata(my_datalake.default.filtering_on_bounds) select manifest_sequence_number, file_path group by all order by manifest_sequence_number);
