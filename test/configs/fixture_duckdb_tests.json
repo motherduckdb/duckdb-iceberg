@@ -60,7 +60,11 @@
         "test/sql/insert/test_insert_query.test",
         "test/sql/storage/catalog/test_prepared_storage.test",
         "test/sql/storage/wal/wal_prepared_storage.test",
-        "test/sql/types/decimal/test_decimal_2975.test"
+        "test/sql/types/decimal/test_decimal_2975.test",
+        "test/sql/catalog/table/test_default.test",
+        "test/sql/function/list/list_distinct.test",
+        "test/sql/insert/test_big_insert.test",
+        "test/sql/optimizer/test_in_rewrite_rule.test"
       ]
     },
     {
