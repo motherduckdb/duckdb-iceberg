@@ -543,8 +543,7 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 					auto &source_column = IcebergTableSchema::GetFromColumnIndex(schema, column_id, 0);
 					auto partition_value_raw_str = stats.has_lower_bounds ? stats.lower_bound.ToString() : "NULL";
 					auto partition_value_transformed_str =
-					    stats.has_lower_bounds ? field.transform.PartitionValueToString(stats.lower_bound)
-					                           : "NULL";
+					    stats.has_lower_bounds ? field.transform.PartitionValueToString(stats.lower_bound) : "NULL";
 					DUCKDB_LOG(
 					    context, IcebergLogType,
 					    "Iceberg Filter Pushdown, skipped 'data_file': '%s', partition column '%s' has raw value %s "
