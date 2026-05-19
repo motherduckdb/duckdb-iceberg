@@ -55,4 +55,25 @@ select c, count(*) from my_datalake.default.equality_delete_table_1 group by all
 8	2
 9	2
 
+# insert data that does not have the column b. so equality delete must no-op
+statement ok
+insert into my_datalake.default.equality_delete_table_1 select range a, range c from range(100, 106);
+
+query II
+select c, count(*) from my_datalake.default.equality_delete_table_1 group by all order by c;
+----
+0	3
+2	2
+3	2
+4	2
+5	2
+7	2
+8	2
+9	2
+100	1
+101	1
+102	1
+103	1
+104	1
+105	1
 

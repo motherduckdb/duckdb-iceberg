@@ -1,4 +1,4 @@
-# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/equality_deletes/test_equality_delete_reads.test
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/equality_deletes/test_equality_deletes_apply_only_to_prev_sequence_numbers.test
 # description: Test iceberg deletes
 # group: [equality_deletes]
 

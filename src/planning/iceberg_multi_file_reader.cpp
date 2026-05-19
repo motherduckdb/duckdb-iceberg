@@ -15,6 +15,7 @@
 
 #include "common/iceberg_utils.hpp"
 #include "iceberg_logging.hpp"
+#include "planning/iceberg_multi_file_list.hpp"
 #include "planning/pruning/iceberg_predicate.hpp"
 #include "core/expression/iceberg_value.hpp"
 #include "core/expression/iceberg_predicate_stats.hpp"
@@ -72,6 +73,13 @@ bool IcebergMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &file
 	for (auto &item : schema) {
 		columns.push_back(TransformColumn(*item));
 	}
+	//! Equality deletes may reference columns that have since been dropped from the schema. Append
+	//! those as hidden 'global columns' (after the real schema columns) so they can still be projected
+	//! from the data files and the equality deletes applied. They are deliberately NOT added to
+	//! 'return_types'/'names', so they remain invisible to queries (handled as reader extra columns).
+	for (auto &missing_column : iceberg_multi_file_list.GetMissingEqualityDeleteColumns()) {
+		columns.push_back(TransformColumn(missing_column.get()));
+	}
 	bind_data.mapping = MultiFileColumnMappingMode::BY_FIELD_ID;
 	return true;
 }
@@ -92,8 +100,14 @@ IcebergMultiFileReader::InitializeGlobalState(ClientContext &context, const Mult
                                               const MultiFileReaderBindData &bind_data, const MultiFileList &file_list,
                                               const vector<MultiFileColumnDefinition> &global_columns,
                                               const vector<ColumnIndex> &global_column_ids) {
+	//! The dropped equality-delete columns appended to the schema in Bind() must be scanned from the
+	//! data files but kept out of the query projection - declare them as reader 'extra_columns'.
 	vector<LogicalType> extra_columns;
-	auto res = make_uniq<IcebergMultiFileReaderGlobalState>(extra_columns, file_list);
+	auto &iceberg_file_list = file_list.Cast<IcebergMultiFileList>();
+	for (auto &missing_column : iceberg_file_list.GetMissingEqualityDeleteColumns()) {
+		extra_columns.push_back(missing_column.get().type);
+	}
+	auto res = make_uniq<IcebergMultiFileReaderGlobalState>(std::move(extra_columns), file_list);
 	return std::move(res);
 }
 
@@ -277,10 +291,21 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
                                                               const vector<ColumnIndex> &global_column_ids,
                                                               optional_ptr<TableFilterSet> table_filters,
                                                               ClientContext &context, MultiFileGlobalState &gstate) {
-	FinalizeBind(reader_data, bind_data.file_options, bind_data.reader_bind, global_columns, global_column_ids, context,
-	             gstate.multi_file_reader_state.get());
+	//! Append the dropped equality-delete columns (the reader 'extra_columns') to the projected ids,
+	//! so they are read from the data files and land in the scan chunk for ApplyEqualityDeletes. They
+	//! are the trailing entries of 'global_columns' (appended after the real schema columns in Bind()).
+	auto extended_column_ids = global_column_ids;
+	if (gstate.multi_file_reader_state) {
+		auto extra_count = gstate.multi_file_reader_state->extra_columns.size();
+		for (idx_t i = global_columns.size() - extra_count; i < global_columns.size(); i++) {
+			extended_column_ids.emplace_back(i);
+		}
+	}
 
-	return CreateMapping(context, reader_data, global_columns, global_column_ids, table_filters, gstate.file_list,
+	FinalizeBind(reader_data, bind_data.file_options, bind_data.reader_bind, global_columns, extended_column_ids,
+	             context, gstate.multi_file_reader_state.get());
+
+	return CreateMapping(context, reader_data, global_columns, extended_column_ids, table_filters, gstate.file_list,
 	                     bind_data.reader_bind, bind_data.virtual_columns);
 }
 
@@ -412,6 +437,8 @@ void IcebergMultiFileReader::ApplyEqualityDeletes(ClientContext &context, DataCh
 	ExpressionExecutor expression_executor(context);
 	expression_executor.AddExpression(*equality_delete_filter);
 	SelectionVector sel_vec(STANDARD_VECTOR_SIZE);
+	// Apply the deletes to the input chunk. The output_chunk may have fewer columns if filters are pushed down
+	// The input chunk will remain consistent in column ordering/types, guaranteed by the multi file reader.
 	idx_t count = expression_executor.SelectExpression(input_chunk, sel_vec);
 
 	output_chunk.Slice(sel_vec, count);

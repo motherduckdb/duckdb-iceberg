@@ -24,6 +24,7 @@
 #include "core/deletes/iceberg_equality_delete.hpp"
 #include "core/deletes/iceberg_positional_delete.hpp"
 #include "core/deletes/iceberg_delete_data.hpp"
+#include "core/metadata/schema/iceberg_column_definition.hpp"
 #include "planning/snapshot/iceberg_scan_info.hpp"
 #include "planning/iceberg_manifest_read_state.hpp"
 #include "planning/metadata_io/manifest/bound_iceberg_manifest_entry.hpp"
@@ -73,6 +74,11 @@ public:
 	void ScanPuffinFile(const BoundIcebergManifestEntry &entry) const;
 	unique_ptr<DeleteFilter> GetPositionalDeletesForFile(const string &file_path) const;
 	void EnumerateDeleteManifestEntries() const;
+	//! Returns the equality-delete columns referenced by active delete files that are no longer part
+	//! of the table's current schema (e.g. dropped via ALTER TABLE). Their name/type are resolved from
+	//! historical schemas. These need to be projected from the data files as reader extra columns so
+	//! the equality deletes can still be applied.
+	vector<reference<const IcebergColumnDefinition>> GetMissingEqualityDeleteColumns() const;
 	void ProcessDeletes(const vector<MultiFileColumnDefinition> &global_columns,
 	                    const vector<ColumnIndex> &global_column_ids) const;
 	void ScanDeleteFiles(const vector<MultiFileColumnDefinition> &global_columns,

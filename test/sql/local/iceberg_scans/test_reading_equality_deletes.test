@@ -25,7 +25,26 @@ select col11 from iceberg_scan('/tmp/warehouse/ns/t/') where col11 = 'c';
 ----
 c
 
-# verify optimzier is triggered when there is no filter pushded into the scan
+# check with virtual column at the end
+query II
+select col11, filename like '%warehouse%' from iceberg_scan('/tmp/warehouse/ns/t/') where col11 = 'c';
+----
+c	true
+
+# check with virtual column at the front
+query II
+select filename like '%warehouse%', col11 from iceberg_scan('/tmp/warehouse/ns/t/') where col11 = 'c';
+----
+true	c
+
+# check with virtual column at the front and the end
+query IIIII
+select filename like '%warehouse%', col11, filename like '%warehouse%', col1, filename like '%warehouse%' from iceberg_scan('/tmp/warehouse/ns/t/') where col11 = 'c';
+----
+true	c	true	103	true
+
+
+# verify optimzier is triggered when there is no filter pushed into the scan
 query II
 explain select col11 from iceberg_scan('/tmp/warehouse/ns/t/');
 ----

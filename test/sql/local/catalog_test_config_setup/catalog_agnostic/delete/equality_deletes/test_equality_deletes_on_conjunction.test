@@ -1,4 +1,4 @@
-# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/equality_deletes/test_equality_delete_reads.test
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/equality_deletes/test_equality_deletes_on_conjunction.test
 # description: Test iceberg deletes
 # group: [equality_deletes]
 
@@ -27,12 +27,15 @@ drop table if exists equality_delete_on_conjunction;
 statement ok
 create table equality_delete_on_conjunction as select range a, range % 5 b, range % 10 c from range(21);
 
+query III nosort before_delete
+select * from equality_delete_on_conjunction where b = 4 and c = 4 order by a;
+
 # generate equality delete file that uses a conjunction
 statement ok
 delete from equality_delete_on_conjunction where b = 4 and c = 4;
 
 query II
-select c, count(*) from equality_delete_on_conjunction gThe roup by all order by c;
+select c, count(*) from equality_delete_on_conjunction group by all order by c;
 ----
 0	3
 1	2
@@ -42,13 +45,12 @@ select c, count(*) from equality_delete_on_conjunction gThe roup by all order by
 6	2
 7	2
 8	2
+9	2
 
 statement ok
-insert into equality_delete_on_conjunction values (1, 1, 1), (11, 1, 1);
+insert into equality_delete_on_conjunction values (4, 4, 4), (14, 4, 4);
 
-# values are restored
-query III
-select * from equality_delete_on_conjunction where b = 1 order by a;
-----
-1	1	1
-11	1	1
+# values are restored from before the delete, but we do not count them double/restored.
+query III nosort before_delete
+select * from equality_delete_on_conjunction where b = 4 and c = 4 order by a;
+
