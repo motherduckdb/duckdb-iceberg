@@ -19,36 +19,38 @@ statement ok
 set unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=true;
 
 statement ok
+drop table if exists my_datalake.default.equality_delete_table_1;
+
+statement ok
 create table my_datalake.default.equality_delete_table_1 as select range a, range % 5 b, range % 10 c from range(21);
 
 statement ok
 delete from my_datalake.default.equality_delete_table_1 where b = 1;
 
+# query II
+# select c, count(*) from my_datalake.default.equality_delete_table_1 group by all order by c;
+# ----
+# 0	3
+# 2	2
+# 3	2
+# 4	2
+# 5	2
+# 7	2
+# 8	2
+# 9	2
+
+# maybe we should throw an error when dropping a column that has equality deletes?
+statement ok
+alter table my_datalake.default.equality_delete_table_1 drop column b;
+
 query II
-select c, count(*) from my_datalake.default.equality_delete_table_1 group by all
+select c, count(*) from my_datalake.default.equality_delete_table_1 group by all order by c;
 ----
 0	3
 2	2
 3	2
 4	2
 5	2
-6	2
-7	2
-8	2
-9	2
-
-statement ok
-alter table my_datalake.default.equality_delete_table_1 drop colummn b;
-
-query II
-select c, count(*) from my_datalake.default.equality_delete_table_1 group by all
-----
-0	2
-2	2
-3	2
-4	2
-5	2
-6	2
 7	2
 8	2
 9	2
