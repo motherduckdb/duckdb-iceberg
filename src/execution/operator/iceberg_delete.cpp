@@ -1,6 +1,7 @@
 #include "execution/operator/iceberg_delete.hpp"
 
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
+#include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 #include "duckdb/execution/operator/persistent/physical_copy_to_file.hpp"
@@ -29,9 +30,11 @@ class IcebergTableEntry;
 
 IcebergDelete::IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table,
                              IcebergMultiFileList &multi_file_list, PhysicalOperator &child,
-                             vector<idx_t> row_id_indexes)
+                             vector<idx_t> row_id_indexes, bool is_equality_delete,
+                             vector<IcebergEqualityDeletePredicate> equality_predicates)
     : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, {LogicalType::BIGINT}, 1), table(table),
-      multi_file_list(multi_file_list), row_id_indexes(std::move(row_id_indexes)) {
+      multi_file_list(multi_file_list), row_id_indexes(std::move(row_id_indexes)),
+      is_equality_delete(is_equality_delete), equality_predicates(std::move(equality_predicates)) {
 	children.push_back(child);
 }
 
@@ -48,6 +51,24 @@ unique_ptr<LocalSinkState> IcebergDelete::GetLocalSinkState(ExecutionContext &co
 //===--------------------------------------------------------------------===//
 SinkResultType IcebergDelete::Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const {
 	auto &global_state = input.global_state.Cast<IcebergDeleteGlobalState>();
+
+	if (is_equality_delete) {
+		//! The equality-delete file's contents come entirely from the planning-time predicates,
+		//! not from the streamed rows - write it exactly once and stop consuming input.
+		bool should_write = false;
+		{
+			lock_guard<mutex> guard(global_state.lock);
+			if (!global_state.equality_delete_written) {
+				global_state.equality_delete_written = true;
+				should_write = true;
+			}
+		}
+		if (should_write) {
+			WriteEqualityDeleteFile(context.client, global_state);
+		}
+		return SinkResultType::FINISHED;
+	}
+
 	auto &local_state = input.local_state.Cast<IcebergDeleteLocalState>();
 
 	auto &file_name_vector = chunk.data[row_id_indexes[0]];
@@ -215,6 +236,70 @@ void IcebergDelete::WritePositionalDeleteFile(ClientContext &context, IcebergDel
 	global_state.written_files.emplace(filename, std::move(delete_file));
 }
 
+void IcebergDelete::WriteEqualityDeleteFile(ClientContext &context, IcebergDeleteGlobalState &global_state) const {
+	D_ASSERT(!equality_predicates.empty());
+
+	auto &fs = FileSystem::GetFileSystem(context);
+	auto data_path = table.table_info.table_metadata.GetDataPath(fs);
+	string delete_filename = UUID::ToString(UUID::GenerateRandomUUID()) + "-equality-deletes.parquet";
+	string delete_file_path = fs.JoinPath(data_path, delete_filename);
+
+	auto info = make_uniq<CopyInfo>();
+	info->file_path = delete_file_path;
+	info->format = "parquet";
+	info->is_from = false;
+
+	// Generate the field ids for the parquet writer: every column carries, as PARQUET:field_id
+	// metadata, the iceberg field-id that the equality delete applies to.
+	child_list_t<Value> field_id_values;
+	vector<string> names_to_write;
+	vector<LogicalType> types_to_write;
+	vector<int32_t> equality_ids;
+	for (auto &predicate : equality_predicates) {
+		field_id_values.emplace_back(predicate.column_name, Value::INTEGER(predicate.field_id));
+		names_to_write.push_back(predicate.column_name);
+		types_to_write.push_back(predicate.type);
+		equality_ids.push_back(predicate.field_id);
+	}
+	vector<Value> field_input;
+	field_input.push_back(Value::STRUCT(std::move(field_id_values)));
+	info->options["field_ids"] = std::move(field_input);
+
+	auto &copy_fun = IcebergUtils::GetCopyFunction(context, "parquet");
+	CopyFunctionBindInput bind_input(*info);
+
+	auto function_data = copy_fun.function.copy_to_bind(context, bind_input, names_to_write, types_to_write);
+	auto copy_global_state = copy_fun.function.copy_to_initialize_global(context, *function_data, delete_file_path);
+
+	ThreadContext thread_context(context);
+	ExecutionContext execution_context(context, thread_context, nullptr);
+	auto copy_local_state = copy_fun.function.copy_to_initialize_local(execution_context, *function_data);
+
+	CopyFunctionFileStatistics stats;
+	copy_fun.function.copy_to_get_written_statistics(context, *function_data, *copy_global_state, stats);
+
+	// Write a single row containing the equality-delete tuple (one value per equality column).
+	DataChunk write_chunk;
+	write_chunk.Initialize(context, types_to_write);
+	for (idx_t col_idx = 0; col_idx < equality_predicates.size(); col_idx++) {
+		write_chunk.data[col_idx].SetValue(0, equality_predicates[col_idx].value);
+	}
+	write_chunk.SetCardinality(1);
+	copy_fun.function.copy_to_sink(execution_context, *function_data, *copy_global_state, *copy_local_state,
+	                               write_chunk);
+
+	copy_fun.function.copy_to_combine(execution_context, *function_data, *copy_global_state, *copy_local_state);
+	copy_fun.function.copy_to_finalize(context, *function_data, *copy_global_state);
+
+	IcebergDeleteFileInfo delete_file;
+	delete_file.file_name = delete_file_path;
+	delete_file.file_format = "parquet";
+	delete_file.delete_count = 1;
+	delete_file.file_size_bytes = stats.file_size_bytes;
+	delete_file.equality_ids = std::move(equality_ids);
+	global_state.written_files.emplace(delete_file_path, std::move(delete_file));
+}
+
 static void PopulateAlteredManifests(const IcebergMultiFileList &multi_file_list, IcebergManifestDeletes &out,
                                      IcebergDeleteData &delete_data) {
 	if (delete_data.type != IcebergDeleteType::DELETION_VECTOR) {
@@ -299,6 +384,20 @@ vector<IcebergManifestEntry> IcebergDelete::GenerateDeleteManifestEntries(Iceber
 		IcebergManifestEntry manifest_entry;
 		manifest_entry.status = IcebergManifestEntryStatusType::ADDED;
 		auto &data_file = manifest_entry.data_file;
+
+		if (!delete_file.equality_ids.empty()) {
+			//! Equality delete: a global delete identified only by the equality field values.
+			//! It has no referenced data file, no filename bounds and no partition info.
+			data_file.content = IcebergManifestEntryContentType::EQUALITY_DELETES;
+			data_file.file_path = delete_file.file_name;
+			data_file.file_format = delete_file.file_format;
+			data_file.record_count = delete_file.delete_count;
+			data_file.file_size_in_bytes = delete_file.file_size_bytes;
+			data_file.equality_ids = delete_file.equality_ids;
+			iceberg_delete_files.push_back(manifest_entry);
+			continue;
+		}
+
 		data_file.content = IcebergManifestEntryContentType::POSITION_DELETES;
 		data_file.file_path = delete_file.file_name;
 		data_file.file_format = delete_file.file_format;
@@ -327,14 +426,29 @@ SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, Clien
                                          OperatorSinkFinalizeInput &input) const {
 	auto &global_state = input.global_state.Cast<IcebergDeleteGlobalState>();
 
-	// FIXME: replace with get deleted rows
-	if (global_state.deleted_rows.empty()) {
+	if (is_equality_delete) {
+		//! Ensure the equality-delete file is written even if Sink never ran (e.g. zero matching rows).
+		bool should_write = false;
+		{
+			lock_guard<mutex> guard(global_state.lock);
+			if (!global_state.equality_delete_written) {
+				global_state.equality_delete_written = true;
+				should_write = true;
+			}
+		}
+		if (should_write) {
+			WriteEqualityDeleteFile(context, global_state);
+		}
+	} else if (global_state.deleted_rows.empty()) {
+		// FIXME: replace with get deleted rows
 		return SinkFinalizeType::READY;
 	}
 
 	auto &iceberg_transaction = IcebergTransaction::Get(context, table.catalog);
-	// write out the delete rows
-	FlushDeletes(iceberg_transaction, context, global_state);
+	if (!is_equality_delete) {
+		// write out the delete rows (the equality-delete file is already written by now)
+		FlushDeletes(iceberg_transaction, context, global_state);
+	}
 
 	// write out the new manifest file
 	auto &irc_table = table.Cast<IcebergTableEntry>();
@@ -410,6 +524,98 @@ static optional_ptr<PhysicalTableScan> FindDeleteSource(PhysicalOperator &plan) 
 	return nullptr;
 }
 
+static bool PlanContainsPhysicalFilter(PhysicalOperator &plan) {
+	if (plan.type == PhysicalOperatorType::FILTER) {
+		return true;
+	}
+	for (auto &child : plan.children) {
+		if (PlanContainsPhysicalFilter(child.get())) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool IcebergDelete::TryGetEqualityDeletePredicates(ClientContext &context, IcebergTableEntry &table,
+                                                   PhysicalOperator &child_plan,
+                                                   vector<IcebergEqualityDeletePredicate> &equality_predicates) {
+	//! Gated behind an explicit testing-only setting.
+	Value setting_value;
+	if (!context.TryGetCurrentSetting(ENABLE_EQUALITY_DELETES_CONFIG_VARIABLE, setting_value) ||
+	    setting_value.IsNull() || !setting_value.GetValue<bool>()) {
+		return false;
+	}
+
+	//! Equality-delete writing is only supported for v2, unpartitioned tables.
+	auto &table_metadata = table.table_info.table_metadata;
+	if (table_metadata.iceberg_version != 2) {
+		return false;
+	}
+	if (table_metadata.HasPartitionSpec() && table_metadata.GetLatestPartitionSpec().IsPartitioned()) {
+		return false;
+	}
+
+	//! A residual Filter operator means part of the WHERE clause did not push down into the scan -
+	//! this is not a pure equality delete.
+	if (PlanContainsPhysicalFilter(child_plan)) {
+		return false;
+	}
+
+	auto table_scan = FindDeleteSource(child_plan);
+	if (!table_scan) {
+		return false;
+	}
+	auto &scan = *table_scan;
+	if (!scan.table_filters || scan.table_filters->filters.empty()) {
+		return false;
+	}
+
+	auto &schema = table_metadata.GetLatestSchema();
+	auto &columns = schema.columns;
+	for (auto &filter_entry : scan.table_filters->filters) {
+		auto column_key = filter_entry.first;
+		auto &table_filter = *filter_entry.second;
+		//! Only a plain `column = constant` qualifies (rejects IN, OR/AND conjunctions, IS NULL, ...).
+		if (table_filter.filter_type != TableFilterType::CONSTANT_COMPARISON) {
+			return false;
+		}
+		auto &constant_filter = table_filter.Cast<ConstantFilter>();
+		if (constant_filter.comparison_type != ExpressionType::COMPARE_EQUAL) {
+			return false;
+		}
+		if (column_key >= scan.column_ids.size()) {
+			return false;
+		}
+		auto &column_index = scan.column_ids[column_key];
+		if (column_index.IsVirtualColumn()) {
+			return false;
+		}
+		auto primary_index = column_index.GetPrimaryIndex();
+		if (primary_index >= columns.size()) {
+			return false;
+		}
+		auto &column_definition = *columns[primary_index];
+		//! The same column referenced more than once is not a clean equality delete.
+		for (auto &existing : equality_predicates) {
+			if (existing.field_id == column_definition.id) {
+				return false;
+			}
+		}
+		Value delete_value;
+		string error_message;
+		if (!constant_filter.constant.DefaultTryCastAs(column_definition.type, delete_value, &error_message, true)) {
+			return false;
+		}
+		IcebergEqualityDeletePredicate predicate;
+		predicate.field_id = column_definition.id;
+		predicate.column_name = column_definition.name;
+		predicate.type = column_definition.type;
+		predicate.value = std::move(delete_value);
+		equality_predicates.push_back(std::move(predicate));
+	}
+	return !equality_predicates.empty();
+}
+
 PhysicalOperator &IcebergDelete::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner,
                                             IcebergTableEntry &table, PhysicalOperator &child_plan,
                                             vector<idx_t> row_id_indexes) {
@@ -419,7 +625,12 @@ PhysicalOperator &IcebergDelete::PlanDelete(ClientContext &context, PhysicalPlan
 	}
 	auto &bind_data = table_scan->bind_data->Cast<MultiFileBindData>();
 	auto &file_list = bind_data.file_list->Cast<IcebergMultiFileList>();
-	return planner.Make<IcebergDelete>(table, file_list, child_plan, std::move(row_id_indexes));
+
+	vector<IcebergEqualityDeletePredicate> equality_predicates;
+	bool is_equality_delete = TryGetEqualityDeletePredicates(context, table, child_plan, equality_predicates);
+
+	return planner.Make<IcebergDelete>(table, file_list, child_plan, std::move(row_id_indexes), is_equality_delete,
+	                                   std::move(equality_predicates));
 }
 
 PhysicalOperator &IcebergCatalog::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,

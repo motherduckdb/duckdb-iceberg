@@ -308,6 +308,13 @@ Value IcebergDataFile::ToValue(const IcebergTableMetadata &table_metadata, const
 	}
 	children.push_back(Value::MAP(LogicalType::STRUCT(null_value_count_types), null_value_counts_values));
 
+	// equality_ids: list<int> (empty for non equality-delete files)
+	vector<Value> equality_id_values;
+	for (auto &id : equality_ids) {
+		equality_id_values.push_back(Value::INTEGER(id));
+	}
+	children.push_back(Value::LIST(LogicalType::INTEGER, std::move(equality_id_values)));
+
 	// referenced_data_file
 	if (table_metadata.iceberg_version >= 3) {
 		children.push_back(Value(referenced_data_file));
@@ -724,6 +731,26 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 		yyjson_mut_obj_add_strcpy(doc, val_obj, "name", "value");
 		yyjson_mut_obj_add_strcpy(doc, val_obj, "type", "binary");
 		yyjson_mut_obj_add_uint(doc, val_obj, "id", NULL_VALUE_COUNTS_VALUE);
+	}
+	// equality_ids: list<int> - the field-ids an equality-delete file applies to
+	{
+		children.emplace_back("equality_ids", LogicalType::LIST(LogicalType::INTEGER));
+
+		child_list_t<Value> equality_ids_list_field;
+		equality_ids_list_field.emplace_back("list", CreateFieldID(EQUALITY_IDS_ELEMENT, false));
+		equality_ids_list_field.emplace_back("__duckdb_field_id", Value::INTEGER(EQUALITY_IDS));
+		data_file_field_ids.emplace_back("equality_ids", Value::STRUCT(equality_ids_list_field));
+
+		auto field_obj = yyjson_mut_arr_add_obj(doc, child_fields_arr);
+		yyjson_mut_obj_add_uint(doc, field_obj, "id", EQUALITY_IDS);
+		yyjson_mut_obj_add_strcpy(doc, field_obj, "name", "equality_ids");
+		yyjson_mut_obj_add_bool(doc, field_obj, "required", false);
+
+		auto list_type = yyjson_mut_obj_add_obj(doc, field_obj, "type");
+		yyjson_mut_obj_add_strcpy(doc, list_type, "type", "list");
+		yyjson_mut_obj_add_uint(doc, list_type, "element-id", EQUALITY_IDS_ELEMENT);
+		yyjson_mut_obj_add_strcpy(doc, list_type, "element", "int");
+		yyjson_mut_obj_add_bool(doc, list_type, "element-required", true);
 	}
 	// referenced_data_file
 	if (table_metadata.iceberg_version >= 3) {

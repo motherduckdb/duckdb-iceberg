@@ -21,6 +21,7 @@
 #include "catalog/rest/storage/authorization/sigv4.hpp"
 #include "common/iceberg_utils.hpp"
 #include "iceberg_logging.hpp"
+#include "iceberg_options.hpp"
 #include "function/copy/iceberg_copy_function.hpp"
 #include "duckdb/optimizer/optimizer_extension.hpp"
 #include "planning/iceberg_optimizer.hpp"
@@ -76,6 +77,12 @@ static void LoadInternal(ExtensionLoader &loader) {
 	config.AddExtensionOption(
 	    "ignore_row_group_size_for_partitioned_tables",
 	    "Ignore unsupported write.parquet.row-group-size-bytes table property for partitioned tables",
+	    LogicalType::BOOLEAN, Value::BOOLEAN(false));
+	config.AddExtensionOption(
+	    ENABLE_EQUALITY_DELETES_CONFIG_VARIABLE,
+	    "DANGEROUS TESTING-ONLY SETTING: when enabled, a DELETE on a v2 Iceberg table whose WHERE clause is a pure "
+	    "conjunction of equality predicates writes an Iceberg equality-delete file. Used to exercise the "
+	    "equality-delete read path.",
 	    LogicalType::BOOLEAN, Value::BOOLEAN(false));
 
 	// Iceberg Table Functions
