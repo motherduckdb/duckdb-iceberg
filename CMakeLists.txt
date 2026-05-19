@@ -10,6 +10,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 include_directories(src/include)
 
+# Compile-time toggle for the experimental, testing-only Iceberg equality-delete WRITE path.
+# Off by default: the shipped extension cannot create equality-delete files. Enable it to
+# generate equality-delete files locally for testing the equality-delete READ path:
+#   cmake ... -DICEBERG_ENABLE_EQUALITY_DELETE_WRITES=ON
+option(ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
+       "Compile in the experimental Iceberg equality-delete write path (testing only)" OFF)
+if(ICEBERG_ENABLE_EQUALITY_DELETE_WRITES)
+	add_definitions(-DICEBERG_ENABLE_EQUALITY_DELETE_WRITES)
+endif()
+
 
 set(EXTENSION_SOURCES
 	src/catalog/rest/api/api_utils.cpp

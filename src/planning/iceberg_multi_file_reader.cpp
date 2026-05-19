@@ -73,13 +73,7 @@ bool IcebergMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &file
 	for (auto &item : schema) {
 		columns.push_back(TransformColumn(*item));
 	}
-	//! Equality deletes may reference columns that have since been dropped from the schema. Append
-	//! those as hidden 'global columns' (after the real schema columns) so they can still be projected
-	//! from the data files and the equality deletes applied. They are deliberately NOT added to
-	//! 'return_types'/'names', so they remain invisible to queries (handled as reader extra columns).
-	for (auto &missing_column : iceberg_multi_file_list.GetMissingEqualityDeleteColumns()) {
-		columns.push_back(TransformColumn(missing_column.get()));
-	}
+
 	bind_data.mapping = MultiFileColumnMappingMode::BY_FIELD_ID;
 	return true;
 }
@@ -424,10 +418,7 @@ void IcebergMultiFileReader::ApplyEqualityDeletes(ClientContext &context, DataCh
 	ExpressionExecutor expression_executor(context);
 	expression_executor.AddExpression(*equality_delete_filter);
 	SelectionVector sel_vec(STANDARD_VECTOR_SIZE);
-	// Apply the deletes to the input chunk. The output_chunk may have fewer columns if filters are pushed down
-	// The input chunk will remain consistent in column ordering/types, guaranteed by the multi file reader.
 	idx_t count = expression_executor.SelectExpression(output_chunk, sel_vec);
-
 	output_chunk.Slice(sel_vec, count);
 }
 

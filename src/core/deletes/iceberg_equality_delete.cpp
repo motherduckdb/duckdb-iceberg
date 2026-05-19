@@ -23,7 +23,7 @@ static void ColumnsReferencedByEqualityIds(DataChunk &source, DataChunk &result,
                                            const vector<int32_t> &equality_ids) {
 	//! Map from column_id to 'local_columns' index, to figure out which columns from the 'source' are relevant here
 	// 'local_columns' are columns from the equality delete file.
-	// id_to_column -> equality_delete_column_field_id_to_output_column_id (output of equality delete read)
+	// id_to_column -> equality_delete_column_field_id_to_output_column_id
 	unordered_map<int32_t, column_t> id_to_column;
 	for (column_t i = 0; i < local_columns.size(); i++) {
 		auto &col = local_columns[i];
@@ -37,7 +37,7 @@ static void ColumnsReferencedByEqualityIds(DataChunk &source, DataChunk &result,
 		D_ASSERT(id_to_column.count(id));
 		column_ids.push_back(id_to_column[id]);
 	}
-	//! Take only the relevant columns from the equality_delete_file
+	//! Take only the relevant columns from the source (equality_delete_file)
 	InitializeFromOtherChunk(result, source, column_ids);
 	result.ReferenceColumns(source, column_ids);
 }
@@ -57,7 +57,8 @@ void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntr
 		return;
 	}
 
-	// make result only reference the columns from source that need equality deletes applied.
+	// make result only reference the columns from source (equality delete file) that have equality_ids
+	// mentioned in the manifest file
 	DataChunk result;
 	ColumnsReferencedByEqualityIds(source, result, local_columns, data_file.equality_ids);
 
@@ -69,7 +70,8 @@ void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntr
 	}
 	auto &deletes = *it->second;
 
-	// We know all equality delete columns will be projected from the scan due to our optimizer
+	// We are scanning the delete file even before the optimizer runs
+	// All equality delete columns will be projected from the scan due to our optimizer
 	// we want to know where in the output the equality delete columns will be projected
 	unordered_map<idx_t, idx_t> global_id_to_result_index;
 	for (idx_t result_id = 0; result_id < global_column_ids.size(); result_id++) {

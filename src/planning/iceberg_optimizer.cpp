@@ -10,12 +10,27 @@
 #include "core/metadata/schema/iceberg_column_definition.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "planning/iceberg_multi_file_list.hpp"
+#include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 
 namespace duckdb {
 
 GuaranteeEqualityDeleteColumnsOptimizer::GuaranteeEqualityDeleteColumnsOptimizer(ClientContext &context)
     : context(context) {
+}
+
+static MultiFileColumnDefinition TransformColumn(optional_ptr<const IcebergColumnDefinition> input) {
+	MultiFileColumnDefinition column(input->name, input->type);
+	if (!input->initial_default || input->initial_default->IsNull()) {
+		column.default_expression = make_uniq<ConstantExpression>(Value(input->type));
+	} else {
+		column.default_expression = make_uniq<ConstantExpression>(*input->initial_default.get());
+	}
+	column.identifier = Value::INTEGER(input->id);
+	for (auto &child : input->children) {
+		column.children.push_back(TransformColumn(*child));
+	}
+	return column;
 }
 
 void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOperator> &op) {
@@ -79,13 +94,19 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 				DUCKDB_LOG(context, IcebergLogType, "Detected deleted column with equality delete: %s", col_info->name);
 				schema_idx = col_info->id;
 				col_type = col_info->type;
-				// TODO: is this allowed?
+
 				// modify the returned types of the get to add a column
 				get.returned_types.push_back(col_type);
-				// modify the columns and types of the bind data of the get to add this extra column
+
+				// modify the multi file reader bind data to add the extra column
 				mfbd.types.push_back(col_type);
 				mfbd.names.push_back(col_info->name);
-				mfbd.columns.push_back(MultiFileColumnDefinition(col_info->name, col_info->type));
+
+				auto new_col = TransformColumn(col_info);
+				new_col.identifier = col_info->id;
+				mfbd.columns.push_back(new_col);
+				// also push back the info to the reader_bind.schema
+				mfbd.reader_bind.schema.push_back(new_col);
 			}
 			idx_t local_idx = DConstants::INVALID_INDEX;
 			const auto &col_ids = get.GetColumnIds();

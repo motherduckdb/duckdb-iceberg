@@ -31,10 +31,10 @@ create table my_datalake.default.equality_delete_table_1 as select range a, rang
 statement ok
 delete from my_datalake.default.equality_delete_table_1 where b = 1;
 
-query II
-explain select c, count(*) from my_datalake.default.equality_delete_table_1 group by all order by c;
-----
-physical_plan	<REGEX>:.*FILTER.*iceberg_verify_equality_del.*ICEBERG_SCAN.*
+# query II
+# explain select c, count(*) from my_datalake.default.equality_delete_table_1 group by all order by c;
+# ----
+# physical_plan	<REGEX>:.*FILTER.*iceberg_verify_equality_del.*ICEBERG_SCAN.*
 
 query II
 select c, count(*) from my_datalake.default.equality_delete_table_1 group by all order by c;

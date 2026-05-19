@@ -78,12 +78,14 @@ static void LoadInternal(ExtensionLoader &loader) {
 	    "ignore_row_group_size_for_partitioned_tables",
 	    "Ignore unsupported write.parquet.row-group-size-bytes table property for partitioned tables",
 	    LogicalType::BOOLEAN, Value::BOOLEAN(false));
+#ifdef ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
 	config.AddExtensionOption(
 	    ENABLE_EQUALITY_DELETES_CONFIG_VARIABLE,
 	    "DANGEROUS TESTING-ONLY SETTING: when enabled, a DELETE on a v2 Iceberg table whose WHERE clause is a pure "
 	    "conjunction of equality predicates writes an Iceberg equality-delete file. Used to exercise the "
 	    "equality-delete read path.",
 	    LogicalType::BOOLEAN, Value::BOOLEAN(false));
+#endif
 
 	// Iceberg Table Functions
 	for (auto &fun : IcebergFunctions::GetTableFunctions(loader)) {

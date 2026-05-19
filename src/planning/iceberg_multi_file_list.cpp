@@ -1005,56 +1005,6 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 	}
 }
 
-vector<reference<const IcebergColumnDefinition>> IcebergMultiFileList::GetMissingEqualityDeleteColumns() const {
-	vector<reference<const IcebergColumnDefinition>> result;
-
-	lock_guard<mutex> guard(delete_lock);
-	EnumerateDeleteManifestEntries();
-
-	auto &current_schema = GetSchema();
-	auto &metadata = GetMetadata();
-	for (auto &entry : delete_manifest_entries) {
-		auto &data_file = entry.entry.data_file;
-		if (data_file.content != IcebergManifestEntryContentType::EQUALITY_DELETES) {
-			continue;
-		}
-		for (auto field_id : data_file.equality_ids) {
-			//! Columns still present in the current schema stay projected via the optimizer - skip them.
-			bool in_current_schema = false;
-			for (auto &column : current_schema.columns) {
-				if (column->id == field_id) {
-					in_current_schema = true;
-					break;
-				}
-			}
-			if (in_current_schema) {
-				continue;
-			}
-			//! Skip field-ids we already resolved (an equality column can appear in multiple delete files).
-			bool already_resolved = false;
-			for (auto &resolved : result) {
-				if (resolved.get().id == field_id) {
-					already_resolved = true;
-					break;
-				}
-			}
-			if (already_resolved) {
-				continue;
-			}
-			//! The column has been dropped from the current schema - resolve its name/type from an
-			//! older schema (field-ids are stable across Iceberg schema evolution).
-			auto column = metadata.FindColumnByFieldId(field_id);
-			if (!column) {
-				throw InvalidConfigurationException(
-				    "Iceberg equality delete references field-id %d, which is not present in any schema of the table",
-				    field_id);
-			}
-			result.push_back(*column);
-		}
-	}
-	return result;
-}
-
 void IcebergMultiFileList::EnumerateDeleteManifestEntries() const {
 	optional_ptr<const case_insensitive_map_t<string>> transactional_delete_files;
 
