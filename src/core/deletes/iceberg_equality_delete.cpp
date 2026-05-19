@@ -72,11 +72,9 @@ void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntr
 	// We know all equality delete columns will be projected from the scan due to our optimizer
 	// we want to know where in the output the equality delete columns will be projected
 	unordered_map<idx_t, idx_t> global_id_to_result_index;
-	idx_t virtual_col_count = 0;
 	for (idx_t result_id = 0; result_id < global_column_ids.size(); result_id++) {
 		auto global_col = global_column_ids[result_id];
 		if (IsVirtualColumn(global_col.GetPrimaryIndex())) {
-			virtual_col_count++;
 			continue;
 		}
 		D_ASSERT(global_col.GetPrimaryIndex() < global_columns.size());
@@ -84,7 +82,7 @@ void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntr
 		auto &col = global_columns[index_in_global_columns];
 		for (auto &equality_delete_col : local_columns) {
 			if (equality_delete_col.GetIdentifierFieldId() == col.GetIdentifierFieldId()) {
-				global_id_to_result_index[index_in_global_columns] = result_id - virtual_col_count;
+				global_id_to_result_index[index_in_global_columns] = result_id;
 				// here we can break. col has one identifier field id and equality deletes should only have unique
 				// values
 				break;

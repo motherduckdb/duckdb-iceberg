@@ -352,8 +352,8 @@ void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, cons
 	ApplyPartitionConstants(multi_file_list, reader_data, global_columns, global_column_ids);
 }
 
-void IcebergMultiFileReader::ApplyEqualityDeletes(ClientContext &context, DataChunk &input_chunk,
-                                                  DataChunk &output_chunk, const IcebergMultiFileList &multi_file_list,
+void IcebergMultiFileReader::ApplyEqualityDeletes(ClientContext &context, DataChunk &output_chunk,
+                                                  const IcebergMultiFileList &multi_file_list,
                                                   const BoundIcebergManifestEntry &bound_manifest_entry,
                                                   const vector<MultiFileColumnDefinition> &local_columns) {
 	// returns a vector<IcebergEqualityDeleteRow>
@@ -368,6 +368,10 @@ void IcebergMultiFileReader::ApplyEqualityDeletes(ClientContext &context, DataCh
 	unordered_map<int32_t, column_t> id_to_local_column;
 	for (column_t i = 0; i < local_columns.size(); i++) {
 		auto &col = local_columns[i];
+		if (col.identifier.IsNull()) {
+			// column could be a virtual column
+			continue;
+		}
 		D_ASSERT(!col.identifier.IsNull());
 		id_to_local_column[col.identifier.GetValue<int32_t>()] = i;
 	}
@@ -439,7 +443,7 @@ void IcebergMultiFileReader::ApplyEqualityDeletes(ClientContext &context, DataCh
 	SelectionVector sel_vec(STANDARD_VECTOR_SIZE);
 	// Apply the deletes to the input chunk. The output_chunk may have fewer columns if filters are pushed down
 	// The input chunk will remain consistent in column ordering/types, guaranteed by the multi file reader.
-	idx_t count = expression_executor.SelectExpression(input_chunk, sel_vec);
+	idx_t count = expression_executor.SelectExpression(output_chunk, sel_vec);
 
 	output_chunk.Slice(sel_vec, count);
 }
@@ -462,7 +466,7 @@ void IcebergMultiFileReader::FinalizeChunk(ClientContext &context, const MultiFi
 	auto &bound_manifest_entry = multi_file_list.GetManifestEntry(file_id);
 
 	auto &local_columns = reader.columns;
-	ApplyEqualityDeletes(context, input_chunk, output_chunk, multi_file_list, bound_manifest_entry, local_columns);
+	ApplyEqualityDeletes(context, output_chunk, multi_file_list, bound_manifest_entry, local_columns);
 }
 
 bool IcebergMultiFileReader::ParseOption(const string &key, const Value &val, MultiFileOptions &options,
