@@ -33,6 +33,7 @@ void BaseManifestReader::ScanInternal() {
 		return;
 	}
 	TableFunctionInput function_input(scan.bind_data.get(), local_state.get(), scan.global_state.get());
+	chunk.Reset();
 	scan.avro_scan->function(scan.context, function_input, chunk);
 	if (chunk.size() == 0) {
 		finished = true;
