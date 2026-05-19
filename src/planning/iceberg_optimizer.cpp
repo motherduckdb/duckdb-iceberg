@@ -108,7 +108,6 @@ void IcebergOptimizer::PreOptimize(OptimizerExtensionInput &input, unique_ptr<Lo
 		return;
 	}
 	guarantee_equality_delete_columns_optimizer.VisitOperator(plan);
-	plan->Print();
 }
 
 OptimizerExtension IcebergOptimizer::Create() {
