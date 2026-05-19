@@ -1,0 +1,72 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/equality_deletes/test_equality_deletes_type_change.test
+# description: Test iceberg deletes
+# group: [equality_deletes]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+use my_datalake.default;
+
+statement ok
+set unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=true;
+
+statement ok
+drop table if exists equality_delete_type_change;
+
+statement ok
+create table equality_delete_type_change (a int, b int, c int);
+
+statement ok
+insert into equality_delete_type_change select range a, range b, range c from range(10);
+
+# promote every type
+statement ok
+alter table equality_delete_type_change alter column b set type BIGINT;
+
+statement ok
+alter table equality_delete_type_change alter column a set type BIGINT;
+
+statement ok
+alter table equality_delete_type_change alter column c set type BIGINT;
+
+statement ok
+insert into equality_delete_type_change select range a, range b, range c from range(500, 510);
+
+statement ok
+delete from equality_delete_type_change where b = 1;
+
+statement ok
+delete from equality_delete_type_change where b = 501;
+
+query III
+select * from equality_delete_type_change order by all;
+----
+0	0	0
+2	2	2
+3	3	3
+4	4	4
+5	5	5
+6	6	6
+7	7	7
+8	8	8
+9	9	9
+500	500	500
+502	502	502
+503	503	503
+504	504	504
+505	505	505
+506	506	506
+507	507	507
+508	508	508
+509	509	509
