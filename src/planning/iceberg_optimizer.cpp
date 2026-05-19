@@ -1,11 +1,14 @@
 #include "planning/iceberg_optimizer.hpp"
+
+#include "iceberg_logging.hpp"
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/common/multi_file/multi_file_data.hpp"
 #include "duckdb/common/multi_file/multi_file_states.hpp"
 #include "duckdb/function/function_binder.hpp"
 #include "duckdb/planner/operator/logical_filter.hpp"
 #include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
-
+#include "core/metadata/schema/iceberg_column_definition.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "planning/iceberg_multi_file_list.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 
@@ -53,17 +56,36 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 		}
 
 		auto &schema_columns = iceberg_list.GetSchema().columns;
+		LogicalType col_type;
 		vector<unique_ptr<Expression>> args;
 		for (auto fid : required_field_ids) {
 			idx_t schema_idx = DConstants::INVALID_INDEX;
 			for (idx_t i = 0; i < schema_columns.size(); i++) {
 				if (schema_columns[i]->id == fid) {
 					schema_idx = i;
+					col_type = schema_columns[schema_idx]->type;
 					break;
 				}
 			}
 			if (schema_idx == DConstants::INVALID_INDEX) {
-				continue;
+				// column was deleted and exists most likely in an old schemas
+				// TODO: if the type of the equality delete column was evolved, then grabbing just any schema could be a
+				// problem
+				auto col_info = iceberg_list.table->table_info.table_metadata.FindColumnByFieldId(fid);
+				if (!col_info) {
+					throw InvalidConfigurationException(
+					    "column %d must apply equality deletes, but no schema has a column with that field id", fid);
+				}
+				DUCKDB_LOG(context, IcebergLogType, "Detected deleted column with equality delete: %s", col_info->name);
+				schema_idx = col_info->id;
+				col_type = col_info->type;
+				// TODO: is this allowed?
+				// modify the returned types of the get to add a column
+				get.returned_types.push_back(col_type);
+				// modify the columns and types of the bind data of the get to add this extra column
+				mfbd.types.push_back(col_type);
+				mfbd.names.push_back(col_info->name);
+				mfbd.columns.push_back(MultiFileColumnDefinition(col_info->name, col_info->type));
 			}
 			idx_t local_idx = DConstants::INVALID_INDEX;
 			const auto &col_ids = get.GetColumnIds();
@@ -78,7 +100,7 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 				local_idx = get.GetColumnIds().size() - 1;
 			}
 			auto bindings = get.GetColumnBindings();
-			args.push_back(make_uniq<BoundColumnRefExpression>(schema_columns[schema_idx]->type, bindings[local_idx]));
+			args.push_back(make_uniq<BoundColumnRefExpression>(col_type, bindings[local_idx]));
 		}
 		if (args.empty()) {
 			return;

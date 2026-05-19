@@ -100,13 +100,7 @@ IcebergMultiFileReader::InitializeGlobalState(ClientContext &context, const Mult
                                               const MultiFileReaderBindData &bind_data, const MultiFileList &file_list,
                                               const vector<MultiFileColumnDefinition> &global_columns,
                                               const vector<ColumnIndex> &global_column_ids) {
-	//! The dropped equality-delete columns appended to the schema in Bind() must be scanned from the
-	//! data files but kept out of the query projection - declare them as reader 'extra_columns'.
 	vector<LogicalType> extra_columns;
-	auto &iceberg_file_list = file_list.Cast<IcebergMultiFileList>();
-	for (auto &missing_column : iceberg_file_list.GetMissingEqualityDeleteColumns()) {
-		extra_columns.push_back(missing_column.get().type);
-	}
 	auto res = make_uniq<IcebergMultiFileReaderGlobalState>(std::move(extra_columns), file_list);
 	return std::move(res);
 }
@@ -291,21 +285,10 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
                                                               const vector<ColumnIndex> &global_column_ids,
                                                               optional_ptr<TableFilterSet> table_filters,
                                                               ClientContext &context, MultiFileGlobalState &gstate) {
-	//! Append the dropped equality-delete columns (the reader 'extra_columns') to the projected ids,
-	//! so they are read from the data files and land in the scan chunk for ApplyEqualityDeletes. They
-	//! are the trailing entries of 'global_columns' (appended after the real schema columns in Bind()).
-	auto extended_column_ids = global_column_ids;
-	if (gstate.multi_file_reader_state) {
-		auto extra_count = gstate.multi_file_reader_state->extra_columns.size();
-		for (idx_t i = global_columns.size() - extra_count; i < global_columns.size(); i++) {
-			extended_column_ids.emplace_back(i);
-		}
-	}
+	FinalizeBind(reader_data, bind_data.file_options, bind_data.reader_bind, global_columns, global_column_ids, context,
+	             gstate.multi_file_reader_state.get());
 
-	FinalizeBind(reader_data, bind_data.file_options, bind_data.reader_bind, global_columns, extended_column_ids,
-	             context, gstate.multi_file_reader_state.get());
-
-	return CreateMapping(context, reader_data, global_columns, extended_column_ids, table_filters, gstate.file_list,
+	return CreateMapping(context, reader_data, global_columns, global_column_ids, table_filters, gstate.file_list,
 	                     bind_data.reader_bind, bind_data.virtual_columns);
 }
 
