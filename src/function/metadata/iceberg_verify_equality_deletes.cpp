@@ -24,6 +24,8 @@ ScalarFunctionSet IcebergFunctions::GetVerifyEqualityDeletesFunction() {
 	// is this a variable length argument then?
 	fun.varargs = LogicalType::ANY;
 	fun.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
+	// set to volatile so it does not get pushed down into the scan
+	fun.SetVolatile();
 	function_set.AddFunction(fun);
 	return function_set;
 }

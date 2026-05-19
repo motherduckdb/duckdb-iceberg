@@ -65,7 +65,7 @@ public:
 	void FinalizeChunk(ClientContext &context, const MultiFileBindData &bind_data, BaseFileReader &reader,
 	                   const MultiFileReaderData &reader_data, DataChunk &input_chunk, DataChunk &output_chunk,
 	                   ExpressionExecutor &executor, optional_ptr<MultiFileReaderGlobalState> global_state) override;
-	void ApplyEqualityDeletes(ClientContext &context, DataChunk &output_chunk,
+	void ApplyEqualityDeletes(ClientContext &context, DataChunk &input_chunk, DataChunk &output_chunk,
 	                          const IcebergMultiFileList &multi_file_list,
 	                          const BoundIcebergManifestEntry &manifest_entry,
 	                          const vector<MultiFileColumnDefinition> &local_columns);

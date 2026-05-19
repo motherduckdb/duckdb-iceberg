@@ -1,0 +1,82 @@
+# name: test/sql/local/iceberg_scans/test_reading_equality_deletes.test
+# group: [iceberg_scans]
+
+require avro
+
+require parquet
+
+require iceberg
+
+statement ok
+set unsafe_enable_version_guessing = true;
+
+# verify optimzier is triggered when there is a filter pushed into the scan
+query II
+explain select id from iceberg_scan('/tmp/warehouse/ns/t/') where col11 = 'c';
+----
+physical_plan	<REGEX>:.*FILTER.*iceberg_verify_equal.*ICEBERG_SCAN.*
+
+# id has the equality delete on it.
+# We are applying the equality delete on the output chunk, so we need a better way
+# to manage where to apply it
+# In the query below, we produce 2 columns in the get
+query I
+select col11 from iceberg_scan('/tmp/warehouse/ns/t/') where col11 = 'c';
+----
+c
+
+# verify optimzier is triggered when there is no filter pushded into the scan
+query II
+explain select col11 from iceberg_scan('/tmp/warehouse/ns/t/');
+----
+physical_plan	<REGEX>:.*FILTER.*iceberg_verify_equal.*ICEBERG_SCAN.*
+
+query I
+select col11 from iceberg_scan('/tmp/warehouse/ns/t/');
+----
+a
+c
+d
+
+query II
+explain select id from iceberg_scan('/tmp/warehouse/ns/t/') where col11 = 'c';
+----
+physical_plan	<REGEX>:.*FILTER.*iceberg_verify_equal.*ICEBERG_SCAN.*
+
+query I
+select id from iceberg_scan('/tmp/warehouse/ns/t/') where col11 = 'c';
+----
+3
+
+query II
+select col1, col6 from iceberg_scan('/tmp/warehouse/ns/t/') where col11 = 'c';
+----
+103	503
+
+# filter on equality delete column and other column that is not projected
+query II
+select col1, col6 from iceberg_scan('/tmp/warehouse/ns/t/') where col11 = 'c' and id > 1;
+----
+103	503
+
+# user defined filter on equality delete column
+query II
+select col1, col6 from iceberg_scan('/tmp/warehouse/ns/t/') where id > 1;
+----
+103	503
+104	504
+
+
+query II
+explain select col1, col6 from iceberg_scan('/tmp/warehouse/ns/t/');
+----
+physical_plan	<REGEX>:.*FILTER.*iceberg_verify_equal.*ICEBERG_SCAN.*
+
+
+query II
+select col1, col6 from iceberg_scan('/tmp/warehouse/ns/t/');
+----
+101	501
+103	503
+104	504
+

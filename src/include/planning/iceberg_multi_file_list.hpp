@@ -67,13 +67,16 @@ public:
 	void ScanEqualityDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result,
 	                            vector<MultiFileColumnDefinition> &columns,
 	                            const vector<MultiFileColumnDefinition> &global_columns,
-	                            const vector<ColumnIndex> &column_indexes) const;
+	                            const vector<ColumnIndex> &global_column_ids) const;
 	void ScanDeleteFile(const BoundIcebergManifestEntry &entry, const vector<MultiFileColumnDefinition> &global_columns,
-	                    const vector<ColumnIndex> &column_indexes) const;
+	                    const vector<ColumnIndex> &global_column_ids) const;
 	void ScanPuffinFile(const BoundIcebergManifestEntry &entry) const;
 	unique_ptr<DeleteFilter> GetPositionalDeletesForFile(const string &file_path) const;
+	void EnumerateDeleteManifestEntries() const;
 	void ProcessDeletes(const vector<MultiFileColumnDefinition> &global_columns,
-	                    const vector<ColumnIndex> &column_indexes) const;
+	                    const vector<ColumnIndex> &global_column_ids) const;
+	void ScanDeleteFiles(const vector<MultiFileColumnDefinition> &global_columns,
+	                     const vector<ColumnIndex> &global_column_ids) const;
 	vector<reference<const IcebergEqualityDeleteRow>>
 	GetEqualityDeletesForFile(const BoundIcebergManifestEntry &manifest_entry) const;
 	void GetStatistics(vector<PartitionStatistics> &result) const;
@@ -142,11 +145,11 @@ public:
 	//! FIXME: this is only used in 'FinalizeBind',
 	//! shouldn't this be used to protect all the variable accesses that are accessed there while the lock is held?
 	mutable mutex delete_lock;
-	//! The columns needed by the equality deletes that aren't referenced by the scan
-	mutable unordered_map<int32_t, column_t> equality_id_to_result_id;
 	mutable idx_t transaction_delete_idx = 0;
-
+	// have we enumerated all delete files (which we need to do for equality delete planning)
+	mutable bool committed_delete_entries_enumerated = false;
 	mutable bool initialized = false;
+	mutable bool scanned_delete_manifests = false;
 	const IcebergOptions &options;
 
 public:

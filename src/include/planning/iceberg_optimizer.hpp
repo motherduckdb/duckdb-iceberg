@@ -14,13 +14,17 @@ namespace duckdb {
 
 class GuaranteeEqualityDeleteColumnsOptimizer {
 public:
+	ClientContext &context;
+
+public:
+	GuaranteeEqualityDeleteColumnsOptimizer(ClientContext &context);
 	void VisitOperator(unique_ptr<LogicalOperator> &op);
 };
 
 class IcebergOptimizer {
 public:
 	static OptimizerExtension Create();
-	static void Optimize(OptimizerExtensionInput &input, unique_ptr<LogicalOperator> &plan);
+	static void PreOptimize(OptimizerExtensionInput &input, unique_ptr<LogicalOperator> &plan);
 };
 
-}
+} // namespace duckdb

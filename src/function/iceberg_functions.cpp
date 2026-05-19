@@ -22,7 +22,6 @@ vector<TableFunctionSet> IcebergFunctions::GetTableFunctions(ExtensionLoader &lo
 	functions.push_back(GetIcebergToDuckLakeFunction());
 	functions.push_back(GetIcebergLoadTableResponseFunction());
 
-
 	return functions;
 }
 

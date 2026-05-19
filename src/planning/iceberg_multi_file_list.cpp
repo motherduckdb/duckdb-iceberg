@@ -1005,8 +1005,88 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 	}
 }
 
+void IcebergMultiFileList::EnumerateDeleteManifestEntries() const {
+	optional_ptr<const case_insensitive_map_t<string>> transactional_delete_files;
+
+	if (HasTransactionData()) {
+		transactional_delete_files = GetTransactionData().transactional_delete_files;
+	}
+	while (!FinishedScanningDeletes()) {
+		delete_manifest_reader->Read();
+	}
+
+	if (!committed_delete_entries_enumerated) {
+		for (idx_t i = 0; i < committed_delete_manifests.size(); i++) {
+			auto &manifest = delete_manifests[i];
+			auto &entries = manifest.entry.manifest_entries;
+			auto &manifest_file = manifest.entry.file;
+			for (auto &manifest_entry : entries) {
+				if (manifest_entry.status == IcebergManifestEntryStatusType::DELETED) {
+					continue;
+				}
+				auto &data_file = manifest_entry.data_file;
+				if (!table_filters.filters.empty() &&
+				    !FileMatchesFilter(manifest_file, manifest_entry, IcebergManifestContentType::DELETE)) {
+					DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'data_file': '%s'",
+					           data_file.file_path);
+					continue;
+				}
+				auto &referenced_data_file = data_file.referenced_data_file;
+				if (!referenced_data_file.empty() && transactional_delete_files &&
+				    transactional_delete_files->count(referenced_data_file)) {
+					//! Skip this delete file, there's a transaction-local delete that makes it obsolete
+					continue;
+				}
+				auto bound_entry = manifest.BindEntry(manifest_entry);
+				delete_manifest_entries.push_back(std::move(bound_entry));
+			}
+		}
+		committed_delete_entries_enumerated = true;
+	}
+
+	auto offset = committed_delete_manifests.size();
+	while (transaction_delete_idx < transaction_delete_manifests.size()) {
+		auto &delete_manifest = delete_manifests[offset + transaction_delete_idx];
+		for (auto &manifest_entry : delete_manifest.entry.manifest_entries) {
+			auto &data_file = manifest_entry.data_file;
+			auto &referenced_data_file = data_file.referenced_data_file;
+			if (!referenced_data_file.empty() && transactional_delete_files) {
+				auto it = transactional_delete_files->find(referenced_data_file);
+				//! Check if this is the currently active (last) delete file for this referenced_data_file
+				if (it != transactional_delete_files->end() && it->second != data_file.file_path) {
+					continue;
+				}
+			}
+			//! FIXME: no file pruning for uncommitted data?
+			auto bound_manifest_entry = delete_manifest.BindEntry(manifest_entry);
+			delete_manifest_entries.push_back(std::move(bound_manifest_entry));
+		}
+		transaction_delete_idx++;
+	}
+
+	D_ASSERT(FinishedScanningDeletes());
+}
+
+void IcebergMultiFileList::ScanDeleteFiles(const vector<MultiFileColumnDefinition> &global_columns,
+                                           const vector<ColumnIndex> &global_column_ids) const {
+	for (auto &bound_manifest_entry : delete_manifest_entries) {
+		auto &manifest_entry = bound_manifest_entry.entry;
+		auto &data_file = manifest_entry.data_file;
+		if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
+			ScanDeleteFile(bound_manifest_entry, global_columns, global_column_ids);
+		} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
+			ScanPuffinFile(bound_manifest_entry);
+		} else {
+			throw NotImplementedException(
+			    "File format '%s' not supported for deletes, only supports 'parquet' and 'puffin' currently",
+			    data_file.file_format);
+		}
+	}
+	scanned_delete_manifests = true;
+}
+
 void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition> &global_columns,
-                                          const vector<ColumnIndex> &column_indexes) const {
+                                          const vector<ColumnIndex> &global_column_ids) const {
 	// In <=v2 we now have to process *all* delete manifests
 	// before we can be certain that we have all the delete data for the current file.
 
@@ -1050,18 +1130,8 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 		}
 	}
 
-	for (auto &bound_manifest_entry : delete_manifest_entries) {
-		auto &manifest_entry = bound_manifest_entry.entry;
-		auto &data_file = manifest_entry.data_file;
-		if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
-			ScanDeleteFile(bound_manifest_entry, global_columns, column_indexes);
-		} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
-			ScanPuffinFile(bound_manifest_entry);
-		} else {
-			throw NotImplementedException(
-			    "File format '%s' not supported for deletes, only supports 'parquet' and 'puffin' currently",
-			    data_file.file_format);
-		}
+	if (!scanned_delete_manifests) {
+		ScanDeleteFiles(global_columns, global_column_ids);
 	}
 
 	auto offset = committed_delete_manifests.size();
@@ -1083,7 +1153,7 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 			auto bound_manifest_entry = delete_manifest.BindEntry(manifest_entry);
 			//! FIXME: no file pruning for uncommitted data?
 			if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
-				ScanDeleteFile(bound_manifest_entry, global_columns, column_indexes);
+				ScanDeleteFile(bound_manifest_entry, global_columns, global_column_ids);
 			} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
 				ScanPuffinFile(bound_manifest_entry);
 			} else {
@@ -1100,7 +1170,7 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 
 void IcebergMultiFileList::ScanDeleteFile(const BoundIcebergManifestEntry &bound_manifest_entry,
                                           const vector<MultiFileColumnDefinition> &global_columns,
-                                          const vector<ColumnIndex> &column_indexes) const {
+                                          const vector<ColumnIndex> &global_column_ids) const {
 	auto &manifest_entry = bound_manifest_entry.entry;
 	auto &data_file = manifest_entry.data_file;
 	auto delete_file_path = data_file.file_path;
@@ -1172,7 +1242,7 @@ void IcebergMultiFileList::ScanDeleteFile(const BoundIcebergManifestEntry &bound
 			delete_scan_function.function(context, function_input, result);
 			result.Flatten();
 			ScanEqualityDeleteFile(bound_manifest_entry, result, multi_file_local_state.reader->columns, global_columns,
-			                       column_indexes);
+			                       global_column_ids);
 		} while (result.size() != 0);
 	}
 }

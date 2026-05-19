@@ -12,6 +12,10 @@ namespace duckdb {
 
 using sequence_number_t = int64_t;
 
+struct EqualityDeleteValuelist {
+	unordered_map<idx_t, vector<Value>> field_id_value_to_remove;
+};
+
 struct IcebergEqualityDeleteRow {
 public:
 	IcebergEqualityDeleteRow() {
@@ -27,6 +31,10 @@ public:
 	//! Also note: it's probably easiest to apply these to the 'output_chunk' of FinalizeChunk, so we can re-use
 	//! expressions. Otherwise the idx of the BoundReferenceExpression would have to change for every file.
 	unordered_map<int32_t, unique_ptr<Expression>> filters;
+
+	// map of field-id(s) to values that should be filtered out.
+	// this is so we can apply the deletes to the
+	case_insensitive_map_t<unique_ptr<EqualityDeleteValuelist>> filter_template;
 };
 
 struct IcebergEqualityDeleteFile {
