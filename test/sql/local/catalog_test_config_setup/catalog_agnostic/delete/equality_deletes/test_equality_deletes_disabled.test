@@ -1,0 +1,25 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/equality_deletes/test_equality_deletes_disabled.test
+# description: Test iceberg deletes
+# group: [equality_deletes]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+use my_datalake.default;
+
+statement error
+set unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=true;
+----
+<REGEX>:.*Did you mean.*
+
