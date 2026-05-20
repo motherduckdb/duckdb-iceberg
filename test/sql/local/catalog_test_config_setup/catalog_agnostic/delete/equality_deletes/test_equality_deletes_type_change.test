@@ -4,6 +4,8 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
+require-env EQUALITY_DELETE_WRITES_ENABLED 1
+
 require avro
 
 require parquet

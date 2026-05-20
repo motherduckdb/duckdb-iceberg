@@ -28,6 +28,7 @@ class IcebergDeleteLocalState;
 class IcebergDeleteGlobalState;
 class IcebergTableEntry;
 
+
 IcebergDelete::IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table,
                              IcebergMultiFileList &multi_file_list, PhysicalOperator &child,
                              vector<idx_t> row_id_indexes, bool is_equality_delete,
@@ -37,6 +38,15 @@ IcebergDelete::IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &tab
       is_equality_delete(is_equality_delete), equality_predicates(std::move(equality_predicates)) {
 	children.push_back(child);
 }
+
+IcebergDelete::IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table,
+                             IcebergMultiFileList &multi_file_list, PhysicalOperator &child,
+                             vector<idx_t> row_id_indexes)
+    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, {LogicalType::BIGINT}, 1), table(table),
+      multi_file_list(multi_file_list), row_id_indexes(std::move(row_id_indexes)) {
+	children.push_back(child);
+}
+
 
 unique_ptr<GlobalSinkState> IcebergDelete::GetGlobalSinkState(ClientContext &context) const {
 	return make_uniq<IcebergDeleteGlobalState>();
@@ -472,14 +482,14 @@ PhysicalOperator &IcebergDelete::PlanDelete(ClientContext &context, PhysicalPlan
 	auto &bind_data = table_scan->bind_data->Cast<MultiFileBindData>();
 	auto &file_list = bind_data.file_list->Cast<IcebergMultiFileList>();
 
-	vector<IcebergEqualityDeletePredicate> equality_predicates;
-	bool is_equality_delete = false;
 #ifdef ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
-	is_equality_delete = TryGetEqualityDeletePredicates(context, table, child_plan, equality_predicates);
-#endif
-
+	vector<IcebergEqualityDeletePredicate> equality_predicates;
+	bool is_equality_delete = TryGetEqualityDeletePredicates(context, table, child_plan, equality_predicates);
 	return planner.Make<IcebergDelete>(table, file_list, child_plan, std::move(row_id_indexes), is_equality_delete,
 	                                   std::move(equality_predicates));
+#else
+	return planner.Make<IcebergDelete>(table, file_list, child_plan, std::move(row_id_indexes));
+#endif
 }
 
 PhysicalOperator &IcebergCatalog::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,

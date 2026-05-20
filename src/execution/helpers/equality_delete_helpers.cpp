@@ -1,5 +1,6 @@
 #include "execution/operator/iceberg_delete.hpp"
 
+#include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
 #include "duckdb/common/types/uuid.hpp"
 #include "duckdb/execution/execution_context.hpp"
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"

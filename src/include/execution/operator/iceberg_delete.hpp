@@ -102,19 +102,28 @@ public:
 
 class IcebergDelete : public PhysicalOperator {
 public:
+
 	IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table, IcebergMultiFileList &multi_file_list,
 	              PhysicalOperator &child, vector<idx_t> row_id_indexes, bool is_equality_delete,
 	              vector<IcebergEqualityDeletePredicate> equality_predicates);
+	IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table, IcebergMultiFileList &multi_file_list,
+	              PhysicalOperator &child, vector<idx_t> row_id_indexes);
 
 	//! The table to delete from
 	IcebergTableEntry &table;
 	IcebergMultiFileList &multi_file_list;
 	//! The column indexes for the relevant row-id columns
 	vector<idx_t> row_id_indexes;
-	//! Whether this delete is written as an Iceberg equality-delete file
+	//! Whether this delete is written as an Iceberg equality-delete file. Hard-wired to a
+	//! `static constexpr false` when the equality-delete write feature is compiled out, so the
+	//! dead branches that reference it can never trigger at runtime in shipped builds.
+#ifdef ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
 	bool is_equality_delete;
-	//! The `column = constant` predicates that make up the equality delete (only set when is_equality_delete)
+	//! The `column = constant` predicates that make up the equality delete
 	vector<IcebergEqualityDeletePredicate> equality_predicates;
+#else
+	static constexpr bool is_equality_delete = false;
+#endif
 
 public:
 	// // Source interface
@@ -167,8 +176,7 @@ private:
 	void WriteDeletionVectorFile(ClientContext &context, IcebergDeleteGlobalState &global_state, const string &filename,
 	                             IcebergDeleteFileInfo delete_file, const set<idx_t> &sorted_deletes) const;
 	//! Writes the Iceberg equality-delete parquet file (one column per equality field, one row of
-	//! constants) and records it in `global_state.written_files`. Only possible if built with
-	//! ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
+	//! constants) and records it in `global_state.written_files`.
 	void WriteEqualityDeleteFile(ClientContext &context, IcebergDeleteGlobalState &global_state) const;
 };
 
