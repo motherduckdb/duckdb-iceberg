@@ -18,6 +18,7 @@
 
 namespace duckdb {
 
+class PhysicalTableScan;
 struct IcebergMultiFileList;
 
 struct WrittenColumnInfo {
@@ -128,13 +129,11 @@ public:
 	                                    IcebergTableEntry &table, PhysicalOperator &child_plan,
 	                                    vector<idx_t> row_id_indexes);
 
-#ifdef ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
 	//! Detects whether `child_plan`'s pushed-down filters describe a pure conjunction of equality
 	//! predicates, and if so extracts them into `equality_predicates`. Returns false otherwise.
 	static bool TryGetEqualityDeletePredicates(ClientContext &context, IcebergTableEntry &table,
 	                                           PhysicalOperator &child_plan,
 	                                           vector<IcebergEqualityDeletePredicate> &equality_predicates);
-#endif
 
 public:
 	// Sink interface
@@ -160,16 +159,17 @@ public:
 	                  IcebergDeleteGlobalState &global_state) const;
 
 private:
+	//! Walk `plan` for the PhysicalTableScan that emits the row-id virtual columns the delete needs.
+	static optional_ptr<PhysicalTableScan> FindDeleteSource(PhysicalOperator &plan);
 	void WritePositionalDeleteFile(ClientContext &context, IcebergDeleteGlobalState &global_state,
 	                               const string &filename, IcebergDeleteFileInfo delete_file,
 	                               set<idx_t> sorted_deletes) const;
 	void WriteDeletionVectorFile(ClientContext &context, IcebergDeleteGlobalState &global_state, const string &filename,
 	                             IcebergDeleteFileInfo delete_file, const set<idx_t> &sorted_deletes) const;
-#ifdef ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
 	//! Writes the Iceberg equality-delete parquet file (one column per equality field, one row of
-	//! constants) and records it in `global_state.written_files`.
+	//! constants) and records it in `global_state.written_files`. Only possible if built with
+	//! ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
 	void WriteEqualityDeleteFile(ClientContext &context, IcebergDeleteGlobalState &global_state) const;
-#endif
 };
 
 } // namespace duckdb

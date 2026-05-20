@@ -63,6 +63,7 @@ set(EXTENSION_SOURCES
 	src/core/metadata/schema/iceberg_table_schema.cpp
 	src/core/metadata/snapshot/iceberg_snapshot.cpp
 	src/core/metadata/sort/iceberg_sort_order.cpp
+	src/execution/helpers/equality_delete_helpers.cpp
 	src/execution/operator/copy/iceberg_copy.cpp
 	src/execution/operator/iceberg_delete.cpp
 	src/execution/operator/iceberg_insert.cpp
