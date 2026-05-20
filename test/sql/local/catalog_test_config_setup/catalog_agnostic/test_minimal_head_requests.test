@@ -58,9 +58,9 @@ select * from my_datalake.default.table_unpartitioned order by all;
 
 # No additional HEAD requests should be made
 query I
-select count(*) from duckdb_logs_parsed('HTTP') where request.type = 'HEAD';
+select request.url from duckdb_logs_parsed('HTTP') where request.type = 'HEAD';
 ----
-0
+
 
 # No additional GET requests should be made
 query I
