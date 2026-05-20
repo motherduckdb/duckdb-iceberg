@@ -41,13 +41,13 @@ select count(*) from duckdb_logs_parsed('HTTP') where request.type = 'HEAD';
 ----
 0
 
-# only 13 get requests
-query I nosort get_count_1
-select count(*) from duckdb_logs_parsed('HTTP')
-where request.type = 'GET'
-  and (request.url like '%.avro'
-  or request.url like '%.parquet');
-----
+statement ok
+set variable original_get_requests = (
+	select count(*) from duckdb_logs_parsed('HTTP')
+	where request.type = 'GET'
+	and (request.url like '%.avro'
+	or request.url like '%.parquet')
+);
 
 query III
 select * from my_datalake.default.table_unpartitioned order by all;
@@ -73,9 +73,22 @@ select count(*) from duckdb_logs_parsed('HTTP') where request.type = 'HEAD';
 0
 
 # same amount of get calls
-query I nosort get_count_1
-select count(*) from duckdb_logs_parsed('HTTP')
-where request.type = 'GET'
-  and (request.url like '%.avro'
-  or request.url like '%.parquet');
+query I
+WITH cte AS (
+    SELECT
+        count(*) AS actual_get_requests
+    FROM duckdb_logs_parsed('HTTP')
+    WHERE request.type = 'GET' AND (request.url LIKE '%.avro' OR request.url LIKE '%.parquet')
+)
+SELECT
+    CASE
+        WHEN cte.actual_get_requests = getvariable('original_get_requests')
+            THEN TRUE
+        ELSE {
+            'old': getvariable('original_get_requests'),
+            'actual': cte.actual_get_requests
+        }::VARIANT
+    END
+FROM cte;
 ----
+true
