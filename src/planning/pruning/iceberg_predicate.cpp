@@ -261,6 +261,10 @@ static bool MatchBoundsExpression(ClientContext &context, const Expression &expr
 			return MatchBoundsConstant<TRANSFORM>(left.Cast<BoundConstantExpression>().value,
 			                                      FlipComparisonExpression(comparison_type), stats, transform);
 		}
+		if (comparison_type == ExpressionType::COMPARE_EQUAL && stats.lower_bound.type() == LogicalType::VARCHAR) {
+			//! Filters on strings (e.g len(my_string_col)) do not maintain lexicographic ordering properties
+			return true;
+		}
 		if (transform.Type() == IcebergTransformType::IDENTITY) {
 			//! No further processing has been done on the stats (lower/upper bounds)
 			bool left_foldable = left.IsFoldable();
