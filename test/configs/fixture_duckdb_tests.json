@@ -65,7 +65,8 @@
         "test/sql/function/list/list_distinct.test",
         "test/sql/insert/test_big_insert.test",
         "test/sql/optimizer/test_in_rewrite_rule.test",
-        "test/sql/upsert/postgres/planner_preprocessing.test"
+        "test/sql/upsert/postgres/planner_preprocessing.test",
+        "test/sql/update/string_update_transaction_local_7348.test"
       ]
     },
     {
