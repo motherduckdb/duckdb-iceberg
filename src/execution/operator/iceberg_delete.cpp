@@ -31,16 +31,6 @@ class IcebergTableEntry;
 
 IcebergDelete::IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table,
                              IcebergMultiFileList &multi_file_list, PhysicalOperator &child,
-                             vector<idx_t> row_id_indexes, bool is_equality_delete,
-                             vector<IcebergEqualityDeletePredicate> equality_predicates)
-    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, {LogicalType::BIGINT}, 1), table(table),
-      multi_file_list(multi_file_list), row_id_indexes(std::move(row_id_indexes)),
-      is_equality_delete(is_equality_delete), equality_predicates(std::move(equality_predicates)) {
-	children.push_back(child);
-}
-
-IcebergDelete::IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table,
-                             IcebergMultiFileList &multi_file_list, PhysicalOperator &child,
                              vector<idx_t> row_id_indexes)
     : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, {LogicalType::BIGINT}, 1), table(table),
       multi_file_list(multi_file_list), row_id_indexes(std::move(row_id_indexes)) {
