@@ -331,7 +331,7 @@ FileExpandResult IcebergMultiFileList::GetExpandResult() const {
 
 idx_t IcebergMultiFileList::GetTotalFileCount() const {
 	// FIXME: the 'added_files_count' + the 'existing_files_count'
-	// in the Manifest List should give us this information without scanning the manifest list
+	// in the Manifest List should give us this information without scanning the manifest file(s)
 	lock_guard<mutex> guard(lock);
 
 	idx_t i = data_manifest_entries.size();
@@ -1013,7 +1013,6 @@ void IcebergMultiFileList::EnumerateDeleteManifestEntries() const {
 	// is targeting before we open it, and there can only be one deletion vector per data file.
 
 	// From the spec: "At most one deletion vector is allowed per data file in a snapshot"
-
 	optional_ptr<const case_insensitive_map_t<string>> transactional_delete_files;
 	if (HasTransactionData()) {
 		transactional_delete_files = GetTransactionData().transactional_delete_files;
