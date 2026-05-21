@@ -815,7 +815,7 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 		chunk.data[col_idx].Append(data_file.ToValue(table_metadata, chunk.data[col_idx].GetType()));
 		col_idx++;
 	}
-	chunk.SetCardinality(manifest_entries.size());
+	chunk.SetChildCardinality(manifest_entries.size());
 	auto iceberg_schema_string = ICUtils::JsonToString(std::move(doc_p));
 
 	child_list_t<Value> metadata_values;

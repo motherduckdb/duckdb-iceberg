@@ -98,7 +98,7 @@ static void IcebergSnapshotsFunction(ClientContext &context, TableFunctionInput 
 		FlatVector::GetDataMutable<string_t>(output.data[3])[i] = manifest_string_t;
 		i++;
 	}
-	output.SetCardinality(i);
+	output.SetChildCardinality(i);
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergSnapshotsFunction() {

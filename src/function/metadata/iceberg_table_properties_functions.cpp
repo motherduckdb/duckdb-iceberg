@@ -154,7 +154,7 @@ static void SetIcebergTablePropertiesFunction(ClientContext &context, TableFunct
 		return;
 	}
 	if (global_state.properties_set) {
-		output.SetCardinality(0);
+		output.SetChildCardinality(0);
 		return;
 	}
 
@@ -172,7 +172,7 @@ static void SetIcebergTablePropertiesFunction(ClientContext &context, TableFunct
 	global_state.properties_set = true;
 	// set success output, failure happens during transaction commit.
 	FlatVector::GetDataMutable<int64_t>(output.data[0])[0] = bind_data.properties.size();
-	output.SetCardinality(1);
+	output.SetChildCardinality(1);
 }
 
 static void RemoveIcebergTablePropertiesFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
@@ -184,7 +184,7 @@ static void RemoveIcebergTablePropertiesFunction(ClientContext &context, TableFu
 		return;
 	}
 	if (global_state.properties_removed) {
-		output.SetCardinality(0);
+		output.SetChildCardinality(0);
 		return;
 	}
 
@@ -201,7 +201,7 @@ static void RemoveIcebergTablePropertiesFunction(ClientContext &context, TableFu
 	global_state.properties_removed = true;
 	// set success output, failure happens during transaction commit.
 	FlatVector::GetDataMutable<int64_t>(output.data[0])[0] = bind_data.properties.size();
-	output.SetCardinality(1);
+	output.SetChildCardinality(1);
 }
 
 static void GetIcebergTablePropertiesFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
@@ -222,7 +222,7 @@ static void GetIcebergTablePropertiesFunction(ClientContext &context, TableFunct
 
 	const auto &properties = txn_table_info.table_metadata.GetTableProperties();
 	if (properties.empty()) {
-		output.SetCardinality(0);
+		output.SetChildCardinality(0);
 		return;
 	}
 	if (!global_state.all_properties_initialized) {
@@ -233,7 +233,7 @@ static void GetIcebergTablePropertiesFunction(ClientContext &context, TableFunct
 	}
 	// if we have already returned all properties.
 	if (global_state.property_count >= global_state.all_properties.size()) {
-		output.SetCardinality(0);
+		output.SetChildCardinality(0);
 		return;
 	}
 
@@ -249,7 +249,7 @@ static void GetIcebergTablePropertiesFunction(ClientContext &context, TableFunct
 		}
 	}
 	global_state.property_count += row_number;
-	output.SetCardinality(row_number);
+	output.SetChildCardinality(row_number);
 }
 
 TableFunctionSet IcebergFunctions::SetIcebergTablePropertiesFunctions() {

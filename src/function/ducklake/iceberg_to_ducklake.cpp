@@ -978,7 +978,7 @@ static void IcebergToDuckLakeFunction(ClientContext &context, TableFunctionInput
 		result->ThrowError("'iceberg_to_ducklake' failed to commit to the DuckLake metadata catalog: ");
 	}
 
-	output.SetCardinality(0);
+	output.SetChildCardinality(0);
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergToDuckLakeFunction() {

@@ -188,7 +188,7 @@ static void IcebergPartitionStatsFunction(ClientContext &context, TableFunctionI
 		for (; global_state.current_manifest_entry_idx < field_summaries.size();
 		     global_state.current_manifest_entry_idx++) {
 			if (out >= STANDARD_VECTOR_SIZE) {
-				output.SetCardinality(out);
+				output.SetChildCardinality(out);
 				return;
 			}
 			auto &field_summary = field_summaries[global_state.current_manifest_entry_idx];
@@ -233,7 +233,7 @@ static void IcebergPartitionStatsFunction(ClientContext &context, TableFunctionI
 		}
 		global_state.current_manifest_entry_idx = 0;
 	}
-	output.SetCardinality(out);
+	output.SetChildCardinality(out);
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergPartitionStatsFunction() {

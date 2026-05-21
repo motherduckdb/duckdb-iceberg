@@ -447,7 +447,7 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
 			data.data[col_idx++].Append(first_row_id);
 		}
 	}
-	data.SetCardinality(manifest_files.size());
+	data.SetChildCardinality(manifest_files.size());
 
 	CopyInfo copy_info;
 	copy_info.is_from = false;

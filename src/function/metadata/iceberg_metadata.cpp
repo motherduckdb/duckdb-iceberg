@@ -177,7 +177,7 @@ static void IcebergMetaDataFunction(ClientContext &context, TableFunctionInput &
 		auto &entries = table_entry.manifest_entries;
 		for (; global_state.current_manifest_entry_idx < entries.size(); global_state.current_manifest_entry_idx++) {
 			if (out >= STANDARD_VECTOR_SIZE) {
-				output.SetCardinality(out);
+				output.SetChildCardinality(out);
 				return;
 			}
 			auto &manifest = table_entry.file;
@@ -205,7 +205,7 @@ static void IcebergMetaDataFunction(ClientContext &context, TableFunctionInput &
 		}
 		global_state.current_manifest_entry_idx = 0;
 	}
-	output.SetCardinality(out);
+	output.SetChildCardinality(out);
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergMetadataFunction() {

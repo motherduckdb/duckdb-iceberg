@@ -185,14 +185,14 @@ void IcebergDelete::WritePositionalDeleteFile(ClientContext &context, IcebergDel
 	for (auto &row_idx : sorted_deletes) {
 		row_data[row_count++] = NumericCast<int64_t>(row_idx);
 		if (row_count >= STANDARD_VECTOR_SIZE) {
-			write_chunk.SetCardinality(row_count);
+			write_chunk.SetChildCardinality(row_count);
 			copy_fun.function.copy_to_sink(execution_context, *function_data, *copy_global_state, *copy_local_state,
 			                               write_chunk);
 			row_count = 0;
 		}
 	}
 	if (row_count > 0) {
-		write_chunk.SetCardinality(row_count);
+		write_chunk.SetChildCardinality(row_count);
 		copy_fun.function.copy_to_sink(execution_context, *function_data, *copy_global_state, *copy_local_state,
 		                               write_chunk);
 	}

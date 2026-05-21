@@ -146,8 +146,8 @@ OperatorResultType IcebergUpdate::Execute(ExecutionContext &context, DataChunk &
 	auto &update_expression_chunk = lstate.update_expression_chunk;
 	auto &insert_chunk = lstate.insert_chunk;
 
-	update_expression_chunk.SetCardinality(input.size());
-	insert_chunk.SetCardinality(input.size());
+	update_expression_chunk.SetChildCardinality(input.size());
+	insert_chunk.SetChildCardinality(input.size());
 	lstate.expression_executor->Execute(input, update_expression_chunk);
 
 	// build output, physical columns + row_id

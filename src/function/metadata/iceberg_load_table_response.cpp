@@ -157,7 +157,7 @@ static void IcebergLoadTableResponseFunction(ClientContext &context, TableFuncti
 
 	auto load_result = rest_api_objects::LoadTableResult::FromJSON(root);
 
-	output.SetCardinality(1);
+	output.SetChildCardinality(1);
 
 	// metadata_location
 	auto &metadata_location_vector = output.data[0];

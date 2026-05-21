@@ -180,7 +180,7 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 
 			for (; global_state.column_it != bind_data.source_to_column_id.end(); global_state.column_it++) {
 				if (out >= STANDARD_VECTOR_SIZE) {
-					output.SetCardinality(out);
+					output.SetChildCardinality(out);
 					return;
 				}
 				idx_t col = 0;
@@ -257,7 +257,7 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 		}
 		global_state.current_manifest_entry_idx = 0;
 	}
-	output.SetCardinality(out);
+	output.SetChildCardinality(out);
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergColumnStatsFunction() {
