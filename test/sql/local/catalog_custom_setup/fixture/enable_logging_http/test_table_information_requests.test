@@ -55,7 +55,7 @@ select count(*) > 10 from (show all tables);
 query I
 select count(*) from duckdb_logs_parsed('HTTP');
 ----
-5
+4
 
 statement ok
 call truncate_duckdb_logs();
@@ -106,7 +106,7 @@ commit;
 query I
 select count(*) from duckdb_logs_parsed('HTTP');
 ----
-9
+7
 
 statement ok
 call truncate_duckdb_logs();
