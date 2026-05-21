@@ -19,6 +19,7 @@
 #include "catalog/rest/storage/authorization/sigv4.hpp"
 #include "catalog/rest/storage/authorization/none.hpp"
 #include "core/expression/iceberg_transform.hpp"
+#include "duckdb/parser/column_definition.hpp"
 
 #include <climits>
 
@@ -265,7 +266,7 @@ optional_ptr<CatalogEntry> IcebergTableInformation::CreateSchemaVersion(const Ic
 	CreateTableInfo info;
 	info.table = name;
 	for (auto &col : table_schema.columns) {
-		info.columns.AddColumn(col->GetColumnDefinition());
+		info.columns.AddColumn(col->GetColumnDefinition<ColumnDefinition>());
 	}
 
 	auto table_entry = make_uniq<IcebergTableEntry>(*this, catalog, schema, info, table_schema.schema_id);

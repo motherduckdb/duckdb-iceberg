@@ -28,7 +28,8 @@ public:
 	bool IsIcebergPrimitiveType() const;
 	vector<unique_ptr<IcebergColumnDefinition>>::const_iterator GetChildIterator(const string &child_name) const;
 
-	ColumnDefinition GetColumnDefinition() const;
+	template <typename T>
+	T GetColumnDefinition() const;
 	unique_ptr<IcebergColumnDefinition> Copy() const;
 	bool Equals(const IcebergColumnDefinition &other) const;
 

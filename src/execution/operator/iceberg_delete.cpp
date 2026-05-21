@@ -28,7 +28,6 @@ class IcebergDeleteLocalState;
 class IcebergDeleteGlobalState;
 class IcebergTableEntry;
 
-
 IcebergDelete::IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table,
                              IcebergMultiFileList &multi_file_list, PhysicalOperator &child,
                              vector<idx_t> row_id_indexes)
@@ -36,7 +35,6 @@ IcebergDelete::IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &tab
       multi_file_list(multi_file_list), row_id_indexes(std::move(row_id_indexes)) {
 	children.push_back(child);
 }
-
 
 unique_ptr<GlobalSinkState> IcebergDelete::GetGlobalSinkState(ClientContext &context) const {
 	return make_uniq<IcebergDeleteGlobalState>();

@@ -102,7 +102,7 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 				mfbd.types.push_back(col_type);
 				mfbd.names.push_back(col_info->name);
 
-				auto new_col = TransformColumn(col_info);
+				auto new_col = col_info->GetColumnDefinition<MultiFileColumnDefinition>();
 				new_col.identifier = col_info->id;
 				mfbd.columns.push_back(new_col);
 				// also push back the info to the reader_bind.schema

@@ -102,12 +102,13 @@ public:
 
 class IcebergDelete : public PhysicalOperator {
 public:
-
 #ifdef ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
 	IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table, IcebergMultiFileList &multi_file_list,
 	              PhysicalOperator &child, vector<idx_t> row_id_indexes, bool is_equality_delete,
-	              vector<IcebergEqualityDeletePredicate> equality_predicates) : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, {LogicalType::BIGINT}, 1), table(table),
-	  multi_file_list(multi_file_list), row_id_indexes(std::move(row_id_indexes)), is_equality_delete(is_equality_delete), equality_predicates(std::move(equality_predicates)) {
+	              vector<IcebergEqualityDeletePredicate> equality_predicates)
+	    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, {LogicalType::BIGINT}, 1), table(table),
+	      multi_file_list(multi_file_list), row_id_indexes(std::move(row_id_indexes)),
+	      is_equality_delete(is_equality_delete), equality_predicates(std::move(equality_predicates)) {
 		children.push_back(child);
 	}
 	//! Whether this delete is written as an Iceberg equality-delete file. Hard-wired to a
@@ -126,8 +127,6 @@ public:
 	IcebergMultiFileList &multi_file_list;
 	//! The column indexes for the relevant row-id columns
 	vector<idx_t> row_id_indexes;
-
-
 
 	vector<IcebergEqualityDeletePredicate> equality_predicates;
 
