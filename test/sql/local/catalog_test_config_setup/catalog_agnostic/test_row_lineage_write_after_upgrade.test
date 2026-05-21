@@ -2,6 +2,9 @@
 # description: test integration with iceberg catalog read
 # group: [catalog_agnostic]
 
+# TODO: Needs https://github.com/duckdblabs/duckdb-internal/issues/9393
+mode skip
+
 require-env CATALOG_TEST_CONFIG_SETUP
 
 require avro
