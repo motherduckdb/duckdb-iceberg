@@ -8,7 +8,7 @@ require parquet
 require iceberg
 
 query IIII
-select * from iceberg_scan('__WORKING_DIRECTORY__/data/persistent/null_stats/default/test_nulls', version='00003-9d6a621e-8a72-4190-a880-f6ca02e32b86') order by all
+select * from iceberg_scan('{WORKING_DIRECTORY}/data/persistent/null_stats/default/test_nulls', version='00003-9d6a621e-8a72-4190-a880-f6ca02e32b86') order by all
 ----
 1	a	2024-03-01 13:33:20+00	true
 2	b	2024-03-02 17:20:00+00	false
@@ -22,7 +22,7 @@ select * from iceberg_scan('__WORKING_DIRECTORY__/data/persistent/null_stats/def
 
 # flag IS NULL
 query IIII
-select * from iceberg_scan('__WORKING_DIRECTORY__/data/persistent/null_stats/default/test_nulls', version='00003-9d6a621e-8a72-4190-a880-f6ca02e32b86') where flag IS NULL order by all
+select * from iceberg_scan('{WORKING_DIRECTORY}/data/persistent/null_stats/default/test_nulls', version='00003-9d6a621e-8a72-4190-a880-f6ca02e32b86') where flag IS NULL order by all
 ----
 4	d	2024-03-05 00:53:20+00	NULL
 5	e	2024-03-06 04:40:00+00	NULL
@@ -32,7 +32,7 @@ select * from iceberg_scan('__WORKING_DIRECTORY__/data/persistent/null_stats/def
 
 # flag IS NOT NULL
 query IIII
-select * from iceberg_scan('__WORKING_DIRECTORY__/data/persistent/null_stats/default/test_nulls', version='00003-9d6a621e-8a72-4190-a880-f6ca02e32b86') where flag IS NOT NULL order by all
+select * from iceberg_scan('{WORKING_DIRECTORY}/data/persistent/null_stats/default/test_nulls', version='00003-9d6a621e-8a72-4190-a880-f6ca02e32b86') where flag IS NOT NULL order by all
 ----
 1	a	2024-03-01 13:33:20+00	true
 2	b	2024-03-02 17:20:00+00	false

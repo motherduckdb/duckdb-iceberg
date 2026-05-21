@@ -40,48 +40,48 @@ require httpfs
 
 # all
 query III
-SELECT * FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable') order by all;
+SELECT * FROM ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_deletes/warehouse/mydb/mytable') order by all;
 ----
 4	d	2025-01-04
 5	e	2025-01-05
 
 # only equality delete fields
 query II
-SELECT id,name FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable') order by all;
+SELECT id,name FROM ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_deletes/warehouse/mydb/mytable') order by all;
 ----
 4	d
 5	e
 
 # no equality delete fields
 query I
-SELECT bir FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable') order by all;
+SELECT bir FROM ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_deletes/warehouse/mydb/mytable') order by all;
 ----
 2025-01-04
 2025-01-05
 
 # partial equality delete field
 query I
-SELECT name FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable') order by all;
+SELECT name FROM ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_deletes/warehouse/mydb/mytable') order by all;
 ----
 d
 e
 
 # partial equality delete field and other
 query II
-SELECT name,bir FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable') order by all;
+SELECT name,bir FROM ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_deletes/warehouse/mydb/mytable') order by all;
 ----
 d	2025-01-04
 e	2025-01-05
 
 # contain metadata
 query II
-SELECT filename[17:32], name FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable') order by all;
+SELECT filename[17:32], name FROM ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_deletes/warehouse/mydb/mytable') order by all;
 ----
 equality_deletes	d
 equality_deletes	e
 
 query I
-SELECT count(*) FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable');
+SELECT count(*) FROM ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_deletes/warehouse/mydb/mytable');
 ----
 2
 
@@ -111,7 +111,7 @@ SELECT count(*) FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equalit
 
 # only equality delete fields
 query I
-SELECT name FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable_partitioned') order by all;
+SELECT name FROM ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_deletes/warehouse/mydb/mytable_partitioned') order by all;
 ----
 a
 d
@@ -119,7 +119,7 @@ e
 
 # no equality delete field
 query I
-SELECT id FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable_partitioned') order by all;
+SELECT id FROM ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_deletes/warehouse/mydb/mytable_partitioned') order by all;
 ----
 1
 4
@@ -127,7 +127,7 @@ SELECT id FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_dele
 
 # partial equality delete field and other
 query II
-SELECT name,bir FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable_partitioned') order by all;
+SELECT name,bir FROM ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_deletes/warehouse/mydb/mytable_partitioned') order by all;
 ----
 a	2025-01-01
 d	2025-01-04
@@ -136,27 +136,27 @@ e	2025-01-05
 
 # contain metadata
 query II
-SELECT filename[17:32], name FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable_partitioned') order by all;
+SELECT filename[17:32], name FROM ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_deletes/warehouse/mydb/mytable_partitioned') order by all;
 ----
 equality_deletes	a
 equality_deletes	d
 equality_deletes	e
 
 query I
-SELECT count(*) FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable_partitioned');
+SELECT count(*) FROM ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_deletes/warehouse/mydb/mytable_partitioned');
 ----
 3
 
 # all
 query III
-SELECT * FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable_partitioned') order by all;
+SELECT * FROM ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_deletes/warehouse/mydb/mytable_partitioned') order by all;
 ----
 1	a	2025-01-01
 4	d	2025-01-04
 5	e	2025-01-05
 
 query III
-SELECT filename[17:32], name, id FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable') order by all;
+SELECT filename[17:32], name, id FROM ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_deletes/warehouse/mydb/mytable') order by all;
 ----
 equality_deletes	d	4
 equality_deletes	e	5
