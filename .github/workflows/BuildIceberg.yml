@@ -106,7 +106,7 @@ jobs:
       local-extension-repo: build/release/extension
 
   test-fixture-equality-delete:
-    name: Test against fixture catalog no link
+    name: Test against fixture Equality Deletes enabled
     needs: build_iceberg
     uses: ./.github/workflows/test-fixture-catalog.yml
     with:
