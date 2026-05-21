@@ -111,7 +111,7 @@ jobs:
     uses: ./.github/workflows/test-fixture-catalog.yml
     with:
       artifact-name: duckdb-iceberg-equality-delete-support
-      equality-delete-writes-enabled: 1
+      equality-delete-writes-enabled: 'true'
 
   test-nessie:
     name: Test against Nessie Catalog
