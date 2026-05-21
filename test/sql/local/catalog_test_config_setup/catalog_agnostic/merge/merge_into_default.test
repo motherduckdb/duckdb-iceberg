@@ -1,6 +1,9 @@
 # name: test/sql/local/catalog_test_config_setup/catalog_agnostic/merge/merge_into_default.test
 # group: [merge]
 
+# TODO: Needs https://github.com/duckdblabs/duckdb-internal/issues/9392
+mode skip
+
 require-env CATALOG_TEST_CONFIG_SETUP
 
 require avro
