@@ -16,9 +16,6 @@ require aws
 # Do not ignore 'HTTP' error messages!
 set ignore_error_messages
 
-# FIXME: PEG Parser doesn't support 'DROP SCHEMA <catalog>.<schema>' currently?
-mode skip
-
 statement error
 DROP SCHEMA my_datalake.default CASCADE;
 ----
@@ -28,5 +25,3 @@ statement error
 DROP TABLE my_datalake.default.empty_table CASCADE;
 ----
 Not implemented Error: DROP TABLE <table_name> CASCADE is not supported for Iceberg tables currently
-
-mode unskip
