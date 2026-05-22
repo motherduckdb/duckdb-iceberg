@@ -57,7 +57,7 @@ bool IcebergMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &file
 	auto &schema = iceberg_multi_file_list.GetSchema().columns;
 	auto &columns = bind_data.schema;
 	for (auto &item : schema) {
-		columns.push_back(item->GetColumnDefinition<MultiFileColumnDefinition>());
+		columns.push_back(item->GetMultiFileColumnDefinition());
 	}
 
 	bind_data.mapping = MultiFileColumnMappingMode::BY_FIELD_ID;

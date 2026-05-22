@@ -88,7 +88,7 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 				mfbd.types.push_back(col_type);
 				mfbd.names.push_back(col_info->name);
 
-				auto new_col = col_info->GetColumnDefinition<MultiFileColumnDefinition>();
+				auto new_col = col_info->GetMultiFileColumnDefinition();
 				if (!new_col.default_expression) {
 					// set default expression to null.
 					new_col.default_expression = make_uniq<ConstantExpression>(Value(col_type));

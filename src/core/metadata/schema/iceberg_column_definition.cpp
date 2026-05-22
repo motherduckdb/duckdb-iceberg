@@ -263,28 +263,21 @@ unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::Copy() const {
 	return res;
 }
 
-//! ColumnDefinition and MultiFileColumnDefinition attach a default expression differently.
-static void SetIcebergColumnDefault(ColumnDefinition &column, unique_ptr<ParsedExpression> default_value) {
-	column.SetDefaultValue(std::move(default_value));
-}
-static void SetIcebergColumnDefault(MultiFileColumnDefinition &column, unique_ptr<ParsedExpression> default_value) {
-	column.default_expression = std::move(default_value);
-}
-
-//! A plain ColumnDefinition does not have children
-static void CopyIcebergColumnChildren(ColumnDefinition &, const IcebergColumnDefinition &) {
-}
-
-static void CopyIcebergColumnChildren(MultiFileColumnDefinition &column,
-                                      const IcebergColumnDefinition &iceberg_column) {
-	column.identifier = Value::INTEGER(iceberg_column.id);
-	for (auto &child : iceberg_column.children) {
-		column.children.push_back(child->GetColumnDefinition<MultiFileColumnDefinition>());
+MultiFileColumnDefinition IcebergColumnDefinition::GetMultiFileColumnDefinition() const {
+	MultiFileColumnDefinition column(name, type);
+	if (!initial_default || initial_default->IsNull()) {
+		column.default_expression = make_uniq<ConstantExpression>(Value(type));
+	} else {
+		column.default_expression = make_uniq<ConstantExpression>(*initial_default);
 	}
+	column.identifier = Value::INTEGER(id);
+	for (auto &child : children) {
+		column.children.push_back(child->GetMultiFileColumnDefinition());
+	}
+	return column;
 }
 
-template <typename T>
-T IcebergColumnDefinition::GetColumnDefinition() const {
+ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
 	optional_ptr<Value> default_to_use;
 	if (write_default) {
 		//! Use write-default if it's set
@@ -293,21 +286,15 @@ T IcebergColumnDefinition::GetColumnDefinition() const {
 		//! If it's not set, use the initial-default (if that *is* set)
 		default_to_use = initial_default.get();
 	}
-	T result(name, type);
 	if (default_to_use) {
 		//! FIXME: the expression needs to be more advanced for nested types
 		if (type.IsNested()) {
 			throw NotImplementedException("DEFAULT values for nested types are not supported currently");
 		}
-		SetIcebergColumnDefault(result, make_uniq<ConstantExpression>(*default_to_use));
+		return ColumnDefinition(name, type, make_uniq<ConstantExpression>(*default_to_use), TableColumnType::STANDARD);
 	}
-	CopyIcebergColumnChildren(result, *this);
-	return result;
+	return ColumnDefinition(name, type);
 }
-
-//! Explicit instantiations - the template body above is only emitted for these two types.
-template ColumnDefinition IcebergColumnDefinition::GetColumnDefinition<ColumnDefinition>() const;
-template MultiFileColumnDefinition IcebergColumnDefinition::GetColumnDefinition<MultiFileColumnDefinition>() const;
 
 static bool DefaultsAreEqual(const unique_ptr<Value> &a, const unique_ptr<Value> &b) {
 	const bool a_is_null = !a || a->IsNull();

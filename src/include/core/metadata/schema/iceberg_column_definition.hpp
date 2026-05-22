@@ -4,6 +4,7 @@
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/common/helper.hpp"
+#include "duckdb/common/multi_file/multi_file_data.hpp"
 #include "duckdb/parser/column_definition.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
 
@@ -28,8 +29,8 @@ public:
 	bool IsIcebergPrimitiveType() const;
 	vector<unique_ptr<IcebergColumnDefinition>>::const_iterator GetChildIterator(const string &child_name) const;
 
-	template <typename T>
-	T GetColumnDefinition() const;
+	ColumnDefinition GetColumnDefinition() const;
+	MultiFileColumnDefinition GetMultiFileColumnDefinition() const;
 	unique_ptr<IcebergColumnDefinition> Copy() const;
 	bool Equals(const IcebergColumnDefinition &other) const;
 
