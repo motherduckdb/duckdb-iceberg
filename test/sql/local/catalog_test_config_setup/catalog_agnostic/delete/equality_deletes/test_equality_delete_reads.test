@@ -51,27 +51,27 @@ select c, count(*) from my_datalake.default.equality_delete_table_1 group by all
 9	2
 
 # equality deletes have applied (project all columns)
-query II
+query III
 select * from my_datalake.default.equality_delete_table_1 where b = 1;
 ----
 
 # equality deletes have applied even with filter on non equality delete column
 # projects all columns
-query II
+query III
 select * from my_datalake.default.equality_delete_table_1 where a = 4;
 ----
 4	4	4
 
 # equality deletes have applied even with filter on non equality delete column
 # projects non-equality delete column
-query II
+query I
 select a from my_datalake.default.equality_delete_table_1 where a = 4;
 ----
 4
 
 # equality deletes have applied even with filter on non equality delete column
 # projects non-equality delete column
-query II
+query I
 select a from my_datalake.default.equality_delete_table_1 where c = 4;
 ----
 4
@@ -95,14 +95,14 @@ select c, count(*) from my_datalake.default.equality_delete_table_1 group by all
 
 # equality deletes have applied even with filter on non equality delete column
 # projects non-equality delete column
-query II
+query I
 select a from my_datalake.default.equality_delete_table_1 where a = 4;
 ----
 4
 
 # equality deletes have applied even with filter on non equality delete column
 # projects non-equality delete column
-query II
+query I
 select a from my_datalake.default.equality_delete_table_1 where c = 4;
 ----
 4
@@ -129,4 +129,3 @@ select c, count(*) from my_datalake.default.equality_delete_table_1 group by all
 103	1
 104	1
 105	1
-

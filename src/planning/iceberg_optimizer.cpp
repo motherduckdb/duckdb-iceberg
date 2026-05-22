@@ -19,20 +19,6 @@ GuaranteeEqualityDeleteColumnsOptimizer::GuaranteeEqualityDeleteColumnsOptimizer
     : context(context) {
 }
 
-static MultiFileColumnDefinition TransformColumn(optional_ptr<const IcebergColumnDefinition> input) {
-	MultiFileColumnDefinition column(input->name, input->type);
-	if (!input->initial_default || input->initial_default->IsNull()) {
-		column.default_expression = make_uniq<ConstantExpression>(Value(input->type));
-	} else {
-		column.default_expression = make_uniq<ConstantExpression>(*input->initial_default.get());
-	}
-	column.identifier = Value::INTEGER(input->id);
-	for (auto &child : input->children) {
-		column.children.push_back(TransformColumn(*child));
-	}
-	return column;
-}
-
 void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOperator> &op) {
 	for (idx_t child_index = 0; child_index < op->children.size(); child_index++) {
 		auto &child = op->children[child_index];
@@ -103,6 +89,10 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 				mfbd.names.push_back(col_info->name);
 
 				auto new_col = col_info->GetColumnDefinition<MultiFileColumnDefinition>();
+				if (!new_col.default_expression) {
+					// set default expression to null.
+					new_col.default_expression = make_uniq<ConstantExpression>(Value(col_type));
+				}
 				new_col.identifier = col_info->id;
 				mfbd.columns.push_back(new_col);
 				// also push back the info to the reader_bind.schema

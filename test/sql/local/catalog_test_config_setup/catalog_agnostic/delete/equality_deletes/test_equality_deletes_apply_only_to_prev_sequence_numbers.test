@@ -24,16 +24,16 @@ statement ok
 set unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=true;
 
 statement ok
-drop table if exists equality_delete_table_1;
+drop table if exists equality_delete_table_test_multiple_equality_deletes;
 
 statement ok
-create table equality_delete_table_1 as select range a, range % 5 b, range % 10 c from range(21);
+create table equality_delete_table_test_multiple_equality_deletes as select range a, range % 5 b, range % 10 c from range(21);
 
 statement ok
-delete from equality_delete_table_1 where b = 1;
+delete from equality_delete_table_test_multiple_equality_deletes where b = 1;
 
 query II
-select c, count(*) from equality_delete_table_1 group by all order by c;
+select c, count(*) from equality_delete_table_test_multiple_equality_deletes group by all order by c;
 ----
 0	3
 2	2
@@ -45,11 +45,11 @@ select c, count(*) from equality_delete_table_1 group by all order by c;
 9	2
 
 statement ok
-insert into equality_delete_table_1 values (1, 1, 1), (11, 1, 1);
+insert into equality_delete_table_test_multiple_equality_deletes values (1, 1, 1), (11, 1, 1);
 
 # values are restored
 query III
-select * from equality_delete_table_1 where b = 1 order by a;
+select * from equality_delete_table_test_multiple_equality_deletes where b = 1 order by a;
 ----
 1	1	1
 11	1	1

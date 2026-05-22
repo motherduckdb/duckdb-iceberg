@@ -20,6 +20,7 @@
 #include "core/expression/iceberg_value.hpp"
 #include "core/expression/iceberg_predicate_stats.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
+#include "duckdb/common/multi_file/multi_file_states.hpp"
 
 namespace duckdb {
 
@@ -47,31 +48,16 @@ shared_ptr<MultiFileList> IcebergMultiFileReader::CreateFileList(ClientContext &
 	return make_shared_ptr<IcebergMultiFileList>(context, scan_info, paths[0], options);
 }
 
-static MultiFileColumnDefinition TransformColumn(const IcebergColumnDefinition &input) {
-	MultiFileColumnDefinition column(input.name, input.type);
-	if (!input.initial_default || input.initial_default->IsNull()) {
-		column.default_expression = make_uniq<ConstantExpression>(Value(input.type));
-	} else {
-		column.default_expression = make_uniq<ConstantExpression>(*input.initial_default);
-	}
-	column.identifier = Value::INTEGER(input.id);
-	for (auto &child : input.children) {
-		column.children.push_back(TransformColumn(*child));
-	}
-	return column;
-}
-
 bool IcebergMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &files, vector<LogicalType> &return_types,
                                   vector<string> &names, MultiFileReaderBindData &bind_data) {
 	auto &iceberg_multi_file_list = dynamic_cast<IcebergMultiFileList &>(files);
 
 	iceberg_multi_file_list.Bind(return_types, names);
 	// FIXME: apply final transformation for 'file_row_number' ???
-
 	auto &schema = iceberg_multi_file_list.GetSchema().columns;
 	auto &columns = bind_data.schema;
 	for (auto &item : schema) {
-		columns.push_back(TransformColumn(*item));
+		columns.push_back(item->GetColumnDefinition<MultiFileColumnDefinition>());
 	}
 
 	bind_data.mapping = MultiFileColumnMappingMode::BY_FIELD_ID;
@@ -280,7 +266,7 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
                                                               optional_ptr<TableFilterSet> table_filters,
                                                               ClientContext &context, MultiFileGlobalState &gstate) {
 	FinalizeBind(reader_data, bind_data.file_options, bind_data.reader_bind, global_columns, global_column_ids, context,
-	             gstate.multi_file_reader_state.get());
+	             gstate);
 
 	return CreateMapping(context, reader_data, global_columns, global_column_ids, table_filters, gstate.file_list,
 	                     bind_data.reader_bind, bind_data.virtual_columns);
@@ -290,9 +276,10 @@ void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, cons
                                           const MultiFileReaderBindData &options,
                                           const vector<MultiFileColumnDefinition> &global_columns,
                                           const vector<ColumnIndex> &global_column_ids, ClientContext &context,
-                                          optional_ptr<MultiFileReaderGlobalState> global_state) {
-	MultiFileReader::FinalizeBind(reader_data, file_options, options, global_columns, global_column_ids, context,
-	                              global_state);
+                                          MultiFileGlobalState &gstate) {
+	auto global_state = gstate.multi_file_reader_state.get();
+	FinalizeBind(reader_data, file_options, options, global_columns, global_column_ids, context, global_state);
+
 	D_ASSERT(global_state);
 	// Get the metadata for this file
 	const auto &multi_file_list = dynamic_cast<const IcebergMultiFileList &>(*global_state->file_list);
@@ -309,10 +296,10 @@ void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, cons
 		lock_guard<mutex> delete_guard(multi_file_list.delete_lock);
 		if (!multi_file_list.FinishedScanningDeletes() ||
 		    multi_file_list.transaction_delete_idx < multi_file_list.transaction_delete_manifests.size()) {
-			multi_file_list.ProcessDeletes(global_columns, global_column_ids);
+			multi_file_list.ProcessDeletes(global_columns, global_column_ids, gstate.projection_ids);
 		}
 		if (!multi_file_list.scanned_delete_manifests) {
-			multi_file_list.ScanDeleteFiles(global_columns, global_column_ids);
+			multi_file_list.ScanDeleteFiles(global_columns, global_column_ids, gstate.projection_ids);
 		}
 		reader.deletion_filter = multi_file_list.GetPositionalDeletesForFile(file_path);
 	}
@@ -327,6 +314,15 @@ void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, cons
 		}
 	}
 	ApplyPartitionConstants(multi_file_list, reader_data, global_columns, global_column_ids);
+}
+
+void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, const MultiFileOptions &file_options,
+                                          const MultiFileReaderBindData &options,
+                                          const vector<MultiFileColumnDefinition> &global_columns,
+                                          const vector<ColumnIndex> &global_column_ids, ClientContext &context,
+                                          optional_ptr<MultiFileReaderGlobalState> global_state) {
+	MultiFileReader::FinalizeBind(reader_data, file_options, options, global_columns, global_column_ids, context,
+	                              global_state);
 }
 
 void IcebergMultiFileReader::ApplyEqualityDeletes(ClientContext &context, DataChunk &output_chunk,

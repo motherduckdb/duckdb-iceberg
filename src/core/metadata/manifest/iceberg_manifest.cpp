@@ -313,7 +313,12 @@ Value IcebergDataFile::ToValue(const IcebergTableMetadata &table_metadata, const
 	for (auto &id : equality_ids) {
 		equality_id_values.push_back(Value::INTEGER(id));
 	}
-	children.push_back(Value::LIST(LogicalType::INTEGER, std::move(equality_id_values)));
+	if (equality_id_values.empty()) {
+		//! Not an equality-delete file - emit a NULL list rather than an empty list.
+		children.push_back(Value(LogicalType::LIST(LogicalType::INTEGER)));
+	} else {
+		children.push_back(Value::LIST(LogicalType::INTEGER, std::move(equality_id_values)));
+	}
 
 	// referenced_data_file
 	if (table_metadata.iceberg_version >= 3) {

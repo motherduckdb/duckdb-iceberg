@@ -45,7 +45,8 @@ static void ColumnsReferencedByEqualityIds(DataChunk &source, DataChunk &result,
 void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntry &bound_manifest_entry,
                                                   DataChunk &source, vector<MultiFileColumnDefinition> &local_columns,
                                                   const vector<MultiFileColumnDefinition> &global_columns,
-                                                  const vector<ColumnIndex> &global_column_ids) const {
+                                                  const vector<ColumnIndex> &global_column_ids,
+                                                  const vector<idx_t> &projection_ids) const {
 	auto &manifest_entry = bound_manifest_entry.entry;
 	auto &data_file = manifest_entry.data_file;
 	auto &manifest_file = GetManifestFileForEntry(bound_manifest_entry, IcebergManifestContentType::DELETE);
@@ -73,18 +74,28 @@ void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntr
 	// We are scanning the delete file even before the optimizer runs
 	// All equality delete columns will be projected from the scan due to our optimizer
 	// we want to know where in the output the equality delete columns will be projected
-	unordered_map<idx_t, idx_t> global_id_to_result_index;
+	unordered_map<idx_t, idx_t> global_id_to_projection_index;
 	for (idx_t result_id = 0; result_id < global_column_ids.size(); result_id++) {
 		auto global_col = global_column_ids[result_id];
 		if (IsVirtualColumn(global_col.GetPrimaryIndex())) {
 			continue;
 		}
 		D_ASSERT(global_col.GetPrimaryIndex() < global_columns.size());
+		// index_in_global_columns = index in input_chunk
 		auto index_in_global_columns = global_col.GetPrimaryIndex();
 		auto &col = global_columns[index_in_global_columns];
 		for (auto &equality_delete_col : local_columns) {
 			if (equality_delete_col.GetIdentifierFieldId() == col.GetIdentifierFieldId()) {
-				global_id_to_result_index[index_in_global_columns] = result_id;
+				if (projection_ids.empty()) {
+					global_id_to_projection_index[index_in_global_columns] = result_id;
+				} else {
+					for (idx_t proj_index = 0; proj_index < projection_ids.size(); proj_index++) {
+						idx_t projection_col = projection_ids[proj_index];
+						if (projection_col == result_id) {
+							global_id_to_projection_index[index_in_global_columns] = proj_index;
+						}
+					}
+				}
 				// here we can break. col has one identifier field id and equality deletes should only have unique
 				// values
 				break;
@@ -109,8 +120,8 @@ void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntr
 		auto &col = global_columns[global_column_id];
 		auto &vec = result.data[col_idx];
 
-		auto it = global_id_to_result_index.find(global_column_id);
-		D_ASSERT(it != global_id_to_result_index.end());
+		auto it = global_id_to_projection_index.find(global_column_id);
+		D_ASSERT(it != global_id_to_projection_index.end());
 		auto result_column_id = it->second;
 
 		for (idx_t i = 0; i < count; i++) {

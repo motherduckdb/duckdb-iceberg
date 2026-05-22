@@ -1074,12 +1074,13 @@ void IcebergMultiFileList::EnumerateDeleteManifestEntries() const {
 }
 
 void IcebergMultiFileList::ScanDeleteFiles(const vector<MultiFileColumnDefinition> &global_columns,
-                                           const vector<ColumnIndex> &global_column_ids) const {
+                                           const vector<ColumnIndex> &global_column_ids,
+                                           const vector<idx_t> &projection_ids) const {
 	for (auto &bound_manifest_entry : delete_manifest_entries) {
 		auto &manifest_entry = bound_manifest_entry.entry;
 		auto &data_file = manifest_entry.data_file;
 		if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
-			ScanDeleteFile(bound_manifest_entry, global_columns, global_column_ids);
+			ScanDeleteFile(bound_manifest_entry, global_columns, global_column_ids, projection_ids);
 		} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
 			ScanPuffinFile(bound_manifest_entry);
 		} else {
@@ -1092,19 +1093,21 @@ void IcebergMultiFileList::ScanDeleteFiles(const vector<MultiFileColumnDefinitio
 }
 
 void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition> &global_columns,
-                                          const vector<ColumnIndex> &global_column_ids) const {
+                                          const vector<ColumnIndex> &global_column_ids,
+                                          const vector<idx_t> &projection_ids) const {
 	//! Enumerate the delete manifest entries, then read the delete files they reference.
 	//! EnumerateDeleteManifestEntries() is idempotent, so this is safe even if the entries were
 	//! already enumerated earlier (e.g. by the optimizer).
 	EnumerateDeleteManifestEntries();
 	if (!scanned_delete_manifests) {
-		ScanDeleteFiles(global_columns, global_column_ids);
+		ScanDeleteFiles(global_columns, global_column_ids, projection_ids);
 	}
 }
 
 void IcebergMultiFileList::ScanDeleteFile(const BoundIcebergManifestEntry &bound_manifest_entry,
                                           const vector<MultiFileColumnDefinition> &global_columns,
-                                          const vector<ColumnIndex> &global_column_ids) const {
+                                          const vector<ColumnIndex> &global_column_ids,
+                                          const vector<idx_t> &projection_ids) const {
 	auto &manifest_entry = bound_manifest_entry.entry;
 	auto &data_file = manifest_entry.data_file;
 	auto delete_file_path = data_file.file_path;
@@ -1176,7 +1179,7 @@ void IcebergMultiFileList::ScanDeleteFile(const BoundIcebergManifestEntry &bound
 			delete_scan_function.function(context, function_input, result);
 			result.Flatten();
 			ScanEqualityDeleteFile(bound_manifest_entry, result, multi_file_local_state.reader->columns, global_columns,
-			                       global_column_ids);
+			                       global_column_ids, projection_ids);
 		} while (result.size() != 0);
 	}
 }

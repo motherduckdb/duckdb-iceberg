@@ -79,7 +79,7 @@ jobs:
           STATIC_LIBCPP: 1
           ENABLE_EXTENSION_AUTOLOADING: 1
           ENABLE_EXTENSION_AUTOINSTALL: 1
-          EXT_FLAGS=-DICEBERG_ENABLE_EQUALITY_DELETE_WRITES: 1
+          EXT_FLAGS: -DICEBERG_ENABLE_EQUALITY_DELETE_WRITES=1
         run: |
           make release
 
@@ -111,7 +111,7 @@ jobs:
     uses: ./.github/workflows/test-fixture-catalog.yml
     with:
       artifact-name: duckdb-iceberg-equality-delete-support
-      equality-delete-writes-enabled: true
+      equality-delete-writes-enabled: 1
 
   test-nessie:
     name: Test against Nessie Catalog
