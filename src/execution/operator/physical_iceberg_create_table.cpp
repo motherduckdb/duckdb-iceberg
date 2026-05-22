@@ -24,7 +24,7 @@ PhysicalIcebergCreateTable::PhysicalIcebergCreateTable(PhysicalPlan &physical_pl
 unique_ptr<GlobalOperatorState> PhysicalIcebergCreateTable::GetGlobalOperatorState(ClientContext &context) const {
 	auto global_state = make_uniq<IcebergCreateTableGlobalState>();
 	MakeCreateTableRequest(context, *global_state);
-	return global_state;
+	return std::move(global_state);
 }
 
 void PhysicalIcebergCreateTable::MakeCreateTableRequest(ClientContext &client_context,
