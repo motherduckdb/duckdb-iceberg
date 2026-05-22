@@ -1,8 +1,6 @@
 # name: test/sql/local/irc_specific_catalogs/polaris/test_issue_969_branch_ref_timestamp.test
-# description: Reproduce duckdb/duckdb-iceberg#969 - ATTACH (REST) default read should
-#              follow current-snapshot-id (refs.main), not pick the largest timestamp_ms
-#              across all branch refs. The side branch's tip has a newer timestamp_ms
-#              than refs.main because of the DELETE-all commit done after branch creation.
+# description: duckdb-iceberg#969 - default read must follow refs.main, not pick the
+#              largest timestamp_ms across all branch refs.
 # group: [polaris]
 
 require-env POLARIS_SERVER_AVAILABLE
@@ -35,30 +33,25 @@ attach 'quickstart_catalog' as my_datalake (
 	DEFAULT_REGION 'us-west-2'
 );
 
-# Sanity-check: the table has two snapshots (main tip with 5 rows, side_branch tip after DELETE-all)
+# Setup produces: main tip with 5 rows, side_branch tip after DELETE-all with a
+# newer timestamp_ms. Precondition for the bug.
 query I
 select count(*) >= 2 from iceberg_snapshots(my_datalake.default.issue_969);
 ----
 true
 
-# Sanity-check: max(timestamp_ms) > min(timestamp_ms). The DELETE-all on side_branch
-# (created after the INSERT into main) produces a snapshot whose timestamp_ms is
-# strictly newer than refs.main's tip. This is the precondition that triggers the bug.
 query I
 select max(timestamp_ms) > min(timestamp_ms) from iceberg_snapshots(my_datalake.default.issue_969);
 ----
 true
 
-# Bug: default read picks the side branch's empty snapshot (largest timestamp_ms across
-# all refs) instead of refs.main (current-snapshot-id). Expected 5, observed 0 before fix.
+# Default read must resolve to refs.main (5 rows), not the side-branch tip (0).
 query I
 select count(*) from my_datalake.default.issue_969;
 ----
 5
 
-# Time-travel by snapshot id of refs.main still works - confirms the *default*
-# resolution is what's wrong, not the manifest/data scan layer. main's snapshot is
-# the older of the two (INSERT happened before the branch's DELETE-all).
+# Explicit-id time travel against refs.main's snapshot keeps working.
 statement ok
 set variable main_snapshot_id = (
 	select snapshot_id from iceberg_snapshots(my_datalake.default.issue_969)
