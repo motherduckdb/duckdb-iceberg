@@ -30,9 +30,14 @@ optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetSnapshotByTimestamp
 	// convert the incoming lookup timestamp to ms once here.
 	auto target_ms = Timestamp::GetEpochMs(timestamp);
 	if (snapshot_log.empty()) {
-		// snapshot-log is optional per spec. For the common case where the lookup
-		// time is at or after the last commit, current_snapshot_id is unambiguously
-		// the right answer (refs.main always points there).
+		// Table has no commits yet (freshly created, no INSERT). Original behavior
+		// returned nullptr here; GetSnapshot interprets that as "use current schema".
+		if (snapshots.empty()) {
+			return nullptr;
+		}
+		// Table has snapshots but no snapshot-log (spec allows this; rare). For the
+		// common case where the lookup is at or after the last commit,
+		// current_snapshot_id is unambiguously the right answer.
 		if (has_current_snapshot && target_ms >= last_updated_ms.value) {
 			return FindSnapshotByIdInternal(current_snapshot_id);
 		}
