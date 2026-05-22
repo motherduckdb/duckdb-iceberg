@@ -36,8 +36,8 @@ optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetSnapshotByTimestamp
 		if (has_current_snapshot && target_ms >= last_updated_ms.value) {
 			return FindSnapshotByIdInternal(current_snapshot_id);
 		}
-		throw InvalidConfigurationException(
-		    "Table has no snapshot-log; cannot resolve snapshot as of " + Timestamp::ToString(timestamp));
+		throw InvalidConfigurationException("Table has no snapshot-log; cannot resolve snapshot as of " +
+		                                    Timestamp::ToString(timestamp));
 	}
 	// snapshot_log is sorted ascending by timestamp_ms; walk newest-first and
 	// return the first entry whose snapshot still exists in the snapshots map
@@ -366,9 +366,7 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_obje
 			res.snapshot_log.emplace_back(entry.snapshot_id, entry.timestamp_ms);
 		}
 		std::sort(res.snapshot_log.begin(), res.snapshot_log.end(),
-		          [](const pair<int64_t, int64_t> &a, const pair<int64_t, int64_t> &b) {
-			          return a.second < b.second;
-		          });
+		          [](const pair<int64_t, int64_t> &a, const pair<int64_t, int64_t> &b) { return a.second < b.second; });
 	}
 	for (auto &spec : table_metadata.partition_specs) {
 		res.partition_specs.emplace(spec.spec_id, IcebergPartitionSpec::ParseFromJson(spec));
