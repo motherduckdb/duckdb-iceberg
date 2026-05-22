@@ -48,7 +48,7 @@ jobs:
 
       - name: Install tools
         timeout-minutes: 10
-        run: python3 scripts/ci/retry.py --timeout 2m -- make -C duckdb -j4 format_tools
+        run: python3 duckdb/scripts/ci/retry.py --timeout 2m -- make -C duckdb -j4 format_tools
 
       - name: List Installed Packages
         shell: bash
