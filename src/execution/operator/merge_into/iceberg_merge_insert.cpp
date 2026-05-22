@@ -32,14 +32,7 @@ SinkCombineResultType IcebergMergeInsert::Combine(ExecutionContext &context, Ope
 
 SinkFinalizeType IcebergMergeInsert::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
                                               OperatorSinkFinalizeInput &input) const {
-	OperatorSinkFinalizeInput copy_finalize {*copy.sink_state, input.interrupt_state};
-	auto finalize_result = copy.Finalize(pipeline, event, context, copy_finalize);
-	if (finalize_result == SinkFinalizeType::BLOCKED) {
-		return SinkFinalizeType::BLOCKED;
-	}
-
-	IcebergMergeInto::FinalizeCopyToInsert(pipeline, event, context, copy, insert, input.interrupt_state);
-	return SinkFinalizeType::READY;
+	return IcebergMergeInto::FinalizeCopyToInsert(pipeline, event, context, copy, insert, input.interrupt_state);
 }
 
 unique_ptr<GlobalSinkState> IcebergMergeInsert::GetGlobalSinkState(ClientContext &context) const {

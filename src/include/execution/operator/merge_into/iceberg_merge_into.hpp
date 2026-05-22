@@ -15,9 +15,9 @@ struct IcebergMergeInto {
 	                                  ExpressionExecutor *expression_executor, DataChunk &projected_chunk,
 	                                  DataChunk &cast_chunk);
 
-	static void FinalizeCopyToInsert(Pipeline &pipeline, Event &event, ClientContext &context,
-	                                 PhysicalOperator &copy_op, PhysicalOperator &insert_op,
-	                                 InterruptState &interrupt_state);
+	static SinkFinalizeType FinalizeCopyToInsert(Pipeline &pipeline, Event &event, ClientContext &context,
+	                                             PhysicalOperator &copy_op, PhysicalOperator &insert_op,
+	                                             InterruptState &interrupt_state);
 };
 
 } // namespace duckdb

@@ -2,9 +2,6 @@
 # description: MERGE with multiple timestamp partition transforms produces incorrect partition values
 # group: [merge]
 
-# TODO: Needs https://github.com/duckdblabs/duckdb-internal/issues/9392
-mode skip
-
 require-env CATALOG_TEST_CONFIG_SETUP
 
 require avro

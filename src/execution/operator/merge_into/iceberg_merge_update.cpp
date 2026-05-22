@@ -55,11 +55,7 @@ SinkFinalizeType IcebergMergeUpdate::Finalize(Pipeline &pipeline, Event &event, 
 	OperatorFinalizeInput update_finalize {*gstate.update_gstate, input.interrupt_state};
 	update_op.OperatorFinalize(pipeline, event, context, update_finalize);
 
-	OperatorSinkFinalizeInput copy_finalize {*copy_op.sink_state, input.interrupt_state};
-	copy_op.Finalize(pipeline, event, context, copy_finalize);
-
-	IcebergMergeInto::FinalizeCopyToInsert(pipeline, event, context, copy_op, insert_op, input.interrupt_state);
-	return SinkFinalizeType::READY;
+	return IcebergMergeInto::FinalizeCopyToInsert(pipeline, event, context, copy_op, insert_op, input.interrupt_state);
 }
 
 unique_ptr<GlobalSinkState> IcebergMergeUpdate::GetGlobalSinkState(ClientContext &context) const {
