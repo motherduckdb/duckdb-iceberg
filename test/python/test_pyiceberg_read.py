@@ -263,6 +263,7 @@ class TestPyIcebergReadEqualityDeletes:
             {"a": 104, "c": 104},
             {"a": 105, "c": 105},
         ]
+
     @pytest.mark.skip(reason="PyIceberg does not support equality deletes")
     def test_pyiceberg_read_duckdb_equality_delete(self, rest_catalog):
         tbl = rest_catalog.load_table("default.equality_delete_table_test_multiple_equality_deletes")
@@ -270,21 +271,21 @@ class TestPyIcebergReadEqualityDeletes:
         res = sorted(arrow_table.to_pylist(), key=lambda r: (r["a"], r["c"]))
         assert len(res) == 23
         assert res == [
-            {"a": 0,  "b": 0, "c":0},
-            {"a": 2,  "b": 1, "c":1},
-            {"a": 3,  "b": 2, "c":2},
-            {"a": 4,  "b": 3, "c":3},
-            {"a": 5,  "b": 4, "c":4},
-            {"a": 7,  "b": 0, "c":5},
-            {"a": 8,  "b": 2, "c":7},
-            {"a": 9,  "b": 3, "c":8},
-            {"a": 10, "b": 4, "c":9},
-            {"a": 12, "b": 0, "c":0},
-            {"a": 13, "b": 1, "c":1},
-            {"a": 14, "b": 2, "c":2},
-            {"a": 15, "b": 3, "c":3},
-            {"a": 17, "b": 4, "c":4},
-            {"a": 18, "b": 0, "c":5},
-            {"a": 19, "b": 2, "c":7},
-            {"a": 20, "b": 3, "c":8}
+            {"a": 0, "b": 0, "c": 0},
+            {"a": 2, "b": 1, "c": 1},
+            {"a": 3, "b": 2, "c": 2},
+            {"a": 4, "b": 3, "c": 3},
+            {"a": 5, "b": 4, "c": 4},
+            {"a": 7, "b": 0, "c": 5},
+            {"a": 8, "b": 2, "c": 7},
+            {"a": 9, "b": 3, "c": 8},
+            {"a": 10, "b": 4, "c": 9},
+            {"a": 12, "b": 0, "c": 0},
+            {"a": 13, "b": 1, "c": 1},
+            {"a": 14, "b": 2, "c": 2},
+            {"a": 15, "b": 3, "c": 3},
+            {"a": 17, "b": 4, "c": 4},
+            {"a": 18, "b": 0, "c": 5},
+            {"a": 19, "b": 2, "c": 7},
+            {"a": 20, "b": 3, "c": 8},
         ]
