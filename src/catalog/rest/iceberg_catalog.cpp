@@ -507,7 +507,9 @@ static void GlueAttach(ClientContext &context, IcebergAttachOptions &input) {
 
 void IcebergCatalog::SetAWSCatalogOptions(IcebergAttachOptions &attach_options,
                                           case_insensitive_set_t &set_by_attach_options) {
-	attach_options.allows_deletes = false;
+	if (set_by_attach_options.find("allow_deletes") == set_by_attach_options.end()) {
+		attach_options.allows_deletes = false;
+	}
 	if (set_by_attach_options.find("support_stage_create") == set_by_attach_options.end()) {
 		attach_options.supports_stage_create = false;
 	}
@@ -548,7 +550,15 @@ unique_ptr<Catalog> IcebergCatalog::Attach(optional_ptr<StorageExtensionInfo> st
 		} else if (lower_name == "support_stage_create") {
 			auto result = entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
 			attach_options.supports_stage_create = result;
-			set_by_attach_options.insert("supports_stage_create");
+			set_by_attach_options.insert("support_stage_create");
+		} else if (lower_name == "use_transaction_commit") {
+			attach_options.use_transaction_commit = entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+		} else if (lower_name == "skip_create_table_metadata_updates") {
+			attach_options.skip_create_table_metadata_updates =
+			    entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+		} else if (lower_name == "allow_deletes") {
+			attach_options.allows_deletes = entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+			set_by_attach_options.insert("allow_deletes");
 		} else if (lower_name == "support_nested_namespaces") {
 			attach_options.support_nested_namespaces =
 			    entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();

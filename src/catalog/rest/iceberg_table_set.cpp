@@ -268,6 +268,9 @@ IcebergTableInformation &IcebergTableSet::CreateNewEntry(ClientContext &context,
 	if (catalog.attach_options.supports_stage_create) {
 		transaction_data.TableAddAssertCreate();
 	}
+	if (!catalog.attach_options.supports_stage_create && catalog.attach_options.skip_create_table_metadata_updates) {
+		return table_info;
+	}
 	// other required updates to the table
 	transaction_data.TableAssignUUID();
 	transaction_data.TableAddUpradeFormatVersion();
