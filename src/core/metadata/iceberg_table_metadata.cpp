@@ -21,40 +21,39 @@ optional_ptr<const IcebergSnapshot> IcebergTableMetadata::FindSnapshotByIdIntern
 }
 
 optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetSnapshotByTimestamp(timestamp_t timestamp) const {
-	// Per Iceberg spec, point-in-time resolution must use snapshot-log
-	// (the history of refs.main). Searching the global snapshots map would
-	// incorrectly pick side-branch tips - see duckdb-iceberg#969.
+	// Per Iceberg spec, point-in-time resolution should use snapshot-log (the
+	// history of refs.main). Searching the global snapshots map would incorrectly
+	// pick side-branch tips - see duckdb-iceberg#969.
 	//
-	// Everything below is compared in raw epoch-millis: snapshot_log stores ms,
-	// last_updated_ms is ms-in-timestamp_t.value (per the parser), and we
-	// convert the incoming lookup timestamp to ms once here.
+	// All comparisons below are in raw epoch-millis: snapshot_log stores ms, and
+	// we convert the incoming lookup timestamp to ms once here.
 	auto target_ms = Timestamp::GetEpochMs(timestamp);
-	if (snapshot_log.empty()) {
-		// Table has no commits yet (freshly created, no INSERT). Original behavior
-		// returned nullptr here; GetSnapshot interprets that as "use current schema".
-		if (snapshots.empty()) {
-			return nullptr;
-		}
-		// Table has snapshots but no snapshot-log (spec allows this; rare). For the
-		// common case where the lookup is at or after the last commit,
-		// current_snapshot_id is unambiguously the right answer.
-		if (has_current_snapshot && target_ms >= last_updated_ms.value) {
-			return FindSnapshotByIdInternal(current_snapshot_id);
-		}
-		throw InvalidConfigurationException("Table has no snapshot-log; cannot resolve snapshot as of " +
-		                                    Timestamp::ToString(timestamp));
-	}
-	// snapshot_log is sorted ascending by timestamp_ms; walk newest-first and
-	// return the first entry whose snapshot still exists in the snapshots map
-	// (spec allows expired snapshots to leave dangling log entries).
-	for (auto it = snapshot_log.rbegin(); it != snapshot_log.rend(); ++it) {
-		if (it->second <= target_ms) {
-			if (auto snap = FindSnapshotByIdInternal(it->first)) {
-				return snap;
+	if (!snapshot_log.empty()) {
+		// snapshot_log is sorted ascending by timestamp_ms; walk newest-first and
+		// return the first entry whose snapshot still exists in the snapshots map
+		// (spec allows expired snapshots to leave dangling log entries).
+		for (auto it = snapshot_log.rbegin(); it != snapshot_log.rend(); ++it) {
+			if (it->second <= target_ms) {
+				if (auto snap = FindSnapshotByIdInternal(it->first)) {
+					return snap;
+				}
 			}
 		}
+		return nullptr;
 	}
-	return nullptr;
+	// snapshot-log is optional per spec. Fall back to the pre-#969 behavior:
+	// scan all snapshots for the largest timestamp_ms <= target.
+	uint64_t max_millis = NumericLimits<uint64_t>::Minimum();
+	optional_ptr<const IcebergSnapshot> max_snapshot = nullptr;
+	for (auto &it : snapshots) {
+		auto &snapshot = it.second;
+		auto curr_millis = Timestamp::GetEpochMs(snapshot.timestamp_ms);
+		if (curr_millis <= target_ms && static_cast<uint64_t>(curr_millis) >= max_millis) {
+			max_snapshot = snapshot;
+			max_millis = curr_millis;
+		}
+	}
+	return max_snapshot;
 }
 
 shared_ptr<IcebergTableSchema> IcebergTableMetadata::GetSchemaFromId(int32_t schema_id) const {
