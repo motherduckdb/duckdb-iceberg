@@ -14,7 +14,7 @@ on:
       equality-delete-writes-enabled:
         description: "Whether the downloaded artifact was built with ICEBERG_ENABLE_EQUALITY_DELETE_WRITES enabled (i.e. the Iceberg equality-delete write path is compiled in)."
         required: false
-        type: integer
+        type: number
         default: 0
 
 jobs:
