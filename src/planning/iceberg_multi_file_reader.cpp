@@ -468,6 +468,7 @@ void IcebergMultiFileReader::FinalizeChunk(ClientContext &context, const MultiFi
 	for (idx_t i = 0; i < diff; i++) {
 		output_chunk.data.pop_back();
 	}
+	output_chunk.Flatten();
 }
 
 bool IcebergMultiFileReader::ParseOption(const string &key, const Value &val, MultiFileOptions &options,
