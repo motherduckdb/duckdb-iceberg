@@ -19,6 +19,9 @@ require ducklake
 set ignore_error_messages
 
 statement ok
+set threads=1;
+
+statement ok
 set enable_logging=true
 
 statement ok
@@ -46,20 +49,14 @@ statement ok
 insert into my_datalake.default.test_filter_on_bounds select range col1 from range(4000, 5000);
 
 query I
-select count(*) from my_datalake.default.filtering_on_bounds where col1 >= 50 and col1 < 100;
+select count(*) from my_datalake.default.test_filter_on_bounds where col1 >= 50 and col1 < 100;
 ----
 50
 
 
-mode output_result
-
-statement ok
-select * from (from iceberg_metadata(my_datalake.default.filtering_on_bounds) select manifest_sequence_number, file_path group by all order by manifest_sequence_number);
-
-
 # verify there are 5 files
 query I
-select count(*) = 5 from (from iceberg_metadata(my_datalake.default.filtering_on_bounds) select manifest_sequence_number, file_path group by all order by manifest_sequence_number);
+select count(*) = 5 from (from iceberg_metadata(my_datalake.default.test_filter_on_bounds) select manifest_sequence_number, file_path group by all order by manifest_sequence_number);
 ----
 1
 
