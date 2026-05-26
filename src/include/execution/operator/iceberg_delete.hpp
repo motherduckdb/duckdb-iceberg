@@ -90,7 +90,8 @@ public:
 
 	//! The table to delete from
 	IcebergTableEntry &table;
-	//! The scan that feeds row ids. May be null when the planner has optimized the
+	//! MultiFile list of the Iceberg Scan of the table we are deleting from.
+	//! May be null when the planner has optimized the
 	//! source scan away (e.g. an always-false WHERE clause like `id = NULL`).
 	optional_ptr<IcebergMultiFileList> multi_file_list;
 	//! The column indexes for the relevant row-id columns
