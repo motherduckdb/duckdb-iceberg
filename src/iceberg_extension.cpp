@@ -78,6 +78,13 @@ static void LoadInternal(ExtensionLoader &loader) {
 	    "ignore_row_group_size_for_partitioned_tables",
 	    "Ignore unsupported write.parquet.row-group-size-bytes table property for partitioned tables",
 	    LogicalType::BOOLEAN, Value::BOOLEAN(false));
+	config.AddExtensionOption(
+	    "unsafe_iceberg_ignore_sort_order",
+	    "Allow INSERT/UPDATE on iceberg tables that declare a sort order, without applying that sort order to "
+	    "the written data. The Iceberg spec permits this (writers are not required to honour a declared sort "
+	    "order, and readers do not assume files are sorted), but skipping the sort may reduce later file-pruning "
+	    "effectiveness and compression.",
+	    LogicalType::BOOLEAN, Value::BOOLEAN(false));
 #ifdef ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
 	config.AddExtensionOption(
 	    ENABLE_EQUALITY_DELETES_CONFIG_VARIABLE,

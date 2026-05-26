@@ -969,7 +969,14 @@ PhysicalOperator &IcebergCatalog::PlanInsert(ClientContext &context, PhysicalPla
 	if (table_metadata.HasSortOrder()) {
 		auto &sort_spec = table_metadata.GetLatestSortOrder();
 		if (sort_spec.IsSorted()) {
-			throw NotImplementedException("INSERT into a sorted iceberg table is not supported yet");
+			Value unsafe_ignore_sort_order;
+			if (!context.TryGetCurrentSetting("unsafe_iceberg_ignore_sort_order", unsafe_ignore_sort_order) ||
+			    !unsafe_ignore_sort_order.GetValue<bool>()) {
+				throw NotImplementedException(
+				    "INSERT into a sorted iceberg table is not supported yet.\nTo bypass this guard and "
+				    "write without applying the table's declared sort order, "
+				    "run \"SET unsafe_iceberg_ignore_sort_order=true\"");
+			}
 		}
 	}
 
