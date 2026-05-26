@@ -243,7 +243,8 @@
         "test/sql/update/test_string_update_null.test",
         "test/sql/update/test_update_many_updaters.test",
         "test/sql/update/test_update_many_updaters_nulls.test",
-        "test/sql/update/test_update_mix.test"
+        "test/sql/update/test_update_mix.test",
+        "test/sql/storage/compression/roaring/roaring_bool_appends.test_slow"
       ]
     },
     {
