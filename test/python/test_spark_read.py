@@ -114,8 +114,8 @@ requires_iceberg_server = pytest.mark.skipif(
 
 
 requires_equality_deletes_available = pytest.mark.skipif(
-    os.getenv("EQUALITY_DELETE_WRITES_ENABLED", None) is None,
-    reason="Test data wasn't generated, run tests in test/sql/local/irc first (and set 'export FIXTURE_SERVER_AVAILABLE=1')",
+    (os.getenv("EQUALITY_DELETE_WRITES_ENABLED", None) is None) or (os.getenv("EQUALITY_DELETE_WRITES_ENABLED", '0') == '0'),
+    reason="Test data wasn't generated, run tests in test/sql/local/irc first (and set 'export EQUALITY_DELETE_WRITES_ENABLED=1')",
 )
 
 
