@@ -48,14 +48,14 @@ select count(*) > 10 from (show all tables);
 ----
 1
 
-# 1 call for oath, 1 call for config
-# 1 call to list namespaces
-# 1 call to list tables in default
-# 1 call to list tables in level1 namespace (no recursive namespace calls)
 query I
-select count(*) from duckdb_logs_parsed('HTTP');
+select split(request.url, 'v1')[2] from duckdb_logs_parsed('HTTP') order by all;
 ----
-4
+/config
+/namespaces
+/namespaces/default/tables
+/namespaces/level1/tables
+/oauth/tokens
 
 statement ok
 call truncate_duckdb_logs();
@@ -71,13 +71,21 @@ s_phone	VARCHAR
 s_acctbal	DECIMAL(15,2)
 s_comment	VARCHAR
 
-# schema default is saved between queries
-# one request to the table information endpoint
-# FIXME: apparantly there is also a request to an avro file
 query I
-select count(*) from duckdb_logs_parsed('HTTP');
+with cte as (
+	select split(request.url, '/')[-1] val
+	from duckdb_logs_parsed('HTTP')
+)
+select CASE WHEN contains(val, '.') THEN (split(val, '.')[2]) ELSE NULL END FROM CTE ORDER BY ALL
 ----
-3
+avro
+avro
+avro
+avro
+NULL
+
+statement ok
+call truncate_duckdb_logs();
 
 statement ok
 begin;
@@ -86,6 +94,20 @@ query I
 select count(*) > 30 from (show all tables);
 ----
 1
+
+statement ok
+commit;
+
+query I
+select count(*) from duckdb_logs_parsed('HTTP');
+----
+3
+
+statement ok
+call truncate_duckdb_logs();
+
+statement ok
+begin;
 
 query I
 select distinct(s_nationkey) from my_datalake.default.supplier order by all limit 5;
@@ -99,14 +121,17 @@ select distinct(s_nationkey) from my_datalake.default.supplier order by all limi
 statement ok
 commit;
 
-# 3 calls from above
-# 5 calls from show all tables above
-# 1 call to the manifest list
-# 2 calls to read parquet files
 query I
-select count(*) from duckdb_logs_parsed('HTTP');
+with cte as (
+	select split(request.url, '/')[-1] val
+	from duckdb_logs_parsed('HTTP')
+)
+select CASE WHEN contains(val, '.') THEN (split(val, '.')[2]) ELSE NULL END FROM CTE ORDER BY ALL
 ----
-7
+avro
+avro
+parquet
+NULL
 
 statement ok
 call truncate_duckdb_logs();
