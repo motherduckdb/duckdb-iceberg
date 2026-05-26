@@ -231,6 +231,9 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
                                  IcebergDeleteGlobalState &global_state) const {
 	bool write_deletion_vector = table.table_info.table_metadata.iceberg_version >= 3;
 
+	if (!multi_file_list) {
+		throw InternalException("IcebergDelete multi_file_list is NULL");
+	}
 	lock_guard<mutex> guard(global_state.lock);
 	for (auto &entry : global_state.deleted_rows) {
 		auto &filename = entry.first;
