@@ -31,7 +31,9 @@ statement ok
 drop table if exists my_datalake.default.test_logging_create_table_large;
 
 statement ok
-create table my_datalake.default.test_logging_create_table as select range a from range(10000);
+create table my_datalake.default.test_logging_create_table WITH 
+	('write.target-file-size-bytes'='1000000', 'write.parquet.compression-codec'='zstd') 
+as select range a from range(10000);
 
 
 query I
@@ -44,7 +46,9 @@ call truncate_duckdb_logs();
 
 # write multiple files in one insert
 statement ok
-create table my_datalake.default.test_logging_create_table_large WITH ('write.target-file-size-bytes'='1000000') as select range a from range(10000000);
+create table my_datalake.default.test_logging_create_table_large WITH 
+	('write.target-file-size-bytes'='1000000', 'write.parquet.compression-codec'='zstd') 
+as select range a from range(10000000);
 
 query I
 select count(*) from duckdb_logs() where type = 'Iceberg' and regexp_matches(message, 'Iceberg INSERT, wrote data_file.*record_count=.*');
@@ -59,7 +63,9 @@ drop table if exists my_datalake.default.test_logging_create_table_large;
 
 # write multiple files in one insert
 statement ok
-create table my_datalake.default.test_logging_create_table_large WITH ('write.target-file-size-bytes'='1000000') as select range a from range(100000000);
+create table my_datalake.default.test_logging_create_table_large WITH 
+	('write.target-file-size-bytes'='1000000', 'write.parquet.compression-codec'='zstd') 
+as select range a from range(100000000);
 
 query I
 select count(*) from duckdb_logs() where type = 'Iceberg' and regexp_matches(message, 'Iceberg INSERT, wrote data_file.*record_count=.*');
