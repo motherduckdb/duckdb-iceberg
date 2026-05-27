@@ -445,6 +445,8 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
 
 		if (has_first_row_id) {
 			data.data[col_idx++].Append(first_row_id);
+		} else {
+			data.data[col_idx++].Append(Value(LogicalType::BIGINT));
 		}
 	}
 	data.SetChildCardinality(manifest_files.size());
