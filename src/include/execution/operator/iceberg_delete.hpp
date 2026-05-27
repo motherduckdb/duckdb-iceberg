@@ -102,10 +102,10 @@ public:
 
 class IcebergDelete : public PhysicalOperator {
 public:
-
 #ifdef ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
-	IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table, optional_ptr<IcebergMultiFileList> multi_file_list,
-	              PhysicalOperator &child, vector<idx_t> row_id_indexes, bool is_equality_delete,
+	IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table,
+	              optional_ptr<IcebergMultiFileList> multi_file_list, PhysicalOperator &child,
+	              vector<idx_t> row_id_indexes, bool is_equality_delete,
 	              vector<IcebergEqualityDeletePredicate> equality_predicates)
 	    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, {LogicalType::BIGINT}, 1),
 	      is_equality_delete(is_equality_delete), table(table), multi_file_list(multi_file_list),
