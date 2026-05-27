@@ -1,8 +1,8 @@
-# name: test/sql/local/irc_specific_catalogs/polaris/test_issue_969_branch_ref_timestamp.test
-# description: duckdb-iceberg#969 - default read must follow refs.main, not pick the
+# name: test/sql/local/catalog_test_config_setup/catalog_specifc/polaris/test_issue_969_branch_ref_timestamp.test
+# description: duckdb-iceberg#969 - default read must follow refs.main, not pick the largest timestamp_ms across all branch refs.
 # group: [polaris]
 
-#              largest timestamp_ms across all branch refs.
+require-env CATALOG_TEST_CONFIG_SETUP
 
 require-env POLARIS_SERVER_AVAILABLE
 
@@ -19,21 +19,7 @@ require aws
 # Do not ignore 'HTTP' error messages!
 set ignore_error_messages
 
-statement ok
-create secret polaris_secret (
-	TYPE ICEBERG,
-	CLIENT_ID 'root',
-	CLIENT_SECRET 's3cr3t',
-	ENDPOINT 'http://0.0.0.0:8181/api/catalog'
-);
-
-statement ok
-attach 'quickstart_catalog' as my_datalake (
-	type ICEBERG,
-	ENDPOINT 'http://0.0.0.0:8181/api/catalog',
-	DEFAULT_REGION 'us-west-2'
-);
-
+# The secret and the `my_datalake` attach are created by polaris.json's on_init.
 # Setup produces: main tip with 5 rows, side_branch tip after DELETE-all with a
 # newer timestamp_ms. Precondition for the bug.
 query I
