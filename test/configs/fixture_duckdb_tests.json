@@ -244,7 +244,8 @@
         "test/sql/update/test_update_many_updaters.test",
         "test/sql/update/test_update_many_updaters_nulls.test",
         "test/sql/update/test_update_mix.test",
-        "test/sql/storage/compression/roaring/roaring_bool_appends.test_slow"
+        "test/sql/storage/compression/roaring/roaring_bool_appends.test_slow",
+        "test/sql/aggregate/aggregates/test_arg_min_max_null_nested.test_slow"
       ]
     },
     {
