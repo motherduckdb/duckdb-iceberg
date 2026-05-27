@@ -14,7 +14,7 @@
 #include "duckdb/planner/tableref/bound_at_clause.hpp"
 
 #include "catalog/rest/iceberg_catalog.hpp"
-#include "catalog/rest/catalog_entry/iceberg_schema_entry.hpp"
+#include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
 #include "catalog/rest/api/catalog_api.hpp"
 #include "planning/iceberg_multi_file_reader.hpp"
 #include "planning/iceberg_multi_file_reader.hpp"
@@ -138,7 +138,7 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 		                       info.options.find("connection_string") != info.options.end();
 		bool has_gcs_creds = info.options.find("bearer_token") != info.options.end();
 		if (!has_s3_creds && !has_azure_creds && !has_gcs_creds) {
-			DUCKDB_LOG_INFO(context, "Failed to create valid secret from Vendend Credentials for table '%s'",
+			DUCKDB_LOG_INFO(context, "Failed to create valid secret from Vended Credentials for table '%s'",
 			                table_info.name);
 		}
 	} else {

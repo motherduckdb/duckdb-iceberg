@@ -206,6 +206,33 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, cons
 	}
 }
 
+unique_ptr<IcebergColumnDefinition>
+IcebergCreateTableRequest::CreateIcebergColumn(const ColumnDefinition &column_def, IcebergDefaultBinder &default_binder,
+                                               bool required, const std::function<idx_t(void)> &next_field_id,
+                                               idx_t iceberg_version) {
+	const auto &name = column_def.Name();
+	const auto &logical_type = column_def.GetType();
+	idx_t first_id = next_field_id();
+	rest_api_objects::Type type;
+	if (logical_type.IsNested()) {
+		type = IcebergTypeHelper::CreateIcebergRestType(logical_type, next_field_id);
+	} else {
+		type.has_primitive_type = true;
+		type.primitive_type = rest_api_objects::PrimitiveType();
+		type.primitive_type.value = IcebergTypeHelper::LogicalTypeToIcebergType(logical_type);
+	}
+	auto iceberg_column_def = IcebergColumnDefinition::ParseType(name, first_id, required, type, "", nullptr);
+	if (column_def.HasDefaultValue()) {
+		auto &default_expr = column_def.DefaultValue();
+		auto val = default_binder.Evaluate(default_expr, logical_type);
+		if (iceberg_version < 3 && !val.IsNull()) {
+			throw InvalidInputException("non-null DEFAULT values are not supported for <V3 tables");
+		}
+		iceberg_column_def->initial_default = make_uniq<Value>(val);
+	}
+	return iceberg_column_def;
+}
+
 shared_ptr<IcebergTableSchema> IcebergCreateTableRequest::CreateIcebergSchema(
     ClientContext &context, const IcebergTableMetadata &table_metadata, const ColumnList &columns,
     optional_ptr<const vector<unique_ptr<Constraint>>> constraints_p, int32_t &last_column_id) {
@@ -240,29 +267,10 @@ shared_ptr<IcebergTableSchema> IcebergCreateTableRequest::CreateIcebergSchema(
 	IcebergDefaultBinder binder(context);
 	for (auto column = column_iterator.begin(); column != column_iterator.end(); ++column) {
 		auto &column_def = *column;
-		auto name = column_def.Name();
-		// check if there is a not null constraint
 		const bool required = required_columns.count(column.pos);
 
-		const auto &logical_type = column_def.GetType();
-		idx_t first_id = next_field_id();
-		rest_api_objects::Type type;
-		if (logical_type.IsNested()) {
-			type = IcebergTypeHelper::CreateIcebergRestType(logical_type, next_field_id);
-		} else {
-			type.has_primitive_type = true;
-			type.primitive_type = rest_api_objects::PrimitiveType();
-			type.primitive_type.value = IcebergTypeHelper::LogicalTypeToIcebergType(logical_type);
-		}
-		auto iceberg_column_def = IcebergColumnDefinition::ParseType(name, first_id, required, type, "", nullptr);
-		if (column_def.HasDefaultValue()) {
-			auto &default_expr = column_def.DefaultValue();
-			auto val = binder.Evaluate(default_expr, logical_type);
-			if (table_metadata.iceberg_version < 3 && !val.IsNull()) {
-				throw InvalidInputException("non-null DEFAULT values are not supported for <V3 tables");
-			}
-			iceberg_column_def->initial_default = make_uniq<Value>(val);
-		}
+		auto iceberg_column_def =
+		    CreateIcebergColumn(column_def, binder, required, next_field_id, table_metadata.iceberg_version);
 		schema->columns.push_back(std::move(iceberg_column_def));
 	}
 	last_column_id = field_id - 1;

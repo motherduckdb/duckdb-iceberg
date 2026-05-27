@@ -35,6 +35,16 @@ DROP TABLE if exists nested_types_2;
 statement ok
 DROP TABLE if exists fixed_array_table_as_list;
 
+# explain create table as works
+statement ok
+EXPLAIN create table should_not_exist as select range a from range(10);
+
+# table does not exist
+statement error
+select * from should_not_exist;
+----
+<REGEX>:.*does not exist.*
+
 # create primitive type table from test all types
 statement ok
 create table all_types_table_primitives_2 as select

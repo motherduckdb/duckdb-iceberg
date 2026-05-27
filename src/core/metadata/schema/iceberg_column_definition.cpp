@@ -204,6 +204,17 @@ unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::ParseStructField(re
 	                 field_write_default);
 }
 
+vector<unique_ptr<IcebergColumnDefinition>>::const_iterator
+IcebergColumnDefinition::GetChildIterator(const string &child_name) const {
+	for (auto it = children.begin(); it != children.end(); it++) {
+		auto &child = *(*it);
+		if (StringUtil::CIEquals(child.name, child_name)) {
+			return it;
+		}
+	}
+	return children.end();
+}
+
 bool IcebergColumnDefinition::IsIcebergPrimitiveType() const {
 	switch (type.id()) {
 	case LogicalTypeId::TINYINT:
@@ -298,6 +309,16 @@ bool IcebergColumnDefinition::Equals(const IcebergColumnDefinition &other) const
 	}
 	if (doc != other.doc) {
 		return false;
+	}
+	if (children.size() != other.children.size()) {
+		return false;
+	}
+	for (idx_t i = 0; i < children.size(); i++) {
+		auto &a_child = children[i];
+		auto &b_child = other.children[i];
+		if (!a_child->Equals(*b_child)) {
+			return false;
+		}
 	}
 
 	if (!DefaultsAreEqual(initial_default, other.initial_default)) {
