@@ -5,6 +5,8 @@
 #include "duckdb/planner/expression/bound_cast_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/function/cast/bound_cast_data.hpp"
+#include "duckdb/common/vector/map_vector.hpp"
+#include "duckdb/common/vector/struct_vector.hpp"
 
 #include "planning/metadata_io/avro/iceberg_avro_multi_file_list.hpp"
 #include "core/metadata/manifest/iceberg_manifest_list.hpp"
@@ -432,18 +434,18 @@ bool IcebergAvroMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &
 // Manifests, and does not happen in any other reads
 static void FixSamePhysicalTypeCasts(BoundCastInfo &cast_info, const LogicalType &source_type,
                                      const LogicalType &target_type) {
-	if (cast_info.function == DefaultCasts::TryVectorNullCast &&
-	    source_type.InternalType() == target_type.InternalType()) {
-		cast_info.function = DefaultCasts::ReinterpretCast;
+	if (source_type.id() == LogicalTypeId::DATE && target_type.id() == LogicalTypeId::INTEGER) {
+		cast_info.SetFunction(DefaultCasts::ReinterpretCast);
 		return;
 	}
-	if (!cast_info.cast_data) {
+	auto cast_data = cast_info.GetCastData();
+	if (!cast_data) {
 		return;
 	}
 	if (source_type.id() != LogicalTypeId::STRUCT || target_type.id() != LogicalTypeId::STRUCT) {
 		return;
 	}
-	auto &struct_data = cast_info.cast_data->Cast<StructBoundCastData>();
+	auto &struct_data = cast_data->Cast<StructBoundCastData>();
 	auto &src_children = StructType::GetChildTypes(source_type);
 	auto &tgt_children = StructType::GetChildTypes(target_type);
 	for (idx_t i = 0; i < struct_data.child_cast_info.size(); i++) {
@@ -458,10 +460,11 @@ static void FixSamePhysicalTypeCasts(BoundCastInfo &cast_info, const LogicalType
 }
 
 static void FixSamePhysicalTypeCastsInExpr(Expression &expr) {
-	if (expr.type == ExpressionType::OPERATOR_CAST) {
+	auto expression_type = expr.GetExpressionType();
+	if (expression_type == ExpressionType::OPERATOR_CAST) {
 		auto &cast_expr = expr.Cast<BoundCastExpression>();
-		FixSamePhysicalTypeCasts(cast_expr.bound_cast, cast_expr.source_type(), cast_expr.return_type);
-	} else if (expr.type == ExpressionType::BOUND_FUNCTION) {
+		FixSamePhysicalTypeCasts(cast_expr.bound_cast, cast_expr.source_type(), cast_expr.GetReturnType());
+	} else if (expression_type == ExpressionType::BOUND_FUNCTION) {
 		for (auto &child : expr.Cast<BoundFunctionExpression>().children) {
 			if (child) {
 				FixSamePhysicalTypeCastsInExpr(*child);
@@ -476,9 +479,28 @@ ReaderInitializeType IcebergAvroMultiFileReader::InitializeReader(
     optional_ptr<TableFilterSet> table_filters, ClientContext &context, MultiFileGlobalState &gstate) {
 	auto result = MultiFileReader::InitializeReader(reader_data, bind_data, global_columns, global_column_ids,
 	                                                table_filters, context, gstate);
-	for (auto &expr : reader_data.expressions) {
-		if (expr) {
-			FixSamePhysicalTypeCastsInExpr(*expr);
+	bool has_day_transform = false;
+	auto get_function_info = function_info.get();
+	if (get_function_info) {
+		auto &avro_scan_info = get_function_info->Cast<IcebergAvroScanInfo>();
+		for (auto &partition_spec : avro_scan_info.metadata.partition_specs) {
+			for (auto &spec_field : partition_spec.second.fields) {
+				if (StringUtil::CIEquals(spec_field.transform.RawType(), "day")) {
+					has_day_transform = true;
+					break;
+				}
+			}
+			if (has_day_transform) {
+				break;
+			}
+		}
+	}
+
+	if (has_day_transform || !get_function_info) {
+		for (auto &expr : reader_data.expressions) {
+			if (expr) {
+				FixSamePhysicalTypeCastsInExpr(*expr);
+			}
 		}
 	}
 	return result;

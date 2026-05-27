@@ -9,8 +9,15 @@
 #include "duckdb/parallel/task_notifier.hpp"
 #include "duckdb/parser/tableref/table_function_ref.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
-#include "duckdb/planner/filter/struct_filter.hpp"
+#include "duckdb/planner/expression/bound_conjunction_expression.hpp"
+#include "duckdb/planner/expression/bound_function_expression.hpp"
+#include "duckdb/planner/expression/bound_reference_expression.hpp"
+#include "duckdb/planner/expression_iterator.hpp"
+#include "duckdb/planner/filter/expression_filter.hpp"
+#include "duckdb/planner/filter/table_filter_functions.hpp"
 #include "duckdb/execution/executor.hpp"
+#include "duckdb/optimizer/filter_combiner.hpp"
+#include "duckdb/function/scalar/struct_utils.hpp"
 
 #include "planning/iceberg_multi_file_reader.hpp"
 #include "function/iceberg_functions.hpp"
@@ -57,6 +64,120 @@ void ManifestEntryReadState::FinishBatch() {
 }
 
 namespace {
+
+static unique_ptr<Expression> CreateReferenceExpression(const LogicalType &type) {
+	return make_uniq<BoundReferenceExpression>(type, 0ULL);
+}
+
+static void AppendColumnPath(const ColumnIndex &column_index, vector<idx_t> &path) {
+	for (auto &child_index : column_index.GetChildIndexes()) {
+		path.push_back(child_index.GetPrimaryIndex());
+		AppendColumnPath(child_index, path);
+	}
+}
+
+static vector<idx_t> GetColumnPath(const ColumnIndex &column_index) {
+	column_index.VerifySinglePath();
+	vector<idx_t> path;
+	AppendColumnPath(column_index, path);
+	return path;
+}
+
+static bool TryGetFilterPath(const Expression &expr, vector<idx_t> &path) {
+	switch (expr.GetExpressionClass()) {
+	case ExpressionClass::BOUND_REF:
+	case ExpressionClass::BOUND_COLUMN_REF:
+		return true;
+	case ExpressionClass::BOUND_FUNCTION: {
+		auto &func = expr.Cast<BoundFunctionExpression>();
+		idx_t child_idx;
+		if (!TryGetStructExtractChildIndex(func, child_idx) || func.children.empty()) {
+			return false;
+		}
+		if (!TryGetFilterPath(*func.children[0], path)) {
+			return false;
+		}
+		path.push_back(child_idx);
+		return true;
+	}
+	default:
+		return false;
+	}
+}
+
+enum class FilterPathMatch : uint8_t { NONE, MATCH, OTHER };
+
+static FilterPathMatch GetFilterPathMatch(const Expression &expr, const vector<idx_t> &path) {
+	vector<idx_t> expr_path;
+	if (TryGetFilterPath(expr, expr_path)) {
+		return expr_path == path ? FilterPathMatch::MATCH : FilterPathMatch::OTHER;
+	}
+	auto result = FilterPathMatch::NONE;
+	ExpressionIterator::EnumerateChildren(expr, [&](const Expression &child) {
+		if (result == FilterPathMatch::OTHER) {
+			return;
+		}
+		auto child_result = GetFilterPathMatch(child, path);
+		if (child_result == FilterPathMatch::OTHER) {
+			result = FilterPathMatch::OTHER;
+		} else if (child_result == FilterPathMatch::MATCH) {
+			result = FilterPathMatch::MATCH;
+		}
+	});
+	return result;
+}
+
+static bool MatchesFilterPath(const Expression &expr, const vector<idx_t> &path) {
+	vector<idx_t> expr_path;
+	return TryGetFilterPath(expr, expr_path) && expr_path == path;
+}
+
+static void ReplaceFilterPathExpressions(unique_ptr<Expression> &expr, const vector<idx_t> &path) {
+	if (MatchesFilterPath(*expr, path)) {
+		expr = CreateReferenceExpression(expr->GetReturnType());
+		return;
+	}
+	ExpressionIterator::EnumerateChildren(
+	    *expr, [&](unique_ptr<Expression> &child) { ReplaceFilterPathExpressions(child, path); });
+}
+
+static unique_ptr<Expression> ExtractFilterExpressionForPath(const Expression &expr, const vector<idx_t> &path) {
+	if (expr.GetExpressionClass() == ExpressionClass::BOUND_FUNCTION) {
+		auto &func = expr.Cast<BoundFunctionExpression>();
+		if (func.function.GetName() == OptionalFilterScalarFun::NAME && func.bind_info) {
+			auto &data = func.bind_info->Cast<OptionalFilterFunctionData>();
+			return data.child_filter_expr ? ExtractFilterExpressionForPath(*data.child_filter_expr, path) : nullptr;
+		}
+		if (func.function.GetName() == SelectivityOptionalFilterScalarFun::NAME && func.bind_info) {
+			auto &data = func.bind_info->Cast<SelectivityOptionalFilterFunctionData>();
+			return data.child_filter_expr ? ExtractFilterExpressionForPath(*data.child_filter_expr, path) : nullptr;
+		}
+	}
+	if (expr.GetExpressionClass() == ExpressionClass::BOUND_CONJUNCTION &&
+	    expr.GetExpressionType() == ExpressionType::CONJUNCTION_AND) {
+		auto &conjunction = expr.Cast<BoundConjunctionExpression>();
+		auto result = make_uniq<BoundConjunctionExpression>(ExpressionType::CONJUNCTION_AND);
+		for (auto &child : conjunction.children) {
+			auto extracted_child = ExtractFilterExpressionForPath(*child, path);
+			if (extracted_child) {
+				result->children.push_back(std::move(extracted_child));
+			}
+		}
+		if (result->children.empty()) {
+			return nullptr;
+		}
+		if (result->children.size() == 1) {
+			return std::move(result->children[0]);
+		}
+		return std::move(result);
+	}
+	if (GetFilterPathMatch(expr, path) != FilterPathMatch::MATCH) {
+		return nullptr;
+	}
+	auto result = expr.Copy();
+	ReplaceFilterPathExpressions(result, path);
+	return result;
+}
 
 class ManifestReadTask : public BaseExecutorTask {
 public:
@@ -157,33 +278,26 @@ bool IcebergMultiFileList::FinishedScanningDeletes() const {
 	return !delete_manifest_reader || delete_manifest_reader->Finished();
 }
 
-optional_ptr<const TableFilter> IcebergMultiFileList::GetFilterForColumnIndex(const TableFilterSet &filter_set,
-                                                                              const ColumnIndex &column_index) const {
+unique_ptr<ExpressionFilter> IcebergMultiFileList::GetFilterForColumnIndex(const IcebergTableFilters &filter_set,
+                                                                           const ColumnIndex &column_index) const {
 	auto primary_index = column_index.GetPrimaryIndex();
-	auto filter_it = filter_set.filters.find(primary_index);
-	if (filter_it == filter_set.filters.end()) {
+
+	auto filter = filter_set.TryGetFilterByColumnIndex(primary_index);
+	if (!filter) {
 		return nullptr;
 	}
 
-	auto &parent_filter = *filter_it->second;
-	auto &child_indexes = column_index.GetChildIndexes();
-
-	reference<const TableFilter> current_filter(parent_filter);
-	for (idx_t i = 0; i < child_indexes.size(); i++) {
-		auto &table_filter = current_filter.get();
-		auto &child_index = child_indexes[i];
-		auto index = child_index.GetPrimaryIndex();
-		if (table_filter.filter_type != TableFilterType::STRUCT_EXTRACT) {
-			return nullptr;
-		}
-		auto &struct_extract = table_filter.Cast<StructFilter>();
-		if (struct_extract.child_idx != index) {
-			//! This filter is not targeting the column on which a partition exists
-			return nullptr;
-		}
-		current_filter = *struct_extract.child_filter;
+	auto path = GetColumnPath(column_index);
+	if (path.empty()) {
+		return filter->Copy();
 	}
-	return current_filter.get();
+
+	auto child_expr = ExtractFilterExpressionForPath(*filter->expr, path);
+	if (!child_expr) {
+		//! This filter is not targeting the column on which a partition exists
+		return nullptr;
+	}
+	return make_uniq<ExpressionFilter>(std::move(child_expr));
 }
 
 void IcebergMultiFileList::Bind(vector<LogicalType> &return_types, vector<string> &names) {
@@ -194,13 +308,15 @@ void IcebergMultiFileList::Bind(vector<LogicalType> &return_types, vector<string
 		return_types = this->types;
 		return;
 	}
-
+	auto &fs = FileSystem::GetFileSystem(context);
+	auto caching_fs = make_shared_ptr<CachingFileSystemWrapper>(FileSystem::GetFileSystem(context), *context.db);
 	if (!scan_info) {
 		D_ASSERT(!path.empty());
 		auto input_string = path;
 		auto iceberg_path = IcebergUtils::GetStorageLocation(context, input_string);
 		auto iceberg_meta_path = IcebergTableMetadata::GetMetaDataPath(context, iceberg_path, fs, options);
-		auto table_metadata = IcebergTableMetadata::Parse(iceberg_meta_path, fs, options.metadata_compression_codec);
+		auto table_metadata =
+		    IcebergTableMetadata::Parse(iceberg_meta_path, *caching_fs, options.metadata_compression_codec);
 
 		auto temp_data = make_uniq<IcebergScanTemporaryData>();
 		temp_data->metadata = IcebergTableMetadata::FromTableMetadata(table_metadata);
@@ -233,21 +349,24 @@ void IcebergMultiFileList::Bind(vector<LogicalType> &return_types, vector<string
 }
 
 unique_ptr<IcebergMultiFileList> IcebergMultiFileList::PushdownInternal(ClientContext &context,
-                                                                        TableFilterSet &new_filters) const {
+                                                                        TableFilterSet &new_filters,
+                                                                        vector<column_t> column_indexes) const {
 	auto filtered_list = make_uniq<IcebergMultiFileList>(context, scan_info, path, this->options);
 
-	TableFilterSet result_filter_set;
+	IcebergTableFilters result_filter_set;
 
 	// Add pre-existing filters
-	for (auto &entry : table_filters.filters) {
-		result_filter_set.PushFilter(ColumnIndex(entry.first), entry.second->Copy());
+	for (auto &entry : table_filters) {
+		result_filter_set.PushFilter(entry.first, entry.second->Copy());
 	}
 
 	// Add new filters
-	for (auto &entry : new_filters.filters) {
-		auto &column_id = entry.first;
-		if (column_id < names.size()) {
-			result_filter_set.PushFilter(ColumnIndex(column_id), entry.second->Copy());
+	for (auto &entry : new_filters) {
+		auto column_idx = column_indexes[entry.GetIndex().GetIndex()];
+		if (column_idx < names.size()) {
+			auto &filter =
+			    ExpressionFilter::GetExpressionFilter(entry.Filter(), "IcebergMultiFileList::PushdownInternal");
+			result_filter_set.PushFilter(column_idx, filter.Copy());
 		}
 	}
 
@@ -262,24 +381,25 @@ unique_ptr<MultiFileList>
 IcebergMultiFileList::DynamicFilterPushdown(ClientContext &context, const MultiFileOptions &options,
                                             const vector<string> &names, const vector<LogicalType> &types,
                                             const vector<column_t> &column_ids, TableFilterSet &filters) const {
-	if (filters.filters.empty()) {
+	if (!filters.HasFilters()) {
 		return nullptr;
 	}
 
 	TableFilterSet filters_copy;
-	for (auto &filter : filters.filters) {
-		auto column_id = column_ids[filter.first];
-		auto previously_pushed_down_filter = this->table_filters.filters.find(column_id);
-		if (previously_pushed_down_filter != this->table_filters.filters.end() &&
-		    filter.second->Equals(*previously_pushed_down_filter->second)) {
+	for (auto &entry : filters) {
+		auto &filter =
+		    ExpressionFilter::GetExpressionFilter(entry.Filter(), "IcebergMultiFileList::DynamicFilterPushdown");
+		auto column_id = column_ids[entry.GetIndex().GetIndex()];
+		auto previously_pushed_down_filter = table_filters.TryGetFilterByColumnIndex(column_id);
+		if (previously_pushed_down_filter && filter.Equals(*previously_pushed_down_filter)) {
 			// Skip filters that we already have pushed down
 			continue;
 		}
-		filters_copy.PushFilter(ColumnIndex(column_id), filter.second->Copy());
+		filters_copy.PushFilter(entry.GetIndex(), filter.Copy());
 	}
 
-	if (!filters_copy.filters.empty()) {
-		auto new_snap = PushdownInternal(context, filters_copy);
+	if (filters_copy.HasFilters()) {
+		auto new_snap = PushdownInternal(context, filters_copy, column_ids);
 		return std::move(new_snap);
 	}
 	return nullptr;
@@ -300,11 +420,11 @@ unique_ptr<MultiFileList> IcebergMultiFileList::ComplexFilterPushdown(ClientCont
 
 	vector<FilterPushdownResult> unused;
 	auto filter_set = combiner.GenerateTableScanFilters(info.column_indexes, unused);
-	if (filter_set.filters.empty()) {
+	if (!filter_set.HasFilters()) {
 		return nullptr;
 	}
 
-	return PushdownInternal(context, filter_set);
+	return PushdownInternal(context, filter_set, info.column_ids);
 }
 
 vector<OpenFileInfo> IcebergMultiFileList::GetAllFiles() const {
@@ -460,8 +580,7 @@ IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(const Value &lowe
 bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest_file,
                                              const IcebergManifestEntry &manifest_entry,
                                              IcebergManifestContentType file_type) const {
-	D_ASSERT(!table_filters.filters.empty());
-	auto &filters = table_filters.filters;
+	D_ASSERT(table_filters.HasFilters());
 	auto &schema = GetSchema().columns;
 
 	auto &metadata = GetMetadata();
@@ -472,13 +591,10 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 		}
 	}
 
-	for (idx_t index = 0; index < schema.size(); index++) {
+	for (auto &entry : table_filters) {
+		auto index = entry.first;
 		auto &column = *schema[index];
-		auto it = filters.find(index);
 
-		if (it == filters.end()) {
-			continue;
-		}
 		auto &data_file = manifest_entry.data_file;
 		// First check if there are partitions
 		if (!data_file.partition_info.empty()) {
@@ -609,7 +725,7 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 			stats.has_nan = nan_counts != 0;
 		}
 
-		auto &filter = *it->second;
+		auto &filter = *entry.second;
 		if (!IcebergPredicate::MatchBounds(context, filter, stats, IcebergTransform::Identity())) {
 			//! If any predicate fails, exclude the file
 			return false;
@@ -691,7 +807,7 @@ optional_ptr<const BoundIcebergManifestEntry> IcebergMultiFileList::GetDataFile(
 
 			auto &data_file = manifest_entry.data_file;
 			// Check whether current data file is filtered out.
-			if (!table_filters.filters.empty() &&
+			if (table_filters.HasFilters() &&
 			    !FileMatchesFilter(manifest_file, manifest_entry, IcebergManifestContentType::DATA)) {
 				DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'data_file': '%s'",
 				           data_file.file_path);
@@ -785,7 +901,7 @@ bool IcebergMultiFileList::ManifestMatchesFilter(const IcebergManifestFile &mani
 		    field_summaries.size(), partition_spec.fields.size());
 	}
 
-	if (table_filters.filters.empty()) {
+	if (!table_filters.HasFilters()) {
 		//! There are no filters
 		return true;
 	}
@@ -1030,7 +1146,7 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 			}
 			auto &data_file = manifest_entry.data_file;
 			// Check whether current data file is filtered out.
-			if (!table_filters.filters.empty() &&
+			if (table_filters.HasFilters() &&
 			    !FileMatchesFilter(manifest_file, manifest_entry, IcebergManifestContentType::DELETE)) {
 				DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'data_file': '%s'",
 				           data_file.file_path);

@@ -20,6 +20,7 @@
 #include "core/metadata/manifest/iceberg_manifest.hpp"
 
 #include "core/deletes/iceberg_deletion_vector.hpp"
+#include "catalog/rest/transaction/iceberg_transaction_update.hpp"
 
 namespace duckdb {
 class IcebergDeleteLocalState;
@@ -53,11 +54,11 @@ SinkResultType IcebergDelete::Sink(ExecutionContext &context, DataChunk &chunk, 
 	auto &file_row_number = chunk.data[row_id_indexes[1]];
 
 	UnifiedVectorFormat row_data;
-	file_row_number.ToUnifiedFormat(chunk.size(), row_data);
+	file_row_number.ToUnifiedFormat(row_data);
 	auto file_row_data = UnifiedVectorFormat::GetData<int64_t>(row_data);
 
 	UnifiedVectorFormat file_name_vdata;
-	file_name_vector.ToUnifiedFormat(chunk.size(), file_name_vdata);
+	file_name_vector.ToUnifiedFormat(file_name_vdata);
 	for (idx_t i = 0; i < chunk.size(); i++) {
 		auto row_idx = row_data.sel->get_index(i);
 		auto file_name_idx = file_name_vdata.sel->get_index(i);
@@ -177,21 +178,21 @@ void IcebergDelete::WritePositionalDeleteFile(ClientContext &context, IcebergDel
 	write_chunk.Initialize(context, write_types);
 	// the first vector is constant (the file name)
 	Value filename_val(filename);
-	write_chunk.data[0].Reference(filename_val);
+	write_chunk.data[0].Reference(filename_val, count_t(STANDARD_VECTOR_SIZE));
 
 	idx_t row_count = 0;
-	auto row_data = FlatVector::GetData<int64_t>(write_chunk.data[1]);
+	auto row_data = FlatVector::GetDataMutable<int64_t>(write_chunk.data[1]);
 	for (auto &row_idx : sorted_deletes) {
 		row_data[row_count++] = NumericCast<int64_t>(row_idx);
 		if (row_count >= STANDARD_VECTOR_SIZE) {
-			write_chunk.SetCardinality(row_count);
+			write_chunk.SetChildCardinality(row_count);
 			copy_fun.function.copy_to_sink(execution_context, *function_data, *copy_global_state, *copy_local_state,
 			                               write_chunk);
 			row_count = 0;
 		}
 	}
 	if (row_count > 0) {
-		write_chunk.SetCardinality(row_count);
+		write_chunk.SetChildCardinality(row_count);
 		copy_fun.function.copy_to_sink(execution_context, *function_data, *copy_global_state, *copy_local_state,
 		                               write_chunk);
 	}
@@ -337,15 +338,16 @@ SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, Clien
 
 	// write out the new manifest file
 	auto &irc_table = table.Cast<IcebergTableEntry>();
+
 	auto &table_info = irc_table.table_info;
 	auto iceberg_delete_files = GenerateDeleteManifestEntries(global_state);
 
 	if (!global_state.written_files.empty()) {
 		ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTableInformation &tbl) {
-			tbl.AddDeleteSnapshot(iceberg_transaction, std::move(iceberg_delete_files),
-			                      std::move(global_state.altered_manifests));
+			auto &transaction_data = tbl.GetOrCreateTransactionData(iceberg_transaction);
+			transaction_data.AddSnapshot(IcebergSnapshotOperationType::DELETE, std::move(iceberg_delete_files),
+			                             std::move(global_state.altered_manifests));
 
-			auto &transaction_data = *tbl.transaction_data;
 			//! Add or overwrite the currently active transaction-local delete files
 			for (auto &entry : global_state.written_files) {
 				auto &delete_file = entry.second;
@@ -366,7 +368,7 @@ SourceResultType IcebergDelete::GetDataInternal(ExecutionContext &context, DataC
 	auto &global_state = sink_state->Cast<IcebergDeleteGlobalState>();
 	auto value = Value::BIGINT(NumericCast<int64_t>(global_state.total_deleted_count.load()));
 	chunk.SetCardinality(1);
-	chunk.SetValue(0, 0, value);
+	chunk.data[0].Append(value);
 	return SourceResultType::FINISHED;
 }
 
@@ -425,11 +427,20 @@ PhysicalOperator &IcebergCatalog::PlanDelete(ClientContext &context, PhysicalPla
 	if (op.return_chunk) {
 		throw BinderException("RETURNING clause not yet supported for deletion from Iceberg table");
 	}
-	auto &ic_table_entry = op.table.Cast<IcebergTableEntry>();
-	auto iceberg_version = ic_table_entry.table_info.table_metadata.iceberg_version;
+	auto &table_entry = op.table.Cast<IcebergTableEntry>();
+	table_entry.PrepareIcebergScanFromEntry(context);
+
+	auto &irc_transaction = IcebergTransaction::Get(context, *this);
+	auto &alter = irc_transaction.GetOrCreateAlter();
+	auto &updated_table = alter.GetOrInitializeTable(table_entry.table_info);
+	auto &table_metadata = updated_table.table_metadata;
+	auto &schema = table_metadata.GetLatestSchema();
+	auto &updated_table_entry = *updated_table.schema_versions[schema.schema_id];
+
+	auto iceberg_version = updated_table_entry.table_info.table_metadata.iceberg_version;
 	if (iceberg_version < 2) {
 		throw NotImplementedException("Delete from Iceberg V%d tables",
-		                              ic_table_entry.table_info.table_metadata.iceberg_version);
+		                              updated_table_entry.table_info.table_metadata.iceberg_version);
 	}
 
 	vector<idx_t> row_id_indexes;
@@ -444,16 +455,16 @@ PhysicalOperator &IcebergCatalog::PlanDelete(ClientContext &context, PhysicalPla
 		row_id_indexes.push_back(bound_ref.index);
 	}
 
-	auto allows_positional_deletes =
-	    ic_table_entry.table_info.table_metadata.PropertiesAllowPositionalDeletes(IcebergSnapshotOperationType::DELETE);
+	auto allows_positional_deletes = updated_table_entry.table_info.table_metadata.PropertiesAllowPositionalDeletes(
+	    IcebergSnapshotOperationType::DELETE);
 	if (!allows_positional_deletes) {
-		auto delete_table_property = ic_table_entry.table_info.table_metadata.GetTableProperty(WRITE_DELETE_MODE);
+		auto delete_table_property = updated_table_entry.table_info.table_metadata.GetTableProperty(WRITE_DELETE_MODE);
 		auto error_message = IcebergCatalog::GetOnlyMergeOnReadSupportedErrorMessage(
-		    ic_table_entry.name, WRITE_DELETE_MODE, delete_table_property);
+		    updated_table_entry.name, WRITE_DELETE_MODE, delete_table_property);
 		throw NotImplementedException(error_message);
 	}
 
-	auto &iceberg_delete = IcebergDelete::PlanDelete(context, planner, ic_table_entry, plan, row_id_indexes);
+	auto &iceberg_delete = IcebergDelete::PlanDelete(context, planner, updated_table_entry, plan, row_id_indexes);
 	return iceberg_delete;
 }
 

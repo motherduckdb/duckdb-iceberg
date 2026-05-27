@@ -117,8 +117,8 @@ void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntr
 			if (!constant.IsNull()) {
 				//! Create a COMPARE_NOT_EQUAL expression
 				equality_filter =
-				    make_uniq<BoundComparisonExpression>(ExpressionType::COMPARE_NOTEQUAL, std::move(bound_ref),
-				                                         make_uniq<BoundConstantExpression>(constant));
+				    BoundComparisonExpression::Create(ExpressionType::COMPARE_NOTEQUAL, std::move(bound_ref),
+				                                      make_uniq<BoundConstantExpression>(constant));
 			} else {
 				//! Construct an OPERATOR_IS_NOT_NULL expression instead
 				auto is_not_null =

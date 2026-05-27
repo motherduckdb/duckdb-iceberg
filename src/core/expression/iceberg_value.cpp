@@ -45,28 +45,22 @@ static Value DeserializeDecimalTemplated(const string_t &blob, uint8_t width, ui
 }
 
 static Value DeserializeHugeintDecimal(const string_t &blob, uint8_t width, uint8_t scale) {
-	hugeint_t ret;
-
 	//! The blob has to be smaller or equal to the size of the type
 	D_ASSERT(blob.GetSize() <= sizeof(hugeint_t));
 
-	// Convert from big-endian to host byte order
-	// read all bytes into a single 128-bit value
 	const uint8_t *src = reinterpret_cast<const uint8_t *>(blob.GetData());
 	bool is_negative = blob.GetSize() > 0 && (src[0] & 0x80);
 
-	// sign extension: 0 for positive, -1 for negative
-	int64_t upper_val = is_negative ? -1 : 0;
+	// use unsigned integers for shifting
+	uint64_t upper_val = is_negative ? ~uint64_t(0) : 0;
 	uint64_t lower_val = is_negative ? ~uint64_t(0) : 0;
 
-	// then split into upper/lower, by shifting each byte from MSB to LSB
 	for (idx_t i = 0; i < blob.GetSize(); i++) {
-		// shift the entire 128 bit value left by 8 bits
-		upper_val = (upper_val << 8) | static_cast<int64_t>(static_cast<uint64_t>(lower_val) >> 56);
+		upper_val = (upper_val << 8) | (lower_val >> 56);
 		lower_val = (lower_val << 8) | src[i];
 	}
 
-	ret = hugeint_t(upper_val, lower_val);
+	hugeint_t ret(static_cast<int64_t>(upper_val), lower_val);
 	return Value::DECIMAL(ret, width, scale);
 }
 
@@ -221,11 +215,19 @@ DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const Log
 		return Value::TIME(val);
 	}
 	case LogicalTypeId::TIMESTAMP_NS:
-		//! FIXME: When support for 'TIMESTAMP_NS' is added,
-		//! keep in mind that the value should be inferred as DATE when the blob size is 4
-
-		//! TIMESTAMP_NS is added as part of Iceberg V3
-		return DeserializeError(blob, type);
+		if (blob.GetSize() == sizeof(int32_t)) {
+			//! Schema evolution happened: Infer the type as DATE
+			return DeserializeValue(blob, LogicalType::DATE);
+		} else if (blob.GetSize() ==
+		           sizeof(int64_t)) { // Timestamps are typically stored as int64 (microseconds since epoch)
+			int64_t nanos_since_epoch;
+			std::memcpy(&nanos_since_epoch, blob.GetData(), sizeof(int64_t));
+			// Convert to DuckDB timestamp using nanoseconds
+			timestamp_ns_t timestamp(nanos_since_epoch);
+			return Value::TIMESTAMPNS(timestamp);
+		} else {
+			return DeserializeError(blob, type);
+		}
 	case LogicalTypeId::UUID:
 		return DeserializeUUID(blob, type);
 		// Add more types as needed
@@ -381,6 +383,16 @@ SerializeResult IcebergValue::SerializeValue(Value input_value, const LogicalTyp
 		auto ret = SerializeResult(column_type, serialized_val);
 		return ret;
 	}
+	case LogicalTypeId::TIMESTAMP_NS: {
+		timestamp_ns_t val = input_value.GetValue<timestamp_ns_t>();
+		if (!Value::IsFinite(val)) {
+			throw ConversionException("Cannot write infinity/-infinity for timestamp_ns type");
+		}
+		int64_t nanos_since_epoch = val.value;
+		auto serialized_const_data_ptr = const_data_ptr_cast<int64_t>(&nanos_since_epoch);
+		auto serialized_val = Value::BLOB(serialized_const_data_ptr, sizeof(int64_t));
+		return SerializeResult(column_type, serialized_val);
+	}
 	case LogicalTypeId::DECIMAL: {
 		auto decimal_as_string = input_value.GetValue<string>();
 		auto dec_pos = decimal_as_string.find(".");
@@ -441,6 +453,10 @@ SerializeResult IcebergValue::SerializeValue(Value input_value, const LogicalTyp
 		return ret;
 	}
 	case LogicalTypeId::BLOB: {
+		// do not double serialize blob values.
+		if (input_value.type() != LogicalType::VARCHAR) {
+			return SerializeResult(column_type, input_value);
+		}
 		// get const data ptr for the string value
 		auto val = input_value.GetValue<string>();
 		auto bytes = HexStringToBytes(val);

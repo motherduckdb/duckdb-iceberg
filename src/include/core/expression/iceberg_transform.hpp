@@ -1,6 +1,8 @@
 #pragma once
 
+#include "common/iceberg_math.hpp"
 #include "core/expression/iceberg_predicate_stats.hpp"
+#include "duckdb/common/types/interval.hpp"
 
 namespace duckdb {
 
@@ -100,8 +102,14 @@ struct YearTransform {
 			return Value::INTEGER(components.year - 1970);
 		}
 		case LogicalTypeId::TIMESTAMP_TZ: {
-			auto val = constant.GetValue<timestamp_tz_t>();
+			timestamp_t val(constant.GetValue<timestamp_tz_t>());
 			auto components = Timestamp::GetComponents(val);
+			return Value::INTEGER(components.year - 1970);
+		}
+		case LogicalTypeId::TIMESTAMP_NS: {
+			auto val = constant.GetValue<timestamp_ns_t>();
+			auto micros = IcebergNanosToMicrosFloor(val.value);
+			auto components = Timestamp::GetComponents(timestamp_t(micros));
 			return Value::INTEGER(components.year - 1970);
 		}
 		case LogicalTypeId::DATE: {
@@ -142,8 +150,14 @@ struct MonthTransform {
 			return Value::INTEGER(diff.months);
 		}
 		case LogicalTypeId::TIMESTAMP_TZ: {
-			auto val = constant.GetValue<timestamp_tz_t>();
+			timestamp_t val(constant.GetValue<timestamp_tz_t>());
 			auto diff = Interval::GetAge(val, timestamp_t::epoch());
+			return Value::INTEGER(diff.months);
+		}
+		case LogicalTypeId::TIMESTAMP_NS: {
+			auto val = constant.GetValue<timestamp_ns_t>();
+			auto ts = timestamp_t(IcebergNanosToMicrosFloor(val.value));
+			auto diff = Interval::GetAge(ts, timestamp_t::epoch());
 			return Value::INTEGER(diff.months);
 		}
 		case LogicalTypeId::DATE: {
@@ -182,8 +196,14 @@ struct DayTransform {
 			return Value::INTEGER(diff.days);
 		}
 		case LogicalTypeId::TIMESTAMP_TZ: {
-			auto val = constant.GetValue<timestamp_tz_t>();
+			timestamp_t val(constant.GetValue<timestamp_tz_t>());
 			auto diff = Interval::GetDifference(val, timestamp_t::epoch());
+			return Value::INTEGER(diff.days);
+		}
+		case LogicalTypeId::TIMESTAMP_NS: {
+			auto val = constant.GetValue<timestamp_ns_t>();
+			auto ts = timestamp_t(IcebergNanosToMicrosFloor(val.value));
+			auto diff = Interval::GetDifference(ts, timestamp_t::epoch());
 			return Value::INTEGER(diff.days);
 		}
 		case LogicalTypeId::DATE: {
@@ -217,11 +237,18 @@ struct HourTransform {
 		switch (constant.type().id()) {
 		case LogicalTypeId::TIMESTAMP: {
 			auto val = constant.GetValue<timestamp_t>();
-			return Value::INTEGER(static_cast<int32_t>(val.value / Interval::MICROS_PER_HOUR));
+			return Value::INTEGER(static_cast<int32_t>(
+			    // Negative timestamps (time before epoch) must round towards negative infinity, but C++ `/`
+			    // truncates toward zero, so we use floor division here to ensure the correct behavior.
+			    IcebergFloorDiv(val.value, Interval::MICROS_PER_HOUR)));
 		}
 		case LogicalTypeId::TIMESTAMP_TZ: {
 			auto val = constant.GetValue<timestamp_tz_t>();
-			return Value::INTEGER(static_cast<int32_t>(val.value / Interval::MICROS_PER_HOUR));
+			return Value::INTEGER(static_cast<int32_t>(IcebergFloorDiv(val.value, Interval::MICROS_PER_HOUR)));
+		}
+		case LogicalTypeId::TIMESTAMP_NS: {
+			auto val = constant.GetValue<timestamp_ns_t>();
+			return Value::INTEGER(static_cast<int32_t>(IcebergFloorDiv(val.value, Interval::NANOS_PER_HOUR)));
 		}
 		default:
 			throw NotImplementedException("'hour' transform for type %s", constant.type().ToString());

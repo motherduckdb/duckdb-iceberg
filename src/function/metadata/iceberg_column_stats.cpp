@@ -60,7 +60,8 @@ static unique_ptr<FunctionData> IcebergColumnStatsBind(ClientContext &context, T
 	// return a TableRef that contains the scans for the
 	auto ret = make_uniq<IcebergColumnStatsBindData>();
 
-	FileSystem &fs = FileSystem::GetFileSystem(context);
+	auto &fs = FileSystem::GetFileSystem(context);
+	auto caching_fs = make_shared_ptr<CachingFileSystemWrapper>(FileSystem::GetFileSystem(context), *context.db);
 	auto input_string = input.inputs[0].ToString();
 	auto filename = IcebergUtils::GetStorageLocation(context, input_string);
 
@@ -103,7 +104,8 @@ static unique_ptr<FunctionData> IcebergColumnStatsBind(ClientContext &context, T
 	}
 
 	auto iceberg_meta_path = IcebergTableMetadata::GetMetaDataPath(context, filename, fs, options);
-	auto table_metadata = IcebergTableMetadata::Parse(iceberg_meta_path, fs, options.metadata_compression_codec);
+	auto table_metadata =
+	    IcebergTableMetadata::Parse(iceberg_meta_path, *caching_fs, options.metadata_compression_codec);
 	ret->metadata = IcebergTableMetadata::FromTableMetadata(table_metadata);
 
 	ret->snapshot_to_scan = ret->metadata.GetSnapshot(options.snapshot_lookup);
@@ -154,7 +156,7 @@ static unique_ptr<FunctionData> IcebergColumnStatsBind(ClientContext &context, T
 }
 
 static void AddString(Vector &vec, idx_t index, string_t &&str) {
-	FlatVector::GetData<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
+	FlatVector::GetDataMutable<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
 }
 
 static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
@@ -178,7 +180,7 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 
 			for (; global_state.column_it != bind_data.source_to_column_id.end(); global_state.column_it++) {
 				if (out >= STANDARD_VECTOR_SIZE) {
-					output.SetCardinality(out);
+					output.SetChildCardinality(out);
 					return;
 				}
 				idx_t col = 0;
@@ -255,7 +257,7 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 		}
 		global_state.current_manifest_entry_idx = 0;
 	}
-	output.SetCardinality(out);
+	output.SetChildCardinality(out);
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergColumnStatsFunction() {

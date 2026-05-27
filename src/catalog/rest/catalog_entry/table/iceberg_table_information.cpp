@@ -8,6 +8,7 @@
 #include "duckdb/common/exception/transaction_exception.hpp"
 #include "duckdb/common/types/string.hpp"
 #include "duckdb/common/types/timestamp.hpp"
+#include "duckdb/common/operator/cast_operators.hpp"
 
 #include "catalog/rest/api/catalog_api.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
@@ -198,6 +199,9 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 				}
 			}
 		}
+		if (!sigv4_auth.sigv4_region.empty()) {
+			user_defaults.emplace("region", Value(sigv4_auth.sigv4_region));
+		}
 	} else if (catalog.auth_handler->type == IcebergAuthorizationType::OAUTH2) {
 		auto &oauth2_auth = catalog.auth_handler->Cast<OAuth2Authorization>();
 		if (!oauth2_auth.default_region.empty()) {
@@ -215,42 +219,29 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 	config_options.insert(user_defaults.begin(), user_defaults.end());
 	auto schema_component = IRCPathComponent::NamespaceComponent(schema.namespace_items);
 	auto key = schema_component.encoded + "." + name;
-	{
-		// get cache lock when accessing load table result cache
-		lock_guard<std::mutex> cache_lock(catalog.GetMetadataCacheLock());
-		auto cached_table_result = catalog.TryGetValidCachedLoadTableResult(key, cache_lock, false);
-		D_ASSERT(cached_table_result);
-		auto &load_table_result = *cached_table_result->load_table_result;
-		if (load_table_result.has_config) {
-			auto &config = load_table_result.config;
-			ParseConfigOptions(config, config_options, context, storage_type);
-		}
 
-		if (load_table_result.has_storage_credentials) {
-			auto &storage_credentials = load_table_result.storage_credentials;
+	ParseConfigOptions(config, config_options, context, storage_type);
 
-			//! If there is only one credential listed, we don't really care about the prefix,
-			//! we can use the table_location instead.
-			const bool ignore_credential_prefix = storage_credentials.size() == 1;
-			for (idx_t index = 0; index < storage_credentials.size(); index++) {
-				auto &credential = storage_credentials[index];
-				CreateSecretInput create_secret_input;
-				create_secret_input.on_conflict = OnCreateConflict::REPLACE_ON_CONFLICT;
-				create_secret_input.persist_type = SecretPersistType::TEMPORARY;
+	//! If there is only one credential listed, we don't really care about the prefix,
+	//! we can use the table_location instead.
+	const bool ignore_credential_prefix = storage_credentials.size() == 1;
+	for (idx_t index = 0; index < storage_credentials.size(); index++) {
+		auto &credential = storage_credentials[index];
+		CreateSecretInput create_secret_input;
+		create_secret_input.on_conflict = OnCreateConflict::REPLACE_ON_CONFLICT;
+		create_secret_input.persist_type = SecretPersistType::TEMPORARY;
 
-				create_secret_input.scope.push_back(ignore_credential_prefix ? table_location : credential.prefix);
-				create_secret_input.name = StringUtil::Format("%s_%d_%s", secret_base_name, index, credential.prefix);
+		create_secret_input.scope.push_back(ignore_credential_prefix ? table_location : credential.prefix);
+		create_secret_input.name = StringUtil::Format("%s_%d_%s", secret_base_name, index, credential.prefix);
 
-				create_secret_input.type = storage_type;
-				create_secret_input.provider = "config";
-				create_secret_input.storage_type = "memory";
-				create_secret_input.options = config_options;
+		create_secret_input.type = storage_type;
+		create_secret_input.provider = "config";
+		create_secret_input.storage_type = "memory";
+		create_secret_input.options = config_options;
 
-				ParseConfigOptions(credential.config, create_secret_input.options, context, storage_type);
-				//! TODO: apply the 'overrides' retrieved from the /v1/config endpoint
-				result.storage_credentials.push_back(create_secret_input);
-			}
-		}
+		ParseConfigOptions(credential.config, create_secret_input.options, context, storage_type);
+		//! TODO: apply the 'overrides' retrieved from the /v1/config endpoint
+		result.storage_credentials.push_back(create_secret_input);
 	}
 
 	if (result.storage_credentials.empty() && !config_options.empty()) {
@@ -286,6 +277,7 @@ optional_ptr<CatalogEntry> IcebergTableInformation::CreateSchemaVersion(const Ic
 	if (result->name.empty()) {
 		throw InternalException("IcebergTableSet::CreateEntry called with empty name");
 	}
+
 	schema_versions.emplace(table_schema.schema_id, std::move(table_entry));
 	return result;
 }
@@ -345,54 +337,59 @@ int64_t IcebergTableInformation::GetExistingSpecId(IcebergPartitionSpec &spec) {
 	}
 	return existing_spec_id;
 }
-void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
-                                               const vector<unique_ptr<ParsedExpression>> &partition_keys,
-                                               const IcebergTableSchema &schema, bool first_partition_spec) {
-	idx_t base_partition_field_id = 1000;
-	if (!first_partition_spec && table_metadata.HasLastPartitionId()) {
-		base_partition_field_id = table_metadata.GetLastPartitionFieldId() + 1;
-	}
 
-	idx_t new_spec_id = 0;
-	if (!first_partition_spec) {
-		new_spec_id = GetNextPartitionSpecId();
-	}
-
-	IcebergPartitionSpec new_spec(new_spec_id);
+IcebergPartitionSpec
+IcebergTableInformation::BuildPartitionSpec(const vector<unique_ptr<ParsedExpression>> &partition_keys,
+                                            const IcebergTableSchema &schema, int32_t spec_id,
+                                            idx_t base_partition_field_id) {
+	IcebergPartitionSpec new_spec(spec_id);
 
 	for (auto &key : partition_keys) {
 		string column_name;
-		string transform_name = "identity";
+		string transform = "identity";
 		idx_t bucket_modulo_val;
 
-		if (key->type == ExpressionType::COLUMN_REF) {
+		auto key_type = key->GetExpressionType();
+		if (key_type == ExpressionType::COLUMN_REF) {
 			auto &colref = key->Cast<ColumnRefExpression>();
 			column_name = colref.column_names.back();
-		} else if (key->type == ExpressionType::FUNCTION) {
+		} else if (key_type == ExpressionType::FUNCTION) {
 			auto &funcexpr = key->Cast<FunctionExpression>();
-			transform_name = funcexpr.function_name;
+			transform = funcexpr.function_name;
 			if (funcexpr.children.empty()) {
-				throw NotImplementedException("Unrecognized transform ('%s')", transform_name);
-			} else if (!IcebergTransform::TransformFunctionSupported(transform_name)) {
-				throw NotImplementedException("Unrecognized transform ('%s')", transform_name);
-			} else if (funcexpr.children[0]->type != ExpressionType::COLUMN_REF) {
-				throw NotImplementedException("Transforms are only supported on column references, not %s",
-				                              EnumUtil::ToChars(funcexpr.children[0]->type));
+				throw NotImplementedException("Unrecognized transform ('%s')", transform);
+			} else if (!IcebergTransform::TransformFunctionSupported(transform)) {
+				throw NotImplementedException("Unrecognized transform ('%s')", transform);
 			}
-			auto &colref = funcexpr.children[0]->Cast<ColumnRefExpression>();
-			column_name = colref.column_names.back();
-			if (transform_name == "bucket" || transform_name == "truncate") {
+			if (transform == "bucket" || transform == "truncate") {
+				// Spark-compatible syntax: bucket(N, col) / truncate(W, col)
 				if (funcexpr.children.size() < 2) {
-					throw InvalidInputException("%s requires a numeric argument, e.g. %s(col, 16)", transform_name,
-					                            transform_name);
+					throw InvalidInputException("%s requires two arguments, e.g. %s(16, col)", transform, transform);
 				}
-				auto &param_expr = *funcexpr.children[1];
-				if (param_expr.type != ExpressionType::VALUE_CONSTANT) {
-					throw InvalidInputException("%s second argument must be a constant integer", transform_name);
+				auto &param_expr = *funcexpr.children[0];
+				if (param_expr.GetExpressionType() != ExpressionType::VALUE_CONSTANT) {
+					throw InvalidInputException("%s first argument must be a constant integer", transform);
 				}
 				auto &const_expr = param_expr.Cast<ConstantExpression>();
-				bucket_modulo_val = const_expr.value.GetValue<int32_t>();
-				transform_name = StringUtil::Format("%s[%d]", transform_name, bucket_modulo_val);
+				auto raw_val = const_expr.GetValue().GetValue<int32_t>();
+				if (raw_val <= 0) {
+					throw InvalidInputException("%s requires a positive integer argument, got %d", transform, raw_val);
+				}
+				bucket_modulo_val = const_expr.GetValue().GetValue<idx_t>();
+				transform = StringUtil::Format("%s[%d]", transform, bucket_modulo_val);
+				if (funcexpr.children[1]->GetExpressionType() != ExpressionType::COLUMN_REF) {
+					throw NotImplementedException("Transforms are only supported on column references, not %s",
+					                              EnumUtil::ToChars(funcexpr.children[1]->GetExpressionType()));
+				}
+				auto &colref = funcexpr.children[1]->Cast<ColumnRefExpression>();
+				column_name = colref.column_names.back();
+			} else {
+				if (funcexpr.children[0]->GetExpressionType() != ExpressionType::COLUMN_REF) {
+					throw NotImplementedException("Transforms are only supported on column references, not %s",
+					                              EnumUtil::ToChars(funcexpr.children[0]->GetExpressionType()));
+				}
+				auto &colref = funcexpr.children[0]->Cast<ColumnRefExpression>();
+				column_name = colref.column_names.back();
 			}
 		} else {
 			throw NotImplementedException("Unsupported partition key type: %s", key->ToString());
@@ -411,55 +408,112 @@ void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
 		}
 
 		IcebergPartitionSpecField field;
-		field.transform = IcebergTransform(transform_name);
-		switch (field.transform.Type()) {
+		// Create the Iceberg transform
+		auto iceberg_transform = IcebergTransform(transform);
+		switch (iceberg_transform.Type()) {
 		case IcebergTransformType::BUCKET:
 		case IcebergTransformType::TRUNCATE:
-			field.transform.SetBucketOrTruncateValue(bucket_modulo_val);
+			iceberg_transform.SetBucketOrTruncateValue(bucket_modulo_val);
 			break;
 		default:
 			break;
 		}
+		field.transform = iceberg_transform;
 		field.source_id = source_id;
 		field.partition_field_id = base_partition_field_id + new_spec.fields.size();
 		// transform field names cannot be the column name. Otherwise Lakekeeper complains
-		field.name = column_name + "_" + field.transform.RawType();
+		field.SetPartitionSpecFieldName(column_name);
 		new_spec.fields.push_back(std::move(field));
 	}
+
+	return new_spec;
+}
+
+void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
+                                               const vector<unique_ptr<ParsedExpression>> &partition_keys,
+                                               const IcebergTableSchema &schema, bool first_partition_spec) {
+	idx_t base_partition_field_id = 1000;
+	if (!first_partition_spec && table_metadata.HasLastPartitionId()) {
+		base_partition_field_id = table_metadata.GetLastPartitionFieldId() + 1;
+	}
+
+	idx_t new_spec_id = 0;
+	if (!first_partition_spec) {
+		new_spec_id = GetNextPartitionSpecId();
+	}
+	auto &transaction_data = GetOrCreateTransactionData(transaction);
+
+	auto new_spec =
+	    BuildPartitionSpec(partition_keys, schema, static_cast<int32_t>(new_spec_id), base_partition_field_id);
 
 	// if spec definition already exists in a previous spec definition, set it to that spec id
 	// (some catalog may allow duplicate definitions, others not)
 	int64_t existing_spec_id = GetExistingSpecId(new_spec);
 	if (existing_spec_id >= 0) {
 		table_metadata.default_spec_id = existing_spec_id;
-		SetDefaultSpec(transaction);
+		transaction_data.TableSetDefaultSpec();
 		return;
 	}
 
 	table_metadata.partition_specs.emplace(new_spec_id, std::move(new_spec));
 	table_metadata.default_spec_id = new_spec_id;
 	if (!first_partition_spec) {
-		AddPartitionSpec(transaction);
-		SetDefaultSpec(transaction);
+		transaction_data.TableAddPartitionSpec();
+		transaction_data.TableSetDefaultSpec();
 	}
 }
 
-optional_ptr<CatalogEntry> IcebergTableInformation::GetSchemaVersion(const IcebergSnapshotLookup &snapshot_lookup) {
-	D_ASSERT(!schema_versions.empty());
+optional_ptr<CatalogEntry> IcebergTableInformation::GetSchemaVersion(ClientContext &context,
+                                                                     optional_ptr<BoundAtClause> at) {
 	if (table_metadata.snapshots.empty()) {
 		return schema_versions[table_metadata.GetCurrentSchemaId()].get();
 	}
+
+	D_ASSERT(!schema_versions.empty());
+	auto &meta_transaction = MetaTransaction::Get(context);
+	auto transaction_start = meta_transaction.GetCurrentTransactionStartTimestamp();
+	auto transaction_start_millis = Timestamp::GetEpochMs(transaction_start);
+
+	auto snapshot_lookup = IcebergSnapshotLookup::FromAtClause(at);
 	auto snapshot_info = table_metadata.GetSnapshot(snapshot_lookup);
-	return schema_versions[snapshot_info.schema_id].get();
+
+	int32_t schema_id;
+	if (!snapshot_lookup.IsLatest() && snapshot_info.snapshot) {
+		//! Time travel query, verify this is reachable
+		auto &snapshot = *snapshot_info.snapshot;
+		if (snapshot.timestamp_ms.value > transaction_start.value) {
+			//! Not reachable by the current transaction
+			return nullptr;
+		}
+		schema_id = snapshot.GetSchemaId();
+	} else {
+		bool use_metadata_log = true;
+		Value val;
+		if (context.TryGetCurrentSetting("iceberg_use_metadata_log", val)) {
+			if (!val.IsNull() && val.type().id() == LogicalTypeId::BOOLEAN) {
+				use_metadata_log = val.GetValue<bool>();
+			}
+		}
+
+		const bool latest_metadata_is_too_fresh = table_metadata.last_updated_ms.value > transaction_start_millis;
+		const bool can_use_metadata_log = use_metadata_log && !table_metadata.metadata_log.empty();
+		if (latest_metadata_is_too_fresh && can_use_metadata_log) {
+			string metadata_path;
+			auto relevant_metadata = CreateMetadataFromLog(context, transaction_start_millis, metadata_path);
+			schema_id = relevant_metadata.GetCurrentSchemaId();
+		} else {
+			schema_id = table_metadata.GetCurrentSchemaId();
+		}
+	}
+	return schema_versions[schema_id].get();
 }
 
 idx_t IcebergTableInformation::GetIcebergVersion() const {
 	return table_metadata.iceberg_version;
 }
 
-optional_ptr<CatalogEntry> IcebergTableInformation::GetLatestSchema() {
-	IcebergSnapshotLookup latest_snapshot;
-	return GetSchemaVersion(latest_snapshot);
+optional_ptr<CatalogEntry> IcebergTableInformation::GetLatestSchema(ClientContext &context) {
+	return GetSchemaVersion(context, nullptr);
 }
 
 string IcebergTableInformation::GetTableKey(const vector<string> &namespace_items, const string &table_name) {
@@ -475,21 +529,29 @@ string IcebergTableInformation::GetTableKey() const {
 }
 
 IcebergSnapshotLookup IcebergTableInformation::GetSnapshotLookup(IcebergTransaction &iceberg_transaction) const {
-	auto &context = *iceberg_transaction.context.lock();
+	auto locked_context = iceberg_transaction.context.lock();
+	auto &context = *locked_context;
 	return GetSnapshotLookup(context);
 }
 
+IcebergSnapshotLookup IcebergTableInformation::GetSnapshotLookup(ClientContext &context,
+                                                                 optional_ptr<BoundAtClause> at) const {
+	if (!at && !HasTransactionUpdates()) {
+		// if there is no user supplied AT () clause, and the table does not have transaction updates
+		// use transaction start time
+		return GetSnapshotLookup(context);
+	}
+	return IcebergSnapshotLookup::FromAtClause(at);
+}
+
 IcebergSnapshotLookup IcebergTableInformation::GetSnapshotLookup(ClientContext &context) const {
-	const auto table_name = name;
 	auto &meta_transaction = MetaTransaction::Get(context);
 	auto transaction_start = meta_transaction.GetCurrentTransactionStartTimestamp();
-	auto start = timestamp_tz_t(transaction_start);
-	BoundAtClause new_at_clause = BoundAtClause("timestamp", Value::TIMESTAMPTZ(start));
-	auto new_lookup_storage = EntryLookupInfo(CatalogType::TABLE_ENTRY, table_name, new_at_clause, QueryErrorContext());
 
-	auto at = new_lookup_storage.GetAtClause();
-	auto snapshot_lookup = IcebergSnapshotLookup::FromAtClause(at);
-	return snapshot_lookup;
+	IcebergSnapshotLookup res;
+	res.snapshot_timestamp = transaction_start;
+	res.SetSource(SnapshotSource::FROM_TIMESTAMP);
+	return res;
 }
 
 bool IcebergTableInformation::TableIsEmpty(const IcebergSnapshotLookup &snapshot_lookup) const {
@@ -506,50 +568,111 @@ bool IcebergTableInformation::TableIsEmpty(const IcebergSnapshotLookup &snapshot
 }
 
 bool IcebergTableInformation::HasTransactionUpdates() const {
-	return transaction_data && (!transaction_data->updates.empty() || !transaction_data->requirements.empty());
+	if (!transaction_data) {
+		return false;
+	}
+	auto &data = *transaction_data;
+	if (!data.updates.empty()) {
+		return true;
+	}
+	if (!data.requirements.empty()) {
+		return true;
+	}
+	if (data.set_schema_id) {
+		return true;
+	}
+	if (data.assert_schema_id) {
+		return true;
+	}
+	return false;
 }
 
-IcebergTableInformation IcebergTableInformation::Copy() const {
+IcebergTableInformation IcebergTableInformation::Copy(ClientContext &context) const {
 	auto ret = IcebergTableInformation(catalog, schema, name);
 	auto table_key = ret.GetTableKey();
 	{
-		lock_guard<std::mutex> cache_lock(catalog.GetMetadataCacheLock());
-		auto cached_result = catalog.TryGetValidCachedLoadTableResult(table_key, cache_lock, false);
+		lock_guard<std::mutex> cache_lock(catalog.table_request_cache.Lock());
+		auto cached_result = catalog.table_request_cache.Get(context, table_key, cache_lock, false);
 		D_ASSERT(cached_result);
 		auto &cached_table_result = *cached_result->load_table_result;
-		ret.table_metadata = IcebergTableMetadata::FromTableMetadata(cached_table_result.metadata);
-		ret.table_metadata.latest_metadata_json = cached_table_result.metadata_location;
+		ret.InitializeFromLoadTableResult(cached_table_result, false);
 	}
 	return ret;
 }
 
-IcebergTableInformation IcebergTableInformation::Copy(IcebergTransaction &iceberg_transaction) const {
-	auto ret = Copy();
-	// get snapshot from start of transaction
-	// latest_snapshot_id and sequence of copied table information should be asof the transaction start
-	// this is to ensure when the transaction commits, the assert ref snapshot id is the one closest to the start of
-	// this
-	auto snapshot_lookup = GetSnapshotLookup(iceberg_transaction);
-	if (ret.TableIsEmpty(snapshot_lookup)) {
-		return ret;
+IcebergTableMetadata IcebergTableInformation::CreateMetadataFromLog(ClientContext &context,
+                                                                    int64_t transaction_start_millis,
+                                                                    string &metadata_path) const {
+	auto &log = table_metadata.metadata_log;
+
+	optional_idx log_item_index;
+	for (idx_t i = log.size(); i-- > 0;) {
+		if (log[i].timestamp_ms <= transaction_start_millis) {
+			log_item_index = i;
+			break;
+		}
 	}
-	IcebergSnapshotScanInfo snapshot_info;
-	try {
-		snapshot_info = ret.table_metadata.GetSnapshot(snapshot_lookup);
-	} catch (InvalidConfigurationException &e) {
-		throw TransactionException("Table %s is already outdated. Please restart your transaction", GetTableKey());
+	if (!log_item_index.IsValid()) {
+		auto timestamp = duckdb::Cast::Operation<timestamp_ms_t, timestamp_t>(timestamp_ms_t(transaction_start_millis));
+		throw InternalException(
+		    "Metadata-log exists but none of the entries were valid for the current transaction start time (%s)",
+		    Timestamp::ToString(timestamp));
 	}
 
-	auto &snapshot = snapshot_info.snapshot;
-	D_ASSERT(snapshot);
-	ret.table_metadata.SetCurrentSchemaId(snapshot_info.schema_id);
-	ret.table_metadata.last_sequence_number = snapshot->sequence_number;
-	ret.table_metadata.current_snapshot_id = snapshot->snapshot_id;
+	auto fs = make_shared_ptr<CachingFileSystemWrapper>(FileSystem::GetFileSystem(context), *context.db);
+	auto &path = log[log_item_index.GetIndex()].metadata_file;
+	auto parsed_metadata = IcebergTableMetadata::Parse(path, *fs, "");
+
+	metadata_path = path;
+	return IcebergTableMetadata::FromTableMetadata(parsed_metadata);
+}
+
+IcebergTableInformation IcebergTableInformation::Copy(IcebergTransaction &iceberg_transaction) const {
+	auto locked_context = iceberg_transaction.context.lock();
+	auto &context = *locked_context;
+
+	auto ret = Copy(context);
+	auto &meta_transaction = MetaTransaction::Get(context);
+	auto transaction_start = meta_transaction.GetCurrentTransactionStartTimestamp();
+	auto transaction_start_millis = Timestamp::GetEpochMs(transaction_start);
+
+	if (table_metadata.last_updated_ms.value > transaction_start_millis) {
+		bool use_metadata_log = true;
+		Value val;
+		if (context.TryGetCurrentSetting("iceberg_use_metadata_log", val)) {
+			if (!val.IsNull() && val.type().id() == LogicalTypeId::BOOLEAN) {
+				use_metadata_log = val.GetValue<bool>();
+			}
+		}
+
+		const bool can_use_metadata_log = use_metadata_log && !table_metadata.metadata_log.empty();
+		if (!can_use_metadata_log) {
+			auto snapshot_lookup = GetSnapshotLookup(iceberg_transaction);
+			if (ret.TableIsEmpty(snapshot_lookup)) {
+				return ret;
+			}
+			IcebergSnapshotScanInfo snapshot_info;
+			snapshot_info = ret.table_metadata.GetSnapshot(snapshot_lookup);
+			if (!snapshot_info.snapshot) {
+				throw TransactionException("Table %s is already outdated. Please restart your transaction",
+				                           GetTableKey());
+			}
+
+			auto &snapshot = snapshot_info.snapshot;
+			D_ASSERT(snapshot);
+			ret.table_metadata.SetCurrentSchemaId(table_metadata.GetCurrentSchemaId());
+			ret.table_metadata.last_sequence_number = snapshot->sequence_number;
+			ret.table_metadata.current_snapshot_id = snapshot->snapshot_id;
+			return ret;
+		}
+		ret.table_metadata = ret.CreateMetadataFromLog(context, transaction_start_millis, ret.latest_metadata_json);
+		return ret;
+	}
 	return ret;
 }
 
 void IcebergTableInformation::InitSchemaVersions() {
-	for (auto &table_schema : table_metadata.schemas) {
+	for (auto &table_schema : table_metadata.GetSchemas()) {
 		CreateSchemaVersion(*table_schema.second);
 	}
 }
@@ -560,110 +683,32 @@ IcebergTableInformation::IcebergTableInformation(IcebergCatalog &catalog, Iceber
 	table_id = "uuid-" + schema.name + "-" + name;
 }
 
-void IcebergTableInformation::InitTransactionData(IcebergTransaction &transaction) {
+IcebergTransactionData &IcebergTableInformation::GetOrCreateTransactionData(IcebergTransaction &transaction) {
 	lock_guard<mutex> guard(transaction.lock);
 	if (!transaction_data) {
 		auto context = transaction.context.lock();
 		transaction_data = make_uniq<IcebergTransactionData>(*context, *this);
 	}
+	return *transaction_data;
 }
 
-void IcebergTableInformation::AddSnapshot(IcebergTransaction &transaction, vector<IcebergManifestEntry> &&data_files) {
-	D_ASSERT(!data_files.empty());
-	InitTransactionData(transaction);
-	IcebergManifestDeletes empty_manifest_deletes;
-	transaction_data->AddSnapshot(IcebergSnapshotOperationType::APPEND, std::move(data_files),
-	                              std::move(empty_manifest_deletes));
-}
+void IcebergTableInformation::InitializeFromLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result,
+                                                            bool initialize_schemas) {
+	table_metadata = IcebergTableMetadata::FromTableMetadata(load_table_result.metadata);
+	config = load_table_result.config;
+	storage_credentials.clear();
+	for (auto &credential : load_table_result.storage_credentials) {
+		storage_credentials.push_back(credential);
+	}
+	latest_metadata_json = load_table_result.metadata_location;
 
-void IcebergTableInformation::AddDeleteSnapshot(IcebergTransaction &transaction,
-                                                vector<IcebergManifestEntry> &&data_files,
-                                                IcebergManifestDeletes &&altered_manifests) {
-	InitTransactionData(transaction);
-	transaction_data->AddSnapshot(IcebergSnapshotOperationType::DELETE, std::move(data_files),
-	                              std::move(altered_manifests));
-}
-
-void IcebergTableInformation::AddUpdateSnapshot(IcebergTransaction &transaction,
-                                                vector<IcebergManifestEntry> &&delete_files,
-                                                vector<IcebergManifestEntry> &&data_files,
-                                                IcebergManifestDeletes &&altered_manifests) {
-	InitTransactionData(transaction);
-	// Automatically creates new snapshot with SnapshotOperationType::Overwrite
-	transaction_data->AddUpdateSnapshot(std::move(delete_files), std::move(data_files), std::move(altered_manifests));
-}
-
-void IcebergTableInformation::AddSchema(IcebergTransaction &transaction) {
-	InitTransactionData(transaction);
-	transaction_data->TableAddSchema();
-}
-
-void IcebergTableInformation::AddAssignUUID(IcebergTransaction &transaction) {
-	InitTransactionData(transaction);
-	transaction_data->TableAssignUUID();
-}
-
-void IcebergTableInformation::AddAssertCreate(IcebergTransaction &transaction) {
-	InitTransactionData(transaction);
-	transaction_data->TableAddAssertCreate();
-}
-
-void IcebergTableInformation::AddAssertCurrentSchemaId(IcebergTransaction &transaction) {
-	InitTransactionData(transaction);
-	transaction_data->TableAddAssertCurrentSchemaId();
-}
-
-void IcebergTableInformation::AddAssertLastAssignedFieldId(IcebergTransaction &transaction) {
-	InitTransactionData(transaction);
-	transaction_data->TableAddAssertLastAssignedFieldId();
-}
-
-void IcebergTableInformation::AddAssertLastAssignedPartitionId(IcebergTransaction &transaction) {
-	InitTransactionData(transaction);
-	transaction_data->TableAddAssertLastAssignedPartitionId();
-}
-
-void IcebergTableInformation::AddAssertDefaultSpecId(IcebergTransaction &transaction) {
-	InitTransactionData(transaction);
-	transaction_data->TableAddAssertDefaultSpecId();
-}
-
-void IcebergTableInformation::AddUpradeFormatVersion(IcebergTransaction &transaction) {
-	InitTransactionData(transaction);
-	transaction_data->TableAddUpradeFormatVersion();
-}
-void IcebergTableInformation::AddSetCurrentSchema(IcebergTransaction &transaction) {
-	InitTransactionData(transaction);
-	transaction_data->TableAddSetCurrentSchema();
-}
-void IcebergTableInformation::AddPartitionSpec(IcebergTransaction &transaction) {
-	InitTransactionData(transaction);
-	transaction_data->TableAddPartitionSpec();
-}
-void IcebergTableInformation::AddSortOrder(IcebergTransaction &transaction) {
-	InitTransactionData(transaction);
-	transaction_data->TableAddSortOrder();
-}
-void IcebergTableInformation::SetDefaultSortOrder(IcebergTransaction &transaction) {
-	InitTransactionData(transaction);
-	transaction_data->TableSetDefaultSortOrder();
-}
-void IcebergTableInformation::SetDefaultSpec(IcebergTransaction &transaction) {
-	InitTransactionData(transaction);
-	transaction_data->TableSetDefaultSpec();
-}
-void IcebergTableInformation::SetProperties(IcebergTransaction &transaction,
-                                            const case_insensitive_map_t<string> &properties) {
-	InitTransactionData(transaction);
-	transaction_data->TableSetProperties(properties);
-}
-void IcebergTableInformation::RemoveProperties(IcebergTransaction &transaction, const vector<string> &properties) {
-	InitTransactionData(transaction);
-	transaction_data->TableRemoveProperties(properties);
-}
-void IcebergTableInformation::SetLocation(IcebergTransaction &transaction) {
-	InitTransactionData(transaction);
-	transaction_data->TableSetLocation();
+	if (initialize_schemas) {
+		auto &schemas = table_metadata.GetSchemas();
+		D_ASSERT(!schemas.empty());
+		for (auto &table_schema : schemas) {
+			CreateSchemaVersion(*table_schema.second);
+		}
+	}
 }
 
 } // namespace duckdb

@@ -2,31 +2,38 @@
 if (NOT EMSCRIPTEN)
   duckdb_extension_load(avro
   LOAD_TESTS
-  GIT_URL https://github.com/duckdb/duckdb-avro
-  GIT_TAG fa61c8e2bfa5b173749bf9db4fc853dea78969b6
+  GIT_URL https://github.com/tishj/duckdb_avro
+  GIT_TAG 404ca1c83d5c8eaff34c2710cd9e44e81702371c
 )
 endif()
 
 # Extension from this repo
+if (DONT_LINK OR "$ENV{DONT_LINK}")
+    set(ICEBERG_DONT_LINK "DONT_LINK")
+else()
+    set(ICEBERG_DONT_LINK "")
+endif()
+
 duckdb_extension_load(iceberg
     SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}
     LOAD_TESTS
+    ${ICEBERG_DONT_LINK}
 )
 
 if (NOT EMSCRIPTEN)
   duckdb_extension_load(tpch)
   duckdb_extension_load(icu)
-  duckdb_extension_load(ducklake
-        LOAD_TESTS
-        GIT_URL https://github.com/duckdb/ducklake
-        GIT_TAG a92abf755a7b4e2f3e410f8b89c72b990a0698da
-)
+#  duckdb_extension_load(ducklake
+#        LOAD_TESTS
+#        GIT_URL https://github.com/duckdb/ducklake
+#        GIT_TAG a92abf755a7b4e2f3e410f8b89c72b990a0698da
+#)
 
   if (NOT MINGW)
     duckdb_extension_load(aws
             LOAD_TESTS
             GIT_URL https://github.com/duckdb/duckdb-aws
-            GIT_TAG 18803d5e55b9f9f6dda5047d0fdb4f4238b6801d
+            GIT_TAG ebce8e46e9a02576cfd0296fe29c23aeeddaa937
     )
   endif()
 endif()

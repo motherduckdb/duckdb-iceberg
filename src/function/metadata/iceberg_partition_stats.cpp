@@ -58,7 +58,8 @@ static unique_ptr<FunctionData> IcebergPartitionStatsBind(ClientContext &context
 	// return a TableRef that contains the scans for the
 	auto ret = make_uniq<IcebergPartitionStatsBindData>();
 
-	FileSystem &fs = FileSystem::GetFileSystem(context);
+	auto &fs = FileSystem::GetFileSystem(context);
+	auto caching_fs = make_shared_ptr<CachingFileSystemWrapper>(fs, *context.db);
 	auto input_string = input.inputs[0].ToString();
 	auto filename = IcebergUtils::GetStorageLocation(context, input_string);
 
@@ -101,7 +102,8 @@ static unique_ptr<FunctionData> IcebergPartitionStatsBind(ClientContext &context
 	}
 
 	auto iceberg_meta_path = IcebergTableMetadata::GetMetaDataPath(context, filename, fs, options);
-	auto table_metadata = IcebergTableMetadata::Parse(iceberg_meta_path, fs, options.metadata_compression_codec);
+	auto table_metadata =
+	    IcebergTableMetadata::Parse(iceberg_meta_path, *caching_fs, options.metadata_compression_codec);
 	ret->metadata = IcebergTableMetadata::FromTableMetadata(table_metadata);
 
 	ret->snapshot_to_scan = ret->metadata.GetSnapshot(options.snapshot_lookup);
@@ -155,7 +157,7 @@ static unique_ptr<FunctionData> IcebergPartitionStatsBind(ClientContext &context
 }
 
 static void AddString(Vector &vec, idx_t index, string_t &&str) {
-	FlatVector::GetData<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
+	FlatVector::GetDataMutable<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
 }
 
 static void IcebergPartitionStatsFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
@@ -186,7 +188,7 @@ static void IcebergPartitionStatsFunction(ClientContext &context, TableFunctionI
 		for (; global_state.current_manifest_entry_idx < field_summaries.size();
 		     global_state.current_manifest_entry_idx++) {
 			if (out >= STANDARD_VECTOR_SIZE) {
-				output.SetCardinality(out);
+				output.SetChildCardinality(out);
 				return;
 			}
 			auto &field_summary = field_summaries[global_state.current_manifest_entry_idx];
@@ -200,13 +202,13 @@ static void IcebergPartitionStatsFunction(ClientContext &context, TableFunctionI
 			//! manifest_path
 			AddString(output.data[col++], out, string_t(manifest.manifest_path));
 			//! added_snapshot_id
-			FlatVector::GetData<int64_t>(output.data[col++])[out] = manifest.added_snapshot_id;
+			FlatVector::GetDataMutable<int64_t>(output.data[col++])[out] = manifest.added_snapshot_id;
 			//! partition_spec_id
-			FlatVector::GetData<int32_t>(output.data[col++])[out] = manifest.partition_spec_id;
+			FlatVector::GetDataMutable<int32_t>(output.data[col++])[out] = manifest.partition_spec_id;
 			//! partition_field_id
-			FlatVector::GetData<uint64_t>(output.data[col++])[out] = field.partition_field_id;
+			FlatVector::GetDataMutable<uint64_t>(output.data[col++])[out] = field.partition_field_id;
 			//! partition_field_name
-			AddString(output.data[col++], out, string_t(field.name));
+			AddString(output.data[col++], out, string_t(field.GetPartitionSpecFieldName()));
 			//! partition_source_columns
 			output.data[col++].SetValue(out, Value::LIST({column.name}));
 			//! partition_field_transform
@@ -223,15 +225,15 @@ static void IcebergPartitionStatsFunction(ClientContext &context, TableFunctionI
 			AddString(output.data[col++], out, string_t(stats.upper_bound.ToString()));
 
 			//! contains_null
-			FlatVector::GetData<bool>(output.data[col++])[out] = field_summary.contains_null;
+			FlatVector::GetDataMutable<bool>(output.data[col++])[out] = field_summary.contains_null;
 			//! contains_nan
-			FlatVector::GetData<bool>(output.data[col++])[out] = field_summary.contains_nan;
+			FlatVector::GetDataMutable<bool>(output.data[col++])[out] = field_summary.contains_nan;
 
 			out++;
 		}
 		global_state.current_manifest_entry_idx = 0;
 	}
-	output.SetCardinality(out);
+	output.SetChildCardinality(out);
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergPartitionStatsFunction() {

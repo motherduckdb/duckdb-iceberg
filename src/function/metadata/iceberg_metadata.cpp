@@ -88,7 +88,8 @@ static unique_ptr<FunctionData> IcebergMetaDataBind(ClientContext &context, Tabl
 	// return a TableRef that contains the scans for the
 	auto ret = make_uniq<IcebergMetaDataBindData>();
 
-	FileSystem &fs = FileSystem::GetFileSystem(context);
+	auto &fs = FileSystem::GetFileSystem(context);
+	auto caching_fs = make_shared_ptr<CachingFileSystemWrapper>(fs, *context.db);
 	auto input_string = input.inputs[0].ToString();
 	auto filename = IcebergUtils::GetStorageLocation(context, input_string);
 
@@ -131,7 +132,8 @@ static unique_ptr<FunctionData> IcebergMetaDataBind(ClientContext &context, Tabl
 	}
 
 	auto iceberg_meta_path = IcebergTableMetadata::GetMetaDataPath(context, filename, fs, options);
-	auto table_metadata = IcebergTableMetadata::Parse(iceberg_meta_path, fs, options.metadata_compression_codec);
+	auto table_metadata =
+	    IcebergTableMetadata::Parse(iceberg_meta_path, *caching_fs, options.metadata_compression_codec);
 	auto metadata = IcebergTableMetadata::FromTableMetadata(table_metadata);
 
 	auto snapshot_to_scan = metadata.GetSnapshot(options.snapshot_lookup);
@@ -156,7 +158,7 @@ static unique_ptr<FunctionData> IcebergMetaDataBind(ClientContext &context, Tabl
 }
 
 static void AddString(Vector &vec, idx_t index, string_t &&str) {
-	FlatVector::GetData<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
+	FlatVector::GetDataMutable<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
 }
 
 static void IcebergMetaDataFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
@@ -175,7 +177,7 @@ static void IcebergMetaDataFunction(ClientContext &context, TableFunctionInput &
 		auto &entries = table_entry.manifest_entries;
 		for (; global_state.current_manifest_entry_idx < entries.size(); global_state.current_manifest_entry_idx++) {
 			if (out >= STANDARD_VECTOR_SIZE) {
-				output.SetCardinality(out);
+				output.SetChildCardinality(out);
 				return;
 			}
 			auto &manifest = table_entry.file;
@@ -185,7 +187,7 @@ static void IcebergMetaDataFunction(ClientContext &context, TableFunctionInput &
 			//! manifest_path
 			AddString(output.data[0], out, string_t(manifest.manifest_path));
 			//! manifest_sequence_number
-			FlatVector::GetData<int64_t>(output.data[1])[out] = manifest.sequence_number;
+			FlatVector::GetDataMutable<int64_t>(output.data[1])[out] = manifest.sequence_number;
 			//! manifest_content
 			AddString(output.data[2], out, string_t(IcebergManifestContentTypeToString(manifest.content)));
 
@@ -198,12 +200,12 @@ static void IcebergMetaDataFunction(ClientContext &context, TableFunctionInput &
 			//! file_format
 			AddString(output.data[6], out, string_t(data_file.file_format));
 			//! record_count
-			FlatVector::GetData<int64_t>(output.data[7])[out] = data_file.record_count;
+			FlatVector::GetDataMutable<int64_t>(output.data[7])[out] = data_file.record_count;
 			out++;
 		}
 		global_state.current_manifest_entry_idx = 0;
 	}
-	output.SetCardinality(out);
+	output.SetChildCardinality(out);
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergMetadataFunction() {

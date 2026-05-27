@@ -1,5 +1,6 @@
 #include "duckdb/common/file_opener.hpp"
 #include "duckdb/common/file_system.hpp"
+#include "duckdb/storage/external_file_cache/caching_file_system_wrapper.hpp"
 
 #include "function/iceberg_functions.hpp"
 #include "iceberg_options.hpp"
@@ -22,12 +23,13 @@ public:
 		auto bind_data = input.bind_data->Cast<IcebergSnaphotsBindData>();
 		auto global_state = make_uniq<IcebergSnapshotGlobalTableFunctionState>();
 
-		FileSystem &fs = FileSystem::GetFileSystem(context);
+		auto &fs = FileSystem::GetFileSystem(context);
+		auto caching_fs = make_shared_ptr<CachingFileSystemWrapper>(fs, *context.db);
 
 		auto iceberg_meta_path =
 		    IcebergTableMetadata::GetMetaDataPath(context, bind_data.filename, fs, bind_data.options);
 		auto table_metadata =
-		    IcebergTableMetadata::Parse(iceberg_meta_path, fs, bind_data.options.metadata_compression_codec);
+		    IcebergTableMetadata::Parse(iceberg_meta_path, *caching_fs, bind_data.options.metadata_compression_codec);
 		global_state->metadata = IcebergTableMetadata::FromTableMetadata(table_metadata);
 
 		auto &info = global_state->metadata;
@@ -89,14 +91,14 @@ static void IcebergSnapshotsFunction(ClientContext &context, TableFunctionInput 
 		}
 
 		auto &snapshot = it->second;
-		FlatVector::GetData<uint64_t>(output.data[0])[i] = snapshot.sequence_number;
-		FlatVector::GetData<uint64_t>(output.data[1])[i] = snapshot.snapshot_id;
-		FlatVector::GetData<timestamp_t>(output.data[2])[i] = snapshot.timestamp_ms;
+		FlatVector::GetDataMutable<uint64_t>(output.data[0])[i] = snapshot.sequence_number;
+		FlatVector::GetDataMutable<uint64_t>(output.data[1])[i] = snapshot.snapshot_id;
+		FlatVector::GetDataMutable<timestamp_t>(output.data[2])[i] = snapshot.timestamp_ms;
 		string_t manifest_string_t = StringVector::AddString(output.data[3], string_t(snapshot.manifest_list));
-		FlatVector::GetData<string_t>(output.data[3])[i] = manifest_string_t;
+		FlatVector::GetDataMutable<string_t>(output.data[3])[i] = manifest_string_t;
 		i++;
 	}
-	output.SetCardinality(i);
+	output.SetChildCardinality(i);
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergSnapshotsFunction() {
