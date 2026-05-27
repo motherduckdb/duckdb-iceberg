@@ -12,6 +12,9 @@ require httpfs
 # Do not ignore 'HTTP' error messages!
 set ignore_error_messages
 
+# requires spatial
+mode skip
+
 statement ok
 SELECT COUNT(*) FROM iceberg_scan(
   'https://storage.googleapis.com/cartobq-iceberg-geo-testbed/v3_geometry/metadata/v1.metadata.json'
