@@ -217,8 +217,7 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 
 		//! Only use credentials whose prefix matches the storage type (e.g. "s3"),
 		//! matching Iceberg Java S3FileIO behavior: filter(c -> c.prefix().startsWith(ROOT_PREFIX))
-		if (!ignore_credential_prefix &&
-		    !CredentialMatchesStorageType(credential.prefix, storage_type)) {
+		if (!ignore_credential_prefix && !CredentialMatchesStorageType(credential.prefix, storage_type)) {
 			continue;
 		}
 

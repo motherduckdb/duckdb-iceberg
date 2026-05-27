@@ -102,8 +102,9 @@ public:
 
 class IcebergDelete : public PhysicalOperator {
 public:
+
 #ifdef ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
-	IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table, IcebergMultiFileList &multi_file_list,
+	IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table, optional_ptr<IcebergMultiFileList> multi_file_list,
 	              PhysicalOperator &child, vector<idx_t> row_id_indexes, bool is_equality_delete,
 	              vector<IcebergEqualityDeletePredicate> equality_predicates)
 	    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, {LogicalType::BIGINT}, 1),
@@ -119,12 +120,16 @@ public:
 	static constexpr bool is_equality_delete = false;
 #endif
 
-	IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table, IcebergMultiFileList &multi_file_list,
-	              PhysicalOperator &child, vector<idx_t> row_id_indexes);
+	IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table,
+	              optional_ptr<IcebergMultiFileList> multi_file_list, PhysicalOperator &child,
+	              vector<idx_t> row_id_indexes);
 
 	//! The table to delete from
 	IcebergTableEntry &table;
-	IcebergMultiFileList &multi_file_list;
+	//! MultiFile list of the Iceberg Scan of the table we are deleting from.
+	//! May be null when the planner has optimized the
+	//! source scan away (e.g. an always-false WHERE clause like `id = NULL`).
+	optional_ptr<IcebergMultiFileList> multi_file_list;
 	//! The column indexes for the relevant row-id columns
 	vector<idx_t> row_id_indexes;
 
