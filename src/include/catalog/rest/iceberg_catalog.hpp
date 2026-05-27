@@ -165,6 +165,8 @@ public:
 	string GetCatalogType() override {
 		return "iceberg";
 	}
+	optional_idx GetCatalogVersion(ClientContext &context) override;
+	void BumpCatalogVersion();
 	bool SupportsTimeTravel() const override {
 		return true;
 	}
@@ -221,6 +223,10 @@ public:
 	unordered_set<string> supported_urls;
 	IcebergSchemaSet schemas;
 	LoadTableResultCache table_request_cache;
+
+private:
+	mutable mutex version_lock;
+	mutable idx_t catalog_version = 0;
 };
 
 } // namespace duckdb

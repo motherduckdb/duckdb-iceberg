@@ -666,4 +666,14 @@ string IcebergCatalog::GetOnlyMergeOnReadSupportedErrorMessage(const string &tab
 	                          property, property_value, table_name);
 }
 
+optional_idx IcebergCatalog::GetCatalogVersion(ClientContext &) {
+	lock_guard<mutex> guard(version_lock);
+	return catalog_version;
+}
+
+void IcebergCatalog::BumpCatalogVersion() {
+	lock_guard<mutex> guard(version_lock);
+	catalog_version++;
+}
+
 } // namespace duckdb

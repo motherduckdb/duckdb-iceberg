@@ -388,8 +388,23 @@ TableTransactionInfo IcebergTransaction::GetTransactionRequest(IcebergTransactio
 }
 
 void IcebergTransaction::Commit() {
-	if (transaction_updates.empty() && created_schemas.empty() && deleted_schemas.empty() &&
-	    schema_property_updates.empty()) {
+	bool has_table_updates = false;
+	for (auto &transaction_update : transaction_updates) {
+		switch (transaction_update->type) {
+		case IcebergTransactionUpdateType::ALTER:
+			has_table_updates |= transaction_update->Cast<IcebergTransactionAlterUpdate>().HasUpdates();
+			break;
+		case IcebergTransactionUpdateType::DELETE:
+		case IcebergTransactionUpdateType::RENAME:
+			has_table_updates = true;
+			break;
+		default:
+			throw InternalException("IcebergTransactionUpdateType (%d) not implemented",
+			                        static_cast<uint8_t>(transaction_update->type));
+		}
+	}
+
+	if (!has_table_updates && created_schemas.empty() && deleted_schemas.empty() && schema_property_updates.empty()) {
 		return;
 	}
 
@@ -437,6 +452,7 @@ void IcebergTransaction::Commit() {
 		error.Throw("Failed to commit Iceberg transaction: ");
 	}
 
+	catalog.BumpCatalogVersion();
 	temp_con.Rollback();
 }
 
