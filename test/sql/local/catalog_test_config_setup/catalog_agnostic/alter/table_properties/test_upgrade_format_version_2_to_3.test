@@ -132,9 +132,6 @@ SELECT id, val FROM my_datalake.default.v2_to_v3_upgrade ORDER BY id;
 13	new_row_3
 14	new_row_4
 
-# FIXME: the '_row_id' expression pushed in the MultiFileReader is broken
-mode skip
-
 # New V3 rows start at row_id 10 (= added_rows_count of the V2 parquet file).
 query IIII
 SELECT
