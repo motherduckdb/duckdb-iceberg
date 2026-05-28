@@ -5,8 +5,10 @@
 #include "duckdb/common/bswap.hpp"
 #include "duckdb/common/exception/conversion_exception.hpp"
 #include "duckdb/common/types/date.hpp"
+#include "duckdb/common/types/geometry.hpp"
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/common/types/value.hpp"
+#include "duckdb/common/types/vector.hpp"
 #include "utf8proc_wrapper.hpp"
 
 namespace duckdb {
@@ -236,7 +238,47 @@ DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const Log
 		}
 	case LogicalTypeId::UUID:
 		return DeserializeUUID(blob, type);
-		// Add more types as needed
+	case LogicalTypeId::GEOMETRY: {
+		// Iceberg v3 (Appendix D): geometry bounds are a packed little-endian
+		// sequence of f64 doubles describing one corner of the bounding box,
+		// in order x, y, (z), (m). Reconstruct a WKB POINT and let
+		// Geometry::FromBinary convert it to DuckDB's native geometry
+		// representation, so the rest of the pruning path can compare it like
+		// any other GEOMETRY value.
+		const auto blob_size = blob.GetSize();
+		uint32_t wkb_type;
+		if (blob_size == 2 * sizeof(double)) {
+			wkb_type = 1; // POINT
+		} else if (blob_size == 3 * sizeof(double)) {
+			// 3 doubles is ambiguous between XYZ and XYM; the writer emits XYZ
+			// whenever Z is present, so resolve in that direction.
+			wkb_type = 1001; // POINT Z
+		} else if (blob_size == 4 * sizeof(double)) {
+			wkb_type = 3001; // POINT ZM
+		} else {
+			return DeserializeError(blob, type);
+		}
+		// WKB layout: byte order (1) + type (uint32 LE, 4) + N doubles (8 each)
+		vector<unsigned char> wkb(1 + sizeof(uint32_t) + blob_size);
+		wkb[0] = 0x01; // little-endian
+		std::memcpy(wkb.data() + 1, &wkb_type, sizeof(uint32_t));
+		std::memcpy(wkb.data() + 1 + sizeof(uint32_t), blob.GetData(), blob_size);
+
+		// FromBinary writes its result into the string heap of result_vector.
+		// Value::GEOMETRY copies the bytes, so the Vector can safely go out of
+		// scope after we read out result_str.
+		Vector result_vector(type);
+		string_t wkb_str(reinterpret_cast<const char *>(wkb.data()), wkb.size());
+		string_t result_str;
+		if (!Geometry::FromBinary(wkb_str, result_str, result_vector, false)) {
+			return DeserializeError(blob, type);
+		}
+		auto result_data = const_data_ptr_cast(result_str.GetData());
+		if (GeoType::HasCRS(type)) {
+			return Value::GEOMETRY(result_data, result_str.GetSize(), GeoType::GetCRS(type));
+		}
+		return Value::GEOMETRY(result_data, result_str.GetSize());
+	}
 	default:
 		break;
 	}

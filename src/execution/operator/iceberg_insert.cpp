@@ -302,24 +302,28 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 					data_file.upper_bounds[column_info.id] = serialized_value.GetValue();
 				}
 			}
-			// Iceberg v3 (Appendix D): geometry lower/upper_bound is a packed little-endian
-			// sequence of f64 doubles giving the min/max corner of the bounding box, with
-			// dimensions in order x, y, (z), (m). Dimensions are included iff present in the
-			// data, as signaled by which bbox_* keys the parquet writer emitted.
+			// See Iceberg v3 (Appendix D) for geometry stats info
 			if (column_info.type.id() == LogicalTypeId::GEOMETRY && stats.has_bbox_xy) {
 				vector<double> lower {stats.bbox_xmin, stats.bbox_ymin};
 				vector<double> upper {stats.bbox_xmax, stats.bbox_ymax};
 				if (stats.has_bbox_z) {
 					lower.push_back(stats.bbox_zmin);
 					upper.push_back(stats.bbox_zmax);
+				} else if (stats.has_bbox_m) {
+					// Spark treats a 3-double bound as XYZ always, so for an
+					// XYM column we'd otherwise be misread as XYZ. Pad the Z slot with
+					// +infinity in both bounds so the encoding is unambiguously 4D and
+					// the M value lands in the right slot.
+					const auto z_max = NumericLimits<double>::Maximum();
+					const auto z_min = NumericLimits<double>::Minimum();
+					lower.push_back(z_min);
+					upper.push_back(z_max);
 				}
 				if (stats.has_bbox_m) {
 					lower.push_back(stats.bbox_mmin);
 					upper.push_back(stats.bbox_mmax);
 				}
 				const auto byte_count = lower.size() * sizeof(double);
-				// DuckDB only supports little-endian targets, so the in-memory double layout is
-				// already the on-disk format.
 				data_file.lower_bounds[column_info.id] =
 				    Value::BLOB(const_data_ptr_cast<double>(lower.data()), byte_count);
 				data_file.upper_bounds[column_info.id] =

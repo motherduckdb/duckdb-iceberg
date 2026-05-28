@@ -10,7 +10,6 @@ IcebergColumnStats IcebergColumnStats::ParseColumnStats(const LogicalType &type,
 	for (idx_t stats_idx = 0; stats_idx < col_stats.size(); stats_idx++) {
 		auto &stats_children = StructValue::GetChildren(col_stats[stats_idx]);
 		auto &stats_name = StringValue::Get(stats_children[0]);
-		Printer::Print(StringUtil::Format("stats_name is %s", stats_name));
 		if (stats_name == "min") {
 			D_ASSERT(!column_stats.has_min);
 			column_stats.min = StringValue::Get(stats_children[1]);
