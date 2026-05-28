@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-LoadTableResult::LoadTableResult() {
-}
+LoadTableResult::LoadTableResult() {}
 
 LoadTableResult LoadTableResult::FromJSON(yyjson_val *obj) {
 	LoadTableResult res;
@@ -24,6 +23,22 @@ LoadTableResult LoadTableResult::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+LoadTableResult LoadTableResult::Copy() const {
+	LoadTableResult res;
+	res.metadata = metadata.Copy();
+	res.metadata_location = metadata_location;
+	res.has_metadata_location = has_metadata_location;
+	for (auto &entry : config) {
+		res.config.emplace(entry.first, entry.second);
+	}
+	res.has_config = has_config;
+	res.storage_credentials.reserve(storage_credentials.size());
+	for (auto &item : storage_credentials) {
+		res.storage_credentials.emplace_back(item.Copy());
+	}
+	res.has_storage_credentials = has_storage_credentials;
+	return res;
+}
 string LoadTableResult::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto metadata_val = yyjson_obj_get(obj, "metadata");
@@ -32,7 +47,7 @@ string LoadTableResult::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = metadata.TryFromJSON(metadata_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto metadata_location_val = yyjson_obj_get(obj, "metadata-location");
@@ -44,9 +59,7 @@ string LoadTableResult::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_str(metadata_location_val)) {
 			metadata_location = yyjson_get_str(metadata_location_val);
 		} else {
-			return StringUtil::Format(
-			    "LoadTableResult property 'metadata_location' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(metadata_location_val));
+			return StringUtil::Format("LoadTableResult property 'metadata_location' is not of type 'string', found '%s' instead", yyjson_get_type_desc(metadata_location_val));
 		}
 	}
 	auto config_val = yyjson_obj_get(obj, "config");
@@ -61,9 +74,7 @@ string LoadTableResult::TryFromJSON(yyjson_val *obj) {
 				if (yyjson_is_str(val)) {
 					tmp = yyjson_get_str(val);
 				} else {
-					return StringUtil::Format(
-					    "LoadTableResult property 'tmp' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(val));
+					return StringUtil::Format("LoadTableResult property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
 				}
 				config.emplace(key_str, std::move(tmp));
 			}
@@ -86,9 +97,7 @@ string LoadTableResult::TryFromJSON(yyjson_val *obj) {
 				storage_credentials.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format(
-			    "LoadTableResult property 'storage_credentials' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(storage_credentials_val));
+			return StringUtil::Format("LoadTableResult property 'storage_credentials' is not of type 'array', found '%s' instead", yyjson_get_type_desc(storage_credentials_val));
 		}
 	}
 	return string();
@@ -96,3 +105,4 @@ string LoadTableResult::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

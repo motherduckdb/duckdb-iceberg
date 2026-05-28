@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-CounterResult::CounterResult() {
-}
+CounterResult::CounterResult() {}
 
 CounterResult CounterResult::FromJSON(yyjson_val *obj) {
 	CounterResult res;
@@ -24,6 +23,12 @@ CounterResult CounterResult::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+CounterResult CounterResult::Copy() const {
+	CounterResult res;
+	res.unit = unit;
+	res.value = value;
+	return res;
+}
 string CounterResult::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto unit_val = yyjson_obj_get(obj, "unit");
@@ -33,8 +38,7 @@ string CounterResult::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(unit_val)) {
 			unit = yyjson_get_str(unit_val);
 		} else {
-			return StringUtil::Format("CounterResult property 'unit' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(unit_val));
+			return StringUtil::Format("CounterResult property 'unit' is not of type 'string', found '%s' instead", yyjson_get_type_desc(unit_val));
 		}
 	}
 	auto value_val = yyjson_obj_get(obj, "value");
@@ -46,8 +50,7 @@ string CounterResult::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(value_val)) {
 			value = yyjson_get_uint(value_val);
 		} else {
-			return StringUtil::Format("CounterResult property 'value' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(value_val));
+			return StringUtil::Format("CounterResult property 'value' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(value_val));
 		}
 	}
 	return string();
@@ -55,3 +58,4 @@ string CounterResult::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-ViewHistoryEntry::ViewHistoryEntry() {
-}
+ViewHistoryEntry::ViewHistoryEntry() {}
 
 ViewHistoryEntry ViewHistoryEntry::FromJSON(yyjson_val *obj) {
 	ViewHistoryEntry res;
@@ -24,6 +23,12 @@ ViewHistoryEntry ViewHistoryEntry::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+ViewHistoryEntry ViewHistoryEntry::Copy() const {
+	ViewHistoryEntry res;
+	res.version_id = version_id;
+	res.timestamp_ms = timestamp_ms;
+	return res;
+}
 string ViewHistoryEntry::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto version_id_val = yyjson_obj_get(obj, "version-id");
@@ -33,9 +38,7 @@ string ViewHistoryEntry::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_int(version_id_val)) {
 			version_id = yyjson_get_int(version_id_val);
 		} else {
-			return StringUtil::Format(
-			    "ViewHistoryEntry property 'version_id' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(version_id_val));
+			return StringUtil::Format("ViewHistoryEntry property 'version_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(version_id_val));
 		}
 	}
 	auto timestamp_ms_val = yyjson_obj_get(obj, "timestamp-ms");
@@ -47,9 +50,7 @@ string ViewHistoryEntry::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(timestamp_ms_val)) {
 			timestamp_ms = yyjson_get_uint(timestamp_ms_val);
 		} else {
-			return StringUtil::Format(
-			    "ViewHistoryEntry property 'timestamp_ms' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(timestamp_ms_val));
+			return StringUtil::Format("ViewHistoryEntry property 'timestamp_ms' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(timestamp_ms_val));
 		}
 	}
 	return string();
@@ -57,3 +58,4 @@ string ViewHistoryEntry::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

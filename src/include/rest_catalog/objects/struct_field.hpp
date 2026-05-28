@@ -17,29 +17,28 @@ class Type;
 class StructField {
 public:
 	StructField();
-	StructField(const StructField &) = delete;
-	StructField &operator=(const StructField &) = delete;
-	StructField(StructField &&) = default;
-	StructField &operator=(StructField &&) = default;
-
+	StructField(const StructField&) = delete;
+	StructField& operator=(const StructField&) = delete;
+	StructField(StructField&&) = default;
+	StructField &operator=(StructField&&) = default;
 public:
 	static StructField FromJSON(yyjson_val *obj);
-
+	StructField Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	int32_t id;
 	string name;
 	unique_ptr<Type> type;
 	bool required;
 	string doc;
-	bool has_doc = false;
+	bool has_doc;
 	PrimitiveTypeValue initial_default;
-	bool has_initial_default = false;
+	bool has_initial_default;
 	PrimitiveTypeValue write_default;
-	bool has_write_default = false;
+	bool has_write_default;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

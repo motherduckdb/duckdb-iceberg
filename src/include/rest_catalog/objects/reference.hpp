@@ -6,28 +6,30 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 
+
 using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class Reference {
 public:
 	Reference();
-	Reference(const Reference &) = delete;
-	Reference &operator=(const Reference &) = delete;
-	Reference(Reference &&) = default;
-	Reference &operator=(Reference &&) = default;
-
+	Reference(const Reference&) = delete;
+	Reference& operator=(const Reference&) = delete;
+	Reference(Reference&&) = default;
+	Reference &operator=(Reference&&) = default;
 public:
 	static Reference FromJSON(yyjson_val *obj);
-
+	Reference Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	string value;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

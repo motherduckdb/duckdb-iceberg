@@ -12,23 +12,24 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class LoadCredentialsResponse {
 public:
 	LoadCredentialsResponse();
-	LoadCredentialsResponse(const LoadCredentialsResponse &) = delete;
-	LoadCredentialsResponse &operator=(const LoadCredentialsResponse &) = delete;
-	LoadCredentialsResponse(LoadCredentialsResponse &&) = default;
-	LoadCredentialsResponse &operator=(LoadCredentialsResponse &&) = default;
-
+	LoadCredentialsResponse(const LoadCredentialsResponse&) = delete;
+	LoadCredentialsResponse& operator=(const LoadCredentialsResponse&) = delete;
+	LoadCredentialsResponse(LoadCredentialsResponse&&) = default;
+	LoadCredentialsResponse &operator=(LoadCredentialsResponse&&) = default;
 public:
 	static LoadCredentialsResponse FromJSON(yyjson_val *obj);
-
+	LoadCredentialsResponse Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	vector<StorageCredential> storage_credentials;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

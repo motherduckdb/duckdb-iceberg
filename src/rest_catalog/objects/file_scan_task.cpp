@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-FileScanTask::FileScanTask() {
-}
+FileScanTask::FileScanTask() {}
 
 FileScanTask FileScanTask::FromJSON(yyjson_val *obj) {
 	FileScanTask res;
@@ -24,6 +23,18 @@ FileScanTask FileScanTask::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+FileScanTask FileScanTask::Copy() const {
+	FileScanTask res;
+	res.data_file = data_file.Copy();
+	res.delete_file_references.reserve(delete_file_references.size());
+	for (auto &item : delete_file_references) {
+		res.delete_file_references.emplace_back(item);
+	}
+	res.has_delete_file_references = has_delete_file_references;
+	res.residual_filter = residual_filter ? make_uniq<Expression>(residual_filter->Copy()) : nullptr;
+	res.has_residual_filter = has_residual_filter;
+	return res;
+}
 string FileScanTask::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto data_file_val = yyjson_obj_get(obj, "data-file");
@@ -32,7 +43,7 @@ string FileScanTask::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = data_file.TryFromJSON(data_file_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto delete_file_references_val = yyjson_obj_get(obj, "delete-file-references");
@@ -42,20 +53,16 @@ string FileScanTask::TryFromJSON(yyjson_val *obj) {
 			size_t idx, max;
 			yyjson_val *val;
 			yyjson_arr_foreach(delete_file_references_val, idx, max, val) {
-				int32_t tmp;
-				if (yyjson_is_int(val)) {
-					tmp = yyjson_get_int(val);
-				} else {
-					return StringUtil::Format(
-					    "FileScanTask property 'tmp' is not of type 'integer', found '%s' instead",
-					    yyjson_get_type_desc(val));
-				}
+			int32_t tmp;
+			if (yyjson_is_int(val)) {
+				tmp = yyjson_get_int(val);
+			} else {
+				return StringUtil::Format("FileScanTask property 'tmp' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(val));
+			}
 				delete_file_references.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format(
-			    "FileScanTask property 'delete_file_references' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(delete_file_references_val));
+			return StringUtil::Format("FileScanTask property 'delete_file_references' is not of type 'array', found '%s' instead", yyjson_get_type_desc(delete_file_references_val));
 		}
 	}
 	auto residual_filter_val = yyjson_obj_get(obj, "residual-filter");
@@ -64,7 +71,7 @@ string FileScanTask::TryFromJSON(yyjson_val *obj) {
 		residual_filter = make_uniq<Expression>();
 		error = residual_filter->TryFromJSON(residual_filter_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	return string();
@@ -72,3 +79,4 @@ string FileScanTask::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

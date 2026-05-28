@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-SortField::SortField() {
-}
+SortField::SortField() {}
 
 SortField SortField::FromJSON(yyjson_val *obj) {
 	SortField res;
@@ -24,6 +23,14 @@ SortField SortField::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+SortField SortField::Copy() const {
+	SortField res;
+	res.source_id = source_id;
+	res.transform = transform.Copy();
+	res.direction = direction.Copy();
+	res.null_order = null_order.Copy();
+	return res;
+}
 string SortField::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto source_id_val = yyjson_obj_get(obj, "source-id");
@@ -33,8 +40,7 @@ string SortField::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_int(source_id_val)) {
 			source_id = yyjson_get_int(source_id_val);
 		} else {
-			return StringUtil::Format("SortField property 'source_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(source_id_val));
+			return StringUtil::Format("SortField property 'source_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(source_id_val));
 		}
 	}
 	auto transform_val = yyjson_obj_get(obj, "transform");
@@ -43,7 +49,7 @@ string SortField::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = transform.TryFromJSON(transform_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto direction_val = yyjson_obj_get(obj, "direction");
@@ -52,7 +58,7 @@ string SortField::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = direction.TryFromJSON(direction_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto null_order_val = yyjson_obj_get(obj, "null-order");
@@ -61,7 +67,7 @@ string SortField::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = null_order.TryFromJSON(null_order_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	return string();
@@ -69,3 +75,4 @@ string SortField::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

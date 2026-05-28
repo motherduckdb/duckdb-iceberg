@@ -12,27 +12,28 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class PartitionField {
 public:
 	PartitionField();
-	PartitionField(const PartitionField &) = delete;
-	PartitionField &operator=(const PartitionField &) = delete;
-	PartitionField(PartitionField &&) = default;
-	PartitionField &operator=(PartitionField &&) = default;
-
+	PartitionField(const PartitionField&) = delete;
+	PartitionField& operator=(const PartitionField&) = delete;
+	PartitionField(PartitionField&&) = default;
+	PartitionField &operator=(PartitionField&&) = default;
 public:
 	static PartitionField FromJSON(yyjson_val *obj);
-
+	PartitionField Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	int32_t source_id;
 	Transform transform;
 	string name;
 	int32_t field_id;
-	bool has_field_id = false;
+	bool has_field_id;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

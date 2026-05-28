@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-SortOrder::SortOrder() {
-}
+SortOrder::SortOrder() {}
 
 SortOrder SortOrder::FromJSON(yyjson_val *obj) {
 	SortOrder res;
@@ -24,6 +23,15 @@ SortOrder SortOrder::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+SortOrder SortOrder::Copy() const {
+	SortOrder res;
+	res.order_id = order_id;
+	res.fields.reserve(fields.size());
+	for (auto &item : fields) {
+		res.fields.emplace_back(item.Copy());
+	}
+	return res;
+}
 string SortOrder::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto order_id_val = yyjson_obj_get(obj, "order-id");
@@ -33,8 +41,7 @@ string SortOrder::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_int(order_id_val)) {
 			order_id = yyjson_get_int(order_id_val);
 		} else {
-			return StringUtil::Format("SortOrder property 'order_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(order_id_val));
+			return StringUtil::Format("SortOrder property 'order_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(order_id_val));
 		}
 	}
 	auto fields_val = yyjson_obj_get(obj, "fields");
@@ -53,8 +60,7 @@ string SortOrder::TryFromJSON(yyjson_val *obj) {
 				fields.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("SortOrder property 'fields' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(fields_val));
+			return StringUtil::Format("SortOrder property 'fields' is not of type 'array', found '%s' instead", yyjson_get_type_desc(fields_val));
 		}
 	}
 	return string();
@@ -62,3 +68,4 @@ string SortOrder::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

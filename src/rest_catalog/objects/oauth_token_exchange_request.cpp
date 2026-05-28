@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-OAuthTokenExchangeRequest::OAuthTokenExchangeRequest() {
-}
+OAuthTokenExchangeRequest::OAuthTokenExchangeRequest() {}
 
 OAuthTokenExchangeRequest OAuthTokenExchangeRequest::FromJSON(yyjson_val *obj) {
 	OAuthTokenExchangeRequest res;
@@ -24,6 +23,21 @@ OAuthTokenExchangeRequest OAuthTokenExchangeRequest::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+OAuthTokenExchangeRequest OAuthTokenExchangeRequest::Copy() const {
+	OAuthTokenExchangeRequest res;
+	res.grant_type = grant_type;
+	res.subject_token = subject_token;
+	res.subject_token_type = subject_token_type.Copy();
+	res.scope = scope;
+	res.has_scope = has_scope;
+	res.requested_token_type = requested_token_type.Copy();
+	res.has_requested_token_type = has_requested_token_type;
+	res.actor_token = actor_token;
+	res.has_actor_token = has_actor_token;
+	res.actor_token_type = actor_token_type.Copy();
+	res.has_actor_token_type = has_actor_token_type;
+	return res;
+}
 string OAuthTokenExchangeRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto grant_type_val = yyjson_obj_get(obj, "grant_type");
@@ -33,9 +47,7 @@ string OAuthTokenExchangeRequest::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(grant_type_val)) {
 			grant_type = yyjson_get_str(grant_type_val);
 		} else {
-			return StringUtil::Format(
-			    "OAuthTokenExchangeRequest property 'grant_type' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(grant_type_val));
+			return StringUtil::Format("OAuthTokenExchangeRequest property 'grant_type' is not of type 'string', found '%s' instead", yyjson_get_type_desc(grant_type_val));
 		}
 	}
 	auto subject_token_val = yyjson_obj_get(obj, "subject_token");
@@ -45,9 +57,7 @@ string OAuthTokenExchangeRequest::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(subject_token_val)) {
 			subject_token = yyjson_get_str(subject_token_val);
 		} else {
-			return StringUtil::Format(
-			    "OAuthTokenExchangeRequest property 'subject_token' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(subject_token_val));
+			return StringUtil::Format("OAuthTokenExchangeRequest property 'subject_token' is not of type 'string', found '%s' instead", yyjson_get_type_desc(subject_token_val));
 		}
 	}
 	auto subject_token_type_val = yyjson_obj_get(obj, "subject_token_type");
@@ -56,7 +66,7 @@ string OAuthTokenExchangeRequest::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = subject_token_type.TryFromJSON(subject_token_type_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto scope_val = yyjson_obj_get(obj, "scope");
@@ -65,9 +75,7 @@ string OAuthTokenExchangeRequest::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(scope_val)) {
 			scope = yyjson_get_str(scope_val);
 		} else {
-			return StringUtil::Format(
-			    "OAuthTokenExchangeRequest property 'scope' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(scope_val));
+			return StringUtil::Format("OAuthTokenExchangeRequest property 'scope' is not of type 'string', found '%s' instead", yyjson_get_type_desc(scope_val));
 		}
 	}
 	auto requested_token_type_val = yyjson_obj_get(obj, "requested_token_type");
@@ -75,7 +83,7 @@ string OAuthTokenExchangeRequest::TryFromJSON(yyjson_val *obj) {
 		has_requested_token_type = true;
 		error = requested_token_type.TryFromJSON(requested_token_type_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto actor_token_val = yyjson_obj_get(obj, "actor_token");
@@ -84,9 +92,7 @@ string OAuthTokenExchangeRequest::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(actor_token_val)) {
 			actor_token = yyjson_get_str(actor_token_val);
 		} else {
-			return StringUtil::Format(
-			    "OAuthTokenExchangeRequest property 'actor_token' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(actor_token_val));
+			return StringUtil::Format("OAuthTokenExchangeRequest property 'actor_token' is not of type 'string', found '%s' instead", yyjson_get_type_desc(actor_token_val));
 		}
 	}
 	auto actor_token_type_val = yyjson_obj_get(obj, "actor_token_type");
@@ -94,7 +100,7 @@ string OAuthTokenExchangeRequest::TryFromJSON(yyjson_val *obj) {
 		has_actor_token_type = true;
 		error = actor_token_type.TryFromJSON(actor_token_type_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	return string();
@@ -102,3 +108,4 @@ string OAuthTokenExchangeRequest::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

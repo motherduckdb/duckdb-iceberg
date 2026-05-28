@@ -14,39 +14,37 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class CompletedPlanningResult {
 public:
 	CompletedPlanningResult();
-	CompletedPlanningResult(const CompletedPlanningResult &) = delete;
-	CompletedPlanningResult &operator=(const CompletedPlanningResult &) = delete;
-	CompletedPlanningResult(CompletedPlanningResult &&) = default;
-	CompletedPlanningResult &operator=(CompletedPlanningResult &&) = default;
+	CompletedPlanningResult(const CompletedPlanningResult&) = delete;
+	CompletedPlanningResult& operator=(const CompletedPlanningResult&) = delete;
+	CompletedPlanningResult(CompletedPlanningResult&&) = default;
+	CompletedPlanningResult &operator=(CompletedPlanningResult&&) = default;
 	class Object5 {
 	public:
 		Object5();
-		Object5(const Object5 &) = delete;
-		Object5 &operator=(const Object5 &) = delete;
-		Object5(Object5 &&) = default;
-		Object5 &operator=(Object5 &&) = default;
-
+		Object5(const Object5&) = delete;
+		Object5& operator=(const Object5&) = delete;
+		Object5(Object5&&) = default;
+		Object5 &operator=(Object5&&) = default;
 	public:
 		static Object5 FromJSON(yyjson_val *obj);
-
+		Object5 Copy() const;
 	public:
 		string TryFromJSON(yyjson_val *obj);
-
 	public:
 		PlanStatus status;
 		vector<StorageCredential> storage_credentials;
-		bool has_storage_credentials = false;
+		bool has_storage_credentials;
 	};
-
 public:
 	static CompletedPlanningResult FromJSON(yyjson_val *obj);
-
+	CompletedPlanningResult Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	ScanTasks scan_tasks;
 	Object5 object_5;
@@ -54,3 +52,4 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

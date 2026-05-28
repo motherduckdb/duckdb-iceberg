@@ -12,10 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-CompletedPlanningResult::CompletedPlanningResult() {
-}
-CompletedPlanningResult::Object5::Object5() {
-}
+CompletedPlanningResult::CompletedPlanningResult() {}
+CompletedPlanningResult::Object5::Object5() {}
 
 CompletedPlanningResult::Object5 CompletedPlanningResult::Object5::FromJSON(yyjson_val *obj) {
 	Object5 res;
@@ -26,6 +24,16 @@ CompletedPlanningResult::Object5 CompletedPlanningResult::Object5::FromJSON(yyjs
 	return res;
 }
 
+CompletedPlanningResult::Object5 CompletedPlanningResult::Object5::Copy() const {
+	Object5 res;
+	res.status = status.Copy();
+	res.storage_credentials.reserve(storage_credentials.size());
+	for (auto &item : storage_credentials) {
+		res.storage_credentials.emplace_back(item.Copy());
+	}
+	res.has_storage_credentials = has_storage_credentials;
+	return res;
+}
 string CompletedPlanningResult::Object5::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto status_val = yyjson_obj_get(obj, "status");
@@ -34,7 +42,7 @@ string CompletedPlanningResult::Object5::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = status.TryFromJSON(status_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto storage_credentials_val = yyjson_obj_get(obj, "storage-credentials");
@@ -52,9 +60,7 @@ string CompletedPlanningResult::Object5::TryFromJSON(yyjson_val *obj) {
 				storage_credentials.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format(
-			    "Object5 property 'storage_credentials' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(storage_credentials_val));
+			return StringUtil::Format("Object5 property 'storage_credentials' is not of type 'array', found '%s' instead", yyjson_get_type_desc(storage_credentials_val));
 		}
 	}
 	return string();
@@ -69,18 +75,23 @@ CompletedPlanningResult CompletedPlanningResult::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+CompletedPlanningResult CompletedPlanningResult::Copy() const {
+	CompletedPlanningResult res;
+	res.scan_tasks = scan_tasks.Copy();
+	res.object_5 = object_5.Copy();
+	return res;
+}
 string CompletedPlanningResult::TryFromJSON(yyjson_val *obj) {
 	string error;
-	error = scan_tasks.TryFromJSON(obj);
-	if (!error.empty()) {
-		return error;
-	}
-	error = object_5.TryFromJSON(obj);
-	if (!error.empty()) {
-		return error;
-	}
+error = scan_tasks.TryFromJSON(obj);if (!error.empty()) {
+	return error;
+}
+error = object_5.TryFromJSON(obj);if (!error.empty()) {
+	return error;
+}
 	return string();
 }
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

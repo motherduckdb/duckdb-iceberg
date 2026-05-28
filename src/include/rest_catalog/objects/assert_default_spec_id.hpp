@@ -12,20 +12,20 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class AssertDefaultSpecId {
 public:
 	AssertDefaultSpecId();
-	AssertDefaultSpecId(const AssertDefaultSpecId &) = delete;
-	AssertDefaultSpecId &operator=(const AssertDefaultSpecId &) = delete;
-	AssertDefaultSpecId(AssertDefaultSpecId &&) = default;
-	AssertDefaultSpecId &operator=(AssertDefaultSpecId &&) = default;
-
+	AssertDefaultSpecId(const AssertDefaultSpecId&) = delete;
+	AssertDefaultSpecId& operator=(const AssertDefaultSpecId&) = delete;
+	AssertDefaultSpecId(AssertDefaultSpecId&&) = default;
+	AssertDefaultSpecId &operator=(AssertDefaultSpecId&&) = default;
 public:
 	static AssertDefaultSpecId FromJSON(yyjson_val *obj);
-
+	AssertDefaultSpecId Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	TableRequirementType type;
 	int32_t default_spec_id;
@@ -33,3 +33,4 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

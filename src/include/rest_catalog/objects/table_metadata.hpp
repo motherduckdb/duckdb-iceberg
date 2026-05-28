@@ -21,66 +21,67 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class TableMetadata {
 public:
 	TableMetadata();
-	TableMetadata(const TableMetadata &) = delete;
-	TableMetadata &operator=(const TableMetadata &) = delete;
-	TableMetadata(TableMetadata &&) = default;
-	TableMetadata &operator=(TableMetadata &&) = default;
-
+	TableMetadata(const TableMetadata&) = delete;
+	TableMetadata& operator=(const TableMetadata&) = delete;
+	TableMetadata(TableMetadata&&) = default;
+	TableMetadata &operator=(TableMetadata&&) = default;
 public:
 	static TableMetadata FromJSON(yyjson_val *obj);
-
+	TableMetadata Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	int32_t format_version;
 	string table_uuid;
 	string location;
-	bool has_location = false;
+	bool has_location;
 	int64_t last_updated_ms;
-	bool has_last_updated_ms = false;
+	bool has_last_updated_ms;
 	int64_t next_row_id;
-	bool has_next_row_id = false;
+	bool has_next_row_id;
 	case_insensitive_map_t<string> properties;
-	bool has_properties = false;
+	bool has_properties;
 	vector<Schema> schemas;
-	bool has_schemas = false;
+	bool has_schemas;
 	int32_t current_schema_id;
-	bool has_current_schema_id = false;
+	bool has_current_schema_id;
 	int32_t last_column_id;
-	bool has_last_column_id = false;
+	bool has_last_column_id;
 	vector<PartitionSpec> partition_specs;
-	bool has_partition_specs = false;
+	bool has_partition_specs;
 	int32_t default_spec_id;
-	bool has_default_spec_id = false;
+	bool has_default_spec_id;
 	int32_t last_partition_id;
-	bool has_last_partition_id = false;
+	bool has_last_partition_id;
 	vector<SortOrder> sort_orders;
-	bool has_sort_orders = false;
+	bool has_sort_orders;
 	int32_t default_sort_order_id;
-	bool has_default_sort_order_id = false;
+	bool has_default_sort_order_id;
 	vector<EncryptedKey> encryption_keys;
-	bool has_encryption_keys = false;
+	bool has_encryption_keys;
 	vector<Snapshot> snapshots;
-	bool has_snapshots = false;
+	bool has_snapshots;
 	SnapshotReferences refs;
-	bool has_refs = false;
+	bool has_refs;
 	int64_t current_snapshot_id;
-	bool has_current_snapshot_id = false;
+	bool has_current_snapshot_id;
 	int64_t last_sequence_number;
-	bool has_last_sequence_number = false;
+	bool has_last_sequence_number;
 	SnapshotLog snapshot_log;
-	bool has_snapshot_log = false;
+	bool has_snapshot_log;
 	MetadataLog metadata_log;
-	bool has_metadata_log = false;
+	bool has_metadata_log;
 	vector<StatisticsFile> statistics;
-	bool has_statistics = false;
+	bool has_statistics;
 	vector<PartitionStatisticsFile> partition_statistics;
-	bool has_partition_statistics = false;
+	bool has_partition_statistics;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

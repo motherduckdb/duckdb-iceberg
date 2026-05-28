@@ -12,23 +12,24 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class SnapshotReferences {
 public:
 	SnapshotReferences();
-	SnapshotReferences(const SnapshotReferences &) = delete;
-	SnapshotReferences &operator=(const SnapshotReferences &) = delete;
-	SnapshotReferences(SnapshotReferences &&) = default;
-	SnapshotReferences &operator=(SnapshotReferences &&) = default;
-
+	SnapshotReferences(const SnapshotReferences&) = delete;
+	SnapshotReferences& operator=(const SnapshotReferences&) = delete;
+	SnapshotReferences(SnapshotReferences&&) = default;
+	SnapshotReferences &operator=(SnapshotReferences&&) = default;
 public:
 	static SnapshotReferences FromJSON(yyjson_val *obj);
-
+	SnapshotReferences Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	case_insensitive_map_t<SnapshotReference> additional_properties;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

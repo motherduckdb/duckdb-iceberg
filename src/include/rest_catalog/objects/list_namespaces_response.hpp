@@ -13,26 +13,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class ListNamespacesResponse {
 public:
 	ListNamespacesResponse();
-	ListNamespacesResponse(const ListNamespacesResponse &) = delete;
-	ListNamespacesResponse &operator=(const ListNamespacesResponse &) = delete;
-	ListNamespacesResponse(ListNamespacesResponse &&) = default;
-	ListNamespacesResponse &operator=(ListNamespacesResponse &&) = default;
-
+	ListNamespacesResponse(const ListNamespacesResponse&) = delete;
+	ListNamespacesResponse& operator=(const ListNamespacesResponse&) = delete;
+	ListNamespacesResponse(ListNamespacesResponse&&) = default;
+	ListNamespacesResponse &operator=(ListNamespacesResponse&&) = default;
 public:
 	static ListNamespacesResponse FromJSON(yyjson_val *obj);
-
+	ListNamespacesResponse Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	PageToken next_page_token;
-	bool has_next_page_token = false;
+	bool has_next_page_token;
 	vector<Namespace> namespaces;
-	bool has_namespaces = false;
+	bool has_namespaces;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

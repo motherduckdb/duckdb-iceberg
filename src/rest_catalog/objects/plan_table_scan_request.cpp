@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-PlanTableScanRequest::PlanTableScanRequest() {
-}
+PlanTableScanRequest::PlanTableScanRequest() {}
 
 PlanTableScanRequest PlanTableScanRequest::FromJSON(yyjson_val *obj) {
 	PlanTableScanRequest res;
@@ -24,6 +23,34 @@ PlanTableScanRequest PlanTableScanRequest::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+PlanTableScanRequest PlanTableScanRequest::Copy() const {
+	PlanTableScanRequest res;
+	res.snapshot_id = snapshot_id;
+	res.has_snapshot_id = has_snapshot_id;
+	res.select.reserve(select.size());
+	for (auto &item : select) {
+		res.select.emplace_back(item.Copy());
+	}
+	res.has_select = has_select;
+	res.filter = filter ? make_uniq<Expression>(filter->Copy()) : nullptr;
+	res.has_filter = has_filter;
+	res.min_rows_requested = min_rows_requested;
+	res.has_min_rows_requested = has_min_rows_requested;
+	res.case_sensitive = case_sensitive;
+	res.has_case_sensitive = has_case_sensitive;
+	res.use_snapshot_schema = use_snapshot_schema;
+	res.has_use_snapshot_schema = has_use_snapshot_schema;
+	res.start_snapshot_id = start_snapshot_id;
+	res.has_start_snapshot_id = has_start_snapshot_id;
+	res.end_snapshot_id = end_snapshot_id;
+	res.has_end_snapshot_id = has_end_snapshot_id;
+	res.stats_fields.reserve(stats_fields.size());
+	for (auto &item : stats_fields) {
+		res.stats_fields.emplace_back(item.Copy());
+	}
+	res.has_stats_fields = has_stats_fields;
+	return res;
+}
 string PlanTableScanRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
@@ -34,9 +61,7 @@ string PlanTableScanRequest::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(snapshot_id_val)) {
 			snapshot_id = yyjson_get_uint(snapshot_id_val);
 		} else {
-			return StringUtil::Format(
-			    "PlanTableScanRequest property 'snapshot_id' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(snapshot_id_val));
+			return StringUtil::Format("PlanTableScanRequest property 'snapshot_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(snapshot_id_val));
 		}
 	}
 	auto select_val = yyjson_obj_get(obj, "select");
@@ -54,9 +79,7 @@ string PlanTableScanRequest::TryFromJSON(yyjson_val *obj) {
 				select.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format(
-			    "PlanTableScanRequest property 'select' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(select_val));
+			return StringUtil::Format("PlanTableScanRequest property 'select' is not of type 'array', found '%s' instead", yyjson_get_type_desc(select_val));
 		}
 	}
 	auto filter_val = yyjson_obj_get(obj, "filter");
@@ -65,7 +88,7 @@ string PlanTableScanRequest::TryFromJSON(yyjson_val *obj) {
 		filter = make_uniq<Expression>();
 		error = filter->TryFromJSON(filter_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto min_rows_requested_val = yyjson_obj_get(obj, "min-rows-requested");
@@ -76,9 +99,7 @@ string PlanTableScanRequest::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(min_rows_requested_val)) {
 			min_rows_requested = yyjson_get_uint(min_rows_requested_val);
 		} else {
-			return StringUtil::Format(
-			    "PlanTableScanRequest property 'min_rows_requested' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(min_rows_requested_val));
+			return StringUtil::Format("PlanTableScanRequest property 'min_rows_requested' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(min_rows_requested_val));
 		}
 	}
 	auto case_sensitive_val = yyjson_obj_get(obj, "case-sensitive");
@@ -87,9 +108,7 @@ string PlanTableScanRequest::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_bool(case_sensitive_val)) {
 			case_sensitive = yyjson_get_bool(case_sensitive_val);
 		} else {
-			return StringUtil::Format(
-			    "PlanTableScanRequest property 'case_sensitive' is not of type 'boolean', found '%s' instead",
-			    yyjson_get_type_desc(case_sensitive_val));
+			return StringUtil::Format("PlanTableScanRequest property 'case_sensitive' is not of type 'boolean', found '%s' instead", yyjson_get_type_desc(case_sensitive_val));
 		}
 	}
 	auto use_snapshot_schema_val = yyjson_obj_get(obj, "use-snapshot-schema");
@@ -98,9 +117,7 @@ string PlanTableScanRequest::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_bool(use_snapshot_schema_val)) {
 			use_snapshot_schema = yyjson_get_bool(use_snapshot_schema_val);
 		} else {
-			return StringUtil::Format(
-			    "PlanTableScanRequest property 'use_snapshot_schema' is not of type 'boolean', found '%s' instead",
-			    yyjson_get_type_desc(use_snapshot_schema_val));
+			return StringUtil::Format("PlanTableScanRequest property 'use_snapshot_schema' is not of type 'boolean', found '%s' instead", yyjson_get_type_desc(use_snapshot_schema_val));
 		}
 	}
 	auto start_snapshot_id_val = yyjson_obj_get(obj, "start-snapshot-id");
@@ -111,9 +128,7 @@ string PlanTableScanRequest::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(start_snapshot_id_val)) {
 			start_snapshot_id = yyjson_get_uint(start_snapshot_id_val);
 		} else {
-			return StringUtil::Format(
-			    "PlanTableScanRequest property 'start_snapshot_id' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(start_snapshot_id_val));
+			return StringUtil::Format("PlanTableScanRequest property 'start_snapshot_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(start_snapshot_id_val));
 		}
 	}
 	auto end_snapshot_id_val = yyjson_obj_get(obj, "end-snapshot-id");
@@ -124,9 +139,7 @@ string PlanTableScanRequest::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(end_snapshot_id_val)) {
 			end_snapshot_id = yyjson_get_uint(end_snapshot_id_val);
 		} else {
-			return StringUtil::Format(
-			    "PlanTableScanRequest property 'end_snapshot_id' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(end_snapshot_id_val));
+			return StringUtil::Format("PlanTableScanRequest property 'end_snapshot_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(end_snapshot_id_val));
 		}
 	}
 	auto stats_fields_val = yyjson_obj_get(obj, "stats-fields");
@@ -144,9 +157,7 @@ string PlanTableScanRequest::TryFromJSON(yyjson_val *obj) {
 				stats_fields.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format(
-			    "PlanTableScanRequest property 'stats_fields' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(stats_fields_val));
+			return StringUtil::Format("PlanTableScanRequest property 'stats_fields' is not of type 'array', found '%s' instead", yyjson_get_type_desc(stats_fields_val));
 		}
 	}
 	return string();
@@ -154,3 +165,4 @@ string PlanTableScanRequest::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

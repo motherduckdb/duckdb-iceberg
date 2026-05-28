@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-CommitReport::CommitReport() {
-}
+CommitReport::CommitReport() {}
 
 CommitReport CommitReport::FromJSON(yyjson_val *obj) {
 	CommitReport res;
@@ -24,6 +23,19 @@ CommitReport CommitReport::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+CommitReport CommitReport::Copy() const {
+	CommitReport res;
+	res.table_name = table_name;
+	res.snapshot_id = snapshot_id;
+	res.sequence_number = sequence_number;
+	res.operation = operation;
+	res.metrics = metrics.Copy();
+	for (auto &entry : metadata) {
+		res.metadata.emplace(entry.first, entry.second);
+	}
+	res.has_metadata = has_metadata;
+	return res;
+}
 string CommitReport::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto table_name_val = yyjson_obj_get(obj, "table-name");
@@ -33,8 +45,7 @@ string CommitReport::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(table_name_val)) {
 			table_name = yyjson_get_str(table_name_val);
 		} else {
-			return StringUtil::Format("CommitReport property 'table_name' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(table_name_val));
+			return StringUtil::Format("CommitReport property 'table_name' is not of type 'string', found '%s' instead", yyjson_get_type_desc(table_name_val));
 		}
 	}
 	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
@@ -46,9 +57,7 @@ string CommitReport::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(snapshot_id_val)) {
 			snapshot_id = yyjson_get_uint(snapshot_id_val);
 		} else {
-			return StringUtil::Format(
-			    "CommitReport property 'snapshot_id' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(snapshot_id_val));
+			return StringUtil::Format("CommitReport property 'snapshot_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(snapshot_id_val));
 		}
 	}
 	auto sequence_number_val = yyjson_obj_get(obj, "sequence-number");
@@ -60,9 +69,7 @@ string CommitReport::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(sequence_number_val)) {
 			sequence_number = yyjson_get_uint(sequence_number_val);
 		} else {
-			return StringUtil::Format(
-			    "CommitReport property 'sequence_number' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(sequence_number_val));
+			return StringUtil::Format("CommitReport property 'sequence_number' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(sequence_number_val));
 		}
 	}
 	auto operation_val = yyjson_obj_get(obj, "operation");
@@ -72,8 +79,7 @@ string CommitReport::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(operation_val)) {
 			operation = yyjson_get_str(operation_val);
 		} else {
-			return StringUtil::Format("CommitReport property 'operation' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(operation_val));
+			return StringUtil::Format("CommitReport property 'operation' is not of type 'string', found '%s' instead", yyjson_get_type_desc(operation_val));
 		}
 	}
 	auto metrics_val = yyjson_obj_get(obj, "metrics");
@@ -82,7 +88,7 @@ string CommitReport::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = metrics.TryFromJSON(metrics_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto metadata_val = yyjson_obj_get(obj, "metadata");
@@ -97,8 +103,7 @@ string CommitReport::TryFromJSON(yyjson_val *obj) {
 				if (yyjson_is_str(val)) {
 					tmp = yyjson_get_str(val);
 				} else {
-					return StringUtil::Format("CommitReport property 'tmp' is not of type 'string', found '%s' instead",
-					                          yyjson_get_type_desc(val));
+					return StringUtil::Format("CommitReport property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
 				}
 				metadata.emplace(key_str, std::move(tmp));
 			}
@@ -111,3 +116,4 @@ string CommitReport::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

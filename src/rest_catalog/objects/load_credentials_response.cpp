@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-LoadCredentialsResponse::LoadCredentialsResponse() {
-}
+LoadCredentialsResponse::LoadCredentialsResponse() {}
 
 LoadCredentialsResponse LoadCredentialsResponse::FromJSON(yyjson_val *obj) {
 	LoadCredentialsResponse res;
@@ -24,6 +23,14 @@ LoadCredentialsResponse LoadCredentialsResponse::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+LoadCredentialsResponse LoadCredentialsResponse::Copy() const {
+	LoadCredentialsResponse res;
+	res.storage_credentials.reserve(storage_credentials.size());
+	for (auto &item : storage_credentials) {
+		res.storage_credentials.emplace_back(item.Copy());
+	}
+	return res;
+}
 string LoadCredentialsResponse::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto storage_credentials_val = yyjson_obj_get(obj, "storage-credentials");
@@ -42,9 +49,7 @@ string LoadCredentialsResponse::TryFromJSON(yyjson_val *obj) {
 				storage_credentials.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format(
-			    "LoadCredentialsResponse property 'storage_credentials' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(storage_credentials_val));
+			return StringUtil::Format("LoadCredentialsResponse property 'storage_credentials' is not of type 'array', found '%s' instead", yyjson_get_type_desc(storage_credentials_val));
 		}
 	}
 	return string();
@@ -52,3 +57,4 @@ string LoadCredentialsResponse::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

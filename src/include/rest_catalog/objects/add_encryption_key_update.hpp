@@ -13,26 +13,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class AddEncryptionKeyUpdate {
 public:
 	AddEncryptionKeyUpdate();
-	AddEncryptionKeyUpdate(const AddEncryptionKeyUpdate &) = delete;
-	AddEncryptionKeyUpdate &operator=(const AddEncryptionKeyUpdate &) = delete;
-	AddEncryptionKeyUpdate(AddEncryptionKeyUpdate &&) = default;
-	AddEncryptionKeyUpdate &operator=(AddEncryptionKeyUpdate &&) = default;
-
+	AddEncryptionKeyUpdate(const AddEncryptionKeyUpdate&) = delete;
+	AddEncryptionKeyUpdate& operator=(const AddEncryptionKeyUpdate&) = delete;
+	AddEncryptionKeyUpdate(AddEncryptionKeyUpdate&&) = default;
+	AddEncryptionKeyUpdate &operator=(AddEncryptionKeyUpdate&&) = default;
 public:
 	static AddEncryptionKeyUpdate FromJSON(yyjson_val *obj);
-
+	AddEncryptionKeyUpdate Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	BaseUpdate base_update;
 	EncryptedKey encryption_key;
 	string action;
-	bool has_action = false;
+	bool has_action;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

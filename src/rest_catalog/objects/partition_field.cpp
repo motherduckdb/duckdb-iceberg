@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-PartitionField::PartitionField() {
-}
+PartitionField::PartitionField() {}
 
 PartitionField PartitionField::FromJSON(yyjson_val *obj) {
 	PartitionField res;
@@ -24,6 +23,15 @@ PartitionField PartitionField::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+PartitionField PartitionField::Copy() const {
+	PartitionField res;
+	res.source_id = source_id;
+	res.transform = transform.Copy();
+	res.name = name;
+	res.field_id = field_id;
+	res.has_field_id = has_field_id;
+	return res;
+}
 string PartitionField::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto source_id_val = yyjson_obj_get(obj, "source-id");
@@ -33,9 +41,7 @@ string PartitionField::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_int(source_id_val)) {
 			source_id = yyjson_get_int(source_id_val);
 		} else {
-			return StringUtil::Format(
-			    "PartitionField property 'source_id' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(source_id_val));
+			return StringUtil::Format("PartitionField property 'source_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(source_id_val));
 		}
 	}
 	auto transform_val = yyjson_obj_get(obj, "transform");
@@ -44,7 +50,7 @@ string PartitionField::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = transform.TryFromJSON(transform_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto name_val = yyjson_obj_get(obj, "name");
@@ -54,8 +60,7 @@ string PartitionField::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(name_val)) {
 			name = yyjson_get_str(name_val);
 		} else {
-			return StringUtil::Format("PartitionField property 'name' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(name_val));
+			return StringUtil::Format("PartitionField property 'name' is not of type 'string', found '%s' instead", yyjson_get_type_desc(name_val));
 		}
 	}
 	auto field_id_val = yyjson_obj_get(obj, "field-id");
@@ -64,8 +69,7 @@ string PartitionField::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_int(field_id_val)) {
 			field_id = yyjson_get_int(field_id_val);
 		} else {
-			return StringUtil::Format("PartitionField property 'field_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(field_id_val));
+			return StringUtil::Format("PartitionField property 'field_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(field_id_val));
 		}
 	}
 	return string();
@@ -73,3 +77,4 @@ string PartitionField::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

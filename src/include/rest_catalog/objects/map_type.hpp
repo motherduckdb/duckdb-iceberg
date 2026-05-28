@@ -6,6 +6,7 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 
+
 using namespace duckdb_yyjson;
 
 namespace duckdb {
@@ -16,17 +17,15 @@ class Type;
 class MapType {
 public:
 	MapType();
-	MapType(const MapType &) = delete;
-	MapType &operator=(const MapType &) = delete;
-	MapType(MapType &&) = default;
-	MapType &operator=(MapType &&) = default;
-
+	MapType(const MapType&) = delete;
+	MapType& operator=(const MapType&) = delete;
+	MapType(MapType&&) = default;
+	MapType &operator=(MapType&&) = default;
 public:
 	static MapType FromJSON(yyjson_val *obj);
-
+	MapType Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	string type;
 	int32_t key_id;
@@ -38,3 +37,4 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

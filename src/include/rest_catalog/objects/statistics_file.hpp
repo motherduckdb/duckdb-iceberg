@@ -12,20 +12,20 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class StatisticsFile {
 public:
 	StatisticsFile();
-	StatisticsFile(const StatisticsFile &) = delete;
-	StatisticsFile &operator=(const StatisticsFile &) = delete;
-	StatisticsFile(StatisticsFile &&) = default;
-	StatisticsFile &operator=(StatisticsFile &&) = default;
-
+	StatisticsFile(const StatisticsFile&) = delete;
+	StatisticsFile& operator=(const StatisticsFile&) = delete;
+	StatisticsFile(StatisticsFile&&) = default;
+	StatisticsFile &operator=(StatisticsFile&&) = default;
 public:
 	static StatisticsFile FromJSON(yyjson_val *obj);
-
+	StatisticsFile Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	int64_t snapshot_id;
 	string statistics_path;
@@ -36,3 +36,4 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

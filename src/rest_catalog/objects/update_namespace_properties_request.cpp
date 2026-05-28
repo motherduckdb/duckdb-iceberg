@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-UpdateNamespacePropertiesRequest::UpdateNamespacePropertiesRequest() {
-}
+UpdateNamespacePropertiesRequest::UpdateNamespacePropertiesRequest() {}
 
 UpdateNamespacePropertiesRequest UpdateNamespacePropertiesRequest::FromJSON(yyjson_val *obj) {
 	UpdateNamespacePropertiesRequest res;
@@ -24,6 +23,19 @@ UpdateNamespacePropertiesRequest UpdateNamespacePropertiesRequest::FromJSON(yyjs
 	return res;
 }
 
+UpdateNamespacePropertiesRequest UpdateNamespacePropertiesRequest::Copy() const {
+	UpdateNamespacePropertiesRequest res;
+	res.removals.reserve(removals.size());
+	for (auto &item : removals) {
+		res.removals.emplace_back(item);
+	}
+	res.has_removals = has_removals;
+	for (auto &entry : updates) {
+		res.updates.emplace(entry.first, entry.second);
+	}
+	res.has_updates = has_updates;
+	return res;
+}
 string UpdateNamespacePropertiesRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto removals_val = yyjson_obj_get(obj, "removals");
@@ -33,20 +45,16 @@ string UpdateNamespacePropertiesRequest::TryFromJSON(yyjson_val *obj) {
 			size_t idx, max;
 			yyjson_val *val;
 			yyjson_arr_foreach(removals_val, idx, max, val) {
-				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
-				} else {
-					return StringUtil::Format(
-					    "UpdateNamespacePropertiesRequest property 'tmp' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(val));
-				}
+			string tmp;
+			if (yyjson_is_str(val)) {
+				tmp = yyjson_get_str(val);
+			} else {
+				return StringUtil::Format("UpdateNamespacePropertiesRequest property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
+			}
 				removals.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format(
-			    "UpdateNamespacePropertiesRequest property 'removals' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(removals_val));
+			return StringUtil::Format("UpdateNamespacePropertiesRequest property 'removals' is not of type 'array', found '%s' instead", yyjson_get_type_desc(removals_val));
 		}
 	}
 	auto updates_val = yyjson_obj_get(obj, "updates");
@@ -61,9 +69,7 @@ string UpdateNamespacePropertiesRequest::TryFromJSON(yyjson_val *obj) {
 				if (yyjson_is_str(val)) {
 					tmp = yyjson_get_str(val);
 				} else {
-					return StringUtil::Format(
-					    "UpdateNamespacePropertiesRequest property 'tmp' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(val));
+					return StringUtil::Format("UpdateNamespacePropertiesRequest property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
 				}
 				updates.emplace(key_str, std::move(tmp));
 			}
@@ -76,3 +82,4 @@ string UpdateNamespacePropertiesRequest::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

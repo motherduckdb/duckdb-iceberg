@@ -13,28 +13,29 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class CreateViewRequest {
 public:
 	CreateViewRequest();
-	CreateViewRequest(const CreateViewRequest &) = delete;
-	CreateViewRequest &operator=(const CreateViewRequest &) = delete;
-	CreateViewRequest(CreateViewRequest &&) = default;
-	CreateViewRequest &operator=(CreateViewRequest &&) = default;
-
+	CreateViewRequest(const CreateViewRequest&) = delete;
+	CreateViewRequest& operator=(const CreateViewRequest&) = delete;
+	CreateViewRequest(CreateViewRequest&&) = default;
+	CreateViewRequest &operator=(CreateViewRequest&&) = default;
 public:
 	static CreateViewRequest FromJSON(yyjson_val *obj);
-
+	CreateViewRequest Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	string name;
 	Schema schema;
 	ViewVersion view_version;
 	case_insensitive_map_t<string> properties;
 	string location;
-	bool has_location = false;
+	bool has_location;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

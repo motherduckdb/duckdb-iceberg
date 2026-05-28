@@ -12,25 +12,26 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class PartitionSpec {
 public:
 	PartitionSpec();
-	PartitionSpec(const PartitionSpec &) = delete;
-	PartitionSpec &operator=(const PartitionSpec &) = delete;
-	PartitionSpec(PartitionSpec &&) = default;
-	PartitionSpec &operator=(PartitionSpec &&) = default;
-
+	PartitionSpec(const PartitionSpec&) = delete;
+	PartitionSpec& operator=(const PartitionSpec&) = delete;
+	PartitionSpec(PartitionSpec&&) = default;
+	PartitionSpec &operator=(PartitionSpec&&) = default;
 public:
 	static PartitionSpec FromJSON(yyjson_val *obj);
-
+	PartitionSpec Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	vector<PartitionField> fields;
 	int32_t spec_id;
-	bool has_spec_id = false;
+	bool has_spec_id;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

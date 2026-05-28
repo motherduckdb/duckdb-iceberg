@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-RemovePartitionSpecsUpdate::RemovePartitionSpecsUpdate() {
-}
+RemovePartitionSpecsUpdate::RemovePartitionSpecsUpdate() {}
 
 RemovePartitionSpecsUpdate RemovePartitionSpecsUpdate::FromJSON(yyjson_val *obj) {
 	RemovePartitionSpecsUpdate res;
@@ -24,12 +23,22 @@ RemovePartitionSpecsUpdate RemovePartitionSpecsUpdate::FromJSON(yyjson_val *obj)
 	return res;
 }
 
+RemovePartitionSpecsUpdate RemovePartitionSpecsUpdate::Copy() const {
+	RemovePartitionSpecsUpdate res;
+	res.base_update = base_update.Copy();
+	res.spec_ids.reserve(spec_ids.size());
+	for (auto &item : spec_ids) {
+		res.spec_ids.emplace_back(item);
+	}
+	res.action = action;
+	res.has_action = has_action;
+	return res;
+}
 string RemovePartitionSpecsUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
-	error = base_update.TryFromJSON(obj);
-	if (!error.empty()) {
-		return error;
-	}
+error = base_update.TryFromJSON(obj);if (!error.empty()) {
+	return error;
+}
 	auto spec_ids_val = yyjson_obj_get(obj, "spec-ids");
 	if (!spec_ids_val) {
 		return "RemovePartitionSpecsUpdate required property 'spec-ids' is missing";
@@ -38,20 +47,16 @@ string RemovePartitionSpecsUpdate::TryFromJSON(yyjson_val *obj) {
 			size_t idx, max;
 			yyjson_val *val;
 			yyjson_arr_foreach(spec_ids_val, idx, max, val) {
-				int32_t tmp;
-				if (yyjson_is_int(val)) {
-					tmp = yyjson_get_int(val);
-				} else {
-					return StringUtil::Format(
-					    "RemovePartitionSpecsUpdate property 'tmp' is not of type 'integer', found '%s' instead",
-					    yyjson_get_type_desc(val));
-				}
+			int32_t tmp;
+			if (yyjson_is_int(val)) {
+				tmp = yyjson_get_int(val);
+			} else {
+				return StringUtil::Format("RemovePartitionSpecsUpdate property 'tmp' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(val));
+			}
 				spec_ids.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format(
-			    "RemovePartitionSpecsUpdate property 'spec_ids' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(spec_ids_val));
+			return StringUtil::Format("RemovePartitionSpecsUpdate property 'spec_ids' is not of type 'array', found '%s' instead", yyjson_get_type_desc(spec_ids_val));
 		}
 	}
 	auto action_val = yyjson_obj_get(obj, "action");
@@ -60,9 +65,7 @@ string RemovePartitionSpecsUpdate::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);
 		} else {
-			return StringUtil::Format(
-			    "RemovePartitionSpecsUpdate property 'action' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_val));
+			return StringUtil::Format("RemovePartitionSpecsUpdate property 'action' is not of type 'string', found '%s' instead", yyjson_get_type_desc(action_val));
 		}
 	}
 	return string();
@@ -70,3 +73,4 @@ string RemovePartitionSpecsUpdate::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

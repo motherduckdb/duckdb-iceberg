@@ -12,26 +12,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class SetDefaultSpecUpdate {
 public:
 	SetDefaultSpecUpdate();
-	SetDefaultSpecUpdate(const SetDefaultSpecUpdate &) = delete;
-	SetDefaultSpecUpdate &operator=(const SetDefaultSpecUpdate &) = delete;
-	SetDefaultSpecUpdate(SetDefaultSpecUpdate &&) = default;
-	SetDefaultSpecUpdate &operator=(SetDefaultSpecUpdate &&) = default;
-
+	SetDefaultSpecUpdate(const SetDefaultSpecUpdate&) = delete;
+	SetDefaultSpecUpdate& operator=(const SetDefaultSpecUpdate&) = delete;
+	SetDefaultSpecUpdate(SetDefaultSpecUpdate&&) = default;
+	SetDefaultSpecUpdate &operator=(SetDefaultSpecUpdate&&) = default;
 public:
 	static SetDefaultSpecUpdate FromJSON(yyjson_val *obj);
-
+	SetDefaultSpecUpdate Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	BaseUpdate base_update;
 	int32_t spec_id;
 	string action;
-	bool has_action = false;
+	bool has_action;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

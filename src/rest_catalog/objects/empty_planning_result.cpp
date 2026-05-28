@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-EmptyPlanningResult::EmptyPlanningResult() {
-}
+EmptyPlanningResult::EmptyPlanningResult() {}
 
 EmptyPlanningResult EmptyPlanningResult::FromJSON(yyjson_val *obj) {
 	EmptyPlanningResult res;
@@ -24,6 +23,11 @@ EmptyPlanningResult EmptyPlanningResult::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+EmptyPlanningResult EmptyPlanningResult::Copy() const {
+	EmptyPlanningResult res;
+	res.status = status.Copy();
+	return res;
+}
 string EmptyPlanningResult::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto status_val = yyjson_obj_get(obj, "status");
@@ -32,7 +36,7 @@ string EmptyPlanningResult::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = status.TryFromJSON(status_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	return string();
@@ -40,3 +44,4 @@ string EmptyPlanningResult::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

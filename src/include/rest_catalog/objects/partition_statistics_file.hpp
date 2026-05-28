@@ -6,25 +6,26 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 
+
 using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class PartitionStatisticsFile {
 public:
 	PartitionStatisticsFile();
-	PartitionStatisticsFile(const PartitionStatisticsFile &) = delete;
-	PartitionStatisticsFile &operator=(const PartitionStatisticsFile &) = delete;
-	PartitionStatisticsFile(PartitionStatisticsFile &&) = default;
-	PartitionStatisticsFile &operator=(PartitionStatisticsFile &&) = default;
-
+	PartitionStatisticsFile(const PartitionStatisticsFile&) = delete;
+	PartitionStatisticsFile& operator=(const PartitionStatisticsFile&) = delete;
+	PartitionStatisticsFile(PartitionStatisticsFile&&) = default;
+	PartitionStatisticsFile &operator=(PartitionStatisticsFile&&) = default;
 public:
 	static PartitionStatisticsFile FromJSON(yyjson_val *obj);
-
+	PartitionStatisticsFile Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	int64_t snapshot_id;
 	string statistics_path;
@@ -33,3 +34,4 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

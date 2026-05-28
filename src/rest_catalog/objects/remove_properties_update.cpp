@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-RemovePropertiesUpdate::RemovePropertiesUpdate() {
-}
+RemovePropertiesUpdate::RemovePropertiesUpdate() {}
 
 RemovePropertiesUpdate RemovePropertiesUpdate::FromJSON(yyjson_val *obj) {
 	RemovePropertiesUpdate res;
@@ -24,12 +23,22 @@ RemovePropertiesUpdate RemovePropertiesUpdate::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+RemovePropertiesUpdate RemovePropertiesUpdate::Copy() const {
+	RemovePropertiesUpdate res;
+	res.base_update = base_update.Copy();
+	res.removals.reserve(removals.size());
+	for (auto &item : removals) {
+		res.removals.emplace_back(item);
+	}
+	res.action = action;
+	res.has_action = has_action;
+	return res;
+}
 string RemovePropertiesUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
-	error = base_update.TryFromJSON(obj);
-	if (!error.empty()) {
-		return error;
-	}
+error = base_update.TryFromJSON(obj);if (!error.empty()) {
+	return error;
+}
 	auto removals_val = yyjson_obj_get(obj, "removals");
 	if (!removals_val) {
 		return "RemovePropertiesUpdate required property 'removals' is missing";
@@ -38,20 +47,16 @@ string RemovePropertiesUpdate::TryFromJSON(yyjson_val *obj) {
 			size_t idx, max;
 			yyjson_val *val;
 			yyjson_arr_foreach(removals_val, idx, max, val) {
-				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
-				} else {
-					return StringUtil::Format(
-					    "RemovePropertiesUpdate property 'tmp' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(val));
-				}
+			string tmp;
+			if (yyjson_is_str(val)) {
+				tmp = yyjson_get_str(val);
+			} else {
+				return StringUtil::Format("RemovePropertiesUpdate property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
+			}
 				removals.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format(
-			    "RemovePropertiesUpdate property 'removals' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(removals_val));
+			return StringUtil::Format("RemovePropertiesUpdate property 'removals' is not of type 'array', found '%s' instead", yyjson_get_type_desc(removals_val));
 		}
 	}
 	auto action_val = yyjson_obj_get(obj, "action");
@@ -60,9 +65,7 @@ string RemovePropertiesUpdate::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);
 		} else {
-			return StringUtil::Format(
-			    "RemovePropertiesUpdate property 'action' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_val));
+			return StringUtil::Format("RemovePropertiesUpdate property 'action' is not of type 'string', found '%s' instead", yyjson_get_type_desc(action_val));
 		}
 	}
 	return string();
@@ -70,3 +73,4 @@ string RemovePropertiesUpdate::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

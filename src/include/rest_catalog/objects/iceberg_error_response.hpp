@@ -12,23 +12,24 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class IcebergErrorResponse {
 public:
 	IcebergErrorResponse();
-	IcebergErrorResponse(const IcebergErrorResponse &) = delete;
-	IcebergErrorResponse &operator=(const IcebergErrorResponse &) = delete;
-	IcebergErrorResponse(IcebergErrorResponse &&) = default;
-	IcebergErrorResponse &operator=(IcebergErrorResponse &&) = default;
-
+	IcebergErrorResponse(const IcebergErrorResponse&) = delete;
+	IcebergErrorResponse& operator=(const IcebergErrorResponse&) = delete;
+	IcebergErrorResponse(IcebergErrorResponse&&) = default;
+	IcebergErrorResponse &operator=(IcebergErrorResponse&&) = default;
 public:
 	static IcebergErrorResponse FromJSON(yyjson_val *obj);
-
+	IcebergErrorResponse Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	ErrorModel _error;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

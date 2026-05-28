@@ -12,20 +12,20 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class TableIdentifier {
 public:
 	TableIdentifier();
-	TableIdentifier(const TableIdentifier &) = delete;
-	TableIdentifier &operator=(const TableIdentifier &) = delete;
-	TableIdentifier(TableIdentifier &&) = default;
-	TableIdentifier &operator=(TableIdentifier &&) = default;
-
+	TableIdentifier(const TableIdentifier&) = delete;
+	TableIdentifier& operator=(const TableIdentifier&) = delete;
+	TableIdentifier(TableIdentifier&&) = default;
+	TableIdentifier &operator=(TableIdentifier&&) = default;
 public:
 	static TableIdentifier FromJSON(yyjson_val *obj);
-
+	TableIdentifier Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	Namespace _namespace;
 	string name;
@@ -33,3 +33,4 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

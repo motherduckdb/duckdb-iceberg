@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-SetExpression::SetExpression() {
-}
+SetExpression::SetExpression() {}
 
 SetExpression SetExpression::FromJSON(yyjson_val *obj) {
 	SetExpression res;
@@ -24,6 +23,16 @@ SetExpression SetExpression::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+SetExpression SetExpression::Copy() const {
+	SetExpression res;
+	res.type = type.Copy();
+	res.term = term.Copy();
+	res.values.reserve(values.size());
+	for (auto &item : values) {
+		res.values.emplace_back(item.Copy());
+	}
+	return res;
+}
 string SetExpression::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -32,7 +41,7 @@ string SetExpression::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = type.TryFromJSON(type_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto term_val = yyjson_obj_get(obj, "term");
@@ -41,7 +50,7 @@ string SetExpression::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = term.TryFromJSON(term_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto values_val = yyjson_obj_get(obj, "values");
@@ -60,8 +69,7 @@ string SetExpression::TryFromJSON(yyjson_val *obj) {
 				values.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("SetExpression property 'values' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(values_val));
+			return StringUtil::Format("SetExpression property 'values' is not of type 'array', found '%s' instead", yyjson_get_type_desc(values_val));
 		}
 	}
 	return string();
@@ -69,3 +77,4 @@ string SetExpression::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

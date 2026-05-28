@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-AssertTableUUID::AssertTableUUID() {
-}
+AssertTableUUID::AssertTableUUID() {}
 
 AssertTableUUID AssertTableUUID::FromJSON(yyjson_val *obj) {
 	AssertTableUUID res;
@@ -24,6 +23,12 @@ AssertTableUUID AssertTableUUID::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+AssertTableUUID AssertTableUUID::Copy() const {
+	AssertTableUUID res;
+	res.type = type.Copy();
+	res.uuid = uuid;
+	return res;
+}
 string AssertTableUUID::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -32,7 +37,7 @@ string AssertTableUUID::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = type.TryFromJSON(type_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto uuid_val = yyjson_obj_get(obj, "uuid");
@@ -42,8 +47,7 @@ string AssertTableUUID::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(uuid_val)) {
 			uuid = yyjson_get_str(uuid_val);
 		} else {
-			return StringUtil::Format("AssertTableUUID property 'uuid' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(uuid_val));
+			return StringUtil::Format("AssertTableUUID property 'uuid' is not of type 'string', found '%s' instead", yyjson_get_type_desc(uuid_val));
 		}
 	}
 	return string();
@@ -51,3 +55,4 @@ string AssertTableUUID::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

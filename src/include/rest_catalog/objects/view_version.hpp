@@ -13,20 +13,20 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class ViewVersion {
 public:
 	ViewVersion();
-	ViewVersion(const ViewVersion &) = delete;
-	ViewVersion &operator=(const ViewVersion &) = delete;
-	ViewVersion(ViewVersion &&) = default;
-	ViewVersion &operator=(ViewVersion &&) = default;
-
+	ViewVersion(const ViewVersion&) = delete;
+	ViewVersion& operator=(const ViewVersion&) = delete;
+	ViewVersion(ViewVersion&&) = default;
+	ViewVersion &operator=(ViewVersion&&) = default;
 public:
 	static ViewVersion FromJSON(yyjson_val *obj);
-
+	ViewVersion Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	int32_t version_id;
 	int64_t timestamp_ms;
@@ -35,8 +35,9 @@ public:
 	vector<ViewRepresentation> representations;
 	Namespace default_namespace;
 	string default_catalog;
-	bool has_default_catalog = false;
+	bool has_default_catalog;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

@@ -12,40 +12,38 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class Schema {
 public:
 	Schema();
-	Schema(const Schema &) = delete;
-	Schema &operator=(const Schema &) = delete;
-	Schema(Schema &&) = default;
-	Schema &operator=(Schema &&) = default;
+	Schema(const Schema&) = delete;
+	Schema& operator=(const Schema&) = delete;
+	Schema(Schema&&) = default;
+	Schema &operator=(Schema&&) = default;
 	class Object1 {
 	public:
 		Object1();
-		Object1(const Object1 &) = delete;
-		Object1 &operator=(const Object1 &) = delete;
-		Object1(Object1 &&) = default;
-		Object1 &operator=(Object1 &&) = default;
-
+		Object1(const Object1&) = delete;
+		Object1& operator=(const Object1&) = delete;
+		Object1(Object1&&) = default;
+		Object1 &operator=(Object1&&) = default;
 	public:
 		static Object1 FromJSON(yyjson_val *obj);
-
+		Object1 Copy() const;
 	public:
 		string TryFromJSON(yyjson_val *obj);
-
 	public:
 		int32_t schema_id;
-		bool has_schema_id = false;
+		bool has_schema_id;
 		vector<int32_t> identifier_field_ids;
-		bool has_identifier_field_ids = false;
+		bool has_identifier_field_ids;
 	};
-
 public:
 	static Schema FromJSON(yyjson_val *obj);
-
+	Schema Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	StructType struct_type;
 	Object1 object_1;
@@ -53,3 +51,4 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

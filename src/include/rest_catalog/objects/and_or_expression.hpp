@@ -17,17 +17,15 @@ class Expression;
 class AndOrExpression {
 public:
 	AndOrExpression();
-	AndOrExpression(const AndOrExpression &) = delete;
-	AndOrExpression &operator=(const AndOrExpression &) = delete;
-	AndOrExpression(AndOrExpression &&) = default;
-	AndOrExpression &operator=(AndOrExpression &&) = default;
-
+	AndOrExpression(const AndOrExpression&) = delete;
+	AndOrExpression& operator=(const AndOrExpression&) = delete;
+	AndOrExpression(AndOrExpression&&) = default;
+	AndOrExpression &operator=(AndOrExpression&&) = default;
 public:
 	static AndOrExpression FromJSON(yyjson_val *obj);
-
+	AndOrExpression Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	ExpressionType type;
 	unique_ptr<Expression> left;
@@ -36,3 +34,4 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

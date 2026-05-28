@@ -12,26 +12,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class RemovePartitionStatisticsUpdate {
 public:
 	RemovePartitionStatisticsUpdate();
-	RemovePartitionStatisticsUpdate(const RemovePartitionStatisticsUpdate &) = delete;
-	RemovePartitionStatisticsUpdate &operator=(const RemovePartitionStatisticsUpdate &) = delete;
-	RemovePartitionStatisticsUpdate(RemovePartitionStatisticsUpdate &&) = default;
-	RemovePartitionStatisticsUpdate &operator=(RemovePartitionStatisticsUpdate &&) = default;
-
+	RemovePartitionStatisticsUpdate(const RemovePartitionStatisticsUpdate&) = delete;
+	RemovePartitionStatisticsUpdate& operator=(const RemovePartitionStatisticsUpdate&) = delete;
+	RemovePartitionStatisticsUpdate(RemovePartitionStatisticsUpdate&&) = default;
+	RemovePartitionStatisticsUpdate &operator=(RemovePartitionStatisticsUpdate&&) = default;
 public:
 	static RemovePartitionStatisticsUpdate FromJSON(yyjson_val *obj);
-
+	RemovePartitionStatisticsUpdate Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	BaseUpdate base_update;
 	int64_t snapshot_id;
 	string action;
-	bool has_action = false;
+	bool has_action;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

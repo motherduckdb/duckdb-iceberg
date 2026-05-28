@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-ScanTasks::ScanTasks() {
-}
+ScanTasks::ScanTasks() {}
 
 ScanTasks ScanTasks::FromJSON(yyjson_val *obj) {
 	ScanTasks res;
@@ -24,6 +23,25 @@ ScanTasks ScanTasks::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+ScanTasks ScanTasks::Copy() const {
+	ScanTasks res;
+	res.delete_files.reserve(delete_files.size());
+	for (auto &item : delete_files) {
+		res.delete_files.emplace_back(item.Copy());
+	}
+	res.has_delete_files = has_delete_files;
+	res.file_scan_tasks.reserve(file_scan_tasks.size());
+	for (auto &item : file_scan_tasks) {
+		res.file_scan_tasks.emplace_back(item.Copy());
+	}
+	res.has_file_scan_tasks = has_file_scan_tasks;
+	res.plan_tasks.reserve(plan_tasks.size());
+	for (auto &item : plan_tasks) {
+		res.plan_tasks.emplace_back(item.Copy());
+	}
+	res.has_plan_tasks = has_plan_tasks;
+	return res;
+}
 string ScanTasks::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto delete_files_val = yyjson_obj_get(obj, "delete-files");
@@ -41,8 +59,7 @@ string ScanTasks::TryFromJSON(yyjson_val *obj) {
 				delete_files.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("ScanTasks property 'delete_files' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(delete_files_val));
+			return StringUtil::Format("ScanTasks property 'delete_files' is not of type 'array', found '%s' instead", yyjson_get_type_desc(delete_files_val));
 		}
 	}
 	auto file_scan_tasks_val = yyjson_obj_get(obj, "file-scan-tasks");
@@ -60,8 +77,7 @@ string ScanTasks::TryFromJSON(yyjson_val *obj) {
 				file_scan_tasks.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("ScanTasks property 'file_scan_tasks' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(file_scan_tasks_val));
+			return StringUtil::Format("ScanTasks property 'file_scan_tasks' is not of type 'array', found '%s' instead", yyjson_get_type_desc(file_scan_tasks_val));
 		}
 	}
 	auto plan_tasks_val = yyjson_obj_get(obj, "plan-tasks");
@@ -79,8 +95,7 @@ string ScanTasks::TryFromJSON(yyjson_val *obj) {
 				plan_tasks.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("ScanTasks property 'plan_tasks' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(plan_tasks_val));
+			return StringUtil::Format("ScanTasks property 'plan_tasks' is not of type 'array', found '%s' instead", yyjson_get_type_desc(plan_tasks_val));
 		}
 	}
 	return string();
@@ -88,3 +103,4 @@ string ScanTasks::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

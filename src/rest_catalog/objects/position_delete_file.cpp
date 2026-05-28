@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-PositionDeleteFile::PositionDeleteFile() {
-}
+PositionDeleteFile::PositionDeleteFile() {}
 
 PositionDeleteFile PositionDeleteFile::FromJSON(yyjson_val *obj) {
 	PositionDeleteFile res;
@@ -24,12 +23,21 @@ PositionDeleteFile PositionDeleteFile::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+PositionDeleteFile PositionDeleteFile::Copy() const {
+	PositionDeleteFile res;
+	res.content_file = content_file.Copy();
+	res.content = content;
+	res.content_offset = content_offset;
+	res.has_content_offset = has_content_offset;
+	res.content_size_in_bytes = content_size_in_bytes;
+	res.has_content_size_in_bytes = has_content_size_in_bytes;
+	return res;
+}
 string PositionDeleteFile::TryFromJSON(yyjson_val *obj) {
 	string error;
-	error = content_file.TryFromJSON(obj);
-	if (!error.empty()) {
-		return error;
-	}
+error = content_file.TryFromJSON(obj);if (!error.empty()) {
+	return error;
+}
 	auto content_val = yyjson_obj_get(obj, "content");
 	if (!content_val) {
 		return "PositionDeleteFile required property 'content' is missing";
@@ -37,9 +45,7 @@ string PositionDeleteFile::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(content_val)) {
 			content = yyjson_get_str(content_val);
 		} else {
-			return StringUtil::Format(
-			    "PositionDeleteFile property 'content' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(content_val));
+			return StringUtil::Format("PositionDeleteFile property 'content' is not of type 'string', found '%s' instead", yyjson_get_type_desc(content_val));
 		}
 	}
 	auto content_offset_val = yyjson_obj_get(obj, "content-offset");
@@ -50,9 +56,7 @@ string PositionDeleteFile::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(content_offset_val)) {
 			content_offset = yyjson_get_uint(content_offset_val);
 		} else {
-			return StringUtil::Format(
-			    "PositionDeleteFile property 'content_offset' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(content_offset_val));
+			return StringUtil::Format("PositionDeleteFile property 'content_offset' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(content_offset_val));
 		}
 	}
 	auto content_size_in_bytes_val = yyjson_obj_get(obj, "content-size-in-bytes");
@@ -63,9 +67,7 @@ string PositionDeleteFile::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(content_size_in_bytes_val)) {
 			content_size_in_bytes = yyjson_get_uint(content_size_in_bytes_val);
 		} else {
-			return StringUtil::Format(
-			    "PositionDeleteFile property 'content_size_in_bytes' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(content_size_in_bytes_val));
+			return StringUtil::Format("PositionDeleteFile property 'content_size_in_bytes' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(content_size_in_bytes_val));
 		}
 	}
 	return string();
@@ -73,3 +75,4 @@ string PositionDeleteFile::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

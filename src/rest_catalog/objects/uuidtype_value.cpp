@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-UUIDTypeValue::UUIDTypeValue() {
-}
+UUIDTypeValue::UUIDTypeValue() {}
 
 UUIDTypeValue UUIDTypeValue::FromJSON(yyjson_val *obj) {
 	UUIDTypeValue res;
@@ -24,16 +23,21 @@ UUIDTypeValue UUIDTypeValue::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+UUIDTypeValue UUIDTypeValue::Copy() const {
+	UUIDTypeValue res;
+	res.value = value;
+	return res;
+}
 string UUIDTypeValue::TryFromJSON(yyjson_val *obj) {
 	string error;
-	if (yyjson_is_str(obj)) {
-		value = yyjson_get_str(obj);
-	} else {
-		return StringUtil::Format("UUIDTypeValue property 'value' is not of type 'string', found '%s' instead",
-		                          yyjson_get_type_desc(obj));
-	}
+if (yyjson_is_str(obj)) {
+	value = yyjson_get_str(obj);
+} else {
+	return StringUtil::Format("UUIDTypeValue property 'value' is not of type 'string', found '%s' instead", yyjson_get_type_desc(obj));
+}
 	return string();
 }
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

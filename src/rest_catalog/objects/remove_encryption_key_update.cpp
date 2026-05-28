@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-RemoveEncryptionKeyUpdate::RemoveEncryptionKeyUpdate() {
-}
+RemoveEncryptionKeyUpdate::RemoveEncryptionKeyUpdate() {}
 
 RemoveEncryptionKeyUpdate RemoveEncryptionKeyUpdate::FromJSON(yyjson_val *obj) {
 	RemoveEncryptionKeyUpdate res;
@@ -24,12 +23,19 @@ RemoveEncryptionKeyUpdate RemoveEncryptionKeyUpdate::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+RemoveEncryptionKeyUpdate RemoveEncryptionKeyUpdate::Copy() const {
+	RemoveEncryptionKeyUpdate res;
+	res.base_update = base_update.Copy();
+	res.key_id = key_id;
+	res.action = action;
+	res.has_action = has_action;
+	return res;
+}
 string RemoveEncryptionKeyUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
-	error = base_update.TryFromJSON(obj);
-	if (!error.empty()) {
-		return error;
-	}
+error = base_update.TryFromJSON(obj);if (!error.empty()) {
+	return error;
+}
 	auto key_id_val = yyjson_obj_get(obj, "key-id");
 	if (!key_id_val) {
 		return "RemoveEncryptionKeyUpdate required property 'key-id' is missing";
@@ -37,9 +43,7 @@ string RemoveEncryptionKeyUpdate::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(key_id_val)) {
 			key_id = yyjson_get_str(key_id_val);
 		} else {
-			return StringUtil::Format(
-			    "RemoveEncryptionKeyUpdate property 'key_id' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(key_id_val));
+			return StringUtil::Format("RemoveEncryptionKeyUpdate property 'key_id' is not of type 'string', found '%s' instead", yyjson_get_type_desc(key_id_val));
 		}
 	}
 	auto action_val = yyjson_obj_get(obj, "action");
@@ -48,9 +52,7 @@ string RemoveEncryptionKeyUpdate::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);
 		} else {
-			return StringUtil::Format(
-			    "RemoveEncryptionKeyUpdate property 'action' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_val));
+			return StringUtil::Format("RemoveEncryptionKeyUpdate property 'action' is not of type 'string', found '%s' instead", yyjson_get_type_desc(action_val));
 		}
 	}
 	return string();
@@ -58,3 +60,4 @@ string RemoveEncryptionKeyUpdate::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

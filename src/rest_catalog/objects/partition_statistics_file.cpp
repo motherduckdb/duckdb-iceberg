@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-PartitionStatisticsFile::PartitionStatisticsFile() {
-}
+PartitionStatisticsFile::PartitionStatisticsFile() {}
 
 PartitionStatisticsFile PartitionStatisticsFile::FromJSON(yyjson_val *obj) {
 	PartitionStatisticsFile res;
@@ -24,6 +23,13 @@ PartitionStatisticsFile PartitionStatisticsFile::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+PartitionStatisticsFile PartitionStatisticsFile::Copy() const {
+	PartitionStatisticsFile res;
+	res.snapshot_id = snapshot_id;
+	res.statistics_path = statistics_path;
+	res.file_size_in_bytes = file_size_in_bytes;
+	return res;
+}
 string PartitionStatisticsFile::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
@@ -35,9 +41,7 @@ string PartitionStatisticsFile::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(snapshot_id_val)) {
 			snapshot_id = yyjson_get_uint(snapshot_id_val);
 		} else {
-			return StringUtil::Format(
-			    "PartitionStatisticsFile property 'snapshot_id' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(snapshot_id_val));
+			return StringUtil::Format("PartitionStatisticsFile property 'snapshot_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(snapshot_id_val));
 		}
 	}
 	auto statistics_path_val = yyjson_obj_get(obj, "statistics-path");
@@ -47,9 +51,7 @@ string PartitionStatisticsFile::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(statistics_path_val)) {
 			statistics_path = yyjson_get_str(statistics_path_val);
 		} else {
-			return StringUtil::Format(
-			    "PartitionStatisticsFile property 'statistics_path' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(statistics_path_val));
+			return StringUtil::Format("PartitionStatisticsFile property 'statistics_path' is not of type 'string', found '%s' instead", yyjson_get_type_desc(statistics_path_val));
 		}
 	}
 	auto file_size_in_bytes_val = yyjson_obj_get(obj, "file-size-in-bytes");
@@ -61,9 +63,7 @@ string PartitionStatisticsFile::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(file_size_in_bytes_val)) {
 			file_size_in_bytes = yyjson_get_uint(file_size_in_bytes_val);
 		} else {
-			return StringUtil::Format(
-			    "PartitionStatisticsFile property 'file_size_in_bytes' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(file_size_in_bytes_val));
+			return StringUtil::Format("PartitionStatisticsFile property 'file_size_in_bytes' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(file_size_in_bytes_val));
 		}
 	}
 	return string();
@@ -71,3 +71,4 @@ string PartitionStatisticsFile::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

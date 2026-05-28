@@ -15,30 +15,31 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class Type {
 public:
 	Type();
-	Type(const Type &) = delete;
-	Type &operator=(const Type &) = delete;
-	Type(Type &&) = default;
-	Type &operator=(Type &&) = default;
-
+	Type(const Type&) = delete;
+	Type& operator=(const Type&) = delete;
+	Type(Type&&) = default;
+	Type &operator=(Type&&) = default;
 public:
 	static Type FromJSON(yyjson_val *obj);
-
+	Type Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	PrimitiveType primitive_type;
-	bool has_primitive_type = false;
+	bool has_primitive_type;
 	StructType struct_type;
-	bool has_struct_type = false;
+	bool has_struct_type;
 	ListType list_type;
-	bool has_list_type = false;
+	bool has_list_type;
 	MapType map_type;
-	bool has_map_type = false;
+	bool has_map_type;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

@@ -12,26 +12,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class RemoveSchemasUpdate {
 public:
 	RemoveSchemasUpdate();
-	RemoveSchemasUpdate(const RemoveSchemasUpdate &) = delete;
-	RemoveSchemasUpdate &operator=(const RemoveSchemasUpdate &) = delete;
-	RemoveSchemasUpdate(RemoveSchemasUpdate &&) = default;
-	RemoveSchemasUpdate &operator=(RemoveSchemasUpdate &&) = default;
-
+	RemoveSchemasUpdate(const RemoveSchemasUpdate&) = delete;
+	RemoveSchemasUpdate& operator=(const RemoveSchemasUpdate&) = delete;
+	RemoveSchemasUpdate(RemoveSchemasUpdate&&) = default;
+	RemoveSchemasUpdate &operator=(RemoveSchemasUpdate&&) = default;
 public:
 	static RemoveSchemasUpdate FromJSON(yyjson_val *obj);
-
+	RemoveSchemasUpdate Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	BaseUpdate base_update;
 	vector<int32_t> schema_ids;
 	string action;
-	bool has_action = false;
+	bool has_action;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

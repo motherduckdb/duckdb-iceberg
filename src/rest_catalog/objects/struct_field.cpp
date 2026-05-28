@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-StructField::StructField() {
-}
+StructField::StructField() {}
 
 StructField StructField::FromJSON(yyjson_val *obj) {
 	StructField res;
@@ -24,6 +23,20 @@ StructField StructField::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+StructField StructField::Copy() const {
+	StructField res;
+	res.id = id;
+	res.name = name;
+	res.type = type ? make_uniq<Type>(type->Copy()) : nullptr;
+	res.required = required;
+	res.doc = doc;
+	res.has_doc = has_doc;
+	res.initial_default = initial_default.Copy();
+	res.has_initial_default = has_initial_default;
+	res.write_default = write_default.Copy();
+	res.has_write_default = has_write_default;
+	return res;
+}
 string StructField::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto id_val = yyjson_obj_get(obj, "id");
@@ -33,8 +46,7 @@ string StructField::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_int(id_val)) {
 			id = yyjson_get_int(id_val);
 		} else {
-			return StringUtil::Format("StructField property 'id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(id_val));
+			return StringUtil::Format("StructField property 'id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(id_val));
 		}
 	}
 	auto name_val = yyjson_obj_get(obj, "name");
@@ -44,8 +56,7 @@ string StructField::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(name_val)) {
 			name = yyjson_get_str(name_val);
 		} else {
-			return StringUtil::Format("StructField property 'name' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(name_val));
+			return StringUtil::Format("StructField property 'name' is not of type 'string', found '%s' instead", yyjson_get_type_desc(name_val));
 		}
 	}
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -55,7 +66,7 @@ string StructField::TryFromJSON(yyjson_val *obj) {
 		type = make_uniq<Type>();
 		error = type->TryFromJSON(type_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto required_val = yyjson_obj_get(obj, "required");
@@ -65,8 +76,7 @@ string StructField::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_bool(required_val)) {
 			required = yyjson_get_bool(required_val);
 		} else {
-			return StringUtil::Format("StructField property 'required' is not of type 'boolean', found '%s' instead",
-			                          yyjson_get_type_desc(required_val));
+			return StringUtil::Format("StructField property 'required' is not of type 'boolean', found '%s' instead", yyjson_get_type_desc(required_val));
 		}
 	}
 	auto doc_val = yyjson_obj_get(obj, "doc");
@@ -75,8 +85,7 @@ string StructField::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(doc_val)) {
 			doc = yyjson_get_str(doc_val);
 		} else {
-			return StringUtil::Format("StructField property 'doc' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(doc_val));
+			return StringUtil::Format("StructField property 'doc' is not of type 'string', found '%s' instead", yyjson_get_type_desc(doc_val));
 		}
 	}
 	auto initial_default_val = yyjson_obj_get(obj, "initial-default");
@@ -84,7 +93,7 @@ string StructField::TryFromJSON(yyjson_val *obj) {
 		has_initial_default = true;
 		error = initial_default.TryFromJSON(initial_default_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto write_default_val = yyjson_obj_get(obj, "write-default");
@@ -92,7 +101,7 @@ string StructField::TryFromJSON(yyjson_val *obj) {
 		has_write_default = true;
 		error = write_default.TryFromJSON(write_default_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	return string();
@@ -100,3 +109,4 @@ string StructField::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

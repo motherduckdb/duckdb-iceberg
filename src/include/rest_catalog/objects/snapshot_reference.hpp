@@ -6,35 +6,37 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 
+
 using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class SnapshotReference {
 public:
 	SnapshotReference();
-	SnapshotReference(const SnapshotReference &) = delete;
-	SnapshotReference &operator=(const SnapshotReference &) = delete;
-	SnapshotReference(SnapshotReference &&) = default;
-	SnapshotReference &operator=(SnapshotReference &&) = default;
-
+	SnapshotReference(const SnapshotReference&) = delete;
+	SnapshotReference& operator=(const SnapshotReference&) = delete;
+	SnapshotReference(SnapshotReference&&) = default;
+	SnapshotReference &operator=(SnapshotReference&&) = default;
 public:
 	static SnapshotReference FromJSON(yyjson_val *obj);
-
+	SnapshotReference Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	string type;
 	int64_t snapshot_id;
 	int64_t max_ref_age_ms;
-	bool has_max_ref_age_ms = false;
+	bool has_max_ref_age_ms;
 	int64_t max_snapshot_age_ms;
-	bool has_max_snapshot_age_ms = false;
+	bool has_max_snapshot_age_ms;
 	int32_t min_snapshots_to_keep;
-	bool has_min_snapshots_to_keep = false;
+	bool has_min_snapshots_to_keep;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

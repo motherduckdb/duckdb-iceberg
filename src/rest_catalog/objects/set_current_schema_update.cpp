@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-SetCurrentSchemaUpdate::SetCurrentSchemaUpdate() {
-}
+SetCurrentSchemaUpdate::SetCurrentSchemaUpdate() {}
 
 SetCurrentSchemaUpdate SetCurrentSchemaUpdate::FromJSON(yyjson_val *obj) {
 	SetCurrentSchemaUpdate res;
@@ -24,12 +23,19 @@ SetCurrentSchemaUpdate SetCurrentSchemaUpdate::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+SetCurrentSchemaUpdate SetCurrentSchemaUpdate::Copy() const {
+	SetCurrentSchemaUpdate res;
+	res.base_update = base_update.Copy();
+	res.schema_id = schema_id;
+	res.action = action;
+	res.has_action = has_action;
+	return res;
+}
 string SetCurrentSchemaUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
-	error = base_update.TryFromJSON(obj);
-	if (!error.empty()) {
-		return error;
-	}
+error = base_update.TryFromJSON(obj);if (!error.empty()) {
+	return error;
+}
 	auto schema_id_val = yyjson_obj_get(obj, "schema-id");
 	if (!schema_id_val) {
 		return "SetCurrentSchemaUpdate required property 'schema-id' is missing";
@@ -37,9 +43,7 @@ string SetCurrentSchemaUpdate::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_int(schema_id_val)) {
 			schema_id = yyjson_get_int(schema_id_val);
 		} else {
-			return StringUtil::Format(
-			    "SetCurrentSchemaUpdate property 'schema_id' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(schema_id_val));
+			return StringUtil::Format("SetCurrentSchemaUpdate property 'schema_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(schema_id_val));
 		}
 	}
 	auto action_val = yyjson_obj_get(obj, "action");
@@ -48,9 +52,7 @@ string SetCurrentSchemaUpdate::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);
 		} else {
-			return StringUtil::Format(
-			    "SetCurrentSchemaUpdate property 'action' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_val));
+			return StringUtil::Format("SetCurrentSchemaUpdate property 'action' is not of type 'string', found '%s' instead", yyjson_get_type_desc(action_val));
 		}
 	}
 	return string();
@@ -58,3 +60,4 @@ string SetCurrentSchemaUpdate::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

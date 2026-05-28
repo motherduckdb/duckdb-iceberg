@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-UpgradeFormatVersionUpdate::UpgradeFormatVersionUpdate() {
-}
+UpgradeFormatVersionUpdate::UpgradeFormatVersionUpdate() {}
 
 UpgradeFormatVersionUpdate UpgradeFormatVersionUpdate::FromJSON(yyjson_val *obj) {
 	UpgradeFormatVersionUpdate res;
@@ -24,12 +23,19 @@ UpgradeFormatVersionUpdate UpgradeFormatVersionUpdate::FromJSON(yyjson_val *obj)
 	return res;
 }
 
+UpgradeFormatVersionUpdate UpgradeFormatVersionUpdate::Copy() const {
+	UpgradeFormatVersionUpdate res;
+	res.base_update = base_update.Copy();
+	res.format_version = format_version;
+	res.action = action;
+	res.has_action = has_action;
+	return res;
+}
 string UpgradeFormatVersionUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
-	error = base_update.TryFromJSON(obj);
-	if (!error.empty()) {
-		return error;
-	}
+error = base_update.TryFromJSON(obj);if (!error.empty()) {
+	return error;
+}
 	auto format_version_val = yyjson_obj_get(obj, "format-version");
 	if (!format_version_val) {
 		return "UpgradeFormatVersionUpdate required property 'format-version' is missing";
@@ -37,9 +43,7 @@ string UpgradeFormatVersionUpdate::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_int(format_version_val)) {
 			format_version = yyjson_get_int(format_version_val);
 		} else {
-			return StringUtil::Format(
-			    "UpgradeFormatVersionUpdate property 'format_version' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(format_version_val));
+			return StringUtil::Format("UpgradeFormatVersionUpdate property 'format_version' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(format_version_val));
 		}
 	}
 	auto action_val = yyjson_obj_get(obj, "action");
@@ -48,9 +52,7 @@ string UpgradeFormatVersionUpdate::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);
 		} else {
-			return StringUtil::Format(
-			    "UpgradeFormatVersionUpdate property 'action' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_val));
+			return StringUtil::Format("UpgradeFormatVersionUpdate property 'action' is not of type 'string', found '%s' instead", yyjson_get_type_desc(action_val));
 		}
 	}
 	return string();
@@ -58,3 +60,4 @@ string UpgradeFormatVersionUpdate::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

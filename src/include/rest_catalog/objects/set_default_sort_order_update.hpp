@@ -12,26 +12,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class SetDefaultSortOrderUpdate {
 public:
 	SetDefaultSortOrderUpdate();
-	SetDefaultSortOrderUpdate(const SetDefaultSortOrderUpdate &) = delete;
-	SetDefaultSortOrderUpdate &operator=(const SetDefaultSortOrderUpdate &) = delete;
-	SetDefaultSortOrderUpdate(SetDefaultSortOrderUpdate &&) = default;
-	SetDefaultSortOrderUpdate &operator=(SetDefaultSortOrderUpdate &&) = default;
-
+	SetDefaultSortOrderUpdate(const SetDefaultSortOrderUpdate&) = delete;
+	SetDefaultSortOrderUpdate& operator=(const SetDefaultSortOrderUpdate&) = delete;
+	SetDefaultSortOrderUpdate(SetDefaultSortOrderUpdate&&) = default;
+	SetDefaultSortOrderUpdate &operator=(SetDefaultSortOrderUpdate&&) = default;
 public:
 	static SetDefaultSortOrderUpdate FromJSON(yyjson_val *obj);
-
+	SetDefaultSortOrderUpdate Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	BaseUpdate base_update;
 	int32_t sort_order_id;
 	string action;
-	bool has_action = false;
+	bool has_action;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

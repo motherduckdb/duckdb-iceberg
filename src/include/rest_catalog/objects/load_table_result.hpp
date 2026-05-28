@@ -13,29 +13,30 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class LoadTableResult {
 public:
 	LoadTableResult();
-	LoadTableResult(const LoadTableResult &) = delete;
-	LoadTableResult &operator=(const LoadTableResult &) = delete;
-	LoadTableResult(LoadTableResult &&) = default;
-	LoadTableResult &operator=(LoadTableResult &&) = default;
-
+	LoadTableResult(const LoadTableResult&) = delete;
+	LoadTableResult& operator=(const LoadTableResult&) = delete;
+	LoadTableResult(LoadTableResult&&) = default;
+	LoadTableResult &operator=(LoadTableResult&&) = default;
 public:
 	static LoadTableResult FromJSON(yyjson_val *obj);
-
+	LoadTableResult Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	TableMetadata metadata;
 	string metadata_location;
-	bool has_metadata_location = false;
+	bool has_metadata_location;
 	case_insensitive_map_t<string> config;
-	bool has_config = false;
+	bool has_config;
 	vector<StorageCredential> storage_credentials;
-	bool has_storage_credentials = false;
+	bool has_storage_credentials;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

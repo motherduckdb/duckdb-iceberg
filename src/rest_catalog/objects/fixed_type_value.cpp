@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-FixedTypeValue::FixedTypeValue() {
-}
+FixedTypeValue::FixedTypeValue() {}
 
 FixedTypeValue FixedTypeValue::FromJSON(yyjson_val *obj) {
 	FixedTypeValue res;
@@ -24,16 +23,21 @@ FixedTypeValue FixedTypeValue::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+FixedTypeValue FixedTypeValue::Copy() const {
+	FixedTypeValue res;
+	res.value = value;
+	return res;
+}
 string FixedTypeValue::TryFromJSON(yyjson_val *obj) {
 	string error;
-	if (yyjson_is_str(obj)) {
-		value = yyjson_get_str(obj);
-	} else {
-		return StringUtil::Format("FixedTypeValue property 'value' is not of type 'string', found '%s' instead",
-		                          yyjson_get_type_desc(obj));
-	}
+if (yyjson_is_str(obj)) {
+	value = yyjson_get_str(obj);
+} else {
+	return StringUtil::Format("FixedTypeValue property 'value' is not of type 'string', found '%s' instead", yyjson_get_type_desc(obj));
+}
 	return string();
 }
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

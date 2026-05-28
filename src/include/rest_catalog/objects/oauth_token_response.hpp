@@ -12,32 +12,33 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class OAuthTokenResponse {
 public:
 	OAuthTokenResponse();
-	OAuthTokenResponse(const OAuthTokenResponse &) = delete;
-	OAuthTokenResponse &operator=(const OAuthTokenResponse &) = delete;
-	OAuthTokenResponse(OAuthTokenResponse &&) = default;
-	OAuthTokenResponse &operator=(OAuthTokenResponse &&) = default;
-
+	OAuthTokenResponse(const OAuthTokenResponse&) = delete;
+	OAuthTokenResponse& operator=(const OAuthTokenResponse&) = delete;
+	OAuthTokenResponse(OAuthTokenResponse&&) = default;
+	OAuthTokenResponse &operator=(OAuthTokenResponse&&) = default;
 public:
 	static OAuthTokenResponse FromJSON(yyjson_val *obj);
-
+	OAuthTokenResponse Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	string access_token;
 	string token_type;
 	int32_t expires_in;
-	bool has_expires_in = false;
+	bool has_expires_in;
 	TokenType issued_token_type;
-	bool has_issued_token_type = false;
+	bool has_issued_token_type;
 	string refresh_token;
-	bool has_refresh_token = false;
+	bool has_refresh_token;
 	string scope;
-	bool has_scope = false;
+	bool has_scope;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

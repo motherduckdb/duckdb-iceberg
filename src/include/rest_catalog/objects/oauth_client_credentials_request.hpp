@@ -6,32 +6,34 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 
+
 using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class OAuthClientCredentialsRequest {
 public:
 	OAuthClientCredentialsRequest();
-	OAuthClientCredentialsRequest(const OAuthClientCredentialsRequest &) = delete;
-	OAuthClientCredentialsRequest &operator=(const OAuthClientCredentialsRequest &) = delete;
-	OAuthClientCredentialsRequest(OAuthClientCredentialsRequest &&) = default;
-	OAuthClientCredentialsRequest &operator=(OAuthClientCredentialsRequest &&) = default;
-
+	OAuthClientCredentialsRequest(const OAuthClientCredentialsRequest&) = delete;
+	OAuthClientCredentialsRequest& operator=(const OAuthClientCredentialsRequest&) = delete;
+	OAuthClientCredentialsRequest(OAuthClientCredentialsRequest&&) = default;
+	OAuthClientCredentialsRequest &operator=(OAuthClientCredentialsRequest&&) = default;
 public:
 	static OAuthClientCredentialsRequest FromJSON(yyjson_val *obj);
-
+	OAuthClientCredentialsRequest Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	string grant_type;
 	string client_id;
 	string client_secret;
 	string scope;
-	bool has_scope = false;
+	bool has_scope;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

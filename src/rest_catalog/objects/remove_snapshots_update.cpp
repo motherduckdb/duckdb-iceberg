@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-RemoveSnapshotsUpdate::RemoveSnapshotsUpdate() {
-}
+RemoveSnapshotsUpdate::RemoveSnapshotsUpdate() {}
 
 RemoveSnapshotsUpdate RemoveSnapshotsUpdate::FromJSON(yyjson_val *obj) {
 	RemoveSnapshotsUpdate res;
@@ -24,12 +23,22 @@ RemoveSnapshotsUpdate RemoveSnapshotsUpdate::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+RemoveSnapshotsUpdate RemoveSnapshotsUpdate::Copy() const {
+	RemoveSnapshotsUpdate res;
+	res.base_update = base_update.Copy();
+	res.snapshot_ids.reserve(snapshot_ids.size());
+	for (auto &item : snapshot_ids) {
+		res.snapshot_ids.emplace_back(item);
+	}
+	res.action = action;
+	res.has_action = has_action;
+	return res;
+}
 string RemoveSnapshotsUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
-	error = base_update.TryFromJSON(obj);
-	if (!error.empty()) {
-		return error;
-	}
+error = base_update.TryFromJSON(obj);if (!error.empty()) {
+	return error;
+}
 	auto snapshot_ids_val = yyjson_obj_get(obj, "snapshot-ids");
 	if (!snapshot_ids_val) {
 		return "RemoveSnapshotsUpdate required property 'snapshot-ids' is missing";
@@ -38,22 +47,18 @@ string RemoveSnapshotsUpdate::TryFromJSON(yyjson_val *obj) {
 			size_t idx, max;
 			yyjson_val *val;
 			yyjson_arr_foreach(snapshot_ids_val, idx, max, val) {
-				int64_t tmp;
-				if (yyjson_is_sint(val)) {
-					tmp = yyjson_get_sint(val);
-				} else if (yyjson_is_uint(val)) {
-					tmp = yyjson_get_uint(val);
-				} else {
-					return StringUtil::Format(
-					    "RemoveSnapshotsUpdate property 'tmp' is not of type 'integer', found '%s' instead",
-					    yyjson_get_type_desc(val));
-				}
+			int64_t tmp;
+			if (yyjson_is_sint(val)) {
+				tmp = yyjson_get_sint(val);
+			} else if (yyjson_is_uint(val)) {
+				tmp = yyjson_get_uint(val);
+			} else {
+				return StringUtil::Format("RemoveSnapshotsUpdate property 'tmp' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(val));
+			}
 				snapshot_ids.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format(
-			    "RemoveSnapshotsUpdate property 'snapshot_ids' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(snapshot_ids_val));
+			return StringUtil::Format("RemoveSnapshotsUpdate property 'snapshot_ids' is not of type 'array', found '%s' instead", yyjson_get_type_desc(snapshot_ids_val));
 		}
 	}
 	auto action_val = yyjson_obj_get(obj, "action");
@@ -62,9 +67,7 @@ string RemoveSnapshotsUpdate::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);
 		} else {
-			return StringUtil::Format(
-			    "RemoveSnapshotsUpdate property 'action' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_val));
+			return StringUtil::Format("RemoveSnapshotsUpdate property 'action' is not of type 'string', found '%s' instead", yyjson_get_type_desc(action_val));
 		}
 	}
 	return string();
@@ -72,3 +75,4 @@ string RemoveSnapshotsUpdate::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

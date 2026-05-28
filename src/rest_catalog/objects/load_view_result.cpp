@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-LoadViewResult::LoadViewResult() {
-}
+LoadViewResult::LoadViewResult() {}
 
 LoadViewResult LoadViewResult::FromJSON(yyjson_val *obj) {
 	LoadViewResult res;
@@ -24,6 +23,16 @@ LoadViewResult LoadViewResult::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+LoadViewResult LoadViewResult::Copy() const {
+	LoadViewResult res;
+	res.metadata_location = metadata_location;
+	res.metadata = metadata.Copy();
+	for (auto &entry : config) {
+		res.config.emplace(entry.first, entry.second);
+	}
+	res.has_config = has_config;
+	return res;
+}
 string LoadViewResult::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto metadata_location_val = yyjson_obj_get(obj, "metadata-location");
@@ -33,9 +42,7 @@ string LoadViewResult::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(metadata_location_val)) {
 			metadata_location = yyjson_get_str(metadata_location_val);
 		} else {
-			return StringUtil::Format(
-			    "LoadViewResult property 'metadata_location' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(metadata_location_val));
+			return StringUtil::Format("LoadViewResult property 'metadata_location' is not of type 'string', found '%s' instead", yyjson_get_type_desc(metadata_location_val));
 		}
 	}
 	auto metadata_val = yyjson_obj_get(obj, "metadata");
@@ -44,7 +51,7 @@ string LoadViewResult::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = metadata.TryFromJSON(metadata_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto config_val = yyjson_obj_get(obj, "config");
@@ -59,9 +66,7 @@ string LoadViewResult::TryFromJSON(yyjson_val *obj) {
 				if (yyjson_is_str(val)) {
 					tmp = yyjson_get_str(val);
 				} else {
-					return StringUtil::Format(
-					    "LoadViewResult property 'tmp' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(val));
+					return StringUtil::Format("LoadViewResult property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
 				}
 				config.emplace(key_str, std::move(tmp));
 			}
@@ -74,3 +79,4 @@ string LoadViewResult::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

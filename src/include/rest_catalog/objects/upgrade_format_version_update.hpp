@@ -12,26 +12,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class UpgradeFormatVersionUpdate {
 public:
 	UpgradeFormatVersionUpdate();
-	UpgradeFormatVersionUpdate(const UpgradeFormatVersionUpdate &) = delete;
-	UpgradeFormatVersionUpdate &operator=(const UpgradeFormatVersionUpdate &) = delete;
-	UpgradeFormatVersionUpdate(UpgradeFormatVersionUpdate &&) = default;
-	UpgradeFormatVersionUpdate &operator=(UpgradeFormatVersionUpdate &&) = default;
-
+	UpgradeFormatVersionUpdate(const UpgradeFormatVersionUpdate&) = delete;
+	UpgradeFormatVersionUpdate& operator=(const UpgradeFormatVersionUpdate&) = delete;
+	UpgradeFormatVersionUpdate(UpgradeFormatVersionUpdate&&) = default;
+	UpgradeFormatVersionUpdate &operator=(UpgradeFormatVersionUpdate&&) = default;
 public:
 	static UpgradeFormatVersionUpdate FromJSON(yyjson_val *obj);
-
+	UpgradeFormatVersionUpdate Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	BaseUpdate base_update;
 	int32_t format_version;
 	string action;
-	bool has_action = false;
+	bool has_action;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

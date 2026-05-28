@@ -12,20 +12,20 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class CommitReport {
 public:
 	CommitReport();
-	CommitReport(const CommitReport &) = delete;
-	CommitReport &operator=(const CommitReport &) = delete;
-	CommitReport(CommitReport &&) = default;
-	CommitReport &operator=(CommitReport &&) = default;
-
+	CommitReport(const CommitReport&) = delete;
+	CommitReport& operator=(const CommitReport&) = delete;
+	CommitReport(CommitReport&&) = default;
+	CommitReport &operator=(CommitReport&&) = default;
 public:
 	static CommitReport FromJSON(yyjson_val *obj);
-
+	CommitReport Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	string table_name;
 	int64_t snapshot_id;
@@ -33,8 +33,9 @@ public:
 	string operation;
 	Metrics metrics;
 	case_insensitive_map_t<string> metadata;
-	bool has_metadata = false;
+	bool has_metadata;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

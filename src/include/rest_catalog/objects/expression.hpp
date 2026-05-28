@@ -18,36 +18,37 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class Expression {
 public:
 	Expression();
-	Expression(const Expression &) = delete;
-	Expression &operator=(const Expression &) = delete;
-	Expression(Expression &&) = default;
-	Expression &operator=(Expression &&) = default;
-
+	Expression(const Expression&) = delete;
+	Expression& operator=(const Expression&) = delete;
+	Expression(Expression&&) = default;
+	Expression &operator=(Expression&&) = default;
 public:
 	static Expression FromJSON(yyjson_val *obj);
-
+	Expression Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	TrueExpression true_expression;
-	bool has_true_expression = false;
+	bool has_true_expression;
 	FalseExpression false_expression;
-	bool has_false_expression = false;
+	bool has_false_expression;
 	AndOrExpression and_or_expression;
-	bool has_and_or_expression = false;
+	bool has_and_or_expression;
 	NotExpression not_expression;
-	bool has_not_expression = false;
+	bool has_not_expression;
 	SetExpression set_expression;
-	bool has_set_expression = false;
+	bool has_set_expression;
 	LiteralExpression literal_expression;
-	bool has_literal_expression = false;
+	bool has_literal_expression;
 	UnaryExpression unary_expression;
-	bool has_unary_expression = false;
+	bool has_unary_expression;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

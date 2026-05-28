@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-ScanReport::ScanReport() {
-}
+ScanReport::ScanReport() {}
 
 ScanReport ScanReport::FromJSON(yyjson_val *obj) {
 	ScanReport res;
@@ -24,6 +23,27 @@ ScanReport ScanReport::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+ScanReport ScanReport::Copy() const {
+	ScanReport res;
+	res.table_name = table_name;
+	res.snapshot_id = snapshot_id;
+	res.filter = filter ? make_uniq<Expression>(filter->Copy()) : nullptr;
+	res.schema_id = schema_id;
+	res.projected_field_ids.reserve(projected_field_ids.size());
+	for (auto &item : projected_field_ids) {
+		res.projected_field_ids.emplace_back(item);
+	}
+	res.projected_field_names.reserve(projected_field_names.size());
+	for (auto &item : projected_field_names) {
+		res.projected_field_names.emplace_back(item);
+	}
+	res.metrics = metrics.Copy();
+	for (auto &entry : metadata) {
+		res.metadata.emplace(entry.first, entry.second);
+	}
+	res.has_metadata = has_metadata;
+	return res;
+}
 string ScanReport::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto table_name_val = yyjson_obj_get(obj, "table-name");
@@ -33,8 +53,7 @@ string ScanReport::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(table_name_val)) {
 			table_name = yyjson_get_str(table_name_val);
 		} else {
-			return StringUtil::Format("ScanReport property 'table_name' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(table_name_val));
+			return StringUtil::Format("ScanReport property 'table_name' is not of type 'string', found '%s' instead", yyjson_get_type_desc(table_name_val));
 		}
 	}
 	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
@@ -46,8 +65,7 @@ string ScanReport::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(snapshot_id_val)) {
 			snapshot_id = yyjson_get_uint(snapshot_id_val);
 		} else {
-			return StringUtil::Format("ScanReport property 'snapshot_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(snapshot_id_val));
+			return StringUtil::Format("ScanReport property 'snapshot_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(snapshot_id_val));
 		}
 	}
 	auto filter_val = yyjson_obj_get(obj, "filter");
@@ -57,7 +75,7 @@ string ScanReport::TryFromJSON(yyjson_val *obj) {
 		filter = make_uniq<Expression>();
 		error = filter->TryFromJSON(filter_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto schema_id_val = yyjson_obj_get(obj, "schema-id");
@@ -67,8 +85,7 @@ string ScanReport::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_int(schema_id_val)) {
 			schema_id = yyjson_get_int(schema_id_val);
 		} else {
-			return StringUtil::Format("ScanReport property 'schema_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(schema_id_val));
+			return StringUtil::Format("ScanReport property 'schema_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(schema_id_val));
 		}
 	}
 	auto projected_field_ids_val = yyjson_obj_get(obj, "projected-field-ids");
@@ -79,19 +96,16 @@ string ScanReport::TryFromJSON(yyjson_val *obj) {
 			size_t idx, max;
 			yyjson_val *val;
 			yyjson_arr_foreach(projected_field_ids_val, idx, max, val) {
-				int32_t tmp;
-				if (yyjson_is_int(val)) {
-					tmp = yyjson_get_int(val);
-				} else {
-					return StringUtil::Format("ScanReport property 'tmp' is not of type 'integer', found '%s' instead",
-					                          yyjson_get_type_desc(val));
-				}
+			int32_t tmp;
+			if (yyjson_is_int(val)) {
+				tmp = yyjson_get_int(val);
+			} else {
+				return StringUtil::Format("ScanReport property 'tmp' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(val));
+			}
 				projected_field_ids.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format(
-			    "ScanReport property 'projected_field_ids' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(projected_field_ids_val));
+			return StringUtil::Format("ScanReport property 'projected_field_ids' is not of type 'array', found '%s' instead", yyjson_get_type_desc(projected_field_ids_val));
 		}
 	}
 	auto projected_field_names_val = yyjson_obj_get(obj, "projected-field-names");
@@ -102,19 +116,16 @@ string ScanReport::TryFromJSON(yyjson_val *obj) {
 			size_t idx, max;
 			yyjson_val *val;
 			yyjson_arr_foreach(projected_field_names_val, idx, max, val) {
-				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
-				} else {
-					return StringUtil::Format("ScanReport property 'tmp' is not of type 'string', found '%s' instead",
-					                          yyjson_get_type_desc(val));
-				}
+			string tmp;
+			if (yyjson_is_str(val)) {
+				tmp = yyjson_get_str(val);
+			} else {
+				return StringUtil::Format("ScanReport property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
+			}
 				projected_field_names.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format(
-			    "ScanReport property 'projected_field_names' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(projected_field_names_val));
+			return StringUtil::Format("ScanReport property 'projected_field_names' is not of type 'array', found '%s' instead", yyjson_get_type_desc(projected_field_names_val));
 		}
 	}
 	auto metrics_val = yyjson_obj_get(obj, "metrics");
@@ -123,7 +134,7 @@ string ScanReport::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = metrics.TryFromJSON(metrics_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto metadata_val = yyjson_obj_get(obj, "metadata");
@@ -138,8 +149,7 @@ string ScanReport::TryFromJSON(yyjson_val *obj) {
 				if (yyjson_is_str(val)) {
 					tmp = yyjson_get_str(val);
 				} else {
-					return StringUtil::Format("ScanReport property 'tmp' is not of type 'string', found '%s' instead",
-					                          yyjson_get_type_desc(val));
+					return StringUtil::Format("ScanReport property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
 				}
 				metadata.emplace(key_str, std::move(tmp));
 			}
@@ -152,3 +162,4 @@ string ScanReport::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

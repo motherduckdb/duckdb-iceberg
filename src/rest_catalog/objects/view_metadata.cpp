@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-ViewMetadata::ViewMetadata() {
-}
+ViewMetadata::ViewMetadata() {}
 
 ViewMetadata ViewMetadata::FromJSON(yyjson_val *obj) {
 	ViewMetadata res;
@@ -24,6 +23,30 @@ ViewMetadata ViewMetadata::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+ViewMetadata ViewMetadata::Copy() const {
+	ViewMetadata res;
+	res.view_uuid = view_uuid;
+	res.format_version = format_version;
+	res.location = location;
+	res.current_version_id = current_version_id;
+	res.versions.reserve(versions.size());
+	for (auto &item : versions) {
+		res.versions.emplace_back(item.Copy());
+	}
+	res.version_log.reserve(version_log.size());
+	for (auto &item : version_log) {
+		res.version_log.emplace_back(item.Copy());
+	}
+	res.schemas.reserve(schemas.size());
+	for (auto &item : schemas) {
+		res.schemas.emplace_back(item.Copy());
+	}
+	for (auto &entry : properties) {
+		res.properties.emplace(entry.first, entry.second);
+	}
+	res.has_properties = has_properties;
+	return res;
+}
 string ViewMetadata::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto view_uuid_val = yyjson_obj_get(obj, "view-uuid");
@@ -33,8 +56,7 @@ string ViewMetadata::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(view_uuid_val)) {
 			view_uuid = yyjson_get_str(view_uuid_val);
 		} else {
-			return StringUtil::Format("ViewMetadata property 'view_uuid' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(view_uuid_val));
+			return StringUtil::Format("ViewMetadata property 'view_uuid' is not of type 'string', found '%s' instead", yyjson_get_type_desc(view_uuid_val));
 		}
 	}
 	auto format_version_val = yyjson_obj_get(obj, "format-version");
@@ -44,9 +66,7 @@ string ViewMetadata::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_int(format_version_val)) {
 			format_version = yyjson_get_int(format_version_val);
 		} else {
-			return StringUtil::Format(
-			    "ViewMetadata property 'format_version' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(format_version_val));
+			return StringUtil::Format("ViewMetadata property 'format_version' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(format_version_val));
 		}
 	}
 	auto location_val = yyjson_obj_get(obj, "location");
@@ -56,8 +76,7 @@ string ViewMetadata::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(location_val)) {
 			location = yyjson_get_str(location_val);
 		} else {
-			return StringUtil::Format("ViewMetadata property 'location' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(location_val));
+			return StringUtil::Format("ViewMetadata property 'location' is not of type 'string', found '%s' instead", yyjson_get_type_desc(location_val));
 		}
 	}
 	auto current_version_id_val = yyjson_obj_get(obj, "current-version-id");
@@ -67,9 +86,7 @@ string ViewMetadata::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_int(current_version_id_val)) {
 			current_version_id = yyjson_get_int(current_version_id_val);
 		} else {
-			return StringUtil::Format(
-			    "ViewMetadata property 'current_version_id' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(current_version_id_val));
+			return StringUtil::Format("ViewMetadata property 'current_version_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(current_version_id_val));
 		}
 	}
 	auto versions_val = yyjson_obj_get(obj, "versions");
@@ -88,8 +105,7 @@ string ViewMetadata::TryFromJSON(yyjson_val *obj) {
 				versions.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("ViewMetadata property 'versions' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(versions_val));
+			return StringUtil::Format("ViewMetadata property 'versions' is not of type 'array', found '%s' instead", yyjson_get_type_desc(versions_val));
 		}
 	}
 	auto version_log_val = yyjson_obj_get(obj, "version-log");
@@ -108,8 +124,7 @@ string ViewMetadata::TryFromJSON(yyjson_val *obj) {
 				version_log.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("ViewMetadata property 'version_log' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(version_log_val));
+			return StringUtil::Format("ViewMetadata property 'version_log' is not of type 'array', found '%s' instead", yyjson_get_type_desc(version_log_val));
 		}
 	}
 	auto schemas_val = yyjson_obj_get(obj, "schemas");
@@ -128,8 +143,7 @@ string ViewMetadata::TryFromJSON(yyjson_val *obj) {
 				schemas.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("ViewMetadata property 'schemas' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(schemas_val));
+			return StringUtil::Format("ViewMetadata property 'schemas' is not of type 'array', found '%s' instead", yyjson_get_type_desc(schemas_val));
 		}
 	}
 	auto properties_val = yyjson_obj_get(obj, "properties");
@@ -144,8 +158,7 @@ string ViewMetadata::TryFromJSON(yyjson_val *obj) {
 				if (yyjson_is_str(val)) {
 					tmp = yyjson_get_str(val);
 				} else {
-					return StringUtil::Format("ViewMetadata property 'tmp' is not of type 'string', found '%s' instead",
-					                          yyjson_get_type_desc(val));
+					return StringUtil::Format("ViewMetadata property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
 				}
 				properties.emplace(key_str, std::move(tmp));
 			}
@@ -158,3 +171,4 @@ string ViewMetadata::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

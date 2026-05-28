@@ -12,23 +12,24 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class AssertCreate {
 public:
 	AssertCreate();
-	AssertCreate(const AssertCreate &) = delete;
-	AssertCreate &operator=(const AssertCreate &) = delete;
-	AssertCreate(AssertCreate &&) = default;
-	AssertCreate &operator=(AssertCreate &&) = default;
-
+	AssertCreate(const AssertCreate&) = delete;
+	AssertCreate& operator=(const AssertCreate&) = delete;
+	AssertCreate(AssertCreate&&) = default;
+	AssertCreate &operator=(AssertCreate&&) = default;
 public:
 	static AssertCreate FromJSON(yyjson_val *obj);
-
+	AssertCreate Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	TableRequirementType type;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

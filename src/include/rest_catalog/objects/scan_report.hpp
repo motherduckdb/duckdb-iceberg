@@ -17,17 +17,15 @@ class Expression;
 class ScanReport {
 public:
 	ScanReport();
-	ScanReport(const ScanReport &) = delete;
-	ScanReport &operator=(const ScanReport &) = delete;
-	ScanReport(ScanReport &&) = default;
-	ScanReport &operator=(ScanReport &&) = default;
-
+	ScanReport(const ScanReport&) = delete;
+	ScanReport& operator=(const ScanReport&) = delete;
+	ScanReport(ScanReport&&) = default;
+	ScanReport &operator=(ScanReport&&) = default;
 public:
 	static ScanReport FromJSON(yyjson_val *obj);
-
+	ScanReport Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	string table_name;
 	int64_t snapshot_id;
@@ -37,8 +35,9 @@ public:
 	vector<string> projected_field_names;
 	Metrics metrics;
 	case_insensitive_map_t<string> metadata;
-	bool has_metadata = false;
+	bool has_metadata;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

@@ -12,10 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-CompletedPlanningWithIDResult::CompletedPlanningWithIDResult() {
-}
-CompletedPlanningWithIDResult::Object6::Object6() {
-}
+CompletedPlanningWithIDResult::CompletedPlanningWithIDResult() {}
+CompletedPlanningWithIDResult::Object6::Object6() {}
 
 CompletedPlanningWithIDResult::Object6 CompletedPlanningWithIDResult::Object6::FromJSON(yyjson_val *obj) {
 	Object6 res;
@@ -26,6 +24,11 @@ CompletedPlanningWithIDResult::Object6 CompletedPlanningWithIDResult::Object6::F
 	return res;
 }
 
+CompletedPlanningWithIDResult::Object6 CompletedPlanningWithIDResult::Object6::Copy() const {
+	Object6 res;
+	res.plan_id = plan_id;
+	return res;
+}
 string CompletedPlanningWithIDResult::Object6::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto plan_id_val = yyjson_obj_get(obj, "plan-id");
@@ -35,8 +38,7 @@ string CompletedPlanningWithIDResult::Object6::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(plan_id_val)) {
 			plan_id = yyjson_get_str(plan_id_val);
 		} else {
-			return StringUtil::Format("Object6 property 'plan_id' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(plan_id_val));
+			return StringUtil::Format("Object6 property 'plan_id' is not of type 'string', found '%s' instead", yyjson_get_type_desc(plan_id_val));
 		}
 	}
 	return string();
@@ -51,18 +53,23 @@ CompletedPlanningWithIDResult CompletedPlanningWithIDResult::FromJSON(yyjson_val
 	return res;
 }
 
+CompletedPlanningWithIDResult CompletedPlanningWithIDResult::Copy() const {
+	CompletedPlanningWithIDResult res;
+	res.completed_planning_result = completed_planning_result.Copy();
+	res.object_6 = object_6.Copy();
+	return res;
+}
 string CompletedPlanningWithIDResult::TryFromJSON(yyjson_val *obj) {
 	string error;
-	error = completed_planning_result.TryFromJSON(obj);
-	if (!error.empty()) {
-		return error;
-	}
-	error = object_6.TryFromJSON(obj);
-	if (!error.empty()) {
-		return error;
-	}
+error = completed_planning_result.TryFromJSON(obj);if (!error.empty()) {
+	return error;
+}
+error = object_6.TryFromJSON(obj);if (!error.empty()) {
+	return error;
+}
 	return string();
 }
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

@@ -12,28 +12,29 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class PositionDeleteFile {
 public:
 	PositionDeleteFile();
-	PositionDeleteFile(const PositionDeleteFile &) = delete;
-	PositionDeleteFile &operator=(const PositionDeleteFile &) = delete;
-	PositionDeleteFile(PositionDeleteFile &&) = default;
-	PositionDeleteFile &operator=(PositionDeleteFile &&) = default;
-
+	PositionDeleteFile(const PositionDeleteFile&) = delete;
+	PositionDeleteFile& operator=(const PositionDeleteFile&) = delete;
+	PositionDeleteFile(PositionDeleteFile&&) = default;
+	PositionDeleteFile &operator=(PositionDeleteFile&&) = default;
 public:
 	static PositionDeleteFile FromJSON(yyjson_val *obj);
-
+	PositionDeleteFile Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	ContentFile content_file;
 	string content;
 	int64_t content_offset;
-	bool has_content_offset = false;
+	bool has_content_offset;
 	int64_t content_size_in_bytes;
-	bool has_content_size_in_bytes = false;
+	bool has_content_size_in_bytes;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

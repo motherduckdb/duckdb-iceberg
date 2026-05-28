@@ -14,20 +14,20 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class ContentFile {
 public:
 	ContentFile();
-	ContentFile(const ContentFile &) = delete;
-	ContentFile &operator=(const ContentFile &) = delete;
-	ContentFile(ContentFile &&) = default;
-	ContentFile &operator=(ContentFile &&) = default;
-
+	ContentFile(const ContentFile&) = delete;
+	ContentFile& operator=(const ContentFile&) = delete;
+	ContentFile(ContentFile&&) = default;
+	ContentFile &operator=(ContentFile&&) = default;
 public:
 	static ContentFile FromJSON(yyjson_val *obj);
-
+	ContentFile Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	int32_t spec_id;
 	vector<PrimitiveTypeValue> partition;
@@ -37,12 +37,13 @@ public:
 	int64_t file_size_in_bytes;
 	int64_t record_count;
 	BinaryTypeValue key_metadata;
-	bool has_key_metadata = false;
+	bool has_key_metadata;
 	vector<int64_t> split_offsets;
-	bool has_split_offsets = false;
+	bool has_split_offsets;
 	int32_t sort_order_id;
-	bool has_sort_order_id = false;
+	bool has_sort_order_id;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

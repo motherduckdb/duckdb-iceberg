@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-AddPartitionSpecUpdate::AddPartitionSpecUpdate() {
-}
+AddPartitionSpecUpdate::AddPartitionSpecUpdate() {}
 
 AddPartitionSpecUpdate AddPartitionSpecUpdate::FromJSON(yyjson_val *obj) {
 	AddPartitionSpecUpdate res;
@@ -24,19 +23,26 @@ AddPartitionSpecUpdate AddPartitionSpecUpdate::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+AddPartitionSpecUpdate AddPartitionSpecUpdate::Copy() const {
+	AddPartitionSpecUpdate res;
+	res.base_update = base_update.Copy();
+	res.spec = spec.Copy();
+	res.action = action;
+	res.has_action = has_action;
+	return res;
+}
 string AddPartitionSpecUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
-	error = base_update.TryFromJSON(obj);
-	if (!error.empty()) {
-		return error;
-	}
+error = base_update.TryFromJSON(obj);if (!error.empty()) {
+	return error;
+}
 	auto spec_val = yyjson_obj_get(obj, "spec");
 	if (!spec_val) {
 		return "AddPartitionSpecUpdate required property 'spec' is missing";
 	} else {
 		error = spec.TryFromJSON(spec_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto action_val = yyjson_obj_get(obj, "action");
@@ -45,9 +51,7 @@ string AddPartitionSpecUpdate::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);
 		} else {
-			return StringUtil::Format(
-			    "AddPartitionSpecUpdate property 'action' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_val));
+			return StringUtil::Format("AddPartitionSpecUpdate property 'action' is not of type 'string', found '%s' instead", yyjson_get_type_desc(action_val));
 		}
 	}
 	return string();
@@ -55,3 +59,4 @@ string AddPartitionSpecUpdate::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

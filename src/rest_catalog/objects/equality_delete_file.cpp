@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-EqualityDeleteFile::EqualityDeleteFile() {
-}
+EqualityDeleteFile::EqualityDeleteFile() {}
 
 EqualityDeleteFile EqualityDeleteFile::FromJSON(yyjson_val *obj) {
 	EqualityDeleteFile res;
@@ -24,12 +23,22 @@ EqualityDeleteFile EqualityDeleteFile::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+EqualityDeleteFile EqualityDeleteFile::Copy() const {
+	EqualityDeleteFile res;
+	res.content_file = content_file.Copy();
+	res.content = content;
+	res.equality_ids.reserve(equality_ids.size());
+	for (auto &item : equality_ids) {
+		res.equality_ids.emplace_back(item);
+	}
+	res.has_equality_ids = has_equality_ids;
+	return res;
+}
 string EqualityDeleteFile::TryFromJSON(yyjson_val *obj) {
 	string error;
-	error = content_file.TryFromJSON(obj);
-	if (!error.empty()) {
-		return error;
-	}
+error = content_file.TryFromJSON(obj);if (!error.empty()) {
+	return error;
+}
 	auto content_val = yyjson_obj_get(obj, "content");
 	if (!content_val) {
 		return "EqualityDeleteFile required property 'content' is missing";
@@ -37,9 +46,7 @@ string EqualityDeleteFile::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(content_val)) {
 			content = yyjson_get_str(content_val);
 		} else {
-			return StringUtil::Format(
-			    "EqualityDeleteFile property 'content' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(content_val));
+			return StringUtil::Format("EqualityDeleteFile property 'content' is not of type 'string', found '%s' instead", yyjson_get_type_desc(content_val));
 		}
 	}
 	auto equality_ids_val = yyjson_obj_get(obj, "equality-ids");
@@ -49,20 +56,16 @@ string EqualityDeleteFile::TryFromJSON(yyjson_val *obj) {
 			size_t idx, max;
 			yyjson_val *val;
 			yyjson_arr_foreach(equality_ids_val, idx, max, val) {
-				int32_t tmp;
-				if (yyjson_is_int(val)) {
-					tmp = yyjson_get_int(val);
-				} else {
-					return StringUtil::Format(
-					    "EqualityDeleteFile property 'tmp' is not of type 'integer', found '%s' instead",
-					    yyjson_get_type_desc(val));
-				}
+			int32_t tmp;
+			if (yyjson_is_int(val)) {
+				tmp = yyjson_get_int(val);
+			} else {
+				return StringUtil::Format("EqualityDeleteFile property 'tmp' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(val));
+			}
 				equality_ids.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format(
-			    "EqualityDeleteFile property 'equality_ids' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(equality_ids_val));
+			return StringUtil::Format("EqualityDeleteFile property 'equality_ids' is not of type 'array', found '%s' instead", yyjson_get_type_desc(equality_ids_val));
 		}
 	}
 	return string();
@@ -70,3 +73,4 @@ string EqualityDeleteFile::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

@@ -14,20 +14,20 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class SortField {
 public:
 	SortField();
-	SortField(const SortField &) = delete;
-	SortField &operator=(const SortField &) = delete;
-	SortField(SortField &&) = default;
-	SortField &operator=(SortField &&) = default;
-
+	SortField(const SortField&) = delete;
+	SortField& operator=(const SortField&) = delete;
+	SortField(SortField&&) = default;
+	SortField &operator=(SortField&&) = default;
 public:
 	static SortField FromJSON(yyjson_val *obj);
-
+	SortField Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	int32_t source_id;
 	Transform transform;
@@ -37,3 +37,4 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

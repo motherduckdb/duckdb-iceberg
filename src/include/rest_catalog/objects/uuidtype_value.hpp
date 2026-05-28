@@ -6,28 +6,30 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 
+
 using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class UUIDTypeValue {
 public:
 	UUIDTypeValue();
-	UUIDTypeValue(const UUIDTypeValue &) = delete;
-	UUIDTypeValue &operator=(const UUIDTypeValue &) = delete;
-	UUIDTypeValue(UUIDTypeValue &&) = default;
-	UUIDTypeValue &operator=(UUIDTypeValue &&) = default;
-
+	UUIDTypeValue(const UUIDTypeValue&) = delete;
+	UUIDTypeValue& operator=(const UUIDTypeValue&) = delete;
+	UUIDTypeValue(UUIDTypeValue&&) = default;
+	UUIDTypeValue &operator=(UUIDTypeValue&&) = default;
 public:
 	static UUIDTypeValue FromJSON(yyjson_val *obj);
-
+	UUIDTypeValue Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	string value;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

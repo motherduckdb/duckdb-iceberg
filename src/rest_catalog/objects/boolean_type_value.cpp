@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-BooleanTypeValue::BooleanTypeValue() {
-}
+BooleanTypeValue::BooleanTypeValue() {}
 
 BooleanTypeValue BooleanTypeValue::FromJSON(yyjson_val *obj) {
 	BooleanTypeValue res;
@@ -24,16 +23,21 @@ BooleanTypeValue BooleanTypeValue::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+BooleanTypeValue BooleanTypeValue::Copy() const {
+	BooleanTypeValue res;
+	res.value = value;
+	return res;
+}
 string BooleanTypeValue::TryFromJSON(yyjson_val *obj) {
 	string error;
-	if (yyjson_is_bool(obj)) {
-		value = yyjson_get_bool(obj);
-	} else {
-		return StringUtil::Format("BooleanTypeValue property 'value' is not of type 'boolean', found '%s' instead",
-		                          yyjson_get_type_desc(obj));
-	}
+if (yyjson_is_bool(obj)) {
+	value = yyjson_get_bool(obj);
+} else {
+	return StringUtil::Format("BooleanTypeValue property 'value' is not of type 'boolean', found '%s' instead", yyjson_get_type_desc(obj));
+}
 	return string();
 }
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

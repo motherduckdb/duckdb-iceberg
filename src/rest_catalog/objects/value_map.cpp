@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-ValueMap::ValueMap() {
-}
+ValueMap::ValueMap() {}
 
 ValueMap ValueMap::FromJSON(yyjson_val *obj) {
 	ValueMap res;
@@ -24,6 +23,20 @@ ValueMap ValueMap::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+ValueMap ValueMap::Copy() const {
+	ValueMap res;
+	res.keys.reserve(keys.size());
+	for (auto &item : keys) {
+		res.keys.emplace_back(item.Copy());
+	}
+	res.has_keys = has_keys;
+	res.values.reserve(values.size());
+	for (auto &item : values) {
+		res.values.emplace_back(item.Copy());
+	}
+	res.has_values = has_values;
+	return res;
+}
 string ValueMap::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto keys_val = yyjson_obj_get(obj, "keys");
@@ -41,8 +54,7 @@ string ValueMap::TryFromJSON(yyjson_val *obj) {
 				keys.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("ValueMap property 'keys' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(keys_val));
+			return StringUtil::Format("ValueMap property 'keys' is not of type 'array', found '%s' instead", yyjson_get_type_desc(keys_val));
 		}
 	}
 	auto values_val = yyjson_obj_get(obj, "values");
@@ -60,8 +72,7 @@ string ValueMap::TryFromJSON(yyjson_val *obj) {
 				values.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("ValueMap property 'values' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(values_val));
+			return StringUtil::Format("ValueMap property 'values' is not of type 'array', found '%s' instead", yyjson_get_type_desc(values_val));
 		}
 	}
 	return string();
@@ -69,3 +80,4 @@ string ValueMap::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

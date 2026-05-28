@@ -6,25 +6,26 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 
+
 using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class SQLViewRepresentation {
 public:
 	SQLViewRepresentation();
-	SQLViewRepresentation(const SQLViewRepresentation &) = delete;
-	SQLViewRepresentation &operator=(const SQLViewRepresentation &) = delete;
-	SQLViewRepresentation(SQLViewRepresentation &&) = default;
-	SQLViewRepresentation &operator=(SQLViewRepresentation &&) = default;
-
+	SQLViewRepresentation(const SQLViewRepresentation&) = delete;
+	SQLViewRepresentation& operator=(const SQLViewRepresentation&) = delete;
+	SQLViewRepresentation(SQLViewRepresentation&&) = default;
+	SQLViewRepresentation &operator=(SQLViewRepresentation&&) = default;
 public:
 	static SQLViewRepresentation FromJSON(yyjson_val *obj);
-
+	SQLViewRepresentation Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	string type;
 	string sql;
@@ -33,3 +34,4 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-SQLViewRepresentation::SQLViewRepresentation() {
-}
+SQLViewRepresentation::SQLViewRepresentation() {}
 
 SQLViewRepresentation SQLViewRepresentation::FromJSON(yyjson_val *obj) {
 	SQLViewRepresentation res;
@@ -24,6 +23,13 @@ SQLViewRepresentation SQLViewRepresentation::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+SQLViewRepresentation SQLViewRepresentation::Copy() const {
+	SQLViewRepresentation res;
+	res.type = type;
+	res.sql = sql;
+	res.dialect = dialect;
+	return res;
+}
 string SQLViewRepresentation::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -33,9 +39,7 @@ string SQLViewRepresentation::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(type_val)) {
 			type = yyjson_get_str(type_val);
 		} else {
-			return StringUtil::Format(
-			    "SQLViewRepresentation property 'type' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(type_val));
+			return StringUtil::Format("SQLViewRepresentation property 'type' is not of type 'string', found '%s' instead", yyjson_get_type_desc(type_val));
 		}
 	}
 	auto sql_val = yyjson_obj_get(obj, "sql");
@@ -45,9 +49,7 @@ string SQLViewRepresentation::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(sql_val)) {
 			sql = yyjson_get_str(sql_val);
 		} else {
-			return StringUtil::Format(
-			    "SQLViewRepresentation property 'sql' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(sql_val));
+			return StringUtil::Format("SQLViewRepresentation property 'sql' is not of type 'string', found '%s' instead", yyjson_get_type_desc(sql_val));
 		}
 	}
 	auto dialect_val = yyjson_obj_get(obj, "dialect");
@@ -57,9 +59,7 @@ string SQLViewRepresentation::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(dialect_val)) {
 			dialect = yyjson_get_str(dialect_val);
 		} else {
-			return StringUtil::Format(
-			    "SQLViewRepresentation property 'dialect' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(dialect_val));
+			return StringUtil::Format("SQLViewRepresentation property 'dialect' is not of type 'string', found '%s' instead", yyjson_get_type_desc(dialect_val));
 		}
 	}
 	return string();
@@ -67,3 +67,4 @@ string SQLViewRepresentation::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

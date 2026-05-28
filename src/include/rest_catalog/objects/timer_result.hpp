@@ -6,25 +6,26 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 
+
 using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class TimerResult {
 public:
 	TimerResult();
-	TimerResult(const TimerResult &) = delete;
-	TimerResult &operator=(const TimerResult &) = delete;
-	TimerResult(TimerResult &&) = default;
-	TimerResult &operator=(TimerResult &&) = default;
-
+	TimerResult(const TimerResult&) = delete;
+	TimerResult& operator=(const TimerResult&) = delete;
+	TimerResult(TimerResult&&) = default;
+	TimerResult &operator=(TimerResult&&) = default;
 public:
 	static TimerResult FromJSON(yyjson_val *obj);
-
+	TimerResult Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	string time_unit;
 	int64_t count;
@@ -33,3 +34,4 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-RegisterTableRequest::RegisterTableRequest() {
-}
+RegisterTableRequest::RegisterTableRequest() {}
 
 RegisterTableRequest RegisterTableRequest::FromJSON(yyjson_val *obj) {
 	RegisterTableRequest res;
@@ -24,6 +23,14 @@ RegisterTableRequest RegisterTableRequest::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+RegisterTableRequest RegisterTableRequest::Copy() const {
+	RegisterTableRequest res;
+	res.name = name;
+	res.metadata_location = metadata_location;
+	res.overwrite = overwrite;
+	res.has_overwrite = has_overwrite;
+	return res;
+}
 string RegisterTableRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto name_val = yyjson_obj_get(obj, "name");
@@ -33,9 +40,7 @@ string RegisterTableRequest::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(name_val)) {
 			name = yyjson_get_str(name_val);
 		} else {
-			return StringUtil::Format(
-			    "RegisterTableRequest property 'name' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(name_val));
+			return StringUtil::Format("RegisterTableRequest property 'name' is not of type 'string', found '%s' instead", yyjson_get_type_desc(name_val));
 		}
 	}
 	auto metadata_location_val = yyjson_obj_get(obj, "metadata-location");
@@ -45,9 +50,7 @@ string RegisterTableRequest::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(metadata_location_val)) {
 			metadata_location = yyjson_get_str(metadata_location_val);
 		} else {
-			return StringUtil::Format(
-			    "RegisterTableRequest property 'metadata_location' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(metadata_location_val));
+			return StringUtil::Format("RegisterTableRequest property 'metadata_location' is not of type 'string', found '%s' instead", yyjson_get_type_desc(metadata_location_val));
 		}
 	}
 	auto overwrite_val = yyjson_obj_get(obj, "overwrite");
@@ -56,9 +59,7 @@ string RegisterTableRequest::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_bool(overwrite_val)) {
 			overwrite = yyjson_get_bool(overwrite_val);
 		} else {
-			return StringUtil::Format(
-			    "RegisterTableRequest property 'overwrite' is not of type 'boolean', found '%s' instead",
-			    yyjson_get_type_desc(overwrite_val));
+			return StringUtil::Format("RegisterTableRequest property 'overwrite' is not of type 'boolean', found '%s' instead", yyjson_get_type_desc(overwrite_val));
 		}
 	}
 	return string();
@@ -66,3 +67,4 @@ string RegisterTableRequest::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

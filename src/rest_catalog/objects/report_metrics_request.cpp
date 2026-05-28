@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-ReportMetricsRequest::ReportMetricsRequest() {
-}
+ReportMetricsRequest::ReportMetricsRequest() {}
 
 ReportMetricsRequest ReportMetricsRequest::FromJSON(yyjson_val *obj) {
 	ReportMetricsRequest res;
@@ -24,19 +23,26 @@ ReportMetricsRequest ReportMetricsRequest::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+ReportMetricsRequest ReportMetricsRequest::Copy() const {
+	ReportMetricsRequest res;
+	res.scan_report = scan_report.Copy();
+	res.has_scan_report = has_scan_report;
+	res.commit_report = commit_report.Copy();
+	res.has_commit_report = has_commit_report;
+	res.report_type = report_type;
+	return res;
+}
 string ReportMetricsRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
-	error = scan_report.TryFromJSON(obj);
-	if (error.empty()) {
-		has_scan_report = true;
-	}
-	error = commit_report.TryFromJSON(obj);
-	if (error.empty()) {
-		has_commit_report = true;
-	}
-	if (!has_commit_report && !has_scan_report) {
-		return "ReportMetricsRequest failed to parse, none of the anyOf candidates matched";
-	}
+error = scan_report.TryFromJSON(obj);
+if (error.empty()) {
+	has_scan_report = true;
+}
+error = commit_report.TryFromJSON(obj);
+if (error.empty()) {
+	has_commit_report = true;
+}
+if (!has_commit_report && !has_scan_report) {	return "ReportMetricsRequest failed to parse, none of the anyOf candidates matched";}
 	auto report_type_val = yyjson_obj_get(obj, "report-type");
 	if (!report_type_val) {
 		return "ReportMetricsRequest required property 'report-type' is missing";
@@ -44,9 +50,7 @@ string ReportMetricsRequest::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(report_type_val)) {
 			report_type = yyjson_get_str(report_type_val);
 		} else {
-			return StringUtil::Format(
-			    "ReportMetricsRequest property 'report_type' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(report_type_val));
+			return StringUtil::Format("ReportMetricsRequest property 'report_type' is not of type 'string', found '%s' instead", yyjson_get_type_desc(report_type_val));
 		}
 	}
 	return string();
@@ -54,3 +58,4 @@ string ReportMetricsRequest::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-CommitViewRequest::CommitViewRequest() {
-}
+CommitViewRequest::CommitViewRequest() {}
 
 CommitViewRequest CommitViewRequest::FromJSON(yyjson_val *obj) {
 	CommitViewRequest res;
@@ -24,6 +23,21 @@ CommitViewRequest CommitViewRequest::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+CommitViewRequest CommitViewRequest::Copy() const {
+	CommitViewRequest res;
+	res.updates.reserve(updates.size());
+	for (auto &item : updates) {
+		res.updates.emplace_back(item.Copy());
+	}
+	res.identifier = identifier.Copy();
+	res.has_identifier = has_identifier;
+	res.requirements.reserve(requirements.size());
+	for (auto &item : requirements) {
+		res.requirements.emplace_back(item.Copy());
+	}
+	res.has_requirements = has_requirements;
+	return res;
+}
 string CommitViewRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto updates_val = yyjson_obj_get(obj, "updates");
@@ -42,8 +56,7 @@ string CommitViewRequest::TryFromJSON(yyjson_val *obj) {
 				updates.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("CommitViewRequest property 'updates' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(updates_val));
+			return StringUtil::Format("CommitViewRequest property 'updates' is not of type 'array', found '%s' instead", yyjson_get_type_desc(updates_val));
 		}
 	}
 	auto identifier_val = yyjson_obj_get(obj, "identifier");
@@ -51,7 +64,7 @@ string CommitViewRequest::TryFromJSON(yyjson_val *obj) {
 		has_identifier = true;
 		error = identifier.TryFromJSON(identifier_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto requirements_val = yyjson_obj_get(obj, "requirements");
@@ -69,9 +82,7 @@ string CommitViewRequest::TryFromJSON(yyjson_val *obj) {
 				requirements.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format(
-			    "CommitViewRequest property 'requirements' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(requirements_val));
+			return StringUtil::Format("CommitViewRequest property 'requirements' is not of type 'array', found '%s' instead", yyjson_get_type_desc(requirements_val));
 		}
 	}
 	return string();
@@ -79,3 +90,4 @@ string CommitViewRequest::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-ErrorModel::ErrorModel() {
-}
+ErrorModel::ErrorModel() {}
 
 ErrorModel ErrorModel::FromJSON(yyjson_val *obj) {
 	ErrorModel res;
@@ -24,6 +23,18 @@ ErrorModel ErrorModel::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+ErrorModel ErrorModel::Copy() const {
+	ErrorModel res;
+	res.message = message;
+	res.type = type;
+	res.code = code;
+	res.stack.reserve(stack.size());
+	for (auto &item : stack) {
+		res.stack.emplace_back(item);
+	}
+	res.has_stack = has_stack;
+	return res;
+}
 string ErrorModel::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto message_val = yyjson_obj_get(obj, "message");
@@ -33,8 +44,7 @@ string ErrorModel::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(message_val)) {
 			message = yyjson_get_str(message_val);
 		} else {
-			return StringUtil::Format("ErrorModel property 'message' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(message_val));
+			return StringUtil::Format("ErrorModel property 'message' is not of type 'string', found '%s' instead", yyjson_get_type_desc(message_val));
 		}
 	}
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -44,8 +54,7 @@ string ErrorModel::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(type_val)) {
 			type = yyjson_get_str(type_val);
 		} else {
-			return StringUtil::Format("ErrorModel property 'type' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(type_val));
+			return StringUtil::Format("ErrorModel property 'type' is not of type 'string', found '%s' instead", yyjson_get_type_desc(type_val));
 		}
 	}
 	auto code_val = yyjson_obj_get(obj, "code");
@@ -55,8 +64,7 @@ string ErrorModel::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_int(code_val)) {
 			code = yyjson_get_int(code_val);
 		} else {
-			return StringUtil::Format("ErrorModel property 'code' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(code_val));
+			return StringUtil::Format("ErrorModel property 'code' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(code_val));
 		}
 	}
 	auto stack_val = yyjson_obj_get(obj, "stack");
@@ -66,18 +74,16 @@ string ErrorModel::TryFromJSON(yyjson_val *obj) {
 			size_t idx, max;
 			yyjson_val *val;
 			yyjson_arr_foreach(stack_val, idx, max, val) {
-				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
-				} else {
-					return StringUtil::Format("ErrorModel property 'tmp' is not of type 'string', found '%s' instead",
-					                          yyjson_get_type_desc(val));
-				}
+			string tmp;
+			if (yyjson_is_str(val)) {
+				tmp = yyjson_get_str(val);
+			} else {
+				return StringUtil::Format("ErrorModel property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
+			}
 				stack.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("ErrorModel property 'stack' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(stack_val));
+			return StringUtil::Format("ErrorModel property 'stack' is not of type 'array', found '%s' instead", yyjson_get_type_desc(stack_val));
 		}
 	}
 	return string();
@@ -85,3 +91,4 @@ string ErrorModel::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

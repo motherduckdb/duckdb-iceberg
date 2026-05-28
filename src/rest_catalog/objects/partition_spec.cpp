@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-PartitionSpec::PartitionSpec() {
-}
+PartitionSpec::PartitionSpec() {}
 
 PartitionSpec PartitionSpec::FromJSON(yyjson_val *obj) {
 	PartitionSpec res;
@@ -24,6 +23,16 @@ PartitionSpec PartitionSpec::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+PartitionSpec PartitionSpec::Copy() const {
+	PartitionSpec res;
+	res.fields.reserve(fields.size());
+	for (auto &item : fields) {
+		res.fields.emplace_back(item.Copy());
+	}
+	res.spec_id = spec_id;
+	res.has_spec_id = has_spec_id;
+	return res;
+}
 string PartitionSpec::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto fields_val = yyjson_obj_get(obj, "fields");
@@ -42,8 +51,7 @@ string PartitionSpec::TryFromJSON(yyjson_val *obj) {
 				fields.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("PartitionSpec property 'fields' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(fields_val));
+			return StringUtil::Format("PartitionSpec property 'fields' is not of type 'array', found '%s' instead", yyjson_get_type_desc(fields_val));
 		}
 	}
 	auto spec_id_val = yyjson_obj_get(obj, "spec-id");
@@ -52,8 +60,7 @@ string PartitionSpec::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_int(spec_id_val)) {
 			spec_id = yyjson_get_int(spec_id_val);
 		} else {
-			return StringUtil::Format("PartitionSpec property 'spec_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(spec_id_val));
+			return StringUtil::Format("PartitionSpec property 'spec_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(spec_id_val));
 		}
 	}
 	return string();
@@ -61,3 +68,4 @@ string PartitionSpec::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

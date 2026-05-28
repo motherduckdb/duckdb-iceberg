@@ -13,26 +13,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+
+
 class DeleteFile {
 public:
 	DeleteFile();
-	DeleteFile(const DeleteFile &) = delete;
-	DeleteFile &operator=(const DeleteFile &) = delete;
-	DeleteFile(DeleteFile &&) = default;
-	DeleteFile &operator=(DeleteFile &&) = default;
-
+	DeleteFile(const DeleteFile&) = delete;
+	DeleteFile& operator=(const DeleteFile&) = delete;
+	DeleteFile(DeleteFile&&) = default;
+	DeleteFile &operator=(DeleteFile&&) = default;
 public:
 	static DeleteFile FromJSON(yyjson_val *obj);
-
+	DeleteFile Copy() const;
 public:
 	string TryFromJSON(yyjson_val *obj);
-
 public:
 	PositionDeleteFile position_delete_file;
-	bool has_position_delete_file = false;
+	bool has_position_delete_file;
 	EqualityDeleteFile equality_delete_file;
-	bool has_equality_delete_file = false;
+	bool has_equality_delete_file;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

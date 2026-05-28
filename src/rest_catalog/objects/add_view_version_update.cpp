@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-AddViewVersionUpdate::AddViewVersionUpdate() {
-}
+AddViewVersionUpdate::AddViewVersionUpdate() {}
 
 AddViewVersionUpdate AddViewVersionUpdate::FromJSON(yyjson_val *obj) {
 	AddViewVersionUpdate res;
@@ -24,19 +23,26 @@ AddViewVersionUpdate AddViewVersionUpdate::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+AddViewVersionUpdate AddViewVersionUpdate::Copy() const {
+	AddViewVersionUpdate res;
+	res.base_update = base_update.Copy();
+	res.view_version = view_version.Copy();
+	res.action = action;
+	res.has_action = has_action;
+	return res;
+}
 string AddViewVersionUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
-	error = base_update.TryFromJSON(obj);
-	if (!error.empty()) {
-		return error;
-	}
+error = base_update.TryFromJSON(obj);if (!error.empty()) {
+	return error;
+}
 	auto view_version_val = yyjson_obj_get(obj, "view-version");
 	if (!view_version_val) {
 		return "AddViewVersionUpdate required property 'view-version' is missing";
 	} else {
 		error = view_version.TryFromJSON(view_version_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto action_val = yyjson_obj_get(obj, "action");
@@ -45,9 +51,7 @@ string AddViewVersionUpdate::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);
 		} else {
-			return StringUtil::Format(
-			    "AddViewVersionUpdate property 'action' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_val));
+			return StringUtil::Format("AddViewVersionUpdate property 'action' is not of type 'string', found '%s' instead", yyjson_get_type_desc(action_val));
 		}
 	}
 	return string();
@@ -55,3 +59,4 @@ string AddViewVersionUpdate::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

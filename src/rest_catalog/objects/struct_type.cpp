@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-StructType::StructType() {
-}
+StructType::StructType() {}
 
 StructType StructType::FromJSON(yyjson_val *obj) {
 	StructType res;
@@ -24,6 +23,15 @@ StructType StructType::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+StructType StructType::Copy() const {
+	StructType res;
+	res.type = type;
+	res.fields.reserve(fields.size());
+	for (auto &item : fields) {
+		res.fields.emplace_back(item ? make_uniq<StructField>(item->Copy()) : nullptr);
+	}
+	return res;
+}
 string StructType::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -33,8 +41,7 @@ string StructType::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(type_val)) {
 			type = yyjson_get_str(type_val);
 		} else {
-			return StringUtil::Format("StructType property 'type' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(type_val));
+			return StringUtil::Format("StructType property 'type' is not of type 'string', found '%s' instead", yyjson_get_type_desc(type_val));
 		}
 	}
 	auto fields_val = yyjson_obj_get(obj, "fields");
@@ -54,8 +61,7 @@ string StructType::TryFromJSON(yyjson_val *obj) {
 				fields.emplace_back(std::move(tmp_p));
 			}
 		} else {
-			return StringUtil::Format("StructType property 'fields' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(fields_val));
+			return StringUtil::Format("StructType property 'fields' is not of type 'array', found '%s' instead", yyjson_get_type_desc(fields_val));
 		}
 	}
 	return string();
@@ -63,3 +69,4 @@ string StructType::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

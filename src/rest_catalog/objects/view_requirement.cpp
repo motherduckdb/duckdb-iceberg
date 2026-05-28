@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-ViewRequirement::ViewRequirement() {
-}
+ViewRequirement::ViewRequirement() {}
 
 ViewRequirement ViewRequirement::FromJSON(yyjson_val *obj) {
 	ViewRequirement res;
@@ -24,18 +23,25 @@ ViewRequirement ViewRequirement::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+ViewRequirement ViewRequirement::Copy() const {
+	ViewRequirement res;
+	res.assert_view_uuid = assert_view_uuid.Copy();
+	res.has_assert_view_uuid = has_assert_view_uuid;
+	return res;
+}
 string ViewRequirement::TryFromJSON(yyjson_val *obj) {
 	string error;
-	do {
-		error = assert_view_uuid.TryFromJSON(obj);
-		if (error.empty()) {
-			has_assert_view_uuid = true;
-			break;
-		}
-		return "ViewRequirement failed to parse, none of the oneOf candidates matched";
-	} while (false);
+do {
+error = assert_view_uuid.TryFromJSON(obj);
+if (error.empty()) {
+	has_assert_view_uuid = true;
+	break;
+}
+	return "ViewRequirement failed to parse, none of the oneOf candidates matched";
+} while (false);
 	return string();
 }
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

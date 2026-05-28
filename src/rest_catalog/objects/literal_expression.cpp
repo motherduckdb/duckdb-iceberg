@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-LiteralExpression::LiteralExpression() {
-}
+LiteralExpression::LiteralExpression() {}
 
 LiteralExpression LiteralExpression::FromJSON(yyjson_val *obj) {
 	LiteralExpression res;
@@ -24,6 +23,13 @@ LiteralExpression LiteralExpression::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+LiteralExpression LiteralExpression::Copy() const {
+	LiteralExpression res;
+	res.type = type.Copy();
+	res.term = term.Copy();
+	res.value = value.Copy();
+	return res;
+}
 string LiteralExpression::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -32,7 +38,7 @@ string LiteralExpression::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = type.TryFromJSON(type_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto term_val = yyjson_obj_get(obj, "term");
@@ -41,7 +47,7 @@ string LiteralExpression::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = term.TryFromJSON(term_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	auto value_val = yyjson_obj_get(obj, "value");
@@ -50,7 +56,7 @@ string LiteralExpression::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = value.TryFromJSON(value_val);
 		if (!error.empty()) {
-			return error;
+		    return error;
 		}
 	}
 	return string();
@@ -58,3 +64,4 @@ string LiteralExpression::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+

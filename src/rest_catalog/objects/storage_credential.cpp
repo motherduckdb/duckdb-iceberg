@@ -12,8 +12,7 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-StorageCredential::StorageCredential() {
-}
+StorageCredential::StorageCredential() {}
 
 StorageCredential StorageCredential::FromJSON(yyjson_val *obj) {
 	StorageCredential res;
@@ -24,6 +23,14 @@ StorageCredential StorageCredential::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+StorageCredential StorageCredential::Copy() const {
+	StorageCredential res;
+	res.prefix = prefix;
+	for (auto &entry : config) {
+		res.config.emplace(entry.first, entry.second);
+	}
+	return res;
+}
 string StorageCredential::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto prefix_val = yyjson_obj_get(obj, "prefix");
@@ -33,8 +40,7 @@ string StorageCredential::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(prefix_val)) {
 			prefix = yyjson_get_str(prefix_val);
 		} else {
-			return StringUtil::Format("StorageCredential property 'prefix' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(prefix_val));
+			return StringUtil::Format("StorageCredential property 'prefix' is not of type 'string', found '%s' instead", yyjson_get_type_desc(prefix_val));
 		}
 	}
 	auto config_val = yyjson_obj_get(obj, "config");
@@ -50,9 +56,7 @@ string StorageCredential::TryFromJSON(yyjson_val *obj) {
 				if (yyjson_is_str(val)) {
 					tmp = yyjson_get_str(val);
 				} else {
-					return StringUtil::Format(
-					    "StorageCredential property 'tmp' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(val));
+					return StringUtil::Format("StorageCredential property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
 				}
 				config.emplace(key_str, std::move(tmp));
 			}
@@ -65,3 +69,4 @@ string StorageCredential::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
+
