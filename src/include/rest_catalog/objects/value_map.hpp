@@ -13,27 +13,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class ValueMap {
 public:
 	ValueMap();
-	ValueMap(const ValueMap&) = delete;
-	ValueMap& operator=(const ValueMap&) = delete;
-	ValueMap(ValueMap&&) = default;
-	ValueMap &operator=(ValueMap&&) = default;
+	ValueMap(const ValueMap &) = delete;
+	ValueMap &operator=(const ValueMap &) = delete;
+	ValueMap(ValueMap &&) = default;
+	ValueMap &operator=(ValueMap &&) = default;
+
 public:
 	static ValueMap FromJSON(yyjson_val *obj);
 	ValueMap Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	vector<IntegerTypeValue> keys;
-	bool has_keys;
+	bool has_keys = false;
 	vector<PrimitiveTypeValue> values;
-	bool has_values;
+	bool has_values = false;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

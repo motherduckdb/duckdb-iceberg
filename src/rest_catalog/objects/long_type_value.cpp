@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-LongTypeValue::LongTypeValue() {}
+LongTypeValue::LongTypeValue() {
+}
 
 LongTypeValue LongTypeValue::FromJSON(yyjson_val *obj) {
 	LongTypeValue res;
@@ -30,16 +31,16 @@ LongTypeValue LongTypeValue::Copy() const {
 }
 string LongTypeValue::TryFromJSON(yyjson_val *obj) {
 	string error;
-if (yyjson_is_sint(obj)) {
-	value = yyjson_get_sint(obj);
-} else if (yyjson_is_uint(obj)) {
-	value = yyjson_get_uint(obj);
-} else {
-	return StringUtil::Format("LongTypeValue property 'value' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(obj));
-}
+	if (yyjson_is_sint(obj)) {
+		value = yyjson_get_sint(obj);
+	} else if (yyjson_is_uint(obj)) {
+		value = yyjson_get_uint(obj);
+	} else {
+		return StringUtil::Format("LongTypeValue property 'value' is not of type 'integer', found '%s' instead",
+		                          yyjson_get_type_desc(obj));
+	}
 	return string();
 }
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

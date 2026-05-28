@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-AddSchemaUpdate::AddSchemaUpdate() {}
+AddSchemaUpdate::AddSchemaUpdate() {
+}
 
 AddSchemaUpdate AddSchemaUpdate::FromJSON(yyjson_val *obj) {
 	AddSchemaUpdate res;
@@ -27,24 +28,29 @@ AddSchemaUpdate AddSchemaUpdate::Copy() const {
 	AddSchemaUpdate res;
 	res.base_update = base_update.Copy();
 	res.schema = schema.Copy();
-	res.action = action;
+	if (has_action) {
+		res.action = action;
+	}
 	res.has_action = has_action;
-	res.last_column_id = last_column_id;
+	if (has_last_column_id) {
+		res.last_column_id = last_column_id;
+	}
 	res.has_last_column_id = has_last_column_id;
 	return res;
 }
 string AddSchemaUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
-error = base_update.TryFromJSON(obj);if (!error.empty()) {
-	return error;
-}
+	error = base_update.TryFromJSON(obj);
+	if (!error.empty()) {
+		return error;
+	}
 	auto schema_val = yyjson_obj_get(obj, "schema");
 	if (!schema_val) {
 		return "AddSchemaUpdate required property 'schema' is missing";
 	} else {
 		error = schema.TryFromJSON(schema_val);
 		if (!error.empty()) {
-		    return error;
+			return error;
 		}
 	}
 	auto action_val = yyjson_obj_get(obj, "action");
@@ -53,7 +59,8 @@ error = base_update.TryFromJSON(obj);if (!error.empty()) {
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);
 		} else {
-			return StringUtil::Format("AddSchemaUpdate property 'action' is not of type 'string', found '%s' instead", yyjson_get_type_desc(action_val));
+			return StringUtil::Format("AddSchemaUpdate property 'action' is not of type 'string', found '%s' instead",
+			                          yyjson_get_type_desc(action_val));
 		}
 	}
 	auto last_column_id_val = yyjson_obj_get(obj, "last-column-id");
@@ -62,7 +69,9 @@ error = base_update.TryFromJSON(obj);if (!error.empty()) {
 		if (yyjson_is_int(last_column_id_val)) {
 			last_column_id = yyjson_get_int(last_column_id_val);
 		} else {
-			return StringUtil::Format("AddSchemaUpdate property 'last_column_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(last_column_id_val));
+			return StringUtil::Format(
+			    "AddSchemaUpdate property 'last_column_id' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(last_column_id_val));
 		}
 	}
 	return string();
@@ -70,4 +79,3 @@ error = base_update.TryFromJSON(obj);if (!error.empty()) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

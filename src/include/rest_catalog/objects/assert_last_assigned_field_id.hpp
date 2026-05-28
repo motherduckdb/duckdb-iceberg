@@ -12,20 +12,21 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class AssertLastAssignedFieldId {
 public:
 	AssertLastAssignedFieldId();
-	AssertLastAssignedFieldId(const AssertLastAssignedFieldId&) = delete;
-	AssertLastAssignedFieldId& operator=(const AssertLastAssignedFieldId&) = delete;
-	AssertLastAssignedFieldId(AssertLastAssignedFieldId&&) = default;
-	AssertLastAssignedFieldId &operator=(AssertLastAssignedFieldId&&) = default;
+	AssertLastAssignedFieldId(const AssertLastAssignedFieldId &) = delete;
+	AssertLastAssignedFieldId &operator=(const AssertLastAssignedFieldId &) = delete;
+	AssertLastAssignedFieldId(AssertLastAssignedFieldId &&) = default;
+	AssertLastAssignedFieldId &operator=(AssertLastAssignedFieldId &&) = default;
+
 public:
 	static AssertLastAssignedFieldId FromJSON(yyjson_val *obj);
 	AssertLastAssignedFieldId Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	TableRequirementType type;
 	int32_t last_assigned_field_id;
@@ -33,4 +34,3 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

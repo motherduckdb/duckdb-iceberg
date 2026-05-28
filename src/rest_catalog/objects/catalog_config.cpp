@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-CatalogConfig::CatalogConfig() {}
+CatalogConfig::CatalogConfig() {
+}
 
 CatalogConfig CatalogConfig::FromJSON(yyjson_val *obj) {
 	CatalogConfig res;
@@ -31,12 +32,16 @@ CatalogConfig CatalogConfig::Copy() const {
 	for (auto &entry : overrides) {
 		res.overrides.emplace(entry.first, entry.second);
 	}
-	res.endpoints.reserve(endpoints.size());
-	for (auto &item : endpoints) {
-		res.endpoints.emplace_back(item);
+	if (has_endpoints) {
+		res.endpoints.reserve(endpoints.size());
+		for (auto &item : endpoints) {
+			res.endpoints.emplace_back(item);
+		}
 	}
 	res.has_endpoints = has_endpoints;
-	res.idempotency_key_lifetime = idempotency_key_lifetime;
+	if (has_idempotency_key_lifetime) {
+		res.idempotency_key_lifetime = idempotency_key_lifetime;
+	}
 	res.has_idempotency_key_lifetime = has_idempotency_key_lifetime;
 	return res;
 }
@@ -55,7 +60,9 @@ string CatalogConfig::TryFromJSON(yyjson_val *obj) {
 				if (yyjson_is_str(val)) {
 					tmp = yyjson_get_str(val);
 				} else {
-					return StringUtil::Format("CatalogConfig property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
+					return StringUtil::Format(
+					    "CatalogConfig property 'tmp' is not of type 'string', found '%s' instead",
+					    yyjson_get_type_desc(val));
 				}
 				defaults.emplace(key_str, std::move(tmp));
 			}
@@ -76,7 +83,9 @@ string CatalogConfig::TryFromJSON(yyjson_val *obj) {
 				if (yyjson_is_str(val)) {
 					tmp = yyjson_get_str(val);
 				} else {
-					return StringUtil::Format("CatalogConfig property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
+					return StringUtil::Format(
+					    "CatalogConfig property 'tmp' is not of type 'string', found '%s' instead",
+					    yyjson_get_type_desc(val));
 				}
 				overrides.emplace(key_str, std::move(tmp));
 			}
@@ -91,16 +100,19 @@ string CatalogConfig::TryFromJSON(yyjson_val *obj) {
 			size_t idx, max;
 			yyjson_val *val;
 			yyjson_arr_foreach(endpoints_val, idx, max, val) {
-			string tmp;
-			if (yyjson_is_str(val)) {
-				tmp = yyjson_get_str(val);
-			} else {
-				return StringUtil::Format("CatalogConfig property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
-			}
+				string tmp;
+				if (yyjson_is_str(val)) {
+					tmp = yyjson_get_str(val);
+				} else {
+					return StringUtil::Format(
+					    "CatalogConfig property 'tmp' is not of type 'string', found '%s' instead",
+					    yyjson_get_type_desc(val));
+				}
 				endpoints.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("CatalogConfig property 'endpoints' is not of type 'array', found '%s' instead", yyjson_get_type_desc(endpoints_val));
+			return StringUtil::Format("CatalogConfig property 'endpoints' is not of type 'array', found '%s' instead",
+			                          yyjson_get_type_desc(endpoints_val));
 		}
 	}
 	auto idempotency_key_lifetime_val = yyjson_obj_get(obj, "idempotency-key-lifetime");
@@ -109,7 +121,9 @@ string CatalogConfig::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(idempotency_key_lifetime_val)) {
 			idempotency_key_lifetime = yyjson_get_str(idempotency_key_lifetime_val);
 		} else {
-			return StringUtil::Format("CatalogConfig property 'idempotency_key_lifetime' is not of type 'string', found '%s' instead", yyjson_get_type_desc(idempotency_key_lifetime_val));
+			return StringUtil::Format(
+			    "CatalogConfig property 'idempotency_key_lifetime' is not of type 'string', found '%s' instead",
+			    yyjson_get_type_desc(idempotency_key_lifetime_val));
 		}
 	}
 	return string();
@@ -117,4 +131,3 @@ string CatalogConfig::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

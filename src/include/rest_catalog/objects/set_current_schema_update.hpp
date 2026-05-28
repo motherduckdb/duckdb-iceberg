@@ -12,27 +12,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class SetCurrentSchemaUpdate {
 public:
 	SetCurrentSchemaUpdate();
-	SetCurrentSchemaUpdate(const SetCurrentSchemaUpdate&) = delete;
-	SetCurrentSchemaUpdate& operator=(const SetCurrentSchemaUpdate&) = delete;
-	SetCurrentSchemaUpdate(SetCurrentSchemaUpdate&&) = default;
-	SetCurrentSchemaUpdate &operator=(SetCurrentSchemaUpdate&&) = default;
+	SetCurrentSchemaUpdate(const SetCurrentSchemaUpdate &) = delete;
+	SetCurrentSchemaUpdate &operator=(const SetCurrentSchemaUpdate &) = delete;
+	SetCurrentSchemaUpdate(SetCurrentSchemaUpdate &&) = default;
+	SetCurrentSchemaUpdate &operator=(SetCurrentSchemaUpdate &&) = default;
+
 public:
 	static SetCurrentSchemaUpdate FromJSON(yyjson_val *obj);
 	SetCurrentSchemaUpdate Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	BaseUpdate base_update;
 	int32_t schema_id;
 	string action;
-	bool has_action;
+	bool has_action = false;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

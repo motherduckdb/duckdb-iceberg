@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-AsyncPlanningResult::AsyncPlanningResult() {}
+AsyncPlanningResult::AsyncPlanningResult() {
+}
 
 AsyncPlanningResult AsyncPlanningResult::FromJSON(yyjson_val *obj) {
 	AsyncPlanningResult res;
@@ -37,7 +38,7 @@ string AsyncPlanningResult::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = status.TryFromJSON(status_val);
 		if (!error.empty()) {
-		    return error;
+			return error;
 		}
 	}
 	auto plan_id_val = yyjson_obj_get(obj, "plan-id");
@@ -47,7 +48,9 @@ string AsyncPlanningResult::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(plan_id_val)) {
 			plan_id = yyjson_get_str(plan_id_val);
 		} else {
-			return StringUtil::Format("AsyncPlanningResult property 'plan_id' is not of type 'string', found '%s' instead", yyjson_get_type_desc(plan_id_val));
+			return StringUtil::Format(
+			    "AsyncPlanningResult property 'plan_id' is not of type 'string', found '%s' instead",
+			    yyjson_get_type_desc(plan_id_val));
 		}
 	}
 	return string();
@@ -55,4 +58,3 @@ string AsyncPlanningResult::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

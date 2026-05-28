@@ -13,29 +13,29 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class AddSchemaUpdate {
 public:
 	AddSchemaUpdate();
-	AddSchemaUpdate(const AddSchemaUpdate&) = delete;
-	AddSchemaUpdate& operator=(const AddSchemaUpdate&) = delete;
-	AddSchemaUpdate(AddSchemaUpdate&&) = default;
-	AddSchemaUpdate &operator=(AddSchemaUpdate&&) = default;
+	AddSchemaUpdate(const AddSchemaUpdate &) = delete;
+	AddSchemaUpdate &operator=(const AddSchemaUpdate &) = delete;
+	AddSchemaUpdate(AddSchemaUpdate &&) = default;
+	AddSchemaUpdate &operator=(AddSchemaUpdate &&) = default;
+
 public:
 	static AddSchemaUpdate FromJSON(yyjson_val *obj);
 	AddSchemaUpdate Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	BaseUpdate base_update;
 	Schema schema;
 	string action;
-	bool has_action;
+	bool has_action = false;
 	int32_t last_column_id;
-	bool has_last_column_id;
+	bool has_last_column_id = false;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

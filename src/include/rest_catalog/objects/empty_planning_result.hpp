@@ -12,24 +12,24 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class EmptyPlanningResult {
 public:
 	EmptyPlanningResult();
-	EmptyPlanningResult(const EmptyPlanningResult&) = delete;
-	EmptyPlanningResult& operator=(const EmptyPlanningResult&) = delete;
-	EmptyPlanningResult(EmptyPlanningResult&&) = default;
-	EmptyPlanningResult &operator=(EmptyPlanningResult&&) = default;
+	EmptyPlanningResult(const EmptyPlanningResult &) = delete;
+	EmptyPlanningResult &operator=(const EmptyPlanningResult &) = delete;
+	EmptyPlanningResult(EmptyPlanningResult &&) = default;
+	EmptyPlanningResult &operator=(EmptyPlanningResult &&) = default;
+
 public:
 	static EmptyPlanningResult FromJSON(yyjson_val *obj);
 	EmptyPlanningResult Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	PlanStatus status;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

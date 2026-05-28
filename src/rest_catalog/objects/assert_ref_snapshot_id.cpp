@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-AssertRefSnapshotId::AssertRefSnapshotId() {}
+AssertRefSnapshotId::AssertRefSnapshotId() {
+}
 
 AssertRefSnapshotId AssertRefSnapshotId::FromJSON(yyjson_val *obj) {
 	AssertRefSnapshotId res;
@@ -27,7 +28,9 @@ AssertRefSnapshotId AssertRefSnapshotId::Copy() const {
 	AssertRefSnapshotId res;
 	res.type = type.Copy();
 	res.ref = ref;
-	res.snapshot_id = snapshot_id;
+	if (has_snapshot_id) {
+		res.snapshot_id = snapshot_id;
+	}
 	res.has_snapshot_id = has_snapshot_id;
 	return res;
 }
@@ -39,7 +42,7 @@ string AssertRefSnapshotId::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = type.TryFromJSON(type_val);
 		if (!error.empty()) {
-		    return error;
+			return error;
 		}
 	}
 	auto ref_val = yyjson_obj_get(obj, "ref");
@@ -49,7 +52,8 @@ string AssertRefSnapshotId::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(ref_val)) {
 			ref = yyjson_get_str(ref_val);
 		} else {
-			return StringUtil::Format("AssertRefSnapshotId property 'ref' is not of type 'string', found '%s' instead", yyjson_get_type_desc(ref_val));
+			return StringUtil::Format("AssertRefSnapshotId property 'ref' is not of type 'string', found '%s' instead",
+			                          yyjson_get_type_desc(ref_val));
 		}
 	}
 	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
@@ -63,7 +67,9 @@ string AssertRefSnapshotId::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(snapshot_id_val)) {
 			snapshot_id = yyjson_get_uint(snapshot_id_val);
 		} else {
-			return StringUtil::Format("AssertRefSnapshotId property 'snapshot_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(snapshot_id_val));
+			return StringUtil::Format(
+			    "AssertRefSnapshotId property 'snapshot_id' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(snapshot_id_val));
 		}
 	}
 	return string();
@@ -71,4 +77,3 @@ string AssertRefSnapshotId::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

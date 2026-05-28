@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-BinaryTypeValue::BinaryTypeValue() {}
+BinaryTypeValue::BinaryTypeValue() {
+}
 
 BinaryTypeValue BinaryTypeValue::FromJSON(yyjson_val *obj) {
 	BinaryTypeValue res;
@@ -30,14 +31,14 @@ BinaryTypeValue BinaryTypeValue::Copy() const {
 }
 string BinaryTypeValue::TryFromJSON(yyjson_val *obj) {
 	string error;
-if (yyjson_is_str(obj)) {
-	value = yyjson_get_str(obj);
-} else {
-	return StringUtil::Format("BinaryTypeValue property 'value' is not of type 'string', found '%s' instead", yyjson_get_type_desc(obj));
-}
+	if (yyjson_is_str(obj)) {
+		value = yyjson_get_str(obj);
+	} else {
+		return StringUtil::Format("BinaryTypeValue property 'value' is not of type 'string', found '%s' instead",
+		                          yyjson_get_type_desc(obj));
+	}
 	return string();
 }
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

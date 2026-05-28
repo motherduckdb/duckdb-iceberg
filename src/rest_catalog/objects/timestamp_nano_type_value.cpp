@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-TimestampNanoTypeValue::TimestampNanoTypeValue() {}
+TimestampNanoTypeValue::TimestampNanoTypeValue() {
+}
 
 TimestampNanoTypeValue TimestampNanoTypeValue::FromJSON(yyjson_val *obj) {
 	TimestampNanoTypeValue res;
@@ -30,14 +31,14 @@ TimestampNanoTypeValue TimestampNanoTypeValue::Copy() const {
 }
 string TimestampNanoTypeValue::TryFromJSON(yyjson_val *obj) {
 	string error;
-if (yyjson_is_str(obj)) {
-	value = yyjson_get_str(obj);
-} else {
-	return StringUtil::Format("TimestampNanoTypeValue property 'value' is not of type 'string', found '%s' instead", yyjson_get_type_desc(obj));
-}
+	if (yyjson_is_str(obj)) {
+		value = yyjson_get_str(obj);
+	} else {
+		return StringUtil::Format("TimestampNanoTypeValue property 'value' is not of type 'string', found '%s' instead",
+		                          yyjson_get_type_desc(obj));
+	}
 	return string();
 }
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

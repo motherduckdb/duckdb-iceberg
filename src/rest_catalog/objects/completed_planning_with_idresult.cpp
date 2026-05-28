@@ -12,8 +12,10 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-CompletedPlanningWithIDResult::CompletedPlanningWithIDResult() {}
-CompletedPlanningWithIDResult::Object6::Object6() {}
+CompletedPlanningWithIDResult::CompletedPlanningWithIDResult() {
+}
+CompletedPlanningWithIDResult::Object6::Object6() {
+}
 
 CompletedPlanningWithIDResult::Object6 CompletedPlanningWithIDResult::Object6::FromJSON(yyjson_val *obj) {
 	Object6 res;
@@ -38,7 +40,8 @@ string CompletedPlanningWithIDResult::Object6::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(plan_id_val)) {
 			plan_id = yyjson_get_str(plan_id_val);
 		} else {
-			return StringUtil::Format("Object6 property 'plan_id' is not of type 'string', found '%s' instead", yyjson_get_type_desc(plan_id_val));
+			return StringUtil::Format("Object6 property 'plan_id' is not of type 'string', found '%s' instead",
+			                          yyjson_get_type_desc(plan_id_val));
 		}
 	}
 	return string();
@@ -61,15 +64,16 @@ CompletedPlanningWithIDResult CompletedPlanningWithIDResult::Copy() const {
 }
 string CompletedPlanningWithIDResult::TryFromJSON(yyjson_val *obj) {
 	string error;
-error = completed_planning_result.TryFromJSON(obj);if (!error.empty()) {
-	return error;
-}
-error = object_6.TryFromJSON(obj);if (!error.empty()) {
-	return error;
-}
+	error = completed_planning_result.TryFromJSON(obj);
+	if (!error.empty()) {
+		return error;
+	}
+	error = object_6.TryFromJSON(obj);
+	if (!error.empty()) {
+		return error;
+	}
 	return string();
 }
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

@@ -32,65 +32,65 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class TableUpdate {
 public:
 	TableUpdate();
-	TableUpdate(const TableUpdate&) = delete;
-	TableUpdate& operator=(const TableUpdate&) = delete;
-	TableUpdate(TableUpdate&&) = default;
-	TableUpdate &operator=(TableUpdate&&) = default;
+	TableUpdate(const TableUpdate &) = delete;
+	TableUpdate &operator=(const TableUpdate &) = delete;
+	TableUpdate(TableUpdate &&) = default;
+	TableUpdate &operator=(TableUpdate &&) = default;
+
 public:
 	static TableUpdate FromJSON(yyjson_val *obj);
 	TableUpdate Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	AssignUUIDUpdate assign_uuidupdate;
-	bool has_assign_uuidupdate;
+	bool has_assign_uuidupdate = false;
 	UpgradeFormatVersionUpdate upgrade_format_version_update;
-	bool has_upgrade_format_version_update;
+	bool has_upgrade_format_version_update = false;
 	AddSchemaUpdate add_schema_update;
-	bool has_add_schema_update;
+	bool has_add_schema_update = false;
 	SetCurrentSchemaUpdate set_current_schema_update;
-	bool has_set_current_schema_update;
+	bool has_set_current_schema_update = false;
 	AddPartitionSpecUpdate add_partition_spec_update;
-	bool has_add_partition_spec_update;
+	bool has_add_partition_spec_update = false;
 	SetDefaultSpecUpdate set_default_spec_update;
-	bool has_set_default_spec_update;
+	bool has_set_default_spec_update = false;
 	AddSortOrderUpdate add_sort_order_update;
-	bool has_add_sort_order_update;
+	bool has_add_sort_order_update = false;
 	SetDefaultSortOrderUpdate set_default_sort_order_update;
-	bool has_set_default_sort_order_update;
+	bool has_set_default_sort_order_update = false;
 	AddSnapshotUpdate add_snapshot_update;
-	bool has_add_snapshot_update;
+	bool has_add_snapshot_update = false;
 	SetSnapshotRefUpdate set_snapshot_ref_update;
-	bool has_set_snapshot_ref_update;
+	bool has_set_snapshot_ref_update = false;
 	RemoveSnapshotsUpdate remove_snapshots_update;
-	bool has_remove_snapshots_update;
+	bool has_remove_snapshots_update = false;
 	RemoveSnapshotRefUpdate remove_snapshot_ref_update;
-	bool has_remove_snapshot_ref_update;
+	bool has_remove_snapshot_ref_update = false;
 	SetLocationUpdate set_location_update;
-	bool has_set_location_update;
+	bool has_set_location_update = false;
 	SetPropertiesUpdate set_properties_update;
-	bool has_set_properties_update;
+	bool has_set_properties_update = false;
 	RemovePropertiesUpdate remove_properties_update;
-	bool has_remove_properties_update;
+	bool has_remove_properties_update = false;
 	SetStatisticsUpdate set_statistics_update;
-	bool has_set_statistics_update;
+	bool has_set_statistics_update = false;
 	RemoveStatisticsUpdate remove_statistics_update;
-	bool has_remove_statistics_update;
+	bool has_remove_statistics_update = false;
 	RemovePartitionSpecsUpdate remove_partition_specs_update;
-	bool has_remove_partition_specs_update;
+	bool has_remove_partition_specs_update = false;
 	RemoveSchemasUpdate remove_schemas_update;
-	bool has_remove_schemas_update;
+	bool has_remove_schemas_update = false;
 	AddEncryptionKeyUpdate add_encryption_key_update;
-	bool has_add_encryption_key_update;
+	bool has_add_encryption_key_update = false;
 	RemoveEncryptionKeyUpdate remove_encryption_key_update;
-	bool has_remove_encryption_key_update;
+	bool has_remove_encryption_key_update = false;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

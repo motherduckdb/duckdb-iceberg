@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-StatisticsFile::StatisticsFile() {}
+StatisticsFile::StatisticsFile() {
+}
 
 StatisticsFile StatisticsFile::FromJSON(yyjson_val *obj) {
 	StatisticsFile res;
@@ -46,7 +47,9 @@ string StatisticsFile::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(snapshot_id_val)) {
 			snapshot_id = yyjson_get_uint(snapshot_id_val);
 		} else {
-			return StringUtil::Format("StatisticsFile property 'snapshot_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(snapshot_id_val));
+			return StringUtil::Format(
+			    "StatisticsFile property 'snapshot_id' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(snapshot_id_val));
 		}
 	}
 	auto statistics_path_val = yyjson_obj_get(obj, "statistics-path");
@@ -56,7 +59,9 @@ string StatisticsFile::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(statistics_path_val)) {
 			statistics_path = yyjson_get_str(statistics_path_val);
 		} else {
-			return StringUtil::Format("StatisticsFile property 'statistics_path' is not of type 'string', found '%s' instead", yyjson_get_type_desc(statistics_path_val));
+			return StringUtil::Format(
+			    "StatisticsFile property 'statistics_path' is not of type 'string', found '%s' instead",
+			    yyjson_get_type_desc(statistics_path_val));
 		}
 	}
 	auto file_size_in_bytes_val = yyjson_obj_get(obj, "file-size-in-bytes");
@@ -68,7 +73,9 @@ string StatisticsFile::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(file_size_in_bytes_val)) {
 			file_size_in_bytes = yyjson_get_uint(file_size_in_bytes_val);
 		} else {
-			return StringUtil::Format("StatisticsFile property 'file_size_in_bytes' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(file_size_in_bytes_val));
+			return StringUtil::Format(
+			    "StatisticsFile property 'file_size_in_bytes' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(file_size_in_bytes_val));
 		}
 	}
 	auto file_footer_size_in_bytes_val = yyjson_obj_get(obj, "file-footer-size-in-bytes");
@@ -80,7 +87,9 @@ string StatisticsFile::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(file_footer_size_in_bytes_val)) {
 			file_footer_size_in_bytes = yyjson_get_uint(file_footer_size_in_bytes_val);
 		} else {
-			return StringUtil::Format("StatisticsFile property 'file_footer_size_in_bytes' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(file_footer_size_in_bytes_val));
+			return StringUtil::Format(
+			    "StatisticsFile property 'file_footer_size_in_bytes' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(file_footer_size_in_bytes_val));
 		}
 	}
 	auto blob_metadata_val = yyjson_obj_get(obj, "blob-metadata");
@@ -99,7 +108,9 @@ string StatisticsFile::TryFromJSON(yyjson_val *obj) {
 				blob_metadata.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("StatisticsFile property 'blob_metadata' is not of type 'array', found '%s' instead", yyjson_get_type_desc(blob_metadata_val));
+			return StringUtil::Format(
+			    "StatisticsFile property 'blob_metadata' is not of type 'array', found '%s' instead",
+			    yyjson_get_type_desc(blob_metadata_val));
 		}
 	}
 	return string();
@@ -107,4 +118,3 @@ string StatisticsFile::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

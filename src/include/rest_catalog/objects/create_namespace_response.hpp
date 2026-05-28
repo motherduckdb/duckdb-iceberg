@@ -12,26 +12,26 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class CreateNamespaceResponse {
 public:
 	CreateNamespaceResponse();
-	CreateNamespaceResponse(const CreateNamespaceResponse&) = delete;
-	CreateNamespaceResponse& operator=(const CreateNamespaceResponse&) = delete;
-	CreateNamespaceResponse(CreateNamespaceResponse&&) = default;
-	CreateNamespaceResponse &operator=(CreateNamespaceResponse&&) = default;
+	CreateNamespaceResponse(const CreateNamespaceResponse &) = delete;
+	CreateNamespaceResponse &operator=(const CreateNamespaceResponse &) = delete;
+	CreateNamespaceResponse(CreateNamespaceResponse &&) = default;
+	CreateNamespaceResponse &operator=(CreateNamespaceResponse &&) = default;
+
 public:
 	static CreateNamespaceResponse FromJSON(yyjson_val *obj);
 	CreateNamespaceResponse Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	Namespace _namespace;
 	case_insensitive_map_t<string> properties;
-	bool has_properties;
+	bool has_properties = false;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

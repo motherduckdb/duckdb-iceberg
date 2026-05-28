@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-SetLocationUpdate::SetLocationUpdate() {}
+SetLocationUpdate::SetLocationUpdate() {
+}
 
 SetLocationUpdate SetLocationUpdate::FromJSON(yyjson_val *obj) {
 	SetLocationUpdate res;
@@ -27,15 +28,18 @@ SetLocationUpdate SetLocationUpdate::Copy() const {
 	SetLocationUpdate res;
 	res.base_update = base_update.Copy();
 	res.location = location;
-	res.action = action;
+	if (has_action) {
+		res.action = action;
+	}
 	res.has_action = has_action;
 	return res;
 }
 string SetLocationUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
-error = base_update.TryFromJSON(obj);if (!error.empty()) {
-	return error;
-}
+	error = base_update.TryFromJSON(obj);
+	if (!error.empty()) {
+		return error;
+	}
 	auto location_val = yyjson_obj_get(obj, "location");
 	if (!location_val) {
 		return "SetLocationUpdate required property 'location' is missing";
@@ -43,7 +47,9 @@ error = base_update.TryFromJSON(obj);if (!error.empty()) {
 		if (yyjson_is_str(location_val)) {
 			location = yyjson_get_str(location_val);
 		} else {
-			return StringUtil::Format("SetLocationUpdate property 'location' is not of type 'string', found '%s' instead", yyjson_get_type_desc(location_val));
+			return StringUtil::Format(
+			    "SetLocationUpdate property 'location' is not of type 'string', found '%s' instead",
+			    yyjson_get_type_desc(location_val));
 		}
 	}
 	auto action_val = yyjson_obj_get(obj, "action");
@@ -52,7 +58,8 @@ error = base_update.TryFromJSON(obj);if (!error.empty()) {
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);
 		} else {
-			return StringUtil::Format("SetLocationUpdate property 'action' is not of type 'string', found '%s' instead", yyjson_get_type_desc(action_val));
+			return StringUtil::Format("SetLocationUpdate property 'action' is not of type 'string', found '%s' instead",
+			                          yyjson_get_type_desc(action_val));
 		}
 	}
 	return string();
@@ -60,4 +67,3 @@ error = base_update.TryFromJSON(obj);if (!error.empty()) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

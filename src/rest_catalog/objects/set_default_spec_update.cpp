@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-SetDefaultSpecUpdate::SetDefaultSpecUpdate() {}
+SetDefaultSpecUpdate::SetDefaultSpecUpdate() {
+}
 
 SetDefaultSpecUpdate SetDefaultSpecUpdate::FromJSON(yyjson_val *obj) {
 	SetDefaultSpecUpdate res;
@@ -27,15 +28,18 @@ SetDefaultSpecUpdate SetDefaultSpecUpdate::Copy() const {
 	SetDefaultSpecUpdate res;
 	res.base_update = base_update.Copy();
 	res.spec_id = spec_id;
-	res.action = action;
+	if (has_action) {
+		res.action = action;
+	}
 	res.has_action = has_action;
 	return res;
 }
 string SetDefaultSpecUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
-error = base_update.TryFromJSON(obj);if (!error.empty()) {
-	return error;
-}
+	error = base_update.TryFromJSON(obj);
+	if (!error.empty()) {
+		return error;
+	}
 	auto spec_id_val = yyjson_obj_get(obj, "spec-id");
 	if (!spec_id_val) {
 		return "SetDefaultSpecUpdate required property 'spec-id' is missing";
@@ -43,7 +47,9 @@ error = base_update.TryFromJSON(obj);if (!error.empty()) {
 		if (yyjson_is_int(spec_id_val)) {
 			spec_id = yyjson_get_int(spec_id_val);
 		} else {
-			return StringUtil::Format("SetDefaultSpecUpdate property 'spec_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(spec_id_val));
+			return StringUtil::Format(
+			    "SetDefaultSpecUpdate property 'spec_id' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(spec_id_val));
 		}
 	}
 	auto action_val = yyjson_obj_get(obj, "action");
@@ -52,7 +58,9 @@ error = base_update.TryFromJSON(obj);if (!error.empty()) {
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);
 		} else {
-			return StringUtil::Format("SetDefaultSpecUpdate property 'action' is not of type 'string', found '%s' instead", yyjson_get_type_desc(action_val));
+			return StringUtil::Format(
+			    "SetDefaultSpecUpdate property 'action' is not of type 'string', found '%s' instead",
+			    yyjson_get_type_desc(action_val));
 		}
 	}
 	return string();
@@ -60,4 +68,3 @@ error = base_update.TryFromJSON(obj);if (!error.empty()) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

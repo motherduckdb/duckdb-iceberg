@@ -6,30 +6,29 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 
-
 using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class BooleanTypeValue {
 public:
 	BooleanTypeValue();
-	BooleanTypeValue(const BooleanTypeValue&) = delete;
-	BooleanTypeValue& operator=(const BooleanTypeValue&) = delete;
-	BooleanTypeValue(BooleanTypeValue&&) = default;
-	BooleanTypeValue &operator=(BooleanTypeValue&&) = default;
+	BooleanTypeValue(const BooleanTypeValue &) = delete;
+	BooleanTypeValue &operator=(const BooleanTypeValue &) = delete;
+	BooleanTypeValue(BooleanTypeValue &&) = default;
+	BooleanTypeValue &operator=(BooleanTypeValue &&) = default;
+
 public:
 	static BooleanTypeValue FromJSON(yyjson_val *obj);
 	BooleanTypeValue Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	bool value;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

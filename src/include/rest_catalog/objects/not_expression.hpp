@@ -17,15 +17,18 @@ class Expression;
 class NotExpression {
 public:
 	NotExpression();
-	NotExpression(const NotExpression&) = delete;
-	NotExpression& operator=(const NotExpression&) = delete;
-	NotExpression(NotExpression&&) = default;
-	NotExpression &operator=(NotExpression&&) = default;
+	NotExpression(const NotExpression &) = delete;
+	NotExpression &operator=(const NotExpression &) = delete;
+	NotExpression(NotExpression &&) = default;
+	NotExpression &operator=(NotExpression &&) = default;
+
 public:
 	static NotExpression FromJSON(yyjson_val *obj);
 	NotExpression Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	ExpressionType type;
 	unique_ptr<Expression> child;
@@ -33,4 +36,3 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

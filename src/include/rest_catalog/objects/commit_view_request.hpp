@@ -14,28 +14,28 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class CommitViewRequest {
 public:
 	CommitViewRequest();
-	CommitViewRequest(const CommitViewRequest&) = delete;
-	CommitViewRequest& operator=(const CommitViewRequest&) = delete;
-	CommitViewRequest(CommitViewRequest&&) = default;
-	CommitViewRequest &operator=(CommitViewRequest&&) = default;
+	CommitViewRequest(const CommitViewRequest &) = delete;
+	CommitViewRequest &operator=(const CommitViewRequest &) = delete;
+	CommitViewRequest(CommitViewRequest &&) = default;
+	CommitViewRequest &operator=(CommitViewRequest &&) = default;
+
 public:
 	static CommitViewRequest FromJSON(yyjson_val *obj);
 	CommitViewRequest Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	vector<ViewUpdate> updates;
 	TableIdentifier identifier;
-	bool has_identifier;
+	bool has_identifier = false;
 	vector<ViewRequirement> requirements;
-	bool has_requirements;
+	bool has_requirements = false;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

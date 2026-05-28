@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-AssertDefaultSpecId::AssertDefaultSpecId() {}
+AssertDefaultSpecId::AssertDefaultSpecId() {
+}
 
 AssertDefaultSpecId AssertDefaultSpecId::FromJSON(yyjson_val *obj) {
 	AssertDefaultSpecId res;
@@ -37,7 +38,7 @@ string AssertDefaultSpecId::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = type.TryFromJSON(type_val);
 		if (!error.empty()) {
-		    return error;
+			return error;
 		}
 	}
 	auto default_spec_id_val = yyjson_obj_get(obj, "default-spec-id");
@@ -47,7 +48,9 @@ string AssertDefaultSpecId::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_int(default_spec_id_val)) {
 			default_spec_id = yyjson_get_int(default_spec_id_val);
 		} else {
-			return StringUtil::Format("AssertDefaultSpecId property 'default_spec_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(default_spec_id_val));
+			return StringUtil::Format(
+			    "AssertDefaultSpecId property 'default_spec_id' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(default_spec_id_val));
 		}
 	}
 	return string();
@@ -55,4 +58,3 @@ string AssertDefaultSpecId::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

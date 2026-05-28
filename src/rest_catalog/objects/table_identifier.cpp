@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-TableIdentifier::TableIdentifier() {}
+TableIdentifier::TableIdentifier() {
+}
 
 TableIdentifier TableIdentifier::FromJSON(yyjson_val *obj) {
 	TableIdentifier res;
@@ -37,7 +38,7 @@ string TableIdentifier::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = _namespace.TryFromJSON(_namespace_val);
 		if (!error.empty()) {
-		    return error;
+			return error;
 		}
 	}
 	auto name_val = yyjson_obj_get(obj, "name");
@@ -49,7 +50,8 @@ string TableIdentifier::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_str(name_val)) {
 			name = yyjson_get_str(name_val);
 		} else {
-			return StringUtil::Format("TableIdentifier property 'name' is not of type 'string', found '%s' instead", yyjson_get_type_desc(name_val));
+			return StringUtil::Format("TableIdentifier property 'name' is not of type 'string', found '%s' instead",
+			                          yyjson_get_type_desc(name_val));
 		}
 	}
 	return string();
@@ -57,4 +59,3 @@ string TableIdentifier::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

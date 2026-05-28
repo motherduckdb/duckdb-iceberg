@@ -6,30 +6,29 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 
-
 using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class FieldName {
 public:
 	FieldName();
-	FieldName(const FieldName&) = delete;
-	FieldName& operator=(const FieldName&) = delete;
-	FieldName(FieldName&&) = default;
-	FieldName &operator=(FieldName&&) = default;
+	FieldName(const FieldName &) = delete;
+	FieldName &operator=(const FieldName &) = delete;
+	FieldName(FieldName &&) = default;
+	FieldName &operator=(FieldName &&) = default;
+
 public:
 	static FieldName FromJSON(yyjson_val *obj);
 	FieldName Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	string value;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

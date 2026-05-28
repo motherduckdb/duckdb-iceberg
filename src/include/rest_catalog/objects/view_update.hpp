@@ -19,39 +19,39 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class ViewUpdate {
 public:
 	ViewUpdate();
-	ViewUpdate(const ViewUpdate&) = delete;
-	ViewUpdate& operator=(const ViewUpdate&) = delete;
-	ViewUpdate(ViewUpdate&&) = default;
-	ViewUpdate &operator=(ViewUpdate&&) = default;
+	ViewUpdate(const ViewUpdate &) = delete;
+	ViewUpdate &operator=(const ViewUpdate &) = delete;
+	ViewUpdate(ViewUpdate &&) = default;
+	ViewUpdate &operator=(ViewUpdate &&) = default;
+
 public:
 	static ViewUpdate FromJSON(yyjson_val *obj);
 	ViewUpdate Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	AssignUUIDUpdate assign_uuidupdate;
-	bool has_assign_uuidupdate;
+	bool has_assign_uuidupdate = false;
 	UpgradeFormatVersionUpdate upgrade_format_version_update;
-	bool has_upgrade_format_version_update;
+	bool has_upgrade_format_version_update = false;
 	AddSchemaUpdate add_schema_update;
-	bool has_add_schema_update;
+	bool has_add_schema_update = false;
 	SetLocationUpdate set_location_update;
-	bool has_set_location_update;
+	bool has_set_location_update = false;
 	SetPropertiesUpdate set_properties_update;
-	bool has_set_properties_update;
+	bool has_set_properties_update = false;
 	RemovePropertiesUpdate remove_properties_update;
-	bool has_remove_properties_update;
+	bool has_remove_properties_update = false;
 	AddViewVersionUpdate add_view_version_update;
-	bool has_add_view_version_update;
+	bool has_add_view_version_update = false;
 	SetCurrentViewVersionUpdate set_current_view_version_update;
-	bool has_set_current_view_version_update;
+	bool has_set_current_view_version_update = false;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

@@ -12,20 +12,21 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class SortOrder {
 public:
 	SortOrder();
-	SortOrder(const SortOrder&) = delete;
-	SortOrder& operator=(const SortOrder&) = delete;
-	SortOrder(SortOrder&&) = default;
-	SortOrder &operator=(SortOrder&&) = default;
+	SortOrder(const SortOrder &) = delete;
+	SortOrder &operator=(const SortOrder &) = delete;
+	SortOrder(SortOrder &&) = default;
+	SortOrder &operator=(SortOrder &&) = default;
+
 public:
 	static SortOrder FromJSON(yyjson_val *obj);
 	SortOrder Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	int32_t order_id;
 	vector<SortField> fields;
@@ -33,4 +34,3 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

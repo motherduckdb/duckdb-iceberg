@@ -12,20 +12,21 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class RenameTableRequest {
 public:
 	RenameTableRequest();
-	RenameTableRequest(const RenameTableRequest&) = delete;
-	RenameTableRequest& operator=(const RenameTableRequest&) = delete;
-	RenameTableRequest(RenameTableRequest&&) = default;
-	RenameTableRequest &operator=(RenameTableRequest&&) = default;
+	RenameTableRequest(const RenameTableRequest &) = delete;
+	RenameTableRequest &operator=(const RenameTableRequest &) = delete;
+	RenameTableRequest(RenameTableRequest &&) = default;
+	RenameTableRequest &operator=(RenameTableRequest &&) = default;
+
 public:
 	static RenameTableRequest FromJSON(yyjson_val *obj);
 	RenameTableRequest Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	TableIdentifier source;
 	TableIdentifier destination;
@@ -33,4 +34,3 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

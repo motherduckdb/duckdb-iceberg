@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-OAuthClientCredentialsRequest::OAuthClientCredentialsRequest() {}
+OAuthClientCredentialsRequest::OAuthClientCredentialsRequest() {
+}
 
 OAuthClientCredentialsRequest OAuthClientCredentialsRequest::FromJSON(yyjson_val *obj) {
 	OAuthClientCredentialsRequest res;
@@ -28,7 +29,9 @@ OAuthClientCredentialsRequest OAuthClientCredentialsRequest::Copy() const {
 	res.grant_type = grant_type;
 	res.client_id = client_id;
 	res.client_secret = client_secret;
-	res.scope = scope;
+	if (has_scope) {
+		res.scope = scope;
+	}
 	res.has_scope = has_scope;
 	return res;
 }
@@ -41,7 +44,9 @@ string OAuthClientCredentialsRequest::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(grant_type_val)) {
 			grant_type = yyjson_get_str(grant_type_val);
 		} else {
-			return StringUtil::Format("OAuthClientCredentialsRequest property 'grant_type' is not of type 'string', found '%s' instead", yyjson_get_type_desc(grant_type_val));
+			return StringUtil::Format(
+			    "OAuthClientCredentialsRequest property 'grant_type' is not of type 'string', found '%s' instead",
+			    yyjson_get_type_desc(grant_type_val));
 		}
 	}
 	auto client_id_val = yyjson_obj_get(obj, "client_id");
@@ -51,7 +56,9 @@ string OAuthClientCredentialsRequest::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(client_id_val)) {
 			client_id = yyjson_get_str(client_id_val);
 		} else {
-			return StringUtil::Format("OAuthClientCredentialsRequest property 'client_id' is not of type 'string', found '%s' instead", yyjson_get_type_desc(client_id_val));
+			return StringUtil::Format(
+			    "OAuthClientCredentialsRequest property 'client_id' is not of type 'string', found '%s' instead",
+			    yyjson_get_type_desc(client_id_val));
 		}
 	}
 	auto client_secret_val = yyjson_obj_get(obj, "client_secret");
@@ -61,7 +68,9 @@ string OAuthClientCredentialsRequest::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(client_secret_val)) {
 			client_secret = yyjson_get_str(client_secret_val);
 		} else {
-			return StringUtil::Format("OAuthClientCredentialsRequest property 'client_secret' is not of type 'string', found '%s' instead", yyjson_get_type_desc(client_secret_val));
+			return StringUtil::Format(
+			    "OAuthClientCredentialsRequest property 'client_secret' is not of type 'string', found '%s' instead",
+			    yyjson_get_type_desc(client_secret_val));
 		}
 	}
 	auto scope_val = yyjson_obj_get(obj, "scope");
@@ -70,7 +79,9 @@ string OAuthClientCredentialsRequest::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(scope_val)) {
 			scope = yyjson_get_str(scope_val);
 		} else {
-			return StringUtil::Format("OAuthClientCredentialsRequest property 'scope' is not of type 'string', found '%s' instead", yyjson_get_type_desc(scope_val));
+			return StringUtil::Format(
+			    "OAuthClientCredentialsRequest property 'scope' is not of type 'string', found '%s' instead",
+			    yyjson_get_type_desc(scope_val));
 		}
 	}
 	return string();
@@ -78,4 +89,3 @@ string OAuthClientCredentialsRequest::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

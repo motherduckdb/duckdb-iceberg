@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-RenameTableRequest::RenameTableRequest() {}
+RenameTableRequest::RenameTableRequest() {
+}
 
 RenameTableRequest RenameTableRequest::FromJSON(yyjson_val *obj) {
 	RenameTableRequest res;
@@ -37,7 +38,7 @@ string RenameTableRequest::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = source.TryFromJSON(source_val);
 		if (!error.empty()) {
-		    return error;
+			return error;
 		}
 	}
 	auto destination_val = yyjson_obj_get(obj, "destination");
@@ -46,7 +47,7 @@ string RenameTableRequest::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = destination.TryFromJSON(destination_val);
 		if (!error.empty()) {
-		    return error;
+			return error;
 		}
 	}
 	return string();
@@ -54,4 +55,3 @@ string RenameTableRequest::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

@@ -6,7 +6,6 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 
-
 using namespace duckdb_yyjson;
 
 namespace duckdb {
@@ -17,15 +16,18 @@ class Type;
 class ListType {
 public:
 	ListType();
-	ListType(const ListType&) = delete;
-	ListType& operator=(const ListType&) = delete;
-	ListType(ListType&&) = default;
-	ListType &operator=(ListType&&) = default;
+	ListType(const ListType &) = delete;
+	ListType &operator=(const ListType &) = delete;
+	ListType(ListType &&) = default;
+	ListType &operator=(ListType &&) = default;
+
 public:
 	static ListType FromJSON(yyjson_val *obj);
 	ListType Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	string type;
 	int32_t element_id;
@@ -35,4 +37,3 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

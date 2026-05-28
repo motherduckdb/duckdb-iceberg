@@ -12,20 +12,21 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class CommitTableResponse {
 public:
 	CommitTableResponse();
-	CommitTableResponse(const CommitTableResponse&) = delete;
-	CommitTableResponse& operator=(const CommitTableResponse&) = delete;
-	CommitTableResponse(CommitTableResponse&&) = default;
-	CommitTableResponse &operator=(CommitTableResponse&&) = default;
+	CommitTableResponse(const CommitTableResponse &) = delete;
+	CommitTableResponse &operator=(const CommitTableResponse &) = delete;
+	CommitTableResponse(CommitTableResponse &&) = default;
+	CommitTableResponse &operator=(CommitTableResponse &&) = default;
+
 public:
 	static CommitTableResponse FromJSON(yyjson_val *obj);
 	CommitTableResponse Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	string metadata_location;
 	TableMetadata metadata;
@@ -33,4 +34,3 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

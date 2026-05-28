@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-AddSortOrderUpdate::AddSortOrderUpdate() {}
+AddSortOrderUpdate::AddSortOrderUpdate() {
+}
 
 AddSortOrderUpdate AddSortOrderUpdate::FromJSON(yyjson_val *obj) {
 	AddSortOrderUpdate res;
@@ -27,22 +28,25 @@ AddSortOrderUpdate AddSortOrderUpdate::Copy() const {
 	AddSortOrderUpdate res;
 	res.base_update = base_update.Copy();
 	res.sort_order = sort_order.Copy();
-	res.action = action;
+	if (has_action) {
+		res.action = action;
+	}
 	res.has_action = has_action;
 	return res;
 }
 string AddSortOrderUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
-error = base_update.TryFromJSON(obj);if (!error.empty()) {
-	return error;
-}
+	error = base_update.TryFromJSON(obj);
+	if (!error.empty()) {
+		return error;
+	}
 	auto sort_order_val = yyjson_obj_get(obj, "sort-order");
 	if (!sort_order_val) {
 		return "AddSortOrderUpdate required property 'sort-order' is missing";
 	} else {
 		error = sort_order.TryFromJSON(sort_order_val);
 		if (!error.empty()) {
-		    return error;
+			return error;
 		}
 	}
 	auto action_val = yyjson_obj_get(obj, "action");
@@ -51,7 +55,9 @@ error = base_update.TryFromJSON(obj);if (!error.empty()) {
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);
 		} else {
-			return StringUtil::Format("AddSortOrderUpdate property 'action' is not of type 'string', found '%s' instead", yyjson_get_type_desc(action_val));
+			return StringUtil::Format(
+			    "AddSortOrderUpdate property 'action' is not of type 'string', found '%s' instead",
+			    yyjson_get_type_desc(action_val));
 		}
 	}
 	return string();
@@ -59,4 +65,3 @@ error = base_update.TryFromJSON(obj);if (!error.empty()) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

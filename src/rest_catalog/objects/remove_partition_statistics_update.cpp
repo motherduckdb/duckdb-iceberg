@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-RemovePartitionStatisticsUpdate::RemovePartitionStatisticsUpdate() {}
+RemovePartitionStatisticsUpdate::RemovePartitionStatisticsUpdate() {
+}
 
 RemovePartitionStatisticsUpdate RemovePartitionStatisticsUpdate::FromJSON(yyjson_val *obj) {
 	RemovePartitionStatisticsUpdate res;
@@ -27,15 +28,18 @@ RemovePartitionStatisticsUpdate RemovePartitionStatisticsUpdate::Copy() const {
 	RemovePartitionStatisticsUpdate res;
 	res.base_update = base_update.Copy();
 	res.snapshot_id = snapshot_id;
-	res.action = action;
+	if (has_action) {
+		res.action = action;
+	}
 	res.has_action = has_action;
 	return res;
 }
 string RemovePartitionStatisticsUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
-error = base_update.TryFromJSON(obj);if (!error.empty()) {
-	return error;
-}
+	error = base_update.TryFromJSON(obj);
+	if (!error.empty()) {
+		return error;
+	}
 	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
 	if (!snapshot_id_val) {
 		return "RemovePartitionStatisticsUpdate required property 'snapshot-id' is missing";
@@ -45,7 +49,9 @@ error = base_update.TryFromJSON(obj);if (!error.empty()) {
 		} else if (yyjson_is_uint(snapshot_id_val)) {
 			snapshot_id = yyjson_get_uint(snapshot_id_val);
 		} else {
-			return StringUtil::Format("RemovePartitionStatisticsUpdate property 'snapshot_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(snapshot_id_val));
+			return StringUtil::Format(
+			    "RemovePartitionStatisticsUpdate property 'snapshot_id' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(snapshot_id_val));
 		}
 	}
 	auto action_val = yyjson_obj_get(obj, "action");
@@ -54,7 +60,9 @@ error = base_update.TryFromJSON(obj);if (!error.empty()) {
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);
 		} else {
-			return StringUtil::Format("RemovePartitionStatisticsUpdate property 'action' is not of type 'string', found '%s' instead", yyjson_get_type_desc(action_val));
+			return StringUtil::Format(
+			    "RemovePartitionStatisticsUpdate property 'action' is not of type 'string', found '%s' instead",
+			    yyjson_get_type_desc(action_val));
 		}
 	}
 	return string();
@@ -62,4 +70,3 @@ error = base_update.TryFromJSON(obj);if (!error.empty()) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

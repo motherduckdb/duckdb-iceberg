@@ -6,26 +6,26 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 
-
 using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class ViewHistoryEntry {
 public:
 	ViewHistoryEntry();
-	ViewHistoryEntry(const ViewHistoryEntry&) = delete;
-	ViewHistoryEntry& operator=(const ViewHistoryEntry&) = delete;
-	ViewHistoryEntry(ViewHistoryEntry&&) = default;
-	ViewHistoryEntry &operator=(ViewHistoryEntry&&) = default;
+	ViewHistoryEntry(const ViewHistoryEntry &) = delete;
+	ViewHistoryEntry &operator=(const ViewHistoryEntry &) = delete;
+	ViewHistoryEntry(ViewHistoryEntry &&) = default;
+	ViewHistoryEntry &operator=(ViewHistoryEntry &&) = default;
+
 public:
 	static ViewHistoryEntry FromJSON(yyjson_val *obj);
 	ViewHistoryEntry Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	int32_t version_id;
 	int64_t timestamp_ms;
@@ -33,4 +33,3 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

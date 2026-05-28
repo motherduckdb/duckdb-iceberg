@@ -13,27 +13,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class Term {
 public:
 	Term();
-	Term(const Term&) = delete;
-	Term& operator=(const Term&) = delete;
-	Term(Term&&) = default;
-	Term &operator=(Term&&) = default;
+	Term(const Term &) = delete;
+	Term &operator=(const Term &) = delete;
+	Term(Term &&) = default;
+	Term &operator=(Term &&) = default;
+
 public:
 	static Term FromJSON(yyjson_val *obj);
 	Term Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	Reference reference;
-	bool has_reference;
+	bool has_reference = false;
 	TransformTerm transform_term;
-	bool has_transform_term;
+	bool has_transform_term = false;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

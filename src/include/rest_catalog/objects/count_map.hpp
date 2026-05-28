@@ -13,27 +13,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class CountMap {
 public:
 	CountMap();
-	CountMap(const CountMap&) = delete;
-	CountMap& operator=(const CountMap&) = delete;
-	CountMap(CountMap&&) = default;
-	CountMap &operator=(CountMap&&) = default;
+	CountMap(const CountMap &) = delete;
+	CountMap &operator=(const CountMap &) = delete;
+	CountMap(CountMap &&) = default;
+	CountMap &operator=(CountMap &&) = default;
+
 public:
 	static CountMap FromJSON(yyjson_val *obj);
 	CountMap Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	vector<IntegerTypeValue> keys;
-	bool has_keys;
+	bool has_keys = false;
 	vector<LongTypeValue> values;
-	bool has_values;
+	bool has_values = false;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

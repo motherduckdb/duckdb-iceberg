@@ -16,10 +16,10 @@ namespace duckdb {
 
 struct IcebergColumnDefinition {
 public:
-	static unique_ptr<IcebergColumnDefinition> ParseStructField(rest_api_objects::StructField &field);
+	static unique_ptr<IcebergColumnDefinition> ParseStructField(const rest_api_objects::StructField &field);
 
 public:
-	static LogicalType ParsePrimitiveType(rest_api_objects::PrimitiveType &type);
+	static LogicalType ParsePrimitiveType(const rest_api_objects::PrimitiveType &type);
 	static LogicalType ParsePrimitiveTypeString(const string &type_str);
 	bool IsIcebergPrimitiveType() const;
 	vector<unique_ptr<IcebergColumnDefinition>>::const_iterator GetChildIterator(const string &child_name) const;

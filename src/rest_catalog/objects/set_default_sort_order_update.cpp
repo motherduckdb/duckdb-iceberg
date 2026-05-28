@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-SetDefaultSortOrderUpdate::SetDefaultSortOrderUpdate() {}
+SetDefaultSortOrderUpdate::SetDefaultSortOrderUpdate() {
+}
 
 SetDefaultSortOrderUpdate SetDefaultSortOrderUpdate::FromJSON(yyjson_val *obj) {
 	SetDefaultSortOrderUpdate res;
@@ -27,15 +28,18 @@ SetDefaultSortOrderUpdate SetDefaultSortOrderUpdate::Copy() const {
 	SetDefaultSortOrderUpdate res;
 	res.base_update = base_update.Copy();
 	res.sort_order_id = sort_order_id;
-	res.action = action;
+	if (has_action) {
+		res.action = action;
+	}
 	res.has_action = has_action;
 	return res;
 }
 string SetDefaultSortOrderUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
-error = base_update.TryFromJSON(obj);if (!error.empty()) {
-	return error;
-}
+	error = base_update.TryFromJSON(obj);
+	if (!error.empty()) {
+		return error;
+	}
 	auto sort_order_id_val = yyjson_obj_get(obj, "sort-order-id");
 	if (!sort_order_id_val) {
 		return "SetDefaultSortOrderUpdate required property 'sort-order-id' is missing";
@@ -43,7 +47,9 @@ error = base_update.TryFromJSON(obj);if (!error.empty()) {
 		if (yyjson_is_int(sort_order_id_val)) {
 			sort_order_id = yyjson_get_int(sort_order_id_val);
 		} else {
-			return StringUtil::Format("SetDefaultSortOrderUpdate property 'sort_order_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(sort_order_id_val));
+			return StringUtil::Format(
+			    "SetDefaultSortOrderUpdate property 'sort_order_id' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(sort_order_id_val));
 		}
 	}
 	auto action_val = yyjson_obj_get(obj, "action");
@@ -52,7 +58,9 @@ error = base_update.TryFromJSON(obj);if (!error.empty()) {
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);
 		} else {
-			return StringUtil::Format("SetDefaultSortOrderUpdate property 'action' is not of type 'string', found '%s' instead", yyjson_get_type_desc(action_val));
+			return StringUtil::Format(
+			    "SetDefaultSortOrderUpdate property 'action' is not of type 'string', found '%s' instead",
+			    yyjson_get_type_desc(action_val));
 		}
 	}
 	return string();
@@ -60,4 +68,3 @@ error = base_update.TryFromJSON(obj);if (!error.empty()) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

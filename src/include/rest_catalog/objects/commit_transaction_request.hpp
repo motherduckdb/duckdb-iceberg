@@ -12,24 +12,24 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class CommitTransactionRequest {
 public:
 	CommitTransactionRequest();
-	CommitTransactionRequest(const CommitTransactionRequest&) = delete;
-	CommitTransactionRequest& operator=(const CommitTransactionRequest&) = delete;
-	CommitTransactionRequest(CommitTransactionRequest&&) = default;
-	CommitTransactionRequest &operator=(CommitTransactionRequest&&) = default;
+	CommitTransactionRequest(const CommitTransactionRequest &) = delete;
+	CommitTransactionRequest &operator=(const CommitTransactionRequest &) = delete;
+	CommitTransactionRequest(CommitTransactionRequest &&) = default;
+	CommitTransactionRequest &operator=(CommitTransactionRequest &&) = default;
+
 public:
 	static CommitTransactionRequest FromJSON(yyjson_val *obj);
 	CommitTransactionRequest Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	vector<CommitTableRequest> table_changes;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

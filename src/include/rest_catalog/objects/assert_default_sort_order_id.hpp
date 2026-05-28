@@ -12,20 +12,21 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class AssertDefaultSortOrderId {
 public:
 	AssertDefaultSortOrderId();
-	AssertDefaultSortOrderId(const AssertDefaultSortOrderId&) = delete;
-	AssertDefaultSortOrderId& operator=(const AssertDefaultSortOrderId&) = delete;
-	AssertDefaultSortOrderId(AssertDefaultSortOrderId&&) = default;
-	AssertDefaultSortOrderId &operator=(AssertDefaultSortOrderId&&) = default;
+	AssertDefaultSortOrderId(const AssertDefaultSortOrderId &) = delete;
+	AssertDefaultSortOrderId &operator=(const AssertDefaultSortOrderId &) = delete;
+	AssertDefaultSortOrderId(AssertDefaultSortOrderId &&) = default;
+	AssertDefaultSortOrderId &operator=(AssertDefaultSortOrderId &&) = default;
+
 public:
 	static AssertDefaultSortOrderId FromJSON(yyjson_val *obj);
 	AssertDefaultSortOrderId Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	TableRequirementType type;
 	int32_t default_sort_order_id;
@@ -33,4 +34,3 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

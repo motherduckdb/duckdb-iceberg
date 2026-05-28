@@ -12,24 +12,24 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class FetchScanTasksResult {
 public:
 	FetchScanTasksResult();
-	FetchScanTasksResult(const FetchScanTasksResult&) = delete;
-	FetchScanTasksResult& operator=(const FetchScanTasksResult&) = delete;
-	FetchScanTasksResult(FetchScanTasksResult&&) = default;
-	FetchScanTasksResult &operator=(FetchScanTasksResult&&) = default;
+	FetchScanTasksResult(const FetchScanTasksResult &) = delete;
+	FetchScanTasksResult &operator=(const FetchScanTasksResult &) = delete;
+	FetchScanTasksResult(FetchScanTasksResult &&) = default;
+	FetchScanTasksResult &operator=(FetchScanTasksResult &&) = default;
+
 public:
 	static FetchScanTasksResult FromJSON(yyjson_val *obj);
 	FetchScanTasksResult Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	ScanTasks scan_tasks;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

@@ -13,20 +13,21 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class UnaryExpression {
 public:
 	UnaryExpression();
-	UnaryExpression(const UnaryExpression&) = delete;
-	UnaryExpression& operator=(const UnaryExpression&) = delete;
-	UnaryExpression(UnaryExpression&&) = default;
-	UnaryExpression &operator=(UnaryExpression&&) = default;
+	UnaryExpression(const UnaryExpression &) = delete;
+	UnaryExpression &operator=(const UnaryExpression &) = delete;
+	UnaryExpression(UnaryExpression &&) = default;
+	UnaryExpression &operator=(UnaryExpression &&) = default;
+
 public:
 	static UnaryExpression FromJSON(yyjson_val *obj);
 	UnaryExpression Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	ExpressionType type;
 	Term term;
@@ -34,4 +35,3 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

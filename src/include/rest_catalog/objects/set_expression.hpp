@@ -14,20 +14,21 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class SetExpression {
 public:
 	SetExpression();
-	SetExpression(const SetExpression&) = delete;
-	SetExpression& operator=(const SetExpression&) = delete;
-	SetExpression(SetExpression&&) = default;
-	SetExpression &operator=(SetExpression&&) = default;
+	SetExpression(const SetExpression &) = delete;
+	SetExpression &operator=(const SetExpression &) = delete;
+	SetExpression(SetExpression &&) = default;
+	SetExpression &operator=(SetExpression &&) = default;
+
 public:
 	static SetExpression FromJSON(yyjson_val *obj);
 	SetExpression Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	ExpressionType type;
 	Term term;
@@ -36,4 +37,3 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

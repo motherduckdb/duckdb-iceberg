@@ -14,29 +14,29 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class ScanTasks {
 public:
 	ScanTasks();
-	ScanTasks(const ScanTasks&) = delete;
-	ScanTasks& operator=(const ScanTasks&) = delete;
-	ScanTasks(ScanTasks&&) = default;
-	ScanTasks &operator=(ScanTasks&&) = default;
+	ScanTasks(const ScanTasks &) = delete;
+	ScanTasks &operator=(const ScanTasks &) = delete;
+	ScanTasks(ScanTasks &&) = default;
+	ScanTasks &operator=(ScanTasks &&) = default;
+
 public:
 	static ScanTasks FromJSON(yyjson_val *obj);
 	ScanTasks Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	vector<DeleteFile> delete_files;
-	bool has_delete_files;
+	bool has_delete_files = false;
 	vector<FileScanTask> file_scan_tasks;
-	bool has_file_scan_tasks;
+	bool has_file_scan_tasks = false;
 	vector<PlanTask> plan_tasks;
-	bool has_plan_tasks;
+	bool has_plan_tasks = false;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

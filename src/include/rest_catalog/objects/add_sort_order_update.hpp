@@ -13,27 +13,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class AddSortOrderUpdate {
 public:
 	AddSortOrderUpdate();
-	AddSortOrderUpdate(const AddSortOrderUpdate&) = delete;
-	AddSortOrderUpdate& operator=(const AddSortOrderUpdate&) = delete;
-	AddSortOrderUpdate(AddSortOrderUpdate&&) = default;
-	AddSortOrderUpdate &operator=(AddSortOrderUpdate&&) = default;
+	AddSortOrderUpdate(const AddSortOrderUpdate &) = delete;
+	AddSortOrderUpdate &operator=(const AddSortOrderUpdate &) = delete;
+	AddSortOrderUpdate(AddSortOrderUpdate &&) = default;
+	AddSortOrderUpdate &operator=(AddSortOrderUpdate &&) = default;
+
 public:
 	static AddSortOrderUpdate FromJSON(yyjson_val *obj);
 	AddSortOrderUpdate Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	BaseUpdate base_update;
 	SortOrder sort_order;
 	string action;
-	bool has_action;
+	bool has_action = false;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

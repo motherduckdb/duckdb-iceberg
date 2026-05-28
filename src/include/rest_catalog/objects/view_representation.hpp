@@ -12,25 +12,25 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class ViewRepresentation {
 public:
 	ViewRepresentation();
-	ViewRepresentation(const ViewRepresentation&) = delete;
-	ViewRepresentation& operator=(const ViewRepresentation&) = delete;
-	ViewRepresentation(ViewRepresentation&&) = default;
-	ViewRepresentation &operator=(ViewRepresentation&&) = default;
+	ViewRepresentation(const ViewRepresentation &) = delete;
+	ViewRepresentation &operator=(const ViewRepresentation &) = delete;
+	ViewRepresentation(ViewRepresentation &&) = default;
+	ViewRepresentation &operator=(ViewRepresentation &&) = default;
+
 public:
 	static ViewRepresentation FromJSON(yyjson_val *obj);
 	ViewRepresentation Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	SQLViewRepresentation sqlview_representation;
-	bool has_sqlview_representation;
+	bool has_sqlview_representation = false;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

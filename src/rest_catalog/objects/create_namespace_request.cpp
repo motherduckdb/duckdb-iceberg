@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-CreateNamespaceRequest::CreateNamespaceRequest() {}
+CreateNamespaceRequest::CreateNamespaceRequest() {
+}
 
 CreateNamespaceRequest CreateNamespaceRequest::FromJSON(yyjson_val *obj) {
 	CreateNamespaceRequest res;
@@ -26,8 +27,10 @@ CreateNamespaceRequest CreateNamespaceRequest::FromJSON(yyjson_val *obj) {
 CreateNamespaceRequest CreateNamespaceRequest::Copy() const {
 	CreateNamespaceRequest res;
 	res._namespace = _namespace.Copy();
-	for (auto &entry : properties) {
-		res.properties.emplace(entry.first, entry.second);
+	if (has_properties) {
+		for (auto &entry : properties) {
+			res.properties.emplace(entry.first, entry.second);
+		}
 	}
 	res.has_properties = has_properties;
 	return res;
@@ -40,7 +43,7 @@ string CreateNamespaceRequest::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = _namespace.TryFromJSON(_namespace_val);
 		if (!error.empty()) {
-		    return error;
+			return error;
 		}
 	}
 	auto properties_val = yyjson_obj_get(obj, "properties");
@@ -55,7 +58,9 @@ string CreateNamespaceRequest::TryFromJSON(yyjson_val *obj) {
 				if (yyjson_is_str(val)) {
 					tmp = yyjson_get_str(val);
 				} else {
-					return StringUtil::Format("CreateNamespaceRequest property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
+					return StringUtil::Format(
+					    "CreateNamespaceRequest property 'tmp' is not of type 'string', found '%s' instead",
+					    yyjson_get_type_desc(val));
 				}
 				properties.emplace(key_str, std::move(tmp));
 			}
@@ -68,4 +73,3 @@ string CreateNamespaceRequest::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

@@ -12,27 +12,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class SetLocationUpdate {
 public:
 	SetLocationUpdate();
-	SetLocationUpdate(const SetLocationUpdate&) = delete;
-	SetLocationUpdate& operator=(const SetLocationUpdate&) = delete;
-	SetLocationUpdate(SetLocationUpdate&&) = default;
-	SetLocationUpdate &operator=(SetLocationUpdate&&) = default;
+	SetLocationUpdate(const SetLocationUpdate &) = delete;
+	SetLocationUpdate &operator=(const SetLocationUpdate &) = delete;
+	SetLocationUpdate(SetLocationUpdate &&) = default;
+	SetLocationUpdate &operator=(SetLocationUpdate &&) = default;
+
 public:
 	static SetLocationUpdate FromJSON(yyjson_val *obj);
 	SetLocationUpdate Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	BaseUpdate base_update;
 	string location;
 	string action;
-	bool has_action;
+	bool has_action = false;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

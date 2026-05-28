@@ -14,20 +14,21 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class ViewMetadata {
 public:
 	ViewMetadata();
-	ViewMetadata(const ViewMetadata&) = delete;
-	ViewMetadata& operator=(const ViewMetadata&) = delete;
-	ViewMetadata(ViewMetadata&&) = default;
-	ViewMetadata &operator=(ViewMetadata&&) = default;
+	ViewMetadata(const ViewMetadata &) = delete;
+	ViewMetadata &operator=(const ViewMetadata &) = delete;
+	ViewMetadata(ViewMetadata &&) = default;
+	ViewMetadata &operator=(ViewMetadata &&) = default;
+
 public:
 	static ViewMetadata FromJSON(yyjson_val *obj);
 	ViewMetadata Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	string view_uuid;
 	int32_t format_version;
@@ -37,9 +38,8 @@ public:
 	vector<ViewHistoryEntry> version_log;
 	vector<Schema> schemas;
 	case_insensitive_map_t<string> properties;
-	bool has_properties;
+	bool has_properties = false;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

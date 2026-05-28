@@ -12,27 +12,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class SetCurrentViewVersionUpdate {
 public:
 	SetCurrentViewVersionUpdate();
-	SetCurrentViewVersionUpdate(const SetCurrentViewVersionUpdate&) = delete;
-	SetCurrentViewVersionUpdate& operator=(const SetCurrentViewVersionUpdate&) = delete;
-	SetCurrentViewVersionUpdate(SetCurrentViewVersionUpdate&&) = default;
-	SetCurrentViewVersionUpdate &operator=(SetCurrentViewVersionUpdate&&) = default;
+	SetCurrentViewVersionUpdate(const SetCurrentViewVersionUpdate &) = delete;
+	SetCurrentViewVersionUpdate &operator=(const SetCurrentViewVersionUpdate &) = delete;
+	SetCurrentViewVersionUpdate(SetCurrentViewVersionUpdate &&) = default;
+	SetCurrentViewVersionUpdate &operator=(SetCurrentViewVersionUpdate &&) = default;
+
 public:
 	static SetCurrentViewVersionUpdate FromJSON(yyjson_val *obj);
 	SetCurrentViewVersionUpdate Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	BaseUpdate base_update;
 	int32_t view_version_id;
 	string action;
-	bool has_action;
+	bool has_action = false;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

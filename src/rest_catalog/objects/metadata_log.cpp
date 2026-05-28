@@ -12,8 +12,10 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-MetadataLog::MetadataLog() {}
-MetadataLog::Object4::Object4() {}
+MetadataLog::MetadataLog() {
+}
+MetadataLog::Object4::Object4() {
+}
 
 MetadataLog::Object4 MetadataLog::Object4::FromJSON(yyjson_val *obj) {
 	Object4 res;
@@ -39,7 +41,8 @@ string MetadataLog::Object4::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(metadata_file_val)) {
 			metadata_file = yyjson_get_str(metadata_file_val);
 		} else {
-			return StringUtil::Format("Object4 property 'metadata_file' is not of type 'string', found '%s' instead", yyjson_get_type_desc(metadata_file_val));
+			return StringUtil::Format("Object4 property 'metadata_file' is not of type 'string', found '%s' instead",
+			                          yyjson_get_type_desc(metadata_file_val));
 		}
 	}
 	auto timestamp_ms_val = yyjson_obj_get(obj, "timestamp-ms");
@@ -51,7 +54,8 @@ string MetadataLog::Object4::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(timestamp_ms_val)) {
 			timestamp_ms = yyjson_get_uint(timestamp_ms_val);
 		} else {
-			return StringUtil::Format("Object4 property 'timestamp_ms' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(timestamp_ms_val));
+			return StringUtil::Format("Object4 property 'timestamp_ms' is not of type 'integer', found '%s' instead",
+			                          yyjson_get_type_desc(timestamp_ms_val));
 		}
 	}
 	return string();
@@ -76,23 +80,23 @@ MetadataLog MetadataLog::Copy() const {
 }
 string MetadataLog::TryFromJSON(yyjson_val *obj) {
 	string error;
-if (yyjson_is_arr(obj)) {
-	size_t idx, max;
-	yyjson_val *val;
-	yyjson_arr_foreach(obj, idx, max, val) {
-		Object4 tmp;
-		error = tmp.TryFromJSON(val);
-		if (!error.empty()) {
-			return error;
+	if (yyjson_is_arr(obj)) {
+		size_t idx, max;
+		yyjson_val *val;
+		yyjson_arr_foreach(obj, idx, max, val) {
+			Object4 tmp;
+			error = tmp.TryFromJSON(val);
+			if (!error.empty()) {
+				return error;
+			}
+			value.emplace_back(std::move(tmp));
 		}
-		value.emplace_back(std::move(tmp));
+	} else {
+		return StringUtil::Format("MetadataLog property 'value' is not of type 'array', found '%s' instead",
+		                          yyjson_get_type_desc(obj));
 	}
-} else {
-	return StringUtil::Format("MetadataLog property 'value' is not of type 'array', found '%s' instead", yyjson_get_type_desc(obj));
-}
 	return string();
 }
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

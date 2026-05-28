@@ -13,28 +13,28 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class SetSnapshotRefUpdate {
 public:
 	SetSnapshotRefUpdate();
-	SetSnapshotRefUpdate(const SetSnapshotRefUpdate&) = delete;
-	SetSnapshotRefUpdate& operator=(const SetSnapshotRefUpdate&) = delete;
-	SetSnapshotRefUpdate(SetSnapshotRefUpdate&&) = default;
-	SetSnapshotRefUpdate &operator=(SetSnapshotRefUpdate&&) = default;
+	SetSnapshotRefUpdate(const SetSnapshotRefUpdate &) = delete;
+	SetSnapshotRefUpdate &operator=(const SetSnapshotRefUpdate &) = delete;
+	SetSnapshotRefUpdate(SetSnapshotRefUpdate &&) = default;
+	SetSnapshotRefUpdate &operator=(SetSnapshotRefUpdate &&) = default;
+
 public:
 	static SetSnapshotRefUpdate FromJSON(yyjson_val *obj);
 	SetSnapshotRefUpdate Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	BaseUpdate base_update;
 	SnapshotReference snapshot_reference;
 	string ref_name;
 	string action;
-	bool has_action;
+	bool has_action = false;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

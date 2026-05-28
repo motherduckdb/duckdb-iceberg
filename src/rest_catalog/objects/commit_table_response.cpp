@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-CommitTableResponse::CommitTableResponse() {}
+CommitTableResponse::CommitTableResponse() {
+}
 
 CommitTableResponse CommitTableResponse::FromJSON(yyjson_val *obj) {
 	CommitTableResponse res;
@@ -38,7 +39,9 @@ string CommitTableResponse::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(metadata_location_val)) {
 			metadata_location = yyjson_get_str(metadata_location_val);
 		} else {
-			return StringUtil::Format("CommitTableResponse property 'metadata_location' is not of type 'string', found '%s' instead", yyjson_get_type_desc(metadata_location_val));
+			return StringUtil::Format(
+			    "CommitTableResponse property 'metadata_location' is not of type 'string', found '%s' instead",
+			    yyjson_get_type_desc(metadata_location_val));
 		}
 	}
 	auto metadata_val = yyjson_obj_get(obj, "metadata");
@@ -47,7 +50,7 @@ string CommitTableResponse::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = metadata.TryFromJSON(metadata_val);
 		if (!error.empty()) {
-		    return error;
+			return error;
 		}
 	}
 	return string();
@@ -55,4 +58,3 @@ string CommitTableResponse::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

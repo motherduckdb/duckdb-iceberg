@@ -6,30 +6,29 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 
-
 using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class ExpressionType {
 public:
 	ExpressionType();
-	ExpressionType(const ExpressionType&) = delete;
-	ExpressionType& operator=(const ExpressionType&) = delete;
-	ExpressionType(ExpressionType&&) = default;
-	ExpressionType &operator=(ExpressionType&&) = default;
+	ExpressionType(const ExpressionType &) = delete;
+	ExpressionType &operator=(const ExpressionType &) = delete;
+	ExpressionType(ExpressionType &&) = default;
+	ExpressionType &operator=(ExpressionType &&) = default;
+
 public:
 	static ExpressionType FromJSON(yyjson_val *obj);
 	ExpressionType Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	string value;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

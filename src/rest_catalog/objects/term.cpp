@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-Term::Term() {}
+Term::Term() {
+}
 
 Term Term::FromJSON(yyjson_val *obj) {
 	Term res;
@@ -25,30 +26,33 @@ Term Term::FromJSON(yyjson_val *obj) {
 
 Term Term::Copy() const {
 	Term res;
-	res.reference = reference.Copy();
+	if (has_reference) {
+		res.reference = reference.Copy();
+	}
 	res.has_reference = has_reference;
-	res.transform_term = transform_term.Copy();
+	if (has_transform_term) {
+		res.transform_term = transform_term.Copy();
+	}
 	res.has_transform_term = has_transform_term;
 	return res;
 }
 string Term::TryFromJSON(yyjson_val *obj) {
 	string error;
-do {
-error = reference.TryFromJSON(obj);
-if (error.empty()) {
-	has_reference = true;
-	break;
-}
-error = transform_term.TryFromJSON(obj);
-if (error.empty()) {
-	has_transform_term = true;
-	break;
-}
-	return "Term failed to parse, none of the oneOf candidates matched";
-} while (false);
+	do {
+		error = reference.TryFromJSON(obj);
+		if (error.empty()) {
+			has_reference = true;
+			break;
+		}
+		error = transform_term.TryFromJSON(obj);
+		if (error.empty()) {
+			has_transform_term = true;
+			break;
+		}
+		return "Term failed to parse, none of the oneOf candidates matched";
+	} while (false);
 	return string();
 }
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

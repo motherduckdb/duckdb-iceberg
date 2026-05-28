@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-FetchScanTasksResult::FetchScanTasksResult() {}
+FetchScanTasksResult::FetchScanTasksResult() {
+}
 
 FetchScanTasksResult FetchScanTasksResult::FromJSON(yyjson_val *obj) {
 	FetchScanTasksResult res;
@@ -30,12 +31,12 @@ FetchScanTasksResult FetchScanTasksResult::Copy() const {
 }
 string FetchScanTasksResult::TryFromJSON(yyjson_val *obj) {
 	string error;
-error = scan_tasks.TryFromJSON(obj);if (!error.empty()) {
-	return error;
-}
+	error = scan_tasks.TryFromJSON(obj);
+	if (!error.empty()) {
+		return error;
+	}
 	return string();
 }
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

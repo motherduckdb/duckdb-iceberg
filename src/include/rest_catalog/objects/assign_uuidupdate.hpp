@@ -12,27 +12,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class AssignUUIDUpdate {
 public:
 	AssignUUIDUpdate();
-	AssignUUIDUpdate(const AssignUUIDUpdate&) = delete;
-	AssignUUIDUpdate& operator=(const AssignUUIDUpdate&) = delete;
-	AssignUUIDUpdate(AssignUUIDUpdate&&) = default;
-	AssignUUIDUpdate &operator=(AssignUUIDUpdate&&) = default;
+	AssignUUIDUpdate(const AssignUUIDUpdate &) = delete;
+	AssignUUIDUpdate &operator=(const AssignUUIDUpdate &) = delete;
+	AssignUUIDUpdate(AssignUUIDUpdate &&) = default;
+	AssignUUIDUpdate &operator=(AssignUUIDUpdate &&) = default;
+
 public:
 	static AssignUUIDUpdate FromJSON(yyjson_val *obj);
 	AssignUUIDUpdate Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	BaseUpdate base_update;
 	string uuid;
 	string action;
-	bool has_action;
+	bool has_action = false;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

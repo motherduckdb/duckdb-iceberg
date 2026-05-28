@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-NotExpression::NotExpression() {}
+NotExpression::NotExpression() {
+}
 
 NotExpression NotExpression::FromJSON(yyjson_val *obj) {
 	NotExpression res;
@@ -37,7 +38,7 @@ string NotExpression::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = type.TryFromJSON(type_val);
 		if (!error.empty()) {
-		    return error;
+			return error;
 		}
 	}
 	auto child_val = yyjson_obj_get(obj, "child");
@@ -47,7 +48,7 @@ string NotExpression::TryFromJSON(yyjson_val *obj) {
 		child = make_uniq<Expression>();
 		error = child->TryFromJSON(child_val);
 		if (!error.empty()) {
-		    return error;
+			return error;
 		}
 	}
 	return string();
@@ -55,4 +56,3 @@ string NotExpression::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

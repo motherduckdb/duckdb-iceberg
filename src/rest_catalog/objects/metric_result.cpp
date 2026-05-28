@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-MetricResult::MetricResult() {}
+MetricResult::MetricResult() {
+}
 
 MetricResult MetricResult::FromJSON(yyjson_val *obj) {
 	MetricResult res;
@@ -25,26 +26,31 @@ MetricResult MetricResult::FromJSON(yyjson_val *obj) {
 
 MetricResult MetricResult::Copy() const {
 	MetricResult res;
-	res.counter_result = counter_result.Copy();
+	if (has_counter_result) {
+		res.counter_result = counter_result.Copy();
+	}
 	res.has_counter_result = has_counter_result;
-	res.timer_result = timer_result.Copy();
+	if (has_timer_result) {
+		res.timer_result = timer_result.Copy();
+	}
 	res.has_timer_result = has_timer_result;
 	return res;
 }
 string MetricResult::TryFromJSON(yyjson_val *obj) {
 	string error;
-error = counter_result.TryFromJSON(obj);
-if (error.empty()) {
-	has_counter_result = true;
-}
-error = timer_result.TryFromJSON(obj);
-if (error.empty()) {
-	has_timer_result = true;
-}
-if (!has_counter_result && !has_timer_result) {	return "MetricResult failed to parse, none of the anyOf candidates matched";}
+	error = counter_result.TryFromJSON(obj);
+	if (error.empty()) {
+		has_counter_result = true;
+	}
+	error = timer_result.TryFromJSON(obj);
+	if (error.empty()) {
+		has_timer_result = true;
+	}
+	if (!has_counter_result && !has_timer_result) {
+		return "MetricResult failed to parse, none of the anyOf candidates matched";
+	}
 	return string();
 }
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

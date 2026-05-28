@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-SnapshotReference::SnapshotReference() {}
+SnapshotReference::SnapshotReference() {
+}
 
 SnapshotReference SnapshotReference::FromJSON(yyjson_val *obj) {
 	SnapshotReference res;
@@ -27,11 +28,17 @@ SnapshotReference SnapshotReference::Copy() const {
 	SnapshotReference res;
 	res.type = type;
 	res.snapshot_id = snapshot_id;
-	res.max_ref_age_ms = max_ref_age_ms;
+	if (has_max_ref_age_ms) {
+		res.max_ref_age_ms = max_ref_age_ms;
+	}
 	res.has_max_ref_age_ms = has_max_ref_age_ms;
-	res.max_snapshot_age_ms = max_snapshot_age_ms;
+	if (has_max_snapshot_age_ms) {
+		res.max_snapshot_age_ms = max_snapshot_age_ms;
+	}
 	res.has_max_snapshot_age_ms = has_max_snapshot_age_ms;
-	res.min_snapshots_to_keep = min_snapshots_to_keep;
+	if (has_min_snapshots_to_keep) {
+		res.min_snapshots_to_keep = min_snapshots_to_keep;
+	}
 	res.has_min_snapshots_to_keep = has_min_snapshots_to_keep;
 	return res;
 }
@@ -44,7 +51,8 @@ string SnapshotReference::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(type_val)) {
 			type = yyjson_get_str(type_val);
 		} else {
-			return StringUtil::Format("SnapshotReference property 'type' is not of type 'string', found '%s' instead", yyjson_get_type_desc(type_val));
+			return StringUtil::Format("SnapshotReference property 'type' is not of type 'string', found '%s' instead",
+			                          yyjson_get_type_desc(type_val));
 		}
 	}
 	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
@@ -56,7 +64,9 @@ string SnapshotReference::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(snapshot_id_val)) {
 			snapshot_id = yyjson_get_uint(snapshot_id_val);
 		} else {
-			return StringUtil::Format("SnapshotReference property 'snapshot_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(snapshot_id_val));
+			return StringUtil::Format(
+			    "SnapshotReference property 'snapshot_id' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(snapshot_id_val));
 		}
 	}
 	auto max_ref_age_ms_val = yyjson_obj_get(obj, "max-ref-age-ms");
@@ -67,7 +77,9 @@ string SnapshotReference::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(max_ref_age_ms_val)) {
 			max_ref_age_ms = yyjson_get_uint(max_ref_age_ms_val);
 		} else {
-			return StringUtil::Format("SnapshotReference property 'max_ref_age_ms' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(max_ref_age_ms_val));
+			return StringUtil::Format(
+			    "SnapshotReference property 'max_ref_age_ms' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(max_ref_age_ms_val));
 		}
 	}
 	auto max_snapshot_age_ms_val = yyjson_obj_get(obj, "max-snapshot-age-ms");
@@ -78,7 +90,9 @@ string SnapshotReference::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(max_snapshot_age_ms_val)) {
 			max_snapshot_age_ms = yyjson_get_uint(max_snapshot_age_ms_val);
 		} else {
-			return StringUtil::Format("SnapshotReference property 'max_snapshot_age_ms' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(max_snapshot_age_ms_val));
+			return StringUtil::Format(
+			    "SnapshotReference property 'max_snapshot_age_ms' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(max_snapshot_age_ms_val));
 		}
 	}
 	auto min_snapshots_to_keep_val = yyjson_obj_get(obj, "min-snapshots-to-keep");
@@ -87,7 +101,9 @@ string SnapshotReference::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_int(min_snapshots_to_keep_val)) {
 			min_snapshots_to_keep = yyjson_get_int(min_snapshots_to_keep_val);
 		} else {
-			return StringUtil::Format("SnapshotReference property 'min_snapshots_to_keep' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(min_snapshots_to_keep_val));
+			return StringUtil::Format(
+			    "SnapshotReference property 'min_snapshots_to_keep' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(min_snapshots_to_keep_val));
 		}
 	}
 	return string();
@@ -95,4 +111,3 @@ string SnapshotReference::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

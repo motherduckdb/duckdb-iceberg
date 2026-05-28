@@ -186,6 +186,8 @@ class CPPMember:
     variable_name: str
     variable_type: str
     schema: Optional[Property]
+    initializer: Optional[str] = None
+    copy_guard: Optional[str] = None
 
 
 @dataclass
@@ -233,9 +235,25 @@ class CPPClass:
         self.referenced_schemas: Set[str] = set()
         self.try_from_json_body: List[str] = []
 
-    def add_member(self, variable_name: str, variable_type: str, schema: Optional[Property]) -> None:
-        self.variables.append(f'\t{variable_type} {variable_name};')
-        self.members.append(CPPMember(variable_name=variable_name, variable_type=variable_type, schema=schema))
+    def add_member(
+        self,
+        variable_name: str,
+        variable_type: str,
+        schema: Optional[Property],
+        initializer: Optional[str] = None,
+        copy_guard: Optional[str] = None,
+    ) -> None:
+        initializer_text = f' = {initializer}' if initializer is not None else ''
+        self.variables.append(f'\t{variable_type} {variable_name}{initializer_text};')
+        self.members.append(
+            CPPMember(
+                variable_name=variable_name,
+                variable_type=variable_type,
+                schema=schema,
+                initializer=initializer,
+                copy_guard=copy_guard,
+            )
+        )
 
     def get_all_referenced_schemas(self) -> Set[str]:
         res = set()
@@ -515,6 +533,8 @@ class CPPClass:
         ]
         for member in self.members:
             lines = self.write_copy_assignment_lines(f'res.{member.variable_name}', member.variable_name, member.schema)
+            if member.copy_guard is not None:
+                lines = [f'if ({member.copy_guard}) {{'] + [f'\t{x}' for x in lines] + ['}']
             res.extend([f'\t{x}' for x in lines])
         res.extend(['\treturn res;', '}'])
         return res
@@ -607,8 +627,8 @@ class CPPClass:
             dereference_style = '->' if item.ref in self.parse_info.recursive_schemas else '.'
 
             self.any_of.append(AnyOf(name=property_name, dereference_style=dereference_style, class_name=class_name))
-            self.add_member(property_name, self.generate_variable_type(item), item)
-            self.add_member(f'has_{property_name}', 'bool', None)
+            self.add_member(property_name, self.generate_variable_type(item), item, copy_guard=f'has_{property_name}')
+            self.add_member(f'has_{property_name}', 'bool', None, 'false')
 
     def generate_one_of(self, property: Property):
         if not property.one_of:
@@ -622,8 +642,8 @@ class CPPClass:
             dereference_style = '->' if item.ref in self.parse_info.recursive_schemas else '.'
 
             self.one_of.append(OneOf(name=property_name, dereference_style=dereference_style, class_name=class_name))
-            self.add_member(property_name, self.generate_variable_type(item), item)
-            self.add_member(f'has_{property_name}', 'bool', None)
+            self.add_member(property_name, self.generate_variable_type(item), item, copy_guard=f'has_{property_name}')
+            self.add_member(f'has_{property_name}', 'bool', None, 'false')
 
     def generate_array_loop(self, array_name, destination_name, array_property: ArrayProperty) -> List[str]:
         item_type = array_property.item_type
@@ -845,8 +865,8 @@ class CPPClass:
                 property_name=item, variable_name=variable_name, body=body, nullable=optional_property.nullable
             )
             variable_type = self.generate_variable_type(optional_property)
-            self.add_member(variable_name, variable_type, optional_property)
-            self.add_member(f'has_{variable_name}', 'bool', None)
+            self.add_member(variable_name, variable_type, optional_property, copy_guard=f'has_{variable_name}')
+            self.add_member(f'has_{variable_name}', 'bool', None, 'false')
 
     def generate_required_properties(self, name: str, properties: Dict[str, Property]):
         if not properties:

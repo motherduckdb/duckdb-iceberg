@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-SetSnapshotRefUpdate::SetSnapshotRefUpdate() {}
+SetSnapshotRefUpdate::SetSnapshotRefUpdate() {
+}
 
 SetSnapshotRefUpdate SetSnapshotRefUpdate::FromJSON(yyjson_val *obj) {
 	SetSnapshotRefUpdate res;
@@ -28,18 +29,22 @@ SetSnapshotRefUpdate SetSnapshotRefUpdate::Copy() const {
 	res.base_update = base_update.Copy();
 	res.snapshot_reference = snapshot_reference.Copy();
 	res.ref_name = ref_name;
-	res.action = action;
+	if (has_action) {
+		res.action = action;
+	}
 	res.has_action = has_action;
 	return res;
 }
 string SetSnapshotRefUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
-error = base_update.TryFromJSON(obj);if (!error.empty()) {
-	return error;
-}
-error = snapshot_reference.TryFromJSON(obj);if (!error.empty()) {
-	return error;
-}
+	error = base_update.TryFromJSON(obj);
+	if (!error.empty()) {
+		return error;
+	}
+	error = snapshot_reference.TryFromJSON(obj);
+	if (!error.empty()) {
+		return error;
+	}
 	auto ref_name_val = yyjson_obj_get(obj, "ref-name");
 	if (!ref_name_val) {
 		return "SetSnapshotRefUpdate required property 'ref-name' is missing";
@@ -47,7 +52,9 @@ error = snapshot_reference.TryFromJSON(obj);if (!error.empty()) {
 		if (yyjson_is_str(ref_name_val)) {
 			ref_name = yyjson_get_str(ref_name_val);
 		} else {
-			return StringUtil::Format("SetSnapshotRefUpdate property 'ref_name' is not of type 'string', found '%s' instead", yyjson_get_type_desc(ref_name_val));
+			return StringUtil::Format(
+			    "SetSnapshotRefUpdate property 'ref_name' is not of type 'string', found '%s' instead",
+			    yyjson_get_type_desc(ref_name_val));
 		}
 	}
 	auto action_val = yyjson_obj_get(obj, "action");
@@ -56,7 +63,9 @@ error = snapshot_reference.TryFromJSON(obj);if (!error.empty()) {
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);
 		} else {
-			return StringUtil::Format("SetSnapshotRefUpdate property 'action' is not of type 'string', found '%s' instead", yyjson_get_type_desc(action_val));
+			return StringUtil::Format(
+			    "SetSnapshotRefUpdate property 'action' is not of type 'string', found '%s' instead",
+			    yyjson_get_type_desc(action_val));
 		}
 	}
 	return string();
@@ -64,4 +73,3 @@ error = snapshot_reference.TryFromJSON(obj);if (!error.empty()) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

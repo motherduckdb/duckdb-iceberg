@@ -6,33 +6,32 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 
-
 using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class UpdateNamespacePropertiesRequest {
 public:
 	UpdateNamespacePropertiesRequest();
-	UpdateNamespacePropertiesRequest(const UpdateNamespacePropertiesRequest&) = delete;
-	UpdateNamespacePropertiesRequest& operator=(const UpdateNamespacePropertiesRequest&) = delete;
-	UpdateNamespacePropertiesRequest(UpdateNamespacePropertiesRequest&&) = default;
-	UpdateNamespacePropertiesRequest &operator=(UpdateNamespacePropertiesRequest&&) = default;
+	UpdateNamespacePropertiesRequest(const UpdateNamespacePropertiesRequest &) = delete;
+	UpdateNamespacePropertiesRequest &operator=(const UpdateNamespacePropertiesRequest &) = delete;
+	UpdateNamespacePropertiesRequest(UpdateNamespacePropertiesRequest &&) = default;
+	UpdateNamespacePropertiesRequest &operator=(UpdateNamespacePropertiesRequest &&) = default;
+
 public:
 	static UpdateNamespacePropertiesRequest FromJSON(yyjson_val *obj);
 	UpdateNamespacePropertiesRequest Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	vector<string> removals;
-	bool has_removals;
+	bool has_removals = false;
 	case_insensitive_map_t<string> updates;
-	bool has_updates;
+	bool has_updates = false;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

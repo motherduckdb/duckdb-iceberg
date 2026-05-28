@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-ListTablesResponse::ListTablesResponse() {}
+ListTablesResponse::ListTablesResponse() {
+}
 
 ListTablesResponse ListTablesResponse::FromJSON(yyjson_val *obj) {
 	ListTablesResponse res;
@@ -25,11 +26,15 @@ ListTablesResponse ListTablesResponse::FromJSON(yyjson_val *obj) {
 
 ListTablesResponse ListTablesResponse::Copy() const {
 	ListTablesResponse res;
-	res.next_page_token = next_page_token.Copy();
+	if (has_next_page_token) {
+		res.next_page_token = next_page_token.Copy();
+	}
 	res.has_next_page_token = has_next_page_token;
-	res.identifiers.reserve(identifiers.size());
-	for (auto &item : identifiers) {
-		res.identifiers.emplace_back(item.Copy());
+	if (has_identifiers) {
+		res.identifiers.reserve(identifiers.size());
+		for (auto &item : identifiers) {
+			res.identifiers.emplace_back(item.Copy());
+		}
 	}
 	res.has_identifiers = has_identifiers;
 	return res;
@@ -41,7 +46,7 @@ string ListTablesResponse::TryFromJSON(yyjson_val *obj) {
 		has_next_page_token = true;
 		error = next_page_token.TryFromJSON(next_page_token_val);
 		if (!error.empty()) {
-		    return error;
+			return error;
 		}
 	}
 	auto identifiers_val = yyjson_obj_get(obj, "identifiers");
@@ -59,7 +64,9 @@ string ListTablesResponse::TryFromJSON(yyjson_val *obj) {
 				identifiers.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("ListTablesResponse property 'identifiers' is not of type 'array', found '%s' instead", yyjson_get_type_desc(identifiers_val));
+			return StringUtil::Format(
+			    "ListTablesResponse property 'identifiers' is not of type 'array', found '%s' instead",
+			    yyjson_get_type_desc(identifiers_val));
 		}
 	}
 	return string();
@@ -67,4 +74,3 @@ string ListTablesResponse::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

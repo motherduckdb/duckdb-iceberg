@@ -6,26 +6,26 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 
-
 using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class StorageCredential {
 public:
 	StorageCredential();
-	StorageCredential(const StorageCredential&) = delete;
-	StorageCredential& operator=(const StorageCredential&) = delete;
-	StorageCredential(StorageCredential&&) = default;
-	StorageCredential &operator=(StorageCredential&&) = default;
+	StorageCredential(const StorageCredential &) = delete;
+	StorageCredential &operator=(const StorageCredential &) = delete;
+	StorageCredential(StorageCredential &&) = default;
+	StorageCredential &operator=(StorageCredential &&) = default;
+
 public:
 	static StorageCredential FromJSON(yyjson_val *obj);
 	StorageCredential Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	string prefix;
 	case_insensitive_map_t<string> config;
@@ -33,4 +33,3 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

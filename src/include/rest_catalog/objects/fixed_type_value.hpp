@@ -6,30 +6,29 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 
-
 using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class FixedTypeValue {
 public:
 	FixedTypeValue();
-	FixedTypeValue(const FixedTypeValue&) = delete;
-	FixedTypeValue& operator=(const FixedTypeValue&) = delete;
-	FixedTypeValue(FixedTypeValue&&) = default;
-	FixedTypeValue &operator=(FixedTypeValue&&) = default;
+	FixedTypeValue(const FixedTypeValue &) = delete;
+	FixedTypeValue &operator=(const FixedTypeValue &) = delete;
+	FixedTypeValue(FixedTypeValue &&) = default;
+	FixedTypeValue &operator=(FixedTypeValue &&) = default;
+
 public:
 	static FixedTypeValue FromJSON(yyjson_val *obj);
 	FixedTypeValue Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	string value;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

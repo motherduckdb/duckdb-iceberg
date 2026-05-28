@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-EncryptedKey::EncryptedKey() {}
+EncryptedKey::EncryptedKey() {
+}
 
 EncryptedKey EncryptedKey::FromJSON(yyjson_val *obj) {
 	EncryptedKey res;
@@ -27,10 +28,14 @@ EncryptedKey EncryptedKey::Copy() const {
 	EncryptedKey res;
 	res.key_id = key_id;
 	res.encrypted_key_metadata = encrypted_key_metadata;
-	res.encrypted_by_id = encrypted_by_id;
+	if (has_encrypted_by_id) {
+		res.encrypted_by_id = encrypted_by_id;
+	}
 	res.has_encrypted_by_id = has_encrypted_by_id;
-	for (auto &entry : properties) {
-		res.properties.emplace(entry.first, entry.second);
+	if (has_properties) {
+		for (auto &entry : properties) {
+			res.properties.emplace(entry.first, entry.second);
+		}
 	}
 	res.has_properties = has_properties;
 	return res;
@@ -44,7 +49,8 @@ string EncryptedKey::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(key_id_val)) {
 			key_id = yyjson_get_str(key_id_val);
 		} else {
-			return StringUtil::Format("EncryptedKey property 'key_id' is not of type 'string', found '%s' instead", yyjson_get_type_desc(key_id_val));
+			return StringUtil::Format("EncryptedKey property 'key_id' is not of type 'string', found '%s' instead",
+			                          yyjson_get_type_desc(key_id_val));
 		}
 	}
 	auto encrypted_key_metadata_val = yyjson_obj_get(obj, "encrypted-key-metadata");
@@ -54,7 +60,9 @@ string EncryptedKey::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(encrypted_key_metadata_val)) {
 			encrypted_key_metadata = yyjson_get_str(encrypted_key_metadata_val);
 		} else {
-			return StringUtil::Format("EncryptedKey property 'encrypted_key_metadata' is not of type 'string', found '%s' instead", yyjson_get_type_desc(encrypted_key_metadata_val));
+			return StringUtil::Format(
+			    "EncryptedKey property 'encrypted_key_metadata' is not of type 'string', found '%s' instead",
+			    yyjson_get_type_desc(encrypted_key_metadata_val));
 		}
 	}
 	auto encrypted_by_id_val = yyjson_obj_get(obj, "encrypted-by-id");
@@ -63,7 +71,9 @@ string EncryptedKey::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(encrypted_by_id_val)) {
 			encrypted_by_id = yyjson_get_str(encrypted_by_id_val);
 		} else {
-			return StringUtil::Format("EncryptedKey property 'encrypted_by_id' is not of type 'string', found '%s' instead", yyjson_get_type_desc(encrypted_by_id_val));
+			return StringUtil::Format(
+			    "EncryptedKey property 'encrypted_by_id' is not of type 'string', found '%s' instead",
+			    yyjson_get_type_desc(encrypted_by_id_val));
 		}
 	}
 	auto properties_val = yyjson_obj_get(obj, "properties");
@@ -78,7 +88,8 @@ string EncryptedKey::TryFromJSON(yyjson_val *obj) {
 				if (yyjson_is_str(val)) {
 					tmp = yyjson_get_str(val);
 				} else {
-					return StringUtil::Format("EncryptedKey property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
+					return StringUtil::Format("EncryptedKey property 'tmp' is not of type 'string', found '%s' instead",
+					                          yyjson_get_type_desc(val));
 				}
 				properties.emplace(key_str, std::move(tmp));
 			}
@@ -91,4 +102,3 @@ string EncryptedKey::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

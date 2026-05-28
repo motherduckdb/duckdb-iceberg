@@ -12,8 +12,10 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-SnapshotLog::SnapshotLog() {}
-SnapshotLog::Object3::Object3() {}
+SnapshotLog::SnapshotLog() {
+}
+SnapshotLog::Object3::Object3() {
+}
 
 SnapshotLog::Object3 SnapshotLog::Object3::FromJSON(yyjson_val *obj) {
 	Object3 res;
@@ -41,7 +43,8 @@ string SnapshotLog::Object3::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(snapshot_id_val)) {
 			snapshot_id = yyjson_get_uint(snapshot_id_val);
 		} else {
-			return StringUtil::Format("Object3 property 'snapshot_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(snapshot_id_val));
+			return StringUtil::Format("Object3 property 'snapshot_id' is not of type 'integer', found '%s' instead",
+			                          yyjson_get_type_desc(snapshot_id_val));
 		}
 	}
 	auto timestamp_ms_val = yyjson_obj_get(obj, "timestamp-ms");
@@ -53,7 +56,8 @@ string SnapshotLog::Object3::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(timestamp_ms_val)) {
 			timestamp_ms = yyjson_get_uint(timestamp_ms_val);
 		} else {
-			return StringUtil::Format("Object3 property 'timestamp_ms' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(timestamp_ms_val));
+			return StringUtil::Format("Object3 property 'timestamp_ms' is not of type 'integer', found '%s' instead",
+			                          yyjson_get_type_desc(timestamp_ms_val));
 		}
 	}
 	return string();
@@ -78,23 +82,23 @@ SnapshotLog SnapshotLog::Copy() const {
 }
 string SnapshotLog::TryFromJSON(yyjson_val *obj) {
 	string error;
-if (yyjson_is_arr(obj)) {
-	size_t idx, max;
-	yyjson_val *val;
-	yyjson_arr_foreach(obj, idx, max, val) {
-		Object3 tmp;
-		error = tmp.TryFromJSON(val);
-		if (!error.empty()) {
-			return error;
+	if (yyjson_is_arr(obj)) {
+		size_t idx, max;
+		yyjson_val *val;
+		yyjson_arr_foreach(obj, idx, max, val) {
+			Object3 tmp;
+			error = tmp.TryFromJSON(val);
+			if (!error.empty()) {
+				return error;
+			}
+			value.emplace_back(std::move(tmp));
 		}
-		value.emplace_back(std::move(tmp));
+	} else {
+		return StringUtil::Format("SnapshotLog property 'value' is not of type 'array', found '%s' instead",
+		                          yyjson_get_type_desc(obj));
 	}
-} else {
-	return StringUtil::Format("SnapshotLog property 'value' is not of type 'array', found '%s' instead", yyjson_get_type_desc(obj));
-}
 	return string();
 }
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

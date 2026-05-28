@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-IcebergErrorResponse::IcebergErrorResponse() {}
+IcebergErrorResponse::IcebergErrorResponse() {
+}
 
 IcebergErrorResponse IcebergErrorResponse::FromJSON(yyjson_val *obj) {
 	IcebergErrorResponse res;
@@ -36,7 +37,7 @@ string IcebergErrorResponse::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = _error.TryFromJSON(_error_val);
 		if (!error.empty()) {
-		    return error;
+			return error;
 		}
 	}
 	return string();
@@ -44,4 +45,3 @@ string IcebergErrorResponse::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

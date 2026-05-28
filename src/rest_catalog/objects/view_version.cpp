@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-ViewVersion::ViewVersion() {}
+ViewVersion::ViewVersion() {
+}
 
 ViewVersion ViewVersion::FromJSON(yyjson_val *obj) {
 	ViewVersion res;
@@ -36,7 +37,9 @@ ViewVersion ViewVersion::Copy() const {
 		res.representations.emplace_back(item.Copy());
 	}
 	res.default_namespace = default_namespace.Copy();
-	res.default_catalog = default_catalog;
+	if (has_default_catalog) {
+		res.default_catalog = default_catalog;
+	}
 	res.has_default_catalog = has_default_catalog;
 	return res;
 }
@@ -49,7 +52,8 @@ string ViewVersion::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_int(version_id_val)) {
 			version_id = yyjson_get_int(version_id_val);
 		} else {
-			return StringUtil::Format("ViewVersion property 'version_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(version_id_val));
+			return StringUtil::Format("ViewVersion property 'version_id' is not of type 'integer', found '%s' instead",
+			                          yyjson_get_type_desc(version_id_val));
 		}
 	}
 	auto timestamp_ms_val = yyjson_obj_get(obj, "timestamp-ms");
@@ -61,7 +65,9 @@ string ViewVersion::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(timestamp_ms_val)) {
 			timestamp_ms = yyjson_get_uint(timestamp_ms_val);
 		} else {
-			return StringUtil::Format("ViewVersion property 'timestamp_ms' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(timestamp_ms_val));
+			return StringUtil::Format(
+			    "ViewVersion property 'timestamp_ms' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(timestamp_ms_val));
 		}
 	}
 	auto schema_id_val = yyjson_obj_get(obj, "schema-id");
@@ -71,7 +77,8 @@ string ViewVersion::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_int(schema_id_val)) {
 			schema_id = yyjson_get_int(schema_id_val);
 		} else {
-			return StringUtil::Format("ViewVersion property 'schema_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(schema_id_val));
+			return StringUtil::Format("ViewVersion property 'schema_id' is not of type 'integer', found '%s' instead",
+			                          yyjson_get_type_desc(schema_id_val));
 		}
 	}
 	auto summary_val = yyjson_obj_get(obj, "summary");
@@ -87,7 +94,8 @@ string ViewVersion::TryFromJSON(yyjson_val *obj) {
 				if (yyjson_is_str(val)) {
 					tmp = yyjson_get_str(val);
 				} else {
-					return StringUtil::Format("ViewVersion property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
+					return StringUtil::Format("ViewVersion property 'tmp' is not of type 'string', found '%s' instead",
+					                          yyjson_get_type_desc(val));
 				}
 				summary.emplace(key_str, std::move(tmp));
 			}
@@ -111,7 +119,9 @@ string ViewVersion::TryFromJSON(yyjson_val *obj) {
 				representations.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("ViewVersion property 'representations' is not of type 'array', found '%s' instead", yyjson_get_type_desc(representations_val));
+			return StringUtil::Format(
+			    "ViewVersion property 'representations' is not of type 'array', found '%s' instead",
+			    yyjson_get_type_desc(representations_val));
 		}
 	}
 	auto default_namespace_val = yyjson_obj_get(obj, "default-namespace");
@@ -120,7 +130,7 @@ string ViewVersion::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = default_namespace.TryFromJSON(default_namespace_val);
 		if (!error.empty()) {
-		    return error;
+			return error;
 		}
 	}
 	auto default_catalog_val = yyjson_obj_get(obj, "default-catalog");
@@ -129,7 +139,9 @@ string ViewVersion::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(default_catalog_val)) {
 			default_catalog = yyjson_get_str(default_catalog_val);
 		} else {
-			return StringUtil::Format("ViewVersion property 'default_catalog' is not of type 'string', found '%s' instead", yyjson_get_type_desc(default_catalog_val));
+			return StringUtil::Format(
+			    "ViewVersion property 'default_catalog' is not of type 'string', found '%s' instead",
+			    yyjson_get_type_desc(default_catalog_val));
 		}
 	}
 	return string();
@@ -137,4 +149,3 @@ string ViewVersion::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

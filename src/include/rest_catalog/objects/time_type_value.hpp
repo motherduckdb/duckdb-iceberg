@@ -6,30 +6,29 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 
-
 using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class TimeTypeValue {
 public:
 	TimeTypeValue();
-	TimeTypeValue(const TimeTypeValue&) = delete;
-	TimeTypeValue& operator=(const TimeTypeValue&) = delete;
-	TimeTypeValue(TimeTypeValue&&) = default;
-	TimeTypeValue &operator=(TimeTypeValue&&) = default;
+	TimeTypeValue(const TimeTypeValue &) = delete;
+	TimeTypeValue &operator=(const TimeTypeValue &) = delete;
+	TimeTypeValue(TimeTypeValue &&) = default;
+	TimeTypeValue &operator=(TimeTypeValue &&) = default;
+
 public:
 	static TimeTypeValue FromJSON(yyjson_val *obj);
 	TimeTypeValue Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	string value;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

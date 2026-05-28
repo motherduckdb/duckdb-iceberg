@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-AddSnapshotUpdate::AddSnapshotUpdate() {}
+AddSnapshotUpdate::AddSnapshotUpdate() {
+}
 
 AddSnapshotUpdate AddSnapshotUpdate::FromJSON(yyjson_val *obj) {
 	AddSnapshotUpdate res;
@@ -27,22 +28,25 @@ AddSnapshotUpdate AddSnapshotUpdate::Copy() const {
 	AddSnapshotUpdate res;
 	res.base_update = base_update.Copy();
 	res.snapshot = snapshot.Copy();
-	res.action = action;
+	if (has_action) {
+		res.action = action;
+	}
 	res.has_action = has_action;
 	return res;
 }
 string AddSnapshotUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
-error = base_update.TryFromJSON(obj);if (!error.empty()) {
-	return error;
-}
+	error = base_update.TryFromJSON(obj);
+	if (!error.empty()) {
+		return error;
+	}
 	auto snapshot_val = yyjson_obj_get(obj, "snapshot");
 	if (!snapshot_val) {
 		return "AddSnapshotUpdate required property 'snapshot' is missing";
 	} else {
 		error = snapshot.TryFromJSON(snapshot_val);
 		if (!error.empty()) {
-		    return error;
+			return error;
 		}
 	}
 	auto action_val = yyjson_obj_get(obj, "action");
@@ -51,7 +55,8 @@ error = base_update.TryFromJSON(obj);if (!error.empty()) {
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);
 		} else {
-			return StringUtil::Format("AddSnapshotUpdate property 'action' is not of type 'string', found '%s' instead", yyjson_get_type_desc(action_val));
+			return StringUtil::Format("AddSnapshotUpdate property 'action' is not of type 'string', found '%s' instead",
+			                          yyjson_get_type_desc(action_val));
 		}
 	}
 	return string();
@@ -59,4 +64,3 @@ error = base_update.TryFromJSON(obj);if (!error.empty()) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-BlobMetadata::BlobMetadata() {}
+BlobMetadata::BlobMetadata() {
+}
 
 BlobMetadata BlobMetadata::FromJSON(yyjson_val *obj) {
 	BlobMetadata res;
@@ -32,8 +33,10 @@ BlobMetadata BlobMetadata::Copy() const {
 	for (auto &item : fields) {
 		res.fields.emplace_back(item);
 	}
-	for (auto &entry : properties) {
-		res.properties.emplace(entry.first, entry.second);
+	if (has_properties) {
+		for (auto &entry : properties) {
+			res.properties.emplace(entry.first, entry.second);
+		}
 	}
 	res.has_properties = has_properties;
 	return res;
@@ -47,7 +50,8 @@ string BlobMetadata::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(type_val)) {
 			type = yyjson_get_str(type_val);
 		} else {
-			return StringUtil::Format("BlobMetadata property 'type' is not of type 'string', found '%s' instead", yyjson_get_type_desc(type_val));
+			return StringUtil::Format("BlobMetadata property 'type' is not of type 'string', found '%s' instead",
+			                          yyjson_get_type_desc(type_val));
 		}
 	}
 	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
@@ -59,7 +63,9 @@ string BlobMetadata::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(snapshot_id_val)) {
 			snapshot_id = yyjson_get_uint(snapshot_id_val);
 		} else {
-			return StringUtil::Format("BlobMetadata property 'snapshot_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(snapshot_id_val));
+			return StringUtil::Format(
+			    "BlobMetadata property 'snapshot_id' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(snapshot_id_val));
 		}
 	}
 	auto sequence_number_val = yyjson_obj_get(obj, "sequence-number");
@@ -71,7 +77,9 @@ string BlobMetadata::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(sequence_number_val)) {
 			sequence_number = yyjson_get_uint(sequence_number_val);
 		} else {
-			return StringUtil::Format("BlobMetadata property 'sequence_number' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(sequence_number_val));
+			return StringUtil::Format(
+			    "BlobMetadata property 'sequence_number' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(sequence_number_val));
 		}
 	}
 	auto fields_val = yyjson_obj_get(obj, "fields");
@@ -82,16 +90,19 @@ string BlobMetadata::TryFromJSON(yyjson_val *obj) {
 			size_t idx, max;
 			yyjson_val *val;
 			yyjson_arr_foreach(fields_val, idx, max, val) {
-			int32_t tmp;
-			if (yyjson_is_int(val)) {
-				tmp = yyjson_get_int(val);
-			} else {
-				return StringUtil::Format("BlobMetadata property 'tmp' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(val));
-			}
+				int32_t tmp;
+				if (yyjson_is_int(val)) {
+					tmp = yyjson_get_int(val);
+				} else {
+					return StringUtil::Format(
+					    "BlobMetadata property 'tmp' is not of type 'integer', found '%s' instead",
+					    yyjson_get_type_desc(val));
+				}
 				fields.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("BlobMetadata property 'fields' is not of type 'array', found '%s' instead", yyjson_get_type_desc(fields_val));
+			return StringUtil::Format("BlobMetadata property 'fields' is not of type 'array', found '%s' instead",
+			                          yyjson_get_type_desc(fields_val));
 		}
 	}
 	auto properties_val = yyjson_obj_get(obj, "properties");
@@ -106,7 +117,8 @@ string BlobMetadata::TryFromJSON(yyjson_val *obj) {
 				if (yyjson_is_str(val)) {
 					tmp = yyjson_get_str(val);
 				} else {
-					return StringUtil::Format("BlobMetadata property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
+					return StringUtil::Format("BlobMetadata property 'tmp' is not of type 'string', found '%s' instead",
+					                          yyjson_get_type_desc(val));
 				}
 				properties.emplace(key_str, std::move(tmp));
 			}
@@ -119,4 +131,3 @@ string BlobMetadata::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

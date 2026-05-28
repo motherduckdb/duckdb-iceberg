@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-CommitTransactionRequest::CommitTransactionRequest() {}
+CommitTransactionRequest::CommitTransactionRequest() {
+}
 
 CommitTransactionRequest CommitTransactionRequest::FromJSON(yyjson_val *obj) {
 	CommitTransactionRequest res;
@@ -49,7 +50,9 @@ string CommitTransactionRequest::TryFromJSON(yyjson_val *obj) {
 				table_changes.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("CommitTransactionRequest property 'table_changes' is not of type 'array', found '%s' instead", yyjson_get_type_desc(table_changes_val));
+			return StringUtil::Format(
+			    "CommitTransactionRequest property 'table_changes' is not of type 'array', found '%s' instead",
+			    yyjson_get_type_desc(table_changes_val));
 		}
 	}
 	return string();
@@ -57,4 +60,3 @@ string CommitTransactionRequest::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

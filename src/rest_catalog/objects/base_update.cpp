@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-BaseUpdate::BaseUpdate() {}
+BaseUpdate::BaseUpdate() {
+}
 
 BaseUpdate BaseUpdate::FromJSON(yyjson_val *obj) {
 	BaseUpdate res;
@@ -37,7 +38,8 @@ string BaseUpdate::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);
 		} else {
-			return StringUtil::Format("BaseUpdate property 'action' is not of type 'string', found '%s' instead", yyjson_get_type_desc(action_val));
+			return StringUtil::Format("BaseUpdate property 'action' is not of type 'string', found '%s' instead",
+			                          yyjson_get_type_desc(action_val));
 		}
 	}
 	return string();
@@ -45,4 +47,3 @@ string BaseUpdate::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

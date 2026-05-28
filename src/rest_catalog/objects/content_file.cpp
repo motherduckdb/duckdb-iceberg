@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-ContentFile::ContentFile() {}
+ContentFile::ContentFile() {
+}
 
 ContentFile ContentFile::FromJSON(yyjson_val *obj) {
 	ContentFile res;
@@ -35,14 +36,20 @@ ContentFile ContentFile::Copy() const {
 	res.file_format = file_format.Copy();
 	res.file_size_in_bytes = file_size_in_bytes;
 	res.record_count = record_count;
-	res.key_metadata = key_metadata.Copy();
+	if (has_key_metadata) {
+		res.key_metadata = key_metadata.Copy();
+	}
 	res.has_key_metadata = has_key_metadata;
-	res.split_offsets.reserve(split_offsets.size());
-	for (auto &item : split_offsets) {
-		res.split_offsets.emplace_back(item);
+	if (has_split_offsets) {
+		res.split_offsets.reserve(split_offsets.size());
+		for (auto &item : split_offsets) {
+			res.split_offsets.emplace_back(item);
+		}
 	}
 	res.has_split_offsets = has_split_offsets;
-	res.sort_order_id = sort_order_id;
+	if (has_sort_order_id) {
+		res.sort_order_id = sort_order_id;
+	}
 	res.has_sort_order_id = has_sort_order_id;
 	return res;
 }
@@ -55,7 +62,8 @@ string ContentFile::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_int(spec_id_val)) {
 			spec_id = yyjson_get_int(spec_id_val);
 		} else {
-			return StringUtil::Format("ContentFile property 'spec_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(spec_id_val));
+			return StringUtil::Format("ContentFile property 'spec_id' is not of type 'integer', found '%s' instead",
+			                          yyjson_get_type_desc(spec_id_val));
 		}
 	}
 	auto partition_val = yyjson_obj_get(obj, "partition");
@@ -74,7 +82,8 @@ string ContentFile::TryFromJSON(yyjson_val *obj) {
 				partition.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("ContentFile property 'partition' is not of type 'array', found '%s' instead", yyjson_get_type_desc(partition_val));
+			return StringUtil::Format("ContentFile property 'partition' is not of type 'array', found '%s' instead",
+			                          yyjson_get_type_desc(partition_val));
 		}
 	}
 	auto content_val = yyjson_obj_get(obj, "content");
@@ -84,7 +93,8 @@ string ContentFile::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(content_val)) {
 			content = yyjson_get_str(content_val);
 		} else {
-			return StringUtil::Format("ContentFile property 'content' is not of type 'string', found '%s' instead", yyjson_get_type_desc(content_val));
+			return StringUtil::Format("ContentFile property 'content' is not of type 'string', found '%s' instead",
+			                          yyjson_get_type_desc(content_val));
 		}
 	}
 	auto file_path_val = yyjson_obj_get(obj, "file-path");
@@ -94,7 +104,8 @@ string ContentFile::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(file_path_val)) {
 			file_path = yyjson_get_str(file_path_val);
 		} else {
-			return StringUtil::Format("ContentFile property 'file_path' is not of type 'string', found '%s' instead", yyjson_get_type_desc(file_path_val));
+			return StringUtil::Format("ContentFile property 'file_path' is not of type 'string', found '%s' instead",
+			                          yyjson_get_type_desc(file_path_val));
 		}
 	}
 	auto file_format_val = yyjson_obj_get(obj, "file-format");
@@ -103,7 +114,7 @@ string ContentFile::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = file_format.TryFromJSON(file_format_val);
 		if (!error.empty()) {
-		    return error;
+			return error;
 		}
 	}
 	auto file_size_in_bytes_val = yyjson_obj_get(obj, "file-size-in-bytes");
@@ -115,7 +126,9 @@ string ContentFile::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(file_size_in_bytes_val)) {
 			file_size_in_bytes = yyjson_get_uint(file_size_in_bytes_val);
 		} else {
-			return StringUtil::Format("ContentFile property 'file_size_in_bytes' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(file_size_in_bytes_val));
+			return StringUtil::Format(
+			    "ContentFile property 'file_size_in_bytes' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(file_size_in_bytes_val));
 		}
 	}
 	auto record_count_val = yyjson_obj_get(obj, "record-count");
@@ -127,7 +140,9 @@ string ContentFile::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(record_count_val)) {
 			record_count = yyjson_get_uint(record_count_val);
 		} else {
-			return StringUtil::Format("ContentFile property 'record_count' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(record_count_val));
+			return StringUtil::Format(
+			    "ContentFile property 'record_count' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(record_count_val));
 		}
 	}
 	auto key_metadata_val = yyjson_obj_get(obj, "key-metadata");
@@ -135,7 +150,7 @@ string ContentFile::TryFromJSON(yyjson_val *obj) {
 		has_key_metadata = true;
 		error = key_metadata.TryFromJSON(key_metadata_val);
 		if (!error.empty()) {
-		    return error;
+			return error;
 		}
 	}
 	auto split_offsets_val = yyjson_obj_get(obj, "split-offsets");
@@ -145,18 +160,20 @@ string ContentFile::TryFromJSON(yyjson_val *obj) {
 			size_t idx, max;
 			yyjson_val *val;
 			yyjson_arr_foreach(split_offsets_val, idx, max, val) {
-			int64_t tmp;
-			if (yyjson_is_sint(val)) {
-				tmp = yyjson_get_sint(val);
-			} else if (yyjson_is_uint(val)) {
-				tmp = yyjson_get_uint(val);
-			} else {
-				return StringUtil::Format("ContentFile property 'tmp' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(val));
-			}
+				int64_t tmp;
+				if (yyjson_is_sint(val)) {
+					tmp = yyjson_get_sint(val);
+				} else if (yyjson_is_uint(val)) {
+					tmp = yyjson_get_uint(val);
+				} else {
+					return StringUtil::Format("ContentFile property 'tmp' is not of type 'integer', found '%s' instead",
+					                          yyjson_get_type_desc(val));
+				}
 				split_offsets.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("ContentFile property 'split_offsets' is not of type 'array', found '%s' instead", yyjson_get_type_desc(split_offsets_val));
+			return StringUtil::Format("ContentFile property 'split_offsets' is not of type 'array', found '%s' instead",
+			                          yyjson_get_type_desc(split_offsets_val));
 		}
 	}
 	auto sort_order_id_val = yyjson_obj_get(obj, "sort-order-id");
@@ -165,7 +182,9 @@ string ContentFile::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_int(sort_order_id_val)) {
 			sort_order_id = yyjson_get_int(sort_order_id_val);
 		} else {
-			return StringUtil::Format("ContentFile property 'sort_order_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(sort_order_id_val));
+			return StringUtil::Format(
+			    "ContentFile property 'sort_order_id' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(sort_order_id_val));
 		}
 	}
 	return string();
@@ -173,4 +192,3 @@ string ContentFile::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

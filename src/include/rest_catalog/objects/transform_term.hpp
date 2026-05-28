@@ -13,20 +13,21 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class TransformTerm {
 public:
 	TransformTerm();
-	TransformTerm(const TransformTerm&) = delete;
-	TransformTerm& operator=(const TransformTerm&) = delete;
-	TransformTerm(TransformTerm&&) = default;
-	TransformTerm &operator=(TransformTerm&&) = default;
+	TransformTerm(const TransformTerm &) = delete;
+	TransformTerm &operator=(const TransformTerm &) = delete;
+	TransformTerm(TransformTerm &&) = default;
+	TransformTerm &operator=(TransformTerm &&) = default;
+
 public:
 	static TransformTerm FromJSON(yyjson_val *obj);
 	TransformTerm Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	string type;
 	Transform transform;
@@ -35,4 +36,3 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

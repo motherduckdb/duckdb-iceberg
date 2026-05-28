@@ -6,7 +6,6 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 
-
 using namespace duckdb_yyjson;
 
 namespace duckdb {
@@ -17,15 +16,18 @@ class StructField;
 class StructType {
 public:
 	StructType();
-	StructType(const StructType&) = delete;
-	StructType& operator=(const StructType&) = delete;
-	StructType(StructType&&) = default;
-	StructType &operator=(StructType&&) = default;
+	StructType(const StructType &) = delete;
+	StructType &operator=(const StructType &) = delete;
+	StructType(StructType &&) = default;
+	StructType &operator=(StructType &&) = default;
+
 public:
 	static StructType FromJSON(yyjson_val *obj);
 	StructType Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	string type;
 	vector<unique_ptr<StructField>> fields;
@@ -33,4 +35,3 @@ public:
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

@@ -12,7 +12,8 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-UpdateNamespacePropertiesResponse::UpdateNamespacePropertiesResponse() {}
+UpdateNamespacePropertiesResponse::UpdateNamespacePropertiesResponse() {
+}
 
 UpdateNamespacePropertiesResponse UpdateNamespacePropertiesResponse::FromJSON(yyjson_val *obj) {
 	UpdateNamespacePropertiesResponse res;
@@ -33,9 +34,11 @@ UpdateNamespacePropertiesResponse UpdateNamespacePropertiesResponse::Copy() cons
 	for (auto &item : removed) {
 		res.removed.emplace_back(item);
 	}
-	res.missing.reserve(missing.size());
-	for (auto &item : missing) {
-		res.missing.emplace_back(item);
+	if (has_missing) {
+		res.missing.reserve(missing.size());
+		for (auto &item : missing) {
+			res.missing.emplace_back(item);
+		}
 	}
 	res.has_missing = has_missing;
 	return res;
@@ -50,16 +53,20 @@ string UpdateNamespacePropertiesResponse::TryFromJSON(yyjson_val *obj) {
 			size_t idx, max;
 			yyjson_val *val;
 			yyjson_arr_foreach(updated_val, idx, max, val) {
-			string tmp;
-			if (yyjson_is_str(val)) {
-				tmp = yyjson_get_str(val);
-			} else {
-				return StringUtil::Format("UpdateNamespacePropertiesResponse property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
-			}
+				string tmp;
+				if (yyjson_is_str(val)) {
+					tmp = yyjson_get_str(val);
+				} else {
+					return StringUtil::Format(
+					    "UpdateNamespacePropertiesResponse property 'tmp' is not of type 'string', found '%s' instead",
+					    yyjson_get_type_desc(val));
+				}
 				updated.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("UpdateNamespacePropertiesResponse property 'updated' is not of type 'array', found '%s' instead", yyjson_get_type_desc(updated_val));
+			return StringUtil::Format(
+			    "UpdateNamespacePropertiesResponse property 'updated' is not of type 'array', found '%s' instead",
+			    yyjson_get_type_desc(updated_val));
 		}
 	}
 	auto removed_val = yyjson_obj_get(obj, "removed");
@@ -70,16 +77,20 @@ string UpdateNamespacePropertiesResponse::TryFromJSON(yyjson_val *obj) {
 			size_t idx, max;
 			yyjson_val *val;
 			yyjson_arr_foreach(removed_val, idx, max, val) {
-			string tmp;
-			if (yyjson_is_str(val)) {
-				tmp = yyjson_get_str(val);
-			} else {
-				return StringUtil::Format("UpdateNamespacePropertiesResponse property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
-			}
+				string tmp;
+				if (yyjson_is_str(val)) {
+					tmp = yyjson_get_str(val);
+				} else {
+					return StringUtil::Format(
+					    "UpdateNamespacePropertiesResponse property 'tmp' is not of type 'string', found '%s' instead",
+					    yyjson_get_type_desc(val));
+				}
 				removed.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("UpdateNamespacePropertiesResponse property 'removed' is not of type 'array', found '%s' instead", yyjson_get_type_desc(removed_val));
+			return StringUtil::Format(
+			    "UpdateNamespacePropertiesResponse property 'removed' is not of type 'array', found '%s' instead",
+			    yyjson_get_type_desc(removed_val));
 		}
 	}
 	auto missing_val = yyjson_obj_get(obj, "missing");
@@ -91,16 +102,20 @@ string UpdateNamespacePropertiesResponse::TryFromJSON(yyjson_val *obj) {
 			size_t idx, max;
 			yyjson_val *val;
 			yyjson_arr_foreach(missing_val, idx, max, val) {
-			string tmp;
-			if (yyjson_is_str(val)) {
-				tmp = yyjson_get_str(val);
-			} else {
-				return StringUtil::Format("UpdateNamespacePropertiesResponse property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
-			}
+				string tmp;
+				if (yyjson_is_str(val)) {
+					tmp = yyjson_get_str(val);
+				} else {
+					return StringUtil::Format(
+					    "UpdateNamespacePropertiesResponse property 'tmp' is not of type 'string', found '%s' instead",
+					    yyjson_get_type_desc(val));
+				}
 				missing.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("UpdateNamespacePropertiesResponse property 'missing' is not of type 'array', found '%s' instead", yyjson_get_type_desc(missing_val));
+			return StringUtil::Format(
+			    "UpdateNamespacePropertiesResponse property 'missing' is not of type 'array', found '%s' instead",
+			    yyjson_get_type_desc(missing_val));
 		}
 	}
 	return string();
@@ -108,4 +123,3 @@ string UpdateNamespacePropertiesResponse::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

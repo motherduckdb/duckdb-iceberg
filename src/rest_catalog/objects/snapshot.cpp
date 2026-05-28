@@ -12,8 +12,10 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-Snapshot::Snapshot() {}
-Snapshot::Object2::Object2() {}
+Snapshot::Snapshot() {
+}
+Snapshot::Object2::Object2() {
+}
 
 Snapshot::Object2 Snapshot::Object2::FromJSON(yyjson_val *obj) {
 	Object2 res;
@@ -41,11 +43,11 @@ string Snapshot::Object2::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(operation_val)) {
 			operation = yyjson_get_str(operation_val);
 		} else {
-			return StringUtil::Format("Object2 property 'operation' is not of type 'string', found '%s' instead", yyjson_get_type_desc(operation_val));
+			return StringUtil::Format("Object2 property 'operation' is not of type 'string', found '%s' instead",
+			                          yyjson_get_type_desc(operation_val));
 		}
 	}
-	case_insensitive_set_t handled_properties {
-			"operation" };
+	case_insensitive_set_t handled_properties {"operation"};
 	size_t idx, max;
 	yyjson_val *key, *val;
 	yyjson_obj_foreach(obj, idx, max, key, val) {
@@ -54,11 +56,12 @@ string Snapshot::Object2::TryFromJSON(yyjson_val *obj) {
 			continue;
 		}
 		string tmp;
-	if (yyjson_is_str(val)) {
-		tmp = yyjson_get_str(val);
-	} else {
-		return StringUtil::Format("Object2 property 'tmp' is not of type 'string', found '%s' instead", yyjson_get_type_desc(val));
-	}
+		if (yyjson_is_str(val)) {
+			tmp = yyjson_get_str(val);
+		} else {
+			return StringUtil::Format("Object2 property 'tmp' is not of type 'string', found '%s' instead",
+			                          yyjson_get_type_desc(val));
+		}
 		additional_properties.emplace(key_str, std::move(tmp));
 	}
 	return string();
@@ -79,15 +82,25 @@ Snapshot Snapshot::Copy() const {
 	res.timestamp_ms = timestamp_ms;
 	res.manifest_list = manifest_list;
 	res.summary = summary.Copy();
-	res.parent_snapshot_id = parent_snapshot_id;
+	if (has_parent_snapshot_id) {
+		res.parent_snapshot_id = parent_snapshot_id;
+	}
 	res.has_parent_snapshot_id = has_parent_snapshot_id;
-	res.sequence_number = sequence_number;
+	if (has_sequence_number) {
+		res.sequence_number = sequence_number;
+	}
 	res.has_sequence_number = has_sequence_number;
-	res.first_row_id = first_row_id;
+	if (has_first_row_id) {
+		res.first_row_id = first_row_id;
+	}
 	res.has_first_row_id = has_first_row_id;
-	res.added_rows = added_rows;
+	if (has_added_rows) {
+		res.added_rows = added_rows;
+	}
 	res.has_added_rows = has_added_rows;
-	res.schema_id = schema_id;
+	if (has_schema_id) {
+		res.schema_id = schema_id;
+	}
 	res.has_schema_id = has_schema_id;
 	return res;
 }
@@ -102,7 +115,8 @@ string Snapshot::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(snapshot_id_val)) {
 			snapshot_id = yyjson_get_uint(snapshot_id_val);
 		} else {
-			return StringUtil::Format("Snapshot property 'snapshot_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(snapshot_id_val));
+			return StringUtil::Format("Snapshot property 'snapshot_id' is not of type 'integer', found '%s' instead",
+			                          yyjson_get_type_desc(snapshot_id_val));
 		}
 	}
 	auto timestamp_ms_val = yyjson_obj_get(obj, "timestamp-ms");
@@ -114,7 +128,8 @@ string Snapshot::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(timestamp_ms_val)) {
 			timestamp_ms = yyjson_get_uint(timestamp_ms_val);
 		} else {
-			return StringUtil::Format("Snapshot property 'timestamp_ms' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(timestamp_ms_val));
+			return StringUtil::Format("Snapshot property 'timestamp_ms' is not of type 'integer', found '%s' instead",
+			                          yyjson_get_type_desc(timestamp_ms_val));
 		}
 	}
 	auto manifest_list_val = yyjson_obj_get(obj, "manifest-list");
@@ -124,7 +139,8 @@ string Snapshot::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_str(manifest_list_val)) {
 			manifest_list = yyjson_get_str(manifest_list_val);
 		} else {
-			return StringUtil::Format("Snapshot property 'manifest_list' is not of type 'string', found '%s' instead", yyjson_get_type_desc(manifest_list_val));
+			return StringUtil::Format("Snapshot property 'manifest_list' is not of type 'string', found '%s' instead",
+			                          yyjson_get_type_desc(manifest_list_val));
 		}
 	}
 	auto summary_val = yyjson_obj_get(obj, "summary");
@@ -133,7 +149,7 @@ string Snapshot::TryFromJSON(yyjson_val *obj) {
 	} else {
 		error = summary.TryFromJSON(summary_val);
 		if (!error.empty()) {
-		    return error;
+			return error;
 		}
 	}
 	auto parent_snapshot_id_val = yyjson_obj_get(obj, "parent-snapshot-id");
@@ -144,7 +160,9 @@ string Snapshot::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(parent_snapshot_id_val)) {
 			parent_snapshot_id = yyjson_get_uint(parent_snapshot_id_val);
 		} else {
-			return StringUtil::Format("Snapshot property 'parent_snapshot_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(parent_snapshot_id_val));
+			return StringUtil::Format(
+			    "Snapshot property 'parent_snapshot_id' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(parent_snapshot_id_val));
 		}
 	}
 	auto sequence_number_val = yyjson_obj_get(obj, "sequence-number");
@@ -155,7 +173,9 @@ string Snapshot::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(sequence_number_val)) {
 			sequence_number = yyjson_get_uint(sequence_number_val);
 		} else {
-			return StringUtil::Format("Snapshot property 'sequence_number' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(sequence_number_val));
+			return StringUtil::Format(
+			    "Snapshot property 'sequence_number' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(sequence_number_val));
 		}
 	}
 	auto first_row_id_val = yyjson_obj_get(obj, "first-row-id");
@@ -166,7 +186,8 @@ string Snapshot::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(first_row_id_val)) {
 			first_row_id = yyjson_get_uint(first_row_id_val);
 		} else {
-			return StringUtil::Format("Snapshot property 'first_row_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(first_row_id_val));
+			return StringUtil::Format("Snapshot property 'first_row_id' is not of type 'integer', found '%s' instead",
+			                          yyjson_get_type_desc(first_row_id_val));
 		}
 	}
 	auto added_rows_val = yyjson_obj_get(obj, "added-rows");
@@ -177,7 +198,8 @@ string Snapshot::TryFromJSON(yyjson_val *obj) {
 		} else if (yyjson_is_uint(added_rows_val)) {
 			added_rows = yyjson_get_uint(added_rows_val);
 		} else {
-			return StringUtil::Format("Snapshot property 'added_rows' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(added_rows_val));
+			return StringUtil::Format("Snapshot property 'added_rows' is not of type 'integer', found '%s' instead",
+			                          yyjson_get_type_desc(added_rows_val));
 		}
 	}
 	auto schema_id_val = yyjson_obj_get(obj, "schema-id");
@@ -186,7 +208,8 @@ string Snapshot::TryFromJSON(yyjson_val *obj) {
 		if (yyjson_is_int(schema_id_val)) {
 			schema_id = yyjson_get_int(schema_id_val);
 		} else {
-			return StringUtil::Format("Snapshot property 'schema_id' is not of type 'integer', found '%s' instead", yyjson_get_type_desc(schema_id_val));
+			return StringUtil::Format("Snapshot property 'schema_id' is not of type 'integer', found '%s' instead",
+			                          yyjson_get_type_desc(schema_id_val));
 		}
 	}
 	return string();
@@ -194,4 +217,3 @@ string Snapshot::TryFromJSON(yyjson_val *obj) {
 
 } // namespace rest_api_objects
 } // namespace duckdb
-

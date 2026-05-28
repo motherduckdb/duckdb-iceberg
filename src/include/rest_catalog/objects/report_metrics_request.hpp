@@ -13,28 +13,28 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-
-
 class ReportMetricsRequest {
 public:
 	ReportMetricsRequest();
-	ReportMetricsRequest(const ReportMetricsRequest&) = delete;
-	ReportMetricsRequest& operator=(const ReportMetricsRequest&) = delete;
-	ReportMetricsRequest(ReportMetricsRequest&&) = default;
-	ReportMetricsRequest &operator=(ReportMetricsRequest&&) = default;
+	ReportMetricsRequest(const ReportMetricsRequest &) = delete;
+	ReportMetricsRequest &operator=(const ReportMetricsRequest &) = delete;
+	ReportMetricsRequest(ReportMetricsRequest &&) = default;
+	ReportMetricsRequest &operator=(ReportMetricsRequest &&) = default;
+
 public:
 	static ReportMetricsRequest FromJSON(yyjson_val *obj);
 	ReportMetricsRequest Copy() const;
+
 public:
 	string TryFromJSON(yyjson_val *obj);
+
 public:
 	ScanReport scan_report;
-	bool has_scan_report;
+	bool has_scan_report = false;
 	CommitReport commit_report;
-	bool has_commit_report;
+	bool has_commit_report = false;
 	string report_type;
 };
 
 } // namespace rest_api_objects
 } // namespace duckdb
-
