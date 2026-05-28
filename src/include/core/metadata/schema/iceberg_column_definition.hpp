@@ -21,10 +21,6 @@ public:
 public:
 	static LogicalType ParsePrimitiveType(rest_api_objects::PrimitiveType &type);
 	static LogicalType ParsePrimitiveTypeString(const string &type_str);
-	static unique_ptr<IcebergColumnDefinition>
-	ParseType(const string &name, int32_t field_id, bool required, rest_api_objects::Type &iceberg_type,
-	          const string &doc, optional_ptr<rest_api_objects::PrimitiveTypeValue> initial_default = nullptr,
-	          optional_ptr<rest_api_objects::PrimitiveTypeValue> write_default = nullptr);
 	bool IsIcebergPrimitiveType() const;
 	vector<unique_ptr<IcebergColumnDefinition>>::const_iterator GetChildIterator(const string &child_name) const;
 
