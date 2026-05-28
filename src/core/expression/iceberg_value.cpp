@@ -472,7 +472,12 @@ SerializeResult IcebergValue::SerializeValue(Value input_value, const LogicalTyp
 		auto ret = SerializeResult(column_type, ret_val);
 		return ret;
 	}
-	// boolean does not yet return proper values so we skip
+		// GEOMETRY and VARIANT bounds are not produced via this string-Value path;
+		// they require multi-double / variant-binary encodings built inline at the
+		// stats-collection site (see IcebergInsertGlobalState::AddFiles).
+	case LogicalTypeId::GEOMETRY:
+	case LogicalTypeId::VARIANT:
+		// boolean does not yet return proper values so we skip
 	case LogicalTypeId::BOOLEAN:
 	default:
 		break;

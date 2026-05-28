@@ -9,7 +9,6 @@
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
 #include "duckdb/execution/operator/projection/physical_projection.hpp"
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
-#include "duckdb/common/types/uuid.hpp"
 #include "duckdb/function/function_binder.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
@@ -96,44 +95,6 @@ unique_ptr<GlobalSinkState> IcebergInsert::GetGlobalSinkState(ClientContext &con
 //===--------------------------------------------------------------------===//
 // Sink
 //===--------------------------------------------------------------------===//
-static IcebergColumnStats ParseColumnStats(const LogicalType &type, const vector<Value> &col_stats,
-                                           ClientContext &context) {
-	IcebergColumnStats column_stats(type);
-	for (idx_t stats_idx = 0; stats_idx < col_stats.size(); stats_idx++) {
-		auto &stats_children = StructValue::GetChildren(col_stats[stats_idx]);
-		auto &stats_name = StringValue::Get(stats_children[0]);
-		if (stats_name == "min") {
-			D_ASSERT(!column_stats.has_min);
-			column_stats.min = StringValue::Get(stats_children[1]);
-			column_stats.has_min = true;
-		} else if (stats_name == "max") {
-			D_ASSERT(!column_stats.has_max);
-			column_stats.max = StringValue::Get(stats_children[1]);
-			column_stats.has_max = true;
-		} else if (stats_name == "null_count") {
-			D_ASSERT(!column_stats.has_null_count);
-			column_stats.has_null_count = true;
-			column_stats.null_count = StringUtil::ToUnsigned(StringValue::Get(stats_children[1]));
-		} else if (stats_name == "num_values") {
-			D_ASSERT(!column_stats.has_num_values);
-			column_stats.has_num_values = true;
-			column_stats.num_values = StringUtil::ToUnsigned(StringValue::Get(stats_children[1]));
-		} else if (stats_name == "column_size_bytes") {
-			column_stats.has_column_size_bytes = true;
-			column_stats.column_size_bytes = StringUtil::ToUnsigned(StringValue::Get(stats_children[1]));
-		} else if (stats_name == "has_nan") {
-			column_stats.has_contains_nan = true;
-			column_stats.contains_nan = StringValue::Get(stats_children[1]) == "true";
-		} else if (stats_name == "variant_type") {
-			//! Should be handled elsewhere
-			continue;
-		} else {
-			// Ignore other stats types.s
-			DUCKDB_LOG_INFO(context, StringUtil::Format("Did not write column stats %s", stats_name));
-		}
-	}
-	return column_stats;
-}
 
 static bool IsMapType(string col_name, IcebergTableSchema &table_schema) {
 	for (auto &col : table_schema.columns) {
@@ -312,7 +273,7 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 				continue;
 			}
 			auto &column_info = *column_info_p;
-			auto stats = ParseColumnStats(column_info.type, col_stats, context);
+			auto stats = IcebergColumnStats::ParseColumnStats(column_info.type, col_stats, context);
 
 			// a map type cannot violate not null constraints.
 			// Null value counts can be off since an empty map is the same as a null map.
@@ -340,6 +301,29 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 				} else if (serialized_value.HasValue()) {
 					data_file.upper_bounds[column_info.id] = serialized_value.GetValue();
 				}
+			}
+			// Iceberg v3 (Appendix D): geometry lower/upper_bound is a packed little-endian
+			// sequence of f64 doubles giving the min/max corner of the bounding box, with
+			// dimensions in order x, y, (z), (m). Dimensions are included iff present in the
+			// data, as signaled by which bbox_* keys the parquet writer emitted.
+			if (column_info.type.id() == LogicalTypeId::GEOMETRY && stats.has_bbox_xy) {
+				vector<double> lower {stats.bbox_xmin, stats.bbox_ymin};
+				vector<double> upper {stats.bbox_xmax, stats.bbox_ymax};
+				if (stats.has_bbox_z) {
+					lower.push_back(stats.bbox_zmin);
+					upper.push_back(stats.bbox_zmax);
+				}
+				if (stats.has_bbox_m) {
+					lower.push_back(stats.bbox_mmin);
+					upper.push_back(stats.bbox_mmax);
+				}
+				const auto byte_count = lower.size() * sizeof(double);
+				// DuckDB only supports little-endian targets, so the in-memory double layout is
+				// already the on-disk format.
+				data_file.lower_bounds[column_info.id] =
+				    Value::BLOB(const_data_ptr_cast<double>(lower.data()), byte_count);
+				data_file.upper_bounds[column_info.id] =
+				    Value::BLOB(const_data_ptr_cast<double>(upper.data()), byte_count);
 			}
 			if (stats.has_column_size_bytes) {
 				data_file.column_sizes[column_info.id] = stats.column_size_bytes;
