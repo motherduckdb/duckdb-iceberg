@@ -137,10 +137,6 @@ static void AddNamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, const 
 		auto type_obj = yyjson_mut_obj_add_obj(doc, field_obj, "type");
 		AddUnnamedField(doc, type_obj, column);
 		yyjson_mut_obj_add_bool(doc, field_obj, "required", column.required);
-		if (column.initial_default) {
-			throw NotImplementedException("DEFAULT values for nested types (like %s) not implemented",
-			                              column.type.ToString());
-		}
 		return;
 	}
 	yyjson_mut_obj_add_strcpy(doc, field_obj, "type", IcebergTypeHelper::LogicalTypeToIcebergType(column.type).c_str());
@@ -225,14 +221,38 @@ IcebergCreateTableRequest::CreateIcebergColumn(const ColumnDefinition &column_de
 		type.primitive_type.value = IcebergTypeHelper::LogicalTypeToIcebergType(logical_type);
 	}
 	auto iceberg_column_def = IcebergColumnDefinition::ParseType(name, first_id, required, type, "", nullptr);
+	
+	// Handle default values
 	if (column_def.HasDefaultValue()) {
 		auto &default_expr = column_def.DefaultValue();
-		auto val = default_binder.Evaluate(default_expr, logical_type);
-		if (iceberg_version < 3 && !val.IsNull()) {
+		auto default_val = default_binder.Evaluate(default_expr, logical_type);
+		if (iceberg_version < 3 && !default_val.IsNull()) {
 			throw InvalidInputException("non-null DEFAULT values are not supported for <V3 tables");
 		}
-		iceberg_column_def->initial_default = make_uniq<Value>(val);
+
+		iceberg_column_def->initial_default = make_uniq<Value>(default_val);
+		
+		// Recursively handle nested types
+		if (logical_type.id() == LogicalTypeId::STRUCT) {
+			iceberg_column_def->children.clear();
+			auto &struct_children = StructValue::GetChildren(default_val);
+			auto &child_types = StructType::GetChildTypes(logical_type);
+			
+			// Create child columns with their defaults
+			for (idx_t i = 0; i < child_types.size(); i++) {
+				auto &child_name = child_types[i].first;
+				auto &child_type = child_types[i].second;
+				
+				ColumnDefinition child_def(child_name, child_type);
+				child_def.SetDefaultValue(make_uniq<ConstantExpression>(struct_children[i]));
+				
+				auto child_iceberg_def = CreateIcebergColumn(child_def, default_binder, false, next_field_id, 
+				                                             iceberg_version);
+				iceberg_column_def->children.push_back(std::move(child_iceberg_def));
+			}
+		}
 	}
+	
 	return iceberg_column_def;
 }
 
