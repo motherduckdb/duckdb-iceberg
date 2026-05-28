@@ -267,6 +267,7 @@ rest_api_objects::StructField IcebergTypeHelper::CreateIcebergRestType(const str
                                                                        const std::function<idx_t()> &get_next_id) {
 	rest_api_objects::StructField result;
 	result.id = static_cast<int32_t>(get_next_id());
+	result.name = name;
 	result.type = make_uniq<rest_api_objects::Type>();
 	result.required = required;
 	if (!doc.empty()) {
