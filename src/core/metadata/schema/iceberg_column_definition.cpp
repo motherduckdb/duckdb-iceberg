@@ -18,7 +18,7 @@ static string AddEscapesToBlob(const string &hexadecimal_string) {
 	return result;
 }
 
-static Value ParseDefaultForType(const LogicalType &type, rest_api_objects::PrimitiveTypeValue &default_value) {
+static Value ParseDefaultForType(const LogicalType &type, const rest_api_objects::PrimitiveTypeValue &default_value) {
 	if (type.IsNested() && type.id() != LogicalTypeId::STRUCT) {
 		throw InvalidConfigurationException("Can't parse default value for nested type (%s)", type.ToString());
 	}
@@ -67,9 +67,8 @@ static Value ParseDefaultForType(const LogicalType &type, rest_api_objects::Prim
 	}
 }
 
-LogicalType IcebergColumnDefinition::ParsePrimitiveType(rest_api_objects::PrimitiveType &type) {
+LogicalType IcebergColumnDefinition::ParsePrimitiveType(const rest_api_objects::PrimitiveType &type) {
 	auto &type_str = type.value;
-
 	return ParsePrimitiveTypeString(type_str);
 }
 
@@ -152,13 +151,13 @@ LogicalType IcebergColumnDefinition::ParsePrimitiveTypeString(const string &type
 }
 
 static rest_api_objects::StructField
-CreateStructField(const string &name, int32_t field_id, bool required, rest_api_objects::Type &iceberg_type,
-                  const string &doc, optional_ptr<rest_api_objects::PrimitiveTypeValue> initial_default = nullptr,
-                  optional_ptr<rest_api_objects::PrimitiveTypeValue> write_default = nullptr) {
+CreateStructField(const string &name, int32_t field_id, bool required, const rest_api_objects::Type &iceberg_type,
+                  const string &doc, optional_ptr<const rest_api_objects::PrimitiveTypeValue> initial_default = nullptr,
+                  optional_ptr<const rest_api_objects::PrimitiveTypeValue> write_default = nullptr) {
 	rest_api_objects::StructField result;
 	result.id = field_id;
 	result.name = name;
-	result.type = make_uniq<rest_api_objects::Type>(std::move(iceberg_type));
+	result.type = make_uniq<rest_api_objects::Type>(iceberg_type.Copy());
 	result.required = required;
 	if (!doc.empty()) {
 		result.has_doc = true;
@@ -166,16 +165,17 @@ CreateStructField(const string &name, int32_t field_id, bool required, rest_api_
 	}
 	if (initial_default) {
 		result.has_initial_default = true;
-		result.initial_default = std::move(*initial_default);
+		result.initial_default = initial_default->Copy();
 	}
 	if (write_default) {
 		result.has_write_default = true;
-		result.write_default = std::move(*write_default);
+		result.write_default = write_default->Copy();
 	}
 	return result;
 }
 
-unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::ParseStructField(rest_api_objects::StructField &field) {
+unique_ptr<IcebergColumnDefinition>
+IcebergColumnDefinition::ParseStructField(const rest_api_objects::StructField &field) {
 	auto res = make_uniq<IcebergColumnDefinition>();
 	res->id = field.id;
 	res->required = field.required;
