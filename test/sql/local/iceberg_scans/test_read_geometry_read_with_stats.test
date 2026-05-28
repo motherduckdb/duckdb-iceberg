@@ -13,7 +13,7 @@ require httpfs
 set ignore_error_messages
 
 query I
-SELECt count(*) FROM iceberg_scan(
+SELECT count(*) FROM iceberg_scan(
            'https://storage.googleapis.com/cartobq-iceberg-geo-testbed/v3_geometry/metadata/v1.metadata.json'
 ) where geom && 'LINESTRING(152 -35, 147 34)';
 ----
