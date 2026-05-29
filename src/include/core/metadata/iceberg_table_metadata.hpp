@@ -127,6 +127,12 @@ public:
 	unordered_map<int32_t, IcebergSortOrder> sort_specs;
 	//! snapshot_id -> snapshot
 	unordered_map<int64_t, IcebergSnapshot> snapshots;
+	//! History of refs.main per Iceberg spec "snapshot-log": (snapshot_id, raw millis)
+	//! pairs recording each change to current-snapshot-id, sorted ascending by ms.
+	//! Used for spec-compliant point-in-time resolution; side-branch commits are absent.
+	//! Stored as raw millis (matching the REST API representation and last_updated_ms)
+	//! to keep all timestamp comparisons in a single unit.
+	vector<pair<int64_t /*snapshot_id*/, int64_t /*timestamp_ms*/>> snapshot_log;
 	vector<IcebergFieldMapping> mappings;
 
 	//! Custom write paths from table properties

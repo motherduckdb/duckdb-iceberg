@@ -476,6 +476,12 @@ void IcebergTransaction::DoTableUpdates(IcebergTransactionAlterUpdate &alter_upd
 			alter_update.committed_tables.insert(it.first);
 		}
 	}
+	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
+	if (ic_catalog.attach_options.max_table_staleness_micros.IsValid()) {
+		for (auto &it : alter_update.committed_tables) {
+			ic_catalog.table_request_cache.Expire(context, it);
+		}
+	}
 	DropSecrets(context);
 }
 

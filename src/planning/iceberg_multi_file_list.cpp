@@ -435,6 +435,11 @@ IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(const Value &lowe
                                                                const string &name, const LogicalType &type) {
 	IcebergPredicateStats res;
 
+	// DuckDB-Iceberg does not yet support deserializing avro blobs to geometry yet.
+	if (type.id() == LogicalTypeId::GEOMETRY) {
+		return res;
+	}
+
 	if (!lower_bound.IsNull()) {
 		D_ASSERT(lower_bound.type().id() == LogicalTypeId::BLOB);
 		auto lower_bound_blob = lower_bound.GetValueUnsafe<string_t>();
