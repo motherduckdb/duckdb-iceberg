@@ -76,6 +76,11 @@ static void LoadInternal(ExtensionLoader &loader) {
 	    "Ignore unsupported write.parquet.row-group-size-bytes table property for partitioned tables",
 	    LogicalType::BOOLEAN, Value::BOOLEAN(false));
 	config.AddExtensionOption(
+	    "iceberg_logging_post_body_truncate_limit",
+	    "Maximum number of characters of a REST catalog POST body to include in Iceberg log messages. "
+	    "Bodies longer than this are truncated with a trailing '... (truncated)' marker. Set to 0 to omit the body.",
+	    LogicalType::UBIGINT, Value::UBIGINT(10000));
+	config.AddExtensionOption(
 	    "unsafe_iceberg_ignore_sort_order",
 	    "Allow INSERT/UPDATE on iceberg tables that declare a sort order, without applying that sort order to "
 	    "the written data. The Iceberg spec permits this (writers are not required to honour a declared sort "

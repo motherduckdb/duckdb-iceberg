@@ -22,6 +22,7 @@
 
 #include "core/deletes/iceberg_deletion_vector.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
+#include "iceberg_logging.hpp"
 
 namespace duckdb {
 class IcebergDeleteLocalState;
@@ -128,6 +129,10 @@ void IcebergDelete::WriteDeletionVectorFile(ClientContext &context, IcebergDelet
 	delete_file.content_offset = 0;
 	delete_file.content_size_in_bytes = blob_data.size();
 	delete_file.file_size_bytes = delete_file.content_size_in_bytes.GetIndex();
+	DUCKDB_LOG(context, IcebergLogType,
+	           "Iceberg DELETE, wrote deletion_vector_file '%s' for data_file '%s', delete_count=%llu, "
+	           "file_size=%llu bytes",
+	           delete_file_path, filename, sorted_deletes.size(), blob_data.size());
 	global_state.written_files.emplace(filename, std::move(delete_file));
 }
 
@@ -213,6 +218,10 @@ void IcebergDelete::WritePositionalDeleteFile(ClientContext &context, IcebergDel
 	auto pos_max_value = pos_max->second.GetValue<idx_t>();
 	delete_file.pos_min_value = pos_min_value;
 	delete_file.pos_max_value = pos_max_value;
+	DUCKDB_LOG(context, IcebergLogType,
+	           "Iceberg DELETE, wrote positional_delete_file '%s' for data_file '%s', delete_count=%llu, "
+	           "file_size=%llu bytes",
+	           delete_file_path, filename, stats.row_count, stats.file_size_bytes);
 	global_state.written_files.emplace(filename, std::move(delete_file));
 }
 
