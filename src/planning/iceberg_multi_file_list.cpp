@@ -435,6 +435,11 @@ IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(const Value &lowe
                                                                const string &name, const LogicalType &type) {
 	IcebergPredicateStats res;
 
+	// DuckDB-Iceberg does not yet support deserializing avro blobs to geometry yet.
+	if (type.id() == LogicalTypeId::GEOMETRY) {
+		return res;
+	}
+
 	if (!lower_bound.IsNull()) {
 		D_ASSERT(lower_bound.type().id() == LogicalTypeId::BLOB);
 		auto lower_bound_blob = lower_bound.GetValueUnsafe<string_t>();
@@ -540,6 +545,17 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 
 				// if the filter doesn't match the partition value, we don't need to scan the data file
 				if (!IcebergPredicate::MatchBounds(context, *table_filter, stats, field.transform)) {
+					auto &source_column = IcebergTableSchema::GetFromColumnIndex(schema, column_id, 0);
+					auto partition_value_raw_str = stats.has_lower_bounds ? stats.lower_bound.ToString() : "NULL";
+					auto partition_value_transformed_str =
+					    stats.has_lower_bounds ? field.transform.PartitionValueToString(stats.lower_bound) : "NULL";
+					DUCKDB_LOG(
+					    context, IcebergLogType,
+					    "Iceberg Filter Pushdown, skipped 'data_file': '%s', partition column '%s' has raw value %s "
+					    "with transform '%s'. '%s(%s)=%s' does not match filter: %s",
+					    data_file.file_path, source_column.name, partition_value_raw_str, field.transform.RawType(),
+					    field.transform.RawType(), partition_value_raw_str, partition_value_transformed_str,
+					    table_filter->ToString(source_column.name));
 					return false;
 				}
 			}
@@ -614,6 +630,11 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 		auto &filter = *it->second;
 		if (!IcebergPredicate::MatchBounds(context, filter, stats, IcebergTransform::Identity())) {
 			//! If any predicate fails, exclude the file
+			DUCKDB_LOG(context, IcebergLogType,
+			           "Iceberg Filter Pushdown, skipped 'data_file': '%s', column '%s' with "
+			           "bounds [%s, %s] did not match filter: %s",
+			           data_file.file_path, column.name, stats.has_lower_bounds ? stats.lower_bound.ToString() : "N/A",
+			           stats.has_upper_bounds ? stats.upper_bound.ToString() : "N/A", filter.ToString(column.name));
 			return false;
 		}
 	}
@@ -695,8 +716,7 @@ optional_ptr<const BoundIcebergManifestEntry> IcebergMultiFileList::GetDataFile(
 			// Check whether current data file is filtered out.
 			if (!table_filters.filters.empty() &&
 			    !FileMatchesFilter(manifest_file, manifest_entry, IcebergManifestContentType::DATA)) {
-				DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'data_file': '%s'",
-				           data_file.file_path);
+				// Note: FileMatches filter will log a message if the file is pruned
 				//! Skip this file
 				continue;
 			}
@@ -817,6 +837,13 @@ bool IcebergMultiFileList::ManifestMatchesFilter(const IcebergManifestFile &mani
 		stats.has_not_null = true; // Not enough information in field_summary to determine if this should be false
 
 		if (!IcebergPredicate::MatchBounds(context, *table_filter, stats, field.transform)) {
+			DUCKDB_LOG(context, IcebergLogType,
+			           "Iceberg Filter Pushdown, skipped 'manifest_file': '%s', column '%s' with "
+			           "transform '%s', bounds [%s, %s] did not match filter: %s",
+			           manifest.manifest_path, column.name, field.transform.RawType(),
+			           stats.has_lower_bounds ? stats.lower_bound.ToString() : "N/A",
+			           stats.has_upper_bounds ? stats.upper_bound.ToString() : "N/A",
+			           table_filter->ToString(column.name));
 			return false;
 		}
 	}
@@ -894,8 +921,6 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 		for (auto &manifest_list_entry : manifest_list_entries) {
 			auto &manifest_file = manifest_list_entry.file;
 			if (!ManifestMatchesFilter(manifest_file)) {
-				DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'manifest_file': '%s'",
-				           manifest_file.manifest_path);
 				//! Skip this manifest
 				continue;
 			}
@@ -923,8 +948,6 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 			for (auto &manifest_list_entry : manifest_list_entries) {
 				auto &manifest = manifest_list_entry.file;
 				if (!ManifestMatchesFilter(manifest)) {
-					DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'manifest_file': '%s'",
-					           manifest.manifest_path);
 					//! Skip this manifest
 					continue;
 				}
