@@ -24,9 +24,6 @@ static Value ParseDefaultForType(const LogicalType &type, const rest_api_objects
 	}
 
 	switch (type.id()) {
-	case LogicalTypeId::STRUCT: {
-		return Value("{}");
-	}
 	case LogicalTypeId::BOOLEAN: {
 		D_ASSERT(default_value.has_boolean_type_value);
 		return Value::BOOLEAN(default_value.boolean_type_value.value);
@@ -283,7 +280,7 @@ unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::Copy() const {
 	return res;
 }
 
-ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
+Value IcebergColumnDefinition::GetWriteDefault() const {
 	optional_ptr<Value> default_to_use;
 	if (write_default) {
 		//! Use write-default if it's set
@@ -293,11 +290,26 @@ ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
 		default_to_use = initial_default.get();
 	}
 	if (default_to_use) {
+		return *default_to_use;
+	}
+	return Value(type);
+}
+
+ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
+	auto write_default = GetWriteDefault();
+	if (!write_default.IsNull()) {
 		//! FIXME: the expression needs to be more advanced for nested types
 		if (type.IsNested()) {
 			throw NotImplementedException("DEFAULT values for nested types are not supported currently");
 		}
-		return ColumnDefinition(name, type, make_uniq<ConstantExpression>(*default_to_use), TableColumnType::STANDARD);
+		return ColumnDefinition(name, type, make_uniq<ConstantExpression>(write_default), TableColumnType::STANDARD);
+	} else if (type.id() == LogicalTypeId::STRUCT) {
+		vector<Value> child_values;
+		for (auto &child : children) {
+			child_values.emplace_back(child->GetWriteDefault());
+		}
+		auto default_value = Value::STRUCT(type, child_values);
+		return ColumnDefinition(name, type, make_uniq<ConstantExpression>(default_value), TableColumnType::STANDARD);
 	} else {
 		return ColumnDefinition(name, type);
 	}

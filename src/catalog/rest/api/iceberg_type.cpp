@@ -184,32 +184,21 @@ rest_api_objects::PrimitiveTypeValue IcebergTypeHelper::PrimitiveTypeFromValue(c
 	//! DecimalTypeValue
 	case LogicalTypeId::DECIMAL: {
 		//! FIXME: Spec says scientific notation should be used for negative scale decimals
-		result.decimal_type_value.value = value.ToString();
-		result.has_decimal_type_value = true;
-		return result;
-	}
-	//! StringTypeValue
-	case LogicalTypeId::VARCHAR: {
 		result.string_type_value.value = value.ToString();
 		result.has_string_type_value = true;
 		return result;
 	}
+	//! NOTE: when parsing we can't differentiate between these, so we set string_type
+	//! StringTypeValue
 	//! UUIDTypeValue
-	case LogicalTypeId::UUID: {
-		result.uuidtype_value.value = value.ToString();
-		result.has_uuidtype_value = true;
-		return result;
-	}
 	//! DateTypeValue
-	case LogicalTypeId::DATE: {
-		result.date_type_value.value = value.ToString();
-		result.has_date_type_value = true;
-		return result;
-	}
 	//! TimeTypeValue
-	case LogicalTypeId::TIME: {
-		result.time_type_value.value = value.ToString();
-		result.has_time_type_value = true;
+	case LogicalTypeId::UUID:
+	case LogicalTypeId::DATE:
+	case LogicalTypeId::TIME:
+	case LogicalTypeId::VARCHAR: {
+		result.string_type_value.value = value.ToString();
+		result.has_string_type_value = true;
 		return result;
 	}
 	//! TimestampTypeValue
@@ -225,26 +214,15 @@ rest_api_objects::PrimitiveTypeValue IcebergTypeHelper::PrimitiveTypeFromValue(c
 		D_ASSERT(splits.size() == 2);
 		auto str = StringUtil::Join(splits, "T");
 
-		if (type.id() == LogicalTypeId::TIMESTAMP) {
-			result.timestamp_type_value.value = str;
-			result.has_timestamp_type_value = true;
-			return result;
-		} else if (type.id() == LogicalTypeId::TIMESTAMP_NS) {
-			result.timestamp_nano_type_value.value = str;
-			result.has_timestamp_nano_type_value = true;
+		if (type.id() == LogicalTypeId::TIMESTAMP || type.id() == LogicalTypeId::TIMESTAMP_NS) {
+			result.string_type_value.value = str;
+			result.has_string_type_value = true;
 			return result;
 		}
 
 		str += ":00";
-		if (type.id() == LogicalTypeId::TIMESTAMP_TZ) {
-			result.timestamp_tz_type_value.value = str;
-			result.has_timestamp_tz_type_value = true;
-			return result;
-		} else {
-			result.timestamp_tz_nano_type_value.value = str;
-			result.has_timestamp_tz_nano_type_value = true;
-			return result;
-		}
+		result.string_type_value.value = str;
+		result.has_string_type_value = true;
 	}
 	//! FIXME: missing FixedTypeValue
 	//! BinaryTypeValue
@@ -257,7 +235,7 @@ rest_api_objects::PrimitiveTypeValue IcebergTypeHelper::PrimitiveTypeFromValue(c
 		return result;
 	}
 	default:
-		throw InvalidConfigurationException("Type %s not supported for Iceberg tables", type.ToString());
+		throw NotImplementedException("DEFAULT values for nested types (like %s) not implemented", type.ToString());
 	}
 }
 
@@ -276,13 +254,9 @@ rest_api_objects::StructField IcebergTypeHelper::CreateIcebergRestType(const str
 	}
 
 	case_insensitive_map_t<reference<const Value>> child_defaults;
-	if (!default_val.IsNull()) {
-		auto val = default_val;
-		if (type.id() == LogicalTypeId::STRUCT) {
-			val = Value("{}");
-		}
+	if (!default_val.IsNull() && type.id() != LogicalTypeId::STRUCT) {
 		result.has_initial_default = true;
-		result.initial_default = std::move(IcebergTypeHelper::PrimitiveTypeFromValue(val));
+		result.initial_default = std::move(IcebergTypeHelper::PrimitiveTypeFromValue(default_val));
 	}
 	auto &rest_type = *result.type;
 
@@ -320,10 +294,8 @@ rest_api_objects::StructField IcebergTypeHelper::CreateIcebergRestType(const str
 			auto &child_name = child.first;
 			auto &child_type = child.second;
 			auto child_default = !default_val.IsNull() ? StructValue::GetChildren(default_val)[i] : Value();
-			auto struct_child = make_uniq<rest_api_objects::StructField>(
-			    IcebergTypeHelper::CreateIcebergRestType(child_name, child_type, false, "",
-			                                             child_default,
-			                                             get_next_id));
+			auto struct_child = make_uniq<rest_api_objects::StructField>(IcebergTypeHelper::CreateIcebergRestType(
+			    child_name, child_type, false, "", child_default, get_next_id));
 			rest_type.struct_type.fields.push_back(std::move(struct_child));
 		}
 		return result;

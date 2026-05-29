@@ -28,6 +28,9 @@ public:
 	unique_ptr<IcebergColumnDefinition> Copy() const;
 	bool Equals(const IcebergColumnDefinition &other) const;
 
+private:
+	Value GetWriteDefault() const;
+
 public:
 	int32_t id;
 	string doc;

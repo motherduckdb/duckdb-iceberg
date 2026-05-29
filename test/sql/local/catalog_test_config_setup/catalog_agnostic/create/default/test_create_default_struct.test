@@ -18,6 +18,8 @@ set ignore_error_messages
 statement ok
 drop table if exists my_datalake.default.tbl;
 
+# NOTE: Since no engine/catalog supports the {} default for STRUCT, we write NULL (omit the initial-default) for STRUCT instead
+# This changes the behavior matrix, and will need to be updated when support for {} is added
 statement ok
 create table my_datalake.default.tbl(
 	col STRUCT(
@@ -29,11 +31,27 @@ create table my_datalake.default.tbl(
 	'format-version'= 3
 );
 
+# input: - (missing)
+# col default: NULL
+# result: NULL
 statement ok
 insert into my_datalake.default.tbl (col2) VALUES (12)
 
-# FIXME: this should be {'a': test, 'b': NULL}
 query II
-select * from my_datalake.default.tbl;
+select * from my_datalake.default.tbl order by all;
 ----
-NULL	12
+{'a': test, 'b': NULL}	12
+
+# input: {'b': 42}
+# col default: NULL
+# col.a default: 'test'
+# result: {'a': test, 'b': 42}
+statement ok
+insert into my_datalake.default.tbl (col, col2)
+	VALUES ({'b': 42}, 24)
+
+query II
+select * from my_datalake.default.tbl order by all;
+----
+{'a': test, 'b': NULL}	12
+{'a': test, 'b': 42}	24
