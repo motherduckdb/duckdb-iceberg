@@ -47,11 +47,11 @@ select * from my_datalake.default.tbl order by all;
 # col.a default: 'test'
 # result: {'a': test, 'b': 42}
 statement ok
-insert into my_datalake.default.tbl (col, col2)
-	VALUES ({'b': 42}, 24)
+insert into my_datalake.default.tbl BY NAME FROM
+	VALUES ({'b': 42}, 24) t(col, col2)
 
 query II
 select * from my_datalake.default.tbl order by all;
 ----
-{'a': test, 'b': NULL}	12
 {'a': test, 'b': 42}	24
+{'a': test, 'b': NULL}	12
