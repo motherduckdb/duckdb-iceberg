@@ -430,6 +430,7 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	// status: int
 	names.push_back("status");
 	types.push_back(LogicalType::INTEGER);
+	field_ids.emplace_back("status", CreateFieldID(STATUS, false));
 
 	// snapshot_id: long
 	names.push_back("snapshot_id");
