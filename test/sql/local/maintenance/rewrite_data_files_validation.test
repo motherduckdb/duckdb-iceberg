@@ -63,3 +63,22 @@ statement error
 SELECT * FROM iceberg_rewrite_data_files('a.b.c', min_input_files => 0);
 ----
 'min_input_files' must be >= 1
+
+# Happy path: all valid params accepted by Bind. Execute resolves the
+# catalog — since 'cat' isn't attached here, the planner throws.
+
+statement error
+SELECT * FROM iceberg_rewrite_data_files(
+    'cat.sch.tbl',
+    strategy => 'binpack',
+    target_file_size_bytes => 268435456,
+    min_input_files => 3,
+    rewrite_all => false
+);
+----
+Catalog "cat" does not exist
+
+statement error
+SELECT * FROM iceberg_rewrite_data_files('cat.sch.tbl');
+----
+Catalog "cat" does not exist

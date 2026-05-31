@@ -2,7 +2,15 @@
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/function/table_function.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/transaction/iceberg_transaction.hpp"
+#include "catalog/rest/transaction/iceberg_transaction_data.hpp"
+#include "catalog/rest/transaction/iceberg_transaction_metadata.hpp"
+#include "core/metadata/snapshot/iceberg_snapshot.hpp"
 #include "function/iceberg_functions.hpp"
+#include "maintenance/rewrite_data_files_executor.hpp"
+#include "maintenance/rewrite_data_files_planner.hpp"
 #include "maintenance/table_identifier.hpp"
 #include "maintenance/table_lock_registry.hpp"
 
@@ -81,7 +89,76 @@ static void RewriteDataFilesExecute(ClientContext &context, TableFunctionInput &
 		                        bind_data.table_key.table);
 	}
 
-	throw NotImplementedException("iceberg_rewrite_data_files: execute not yet wired");
+	RewriteDataFilesPlanInput plan_input;
+	plan_input.table_key = bind_data.table_key;
+	plan_input.target_file_size_bytes = bind_data.target_file_size_bytes;
+	plan_input.min_input_files = bind_data.min_input_files;
+	plan_input.rewrite_all = bind_data.rewrite_all;
+
+	auto plan = PlanRewrite(context, plan_input);
+
+	if (plan.table_is_empty) {
+		FlatVector::GetData<int64_t>(output.data[0])[0] = 0;
+		FlatVector::GetData<int64_t>(output.data[1])[0] = 0;
+		FlatVector::GetData<int64_t>(output.data[2])[0] = 0;
+		output.SetCardinality(1);
+		return;
+	}
+
+	auto exec_result = ExecuteRewrite(context, plan);
+
+	if (!exec_result.new_entries.empty()) {
+		auto &table_info = *plan.table_info;
+
+		vector<string> produced_paths;
+		produced_paths.reserve(exec_result.new_entries.size());
+		for (auto &entry : exec_result.new_entries) {
+			produced_paths.push_back(entry.data_file.file_path);
+		}
+
+		try {
+			auto commit_snapshot = table_info.table_metadata.GetLatestSnapshot();
+			if (commit_snapshot && commit_snapshot->snapshot_id != plan.starting_snapshot_id) {
+				throw InternalException(
+				    "iceberg_rewrite_data_files: table metadata snapshot drifted between plan (%lld) "
+				    "and commit (%lld) within the same transaction",
+				    plan.starting_snapshot_id, commit_snapshot->snapshot_id);
+			}
+
+			auto &iceberg_transaction = IcebergTransaction::Get(context, table_info.catalog);
+
+			IcebergManifestDeletes deletes;
+			for (auto &cand : exec_result.rewritten_candidates) {
+				deletes.InvalidateFile(cand.file_path);
+			}
+
+			ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTableInformation &tbl) {
+				auto tbl_snapshot = tbl.table_metadata.GetLatestSnapshot();
+				if (tbl_snapshot && tbl_snapshot->snapshot_id != plan.starting_snapshot_id) {
+					throw InternalException(
+					    "iceberg_rewrite_data_files: transaction-internal table copy has snapshot %lld "
+					    "but planner used %lld",
+					    tbl_snapshot->snapshot_id, plan.starting_snapshot_id);
+				}
+				auto &transaction_data = tbl.GetOrCreateTransactionData(iceberg_transaction);
+				transaction_data.AddSnapshot(IcebergSnapshotOperationType::REPLACE,
+				                             std::move(exec_result.new_entries), std::move(deletes));
+			});
+		} catch (...) {
+			if (table_info.catalog.attach_options.allows_deletes) {
+				auto &fs = FileSystem::GetFileSystem(context);
+				for (auto &path : produced_paths) {
+					fs.TryRemoveFile(path);
+				}
+			}
+			throw;
+		}
+	}
+
+	FlatVector::GetData<int64_t>(output.data[0])[0] = exec_result.rewritten_data_files;
+	FlatVector::GetData<int64_t>(output.data[1])[0] = exec_result.added_data_files;
+	FlatVector::GetData<int64_t>(output.data[2])[0] = exec_result.rewritten_bytes;
+	output.SetCardinality(1);
 }
 
 } // namespace

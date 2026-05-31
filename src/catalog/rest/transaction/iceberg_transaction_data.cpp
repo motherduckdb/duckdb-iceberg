@@ -89,8 +89,16 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 	case IcebergSnapshotOperationType::APPEND:
 		manifest_content_type = IcebergManifestContentType::DATA;
 		break;
+	case IcebergSnapshotOperationType::REPLACE:
+		//! REPLACE is what iceberg_rewrite_data_files emits: the new files are
+		//! plain DATA (same shape as APPEND), and the "rewritten" inputs flow
+		//! through `altered_manifests` so ConstructManifestList flips them to
+		//! DELETED in the new manifest list. Spec calls this a compaction
+		//! snapshot — no logical row change, just file consolidation.
+		manifest_content_type = IcebergManifestContentType::DATA;
+		break;
 	default:
-		throw NotImplementedException("Cannot have use snapshot operation type REPLACE or OVERWRITE here");
+		throw NotImplementedException("Cannot have use snapshot operation type OVERWRITE here");
 	};
 
 	auto bogus_snapshot_id = IcebergSnapshot::NewSnapshotId();
