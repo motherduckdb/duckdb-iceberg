@@ -12,9 +12,20 @@ require httpfs
 # Do not ignore 'HTTP' error messages!
 set ignore_error_messages
 
+statement ok
+set logging_level='debug';
+
+statement ok
+CALL enable_logging('Iceberg');
+
 query I
 SELECT count(*) FROM iceberg_scan(
            'https://storage.googleapis.com/cartobq-iceberg-geo-testbed/v3_geometry/metadata/v1.metadata.json'
 ) where geom && 'LINESTRING(152 -35, 147 34)';
 ----
 1000
+
+mode output_result
+
+statement ok
+select * from duckdb_logs() where type = 'Iceberg';
