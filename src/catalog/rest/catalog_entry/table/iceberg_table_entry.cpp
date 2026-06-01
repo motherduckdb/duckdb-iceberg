@@ -86,13 +86,28 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 	if (table_credentials.config) {
 		auto &info = *table_credentials.config;
 		D_ASSERT(info.scope.empty());
-		string lc_storage_location = StringUtil::Lower(metadata_path);
-		size_t metadata_pos = lc_storage_location.find("metadata");
-		if (metadata_pos != string::npos) {
-			info.scope = {metadata_path.substr(0, metadata_pos)};
+		string storage_scope;
+		auto data_path = table_info.table_metadata.table_properties.find("write.data.path");
+		if (data_path != table_info.table_metadata.table_properties.end()) {
+			storage_scope = data_path->second;
 		} else {
-			DUCKDB_LOG_INFO(context, "Creating Iceberg Table secret with no scope. Returned metadata location is %s",
-			                lc_storage_location);
+			storage_scope = table_info.table_metadata.GetLocation();
+		}
+		if (!storage_scope.empty()) {
+			if (!StringUtil::EndsWith(storage_scope, "/")) {
+				storage_scope += "/";
+			}
+			info.scope = {storage_scope};
+		} else {
+			string lc_storage_location = StringUtil::Lower(metadata_path);
+			size_t metadata_pos = lc_storage_location.find("metadata");
+			if (metadata_pos != string::npos) {
+				info.scope = {metadata_path.substr(0, metadata_pos)};
+			} else {
+				DUCKDB_LOG_INFO(context,
+				                "Creating Iceberg Table secret with no scope. Returned metadata location is %s",
+				                lc_storage_location);
+			}
 		}
 
 		if (StringUtil::StartsWith(ic_catalog.uri, "glue")) {
