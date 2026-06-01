@@ -15,17 +15,71 @@ require httpfs
 # Do not ignore 'HTTP' error messages!
 set ignore_error_messages
 
+#statement ok
+#drop table if exists my_datalake.default.tbl;
+
+## NOTE: Since no engine/catalog supports the {} default for STRUCT, we write NULL (omit the initial-default) for STRUCT instead
+## This changes the behavior matrix, and will need to be updated when support for {} is added
+#statement ok
+#create table my_datalake.default.tbl(
+#	col STRUCT(
+#		a VARCHAR,
+#		b INTEGER
+#	) DEFAULT {'a': 'test', 'b': NULL},
+#	col2 INTEGER
+#) WITH (
+#	'format-version'= 3
+#);
+
+## input: - (missing)
+## col default: NULL
+## result: NULL
+#statement ok
+#insert into my_datalake.default.tbl (col2) VALUES (12)
+
+#query II
+#select * from my_datalake.default.tbl order by all;
+#----
+#{'a': test, 'b': NULL}	12
+
+## input: {'b': 42}
+## col default: NULL
+## col.a default: 'test'
+## result: {'a': test, 'b': 42}
+#statement ok
+#insert into my_datalake.default.tbl BY NAME FROM
+#	VALUES ({'b': 42}, 24) t(col, col2)
+
+#query II
+#select * from my_datalake.default.tbl order by all;
+#----
+#{'a': test, 'b': 42}	24
+#{'a': test, 'b': NULL}	12
+
+# Struct nested within another struct
+
 statement ok
-drop table if exists my_datalake.default.tbl;
+drop table if exists my_datalake.default.nested_tbl;
 
 # NOTE: Since no engine/catalog supports the {} default for STRUCT, we write NULL (omit the initial-default) for STRUCT instead
 # This changes the behavior matrix, and will need to be updated when support for {} is added
 statement ok
-create table my_datalake.default.tbl(
+create table my_datalake.default.nested_tbl(
 	col STRUCT(
 		a VARCHAR,
-		b INTEGER
-	) DEFAULT {'a': 'test', 'b': NULL},
+		b STRUCT(
+			c BIGINT,
+			d BIGINT
+		),
+		e BOOLEAN
+	) DEFAULT {
+		'a': 'test',
+		'b': {
+			'c': 1000,
+			'd': -500
+		},
+		'e': NULL
+	},
 	col2 INTEGER
 ) WITH (
 	'format-version'= 3
@@ -35,23 +89,23 @@ create table my_datalake.default.tbl(
 # col default: NULL
 # result: NULL
 statement ok
-insert into my_datalake.default.tbl (col2) VALUES (12)
+insert into my_datalake.default.nested_tbl (col2) VALUES (12)
 
 query II
-select * from my_datalake.default.tbl order by all;
+select * from my_datalake.default.nested_tbl order by all;
 ----
-{'a': test, 'b': NULL}	12
+{'a': test, 'b': NULL, 'e': NULL}	12
 
 # input: {'b': 42}
 # col default: NULL
 # col.a default: 'test'
 # result: {'a': test, 'b': 42}
 statement ok
-insert into my_datalake.default.tbl BY NAME FROM
+insert into my_datalake.default.nested_tbl BY NAME FROM
 	VALUES ({'b': 42}, 24) t(col, col2)
 
 query II
-select * from my_datalake.default.tbl order by all;
+select * from my_datalake.default.nested_tbl order by all;
 ----
 {'a': test, 'b': 42}	24
 {'a': test, 'b': NULL}	12

@@ -306,7 +306,13 @@ ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
 	} else if (type.id() == LogicalTypeId::STRUCT) {
 		vector<Value> child_values;
 		for (auto &child : children) {
-			child_values.emplace_back(child->GetWriteDefault());
+			auto child_column = child->GetColumnDefinition();
+			if (child_column.HasDefaultValue()) {
+				auto &child_default = child_column.DefaultValue().Cast<ConstantExpression>();
+				child_values.emplace_back(child_default.GetValue());
+			} else {
+				child_values.emplace_back(Value(child->type));
+			}
 		}
 		auto default_value = Value::STRUCT(type, child_values);
 		return ColumnDefinition(name, type, make_uniq<ConstantExpression>(default_value), TableColumnType::STANDARD);
