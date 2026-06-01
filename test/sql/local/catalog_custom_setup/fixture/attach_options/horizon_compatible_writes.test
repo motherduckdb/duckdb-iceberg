@@ -40,10 +40,10 @@ ATTACH '' AS my_datalake (
     CLIENT_ID 'admin',
     CLIENT_SECRET 'password',
     ENDPOINT 'http://127.0.0.1:8181',
-    support_stage_create false,
-    use_transaction_commit false,
+    stage_create_tables false,
+    disable_multi_table_commit true,
     skip_create_table_metadata_updates true,
-    allow_deletes false
+    remove_files_on_delete false
 );
 
 statement ok
@@ -109,6 +109,10 @@ select count(*) from my_datalake.default.test_horizon_mixed_empty_create;
 ----
 0
 
+# The table is created up front with a POST to the `.../tables` collection endpoint.
+# Because skip_create_table_metadata_updates is set and the new table received no data,
+# it queues no transaction updates, so no follow-up per-table commit
+# (POST to `.../tables/<name>`) is issued for it.
 query I
 select count(*) from duckdb_logs_parsed('HTTP') where request.type = 'POST'
   and request.url like '%/namespaces/default/tables/test_horizon_mixed_empty_create';

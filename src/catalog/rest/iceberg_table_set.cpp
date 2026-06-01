@@ -265,10 +265,10 @@ IcebergTableInformation &IcebergTableSet::CreateNewEntry(ClientContext &context,
 
 	// if we stage created the table, we add an assert create
 	auto &transaction_data = table_info.GetOrCreateTransactionData(iceberg_transaction);
-	if (catalog.attach_options.supports_stage_create) {
+	if (catalog.attach_options.stage_create_tables) {
 		transaction_data.TableAddAssertCreate();
 	}
-	if (!catalog.attach_options.supports_stage_create && catalog.attach_options.skip_create_table_metadata_updates) {
+	if (!catalog.attach_options.stage_create_tables && catalog.attach_options.skip_create_table_metadata_updates) {
 		return table_info;
 	}
 	// other required updates to the table
