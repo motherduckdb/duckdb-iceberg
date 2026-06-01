@@ -1,0 +1,154 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/test_filtering_geometry_predicates.test
+# group: [filtering]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+set enable_logging=true
+
+statement ok
+set logging_level='debug'
+
+# Verifies file-level pruning on a GEOMETRY column using the bbox-only
+# predicates `&&` and `ST_Intersects_Extent`. Each INSERT lands in its own
+# data file, so the file's bbox stats come straight from the row contents.
+#
+# File -1- bbox: [0..10,  0..10  ]   (lower-left)
+# File -2- bbox: [100..120, 100..120] (far upper-right)
+# File -3- bbox: [50..60, 50..60]    (middle)
+
+statement ok
+drop table if exists my_datalake.default.geom_pruning;
+
+statement ok
+create table my_datalake.default.geom_pruning (g GEOMETRY) with ('format-version'='3');
+
+statement ok
+insert into my_datalake.default.geom_pruning VALUES
+    ('POINT(1 2)'::GEOMETRY),
+    ('POINT(5 7)'::GEOMETRY),
+    ('LINESTRING(0 0, 10 10)'::GEOMETRY);
+
+statement ok
+insert into my_datalake.default.geom_pruning VALUES
+    ('POINT(100 100)'::GEOMETRY),
+    ('LINESTRING(100 100, 120 120)'::GEOMETRY);
+
+statement ok
+insert into my_datalake.default.geom_pruning VALUES
+    ('POINT(50 50)'::GEOMETRY),
+    ('POINT(60 60)'::GEOMETRY);
+
+statement ok
+CALL truncate_duckdb_logs();
+
+# ------------------------------------------------------------------
+# `&&`: predicate bbox intersects file -1- only. Prune -2- and -3-.
+# ------------------------------------------------------------------
+
+query I
+select g::VARCHAR from my_datalake.default.geom_pruning
+where g && 'POLYGON((-1 -1, 11 -1, 11 11, -1 11, -1 -1))'
+order by g::VARCHAR;
+----
+LINESTRING (0 0, 10 10)
+POINT (1 2)
+POINT (5 7)
+
+query I
+select count(*) from duckdb_logs()
+where type = 'Iceberg' and message.contains('Iceberg Filter Pushdown, skipped ''data_file'':');
+----
+2
+
+statement ok
+CALL truncate_duckdb_logs();
+
+# ------------------------------------------------------------------
+# `&&`: predicate bbox intersects file -2- only. Prune -1- and -3-.
+# ------------------------------------------------------------------
+
+query I
+select g::VARCHAR from my_datalake.default.geom_pruning
+where g && 'POLYGON((99 99, 121 99, 121 121, 99 121, 99 99))'
+order by g::VARCHAR;
+----
+LINESTRING (100 100, 120 120)
+POINT (100 100)
+
+query I
+select count(*) from duckdb_logs()
+where type = 'Iceberg' and message.contains('Iceberg Filter Pushdown, skipped ''data_file'':');
+----
+2
+
+statement ok
+CALL truncate_duckdb_logs();
+
+# ------------------------------------------------------------------
+# `ST_Intersects_Extent`: predicate bbox intersects file -3- only.
+# Prune -1- and -2-.
+# ------------------------------------------------------------------
+
+query I
+select g::VARCHAR from my_datalake.default.geom_pruning
+where ST_Intersects_Extent(g, 'POLYGON((49 49, 61 49, 61 61, 49 61, 49 49))'::GEOMETRY)
+order by g::VARCHAR;
+----
+POINT (50 50)
+POINT (60 60)
+
+query I
+select count(*) from duckdb_logs()
+where type = 'Iceberg' and message.contains('Iceberg Filter Pushdown, skipped ''data_file'':');
+----
+2
+
+statement ok
+CALL truncate_duckdb_logs();
+
+# ------------------------------------------------------------------
+# Constant bbox intersects no file. All three should be pruned.
+# ------------------------------------------------------------------
+
+query I
+select count(*) from my_datalake.default.geom_pruning
+where g && 'POLYGON((200 200, 300 200, 300 300, 200 300, 200 200))';
+----
+0
+
+query I
+select count(*) from duckdb_logs()
+where type = 'Iceberg' and message.contains('Iceberg Filter Pushdown, skipped ''data_file'':');
+----
+3
+
+statement ok
+CALL truncate_duckdb_logs();
+
+# ------------------------------------------------------------------
+# Constant bbox covers every file. Nothing should be pruned.
+# ------------------------------------------------------------------
+
+query I
+select count(*) from my_datalake.default.geom_pruning
+where g && 'POLYGON((-1 -1, 121 -1, 121 121, -1 121, -1 -1))';
+----
+7
+
+query I
+select count(*) from duckdb_logs()
+where type = 'Iceberg' and message.contains('Iceberg Filter Pushdown, skipped ''data_file'':');
+----
+0

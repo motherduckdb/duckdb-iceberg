@@ -74,9 +74,7 @@ def spark_con(request):
 
     runtime_jar = generate_jar_location(runtime_config)
     runtime_pkg = generate_package(runtime_config)
-    runtime_path = os.path.abspath(
-        os.path.join(SCRIPT_DIR, "..", "..", "scripts", "data_generators", runtime_jar)
-    )
+    runtime_path = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", "scripts", "data_generators", runtime_jar))
 
     os.environ["PYSPARK_SUBMIT_ARGS"] = (
         f"--packages {runtime_pkg},org.apache.iceberg:iceberg-aws-bundle:{runtime_config.iceberg_library_version} pyspark-shell"
@@ -323,13 +321,9 @@ class TestSparkRead:
         res = df.collect()
         assert res == [
             Row(_last_updated_sequence_number=5, _row_id=3, id=1, data="replaced"),
-            Row(
-                _last_updated_sequence_number=8, _row_id=0, id=2, data="replaced_again"
-            ),
+            Row(_last_updated_sequence_number=8, _row_id=0, id=2, data="replaced_again"),
             Row(_last_updated_sequence_number=2, _row_id=6, id=4, data="d_u1"),
-            Row(
-                _last_updated_sequence_number=8, _row_id=1, id=6, data="replaced_again"
-            ),
+            Row(_last_updated_sequence_number=8, _row_id=1, id=6, data="replaced_again"),
             Row(_last_updated_sequence_number=7, _row_id=2, id=7, data="g_new"),
         ]
 
@@ -344,8 +338,6 @@ class TestSparkRead:
         )
         res = df.collect()
         assert res == [
-            Row(
-                _last_updated_sequence_number=8, _row_id=3, id=2, data="replaced_again"
-            ),
+            Row(_last_updated_sequence_number=8, _row_id=3, id=2, data="replaced_again"),
             Row(_last_updated_sequence_number=7, _row_id=0, id=7, data="g_new"),
         ]

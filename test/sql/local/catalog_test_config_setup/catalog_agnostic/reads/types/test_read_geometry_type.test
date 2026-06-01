@@ -1,5 +1,5 @@
-# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/test_read_geometry_type.test
-# group: [reads]
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/types/test_read_geometry_type.test
+# group: [types]
 
 require-env CATALOG_TEST_CONFIG_SETUP
 

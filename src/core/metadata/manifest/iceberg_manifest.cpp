@@ -617,11 +617,8 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	auto schema_doc = schema_doc_p.get();
 	auto schema_root_obj = yyjson_mut_obj(schema_doc);
 	yyjson_mut_doc_set_root(schema_doc, schema_root_obj);
-	IcebergCreateTableRequest::PopulateSchema(
-		schema_doc,
-		schema_root_obj,
-		*table_metadata.GetSchemaFromId(table_metadata.GetCurrentSchemaId())
-	);
+	IcebergCreateTableRequest::PopulateSchema(schema_doc, schema_root_obj,
+	                                          *table_metadata.GetSchemaFromId(table_metadata.GetCurrentSchemaId()));
 	auto iceberg_table_schema_string = ICUtils::JsonToString(std::move(schema_doc_p));
 
 	child_list_t<Value> metadata_values;
