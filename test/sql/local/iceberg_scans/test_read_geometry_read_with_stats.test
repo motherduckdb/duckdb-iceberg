@@ -25,7 +25,7 @@ SELECT count(*) FROM iceberg_scan(
 ----
 1000
 
-mode output_result
-
-statement ok
-select * from duckdb_logs() where type = 'Iceberg';
+query I
+select count(*) from duckdb_logs() where type = 'Iceberg' and message like '%skipped %data_file%';
+----
+9
