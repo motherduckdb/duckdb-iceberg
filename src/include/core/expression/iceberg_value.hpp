@@ -82,7 +82,10 @@ public:
 	static DeserializeResult DeserializeValue(const string_t &blob, const LogicalType &target);
 	static SerializeResult SerializeValue(Value input_value, const LogicalType &column_type, SerializeBound bound_type);
 	static string TruncateString(const string &input);
-	static string TruncateAndIncrementString(const string &input);
+	// Computes a truncated, incremented upper bound for a string. Returns false
+	// (and leaves `result` untouched) when no valid bound can be produced, so the
+	// caller can omit the optional upper bound instead of failing.
+	static bool TruncateAndIncrementString(const string &input, string &result);
 };
 
 } // namespace duckdb
