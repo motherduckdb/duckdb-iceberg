@@ -1,4 +1,4 @@
-# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_write_variant_bounds.test
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/test_write_variant_bounds.test
 # description: writing lower/upper bounds for shredded VARIANT columns into the manifest
 # group: [insert]
 
