@@ -103,18 +103,17 @@ insert into my_datalake.default.geom_bounds_xym VALUES
 statement ok
 set variable manifest_path_xym = (select manifest_path from iceberg_metadata(my_datalake.default.geom_bounds_xym) order by manifest_sequence_number desc limit 1);
 
-# 32-byte bounds: [xmin, ymin, DBL_MAX, mmin] / [xmax, ymax, DBL_MAX, mmax]
+# 32-byte bounds: [xmin, ymin, DBL_MIN, mmin] / [xmax, ymax, DBL_MAX, mmax]
 query II
 select octet_length(map_extract(lower_bounds, 1)[1]), octet_length(map_extract(upper_bounds, 1)[1])
 from (select unnest(data_file) from read_avro(getvariable('manifest_path_xym')));
 ----
 32	32
 
-# Verify the Z slot holds the +infinity sentinel in both bounds.
-# +inf in little-endian f64 = 00 00 00 00 00 00 F0 7F.
+# Verify the Z slot holds UNKNOWN_MAX (+infinity) in the z slot and UNKNOWN_MIN (-infinity)
 # The Z slot occupies bytes 17..24 (1-indexed) after [xmin, ymin].
 query II
-select map_extract(lower_bounds, 1)[1][17:24] = '\x00\x00\x00\x00\x00\x00\xF0\x7F'::BLOB,
+select map_extract(lower_bounds, 1)[1][17:24] = '\x00\x00\x00\x00\x00\x00\xF0\xFF'::BLOB,
        map_extract(upper_bounds, 1)[1][17:24] = '\x00\x00\x00\x00\x00\x00\xF0\x7F'::BLOB
 from (select unnest(data_file) from read_avro(getvariable('manifest_path_xym')));
 ----

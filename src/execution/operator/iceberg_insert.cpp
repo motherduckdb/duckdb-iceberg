@@ -314,8 +314,8 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 					// XYM column we'd otherwise be misread as XYZ. Pad the Z slot with
 					// +infinity in both bounds so the encoding is unambiguously 4D and
 					// the M value lands in the right slot.
-					const auto z_max = NumericLimits<double>::Maximum();
-					const auto z_min = NumericLimits<double>::Minimum();
+					const auto z_max = GeometryExtent::UNKNOWN_MAX;
+					const auto z_min = GeometryExtent::UNKNOWN_MIN;
 					lower.push_back(z_min);
 					upper.push_back(z_max);
 				}
