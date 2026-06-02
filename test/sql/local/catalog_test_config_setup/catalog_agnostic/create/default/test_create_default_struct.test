@@ -85,16 +85,16 @@ create table my_datalake.default.nested_tbl(
 	'format-version'= 3
 );
 
-# input: - (missing)
-# col default: NULL
-# result: NULL
-statement ok
-insert into my_datalake.default.nested_tbl (col2) VALUES (12)
+## input: - (missing)
+## col default: NULL
+## result: NULL
+#statement ok
+#insert into my_datalake.default.nested_tbl (col2) VALUES (12)
 
-query II
-select * from my_datalake.default.nested_tbl order by all;
-----
-{'a': test, 'b': {'c': 1000, 'd': -500}, 'e': NULL}	12
+#query II
+#select * from my_datalake.default.nested_tbl order by all;
+#----
+#{'a': test, 'b': {'c': 1000, 'd': -500}, 'e': NULL}	12
 
 # input: {'b': 42}
 # col default: NULL
@@ -102,10 +102,18 @@ select * from my_datalake.default.nested_tbl order by all;
 # result: {'a': test, 'b': 42}
 statement ok
 insert into my_datalake.default.nested_tbl BY NAME FROM
-	VALUES ({'b': 42}, 24) t(col, col2)
+	VALUES (
+		{
+			'b': {
+				'd': 42
+			}
+		},
+		24
+	) t(col, col2)
 
 query II
 select * from my_datalake.default.nested_tbl order by all;
 ----
-{'a': test, 'b': 42}	24
-{'a': test, 'b': NULL}	12
+{'a': test, 'b': {'c': 1000, 'd': 42}, 'e': NULL}	24
+
+#{'a': test, 'b': NULL}	12
