@@ -18,6 +18,7 @@
 
 namespace duckdb {
 
+class PhysicalTableScan;
 struct IcebergMultiFileList;
 
 struct WrittenColumnInfo {
@@ -27,6 +28,19 @@ struct WrittenColumnInfo {
 
 	LogicalType type;
 	int32_t field_id;
+};
+
+//! A single `column = constant` predicate extracted from a DELETE's WHERE clause, used to
+//! materialize an Iceberg equality-delete file.
+struct IcebergEqualityDeletePredicate {
+	//! The Iceberg field-id of the column
+	int32_t field_id;
+	//! The column name (used both for the parquet column name and its field-id metadata)
+	string column_name;
+	//! The column type
+	LogicalType type;
+	//! The constant value to delete (cast to `type`)
+	Value value;
 };
 
 class IcebergDeleteLocalState : public LocalSinkState {
@@ -47,6 +61,8 @@ struct IcebergDeleteFileInfo {
 	optional_idx content_size_in_bytes;
 	optional_idx content_offset;
 	vector<IcebergPartitionInfo> partition_info;
+	//! When non-empty, this is an equality-delete file; holds the field-ids it applies to
+	vector<int32_t> equality_ids;
 };
 
 class IcebergDeleteGlobalState : public GlobalSinkState {
@@ -64,6 +80,8 @@ public:
 	// data file name -> newly deleted rows.
 	unordered_map<string, vector<idx_t>> deleted_rows;
 	IcebergManifestDeletes altered_manifests;
+	//! Guards the one-time write of the equality-delete file (Sink runs in parallel)
+	bool equality_delete_written = false;
 
 	void Flush(IcebergDeleteLocalState &local_state) {
 		auto &local_entry = local_state.file_row_numbers;
@@ -84,6 +102,24 @@ public:
 
 class IcebergDelete : public PhysicalOperator {
 public:
+#ifdef ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
+	IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table,
+	              optional_ptr<IcebergMultiFileList> multi_file_list, PhysicalOperator &child,
+	              vector<idx_t> row_id_indexes, bool is_equality_delete,
+	              vector<IcebergEqualityDeletePredicate> equality_predicates)
+	    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, {LogicalType::BIGINT}, 1),
+	      is_equality_delete(is_equality_delete), table(table), multi_file_list(multi_file_list),
+	      row_id_indexes(std::move(row_id_indexes)), equality_predicates(std::move(equality_predicates)) {
+		children.push_back(child);
+	}
+	//! Whether this delete is written as an Iceberg equality-delete file. Hard-wired to a
+	//! `static constexpr false` when the equality-delete write feature is compiled out, so the
+	//! dead branches that reference it can never trigger at runtime in shipped builds.
+	bool is_equality_delete;
+#else
+	static constexpr bool is_equality_delete = false;
+#endif
+
 	IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table,
 	              optional_ptr<IcebergMultiFileList> multi_file_list, PhysicalOperator &child,
 	              vector<idx_t> row_id_indexes);
@@ -97,6 +133,8 @@ public:
 	//! The column indexes for the relevant row-id columns
 	vector<idx_t> row_id_indexes;
 
+	vector<IcebergEqualityDeletePredicate> equality_predicates;
+
 public:
 	// // Source interface
 	SourceResultType GetDataInternal(ExecutionContext &context, DataChunk &chunk,
@@ -109,6 +147,12 @@ public:
 	static PhysicalOperator &PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner,
 	                                    IcebergTableEntry &table, PhysicalOperator &child_plan,
 	                                    vector<idx_t> row_id_indexes);
+
+	//! Detects whether `child_plan`'s pushed-down filters describe a pure conjunction of equality
+	//! predicates, and if so extracts them into `equality_predicates`. Returns false otherwise.
+	static bool TryGetEqualityDeletePredicates(ClientContext &context, IcebergTableEntry &table,
+	                                           PhysicalOperator &child_plan,
+	                                           vector<IcebergEqualityDeletePredicate> &equality_predicates);
 
 public:
 	// Sink interface
@@ -134,11 +178,16 @@ public:
 	                  IcebergDeleteGlobalState &global_state) const;
 
 private:
+	//! Walk `plan` for the PhysicalTableScan that emits the row-id virtual columns the delete needs.
+	static optional_ptr<PhysicalTableScan> FindDeleteSource(PhysicalOperator &plan);
 	void WritePositionalDeleteFile(ClientContext &context, IcebergDeleteGlobalState &global_state,
 	                               const string &filename, IcebergDeleteFileInfo delete_file,
 	                               set<idx_t> sorted_deletes) const;
 	void WriteDeletionVectorFile(ClientContext &context, IcebergDeleteGlobalState &global_state, const string &filename,
 	                             IcebergDeleteFileInfo delete_file, const set<idx_t> &sorted_deletes) const;
+	//! Writes the Iceberg equality-delete parquet file (one column per equality field, one row of
+	//! constants) and records it in `global_state.written_files`.
+	void WriteEqualityDeleteFile(ClientContext &context, IcebergDeleteGlobalState &global_state) const;
 };
 
 } // namespace duckdb
