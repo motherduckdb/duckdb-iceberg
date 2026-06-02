@@ -433,6 +433,7 @@ void IcebergMultiFileReader::FinalizeChunk(ClientContext &context, const MultiFi
 	//! Base class finalization first
 	MultiFileReader::FinalizeChunk(context, bind_data, reader, reader_data, input_chunk, output_chunk, executor,
 	                               global_state);
+
 	D_ASSERT(global_state);
 	// Get the metadata for this file
 	auto file_id = reader.file_list_idx.GetIndex();
@@ -440,6 +441,9 @@ void IcebergMultiFileReader::FinalizeChunk(ClientContext &context, const MultiFi
 
 	auto &local_columns = reader.columns;
 	ApplyEqualityDeletes(context, output_chunk, multi_file_list, bound_manifest_entry, local_columns);
+	//! FIXME: dictionary vectors cause problems in 'GroupedAggregateHashTable::TryAddDictionaryGroups'
+	//! side-step the issue by flattening for now
+	output_chunk.Flatten();
 }
 
 bool IcebergMultiFileReader::ParseOption(const string &key, const Value &val, MultiFileOptions &options,
