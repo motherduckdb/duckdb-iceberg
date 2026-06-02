@@ -75,6 +75,7 @@ IcebergColumnDefinition::ParseType(const string &name, int32_t field_id, bool re
 	res->id = field_id;
 	res->required = required;
 	res->name = name;
+	res->doc = doc;
 
 	if (type.has_primitive_type) {
 		res->type = ParsePrimitiveType(type.primitive_type);
@@ -248,6 +249,7 @@ unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::Copy() const {
 	auto res = make_uniq<IcebergColumnDefinition>();
 	res->id = id;
 	res->name = name;
+	res->doc = doc;
 	res->type = type;
 	// TODO: initial default and write default need more support here
 	if (initial_default) {
@@ -286,14 +288,19 @@ ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
 		//! If it's not set, use the initial-default (if that *is* set)
 		default_to_use = initial_default.get();
 	}
-	if (default_to_use) {
+	if (default_to_use && type.IsNested()) {
 		//! FIXME: the expression needs to be more advanced for nested types
-		if (type.IsNested()) {
-			throw NotImplementedException("DEFAULT values for nested types are not supported currently");
-		}
-		return ColumnDefinition(name, type, make_uniq<ConstantExpression>(*default_to_use), TableColumnType::STANDARD);
+		throw NotImplementedException("DEFAULT values for nested types are not supported currently");
 	}
-	return ColumnDefinition(name, type);
+	ColumnDefinition column =
+	    default_to_use
+	        ? ColumnDefinition(name, type, make_uniq<ConstantExpression>(*default_to_use), TableColumnType::STANDARD)
+	        : ColumnDefinition(name, type);
+	if (!doc.empty()) {
+		//! Surface the Iceberg field `doc` as the DuckDB column comment
+		column.SetComment(Value(doc));
+	}
+	return column;
 }
 
 static bool DefaultsAreEqual(const unique_ptr<Value> &a, const unique_ptr<Value> &b) {
