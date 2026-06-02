@@ -140,7 +140,7 @@ void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntr
 				//! Construct an OPERATOR_IS_NOT_NULL expression instead
 				auto is_not_null =
 				    make_uniq<BoundOperatorExpression>(ExpressionType::OPERATOR_IS_NOT_NULL, LogicalType::BOOLEAN);
-				is_not_null->children.push_back(std::move(bound_ref));
+				is_not_null->GetChildrenMutable().push_back(std::move(bound_ref));
 				equality_filter = std::move(is_not_null);
 			}
 			row.filters.emplace(std::make_pair(field_id, std::move(equality_filter)));
