@@ -190,7 +190,7 @@ void IcebergDelete::WriteEqualityDeleteFile(ClientContext &context, IcebergDelet
 	for (idx_t col_idx = 0; col_idx < equality_predicates.size(); col_idx++) {
 		write_chunk.data[col_idx].SetValue(0, equality_predicates[col_idx].value);
 	}
-	write_chunk.SetCardinality(1);
+	write_chunk.SetChildCardinality(1);
 	copy_fun.function.copy_to_sink(execution_context, *function_data, *copy_global_state, *copy_local_state,
 	                               write_chunk);
 
