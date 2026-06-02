@@ -16,9 +16,6 @@ require httpfs
 set ignore_error_messages
 
 statement ok
-SET TimeZone = 'UTC';
-
-statement ok
 drop table if exists my_datalake.default.non_ascii_upper_bound_test;
 
 statement ok
