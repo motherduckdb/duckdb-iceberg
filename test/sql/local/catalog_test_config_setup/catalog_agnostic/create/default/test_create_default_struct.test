@@ -94,7 +94,7 @@ insert into my_datalake.default.nested_tbl (col2) VALUES (12)
 query II
 select * from my_datalake.default.nested_tbl order by all;
 ----
-{'a': test, 'b': NULL, 'e': NULL}	12
+{'a': test, 'b': {'c': 1000, 'd': -500}, 'e': NULL}	12
 
 # input: {'b': 42}
 # col default: NULL
