@@ -38,20 +38,11 @@ insert into my_datalake.default.geom_bounds_xy VALUES
     ('POINT(5 7)'::GEOMETRY),
     ('LINESTRING(-3 -4, 10 10)'::GEOMETRY);
 
-# query I
-# select * from my_datalake.default.geom_bounds_xy where g && 'LINESTRING(5 5, 10 10)';
-# ----
-# POINT (5 7)
-# LINESTRING (-3 -4, 10 10)
-
 # insert only geometry points outside of filter in the above query
 statement ok
 insert into my_datalake.default.geom_bounds_xy VALUES
     ('POINT(100 100)'::GEOMETRY),
     ('LINESTRING(100 100, 120 120)'::GEOMETRY);
-
-# statement ok
-# call enable_logging('Iceberg');
 
 # result is the same
 query I
@@ -60,8 +51,3 @@ select * from my_datalake.default.geom_bounds_xy where g && 'LINESTRING(5 5, 10 
 POINT (5 7)
 LINESTRING (-3 -4, 10 10)
 
-# TODO: implement bounding box filtering on geometry stats.
-query I
-select count(*) from duckdb_logs() where type = 'Iceberg';
-----
-0
