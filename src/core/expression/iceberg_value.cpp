@@ -236,7 +236,7 @@ DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const Log
 		}
 	case LogicalTypeId::UUID:
 		return DeserializeUUID(blob, type);
-		// Add more types as needed
+	// Add more types as needed
 	default:
 		break;
 	}

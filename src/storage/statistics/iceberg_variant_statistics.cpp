@@ -4,8 +4,11 @@
 #include "duckdb/common/constants.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/common/types/variant.hpp"
+#include "duckdb/common/types/vector.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/function/function_binder.hpp"
+#include "duckdb/function/scalar/variant_utils.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 
@@ -220,6 +223,95 @@ bool IcebergVariantBounds::Finalize(ClientContext &context, bool &has_lower, str
 		has_upper = SerializeBoundsVariant(context, Value::STRUCT(std::move(upper_children)), upper_blob);
 	}
 	return has_lower || has_upper;
+}
+
+//===--------------------------------------------------------------------===//
+// Bounds deserialization
+//===--------------------------------------------------------------------===//
+
+bool IcebergVariantBoundsReader::Deserialize(ClientContext &context, const string_t &blob, Value &result) {
+	if (blob.GetSize() == 0) {
+		return false;
+	}
+
+	// The parquet extension owns the canonical variant binary decoder; the iceberg extension does not link against
+	// it, so we decode through the registered 'variant_bytes_to_variant' scalar function (the inverse of
+	// 'variant_to_parquet_variant' that IcebergVariantBounds::Finalize uses to serialize the bounds).
+	vector<unique_ptr<Expression>> children;
+	children.push_back(make_uniq<BoundConstantExpression>(Value::BLOB_RAW(blob.GetString())));
+
+	ErrorData error;
+	FunctionBinder binder(context);
+	auto expr = binder.BindScalarFunction(DEFAULT_SCHEMA, "variant_bytes_to_variant", std::move(children), error);
+	if (!expr) {
+		return false;
+	}
+
+	Value variant_value;
+	if (!ExpressionExecutor::TryEvaluateScalar(context, *expr, variant_value) || variant_value.IsNull()) {
+		return false;
+	}
+	result = std::move(variant_value);
+	return true;
+}
+
+//! Reverse of BuildJsonPath: "$['person']['age']" -> "person.age", "$" -> "".
+static string NormalizeJsonPath(const string &path) {
+	vector<string> segments;
+	size_t pos = 0;
+	while ((pos = path.find("['", pos)) != string::npos) {
+		pos += 2;
+		auto end = path.find("']", pos);
+		if (end == string::npos) {
+			break;
+		}
+		segments.push_back(path.substr(pos, end - pos));
+		pos = end + 2;
+	}
+	return StringUtil::Join(segments, ".");
+}
+
+bool IcebergVariantBoundsReader::RekeyBoundsVariant(const Value &bounds_variant, Value &result) {
+	if (bounds_variant.IsNull() || bounds_variant.type().id() != LogicalTypeId::VARIANT) {
+		return false;
+	}
+
+	Value struct_value;
+	try {
+		// Convert the VARIANT into a regular nested Value: objects become STRUCTs keyed by the variant's object
+		// keys (the JSON paths "$['age']", ...), with the leaf bounds as typed scalar values.
+		Vector tmp(bounds_variant);
+		RecursiveUnifiedVectorFormat format;
+		Vector::RecursiveToUnifiedFormat(tmp, 1, format);
+		UnifiedVariantVectorData variant_data(format);
+		struct_value = VariantUtils::ConvertVariantToValue(variant_data, 0, 0);
+	} catch (...) {
+		return false;
+	}
+
+	if (struct_value.IsNull() || struct_value.type().id() != LogicalTypeId::STRUCT) {
+		return false;
+	}
+
+	// Rebuild the struct with the JSON-path keys normalized to plain field names, then cast back to VARIANT so a
+	// filter on the variant column can be evaluated against it.
+	auto &child_types = StructType::GetChildTypes(struct_value.type());
+	auto &child_values = StructValue::GetChildren(struct_value);
+	child_list_t<Value> renamed;
+	for (idx_t i = 0; i < child_types.size(); i++) {
+		renamed.emplace_back(NormalizeJsonPath(child_types[i].first), child_values[i]);
+	}
+	if (renamed.empty()) {
+		return false;
+	}
+
+	Value renamed_struct = Value::STRUCT(std::move(renamed));
+	Value variant_result;
+	if (!renamed_struct.DefaultTryCastAs(LogicalType::VARIANT(), variant_result, nullptr)) {
+		return false;
+	}
+	result = std::move(variant_result);
+	return true;
 }
 
 } // namespace duckdb
