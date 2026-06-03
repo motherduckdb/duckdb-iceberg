@@ -61,4 +61,24 @@ private:
 	vector<FieldBound> fields;
 };
 
+//! Decodes the parquet-variant bounds blobs produced by IcebergVariantBounds back into a VARIANT Value,
+//! so a manifest's lower/upper bound for a shredded VARIANT column can be used for file pruning.
+//!
+//! The blob is the canonical binary Variant encoding (metadata + value concatenated) of an object whose keys
+//! are JSON paths ("$['age']", "$['person']['age']"). The keys are preserved as-is; a pruning consumer rebuilds
+//! the matching JSON path (see IcebergVariantBounds' BuildJsonPath convention) to look up a field's bounds.
+struct IcebergVariantBoundsReader {
+	//! Decode a bounds blob into a VARIANT Value by delegating to the parquet extension's
+	//! 'variant_bytes_to_variant' scalar function. Returns false (leaving result untouched) if the blob can't
+	//! be decoded (e.g. the parquet extension isn't loaded, or the bytes are malformed).
+	static bool Deserialize(ClientContext &context, const string_t &blob, Value &result);
+
+	//! Re-key a decoded bounds VARIANT (whose object keys are JSON paths like "$['age']") to the plain field
+	//! names used at the call site ("age", "person.age"), returning a VARIANT Value with the renamed keys. This
+	//! lets a filter on the variant column (e.g. "variant_col.age > 60") be evaluated directly against the bound
+	//! via IcebergPredicate::MatchBounds. Returns false (leaving result untouched) if the value isn't a VARIANT
+	//! object.
+	static bool RekeyBoundsVariant(const Value &bounds_variant, Value &result);
+};
+
 } // namespace duckdb
