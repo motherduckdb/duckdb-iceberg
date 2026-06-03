@@ -24,21 +24,34 @@ statement ok
 create table my_datalake.default.tbl(
 	col STRUCT(
 		a VARCHAR,
-		b INTEGER
+		b INTEGER,
+		c BOOLEAN
 	) DEFAULT {'a': 'test', 'b': NULL},
 	col2 INTEGER
 ) WITH (
 	'format-version'= 3
 );
 
+# in: - (col not provided)
+# col.default: {}
+# col.a.default: 'test'
+# col.b.default: NULL
+# col.c.default: -
+# result: {'a': test, 'b': NULL, 'c': NULL}
 statement ok
 insert into my_datalake.default.tbl (col2) VALUES (12)
 
 query II
 select * from my_datalake.default.tbl order by all;
 ----
-{'a': test, 'b': NULL}	12
+{'a': test, 'b': NULL, 'c': NULL}	12
 
+# in: {'b': 42}
+# col.default: {}
+# col.a.default: 'test'
+# col.b.default: NULL
+# col.c.default: -
+# result: {'a': test, 'b': 42, 'c': NULL}
 statement ok
 insert into my_datalake.default.tbl BY NAME FROM
 	VALUES ({'b': 42}, 24) t(col, col2)
@@ -46,8 +59,8 @@ insert into my_datalake.default.tbl BY NAME FROM
 query II
 select * from my_datalake.default.tbl order by all;
 ----
-{'a': test, 'b': 42}	24
-{'a': test, 'b': NULL}	12
+{'a': test, 'b': 42, 'c': NULL}	24
+{'a': test, 'b': NULL, 'c': NULL}	12
 
 # Struct nested within another struct
 
@@ -61,15 +74,16 @@ create table my_datalake.default.nested_tbl(
 	col STRUCT(
 		a VARCHAR,
 		b STRUCT(
-			c BIGINT,
-			d BIGINT
+			v1 BIGINT,
+			v2 BIGINT,
+			v3 BIGINT
 		),
 		e BOOLEAN
 	) DEFAULT {
 		'a': 'test',
 		'b': {
-			'c': 1000,
-			'd': -500
+			'v1': 1000,
+			'v3': -500
 		},
 		'e': NULL
 	},
@@ -78,20 +92,34 @@ create table my_datalake.default.nested_tbl(
 	'format-version'= 3
 );
 
+# col.b.in: -
+# col.b.default: {}
+# col.b.v1.default: 1000
+# col.b.v2.default: -
+# col.b.v3.default: -500
+# col.b.result: {'v1': 1000, 'v2': NULL, 'v3': -500}
 statement ok
 insert into my_datalake.default.nested_tbl (col2) VALUES (12)
 
 query II
 select * from my_datalake.default.nested_tbl order by all;
 ----
-{'a': test, 'b': {'c': 1000, 'd': -500}, 'e': NULL}	12
+{'a': test, 'b': {'v1': 1000, 'v2': NULL, 'v3': -500}, 'e': NULL}	12
 
+# Only supply b.v3, which has a default of -500
+
+# col.b.in: {'v3': NULL}
+# col.b.default: {}
+# col.b.v1.default: 1000
+# col.b.v2.default: -
+# col.b.v3.default: -500
+# col.b.result: {'v1': 1000, 'v2': NULL, 'v3': NULL}
 statement ok
 insert into my_datalake.default.nested_tbl BY NAME FROM
 	VALUES (
 		{
 			'b': {
-				'd': 42
+				'v3': NULL
 			}
 		},
 		24
@@ -100,6 +128,32 @@ insert into my_datalake.default.nested_tbl BY NAME FROM
 query II
 select * from my_datalake.default.nested_tbl order by all;
 ----
-{'a': test, 'b': {'c': 1000, 'd': -500}, 'e': NULL}	12
-{'a': test, 'b': {'c': 1000, 'd': 42}, 'e': NULL}	24
+{'a': test, 'b': {'v1': 1000, 'v2': NULL, 'v3': -500}, 'e': NULL}	12
+{'a': test, 'b': {'v1': 1000, 'v2': NULL, 'v3': NULL}, 'e': NULL}	24
+
+# Only supply b.v2, which has no default
+
+# col.b.in: {'v3': 42}
+# col.b.default: {}
+# col.b.v1.default: 1000
+# col.b.v2.default: -
+# col.b.v3.default: -500
+# col.b.result: {'v1': 1000, 'v2': NULL, 'v3': 42}
+statement ok
+insert into my_datalake.default.nested_tbl BY NAME FROM
+	VALUES (
+		{
+			'b': {
+				'v2': 250
+			}
+		},
+		24
+	) t(col, col2)
+
+query II
+select * from my_datalake.default.nested_tbl order by all;
+----
+{'a': test, 'b': {'v1': 1000, 'v2': 250, 'v3': -500}, 'e': NULL}	24
+{'a': test, 'b': {'v1': 1000, 'v2': NULL, 'v3': -500}, 'e': NULL}	12
+{'a': test, 'b': {'v1': 1000, 'v2': NULL, 'v3': NULL}, 'e': NULL}	24
 
