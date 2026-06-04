@@ -25,7 +25,7 @@ create table my_datalake.default.tbl(
 	col STRUCT(
 		a VARCHAR,
 		b INTEGER,
-		c BOOLEAN
+		c BLOB
 	) DEFAULT {'a': 'test', 'b': NULL},
 	col2 INTEGER
 ) WITH (
@@ -60,6 +60,23 @@ query II
 select * from my_datalake.default.tbl order by all;
 ----
 {'a': test, 'b': 42, 'c': NULL}	24
+{'a': test, 'b': NULL, 'c': NULL}	12
+
+# in: {'c': '\xaa\xff\xaa'}
+# col.default: {}
+# col.a.default: 'test'
+# col.b.default: NULL
+# col.c.default: -
+# result: {'a': test, 'b': NULL, 'c': '\xaa\xff\xaa'}
+statement ok
+insert into my_datalake.default.tbl BY NAME FROM
+	VALUES ({'c': '\xaa\xff\xaa'}, 24) t(col, col2)
+
+query II
+select * from my_datalake.default.tbl order by all;
+----
+{'a': test, 'b': 42, 'c': NULL}	24
+{'a': test, 'b': NULL, 'c': \xAA\xFF\xAA}	24
 {'a': test, 'b': NULL, 'c': NULL}	12
 
 # Struct nested within another struct
