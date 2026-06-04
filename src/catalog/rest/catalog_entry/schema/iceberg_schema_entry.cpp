@@ -1,4 +1,4 @@
-#include "catalog/rest/catalog_entry/iceberg_schema_entry.hpp"
+#include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
 
 #include "duckdb/parser/column_list.hpp"
 #include "duckdb/parser/constraints/list.hpp"
@@ -20,6 +20,7 @@
 #include "catalog/rest/api/iceberg_type.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
 #include "common/iceberg_default.hpp"
+#include "duckdb/common/exception/http_exception.hpp"
 
 namespace duckdb {
 
@@ -140,8 +141,8 @@ optional_ptr<CatalogEntry> IcebergSchemaEntry::CreateFunction(CatalogTransaction
 void ICUnqualifyColumnRef(ParsedExpression &expr) {
 	if (expr.GetExpressionType() == ExpressionType::COLUMN_REF) {
 		auto &colref = expr.Cast<ColumnRefExpression>();
-		auto name = std::move(colref.column_names.back());
-		colref.column_names = {std::move(name)};
+		auto name = std::move(colref.ColumnNamesMutable().back());
+		colref.ColumnNamesMutable() = {std::move(name)};
 		return;
 	}
 	ParsedExpressionIterator::EnumerateChildren(expr, ICUnqualifyColumnRef);
@@ -767,5 +768,24 @@ IcebergTableSet &IcebergSchemaEntry::GetCatalogSet(CatalogType type) {
 		throw InternalException("Type not supported for GetCatalogSet");
 	}
 }
+
+void IcebergSchemaEntry::LoadProperties(ClientContext &context) {
+	if (schema_info.properties_loaded) {
+		// not needed
+		return;
+	}
+	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
+
+	auto get_namespace_result = IRCAPI::GetNamespace(context, ic_catalog, *this);
+	if (get_namespace_result.has_error) {
+		throw HTTPException(StringUtil::Format("GetNamespace endpoint returned response code %s with message \"%s\"",
+		                                       EnumUtil::ToString(get_namespace_result.status_),
+		                                       get_namespace_result.error_._error.message));
+	}
+
+	schema_info.properties = get_namespace_result.result_->properties;
+	schema_info.properties_loaded = true;
+	// TODO: eventually set up caching for this response?
+};
 
 } // namespace duckdb

@@ -13,13 +13,15 @@
 #include "catalog/rest/api/catalog_api.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_data.hpp"
-#include "catalog/rest/catalog_entry/iceberg_schema_entry.hpp"
+#include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/storage/iceberg_authorization.hpp"
 #include "catalog/rest/storage/authorization/oauth2.hpp"
 #include "catalog/rest/storage/authorization/sigv4.hpp"
 #include "catalog/rest/storage/authorization/none.hpp"
+#include "catalog/rest/storage/authorization/sigv4_utils.hpp"
 #include "core/expression/iceberg_transform.hpp"
+#include "duckdb/parser/column_definition.hpp"
 
 #include <climits>
 
@@ -27,20 +29,6 @@ namespace duckdb {
 
 const string &IcebergTableInformation::BaseFilePath() const {
 	return table_metadata.location;
-}
-
-static string DetectStorageType(const string &location) {
-	// Detect storage type from the location URL
-	if (StringUtil::StartsWith(location, "gs://") || StringUtil::Contains(location, "storage.googleapis.com")) {
-		return "gcs";
-	} else if (StringUtil::StartsWith(location, "s3://") || StringUtil::StartsWith(location, "s3a://")) {
-		return "s3";
-	} else if (StringUtil::StartsWith(location, "abfs://") || StringUtil::StartsWith(location, "abfss://") ||
-	           StringUtil::StartsWith(location, "az://")) {
-		return "azure";
-	}
-	// Default to s3 for backward compatibility
-	return "s3";
 }
 
 static void ParseGCSConfigOptions(const case_insensitive_map_t<string> &config,
@@ -227,11 +215,28 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 	const bool ignore_credential_prefix = storage_credentials.size() == 1;
 	for (idx_t index = 0; index < storage_credentials.size(); index++) {
 		auto &credential = storage_credentials[index];
+
+		//! Only use credentials whose prefix matches the storage type (e.g. "s3"),
+		//! matching Iceberg Java S3FileIO behavior: filter(c -> c.prefix().startsWith(ROOT_PREFIX))
+		if (!ignore_credential_prefix && !CredentialMatchesStorageType(credential.prefix, storage_type)) {
+			continue;
+		}
+
 		CreateSecretInput create_secret_input;
 		create_secret_input.on_conflict = OnCreateConflict::REPLACE_ON_CONFLICT;
 		create_secret_input.persist_type = SecretPersistType::TEMPORARY;
 
-		create_secret_input.scope.push_back(ignore_credential_prefix ? table_location : credential.prefix);
+		if (ignore_credential_prefix) {
+			create_secret_input.scope.push_back(table_location);
+		} else {
+			create_secret_input.scope.push_back(credential.prefix);
+			//! Also match paths whose scheme differs from the credential prefix
+			//! (e.g. oss:// files with s3 credentials), equivalent to Java S3FileIO's
+			//! ROOT_PREFIX fallback in clientForStoragePath()
+			if (!StringUtil::StartsWith(table_location, credential.prefix)) {
+				create_secret_input.scope.push_back(table_location);
+			}
+		}
 		create_secret_input.name = StringUtil::Format("%s_%d_%s", secret_base_name, index, credential.prefix);
 
 		create_secret_input.type = storage_type;
@@ -352,21 +357,21 @@ IcebergTableInformation::BuildPartitionSpec(const vector<unique_ptr<ParsedExpres
 		auto key_type = key->GetExpressionType();
 		if (key_type == ExpressionType::COLUMN_REF) {
 			auto &colref = key->Cast<ColumnRefExpression>();
-			column_name = colref.column_names.back();
+			column_name = colref.ColumnNames().back();
 		} else if (key_type == ExpressionType::FUNCTION) {
 			auto &funcexpr = key->Cast<FunctionExpression>();
-			transform = funcexpr.function_name;
-			if (funcexpr.children.empty()) {
+			transform = funcexpr.FunctionName();
+			if (funcexpr.GetArguments().empty()) {
 				throw NotImplementedException("Unrecognized transform ('%s')", transform);
 			} else if (!IcebergTransform::TransformFunctionSupported(transform)) {
 				throw NotImplementedException("Unrecognized transform ('%s')", transform);
 			}
 			if (transform == "bucket" || transform == "truncate") {
 				// Spark-compatible syntax: bucket(N, col) / truncate(W, col)
-				if (funcexpr.children.size() < 2) {
+				if (funcexpr.GetArguments().size() < 2) {
 					throw InvalidInputException("%s requires two arguments, e.g. %s(16, col)", transform, transform);
 				}
-				auto &param_expr = *funcexpr.children[0];
+				auto &param_expr = funcexpr.GetArguments()[0].GetExpression();
 				if (param_expr.GetExpressionType() != ExpressionType::VALUE_CONSTANT) {
 					throw InvalidInputException("%s first argument must be a constant integer", transform);
 				}
@@ -377,19 +382,19 @@ IcebergTableInformation::BuildPartitionSpec(const vector<unique_ptr<ParsedExpres
 				}
 				bucket_modulo_val = const_expr.GetValue().GetValue<idx_t>();
 				transform = StringUtil::Format("%s[%d]", transform, bucket_modulo_val);
-				if (funcexpr.children[1]->GetExpressionType() != ExpressionType::COLUMN_REF) {
+				if (funcexpr.GetArguments()[1].GetExpression().GetExpressionType() != ExpressionType::COLUMN_REF) {
 					throw NotImplementedException("Transforms are only supported on column references, not %s",
-					                              EnumUtil::ToChars(funcexpr.children[1]->GetExpressionType()));
+					                              EnumUtil::ToChars(funcexpr.GetArguments()[1].GetExpression().GetExpressionType()));
 				}
-				auto &colref = funcexpr.children[1]->Cast<ColumnRefExpression>();
-				column_name = colref.column_names.back();
+				auto &colref = funcexpr.GetArguments()[1].GetExpression().Cast<ColumnRefExpression>();
+				column_name = colref.ColumnNames().back();
 			} else {
-				if (funcexpr.children[0]->GetExpressionType() != ExpressionType::COLUMN_REF) {
+				if (funcexpr.GetArguments()[0].GetExpression().GetExpressionType() != ExpressionType::COLUMN_REF) {
 					throw NotImplementedException("Transforms are only supported on column references, not %s",
-					                              EnumUtil::ToChars(funcexpr.children[0]->GetExpressionType()));
+					                              EnumUtil::ToChars(funcexpr.GetArguments()[0].GetExpression().GetExpressionType()));
 				}
-				auto &colref = funcexpr.children[0]->Cast<ColumnRefExpression>();
-				column_name = colref.column_names.back();
+				auto &colref = funcexpr.GetArguments()[0].GetExpression().Cast<ColumnRefExpression>();
+				column_name = colref.ColumnNames().back();
 			}
 		} else {
 			throw NotImplementedException("Unsupported partition key type: %s", key->ToString());

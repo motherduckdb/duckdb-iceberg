@@ -2,6 +2,8 @@
 #include "duckdb/common/types.hpp"
 #include "common/iceberg_constants.hpp"
 #include "duckdb/common/value_operations/value_operations.hpp"
+#include "duckdb/parser/column_definition.hpp"
+#include "duckdb/common/multi_file/multi_file_data.hpp"
 
 namespace duckdb {
 
@@ -280,6 +282,20 @@ unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::Copy() const {
 	return res;
 }
 
+MultiFileColumnDefinition IcebergColumnDefinition::GetMultiFileColumnDefinition() const {
+	MultiFileColumnDefinition column(name, type);
+	if (!initial_default || initial_default->IsNull()) {
+		column.default_expression = make_uniq<ConstantExpression>(Value(type));
+	} else {
+		column.default_expression = make_uniq<ConstantExpression>(*initial_default);
+	}
+	column.identifier = Value::INTEGER(id);
+	for (auto &child : children) {
+		column.children.push_back(child->GetMultiFileColumnDefinition());
+	}
+	return column;
+}
+
 Value IcebergColumnDefinition::GetWriteDefault() const {
 	optional_ptr<Value> default_to_use;
 	if (write_default) {
@@ -319,6 +335,7 @@ ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
 	} else {
 		return ColumnDefinition(name, type);
 	}
+	return ColumnDefinition(name, type);
 }
 
 static bool DefaultsAreEqual(const unique_ptr<Value> &a, const unique_ptr<Value> &b) {

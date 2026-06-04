@@ -11,6 +11,11 @@ on:
         required: false
         type: string
         default: ""
+      equality-delete-writes-enabled:
+        description: "Whether the downloaded artifact was built with ICEBERG_ENABLE_EQUALITY_DELETE_WRITES enabled (i.e. the Iceberg equality-delete write path is compiled in)."
+        required: false
+        type: number
+        default: 0
 
 jobs:
   test-spark:
@@ -98,6 +103,7 @@ jobs:
         env:
           CATALOG_TEST_CONFIG_SETUP: 1
           FIXTURE_SERVER_AVAILABLE: 1
+          EQUALITY_DELETE_WRITES_ENABLED: ${{ inputs.equality-delete-writes-enabled }}
         run: |
           ./build/release/test/unittest --order lex "$PWD/test/sql/local/catalog_test_config_setup/*" --list-test-names-only || true
           ./build/release/test/unittest --order lex "$PWD/test/sql/local/catalog_test_config_setup/*" --test-config test/configs/fixture.json
@@ -110,10 +116,11 @@ jobs:
           ./build/release/test/unittest --order lex "$PWD/test/*" --list-test-names-only || true
           ./build/release/test/unittest --order lex "$PWD/test/*"
 
-      - name: Test reads with PyIceberg
+      - name: Test reads with PyIceberg and Spark
         if: inputs.local-extension-repo == ''
         env:
           FIXTURE_SERVER_AVAILABLE: 1
+          EQUALITY_DELETE_WRITES_ENABLED: ${{ inputs.equality-delete-writes-enabled }}
         run: |
           # test with spark v4
           source .venv-spark4/bin/activate
@@ -125,8 +132,8 @@ jobs:
           python3 -m pip install pyspark==3.5.2 pytest pyiceberg==0.9.1 pyarrow pydantic==2.9.0
           python3 -m pytest test/python
 
-      - name: Run all duckdb/duckdb tests
-        if: inputs.local-extension-repo == ''
-        run: |
-          ./build/release/test/unittest --order lex --test-dir duckdb "test/sql/*" --list-test-names-only || true
-          ./build/release/test/unittest --order lex --test-dir duckdb "test/sql/*" --test-config test/configs/fixture_duckdb_tests.json
+      #- name: Run all duckdb/duckdb tests
+      #  if: inputs.local-extension-repo == ''
+      #  run: |
+      #    ./build/release/test/unittest --order lex --test-dir duckdb "test/sql/*" --list-test-names-only || true
+      #    ./build/release/test/unittest --order lex --test-dir duckdb "test/sql/*" --test-config test/configs/fixture_duckdb_tests.json

@@ -1,5 +1,6 @@
 #include "common/iceberg_default.hpp"
 #include "duckdb/execution/expression_executor.hpp"
+#include "duckdb/function/scalar/struct_functions.hpp"
 
 namespace duckdb {
 
@@ -89,15 +90,13 @@ static Value CreateStructDefault(const Value &value, const case_insensitive_map_
 	return Value::STRUCT(field_defaults);
 }
 
-static Value EvaluateStructDefault(ClientContext &context, const Expression &default_expr, const string &column_name) {
+static Value EvaluateStructDefault(ClientContext &context, const Expression &default_expr) {
 	if (!default_expr.IsFoldable()) {
-		throw BinderException("Cannot resolve partial STRUCT insert for column \"%s\" with non-constant default value",
-		                      column_name);
+		throw BinderException("Cannot resolve partial STRUCT insert with non-constant default value");
 	}
 	Value default_value;
 	if (!ExpressionExecutor::TryEvaluateScalar(context, default_expr, default_value)) {
-		throw BinderException("Cannot resolve partial STRUCT insert for column \"%s\" with non-constant default value",
-		                      column_name);
+		throw BinderException("Cannot resolve partial STRUCT insert with non-constant default value");
 	}
 	return default_value;
 }
@@ -119,7 +118,7 @@ unique_ptr<Expression> IcebergDefaultProjectionResolver::ResolveDefault(
 	// Column is of type STRUCT, create a remap that fills in omitted fields from the column default.
 	vector<unique_ptr<Expression>> children;
 	children.push_back(make_uniq<BoundColumnRefExpression>(input_type, binding));
-	children.push_back(make_uniq<BoundConstantExpression>(Value(col.Type())));
+	children.push_back(make_uniq<BoundConstantExpression>(Value(result_type)));
 
 	case_insensitive_map_t<StructFieldMapping> mapping;
 	children.push_back(make_uniq<BoundConstantExpression>(CreateStructMapping(input_type, "", mapping)));
