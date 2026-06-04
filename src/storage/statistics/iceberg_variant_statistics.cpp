@@ -3,6 +3,7 @@
 #include "duckdb/catalog/catalog.hpp"
 #include "duckdb/common/constants.hpp"
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/printer.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/types/variant.hpp"
 #include "duckdb/common/types/vector.hpp"
@@ -255,8 +256,8 @@ bool IcebergVariantBoundsReader::Deserialize(ClientContext &context, const strin
 	return true;
 }
 
-//! Reverse of BuildJsonPath: "$['person']['age']" -> "person.age", "$" -> "".
-static string NormalizeJsonPath(const string &path) {
+//! Reverse of BuildJsonPath: "$['person']['address']['zip']" -> {"person","address","zip"}, "$" -> {}.
+static vector<string> ParseJsonPathSegments(const string &path) {
 	vector<string> segments;
 	size_t pos = 0;
 	while ((pos = path.find("['", pos)) != string::npos) {
@@ -268,8 +269,50 @@ static string NormalizeJsonPath(const string &path) {
 		segments.push_back(path.substr(pos, end - pos));
 		pos = end + 2;
 	}
-	return StringUtil::Join(segments, ".");
+	return segments;
 }
+
+namespace {
+
+//! A node in the reconstructed bounds object: either a leaf scalar bound, or a nested object whose children are
+//! kept in insertion order so the resulting struct is deterministic.
+struct BoundNode {
+	bool is_leaf = false;
+	Value leaf;
+	vector<std::pair<string, unique_ptr<BoundNode>>> children;
+
+	BoundNode &Child(const string &key) {
+		for (auto &entry : children) {
+			if (entry.first == key) {
+				return *entry.second;
+			}
+		}
+		children.emplace_back(key, make_uniq<BoundNode>());
+		return *children.back().second;
+	}
+};
+
+void InsertPath(BoundNode &root, const vector<string> &segments, const Value &value) {
+	BoundNode *node = &root;
+	for (auto &segment : segments) {
+		node = &node->Child(segment);
+	}
+	node->is_leaf = true;
+	node->leaf = value;
+}
+
+Value NodeToValue(const BoundNode &node) {
+	if (node.is_leaf || node.children.empty()) {
+		return node.leaf;
+	}
+	child_list_t<Value> struct_children;
+	for (auto &entry : node.children) {
+		struct_children.emplace_back(entry.first, NodeToValue(*entry.second));
+	}
+	return Value::STRUCT(std::move(struct_children));
+}
+
+} // namespace
 
 bool IcebergVariantBoundsReader::RekeyBoundsVariant(const Value &bounds_variant, Value &result) {
 	if (bounds_variant.IsNull() || bounds_variant.type().id() != LogicalTypeId::VARIANT) {
@@ -279,7 +322,7 @@ bool IcebergVariantBoundsReader::RekeyBoundsVariant(const Value &bounds_variant,
 	Value struct_value;
 	try {
 		// Convert the VARIANT into a regular nested Value: objects become STRUCTs keyed by the variant's object
-		// keys (the JSON paths "$['age']", ...), with the leaf bounds as typed scalar values.
+		// keys (the flat JSON paths "$['person']['address']['zip']", ...), with the leaf bounds as typed scalars.
 		Vector tmp(bounds_variant);
 		RecursiveUnifiedVectorFormat format;
 		Vector::RecursiveToUnifiedFormat(tmp, 1, format);
@@ -293,21 +336,22 @@ bool IcebergVariantBoundsReader::RekeyBoundsVariant(const Value &bounds_variant,
 		return false;
 	}
 
-	// Rebuild the struct with the JSON-path keys normalized to plain field names, then cast back to VARIANT so a
-	// filter on the variant column can be evaluated against it.
+	// The bounds object is flat: each key is a full JSON path. Rebuild the nested structure those paths describe
+	// (e.g. "$['person']['address']['zip']" -> {person: {address: {zip: <bound>}}}) so a nested filter access like
+	// "variant_col.person.address.zip" resolves against it. A flat dotted key would leave the access NULL.
 	auto &child_types = StructType::GetChildTypes(struct_value.type());
 	auto &child_values = StructValue::GetChildren(struct_value);
-	child_list_t<Value> renamed;
+	BoundNode root;
 	for (idx_t i = 0; i < child_types.size(); i++) {
-		renamed.emplace_back(NormalizeJsonPath(child_types[i].first), child_values[i]);
+		InsertPath(root, ParseJsonPathSegments(child_types[i].first), child_values[i]);
 	}
-	if (renamed.empty()) {
+	if (root.children.empty()) {
 		return false;
 	}
 
-	Value renamed_struct = Value::STRUCT(std::move(renamed));
+	Value nested_struct = NodeToValue(root);
 	Value variant_result;
-	if (!renamed_struct.DefaultTryCastAs(LogicalType::VARIANT(), variant_result, nullptr)) {
+	if (!nested_struct.DefaultTryCastAs(LogicalType::VARIANT(), variant_result, nullptr)) {
 		return false;
 	}
 	result = std::move(variant_result);

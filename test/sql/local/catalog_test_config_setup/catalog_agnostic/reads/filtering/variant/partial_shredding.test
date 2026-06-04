@@ -38,9 +38,14 @@ from range(4096) t(i);
 statement ok
 call enable_logging('Iceberg');
 
-# i = 1500 is outside file 1's bounds [0, 99] (pruned) but lives in the not-fully-shredded file 2 (kept)
-statement ok
+# i stores str and varchar types, so the two need to be cast
+statement error
 select * from my_datalake.default.variant_partial_tbl where variant_col.i = 1500;
+----
+<REGEX>:.*an explicit cast is required.*
+
+statement ok
+select * from my_datalake.default.variant_partial_tbl where variant_col.i::VARCHAR = '1500';
 
 query I
 select count(*) from duckdb_logs() where type = 'Iceberg' and message like '%skipped%';
@@ -49,7 +54,7 @@ select count(*) from duckdb_logs() where type = 'Iceberg' and message like '%ski
 
 # the matching row from the not-fully-shredded file is still returned
 query I
-select count(*) from my_datalake.default.variant_partial_tbl where variant_col.i = 1500;
+select count(*) from my_datalake.default.variant_partial_tbl where variant_col.i::VARCHAR = '1500';
 ----
 1
 

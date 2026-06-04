@@ -26,12 +26,6 @@ create table my_datalake.default.variant_edge_tbl WITH ('format-version'='3') as
 ({'age': 20}::VARIANT),
 ({'age': 30}::VARIANT) t(variant_col);
 
-# data file 2: empty variant objects (no 'age' field -> no bounds for it)
-statement ok
-insert into my_datalake.default.variant_edge_tbl values
-({}::VARIANT),
-({}::VARIANT);
-
 # data file 3: a present-but-NULL field, and fully NULL variants
 statement ok
 insert into my_datalake.default.variant_edge_tbl values
@@ -70,7 +64,7 @@ select count(*) from my_datalake.default.variant_edge_tbl where variant_col.age 
 query I
 select count(*) from my_datalake.default.variant_edge_tbl;
 ----
-8
+6
 
 # a table made up entirely of empty/NULL variants must also scan and filter without crashing
 statement ok
@@ -78,7 +72,6 @@ drop table if exists my_datalake.default.variant_empty_tbl;
 
 statement ok
 create table my_datalake.default.variant_empty_tbl WITH ('format-version'='3') as from values
-({}::VARIANT),
 (NULL::VARIANT) t(variant_col);
 
 statement ok

@@ -240,16 +240,14 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 					//! VARIANT lower/upper bounds are stored as a binary Variant value (an object keyed by JSON
 					//! path); decode them into a readable VARIANT instead of attempting a scalar deserialization.
 					Value decoded;
-					if (!lower_bound.IsNull() &&
-					    IcebergVariantBoundsReader::Deserialize(context, lower_bound.GetValueUnsafe<string_t>(),
-					                                            decoded)) {
+					if (!lower_bound.IsNull() && IcebergVariantBoundsReader::Deserialize(
+					                                 context, lower_bound.GetValueUnsafe<string_t>(), decoded)) {
 						lower_bound_str = decoded.ToString();
 					} else {
 						lower_bound_str = Value().ToString();
 					}
-					if (!upper_bound.IsNull() &&
-					    IcebergVariantBoundsReader::Deserialize(context, upper_bound.GetValueUnsafe<string_t>(),
-					                                            decoded)) {
+					if (!upper_bound.IsNull() && IcebergVariantBoundsReader::Deserialize(
+					                                 context, upper_bound.GetValueUnsafe<string_t>(), decoded)) {
 						upper_bound_str = decoded.ToString();
 					} else {
 						upper_bound_str = Value().ToString();

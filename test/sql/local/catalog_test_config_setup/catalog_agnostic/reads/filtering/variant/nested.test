@@ -37,8 +37,12 @@ statement ok
 call enable_logging('Iceberg');
 
 # zip > 1500 prunes data file 1 (max zip 1200)
-statement ok
+query I
 select * from my_datalake.default.variant_nested_tbl where variant_col.person.address.zip > 1500;
+----
+{'person': {'address': {'city': ATX, 'zip': 2000}, 'name': Dylan}}
+{'person': {'address': {'city': SEA, 'zip': 2100}, 'name': Eric}}
+{'person': {'address': {'city': BOS, 'zip': 2200}, 'name': Frank}}
 
 query I
 select count(*) from duckdb_logs() where type = 'Iceberg' and message like '%skipped%';
@@ -49,19 +53,14 @@ statement ok
 CALL truncate_duckdb_logs();
 
 # zip < 1500 prunes data file 2 (min zip 2000)
-statement ok
+query I
 select * from my_datalake.default.variant_nested_tbl where variant_col.person.address.zip < 1500;
+----
+{'person': {'address': {'city': NYC, 'zip': 1000}, 'name': Alice}}
+{'person': {'address': {'city': LA, 'zip': 1100}, 'name': Bob}}
+{'person': {'address': {'city': SF, 'zip': 1200}, 'name': Chad}}
 
 query I
 select count(*) from duckdb_logs() where type = 'Iceberg' and message like '%skipped%';
 ----
 1
-
-statement ok
-CALL truncate_duckdb_logs();
-
-# the surviving data file returns the correct rows
-query I
-select count(*) from my_datalake.default.variant_nested_tbl where variant_col.person.address.zip > 1500;
-----
-3
