@@ -27,7 +27,7 @@ public:
 
 public:
 	unique_ptr<Expression> VisitReplace(BoundReferenceExpression &expr, unique_ptr<Expression> *expr_ptr) override {
-		if (expr.index != 0) {
+		if (expr.Index() != 0) {
 			return nullptr;
 		}
 		auto &return_type = expr.GetReturnType();

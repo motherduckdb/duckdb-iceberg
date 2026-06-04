@@ -525,7 +525,7 @@ PhysicalOperator &IcebergCatalog::PlanDelete(ClientContext &context, PhysicalPla
 	}
 	for (idx_t i = 0; i < 2; i++) {
 		auto &bound_ref = op.expressions[column_offset + i]->Cast<BoundReferenceExpression>();
-		row_id_indexes.push_back(bound_ref.index);
+		row_id_indexes.push_back(bound_ref.Index());
 	}
 
 	auto allows_positional_deletes = updated_table_entry.table_info.table_metadata.PropertiesAllowPositionalDeletes(
