@@ -146,6 +146,26 @@ void IcebergVariantBounds::AddStatsEntry(const vector<string> &full_path, idx_t 
 		return;
 	}
 
+	// Check potentially not fully shredded path
+	if (leaf == "value") {
+		bool has_null_count = false, has_num_values = false;
+		idx_t null_count = 0, num_values = 0;
+		for (auto &child : col_stats) {
+			auto &child_children = StructValue::GetChildren(child);
+			if (StringValue::Get(child_children[0]) == "null_count") {
+				null_count = StringUtil::ToUnsigned(StringValue::Get(child_children[1]));
+				has_null_count = true;
+			}
+			if (StringValue::Get(child_children[0]) == "num_values") {
+				num_values = StringUtil::ToUnsigned(StringValue::Get(child_children[1]));
+				has_num_values = true;
+			}
+		}
+		if (!has_num_values || !has_null_count || (num_values - null_count) > 0) {
+			// be conservative: missing counts OR any non-null -> treat as partial
+			partial_paths.push_back(ExtractVariantFieldNames(full_path, variant_field_start));
+		}
+	}
 	// only "typed_value" leaves carry shredded bounds; ignore untyped "value" leaves for now
 	if (leaf != "typed_value") {
 		return;
@@ -191,6 +211,24 @@ bool IcebergVariantBounds::Finalize(ClientContext &context, bool &has_lower, str
 	child_list_t<Value> lower_children;
 	child_list_t<Value> upper_children;
 	for (auto &field : fields) {
+		bool drop_field = !partial_paths.empty();
+		for (auto &partial_path : partial_paths) {
+			for (idx_t i = 0; i < partial_path.size(); i++) {
+				if (i > field.field_names.size()) {
+					// the partial path is longer
+					throw InternalException("Partial path length longer than field path length");
+				}
+				if (partial_path[i] != field.field_names[i]) {
+					// the paths deviate
+					drop_field = false;
+					break;
+				}
+			}
+		}
+		if (drop_field) {
+			// field was not fully shredded, so we do not include it in our stats.
+			continue;
+		}
 		LogicalType leaf_type;
 		string json_path;
 		try {

@@ -16,12 +16,14 @@ require icu
 
 require core_functions
 
+set ignore_error_messages
+
 statement ok
 drop table if exists my_datalake.default.variant_stats_tbl;
 
 # single data file with two shredded fields: age in [20, 60], name in ['Alice', 'Eric']
 statement ok
-create table my_datalake.default.variant_stats_tbl WITH ('format-version'='3') as from values
+create table my_datalake.default.variant_stats_tbl WITH ('format-version'=3) as from values
 ({'age': 20, 'name': 'Alice'}::VARIANT),
 ({'age': 30, 'name': 'Bob'}::VARIANT),
 ({'age': 40, 'name': 'Chad'}::VARIANT),
@@ -35,21 +37,21 @@ select column_name from iceberg_column_stats(my_datalake.default.variant_stats_t
 variant_col
 
 # lower bound carries the per-field minimums, upper bound the per-field maximums
-query I
-select count(*) from iceberg_column_stats(my_datalake.default.variant_stats_tbl)
-where column_name = 'variant_col'
-  and lower_bound like '%age%' and lower_bound like '%20%' and lower_bound like '%Alice%'
-  and upper_bound like '%age%' and upper_bound like '%60%' and upper_bound like '%Eric%';
+query II
+select lower_bound, upper_bound from iceberg_column_stats(my_datalake.default.variant_stats_tbl);
 ----
-1
+{'$[\'age\']': 20, '$[\'name\']': Alice}	{'$[\'age\']': 60, '$[\'name\']': Eric}
 
-# the lower bound must not contain the maximums (and vice versa)
-query I
-select count(*) from iceberg_column_stats(my_datalake.default.variant_stats_tbl)
-where column_name = 'variant_col'
-  and lower_bound like '%Eric%';
+
+statement ok
+insert into my_datalake.default.variant_stats_tbl values ({'root': 'str_val'}::VARIANT), ({'root':50}::VARIANT);
+
+# after inserting unshredded type, lower_bounds and upper_bounds are NULL
+query II
+select lower_bound, upper_bound from iceberg_column_stats(my_datalake.default.variant_stats_tbl);
 ----
-0
+{'$[\'age\']': 20, '$[\'name\']': Alice}	{'$[\'age\']': 60, '$[\'name\']': Eric}
+NULL	NULL
 
 # ------------------------------------------------------------------------------
 # a variant column that never shreds has no bounds: the function must report NULL
