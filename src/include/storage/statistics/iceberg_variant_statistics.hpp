@@ -28,9 +28,9 @@ class ClientContext;
 //! serialized to the parquet-variant encoding (metadata + value concatenated), which is
 //! exactly what the Iceberg spec stores in the manifest lower/upper bounds for a variant.
 //!
-//! First-pass limitations: bounds are emitted for any shredded field that has a min/max,
-//! without checking that the field is uniformly typed (fully shredded). Fields whose type
-//! cannot be resolved or whose bound cannot be cast are silently skipped.
+//! First-pass limitations: bounds are emitted for fully shredded fields that has a min/max,
+//! For any "leaf" stats that are  not typed values, we can infer fully shreddedness from that.
+//! If the field is not fully shredded, we do not write the stats.
 class IcebergVariantBounds {
 public:
 	//! Ingest one stats entry whose path descends into the variant.
@@ -59,6 +59,9 @@ private:
 	bool has_variant_type = false;
 	string variant_type_str;
 	vector<FieldBound> fields;
+	// path of partially shredded variant values.
+	// we do not record stats for partially shredded values since the types may be different
+	vector<vector<string>> partial_paths;
 };
 
 //! Decodes the parquet-variant bounds blobs produced by IcebergVariantBounds back into a VARIANT Value,
