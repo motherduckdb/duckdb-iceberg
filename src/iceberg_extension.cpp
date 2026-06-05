@@ -21,7 +21,10 @@
 #include "catalog/rest/storage/authorization/sigv4.hpp"
 #include "common/iceberg_utils.hpp"
 #include "iceberg_logging.hpp"
+#include "iceberg_options.hpp"
 #include "function/copy/iceberg_copy_function.hpp"
+#include "duckdb/optimizer/optimizer_extension.hpp"
+#include "planning/iceberg_optimizer.hpp"
 
 namespace duckdb {
 
@@ -87,6 +90,14 @@ static void LoadInternal(ExtensionLoader &loader) {
 	    "order, and readers do not assume files are sorted), but skipping the sort may reduce later file-pruning "
 	    "effectiveness and compression.",
 	    LogicalType::BOOLEAN, Value::BOOLEAN(false));
+#ifdef ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
+	config.AddExtensionOption(
+	    ENABLE_EQUALITY_DELETES_CONFIG_VARIABLE,
+	    "DANGEROUS TESTING-ONLY SETTING: when enabled, a DELETE on a v2 Iceberg table whose WHERE clause is a pure "
+	    "conjunction of equality predicates writes an Iceberg equality-delete file. Used to exercise the "
+	    "equality-delete read path.",
+	    LogicalType::BOOLEAN, Value::BOOLEAN(false));
+#endif
 
 	// Iceberg Table Functions
 	for (auto &fun : IcebergFunctions::GetTableFunctions(loader)) {
@@ -114,6 +125,10 @@ static void LoadInternal(ExtensionLoader &loader) {
 	auto &log_manager = instance.GetLogManager();
 	log_manager.RegisterLogType(make_uniq<IcebergLogType>());
 	StorageExtension::Register(config, "iceberg", make_shared_ptr<IRCStorageExtension>());
+
+	// Re-introduces equality-delete columns onto iceberg_scan LogicalGets after the built-in
+	// optimizers have run; see planning/iceberg_optimizer.hpp for the why.
+	OptimizerExtension::Register(config, IcebergOptimizer::Create());
 }
 
 void IcebergExtension::Load(ExtensionLoader &loader) {

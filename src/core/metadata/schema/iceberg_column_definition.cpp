@@ -2,6 +2,8 @@
 #include "duckdb/common/types.hpp"
 #include "common/iceberg_constants.hpp"
 #include "duckdb/common/value_operations/value_operations.hpp"
+#include "duckdb/parser/column_definition.hpp"
+#include "duckdb/common/multi_file/multi_file_data.hpp"
 
 namespace duckdb {
 
@@ -73,6 +75,7 @@ IcebergColumnDefinition::ParseType(const string &name, int32_t field_id, bool re
 	res->id = field_id;
 	res->required = required;
 	res->name = name;
+	res->doc = doc;
 
 	if (type.has_primitive_type) {
 		res->type = ParsePrimitiveType(type.primitive_type);
@@ -249,6 +252,7 @@ unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::Copy() const {
 	auto res = make_uniq<IcebergColumnDefinition>();
 	res->id = id;
 	res->name = name;
+	res->doc = doc;
 	res->type = type;
 	// TODO: initial default and write default need more support here
 	if (initial_default) {
@@ -264,6 +268,20 @@ unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::Copy() const {
 	return res;
 }
 
+MultiFileColumnDefinition IcebergColumnDefinition::GetMultiFileColumnDefinition() const {
+	MultiFileColumnDefinition column(name, type);
+	if (!initial_default || initial_default->IsNull()) {
+		column.default_expression = make_uniq<ConstantExpression>(Value(type));
+	} else {
+		column.default_expression = make_uniq<ConstantExpression>(*initial_default);
+	}
+	column.identifier = Value::INTEGER(id);
+	for (auto &child : children) {
+		column.children.push_back(child->GetMultiFileColumnDefinition());
+	}
+	return column;
+}
+
 ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
 	optional_ptr<Value> default_to_use;
 	if (write_default) {
@@ -273,15 +291,19 @@ ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
 		//! If it's not set, use the initial-default (if that *is* set)
 		default_to_use = initial_default.get();
 	}
-	if (default_to_use) {
+	if (default_to_use && type.IsNested()) {
 		//! FIXME: the expression needs to be more advanced for nested types
-		if (type.IsNested()) {
-			throw NotImplementedException("DEFAULT values for nested types are not supported currently");
-		}
-		return ColumnDefinition(name, type, make_uniq<ConstantExpression>(*default_to_use), TableColumnType::STANDARD);
-	} else {
-		return ColumnDefinition(name, type);
+		throw NotImplementedException("DEFAULT values for nested types are not supported currently");
 	}
+	ColumnDefinition column =
+	    default_to_use
+	        ? ColumnDefinition(name, type, make_uniq<ConstantExpression>(*default_to_use), TableColumnType::STANDARD)
+	        : ColumnDefinition(name, type);
+	if (!doc.empty()) {
+		//! Surface the Iceberg field `doc` as the DuckDB column comment
+		column.SetComment(Value(doc));
+	}
+	return column;
 }
 
 static bool DefaultsAreEqual(const unique_ptr<Value> &a, const unique_ptr<Value> &b) {

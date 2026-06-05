@@ -323,6 +323,18 @@ const unordered_map<int32_t, shared_ptr<IcebergTableSchema>> &IcebergTableMetada
 	return schemas;
 }
 
+// TODO: this should also recursively check struct, map, and list columns
+optional_ptr<const IcebergColumnDefinition> IcebergTableMetadata::FindColumnByFieldId(int32_t field_id) const {
+	for (auto &schema_entry : schemas) {
+		for (auto &column : schema_entry.second->columns) {
+			if (column->id == field_id) {
+				return *column;
+			}
+		}
+	}
+	return nullptr;
+}
+
 bool IcebergTableMetadata::HasLastPartitionId() const {
 	return last_partition_field_id.IsValid();
 }
