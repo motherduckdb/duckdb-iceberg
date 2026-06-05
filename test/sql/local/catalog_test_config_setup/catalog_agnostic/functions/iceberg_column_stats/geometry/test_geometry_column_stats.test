@@ -1,0 +1,154 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/functions/iceberg_column_stats/geometry/test_geometry_column_stats.test
+# group: [geometry]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+set enable_logging=true
+
+statement ok
+set logging_level='debug'
+
+# GEOMETRY columns have no scalar min/max. iceberg_column_stats leaves the scalar
+# lower_bound / upper_bound NULL and instead reports the per-axis bounding box in
+# the lower_bound_geometry / upper_bound_geometry structs {bbox_x, bbox_y, bbox_z, bbox_m}.
+# Absent Z/M axes are reported as NULL.
+
+# --- XY ------------------------------------------------------------------
+
+statement ok
+drop table if exists my_datalake.default.geom_stats_xy;
+
+statement ok
+create table my_datalake.default.geom_stats_xy (g GEOMETRY) with ('format-version'='3');
+
+statement ok
+insert into my_datalake.default.geom_stats_xy VALUES
+    ('POINT(1 2)'::GEOMETRY),
+    ('POINT(5 7)'::GEOMETRY),
+    ('LINESTRING(-3 -4, 10 10)'::GEOMETRY);
+
+query IIIII
+select column_name, lower_bound, upper_bound, lower_bound_geometry, upper_bound_geometry
+from iceberg_column_stats(my_datalake.default.geom_stats_xy);
+----
+g	NULL	NULL	{'bbox_x': -3.0, 'bbox_y': -4.0, 'bbox_z': NULL, 'bbox_m': NULL}	{'bbox_x': 10.0, 'bbox_y': 10.0, 'bbox_z': NULL, 'bbox_m': NULL}
+
+# --- XYZ -----------------------------------------------------------------
+
+statement ok
+drop table if exists my_datalake.default.geom_stats_xyz;
+
+statement ok
+create table my_datalake.default.geom_stats_xyz (g GEOMETRY) with ('format-version'='3');
+
+statement ok
+insert into my_datalake.default.geom_stats_xyz VALUES
+    ('POINT Z (1 2 3)'::GEOMETRY),
+    ('POINT Z (5 7 9)'::GEOMETRY),
+    ('LINESTRING Z (5 5 5, 10 10 10)'::GEOMETRY);
+
+query IIIII
+select column_name, lower_bound, upper_bound, lower_bound_geometry, upper_bound_geometry
+from iceberg_column_stats(my_datalake.default.geom_stats_xyz);
+----
+g	NULL	NULL	{'bbox_x': 1.0, 'bbox_y': 2.0, 'bbox_z': 3.0, 'bbox_m': NULL}	{'bbox_x': 10.0, 'bbox_y': 10.0, 'bbox_z': 10.0, 'bbox_m': NULL}
+
+# --- XYM -----------------------------------------------------------------
+# The writer pads the Z slot with ±infinity for XYM, so bbox_z is reported NULL
+# (HasZ() == false) while bbox_m carries the M extent.
+
+statement ok
+drop table if exists my_datalake.default.geom_stats_xym;
+
+statement ok
+create table my_datalake.default.geom_stats_xym (g GEOMETRY) with ('format-version'='3');
+
+statement ok
+insert into my_datalake.default.geom_stats_xym VALUES
+    ('POINT M (1 2 3)'::GEOMETRY),
+    ('POINT M (5 7 9)'::GEOMETRY);
+
+query IIIII
+select column_name, lower_bound, upper_bound, lower_bound_geometry, upper_bound_geometry
+from iceberg_column_stats(my_datalake.default.geom_stats_xym);
+----
+g	NULL	NULL	{'bbox_x': 1.0, 'bbox_y': 2.0, 'bbox_z': NULL, 'bbox_m': 3.0}	{'bbox_x': 5.0, 'bbox_y': 7.0, 'bbox_z': NULL, 'bbox_m': 9.0}
+
+# --- XYZM ----------------------------------------------------------------
+
+statement ok
+drop table if exists my_datalake.default.geom_stats_xyzm;
+
+statement ok
+create table my_datalake.default.geom_stats_xyzm (g GEOMETRY) with ('format-version'='3');
+
+statement ok
+insert into my_datalake.default.geom_stats_xyzm VALUES
+    ('POINT ZM (1 2 3 4)'::GEOMETRY),
+    ('POINT ZM (5 7 9 11)'::GEOMETRY);
+
+query IIIII
+select column_name, lower_bound, upper_bound, lower_bound_geometry, upper_bound_geometry
+from iceberg_column_stats(my_datalake.default.geom_stats_xyzm);
+----
+g	NULL	NULL	{'bbox_x': 1.0, 'bbox_y': 2.0, 'bbox_z': 3.0, 'bbox_m': 4.0}	{'bbox_x': 5.0, 'bbox_y': 7.0, 'bbox_z': 9.0, 'bbox_m': 11.0}
+
+# The individual axes are queryable, since the bounds are a real struct.
+query III
+select lower_bound_geometry.bbox_x, upper_bound_geometry.bbox_z, lower_bound_geometry.bbox_m
+from iceberg_column_stats(my_datalake.default.geom_stats_xyzm);
+----
+1.0	9.0	4.0
+
+# --- All-NULL geometry ---------------------------------------------------
+# No bbox_* keys are written, so there is no bounding box to report. The
+# geometry bound structs are NULL (as are the scalar bounds).
+
+statement ok
+drop table if exists my_datalake.default.geom_stats_null;
+
+statement ok
+create table my_datalake.default.geom_stats_null (g GEOMETRY) with ('format-version'='3');
+
+statement ok
+insert into my_datalake.default.geom_stats_null VALUES (NULL), (NULL), (NULL);
+
+query IIIII
+select column_name, lower_bound, upper_bound, lower_bound_geometry, upper_bound_geometry
+from iceberg_column_stats(my_datalake.default.geom_stats_null);
+----
+g	NULL	NULL	NULL	NULL
+
+# --- Mixed table: non-geometry columns get NULL geometry structs ---------
+
+statement ok
+drop table if exists my_datalake.default.geom_stats_mixed;
+
+statement ok
+create table my_datalake.default.geom_stats_mixed (id INTEGER, g GEOMETRY) with ('format-version'='3');
+
+statement ok
+insert into my_datalake.default.geom_stats_mixed VALUES
+    (1, 'POINT(1 2)'::GEOMETRY),
+    (2, 'POINT(5 7)'::GEOMETRY);
+
+# The scalar column reports scalar bounds and NULL geometry structs; the
+# geometry column reports NULL scalar bounds and a populated bounding box.
+query IIIII
+select column_name, lower_bound, upper_bound, lower_bound_geometry, upper_bound_geometry
+from iceberg_column_stats(my_datalake.default.geom_stats_mixed) order by column_name;
+----
+g	NULL	NULL	{'bbox_x': 1.0, 'bbox_y': 2.0, 'bbox_z': NULL, 'bbox_m': NULL}	{'bbox_x': 5.0, 'bbox_y': 7.0, 'bbox_z': NULL, 'bbox_m': NULL}
+id	1	2	NULL	NULL

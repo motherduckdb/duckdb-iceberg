@@ -27,6 +27,8 @@
 #include "core/metadata/manifest/iceberg_manifest.hpp"
 #include "core/metadata/manifest/iceberg_manifest_list.hpp"
 
+#include "duckdb/storage/statistics/geometry_stats.hpp"
+
 #include <numeric>
 
 namespace duckdb {
@@ -54,6 +56,31 @@ public:
 	idx_t current_manifest_entry_idx = 0;
 	unordered_map<uint64_t, ColumnIndex>::const_iterator column_it;
 };
+
+//! GEOMETRY columns don't have a single scalar lower/upper bound; instead Iceberg stores the
+//! min/max corner of the file's bounding box per coordinate axis (x, y, optional z, optional m).
+//! We surface those as a STRUCT so each axis is queryable, e.g. lower_bound_geometry.bbox_x.
+static LogicalType GeometryBoundType() {
+	child_list_t<LogicalType> children;
+	children.emplace_back("bbox_x", LogicalType::DOUBLE);
+	children.emplace_back("bbox_y", LogicalType::DOUBLE);
+	children.emplace_back("bbox_z", LogicalType::DOUBLE);
+	children.emplace_back("bbox_m", LogicalType::DOUBLE);
+	return LogicalType::STRUCT(std::move(children));
+}
+
+//! Build one corner (lower or upper) of the bounding box as a {bbox_x, bbox_y, bbox_z, bbox_m}
+//! struct. Absent Z/M axes are reported as NULL rather than ±infinity.
+static Value GeometryBoundValue(const GeometryExtent &extent, bool lower_corner) {
+	child_list_t<Value> children;
+	children.emplace_back("bbox_x", Value::DOUBLE(lower_corner ? extent.x_min : extent.x_max));
+	children.emplace_back("bbox_y", Value::DOUBLE(lower_corner ? extent.y_min : extent.y_max));
+	children.emplace_back("bbox_z", extent.HasZ() ? Value::DOUBLE(lower_corner ? extent.z_min : extent.z_max)
+	                                              : Value(LogicalType::DOUBLE));
+	children.emplace_back("bbox_m", extent.HasM() ? Value::DOUBLE(lower_corner ? extent.m_min : extent.m_max)
+	                                              : Value(LogicalType::DOUBLE));
+	return Value::STRUCT(std::move(children));
+}
 
 static unique_ptr<FunctionData> IcebergColumnStatsBind(ClientContext &context, TableFunctionBindInput &input,
                                                        vector<LogicalType> &return_types, vector<string> &names) {
@@ -152,6 +179,15 @@ static unique_ptr<FunctionData> IcebergColumnStatsBind(ClientContext &context, T
 	names.emplace_back("nan_value_count");
 	return_types.emplace_back(LogicalType::BIGINT);
 
+	//! For GEOMETRY columns the lower/upper bound is a per-axis bounding box rather than a scalar,
+	//! so it is exposed here as a struct. These are NULL for non-geometry columns (which instead
+	//! populate the scalar lower_bound / upper_bound above).
+	names.emplace_back("lower_bound_geometry");
+	return_types.emplace_back(GeometryBoundType());
+
+	names.emplace_back("upper_bound_geometry");
+	return_types.emplace_back(GeometryBoundType());
+
 	return std::move(ret);
 }
 
@@ -238,10 +274,23 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 				//! column_type
 				AddString(output.data[col++], out, string_t(column.type.ToString()));
 
+				//! GEOMETRY bounds are a bounding box (no scalar min/max), so the scalar
+				//! lower_bound / upper_bound stay NULL and the box is reported in the
+				//! lower_bound_geometry / upper_bound_geometry structs below instead.
+				bool is_geometry = column.type.id() == LogicalTypeId::GEOMETRY && stats.geometry_stats;
+
 				//! lower_bound
-				AddString(output.data[col++], out, string_t(stats.lower_bound.ToString()));
+				if (is_geometry) {
+					FlatVector::SetNull(output.data[col++], out, true);
+				} else {
+					AddString(output.data[col++], out, string_t(stats.lower_bound.ToString()));
+				}
 				//! upper_bound
-				AddString(output.data[col++], out, string_t(stats.upper_bound.ToString()));
+				if (is_geometry) {
+					FlatVector::SetNull(output.data[col++], out, true);
+				} else {
+					AddString(output.data[col++], out, string_t(stats.upper_bound.ToString()));
+				}
 
 				// column_size
 				output.data[col++].SetValue(out, column_size);
@@ -251,6 +300,16 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 				output.data[col++].SetValue(out, null_value_count);
 				// nan_value_count
 				output.data[col++].SetValue(out, nan_value_count);
+
+				// lower_bound_geometry / upper_bound_geometry
+				if (is_geometry) {
+					auto &extent = GeometryStats::GetExtent(*stats.geometry_stats);
+					output.data[col++].SetValue(out, GeometryBoundValue(extent, true));
+					output.data[col++].SetValue(out, GeometryBoundValue(extent, false));
+				} else {
+					output.data[col++].SetValue(out, Value(GeometryBoundType()));
+					output.data[col++].SetValue(out, Value(GeometryBoundType()));
+				}
 				out++;
 			}
 			global_state.column_it = bind_data.source_to_column_id.begin();

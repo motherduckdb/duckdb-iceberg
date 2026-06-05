@@ -66,6 +66,13 @@ LINESTRING (0 0, 10 10)
 POINT (1 2)
 POINT (5 7)
 
+mode output_result
+
+statement ok
+select * from duckdb_logs() where type = 'Iceberg' and message.contains('Iceberg Filter Pushdown, skipped ''data_file'':');
+
+mode skip
+
 query I
 select count(*) from duckdb_logs()
 where type = 'Iceberg' and message.contains('Iceberg Filter Pushdown, skipped ''data_file'':');
