@@ -254,8 +254,8 @@ static bool MatchBoundsExpression(ClientContext &context, const Expression &expr
 		auto &left = BoundComparisonExpression::Left(compare_expr);
 		auto &right = BoundComparisonExpression::Right(compare_expr);
 		if (IsDirectReference(left) && right.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT) {
-			return MatchBoundsConstant<TRANSFORM>(right.Cast<BoundConstantExpression>().GetValue(), comparison_type, stats,
-			                                      transform);
+			return MatchBoundsConstant<TRANSFORM>(right.Cast<BoundConstantExpression>().GetValue(), comparison_type,
+			                                      stats, transform);
 		}
 		if (left.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT && IsDirectReference(right)) {
 			return MatchBoundsConstant<TRANSFORM>(left.Cast<BoundConstantExpression>().GetValue(),
@@ -304,7 +304,8 @@ static bool MatchBoundsExpression(ClientContext &context, const Expression &expr
 			//! with a single child expression of type BOUND_REF.
 			//!
 			//! See duckdb/duckdb-iceberg#464
-			if (bound_operator_expr.GetChildren().size() != 1 || !IsDirectReference(*bound_operator_expr.GetChildren()[0])) {
+			if (bound_operator_expr.GetChildren().size() != 1 ||
+			    !IsDirectReference(*bound_operator_expr.GetChildren()[0])) {
 				//! We can't evaluate expressions that aren't direct column references
 				return true;
 			}
@@ -315,7 +316,8 @@ static bool MatchBoundsExpression(ClientContext &context, const Expression &expr
 			return MatchBoundsIsNotNullFilter<TRANSFORM>(stats, transform);
 		}
 		case ExpressionType::COMPARE_IN: {
-			if (bound_operator_expr.GetChildren().empty() || !IsDirectReference(*bound_operator_expr.GetChildren()[0])) {
+			if (bound_operator_expr.GetChildren().empty() ||
+			    !IsDirectReference(*bound_operator_expr.GetChildren()[0])) {
 				return true;
 			}
 			for (idx_t i = 1; i < bound_operator_expr.GetChildren().size(); i++) {

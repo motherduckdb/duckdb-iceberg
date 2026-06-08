@@ -168,9 +168,8 @@ void IcebergMultiFileList::FinalizeEqualityDeletes(const vector<MultiFileColumnD
 						    BoundComparisonExpression::Create(ExpressionType::COMPARE_NOTEQUAL, std::move(bound_ref),
 						                                      make_uniq<BoundConstantExpression>(constant));
 					} else {
-						auto is_not_null =
-						    make_uniq<BoundOperatorExpression>(ExpressionType::OPERATOR_IS_NOT_NULL,
-						                                      LogicalType::BOOLEAN);
+						auto is_not_null = make_uniq<BoundOperatorExpression>(ExpressionType::OPERATOR_IS_NOT_NULL,
+						                                                      LogicalType::BOOLEAN);
 						is_not_null->GetChildrenMutable().push_back(std::move(bound_ref));
 						equality_filter = std::move(is_not_null);
 					}
