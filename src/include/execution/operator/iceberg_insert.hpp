@@ -124,8 +124,7 @@ private:
 class IcebergInsert : public PhysicalOperator {
 public:
 	//! INSERT INTO
-	IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op, TableCatalogEntry &table,
-	              physical_index_vector_t<idx_t> column_index_map);
+	IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op, TableCatalogEntry &table);
 	IcebergInsert(PhysicalPlan &physical_plan, const vector<LogicalType> &types, TableCatalogEntry &table);
 
 	//! CREATE TABLE AS
@@ -138,8 +137,6 @@ public:
 	optional_ptr<SchemaCatalogEntry> schema;
 	//! Create table info, in case of CREATE TABLE AS
 	unique_ptr<BoundCreateTableInfo> info;
-	//! column_index_map
-	physical_index_vector_t<idx_t> column_index_map;
 	//! The physical copy used internally by this insert
 	unique_ptr<PhysicalOperator> physical_copy_to_file;
 	//! When set, this insert is part of an UPDATE: points to the delete operator so Finalize

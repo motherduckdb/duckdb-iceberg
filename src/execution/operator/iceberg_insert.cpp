@@ -45,10 +45,8 @@ static bool WriteSequenceNumber(IcebergInsertVirtualColumns virtual_columns) {
 	       virtual_columns == IcebergInsertVirtualColumns::WRITE_ROW_ID_AND_SEQUENCE_NUMBER;
 }
 
-IcebergInsert::IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op, TableCatalogEntry &table,
-                             physical_index_vector_t<idx_t> column_index_map_p)
-    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, op.types, 1), table(&table), schema(nullptr),
-      column_index_map(std::move(column_index_map_p)) {
+IcebergInsert::IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op, TableCatalogEntry &table)
+    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, op.types, 1), table(&table), schema(nullptr) {
 }
 
 IcebergInsert::IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op, SchemaCatalogEntry &schema,
@@ -926,17 +924,6 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 	return physical_copy;
 }
 
-void VerifyDirectInsertionOrder(LogicalInsert &op) {
-	idx_t column_index = 0;
-	for (auto &mapping : op.column_index_map) {
-		if (mapping == DConstants::INVALID_INDEX || mapping != column_index) {
-			//! See issue#444
-			throw NotImplementedException("Iceberg inserts don't support targeted inserts yet (i.e tbl(col1,col2))");
-		}
-		column_index++;
-	}
-}
-
 PhysicalOperator &IcebergInsert::PlanInsert(ClientContext &context, PhysicalPlanGenerator &planner,
                                             IcebergTableEntry &table) {
 	optional_idx partition_id;
@@ -982,7 +969,7 @@ PhysicalOperator &IcebergCatalog::PlanInsert(ClientContext &context, PhysicalPla
 
 	// Create Copy Info
 	IcebergCopyInput info(context, table_metadata, schema);
-	auto &insert = planner.Make<IcebergInsert>(op, updated_table_entry, op.column_index_map);
+	auto &insert = planner.Make<IcebergInsert>(op, updated_table_entry);
 	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, info, plan);
 	insert.children.push_back(physical_copy);
 
