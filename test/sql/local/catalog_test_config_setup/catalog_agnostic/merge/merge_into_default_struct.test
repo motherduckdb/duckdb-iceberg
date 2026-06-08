@@ -39,7 +39,7 @@ CREATE TABLE my_datalake.default.tbl(
 		a VARCHAR,
 		b INTEGER,
 		c BLOB
-	) DEFAULT {'a': 'test', 'b': 42},
+	) DEFAULT {'a': 'hello', 'b': 42},
 	col2 BLOB
 ) WITH (
 	'format-version'='3'
@@ -73,14 +73,12 @@ select * from my_datalake.default.tbl where id = 4;
 ----
 4	{'a': test, 'b': 42, 'c': NULL}	\xAA\xFF\xAA\xAA\xFF\xAA
 
-mode skip
-
 # column list
 query I
 MERGE INTO my_datalake.default.tbl AS t USING (
 	VALUES
-		(2, {'b': 42}, NULL),
-		(5, {'b': 42}, NULL)
+		(2, {'b': 21}, NULL),
+		(5, {'b': 21}, NULL)
 ) AS s(id, col, col2) ON t.id = s.id
 WHEN MATCHED THEN UPDATE SET col = s.col, col2 = s.col2
 WHEN NOT MATCHED THEN INSERT (id, col, col2) VALUES (s.id, s.col, s.col2)
@@ -88,13 +86,14 @@ WHEN NOT MATCHED THEN INSERT (id, col, col2) VALUES (s.id, s.col, s.col2)
 2
 
 query III
-select * from my_datalake.default.tbl order by id;
+select * from my_datalake.default.tbl where id = 2;
 ----
-1	{'a': test, 'b': NULL, 'c': NULL}	\xAA\xFF\xAA
-2	{'a': test, 'b': 42, 'c': NULL}	NULL
-3	{'a': seed, 'b': 0, 'c': \x03}	NULL
-4	{'a': test, 'b': NULL, 'c': NULL}	\xAA\xFF\xAA\xAA\xFF\xAA
-5	{'a': test, 'b': 42, 'c': NULL}	NULL
+2	{'a': hello, 'b': 21, 'c': NULL}	NULL
+
+query III
+select * from my_datalake.default.tbl where id = 5;
+----
+5	{'a': hello, 'b': 21, 'c': NULL}	NULL
 
 # default values
 query I
@@ -109,11 +108,11 @@ WHEN NOT MATCHED THEN INSERT (id, col, col2) VALUES (s.id, s.col, s.col2)
 2
 
 query III
-select * from my_datalake.default.tbl order by id;
+select * from my_datalake.default.tbl where id = 3;
 ----
-1	{'a': test, 'b': NULL, 'c': NULL}	\xAA\xFF\xAA
-2	{'a': test, 'b': 42, 'c': NULL}	NULL
-3	{'a': test, 'b': NULL, 'c': \xAA\xFF\xAA}	NULL
-4	{'a': test, 'b': NULL, 'c': NULL}	\xAA\xFF\xAA\xAA\xFF\xAA
-5	{'a': test, 'b': 42, 'c': NULL}	NULL
-6	{'a': test, 'b': NULL, 'c': NULL}	NULL
+3	{'a': hello, 'b': 42, 'c': \xAA\xFF\xAA}	NULL
+
+query III
+select * from my_datalake.default.tbl where id = 6;
+----
+6	{'a': hello, 'b': 42, 'c': NULL}	NULL
