@@ -115,4 +115,4 @@ select * from my_datalake.default.tbl where id = 3;
 query III
 select * from my_datalake.default.tbl where id = 6;
 ----
-6	{'a': hello, 'b': 42, 'c': NULL}	NULL
+6	{'a': hello, 'b': 42, 'c': \xAA\xFF\xAA}	NULL

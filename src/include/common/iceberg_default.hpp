@@ -21,12 +21,9 @@ private:
 };
 
 struct IcebergDefaultProjectionResolver {
-	static unique_ptr<Expression> ResolveDefault(
-		ClientContext &context,
-		const LogicalType &input_type,
-		const LogicalType &result_type,
-		ColumnBinding binding,
-		const Expression &default_expr);
+	static unique_ptr<Expression> ResolveDefault(ClientContext &context, const LogicalType &input_type,
+	                                             const LogicalType &result_type, ColumnBinding binding,
+	                                             const Expression &default_expr);
 };
 
 } // namespace duckdb

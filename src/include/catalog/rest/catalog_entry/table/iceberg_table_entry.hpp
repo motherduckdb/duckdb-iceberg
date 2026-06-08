@@ -28,8 +28,8 @@ public:
 
 	LogicalType GetExpectedTypeForInsert(const ColumnDefinition &column) const override;
 	unique_ptr<Expression> GetDefaultExpressionForColumn(ClientContext &context, const LogicalType &input_type,
-	                                                             const LogicalType &result_type, ColumnBinding binding,
-	                                                             const Expression &constant_value) const override;
+	                                                     const LogicalType &result_type, ColumnBinding binding,
+	                                                     const Expression &constant_value) const override;
 
 	void BindUpdateConstraints(Binder &binder, LogicalGet &get, LogicalProjection &proj, LogicalUpdate &update,
 	                           ClientContext &context) override;

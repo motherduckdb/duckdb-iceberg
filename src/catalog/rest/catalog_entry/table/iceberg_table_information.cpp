@@ -383,15 +383,17 @@ IcebergTableInformation::BuildPartitionSpec(const vector<unique_ptr<ParsedExpres
 				bucket_modulo_val = const_expr.GetValue().GetValue<idx_t>();
 				transform = StringUtil::Format("%s[%d]", transform, bucket_modulo_val);
 				if (funcexpr.GetArguments()[1].GetExpression().GetExpressionType() != ExpressionType::COLUMN_REF) {
-					throw NotImplementedException("Transforms are only supported on column references, not %s",
-					                              EnumUtil::ToChars(funcexpr.GetArguments()[1].GetExpression().GetExpressionType()));
+					throw NotImplementedException(
+					    "Transforms are only supported on column references, not %s",
+					    EnumUtil::ToChars(funcexpr.GetArguments()[1].GetExpression().GetExpressionType()));
 				}
 				auto &colref = funcexpr.GetArguments()[1].GetExpression().Cast<ColumnRefExpression>();
 				column_name = colref.ColumnNames().back();
 			} else {
 				if (funcexpr.GetArguments()[0].GetExpression().GetExpressionType() != ExpressionType::COLUMN_REF) {
-					throw NotImplementedException("Transforms are only supported on column references, not %s",
-					                              EnumUtil::ToChars(funcexpr.GetArguments()[0].GetExpression().GetExpressionType()));
+					throw NotImplementedException(
+					    "Transforms are only supported on column references, not %s",
+					    EnumUtil::ToChars(funcexpr.GetArguments()[0].GetExpression().GetExpressionType()));
 				}
 				auto &colref = funcexpr.GetArguments()[0].GetExpression().Cast<ColumnRefExpression>();
 				column_name = colref.ColumnNames().back();

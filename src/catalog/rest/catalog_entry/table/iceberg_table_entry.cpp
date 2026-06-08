@@ -288,9 +288,11 @@ LogicalType IcebergTableEntry::GetExpectedTypeForInsert(const ColumnDefinition &
 	return type;
 }
 
-unique_ptr<Expression> IcebergTableEntry::GetDefaultExpressionForColumn(ClientContext &context, const LogicalType &input_type,
-																const LogicalType &result_type, ColumnBinding binding,
-																const Expression &constant_value) const {
+unique_ptr<Expression> IcebergTableEntry::GetDefaultExpressionForColumn(ClientContext &context,
+                                                                        const LogicalType &input_type,
+                                                                        const LogicalType &result_type,
+                                                                        ColumnBinding binding,
+                                                                        const Expression &constant_value) const {
 	return IcebergDefaultProjectionResolver::ResolveDefault(context, input_type, result_type, binding, constant_value);
 }
 

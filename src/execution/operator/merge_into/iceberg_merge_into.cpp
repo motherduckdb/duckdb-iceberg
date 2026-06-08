@@ -223,7 +223,7 @@ static unique_ptr<MergeIntoOperator> IcebergPlanMergeIntoAction(IcebergCatalog &
 			insert_op.bound_defaults.push_back(def->Copy());
 		}
 		//// transform expressions if required
-		//if (!action.column_index_map.empty()) {
+		// if (!action.column_index_map.empty()) {
 		//	vector<unique_ptr<Expression>> new_expressions;
 		//	for (auto &col : op.table.GetColumns().Physical()) {
 		//		auto storage_idx = col.StorageOid();

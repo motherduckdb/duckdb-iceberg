@@ -103,13 +103,11 @@ static Value EvaluateStructDefault(ClientContext &context, const Expression &def
 
 } // namespace
 
-unique_ptr<Expression> IcebergDefaultProjectionResolver::ResolveDefault(
-	ClientContext &context,
-	const LogicalType &input_type,
-	const LogicalType &result_type,
-	ColumnBinding binding,
-	const Expression &default_expr
-) {
+unique_ptr<Expression> IcebergDefaultProjectionResolver::ResolveDefault(ClientContext &context,
+                                                                        const LogicalType &input_type,
+                                                                        const LogicalType &result_type,
+                                                                        ColumnBinding binding,
+                                                                        const Expression &default_expr) {
 	auto default_value = EvaluateStructDefault(context, default_expr);
 	if (default_value.IsNull()) {
 		return make_uniq<BoundColumnRefExpression>(input_type, binding);
