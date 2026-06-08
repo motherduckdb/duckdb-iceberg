@@ -185,6 +185,13 @@ public:
 	//! Allow ATTACH OR REPLACE to actually re-attach when iceberg-specific options change
 	bool HasConflictingAttachOptions(const string &path, const AttachOptions &options) override;
 	void SetAttachOptions(const unordered_map<string, Value> &options);
+	optional_idx GetCatalogVersion(ClientContext &context) override {
+		return internal_catalog_version.load();
+	}
+
+	void IncrementCatalogVersion() {
+		internal_catalog_version.fetch_add(1);
+	}
 	//! Throws if the write mode property doesn't allow merge-on-read delete files, which is all DuckDB-Iceberg writes
 	static void VerifyMergeOnRead(const IcebergTableMetadata &metadata, const string &table_name,
 	                              const string &write_mode_property);
@@ -205,6 +212,7 @@ public:
 	optional<Identifier> default_schema;
 
 private:
+	std::atomic<idx_t> internal_catalog_version {TRANSACTION_ID_START + 1};
 	//! Original client selector, used for ATTACH OR REPLACE comparisons.
 	const string attach_path;
 	//! warehouse
