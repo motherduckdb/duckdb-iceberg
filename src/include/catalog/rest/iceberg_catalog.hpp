@@ -191,6 +191,13 @@ public:
 	string GetDBPath() override;
 	//! Allow ATTACH OR REPLACE to actually re-attach when iceberg-specific options change
 	bool HasConflictingAttachOptions(const string &path, const AttachOptions &options) override;
+	optional_idx GetCatalogVersion(ClientContext &context) override {
+		return internal_catalog_version.load();
+	}
+
+	void IncrementCatalogVersion() {
+		internal_catalog_version.fetch_add(1);
+	}
 	static string GetOnlyMergeOnReadSupportedErrorMessage(const string &table_name, const string &property,
 	                                                      const string &property_value);
 
@@ -209,6 +216,7 @@ public:
 	string default_schema;
 
 private:
+	std::atomic<idx_t> internal_catalog_version {TRANSACTION_ID_START + 1};
 	//! warehouse
 	string warehouse;
 	// defaults and overrides provided by a catalog.

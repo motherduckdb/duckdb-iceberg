@@ -475,6 +475,8 @@ void IcebergTransaction::Commit() {
 		error.Throw("Failed to commit Iceberg transaction: ");
 	}
 
+	// Only reached when all Do*() calls succeeded - exceptions re-throw from the catch block above
+	catalog.IncrementCatalogVersion();
 	temp_con.Rollback();
 }
 
