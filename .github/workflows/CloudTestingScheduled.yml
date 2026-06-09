@@ -18,7 +18,7 @@ jobs:
       httpfs_ref: ''
     secrets: inherit
 
-  cloud-tests-v1.5-variegata:
+  cloud-tests-v15-variegata:
     name: Run Cloud tests on v1.5-variegata
     uses: ./.github/workflows/CloudTestingReusable.yml
     with:
