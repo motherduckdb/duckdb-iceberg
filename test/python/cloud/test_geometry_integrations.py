@@ -75,7 +75,15 @@ import pytest
 
 
 def _find_duckdb_library():
-    repo = pathlib.Path(__file__).resolve().parents[2]
+    components = pathlib.Path(__file__).resolve()
+    parent_id = 0
+    repo = None
+    while len(components.parents) > parent_id:
+        if components.parents[parent_id].parts[-1] == "duckdb-iceberg":
+            repo = components.parents[parent_id]
+            break
+        parent_id+=1
+    pytest.mark.skipif(repo is None, "Could not find duckdb-iceberg extension build")
     candidates = []
     for build_type in ["release"]:
         candidates.extend(glob.glob(str(repo / "build" / build_type / "src" / "libduckdb.*")))
@@ -94,10 +102,6 @@ from snowflake.snowpark import Session  # noqa: E402
 # Snowflake references it via CATALOG_NAMESPACE when registering).
 NAMESPACE = "default"
 
-# Polaris REST catalog both engines point at. Non-secret, overridable.
-CATALOG_ENDPOINT = os.environ.get(
-    "ICEBERG_CATALOG_ENDPOINT", None
-)
 CATALOG_NAME = os.environ.get("ICEBERG_CATALOG_NAME", "s3-catalog")
 
 # Snowflake objects used to register an externally-created Iceberg table.
@@ -108,6 +112,7 @@ REQUIRED_ENV_VARS = [
     "ICEBERG_SNOWFLAKE_REMOTE_AVAILABLE",
     "SNOWFLAKE_PAT",
     "ICEBERG_CATALOG_CLIENT_ID",
+    "ICEBERG_CATALOG_ENDPOINT",
     "ICEBERG_CATALOG_CLIENT_SECRET",
     "SNOWFLAKE_ACCOUNT",
     "SNOWFLAKE_USER",
@@ -115,6 +120,7 @@ REQUIRED_ENV_VARS = [
     "SNOWFLAKE_WAREHOUSE",
     "SNOWFLAKE_DATABASE",
 ]
+
 
 _missing = [var for var in REQUIRED_ENV_VARS if not os.getenv(var)]
 
@@ -239,9 +245,9 @@ def duckdb_con():
         db.query(
             "CREATE SECRET iceberg_interop_secret ("
             "  TYPE ICEBERG,"
-            f"  CLIENT_ID '{ICEBERT_CATALOG_CLIENT_ID}',"
-            f"  CLIENT_SECRET '{ICEBERG_CATALOG_CLIENT_SECRET}',"
-            f"  ENDPOINT '{CATALOG_ENDPOINT}'"
+            f"  CLIENT_ID '{os.getenv('ICEBERG_CATALOG_CLIENT_ID')}',"
+            f"  CLIENT_SECRET '{os.getenv('ICEBERG_CATALOG_CLIENT_SECRET')}',"
+            f"  ENDPOINT '{os.getenv('ICEBERG_CATALOG_ENDPOINT')}'"
             ");"
         )
 
@@ -251,7 +257,7 @@ def duckdb_con():
             f"ATTACH '{CATALOG_NAME}' AS my_datalake ("
             "  TYPE ICEBERG,"
             f"{region_clause}"
-            f"  ENDPOINT '{CATALOG_ENDPOINT}'"
+            f"  ENDPOINT '{os.getenv('ICEBERG_CATALOG_ENDPOINT')}'"
             ");"
         )
         db.query(f"CREATE SCHEMA IF NOT EXISTS my_datalake.{NAMESPACE};")
@@ -264,13 +270,13 @@ def duckdb_con():
 def snowflake_session():
     """A snowpark Session authenticated with a Programmatic Access Token."""
     config = {
-        "account": f"{SNOWFLAKE_ACCOUNT}",
-        "user": f"{SNOWFLAKE_USER}",
+        "account": f"{os.getenv('SNOWFLAKE_ACCOUNT')}",
+        "user": f"{os.getenv('SNOWFLAKE_USER')}",
         "authenticator": "PROGRAMMATIC_ACCESS_TOKEN",
         "token": os.environ.get("SNOWFLAKE_PAT", ""),
-        "role": f"{SNOWFLAKE_ROLE}",
-        "warehouse": f"{SNOWFLAKE_WAREHOUSE}",
-        "database": f"{SNOWFLAKE_DATABASE}",
+        "role": f"{os.getenv('SNOWFLAKE_ROLE')}",
+        "warehouse": f"{os.getenv('SNOWFLAKE_WAREHOUSE')}",
+        "database": f"{os.getenv('SNOWFLAKE_DATABASE')}",
         "schema": "PUBLIC",
     }
     session = Session.builder.configs(config).create()
@@ -387,6 +393,6 @@ def test_duckdb_reads_snowflake_written_geometry(duckdb_con, snowflake_session, 
 
     assert len(row) == 2
     # one geometry file should be filtered out by bbox stats in manifest file
-    logs = duckdb_con.fetch_all("select count(*) from duckdb_logs() where type = 'Iceberg' and message like '%skipped%'").collect()
+    logs = duckdb_con.fetch_all("select count(*) from duckdb_logs() where type = 'Iceberg' and message like '%skipped%'")
     # verify that 1 file has been filtered out 
     assert len(logs) == 1
