@@ -51,7 +51,8 @@
       "paths": [
         "test/sql/pragma/profiling/test_custom_profiling_row_group_metrics.test_slow",
         "test/sql/json/test_json_serialize_sql.test",
-        "test/sql/json/test_json_macros.test"
+        "test/sql/json/test_json_macros.test",
+        "test/sql/json/test_json_serialize_plan.test"
       ]
     },
     {
