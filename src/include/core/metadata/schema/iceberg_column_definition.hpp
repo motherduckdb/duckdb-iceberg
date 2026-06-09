@@ -31,6 +31,7 @@ public:
 
 public:
 	void AddChild(unique_ptr<IcebergColumnDefinition> &&child);
+	void ReplaceChild(const string &name, unique_ptr<IcebergColumnDefinition> &&child);
 	void RemoveChild(const string &name);
 	optional_ptr<const IcebergColumnDefinition> GetChild(const string &name) const;
 	optional_ptr<const IcebergColumnDefinition> GetChild(idx_t index) const;

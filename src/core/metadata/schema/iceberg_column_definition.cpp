@@ -274,7 +274,19 @@ unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::Copy() const {
 MultiFileColumnDefinition IcebergColumnDefinition::GetMultiFileColumnDefinition() const {
 	MultiFileColumnDefinition column(name, type);
 	if (!initial_default || initial_default->IsNull()) {
-		column.default_expression = make_uniq<ConstantExpression>(Value(type));
+		if (type.id() == LogicalTypeId::STRUCT) {
+			//! NOTE: spec defines {} as default value, but in practice no engine/catalog supports this
+			vector<Value> child_values;
+			for (auto &child : children) {
+				auto child_column = child->GetMultiFileColumnDefinition();
+				auto &child_default = child_column.default_expression->Cast<ConstantExpression>().GetValue();
+				child_values.emplace_back(child_default);
+			}
+			auto default_value = Value::STRUCT(type, child_values);
+			column.default_expression = make_uniq<ConstantExpression>(default_value);
+		} else {
+			column.default_expression = make_uniq<ConstantExpression>(Value(type));
+		}
 	} else {
 		column.default_expression = make_uniq<ConstantExpression>(*initial_default);
 	}
@@ -348,11 +360,13 @@ void IcebergColumnDefinition::RemoveChild(const string &name) {
 		throw InternalException("Can't delete child by name '%s', no child by that name exists", name);
 	}
 	children.erase(it);
+	RewriteType();
 }
 
 void IcebergColumnDefinition::AddChild(unique_ptr<IcebergColumnDefinition> &&child) {
 	child->parent = this;
 	children.emplace_back(std::move(child));
+	RewriteType();
 }
 
 idx_t IcebergColumnDefinition::GetChildCount() const {
@@ -360,7 +374,39 @@ idx_t IcebergColumnDefinition::GetChildCount() const {
 }
 
 void IcebergColumnDefinition::RewriteType() {
-	//! TODO: rewrite types recursively
+	switch (type.id()) {
+	case LogicalTypeId::STRUCT: {
+		child_list_t<LogicalType> struct_children;
+		struct_children.reserve(children.size());
+		for (auto &child : children) {
+			struct_children.emplace_back(child->name, child->type);
+		}
+		type = LogicalType::STRUCT(std::move(struct_children));
+		break;
+	}
+	case LogicalTypeId::LIST: {
+		if (children.size() != 1) {
+			return;
+		}
+		type = LogicalType::LIST(children[0]->type);
+		break;
+	}
+	case LogicalTypeId::MAP: {
+		if (children.size() != 2) {
+			return;
+		}
+		type = LogicalType::MAP(children[0]->type, children[1]->type);
+		break;
+	}
+	default:
+		if (parent) {
+			parent->RewriteType();
+		}
+		return;
+	}
+	if (parent) {
+		parent->RewriteType();
+	}
 }
 
 optional_ptr<const IcebergColumnDefinition> IcebergColumnDefinition::GetChild(const string &name) const {

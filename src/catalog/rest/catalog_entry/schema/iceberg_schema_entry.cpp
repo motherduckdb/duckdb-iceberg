@@ -467,6 +467,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		}
 		auto &column = *column_p;
 		column.name = new_name;
+		column.RewriteType();
 
 		auto new_schema_id = new_schema->schema_id;
 
@@ -661,6 +662,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			    StringUtil::Join(new_path, "."), table_entry.name);
 		}
 		column_p->name = new_name;
+		column_p->RewriteType();
 		IntroduceNewSchema(updated_table, transaction_data, new_schema);
 		return;
 	}
@@ -700,7 +702,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			    "The column ('%s') doesnt exist on the table '%s', DROP COLUMN failed to remove the field",
 			    StringUtil::Join(column_path, "."), table_entry.name);
 		}
-		if (parent.GetChildCount()) {
+		if (parent.GetChildCount() == 1) {
 			throw CatalogException("Can't drop field '%s' because it's the last field of the STRUCT!",
 			                       StringUtil::Join(column_path, "."));
 		}
