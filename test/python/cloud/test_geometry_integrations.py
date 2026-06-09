@@ -82,7 +82,7 @@ def _find_duckdb_library():
         if components.parents[parent_id].parts[-1] == "duckdb-iceberg":
             repo = components.parents[parent_id]
             break
-        parent_id+=1
+        parent_id += 1
     pytest.mark.skipif(repo is None, "Could not find duckdb-iceberg extension build")
     candidates = []
     for build_type in ["release"]:
@@ -317,12 +317,10 @@ def duckdb_created_d2s_table(duckdb_con):
     populated by DuckDB and read by Snowflake.
     """
     duckdb_con.query(f"DROP TABLE IF EXISTS my_datalake.{NAMESPACE}.{D2S_TABLE};")
-    duckdb_con.query(
-        f"CREATE TABLE my_datalake.{NAMESPACE}.{D2S_TABLE} (v GEOMETRY) "
-        "WITH ('format-version'='3');"
-    )
+    duckdb_con.query(f"CREATE TABLE my_datalake.{NAMESPACE}.{D2S_TABLE} (v GEOMETRY) " "WITH ('format-version'='3');")
     yield D2S_TABLE
     duckdb_con.query(f"DROP TABLE IF EXISTS my_datalake.{NAMESPACE}.{D2S_TABLE};")
+
 
 def test_snowflake_reads_duckdb_written_geometry(duckdb_con, snowflake_session, duckdb_created_d2s_table):
     table = duckdb_created_d2s_table
@@ -335,9 +333,7 @@ def test_snowflake_reads_duckdb_written_geometry(duckdb_con, snowflake_session, 
         f"INSERT INTO my_datalake.{NAMESPACE}.{table} VALUES ('POINT(1 2)'::GEOMETRY), ('POINT(5 7)'::GEOMETRY), ('LINESTRING(-3 -4, 10 10)'::GEOMETRY)"
     )
 
-    duckdb_con.query(
-        f"INSERT INTO my_datalake.{NAMESPACE}.{table} VALUES ('POINT(100 100)'::GEOMETRY)"
-    )
+    duckdb_con.query(f"INSERT INTO my_datalake.{NAMESPACE}.{table} VALUES ('POINT(100 100)'::GEOMETRY)")
 
     # Sanity: DuckDB sees everything it wrote.
     assert duckdb_con.fetch_scalar(f"SELECT count(*) FROM my_datalake.{NAMESPACE}.{table};") == "6"
@@ -360,6 +356,7 @@ def test_snowflake_reads_duckdb_written_geometry(duckdb_con, snowflake_session, 
 # Test 2: Snowflake writes GEOMETRY data, DuckDB reads it.
 # ---------------------------------------------------------------------------
 
+
 def test_duckdb_reads_snowflake_written_geometry(duckdb_con, snowflake_session, duckdb_created_d2s_table):
     # Snowflake would need to own/create the table to write it (illustrative).
     sf_table = D2S_TABLE
@@ -373,26 +370,23 @@ def test_duckdb_reads_snowflake_written_geometry(duckdb_con, snowflake_session, 
 
     snowflake_session.sql(
         f"INSERT INTO {sf_table} "
-         "  SELECT TO_GEOMETRY('POINT(-20 -25)', 4326) "
-         "  UNION ALL "
-         "  SELECT TO_GEOMETRY('POINT(10 15)',   4326) "
-         "  UNION ALL "
-         "  SELECT TO_GEOMETRY('POINT(10 15)',   4326) "
+        "  SELECT TO_GEOMETRY('POINT(-20 -25)', 4326) "
+        "  UNION ALL "
+        "  SELECT TO_GEOMETRY('POINT(10 15)',   4326) "
+        "  UNION ALL "
+        "  SELECT TO_GEOMETRY('POINT(10 15)',   4326) "
     ).collect()
 
-    snowflake_session.sql(
-        f"INSERT INTO {sf_table} "
-         "  SELECT TO_GEOMETRY('POINT(-20 -25)', 4326) "
-    ).collect()
+    snowflake_session.sql(f"INSERT INTO {sf_table} " "  SELECT TO_GEOMETRY('POINT(-20 -25)', 4326) ").collect()
 
     # DuckDB reads the Snowflake-written table back from the shared catalog.
     duckdb_con.query("call enable_logging('Iceberg')")
-    row = duckdb_con.fetch_all(
-        f"SELECT v FROM my_datalake.{NAMESPACE}.{sf_table} where v && 'POINT(10 15)'"
-    )
+    row = duckdb_con.fetch_all(f"SELECT v FROM my_datalake.{NAMESPACE}.{sf_table} where v && 'POINT(10 15)'")
 
     assert len(row) == 2
     # one geometry file should be filtered out by bbox stats in manifest file
-    logs = duckdb_con.fetch_all("select count(*) from duckdb_logs() where type = 'Iceberg' and message like '%skipped%'")
-    # verify that 1 file has been filtered out 
+    logs = duckdb_con.fetch_all(
+        "select count(*) from duckdb_logs() where type = 'Iceberg' and message like '%skipped%'"
+    )
+    # verify that 1 file has been filtered out
     assert len(logs) == 1
