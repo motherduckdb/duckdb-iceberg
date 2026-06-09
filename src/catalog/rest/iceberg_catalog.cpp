@@ -543,7 +543,7 @@ unique_ptr<Catalog> IcebergCatalog::Attach(optional_ptr<StorageExtensionInfo> st
 		} else if (lower_name == "access_delegation_mode") {
 			access_mode_string = StringUtil::Lower(entry.second.ToString());
 		} else if (lower_name == "endpoint") {
-			attach_options.endpoint = StringUtil::Lower(entry.second.ToString());
+			attach_options.endpoint = entry.second.ToString();
 			StringUtil::RTrim(attach_options.endpoint, "/");
 		} else if (lower_name == "support_stage_create") {
 			auto result = entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
