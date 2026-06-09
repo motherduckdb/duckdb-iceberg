@@ -632,8 +632,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		    new_field, binder, false, next_field_id, updated_table.table_metadata.iceberg_version);
 		last_column_id = field_id - 1;
 
-		parent.children.push_back(std::move(new_iceberg_column));
-
+		parent.AddChild(std::move(new_iceberg_column));
 		IntroduceNewSchema(updated_table, transaction_data, new_schema);
 		return;
 	}
@@ -692,8 +691,8 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			    StringUtil::Join(column_path, "."), table_entry.name);
 		}
 		auto &parent = *parent_p;
-		auto child_it = parent.GetChildIterator(column_path.back());
-		if (child_it == parent.children.end()) {
+		auto child = parent.GetChild(column_path.back());
+		if (!child) {
 			if (if_column_exists) {
 				return;
 			}
@@ -701,11 +700,11 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			    "The column ('%s') doesnt exist on the table '%s', DROP COLUMN failed to remove the field",
 			    StringUtil::Join(column_path, "."), table_entry.name);
 		}
-		if (parent.children.size() == 1) {
+		if (parent.GetChildCount()) {
 			throw CatalogException("Can't drop field '%s' because it's the last field of the STRUCT!",
 			                       StringUtil::Join(column_path, "."));
 		}
-		parent.children.erase(child_it);
+		parent.RemoveChild(child->name);
 		IntroduceNewSchema(updated_table, transaction_data, new_schema);
 		return;
 	}

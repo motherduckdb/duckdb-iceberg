@@ -33,7 +33,7 @@ void IcebergTableSchema::PopulateSourceIdMap(unordered_map<uint64_t, ColumnIndex
 			new_index = ColumnIndex(i);
 		}
 
-		PopulateSourceIdMap(source_to_column_id, column->children, new_index);
+		PopulateSourceIdMap(source_to_column_id, column->GetChildren(), new_index);
 		source_to_column_id.emplace(static_cast<uint64_t>(column->id), std::move(new_index));
 	}
 }
@@ -53,23 +53,12 @@ IcebergTableSchema::GetFromColumnIndex(const vector<unique_ptr<IcebergColumnDefi
 	if (depth == child_indexes.size()) {
 		return *column;
 	}
-	if (column->children.empty()) {
+	if (!column->GetChildCount()) {
 		throw InvalidConfigurationException(
 		    "Expected column to have children, ColumnIndex has a depth of %d, we reached only %d",
 		    column_index.ChildIndexCount(), depth);
 	}
-	return GetFromColumnIndex(column->children, column_index, depth + 1);
-}
-
-static optional_ptr<const IcebergColumnDefinition> GetColumnChild(const IcebergColumnDefinition &column,
-                                                                  const string &child_name) {
-	for (auto &child_p : column.children) {
-		auto &child = *child_p;
-		if (StringUtil::CIEquals(child.name, child_name)) {
-			return child;
-		}
-	}
-	return nullptr;
+	return GetFromColumnIndex(column->GetChildren(), column_index, depth + 1);
 }
 
 optional_ptr<const IcebergColumnDefinition>
@@ -99,7 +88,7 @@ IcebergTableSchema::GetFromPath(const vector<string> &path, optional_ptr<optiona
 			    "Column path %s points to child of variant column %s - but no name_offset is provided",
 			    StringUtil::Join(path, "."), res.get().name);
 		}
-		auto next_child = GetColumnChild(column, path[i]);
+		auto next_child = column.GetChild(path[i]);
 		if (!next_child) {
 			return nullptr;
 		}

@@ -225,17 +225,6 @@ IcebergColumnDefinition::ParseStructField(const rest_api_objects::StructField &f
 	return res;
 }
 
-vector<unique_ptr<IcebergColumnDefinition>>::const_iterator
-IcebergColumnDefinition::GetChildIterator(const string &child_name) const {
-	for (auto it = children.begin(); it != children.end(); it++) {
-		auto &child = *(*it);
-		if (StringUtil::CIEquals(child.name, child_name)) {
-			return it;
-		}
-	}
-	return children.end();
-}
-
 bool IcebergColumnDefinition::IsIcebergPrimitiveType() const {
 	switch (type.id()) {
 	case LogicalTypeId::TINYINT:
@@ -349,6 +338,45 @@ static bool DefaultsAreEqual(const unique_ptr<Value> &a, const unique_ptr<Value>
 		return false;
 	}
 	return ValueOperations::NotDistinctFrom(*a, *b);
+}
+
+void IcebergColumnDefinition::RemoveChild(const string &name) {
+	auto it = std::find_if(children.begin(), children.end(), [&name](const unique_ptr<IcebergColumnDefinition> &child) {
+		return StringUtil::CIEquals(child->name, name);
+	});
+	if (it == children.end()) {
+		throw InternalException("Can't delete child by name '%s', no child by that name exists", name);
+	}
+	children.erase(it);
+}
+
+void IcebergColumnDefinition::AddChild(unique_ptr<IcebergColumnDefinition> &&child) {
+	children.emplace_back(std::move(child));
+}
+
+idx_t IcebergColumnDefinition::GetChildCount() const {
+	return children.size();
+}
+
+optional_ptr<const IcebergColumnDefinition> IcebergColumnDefinition::GetChild(const string &name) const {
+	auto it = std::find_if(children.begin(), children.end(), [&name](const unique_ptr<IcebergColumnDefinition> &child) {
+		return StringUtil::CIEquals(child->name, name);
+	});
+	if (it == children.end()) {
+		return nullptr;
+	}
+	return (*it).get();
+}
+
+optional_ptr<const IcebergColumnDefinition> IcebergColumnDefinition::GetChild(idx_t index) const {
+	if (index >= children.size()) {
+		return nullptr;
+	}
+	return children[index].get();
+}
+
+const vector<unique_ptr<IcebergColumnDefinition>> &IcebergColumnDefinition::GetChildren() const {
+	return children;
 }
 
 bool IcebergColumnDefinition::Equals(const IcebergColumnDefinition &other) const {

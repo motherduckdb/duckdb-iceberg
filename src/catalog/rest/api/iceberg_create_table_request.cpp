@@ -67,7 +67,8 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, cons
 	case LogicalTypeId::STRUCT: {
 		yyjson_mut_obj_add_strcpy(doc, field_obj, "type", "struct");
 		auto nested_fields_arr = yyjson_mut_obj_add_arr(doc, field_obj, "fields");
-		for (auto &field : column.children) {
+		for (idx_t i = 0; i < column.GetChildCount(); i++) {
+			auto field = column.GetChild(i);
 			auto nested_field_obj = yyjson_mut_arr_add_obj(doc, nested_fields_arr);
 			AddNamedField(doc, nested_field_obj, *field);
 		}
@@ -75,8 +76,8 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, cons
 	}
 	case LogicalTypeId::LIST: {
 		yyjson_mut_obj_add_strcpy(doc, field_obj, "type", "list");
-		D_ASSERT(column.children.size() == 1);
-		auto &list_type = column.children[0];
+		D_ASSERT(column.GetChildCount() == 1);
+		auto list_type = column.GetChild("element");
 		yyjson_mut_obj_add_uint(doc, field_obj, "element-id", list_type->id);
 		if (list_type->IsIcebergPrimitiveType()) {
 			yyjson_mut_obj_add_strcpy(doc, field_obj, "element",
@@ -90,8 +91,8 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, cons
 	}
 	case LogicalTypeId::MAP: {
 		yyjson_mut_obj_add_strcpy(doc, field_obj, "type", "map");
-		D_ASSERT(column.children.size() == 2);
-		auto &key_child = column.children[0];
+		D_ASSERT(column.GetChildCount() == 2);
+		auto key_child = column.GetChild("key");
 		if (key_child->IsIcebergPrimitiveType()) {
 			yyjson_mut_obj_add_strcpy(doc, field_obj, "key",
 			                          IcebergTypeHelper::LogicalTypeToIcebergType(key_child->type).c_str());
@@ -100,7 +101,7 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, cons
 			AddUnnamedField(doc, key_obj, *key_child);
 		}
 		yyjson_mut_obj_add_uint(doc, field_obj, "key-id", key_child->id);
-		auto &val_child = column.children[1];
+		auto val_child = column.GetChild("value");
 		if (val_child->IsIcebergPrimitiveType()) {
 			yyjson_mut_obj_add_strcpy(doc, field_obj, "value",
 			                          IcebergTypeHelper::LogicalTypeToIcebergType(val_child->type).c_str());

@@ -70,11 +70,10 @@ static void SchemaToColumnsInternal(const vector<unique_ptr<IcebergColumnDefinit
 	for (idx_t i = 0; i < columns.size(); i++) {
 		auto &column = *columns[i];
 		result.emplace(column.id, DuckLakeColumn(column, i, parent));
-		if (column.children.empty()) {
+		if (!column.GetChildCount()) {
 			continue;
 		}
-		auto &children = column.children;
-		SchemaToColumnsInternal(children, result, column);
+		SchemaToColumnsInternal(column.GetChildren(), result, column);
 	}
 }
 
