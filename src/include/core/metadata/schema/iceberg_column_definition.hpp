@@ -36,6 +36,7 @@ public:
 	optional_ptr<const IcebergColumnDefinition> GetChild(idx_t index) const;
 	const vector<unique_ptr<IcebergColumnDefinition>> &GetChildren() const;
 	idx_t GetChildCount() const;
+	void RewriteType();
 
 private:
 	Value GetWriteDefault() const;
@@ -50,6 +51,7 @@ public:
 	bool required;
 
 private:
+	optional_ptr<IcebergColumnDefinition> parent;
 	vector<unique_ptr<IcebergColumnDefinition>> children;
 };
 

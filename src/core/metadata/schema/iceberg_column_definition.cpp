@@ -190,7 +190,7 @@ IcebergColumnDefinition::ParseStructField(const rest_api_objects::StructField &f
 			auto &child_field = *field_p;
 			auto child = ParseStructField(child_field);
 			struct_children.push_back(std::make_pair(child->name, child->type));
-			res->children.push_back(std::move(child));
+			res->AddChild(std::move(child));
 		}
 		res->type = LogicalType::STRUCT(std::move(struct_children));
 	} else if (type.has_list_type) {
@@ -199,7 +199,7 @@ IcebergColumnDefinition::ParseStructField(const rest_api_objects::StructField &f
 		                                     *list_type.element, "", nullptr, nullptr);
 		auto child = ParseStructField(child_field);
 		res->type = LogicalType::LIST(child->type);
-		res->children.push_back(std::move(child));
+		res->AddChild(std::move(child));
 	} else if (type.has_map_type) {
 		auto &map_type = type.map_type;
 		auto key_field = CreateStructField("key", map_type.key_id, true, *map_type.key, "", nullptr);
@@ -209,8 +209,8 @@ IcebergColumnDefinition::ParseStructField(const rest_api_objects::StructField &f
 		auto key = ParseStructField(key_field);
 		auto value = ParseStructField(value_field);
 		res->type = LogicalType::MAP(key->type, value->type);
-		res->children.push_back(std::move(key));
-		res->children.push_back(std::move(value));
+		res->AddChild(std::move(key));
+		res->AddChild(std::move(value));
 	} else {
 		throw InvalidConfigurationException("Encountered an invalid type in JSON schema");
 	}
@@ -266,7 +266,7 @@ unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::Copy() const {
 	}
 	res->required = required;
 	for (auto &child : children) {
-		res->children.push_back(child->Copy());
+		res->AddChild(child->Copy());
 	}
 	return res;
 }
@@ -351,11 +351,16 @@ void IcebergColumnDefinition::RemoveChild(const string &name) {
 }
 
 void IcebergColumnDefinition::AddChild(unique_ptr<IcebergColumnDefinition> &&child) {
+	child->parent = this;
 	children.emplace_back(std::move(child));
 }
 
 idx_t IcebergColumnDefinition::GetChildCount() const {
 	return children.size();
+}
+
+void IcebergColumnDefinition::RewriteType() {
+	//! TODO: rewrite types recursively
 }
 
 optional_ptr<const IcebergColumnDefinition> IcebergColumnDefinition::GetChild(const string &name) const {
