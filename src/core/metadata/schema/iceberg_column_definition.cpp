@@ -84,7 +84,7 @@ IcebergColumnDefinition::ParseType(const string &name, int32_t field_id, bool re
 		for (auto &field_p : struct_type.fields) {
 			auto &field = *field_p;
 			auto child = ParseStructField(field);
-			struct_children.push_back(std::make_pair(child->name, child->type));
+			struct_children.emplace_back(std::make_pair(child->name, child->type));
 			res->children.push_back(std::move(child));
 		}
 		res->type = LogicalType::STRUCT(std::move(struct_children));
@@ -291,9 +291,10 @@ ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
 		if (type.IsNested()) {
 			throw NotImplementedException("DEFAULT values for nested types are not supported currently");
 		}
-		return ColumnDefinition(name, type, make_uniq<ConstantExpression>(*default_to_use), TableColumnType::STANDARD);
+		return ColumnDefinition(Identifier(name), type, make_uniq<ConstantExpression>(*default_to_use),
+		                        TableColumnType::STANDARD);
 	}
-	return ColumnDefinition(name, type);
+	return ColumnDefinition(Identifier(name), type);
 }
 
 static bool DefaultsAreEqual(const unique_ptr<Value> &a, const unique_ptr<Value> &b) {

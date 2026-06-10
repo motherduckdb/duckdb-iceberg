@@ -270,7 +270,7 @@ namespace {
 
 struct AvroBindSchemaMetadata {
 	child_list_t<Value> field_ids;
-	vector<string> names;
+	vector<Identifier> names;
 	vector<LogicalType> types;
 };
 
@@ -283,7 +283,7 @@ static Value CreateFieldID(int32_t field_id, bool nullable) {
 
 static void AddSimpleColumn(AvroBindSchemaMetadata &metadata, const string &name, const LogicalType &type,
                             int32_t field_id, bool nullable) {
-	metadata.names.push_back(name);
+	metadata.names.push_back(Identifier(name));
 	metadata.types.push_back(type);
 	metadata.field_ids.emplace_back(name, CreateFieldID(field_id, nullable));
 }

@@ -99,7 +99,7 @@ public:
 	const IcebergTableSchema &GetSchema() const;
 	bool FinishedScanningDeletes() const;
 
-	void Bind(vector<LogicalType> &return_types, vector<string> &names);
+	void Bind(vector<LogicalType> &return_types, vector<Identifier> &names);
 	unique_ptr<IcebergMultiFileList> PushdownInternal(ClientContext &context, TableFilterSet &new_filters,
 	                                                  vector<column_t> column_indexes) const;
 	void ScanPositionalDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result) const;
@@ -128,7 +128,7 @@ public:
 public:
 	//! MultiFileList API
 	unique_ptr<MultiFileList> DynamicFilterPushdown(ClientContext &context, const MultiFileOptions &options,
-	                                                const vector<string> &names, const vector<LogicalType> &types,
+	                                                const vector<Identifier> &names, const vector<LogicalType> &types,
 	                                                const vector<column_t> &column_ids,
 	                                                TableFilterSet &filters) const override;
 	unique_ptr<MultiFileList> ComplexFilterPushdown(ClientContext &context, const MultiFileOptions &options,

@@ -435,7 +435,7 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	//! Create the types for the DataChunk
 
 	child_list_t<Value> field_ids;
-	vector<string> names;
+	vector<Identifier> names;
 	vector<LogicalType> types;
 
 	auto &current_partition_spec = table_metadata.GetLatestPartitionSpec();

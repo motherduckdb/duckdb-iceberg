@@ -49,7 +49,7 @@ shared_ptr<MultiFileList> IcebergMultiFileReader::CreateFileList(ClientContext &
 }
 
 bool IcebergMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &files, vector<LogicalType> &return_types,
-                                  vector<string> &names, MultiFileReaderBindData &bind_data) {
+                                  vector<Identifier> &names, MultiFileReaderBindData &bind_data) {
 	auto &iceberg_multi_file_list = dynamic_cast<IcebergMultiFileList &>(files);
 
 	iceberg_multi_file_list.Bind(return_types, names);
@@ -65,7 +65,7 @@ bool IcebergMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &file
 }
 
 void IcebergMultiFileReader::BindOptions(MultiFileOptions &options, MultiFileList &files,
-                                         vector<LogicalType> &return_types, vector<string> &names,
+                                         vector<LogicalType> &return_types, vector<Identifier> &names,
                                          MultiFileReaderBindData &bind_data) {
 	// Disable all other multifilereader options
 	options.auto_detect_hive_partitioning = false;
@@ -93,19 +93,19 @@ static void ApplyFieldMapping(MultiFileColumnDefinition &col, const vector<Icebe
 	}
 
 	auto name = col.name;
-	if (parent && parent->type.id() == LogicalTypeId::MAP && StringUtil::CIEquals(name, "key_value")) {
+	if (parent && parent->type.id() == LogicalTypeId::MAP && name == "key_value") {
 		//! Deal with MAP, it has a 'key_value' child, which holds the 'key' + 'value' columns
 		for (auto &child : col.children) {
 			ApplyFieldMapping(child, mappings, fields, context, parent);
 		}
 		return;
 	}
-	if (parent && parent->type.id() == LogicalTypeId::LIST && StringUtil::CIEquals(name, "list")) {
+	if (parent && parent->type.id() == LogicalTypeId::LIST && name == "list") {
 		//! Deal with LIST, it has a 'element' child, which has the column for the underlying list data
 		name = "element";
 	}
 
-	auto it = fields.find(name);
+	auto it = fields.find(name.GetIdentifierName());
 	if (it == fields.end()) {
 		DUCKDB_LOG(context, IcebergLogType, "Column '%s' does not have a field-id, and no field-mapping exists for it!",
 		           name);
@@ -504,7 +504,8 @@ static unique_ptr<Expression> ConstructVirtualRowIdExpression(ClientContext &con
 
 	FunctionBinder binder(context);
 	ErrorData error;
-	auto function_expr = binder.BindScalarFunction(DEFAULT_SCHEMA, "+", std::move(children), error, true, nullptr);
+	auto function_expr =
+	    binder.BindScalarFunction(Identifier::DefaultSchema(), "+", std::move(children), error, true, nullptr);
 	if (error.HasError()) {
 		error.Throw();
 	}

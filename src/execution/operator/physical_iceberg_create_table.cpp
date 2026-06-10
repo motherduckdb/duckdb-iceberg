@@ -84,7 +84,7 @@ string PhysicalIcebergCreateTable::GetName() const {
 InsertionOrderPreservingMap<string> PhysicalIcebergCreateTable::ParamsToString() const {
 	InsertionOrderPreservingMap<string> result;
 	if (info) {
-		result["Table Name"] = info->Base().table;
+		result["Table Name"] = info->Base().table.GetIdentifierName();
 	}
 	return result;
 }

@@ -237,9 +237,10 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 				create_secret_input.scope.push_back(table_location);
 			}
 		}
-		create_secret_input.name = StringUtil::Format("%s_%d_%s", secret_base_name, index, credential.prefix);
+		create_secret_input.name =
+		    Identifier(StringUtil::Format("%s_%d_%s", secret_base_name, index, credential.prefix));
 
-		create_secret_input.type = storage_type;
+		create_secret_input.type = Identifier(storage_type);
 		create_secret_input.provider = "config";
 		create_secret_input.storage_type = "memory";
 		create_secret_input.options = config_options;
@@ -258,8 +259,8 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 
 		//! TODO: apply the 'overrides' retrieved from the /v1/config endpoint
 		config.options = config_options;
-		config.name = secret_base_name;
-		config.type = storage_type;
+		config.name = Identifier(secret_base_name);
+		config.type = Identifier(storage_type);
 		config.provider = "config";
 		config.storage_type = "memory";
 	}
@@ -269,7 +270,7 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 
 optional_ptr<CatalogEntry> IcebergTableInformation::CreateSchemaVersion(const IcebergTableSchema &table_schema) {
 	CreateTableInfo info;
-	info.table = name;
+	info.table = Identifier(name);
 	for (auto &col : table_schema.columns) {
 		info.columns.AddColumn(col->GetColumnDefinition());
 	}
@@ -357,10 +358,10 @@ IcebergTableInformation::BuildPartitionSpec(const vector<unique_ptr<ParsedExpres
 		auto key_type = key->GetExpressionType();
 		if (key_type == ExpressionType::COLUMN_REF) {
 			auto &colref = key->Cast<ColumnRefExpression>();
-			column_name = colref.ColumnNames().back();
+			column_name = colref.ColumnNames().back().GetIdentifierName();
 		} else if (key_type == ExpressionType::FUNCTION) {
 			auto &funcexpr = key->Cast<FunctionExpression>();
-			transform = funcexpr.FunctionName();
+			transform = funcexpr.FunctionName().GetIdentifierName();
 			if (funcexpr.GetArguments().empty()) {
 				throw NotImplementedException("Unrecognized transform ('%s')", transform);
 			} else if (!IcebergTransform::TransformFunctionSupported(transform)) {
@@ -383,18 +384,20 @@ IcebergTableInformation::BuildPartitionSpec(const vector<unique_ptr<ParsedExpres
 				bucket_modulo_val = const_expr.GetValue().GetValue<idx_t>();
 				transform = StringUtil::Format("%s[%d]", transform, bucket_modulo_val);
 				if (funcexpr.GetArguments()[1].GetExpression().GetExpressionType() != ExpressionType::COLUMN_REF) {
-					throw NotImplementedException("Transforms are only supported on column references, not %s",
-					                              EnumUtil::ToChars(funcexpr.GetArguments()[1].GetExpression().GetExpressionType()));
+					throw NotImplementedException(
+					    "Transforms are only supported on column references, not %s",
+					    EnumUtil::ToChars(funcexpr.GetArguments()[1].GetExpression().GetExpressionType()));
 				}
 				auto &colref = funcexpr.GetArguments()[1].GetExpression().Cast<ColumnRefExpression>();
-				column_name = colref.ColumnNames().back();
+				column_name = colref.ColumnNames().back().GetIdentifierName();
 			} else {
 				if (funcexpr.GetArguments()[0].GetExpression().GetExpressionType() != ExpressionType::COLUMN_REF) {
-					throw NotImplementedException("Transforms are only supported on column references, not %s",
-					                              EnumUtil::ToChars(funcexpr.GetArguments()[0].GetExpression().GetExpressionType()));
+					throw NotImplementedException(
+					    "Transforms are only supported on column references, not %s",
+					    EnumUtil::ToChars(funcexpr.GetArguments()[0].GetExpression().GetExpressionType()));
 				}
 				auto &colref = funcexpr.GetArguments()[0].GetExpression().Cast<ColumnRefExpression>();
-				column_name = colref.ColumnNames().back();
+				column_name = colref.ColumnNames().back().GetIdentifierName();
 			}
 		} else {
 			throw NotImplementedException("Unsupported partition key type: %s", key->ToString());
