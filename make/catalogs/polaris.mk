@@ -23,10 +23,12 @@ polaris: polaris-clone polaris-stop
 	(cd .catalogs/polaris/site/content/guides/minio && docker compose up -d)
 	$(call set_active_catalog,polaris)
 
-polaris-data: polaris
+polaris-data-only:
 	@echo "Setting up venv-spark4 and generating data..."
 	python3 -m venv .venv-spark4 && \
 	. .venv-spark4/bin/activate && \
 	python3 -m pip install -r scripts/requirements.txt && \
 	if [ -f "$(POLARIS_ENV_FILE)" ]; then echo "Loading env from $(POLARIS_ENV_FILE)"; set -a; . ./$(POLARIS_ENV_FILE); set +a; fi && \
 	python3 -m pytest scripts/data_generators/test_generate_data.py $(if $(TEST),-k $(TEST)) -vv
+
+polaris-data: polaris polaris-data-only

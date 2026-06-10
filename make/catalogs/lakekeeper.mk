@@ -43,9 +43,11 @@ lakekeeper: lakekeeper-clone lakekeeper-stop
 			jupyter nbconvert --to notebook --execute --output-dir=/tmp /home/jovyan/examples/03-01-Spark.ipynb'
 	$(call set_active_catalog,lakekeeper)
 
-lakekeeper-data: lakekeeper
+lakekeeper-data-only:
 	@echo "Setting up venv-spark4 and generating data..."
 	python3 -m venv .venv-spark4 && \
 	. .venv-spark4/bin/activate && \
 	python3 -m pip install -r scripts/requirements.txt && \
 	python3 -m pytest scripts/data_generators/test_generate_data.py $(if $(TEST),-k $(TEST)) -vv
+
+lakekeeper-data: lakekeeper lakekeeper-data-only
