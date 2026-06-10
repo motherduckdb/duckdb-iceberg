@@ -7,7 +7,7 @@
 # 1. Refresh token has been revoked (server returns 401 or invalid_grant error)
 # 2. Fallback to client_credentials when refresh_token fails
 
-require-env CATALOG_TEST_CONFIG_SETUP nessie
+require-env NESSIE_SERVER_AVAILABLE
 
 require avro
 

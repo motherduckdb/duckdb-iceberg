@@ -2,7 +2,7 @@
 # description: Verify static tokens work without triggering new OAuth2 token fetches
 # group: [oauth2]
 
-require-env CATALOG_TEST_CONFIG_SETUP fixture
+require-env FIXTURE_SERVER_AVAILABLE
 
 require avro
 

@@ -1,7 +1,7 @@
 # name: test/sql/local/catalog_custom_setup/fixture/setup_errors/wrong_oauth2_uri.test
 # group: [setup_errors]
 
-require-env CATALOG_TEST_CONFIG_SETUP fixture
+require-env FIXTURE_SERVER_AVAILABLE
 
 require avro
 
