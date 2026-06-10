@@ -59,12 +59,8 @@ select request.url[26:] from duckdb_logs_parsed('http') where request.url not li
 ----
 namespaces/default/tables/spark_written_upper_lower_bounds
 
-# test parsing of interval
 statement ok
-DETACH my_datalake;
-
-statement ok
-ATTACH '' AS my_datalake (
+ATTACH OR REPLACE '' AS my_datalake (
     TYPE ICEBERG,
     CLIENT_ID 'admin',
     CLIENT_SECRET 'password',
@@ -94,10 +90,7 @@ select request.url[26:] from duckdb_logs_parsed('http') where request.url not li
 namespaces/default/tables/spark_written_upper_lower_bounds
 
 statement ok
-DETACH my_datalake
-
-statement ok
-ATTACH '' AS my_datalake (
+ATTACH OR REPLACE '' AS my_datalake (
     TYPE ICEBERG,
     CLIENT_ID 'admin',
     CLIENT_SECRET 'password',
@@ -127,10 +120,7 @@ select request.url[26:] from duckdb_logs_parsed('http') where request.url not li
 namespaces/default/tables/spark_written_upper_lower_bounds
 
 statement ok
-DETACH my_datalake
-
-statement ok
-ATTACH '' AS my_datalake (
+ATTACH OR REPLACE '' AS my_datalake (
     TYPE ICEBERG,
     CLIENT_ID 'admin',
     CLIENT_SECRET 'password',
@@ -162,11 +152,8 @@ select request.url[26:] from duckdb_logs_parsed('http') where request.url not li
 namespaces/default/tables/spark_written_upper_lower_bounds
 namespaces/default/tables/spark_written_upper_lower_bounds
 
-statement ok
-DETACH my_datalake
-
-statement ok
-ATTACH '' AS my_datalake (
+statement error
+ATTACH OR REPLACE '' my_datalake (
     TYPE ICEBERG,
     CLIENT_ID 'admin',
     CLIENT_SECRET 'password',
@@ -176,11 +163,8 @@ ATTACH '' AS my_datalake (
 ----
 <REGEX>:.*Could not convert string 'blah blah' to INTERVAL.*
 
-statement ok
-DETACH my_datalake
-
-statement ok
-ATTACH '' AS my_datalake (
+statement error
+ATTACH OR REPLACE '' AS my_datalake (
     TYPE ICEBERG,
     CLIENT_ID 'admin',
     CLIENT_SECRET 'password',
