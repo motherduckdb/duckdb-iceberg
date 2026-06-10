@@ -153,7 +153,7 @@ namespaces/default/tables/spark_written_upper_lower_bounds
 namespaces/default/tables/spark_written_upper_lower_bounds
 
 statement error
-ATTACH OR REPLACE '' my_datalake (
+ATTACH OR REPLACE '' AS my_datalake (
     TYPE ICEBERG,
     CLIENT_ID 'admin',
     CLIENT_SECRET 'password',
