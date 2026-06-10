@@ -68,7 +68,7 @@ ALTER TABLE my_datalake.default.test_unsupported_transforms SET PARTITIONED BY (
 statement error
 ALTER TABLE my_datalake.default.test_unsupported_transforms SET PARTITIONED BY (ceil(amount));
 ----
-<REGEX>:.*Unrecognized transform \(\'ceil\'\).
+<REGEX>:.*Unrecognized transform \(\'ceil\'\).*
 
 statement error
 ALTER TABLE my_datalake.default.test_unsupported_transforms SET PARTITIONED BY (round(amount));
