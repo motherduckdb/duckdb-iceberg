@@ -47,8 +47,6 @@ jobs:
           make polaris-data
 
       - name: Run Polaris Specific Tests
-        env:
-          POLARIS_SERVER_AVAILABLE: 1
         run: |
           export POLARIS_CLIENT_ID=$(cat tmp/polaris_client_id.txt)
           export POLARIS_CLIENT_SECRET=$(cat tmp/polaris_client_secret.txt)
@@ -56,8 +54,6 @@ jobs:
           ./build/release/test/unittest --order lex "$PWD/test/*"
  
       - name: Run Generic IRC tests
-        env:
-          POLARIS_SERVER_AVAILABLE: 1
         run: |
           export POLARIS_CLIENT_ID=$(cat tmp/polaris_client_id.txt)
           export POLARIS_CLIENT_SECRET=$(cat tmp/polaris_client_secret.txt)

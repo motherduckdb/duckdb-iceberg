@@ -77,8 +77,6 @@ jobs:
 
       - name: Install Iceberg & Run Generic Tests Set local extension repo, Install iceberg from build/release/extension and remove require iceberg from tests
         if: inputs.local-extension-repo != ''
-        env:
-          FIXTURE_SERVER_AVAILABLE: 1
         run: |
           # remove already installed extension if it is installed
           rm ~/.duckdb/extensions/**/**/iceberg.* || true
@@ -100,7 +98,6 @@ jobs:
       - name: Run Generic IRC tests
         if: inputs.local-extension-repo == ''
         env:
-          FIXTURE_SERVER_AVAILABLE: 1
           EQUALITY_DELETE_WRITES_ENABLED: ${{ inputs.equality-delete-writes-enabled }}
         run: |
           ./build/release/test/unittest --order lex "$PWD/test/sql/local/catalog_test_config_setup/*" --list-test-names-only || true
@@ -108,8 +105,6 @@ jobs:
 
       - name: Run other tests
         if: inputs.local-extension-repo == ''
-        env:
-          FIXTURE_SERVER_AVAILABLE: 1
         run: |
           ./build/release/test/unittest --order lex "$PWD/test/*" --list-test-names-only || true
           ./build/release/test/unittest --order lex "$PWD/test/*"
@@ -117,7 +112,6 @@ jobs:
       - name: Test reads with PyIceberg and Spark
         if: inputs.local-extension-repo == ''
         env:
-          FIXTURE_SERVER_AVAILABLE: 1
           EQUALITY_DELETE_WRITES_ENABLED: ${{ inputs.equality-delete-writes-enabled }}
         run: |
           # test with spark v4
