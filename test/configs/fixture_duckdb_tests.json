@@ -1282,6 +1282,12 @@
       ]
     },
     {
+      "reason": "Contains attach and use call, when config already uses iceberg attached db",
+      "paths": [
+        "test/sql/storage/metadata/partial_column_metadata_reuse_small_block.test"
+      ]
+    }
+    {
       "reason": "Wrong row count - storage layout differences vs duckdb",
       "paths": [
         "test/sql/binder/test_duplicate_in_set_operation.test",
