@@ -366,6 +366,7 @@ def test_snowflake_reads_duckdb_written_variant(duckdb_con, snowflake_session, d
 # Test 2: Snowflake writes VARIANT data, DuckDB reads it.
 # ---------------------------------------------------------------------------
 
+
 def test_duckdb_reads_snowflake_written_variant(duckdb_con, snowflake_session, duckdb_created_d2s_table):
     # Snowflake would need to own/create the table to write it (illustrative).
     sf_table = D2S_TABLE

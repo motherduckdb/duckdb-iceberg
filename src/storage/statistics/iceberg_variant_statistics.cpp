@@ -121,6 +121,7 @@ static bool SerializeBoundsVariant(ClientContext &context, Value bounds_struct, 
 	if (result_children.size() < 2 || result_children[0].IsNull() || result_children[1].IsNull()) {
 		return false;
 	}
+	// return metadata + value
 	out = StringValue::Get(result_children[0]) + StringValue::Get(result_children[1]);
 	return true;
 }
@@ -146,7 +147,7 @@ void IcebergVariantBounds::AddStatsEntry(const vector<string> &full_path, idx_t 
 		return;
 	}
 
-	// Check potentially not fully shredded path
+	// check leafs have values. That means path is not fully shredded
 	if (leaf == "value") {
 		bool has_null_count = false, has_num_values = false;
 		idx_t null_count = 0, num_values = 0;
@@ -214,8 +215,9 @@ bool IcebergVariantBounds::Finalize(ClientContext &context, bool &has_lower, str
 		bool drop_field = !partial_paths.empty();
 		for (auto &partial_path : partial_paths) {
 			for (idx_t i = 0; i < partial_path.size(); i++) {
-				if (i > field.field_names.size()) {
-					// the partial path is longer
+				if (i >= field.field_names.size()) {
+					// the partial path of an unshredded field is longer.
+					// i.e a.b.c.d (unshredded) is longer than a.b which is not possible
 					throw InternalException("Partial path length longer than field path length");
 				}
 				if (partial_path[i] != field.field_names[i]) {

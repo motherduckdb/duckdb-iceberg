@@ -642,6 +642,10 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 		IcebergPredicateStats stats;
 
 		if (column.type.id() == LogicalTypeId::VARIANT) {
+			if (lower_bound.IsNull() || upper_bound.IsNull()) {
+				// if there are no variant stats, scan the whole file
+				return true;
+			}
 			Value lower_decoded, upper_decoded;
 			auto lower_blob = lower_bound.GetValueUnsafe<string_t>();
 			auto upper_blob = upper_bound.GetValueUnsafe<string_t>();
@@ -655,7 +659,6 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 			    IcebergVariantBoundsReader::RekeyBoundsVariant(upper_decoded, upper_variant)) {
 				stats.SetUpperBound(upper_variant);
 			}
-			auto break_here_inspect_result = 0;
 		} else {
 			stats = IcebergPredicateStats::DeserializeBounds(lower_bound, upper_bound, column.name, column.type);
 		}
