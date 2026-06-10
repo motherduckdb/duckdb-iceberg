@@ -10,7 +10,7 @@
   ],
   "test_env": [
     {
-      "env_name": "CATALOG_TYPE",
+      "env_name": "CATALOG_TEST_CONFIG_SETUP",
       "env_value": "nessie"
     }
   ],
