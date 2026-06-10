@@ -1,5 +1,5 @@
 #include "planning/pruning/iceberg_predicate.hpp"
-
+#include "duckdb/common/printer.hpp"
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
@@ -12,6 +12,7 @@
 #include "duckdb/planner/filter/expression_filter.hpp"
 #include "duckdb/planner/logical_operator_visitor.hpp"
 #include "duckdb/execution/expression_executor.hpp"
+#include "duckdb/storage/statistics/geometry_stats.hpp"
 
 namespace duckdb {
 
@@ -183,6 +184,17 @@ bool MatchBoundsTemplated(ClientContext &context, const TableFilter &filter, con
 		//!
 		//! See duckdb/duckdb-iceberg#464
 		auto &expression_filter = filter.Cast<ExpressionFilter>();
+
+		//! Spatial predicates on a geometry column (e.g. ST_Intersects, which the spatial
+		//! optimizer rewrites into a `geom && <const>` / st_intersects_extent bbox pre-filter)
+		//! arrive here as an ExpressionFilter. Delegate to GeometryStats::CheckZonemap, which
+		//! whitelists the bbox-prunable predicates and does the intersect/contain math against
+		//! the file's bounding-box extent. Only prune when the result is provably empty.
+		if (stats.geometry_stats) {
+			auto result = GeometryStats::CheckZonemap(*stats.geometry_stats, expression_filter.expr);
+			return result != FilterPropagateResult::FILTER_ALWAYS_FALSE;
+		}
+
 		auto &expr = *expression_filter.expr;
 
 		switch (expr.type) {

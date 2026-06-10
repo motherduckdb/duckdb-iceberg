@@ -19,6 +19,8 @@
 #include "iceberg_logging.hpp"
 #include "planning/pruning/iceberg_predicate.hpp"
 #include "core/expression/iceberg_value.hpp"
+#include "duckdb/storage/statistics/geometry_stats.hpp"
+#include "duckdb/common/types/geometry.hpp"
 #include "core/metadata/manifest/iceberg_manifest.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 #include "core/expression/iceberg_predicate_stats.hpp"
@@ -432,12 +434,58 @@ bool IcebergPredicateStats::BoundsAreNull() const {
 	return has_lower_bounds && has_upper_bounds && lower_bound.IsNull() && upper_bound.IsNull();
 }
 
+// Iceberg v3 (Appendix D): geometry lower/upper bounds are a packed little-endian
+// sequence of f64 doubles giving the min/max corner of the bounding box, in order
+// x, y, (z), (m). Reconstruct a GEOMETRY_STATS BaseStatistics whose extent spans
+// [lower, upper] so spatial predicate pruning can be delegated to
+// GeometryStats::CheckZonemap. Returns null when the bounds can't form an XY box.
+static shared_ptr<BaseStatistics> BuildGeometryStats(const Value &lower_bound, const Value &upper_bound,
+                                                     const LogicalType &type) {
+	if (lower_bound.IsNull() || upper_bound.IsNull()) {
+		return nullptr;
+	}
+	auto lower_blob = lower_bound.GetValueUnsafe<string_t>();
+	auto upper_blob = upper_bound.GetValueUnsafe<string_t>();
+	const auto lower_coordinate_card = lower_blob.GetSize() / sizeof(double);
+	const auto upper_coordinate_card = upper_blob.GetSize() / sizeof(double);
+	if (lower_coordinate_card < 2 || upper_coordinate_card < 2) {
+		// Not enough information to form an XY bounding box.
+		return nullptr;
+	}
+	const auto *lo = reinterpret_cast<const double *>(lower_blob.GetData());
+	const auto *hi = reinterpret_cast<const double *>(upper_blob.GetData());
+
+	// CreateUnknown initializes the extent to ±infinity on every axis (so absent
+	// Z/M axes correctly report HasZ()/HasM() == false) and sets has_no_null = true
+	// so CheckZonemap doesn't short-circuit to FILTER_ALWAYS_FALSE.
+	auto stats = make_shared_ptr<BaseStatistics>(GeometryStats::CreateUnknown(type));
+	auto &extent = GeometryStats::GetExtent(*stats);
+	extent.x_min = lo[0];
+	extent.y_min = lo[1];
+	extent.x_max = hi[0];
+	extent.y_max = hi[1];
+	// 3 doubles is XYZ (the writer emits XYZ whenever Z is present); 4 is XYZM.
+	if (lower_coordinate_card >= 3 && upper_coordinate_card >= 3) {
+		extent.z_min = lo[2];
+		extent.z_max = hi[2];
+	}
+	if (lower_coordinate_card >= 4 && upper_coordinate_card >= 4) {
+		extent.m_min = lo[3];
+		extent.m_max = hi[3];
+	}
+	return stats;
+}
+
 IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(const Value &lower_bound, const Value &upper_bound,
                                                                const string &name, const LogicalType &type) {
 	IcebergPredicateStats res;
 
-	// DuckDB-Iceberg does not yet support deserializing avro blobs to geometry yet.
 	if (type.id() == LogicalTypeId::GEOMETRY) {
+		// Geometry bounds need both corners together to build a bounding-box extent,
+		// so they don't go through the per-bound Value deserialization below.
+		res.geometry_stats = BuildGeometryStats(lower_bound, upper_bound, type);
+		res.has_lower_bounds = res.geometry_stats != nullptr;
+		res.has_upper_bounds = res.geometry_stats != nullptr;
 		return res;
 	}
 

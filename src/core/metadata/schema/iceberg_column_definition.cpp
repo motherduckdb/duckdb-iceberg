@@ -186,7 +186,10 @@ LogicalType IcebergColumnDefinition::ParsePrimitiveTypeString(const string &type
 		// Geometry is an Iceberg v3 type stored as WKB binary in parquet.
 		// The type string may include a CRS parameter: geometry(<crs>)
 		if (type_str == "geometry") {
-			return LogicalType::GEOMETRY(IcebergConstants::DefaultGeometryCRS);
+			// If we use IcebergConstants::DefaultGeometryCRS, file pruning does not work as well
+			// since LogicalType::Geometry(<crs>) != LogicalType::Geometry(), so casts get introduced
+			// on Iceberg predicates.
+			return LogicalType::GEOMETRY();
 		}
 		if (type_str.size() > 9 && type_str[8] == '(' && type_str.back() == ')') {
 			auto crs_str = type_str.substr(9, type_str.size() - 10);

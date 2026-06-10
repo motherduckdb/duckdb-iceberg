@@ -111,6 +111,7 @@ set(EXTENSION_SOURCES
 	src/planning/pruning/iceberg_predicate.cpp
 	src/planning/snapshot/iceberg_snapshot_lookup.cpp
 	src/storage/statistics/iceberg_variant_statistics.cpp
+	src/storage/statistics/iceberg_statistics.cpp
 )
 
 add_subdirectory(src/rest_catalog/objects)
