@@ -2,7 +2,7 @@
 # description: test purge requested attach option
 # group: [attach_options]
 
-require-env FIXTURE_SERVER_AVAILABLE
+require-env CATALOG_TEST_CONFIG_SETUP fixture
 
 require avro
 

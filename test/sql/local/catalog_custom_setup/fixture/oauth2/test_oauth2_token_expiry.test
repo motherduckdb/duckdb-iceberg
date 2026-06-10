@@ -2,7 +2,7 @@
 # description: Test that OAuth2 token expiry is tracked from the token response
 # group: [oauth2]
 
-require-env FIXTURE_SERVER_AVAILABLE
+require-env CATALOG_TEST_CONFIG_SETUP fixture
 
 require avro
 

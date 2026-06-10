@@ -2,7 +2,7 @@
 # description: test sigv4 sigv4_service and sigv4_region attach options for non-AWS endpoints
 # group: [attach_options]
 
-require-env FIXTURE_SERVER_AVAILABLE
+require-env CATALOG_TEST_CONFIG_SETUP fixture
 
 require avro
 

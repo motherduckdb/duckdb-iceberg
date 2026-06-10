@@ -2,7 +2,7 @@
 # description: test nessie integration
 # group: [nessie]
 
-require-env NESSIE_SERVER_AVAILABLE
+require-env CATALOG_TEST_CONFIG_SETUP nessie
 
 require avro
 

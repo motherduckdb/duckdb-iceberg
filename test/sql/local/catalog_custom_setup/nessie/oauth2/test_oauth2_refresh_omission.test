@@ -10,7 +10,7 @@
 # Keycloak typically returns a new refresh_token on each refresh, but we test the
 # omission case by verifying multiple refreshes work.
 
-require-env NESSIE_SERVER_AVAILABLE
+require-env CATALOG_TEST_CONFIG_SETUP nessie
 
 require avro
 

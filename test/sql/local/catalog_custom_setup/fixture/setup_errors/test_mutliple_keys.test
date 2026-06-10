@@ -2,7 +2,7 @@
 # description: test integration with iceberg catalog read
 # group: [setup_errors]
 
-require-env FIXTURE_SERVER_AVAILABLE
+require-env CATALOG_TEST_CONFIG_SETUP fixture
 
 require avro
 

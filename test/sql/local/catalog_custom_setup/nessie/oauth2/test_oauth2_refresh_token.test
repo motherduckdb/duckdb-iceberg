@@ -2,7 +2,7 @@
 # description: Test RFC 6749 Section 6 refresh_token grant flow
 # group: [oauth2]
 
-require-env NESSIE_SERVER_AVAILABLE
+require-env CATALOG_TEST_CONFIG_SETUP nessie
 
 require avro
 

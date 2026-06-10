@@ -2,7 +2,7 @@
 # description: Test OAuth2 edge cases: small expires_in, refresh_token rotation, and omission
 # group: [oauth2]
 
-require-env NESSIE_SERVER_AVAILABLE
+require-env CATALOG_TEST_CONFIG_SETUP nessie
 
 require avro
 

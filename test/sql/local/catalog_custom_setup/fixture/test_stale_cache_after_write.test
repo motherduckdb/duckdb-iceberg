@@ -2,7 +2,7 @@
 # description: Test that metadata cache is invalidated after writes
 # group: [fixture]
 
-require-env FIXTURE_SERVER_AVAILABLE
+require-env CATALOG_TEST_CONFIG_SETUP fixture
 
 require avro
 
