@@ -15,8 +15,16 @@ require iceberg
 
 require httpfs
 
+require icu
+
 # Do not ignore 'HTTP' error messages!
 set ignore_error_messages
+
+# The table values are timestamptz; pin the session timezone so the inserted
+# and queried values are interpreted the same way as the UTC values written by
+# Spark regardless of the local timezone.
+statement ok
+SET TimeZone = 'UTC';
 
 # ---- Verify Spark's initial state ----
 # Spark inserted 10 timestamps (2023-01-01 through 2023-10-01, spread across 4 buckets) plus NULL.
