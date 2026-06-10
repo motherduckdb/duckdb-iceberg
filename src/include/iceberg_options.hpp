@@ -1,12 +1,16 @@
 #pragma once
 
 #include "duckdb/common/string.hpp"
-#include "duckdb/common/types/timestamp.hpp"
-#include "duckdb/planner/tableref/bound_at_clause.hpp"
+#include "planning/snapshot/iceberg_snapshot_lookup.hpp"
 
 namespace duckdb {
 
 static string VERSION_GUESSING_CONFIG_VARIABLE = "unsafe_enable_version_guessing";
+
+// When this is true, a DELETE on a v2 Iceberg table whose WHERE clause is a pure
+// conjunction of equality predicates writes an Iceberg equality-delete file instead
+// of a positional delete. This exists only to exercise the equality-delete read path.
+static string ENABLE_EQUALITY_DELETES_CONFIG_VARIABLE = "unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes";
 
 // When this is provided (and unsafe_enable_version_guessing is true)
 // we first look for DEFAULT_VERSION_HINT_FILE, if it doesn't exist we
@@ -24,21 +28,6 @@ static string DEFAULT_VERSION_HINT_FILE = "version-hint.text";
 
 // By default we will use the unknown version behavior mentioned above
 static string DEFAULT_TABLE_VERSION = UNKNOWN_TABLE_VERSION;
-
-enum class SnapshotSource : uint8_t { LATEST, FROM_TIMESTAMP, FROM_ID };
-
-struct IcebergSnapshotLookup {
-public:
-	SnapshotSource snapshot_source = SnapshotSource::LATEST;
-	int64_t snapshot_id;
-	timestamp_t snapshot_timestamp;
-
-public:
-	bool IsLatest() const {
-		return snapshot_source == SnapshotSource::LATEST;
-	}
-	static IcebergSnapshotLookup FromAtClause(optional_ptr<BoundAtClause> at);
-};
 
 struct IcebergOptions {
 	bool allow_moved_paths = false;

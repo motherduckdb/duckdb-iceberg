@@ -1,32 +1,41 @@
 # This file is included by DuckDB's build system. It specifies which extension to load
 if (NOT EMSCRIPTEN)
-duckdb_extension_load(avro
-		LOAD_TESTS
-		GIT_URL https://github.com/duckdb/duckdb_avro
-		GIT_TAG 4fa0f73f816e9878d5b6a39795e060877766ac1a
+  duckdb_extension_load(avro
+  LOAD_TESTS
+  GIT_URL https://github.com/duckdb/duckdb-avro
+  GIT_TAG 7f423d69709045e38f8431b3470e0395fce1a595
 )
 endif()
 
 # Extension from this repo
+if (DONT_LINK OR "$ENV{DONT_LINK}")
+  set(ICEBERG_DONT_LINK "DONT_LINK")
+else()
+  set(ICEBERG_DONT_LINK "")
+endif()
+
+
+duckdb_extension_load(json)
 duckdb_extension_load(iceberg
     SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}
     LOAD_TESTS
+    ${ICEBERG_DONT_LINK}
 )
 
 if (NOT EMSCRIPTEN)
-duckdb_extension_load(tpch)
-duckdb_extension_load(icu)
-duckdb_extension_load(ducklake
+  duckdb_extension_load(tpch)
+  duckdb_extension_load(icu)
+  duckdb_extension_load(ducklake
         LOAD_TESTS
         GIT_URL https://github.com/duckdb/ducklake
-        GIT_TAG f22b43cc4c8db6eb996e9797221318b72b10bd48
+        GIT_TAG a92abf755a7b4e2f3e410f8b89c72b990a0698da
 )
 
-if (NOT MINGW)
+  if (NOT MINGW)
     duckdb_extension_load(aws
             LOAD_TESTS
             GIT_URL https://github.com/duckdb/duckdb-aws
-            GIT_TAG 18803d5e55b9f9f6dda5047d0fdb4f4238b6801d
+            GIT_TAG ebce8e46e9a02576cfd0296fe29c23aeeddaa937
     )
-endif()
+  endif()
 endif()

@@ -56,17 +56,13 @@ jobs:
           source .venv-spark4/bin/activate
           python3 -m pip install -r scripts/requirements.txt
 
-      - name: Generate data and start fixture
+      - name: Setup fixture local
         run: |
-          source .venv-spark4/bin/activate
-          rm -rf data/generated
-          ./scripts/start-fixture-rest-catalog.sh
-          python3 -m scripts.data_generators.generate_data local
+          make fixture-data-local
 
       - name: Run local tests
         env:
           DUCKDB_ICEBERG_HAVE_GENERATED_DATA: 1
         run: |
-          ./build/release/test/unittest "$PWD/test/*" --list-test-names-only || true
-          ./build/release/test/unittest "$PWD/test/*"
+          ./build/release/test/unittest --order lex "$PWD/test/*" --list-test-names-only || true ./build/release/test/unittest --order lex "$PWD/test/*"
 
