@@ -279,6 +279,7 @@ def snowflake_session():
     finally:
         session.close()
 
+
 def _register_external_table(session, catalog_table, sf_name=None):
     """
     Register a table that already exists in the Polaris catalog as an external
@@ -295,6 +296,7 @@ def _register_external_table(session, catalog_table, sf_name=None):
     ).collect()
     return sf_name
 
+
 # ---------------------------------------------------------------------------
 # Test 1: DuckDB writes VARIANT data, Snowflake registers + reads it.
 # ---------------------------------------------------------------------------
@@ -309,13 +311,12 @@ def duckdb_created_d2s_table(duckdb_con):
     populated by DuckDB and read by Snowflake.
     """
     duckdb_con.query(f"DROP TABLE IF EXISTS my_datalake.{NAMESPACE}.{D2S_TABLE};")
-    duckdb_con.query(
-        f"CREATE TABLE my_datalake.{NAMESPACE}.{D2S_TABLE} (v VARIANT) "
-        "WITH ('format-version'='3');"
-    )
+    duckdb_con.query(f"CREATE TABLE my_datalake.{NAMESPACE}.{D2S_TABLE} (v VARIANT) " "WITH ('format-version'='3');")
     yield D2S_TABLE
     duckdb_con.query(f"DROP TABLE IF EXISTS my_datalake.{NAMESPACE}.{D2S_TABLE};")
 
+
+@pytest.mark.skip("Snowflake cannot read duckdb shredded variant. See duckdb-internal/issues/9653")
 def test_snowflake_reads_duckdb_written_variant(duckdb_con, snowflake_session, duckdb_created_d2s_table):
     table = duckdb_created_d2s_table
 
@@ -352,8 +353,7 @@ def test_snowflake_reads_duckdb_written_variant(duckdb_con, snowflake_session, d
 
         # A specific shredded row is readable with its object fields intact.
         row = snowflake_session.sql(
-            f"SELECT v:age::int AS age, v:city::string AS city FROM {sf_table} "
-            "WHERE v:city::string = 'city_42'"
+            f"SELECT v:age::int AS age, v:city::string AS city FROM {sf_table} " "WHERE v:city::string = 'city_42'"
         ).collect()
         assert len(row) == 1
         assert row[0]["AGE"] == 42
@@ -376,18 +376,59 @@ def test_duckdb_reads_snowflake_written_variant(duckdb_con, snowflake_session, d
         f"  CATALOG_NAMESPACE = '{NAMESPACE}'\n"
         f"  CATALOG_TABLE_NAME = '{sf_table}'"
     ).collect()
+    # Have snowflake insert shredded variant stats (file 1)
     snowflake_session.sql(
         f"INSERT INTO {sf_table} "
         "SELECT TO_VARIANT(OBJECT_CONSTRUCT('age', seq4(), 'city', 'city_' || seq4())) "
-        "FROM TABLE(GENERATOR(ROWCOUNT => 100))"
+        "FROM TABLE(GENERATOR(ROWCOUNT => 10))"
+    ).collect()
+    # Have snowflake insert shredded variant stats (file 2).
+    snowflake_session.sql(
+        f"INSERT INTO {sf_table} "
+        "SELECT TO_VARIANT(OBJECT_CONSTRUCT('age', seq4() + 500, 'city', 'city_' || (seq4() + 500))) "
+        "FROM TABLE(GENERATOR(ROWCOUNT => 10))"
     ).collect()
 
-    # DuckDB reads the Snowflake-written table back from the shared catalog.
-    # assert duckdb_con.fetch_scalar(f"SELECT count(*) FROM my_datalake.{NAMESPACE}.{sf_table};") == "100"
-    #
-    # A specific shredded row's object fields are intact.
+    # Have snowflake insert unshredded variant data into the table (file 3).
+    snowflake_session.sql(
+        f"INSERT INTO {sf_table} "
+        "SELECT IFF(seq4() < 5, "
+        "  TO_VARIANT('scalar_' || seq4()), "
+        "  TO_VARIANT(OBJECT_CONSTRUCT('age', 'str_' || seq4(), 'city', 'town_' || seq4()))) "
+        "FROM TABLE(GENERATOR(ROWCOUNT => 10))"
+    ).collect()
+
+    # Have snowflake insert unshredded variant data into the table (file 4),
+    snowflake_session.sql(
+        f"INSERT INTO {sf_table} "
+        "SELECT IFF(seq4() < 5, "
+        "  TO_VARIANT('scalar_' || (seq4() + 1000)), "
+        "  TO_VARIANT(OBJECT_CONSTRUCT('age', 'str_' || (seq4() + 1000), 'city', 'town_' || (seq4() + 1000)))) "
+        "FROM TABLE(GENERATOR(ROWCOUNT => 10))"
+    ).collect()
+
+    duckdb_con.query("call enable_logging('Iceberg')")
+    # DuckDB can filter on the shredded variant stats
     row = duckdb_con.fetch_all(
         f"SELECT v.age::int, v.city::varchar FROM my_datalake.{NAMESPACE}.{sf_table} "
-        "WHERE v.city::varchar = 'city_42';"
+        "WHERE v.city::varchar = 'city_2';"
     )
-    assert row == [("42", "city_42")]
+    assert row == [("2", "city_2")]
+    logs = duckdb_con.fetch_all(
+        "select count(*) from duckdb_logs() where type = 'Iceberg' and message like '%skipped%'"
+    )
+    # only data file 2 can be skipped, it is shredded and bounds do not match the filter
+    assert logs[0][0] == '1'
+
+    duckdb_con.query("call truncate_duckdb_logs()")
+    # Have DuckDB Filter on the unshredded variant stats
+    unshredded = duckdb_con.fetch_all(
+        f"SELECT v.age::varchar, v.city::varchar FROM my_datalake.{NAMESPACE}.{sf_table} "
+        "WHERE v.age::varchar = 'str_7';"
+    )
+    assert unshredded == [("str_7", "town_7")]
+    logs = duckdb_con.fetch_all(
+        "select count(*) from duckdb_logs() where type = 'Iceberg' and message like '%skipped%'"
+    )
+    # data files 1 & 2 are skipped because they start with 'town_'
+    assert logs[0][0] == '2'
