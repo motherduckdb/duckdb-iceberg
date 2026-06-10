@@ -51,7 +51,7 @@ static unique_ptr<HTTPResponse> MakeRequest(ClientContext &context, const Iceber
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
 	url_builder.AddPathComponent(IRCPathComponent::NamespaceComponent(ic_schema.namespace_items));
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("tables"));
-	url_builder.AddPathComponent(IRCPathComponent::RegularComponent(ic_table_entry.name));
+	url_builder.AddPathComponent(IRCPathComponent::RegularComponent(ic_table_entry.name.GetIdentifierName()));
 
 	HTTPHeaders headers(*context.db);
 	if (ic_catalog.attach_options.access_mode == IRCAccessDelegationMode::VENDED_CREDENTIALS) {
@@ -76,9 +76,9 @@ static unique_ptr<FunctionData> IcebergLoadTableResponseBind(ClientContext &cont
 		                            input_string);
 	}
 
-	EntryLookupInfo table_lookup(CatalogType::TABLE_ENTRY, qualified_name[2]);
-	auto catalog_entry = Catalog::GetEntry(context, qualified_name[0], qualified_name[1], table_lookup,
-	                                       OnEntryNotFound::THROW_EXCEPTION);
+	EntryLookupInfo table_lookup(CatalogType::TABLE_ENTRY, Identifier(qualified_name[2]));
+	auto catalog_entry = Catalog::GetEntry(context, Identifier(qualified_name[0]), Identifier(qualified_name[1]),
+	                                       table_lookup, OnEntryNotFound::THROW_EXCEPTION);
 
 	if (catalog_entry->type != CatalogType::TABLE_ENTRY) {
 		throw InvalidInputException("'%s' is not a table", input_string);

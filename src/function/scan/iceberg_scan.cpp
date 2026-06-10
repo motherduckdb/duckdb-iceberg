@@ -109,10 +109,10 @@ TableFunctionSet IcebergFunctions::GetIcebergScanFunction(ExtensionLoader &loade
 		function.named_parameters.erase("schema");
 		AddNamedParameters(function);
 
-		function.name = "iceberg_scan";
+		function.SetName("iceberg_scan");
 	}
 
-	parquet_scan_copy.name = "iceberg_scan";
+	parquet_scan_copy.SetName("iceberg_scan");
 	return parquet_scan_copy;
 }
 

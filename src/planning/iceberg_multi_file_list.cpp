@@ -300,11 +300,11 @@ unique_ptr<ExpressionFilter> IcebergMultiFileList::GetFilterForColumnIndex(const
 	return make_uniq<ExpressionFilter>(std::move(child_expr));
 }
 
-void IcebergMultiFileList::Bind(vector<LogicalType> &return_types, vector<string> &names) {
+void IcebergMultiFileList::Bind(vector<LogicalType> &return_types, vector<Identifier> &names) {
 	lock_guard<mutex> guard(lock);
 
 	if (have_bound) {
-		names = this->names;
+		names = StringsToIdentifiers(this->names);
 		return_types = this->types;
 		return;
 	}
@@ -334,17 +334,17 @@ void IcebergMultiFileList::Bind(vector<LogicalType> &return_types, vector<string
 
 	auto &schema = GetSchema().columns;
 	for (auto &schema_entry : schema) {
-		names.push_back(schema_entry->name);
+		names.push_back(Identifier(schema_entry->name));
 		return_types.push_back(schema_entry->type);
 	}
 
 	QueryResult::DeduplicateColumns(names);
 	for (idx_t i = 0; i < names.size(); i++) {
-		schema[i]->name = names[i];
+		schema[i]->name = names[i].GetIdentifierName();
 	}
 
 	have_bound = true;
-	this->names = names;
+	this->names = IdentifiersToStrings(names);
 	this->types = return_types;
 }
 
@@ -379,7 +379,7 @@ unique_ptr<IcebergMultiFileList> IcebergMultiFileList::PushdownInternal(ClientCo
 
 unique_ptr<MultiFileList>
 IcebergMultiFileList::DynamicFilterPushdown(ClientContext &context, const MultiFileOptions &options,
-                                            const vector<string> &names, const vector<LogicalType> &types,
+                                            const vector<Identifier> &names, const vector<LogicalType> &types,
                                             const vector<column_t> &column_ids, TableFilterSet &filters) const {
 	if (!filters.HasFilters()) {
 		return nullptr;
@@ -1255,7 +1255,7 @@ void IcebergMultiFileList::ScanDeleteFile(const BoundIcebergManifestEntry &bound
 	children.push_back(Value(delete_file_path));
 	named_parameter_map_t named_params;
 	vector<LogicalType> input_types;
-	vector<string> input_names;
+	vector<Identifier> input_names;
 
 	TableFunctionRef empty;
 	OpenFileInfo res(delete_file_path);

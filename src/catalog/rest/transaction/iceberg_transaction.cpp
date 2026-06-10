@@ -278,7 +278,7 @@ static rest_api_objects::TableRequirement CreateAssertNoSnapshotRequirement() {
 void IcebergTransaction::DropSecrets(ClientContext &context) {
 	auto &secret_manager = SecretManager::Get(context);
 	for (auto &secret_name : created_secrets) {
-		(void)secret_manager.DropSecretByName(context, secret_name, OnEntryNotFound::RETURN_NULL);
+		(void)secret_manager.DropSecretByName(context, Identifier(secret_name), OnEntryNotFound::RETURN_NULL);
 	}
 }
 
@@ -527,7 +527,7 @@ void IcebergTransaction::DoTableRename(IcebergTransactionRenameUpdate &rename_up
 	IRCAPI::CommitTableRename(context, catalog, transaction_json);
 
 	DropInfo drop_info;
-	drop_info.name = table_name;
+	drop_info.name = Identifier(table_name);
 	drop_info.if_not_found = OnEntryNotFound::THROW_EXCEPTION;
 	schema.DropEntry(context, drop_info, true);
 
@@ -549,9 +549,9 @@ void IcebergTransaction::DoTableDeletes(IcebergTransactionDeleteUpdate &delete_u
 	// remove the load table result
 	ic_catalog.table_request_cache.Expire(context, table_key);
 	// remove the table entry from the catalog
-	auto &schema_entry = ic_catalog.schemas.GetEntry(schema_key).Cast<IcebergSchemaEntry>();
+	auto &schema_entry = ic_catalog.schemas.GetEntry(schema_key.GetIdentifierName()).Cast<IcebergSchemaEntry>();
 	DropInfo drop_info;
-	drop_info.name = table_name;
+	drop_info.name = Identifier(table_name);
 	drop_info.if_not_found = OnEntryNotFound::RETURN_NULL;
 	schema_entry.DropEntry(context, drop_info, true);
 }

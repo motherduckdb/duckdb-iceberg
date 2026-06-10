@@ -295,7 +295,7 @@ rest_api_objects::StructField IcebergTypeHelper::CreateIcebergRestType(const str
 			auto &child_type = child.second;
 			auto child_default = !default_val.IsNull() ? StructValue::GetChildren(default_val)[i] : Value();
 			auto struct_child = make_uniq<rest_api_objects::StructField>(IcebergTypeHelper::CreateIcebergRestType(
-			    child_name, child_type, false, "", child_default, get_next_id));
+			    child_name.GetIdentifierName(), child_type, false, "", child_default, get_next_id));
 			rest_type.struct_type.fields.push_back(std::move(struct_child));
 		}
 		return result;

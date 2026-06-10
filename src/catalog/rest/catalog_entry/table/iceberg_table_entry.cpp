@@ -172,7 +172,7 @@ TableFunction IcebergTableEntry::GetScanFunction(ClientContext &context, unique_
 	auto &db = DatabaseInstance::GetDatabase(context);
 	auto &system_catalog = Catalog::GetSystemCatalog(db);
 	auto data = CatalogTransaction::GetSystemTransaction(db);
-	auto &catalog_schema = system_catalog.GetSchema(data, DEFAULT_SCHEMA);
+	auto &catalog_schema = system_catalog.GetSchema(data, Identifier::DefaultSchema());
 	auto catalog_entry = catalog_schema.GetEntry(data, CatalogType::TABLE_FUNCTION_ENTRY, "iceberg_scan");
 	if (!catalog_entry) {
 		throw InvalidInputException("Function with name \"iceberg_scan\" not found!");
@@ -231,7 +231,7 @@ TableFunction IcebergTableEntry::GetScanFunction(ClientContext &context, unique_
 	iceberg_scan_function.function_info = scan_info;
 	named_parameter_map_t param_map;
 	vector<LogicalType> return_types;
-	vector<string> names;
+	vector<Identifier> names;
 	TableFunctionRef empty_ref;
 
 	// Set the S3 path as input to table function
@@ -239,7 +239,9 @@ TableFunction IcebergTableEntry::GetScanFunction(ClientContext &context, unique_
 	vector<Value> inputs = {storage_location};
 	TableFunctionBindInput bind_input(inputs, param_map, return_types, names, nullptr, nullptr, iceberg_scan_function,
 	                                  empty_ref);
-	auto result = iceberg_scan_function.bind(context, bind_input, return_types, names);
+	vector<string> bind_names;
+	auto result = iceberg_scan_function.bind(context, bind_input, return_types, bind_names);
+	names = StringsToIdentifiers(bind_names);
 	bind_data = std::move(result);
 	auto &file_bind_data = bind_data->Cast<MultiFileBindData>();
 	D_ASSERT(file_bind_data.file_list);

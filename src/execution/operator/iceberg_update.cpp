@@ -226,7 +226,7 @@ string IcebergUpdate::GetName() const {
 
 InsertionOrderPreservingMap<string> IcebergUpdate::ParamsToString() const {
 	InsertionOrderPreservingMap<string> result;
-	result["Table Name"] = table.name;
+	result["Table Name"] = table.name.GetIdentifierName();
 	return result;
 }
 

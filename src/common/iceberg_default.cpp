@@ -33,10 +33,10 @@ static Value CreateStructMapping(const LogicalType &struct_type, const string &n
 
 	auto &struct_children = StructType::GetChildTypes(struct_type);
 	for (auto &[field_name, field_type] : struct_children) {
-		auto &child_mapping = out_mapping[field_name];
+		auto &child_mapping = out_mapping[field_name.GetIdentifierName()];
 		Value mapping;
 		if (field_type.id() == LogicalTypeId::STRUCT) {
-			mapping = CreateStructMapping(field_type, field_name, child_mapping.child_mapping);
+			mapping = CreateStructMapping(field_type, field_name.GetIdentifierName(), child_mapping.child_mapping);
 		} else {
 			mapping = Value(field_name);
 		}
@@ -59,7 +59,7 @@ static Value CreateStructDefault(const Value &value, const case_insensitive_map_
 		auto &field_type = struct_children[j].second;
 		auto &field_value = field_values[j];
 
-		auto it = mapping.find(field_name);
+		auto it = mapping.find(field_name.GetIdentifierName());
 		const bool is_mapped = it != mapping.end();
 
 		Value field_default;

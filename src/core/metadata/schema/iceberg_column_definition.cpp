@@ -189,7 +189,7 @@ IcebergColumnDefinition::ParseStructField(const rest_api_objects::StructField &f
 		for (auto &field_p : struct_type.fields) {
 			auto &child_field = *field_p;
 			auto child = ParseStructField(child_field);
-			struct_children.push_back(std::make_pair(child->name, child->type));
+			struct_children.emplace_back(child->name, child->type);
 			res->AddChild(std::move(child));
 		}
 		res->type = LogicalType::STRUCT(std::move(struct_children));
@@ -319,7 +319,8 @@ ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
 		if (type.IsNested()) {
 			throw NotImplementedException("DEFAULT values for nested types are not supported currently");
 		}
-		return ColumnDefinition(name, type, make_uniq<ConstantExpression>(write_default), TableColumnType::STANDARD);
+		return ColumnDefinition(Identifier(name), type, make_uniq<ConstantExpression>(write_default),
+		                        TableColumnType::STANDARD);
 	} else if (type.id() == LogicalTypeId::STRUCT) {
 		vector<Value> child_values;
 		for (auto &child : children) {
@@ -332,11 +333,12 @@ ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
 			}
 		}
 		auto default_value = Value::STRUCT(type, child_values);
-		return ColumnDefinition(name, type, make_uniq<ConstantExpression>(default_value), TableColumnType::STANDARD);
+		return ColumnDefinition(Identifier(name), type, make_uniq<ConstantExpression>(default_value),
+		                        TableColumnType::STANDARD);
 	} else {
-		return ColumnDefinition(name, type);
+		return ColumnDefinition(Identifier(name), type);
 	}
-	return ColumnDefinition(name, type);
+	return ColumnDefinition(Identifier(name), type);
 }
 
 static bool DefaultsAreEqual(const unique_ptr<Value> &a, const unique_ptr<Value> &b) {

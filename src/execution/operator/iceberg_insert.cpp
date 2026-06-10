@@ -300,7 +300,7 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 			}
 
 			optional_idx name_offset;
-			auto column_info_p = ic_schema->GetFromPath(column_names, &name_offset);
+			auto column_info_p = ic_schema->GetFromPath(StringsToIdentifiers(column_names), &name_offset);
 			if (!column_info_p) {
 				auto normalized_col_name = StringUtil::Join(column_names, ".");
 				throw InternalException("Column '%s' can not be found in the schema, but returned by RETURN_STATS",
@@ -363,7 +363,7 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 	D_ASSERT(table);
 	auto &ic_table = table->Cast<IcebergTableEntry>();
 	auto &table_metadata = ic_table.table_info.table_metadata;
-	global_state.AddFiles(chunk, ic_table.name, table_metadata);
+	global_state.AddFiles(chunk, ic_table.name.GetIdentifierName(), table_metadata);
 }
 
 optional_ptr<TableCatalogEntry> IcebergInsert::GetEffectiveTable() const {
@@ -466,13 +466,13 @@ string IcebergInsert::GetName() const {
 InsertionOrderPreservingMap<string> IcebergInsert::ParamsToString() const {
 	InsertionOrderPreservingMap<string> result;
 	if (table) {
-		result["Table Name"] = table->name;
+		result["Table Name"] = table->name.GetIdentifierName();
 	} else if (info) {
-		result["Table Name"] = info->Base().table;
+		result["Table Name"] = info->Base().table.GetIdentifierName();
 	} else if (create_state) {
 		lock_guard<mutex> guard(create_state->lock);
 		if (create_state->table_entry) {
-			result["Table Name"] = create_state->table_entry->name;
+			result["Table Name"] = create_state->table_entry->name.GetIdentifierName();
 		}
 	}
 	return result;
@@ -564,7 +564,8 @@ static unique_ptr<Expression> GetDateDiffFunction(ClientContext &context, const 
 
 	ErrorData error;
 	FunctionBinder binder(context);
-	auto function = binder.BindScalarFunction(DEFAULT_SCHEMA, "date_diff", std::move(children), error, false);
+	auto function =
+	    binder.BindScalarFunction(Identifier::DefaultSchema(), "date_diff", std::move(children), error, false);
 	if (!function) {
 		error.Throw();
 	}
@@ -584,7 +585,8 @@ static unique_ptr<Expression> GetBucketExpression(ClientContext &context, const 
 
 	ErrorData error;
 	FunctionBinder binder(context);
-	auto function = binder.BindScalarFunction(DEFAULT_SCHEMA, "iceberg_bucket", std::move(children), error, false);
+	auto function =
+	    binder.BindScalarFunction(Identifier::DefaultSchema(), "iceberg_bucket", std::move(children), error, false);
 	if (!function) {
 		error.Throw();
 	}
@@ -604,7 +606,8 @@ static unique_ptr<Expression> GetTruncateExpression(ClientContext &context, cons
 
 	ErrorData error;
 	FunctionBinder binder(context);
-	auto function = binder.BindScalarFunction(DEFAULT_SCHEMA, "iceberg_truncate", std::move(children), error, false);
+	auto function =
+	    binder.BindScalarFunction(Identifier::DefaultSchema(), "iceberg_truncate", std::move(children), error, false);
 	if (!function) {
 		error.Throw();
 	}
@@ -697,7 +700,7 @@ static void GeneratePartitionExpressions(ClientContext &context, const IcebergCo
 		partition_columns.push_back(partition_column_start++);
 
 		auto expr = GetPartitionExpression(context, copy_input, field);
-		projection_names.push_back(field.GetPartitionSpecFieldName());
+		projection_names.push_back(Identifier(field.GetPartitionSpecFieldName()));
 		projection_types.push_back(expr->GetReturnType());
 		projection_expressions.push_back(std::move(expr));
 	}
@@ -850,10 +853,11 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 
 	// copy_to_bind receives physical + virtual only (partition routing columns are stripped
 	// by PhysicalCopyToFile before writing, so including them causes a type mismatch).
-	auto function_data = copy_fun.function.copy_to_bind(context, bind_input, names_to_write, types_to_write);
+	auto function_data =
+	    copy_fun.function.copy_to_bind(context, bind_input, StringsToIdentifiers(names_to_write), types_to_write);
 	result.bind_data = std::move(function_data);
 
-	result.names = names_to_write;
+	result.names = StringsToIdentifiers(names_to_write);
 	result.expected_types = types_to_write;
 
 	if (copy_input.partition_spec) {
@@ -989,7 +993,7 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(BoundCreateTabl
 	for (auto &col : create_info.columns.Logical()) {
 		auto col_def = make_uniq<IcebergColumnDefinition>();
 		col_def->id = next_field_id++;
-		col_def->name = col.Name();
+		col_def->name = col.Name().GetIdentifierName();
 		col_def->type = col.Type();
 		col_def->required = false;
 		schema->columns.push_back(std::move(col_def));

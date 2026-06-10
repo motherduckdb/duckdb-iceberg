@@ -134,8 +134,8 @@ IcebergCreateTableRequest::CreateIcebergColumn(const ColumnDefinition &column_de
 		}
 	}
 
-	auto rest_type =
-	    IcebergTypeHelper::CreateIcebergRestType(name, logical_type, required, "", default_value, next_field_id);
+	auto rest_type = IcebergTypeHelper::CreateIcebergRestType(name.GetIdentifierName(), logical_type, required, "",
+	                                                          default_value, next_field_id);
 	auto iceberg_column_def = IcebergColumnDefinition::ParseStructField(rest_type);
 	return iceberg_column_def;
 }

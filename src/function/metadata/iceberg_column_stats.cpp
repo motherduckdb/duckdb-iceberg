@@ -67,7 +67,7 @@ static unique_ptr<FunctionData> IcebergColumnStatsBind(ClientContext &context, T
 	auto &snapshot_lookup = options.snapshot_lookup;
 
 	for (auto &kv : input.named_parameters) {
-		auto loption = StringUtil::Lower(kv.first);
+		auto loption = StringUtil::Lower(kv.first.GetIdentifierName());
 		auto &val = kv.second;
 		if (loption == "allow_moved_paths") {
 			options.allow_moved_paths = BooleanValue::Get(val);

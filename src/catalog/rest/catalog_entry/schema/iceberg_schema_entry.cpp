@@ -25,8 +25,8 @@
 namespace duckdb {
 
 IcebergSchemaEntry::IcebergSchemaEntry(Catalog &catalog, CreateSchemaInfo &info)
-    : SchemaCatalogEntry(catalog, info), namespace_items(IRCAPI::ParseSchemaName(info.schema)), exists(true),
-      tables(*this) {
+    : SchemaCatalogEntry(catalog, info), namespace_items(IRCAPI::ParseSchemaName(info.schema.GetIdentifierName())),
+      exists(true), tables(*this) {
 }
 
 IcebergSchemaEntry::~IcebergSchemaEntry() {
@@ -41,7 +41,7 @@ IcebergTransaction &GetICTransaction(CatalogTransaction transaction) {
 
 bool IcebergSchemaEntry::HandleCreateConflict(CatalogTransaction &transaction, CatalogType catalog_type,
                                               const string &entry_name, OnCreateConflict on_conflict) {
-	auto existing_entry = GetEntry(transaction, catalog_type, entry_name);
+	auto existing_entry = GetEntry(transaction, catalog_type, Identifier(entry_name));
 	if (on_conflict == OnCreateConflict::REPLACE_ON_CONFLICT) {
 		throw NotImplementedException(
 		    "CREATE OR REPLACE not supported in DuckDB-Iceberg. Please use separate Drop and Create Statements");
@@ -55,7 +55,7 @@ bool IcebergSchemaEntry::HandleCreateConflict(CatalogTransaction &transaction, C
 		auto latest_state = iceberg_transaction.GetLatestTableState(table_key);
 		if (latest_state && latest_state->IsDroppedOrRenamed()) {
 			auto &ic_catalog = catalog.Cast<IcebergCatalog>();
-			vector<string> qualified_name = {ic_catalog.GetName()};
+			vector<string> qualified_name = {ic_catalog.GetName().GetIdentifierName()};
 			qualified_name.insert(qualified_name.end(), namespace_items.begin(), namespace_items.end());
 			qualified_name.push_back(entry_name);
 			auto qualified_table_name = StringUtil::Join(qualified_name, ".");
@@ -81,13 +81,15 @@ bool IcebergSchemaEntry::HandleCreateConflict(CatalogTransaction &transaction, C
 optional_ptr<CatalogEntry> IcebergSchemaEntry::CreateTable(CatalogTransaction &transaction, ClientContext &context,
                                                            BoundCreateTableInfo &info) {
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
-	if (!exists && iceberg_transaction.created_schemas.find(name) == iceberg_transaction.created_schemas.end()) {
+	if (!exists && iceberg_transaction.created_schemas.find(name.GetIdentifierName()) ==
+	                   iceberg_transaction.created_schemas.end()) {
 		throw InvalidInputException("Schema with name \"%s\" does not exist", name);
 	}
 	auto &base_info = info.Base();
 	auto &ir_catalog = catalog.Cast<IcebergCatalog>();
 	// check if we have an existing entry with this name
-	if (!HandleCreateConflict(transaction, CatalogType::TABLE_ENTRY, base_info.table, base_info.on_conflict)) {
+	if (!HandleCreateConflict(transaction, CatalogType::TABLE_ENTRY, base_info.table.GetIdentifierName(),
+	                          base_info.on_conflict)) {
 		return nullptr;
 	}
 
@@ -108,7 +110,7 @@ void IcebergSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {
 void IcebergSchemaEntry::DropEntry(ClientContext &context, DropInfo &info, bool delete_entry) {
 	auto table_name = info.name;
 	// find if info has a table name, if so look for it in
-	auto table_info_it = tables.GetEntries().find(table_name);
+	auto table_info_it = tables.GetEntries().find(table_name.GetIdentifierName());
 	if (table_info_it == tables.GetEntries().end()) {
 		if (info.if_not_found == OnEntryNotFound::RETURN_NULL) {
 			return;
@@ -120,7 +122,7 @@ void IcebergSchemaEntry::DropEntry(ClientContext &context, DropInfo &info, bool 
 	}
 	if (delete_entry) {
 		// Remove the entry from the catalog
-		tables.GetEntriesMutable().erase(table_name);
+		tables.GetEntriesMutable().erase(table_name.GetIdentifierName());
 	} else {
 		// Add the table to the transaction's deleted_tables
 		auto &transaction = IcebergTransaction::Get(context, catalog).Cast<IcebergTransaction>();
@@ -363,7 +365,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		}
 
 		optional_idx column_id;
-		auto new_schema = current_schema.RemoveColumn(to_remove_column, column_id);
+		auto new_schema = current_schema.RemoveColumn(to_remove_column.GetIdentifierName(), column_id);
 		const bool column_exists = column_id.IsValid();
 		if (!column_exists) {
 			if (!remove_column_info.if_column_exists) {
@@ -444,7 +446,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			//! The table is dropped or renamed by this transaction, so it's not a conflict anymore
 			D_ASSERT(state && state->IsDroppedOrRenamed());
 		}
-		irc_transaction.RenameTable(updated_table, new_name);
+		irc_transaction.RenameTable(updated_table, new_name.GetIdentifierName());
 		break;
 	}
 	case AlterTableType::RENAME_COLUMN: {
@@ -466,7 +468,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			                       new_name, table_entry.name);
 		}
 		auto &column = *column_p;
-		column.name = new_name;
+		column.name = new_name.GetIdentifierName();
 		column.RewriteType();
 
 		auto new_schema_id = new_schema->schema_id;
@@ -593,13 +595,13 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		new_schema->schema_id++;
 
 		auto parent_path = column_path;
-		column_path.push_back(new_field.GetName());
+		column_path.emplace_back(new_field.GetName());
 
 		auto parent_p = new_schema->GetMutableFromPath(parent_path, nullptr);
 		if (!parent_p) {
 			throw CatalogException(
 			    "The parent column ('%s') does not exist on the table '%s', ADD COLUMN failed to add a new field",
-			    StringUtil::Join(parent_path, "."), table_entry.name);
+			    StringUtil::Join(IdentifiersToStrings(parent_path), "."), table_entry.name);
 		}
 		auto &parent = *parent_p;
 
@@ -610,18 +612,19 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			}
 			throw CatalogException(
 			    "The column ('%s') already exists on the table '%s', ADD COLUMN failed to add a new field",
-			    StringUtil::Join(column_path, "."), table_entry.name);
+			    StringUtil::Join(IdentifiersToStrings(column_path), "."), table_entry.name);
 		}
 
 		if (parent.type.id() != LogicalTypeId::STRUCT) {
 			throw CatalogException("Can't add field '%s' to column '%s', because the parent is not a struct (type: %s)",
-			                       new_field.GetName(), StringUtil::Join(parent_path, "."), parent.type.ToString());
+			                       new_field.GetName(), StringUtil::Join(IdentifiersToStrings(parent_path), "."),
+			                       parent.type.ToString());
 		}
 
 		auto &last_column_id = updated_table.table_metadata.last_column_id;
 		if (!last_column_id.IsValid()) {
 			throw InternalException("No last_column_id when trying to ADD COLUMN %s",
-			                        StringUtil::Join(column_path, "."));
+			                        StringUtil::Join(IdentifiersToStrings(column_path), "."));
 		}
 		auto field_id = last_column_id.GetIndex() + 1;
 		auto next_field_id = [&field_id]() -> idx_t {
@@ -648,20 +651,20 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		auto column_p = new_schema->GetMutableFromPath(column_path, nullptr);
 		if (!column_p) {
 			throw CatalogException("The column ('%s') doesn't exist on the table '%s', RENAME COLUMN failed",
-			                       StringUtil::Join(column_path, "."), table_entry.name);
+			                       StringUtil::Join(IdentifiersToStrings(column_path), "."), table_entry.name);
 		}
 
 		auto new_path = column_path;
 		new_path.pop_back();
-		new_path.push_back(new_name);
+		new_path.emplace_back(new_name.GetIdentifierName());
 
 		auto existing_column = new_schema->GetMutableFromPath(new_path, nullptr);
 		if (existing_column) {
 			throw CatalogException(
 			    "The column ('%s') already exists on the table '%s', RENAME COLUMN failed to rename the field",
-			    StringUtil::Join(new_path, "."), table_entry.name);
+			    StringUtil::Join(IdentifiersToStrings(new_path), "."), table_entry.name);
 		}
-		column_p->name = new_name;
+		column_p->name = new_name.GetIdentifierName();
 		column_p->RewriteType();
 		IntroduceNewSchema(updated_table, transaction_data, new_schema);
 		return;
@@ -690,21 +693,21 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			}
 			throw CatalogException(
 			    "The column ('%s') doesnt exist on the table '%s', DROP COLUMN failed to remove the field",
-			    StringUtil::Join(column_path, "."), table_entry.name);
+			    StringUtil::Join(IdentifiersToStrings(column_path), "."), table_entry.name);
 		}
 		auto &parent = *parent_p;
-		auto child = parent.GetChild(column_path.back());
+		auto child = parent.GetChild(column_path.back().GetIdentifierName());
 		if (!child) {
 			if (if_column_exists) {
 				return;
 			}
 			throw CatalogException(
 			    "The column ('%s') doesnt exist on the table '%s', DROP COLUMN failed to remove the field",
-			    StringUtil::Join(column_path, "."), table_entry.name);
+			    StringUtil::Join(IdentifiersToStrings(column_path), "."), table_entry.name);
 		}
 		if (parent.GetChildCount() == 1) {
 			throw CatalogException("Can't drop field '%s' because it's the last field of the STRUCT!",
-			                       StringUtil::Join(column_path, "."));
+			                       StringUtil::Join(IdentifiersToStrings(column_path), "."));
 		}
 		parent.RemoveChild(child->name);
 		IntroduceNewSchema(updated_table, transaction_data, new_schema);
@@ -749,7 +752,7 @@ optional_ptr<CatalogEntry> IcebergSchemaEntry::LookupEntry(CatalogTransaction tr
 	auto table_entry = GetCatalogSet(type).GetEntry(context, lookup_info);
 	if (!table_entry) {
 		// verify the schema exists
-		if (!IRCAPI::VerifySchemaExistence(context, ic_catalog, name)) {
+		if (!IRCAPI::VerifySchemaExistence(context, ic_catalog, name.GetIdentifierName())) {
 			// set exists to false here
 			// we would like to throw an error, but this code is also called when listing schemas,
 			// and throwing an error will abort the listing process.
