@@ -19,10 +19,6 @@ namespace duckdb {
 
 namespace rewrite_executor_internal {
 
-//! Wrap a string in single quotes and double any embedded `'`. We never expose
-//! this to untrusted input today (file paths come from the manifest, schema
-//! names come from the iceberg catalog), but the escaping is still required so
-//! a column name like `it's` doesn't blow up the SQL parser.
 static string QuoteSqlString(const string &s) {
 	string out;
 	out.reserve(s.size() + 2);
@@ -37,12 +33,6 @@ static string QuoteSqlString(const string &s) {
 	return out;
 }
 
-//! Recursive walk over an iceberg column definition emitting the FIELD_IDS
-//! literal. For primitives the literal is the field_id as an integer; for
-//! nested types it's a struct with a sentinel `__duckdb_field_id` slot plus
-//! one slot per child. Mirrors the Value tree built by
-//! `iceberg_insert.cpp::GetFieldIdValue` so APPEND and REWRITE produce the
-//! same on-disk parquet metadata for the same logical schema.
 static string RenderFieldIdValue(const IcebergColumnDefinition &col) {
 	if (col.children.empty()) {
 		return std::to_string(col.id);
@@ -90,10 +80,6 @@ string BuildRewriteCopySql(const string &catalog, const string &schema, const st
 	}
 	file_list += "]";
 
-	//! Read via the catalog-attached Iceberg table so the scan layer applies
-	//! MoR position/equality deletes during read. `WHERE filename IN (...)`
-	//! uses the iceberg `filename` virtual column to scope the scan to this
-	//! rewrite group's files.
 	string sql = "COPY (SELECT * FROM ";
 	sql += BuildSimpleTableReference(catalog, schema, table);
 	sql += " WHERE filename IN ";
@@ -136,11 +122,7 @@ IcebergManifestEntry ExecuteOneGroup(ClientContext &context, const IcebergTableI
 	auto sql = rewrite_executor_internal::BuildRewriteCopySql(table_key.catalog, table_key.schema, table_key.table,
 	                                                          file_paths, data_path, field_ids);
 
-	//! Fresh Connection on the same DatabaseInstance — see
-	//! `iceberg_to_ducklake.cpp:953` for the precedent. Secret manager state
-	//! is at the DB level so OSS/S3 credentials carry over without explicit
-	//! plumbing. We avoid running on `context` directly because COPY would
-	//! re-enter the table function pipeline.
+	//! Use a nested connection so COPY does not re-enter the table function pipeline.
 	auto &db = DatabaseInstance::GetDatabase(context);
 	Connection conn(db);
 	auto result = conn.Query(sql);
@@ -153,23 +135,15 @@ IcebergManifestEntry ExecuteOneGroup(ClientContext &context, const IcebergTableI
 		    "iceberg_rewrite_data_files: COPY returned no rows from RETURN_FILES — expected exactly one");
 	}
 	if (chunk->size() > 1) {
-		//! PER_THREAD_OUTPUT=false + no partition_output should yield exactly
-		//! one summary row. More than one means our assumptions about the COPY
-		//! shape drifted — fail loud rather than silently dropping rows.
 		throw InternalException(
 		    "iceberg_rewrite_data_files: COPY returned %llu summary rows (expected 1)",
 		    (unsigned long long)chunk->size());
 	}
 
-	//! CHANGED_ROWS_AND_FILE_LIST layout (DuckDB v1.4):
-	//!   0 Count BIGINT          — total rows written across this COPY
-	//!   1 Files LIST(VARCHAR)   — produced output file paths
 	auto count_val = chunk->GetValue(0, 0);
 	auto files_val = chunk->GetValue(1, 0);
 	auto &produced_files = ListValue::GetChildren(files_val);
 	if (produced_files.size() != 1) {
-		//! PER_THREAD_OUTPUT=false guarantees a single file; anything else means
-		//! we somehow hit partitioned output or threaded output by accident.
 		throw InternalException(
 		    "iceberg_rewrite_data_files: COPY produced %llu files for a single rewrite group (expected 1)",
 		    (unsigned long long)produced_files.size());
@@ -177,42 +151,16 @@ IcebergManifestEntry ExecuteOneGroup(ClientContext &context, const IcebergTableI
 
 	IcebergManifestEntry entry;
 	entry.status = IcebergManifestEntryStatusType::ADDED;
-	//! Pin data_sequence_number to the starting snapshot's seq so concurrently-
-	//! written equality deletes keep applying (Iceberg V2 spec §4.2.4).
-	//! Existing position deletes are materialized during the scan read above.
+	//! Preserve equality-delete applicability after compaction.
 	entry.SetSequenceNumber(starting_sequence_number);
-	//! Do NOT pin file_sequence_number: the spec says it "is always assigned at
-	//! commit and cannot be provided explicitly" — it records the snapshot in
-	//! which the file was *physically* added, which for a compaction output is
-	//! the new REPLACE snapshot, NOT the starting one. Leaving it NULL on this
-	//! ADDED entry lets it inherit the new manifest's seq on read (and the
-	//! commit-time rewrite-forward in iceberg_add_snapshot resolves it then).
-	//! Pinning it would falsely age the file and break incremental readers that
-	//! key off file_sequence_number. Parity: Iceberg GenericManifestEntry.
-	//! wrapAppend sets fileSequenceNumber=null; Trino finishOptimize sets only
-	//! rewriteFiles.dataSequenceNumber(...).
 	entry.data_file.content = IcebergManifestEntryContentType::DATA;
 	entry.data_file.file_format = "parquet";
 	entry.data_file.file_path = produced_files[0].GetValue<string>();
 	entry.data_file.record_count = count_val.GetValue<int64_t>();
-	//! SQL COPY doesn't surface file_size_bytes in this return shape; one HEAD
-	//! request per produced file (cheap relative to the COPY itself) keeps the
-	//! manifest entry honest about on-disk size for downstream readers.
 	auto file_handle = fs.OpenFile(entry.data_file.file_path, FileFlags::FILE_FLAGS_READ);
 	entry.data_file.file_size_in_bytes = static_cast<int64_t>(file_handle->GetFileSize());
-	//! The planner buckets candidates so every file in one group shares the same
-	//! partition values. Copy from candidate 0 instead of re-deriving from
-	//! `partition_keys` — for unpartitioned tables COPY emits NULL there
-	//! anyway, and for partitioned tables we'd just round-trip the same
-	//! values that already live on the candidate.
+	//! The planner keeps every rewrite group within one partition.
 	entry.data_file.partition_info = group.front().partition_info;
-	//! NOTE: lower_bounds / upper_bounds / null_value_counts / column_sizes
-	//! are intentionally left empty. Iceberg spec marks them optional
-	//! and readers degrade gracefully (skip min/max pushdown for this file).
-	//! Stats parsing is deferred to a follow-up — it requires the same
-	//! ParseColumnStats + IcebergValue::SerializeValue machinery as
-	//! IcebergInsertGlobalState::AddFiles and would double the size of this
-	//! commit without changing commit semantics.
 	return entry;
 }
 
@@ -243,12 +191,6 @@ RewriteExecutionResult ExecuteRewrite(ClientContext &context, const RewritePlan 
 				result.rewritten_candidates.push_back(cand);
 			}
 		} catch (...) {
-			//! Best-effort cleanup of prior successful groups' output files.
-			//! The current failing group's file (if COPY produced one before the
-			//! error) is NOT cleaned here — it becomes an orphan reclaimable by
-			//! remove_orphan_files. This only covers files already in
-			//! result.new_entries. Respects allows_deletes for catalogs (like
-			//! S3 Tables) that reject client-side deletions.
 			if (table_info.catalog.attach_options.allows_deletes) {
 				auto &fs = FileSystem::GetFileSystem(context);
 				for (auto &entry : result.new_entries) {

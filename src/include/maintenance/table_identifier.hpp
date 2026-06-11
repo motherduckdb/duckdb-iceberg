@@ -6,9 +6,6 @@
 
 namespace duckdb {
 
-//! Check that a name component contains only [a-zA-Z_][a-zA-Z0-9_]* — the
-//! subset of identifiers that can appear unquoted in DuckDB SQL. Rejects
-//! hyphens, unicode, spaces, and empty strings.
 inline bool IsSimpleIdentifier(const string &part) {
 	if (part.empty()) {
 		return false;
@@ -26,11 +23,6 @@ inline bool IsSimpleIdentifier(const string &part) {
 	return true;
 }
 
-//! Split "catalog.schema.table" into a `MaintenanceTableKey`. Validates that
-//! all three components are simple identifiers (no quoting, no nested
-//! namespaces). Raises InvalidInputException on malformed input.
-//!
-//! Limitation: quoted identifiers and nested namespaces are not supported yet.
 inline MaintenanceTableKey ParseMaintenanceTableIdentifier(const string &function_name, const string &identifier) {
 	auto parts = StringUtil::Split(identifier, '.');
 	if (parts.size() != 3) {
