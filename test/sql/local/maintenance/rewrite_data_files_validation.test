@@ -8,8 +8,6 @@ require parquet
 
 require iceberg
 
-# Identifier shape: must be exactly catalog.schema.table.
-
 statement error
 SELECT * FROM iceberg_rewrite_data_files('bad');
 ----
@@ -35,8 +33,6 @@ SELECT * FROM iceberg_rewrite_data_files('a..c');
 ----
 has an empty component
 
-# strategy: only 'binpack' for now.
-
 statement error
 SELECT * FROM iceberg_rewrite_data_files('a.b.c', strategy => 'sort');
 ----
@@ -46,8 +42,6 @@ statement error
 SELECT * FROM iceberg_rewrite_data_files('a.b.c', strategy => 'zorder');
 ----
 only 'binpack' strategy is supported
-
-# Numeric bounds.
 
 statement error
 SELECT * FROM iceberg_rewrite_data_files('a.b.c', target_file_size_bytes => 0);
@@ -63,9 +57,6 @@ statement error
 SELECT * FROM iceberg_rewrite_data_files('a.b.c', min_input_files => 0);
 ----
 'min_input_files' must be >= 1
-
-# Happy path: all valid params accepted by Bind. Execute resolves the
-# catalog — since 'cat' isn't attached here, the planner throws.
 
 statement error
 SELECT * FROM iceberg_rewrite_data_files(

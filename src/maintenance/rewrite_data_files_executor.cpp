@@ -52,17 +52,13 @@ IcebergManifestEntry BuildRewriteManifestEntry(ClientContext &context, const vec
 
 	IcebergManifestEntry entry;
 	entry.status = IcebergManifestEntryStatusType::ADDED;
-	//! Pin data_sequence_number to the starting snapshot's seq so concurrently-
-	//! written equality deletes keep applying (Iceberg V2 spec §4.2.4). Existing
-	//! position deletes are materialized during the scan read above.
+	//! Preserve equality-delete applicability after compaction.
 	entry.SetSequenceNumber(starting_sequence_number);
 	entry.data_file.content = IcebergManifestEntryContentType::DATA;
 	entry.data_file.file_format = "parquet";
 	entry.data_file.file_path = produced_file;
 	entry.data_file.record_count = record_count;
 	auto &fs = FileSystem::GetFileSystem(context);
-	//! COPY RETURN_FILES does not surface file_size_bytes, so issue one HEAD/read
-	//! sized lookup per produced file to keep the manifest entry accurate.
 	auto file_handle = fs.OpenFile(produced_file, FileFlags::FILE_FLAGS_READ);
 	entry.data_file.file_size_in_bytes = static_cast<int64_t>(file_handle->GetFileSize());
 	//! The planner buckets candidates so every file in one group shares the same

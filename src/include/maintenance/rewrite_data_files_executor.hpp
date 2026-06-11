@@ -16,7 +16,9 @@ struct RewriteExecutionResult {
 	int64_t rewritten_data_files = 0;
 	int64_t added_data_files = 0;
 	int64_t rewritten_bytes = 0;
+	//! Added files for the REPLACE snapshot.
 	vector<IcebergManifestEntry> new_entries;
+	//! Input files to remove in the same REPLACE snapshot.
 	vector<RewriteCandidate> rewritten_candidates;
 };
 
