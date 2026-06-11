@@ -134,10 +134,13 @@ public:
 
 	mutable ManifestEntryReadState read_state;
 
-	//! For each file that has a delete file, the state for processing that/those delete file(s)
-	mutable case_insensitive_map_t<shared_ptr<IcebergDeleteData>> positional_delete_data;
-	//! All equality deletes with sequence numbers higher than that of the data_file apply to that data_file
-	mutable map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> equality_delete_data;
+	//! For each file that has a delete file, the state for processing that/those delete file(s).
+	//! Shared with the filter pushdown copies of this list (see PushdownInternal) so that delete state
+	//! observed while scanning is also visible to the list referenced by DML operators.
+	mutable shared_ptr<case_insensitive_map_t<shared_ptr<IcebergDeleteData>>> positional_delete_data;
+	//! All equality deletes with sequence numbers higher than that of the data_file apply to that data_file.
+	//! Shared with the filter pushdown copies of this list for the same reason as positional_delete_data.
+	mutable shared_ptr<map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>>> equality_delete_data;
 
 	//! FIXME: this is only used in 'FinalizeBind',
 	//! shouldn't this be used to protect all the variable accesses that are accessed there while the lock is held?

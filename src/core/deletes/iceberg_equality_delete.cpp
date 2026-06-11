@@ -59,9 +59,9 @@ void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntr
 
 	const auto sequence_number = manifest_entry.GetSequenceNumber(manifest_file);
 	//! Get or create the equality delete data for this sequence number
-	auto it = equality_delete_data.find(sequence_number);
-	if (it == equality_delete_data.end()) {
-		it = equality_delete_data.emplace(sequence_number, make_uniq<IcebergEqualityDeleteData>(sequence_number)).first;
+	auto it = equality_delete_data->find(sequence_number);
+	if (it == equality_delete_data->end()) {
+		it = equality_delete_data->emplace(sequence_number, make_uniq<IcebergEqualityDeleteData>(sequence_number)).first;
 	}
 	auto &deletes = *it->second;
 
