@@ -56,7 +56,12 @@
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/alter_type_v3.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/table_properties/test_alter_table_options.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/table_properties/test_upgrade_format_version_2_to_3.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/alter_default.test"
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/alter_default.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/test_write_geometry_bounds.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/test_filtering_geometry_predicates.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/types/test_read_geometry_type.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/test_create_geometry_type.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/functions/iceberg_column_stats/geometry/test_geometry_column_stats.test"
       ]
     },
     {
