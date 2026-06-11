@@ -63,7 +63,19 @@
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/test_filtering_geometry_predicates.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/types/test_read_geometry_type.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/test_create_geometry_type.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/functions/iceberg_column_stats/geometry/test_geometry_column_stats.test"
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/functions/iceberg_column_stats/geometry/test_geometry_column_stats.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/functions/iceberg_column_stats/deserialize_variant.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/variant/test_write_variant_bounds.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/variant/test_write_variant_bounds_simple.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/test_pruning_on_variant_col.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/variant/arrays.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/variant/combinations.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/variant/comparisons.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/variant/edge_cases.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/variant/nested.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/variant/partial_shredding.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/variant/test_partial_paths.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/variant/types.test"
       ]
     },
     {
