@@ -216,7 +216,7 @@ void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const Iceb
 			lower_result = IcebergValue::SerializeValue(min_values[i].DefaultCastAs(LogicalType::VARCHAR),
 			                                            min_values[i].type(), SerializeBound::LOWER_BOUND);
 			upper_result = IcebergValue::SerializeValue(max_values[i].DefaultCastAs(LogicalType::VARCHAR),
-			                                            max_values[i].type(), SerializeBound::LOWER_BOUND);
+			                                            max_values[i].type(), SerializeBound::UPPER_BOUND);
 		}
 
 		if (lower_result.HasValue()) {
