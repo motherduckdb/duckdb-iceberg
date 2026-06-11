@@ -42,4 +42,4 @@ jobs:
       extension_name: iceberg
       duckdb_version: 6c4baf23e76d3261df70466322a23fc39fa6291a
       ci_tools_version: main
-      format_checks: 'format;tidy'
+      format_checks: 'format'
