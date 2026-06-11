@@ -26,7 +26,9 @@
     "RETURNING clause not yet supported",
     "There are no UNIQUE/PRIMARY KEY constraints that refer to this table",
     "The specified columns as conflict target are not referenced by a UNIQUE/PRIMARY KEY",
-    "Cannot change nullable column to non-nullable"
+    "Cannot change nullable column to non-nullable",
+    "IcebergScan serialization not implemented",
+    "file system operations are disabled by configuration"
   ],
   "skip_tests": [
     {
@@ -42,6 +44,15 @@
       "reason": "Checks that parquet extension is not loaded",
       "paths": [
         "test/sql/copy/csv/zstd_crash.test"
+      ]
+    },
+    {
+      "reason": "requires json support",
+      "paths": [
+        "test/sql/pragma/profiling/test_custom_profiling_row_group_metrics.test_slow",
+        "test/sql/json/test_json_serialize_sql.test",
+        "test/sql/json/test_json_macros.test",
+        "test/sql/json/test_json_serialize_plan.test"
       ]
     },
     {
