@@ -1,5 +1,7 @@
-# name: test/sql/local/irc_any_catalog/maintenance/rewrite_data_files_sequence_pin.test
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/maintenance/rewrite_data_files_sequence_pin.test
 # description: iceberg_rewrite_data_files must pin the rewritten data file's
+# group: [maintenance]
+
 #              data_sequence_number to the STARTING snapshot's sequence number
 #              (parity: Iceberg RewriteDataFilesCommitManager.useStartingSequenceNumber
 #              / Trino finishOptimize rewriteFiles.dataSequenceNumber). If the new
@@ -7,7 +9,6 @@
 #              written equality deletes (delete.seq > data.seq) would silently stop
 #              applying. We observe the pinned seq through iceberg_metadata's
 #              data_sequence_number column.
-# group: [maintenance]
 
 require-env ICEBERG_SERVER_AVAILABLE
 

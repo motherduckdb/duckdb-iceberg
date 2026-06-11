@@ -1,5 +1,7 @@
-# name: test/sql/local/irc_any_catalog/maintenance/rewrite_data_files_mor_position.test
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/maintenance/rewrite_data_files_mor_position.test
 # description: end-to-end V2 merge-on-read rewrite. A DELETE on a V2 table writes
+# group: [maintenance]
+
 #              real POSITION_DELETES files (DuckDB emits MoR position deletes, not
 #              copy-on-write), so this exercises iceberg_rewrite_data_files over a
 #              table carrying live data files AND position-delete files. We assert
@@ -11,7 +13,6 @@
 #              data-file seq), not the max data-file seq. Parity:
 #              RewriteDataFilesCommitManager.useStartingSequenceNumber /
 #              Trino finishOptimize rewriteFiles.dataSequenceNumber.
-# group: [maintenance]
 
 require-env ICEBERG_SERVER_AVAILABLE
 

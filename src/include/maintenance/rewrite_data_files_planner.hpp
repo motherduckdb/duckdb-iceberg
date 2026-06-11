@@ -39,15 +39,14 @@ struct RewriteCandidate {
 //! on new ADDED entries so concurrent equality deletes keep applying.
 struct RewritePlan {
 	bool table_is_empty = false;
-	//! Three-part catalog identifier. Executor uses it to build the scan SQL
-	//! that routes through the iceberg scan layer (applies MoR deletes).
+	//! Three-part catalog identifier used to bind the in-context Iceberg scan
+	//! that applies MoR deletes.
 	MaintenanceTableKey table_key;
 	int64_t starting_snapshot_id = -1;
 	int64_t starting_sequence_number = 0;
-	//! Keep the loaded table metadata alive while the executor opens a nested
-	//! connection to run COPY. The nested query can refresh the catalog entry
-	//! backing IcebergTableSet; a borrowed pointer would dangle before commit.
-	//! Null only when table_is_empty.
+	//! Keep the loaded table metadata alive through logical and physical
+	//! planning. Physical execution replaces this with freshly loaded metadata
+	//! before validating and committing.
 	shared_ptr<IcebergTableInformation> table_info;
 	//! All data files the planner saw, before any size/partition filtering.
 	//! Kept for diagnostics and for the executor's "input bytes" metric.

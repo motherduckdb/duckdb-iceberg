@@ -1,8 +1,9 @@
-# name: test/sql/local/irc_any_catalog/maintenance/rewrite_data_files_commit.test
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/maintenance/rewrite_data_files_commit.test
 # description: end-to-end check that iceberg_rewrite_data_files commits a REPLACE
+# group: [maintenance]
+
 #              snapshot — row count + file count both observable through a fresh
 #              metadata refresh.
-# group: [maintenance]
 
 require-env ICEBERG_SERVER_AVAILABLE
 

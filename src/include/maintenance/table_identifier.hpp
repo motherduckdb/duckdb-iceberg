@@ -34,25 +34,22 @@ inline bool IsSimpleIdentifier(const string &part) {
 inline MaintenanceTableKey ParseMaintenanceTableIdentifier(const string &function_name, const string &identifier) {
 	auto parts = StringUtil::Split(identifier, '.');
 	if (parts.size() != 3) {
-		throw InvalidInputException(
-		    "%s: table identifier must be 'catalog.schema.table', got '%s'", function_name, identifier);
+		throw InvalidInputException("%s: table identifier must be 'catalog.schema.table', got '%s'", function_name,
+		                            identifier);
 	}
 	for (auto &part : parts) {
 		if (part.empty()) {
-			throw InvalidInputException(
-			    "%s: table identifier '%s' has an empty component", function_name, identifier);
+			throw InvalidInputException("%s: table identifier '%s' has an empty component", function_name, identifier);
 		}
 		if (!IsSimpleIdentifier(part)) {
-			throw InvalidInputException(
-			    "%s currently requires a simple catalog.schema.table identifier; "
-			    "quoted identifiers and nested namespaces are not supported yet (got '%s')",
-			    function_name, identifier);
+			throw InvalidInputException("%s currently requires a simple catalog.schema.table identifier; "
+			                            "quoted identifiers and nested namespaces are not supported yet (got '%s')",
+			                            function_name, identifier);
 		}
 	}
 	//! Normalize to lower-case for consistent lock keys — DuckDB resolves
 	//! unquoted identifiers case-insensitively.
-	return MaintenanceTableKey{StringUtil::Lower(parts[0]), StringUtil::Lower(parts[1]),
-	                           StringUtil::Lower(parts[2])};
+	return MaintenanceTableKey {StringUtil::Lower(parts[0]), StringUtil::Lower(parts[1]), StringUtil::Lower(parts[2])};
 }
 
 } // namespace duckdb

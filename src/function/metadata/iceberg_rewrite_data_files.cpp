@@ -1,37 +1,38 @@
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/file_system.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/function/table_function.hpp"
+#include "duckdb/parser/expression/columnref_expression.hpp"
+#include "duckdb/parser/expression/constant_expression.hpp"
+#include "duckdb/parser/expression/operator_expression.hpp"
+#include "duckdb/parser/expression/star_expression.hpp"
+#include "duckdb/parser/query_node/select_node.hpp"
+#include "duckdb/parser/statement/copy_statement.hpp"
+#include "duckdb/parser/tableref/basetableref.hpp"
+#include "duckdb/planner/binder.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
-#include "catalog/rest/iceberg_catalog.hpp"
-#include "catalog/rest/transaction/iceberg_transaction.hpp"
-#include "catalog/rest/transaction/iceberg_transaction_data.hpp"
-#include "catalog/rest/transaction/iceberg_transaction_metadata.hpp"
-#include "core/metadata/snapshot/iceberg_snapshot.hpp"
+#include "core/metadata/iceberg_table_metadata.hpp"
 #include "function/iceberg_functions.hpp"
 #include "maintenance/rewrite_data_files_executor.hpp"
+#include "maintenance/rewrite_data_files_operator.hpp"
 #include "maintenance/rewrite_data_files_planner.hpp"
 #include "maintenance/table_identifier.hpp"
-#include "maintenance/table_lock_registry.hpp"
 
 namespace duckdb {
 
 namespace {
 
-struct RewriteDataFilesBindData : public TableFunctionData {
+struct RewriteDataFilesOptions {
 	MaintenanceTableKey table_key;
-	string strategy = "binpack";
-	int64_t target_file_size_bytes = 134217728; // 128 MiB
+	int64_t target_file_size_bytes = 134217728;
 	int64_t min_input_files = 5;
 	bool rewrite_all = false;
-	bool emitted = false;
 };
 
-static unique_ptr<FunctionData> RewriteDataFilesBind(ClientContext &context, TableFunctionBindInput &input,
-                                                     vector<LogicalType> &return_types, vector<string> &names) {
-	auto bind_data = make_uniq<RewriteDataFilesBindData>();
-	bind_data->table_key =
-	    ParseMaintenanceTableIdentifier("iceberg_rewrite_data_files", StringValue::Get(input.inputs[0]));
+static RewriteDataFilesOptions ParseOptions(TableFunctionBindInput &input) {
+	RewriteDataFilesOptions result;
+	result.table_key = ParseMaintenanceTableIdentifier("iceberg_rewrite_data_files", StringValue::Get(input.inputs[0]));
 
 	for (auto &kv : input.named_parameters) {
 		auto opt = StringUtil::Lower(kv.first);
@@ -42,135 +43,115 @@ static unique_ptr<FunctionData> RewriteDataFilesBind(ClientContext &context, Tab
 				throw InvalidInputException(
 				    "iceberg_rewrite_data_files: only 'binpack' strategy is supported, got '%s'", strategy);
 			}
-			bind_data->strategy = std::move(strategy);
 		} else if (opt == "target_file_size_bytes") {
-			auto v = val.GetValue<int64_t>();
-			if (v <= 0) {
+			auto value = val.GetValue<int64_t>();
+			if (value <= 0) {
 				throw InvalidInputException(
-				    "iceberg_rewrite_data_files: 'target_file_size_bytes' must be > 0, got %lld", v);
+				    "iceberg_rewrite_data_files: 'target_file_size_bytes' must be > 0, got %lld", value);
 			}
-			bind_data->target_file_size_bytes = v;
+			result.target_file_size_bytes = value;
 		} else if (opt == "min_input_files") {
-			auto v = val.GetValue<int64_t>();
-			if (v < 1) {
-				throw InvalidInputException(
-				    "iceberg_rewrite_data_files: 'min_input_files' must be >= 1, got %lld", v);
+			auto value = val.GetValue<int64_t>();
+			if (value < 1) {
+				throw InvalidInputException("iceberg_rewrite_data_files: 'min_input_files' must be >= 1, got %lld",
+				                            value);
 			}
-			bind_data->min_input_files = v;
+			result.min_input_files = value;
 		} else if (opt == "rewrite_all") {
-			bind_data->rewrite_all = BooleanValue::Get(val);
+			result.rewrite_all = BooleanValue::Get(val);
 		}
 	}
-
-	names.emplace_back("rewritten_data_files");
-	return_types.emplace_back(LogicalType::BIGINT);
-
-	names.emplace_back("added_data_files");
-	return_types.emplace_back(LogicalType::BIGINT);
-
-	names.emplace_back("rewritten_bytes");
-	return_types.emplace_back(LogicalType::BIGINT);
-
-	return std::move(bind_data);
+	return result;
 }
 
-static void RewriteDataFilesExecute(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
-	auto &bind_data = data.bind_data->CastNoConst<RewriteDataFilesBindData>();
-	if (bind_data.emitted) {
-		output.SetCardinality(0);
-		return;
-	}
-	bind_data.emitted = true;
+static unique_ptr<QueryNode> BuildGroupSelect(const MaintenanceTableKey &table_key,
+                                              const vector<RewriteCandidate> &group) {
+	auto select = make_uniq<SelectNode>();
+	select->select_list.push_back(make_uniq<StarExpression>());
 
-	auto guard = TableLockRegistry::GetInstance().TryAcquire(bind_data.table_key, "rewrite_data_files");
-	if (!guard.Owns()) {
-		throw CatalogException("iceberg_rewrite_data_files: table '%s' is already being compacted by another "
-		                        "maintenance action",
-		                        bind_data.table_key.table);
+	auto table = make_uniq<BaseTableRef>();
+	table->catalog_name = table_key.catalog;
+	table->schema_name = table_key.schema;
+	table->table_name = table_key.table;
+	table->alias = "rewrite_source";
+	select->from_table = std::move(table);
+
+	vector<unique_ptr<ParsedExpression>> in_children;
+	in_children.push_back(make_uniq<ColumnRefExpression>("filename"));
+	for (auto &candidate : group) {
+		in_children.push_back(make_uniq<ConstantExpression>(Value(candidate.file_path)));
 	}
+	select->where_clause = make_uniq<OperatorExpression>(ExpressionType::COMPARE_IN, std::move(in_children));
+	return std::move(select);
+}
+
+static unique_ptr<LogicalOperator> BindGroupCopy(Binder &binder, const RewritePlan &plan,
+                                                 const vector<RewriteCandidate> &group, idx_t group_idx) {
+	auto &metadata = plan.table_info->table_metadata;
+	auto schema_id = metadata.GetCurrentSchemaId();
+	auto schema_it = metadata.GetSchemas().find(schema_id);
+	if (schema_it == metadata.GetSchemas().end()) {
+		throw InternalException("iceberg_rewrite_data_files: current schema id %d not found in metadata", schema_id);
+	}
+
+	auto &fs = FileSystem::GetFileSystem(binder.context);
+	CopyStatement copy_statement;
+	copy_statement.info->select_statement = BuildGroupSelect(plan.table_key, group);
+	copy_statement.info->file_path =
+	    fs.JoinPath(metadata.GetDataPath(fs), StringUtil::Format("rewrite_group_%llu", group_idx));
+	copy_statement.info->format = "parquet";
+	copy_statement.info->is_from = false;
+	copy_statement.info->is_format_auto_detected = false;
+	copy_statement.info->options["field_ids"].push_back(BuildRewriteFieldIds(*schema_it->second));
+	copy_statement.info->options["filename_pattern"].push_back(Value("{uuidv7}"));
+	copy_statement.info->options["return_files"].push_back(Value::BOOLEAN(true));
+	copy_statement.info->options["per_thread_output"].push_back(Value::BOOLEAN(false));
+	copy_statement.info->options["overwrite_or_ignore"].push_back(Value::BOOLEAN(true));
+
+	auto copy_binder = Binder::CreateBinder(binder.context, &binder);
+	auto bound_copy = copy_binder->Bind(copy_statement);
+	if (bound_copy.types.size() != 2) {
+		throw InternalException("iceberg_rewrite_data_files: expected COPY RETURN_FILES to return two columns");
+	}
+	return std::move(bound_copy.plan);
+}
+
+static unique_ptr<LogicalOperator> RewriteDataFilesBindOperator(ClientContext &context, TableFunctionBindInput &input,
+                                                                idx_t bind_index, vector<string> &return_names) {
+	if (!input.binder) {
+		throw InternalException("iceberg_rewrite_data_files: bind_operator called without a binder");
+	}
+	auto options = ParseOptions(input);
+	input.binder->SetAlwaysRequireRebind();
 
 	RewriteDataFilesPlanInput plan_input;
-	plan_input.table_key = bind_data.table_key;
-	plan_input.target_file_size_bytes = bind_data.target_file_size_bytes;
-	plan_input.min_input_files = bind_data.min_input_files;
-	plan_input.rewrite_all = bind_data.rewrite_all;
-
+	plan_input.table_key = options.table_key;
+	plan_input.target_file_size_bytes = options.target_file_size_bytes;
+	plan_input.min_input_files = options.min_input_files;
+	plan_input.rewrite_all = options.rewrite_all;
 	auto plan = PlanRewrite(context, plan_input);
 
-	if (plan.table_is_empty) {
-		FlatVector::GetData<int64_t>(output.data[0])[0] = 0;
-		FlatVector::GetData<int64_t>(output.data[1])[0] = 0;
-		FlatVector::GetData<int64_t>(output.data[2])[0] = 0;
-		output.SetCardinality(1);
-		return;
+	auto result = make_uniq<LogicalRewriteDataFiles>(bind_index, std::move(plan));
+	for (idx_t group_idx = 0; group_idx < result->plan.file_groups.size(); group_idx++) {
+		result->children.push_back(
+		    BindGroupCopy(*input.binder, result->plan, result->plan.file_groups[group_idx], group_idx));
 	}
 
-	auto exec_result = ExecuteRewrite(context, plan);
-
-	if (!exec_result.new_entries.empty()) {
-		auto &table_info = *plan.table_info;
-
-		vector<string> produced_paths;
-		produced_paths.reserve(exec_result.new_entries.size());
-		for (auto &entry : exec_result.new_entries) {
-			produced_paths.push_back(entry.data_file.file_path);
-		}
-
-		try {
-			auto commit_snapshot = table_info.table_metadata.GetLatestSnapshot();
-			if (commit_snapshot && commit_snapshot->snapshot_id != plan.starting_snapshot_id) {
-				throw InternalException(
-				    "iceberg_rewrite_data_files: table metadata snapshot drifted between plan (%lld) "
-				    "and commit (%lld) within the same transaction",
-				    plan.starting_snapshot_id, commit_snapshot->snapshot_id);
-			}
-
-			auto &iceberg_transaction = IcebergTransaction::Get(context, table_info.catalog);
-
-			IcebergManifestDeletes deletes;
-			for (auto &cand : exec_result.rewritten_candidates) {
-				deletes.InvalidateFile(cand.file_path);
-			}
-
-			ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTableInformation &tbl) {
-				auto tbl_snapshot = tbl.table_metadata.GetLatestSnapshot();
-				if (tbl_snapshot && tbl_snapshot->snapshot_id != plan.starting_snapshot_id) {
-					throw InternalException(
-					    "iceberg_rewrite_data_files: transaction-internal table copy has snapshot %lld "
-					    "but planner used %lld",
-					    tbl_snapshot->snapshot_id, plan.starting_snapshot_id);
-				}
-				auto &transaction_data = tbl.GetOrCreateTransactionData(iceberg_transaction);
-				transaction_data.AddSnapshot(IcebergSnapshotOperationType::REPLACE,
-				                             std::move(exec_result.new_entries), std::move(deletes));
-			});
-		} catch (...) {
-			if (table_info.catalog.attach_options.allows_deletes) {
-				auto &fs = FileSystem::GetFileSystem(context);
-				for (auto &path : produced_paths) {
-					fs.TryRemoveFile(path);
-				}
-			}
-			throw;
-		}
-	}
-
-	FlatVector::GetData<int64_t>(output.data[0])[0] = exec_result.rewritten_data_files;
-	FlatVector::GetData<int64_t>(output.data[1])[0] = exec_result.added_data_files;
-	FlatVector::GetData<int64_t>(output.data[2])[0] = exec_result.rewritten_bytes;
-	output.SetCardinality(1);
+	return_names = {"rewritten_data_files", "added_data_files", "rewritten_bytes"};
+	return std::move(result);
 }
 
 } // namespace
 
 TableFunctionSet IcebergFunctions::GetIcebergRewriteDataFilesFunction() {
 	TableFunctionSet function_set("iceberg_rewrite_data_files");
-	TableFunction tf({LogicalType::VARCHAR}, RewriteDataFilesExecute, RewriteDataFilesBind);
-	tf.named_parameters["strategy"] = LogicalType::VARCHAR;
-	tf.named_parameters["target_file_size_bytes"] = LogicalType::BIGINT;
-	tf.named_parameters["min_input_files"] = LogicalType::BIGINT;
-	tf.named_parameters["rewrite_all"] = LogicalType::BOOLEAN;
-	function_set.AddFunction(tf);
+	TableFunction function({LogicalType::VARCHAR}, nullptr);
+	function.bind_operator = RewriteDataFilesBindOperator;
+	function.named_parameters["strategy"] = LogicalType::VARCHAR;
+	function.named_parameters["target_file_size_bytes"] = LogicalType::BIGINT;
+	function.named_parameters["min_input_files"] = LogicalType::BIGINT;
+	function.named_parameters["rewrite_all"] = LogicalType::BOOLEAN;
+	function_set.AddFunction(function);
 	return function_set;
 }
 

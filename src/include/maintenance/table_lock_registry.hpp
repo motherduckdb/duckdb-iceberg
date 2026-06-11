@@ -77,8 +77,8 @@ public:
 
 private:
 	friend class TableLockRegistry;
-	MaintenanceTableLockGuard(std::shared_ptr<MaintenanceTableLockEntry> entry,
-	                          std::unique_lock<std::mutex> lock, string holder)
+	MaintenanceTableLockGuard(std::shared_ptr<MaintenanceTableLockEntry> entry, std::unique_lock<std::mutex> lock,
+	                          string holder)
 	    : entry(std::move(entry)), lock(std::move(lock)), holder(std::move(holder)) {
 	}
 

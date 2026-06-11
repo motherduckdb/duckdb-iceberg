@@ -1,6 +1,6 @@
 #pragma once
 
-#include "duckdb/common/string.hpp"
+#include "duckdb/common/types/value.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/main/client_context.hpp"
 
@@ -12,10 +12,6 @@ namespace duckdb {
 struct IcebergTableInformation;
 class IcebergTableSchema;
 
-//! Aggregate counts + the data the commit step needs for the REPLACE snapshot.
-//! `new_entries` are the ADDED manifest entries (one per successfully rewritten
-//! group). `rewritten_candidates` is the flat list of input files that were
-//! actually consumed — the commit step flips their manifest entries to DELETED.
 struct RewriteExecutionResult {
 	int64_t rewritten_data_files = 0;
 	int64_t added_data_files = 0;
@@ -24,46 +20,25 @@ struct RewriteExecutionResult {
 	vector<RewriteCandidate> rewritten_candidates;
 };
 
-//! Run a single file_group end-to-end: build the COPY SQL, execute it on a
-//! fresh Connection so we don't re-enter the calling context, and parse the
-//! WRITTEN_FILE_STATISTICS chunk into one ADDED IcebergManifestEntry. Throws on
-//! any failure — propagated directly to the caller. Partition info on the
-//! returned entry is copied straight from
-//! `group.front().partition_info`, relying on the planner's invariant that
-//! every file in a bucket shares the same partition values.
-//! `starting_sequence_number` is pinned on the new ADDED manifest entry so
-//! concurrently-written equality deletes keep applying after compaction
-//! (Iceberg V2 spec: delete.seq > data.seq rule). Existing position deletes
-//! are materialized during the scan read, not via seq pinning.
-IcebergManifestEntry ExecuteOneGroup(ClientContext &context, const IcebergTableInformation &table_info,
-                                     const MaintenanceTableKey &table_key,
-                                     const vector<RewriteCandidate> &group, int64_t starting_sequence_number);
+//! Build the structured FIELD_IDS value consumed by parquet COPY.
+Value BuildRewriteFieldIds(const IcebergTableSchema &schema);
 
-//! Drive the full plan. No-op (empty result) when `plan.table_is_empty` or
-//! `plan.file_groups` is empty. Fail-fast: any group failure throws. The
-//! returned `new_entries` accumulate ADDED manifest entries for every group;
-//! the commit step uses them as the "added" side of the REPLACE.
-RewriteExecutionResult ExecuteRewrite(ClientContext &context, const RewritePlan &plan);
+//! Convert the single-file result of one rewrite-group COPY into an ADDED
+//! manifest entry. The COPY result supplies the row count and path; partition
+//! values and sequence-number semantics come from the frozen rewrite plan.
+IcebergManifestEntry BuildRewriteManifestEntry(ClientContext &context, const vector<RewriteCandidate> &group,
+                                               int64_t starting_sequence_number, int64_t record_count,
+                                               const string &produced_file);
 
-namespace rewrite_executor_internal {
+//! Commit all completed rewrite groups as one Iceberg REPLACE snapshot.
+void CommitRewrite(ClientContext &context, const RewritePlan &plan, RewriteExecutionResult &result);
 
-//! Render the FIELD_IDS struct literal for the parquet COPY option.
-//! Output: "{'col1': 1, 'col2': {'__duckdb_field_id': 2, 'inner': 3}}".
-//! Mirrors `iceberg_insert.cpp::WrittenFieldIds` so the rewrite output is
-//! schema-compatible with files written by APPEND. Exposed for unit tests.
-string BuildFieldIdsLiteral(const IcebergTableSchema &schema);
+//! Best-effort cleanup for files produced before a rewrite failure.
+void CleanupRewriteFiles(ClientContext &context, const IcebergTableInformation &table_info,
+                         const vector<string> &produced_paths);
 
-//! Build the COPY SQL. Reads via the catalog-attached Iceberg table
-//! (`<catalog>.<schema>.<table>`) so the iceberg scan layer applies MoR
-//! position/equality deletes during read; filters by `filename` virtual column
-//! to scope the scan to the rewrite group. Writes a single output parquet
-//! into `target_dir` with `{uuidv7}` filename pattern. RETURN_FILES is on so
-//! the caller can parse the produced file list into an IcebergManifestEntry.
-//! Exposed for unit tests so the SQL shape is locked down.
-string BuildRewriteCopySql(const string &catalog, const string &schema, const string &table,
-                           const vector<string> &file_paths, const string &target_dir,
-                           const string &field_ids_literal);
-
-} // namespace rewrite_executor_internal
+//! Validate that the currently loaded table snapshot still matches the frozen
+//! rewrite plan. Empty-table plans require the table to remain snapshot-less.
+void ValidateRewriteSnapshot(const RewritePlan &plan, const IcebergTableInformation &table_info, const string &phase);
 
 } // namespace duckdb
