@@ -115,7 +115,9 @@ private:
 IcebergMultiFileList::IcebergMultiFileList(ClientContext &context_p, shared_ptr<IcebergScanInfo> scan_info,
                                            const string &path, const IcebergOptions &options)
     : context(context_p), fs(FileSystem::GetFileSystem(context)), scan_info(scan_info), path(path), table(nullptr),
-      options(options) {
+      options(options),
+      positional_delete_data(make_shared_ptr<case_insensitive_map_t<shared_ptr<IcebergDeleteData>>>()),
+      equality_delete_data(make_shared_ptr<map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>>>()) {
 }
 
 IcebergMultiFileList::~IcebergMultiFileList() {
@@ -257,6 +259,10 @@ unique_ptr<IcebergMultiFileList> IcebergMultiFileList::PushdownInternal(ClientCo
 	filtered_list->names = names;
 	filtered_list->types = types;
 	filtered_list->have_bound = true;
+	//! Share the delete state: DML operators hold a reference to the original list of the scan's bind data,
+	//! while the scan itself can read through a filtered copy created by (dynamic) filter pushdown.
+	filtered_list->positional_delete_data = positional_delete_data;
+	filtered_list->equality_delete_data = equality_delete_data;
 	return filtered_list;
 }
 
@@ -859,8 +865,8 @@ IcebergMultiFileList::GetEqualityDeletesForFile(const BoundIcebergManifestEntry 
 	auto &manifest_file = data_manifests[bound_manifest_entry.manifest_file_idx].entry.file;
 	auto &data_file = manifest_entry.data_file;
 	auto &metadata = GetMetadata();
-	auto it = equality_delete_data.upper_bound(manifest_entry.GetSequenceNumber(manifest_file));
-	for (; it != equality_delete_data.end(); it++) {
+	auto it = equality_delete_data->upper_bound(manifest_entry.GetSequenceNumber(manifest_file));
+	for (; it != equality_delete_data->end(); it++) {
 		auto &files = it->second->files;
 		for (auto &file : files) {
 			auto &partition_spec = metadata.partition_specs.at(file.partition_spec_id);
@@ -1208,8 +1214,8 @@ void IcebergMultiFileList::ScanDeleteFile(const BoundIcebergManifestEntry &bound
 }
 
 unique_ptr<DeleteFilter> IcebergMultiFileList::GetPositionalDeletesForFile(const string &file_path) const {
-	auto it = positional_delete_data.find(file_path);
-	if (it != positional_delete_data.end()) {
+	auto it = positional_delete_data->find(file_path);
+	if (it != positional_delete_data->end()) {
 		// There is delete data for this file, return it
 		return it->second->ToFilter();
 	}
