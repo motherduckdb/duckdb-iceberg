@@ -1286,7 +1286,7 @@
       "paths": [
         "test/sql/storage/metadata/partial_column_metadata_reuse_small_block.test"
       ]
-    }
+    },
     {
       "reason": "Wrong row count - storage layout differences vs duckdb",
       "paths": [
