@@ -3,6 +3,7 @@
 #include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/file_system.hpp"
+#include "duckdb/common/multi_file/multi_file_reader.hpp"
 #include "duckdb/execution/execution_context.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/parallel/event.hpp"
@@ -10,6 +11,10 @@
 #include "duckdb/parser/tableref/table_function_ref.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/planner/filter/struct_filter.hpp"
+#include "duckdb/planner/filter/constant_filter.hpp"
+#include "duckdb/planner/filter/conjunction_filter.hpp"
+#include "duckdb/planner/filter/in_filter.hpp"
+#include "duckdb/planner/filter/null_filter.hpp"
 #include "duckdb/execution/executor.hpp"
 
 #include "planning/iceberg_multi_file_reader.hpp"
@@ -57,6 +62,51 @@ void ManifestEntryReadState::FinishBatch() {
 }
 
 namespace {
+
+static bool EvaluateFilterAgainstConstant(TableFilter &filter, const Value &constant) {
+	switch (filter.filter_type) {
+	case TableFilterType::CONSTANT_COMPARISON: {
+		auto &constant_filter = filter.Cast<ConstantFilter>();
+		if (constant.IsNull()) {
+			return false;
+		}
+		return constant_filter.Compare(constant);
+	}
+	case TableFilterType::IS_NULL:
+		return constant.IsNull();
+	case TableFilterType::IS_NOT_NULL:
+		return !constant.IsNull();
+	case TableFilterType::IN_FILTER: {
+		auto &in_filter = filter.Cast<InFilter>();
+		for (auto &value : in_filter.values) {
+			if (!constant.IsNull() && value == constant) {
+				return true;
+			}
+		}
+		return false;
+	}
+	case TableFilterType::CONJUNCTION_OR: {
+		auto &or_filter = filter.Cast<ConjunctionOrFilter>();
+		for (auto &child : or_filter.child_filters) {
+			if (EvaluateFilterAgainstConstant(*child, constant)) {
+				return true;
+			}
+		}
+		return false;
+	}
+	case TableFilterType::CONJUNCTION_AND: {
+		auto &and_filter = filter.Cast<ConjunctionAndFilter>();
+		for (auto &child : and_filter.child_filters) {
+			if (!EvaluateFilterAgainstConstant(*child, constant)) {
+				return false;
+			}
+		}
+		return true;
+	}
+	default:
+		return true;
+	}
+}
 
 class ManifestReadTask : public BaseExecutorTask {
 public:
@@ -248,9 +298,10 @@ unique_ptr<IcebergMultiFileList> IcebergMultiFileList::PushdownInternal(ClientCo
 	// Add new filters
 	for (auto &entry : new_filters.filters) {
 		auto &column_id = entry.first;
-		if (column_id < names.size()) {
-			result_filter_set.PushFilter(ColumnIndex(column_id), entry.second->Copy());
-		}
+		//! Preserve filters on virtual columns such as `filename`. Rewrite
+		//! planning binds per-group scans as `WHERE filename IN (...)`; dropping
+		//! those filters here makes every branch rescan the full table.
+		result_filter_set.PushFilter(ColumnIndex(column_id), entry.second->Copy());
 	}
 
 	filtered_list->table_filters = std::move(result_filter_set);
@@ -470,6 +521,12 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 	D_ASSERT(!table_filters.filters.empty());
 	auto &filters = table_filters.filters;
 	auto &schema = GetSchema().columns;
+	auto filename_filter = filters.find(MultiFileReader::COLUMN_IDENTIFIER_FILENAME);
+	if (filename_filter != filters.end()) {
+		if (!EvaluateFilterAgainstConstant(*filename_filter->second, Value(manifest_entry.data_file.file_path))) {
+			return false;
+		}
+	}
 
 	auto &metadata = GetMetadata();
 	unordered_set<int32_t> mapping_field_ids;

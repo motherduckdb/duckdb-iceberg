@@ -1,8 +1,6 @@
 #include "maintenance/rewrite_data_files_operator.hpp"
 
 #include "duckdb/common/exception.hpp"
-#include "duckdb/common/file_system.hpp"
-#include "duckdb/common/string_util.hpp"
 #include "duckdb/execution/operator/set/physical_union.hpp"
 #include "duckdb/parallel/meta_pipeline.hpp"
 #include "duckdb/parallel/pipeline.hpp"
@@ -11,6 +9,9 @@
 #include "maintenance/maintenance_table_loader.hpp"
 #include "maintenance/rewrite_data_files_executor.hpp"
 #include "maintenance/table_lock_registry.hpp"
+#include "duckdb/planner/expression/bound_reference_expression.hpp"
+#include "duckdb/planner/expression/bound_constant_expression.hpp"
+#include "duckdb/execution/operator/projection/physical_projection.hpp"
 
 namespace duckdb {
 
@@ -18,12 +19,6 @@ namespace {
 
 static vector<LogicalType> RewriteResultTypes() {
 	return {LogicalType::BIGINT, LogicalType::BIGINT, LogicalType::BIGINT};
-}
-
-static string GetRewriteGroupDirectory(ClientContext &context, const RewritePlan &plan, idx_t group_idx) {
-	auto &fs = FileSystem::GetFileSystem(context);
-	return fs.JoinPath(plan.table_info->table_metadata.GetDataPath(fs),
-	                   StringUtil::Format("rewrite_group_%llu", group_idx));
 }
 
 struct RewriteDataFilesGlobalState : public GlobalSinkState {
@@ -51,7 +46,6 @@ struct RewriteDataFilesGlobalState : public GlobalSinkState {
 	mutex lock;
 	//! 0 = unseen, 1 = processing, 2 = complete.
 	vector<uint8_t> group_states;
-	vector<string> group_output_directories;
 	vector<string> produced_paths;
 	RewriteExecutionResult result;
 	bool committed = false;
@@ -106,8 +100,21 @@ PhysicalOperator &LogicalRewriteDataFiles::CreatePlan(ClientContext &context, Ph
 	}
 
 	ArenaLinkedList<reference<PhysicalOperator>> physical_children(planner.ArenaRef());
-	for (auto &child : children) {
-		physical_children.push_back(planner.CreatePlan(*child));
+	for (idx_t group_idx = 0; group_idx < children.size(); group_idx++) {
+		auto &child = children[group_idx];
+		auto &child_plan = planner.CreatePlan(*child);
+		auto child_types = child_plan.GetTypes();
+
+		vector<unique_ptr<Expression>> projection_expressions;
+		projection_expressions.push_back(make_uniq<BoundConstantExpression>(Value::UBIGINT(group_idx)));
+		for (idx_t i = 0; i < child_types.size(); i++) {
+			auto &child_type = child_types[i];
+			projection_expressions.push_back(make_uniq<BoundReferenceExpression>(child_type, i));
+		}
+		child_types.insert(child_types.begin(), LogicalType::UBIGINT);
+		auto &physical_projection = planner.Make<PhysicalProjection>(child_types, std::move(projection_expressions), 1);
+		physical_projection.children.push_back(child_plan);
+		physical_children.push_back(physical_projection);
 	}
 	if (physical_children.size() == 1) {
 		rewrite.children.push_back(physical_children[0]);
@@ -142,11 +149,7 @@ void PhysicalRewriteDataFiles::BuildPipelines(Pipeline &current, MetaPipeline &m
 }
 
 unique_ptr<GlobalSinkState> PhysicalRewriteDataFiles::GetGlobalSinkState(ClientContext &context) const {
-	auto result = make_uniq<RewriteDataFilesGlobalState>(context, plan);
-	for (idx_t group_idx = 0; group_idx < result->plan.file_groups.size(); group_idx++) {
-		result->group_output_directories.push_back(GetRewriteGroupDirectory(context, result->plan, group_idx));
-	}
-	return std::move(result);
+	return make_uniq<RewriteDataFilesGlobalState>(context, plan);
 }
 
 unique_ptr<LocalSinkState> PhysicalRewriteDataFiles::GetLocalSinkState(ExecutionContext &context) const {
@@ -157,33 +160,33 @@ SinkResultType PhysicalRewriteDataFiles::Sink(ExecutionContext &context, DataChu
                                               OperatorSinkInput &input) const {
 	auto &gstate = input.global_state.Cast<RewriteDataFilesGlobalState>();
 	for (idx_t row = 0; row < chunk.size(); row++) {
-		auto count = chunk.GetValue(0, row).GetValue<int64_t>();
-		auto files_value = chunk.GetValue(1, row);
-		auto &files = ListValue::GetChildren(files_value);
-		if (files.size() != 1) {
-			throw InternalException("iceberg_rewrite_data_files: COPY produced %llu files (expected exactly one)",
-			                        static_cast<unsigned long long>(files.size()));
+		if (chunk.ColumnCount() < 3) {
+			throw InternalException(
+			    "iceberg_rewrite_data_files: expected COPY RETURN_STATS result with at least three columns");
 		}
-		auto produced_file = files[0].GetValue<string>();
-		optional_idx group_idx;
-		for (idx_t candidate_idx = 0; candidate_idx < gstate.group_output_directories.size(); candidate_idx++) {
-			if (StringUtil::StartsWith(produced_file, gstate.group_output_directories[candidate_idx])) {
-				group_idx = candidate_idx;
-				break;
-			}
+		auto group_idx = chunk.GetValue(0, row).GetValue<uint64_t>();
+		if (static_cast<idx_t>(group_idx) >= gstate.plan.file_groups.size()) {
+			throw InternalException("iceberg_rewrite_data_files: COPY returned unknown group index %lld", group_idx);
 		}
-		if (!group_idx.IsValid()) {
-			throw InternalException("iceberg_rewrite_data_files: COPY returned file '%s' for an unknown group",
-			                        produced_file);
+		//! COPY RETURN_STATS emits one row per produced file:
+		//!   0 group_idx
+		//!   1 filename
+		//!   2 count
+		//! followed by file size, footer size, column stats, and partition keys.
+		auto produced_file = chunk.GetValue(1, row).GetValue<string>();
+		if (produced_file.empty()) {
+			throw InternalException("iceberg_rewrite_data_files: COPY for group %lld returned an empty file path",
+			                        group_idx);
 		}
-		auto &group = gstate.plan.file_groups[group_idx.GetIndex()];
+		auto count = NumericCast<int64_t>(chunk.GetValue(2, row).GetValue<uint64_t>());
+		auto &group = gstate.plan.file_groups[group_idx];
 		{
 			lock_guard<mutex> guard(gstate.lock);
-			if (gstate.group_states[group_idx.GetIndex()] != 0) {
-				throw InternalException("iceberg_rewrite_data_files: COPY returned duplicate result for group %llu",
-				                        static_cast<unsigned long long>(group_idx.GetIndex()));
+			if (gstate.group_states[group_idx] != 0) {
+				throw InternalException("iceberg_rewrite_data_files: COPY returned duplicate result for group %lld",
+				                        group_idx);
 			}
-			gstate.group_states[group_idx.GetIndex()] = 1;
+			gstate.group_states[group_idx] = 1;
 			gstate.produced_paths.push_back(produced_file);
 		}
 		auto entry = BuildRewriteManifestEntry(context.client, group, gstate.plan.starting_sequence_number, count,
@@ -191,7 +194,7 @@ SinkResultType PhysicalRewriteDataFiles::Sink(ExecutionContext &context, DataChu
 
 		{
 			lock_guard<mutex> guard(gstate.lock);
-			gstate.group_states[group_idx.GetIndex()] = 2;
+			gstate.group_states[group_idx] = 2;
 			gstate.result.new_entries.push_back(std::move(entry));
 			gstate.result.added_data_files++;
 			gstate.result.rewritten_data_files += static_cast<int64_t>(group.size());

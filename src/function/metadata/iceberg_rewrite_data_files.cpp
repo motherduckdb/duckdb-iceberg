@@ -81,12 +81,15 @@ static unique_ptr<QueryNode> BuildGroupSelect(const MaintenanceTableKey &table_k
 	for (auto &candidate : group) {
 		in_children.push_back(make_uniq<ConstantExpression>(Value(candidate.file_path)));
 	}
+	//! Read through the attached Iceberg table so the scan layer applies MoR
+	//! position/equality deletes, then scope the scan to this rewrite group's
+	//! source files using the `filename` virtual column.
 	select->where_clause = make_uniq<OperatorExpression>(ExpressionType::COMPARE_IN, std::move(in_children));
 	return std::move(select);
 }
 
 static unique_ptr<LogicalOperator> BindGroupCopy(Binder &binder, const RewritePlan &plan,
-                                                 const vector<RewriteCandidate> &group, idx_t group_idx) {
+                                                 const vector<RewriteCandidate> &group) {
 	auto &metadata = plan.table_info->table_metadata;
 	auto schema_id = metadata.GetCurrentSchemaId();
 	auto schema_it = metadata.GetSchemas().find(schema_id);
@@ -97,21 +100,31 @@ static unique_ptr<LogicalOperator> BindGroupCopy(Binder &binder, const RewritePl
 	auto &fs = FileSystem::GetFileSystem(binder.context);
 	CopyStatement copy_statement;
 	copy_statement.info->select_statement = BuildGroupSelect(plan.table_key, group);
-	copy_statement.info->file_path =
-	    fs.JoinPath(metadata.GetDataPath(fs), StringUtil::Format("rewrite_group_%llu", group_idx));
+	copy_statement.info->file_path = metadata.GetDataPath(fs);
 	copy_statement.info->format = "parquet";
 	copy_statement.info->is_from = false;
 	copy_statement.info->is_format_auto_detected = false;
+	//! Mirrors the structured field-id metadata used by APPEND so rewritten
+	//! parquet files stay schema-compatible with regular Iceberg writes.
 	copy_statement.info->options["field_ids"].push_back(BuildRewriteFieldIds(*schema_it->second));
 	copy_statement.info->options["filename_pattern"].push_back(Value("{uuidv7}"));
-	copy_statement.info->options["return_files"].push_back(Value::BOOLEAN(true));
+	//! Force COPY through DuckDB's rotated-file path creation even though we
+	//! still expect exactly one output file per rewrite group. The huge
+	//! ROW_GROUPS_PER_FILE value keeps rotation from actually happening while
+	//! ensuring COPY resolves `filename_pattern` into a concrete parquet path.
+	copy_statement.info->options["row_groups_per_file"].push_back(
+	    Value::UBIGINT(NumericLimits<uint64_t>::Maximum() - 1));
+	//! RETURN_STATS then reports that concrete parquet path. RETURN_FILES only
+	//! reports the directory root for the plain single-file COPY TO <dir> path,
+	//! which breaks follow-up rewrites.
+	copy_statement.info->options["return_stats"].push_back(Value::BOOLEAN(true));
 	copy_statement.info->options["per_thread_output"].push_back(Value::BOOLEAN(false));
 	copy_statement.info->options["overwrite_or_ignore"].push_back(Value::BOOLEAN(true));
 
 	auto copy_binder = Binder::CreateBinder(binder.context, &binder);
 	auto bound_copy = copy_binder->Bind(copy_statement);
-	if (bound_copy.types.size() != 2) {
-		throw InternalException("iceberg_rewrite_data_files: expected COPY RETURN_FILES to return two columns");
+	if (bound_copy.types.size() != 6) {
+		throw InternalException("iceberg_rewrite_data_files: expected COPY RETURN_STATS to return six columns");
 	}
 	return std::move(bound_copy.plan);
 }
@@ -133,8 +146,7 @@ static unique_ptr<LogicalOperator> RewriteDataFilesBindOperator(ClientContext &c
 
 	auto result = make_uniq<LogicalRewriteDataFiles>(bind_index, std::move(plan));
 	for (idx_t group_idx = 0; group_idx < result->plan.file_groups.size(); group_idx++) {
-		result->children.push_back(
-		    BindGroupCopy(*input.binder, result->plan, result->plan.file_groups[group_idx], group_idx));
+		result->children.push_back(BindGroupCopy(*input.binder, result->plan, result->plan.file_groups[group_idx]));
 	}
 
 	return_names = {"rewritten_data_files", "added_data_files", "rewritten_bytes"};

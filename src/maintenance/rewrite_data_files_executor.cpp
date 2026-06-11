@@ -16,6 +16,11 @@ namespace duckdb {
 
 namespace {
 
+//! Recursive walk over an Iceberg column definition emitting the FIELD_IDS
+//! value tree. For primitives the value is the field_id as an integer; for
+//! nested types it's a struct with a sentinel `__duckdb_field_id` slot plus
+//! one slot per child. Mirrors the parquet field-id metadata written by the
+//! regular Iceberg insert path so APPEND and REWRITE stay compatible.
 static Value GetFieldIdValue(const IcebergColumnDefinition &column) {
 	if (column.children.empty()) {
 		return Value::BIGINT(column.id);
@@ -47,14 +52,21 @@ IcebergManifestEntry BuildRewriteManifestEntry(ClientContext &context, const vec
 
 	IcebergManifestEntry entry;
 	entry.status = IcebergManifestEntryStatusType::ADDED;
+	//! Pin data_sequence_number to the starting snapshot's seq so concurrently-
+	//! written equality deletes keep applying (Iceberg V2 spec §4.2.4). Existing
+	//! position deletes are materialized during the scan read above.
 	entry.SetSequenceNumber(starting_sequence_number);
 	entry.data_file.content = IcebergManifestEntryContentType::DATA;
 	entry.data_file.file_format = "parquet";
 	entry.data_file.file_path = produced_file;
 	entry.data_file.record_count = record_count;
 	auto &fs = FileSystem::GetFileSystem(context);
+	//! COPY RETURN_FILES does not surface file_size_bytes, so issue one HEAD/read
+	//! sized lookup per produced file to keep the manifest entry accurate.
 	auto file_handle = fs.OpenFile(produced_file, FileFlags::FILE_FLAGS_READ);
 	entry.data_file.file_size_in_bytes = static_cast<int64_t>(file_handle->GetFileSize());
+	//! The planner buckets candidates so every file in one group shares the same
+	//! partition tuple. Reuse candidate 0 instead of re-deriving it.
 	entry.data_file.partition_info = group.front().partition_info;
 	return entry;
 }
@@ -85,6 +97,8 @@ void CleanupRewriteFiles(ClientContext &context, const IcebergTableInformation &
 		try {
 			fs.TryRemoveFile(path);
 		} catch (...) {
+			//! Best-effort cleanup only. Failures here should not mask the original
+			//! COPY/validation/commit error.
 		}
 	}
 }
