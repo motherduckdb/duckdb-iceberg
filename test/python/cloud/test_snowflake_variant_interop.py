@@ -316,7 +316,7 @@ def duckdb_created_d2s_table(duckdb_con):
     duckdb_con.query(f"DROP TABLE IF EXISTS my_datalake.{NAMESPACE}.{D2S_TABLE};")
 
 
-@pytest.mark.skip("Snowflake cannot read duckdb shredded variant. See duckdb-internal/issues/9653")
+@pytest.mark.skip("Snowflake cannot read duckdb non-shredded variant. See duckdb-internal/issues/9653")
 def test_snowflake_reads_duckdb_written_variant(duckdb_con, snowflake_session, duckdb_created_d2s_table):
     table = duckdb_created_d2s_table
 
