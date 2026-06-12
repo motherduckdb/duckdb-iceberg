@@ -340,7 +340,9 @@ void IcebergMultiFileReader::ApplyEqualityDeletes(ClientContext &context, DataCh
 	auto delete_files = multi_file_list.GetEqualityDeletesForFile(bound_manifest_entry);
 	vector<reference<const IcebergEqualityDeleteRow>> delete_rows;
 	for (auto &file : delete_files) {
-		delete_rows.insert(delete_rows.end(), file.get().rows.begin(), file.get().rows.end());
+		for (auto &row : file.get().rows) {
+			delete_rows.push_back(row);
+		}
 	}
 
 	if (delete_rows.empty()) {
