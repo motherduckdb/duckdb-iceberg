@@ -1,0 +1,17 @@
+# name: test/sql/local/iceberg_scans/iceberg_v1_existing_manifest_entry.test
+# description: V1 Manifest with entry of type EXISTING, without a sequence number
+# group: [iceberg_scans]
+
+require avro
+
+require parquet
+
+require iceberg
+
+query III
+select * from iceberg_scan('data/persistent/iceberg_v1_repro/repro/merch_v1/metadata/00003-8d01e4aa-d143-49c9-898e-b5e477577b70.metadata.json')
+----
+4	nhl	40
+6	nba	60
+2	nba	20
+3	mlb	30
