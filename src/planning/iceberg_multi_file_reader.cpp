@@ -271,7 +271,34 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
 	FinalizeBind(reader_data, bind_data.file_options, bind_data.reader_bind, global_columns, global_column_ids, context,
 	             gstate);
 
-	return CreateMapping(context, reader_data, global_columns, global_column_ids, table_filters, gstate.file_list,
+	// Add the columns needed by the equality deletes that are not part of the projection. FinalizeBind (above) ran the
+	// delete scan, which records such columns in `equality_id_to_result_id` (see ScanEqualityDeleteFile). We read them
+	// as extra columns appended after the projected columns; FinalizeChunk strips them back off after applying the
+	// deletes so they do not end up in the scan output.
+	const auto &multi_file_list = gstate.file_list.Cast<IcebergMultiFileList>();
+	auto &equality_to_result_id = multi_file_list.equality_id_to_result_id;
+	if (equality_to_result_id.empty()) {
+		return CreateMapping(context, reader_data, global_columns, global_column_ids, table_filters, gstate.file_list,
+		                     bind_data.reader_bind, bind_data.virtual_columns);
+	}
+
+	unordered_map<int32_t, column_t> id_to_global_column;
+	for (column_t i = 0; i < global_columns.size(); i++) {
+		auto &col = global_columns[i];
+		if (col.identifier.IsNull()) {
+			continue;
+		}
+		id_to_global_column[col.identifier.GetValue<int32_t>()] = i;
+	}
+
+	auto new_global_column_ids = global_column_ids;
+	new_global_column_ids.resize(global_column_ids.size() + equality_to_result_id.size());
+	for (auto &it : equality_to_result_id) {
+		auto global_column_id = id_to_global_column[it.first];
+		new_global_column_ids[it.second] = ColumnIndex(global_column_id);
+	}
+
+	return CreateMapping(context, reader_data, global_columns, new_global_column_ids, table_filters, gstate.file_list,
 	                     bind_data.reader_bind, bind_data.virtual_columns);
 }
 
@@ -430,6 +457,18 @@ void IcebergMultiFileReader::FinalizeChunk(ClientContext &context, const MultiFi
 	// Get the metadata for this file
 	const auto &multi_file_list = global_state->file_list->Cast<IcebergMultiFileList>();
 
+	// Append the extra equality-delete columns (read into input_chunk but not part of the scan's projection) onto the
+	// output chunk so ApplyEqualityDeletes can reference them by their result position, then strip them off again
+	// below. They originate from the non-projected fallback in ScanEqualityDeleteFile / InitializeReader and must not
+	// leak into the scan output. This is a no-op for the common case where the optimizer already projected them.
+	idx_t diff = multi_file_list.equality_id_to_result_id.size();
+	if (diff > 0) {
+		idx_t start = input_chunk.ColumnCount() - diff;
+		for (idx_t i = 0; i < diff; i++) {
+			output_chunk.data.emplace_back(input_chunk.data[start + i]);
+		}
+	}
+
 	//! Base class finalization first
 	MultiFileReader::FinalizeChunk(context, bind_data, reader, reader_data, input_chunk, output_chunk, executor,
 	                               global_state);
@@ -440,6 +479,11 @@ void IcebergMultiFileReader::FinalizeChunk(ClientContext &context, const MultiFi
 
 	auto &local_columns = reader.columns;
 	ApplyEqualityDeletes(context, output_chunk, multi_file_list, bound_manifest_entry, local_columns);
+
+	//! Remove the extra equality-delete columns we appended above so they do not end up in the scan output
+	for (idx_t i = 0; i < diff; i++) {
+		output_chunk.data.pop_back();
+	}
 }
 
 bool IcebergMultiFileReader::ParseOption(const string &key, const Value &val, MultiFileOptions &options,

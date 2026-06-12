@@ -109,6 +109,26 @@ void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntr
 		field_id_to_global_column[global_col.GetIdentifierFieldId()] = i;
 	}
 
+	// Fallback for scans whose projection does not include the equality-delete columns. Normally the
+	// GuaranteeEqualityDeleteColumnsOptimizer adds them to the projection, but that optimizer pass does not run for
+	// every scan: MotherDuck's hybrid execution replaces the bind data of a remote iceberg_scan with a wrapper, so the
+	// optimizer skips it (see GuaranteeEqualityDeleteColumnsOptimizer), and the server then executes the scan with the
+	// optimizer disabled. For any equality-delete column that is not already projected we assign it an extra result
+	// position appended after the read columns. IcebergMultiFileReader reads these as extra columns and strips them
+	// again in FinalizeChunk, so the deletes are applied without leaking the columns into the scan output. This path
+	// is only reached when the optimizer did not run, in which case there is no projection pushdown and
+	// `projection_ids` is empty, so a read position equals the corresponding output position.
+	for (auto field_id : data_file.equality_ids) {
+		auto global_column_id = field_id_to_global_column[field_id];
+		if (global_id_to_projection_index.count(global_column_id)) {
+			continue;
+		}
+		D_ASSERT(projection_ids.empty());
+		auto new_result_id = global_column_ids.size() + equality_id_to_result_id.size();
+		auto result_id = equality_id_to_result_id.emplace(field_id, new_result_id).first->second;
+		global_id_to_projection_index[global_column_id] = result_id;
+	}
+
 	deletes.files.emplace_back(data_file.partition_info, manifest_file.partition_spec_id);
 	auto &rows = deletes.files.back().rows;
 	rows.resize(count);

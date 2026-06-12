@@ -143,6 +143,13 @@ public:
 	mutable case_insensitive_map_t<shared_ptr<IcebergDeleteData>> positional_delete_data;
 	//! All equality deletes with sequence numbers higher than that of the data_file apply to that data_file
 	mutable map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> equality_delete_data;
+	//! Equality-delete columns that are needed to evaluate the deletes but are NOT part of the scan's projection
+	//! (field_id -> the extra result position it is read into, appended after the projected output columns). This
+	//! happens when the GuaranteeEqualityDeleteColumnsOptimizer did not run for this scan, e.g. for MotherDuck hybrid
+	//! scans where the optimizer sees a remote-function wrapper instead of the iceberg scan. We read these columns as
+	//! extra columns and strip them again in FinalizeChunk so the delete filter can reference them without leaking
+	//! them into the scan output.
+	mutable unordered_map<int32_t, idx_t> equality_id_to_result_id;
 
 	//! FIXME: this is only used in 'FinalizeBind',
 	//! shouldn't this be used to protect all the variable accesses that are accessed there while the lock is held?
