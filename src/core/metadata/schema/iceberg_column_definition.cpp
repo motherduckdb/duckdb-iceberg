@@ -315,9 +315,8 @@ Value IcebergColumnDefinition::GetWriteDefault() const {
 ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
 	auto write_default = GetWriteDefault();
 	if (!write_default.IsNull()) {
-		//! FIXME: the expression needs to be more advanced for nested types
 		if (type.IsNested()) {
-			throw NotImplementedException("DEFAULT values for nested types are not supported currently");
+			throw NotImplementedException("{} DEFAULT not supported for STRUCT yet");
 		}
 		return ColumnDefinition(Identifier(name), type, make_uniq<ConstantExpression>(write_default),
 		                        TableColumnType::STANDARD);
