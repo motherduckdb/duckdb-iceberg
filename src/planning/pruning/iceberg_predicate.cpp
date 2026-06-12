@@ -17,6 +17,28 @@
 
 namespace duckdb {
 
+namespace {
+
+struct BoundExpressionReplacer : public LogicalOperatorVisitor {
+public:
+	BoundExpressionReplacer(const Value &val) : val(val) {
+	}
+
+public:
+	unique_ptr<Expression> VisitReplace(BoundReferenceExpression &expr, unique_ptr<Expression> *expr_ptr) override {
+		if (expr.index != 0) {
+			return nullptr;
+		}
+		auto &return_type = expr.return_type;
+		return make_uniq<BoundConstantExpression>(val.DefaultCastAs(return_type, true));
+	}
+
+public:
+	const Value &val;
+};
+
+} // namespace
+
 template <class TRANSFORM>
 bool MatchBoundsTemplated(ClientContext &context, const TableFilter &filter, const IcebergPredicateStats &stats,
                           const IcebergTransform &transform);
@@ -91,9 +113,75 @@ static bool IsDirectReference(const Expression &expr) {
 	case ExpressionClass::BOUND_REF:
 	case ExpressionClass::BOUND_COLUMN_REF:
 		return true;
-	default:
+	default: {
 		return false;
 	}
+	}
+}
+
+static bool IsVariantExtract(const Expression &expr) {
+	if (expr.GetExpressionClass() != ExpressionClass::BOUND_FUNCTION) {
+		return false;
+	}
+	auto &variant_extract = expr.Cast<BoundFunctionExpression>();
+	if (variant_extract.function.name != "variant_extract") {
+		return false;
+	}
+	if (variant_extract.children.empty()) {
+		return false;
+	}
+	return true;
+}
+
+static bool IsVariantReference(const Expression &expr) {
+	if (expr.GetExpressionClass() != ExpressionClass::BOUND_FUNCTION) {
+		return false;
+	}
+	auto &variant_normalize_func = expr.Cast<BoundFunctionExpression>();
+	if (variant_normalize_func.function.name != "variant_normalize") {
+		return false;
+	}
+	if (variant_normalize_func.children.size() != 1) {
+		return false;
+	}
+
+	reference<const Expression> current_expr(*variant_normalize_func.children[0]);
+	while (IsVariantExtract(current_expr)) {
+		auto &func = current_expr.get().Cast<BoundFunctionExpression>();
+		current_expr = *func.children[0];
+	}
+	return IsDirectReference(current_expr);
+}
+
+template <class TRANSFORM>
+bool MatchTransformedBounds(ClientContext &context, ExpressionType comparison_type, const Expression &left,
+                            const Expression &right, const IcebergPredicateStats &stats,
+                            const IcebergTransform &transform) {
+	BoundExpressionReplacer lower_replacer(stats.lower_bound);
+	BoundExpressionReplacer upper_replacer(stats.upper_bound);
+	auto lower_copy = left.Copy();
+	auto upper_copy = left.Copy();
+	lower_replacer.VisitExpression(&lower_copy);
+	upper_replacer.VisitExpression(&upper_copy);
+
+	Value right_constant;
+	if (!ExpressionExecutor::TryEvaluateScalar(context, right, right_constant)) {
+		return true;
+	}
+
+	Value transformed_lower_bound;
+	Value transformed_upper_bound;
+	if (!ExpressionExecutor::TryEvaluateScalar(context, *lower_copy, transformed_lower_bound)) {
+		return true;
+	}
+	if (!ExpressionExecutor::TryEvaluateScalar(context, *upper_copy, transformed_upper_bound)) {
+		return true;
+	}
+	IcebergPredicateStats transformed_stats(stats);
+	transformed_stats.lower_bound = transformed_lower_bound;
+	transformed_stats.upper_bound = transformed_upper_bound;
+
+	return MatchBoundsConstant<TRANSFORM>(right_constant, comparison_type, transformed_stats, transform);
 }
 
 template <class TRANSFORM>
@@ -165,13 +253,32 @@ bool MatchBoundsTemplated(ClientContext &context, const TableFilter &filter, con
 			auto comparison_type = compare_expr.GetExpressionType();
 			auto &left = *compare_expr.left;
 			auto &right = *compare_expr.right;
-			if (IsDirectReference(left) && right.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT) {
-				return MatchBoundsConstant<TRANSFORM>(right.Cast<BoundConstantExpression>().value, comparison_type,
-				                                      stats, transform);
-			}
-			if (left.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT && IsDirectReference(right)) {
-				return MatchBoundsConstant<TRANSFORM>(left.Cast<BoundConstantExpression>().value,
-				                                      FlipComparisonExpression(comparison_type), stats, transform);
+
+			const bool right_is_const = right.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT;
+			const bool left_is_const = left.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT;
+
+			const bool left_is_ref = IsDirectReference(left);
+			const bool right_is_ref = IsDirectReference(right);
+
+			const bool is_identity = transform.Type() == IcebergTransformType::IDENTITY;
+
+			if (right_is_const && left_is_const) {
+				return true;
+			} else if (right_is_const) {
+				if (left_is_ref) {
+					return MatchBoundsConstant<TRANSFORM>(right.Cast<BoundConstantExpression>().value, comparison_type,
+					                                      stats, transform);
+				} else if (is_identity && IsVariantReference(left)) {
+					return MatchTransformedBounds<TRANSFORM>(context, expr.type, left, right, stats, transform);
+					;
+				}
+			} else if (left_is_const) {
+				if (right_is_ref) {
+					return MatchBoundsConstant<TRANSFORM>(left.Cast<BoundConstantExpression>().value,
+					                                      FlipComparisonExpression(comparison_type), stats, transform);
+				} else if (is_identity && IsVariantReference(right)) {
+					return MatchTransformedBounds<TRANSFORM>(context, expr.type, right, left, stats, transform);
+				}
 			}
 			return true;
 		}

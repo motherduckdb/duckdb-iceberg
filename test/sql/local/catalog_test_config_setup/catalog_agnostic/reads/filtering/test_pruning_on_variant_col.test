@@ -38,8 +38,14 @@ Insert into my_datalake.default.variant_bounds_tbl values
 statement ok
 call enable_logging('Iceberg');
 
-statement ok
-select * from my_datalake.default.variant_bounds_tbl where variant_col.age > 60;
+query I
+select * from my_datalake.default.variant_bounds_tbl where variant_col.age > 60 order by all;
+----
+{'age': 70, 'name': Frank}
+{'age': 80, 'name': George}
+{'age': 90, 'name': Howard}
+{'age': 100, 'name': Ian}
+{'age': 110, 'name': Jill}
 
 # skipped the first file.
 query I
