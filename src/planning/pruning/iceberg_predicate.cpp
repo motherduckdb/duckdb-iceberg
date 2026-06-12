@@ -4,6 +4,7 @@
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
+#include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/null_filter.hpp"
@@ -85,6 +86,16 @@ static bool MatchBoundsConjunctionAndFilter(ClientContext &context, const Conjun
 	return true;
 }
 
+static bool IsDirectReference(const Expression &expr) {
+	switch (expr.GetExpressionClass()) {
+	case ExpressionClass::BOUND_REF:
+	case ExpressionClass::BOUND_COLUMN_REF:
+		return true;
+	default:
+		return false;
+	}
+}
+
 template <class TRANSFORM>
 bool MatchBoundsTemplated(ClientContext &context, const TableFilter &filter, const IcebergPredicateStats &stats,
                           const IcebergTransform &transform) {
@@ -145,6 +156,25 @@ bool MatchBoundsTemplated(ClientContext &context, const TableFilter &filter, con
 		auto &expr = *expression_filter.expr;
 
 		switch (expr.type) {
+		case ExpressionType::COMPARE_GREATERTHAN:
+		case ExpressionType::COMPARE_GREATERTHANOREQUALTO:
+		case ExpressionType::COMPARE_LESSTHAN:
+		case ExpressionType::COMPARE_LESSTHANOREQUALTO:
+		case ExpressionType::COMPARE_EQUAL: {
+			auto &compare_expr = expr.Cast<BoundComparisonExpression>();
+			auto comparison_type = compare_expr.GetExpressionType();
+			auto &left = *compare_expr.left;
+			auto &right = *compare_expr.right;
+			if (IsDirectReference(left) && right.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT) {
+				return MatchBoundsConstant<TRANSFORM>(right.Cast<BoundConstantExpression>().value, comparison_type,
+				                                      stats, transform);
+			}
+			if (left.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT && IsDirectReference(right)) {
+				return MatchBoundsConstant<TRANSFORM>(left.Cast<BoundConstantExpression>().value,
+				                                      FlipComparisonExpression(comparison_type), stats, transform);
+			}
+			return true;
+		}
 		case ExpressionType::OPERATOR_IS_NULL:
 		case ExpressionType::OPERATOR_IS_NOT_NULL: {
 			D_ASSERT(expr.GetExpressionClass() == ExpressionClass::BOUND_OPERATOR);
