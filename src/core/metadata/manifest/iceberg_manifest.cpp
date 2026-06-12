@@ -309,6 +309,18 @@ Value IcebergDataFile::ToValue(const IcebergTableMetadata &table_metadata, const
 	}
 	children.push_back(Value::MAP(LogicalType::STRUCT(null_value_count_types), null_value_counts_values));
 
+	// equality_ids: list<int> (empty for non equality-delete files)
+	vector<Value> equality_id_values;
+	for (auto &id : equality_ids) {
+		equality_id_values.push_back(Value::INTEGER(id));
+	}
+	if (equality_id_values.empty()) {
+		//! Not an equality-delete file - emit a NULL list rather than an empty list.
+		children.push_back(Value(LogicalType::LIST(LogicalType::INTEGER)));
+	} else {
+		children.push_back(Value::LIST(LogicalType::INTEGER, std::move(equality_id_values)));
+	}
+
 	// referenced_data_file
 	if (table_metadata.iceberg_version >= 3) {
 		children.push_back(Value(referenced_data_file));
@@ -551,6 +563,14 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 
 	data_file_field_ids.emplace_back("null_value_counts", Value::STRUCT(null_values_counts_record_field_ids));
 
+	// equality_ids: list<int> - the field-ids an equality-delete file applies to
+	children.emplace_back("equality_ids", LogicalType::LIST(LogicalType::INTEGER));
+
+	child_list_t<Value> equality_ids_list_field;
+	equality_ids_list_field.emplace_back("list", CreateFieldID(EQUALITY_IDS_ELEMENT, false));
+	equality_ids_list_field.emplace_back("__duckdb_field_id", Value::INTEGER(EQUALITY_IDS));
+	data_file_field_ids.emplace_back("equality_ids", Value::STRUCT(equality_ids_list_field));
+
 	// referenced_data_file
 	if (table_metadata.iceberg_version >= 3) {
 		// referenced_data_file: long
@@ -617,11 +637,8 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	auto schema_doc = schema_doc_p.get();
 	auto schema_root_obj = yyjson_mut_obj(schema_doc);
 	yyjson_mut_doc_set_root(schema_doc, schema_root_obj);
-	IcebergCreateTableRequest::PopulateSchema(
-		schema_doc,
-		schema_root_obj,
-		*table_metadata.GetSchemaFromId(table_metadata.GetCurrentSchemaId())
-	);
+	IcebergCreateTableRequest::PopulateSchema(schema_doc, schema_root_obj,
+	                                          *table_metadata.GetSchemaFromId(table_metadata.GetCurrentSchemaId()));
 	auto iceberg_table_schema_string = ICUtils::JsonToString(std::move(schema_doc_p));
 
 	child_list_t<Value> metadata_values;

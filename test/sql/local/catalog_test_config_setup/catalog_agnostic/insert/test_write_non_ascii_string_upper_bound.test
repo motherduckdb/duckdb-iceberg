@@ -1,0 +1,75 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_write_non_ascii_string_upper_bound.test
+# description: A long non-ASCII string (multi-byte UTF-8) must not fail the write with "Could not write upper bounds for string column"; the upper bound is computed on whole code points so a valid bound (>= the column max) is still produced.
+# group: [insert]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+drop table if exists my_datalake.default.non_ascii_upper_bound_test;
+
+statement ok
+create table my_datalake.default.non_ascii_upper_bound_test (
+    id int,
+    title varchar
+);
+
+# These strings are longer than 16 bytes and contain multi-byte UTF-8 within
+# the first 16 bytes. Previously the upper-bound truncate+increment could not
+# produce valid UTF-8 and the whole insert failed.
+statement ok
+insert into my_datalake.default.non_ascii_upper_bound_test values
+    (1, 'ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲ'),
+    (2, 'Ünïcödé strïng wïth ëxtra bytës'),
+    (3, 'short ascii');
+
+# Data round-trips intact.
+query IT
+select id, title from my_datalake.default.non_ascii_upper_bound_test order by id;
+----
+1	ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲ
+2	Ünïcödé strïng wïth ëxtra bytës
+3	short ascii
+
+statement ok
+set variable mp = (select manifest_path from iceberg_metadata(my_datalake.default.non_ascii_upper_bound_test) order by manifest_sequence_number desc limit 1);
+
+# The varchar column (field id 2) gets an upper bound even though its max value
+# is a long non-ASCII string: the bound is produced by incrementing the last
+# code point of the truncated prefix.
+query I
+select count(*) from (
+    select unnest(map_keys(upper_bounds)) k
+    from (select unnest(data_file) from read_avro(getvariable('mp')))
+) where k = 2;
+----
+1
+
+# And it is a valid upper bound: decoded, it is >= the column's max value.
+query I
+select decode(ub) >= (select max(title) from my_datalake.default.non_ascii_upper_bound_test)
+from (
+    select unnest(map_keys(upper_bounds)) k, unnest(map_values(upper_bounds)) ub
+    from (select unnest(data_file) from read_avro(getvariable('mp')))
+) where k = 2;
+----
+true
+
+# The lower bound for the varchar column is written too (truncation only).
+query I
+select count(*) from (
+    select unnest(map_keys(lower_bounds)) k
+    from (select unnest(data_file) from read_avro(getvariable('mp')))
+) where k = 2;
+----
+1

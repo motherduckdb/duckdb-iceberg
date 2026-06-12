@@ -20,6 +20,7 @@
 #include "catalog/rest/storage/authorization/none.hpp"
 #include "catalog/rest/storage/authorization/sigv4_utils.hpp"
 #include "core/expression/iceberg_transform.hpp"
+#include "duckdb/parser/column_definition.hpp"
 
 #include <climits>
 

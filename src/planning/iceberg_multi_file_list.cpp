@@ -19,10 +19,13 @@
 #include "iceberg_logging.hpp"
 #include "planning/pruning/iceberg_predicate.hpp"
 #include "core/expression/iceberg_value.hpp"
+#include "duckdb/storage/statistics/geometry_stats.hpp"
+#include "duckdb/common/types/geometry.hpp"
 #include "core/metadata/manifest/iceberg_manifest.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 #include "core/expression/iceberg_predicate_stats.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
+#include "storage/statistics/iceberg_variant_statistics.hpp"
 #include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
 #include "planning/metadata_io/manifest_list/iceberg_manifest_list_reader.hpp"
 #include "planning/metadata_io/manifest_list/bound_iceberg_manifest_list_entry.hpp"
@@ -331,7 +334,7 @@ FileExpandResult IcebergMultiFileList::GetExpandResult() const {
 
 idx_t IcebergMultiFileList::GetTotalFileCount() const {
 	// FIXME: the 'added_files_count' + the 'existing_files_count'
-	// in the Manifest List should give us this information without scanning the manifest list
+	// in the Manifest List should give us this information without scanning the manifest file(s)
 	lock_guard<mutex> guard(lock);
 
 	idx_t i = data_manifest_entries.size();
@@ -431,12 +434,58 @@ bool IcebergPredicateStats::BoundsAreNull() const {
 	return has_lower_bounds && has_upper_bounds && lower_bound.IsNull() && upper_bound.IsNull();
 }
 
+// Iceberg v3 (Appendix D): geometry lower/upper bounds are a packed little-endian
+// sequence of f64 doubles giving the min/max corner of the bounding box, in order
+// x, y, (z), (m). Reconstruct a GEOMETRY_STATS BaseStatistics whose extent spans
+// [lower, upper] so spatial predicate pruning can be delegated to
+// GeometryStats::CheckZonemap. Returns null when the bounds can't form an XY box.
+static shared_ptr<BaseStatistics> BuildGeometryStats(const Value &lower_bound, const Value &upper_bound,
+                                                     const LogicalType &type) {
+	if (lower_bound.IsNull() || upper_bound.IsNull()) {
+		return nullptr;
+	}
+	auto lower_blob = lower_bound.GetValueUnsafe<string_t>();
+	auto upper_blob = upper_bound.GetValueUnsafe<string_t>();
+	const auto lower_coordinate_card = lower_blob.GetSize() / sizeof(double);
+	const auto upper_coordinate_card = upper_blob.GetSize() / sizeof(double);
+	if (lower_coordinate_card < 2 || upper_coordinate_card < 2) {
+		// Not enough information to form an XY bounding box.
+		return nullptr;
+	}
+	const auto *lo = reinterpret_cast<const double *>(lower_blob.GetData());
+	const auto *hi = reinterpret_cast<const double *>(upper_blob.GetData());
+
+	// CreateUnknown initializes the extent to ±infinity on every axis (so absent
+	// Z/M axes correctly report HasZ()/HasM() == false) and sets has_no_null = true
+	// so CheckZonemap doesn't short-circuit to FILTER_ALWAYS_FALSE.
+	auto stats = make_shared_ptr<BaseStatistics>(GeometryStats::CreateUnknown(type));
+	auto &extent = GeometryStats::GetExtent(*stats);
+	extent.x_min = lo[0];
+	extent.y_min = lo[1];
+	extent.x_max = hi[0];
+	extent.y_max = hi[1];
+	// 3 doubles is XYZ (the writer emits XYZ whenever Z is present); 4 is XYZM.
+	if (lower_coordinate_card >= 3 && upper_coordinate_card >= 3) {
+		extent.z_min = lo[2];
+		extent.z_max = hi[2];
+	}
+	if (lower_coordinate_card >= 4 && upper_coordinate_card >= 4) {
+		extent.m_min = lo[3];
+		extent.m_max = hi[3];
+	}
+	return stats;
+}
+
 IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(const Value &lower_bound, const Value &upper_bound,
                                                                const string &name, const LogicalType &type) {
 	IcebergPredicateStats res;
 
-	// DuckDB-Iceberg does not yet support deserializing avro blobs to geometry yet.
 	if (type.id() == LogicalTypeId::GEOMETRY) {
+		// Geometry bounds need both corners together to build a bounding-box extent,
+		// so they don't go through the per-bound Value deserialization below.
+		res.geometry_stats = BuildGeometryStats(lower_bound, upper_bound, type);
+		res.has_lower_bounds = res.geometry_stats != nullptr;
+		res.has_upper_bounds = res.geometry_stats != nullptr;
 		return res;
 	}
 
@@ -590,8 +639,29 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 		if (upper_bound_it != data_file.upper_bounds.end()) {
 			upper_bound = upper_bound_it->second;
 		}
+		IcebergPredicateStats stats;
 
-		auto stats = IcebergPredicateStats::DeserializeBounds(lower_bound, upper_bound, column.name, column.type);
+		if (column.type.id() == LogicalTypeId::VARIANT) {
+			if (lower_bound.IsNull() || upper_bound.IsNull()) {
+				// if there are no variant stats, scan the whole file
+				return true;
+			}
+			Value lower_decoded, upper_decoded;
+			auto lower_blob = lower_bound.GetValueUnsafe<string_t>();
+			auto upper_blob = upper_bound.GetValueUnsafe<string_t>();
+
+			Value lower_variant, upper_variant;
+			if (IcebergVariantBoundsReader::Deserialize(context, lower_blob, lower_decoded) &&
+			    IcebergVariantBoundsReader::RekeyBoundsVariant(lower_decoded, lower_variant)) {
+				stats.SetLowerBound(lower_variant);
+			}
+			if (IcebergVariantBoundsReader::Deserialize(context, upper_blob, upper_decoded) &&
+			    IcebergVariantBoundsReader::RekeyBoundsVariant(upper_decoded, upper_variant)) {
+				stats.SetUpperBound(upper_variant);
+			}
+		} else {
+			stats = IcebergPredicateStats::DeserializeBounds(lower_bound, upper_bound, column.name, column.type);
+		}
 
 		int64_t value_count = 0;
 		bool has_value_counts = false;
@@ -1028,8 +1098,7 @@ void IcebergMultiFileList::InitializeFiles(lock_guard<mutex> &guard) const {
 	}
 }
 
-void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition> &global_columns,
-                                          const vector<ColumnIndex> &column_indexes) const {
+void IcebergMultiFileList::EnumerateDeleteManifestEntries() const {
 	// In <=v2 we now have to process *all* delete manifests
 	// before we can be certain that we have all the delete data for the current file.
 
@@ -1037,7 +1106,6 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 	// is targeting before we open it, and there can only be one deletion vector per data file.
 
 	// From the spec: "At most one deletion vector is allowed per data file in a snapshot"
-
 	optional_ptr<const case_insensitive_map_t<string>> transactional_delete_files;
 	if (HasTransactionData()) {
 		transactional_delete_files = GetTransactionData().transactional_delete_files;
@@ -1045,37 +1113,67 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 	while (!FinishedScanningDeletes()) {
 		delete_manifest_reader->Read();
 	}
-	for (idx_t i = 0; i < committed_delete_manifests.size(); i++) {
-		auto &manifest = delete_manifests[i];
-		auto &entries = manifest.entry.manifest_entries;
-		auto &manifest_file = manifest.entry.file;
-		for (auto &manifest_entry : entries) {
-			if (manifest_entry.status == IcebergManifestEntryStatusType::DELETED) {
-				continue;
+
+	if (!committed_delete_entries_enumerated) {
+		for (idx_t i = 0; i < committed_delete_manifests.size(); i++) {
+			auto &manifest = delete_manifests[i];
+			auto &entries = manifest.entry.manifest_entries;
+			auto &manifest_file = manifest.entry.file;
+			for (auto &manifest_entry : entries) {
+				if (manifest_entry.status == IcebergManifestEntryStatusType::DELETED) {
+					continue;
+				}
+				auto &data_file = manifest_entry.data_file;
+				if (!table_filters.filters.empty() &&
+				    !FileMatchesFilter(manifest_file, manifest_entry, IcebergManifestContentType::DELETE)) {
+					DUCKDB_LOG(context, IcebergLogType, "Iceberg Filter Pushdown, skipped 'data_file': '%s'",
+					           data_file.file_path);
+					continue;
+				}
+				auto &referenced_data_file = data_file.referenced_data_file;
+				if (!referenced_data_file.empty() && transactional_delete_files &&
+				    transactional_delete_files->count(referenced_data_file)) {
+					//! Skip this delete file, there's a transaction-local delete that makes it obsolete
+					continue;
+				}
+				auto bound_entry = manifest.BindEntry(manifest_entry);
+				delete_manifest_entries.push_back(std::move(bound_entry));
 			}
-			auto &data_file = manifest_entry.data_file;
-			// Check whether current data file is filtered out.
-			if (!table_filters.filters.empty() &&
-			    !FileMatchesFilter(manifest_file, manifest_entry, IcebergManifestContentType::DELETE)) {
-				//! Skip this file
-				continue;
-			}
-			auto &referenced_data_file = data_file.referenced_data_file;
-			if (!referenced_data_file.empty() && transactional_delete_files &&
-			    transactional_delete_files->count(referenced_data_file)) {
-				//! Skip this delete file, there's a transaction-local delete that makes it obsolete
-				continue;
-			}
-			auto bound_entry = manifest.BindEntry(manifest_entry);
-			delete_manifest_entries.push_back(std::move(bound_entry));
 		}
+		committed_delete_entries_enumerated = true;
 	}
 
+	auto offset = committed_delete_manifests.size();
+	while (transaction_delete_idx < transaction_delete_manifests.size()) {
+		auto &delete_manifest = delete_manifests[offset + transaction_delete_idx];
+		for (auto &manifest_entry : delete_manifest.entry.manifest_entries) {
+			auto &data_file = manifest_entry.data_file;
+			auto &referenced_data_file = data_file.referenced_data_file;
+			if (!referenced_data_file.empty() && transactional_delete_files) {
+				auto it = transactional_delete_files->find(referenced_data_file);
+				//! Check if this is the currently active (last) delete file for this referenced_data_file
+				if (it != transactional_delete_files->end() && it->second != data_file.file_path) {
+					continue;
+				}
+			}
+			//! FIXME: no file pruning for uncommitted data?
+			auto bound_manifest_entry = delete_manifest.BindEntry(manifest_entry);
+			delete_manifest_entries.push_back(std::move(bound_manifest_entry));
+		}
+		transaction_delete_idx++;
+	}
+
+	D_ASSERT(FinishedScanningDeletes());
+}
+
+void IcebergMultiFileList::ScanDeleteFiles(const vector<MultiFileColumnDefinition> &global_columns,
+                                           const vector<ColumnIndex> &global_column_ids,
+                                           const vector<idx_t> &projection_ids) const {
 	for (auto &bound_manifest_entry : delete_manifest_entries) {
 		auto &manifest_entry = bound_manifest_entry.entry;
 		auto &data_file = manifest_entry.data_file;
 		if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
-			ScanDeleteFile(bound_manifest_entry, global_columns, column_indexes);
+			ScanDeleteFile(bound_manifest_entry, global_columns, global_column_ids, projection_ids);
 		} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
 			ScanPuffinFile(bound_manifest_entry);
 		} else {
@@ -1084,44 +1182,25 @@ void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition
 			    data_file.file_format);
 		}
 	}
+	scanned_delete_manifests = true;
+}
 
-	auto offset = committed_delete_manifests.size();
-	while (transaction_delete_idx < transaction_delete_manifests.size()) {
-		auto &delete_manifest = delete_manifests[offset + transaction_delete_idx];
-		for (auto &manifest_entry : delete_manifest.entry.manifest_entries) {
-			auto &data_file = manifest_entry.data_file;
-
-			auto &referenced_data_file = data_file.referenced_data_file;
-			if (!referenced_data_file.empty() && transactional_delete_files) {
-				auto it = transactional_delete_files->find(referenced_data_file);
-				//! Check if this is the currently active (last) delete file for this referenced_data_file
-				if (it != transactional_delete_files->end() && it->second != data_file.file_path) {
-					//! It's not, skip the delete
-					continue;
-				}
-			}
-
-			auto bound_manifest_entry = delete_manifest.BindEntry(manifest_entry);
-			//! FIXME: no file pruning for uncommitted data?
-			if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
-				ScanDeleteFile(bound_manifest_entry, global_columns, column_indexes);
-			} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
-				ScanPuffinFile(bound_manifest_entry);
-			} else {
-				throw NotImplementedException(
-				    "File format '%s' not supported for deletes, only supports 'parquet' and 'puffin' currently",
-				    data_file.file_format);
-			}
-		}
-		transaction_delete_idx++;
+void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition> &global_columns,
+                                          const vector<ColumnIndex> &global_column_ids,
+                                          const vector<idx_t> &projection_ids) const {
+	//! Enumerate the delete manifest entries, then read the delete files they reference.
+	//! EnumerateDeleteManifestEntries() is idempotent, so this is safe even if the entries were
+	//! already enumerated earlier (e.g. by the optimizer).
+	EnumerateDeleteManifestEntries();
+	if (!scanned_delete_manifests) {
+		ScanDeleteFiles(global_columns, global_column_ids, projection_ids);
 	}
-
-	D_ASSERT(FinishedScanningDeletes());
 }
 
 void IcebergMultiFileList::ScanDeleteFile(const BoundIcebergManifestEntry &bound_manifest_entry,
                                           const vector<MultiFileColumnDefinition> &global_columns,
-                                          const vector<ColumnIndex> &column_indexes) const {
+                                          const vector<ColumnIndex> &global_column_ids,
+                                          const vector<idx_t> &projection_ids) const {
 	auto &manifest_entry = bound_manifest_entry.entry;
 	auto &data_file = manifest_entry.data_file;
 	auto delete_file_path = data_file.file_path;
@@ -1193,7 +1272,7 @@ void IcebergMultiFileList::ScanDeleteFile(const BoundIcebergManifestEntry &bound
 			delete_scan_function.function(context, function_input, result);
 			result.Flatten();
 			ScanEqualityDeleteFile(bound_manifest_entry, result, multi_file_local_state.reader->columns, global_columns,
-			                       column_indexes);
+			                       global_column_ids, projection_ids);
 		} while (result.size() != 0);
 	}
 }
