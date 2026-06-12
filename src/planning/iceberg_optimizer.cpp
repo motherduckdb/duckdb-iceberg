@@ -31,7 +31,18 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 			VisitOperator(child);
 			return;
 		}
-		auto &mfbd = get.bind_data->Cast<MultiFileBindData>();
+		// The bind data of an iceberg_scan is not always a MultiFileBindData. Embedders such as
+		// MotherDuck replace it with their own wrapper type when the scan is planned for remote
+		// execution. The equality-delete column rewrite below only makes sense for a local scan
+		// that owns the IcebergMultiFileList, so skip anything whose bind data is not the
+		// MultiFileBindData we expect instead of blindly casting (which trips the dynamic-cast
+		// assertion in debug builds and is undefined behaviour in release builds).
+		auto mfbd_ptr = dynamic_cast<MultiFileBindData *>(get.bind_data.get());
+		if (!mfbd_ptr) {
+			VisitOperator(child);
+			return;
+		}
+		auto &mfbd = *mfbd_ptr;
 		if (!mfbd.file_list) {
 			return;
 		}
