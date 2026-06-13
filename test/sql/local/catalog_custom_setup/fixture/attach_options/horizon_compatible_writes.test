@@ -1,0 +1,126 @@
+# name: test/sql/local/catalog_custom_setup/fixture/attach_options/horizon_compatible_writes.test
+# description: test attach options needed by REST catalogs that reject staged create, create metadata updates, and transaction commit
+# group: [attach_options]
+
+require-env FIXTURE_SERVER_AVAILABLE
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+set enable_logging=true
+
+statement ok
+set logging_level='debug';
+
+statement ok
+CALL enable_logging('HTTP');
+
+statement ok
+CREATE SECRET (
+    TYPE S3,
+    KEY_ID 'admin',
+    SECRET 'password',
+    ENDPOINT '127.0.0.1:9000',
+    URL_STYLE 'path',
+    USE_SSL 0
+);
+
+statement ok
+ATTACH '' AS my_datalake (
+    TYPE ICEBERG,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    ENDPOINT 'http://127.0.0.1:8181',
+    stage_create_tables false,
+    disable_multi_table_commit true,
+    skip_create_table_metadata_updates true,
+    remove_files_on_delete false
+);
+
+statement ok
+create schema if not exists my_datalake.default;
+
+statement ok
+drop table if exists my_datalake.default.test_horizon_compatible_writes;
+
+statement ok
+CALL truncate_duckdb_logs();
+
+statement ok
+create table my_datalake.default.test_horizon_compatible_writes (id int, label varchar);
+
+statement ok
+insert into my_datalake.default.test_horizon_compatible_writes values (1, 'created'), (2, 'inserted');
+
+query II
+select * from my_datalake.default.test_horizon_compatible_writes order by all;
+----
+1	created
+2	inserted
+
+query I
+select count(*) from duckdb_logs_parsed('HTTP') where request.url like '%/transactions/commit%';
+----
+0
+
+statement ok
+drop table if exists my_datalake.default.test_horizon_compatible_writes;
+
+statement ok
+drop table if exists my_datalake.default.test_horizon_mixed_existing;
+
+statement ok
+drop table if exists my_datalake.default.test_horizon_mixed_empty_create;
+
+statement ok
+create table my_datalake.default.test_horizon_mixed_existing (id int, label varchar);
+
+statement ok
+CALL truncate_duckdb_logs();
+
+statement ok
+begin transaction;
+
+statement ok
+create table my_datalake.default.test_horizon_mixed_empty_create (id int, label varchar);
+
+statement ok
+insert into my_datalake.default.test_horizon_mixed_existing values (3, 'mixed');
+
+statement ok
+commit;
+
+query II
+select * from my_datalake.default.test_horizon_mixed_existing order by all;
+----
+3	mixed
+
+query I
+select count(*) from my_datalake.default.test_horizon_mixed_empty_create;
+----
+0
+
+# The table is created up front with a POST to the `.../tables` collection endpoint.
+# Because skip_create_table_metadata_updates is set and the new table received no data,
+# it queues no transaction updates, so no follow-up per-table commit
+# (POST to `.../tables/<name>`) is issued for it.
+query I
+select count(*) from duckdb_logs_parsed('HTTP') where request.type = 'POST'
+  and request.url like '%/namespaces/default/tables/test_horizon_mixed_empty_create';
+----
+0
+
+statement ok
+drop table if exists my_datalake.default.test_horizon_mixed_empty_create;
+
+statement ok
+drop table if exists my_datalake.default.test_horizon_mixed_existing;
