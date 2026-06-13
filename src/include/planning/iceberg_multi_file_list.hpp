@@ -31,6 +31,9 @@
 
 namespace duckdb {
 
+class IcebergTableEntry;
+struct IcebergMultiFileList;
+
 struct IcebergManifestScanningState {
 public:
 	IcebergManifestScanningState(ClientContext &context, unique_ptr<AvroScan> scan,
@@ -44,6 +47,49 @@ public:
 	unique_ptr<AvroScan> scan;
 	vector<IcebergManifestListEntry> &list_entries;
 	atomic<idx_t> in_progress_tasks;
+};
+
+struct IcebergMultiFileListSharedState {
+public:
+	IcebergMultiFileListSharedState(ClientContext &context, shared_ptr<IcebergScanInfo> scan_info, string path,
+	                                const IcebergOptions &options);
+	~IcebergMultiFileListSharedState();
+
+private:
+	friend struct IcebergMultiFileList;
+
+	ClientContext &context;
+	FileSystem &fs;
+	shared_ptr<IcebergScanInfo> scan_info;
+	string path;
+	IcebergTableEntry *table = nullptr;
+	IcebergOptions options;
+
+	mutable mutex lock;
+	mutable mutex delete_lock;
+	mutable ManifestEntryReadState read_state;
+
+	mutable bool initialized = false;
+
+	//! Scanned delete manifests and their owners.
+	mutable vector<IcebergManifestListEntry> committed_delete_manifests;
+	mutable vector<reference<const IcebergManifestListEntry>> transaction_delete_manifests;
+	mutable unique_ptr<AvroScan> delete_manifest_scan;
+	mutable unique_ptr<manifest_file::ManifestReader> delete_manifest_reader;
+
+	//! Scanned data manifests and their owners.
+	mutable vector<IcebergManifestListEntry> committed_data_manifests;
+	mutable vector<reference<const IcebergManifestListEntry>> transaction_data_manifests;
+	mutable unique_ptr<IcebergManifestScanningState> data_manifest_read_state;
+	mutable unique_ptr<manifest_file::ManifestReader> data_manifest_reader;
+
+	//! Declared after the manifest owners so references in parsed delete data are destroyed first.
+	mutable case_insensitive_map_t<shared_ptr<IcebergDeleteData>> positional_delete_data;
+	mutable map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> equality_delete_data;
+	mutable unordered_set<string> processed_delete_files;
+
+	//! Populated as parsed data-file entries become visible to any filtered view.
+	mutable case_insensitive_map_t<vector<IcebergPartitionInfo>> data_file_partition_info;
 };
 
 struct IcebergMultiFileList : public MultiFileList {
@@ -60,32 +106,24 @@ public:
 	const IcebergTransactionData &GetTransactionData() const;
 	const IcebergSnapshotScanInfo &GetSnapshot() const;
 	const IcebergTableSchema &GetSchema() const;
-	bool FinishedScanningDeletes() const;
+	IcebergTableEntry *GetTable() const;
+	void SetTable(IcebergTableEntry *table);
+	void SetOptions(const IcebergOptions &options);
 
 	void Bind(vector<LogicalType> &return_types, vector<string> &names);
 	unique_ptr<IcebergMultiFileList> PushdownInternal(ClientContext &context, TableFilterSet &new_filters) const;
-	void ScanPositionalDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result) const;
-	void ScanEqualityDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result,
-	                            vector<MultiFileColumnDefinition> &columns,
-	                            const vector<MultiFileColumnDefinition> &global_columns,
-	                            const vector<ColumnIndex> &global_column_ids,
-	                            const vector<idx_t> &projection_ids) const;
-	void ScanDeleteFile(const BoundIcebergManifestEntry &entry, const vector<MultiFileColumnDefinition> &global_columns,
-	                    const vector<ColumnIndex> &global_column_ids, const vector<idx_t> &projection_ids) const;
-	void ScanPuffinFile(const BoundIcebergManifestEntry &entry) const;
 	unique_ptr<DeleteFilter> GetPositionalDeletesForFile(const string &file_path) const;
-	void EnumerateDeleteManifestEntries() const;
 	void ProcessDeletes(const vector<MultiFileColumnDefinition> &global_columns,
 	                    const vector<ColumnIndex> &global_column_ids, const vector<idx_t> &projection_ids) const;
-	void ScanDeleteFiles(const vector<MultiFileColumnDefinition> &global_columns,
-	                     const vector<ColumnIndex> &global_column_ids, const vector<idx_t> &projection_ids) const;
 	vector<reference<const IcebergEqualityDeleteRow>>
 	GetEqualityDeletesForFile(const BoundIcebergManifestEntry &manifest_entry) const;
 	void GetStatistics(vector<PartitionStatistics> &result) const;
-	const BoundIcebergManifestEntry &GetManifestEntry(idx_t file_id) const;
+	BoundIcebergManifestEntry GetManifestEntry(idx_t file_id) const;
 	vector<IcebergPartitionInfo> GetPartitionInfoForDataFile(const string &file_path) const;
 	const IcebergManifestFile &GetManifestFileForEntry(const BoundIcebergManifestEntry &entry,
 	                                                   IcebergManifestContentType type) const;
+	vector<BoundIcebergManifestEntry> GetDeleteManifestEntries() const;
+	shared_ptr<IcebergDeleteData> GetExistingPositionalDeleteData(const string &file_path) const;
 
 public:
 	//! MultiFileList API
@@ -120,66 +158,58 @@ protected:
 	                                                        const ColumnIndex &column_index) const;
 
 private:
-	optional_ptr<ManifestReadBatch> TryGetNextBatch(lock_guard<mutex> &guard) const;
+	IcebergMultiFileList(shared_ptr<IcebergMultiFileListSharedState> shared_state);
+	bool TryGetNextBatch(lock_guard<mutex> &guard) const;
 	void FinishScanTasks(lock_guard<mutex> &guard) const;
+	void InitializeSharedState(lock_guard<mutex> &guard) const;
+	bool FinishedScanningDeletes() const;
+	void EnumerateDeleteManifestEntriesInternal() const;
+	void ProcessDeletesInternal(const vector<MultiFileColumnDefinition> &global_columns,
+	                            const vector<ColumnIndex> &global_column_ids,
+	                            const vector<idx_t> &projection_ids) const;
+	void ScanDeleteFiles(const vector<MultiFileColumnDefinition> &global_columns,
+	                     const vector<ColumnIndex> &global_column_ids, const vector<idx_t> &projection_ids) const;
+	void ScanDeleteFile(const BoundIcebergManifestEntry &entry, const vector<MultiFileColumnDefinition> &global_columns,
+	                    const vector<ColumnIndex> &global_column_ids, const vector<idx_t> &projection_ids) const;
+	void ScanPositionalDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result) const;
+	void ScanEqualityDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result,
+	                            vector<MultiFileColumnDefinition> &columns,
+	                            const vector<MultiFileColumnDefinition> &global_columns,
+	                            const vector<ColumnIndex> &global_column_ids,
+	                            const vector<idx_t> &projection_ids) const;
+	void ScanPuffinFile(const BoundIcebergManifestEntry &entry) const;
 
-public:
+private:
+	shared_ptr<IcebergMultiFileListSharedState> shared_state;
 	ClientContext &context;
 	FileSystem &fs;
-	shared_ptr<IcebergScanInfo> scan_info;
-	string path;
-	IcebergTableEntry *table;
-
-	mutable mutex lock;
+	const IcebergOptions &options;
 	//! ComplexFilterPushdown results
 	bool have_bound = false;
 	vector<string> names;
 	vector<LogicalType> types;
 	TableFilterSet table_filters;
 
-	mutable ManifestEntryReadState read_state;
-
-	//! For each file that has a delete file, the state for processing that/those delete file(s).
-	//! Shared with the filter pushdown copies of this list (see PushdownInternal) so that delete state
-	//! observed while scanning is also visible to the list referenced by DML operators.
-	mutable shared_ptr<case_insensitive_map_t<shared_ptr<IcebergDeleteData>>> positional_delete_data;
-	//! All equality deletes with sequence numbers higher than that of the data_file apply to that data_file.
-	//! Shared with the filter pushdown copies of this list for the same reason as positional_delete_data.
-	mutable shared_ptr<map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>>> equality_delete_data;
-
-	//! FIXME: this is only used in 'FinalizeBind',
-	//! shouldn't this be used to protect all the variable accesses that are accessed there while the lock is held?
-	mutable mutex delete_lock;
 	mutable idx_t transaction_delete_idx = 0;
-	// have we enumerated all delete files (which we need to do for equality delete planning)
 	mutable bool committed_delete_entries_enumerated = false;
 	mutable bool initialized = false;
-	mutable bool scanned_delete_manifests = false;
-	const IcebergOptions &options;
+	mutable idx_t next_data_batch_idx = 0;
+	mutable bool has_current_data_batch = false;
+	mutable ManifestReadBatch current_data_batch;
+	mutable idx_t current_data_batch_offset = 0;
 
-public:
 	//! References to items inside the 'manifest_entries' of the list entries in the 'delete_manifests'
 	mutable vector<BoundIcebergManifestEntry> delete_manifest_entries;
 	//! Combination of committed + transaction delete manifests
 	mutable vector<BoundIcebergManifestListEntry> delete_manifests;
-	//! Scanned delete manifests of the snapshot being scanned
-	mutable unique_ptr<AvroScan> delete_manifest_scan;
-	mutable unique_ptr<manifest_file::ManifestReader> delete_manifest_reader;
-	mutable vector<IcebergManifestListEntry> committed_delete_manifests;
-	//! Cached, uncommitted delete manifests created by earlier statements in the transaction
-	mutable vector<reference<const IcebergManifestListEntry>> transaction_delete_manifests;
+	mutable vector<bool> delete_manifest_matches;
 
 private:
 	//! References to items inside the 'manifest_entries' of the list entries in the 'data_manifests'
 	mutable vector<BoundIcebergManifestEntry> data_manifest_entries;
 	//! Combination of committed + transaction data manifests
 	mutable vector<BoundIcebergManifestListEntry> data_manifests;
-	//! Scanned data manifests of the snapshot being scanned
-	mutable unique_ptr<IcebergManifestScanningState> data_manifest_read_state;
-	mutable unique_ptr<manifest_file::ManifestReader> data_manifest_reader;
-	mutable vector<IcebergManifestListEntry> committed_data_manifests;
-	//! Cached, uncommitted data manifests created by earlier statements in the transaction
-	mutable vector<reference<const IcebergManifestListEntry>> transaction_data_manifests;
+	mutable vector<bool> data_manifest_matches;
 };
 
 } // namespace duckdb

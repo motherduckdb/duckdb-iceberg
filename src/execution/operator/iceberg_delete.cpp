@@ -278,9 +278,9 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 		}
 		if (write_deletion_vector) {
 			//! Addd the existing delete we're replacing
-			auto it = multi_file_list->positional_delete_data->find(filename);
-			if (it != multi_file_list->positional_delete_data->end()) {
-				auto &delete_data = *it->second;
+			auto existing_delete = multi_file_list->GetExistingPositionalDeleteData(filename);
+			if (existing_delete) {
+				auto &delete_data = *existing_delete;
 				PopulateAlteredManifests(*multi_file_list, global_state.altered_manifests, delete_data);
 				delete_data.ToSet(sorted_deletes);
 			}

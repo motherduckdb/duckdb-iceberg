@@ -38,7 +38,7 @@ void IcebergMultiFileList::ScanPositionalDeleteFile(const BoundIcebergManifestEn
 	}
 	reference<string_t> current_file_path = names[0];
 	auto initial_key = current_file_path.get().GetString();
-	auto deletes = TryGetOrCreate(*positional_delete_data, bound_entry, initial_key);
+	auto deletes = TryGetOrCreate(shared_state->positional_delete_data, bound_entry, initial_key);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto &name = names[i];
@@ -47,7 +47,7 @@ void IcebergMultiFileList::ScanPositionalDeleteFile(const BoundIcebergManifestEn
 		if (name != current_file_path.get()) {
 			current_file_path = name;
 			auto key = current_file_path.get().GetString();
-			deletes = TryGetOrCreate(*positional_delete_data, bound_entry, key);
+			deletes = TryGetOrCreate(shared_state->positional_delete_data, bound_entry, key);
 		}
 		if (!deletes) {
 			continue;

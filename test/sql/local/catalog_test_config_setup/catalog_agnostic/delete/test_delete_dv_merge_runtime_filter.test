@@ -53,3 +53,87 @@ SELECT * FROM my_datalake.default.test_dv_merge_runtime_filter ORDER BY id;
 
 statement ok
 DROP TABLE my_datalake.default.test_dv_merge_runtime_filter;
+
+# Complex and dynamic pushdown must preserve parsed V2 positional-delete metadata.
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.test_positional_delete_filter_pushdown;
+
+statement ok
+CREATE TABLE my_datalake.default.test_positional_delete_filter_pushdown (id INT, val VARCHAR)
+WITH ('format-version'='2');
+
+statement ok
+INSERT INTO my_datalake.default.test_positional_delete_filter_pushdown VALUES
+    (1, 'a'), (2, 'b'), (3, 'c'), (4, 'd');
+
+statement ok
+DELETE FROM my_datalake.default.test_positional_delete_filter_pushdown WHERE id = 1;
+
+# Static predicates go through complex filter pushdown.
+statement ok
+UPDATE my_datalake.default.test_positional_delete_filter_pushdown SET val = 'b_updated' WHERE id = 2;
+
+# The join adds dynamic filter pushdown on top of the complex filter state.
+statement ok
+UPDATE my_datalake.default.test_positional_delete_filter_pushdown SET val = val || '_updated'
+FROM (VALUES (3)) t(uid) WHERE id = t.uid;
+
+query II
+SELECT * FROM my_datalake.default.test_positional_delete_filter_pushdown ORDER BY id;
+----
+2	b_updated
+3	c_updated
+4	d
+
+statement ok
+DROP TABLE my_datalake.default.test_positional_delete_filter_pushdown;
+
+# Partition metadata and deletion vectors must remain available through several
+# pushed-down views of the same bind-time list.
+statement ok
+SET threads=4;
+
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.test_partitioned_dv_filter_pushdown;
+
+statement ok
+CREATE TABLE my_datalake.default.test_partitioned_dv_filter_pushdown (id INT, part INT, val VARCHAR)
+PARTITIONED BY (part) WITH ('format-version'='3');
+
+# Separate inserts create several manifests while ids 1 and 2 still share a data file.
+statement ok
+INSERT INTO my_datalake.default.test_partitioned_dv_filter_pushdown VALUES
+    (1, 10, 'a'), (2, 10, 'b');
+
+statement ok
+INSERT INTO my_datalake.default.test_partitioned_dv_filter_pushdown VALUES
+    (3, 20, 'c'), (4, 20, 'd');
+
+statement ok
+DELETE FROM my_datalake.default.test_partitioned_dv_filter_pushdown WHERE id = 1;
+
+statement ok
+UPDATE my_datalake.default.test_partitioned_dv_filter_pushdown SET val = val || '_dynamic'
+FROM (VALUES (2), (3)) t(uid) WHERE id = t.uid;
+
+# Revisit the first partition through complex filter pushdown and merge its
+# replacement deletion vector without rescanning the old one.
+statement ok
+UPDATE my_datalake.default.test_partitioned_dv_filter_pushdown SET val = val || '_complex' WHERE id = 2;
+
+# A further MERGE creates another pushed-down generation and must reuse the
+# already-processed deletion-vector metadata.
+statement ok
+MERGE INTO my_datalake.default.test_partitioned_dv_filter_pushdown target
+USING (VALUES (3)) source(id) USING (id)
+WHEN MATCHED THEN UPDATE SET val = val || '_merge';
+
+query III
+SELECT * FROM my_datalake.default.test_partitioned_dv_filter_pushdown ORDER BY id;
+----
+2	10	b_dynamic_complex
+3	20	c_dynamic_merge
+4	20	d
+
+statement ok
+DROP TABLE my_datalake.default.test_partitioned_dv_filter_pushdown;
