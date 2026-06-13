@@ -34,6 +34,10 @@ public:
 	IcebergEqualityDeleteFile(vector<IcebergPartitionInfo> partition_info_p, int32_t partition_spec_id)
 	    : partition_info(std::move(partition_info_p)), partition_spec_id(partition_spec_id) {
 	}
+	IcebergEqualityDeleteFile(const IcebergEqualityDeleteFile &) = delete;
+	IcebergEqualityDeleteFile &operator=(const IcebergEqualityDeleteFile &) = delete;
+	IcebergEqualityDeleteFile(IcebergEqualityDeleteFile &&) = default;
+	IcebergEqualityDeleteFile &operator=(IcebergEqualityDeleteFile &&) = default;
 
 public:
 	//! The partition info if the equality delete has partition information
