@@ -507,9 +507,11 @@ static void GlueAttach(ClientContext &context, IcebergAttachOptions &input) {
 
 void IcebergCatalog::SetAWSCatalogOptions(IcebergAttachOptions &attach_options,
                                           case_insensitive_set_t &set_by_attach_options) {
-	attach_options.allows_deletes = false;
-	if (set_by_attach_options.find("support_stage_create") == set_by_attach_options.end()) {
-		attach_options.supports_stage_create = false;
+	if (set_by_attach_options.find("remove_files_on_delete") == set_by_attach_options.end()) {
+		attach_options.remove_files_on_delete = false;
+	}
+	if (set_by_attach_options.find("stage_create_tables") == set_by_attach_options.end()) {
+		attach_options.stage_create_tables = false;
 	}
 	if (set_by_attach_options.find("purge_requested") == set_by_attach_options.end()) {
 		attach_options.purge_requested = true;
@@ -545,10 +547,19 @@ unique_ptr<Catalog> IcebergCatalog::Attach(optional_ptr<StorageExtensionInfo> st
 		} else if (lower_name == "endpoint") {
 			attach_options.endpoint = entry.second.ToString();
 			StringUtil::RTrim(attach_options.endpoint, "/");
-		} else if (lower_name == "support_stage_create") {
+		} else if (lower_name == "stage_create_tables") {
 			auto result = entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
-			attach_options.supports_stage_create = result;
-			set_by_attach_options.insert("supports_stage_create");
+			attach_options.stage_create_tables = result;
+			set_by_attach_options.insert("stage_create_tables");
+		} else if (lower_name == "disable_multi_table_commit") {
+			attach_options.disable_multi_table_commit =
+			    entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+		} else if (lower_name == "skip_create_table_metadata_updates") {
+			attach_options.skip_create_table_metadata_updates =
+			    entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+		} else if (lower_name == "remove_files_on_delete") {
+			attach_options.remove_files_on_delete = entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+			set_by_attach_options.insert("remove_files_on_delete");
 		} else if (lower_name == "support_nested_namespaces") {
 			attach_options.support_nested_namespaces =
 			    entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
