@@ -18,28 +18,6 @@
 
 namespace duckdb {
 
-namespace {
-
-struct BoundExpressionReplacer : public LogicalOperatorVisitor {
-public:
-	BoundExpressionReplacer(const Value &val) : val(val) {
-	}
-
-public:
-	unique_ptr<Expression> VisitReplace(BoundReferenceExpression &expr, unique_ptr<Expression> *expr_ptr) override {
-		if (expr.Index() != 0) {
-			return nullptr;
-		}
-		auto &return_type = expr.GetReturnType();
-		return make_uniq<BoundConstantExpression>(val.DefaultCastAs(return_type, true));
-	}
-
-public:
-	const Value &val;
-};
-
-} // namespace
-
 template <class TRANSFORM>
 bool MatchBoundsTemplated(ClientContext &context, const ExpressionFilter &filter, const IcebergPredicateStats &stats,
                           const IcebergTransform &transform);
@@ -90,37 +68,6 @@ static bool MatchBoundsIsNullFilter(const IcebergPredicateStats &stats, const Ic
 template <class TRANSFORM>
 static bool MatchBoundsIsNotNullFilter(const IcebergPredicateStats &stats, const IcebergTransform &transform) {
 	return stats.has_not_null == true;
-}
-
-template <class TRANSFORM>
-bool MatchTransformedBounds(ClientContext &context, ExpressionType comparison_type, const Expression &left,
-                            const Expression &right, const IcebergPredicateStats &stats,
-                            const IcebergTransform &transform) {
-	BoundExpressionReplacer lower_replacer(stats.lower_bound);
-	BoundExpressionReplacer upper_replacer(stats.upper_bound);
-	auto lower_copy = left.Copy();
-	auto upper_copy = left.Copy();
-	lower_replacer.VisitExpression(&lower_copy);
-	upper_replacer.VisitExpression(&upper_copy);
-
-	Value right_constant;
-	if (!ExpressionExecutor::TryEvaluateScalar(context, right, right_constant)) {
-		return true;
-	}
-
-	Value transformed_lower_bound;
-	Value transformed_upper_bound;
-	if (!ExpressionExecutor::TryEvaluateScalar(context, *lower_copy, transformed_lower_bound)) {
-		return true;
-	}
-	if (!ExpressionExecutor::TryEvaluateScalar(context, *upper_copy, transformed_upper_bound)) {
-		return true;
-	}
-	IcebergPredicateStats transformed_stats(stats);
-	transformed_stats.lower_bound = transformed_lower_bound;
-	transformed_stats.upper_bound = transformed_upper_bound;
-
-	return MatchBoundsConstant<TRANSFORM>(right_constant, comparison_type, transformed_stats, transform);
 }
 
 // template <class TRANSFORM>
@@ -261,23 +208,13 @@ static bool MatchBoundsExpression(ClientContext &context, const Expression &expr
 			return MatchBoundsConstant<TRANSFORM>(left.Cast<BoundConstantExpression>().GetValue(),
 			                                      FlipComparisonExpression(comparison_type), stats, transform);
 		}
-		if (comparison_type == ExpressionType::COMPARE_EQUAL && stats.lower_bound.type() == LogicalType::VARCHAR) {
-			//! Filters on strings (e.g len(my_string_col)) do not maintain lexicographic ordering properties
-			return true;
-		}
-		if (transform.Type() == IcebergTransformType::IDENTITY) {
-			//! No further processing has been done on the stats (lower/upper bounds)
-			bool left_foldable = left.IsFoldable();
-			bool right_foldable = right.IsFoldable();
-			if (!left_foldable && !right_foldable) {
-				//! Both are not foldable, can't evaluate at all
-				return true;
-			}
-			if (left_foldable) {
-				return MatchTransformedBounds<TRANSFORM>(context, comparison_type, right, left, stats, transform);
-			}
-			return MatchTransformedBounds<TRANSFORM>(context, comparison_type, left, right, stats, transform);
-		}
+		//! The column side is not a direct column reference (e.g. `pk % 8 = 4`, `day(ts) = 5`).
+		//! Evaluating such an expression at the lower/upper bound and comparing against the
+		//! result range is only sound when the expression is MONOTONE over the bound interval,
+		//! which we cannot establish in general: e.g. for `pk % 8` over a file with bounds
+		//! [0, 49] that approach yields [0 % 8, 49 % 8] = [0, 1] and would incorrectly prune
+		//! files containing pk % 8 ∈ {2..7} — silently dropping correct rows from the result
+		//! (duckdb/duckdb-iceberg#1052). Be conservative: don't prune.
 		return true;
 	}
 

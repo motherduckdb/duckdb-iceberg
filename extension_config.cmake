@@ -2,8 +2,8 @@
 if (NOT EMSCRIPTEN)
   duckdb_extension_load(avro
   LOAD_TESTS
-  GIT_URL https://github.com/duckdb/duckdb-avro
-  GIT_TAG 0e499606ab97f96f83d017c1720f1149d510b337
+  GIT_URL https://github.com/tishj/duckdb_avro
+  GIT_TAG 404ca1c83d5c8eaff34c2710cd9e44e81702371c
 )
 endif()
 
@@ -32,8 +32,8 @@ if (NOT EMSCRIPTEN)
   if (NOT MINGW)
     duckdb_extension_load(aws
             LOAD_TESTS
-            GIT_URL https://github.com/tishj/duckdb_aws
-            GIT_TAG aca9727eab08d9b91e98bffaa1bfa8efd6a94db5
+            GIT_URL https://github.com/duckdb/duckdb-aws
+            GIT_TAG f15081e8708b78715a11391f33aea0c28b8c8d1a
     )
   endif()
 endif()
