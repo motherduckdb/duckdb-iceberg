@@ -32,8 +32,8 @@ if (NOT EMSCRIPTEN)
   if (NOT MINGW)
     duckdb_extension_load(aws
             LOAD_TESTS
-            GIT_URL https://github.com/duckdb/duckdb-aws
-            GIT_TAG ebce8e46e9a02576cfd0296fe29c23aeeddaa937
+            GIT_URL https://github.com/tishj/duckdb_aws
+            GIT_TAG aca9727eab08d9b91e98bffaa1bfa8efd6a94db5
     )
   endif()
 endif()
