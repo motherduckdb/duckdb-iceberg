@@ -44,7 +44,7 @@ statement ok
 call enable_logging();
 
 query II
-select * from my_datalake.default.test_insert_into_partitioned_table_month where a = '1993-04-20 13:34:27.123456'::TIMESTAMPTZ;
+select * from my_datalake.default.test_insert_into_partitioned_table_month where a = '1993-04-20 13:34:27.123456'::TIMESTAMP;
 ----
 1993-04-20 13:34:27.123456	15
 
