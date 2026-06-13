@@ -76,6 +76,9 @@ private:
 	mutable vector<reference<const IcebergManifestListEntry>> transaction_delete_manifests;
 	mutable unique_ptr<AvroScan> delete_manifest_scan;
 	mutable unique_ptr<manifest_file::ManifestReader> delete_manifest_reader;
+	mutable bool delete_entries_enumerated = false;
+	mutable idx_t next_delete_entry_to_process = 0;
+	mutable vector<BoundIcebergManifestEntry> delete_manifest_entries;
 
 	//! Scanned data manifests and their owners.
 	mutable vector<IcebergManifestListEntry> committed_data_manifests;
@@ -86,10 +89,17 @@ private:
 	//! Declared after the manifest owners so references in parsed delete data are destroyed first.
 	mutable case_insensitive_map_t<shared_ptr<IcebergDeleteData>> positional_delete_data;
 	mutable map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> equality_delete_data;
-	mutable unordered_set<string> processed_delete_files;
 
 	//! Populated as parsed data-file entries become visible to any filtered view.
 	mutable case_insensitive_map_t<vector<IcebergPartitionInfo>> data_file_partition_info;
+};
+
+struct IcebergDataViewCursor {
+public:
+	idx_t next_batch_idx = 0;
+	bool has_current_batch = false;
+	ManifestReadBatch current_batch;
+	idx_t current_batch_offset = 0;
 };
 
 struct IcebergMultiFileList : public MultiFileList {
@@ -190,16 +200,8 @@ private:
 	vector<LogicalType> types;
 	TableFilterSet table_filters;
 
-	mutable idx_t transaction_delete_idx = 0;
-	mutable bool committed_delete_entries_enumerated = false;
-	mutable bool initialized = false;
-	mutable idx_t next_data_batch_idx = 0;
-	mutable bool has_current_data_batch = false;
-	mutable ManifestReadBatch current_data_batch;
-	mutable idx_t current_data_batch_offset = 0;
-
-	//! References to items inside the 'manifest_entries' of the list entries in the 'delete_manifests'
-	mutable vector<BoundIcebergManifestEntry> delete_manifest_entries;
+	mutable bool view_initialized = false;
+	mutable IcebergDataViewCursor data_view_cursor;
 	//! Combination of committed + transaction delete manifests
 	mutable vector<BoundIcebergManifestListEntry> delete_manifests;
 	mutable vector<bool> delete_manifest_matches;
