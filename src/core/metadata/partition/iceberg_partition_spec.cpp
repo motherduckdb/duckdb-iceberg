@@ -9,14 +9,14 @@ IcebergPartitionSpecField IcebergPartitionSpecField::ParseFromJson(const rest_ap
 	result.name = field.name;
 	result.transform = field.transform.value;
 	result.source_id = field.source_id;
-	D_ASSERT(field.has_field_id);
-	result.partition_field_id = field.field_id;
+	D_ASSERT(field.field_id);
+	result.partition_field_id = *field.field_id;
 	return result;
 }
 
 IcebergPartitionSpec IcebergPartitionSpec::ParseFromJson(const rest_api_objects::PartitionSpec &partition_spec) {
-	D_ASSERT(partition_spec.has_spec_id);
-	IcebergPartitionSpec result(partition_spec.spec_id);
+	D_ASSERT(partition_spec.spec_id);
+	IcebergPartitionSpec result(*partition_spec.spec_id);
 	for (auto &field : partition_spec.fields) {
 		result.fields.push_back(IcebergPartitionSpecField::ParseFromJson(field));
 	}

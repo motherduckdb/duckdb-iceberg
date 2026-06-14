@@ -25,6 +25,7 @@
 #include "iceberg_logging.hpp"
 #include "catalog/rest/api/table_update.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
+#include "rest_catalog/objects/list.hpp"
 
 namespace duckdb {
 
@@ -51,7 +52,7 @@ static void AddExplicitNullSnapshotIds(yyjson_mut_doc *doc, yyjson_mut_val *root
 	D_ASSERT(requirements_array);
 	for (idx_t i = 0; i < table.requirements.size(); i++) {
 		auto &requirement = table.requirements[i];
-		if (!requirement.has_assert_ref_snapshot_id || requirement.assert_ref_snapshot_id.has_snapshot_id) {
+		if (!requirement.assert_ref_snapshot_id || requirement.assert_ref_snapshot_id->snapshot_id) {
 			continue;
 		}
 		auto requirement_json = yyjson_mut_arr_get(requirements_array, i);
@@ -110,23 +111,21 @@ static string ConstructTableUpdateJSON(rest_api_objects::CommitTableRequest &tab
 
 static rest_api_objects::TableRequirement CreateAssertRefSnapshotIdRequirement(const IcebergSnapshot &old_snapshot) {
 	rest_api_objects::TableRequirement req;
-	req.has_assert_ref_snapshot_id = true;
+	req.assert_ref_snapshot_id = rest_api_objects::AssertRefSnapshotId();
 
-	auto &res = req.assert_ref_snapshot_id;
+	auto &res = *req.assert_ref_snapshot_id;
 	res.ref = "main";
 	res.snapshot_id = old_snapshot.snapshot_id;
-	res.has_snapshot_id = true;
 	res.type.value = "assert-ref-snapshot-id";
 	return req;
 }
 
 static rest_api_objects::TableRequirement CreateAssertNoSnapshotRequirement() {
 	rest_api_objects::TableRequirement req;
-	req.has_assert_ref_snapshot_id = true;
+	req.assert_ref_snapshot_id = rest_api_objects::AssertRefSnapshotId();
 
-	auto &res = req.assert_ref_snapshot_id;
+	auto &res = *req.assert_ref_snapshot_id;
 	res.ref = "main";
-	res.has_snapshot_id = false;
 	res.type.value = "assert-ref-snapshot-id";
 	return req;
 }
@@ -141,8 +140,8 @@ void IcebergTransaction::DropSecrets(ClientContext &context) {
 static rest_api_objects::TableUpdate CreateSetSnapshotRefUpdate(int64_t snapshot_id) {
 	rest_api_objects::TableUpdate table_update;
 
-	table_update.has_set_snapshot_ref_update = true;
-	auto &update = table_update.set_snapshot_ref_update;
+	table_update.set_snapshot_ref_update = rest_api_objects::SetSnapshotRefUpdate();
+	auto &update = *table_update.set_snapshot_ref_update;
 	update.base_update.action = "set-snapshot-ref";
 
 	update.ref_name = "main";
@@ -176,9 +175,9 @@ TableTransactionInfo IcebergTransaction::GetTransactionRequest(IcebergTransactio
 		IcebergCommitState commit_state(table_info, context);
 		auto &table_change = commit_state.table_change;
 		auto &schema = table_info.schema.Cast<IcebergSchemaEntry>();
-		table_change.identifier._namespace.value = schema.namespace_items;
-		table_change.identifier.name = table_info.name;
-		table_change.has_identifier = true;
+		table_change.identifier = rest_api_objects::TableIdentifier();
+		table_change.identifier->_namespace.value = schema.namespace_items;
+		table_change.identifier->name = table_info.name;
 
 		auto &metadata = commit_state.table_info.table_metadata;
 		auto current_snapshot = metadata.GetLatestSnapshot();
@@ -329,10 +328,10 @@ void IcebergTransaction::DoTableUpdates(IcebergTransactionAlterUpdate &alter_upd
 		// each table change will make a separate request
 		for (auto &it : transaction_info.table_requests) {
 			auto &table_change = transaction.table_changes[it.second];
-			D_ASSERT(table_change.has_identifier);
+			D_ASSERT(table_change.identifier);
+			auto &identifier = *table_change.identifier;
 			auto transaction_json = ConstructTableUpdateJSON(table_change);
-			IRCAPI::CommitTableUpdate(context, catalog, table_change.identifier._namespace.value,
-			                          table_change.identifier.name, transaction_json);
+			IRCAPI::CommitTableUpdate(context, catalog, identifier._namespace.value, identifier.name, transaction_json);
 			alter_update.committed_tables.insert(it.first);
 		}
 	}
@@ -397,7 +396,7 @@ void IcebergTransaction::DoSchemaCreates(ClientContext &context) {
 
 		rest_api_objects::CreateNamespaceRequest request;
 		request._namespace.value = namespace_identifiers;
-		request.has_properties = true;
+		request.properties = case_insensitive_map_t<string>();
 		auto create_body = RESTObjectToJSONString(request);
 
 		IRCAPI::CommitNamespaceCreate(context, ic_catalog, create_body);
@@ -427,10 +426,9 @@ void IcebergTransaction::DoSchemaPropertyUpdates(ClientContext &context) {
 		auto namespace_identifiers = IRCAPI::ParseSchemaName(schema_name_no_catalog);
 
 		rest_api_objects::UpdateNamespacePropertiesRequest request;
-		request.removals.assign(schema_property_updates.removals.begin(), schema_property_updates.removals.end());
-		request.has_removals = true;
+		request.removals = vector<string>();
+		request.removals->assign(schema_property_updates.removals.begin(), schema_property_updates.removals.end());
 		request.updates = schema_property_updates.updates;
-		request.has_updates = true;
 		auto create_body = RESTObjectToJSONString(request);
 
 		IRCAPI::CommitNamespacePropertiesUpdate(context, ic_catalog, create_body, namespace_identifiers);

@@ -106,26 +106,26 @@ Snapshot Snapshot::Copy() const {
 	res.timestamp_ms = timestamp_ms;
 	res.manifest_list = manifest_list;
 	res.summary = summary.Copy();
-	if (has_parent_snapshot_id) {
-		res.parent_snapshot_id = parent_snapshot_id;
+	if (parent_snapshot_id.has_value()) {
+		res.parent_snapshot_id.emplace();
+		(*res.parent_snapshot_id) = (*parent_snapshot_id);
 	}
-	res.has_parent_snapshot_id = has_parent_snapshot_id;
-	if (has_sequence_number) {
-		res.sequence_number = sequence_number;
+	if (sequence_number.has_value()) {
+		res.sequence_number.emplace();
+		(*res.sequence_number) = (*sequence_number);
 	}
-	res.has_sequence_number = has_sequence_number;
-	if (has_first_row_id) {
-		res.first_row_id = first_row_id;
+	if (first_row_id.has_value()) {
+		res.first_row_id.emplace();
+		(*res.first_row_id) = (*first_row_id);
 	}
-	res.has_first_row_id = has_first_row_id;
-	if (has_added_rows) {
-		res.added_rows = added_rows;
+	if (added_rows.has_value()) {
+		res.added_rows.emplace();
+		(*res.added_rows) = (*added_rows);
 	}
-	res.has_added_rows = has_added_rows;
-	if (has_schema_id) {
-		res.schema_id = schema_id;
+	if (schema_id.has_value()) {
+		res.schema_id.emplace();
+		(*res.schema_id) = (*schema_id);
 	}
-	res.has_schema_id = has_schema_id;
 	return res;
 }
 
@@ -178,64 +178,70 @@ string Snapshot::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto parent_snapshot_id_val = yyjson_obj_get(obj, "parent-snapshot-id");
-	if (parent_snapshot_id_val && !yyjson_is_null(parent_snapshot_id_val)) {
-		has_parent_snapshot_id = true;
+	if (parent_snapshot_id_val) {
+		int64_t parent_snapshot_id_tmp;
 		if (yyjson_is_sint(parent_snapshot_id_val)) {
-			parent_snapshot_id = yyjson_get_sint(parent_snapshot_id_val);
+			parent_snapshot_id_tmp = yyjson_get_sint(parent_snapshot_id_val);
 		} else if (yyjson_is_uint(parent_snapshot_id_val)) {
-			parent_snapshot_id = yyjson_get_uint(parent_snapshot_id_val);
+			parent_snapshot_id_tmp = yyjson_get_uint(parent_snapshot_id_val);
 		} else {
 			return StringUtil::Format(
-			    "Snapshot property 'parent_snapshot_id' is not of type 'integer', found '%s' instead",
+			    "Snapshot property 'parent_snapshot_id_tmp' is not of type 'integer', found '%s' instead",
 			    yyjson_get_type_desc(parent_snapshot_id_val));
 		}
+		parent_snapshot_id = std::move(parent_snapshot_id_tmp);
 	}
 	auto sequence_number_val = yyjson_obj_get(obj, "sequence-number");
-	if (sequence_number_val && !yyjson_is_null(sequence_number_val)) {
-		has_sequence_number = true;
+	if (sequence_number_val) {
+		int64_t sequence_number_tmp;
 		if (yyjson_is_sint(sequence_number_val)) {
-			sequence_number = yyjson_get_sint(sequence_number_val);
+			sequence_number_tmp = yyjson_get_sint(sequence_number_val);
 		} else if (yyjson_is_uint(sequence_number_val)) {
-			sequence_number = yyjson_get_uint(sequence_number_val);
+			sequence_number_tmp = yyjson_get_uint(sequence_number_val);
 		} else {
 			return StringUtil::Format(
-			    "Snapshot property 'sequence_number' is not of type 'integer', found '%s' instead",
+			    "Snapshot property 'sequence_number_tmp' is not of type 'integer', found '%s' instead",
 			    yyjson_get_type_desc(sequence_number_val));
 		}
+		sequence_number = std::move(sequence_number_tmp);
 	}
 	auto first_row_id_val = yyjson_obj_get(obj, "first-row-id");
-	if (first_row_id_val && !yyjson_is_null(first_row_id_val)) {
-		has_first_row_id = true;
+	if (first_row_id_val) {
+		int64_t first_row_id_tmp;
 		if (yyjson_is_sint(first_row_id_val)) {
-			first_row_id = yyjson_get_sint(first_row_id_val);
+			first_row_id_tmp = yyjson_get_sint(first_row_id_val);
 		} else if (yyjson_is_uint(first_row_id_val)) {
-			first_row_id = yyjson_get_uint(first_row_id_val);
+			first_row_id_tmp = yyjson_get_uint(first_row_id_val);
 		} else {
-			return StringUtil::Format("Snapshot property 'first_row_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(first_row_id_val));
+			return StringUtil::Format(
+			    "Snapshot property 'first_row_id_tmp' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(first_row_id_val));
 		}
+		first_row_id = std::move(first_row_id_tmp);
 	}
 	auto added_rows_val = yyjson_obj_get(obj, "added-rows");
-	if (added_rows_val && !yyjson_is_null(added_rows_val)) {
-		has_added_rows = true;
+	if (added_rows_val) {
+		int64_t added_rows_tmp;
 		if (yyjson_is_sint(added_rows_val)) {
-			added_rows = yyjson_get_sint(added_rows_val);
+			added_rows_tmp = yyjson_get_sint(added_rows_val);
 		} else if (yyjson_is_uint(added_rows_val)) {
-			added_rows = yyjson_get_uint(added_rows_val);
+			added_rows_tmp = yyjson_get_uint(added_rows_val);
 		} else {
-			return StringUtil::Format("Snapshot property 'added_rows' is not of type 'integer', found '%s' instead",
+			return StringUtil::Format("Snapshot property 'added_rows_tmp' is not of type 'integer', found '%s' instead",
 			                          yyjson_get_type_desc(added_rows_val));
 		}
+		added_rows = std::move(added_rows_tmp);
 	}
 	auto schema_id_val = yyjson_obj_get(obj, "schema-id");
-	if (schema_id_val && !yyjson_is_null(schema_id_val)) {
-		has_schema_id = true;
+	if (schema_id_val) {
+		int32_t schema_id_tmp;
 		if (yyjson_is_int(schema_id_val)) {
-			schema_id = yyjson_get_int(schema_id_val);
+			schema_id_tmp = yyjson_get_int(schema_id_val);
 		} else {
-			return StringUtil::Format("Snapshot property 'schema_id' is not of type 'integer', found '%s' instead",
+			return StringUtil::Format("Snapshot property 'schema_id_tmp' is not of type 'integer', found '%s' instead",
 			                          yyjson_get_type_desc(schema_id_val));
 		}
+		schema_id = std::move(schema_id_tmp);
 	}
 	return "";
 }
@@ -259,28 +265,33 @@ void Snapshot::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
 	yyjson_mut_obj_add_val(doc, obj, "summary", summary_val);
 
 	// Serialize: parent-snapshot-id
-	if (has_parent_snapshot_id) {
-		yyjson_mut_obj_add_sint(doc, obj, "parent-snapshot-id", parent_snapshot_id);
+	if (parent_snapshot_id.has_value()) {
+		auto &parent_snapshot_id_value = *parent_snapshot_id;
+		yyjson_mut_obj_add_sint(doc, obj, "parent-snapshot-id", parent_snapshot_id_value);
 	}
 
 	// Serialize: sequence-number
-	if (has_sequence_number) {
-		yyjson_mut_obj_add_sint(doc, obj, "sequence-number", sequence_number);
+	if (sequence_number.has_value()) {
+		auto &sequence_number_value = *sequence_number;
+		yyjson_mut_obj_add_sint(doc, obj, "sequence-number", sequence_number_value);
 	}
 
 	// Serialize: first-row-id
-	if (has_first_row_id) {
-		yyjson_mut_obj_add_sint(doc, obj, "first-row-id", first_row_id);
+	if (first_row_id.has_value()) {
+		auto &first_row_id_value = *first_row_id;
+		yyjson_mut_obj_add_sint(doc, obj, "first-row-id", first_row_id_value);
 	}
 
 	// Serialize: added-rows
-	if (has_added_rows) {
-		yyjson_mut_obj_add_sint(doc, obj, "added-rows", added_rows);
+	if (added_rows.has_value()) {
+		auto &added_rows_value = *added_rows;
+		yyjson_mut_obj_add_sint(doc, obj, "added-rows", added_rows_value);
 	}
 
 	// Serialize: schema-id
-	if (has_schema_id) {
-		yyjson_mut_obj_add_int(doc, obj, "schema-id", schema_id);
+	if (schema_id.has_value()) {
+		auto &schema_id_value = *schema_id;
+		yyjson_mut_obj_add_int(doc, obj, "schema-id", schema_id_value);
 	}
 }
 

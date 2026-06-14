@@ -28,28 +28,28 @@ CreateTableRequest CreateTableRequest::Copy() const {
 	CreateTableRequest res;
 	res.name = name;
 	res.schema = schema.Copy();
-	if (has_location) {
-		res.location = location;
+	if (location.has_value()) {
+		res.location.emplace();
+		(*res.location) = (*location);
 	}
-	res.has_location = has_location;
-	if (has_partition_spec) {
-		res.partition_spec = partition_spec.Copy();
+	if (partition_spec.has_value()) {
+		res.partition_spec.emplace();
+		(*res.partition_spec) = (*partition_spec).Copy();
 	}
-	res.has_partition_spec = has_partition_spec;
-	if (has_write_order) {
-		res.write_order = write_order.Copy();
+	if (write_order.has_value()) {
+		res.write_order.emplace();
+		(*res.write_order) = (*write_order).Copy();
 	}
-	res.has_write_order = has_write_order;
-	if (has_stage_create) {
-		res.stage_create = stage_create;
+	if (stage_create.has_value()) {
+		res.stage_create.emplace();
+		(*res.stage_create) = (*stage_create);
 	}
-	res.has_stage_create = has_stage_create;
-	if (has_properties) {
-		for (auto &entry : properties) {
-			res.properties.emplace(entry.first, entry.second);
+	if (properties.has_value()) {
+		res.properties.emplace();
+		for (auto &entry : (*properties)) {
+			(*res.properties).emplace(entry.first, entry.second);
 		}
 	}
-	res.has_properties = has_properties;
 	return res;
 }
 
@@ -76,46 +76,50 @@ string CreateTableRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto location_val = yyjson_obj_get(obj, "location");
-	if (location_val && !yyjson_is_null(location_val)) {
-		has_location = true;
+	if (location_val) {
+		string location_tmp;
 		if (yyjson_is_str(location_val)) {
-			location = yyjson_get_str(location_val);
+			location_tmp = yyjson_get_str(location_val);
 		} else {
 			return StringUtil::Format(
-			    "CreateTableRequest property 'location' is not of type 'string', found '%s' instead",
+			    "CreateTableRequest property 'location_tmp' is not of type 'string', found '%s' instead",
 			    yyjson_get_type_desc(location_val));
 		}
+		location = std::move(location_tmp);
 	}
 	auto partition_spec_val = yyjson_obj_get(obj, "partition-spec");
-	if (partition_spec_val && !yyjson_is_null(partition_spec_val)) {
-		has_partition_spec = true;
-		error = partition_spec.TryFromJSON(partition_spec_val);
+	if (partition_spec_val) {
+		PartitionSpec partition_spec_tmp;
+		error = partition_spec_tmp.TryFromJSON(partition_spec_val);
 		if (!error.empty()) {
 			return error;
 		}
+		partition_spec = std::move(partition_spec_tmp);
 	}
 	auto write_order_val = yyjson_obj_get(obj, "write-order");
-	if (write_order_val && !yyjson_is_null(write_order_val)) {
-		has_write_order = true;
-		error = write_order.TryFromJSON(write_order_val);
+	if (write_order_val) {
+		SortOrder write_order_tmp;
+		error = write_order_tmp.TryFromJSON(write_order_val);
 		if (!error.empty()) {
 			return error;
 		}
+		write_order = std::move(write_order_tmp);
 	}
 	auto stage_create_val = yyjson_obj_get(obj, "stage-create");
-	if (stage_create_val && !yyjson_is_null(stage_create_val)) {
-		has_stage_create = true;
+	if (stage_create_val) {
+		bool stage_create_tmp;
 		if (yyjson_is_bool(stage_create_val)) {
-			stage_create = yyjson_get_bool(stage_create_val);
+			stage_create_tmp = yyjson_get_bool(stage_create_val);
 		} else {
 			return StringUtil::Format(
-			    "CreateTableRequest property 'stage_create' is not of type 'boolean', found '%s' instead",
+			    "CreateTableRequest property 'stage_create_tmp' is not of type 'boolean', found '%s' instead",
 			    yyjson_get_type_desc(stage_create_val));
 		}
+		stage_create = std::move(stage_create_tmp);
 	}
 	auto properties_val = yyjson_obj_get(obj, "properties");
-	if (properties_val && !yyjson_is_null(properties_val)) {
-		has_properties = true;
+	if (properties_val) {
+		case_insensitive_map_t<string> properties_tmp;
 		if (yyjson_is_obj(properties_val)) {
 			size_t idx, max;
 			yyjson_val *key, *val;
@@ -129,11 +133,12 @@ string CreateTableRequest::TryFromJSON(yyjson_val *obj) {
 					    "CreateTableRequest property 'tmp' is not of type 'string', found '%s' instead",
 					    yyjson_get_type_desc(val));
 				}
-				properties.emplace(key_str, std::move(tmp));
+				properties_tmp.emplace(key_str, std::move(tmp));
 			}
 		} else {
-			return "CreateTableRequest property 'properties' is not of type 'object'";
+			return "CreateTableRequest property 'properties_tmp' is not of type 'object'";
 		}
+		properties = std::move(properties_tmp);
 	}
 	return "";
 }
@@ -151,37 +156,42 @@ void CreateTableRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) 
 	yyjson_mut_obj_add_val(doc, obj, "schema", schema_val);
 
 	// Serialize: location
-	if (has_location) {
-		yyjson_mut_obj_add_strcpy(doc, obj, "location", location.c_str());
+	if (location.has_value()) {
+		auto &location_value = *location;
+		yyjson_mut_obj_add_strcpy(doc, obj, "location", location_value.c_str());
 	}
 
 	// Serialize: partition-spec
-	if (has_partition_spec) {
-		yyjson_mut_val *partition_spec_val = partition_spec.ToJSON(doc);
-		yyjson_mut_obj_add_val(doc, obj, "partition-spec", partition_spec_val);
+	if (partition_spec.has_value()) {
+		auto &partition_spec_value = *partition_spec;
+		yyjson_mut_val *partition_spec_value_val = partition_spec_value.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "partition-spec", partition_spec_value_val);
 	}
 
 	// Serialize: write-order
-	if (has_write_order) {
-		yyjson_mut_val *write_order_val = write_order.ToJSON(doc);
-		yyjson_mut_obj_add_val(doc, obj, "write-order", write_order_val);
+	if (write_order.has_value()) {
+		auto &write_order_value = *write_order;
+		yyjson_mut_val *write_order_value_val = write_order_value.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "write-order", write_order_value_val);
 	}
 
 	// Serialize: stage-create
-	if (has_stage_create) {
-		yyjson_mut_obj_add_bool(doc, obj, "stage-create", stage_create);
+	if (stage_create.has_value()) {
+		auto &stage_create_value = *stage_create;
+		yyjson_mut_obj_add_bool(doc, obj, "stage-create", stage_create_value);
 	}
 
 	// Serialize: properties
-	if (has_properties) {
-		yyjson_mut_val *properties_obj = yyjson_mut_obj(doc);
-		for (const auto &it : properties) {
+	if (properties.has_value()) {
+		auto &properties_value = *properties;
+		yyjson_mut_val *properties_value_obj = yyjson_mut_obj(doc);
+		for (const auto &it : properties_value) {
 			auto &key = it.first;
 			auto &value = it.second;
 			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
-			yyjson_mut_obj_add_strcpy(doc, properties_obj, key_ptr, value.c_str());
+			yyjson_mut_obj_add_strcpy(doc, properties_value_obj, key_ptr, value.c_str());
 		}
-		yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
+		yyjson_mut_obj_add_val(doc, obj, "properties", properties_value_obj);
 	}
 }
 

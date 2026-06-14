@@ -26,29 +26,33 @@ Term Term::FromJSON(yyjson_val *obj) {
 
 Term Term::Copy() const {
 	Term res;
-	if (has_reference) {
-		res.reference = reference.Copy();
+	if (reference.has_value()) {
+		res.reference.emplace();
+		(*res.reference) = (*reference).Copy();
 	}
-	res.has_reference = has_reference;
-	if (has_transform_term) {
-		res.transform_term = transform_term.Copy();
+	if (transform_term.has_value()) {
+		res.transform_term.emplace();
+		(*res.transform_term) = (*transform_term).Copy();
 	}
-	res.has_transform_term = has_transform_term;
 	return res;
 }
 
 string Term::TryFromJSON(yyjson_val *obj) {
 	string error;
 	do {
-		error = reference.TryFromJSON(obj);
+		reference.emplace();
+		error = reference->TryFromJSON(obj);
 		if (error.empty()) {
-			has_reference = true;
 			break;
+		} else {
+			reference = nullopt;
 		}
-		error = transform_term.TryFromJSON(obj);
+		transform_term.emplace();
+		error = transform_term->TryFromJSON(obj);
 		if (error.empty()) {
-			has_transform_term = true;
 			break;
+		} else {
+			transform_term = nullopt;
 		}
 		return "Term failed to parse, none of the oneOf candidates matched";
 	} while (false);
@@ -56,10 +60,10 @@ string Term::TryFromJSON(yyjson_val *obj) {
 }
 
 yyjson_mut_val *Term::ToJSON(yyjson_mut_doc *doc) const {
-	if (has_reference) {
-		return reference.ToJSON(doc);
-	} else if (has_transform_term) {
-		return transform_term.ToJSON(doc);
+	if (reference.has_value()) {
+		return reference->ToJSON(doc);
+	} else if (transform_term.has_value()) {
+		return transform_term->ToJSON(doc);
 	}
 	// No variant is active - return empty object
 	return yyjson_mut_obj(doc);

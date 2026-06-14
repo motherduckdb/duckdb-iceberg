@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -38,8 +39,7 @@ public:
 	Schema schema;
 	ViewVersion view_version;
 	case_insensitive_map_t<string> properties;
-	string location;
-	bool has_location = false;
+	optional<string> location;
 };
 
 } // namespace rest_api_objects

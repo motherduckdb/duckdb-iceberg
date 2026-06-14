@@ -32,10 +32,10 @@ CreateViewRequest CreateViewRequest::Copy() const {
 	for (auto &entry : properties) {
 		res.properties.emplace(entry.first, entry.second);
 	}
-	if (has_location) {
-		res.location = location;
+	if (location.has_value()) {
+		res.location.emplace();
+		(*res.location) = (*location);
 	}
-	res.has_location = has_location;
 	return res;
 }
 
@@ -94,15 +94,16 @@ string CreateViewRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto location_val = yyjson_obj_get(obj, "location");
-	if (location_val && !yyjson_is_null(location_val)) {
-		has_location = true;
+	if (location_val) {
+		string location_tmp;
 		if (yyjson_is_str(location_val)) {
-			location = yyjson_get_str(location_val);
+			location_tmp = yyjson_get_str(location_val);
 		} else {
 			return StringUtil::Format(
-			    "CreateViewRequest property 'location' is not of type 'string', found '%s' instead",
+			    "CreateViewRequest property 'location_tmp' is not of type 'string', found '%s' instead",
 			    yyjson_get_type_desc(location_val));
 		}
+		location = std::move(location_tmp);
 	}
 	return "";
 }
@@ -134,8 +135,9 @@ void CreateViewRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) c
 	yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
 
 	// Serialize: location
-	if (has_location) {
-		yyjson_mut_obj_add_strcpy(doc, obj, "location", location.c_str());
+	if (location.has_value()) {
+		auto &location_value = *location;
+		yyjson_mut_obj_add_strcpy(doc, obj, "location", location_value.c_str());
 	}
 }
 

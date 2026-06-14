@@ -30,18 +30,18 @@ StructField StructField::Copy() const {
 	res.name = name;
 	res.type = type ? make_uniq<Type>(type->Copy()) : nullptr;
 	res.required = required;
-	if (has__doc) {
-		res._doc = _doc;
+	if (_doc.has_value()) {
+		res._doc.emplace();
+		(*res._doc) = (*_doc);
 	}
-	res.has__doc = has__doc;
-	if (has_initial_default) {
-		res.initial_default = initial_default.Copy();
+	if (initial_default.has_value()) {
+		res.initial_default.emplace();
+		(*res.initial_default) = (*initial_default).Copy();
 	}
-	res.has_initial_default = has_initial_default;
-	if (has_write_default) {
-		res.write_default = write_default.Copy();
+	if (write_default.has_value()) {
+		res.write_default.emplace();
+		(*res.write_default) = (*write_default).Copy();
 	}
-	res.has_write_default = has_write_default;
 	return res;
 }
 
@@ -91,30 +91,33 @@ string StructField::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto _doc_val = yyjson_obj_get(obj, "doc");
-	if (_doc_val && !yyjson_is_null(_doc_val)) {
-		has__doc = true;
+	if (_doc_val) {
+		string _doc_tmp;
 		if (yyjson_is_str(_doc_val)) {
-			_doc = yyjson_get_str(_doc_val);
+			_doc_tmp = yyjson_get_str(_doc_val);
 		} else {
-			return StringUtil::Format("StructField property '_doc' is not of type 'string', found '%s' instead",
+			return StringUtil::Format("StructField property '_doc_tmp' is not of type 'string', found '%s' instead",
 			                          yyjson_get_type_desc(_doc_val));
 		}
+		_doc = std::move(_doc_tmp);
 	}
 	auto initial_default_val = yyjson_obj_get(obj, "initial-default");
-	if (initial_default_val && !yyjson_is_null(initial_default_val)) {
-		has_initial_default = true;
-		error = initial_default.TryFromJSON(initial_default_val);
+	if (initial_default_val) {
+		PrimitiveTypeValue initial_default_tmp;
+		error = initial_default_tmp.TryFromJSON(initial_default_val);
 		if (!error.empty()) {
 			return error;
 		}
+		initial_default = std::move(initial_default_tmp);
 	}
 	auto write_default_val = yyjson_obj_get(obj, "write-default");
-	if (write_default_val && !yyjson_is_null(write_default_val)) {
-		has_write_default = true;
-		error = write_default.TryFromJSON(write_default_val);
+	if (write_default_val) {
+		PrimitiveTypeValue write_default_tmp;
+		error = write_default_tmp.TryFromJSON(write_default_val);
 		if (!error.empty()) {
 			return error;
 		}
+		write_default = std::move(write_default_tmp);
 	}
 	return "";
 }
@@ -138,20 +141,23 @@ void StructField::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
 	yyjson_mut_obj_add_bool(doc, obj, "required", required);
 
 	// Serialize: doc
-	if (has__doc) {
-		yyjson_mut_obj_add_strcpy(doc, obj, "doc", _doc.c_str());
+	if (_doc.has_value()) {
+		auto &_doc_value = *_doc;
+		yyjson_mut_obj_add_strcpy(doc, obj, "doc", _doc_value.c_str());
 	}
 
 	// Serialize: initial-default
-	if (has_initial_default) {
-		yyjson_mut_val *initial_default_val = initial_default.ToJSON(doc);
-		yyjson_mut_obj_add_val(doc, obj, "initial-default", initial_default_val);
+	if (initial_default.has_value()) {
+		auto &initial_default_value = *initial_default;
+		yyjson_mut_val *initial_default_value_val = initial_default_value.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "initial-default", initial_default_value_val);
 	}
 
 	// Serialize: write-default
-	if (has_write_default) {
-		yyjson_mut_val *write_default_val = write_default.ToJSON(doc);
-		yyjson_mut_obj_add_val(doc, obj, "write-default", write_default_val);
+	if (write_default.has_value()) {
+		auto &write_default_value = *write_default;
+		yyjson_mut_val *write_default_value_val = write_default_value.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "write-default", write_default_value_val);
 	}
 }
 

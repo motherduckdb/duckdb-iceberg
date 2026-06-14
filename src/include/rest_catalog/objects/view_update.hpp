@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -40,22 +41,14 @@ public:
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
-	AssignUUIDUpdate assign_uuidupdate;
-	bool has_assign_uuidupdate = false;
-	UpgradeFormatVersionUpdate upgrade_format_version_update;
-	bool has_upgrade_format_version_update = false;
-	AddSchemaUpdate add_schema_update;
-	bool has_add_schema_update = false;
-	SetLocationUpdate set_location_update;
-	bool has_set_location_update = false;
-	SetPropertiesUpdate set_properties_update;
-	bool has_set_properties_update = false;
-	RemovePropertiesUpdate remove_properties_update;
-	bool has_remove_properties_update = false;
-	AddViewVersionUpdate add_view_version_update;
-	bool has_add_view_version_update = false;
-	SetCurrentViewVersionUpdate set_current_view_version_update;
-	bool has_set_current_view_version_update = false;
+	optional<AssignUUIDUpdate> assign_uuidupdate;
+	optional<UpgradeFormatVersionUpdate> upgrade_format_version_update;
+	optional<AddSchemaUpdate> add_schema_update;
+	optional<SetLocationUpdate> set_location_update;
+	optional<SetPropertiesUpdate> set_properties_update;
+	optional<RemovePropertiesUpdate> remove_properties_update;
+	optional<AddViewVersionUpdate> add_view_version_update;
+	optional<SetCurrentViewVersionUpdate> set_current_view_version_update;
 };
 
 } // namespace rest_api_objects

@@ -20,31 +20,31 @@ static string AddEscapesToBlob(const string &hexadecimal_string) {
 	return result;
 }
 
-static Value ParseDefaultForType(const LogicalType &type, rest_api_objects::PrimitiveTypeValue &default_value) {
+static Value ParseDefaultForType(const LogicalType &type, const rest_api_objects::PrimitiveTypeValue &default_value) {
 	if (type.IsNested()) {
 		throw InvalidConfigurationException("Can't parse default value for nested type (%s)", type.ToString());
 	}
 
 	switch (type.id()) {
 	case LogicalTypeId::BOOLEAN: {
-		D_ASSERT(default_value.has_boolean_type_value);
-		return Value::BOOLEAN(default_value.boolean_type_value.value);
+		D_ASSERT(default_value.boolean_type_value);
+		return Value::BOOLEAN(default_value.boolean_type_value->value);
 	}
 	case LogicalTypeId::INTEGER: {
-		D_ASSERT(default_value.has_integer_type_value);
-		return Value::INTEGER(default_value.integer_type_value.value);
+		D_ASSERT(default_value.integer_type_value);
+		return Value::INTEGER(default_value.integer_type_value->value);
 	}
 	case LogicalTypeId::BIGINT: {
-		D_ASSERT(default_value.has_long_type_value);
-		return Value::BIGINT(default_value.long_type_value.value);
+		D_ASSERT(default_value.long_type_value);
+		return Value::BIGINT(default_value.long_type_value->value);
 	}
 	case LogicalTypeId::FLOAT: {
-		D_ASSERT(default_value.has_float_type_value);
-		return Value::FLOAT(default_value.float_type_value.value);
+		D_ASSERT(default_value.float_type_value);
+		return Value::FLOAT(default_value.float_type_value->value);
 	}
 	case LogicalTypeId::DOUBLE: {
-		D_ASSERT(default_value.has_double_type_value);
-		return Value::DOUBLE(default_value.double_type_value.value);
+		D_ASSERT(default_value.double_type_value);
+		return Value::DOUBLE(default_value.double_type_value->value);
 	}
 	case LogicalTypeId::DECIMAL:
 	case LogicalTypeId::DATE:
@@ -54,12 +54,12 @@ static Value ParseDefaultForType(const LogicalType &type, rest_api_objects::Prim
 	case LogicalTypeId::TIMESTAMP_NS:
 	case LogicalTypeId::VARCHAR:
 	case LogicalTypeId::UUID: {
-		D_ASSERT(default_value.has_string_type_value);
-		return Value(default_value.string_type_value.value).DefaultCastAs(type);
+		D_ASSERT(default_value.string_type_value);
+		return Value(default_value.string_type_value->value).DefaultCastAs(type);
 	}
 	case LogicalTypeId::BLOB: {
-		D_ASSERT(default_value.has_binary_type_value);
-		return Value::BLOB(AddEscapesToBlob(default_value.binary_type_value.value));
+		D_ASSERT(default_value.binary_type_value);
+		return Value::BLOB(AddEscapesToBlob(default_value.binary_type_value->value));
 	}
 	default:
 		throw NotImplementedException("ParseDefaultForType not implemented for type: %s", type.ToString());
@@ -68,19 +68,21 @@ static Value ParseDefaultForType(const LogicalType &type, rest_api_objects::Prim
 
 unique_ptr<IcebergColumnDefinition>
 IcebergColumnDefinition::ParseType(const string &name, int32_t field_id, bool required, rest_api_objects::Type &type,
-                                   const string &doc,
-                                   optional_ptr<rest_api_objects::PrimitiveTypeValue> initial_default,
-                                   optional_ptr<rest_api_objects::PrimitiveTypeValue> write_default) {
+                                   const std::optional<string> &doc,
+                                   const std::optional<rest_api_objects::PrimitiveTypeValue> &initial_default,
+                                   const std::optional<rest_api_objects::PrimitiveTypeValue> &write_default) {
 	auto res = make_uniq<IcebergColumnDefinition>();
 	res->id = field_id;
 	res->required = required;
 	res->name = name;
-	res->doc = doc;
+	if (doc) {
+		res->doc = *doc;
+	}
 
-	if (type.has_primitive_type) {
-		res->type = ParsePrimitiveType(type.primitive_type);
-	} else if (type.has_struct_type) {
-		auto &struct_type = type.struct_type;
+	if (type.primitive_type) {
+		res->type = ParsePrimitiveType(*type.primitive_type);
+	} else if (type.struct_type) {
+		auto &struct_type = *type.struct_type;
 		child_list_t<LogicalType> struct_children;
 		for (auto &field_p : struct_type.fields) {
 			auto &field = *field_p;
@@ -89,17 +91,15 @@ IcebergColumnDefinition::ParseType(const string &name, int32_t field_id, bool re
 			res->children.push_back(std::move(child));
 		}
 		res->type = LogicalType::STRUCT(std::move(struct_children));
-	} else if (type.has_list_type) {
-		auto &list_type = type.list_type;
-		auto child = ParseType("element", list_type.element_id, list_type.element_required, *list_type.element, "",
-		                       nullptr, nullptr);
+	} else if (type.list_type) {
+		auto &list_type = *type.list_type;
+		auto child = ParseType("element", list_type.element_id, list_type.element_required, *list_type.element);
 		res->type = LogicalType::LIST(child->type);
 		res->children.push_back(std::move(child));
-	} else if (type.has_map_type) {
-		auto &map_type = type.map_type;
-		auto key = ParseType("key", map_type.key_id, true, *map_type.key, "", nullptr);
-		auto value =
-		    ParseType("value", map_type.value_id, map_type.value_required, *map_type.value, "", nullptr, nullptr);
+	} else if (type.map_type) {
+		auto &map_type = *type.map_type;
+		auto key = ParseType("key", map_type.key_id, true, *map_type.key);
+		auto value = ParseType("value", map_type.value_id, map_type.value_required, *map_type.value);
 		res->type = LogicalType::MAP(key->type, value->type);
 		res->children.push_back(std::move(key));
 		res->children.push_back(std::move(value));
@@ -204,10 +204,8 @@ LogicalType IcebergColumnDefinition::ParsePrimitiveTypeString(const string &type
 }
 
 unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::ParseStructField(rest_api_objects::StructField &field) {
-	auto field_initial_default = field.has_initial_default ? &field.initial_default : nullptr;
-	auto field_write_default = field.has_write_default ? &field.write_default : nullptr;
-	return ParseType(field.name, field.id, field.required, *field.type, field._doc, field_initial_default,
-	                 field_write_default);
+	return ParseType(field.name, field.id, field.required, *field.type, field._doc, field.initial_default,
+	                 field.write_default);
 }
 
 vector<unique_ptr<IcebergColumnDefinition>>::const_iterator

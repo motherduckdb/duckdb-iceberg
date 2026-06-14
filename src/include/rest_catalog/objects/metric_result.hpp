@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -34,10 +35,8 @@ public:
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
-	CounterResult counter_result;
-	bool has_counter_result = false;
-	TimerResult timer_result;
-	bool has_timer_result = false;
+	optional<CounterResult> counter_result;
+	optional<TimerResult> timer_result;
 };
 
 } // namespace rest_api_objects

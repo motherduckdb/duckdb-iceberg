@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -37,8 +38,7 @@ public:
 public:
 	vector<TableRequirement> requirements;
 	vector<TableUpdate> updates;
-	TableIdentifier identifier;
-	bool has_identifier = false;
+	optional<TableIdentifier> identifier;
 };
 
 } // namespace rest_api_objects

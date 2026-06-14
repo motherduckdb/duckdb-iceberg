@@ -29,13 +29,13 @@ CompletedPlanningResult::Object5 CompletedPlanningResult::Object5::FromJSON(yyjs
 CompletedPlanningResult::Object5 CompletedPlanningResult::Object5::Copy() const {
 	Object5 res;
 	res.status = status.Copy();
-	if (has_storage_credentials) {
-		res.storage_credentials.reserve(storage_credentials.size());
-		for (auto &item : storage_credentials) {
-			res.storage_credentials.emplace_back(item.Copy());
+	if (storage_credentials.has_value()) {
+		res.storage_credentials.emplace();
+		(*res.storage_credentials).reserve((*storage_credentials).size());
+		for (auto &item : (*storage_credentials)) {
+			(*res.storage_credentials).emplace_back(item.Copy());
 		}
 	}
-	res.has_storage_credentials = has_storage_credentials;
 	return res;
 }
 
@@ -51,8 +51,8 @@ string CompletedPlanningResult::Object5::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto storage_credentials_val = yyjson_obj_get(obj, "storage-credentials");
-	if (storage_credentials_val && !yyjson_is_null(storage_credentials_val)) {
-		has_storage_credentials = true;
+	if (storage_credentials_val) {
+		vector<StorageCredential> storage_credentials_tmp;
 		if (yyjson_is_arr(storage_credentials_val)) {
 			size_t idx, max;
 			yyjson_val *val;
@@ -62,13 +62,14 @@ string CompletedPlanningResult::Object5::TryFromJSON(yyjson_val *obj) {
 				if (!error.empty()) {
 					return error;
 				}
-				storage_credentials.emplace_back(std::move(tmp));
+				storage_credentials_tmp.emplace_back(std::move(tmp));
 			}
 		} else {
 			return StringUtil::Format(
-			    "Object5 property 'storage_credentials' is not of type 'array', found '%s' instead",
+			    "Object5 property 'storage_credentials_tmp' is not of type 'array', found '%s' instead",
 			    yyjson_get_type_desc(storage_credentials_val));
 		}
+		storage_credentials = std::move(storage_credentials_tmp);
 	}
 	return "";
 }
@@ -83,13 +84,14 @@ void CompletedPlanningResult::Object5::PopulateJSON(yyjson_mut_doc *doc, yyjson_
 	yyjson_mut_obj_add_val(doc, obj, "status", status_val);
 
 	// Serialize: storage-credentials
-	if (has_storage_credentials) {
-		yyjson_mut_val *storage_credentials_arr = yyjson_mut_arr(doc);
-		for (const auto &item : storage_credentials) {
+	if (storage_credentials.has_value()) {
+		auto &storage_credentials_value = *storage_credentials;
+		yyjson_mut_val *storage_credentials_value_arr = yyjson_mut_arr(doc);
+		for (const auto &item : storage_credentials_value) {
 			yyjson_mut_val *item_val = item.ToJSON(doc);
-			yyjson_mut_arr_append(storage_credentials_arr, item_val);
+			yyjson_mut_arr_append(storage_credentials_value_arr, item_val);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "storage-credentials", storage_credentials_arr);
+		yyjson_mut_obj_add_val(doc, obj, "storage-credentials", storage_credentials_value_arr);
 	}
 }
 

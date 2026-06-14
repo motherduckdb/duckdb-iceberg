@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -36,14 +37,10 @@ public:
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
-	CompletedPlanningWithIDResult completed_planning_with_idresult;
-	bool has_completed_planning_with_idresult = false;
-	FailedPlanningResult failed_planning_result;
-	bool has_failed_planning_result = false;
-	AsyncPlanningResult async_planning_result;
-	bool has_async_planning_result = false;
-	EmptyPlanningResult empty_planning_result;
-	bool has_empty_planning_result = false;
+	optional<CompletedPlanningWithIDResult> completed_planning_with_idresult;
+	optional<FailedPlanningResult> failed_planning_result;
+	optional<AsyncPlanningResult> async_planning_result;
+	optional<EmptyPlanningResult> empty_planning_result;
 };
 
 } // namespace rest_api_objects

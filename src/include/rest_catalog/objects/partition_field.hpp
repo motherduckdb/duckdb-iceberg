@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -36,8 +37,7 @@ public:
 	int32_t source_id;
 	Transform transform;
 	string name;
-	int32_t field_id;
-	bool has_field_id = false;
+	optional<int32_t> field_id;
 };
 
 } // namespace rest_api_objects

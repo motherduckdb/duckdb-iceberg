@@ -220,12 +220,11 @@ IcebergCreateTableRequest::CreateIcebergColumn(const ColumnDefinition &column_de
 	if (logical_type.IsNested()) {
 		type = IcebergTypeHelper::CreateIcebergRestType(logical_type, next_field_id);
 	} else {
-		type.has_primitive_type = true;
 		type.primitive_type = rest_api_objects::PrimitiveType();
-		type.primitive_type.value = IcebergTypeHelper::LogicalTypeToIcebergType(logical_type);
+		type.primitive_type->value = IcebergTypeHelper::LogicalTypeToIcebergType(logical_type);
 	}
-	auto iceberg_column_def =
-	    IcebergColumnDefinition::ParseType(name.GetIdentifierName(), first_id, required, type, "", nullptr);
+	auto iceberg_column_def = IcebergColumnDefinition::ParseType(name.GetIdentifierName(), first_id, required, type, "",
+	                                                             std::nullopt, std::nullopt);
 	if (column_def.HasDefaultValue()) {
 		auto &default_expr = column_def.DefaultValue();
 		auto val = default_binder.Evaluate(default_expr, logical_type);

@@ -26,29 +26,33 @@ ReportMetricsRequest ReportMetricsRequest::FromJSON(yyjson_val *obj) {
 
 ReportMetricsRequest ReportMetricsRequest::Copy() const {
 	ReportMetricsRequest res;
-	if (has_scan_report) {
-		res.scan_report = scan_report.Copy();
+	if (scan_report.has_value()) {
+		res.scan_report.emplace();
+		(*res.scan_report) = (*scan_report).Copy();
 	}
-	res.has_scan_report = has_scan_report;
-	if (has_commit_report) {
-		res.commit_report = commit_report.Copy();
+	if (commit_report.has_value()) {
+		res.commit_report.emplace();
+		(*res.commit_report) = (*commit_report).Copy();
 	}
-	res.has_commit_report = has_commit_report;
 	res.report_type = report_type;
 	return res;
 }
 
 string ReportMetricsRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
-	error = scan_report.TryFromJSON(obj);
+	scan_report.emplace();
+	error = scan_report->TryFromJSON(obj);
 	if (error.empty()) {
-		has_scan_report = true;
+	} else {
+		scan_report = nullopt;
 	}
-	error = commit_report.TryFromJSON(obj);
+	commit_report.emplace();
+	error = commit_report->TryFromJSON(obj);
 	if (error.empty()) {
-		has_commit_report = true;
+	} else {
+		commit_report = nullopt;
 	}
-	if (!has_commit_report && !has_scan_report) {
+	if (!(commit_report.has_value()) && !(scan_report.has_value())) {
 		return "ReportMetricsRequest failed to parse, none of the anyOf candidates matched";
 	}
 	auto report_type_val = yyjson_obj_get(obj, "report-type");
@@ -71,10 +75,10 @@ void ReportMetricsRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj
 		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
 
-	if (has_scan_report) {
-		scan_report.PopulateJSON(doc, obj);
-	} else if (has_commit_report) {
-		commit_report.PopulateJSON(doc, obj);
+	if (scan_report.has_value()) {
+		scan_report->PopulateJSON(doc, obj);
+	} else if (commit_report.has_value()) {
+		commit_report->PopulateJSON(doc, obj);
 	}
 
 	// Serialize: report-type

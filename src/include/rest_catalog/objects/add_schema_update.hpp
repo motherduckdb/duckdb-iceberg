@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -36,8 +37,7 @@ public:
 public:
 	BaseUpdate base_update;
 	Schema schema;
-	int32_t last_column_id;
-	bool has_last_column_id = false;
+	optional<int32_t> last_column_id;
 };
 
 } // namespace rest_api_objects

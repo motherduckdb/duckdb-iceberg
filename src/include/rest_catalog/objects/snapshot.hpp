@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -60,16 +61,11 @@ public:
 	int64_t timestamp_ms;
 	string manifest_list;
 	Object2 summary;
-	int64_t parent_snapshot_id;
-	bool has_parent_snapshot_id = false;
-	int64_t sequence_number;
-	bool has_sequence_number = false;
-	int64_t first_row_id;
-	bool has_first_row_id = false;
-	int64_t added_rows;
-	bool has_added_rows = false;
-	int32_t schema_id;
-	bool has_schema_id = false;
+	optional<int64_t> parent_snapshot_id;
+	optional<int64_t> sequence_number;
+	optional<int64_t> first_row_id;
+	optional<int64_t> added_rows;
+	optional<int32_t> schema_id;
 };
 
 } // namespace rest_api_objects

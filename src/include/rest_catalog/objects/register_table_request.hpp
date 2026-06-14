@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -34,8 +35,7 @@ public:
 public:
 	string name;
 	string metadata_location;
-	bool overwrite;
-	bool has_overwrite = false;
+	optional<bool> overwrite;
 };
 
 } // namespace rest_api_objects

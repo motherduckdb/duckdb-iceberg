@@ -27,12 +27,12 @@ CreateNamespaceRequest CreateNamespaceRequest::FromJSON(yyjson_val *obj) {
 CreateNamespaceRequest CreateNamespaceRequest::Copy() const {
 	CreateNamespaceRequest res;
 	res._namespace = _namespace.Copy();
-	if (has_properties) {
-		for (auto &entry : properties) {
-			res.properties.emplace(entry.first, entry.second);
+	if (properties.has_value()) {
+		res.properties.emplace();
+		for (auto &entry : (*properties)) {
+			(*res.properties).emplace(entry.first, entry.second);
 		}
 	}
-	res.has_properties = has_properties;
 	return res;
 }
 
@@ -48,8 +48,8 @@ string CreateNamespaceRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto properties_val = yyjson_obj_get(obj, "properties");
-	if (properties_val && !yyjson_is_null(properties_val)) {
-		has_properties = true;
+	if (properties_val) {
+		case_insensitive_map_t<string> properties_tmp;
 		if (yyjson_is_obj(properties_val)) {
 			size_t idx, max;
 			yyjson_val *key, *val;
@@ -63,11 +63,12 @@ string CreateNamespaceRequest::TryFromJSON(yyjson_val *obj) {
 					    "CreateNamespaceRequest property 'tmp' is not of type 'string', found '%s' instead",
 					    yyjson_get_type_desc(val));
 				}
-				properties.emplace(key_str, std::move(tmp));
+				properties_tmp.emplace(key_str, std::move(tmp));
 			}
 		} else {
-			return "CreateNamespaceRequest property 'properties' is not of type 'object'";
+			return "CreateNamespaceRequest property 'properties_tmp' is not of type 'object'";
 		}
+		properties = std::move(properties_tmp);
 	}
 	return "";
 }
@@ -82,15 +83,16 @@ void CreateNamespaceRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *o
 	yyjson_mut_obj_add_val(doc, obj, "namespace", _namespace_val);
 
 	// Serialize: properties
-	if (has_properties) {
-		yyjson_mut_val *properties_obj = yyjson_mut_obj(doc);
-		for (const auto &it : properties) {
+	if (properties.has_value()) {
+		auto &properties_value = *properties;
+		yyjson_mut_val *properties_value_obj = yyjson_mut_obj(doc);
+		for (const auto &it : properties_value) {
 			auto &key = it.first;
 			auto &value = it.second;
 			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
-			yyjson_mut_obj_add_strcpy(doc, properties_obj, key_ptr, value.c_str());
+			yyjson_mut_obj_add_strcpy(doc, properties_value_obj, key_ptr, value.c_str());
 		}
-		yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
+		yyjson_mut_obj_add_val(doc, obj, "properties", properties_value_obj);
 	}
 }
 

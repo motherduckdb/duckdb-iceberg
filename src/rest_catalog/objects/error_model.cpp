@@ -29,13 +29,13 @@ ErrorModel ErrorModel::Copy() const {
 	res.message = message;
 	res.type = type;
 	res.code = code;
-	if (has_stack) {
-		res.stack.reserve(stack.size());
-		for (auto &item : stack) {
-			res.stack.emplace_back(item);
+	if (stack.has_value()) {
+		res.stack.emplace();
+		(*res.stack).reserve((*stack).size());
+		for (auto &item : (*stack)) {
+			(*res.stack).emplace_back(item);
 		}
 	}
-	res.has_stack = has_stack;
 	return res;
 }
 
@@ -75,8 +75,8 @@ string ErrorModel::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto stack_val = yyjson_obj_get(obj, "stack");
-	if (stack_val && !yyjson_is_null(stack_val)) {
-		has_stack = true;
+	if (stack_val) {
+		vector<string> stack_tmp;
 		if (yyjson_is_arr(stack_val)) {
 			size_t idx, max;
 			yyjson_val *val;
@@ -88,12 +88,13 @@ string ErrorModel::TryFromJSON(yyjson_val *obj) {
 					return StringUtil::Format("ErrorModel property 'tmp' is not of type 'string', found '%s' instead",
 					                          yyjson_get_type_desc(val));
 				}
-				stack.emplace_back(std::move(tmp));
+				stack_tmp.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("ErrorModel property 'stack' is not of type 'array', found '%s' instead",
+			return StringUtil::Format("ErrorModel property 'stack_tmp' is not of type 'array', found '%s' instead",
 			                          yyjson_get_type_desc(stack_val));
 		}
+		stack = std::move(stack_tmp);
 	}
 	return "";
 }
@@ -113,13 +114,14 @@ void ErrorModel::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
 	yyjson_mut_obj_add_int(doc, obj, "code", code);
 
 	// Serialize: stack
-	if (has_stack) {
-		yyjson_mut_val *stack_arr = yyjson_mut_arr(doc);
-		for (const auto &item : stack) {
+	if (stack.has_value()) {
+		auto &stack_value = *stack;
+		yyjson_mut_val *stack_value_arr = yyjson_mut_arr(doc);
+		for (const auto &item : stack_value) {
 			yyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());
-			yyjson_mut_arr_append(stack_arr, item_val);
+			yyjson_mut_arr_append(stack_value_arr, item_val);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "stack", stack_arr);
+		yyjson_mut_obj_add_val(doc, obj, "stack", stack_value_arr);
 	}
 }
 

@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -36,8 +37,7 @@ public:
 public:
 	BaseUpdate base_update;
 	StatisticsFile statistics;
-	int64_t snapshot_id;
-	bool has_snapshot_id = false;
+	optional<int64_t> snapshot_id;
 };
 
 } // namespace rest_api_objects

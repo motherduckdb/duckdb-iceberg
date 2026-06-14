@@ -26,29 +26,33 @@ DeleteFile DeleteFile::FromJSON(yyjson_val *obj) {
 
 DeleteFile DeleteFile::Copy() const {
 	DeleteFile res;
-	if (has_position_delete_file) {
-		res.position_delete_file = position_delete_file.Copy();
+	if (position_delete_file.has_value()) {
+		res.position_delete_file.emplace();
+		(*res.position_delete_file) = (*position_delete_file).Copy();
 	}
-	res.has_position_delete_file = has_position_delete_file;
-	if (has_equality_delete_file) {
-		res.equality_delete_file = equality_delete_file.Copy();
+	if (equality_delete_file.has_value()) {
+		res.equality_delete_file.emplace();
+		(*res.equality_delete_file) = (*equality_delete_file).Copy();
 	}
-	res.has_equality_delete_file = has_equality_delete_file;
 	return res;
 }
 
 string DeleteFile::TryFromJSON(yyjson_val *obj) {
 	string error;
 	do {
-		error = position_delete_file.TryFromJSON(obj);
+		position_delete_file.emplace();
+		error = position_delete_file->TryFromJSON(obj);
 		if (error.empty()) {
-			has_position_delete_file = true;
 			break;
+		} else {
+			position_delete_file = nullopt;
 		}
-		error = equality_delete_file.TryFromJSON(obj);
+		equality_delete_file.emplace();
+		error = equality_delete_file->TryFromJSON(obj);
 		if (error.empty()) {
-			has_equality_delete_file = true;
 			break;
+		} else {
+			equality_delete_file = nullopt;
 		}
 		return "DeleteFile failed to parse, none of the oneOf candidates matched";
 	} while (false);
@@ -60,10 +64,10 @@ void DeleteFile::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
 		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
 
-	if (has_position_delete_file) {
-		position_delete_file.PopulateJSON(doc, obj);
-	} else if (has_equality_delete_file) {
-		equality_delete_file.PopulateJSON(doc, obj);
+	if (position_delete_file.has_value()) {
+		position_delete_file->PopulateJSON(doc, obj);
+	} else if (equality_delete_file.has_value()) {
+		equality_delete_file->PopulateJSON(doc, obj);
 	}
 }
 

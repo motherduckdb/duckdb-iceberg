@@ -8,11 +8,14 @@ namespace duckdb {
 
 shared_ptr<IcebergTableSchema> IcebergTableSchema::ParseSchema(const rest_api_objects::Schema &schema) {
 	auto res = make_shared_ptr<IcebergTableSchema>();
-	res->schema_id = schema.object_1.schema_id;
+	D_ASSERT(schema.object_1.schema_id);
+	res->schema_id = *schema.object_1.schema_id;
 	for (auto &field : schema.struct_type.fields) {
 		res->columns.push_back(IcebergColumnDefinition::ParseStructField(*field));
 	}
-	res->identifier_field_ids = schema.object_1.identifier_field_ids;
+	if (auto &identifier_field_ids = schema.object_1.identifier_field_ids) {
+		res->identifier_field_ids = *identifier_field_ids;
+	}
 	return res;
 }
 

@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -34,10 +35,8 @@ public:
 
 public:
 	ContentFile content_file;
-	int64_t content_offset;
-	bool has_content_offset = false;
-	int64_t content_size_in_bytes;
-	bool has_content_size_in_bytes = false;
+	optional<int64_t> content_offset;
+	optional<int64_t> content_size_in_bytes;
 };
 
 } // namespace rest_api_objects

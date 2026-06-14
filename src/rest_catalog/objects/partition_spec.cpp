@@ -30,10 +30,10 @@ PartitionSpec PartitionSpec::Copy() const {
 	for (auto &item : fields) {
 		res.fields.emplace_back(item.Copy());
 	}
-	if (has_spec_id) {
-		res.spec_id = spec_id;
+	if (spec_id.has_value()) {
+		res.spec_id.emplace();
+		(*res.spec_id) = (*spec_id);
 	}
-	res.has_spec_id = has_spec_id;
 	return res;
 }
 
@@ -60,14 +60,16 @@ string PartitionSpec::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto spec_id_val = yyjson_obj_get(obj, "spec-id");
-	if (spec_id_val && !yyjson_is_null(spec_id_val)) {
-		has_spec_id = true;
+	if (spec_id_val) {
+		int32_t spec_id_tmp;
 		if (yyjson_is_int(spec_id_val)) {
-			spec_id = yyjson_get_int(spec_id_val);
+			spec_id_tmp = yyjson_get_int(spec_id_val);
 		} else {
-			return StringUtil::Format("PartitionSpec property 'spec_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(spec_id_val));
+			return StringUtil::Format(
+			    "PartitionSpec property 'spec_id_tmp' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(spec_id_val));
 		}
+		spec_id = std::move(spec_id_tmp);
 	}
 	return "";
 }
@@ -86,8 +88,9 @@ void PartitionSpec::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const
 	yyjson_mut_obj_add_val(doc, obj, "fields", fields_arr);
 
 	// Serialize: spec-id
-	if (has_spec_id) {
-		yyjson_mut_obj_add_int(doc, obj, "spec-id", spec_id);
+	if (spec_id.has_value()) {
+		auto &spec_id_value = *spec_id;
+		yyjson_mut_obj_add_int(doc, obj, "spec-id", spec_id_value);
 	}
 }
 

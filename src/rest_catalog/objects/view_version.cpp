@@ -37,10 +37,10 @@ ViewVersion ViewVersion::Copy() const {
 		res.representations.emplace_back(item.Copy());
 	}
 	res.default_namespace = default_namespace.Copy();
-	if (has_default_catalog) {
-		res.default_catalog = default_catalog;
+	if (default_catalog.has_value()) {
+		res.default_catalog.emplace();
+		(*res.default_catalog) = (*default_catalog);
 	}
-	res.has_default_catalog = has_default_catalog;
 	return res;
 }
 
@@ -135,15 +135,16 @@ string ViewVersion::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto default_catalog_val = yyjson_obj_get(obj, "default-catalog");
-	if (default_catalog_val && !yyjson_is_null(default_catalog_val)) {
-		has_default_catalog = true;
+	if (default_catalog_val) {
+		string default_catalog_tmp;
 		if (yyjson_is_str(default_catalog_val)) {
-			default_catalog = yyjson_get_str(default_catalog_val);
+			default_catalog_tmp = yyjson_get_str(default_catalog_val);
 		} else {
 			return StringUtil::Format(
-			    "ViewVersion property 'default_catalog' is not of type 'string', found '%s' instead",
+			    "ViewVersion property 'default_catalog_tmp' is not of type 'string', found '%s' instead",
 			    yyjson_get_type_desc(default_catalog_val));
 		}
+		default_catalog = std::move(default_catalog_tmp);
 	}
 	return "";
 }
@@ -185,8 +186,9 @@ void ViewVersion::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
 	yyjson_mut_obj_add_val(doc, obj, "default-namespace", default_namespace_val);
 
 	// Serialize: default-catalog
-	if (has_default_catalog) {
-		yyjson_mut_obj_add_strcpy(doc, obj, "default-catalog", default_catalog.c_str());
+	if (default_catalog.has_value()) {
+		auto &default_catalog_value = *default_catalog;
+		yyjson_mut_obj_add_strcpy(doc, obj, "default-catalog", default_catalog_value.c_str());
 	}
 }
 

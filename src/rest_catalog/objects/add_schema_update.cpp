@@ -28,10 +28,10 @@ AddSchemaUpdate AddSchemaUpdate::Copy() const {
 	AddSchemaUpdate res;
 	res.base_update = base_update.Copy();
 	res.schema = schema.Copy();
-	if (has_last_column_id) {
-		res.last_column_id = last_column_id;
+	if (last_column_id.has_value()) {
+		res.last_column_id.emplace();
+		(*res.last_column_id) = (*last_column_id);
 	}
-	res.has_last_column_id = has_last_column_id;
 	return res;
 }
 
@@ -51,15 +51,16 @@ string AddSchemaUpdate::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto last_column_id_val = yyjson_obj_get(obj, "last-column-id");
-	if (last_column_id_val && !yyjson_is_null(last_column_id_val)) {
-		has_last_column_id = true;
+	if (last_column_id_val) {
+		int32_t last_column_id_tmp;
 		if (yyjson_is_int(last_column_id_val)) {
-			last_column_id = yyjson_get_int(last_column_id_val);
+			last_column_id_tmp = yyjson_get_int(last_column_id_val);
 		} else {
 			return StringUtil::Format(
-			    "AddSchemaUpdate property 'last_column_id' is not of type 'integer', found '%s' instead",
+			    "AddSchemaUpdate property 'last_column_id_tmp' is not of type 'integer', found '%s' instead",
 			    yyjson_get_type_desc(last_column_id_val));
 		}
+		last_column_id = std::move(last_column_id_tmp);
 	}
 	return "";
 }
@@ -77,8 +78,9 @@ void AddSchemaUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) con
 	yyjson_mut_obj_add_val(doc, obj, "schema", schema_val);
 
 	// Serialize: last-column-id
-	if (has_last_column_id) {
-		yyjson_mut_obj_add_int(doc, obj, "last-column-id", last_column_id);
+	if (last_column_id.has_value()) {
+		auto &last_column_id_value = *last_column_id;
+		yyjson_mut_obj_add_int(doc, obj, "last-column-id", last_column_id_value);
 	}
 }
 

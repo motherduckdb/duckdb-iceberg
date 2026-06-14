@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -35,8 +36,7 @@ public:
 public:
 	string metadata_location;
 	ViewMetadata metadata;
-	case_insensitive_map_t<string> config;
-	bool has_config = false;
+	optional<case_insensitive_map_t<string>> config;
 };
 
 } // namespace rest_api_objects

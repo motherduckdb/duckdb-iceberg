@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -39,12 +40,9 @@ public:
 	string name;
 	unique_ptr<Type> type;
 	bool required;
-	string _doc;
-	bool has__doc = false;
-	PrimitiveTypeValue initial_default;
-	bool has_initial_default = false;
-	PrimitiveTypeValue write_default;
-	bool has_write_default = false;
+	optional<string> _doc;
+	optional<PrimitiveTypeValue> initial_default;
+	optional<PrimitiveTypeValue> write_default;
 };
 
 } // namespace rest_api_objects

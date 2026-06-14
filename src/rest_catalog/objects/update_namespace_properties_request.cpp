@@ -26,27 +26,27 @@ UpdateNamespacePropertiesRequest UpdateNamespacePropertiesRequest::FromJSON(yyjs
 
 UpdateNamespacePropertiesRequest UpdateNamespacePropertiesRequest::Copy() const {
 	UpdateNamespacePropertiesRequest res;
-	if (has_removals) {
-		res.removals.reserve(removals.size());
-		for (auto &item : removals) {
-			res.removals.emplace_back(item);
+	if (removals.has_value()) {
+		res.removals.emplace();
+		(*res.removals).reserve((*removals).size());
+		for (auto &item : (*removals)) {
+			(*res.removals).emplace_back(item);
 		}
 	}
-	res.has_removals = has_removals;
-	if (has_updates) {
-		for (auto &entry : updates) {
-			res.updates.emplace(entry.first, entry.second);
+	if (updates.has_value()) {
+		res.updates.emplace();
+		for (auto &entry : (*updates)) {
+			(*res.updates).emplace(entry.first, entry.second);
 		}
 	}
-	res.has_updates = has_updates;
 	return res;
 }
 
 string UpdateNamespacePropertiesRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto removals_val = yyjson_obj_get(obj, "removals");
-	if (removals_val && !yyjson_is_null(removals_val)) {
-		has_removals = true;
+	if (removals_val) {
+		vector<string> removals_tmp;
 		if (yyjson_is_arr(removals_val)) {
 			size_t idx, max;
 			yyjson_val *val;
@@ -59,17 +59,18 @@ string UpdateNamespacePropertiesRequest::TryFromJSON(yyjson_val *obj) {
 					    "UpdateNamespacePropertiesRequest property 'tmp' is not of type 'string', found '%s' instead",
 					    yyjson_get_type_desc(val));
 				}
-				removals.emplace_back(std::move(tmp));
+				removals_tmp.emplace_back(std::move(tmp));
 			}
 		} else {
 			return StringUtil::Format(
-			    "UpdateNamespacePropertiesRequest property 'removals' is not of type 'array', found '%s' instead",
+			    "UpdateNamespacePropertiesRequest property 'removals_tmp' is not of type 'array', found '%s' instead",
 			    yyjson_get_type_desc(removals_val));
 		}
+		removals = std::move(removals_tmp);
 	}
 	auto updates_val = yyjson_obj_get(obj, "updates");
-	if (updates_val && !yyjson_is_null(updates_val)) {
-		has_updates = true;
+	if (updates_val) {
+		case_insensitive_map_t<string> updates_tmp;
 		if (yyjson_is_obj(updates_val)) {
 			size_t idx, max;
 			yyjson_val *key, *val;
@@ -83,11 +84,12 @@ string UpdateNamespacePropertiesRequest::TryFromJSON(yyjson_val *obj) {
 					    "UpdateNamespacePropertiesRequest property 'tmp' is not of type 'string', found '%s' instead",
 					    yyjson_get_type_desc(val));
 				}
-				updates.emplace(key_str, std::move(tmp));
+				updates_tmp.emplace(key_str, std::move(tmp));
 			}
 		} else {
-			return "UpdateNamespacePropertiesRequest property 'updates' is not of type 'object'";
+			return "UpdateNamespacePropertiesRequest property 'updates_tmp' is not of type 'object'";
 		}
+		updates = std::move(updates_tmp);
 	}
 	return "";
 }
@@ -98,25 +100,27 @@ void UpdateNamespacePropertiesRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_
 	}
 
 	// Serialize: removals
-	if (has_removals) {
-		yyjson_mut_val *removals_arr = yyjson_mut_arr(doc);
-		for (const auto &item : removals) {
+	if (removals.has_value()) {
+		auto &removals_value = *removals;
+		yyjson_mut_val *removals_value_arr = yyjson_mut_arr(doc);
+		for (const auto &item : removals_value) {
 			yyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());
-			yyjson_mut_arr_append(removals_arr, item_val);
+			yyjson_mut_arr_append(removals_value_arr, item_val);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "removals", removals_arr);
+		yyjson_mut_obj_add_val(doc, obj, "removals", removals_value_arr);
 	}
 
 	// Serialize: updates
-	if (has_updates) {
-		yyjson_mut_val *updates_obj = yyjson_mut_obj(doc);
-		for (const auto &it : updates) {
+	if (updates.has_value()) {
+		auto &updates_value = *updates;
+		yyjson_mut_val *updates_value_obj = yyjson_mut_obj(doc);
+		for (const auto &it : updates_value) {
 			auto &key = it.first;
 			auto &value = it.second;
 			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
-			yyjson_mut_obj_add_strcpy(doc, updates_obj, key_ptr, value.c_str());
+			yyjson_mut_obj_add_strcpy(doc, updates_value_obj, key_ptr, value.c_str());
 		}
-		yyjson_mut_obj_add_val(doc, obj, "updates", updates_obj);
+		yyjson_mut_obj_add_val(doc, obj, "updates", updates_value_obj);
 	}
 }
 

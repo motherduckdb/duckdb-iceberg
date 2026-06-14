@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -35,8 +36,7 @@ public:
 	string grant_type;
 	string client_id;
 	string client_secret;
-	string scope;
-	bool has_scope = false;
+	optional<string> scope;
 };
 
 } // namespace rest_api_objects

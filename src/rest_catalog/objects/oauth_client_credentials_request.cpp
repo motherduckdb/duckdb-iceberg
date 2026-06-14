@@ -29,10 +29,10 @@ OAuthClientCredentialsRequest OAuthClientCredentialsRequest::Copy() const {
 	res.grant_type = grant_type;
 	res.client_id = client_id;
 	res.client_secret = client_secret;
-	if (has_scope) {
-		res.scope = scope;
+	if (scope.has_value()) {
+		res.scope.emplace();
+		(*res.scope) = (*scope);
 	}
-	res.has_scope = has_scope;
 	return res;
 }
 
@@ -75,15 +75,16 @@ string OAuthClientCredentialsRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto scope_val = yyjson_obj_get(obj, "scope");
-	if (scope_val && !yyjson_is_null(scope_val)) {
-		has_scope = true;
+	if (scope_val) {
+		string scope_tmp;
 		if (yyjson_is_str(scope_val)) {
-			scope = yyjson_get_str(scope_val);
+			scope_tmp = yyjson_get_str(scope_val);
 		} else {
 			return StringUtil::Format(
-			    "OAuthClientCredentialsRequest property 'scope' is not of type 'string', found '%s' instead",
+			    "OAuthClientCredentialsRequest property 'scope_tmp' is not of type 'string', found '%s' instead",
 			    yyjson_get_type_desc(scope_val));
 		}
+		scope = std::move(scope_tmp);
 	}
 	return "";
 }
@@ -103,8 +104,9 @@ void OAuthClientCredentialsRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut
 	yyjson_mut_obj_add_strcpy(doc, obj, "client_secret", client_secret.c_str());
 
 	// Serialize: scope
-	if (has_scope) {
-		yyjson_mut_obj_add_strcpy(doc, obj, "scope", scope.c_str());
+	if (scope.has_value()) {
+		auto &scope_value = *scope;
+		yyjson_mut_obj_add_strcpy(doc, obj, "scope", scope_value.c_str());
 	}
 }
 

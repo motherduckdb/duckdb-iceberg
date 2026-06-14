@@ -139,26 +139,19 @@ rest_api_objects::Snapshot IcebergSnapshot::ToRESTObject(const IcebergTableMetad
 		res.summary.additional_properties[MetricsTypeToString(entry.first)] = std::to_string(entry.second);
 	}
 
-	if (!has_parent_snapshot) {
-		res.has_parent_snapshot_id = false;
-	} else {
-		res.has_parent_snapshot_id = true;
+	if (has_parent_snapshot) {
 		res.parent_snapshot_id = parent_snapshot_id;
 	}
 
 	if (has_added_rows) {
-		res.has_added_rows = true;
 		res.added_rows = added_rows;
 	}
 
-	res.has_sequence_number = true;
 	res.sequence_number = sequence_number;
 
-	res.has_schema_id = true;
 	res.schema_id = schema_id;
 
 	if (has_first_row_id) {
-		res.has_first_row_id = true;
 		res.first_row_id = first_row_id;
 	} else if (table_metadata.iceberg_version >= 3) {
 		throw InternalException("first-row-id required for V3 tables!");
@@ -174,14 +167,14 @@ IcebergSnapshot IcebergSnapshot::ParseSnapshot(const rest_api_objects::Snapshot 
 		//! SPEC: Snapshot field sequence-number must default to 0
 		ret.sequence_number = 0;
 	} else if (metadata.iceberg_version >= 2) {
-		D_ASSERT(snapshot.has_sequence_number);
-		ret.sequence_number = snapshot.sequence_number;
+		D_ASSERT(snapshot.sequence_number);
+		ret.sequence_number = *snapshot.sequence_number;
 	}
 
 	ret.snapshot_id = snapshot.snapshot_id;
 	ret.timestamp_ms = Timestamp::FromEpochMs(snapshot.timestamp_ms);
-	D_ASSERT(snapshot.has_schema_id);
-	ret.schema_id = snapshot.schema_id;
+	D_ASSERT(snapshot.schema_id);
+	ret.schema_id = *snapshot.schema_id;
 	ret.manifest_list = snapshot.manifest_list;
 	ret.metrics = MetricsFromSummary(snapshot.summary.additional_properties);
 
@@ -198,11 +191,15 @@ IcebergSnapshot IcebergSnapshot::ParseSnapshot(const rest_api_objects::Snapshot 
 		throw InvalidConfigurationException("Unknown snapshot operation type: '%s'", op);
 	}
 
-	ret.has_first_row_id = snapshot.has_first_row_id;
-	ret.first_row_id = snapshot.first_row_id;
+	if (snapshot.first_row_id) {
+		ret.first_row_id = *snapshot.first_row_id;
+		ret.has_first_row_id = true;
+	}
 
-	ret.has_added_rows = snapshot.has_added_rows;
-	ret.added_rows = snapshot.added_rows;
+	if (snapshot.added_rows) {
+		ret.added_rows = *snapshot.added_rows;
+		ret.has_added_rows = true;
+	}
 	return ret;
 }
 

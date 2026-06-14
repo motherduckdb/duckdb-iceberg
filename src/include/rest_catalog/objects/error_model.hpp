@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -35,8 +36,7 @@ public:
 	string message;
 	string type;
 	int32_t code;
-	vector<string> stack;
-	bool has_stack = false;
+	optional<vector<string>> stack;
 };
 
 } // namespace rest_api_objects

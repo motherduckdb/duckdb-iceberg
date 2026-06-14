@@ -34,10 +34,10 @@ CommitTableRequest CommitTableRequest::Copy() const {
 	for (auto &item : updates) {
 		res.updates.emplace_back(item.Copy());
 	}
-	if (has_identifier) {
-		res.identifier = identifier.Copy();
+	if (identifier.has_value()) {
+		res.identifier.emplace();
+		(*res.identifier) = (*identifier).Copy();
 	}
-	res.has_identifier = has_identifier;
 	return res;
 }
 
@@ -86,12 +86,13 @@ string CommitTableRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto identifier_val = yyjson_obj_get(obj, "identifier");
-	if (identifier_val && !yyjson_is_null(identifier_val)) {
-		has_identifier = true;
-		error = identifier.TryFromJSON(identifier_val);
+	if (identifier_val) {
+		TableIdentifier identifier_tmp;
+		error = identifier_tmp.TryFromJSON(identifier_val);
 		if (!error.empty()) {
 			return error;
 		}
+		identifier = std::move(identifier_tmp);
 	}
 	return "";
 }
@@ -118,9 +119,10 @@ void CommitTableRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) 
 	yyjson_mut_obj_add_val(doc, obj, "updates", updates_arr);
 
 	// Serialize: identifier
-	if (has_identifier) {
-		yyjson_mut_val *identifier_val = identifier.ToJSON(doc);
-		yyjson_mut_obj_add_val(doc, obj, "identifier", identifier_val);
+	if (identifier.has_value()) {
+		auto &identifier_value = *identifier;
+		yyjson_mut_val *identifier_value_val = identifier_value.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "identifier", identifier_value_val);
 	}
 }
 

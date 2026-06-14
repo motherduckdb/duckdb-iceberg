@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -34,10 +35,8 @@ public:
 public:
 	case_insensitive_map_t<string> defaults;
 	case_insensitive_map_t<string> overrides;
-	vector<string> endpoints;
-	bool has_endpoints = false;
-	string idempotency_key_lifetime;
-	bool has_idempotency_key_lifetime = false;
+	optional<vector<string>> endpoints;
+	optional<string> idempotency_key_lifetime;
 };
 
 } // namespace rest_api_objects
