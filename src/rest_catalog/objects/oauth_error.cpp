@@ -75,8 +75,10 @@ string OAuthError::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *OAuthError::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void OAuthError::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: error
 	yyjson_mut_obj_add_str(doc, obj, "error", _error.c_str());
@@ -90,7 +92,11 @@ yyjson_mut_val *OAuthError::ToJSON(yyjson_mut_doc *doc) const {
 	if (has_error_uri) {
 		yyjson_mut_obj_add_str(doc, obj, "error_uri", error_uri.c_str());
 	}
+}
 
+yyjson_mut_val *OAuthError::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

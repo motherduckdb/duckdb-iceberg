@@ -72,8 +72,10 @@ string StorageCredential::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *StorageCredential::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void StorageCredential::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: prefix
 	yyjson_mut_obj_add_str(doc, obj, "prefix", prefix.c_str());
@@ -86,7 +88,11 @@ yyjson_mut_val *StorageCredential::ToJSON(yyjson_mut_doc *doc) const {
 		yyjson_mut_obj_add_str(doc, config_obj, key.c_str(), value.c_str());
 	}
 	yyjson_mut_obj_add_val(doc, obj, "config", config_obj);
+}
 
+yyjson_mut_val *StorageCredential::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

@@ -211,9 +211,59 @@ string TableUpdate::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
+void TableUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	if (has_assign_uuidupdate) {
+		assign_uuidupdate.PopulateJSON(doc, obj);
+	} else if (has_upgrade_format_version_update) {
+		upgrade_format_version_update.PopulateJSON(doc, obj);
+	} else if (has_add_schema_update) {
+		add_schema_update.PopulateJSON(doc, obj);
+	} else if (has_set_current_schema_update) {
+		set_current_schema_update.PopulateJSON(doc, obj);
+	} else if (has_add_partition_spec_update) {
+		add_partition_spec_update.PopulateJSON(doc, obj);
+	} else if (has_set_default_spec_update) {
+		set_default_spec_update.PopulateJSON(doc, obj);
+	} else if (has_add_sort_order_update) {
+		add_sort_order_update.PopulateJSON(doc, obj);
+	} else if (has_set_default_sort_order_update) {
+		set_default_sort_order_update.PopulateJSON(doc, obj);
+	} else if (has_add_snapshot_update) {
+		add_snapshot_update.PopulateJSON(doc, obj);
+	} else if (has_set_snapshot_ref_update) {
+		set_snapshot_ref_update.PopulateJSON(doc, obj);
+	} else if (has_remove_snapshots_update) {
+		remove_snapshots_update.PopulateJSON(doc, obj);
+	} else if (has_remove_snapshot_ref_update) {
+		remove_snapshot_ref_update.PopulateJSON(doc, obj);
+	} else if (has_set_location_update) {
+		set_location_update.PopulateJSON(doc, obj);
+	} else if (has_set_properties_update) {
+		set_properties_update.PopulateJSON(doc, obj);
+	} else if (has_remove_properties_update) {
+		remove_properties_update.PopulateJSON(doc, obj);
+	} else if (has_set_statistics_update) {
+		set_statistics_update.PopulateJSON(doc, obj);
+	} else if (has_remove_statistics_update) {
+		remove_statistics_update.PopulateJSON(doc, obj);
+	} else if (has_remove_partition_specs_update) {
+		remove_partition_specs_update.PopulateJSON(doc, obj);
+	} else if (has_remove_schemas_update) {
+		remove_schemas_update.PopulateJSON(doc, obj);
+	} else if (has_add_encryption_key_update) {
+		add_encryption_key_update.PopulateJSON(doc, obj);
+	} else if (has_remove_encryption_key_update) {
+		remove_encryption_key_update.PopulateJSON(doc, obj);
+	}
+}
+
 yyjson_mut_val *TableUpdate::ToJSON(yyjson_mut_doc *doc) const {
 	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

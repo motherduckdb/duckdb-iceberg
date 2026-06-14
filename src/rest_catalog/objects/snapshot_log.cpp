@@ -64,15 +64,21 @@ string SnapshotLog::Object3::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *SnapshotLog::Object3::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void SnapshotLog::Object3::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: snapshot-id
 	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
 
 	// Serialize: timestamp-ms
 	yyjson_mut_obj_add_sint(doc, obj, "timestamp-ms", timestamp_ms);
+}
 
+yyjson_mut_val *SnapshotLog::Object3::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

@@ -277,16 +277,24 @@ class CPPClass:
         self.generate_one_of(schema)
         self.generate_any_of(schema)
 
+        inherited_properties = self.collect_all_of_property_names(schema)
+        self.validate_polymorphic_property_ownership(schema, inherited_properties)
+
         required = object_property.required
         if not required:
             required = []
-        remaining_properties = [x for x in object_property.properties if x not in required]
+        remaining_properties = [
+            x for x in object_property.properties
+            if x not in required and x not in inherited_properties
+        ]
 
         required_properties = {}
         optional_properties = {}
         for item in remaining_properties:
             optional_properties[item] = object_property.properties[item]
         for item in required:
+            if item in inherited_properties:
+                continue
             required_properties[item] = object_property.properties[item]
 
         self.generate_required_properties(self.name, required_properties)
@@ -481,6 +489,56 @@ class CPPClass:
             return []
         return ['public:'] + self.variables
 
+    def collect_property_names(self, property: Property, visited: Optional[Set[str]] = None) -> Set[str]:
+        if visited is None:
+            visited = set()
+
+        if property.type == Property.Type.SCHEMA_REFERENCE:
+            schema_property = cast(SchemaReferenceProperty, property)
+            if schema_property.ref in visited:
+                return set()
+            visited = set(visited)
+            visited.add(schema_property.ref)
+            return self.collect_property_names(self.parse_info.parsed_schemas[schema_property.ref], visited)
+
+        if property.type != Property.Type.OBJECT:
+            return set()
+
+        object_property = cast(ObjectProperty, property)
+        names = set(object_property.properties.keys())
+        for base_property in object_property.all_of:
+            names.update(self.collect_property_names(base_property, visited))
+        return names
+
+    def collect_all_of_property_names(self, property: Property) -> Set[str]:
+        if not property.all_of:
+            return set()
+
+        seen: Set[str] = set()
+        for base_property in property.all_of:
+            base_names = self.collect_property_names(base_property)
+            overlap = seen.intersection(base_names)
+            if overlap:
+                overlap_str = ', '.join(sorted(overlap))
+                print(f"Schema '{self.name}' has duplicate allOf base properties: {overlap_str}")
+                exit(1)
+            seen.update(base_names)
+        return seen
+
+    def validate_polymorphic_property_ownership(self, property: Property, inherited_properties: Set[str]) -> None:
+        local_properties = set(cast(ObjectProperty, property).properties.keys()) - inherited_properties
+
+        for composition_name, variants in (('anyOf', property.any_of), ('oneOf', property.one_of)):
+            for variant in variants:
+                variant_properties = self.collect_property_names(variant)
+                overlap = local_properties.intersection(variant_properties)
+                if overlap:
+                    overlap_str = ', '.join(sorted(overlap))
+                    print(
+                        f"Schema '{self.name}' has duplicate properties shared between local fields and {composition_name}: {overlap_str}"
+                    )
+                    exit(1)
+
     def direct_copy_expression(self, source: str, schema: Property) -> str:
         if schema.type == Property.Type.PRIMITIVE:
             return source
@@ -540,6 +598,7 @@ class CPPClass:
         res = []
         base = '::'.join(base_class) + '::' if base_class else ''
         qualified_name = f'{base}{self.name}'
+        supports_population = self.supports_json_object_population()
 
         res.append(f'{qualified_name}::{self.name}() {{}}')
         res.extend(self.write_nested_classes_source(base_class))
@@ -580,6 +639,10 @@ class CPPClass:
 
         if self.name not in SERIALIZATION_EXCLUDED:
             # Serialization methods
+            if supports_population:
+                res.extend([''])
+                res.extend(self.generate_populate_json_method(qualified_name))
+                res.extend([''])
             res.extend(self.generate_to_json_method(qualified_name))
         else:
             res.extend([
@@ -590,6 +653,7 @@ class CPPClass:
 
     def write_header(self) -> List[str]:
         res = []
+        supports_population = self.supports_json_object_population() and self.name not in SERIALIZATION_EXCLUDED
         res.extend(
             [
                 f'class {self.name} {{',
@@ -613,10 +677,14 @@ class CPPClass:
                 f'\t{self.name} Copy() const;',
                 '',
                 '\t// Serialization',
-                '\tyyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;',
-                '',
             ]
         )
+        if supports_population:
+            res.append('\tvoid PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;')
+        res.extend([
+            '\tyyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;',
+            '',
+        ])
         res.extend(self.write_variables())
         res.append('};')
         return res
@@ -998,12 +1066,191 @@ class CPPClass:
             nested_class.from_property(parsed_schema)
             self.nested_classes[item] = nested_class
 
+    def schema_supports_json_object_population(
+        self, schema: Optional[Property], visited: Optional[Set[str]] = None
+    ) -> bool:
+        if schema is None:
+            return False
+
+        if visited is None:
+            visited = set()
+
+        if schema.type == Property.Type.SCHEMA_REFERENCE:
+            schema_property = cast(SchemaReferenceProperty, schema)
+            if schema_property.ref in visited:
+                return True
+            next_visited = set(visited)
+            next_visited.add(schema_property.ref)
+            return self.schema_supports_json_object_population(
+                self.parse_info.parsed_schemas[schema_property.ref], next_visited
+            )
+
+        if schema.type != Property.Type.OBJECT:
+            return False
+
+        object_schema = cast(ObjectProperty, schema)
+        has_object_content = (
+            bool(object_schema.all_of)
+            or bool(object_schema.properties)
+            or object_schema.additional_properties is not None
+        )
+
+        if object_schema.one_of:
+            return all(self.schema_supports_json_object_population(item, visited) for item in object_schema.one_of)
+        if object_schema.any_of and not has_object_content:
+            return all(self.schema_supports_json_object_population(item, visited) for item in object_schema.any_of)
+        return True
+
+    def supports_json_object_population(self) -> bool:
+        return self.schema_supports_json_object_population(self.parse_info.parsed_schemas.get(self.name))
+
+    def class_supports_json_object_population(self, class_name: str) -> bool:
+        return class_name not in SERIALIZATION_EXCLUDED and self.schema_supports_json_object_population(
+            self.parse_info.parsed_schemas[class_name]
+        )
+
+    def _generate_json_object_merge(self, source_expr: str, temp_name: str, indent: int = 1) -> List[str]:
+        prefix = '\t' * indent
+        return [
+            f'{prefix}yyjson_mut_val *{temp_name} = {source_expr};',
+            f'{prefix}if (!yyjson_mut_is_obj({temp_name})) {{',
+            f'{prefix}\tthrow InternalException("PopulateJSON requires an object-like JSON value");',
+            f'{prefix}}}',
+            f'{prefix}{{',
+            f'{prefix}\tsize_t idx, max;',
+            f'{prefix}\tyyjson_mut_val *key, *val;',
+            f'{prefix}\tyyjson_mut_obj_foreach({temp_name}, idx, max, key, val) {{',
+            f'{prefix}\t\tyyjson_mut_obj_add(obj, key, val);',
+            f'{prefix}\t}}',
+            f'{prefix}}}',
+        ]
+
+    def generate_populate_json_method(self, qualified_name: str) -> List[str]:
+        lines = [
+            f"void {qualified_name}::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {{",
+            "\tif (!yyjson_mut_is_obj(obj)) {",
+            '\t\tthrow InternalException("PopulateJSON requires obj to be a JSON object");',
+            "\t}",
+            "",
+        ]
+
+        if self.one_of:
+            for i, variant in enumerate(self.one_of):
+                if i == 0:
+                    lines.append(f"\tif (has_{variant.name}) {{")
+                else:
+                    lines.append(f"\t}} else if (has_{variant.name}) {{")
+
+                if self.class_supports_json_object_population(variant.class_name):
+                    if variant.dereference_style == '->':
+                        lines.append(f"\t\t{variant.name}->PopulateJSON(doc, obj);")
+                    else:
+                        lines.append(f"\t\t{variant.name}.PopulateJSON(doc, obj);")
+                else:
+                    accessor = f"{variant.name}{variant.dereference_style}ToJSON(doc)"
+                    lines.extend(self._generate_json_object_merge(accessor, f"{variant.name}_obj", indent=2))
+
+            lines.extend([
+                "\t}",
+                "}",
+            ])
+            return lines
+
+        any_of_has_properties = (
+            self.all_of
+            or self.required_properties
+            or self.optional_properties
+            or (self.additional_properties and self.additional_properties.schema)
+        )
+
+        if self.any_of and not any_of_has_properties:
+            for i, variant in enumerate(self.any_of):
+                if i == 0:
+                    lines.append(f"\tif (has_{variant.name}) {{")
+                else:
+                    lines.append(f"\t}} else if (has_{variant.name}) {{")
+
+                if self.class_supports_json_object_population(variant.class_name):
+                    if variant.dereference_style == '->':
+                        lines.append(f"\t\t{variant.name}->PopulateJSON(doc, obj);")
+                    else:
+                        lines.append(f"\t\t{variant.name}.PopulateJSON(doc, obj);")
+                else:
+                    accessor = f"{variant.name}{variant.dereference_style}ToJSON(doc)"
+                    lines.extend(self._generate_json_object_merge(accessor, f"{variant.name}_obj", indent=2))
+
+            lines.extend([
+                "\t}",
+                "}",
+            ])
+            return lines
+
+        if self.any_of:
+            for i, variant in enumerate(self.any_of):
+                if i == 0:
+                    lines.append(f"\tif (has_{variant.name}) {{")
+                else:
+                    lines.append(f"\t}} else if (has_{variant.name}) {{")
+
+                if self.class_supports_json_object_population(variant.class_name):
+                    if variant.dereference_style == '->':
+                        lines.append(f"\t\t{variant.name}->PopulateJSON(doc, obj);")
+                    else:
+                        lines.append(f"\t\t{variant.name}.PopulateJSON(doc, obj);")
+                else:
+                    accessor = f"{variant.name}{variant.dereference_style}ToJSON(doc)"
+                    lines.extend(self._generate_json_object_merge(accessor, f"{variant.name}_obj", indent=2))
+
+            lines.append("\t}")
+            lines.append("")
+
+        if self.all_of:
+            for base in self.all_of:
+                if base.class_name:
+                    lines.append(f"\t// Serialize base class: {base.class_name}")
+                    if self.class_supports_json_object_population(base.class_name):
+                        lines.append(f"\t{base.name}.PopulateJSON(doc, obj);")
+                    else:
+                        lines.extend(
+                            self._generate_json_object_merge(
+                                f"{base.name}.ToJSON(doc)", f"{base.name}base_obj", indent=1
+                            )
+                        )
+                    lines.append("")
+
+        for _, prop in self.required_properties.items():
+            lines.extend(
+                self._generate_property_serialization(
+                    prop.variable_name,
+                    prop.property_name,
+                    prop.schema,
+                    required=True,
+                )
+            )
+
+        for _, prop in self.optional_properties.items():
+            lines.extend(
+                self._generate_property_serialization(
+                    prop.variable_name,
+                    prop.property_name,
+                    prop.schema,
+                    required=False,
+                )
+            )
+
+        if self.additional_properties and self.additional_properties.schema:
+            lines.extend(self._generate_additional_properties_serialization())
+
+        lines.append("}")
+        return lines
+
     # ==================== SERIALIZATION METHODS ====================
 
     def generate_to_json_method(self, qualified_name: str) -> List[str]:
         """Generate ToJSON method implementation"""
 
         root_schema = self.parse_info.parsed_schemas.get(self.name)
+        supports_population = self.supports_json_object_population()
 
         if root_schema and root_schema.type == Property.Type.PRIMITIVE:
             prim = cast(PrimitiveProperty, root_schema)
@@ -1066,25 +1313,32 @@ class CPPClass:
             ])
             return lines
 
+        if supports_population:
+            return [
+                f"yyjson_mut_val* {qualified_name}::ToJSON(yyjson_mut_doc *doc) const {{",
+                "\tyyjson_mut_val *obj = yyjson_mut_obj(doc);",
+                "\tPopulateJSON(doc, obj);",
+                "\treturn obj;",
+                "}",
+            ]
+
         lines = []
-        # Generate main ToJSON method
         lines.extend([
             f"yyjson_mut_val* {qualified_name}::ToJSON(yyjson_mut_doc *doc) const {{",
         ])
 
         if self.one_of:
-            # Generate switch/if-else based on which variant is active
             for i, variant in enumerate(self.one_of):
                 if i == 0:
                     lines.append(f"\tif (has_{variant.name}) {{")
                 else:
                     lines.append(f"\t}} else if (has_{variant.name}) {{")
-                
+
                 if variant.dereference_style == '->':
                     lines.append(f"\t\treturn {variant.name}->ToJSON(doc);")
                 else:
                     lines.append(f"\t\treturn {variant.name}.ToJSON(doc);")
-            
+
             lines.extend([
                 "\t}",
                 "\t// No variant is active - return empty object",
@@ -1093,59 +1347,54 @@ class CPPClass:
             ])
             return lines
 
-        lines.extend([
-            "\tyyjson_mut_val *obj = yyjson_mut_obj(doc);",
-            ""
-        ])
+        any_of_has_properties = (
+            self.all_of
+            or self.required_properties
+            or self.optional_properties
+            or (self.additional_properties and self.additional_properties.schema)
+        )
+        any_of_is_primitive = self.any_of and all(
+            self.parse_info.parsed_schemas[variant.class_name].type == Property.Type.PRIMITIVE
+            for variant in self.any_of
+        )
+        serialization_any_of = self.any_of
+        if any_of_is_primitive:
+            def primitive_variant_priority(variant: AnyOf) -> int:
+                schema = cast(PrimitiveProperty, self.parse_info.parsed_schemas[variant.class_name])
+                if schema.primitive_type == 'integer':
+                    return 2 if schema.format == 'int64' else 1
+                if schema.primitive_type == 'number':
+                    return 2 if schema.format == 'double' else 1
+                return 0
 
-        # Serialize allOf base classes first
-        if self.all_of:
-            for base in self.all_of:
-                if base.class_name:
-                    lines.append(f"\t// Serialize base class: {base.class_name}")
-                    lines.append(f"\tyyjson_mut_val *{base.name}base_obj = {base.name}.ToJSON(doc);")
-                    lines.extend([
-                        "\t// Merge base properties into this object",
-                        "\t{",
-                        "\t\tsize_t idx, max;",
-                        "\t\tyyjson_mut_val *key, *val;",
-                        f"\t\tyyjson_mut_obj_foreach({base.name}base_obj, idx, max, key, val) {{",
-                        "\t\t\tyyjson_mut_obj_add(obj, key, val);",
-                        "\t\t}",
-                        "\t}",
-                        ""
-                    ])
+            serialization_any_of = sorted(self.any_of, key=primitive_variant_priority, reverse=True)
 
-        # Serialize required properties
-        for prop_name, prop in self.required_properties.items():
-            lines.extend(self._generate_property_serialization(
-                prop.variable_name,
-                prop.property_name,
-                prop.schema,
-                required=True
-            ))
-        
-        # Serialize optional properties
-        for prop_name, prop in self.optional_properties.items():
-            lines.extend(self._generate_property_serialization(
-                prop.variable_name,
-                prop.property_name,
-                prop.schema,
-                required=False
-            ))
-        
-        # Serialize additional properties
-        if self.additional_properties and self.additional_properties.schema:
-            lines.extend(
-                self._generate_additional_properties_serialization()
-            )
-        
+        if self.any_of and not any_of_has_properties:
+            for i, variant in enumerate(serialization_any_of):
+                if i == 0:
+                    lines.append(f"\tif (has_{variant.name}) {{")
+                else:
+                    lines.append(f"\t}} else if (has_{variant.name}) {{")
+
+                if variant.dereference_style == '->':
+                    lines.append(f"\t\treturn {variant.name}->ToJSON(doc);")
+                else:
+                    lines.append(f"\t\treturn {variant.name}.ToJSON(doc);")
+
+            lines.extend([
+                "\t}",
+                "\t// No variant is active - return null"
+                if any_of_is_primitive
+                else "\t// No variant is active - return empty object",
+                "\treturn yyjson_mut_null(doc);" if any_of_is_primitive else "\treturn yyjson_mut_obj(doc);",
+                "}"
+            ])
+            return lines
+
         lines.extend([
-            "",
-            "\treturn obj;",
-            "}"
+            '\tthrow InternalException("ToJSON should use PopulateJSON for object-like schemas");',
+            "}",
         ])
-        
         return lines
 
     def _generate_property_serialization(

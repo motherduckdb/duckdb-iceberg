@@ -31,11 +31,11 @@ public:
 	DataFile Copy() const;
 
 	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	ContentFile content_file;
-	string content;
 	int64_t first_row_id;
 	bool has_first_row_id = false;
 	CountMap column_sizes;

@@ -73,8 +73,10 @@ string CompletedPlanningResult::Object5::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *CompletedPlanningResult::Object5::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void CompletedPlanningResult::Object5::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: status
 	yyjson_mut_val *status_val = status.ToJSON(doc);
@@ -89,7 +91,11 @@ yyjson_mut_val *CompletedPlanningResult::Object5::ToJSON(yyjson_mut_doc *doc) co
 		}
 		yyjson_mut_obj_add_val(doc, obj, "storage-credentials", storage_credentials_arr);
 	}
+}
 
+yyjson_mut_val *CompletedPlanningResult::Object5::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 
@@ -122,31 +128,21 @@ string CompletedPlanningResult::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *CompletedPlanningResult::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void CompletedPlanningResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize base class: ScanTasks
-	yyjson_mut_val *scan_tasksbase_obj = scan_tasks.ToJSON(doc);
-	// Merge base properties into this object
-	{
-		size_t idx, max;
-		yyjson_mut_val *key, *val;
-		yyjson_mut_obj_foreach(scan_tasksbase_obj, idx, max, key, val) {
-			yyjson_mut_obj_add(obj, key, val);
-		}
-	}
+	scan_tasks.PopulateJSON(doc, obj);
 
 	// Serialize base class: Object5
-	yyjson_mut_val *object_5base_obj = object_5.ToJSON(doc);
-	// Merge base properties into this object
-	{
-		size_t idx, max;
-		yyjson_mut_val *key, *val;
-		yyjson_mut_obj_foreach(object_5base_obj, idx, max, key, val) {
-			yyjson_mut_obj_add(obj, key, val);
-		}
-	}
+	object_5.PopulateJSON(doc, obj);
+}
 
+yyjson_mut_val *CompletedPlanningResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

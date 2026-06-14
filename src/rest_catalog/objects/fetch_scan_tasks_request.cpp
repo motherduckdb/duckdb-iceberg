@@ -44,13 +44,19 @@ string FetchScanTasksRequest::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *FetchScanTasksRequest::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void FetchScanTasksRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: plan-task
 	yyjson_mut_val *plan_task_val = plan_task.ToJSON(doc);
 	yyjson_mut_obj_add_val(doc, obj, "plan-task", plan_task_val);
+}
 
+yyjson_mut_val *FetchScanTasksRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

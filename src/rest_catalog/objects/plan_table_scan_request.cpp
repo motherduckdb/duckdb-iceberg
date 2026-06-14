@@ -199,8 +199,10 @@ string PlanTableScanRequest::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *PlanTableScanRequest::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void PlanTableScanRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: snapshot-id
 	if (has_snapshot_id) {
@@ -257,7 +259,11 @@ yyjson_mut_val *PlanTableScanRequest::ToJSON(yyjson_mut_doc *doc) const {
 		}
 		yyjson_mut_obj_add_val(doc, obj, "stats-fields", stats_fields_arr);
 	}
+}
 
+yyjson_mut_val *PlanTableScanRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

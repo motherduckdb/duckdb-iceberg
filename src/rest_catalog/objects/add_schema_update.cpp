@@ -28,10 +28,6 @@ AddSchemaUpdate AddSchemaUpdate::Copy() const {
 	AddSchemaUpdate res;
 	res.base_update = base_update.Copy();
 	res.schema = schema.Copy();
-	if (has_action) {
-		res.action = action;
-	}
-	res.has_action = has_action;
 	if (has_last_column_id) {
 		res.last_column_id = last_column_id;
 	}
@@ -54,16 +50,6 @@ string AddSchemaUpdate::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto action_val = yyjson_obj_get(obj, "action");
-	if (action_val && !yyjson_is_null(action_val)) {
-		has_action = true;
-		if (yyjson_is_str(action_val)) {
-			action = yyjson_get_str(action_val);
-		} else {
-			return StringUtil::Format("AddSchemaUpdate property 'action' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(action_val));
-		}
-	}
 	auto last_column_id_val = yyjson_obj_get(obj, "last-column-id");
 	if (last_column_id_val && !yyjson_is_null(last_column_id_val)) {
 		has_last_column_id = true;
@@ -78,34 +64,27 @@ string AddSchemaUpdate::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *AddSchemaUpdate::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void AddSchemaUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize base class: BaseUpdate
-	yyjson_mut_val *base_updatebase_obj = base_update.ToJSON(doc);
-	// Merge base properties into this object
-	{
-		size_t idx, max;
-		yyjson_mut_val *key, *val;
-		yyjson_mut_obj_foreach(base_updatebase_obj, idx, max, key, val) {
-			yyjson_mut_obj_add(obj, key, val);
-		}
-	}
+	base_update.PopulateJSON(doc, obj);
 
 	// Serialize: schema
 	yyjson_mut_val *schema_val = schema.ToJSON(doc);
 	yyjson_mut_obj_add_val(doc, obj, "schema", schema_val);
 
-	// Serialize: action
-	if (has_action) {
-		yyjson_mut_obj_add_str(doc, obj, "action", action.c_str());
-	}
-
 	// Serialize: last-column-id
 	if (has_last_column_id) {
 		yyjson_mut_obj_add_int(doc, obj, "last-column-id", last_column_id);
 	}
+}
 
+yyjson_mut_val *AddSchemaUpdate::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

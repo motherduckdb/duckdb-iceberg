@@ -70,8 +70,10 @@ string SortOrder::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *SortOrder::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void SortOrder::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: order-id
 	yyjson_mut_obj_add_int(doc, obj, "order-id", order_id);
@@ -83,7 +85,11 @@ yyjson_mut_val *SortOrder::ToJSON(yyjson_mut_doc *doc) const {
 		yyjson_mut_arr_append(fields_arr, item_val);
 	}
 	yyjson_mut_obj_add_val(doc, obj, "fields", fields_arr);
+}
 
+yyjson_mut_val *SortOrder::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

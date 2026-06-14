@@ -79,8 +79,10 @@ string Schema::Object1::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *Schema::Object1::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void Schema::Object1::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: schema-id
 	if (has_schema_id) {
@@ -96,7 +98,11 @@ yyjson_mut_val *Schema::Object1::ToJSON(yyjson_mut_doc *doc) const {
 		}
 		yyjson_mut_obj_add_val(doc, obj, "identifier-field-ids", identifier_field_ids_arr);
 	}
+}
 
+yyjson_mut_val *Schema::Object1::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 
@@ -129,31 +135,21 @@ string Schema::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *Schema::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void Schema::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize base class: StructType
-	yyjson_mut_val *struct_typebase_obj = struct_type.ToJSON(doc);
-	// Merge base properties into this object
-	{
-		size_t idx, max;
-		yyjson_mut_val *key, *val;
-		yyjson_mut_obj_foreach(struct_typebase_obj, idx, max, key, val) {
-			yyjson_mut_obj_add(obj, key, val);
-		}
-	}
+	struct_type.PopulateJSON(doc, obj);
 
 	// Serialize base class: Object1
-	yyjson_mut_val *object_1base_obj = object_1.ToJSON(doc);
-	// Merge base properties into this object
-	{
-		size_t idx, max;
-		yyjson_mut_val *key, *val;
-		yyjson_mut_obj_foreach(object_1base_obj, idx, max, key, val) {
-			yyjson_mut_obj_add(obj, key, val);
-		}
-	}
+	object_1.PopulateJSON(doc, obj);
+}
 
+yyjson_mut_val *Schema::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

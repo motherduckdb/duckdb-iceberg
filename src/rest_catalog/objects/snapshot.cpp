@@ -68,8 +68,10 @@ string Snapshot::Object2::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *Snapshot::Object2::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void Snapshot::Object2::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: operation
 	yyjson_mut_obj_add_str(doc, obj, "operation", operation.c_str());
@@ -80,7 +82,11 @@ yyjson_mut_val *Snapshot::Object2::ToJSON(yyjson_mut_doc *doc) const {
 		auto &value = it.second;
 		yyjson_mut_obj_add_str(doc, obj, key.c_str(), value.c_str());
 	}
+}
 
+yyjson_mut_val *Snapshot::Object2::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 
@@ -233,8 +239,10 @@ string Snapshot::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *Snapshot::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void Snapshot::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: snapshot-id
 	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
@@ -273,7 +281,11 @@ yyjson_mut_val *Snapshot::ToJSON(yyjson_mut_doc *doc) const {
 	if (has_schema_id) {
 		yyjson_mut_obj_add_int(doc, obj, "schema-id", schema_id);
 	}
+}
 
+yyjson_mut_val *Snapshot::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

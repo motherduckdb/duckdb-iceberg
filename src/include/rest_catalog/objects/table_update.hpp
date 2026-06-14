@@ -49,6 +49,7 @@ public:
 	TableUpdate Copy() const;
 
 	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:

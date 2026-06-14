@@ -55,8 +55,10 @@ string NotExpression::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *NotExpression::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void NotExpression::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: type
 	yyjson_mut_val *type_val = type.ToJSON(doc);
@@ -65,7 +67,11 @@ yyjson_mut_val *NotExpression::ToJSON(yyjson_mut_doc *doc) const {
 	// Serialize: child
 	yyjson_mut_val *child_val = child->ToJSON(doc);
 	yyjson_mut_obj_add_val(doc, obj, "child", child_val);
+}
 
+yyjson_mut_val *NotExpression::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

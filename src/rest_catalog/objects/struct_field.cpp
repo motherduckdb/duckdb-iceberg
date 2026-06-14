@@ -119,8 +119,10 @@ string StructField::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *StructField::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void StructField::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: id
 	yyjson_mut_obj_add_int(doc, obj, "id", id);
@@ -151,7 +153,11 @@ yyjson_mut_val *StructField::ToJSON(yyjson_mut_doc *doc) const {
 		yyjson_mut_val *write_default_val = write_default.ToJSON(doc);
 		yyjson_mut_obj_add_val(doc, obj, "write-default", write_default_val);
 	}
+}
 
+yyjson_mut_val *StructField::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

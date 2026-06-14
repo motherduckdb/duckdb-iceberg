@@ -29,13 +29,12 @@ public:
 	RemovePartitionStatisticsUpdate Copy() const;
 
 	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	BaseUpdate base_update;
 	int64_t snapshot_id;
-	string action;
-	bool has_action = false;
 };
 
 } // namespace rest_api_objects

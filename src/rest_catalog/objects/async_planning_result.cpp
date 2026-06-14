@@ -57,8 +57,10 @@ string AsyncPlanningResult::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *AsyncPlanningResult::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void AsyncPlanningResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: status
 	yyjson_mut_val *status_val = status.ToJSON(doc);
@@ -66,7 +68,11 @@ yyjson_mut_val *AsyncPlanningResult::ToJSON(yyjson_mut_doc *doc) const {
 
 	// Serialize: plan-id
 	yyjson_mut_obj_add_str(doc, obj, "plan-id", plan_id.c_str());
+}
 
+yyjson_mut_val *AsyncPlanningResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

@@ -73,8 +73,10 @@ string ListTablesResponse::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *ListTablesResponse::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void ListTablesResponse::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: next-page-token
 	if (has_next_page_token) {
@@ -91,7 +93,11 @@ yyjson_mut_val *ListTablesResponse::ToJSON(yyjson_mut_doc *doc) const {
 		}
 		yyjson_mut_obj_add_val(doc, obj, "identifiers", identifiers_arr);
 	}
+}
 
+yyjson_mut_val *ListTablesResponse::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

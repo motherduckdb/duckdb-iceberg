@@ -54,8 +54,10 @@ string RenameTableRequest::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *RenameTableRequest::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void RenameTableRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: source
 	yyjson_mut_val *source_val = source.ToJSON(doc);
@@ -64,7 +66,11 @@ yyjson_mut_val *RenameTableRequest::ToJSON(yyjson_mut_doc *doc) const {
 	// Serialize: destination
 	yyjson_mut_val *destination_val = destination.ToJSON(doc);
 	yyjson_mut_obj_add_val(doc, obj, "destination", destination_val);
+}
 
+yyjson_mut_val *RenameTableRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

@@ -117,8 +117,10 @@ string StatisticsFile::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *StatisticsFile::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void StatisticsFile::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: snapshot-id
 	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
@@ -139,7 +141,11 @@ yyjson_mut_val *StatisticsFile::ToJSON(yyjson_mut_doc *doc) const {
 		yyjson_mut_arr_append(blob_metadata_arr, item_val);
 	}
 	yyjson_mut_obj_add_val(doc, obj, "blob-metadata", blob_metadata_arr);
+}
 
+yyjson_mut_val *StatisticsFile::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

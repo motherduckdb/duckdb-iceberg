@@ -66,12 +66,24 @@ string ReportMetricsRequest::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *ReportMetricsRequest::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void ReportMetricsRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	if (has_scan_report) {
+		scan_report.PopulateJSON(doc, obj);
+	} else if (has_commit_report) {
+		commit_report.PopulateJSON(doc, obj);
+	}
 
 	// Serialize: report-type
 	yyjson_mut_obj_add_str(doc, obj, "report-type", report_type.c_str());
+}
 
+yyjson_mut_val *ReportMetricsRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

@@ -29,11 +29,11 @@ public:
 	EqualityDeleteFile Copy() const;
 
 	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	ContentFile content_file;
-	string content;
 	vector<int32_t> equality_ids;
 	bool has_equality_ids = false;
 };

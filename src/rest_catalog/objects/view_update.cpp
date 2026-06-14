@@ -103,9 +103,33 @@ string ViewUpdate::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
+void ViewUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	if (has_assign_uuidupdate) {
+		assign_uuidupdate.PopulateJSON(doc, obj);
+	} else if (has_upgrade_format_version_update) {
+		upgrade_format_version_update.PopulateJSON(doc, obj);
+	} else if (has_add_schema_update) {
+		add_schema_update.PopulateJSON(doc, obj);
+	} else if (has_set_location_update) {
+		set_location_update.PopulateJSON(doc, obj);
+	} else if (has_set_properties_update) {
+		set_properties_update.PopulateJSON(doc, obj);
+	} else if (has_remove_properties_update) {
+		remove_properties_update.PopulateJSON(doc, obj);
+	} else if (has_add_view_version_update) {
+		add_view_version_update.PopulateJSON(doc, obj);
+	} else if (has_set_current_view_version_update) {
+		set_current_view_version_update.PopulateJSON(doc, obj);
+	}
+}
+
 yyjson_mut_val *ViewUpdate::ToJSON(yyjson_mut_doc *doc) const {
 	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

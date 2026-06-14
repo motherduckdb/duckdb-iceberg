@@ -546,7 +546,7 @@ yyjson_mut_val *IcebergTableMetadata::SnapshotsToJSON(yyjson_mut_doc *doc) const
 	for (auto &it : snapshots) {
 		auto &snapshot = it.second;
 		auto snapshot_rest_object = snapshot.ToRESTObject(*this);
-		auto snapshot_obj = IcebergSnapshot::ToJSON(snapshot_rest_object, doc);
+		auto snapshot_obj = snapshot_rest_object.ToJSON(doc);
 		yyjson_mut_arr_add_val(snapshots_array, snapshot_obj);
 	}
 	return snapshots_array;

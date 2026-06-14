@@ -30,13 +30,12 @@ public:
 	AddSchemaUpdate Copy() const;
 
 	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	BaseUpdate base_update;
 	Schema schema;
-	string action;
-	bool has_action = false;
 	int32_t last_column_id;
 	bool has_last_column_id = false;
 };

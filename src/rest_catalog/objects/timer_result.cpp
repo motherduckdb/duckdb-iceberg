@@ -75,8 +75,10 @@ string TimerResult::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *TimerResult::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void TimerResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: time-unit
 	yyjson_mut_obj_add_str(doc, obj, "time-unit", time_unit.c_str());
@@ -86,7 +88,11 @@ yyjson_mut_val *TimerResult::ToJSON(yyjson_mut_doc *doc) const {
 
 	// Serialize: total-duration
 	yyjson_mut_obj_add_sint(doc, obj, "total-duration", total_duration);
+}
 
+yyjson_mut_val *TimerResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

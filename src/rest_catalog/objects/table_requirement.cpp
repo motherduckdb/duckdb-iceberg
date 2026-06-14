@@ -109,26 +109,34 @@ string TableRequirement::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *TableRequirement::ToJSON(yyjson_mut_doc *doc) const {
-	if (has_assert_create) {
-		return assert_create.ToJSON(doc);
-	} else if (has_assert_table_uuid) {
-		return assert_table_uuid.ToJSON(doc);
-	} else if (has_assert_ref_snapshot_id) {
-		return assert_ref_snapshot_id.ToJSON(doc);
-	} else if (has_assert_last_assigned_field_id) {
-		return assert_last_assigned_field_id.ToJSON(doc);
-	} else if (has_assert_current_schema_id) {
-		return assert_current_schema_id.ToJSON(doc);
-	} else if (has_assert_last_assigned_partition_id) {
-		return assert_last_assigned_partition_id.ToJSON(doc);
-	} else if (has_assert_default_spec_id) {
-		return assert_default_spec_id.ToJSON(doc);
-	} else if (has_assert_default_sort_order_id) {
-		return assert_default_sort_order_id.ToJSON(doc);
+void TableRequirement::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
-	// No variant is active - return empty object
-	return yyjson_mut_obj(doc);
+
+	if (has_assert_create) {
+		assert_create.PopulateJSON(doc, obj);
+	} else if (has_assert_table_uuid) {
+		assert_table_uuid.PopulateJSON(doc, obj);
+	} else if (has_assert_ref_snapshot_id) {
+		assert_ref_snapshot_id.PopulateJSON(doc, obj);
+	} else if (has_assert_last_assigned_field_id) {
+		assert_last_assigned_field_id.PopulateJSON(doc, obj);
+	} else if (has_assert_current_schema_id) {
+		assert_current_schema_id.PopulateJSON(doc, obj);
+	} else if (has_assert_last_assigned_partition_id) {
+		assert_last_assigned_partition_id.PopulateJSON(doc, obj);
+	} else if (has_assert_default_spec_id) {
+		assert_default_spec_id.PopulateJSON(doc, obj);
+	} else if (has_assert_default_sort_order_id) {
+		assert_default_sort_order_id.PopulateJSON(doc, obj);
+	}
+}
+
+yyjson_mut_val *TableRequirement::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

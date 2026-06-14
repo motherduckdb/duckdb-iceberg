@@ -72,8 +72,10 @@ string PartitionSpec::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *PartitionSpec::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void PartitionSpec::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: fields
 	yyjson_mut_val *fields_arr = yyjson_mut_arr(doc);
@@ -87,7 +89,11 @@ yyjson_mut_val *PartitionSpec::ToJSON(yyjson_mut_doc *doc) const {
 	if (has_spec_id) {
 		yyjson_mut_obj_add_int(doc, obj, "spec-id", spec_id);
 	}
+}
 
+yyjson_mut_val *PartitionSpec::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

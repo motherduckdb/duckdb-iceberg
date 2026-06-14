@@ -33,8 +33,7 @@ void AddSchemaUpdate::CreateUpdate(DatabaseInstance &db, ClientContext &context,
 	commit_state.table_change.updates.push_back(rest_api_objects::TableUpdate());
 	auto &update = commit_state.table_change.updates.back();
 	update.has_add_schema_update = true;
-	update.add_schema_update.has_action = true;
-	update.add_schema_update.action = "add-schema";
+	update.add_schema_update.base_update.action = "add-schema";
 
 	auto &schemas = table_info.table_metadata.GetSchemas();
 	auto it = schemas.find(schema_id);
@@ -59,8 +58,7 @@ void AssignUUIDUpdate::CreateUpdate(DatabaseInstance &db, ClientContext &context
 	commit_state.table_change.updates.push_back(rest_api_objects::TableUpdate());
 	auto &update = commit_state.table_change.updates.back();
 	update.has_assign_uuidupdate = true;
-	update.assign_uuidupdate.action = "assign-uuid";
-	update.assign_uuidupdate.has_action = true;
+	update.assign_uuidupdate.base_update.action = "assign-uuid";
 	// uuid most likely created by the rest catalog?
 	update.assign_uuidupdate.uuid = table_info.table_metadata.table_uuid;
 }
@@ -163,8 +161,7 @@ void UpgradeFormatVersion::CreateUpdate(DatabaseInstance &db, ClientContext &con
 	commit_state.table_change.updates.push_back(rest_api_objects::TableUpdate());
 	auto &req = commit_state.table_change.updates.back();
 	req.has_upgrade_format_version_update = true;
-	req.upgrade_format_version_update.action = "upgrade-format-version";
-	req.upgrade_format_version_update.has_action = true;
+	req.upgrade_format_version_update.base_update.action = "upgrade-format-version";
 	req.upgrade_format_version_update.format_version = table_info.table_metadata.iceberg_version;
 }
 
@@ -177,7 +174,7 @@ void SetCurrentSchema::CreateUpdate(DatabaseInstance &db, ClientContext &context
 	commit_state.table_change.updates.push_back(rest_api_objects::TableUpdate());
 	auto &req = commit_state.table_change.updates.back();
 	req.has_set_current_schema_update = true;
-	req.set_current_schema_update.action = "set-current-schema";
+	req.set_current_schema_update.base_update.action = "set-current-schema";
 	// TODO: should this be a different value? or is the rest catalog setting this again?
 	req.set_current_schema_update.schema_id = table_info.table_metadata.GetCurrentSchemaId();
 }
@@ -191,8 +188,7 @@ void AddPartitionSpec::CreateUpdate(DatabaseInstance &db, ClientContext &context
 	commit_state.table_change.updates.push_back(rest_api_objects::TableUpdate());
 	auto &req = commit_state.table_change.updates.back();
 	req.has_add_partition_spec_update = true;
-	req.add_partition_spec_update.has_action = true;
-	req.add_partition_spec_update.action = "add-spec";
+	req.add_partition_spec_update.base_update.action = "add-spec";
 	req.add_partition_spec_update.spec.has_spec_id = true;
 	// need to get the spec id from table_info() so we can also check updated tables.
 	req.add_partition_spec_update.spec.spec_id = table_info.table_metadata.default_spec_id;
@@ -218,8 +214,7 @@ void AddSortOrder::CreateUpdate(DatabaseInstance &db, ClientContext &context, Ic
 	commit_state.table_change.updates.push_back(rest_api_objects::TableUpdate());
 	auto &req = commit_state.table_change.updates.back();
 	req.has_add_sort_order_update = true;
-	req.add_sort_order_update.has_action = true;
-	req.add_sort_order_update.action = "add-sort-order";
+	req.add_sort_order_update.base_update.action = "add-sort-order";
 	if (table_info.table_metadata.HasSortOrder()) {
 		req.add_sort_order_update.sort_order.order_id = table_info.table_metadata.default_sort_order_id.GetIndex();
 	}
@@ -247,8 +242,7 @@ void SetDefaultSortOrder::CreateUpdate(DatabaseInstance &db, ClientContext &cont
 	commit_state.table_change.updates.push_back(rest_api_objects::TableUpdate());
 	auto &req = commit_state.table_change.updates.back();
 	req.has_set_default_sort_order_update = true;
-	req.set_default_sort_order_update.has_action = true;
-	req.set_default_sort_order_update.action = "set-default-sort-order";
+	req.set_default_sort_order_update.base_update.action = "set-default-sort-order";
 	D_ASSERT(table_info.table_metadata.HasSortOrder());
 	req.set_default_sort_order_update.sort_order_id = table_info.table_metadata.GetLatestSortOrder().sort_order_id;
 }
@@ -262,8 +256,7 @@ void SetDefaultSpec::CreateUpdate(DatabaseInstance &db, ClientContext &context,
 	commit_state.table_change.updates.push_back(rest_api_objects::TableUpdate());
 	auto &req = commit_state.table_change.updates.back();
 	req.has_set_default_spec_update = true;
-	req.set_default_spec_update.has_action = true;
-	req.set_default_spec_update.action = "set-default-spec";
+	req.set_default_spec_update.base_update.action = "set-default-spec";
 	req.set_default_spec_update.spec_id = table_info.table_metadata.default_spec_id;
 }
 
@@ -276,7 +269,7 @@ void SetProperties::CreateUpdate(DatabaseInstance &db, ClientContext &context, I
 	commit_state.table_change.updates.push_back(rest_api_objects::TableUpdate());
 	auto &req = commit_state.table_change.updates.back();
 	req.has_set_properties_update = true;
-	req.set_properties_update.action = "set-properties";
+	req.set_properties_update.base_update.action = "set-properties";
 	req.set_properties_update.updates = properties;
 }
 
@@ -289,7 +282,7 @@ void RemoveProperties::CreateUpdate(DatabaseInstance &db, ClientContext &context
 	commit_state.table_change.updates.push_back(rest_api_objects::TableUpdate());
 	auto &req = commit_state.table_change.updates.back();
 	req.has_remove_properties_update = true;
-	req.remove_properties_update.action = "remove-properties";
+	req.remove_properties_update.base_update.action = "remove-properties";
 	req.remove_properties_update.removals = properties;
 }
 
@@ -301,7 +294,7 @@ void SetLocation::CreateUpdate(DatabaseInstance &db, ClientContext &context, Ice
 	commit_state.table_change.updates.push_back(rest_api_objects::TableUpdate());
 	auto &req = commit_state.table_change.updates.back();
 	req.has_set_location_update = true;
-	req.set_location_update.action = "set-location";
+	req.set_location_update.base_update.action = "set-location";
 	req.set_location_update.location = table_info.table_metadata.location;
 }
 

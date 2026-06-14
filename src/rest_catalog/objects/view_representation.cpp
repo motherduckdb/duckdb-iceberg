@@ -46,12 +46,20 @@ string ViewRepresentation::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *ViewRepresentation::ToJSON(yyjson_mut_doc *doc) const {
-	if (has_sqlview_representation) {
-		return sqlview_representation.ToJSON(doc);
+void ViewRepresentation::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
-	// No variant is active - return empty object
-	return yyjson_mut_obj(doc);
+
+	if (has_sqlview_representation) {
+		sqlview_representation.PopulateJSON(doc, obj);
+	}
+}
+
+yyjson_mut_val *ViewRepresentation::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -46,13 +46,19 @@ string FailedPlanningResult::Object7::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *FailedPlanningResult::Object7::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void FailedPlanningResult::Object7::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: status
 	yyjson_mut_val *status_val = status.ToJSON(doc);
 	yyjson_mut_obj_add_val(doc, obj, "status", status_val);
+}
 
+yyjson_mut_val *FailedPlanningResult::Object7::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 
@@ -85,31 +91,21 @@ string FailedPlanningResult::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *FailedPlanningResult::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void FailedPlanningResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize base class: IcebergErrorResponse
-	yyjson_mut_val *iceberg_error_responsebase_obj = iceberg_error_response.ToJSON(doc);
-	// Merge base properties into this object
-	{
-		size_t idx, max;
-		yyjson_mut_val *key, *val;
-		yyjson_mut_obj_foreach(iceberg_error_responsebase_obj, idx, max, key, val) {
-			yyjson_mut_obj_add(obj, key, val);
-		}
-	}
+	iceberg_error_response.PopulateJSON(doc, obj);
 
 	// Serialize base class: Object7
-	yyjson_mut_val *object_7base_obj = object_7.ToJSON(doc);
-	// Merge base properties into this object
-	{
-		size_t idx, max;
-		yyjson_mut_val *key, *val;
-		yyjson_mut_obj_foreach(object_7base_obj, idx, max, key, val) {
-			yyjson_mut_obj_add(obj, key, val);
-		}
-	}
+	object_7.PopulateJSON(doc, obj);
+}
 
+yyjson_mut_val *FailedPlanningResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

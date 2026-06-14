@@ -64,16 +64,24 @@ string FetchPlanningResult::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *FetchPlanningResult::ToJSON(yyjson_mut_doc *doc) const {
-	if (has_completed_planning_result) {
-		return completed_planning_result.ToJSON(doc);
-	} else if (has_failed_planning_result) {
-		return failed_planning_result.ToJSON(doc);
-	} else if (has_empty_planning_result) {
-		return empty_planning_result.ToJSON(doc);
+void FetchPlanningResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
-	// No variant is active - return empty object
-	return yyjson_mut_obj(doc);
+
+	if (has_completed_planning_result) {
+		completed_planning_result.PopulateJSON(doc, obj);
+	} else if (has_failed_planning_result) {
+		failed_planning_result.PopulateJSON(doc, obj);
+	} else if (has_empty_planning_result) {
+		empty_planning_result.PopulateJSON(doc, obj);
+	}
+}
+
+yyjson_mut_val *FetchPlanningResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -82,8 +82,10 @@ string ListType::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *ListType::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void ListType::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: type
 	yyjson_mut_obj_add_str(doc, obj, "type", type.c_str());
@@ -97,7 +99,11 @@ yyjson_mut_val *ListType::ToJSON(yyjson_mut_doc *doc) const {
 
 	// Serialize: element-required
 	yyjson_mut_obj_add_bool(doc, obj, "element-required", element_required);
+}
 
+yyjson_mut_val *ListType::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

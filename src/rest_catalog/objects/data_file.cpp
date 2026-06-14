@@ -27,7 +27,6 @@ DataFile DataFile::FromJSON(yyjson_val *obj) {
 DataFile DataFile::Copy() const {
 	DataFile res;
 	res.content_file = content_file.Copy();
-	res.content = content;
 	if (has_first_row_id) {
 		res.first_row_id = first_row_id;
 	}
@@ -64,17 +63,6 @@ string DataFile::TryFromJSON(yyjson_val *obj) {
 	error = content_file.TryFromJSON(obj);
 	if (!error.empty()) {
 		return error;
-	}
-	auto content_val = yyjson_obj_get(obj, "content");
-	if (!content_val) {
-		return "DataFile required property 'content' is missing";
-	} else {
-		if (yyjson_is_str(content_val)) {
-			content = yyjson_get_str(content_val);
-		} else {
-			return StringUtil::Format("DataFile property 'content' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(content_val));
-		}
 	}
 	auto first_row_id_val = yyjson_obj_get(obj, "first-row-id");
 	if (first_row_id_val && !yyjson_is_null(first_row_id_val)) {
@@ -139,22 +127,13 @@ string DataFile::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *DataFile::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-
-	// Serialize base class: ContentFile
-	yyjson_mut_val *content_filebase_obj = content_file.ToJSON(doc);
-	// Merge base properties into this object
-	{
-		size_t idx, max;
-		yyjson_mut_val *key, *val;
-		yyjson_mut_obj_foreach(content_filebase_obj, idx, max, key, val) {
-			yyjson_mut_obj_add(obj, key, val);
-		}
+void DataFile::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
 
-	// Serialize: content
-	yyjson_mut_obj_add_str(doc, obj, "content", content.c_str());
+	// Serialize base class: ContentFile
+	content_file.PopulateJSON(doc, obj);
 
 	// Serialize: first-row-id
 	if (has_first_row_id) {
@@ -196,7 +175,11 @@ yyjson_mut_val *DataFile::ToJSON(yyjson_mut_doc *doc) const {
 		yyjson_mut_val *upper_bounds_val = upper_bounds.ToJSON(doc);
 		yyjson_mut_obj_add_val(doc, obj, "upper-bounds", upper_bounds_val);
 	}
+}
 
+yyjson_mut_val *DataFile::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

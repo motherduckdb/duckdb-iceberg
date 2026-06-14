@@ -39,20 +39,18 @@ string FetchScanTasksResult::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *FetchScanTasksResult::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-
-	// Serialize base class: ScanTasks
-	yyjson_mut_val *scan_tasksbase_obj = scan_tasks.ToJSON(doc);
-	// Merge base properties into this object
-	{
-		size_t idx, max;
-		yyjson_mut_val *key, *val;
-		yyjson_mut_obj_foreach(scan_tasksbase_obj, idx, max, key, val) {
-			yyjson_mut_obj_add(obj, key, val);
-		}
+void FetchScanTasksResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
 
+	// Serialize base class: ScanTasks
+	scan_tasks.PopulateJSON(doc, obj);
+}
+
+yyjson_mut_val *FetchScanTasksResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 

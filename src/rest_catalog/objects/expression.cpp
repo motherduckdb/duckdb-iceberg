@@ -100,24 +100,52 @@ string Expression::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *Expression::ToJSON(yyjson_mut_doc *doc) const {
-	if (has_true_expression) {
-		return true_expression.ToJSON(doc);
-	} else if (has_false_expression) {
-		return false_expression.ToJSON(doc);
-	} else if (has_and_or_expression) {
-		return and_or_expression.ToJSON(doc);
-	} else if (has_not_expression) {
-		return not_expression.ToJSON(doc);
-	} else if (has_set_expression) {
-		return set_expression.ToJSON(doc);
-	} else if (has_literal_expression) {
-		return literal_expression.ToJSON(doc);
-	} else if (has_unary_expression) {
-		return unary_expression.ToJSON(doc);
+void Expression::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
-	// No variant is active - return empty object
-	return yyjson_mut_obj(doc);
+
+	if (has_true_expression) {
+		true_expression.PopulateJSON(doc, obj);
+	} else if (has_false_expression) {
+		false_expression.PopulateJSON(doc, obj);
+	} else if (has_and_or_expression) {
+		and_or_expression.PopulateJSON(doc, obj);
+	} else if (has_not_expression) {
+		not_expression.PopulateJSON(doc, obj);
+	} else if (has_set_expression) {
+		set_expression.PopulateJSON(doc, obj);
+	} else if (has_literal_expression) {
+		yyjson_mut_val *literal_expression_obj = literal_expression.ToJSON(doc);
+		if (!yyjson_mut_is_obj(literal_expression_obj)) {
+			throw InternalException("PopulateJSON requires an object-like JSON value");
+		}
+		{
+			size_t idx, max;
+			yyjson_mut_val *key, *val;
+			yyjson_mut_obj_foreach(literal_expression_obj, idx, max, key, val) {
+				yyjson_mut_obj_add(obj, key, val);
+			}
+		}
+	} else if (has_unary_expression) {
+		yyjson_mut_val *unary_expression_obj = unary_expression.ToJSON(doc);
+		if (!yyjson_mut_is_obj(unary_expression_obj)) {
+			throw InternalException("PopulateJSON requires an object-like JSON value");
+		}
+		{
+			size_t idx, max;
+			yyjson_mut_val *key, *val;
+			yyjson_mut_obj_foreach(unary_expression_obj, idx, max, key, val) {
+				yyjson_mut_obj_add(obj, key, val);
+			}
+		}
+	}
+}
+
+yyjson_mut_val *Expression::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

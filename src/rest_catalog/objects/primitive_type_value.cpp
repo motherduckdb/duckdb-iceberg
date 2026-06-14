@@ -170,9 +170,41 @@ string PrimitiveTypeValue::TryFromJSON(yyjson_val *obj) {
 }
 
 yyjson_mut_val *PrimitiveTypeValue::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-
-	return obj;
+	if (has_long_type_value) {
+		return long_type_value.ToJSON(doc);
+	} else if (has_double_type_value) {
+		return double_type_value.ToJSON(doc);
+	} else if (has_integer_type_value) {
+		return integer_type_value.ToJSON(doc);
+	} else if (has_float_type_value) {
+		return float_type_value.ToJSON(doc);
+	} else if (has_boolean_type_value) {
+		return boolean_type_value.ToJSON(doc);
+	} else if (has_decimal_type_value) {
+		return decimal_type_value.ToJSON(doc);
+	} else if (has_string_type_value) {
+		return string_type_value.ToJSON(doc);
+	} else if (has_uuidtype_value) {
+		return uuidtype_value.ToJSON(doc);
+	} else if (has_date_type_value) {
+		return date_type_value.ToJSON(doc);
+	} else if (has_time_type_value) {
+		return time_type_value.ToJSON(doc);
+	} else if (has_timestamp_type_value) {
+		return timestamp_type_value.ToJSON(doc);
+	} else if (has_timestamp_tz_type_value) {
+		return timestamp_tz_type_value.ToJSON(doc);
+	} else if (has_timestamp_nano_type_value) {
+		return timestamp_nano_type_value.ToJSON(doc);
+	} else if (has_timestamp_tz_nano_type_value) {
+		return timestamp_tz_nano_type_value.ToJSON(doc);
+	} else if (has_fixed_type_value) {
+		return fixed_type_value.ToJSON(doc);
+	} else if (has_binary_type_value) {
+		return binary_type_value.ToJSON(doc);
+	}
+	// No variant is active - return null
+	return yyjson_mut_null(doc);
 }
 
 } // namespace rest_api_objects

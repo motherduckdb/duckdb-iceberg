@@ -116,8 +116,10 @@ string OAuthTokenResponse::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *OAuthTokenResponse::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+void OAuthTokenResponse::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
 
 	// Serialize: access_token
 	yyjson_mut_obj_add_str(doc, obj, "access_token", access_token.c_str());
@@ -145,7 +147,11 @@ yyjson_mut_val *OAuthTokenResponse::ToJSON(yyjson_mut_doc *doc) const {
 	if (has_scope) {
 		yyjson_mut_obj_add_str(doc, obj, "scope", scope.c_str());
 	}
+}
 
+yyjson_mut_val *OAuthTokenResponse::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
 	return obj;
 }
 
