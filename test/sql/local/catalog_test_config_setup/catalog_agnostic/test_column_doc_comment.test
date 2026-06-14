@@ -4,6 +4,8 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
+require-env DUCKDB_ICEBERG_HAVE_GENERATED_DATA
+
 require avro
 
 require parquet

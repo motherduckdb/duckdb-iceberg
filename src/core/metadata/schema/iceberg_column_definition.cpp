@@ -178,6 +178,9 @@ IcebergColumnDefinition::ParseStructField(const rest_api_objects::StructField &f
 	res->id = field.id;
 	res->required = field.required;
 	res->name = field.name;
+	if (field._doc) {
+		res->doc = *field._doc;
+	}
 
 	auto &type = *field.type;
 	if (type.primitive_type) {
