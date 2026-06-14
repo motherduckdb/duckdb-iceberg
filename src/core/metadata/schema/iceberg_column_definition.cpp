@@ -292,7 +292,7 @@ ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
 		default_to_use = initial_default.get();
 	}
 	auto res = ColumnDefinition(Identifier(name), type);
-	if (default_to_use && type.IsNested()) {
+	if (default_to_use) {
 		//! FIXME: the expression needs to be more advanced for nested types
 		if (type.IsNested()) {
 			throw NotImplementedException("DEFAULT values for nested types are not supported currently");
