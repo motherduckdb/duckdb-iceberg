@@ -109,7 +109,8 @@ unique_ptr<Expression> IcebergDefaultProjectionResolver::ResolveDefault(ClientCo
                                                                         ColumnBinding binding,
                                                                         const Expression &default_expr) {
 	auto default_value = EvaluateStructDefault(context, default_expr);
-	if (default_value.IsNull()) {
+	if (default_value.IsNull() || input_type.id() != LogicalTypeId::STRUCT ||
+	    result_type.id() != LogicalTypeId::STRUCT) {
 		return make_uniq<BoundColumnRefExpression>(input_type, binding);
 	}
 
