@@ -77,7 +77,7 @@ void StructType::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
 	}
 
 	// Serialize: type
-	yyjson_mut_obj_add_str(doc, obj, "type", type.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
 
 	// Serialize: fields
 	yyjson_mut_val *fields_arr = yyjson_mut_arr(doc);

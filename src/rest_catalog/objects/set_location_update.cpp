@@ -61,7 +61,7 @@ void SetLocationUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) c
 	base_update.PopulateJSON(doc, obj);
 
 	// Serialize: location
-	yyjson_mut_obj_add_str(doc, obj, "location", location.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "location", location.c_str());
 }
 
 yyjson_mut_val *SetLocationUpdate::ToJSON(yyjson_mut_doc *doc) const {

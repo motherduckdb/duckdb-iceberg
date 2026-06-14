@@ -113,7 +113,7 @@ void CreateViewRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) c
 	}
 
 	// Serialize: name
-	yyjson_mut_obj_add_str(doc, obj, "name", name.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "name", name.c_str());
 
 	// Serialize: schema
 	yyjson_mut_val *schema_val = schema.ToJSON(doc);
@@ -128,13 +128,14 @@ void CreateViewRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) c
 	for (const auto &it : properties) {
 		auto &key = it.first;
 		auto &value = it.second;
-		yyjson_mut_obj_add_str(doc, properties_obj, key.c_str(), value.c_str());
+		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+		yyjson_mut_obj_add_strcpy(doc, properties_obj, key_ptr, value.c_str());
 	}
 	yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
 
 	// Serialize: location
 	if (has_location) {
-		yyjson_mut_obj_add_str(doc, obj, "location", location.c_str());
+		yyjson_mut_obj_add_strcpy(doc, obj, "location", location.c_str());
 	}
 }
 

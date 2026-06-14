@@ -477,11 +477,11 @@ void TableMetadata::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const
 	yyjson_mut_obj_add_int(doc, obj, "format-version", format_version);
 
 	// Serialize: table-uuid
-	yyjson_mut_obj_add_str(doc, obj, "table-uuid", table_uuid.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "table-uuid", table_uuid.c_str());
 
 	// Serialize: location
 	if (has_location) {
-		yyjson_mut_obj_add_str(doc, obj, "location", location.c_str());
+		yyjson_mut_obj_add_strcpy(doc, obj, "location", location.c_str());
 	}
 
 	// Serialize: last-updated-ms
@@ -500,7 +500,8 @@ void TableMetadata::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const
 		for (const auto &it : properties) {
 			auto &key = it.first;
 			auto &value = it.second;
-			yyjson_mut_obj_add_str(doc, properties_obj, key.c_str(), value.c_str());
+			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+			yyjson_mut_obj_add_strcpy(doc, properties_obj, key_ptr, value.c_str());
 		}
 		yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
 	}

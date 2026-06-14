@@ -69,7 +69,7 @@ void SetSnapshotRefUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj
 	snapshot_reference.PopulateJSON(doc, obj);
 
 	// Serialize: ref-name
-	yyjson_mut_obj_add_str(doc, obj, "ref-name", ref_name.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "ref-name", ref_name.c_str());
 }
 
 yyjson_mut_val *SetSnapshotRefUpdate::ToJSON(yyjson_mut_doc *doc) const {

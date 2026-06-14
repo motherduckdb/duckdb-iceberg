@@ -104,10 +104,10 @@ void ErrorModel::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
 	}
 
 	// Serialize: message
-	yyjson_mut_obj_add_str(doc, obj, "message", message.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "message", message.c_str());
 
 	// Serialize: type
-	yyjson_mut_obj_add_str(doc, obj, "type", type.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
 
 	// Serialize: code
 	yyjson_mut_obj_add_int(doc, obj, "code", code);

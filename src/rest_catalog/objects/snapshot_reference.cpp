@@ -116,7 +116,7 @@ void SnapshotReference::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) c
 	}
 
 	// Serialize: type
-	yyjson_mut_obj_add_str(doc, obj, "type", type.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
 
 	// Serialize: snapshot-id
 	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);

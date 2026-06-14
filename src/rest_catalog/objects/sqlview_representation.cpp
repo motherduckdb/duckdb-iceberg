@@ -79,13 +79,13 @@ void SQLViewRepresentation::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *ob
 	}
 
 	// Serialize: type
-	yyjson_mut_obj_add_str(doc, obj, "type", type.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
 
 	// Serialize: sql
-	yyjson_mut_obj_add_str(doc, obj, "sql", sql.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "sql", sql.c_str());
 
 	// Serialize: dialect
-	yyjson_mut_obj_add_str(doc, obj, "dialect", dialect.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "dialect", dialect.c_str());
 }
 
 yyjson_mut_val *SQLViewRepresentation::ToJSON(yyjson_mut_doc *doc) const {

@@ -68,7 +68,7 @@ void MetadataLog::Object4::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj
 	}
 
 	// Serialize: metadata-file
-	yyjson_mut_obj_add_str(doc, obj, "metadata-file", metadata_file.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "metadata-file", metadata_file.c_str());
 
 	// Serialize: timestamp-ms
 	yyjson_mut_obj_add_sint(doc, obj, "timestamp-ms", timestamp_ms);

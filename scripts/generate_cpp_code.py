@@ -1480,7 +1480,7 @@ class CPPClass:
         
         if prim_type == 'string':
             return [
-                f'{prefix}yyjson_mut_obj_add_str(doc, obj, "{json_name}", {var_name}.c_str());'
+                f'{prefix}yyjson_mut_obj_add_strcpy(doc, obj, "{json_name}", {var_name}.c_str());'
             ]
         elif prim_type == 'integer':
             if prop.format == 'int64':
@@ -1678,25 +1678,34 @@ class CPPClass:
         prim_type = prim_prop.primitive_type
         
         if prim_type == 'string':
-            lines.append(
-                f'{prefix}\tyyjson_mut_obj_add_str(doc, item_val, key.c_str(), value.c_str());'
-            )
+            lines.extend([
+                f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
+                f'{prefix}\tyyjson_mut_obj_add_strcpy(doc, item_val, key_ptr, value.c_str());'
+            ])
         elif prim_type == 'integer':
             if prim_prop.format == 'int64':
-                lines.append(
-                    f'{prefix}\tyyjson_mut_obj_add_sint(doc, item_val, key.c_str(), value);'
+                lines.extend([
+                    f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
+                    f'{prefix}\tyyjson_mut_obj_add_sint(doc, item_val, key_ptr, value);'
+                ]
                 )
             else:
-                lines.append(
-                    f'{prefix}\tyyjson_mut_obj_add_int(doc, item_val, key.c_str(), value);'
+                lines.extend([
+                    f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
+                    f'{prefix}\tyyjson_mut_obj_add_int(doc, item_val, key_ptr, value);'
+                ]
                 )
         elif prim_type == 'boolean':
-            lines.append(
-                f'{prefix}\tyyjson_mut_obj_add_bool(doc, item_val, key.c_str(), value);'
+            lines.extend([
+                f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
+                f'{prefix}\tyyjson_mut_obj_add_bool(doc, item_val, key_ptr, value);'
+            ]
             )
         elif prim_type == 'number':
-            lines.append(
-                f'{prefix}\tyyjson_mut_obj_add_real(doc, item_val, key.c_str(), value);'
+            lines.extend([
+                f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
+                f'{prefix}\tyyjson_mut_obj_add_real(doc, item_val, key_ptr, value);'
+            ]
             )
         
         lines.append(f'{prefix}}}')
@@ -1718,12 +1727,14 @@ class CPPClass:
         if schema_ref.ref in self.parse_info.recursive_schemas:
             lines.extend([
                 f'{prefix}\tyyjson_mut_val *value_obj = value->ToJSON(doc);',
-                f'{prefix}\tyyjson_mut_obj_add_val(doc, item_val, key.c_str(), value_obj);'
+                f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
+                f'{prefix}\tyyjson_mut_obj_add_val(doc, item_val, key_ptr, value_obj);'
             ])
         else:
             lines.extend([
                 f'{prefix}\tyyjson_mut_val *value_obj = value.ToJSON(doc);',
-                f'{prefix}\tyyjson_mut_obj_add_val(doc, item_val, key.c_str(), value_obj);'
+                f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
+                f'{prefix}\tyyjson_mut_obj_add_val(doc, item_val, key_ptr, value_obj);'
             ])
         
         lines.append(f'{prefix}}}')
@@ -1794,7 +1805,8 @@ class CPPClass:
             ])
         
         lines.extend([
-            f'{prefix}\tyyjson_mut_obj_add_val(doc, item_val, key.c_str(), value_arr);',
+            f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
+            f'{prefix}\tyyjson_mut_obj_add_val(doc, item_val, key_ptr, value_arr);',
             f'{prefix}}}'
         ])
         
@@ -1814,7 +1826,8 @@ class CPPClass:
         if object_prop.is_raw_object():
             lines.extend([
                 f'{prefix}\tyyjson_mut_val *value_obj = yyjson_mut_val_mut_copy(doc, value_map);',
-                f'{prefix}\tyyjson_mut_obj_add_val(doc, item_val, key.c_str(), value_obj);'
+                f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
+                f'{prefix}\tyyjson_mut_obj_add_val(doc, item_val, key_ptr, value_obj);'
             ])
         elif object_prop.additional_properties:
             lines.append(
@@ -1830,25 +1843,35 @@ class CPPClass:
                 )
                 
                 if nested_prim.primitive_type == 'string':
-                    lines.append(
-                        f'{prefix}\t\tyyjson_mut_obj_add_str(doc, value_obj, nested_key.c_str(), nested_value.c_str());'
+                    lines.extend([
+                        f'{prefix}\t\tauto nested_key_ptr = unsafe_yyjson_mut_strncpy(doc, nested_key.c_str(), strlen(nested_key.c_str()));',
+                        f'{prefix}\t\tyyjson_mut_obj_add_strcpy(doc, value_obj, nested_key_ptr, nested_value.c_str());'
+                    ]
                     )
                 elif nested_prim.primitive_type == 'integer':
                     if nested_prim.format == 'int64':
-                        lines.append(
-                            f'{prefix}\t\tyyjson_mut_obj_add_sint(doc, value_obj, nested_key.c_str(), nested_value);'
+                        lines.extend([
+                            f'{prefix}\t\tauto nested_key_ptr = unsafe_yyjson_mut_strncpy(doc, nested_key.c_str(), strlen(nested_key.c_str()));',
+                            f'{prefix}\t\tyyjson_mut_obj_add_sint(doc, value_obj, nested_key_ptr, nested_value);'
+                        ]
                         )
                     else:
-                        lines.append(
-                            f'{prefix}\t\tyyjson_mut_obj_add_int(doc, value_obj, nested_key.c_str(), nested_value);'
+                        lines.extend([
+                            f'{prefix}\t\tauto nested_key_ptr = unsafe_yyjson_mut_strncpy(doc, nested_key.c_str(), strlen(nested_key.c_str()));',
+                            f'{prefix}\t\tyyjson_mut_obj_add_int(doc, value_obj, nested_key_ptr, nested_value);'
+                        ]
                         )
                 elif nested_prim.primitive_type == 'boolean':
-                    lines.append(
-                        f'{prefix}\t\tyyjson_mut_obj_add_bool(doc, value_obj, nested_key.c_str(), nested_value);'
+                    lines.extend([
+                        f'{prefix}\t\tauto nested_key_ptr = unsafe_yyjson_mut_strncpy(doc, nested_key.c_str(), strlen(nested_key.c_str()));',
+                        f'{prefix}\t\tyyjson_mut_obj_add_bool(doc, value_obj, nested_key_ptr, nested_value);'
+                    ]
                     )
                 elif nested_prim.primitive_type == 'number':
-                    lines.append(
-                        f'{prefix}\t\tyyjson_mut_obj_add_real(doc, value_obj, nested_key.c_str(), nested_value);'
+                    lines.extend([
+                        f'{prefix}\t\tauto nested_key_ptr = unsafe_yyjson_mut_strncpy(doc, nested_key.c_str(), strlen(nested_key.c_str()));',
+                        f'{prefix}\t\tyyjson_mut_obj_add_real(doc, value_obj, nested_key_ptr, nested_value);'
+                    ]
                     )
                 
                 lines.append(f'{prefix}\t}}')
@@ -1869,12 +1892,15 @@ class CPPClass:
                     )
                 
                 lines.extend([
-                    f'{prefix}\t\tyyjson_mut_obj_add_val(doc, value_obj, nested_key.c_str(), nested_obj);',
+                    f'{prefix}\t\tauto nested_key_ptr = unsafe_yyjson_mut_strncpy(doc, nested_key.c_str(), strlen(nested_key.c_str()));',
+                    f'{prefix}\t\tyyjson_mut_obj_add_val(doc, value_obj, nested_key_ptr, nested_obj);',
                     f'{prefix}\t}}'
                 ])
             
-            lines.append(
-                f'{prefix}\tyyjson_mut_obj_add_val(doc, item_val, key.c_str(), value_obj);'
+            lines.extend([
+                f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
+                f'{prefix}\tyyjson_mut_obj_add_val(doc, item_val, key_ptr, value_obj);'
+            ]
             )
         
         lines.append(f'{prefix}}}')
@@ -1896,7 +1922,7 @@ class CPPClass:
             
             if prim_type == 'string':
                 lines.append(
-                    f'{prefix}yyjson_mut_obj_add_str(doc, item_val, "{prop_name}", item.{prop_name}.c_str());'
+                    f'{prefix}yyjson_mut_obj_add_strcpy(doc, item_val, "{prop_name}", item.{prop_name}.c_str());'
                 )
             elif prim_type == 'integer':
                 if prim_prop.format == 'int64':
@@ -2037,28 +2063,38 @@ class CPPClass:
             if add_prop.type == Property.Type.PRIMITIVE:
                 prim_prop = cast(PrimitiveProperty, add_prop)
                 if prim_prop.primitive_type == 'string':
-                    lines.append(
-                        f'{prefix}\tyyjson_mut_obj_add_str(doc, {var_name}_obj, key.c_str(), value.c_str());'
+                    lines.extend([
+                        f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
+                        f'{prefix}\tyyjson_mut_obj_add_strcpy(doc, {var_name}_obj, key_ptr, value.c_str());'
+                    ]
                     )
                 elif prim_prop.primitive_type == 'integer':
-                    lines.append(
-                        f'{prefix}\tyyjson_mut_obj_add_int(doc, {var_name}_obj, key.c_str(), value);'
+                    lines.extend([
+                        f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
+                        f'{prefix}\tyyjson_mut_obj_add_int(doc, {var_name}_obj, key_ptr, value);'
+                    ]
                     )
                 elif prim_prop.primitive_type == 'boolean':
-                    lines.append(
-                        f'{prefix}\tyyjson_mut_obj_add_bool(doc, {var_name}_obj, key.c_str(), value);'
+                    lines.extend([
+                        f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
+                        f'{prefix}\tyyjson_mut_obj_add_bool(doc, {var_name}_obj, key_ptr, value);'
+                    ]
                     )
                 elif prim_prop.primitive_type == 'number':
-                    lines.append(
-                        f'{prefix}\tyyjson_mut_obj_add_real(doc, {var_name}_obj, key.c_str(), value);'
+                    lines.extend([
+                        f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
+                        f'{prefix}\tyyjson_mut_obj_add_real(doc, {var_name}_obj, key_ptr, value);'
+                    ]
                     )
             elif add_prop.type == Property.Type.SCHEMA_REFERENCE:
                 schema_ref = cast(SchemaReferenceProperty, add_prop)
                 lines.append(
                     f'{prefix}\tyyjson_mut_val *value_obj = value.ToJSON(doc);'
                 )
-                lines.append(
-                    f'{prefix}\tyyjson_mut_obj_add_val(doc, {var_name}_obj, key.c_str(), value_obj);'
+                lines.extend([
+                    f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
+                    f'{prefix}\tyyjson_mut_obj_add_val(doc, {var_name}_obj, key_ptr, value_obj);'
+                ]
                 )
             
             lines.extend([
@@ -2085,37 +2121,49 @@ class CPPClass:
         if add_prop.type == Property.Type.PRIMITIVE:
             prim_prop = cast(PrimitiveProperty, add_prop)
             if prim_prop.primitive_type == 'string':
-                lines.append(
-                    "\t\tyyjson_mut_obj_add_str(doc, obj, key.c_str(), value.c_str());"
+                lines.extend([
+                    "\t\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));",
+                    "\t\tyyjson_mut_obj_add_strcpy(doc, obj, key_ptr, value.c_str());"
+                ]
                 )
             elif prim_prop.primitive_type == 'integer':
                 if prim_prop.format == 'int64':
-                    lines.append(
-                        "\t\tyyjson_mut_obj_add_sint(doc, obj, key.c_str(), value);"
+                    lines.extend([
+                        "\t\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));",
+                        "\t\tyyjson_mut_obj_add_sint(doc, obj, key_ptr, value);"
+                    ]
                     )
                 else:
-                    lines.append(
-                        "\t\tyyjson_mut_obj_add_int(doc, obj, key.c_str(), value);"
+                    lines.extend([
+                        "\t\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));",
+                        "\t\tyyjson_mut_obj_add_int(doc, obj, key_ptr, value);"
+                    ]
                     )
             elif prim_prop.primitive_type == 'boolean':
-                lines.append(
-                    "\t\tyyjson_mut_obj_add_bool(doc, obj, key.c_str(), value);"
+                lines.extend([
+                    "\t\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));",
+                    "\t\tyyjson_mut_obj_add_bool(doc, obj, key_ptr, value);"
+                ]
                 )
             elif prim_prop.primitive_type == 'number':
-                lines.append(
-                    "\t\tyyjson_mut_obj_add_real(doc, obj, key.c_str(), value);"
+                lines.extend([
+                    "\t\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));",
+                    "\t\tyyjson_mut_obj_add_real(doc, obj, key_ptr, value);"
+                ]
                 )
         elif add_prop.type == Property.Type.SCHEMA_REFERENCE:
             schema_ref = cast(SchemaReferenceProperty, add_prop)
             if schema_ref.ref in self.parse_info.recursive_schemas:
                 lines.extend([
                     "\t\tyyjson_mut_val *value_obj = value->ToJSON(doc);",
-                    "\t\tyyjson_mut_obj_add_val(doc, obj, key.c_str(), value_obj);"
+                    "\t\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));",
+                    "\t\tyyjson_mut_obj_add_val(doc, obj, key_ptr, value_obj);"
                 ])
             else:
                 lines.extend([
                     "\t\tyyjson_mut_val *value_obj = value.ToJSON(doc);",
-                    "\t\tyyjson_mut_obj_add_val(doc, obj, key.c_str(), value_obj);"
+                    "\t\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));",
+                    "\t\tyyjson_mut_obj_add_val(doc, obj, key_ptr, value_obj);"
                 ])
         
         lines.extend([

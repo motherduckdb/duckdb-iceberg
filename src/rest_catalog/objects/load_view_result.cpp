@@ -91,7 +91,7 @@ void LoadViewResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) cons
 	}
 
 	// Serialize: metadata-location
-	yyjson_mut_obj_add_str(doc, obj, "metadata-location", metadata_location.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "metadata-location", metadata_location.c_str());
 
 	// Serialize: metadata
 	yyjson_mut_val *metadata_val = metadata.ToJSON(doc);
@@ -103,7 +103,8 @@ void LoadViewResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) cons
 		for (const auto &it : config) {
 			auto &key = it.first;
 			auto &value = it.second;
-			yyjson_mut_obj_add_str(doc, config_obj, key.c_str(), value.c_str());
+			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+			yyjson_mut_obj_add_strcpy(doc, config_obj, key_ptr, value.c_str());
 		}
 		yyjson_mut_obj_add_val(doc, obj, "config", config_obj);
 	}

@@ -66,7 +66,7 @@ void CounterResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const
 	}
 
 	// Serialize: unit
-	yyjson_mut_obj_add_str(doc, obj, "unit", unit.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "unit", unit.c_str());
 
 	// Serialize: value
 	yyjson_mut_obj_add_sint(doc, obj, "value", value);

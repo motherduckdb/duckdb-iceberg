@@ -167,7 +167,8 @@ void ViewVersion::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
 	for (const auto &it : summary) {
 		auto &key = it.first;
 		auto &value = it.second;
-		yyjson_mut_obj_add_str(doc, summary_obj, key.c_str(), value.c_str());
+		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+		yyjson_mut_obj_add_strcpy(doc, summary_obj, key_ptr, value.c_str());
 	}
 	yyjson_mut_obj_add_val(doc, obj, "summary", summary_obj);
 
@@ -185,7 +186,7 @@ void ViewVersion::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
 
 	// Serialize: default-catalog
 	if (has_default_catalog) {
-		yyjson_mut_obj_add_str(doc, obj, "default-catalog", default_catalog.c_str());
+		yyjson_mut_obj_add_strcpy(doc, obj, "default-catalog", default_catalog.c_str());
 	}
 }
 

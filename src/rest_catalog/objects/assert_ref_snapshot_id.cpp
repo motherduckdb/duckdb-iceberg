@@ -86,7 +86,7 @@ void AssertRefSnapshotId::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj)
 	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
 
 	// Serialize: ref
-	yyjson_mut_obj_add_str(doc, obj, "ref", ref.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "ref", ref.c_str());
 
 	// Serialize: snapshot-id
 	if (has_snapshot_id) {

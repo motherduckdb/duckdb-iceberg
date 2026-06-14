@@ -72,7 +72,7 @@ void TransformTerm::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const
 	}
 
 	// Serialize: type
-	yyjson_mut_obj_add_str(doc, obj, "type", type.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
 
 	// Serialize: transform
 	yyjson_mut_val *transform_val = transform.ToJSON(doc);

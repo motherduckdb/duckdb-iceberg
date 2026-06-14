@@ -68,7 +68,7 @@ void TableIdentifier::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) con
 	yyjson_mut_obj_add_val(doc, obj, "namespace", _namespace_val);
 
 	// Serialize: name
-	yyjson_mut_obj_add_str(doc, obj, "name", name.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "name", name.c_str());
 }
 
 yyjson_mut_val *TableIdentifier::ToJSON(yyjson_mut_doc *doc) const {

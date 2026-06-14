@@ -67,7 +67,7 @@ void AsyncPlanningResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj)
 	yyjson_mut_obj_add_val(doc, obj, "status", status_val);
 
 	// Serialize: plan-id
-	yyjson_mut_obj_add_str(doc, obj, "plan-id", plan_id.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "plan-id", plan_id.c_str());
 }
 
 yyjson_mut_val *AsyncPlanningResult::ToJSON(yyjson_mut_doc *doc) const {

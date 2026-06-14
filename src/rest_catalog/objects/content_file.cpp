@@ -208,10 +208,10 @@ void ContentFile::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
 	yyjson_mut_obj_add_val(doc, obj, "partition", partition_arr);
 
 	// Serialize: content
-	yyjson_mut_obj_add_str(doc, obj, "content", content.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "content", content.c_str());
 
 	// Serialize: file-path
-	yyjson_mut_obj_add_str(doc, obj, "file-path", file_path.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "file-path", file_path.c_str());
 
 	// Serialize: file-format
 	yyjson_mut_val *file_format_val = file_format.ToJSON(doc);

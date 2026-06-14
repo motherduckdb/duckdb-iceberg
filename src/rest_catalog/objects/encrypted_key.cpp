@@ -107,14 +107,14 @@ void EncryptedKey::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const 
 	}
 
 	// Serialize: key-id
-	yyjson_mut_obj_add_str(doc, obj, "key-id", key_id.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "key-id", key_id.c_str());
 
 	// Serialize: encrypted-key-metadata
-	yyjson_mut_obj_add_str(doc, obj, "encrypted-key-metadata", encrypted_key_metadata.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "encrypted-key-metadata", encrypted_key_metadata.c_str());
 
 	// Serialize: encrypted-by-id
 	if (has_encrypted_by_id) {
-		yyjson_mut_obj_add_str(doc, obj, "encrypted-by-id", encrypted_by_id.c_str());
+		yyjson_mut_obj_add_strcpy(doc, obj, "encrypted-by-id", encrypted_by_id.c_str());
 	}
 
 	// Serialize: properties
@@ -123,7 +123,8 @@ void EncryptedKey::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const 
 		for (const auto &it : properties) {
 			auto &key = it.first;
 			auto &value = it.second;
-			yyjson_mut_obj_add_str(doc, properties_obj, key.c_str(), value.c_str());
+			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+			yyjson_mut_obj_add_strcpy(doc, properties_obj, key_ptr, value.c_str());
 		}
 		yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
 	}
