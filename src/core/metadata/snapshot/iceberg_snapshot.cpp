@@ -55,8 +55,18 @@ void IcebergSnapshotMetrics::AddManifestFile(const IcebergManifestFile &manifest
 		//! schedulers), and are erroneously counted as added data files.
 		metrics.emplace(IcebergSnapshotMetricType::ADDED_DELETE_FILES, 0).first->second +=
 		    manifest_file.added_files_count;
+		metrics.emplace(IcebergSnapshotMetricType::REMOVED_DELETE_FILES, 0).first->second +=
+		    manifest_file.deleted_files_count;
+#ifndef ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
+		//! Without equality-delete writes every delete file is a positional delete file, so the
+		//! added position-delete record count and the removed positional-delete-file count map
+		//! directly from the manifest. Guarded so we don't mislabel equality deletes as positional
+		//! once equality-delete writes are supported.
 		metrics.emplace(IcebergSnapshotMetricType::ADDED_POSITION_DELETES, 0).first->second +=
 		    manifest_file.added_rows_count;
+		metrics.emplace(IcebergSnapshotMetricType::REMOVED_POSITION_DELETE_FILES, 0).first->second +=
+		    manifest_file.deleted_files_count;
+#endif
 
 		auto previous_total_delete_files = metrics.find(IcebergSnapshotMetricType::TOTAL_DELETE_FILES);
 		if (previous_total_delete_files != metrics.end()) {
@@ -67,6 +77,7 @@ void IcebergSnapshotMetrics::AddManifestFile(const IcebergManifestFile &manifest
 			}
 		}
 
+#ifndef ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
 		auto previous_total_position_deletes = metrics.find(IcebergSnapshotMetricType::TOTAL_POSITION_DELETES);
 		if (previous_total_position_deletes != metrics.end()) {
 			int64_t total_position_deletes = previous_total_position_deletes->second + manifest_file.added_rows_count -
@@ -75,6 +86,7 @@ void IcebergSnapshotMetrics::AddManifestFile(const IcebergManifestFile &manifest
 				metrics[IcebergSnapshotMetricType::TOTAL_POSITION_DELETES] = total_position_deletes;
 			}
 		}
+#endif
 		return;
 	}
 
@@ -132,6 +144,8 @@ static const IcebergSnapshotMetricItem SNAPSHOT_METRIC_KEYS[] = {
     {IcebergSnapshotMetricType::DELETED_RECORDS, "deleted-records"},
     {IcebergSnapshotMetricType::ADDED_DELETE_FILES, "added-delete-files"},
     {IcebergSnapshotMetricType::ADDED_POSITION_DELETES, "added-position-deletes"},
+    {IcebergSnapshotMetricType::REMOVED_DELETE_FILES, "removed-delete-files"},
+    {IcebergSnapshotMetricType::REMOVED_POSITION_DELETE_FILES, "removed-position-delete-files"},
     {IcebergSnapshotMetricType::TOTAL_DATA_FILES, "total-data-files"},
     {IcebergSnapshotMetricType::TOTAL_RECORDS, "total-records"},
     {IcebergSnapshotMetricType::TOTAL_DELETE_FILES, "total-delete-files"},
