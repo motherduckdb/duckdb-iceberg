@@ -9,11 +9,13 @@ endif()
 
 # Extension from this repo
 if (DONT_LINK OR "$ENV{DONT_LINK}")
-    set(ICEBERG_DONT_LINK "DONT_LINK")
+  set(ICEBERG_DONT_LINK "DONT_LINK")
 else()
-    set(ICEBERG_DONT_LINK "")
+  set(ICEBERG_DONT_LINK "")
 endif()
 
+
+duckdb_extension_load(json)
 duckdb_extension_load(iceberg
     SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}
     LOAD_TESTS

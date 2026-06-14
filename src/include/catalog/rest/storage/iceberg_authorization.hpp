@@ -21,9 +21,13 @@ struct IcebergAttachOptions {
 	string secret;
 	string name;
 	// some catalogs do not yet support stage create
-	bool supports_stage_create = true;
+	bool stage_create_tables = true;
+	// some catalogs reject the multi-table transactions/commit endpoint; opt out of it here
+	bool disable_multi_table_commit = false;
+	// some catalogs fully initialize metadata during non-staged CREATE TABLE and reject follow-up metadata updates
+	bool skip_create_table_metadata_updates = false;
 	// if the catalog allows manual cleaning up of storage files.
-	bool allows_deletes = true;
+	bool remove_files_on_delete = true;
 	bool support_nested_namespaces = false;
 	bool encode_entire_prefix = false;
 	// in rest api spec, purge requested defaults to false.

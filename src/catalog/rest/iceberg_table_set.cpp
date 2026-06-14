@@ -90,6 +90,17 @@ void IcebergTableSet::Scan(ClientContext &context, const std::function<void(Cata
 		auto table_key = table_info.GetTableKey();
 		iceberg_transaction.tables[table_key] = entry.second;
 
+		if (!table_info.schema_versions.empty()) {
+			// The table has already been resolved (e.g. via DESCRIBE or a scan), so its full schema -
+			// including column comments mapped from the Iceberg field 'doc' - is available. Surface the
+			// resolved entry instead of the placeholder so listings reflect the real columns.
+			auto resolved = table_info.GetLatestSchema(context);
+			if (resolved) {
+				callback(*resolved);
+				continue;
+			}
+		}
+
 		if (table_info.dummy_entry) {
 			// FIXME: why do we need to return the same entry again?
 			auto &optional = table_info.dummy_entry.get()->Cast<CatalogEntry>();
@@ -267,8 +278,11 @@ IcebergTableInformation &IcebergTableSet::CreateNewEntry(ClientContext &context,
 
 	// if we stage created the table, we add an assert create
 	auto &transaction_data = table_info.GetOrCreateTransactionData(iceberg_transaction);
-	if (catalog.attach_options.supports_stage_create) {
+	if (catalog.attach_options.stage_create_tables) {
 		transaction_data.TableAddAssertCreate();
+	}
+	if (!catalog.attach_options.stage_create_tables && catalog.attach_options.skip_create_table_metadata_updates) {
+		return table_info;
 	}
 	// other required updates to the table
 	transaction_data.TableAssignUUID();

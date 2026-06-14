@@ -15,6 +15,7 @@
 #include "duckdb/planner/filter/expression_filter.hpp"
 #include "duckdb/planner/logical_operator_visitor.hpp"
 #include "duckdb/execution/expression_executor.hpp"
+#include "duckdb/storage/statistics/geometry_stats.hpp"
 
 namespace duckdb {
 

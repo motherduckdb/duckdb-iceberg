@@ -263,14 +263,6 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 	if (!multi_file_list) {
 		throw InternalException("IcebergDelete multi_file_list is NULL");
 	}
-	{
-		lock_guard<mutex> guard(multi_file_list->lock);
-		lock_guard<mutex> delete_guard(multi_file_list->delete_lock);
-		if (!multi_file_list->FinishedScanningDeletes() ||
-		    multi_file_list->transaction_delete_idx < multi_file_list->transaction_delete_manifests.size()) {
-			multi_file_list->ProcessDeletes();
-		}
-	}
 
 	lock_guard<mutex> guard(global_state.lock);
 	for (auto &entry : global_state.deleted_rows) {
@@ -288,9 +280,9 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 		}
 		if (write_deletion_vector) {
 			//! Addd the existing delete we're replacing
-			auto it = multi_file_list->positional_delete_data.find(filename);
-			if (it != multi_file_list->positional_delete_data.end()) {
-				auto &delete_data = *it->second;
+			auto existing_delete = multi_file_list->GetExistingPositionalDeleteData(filename);
+			if (existing_delete) {
+				auto &delete_data = *existing_delete;
 				PopulateAlteredManifests(*multi_file_list, global_state.altered_manifests, delete_data);
 				delete_data.ToSet(sorted_deletes);
 			}
