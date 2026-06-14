@@ -89,3 +89,40 @@ query III
 select * from my_datalake.default.tbl where id = 3
 ----
 3	{'a': test, 'b': NULL, 'c': \xAA\xFF\xAA}	NULL
+
+# DEFAULT NULL on a STRUCT currently materializes a struct whose fields are all NULL.
+
+statement ok
+drop table if exists my_datalake.default.tbl_default_null_struct;
+
+statement ok
+create table my_datalake.default.tbl_default_null_struct(
+	id INTEGER,
+	col STRUCT(
+		a VARCHAR,
+		b INTEGER,
+		c STRUCT(
+			x BIGINT
+		)
+	) DEFAULT NULL,
+	col2 INTEGER
+) WITH (
+	'format-version' = 3
+);
+
+statement ok
+insert into my_datalake.default.tbl_default_null_struct values
+	(1, {'a': 'seed', 'b': 1, 'c': {'x': 11}}, 10),
+	(2, {'a': 'seed', 'b': 2, 'c': {'x': 22}}, 20);
+
+statement ok
+update my_datalake.default.tbl_default_null_struct
+	set col = DEFAULT,
+	col2 = col2 + 100
+where id = 1;
+
+# FIXME: 'c' should be NULL, but this needs support for {} first
+query III
+select * from my_datalake.default.tbl_default_null_struct where id = 1;
+----
+1	{'a': NULL, 'b': NULL, 'c': {'x': NULL}}	110

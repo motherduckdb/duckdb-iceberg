@@ -116,3 +116,51 @@ query III
 select * from my_datalake.default.tbl where id = 6;
 ----
 6	{'a': hello, 'b': 42, 'c': \xAA\xFF\xAA}	NULL
+
+# DEFAULT NULL on a STRUCT currently materializes a struct whose fields are all NULL.
+
+statement ok
+drop table if exists my_datalake.default.tbl_default_null_struct;
+
+statement ok
+create table my_datalake.default.tbl_default_null_struct(
+	id INTEGER,
+	col STRUCT(
+		a VARCHAR,
+		b INTEGER,
+		c STRUCT(
+			x BIGINT
+		)
+	) DEFAULT NULL,
+	col2 INTEGER
+) WITH (
+	'format-version' = 3
+);
+
+statement ok
+insert into my_datalake.default.tbl_default_null_struct values
+	(1, {'a': 'seed', 'b': 1, 'c': {'x': 11}}, 10),
+	(2, {'a': 'seed', 'b': 2, 'c': {'x': 22}}, 20);
+
+query I
+MERGE INTO my_datalake.default.tbl_default_null_struct AS t USING (
+	VALUES
+		(1, 100),
+		(3, 300)
+) AS s(id, col2) ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET col = DEFAULT, col2 = s.col2
+WHEN NOT MATCHED THEN INSERT VALUES (s.id, DEFAULT, s.col2)
+----
+2
+
+# FIXME: 'c' should be NULL, but this needs support for {} first
+query III
+select * from my_datalake.default.tbl_default_null_struct where id = 1;
+----
+1	{'a': NULL, 'b': NULL, 'c': {'x': NULL}}	100
+
+# FIXME: 'c' should be NULL, but this needs support for {} first
+query III
+select * from my_datalake.default.tbl_default_null_struct where id = 3;
+----
+3	{'a': NULL, 'b': NULL, 'c': {'x': NULL}}	300

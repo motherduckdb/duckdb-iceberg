@@ -177,3 +177,33 @@ select * from my_datalake.default.nested_tbl order by all;
 {'a': test, 'b': {'v1': 1000, 'v2': NULL, 'v3': -500}, 'e': NULL}	12
 {'a': test, 'b': {'v1': 1000, 'v2': NULL, 'v3': NULL}, 'e': NULL}	24
 
+# DEFAULT NULL on a STRUCT currently materializes a struct whose fields are all NULL.
+
+statement ok
+drop table if exists my_datalake.default.tbl_default_null_struct;
+
+statement ok
+create table my_datalake.default.tbl_default_null_struct(
+	id INTEGER,
+	col STRUCT(
+		a VARCHAR,
+		b INTEGER,
+		c STRUCT(
+			x BIGINT
+		)
+	) DEFAULT NULL
+) WITH (
+	'format-version' = 3
+);
+
+statement ok
+insert into my_datalake.default.tbl_default_null_struct values
+	(1, DEFAULT),
+	(2, DEFAULT);
+
+# FIXME: 'c' should be NULL, but this needs support for {} first
+query II
+select * from my_datalake.default.tbl_default_null_struct order by id;
+----
+1	{'a': NULL, 'b': NULL, 'c': {'x': NULL}}
+2	{'a': NULL, 'b': NULL, 'c': {'x': NULL}}
