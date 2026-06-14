@@ -65,10 +65,10 @@ void RegisterViewRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj)
 	}
 
 	// Serialize: name
-	yyjson_mut_obj_add_str(doc, obj, "name", name.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "name", name.c_str());
 
 	// Serialize: metadata-location
-	yyjson_mut_obj_add_str(doc, obj, "metadata-location", metadata_location.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "metadata-location", metadata_location.c_str());
 }
 
 yyjson_mut_val *RegisterViewRequest::ToJSON(yyjson_mut_doc *doc) const {

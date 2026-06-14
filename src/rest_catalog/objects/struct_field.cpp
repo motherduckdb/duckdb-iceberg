@@ -131,7 +131,7 @@ void StructField::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
 	yyjson_mut_obj_add_int(doc, obj, "id", id);
 
 	// Serialize: name
-	yyjson_mut_obj_add_str(doc, obj, "name", name.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "name", name.c_str());
 
 	// Serialize: type
 	yyjson_mut_val *type_val = type->ToJSON(doc);
@@ -143,7 +143,7 @@ void StructField::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
 	// Serialize: doc
 	if (_doc.has_value()) {
 		auto &_doc_value = *_doc;
-		yyjson_mut_obj_add_str(doc, obj, "doc", _doc_value.c_str());
+		yyjson_mut_obj_add_strcpy(doc, obj, "doc", _doc_value.c_str());
 	}
 
 	// Serialize: initial-default

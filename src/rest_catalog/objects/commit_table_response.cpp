@@ -63,7 +63,7 @@ void CommitTableResponse::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj)
 	}
 
 	// Serialize: metadata-location
-	yyjson_mut_obj_add_str(doc, obj, "metadata-location", metadata_location.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "metadata-location", metadata_location.c_str());
 
 	// Serialize: metadata
 	yyjson_mut_val *metadata_val = metadata.ToJSON(doc);

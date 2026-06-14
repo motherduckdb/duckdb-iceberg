@@ -52,7 +52,7 @@ void BaseUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
 	}
 
 	// Serialize: action
-	yyjson_mut_obj_add_str(doc, obj, "action", action.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "action", action.c_str());
 }
 
 yyjson_mut_val *BaseUpdate::ToJSON(yyjson_mut_doc *doc) const {

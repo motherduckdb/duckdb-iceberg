@@ -133,7 +133,7 @@ void LoadTableResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) con
 	// Serialize: metadata-location
 	if (metadata_location.has_value()) {
 		auto &metadata_location_value = *metadata_location;
-		yyjson_mut_obj_add_str(doc, obj, "metadata-location", metadata_location_value.c_str());
+		yyjson_mut_obj_add_strcpy(doc, obj, "metadata-location", metadata_location_value.c_str());
 	}
 
 	// Serialize: config
@@ -143,7 +143,8 @@ void LoadTableResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) con
 		for (const auto &it : config_value) {
 			auto &key = it.first;
 			auto &value = it.second;
-			yyjson_mut_obj_add_str(doc, config_value_obj, key.c_str(), value.c_str());
+			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+			yyjson_mut_obj_add_strcpy(doc, config_value_obj, key_ptr, value.c_str());
 		}
 		yyjson_mut_obj_add_val(doc, obj, "config", config_value_obj);
 	}

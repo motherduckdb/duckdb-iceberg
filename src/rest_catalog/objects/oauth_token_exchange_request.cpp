@@ -134,10 +134,10 @@ void OAuthTokenExchangeRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val
 	}
 
 	// Serialize: grant_type
-	yyjson_mut_obj_add_str(doc, obj, "grant_type", grant_type.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "grant_type", grant_type.c_str());
 
 	// Serialize: subject_token
-	yyjson_mut_obj_add_str(doc, obj, "subject_token", subject_token.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "subject_token", subject_token.c_str());
 
 	// Serialize: subject_token_type
 	yyjson_mut_val *subject_token_type_val = subject_token_type.ToJSON(doc);
@@ -146,7 +146,7 @@ void OAuthTokenExchangeRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val
 	// Serialize: scope
 	if (scope.has_value()) {
 		auto &scope_value = *scope;
-		yyjson_mut_obj_add_str(doc, obj, "scope", scope_value.c_str());
+		yyjson_mut_obj_add_strcpy(doc, obj, "scope", scope_value.c_str());
 	}
 
 	// Serialize: requested_token_type
@@ -159,7 +159,7 @@ void OAuthTokenExchangeRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val
 	// Serialize: actor_token
 	if (actor_token.has_value()) {
 		auto &actor_token_value = *actor_token;
-		yyjson_mut_obj_add_str(doc, obj, "actor_token", actor_token_value.c_str());
+		yyjson_mut_obj_add_strcpy(doc, obj, "actor_token", actor_token_value.c_str());
 	}
 
 	// Serialize: actor_token_type

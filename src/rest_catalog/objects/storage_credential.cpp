@@ -78,14 +78,15 @@ void StorageCredential::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) c
 	}
 
 	// Serialize: prefix
-	yyjson_mut_obj_add_str(doc, obj, "prefix", prefix.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "prefix", prefix.c_str());
 
 	// Serialize: config
 	yyjson_mut_val *config_obj = yyjson_mut_obj(doc);
 	for (const auto &it : config) {
 		auto &key = it.first;
 		auto &value = it.second;
-		yyjson_mut_obj_add_str(doc, config_obj, key.c_str(), value.c_str());
+		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+		yyjson_mut_obj_add_strcpy(doc, config_obj, key_ptr, value.c_str());
 	}
 	yyjson_mut_obj_add_val(doc, obj, "config", config_obj);
 }

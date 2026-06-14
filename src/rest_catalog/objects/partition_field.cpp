@@ -98,7 +98,7 @@ void PartitionField::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) cons
 	yyjson_mut_obj_add_val(doc, obj, "transform", transform_val);
 
 	// Serialize: name
-	yyjson_mut_obj_add_str(doc, obj, "name", name.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "name", name.c_str());
 
 	// Serialize: field-id
 	if (field_id.has_value()) {

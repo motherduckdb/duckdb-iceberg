@@ -143,7 +143,8 @@ void CatalogConfig::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const
 	for (const auto &it : defaults) {
 		auto &key = it.first;
 		auto &value = it.second;
-		yyjson_mut_obj_add_str(doc, defaults_obj, key.c_str(), value.c_str());
+		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+		yyjson_mut_obj_add_strcpy(doc, defaults_obj, key_ptr, value.c_str());
 	}
 	yyjson_mut_obj_add_val(doc, obj, "defaults", defaults_obj);
 
@@ -152,7 +153,8 @@ void CatalogConfig::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const
 	for (const auto &it : overrides) {
 		auto &key = it.first;
 		auto &value = it.second;
-		yyjson_mut_obj_add_str(doc, overrides_obj, key.c_str(), value.c_str());
+		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+		yyjson_mut_obj_add_strcpy(doc, overrides_obj, key_ptr, value.c_str());
 	}
 	yyjson_mut_obj_add_val(doc, obj, "overrides", overrides_obj);
 
@@ -170,7 +172,7 @@ void CatalogConfig::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const
 	// Serialize: idempotency-key-lifetime
 	if (idempotency_key_lifetime.has_value()) {
 		auto &idempotency_key_lifetime_value = *idempotency_key_lifetime;
-		yyjson_mut_obj_add_str(doc, obj, "idempotency-key-lifetime", idempotency_key_lifetime_value.c_str());
+		yyjson_mut_obj_add_strcpy(doc, obj, "idempotency-key-lifetime", idempotency_key_lifetime_value.c_str());
 	}
 }
 

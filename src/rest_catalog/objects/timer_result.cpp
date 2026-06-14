@@ -81,7 +81,7 @@ void TimerResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
 	}
 
 	// Serialize: time-unit
-	yyjson_mut_obj_add_str(doc, obj, "time-unit", time_unit.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "time-unit", time_unit.c_str());
 
 	// Serialize: count
 	yyjson_mut_obj_add_sint(doc, obj, "count", count);

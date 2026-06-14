@@ -74,13 +74,14 @@ void Snapshot::Object2::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) c
 	}
 
 	// Serialize: operation
-	yyjson_mut_obj_add_str(doc, obj, "operation", operation.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "operation", operation.c_str());
 
 	// Serialize additional properties
 	for (const auto &it : additional_properties) {
 		auto &key = it.first;
 		auto &value = it.second;
-		yyjson_mut_obj_add_str(doc, obj, key.c_str(), value.c_str());
+		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+		yyjson_mut_obj_add_strcpy(doc, obj, key_ptr, value.c_str());
 	}
 }
 
@@ -257,7 +258,7 @@ void Snapshot::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
 	yyjson_mut_obj_add_sint(doc, obj, "timestamp-ms", timestamp_ms);
 
 	// Serialize: manifest-list
-	yyjson_mut_obj_add_str(doc, obj, "manifest-list", manifest_list.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "manifest-list", manifest_list.c_str());
 
 	// Serialize: summary
 	yyjson_mut_val *summary_val = summary.ToJSON(doc);

@@ -61,7 +61,7 @@ void RemoveEncryptionKeyUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val
 	base_update.PopulateJSON(doc, obj);
 
 	// Serialize: key-id
-	yyjson_mut_obj_add_str(doc, obj, "key-id", key_id.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "key-id", key_id.c_str());
 }
 
 yyjson_mut_val *RemoveEncryptionKeyUpdate::ToJSON(yyjson_mut_doc *doc) const {

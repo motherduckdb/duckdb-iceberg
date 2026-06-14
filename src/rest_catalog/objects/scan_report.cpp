@@ -181,7 +181,7 @@ void ScanReport::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
 	}
 
 	// Serialize: table-name
-	yyjson_mut_obj_add_str(doc, obj, "table-name", table_name.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "table-name", table_name.c_str());
 
 	// Serialize: snapshot-id
 	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
@@ -220,7 +220,8 @@ void ScanReport::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
 		for (const auto &it : metadata_value) {
 			auto &key = it.first;
 			auto &value = it.second;
-			yyjson_mut_obj_add_str(doc, metadata_value_obj, key.c_str(), value.c_str());
+			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+			yyjson_mut_obj_add_strcpy(doc, metadata_value_obj, key_ptr, value.c_str());
 		}
 		yyjson_mut_obj_add_val(doc, obj, "metadata", metadata_value_obj);
 	}

@@ -86,7 +86,7 @@ void PartitionStatisticsFile::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *
 	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
 
 	// Serialize: statistics-path
-	yyjson_mut_obj_add_str(doc, obj, "statistics-path", statistics_path.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "statistics-path", statistics_path.c_str());
 
 	// Serialize: file-size-in-bytes
 	yyjson_mut_obj_add_sint(doc, obj, "file-size-in-bytes", file_size_in_bytes);

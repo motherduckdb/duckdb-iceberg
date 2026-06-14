@@ -190,13 +190,13 @@ void ViewMetadata::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const 
 	}
 
 	// Serialize: view-uuid
-	yyjson_mut_obj_add_str(doc, obj, "view-uuid", view_uuid.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "view-uuid", view_uuid.c_str());
 
 	// Serialize: format-version
 	yyjson_mut_obj_add_int(doc, obj, "format-version", format_version);
 
 	// Serialize: location
-	yyjson_mut_obj_add_str(doc, obj, "location", location.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "location", location.c_str());
 
 	// Serialize: current-version-id
 	yyjson_mut_obj_add_int(doc, obj, "current-version-id", current_version_id);
@@ -232,7 +232,8 @@ void ViewMetadata::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const 
 		for (const auto &it : properties_value) {
 			auto &key = it.first;
 			auto &value = it.second;
-			yyjson_mut_obj_add_str(doc, properties_value_obj, key.c_str(), value.c_str());
+			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+			yyjson_mut_obj_add_strcpy(doc, properties_value_obj, key_ptr, value.c_str());
 		}
 		yyjson_mut_obj_add_val(doc, obj, "properties", properties_value_obj);
 	}

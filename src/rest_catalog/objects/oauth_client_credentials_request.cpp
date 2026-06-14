@@ -95,18 +95,18 @@ void OAuthClientCredentialsRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut
 	}
 
 	// Serialize: grant_type
-	yyjson_mut_obj_add_str(doc, obj, "grant_type", grant_type.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "grant_type", grant_type.c_str());
 
 	// Serialize: client_id
-	yyjson_mut_obj_add_str(doc, obj, "client_id", client_id.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "client_id", client_id.c_str());
 
 	// Serialize: client_secret
-	yyjson_mut_obj_add_str(doc, obj, "client_secret", client_secret.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "client_secret", client_secret.c_str());
 
 	// Serialize: scope
 	if (scope.has_value()) {
 		auto &scope_value = *scope;
-		yyjson_mut_obj_add_str(doc, obj, "scope", scope_value.c_str());
+		yyjson_mut_obj_add_strcpy(doc, obj, "scope", scope_value.c_str());
 	}
 }
 

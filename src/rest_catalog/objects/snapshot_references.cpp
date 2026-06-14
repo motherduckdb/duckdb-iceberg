@@ -58,7 +58,8 @@ void SnapshotReferences::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) 
 		auto &key = it.first;
 		auto &value = it.second;
 		yyjson_mut_val *value_obj = value.ToJSON(doc);
-		yyjson_mut_obj_add_val(doc, obj, key.c_str(), value_obj);
+		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+		yyjson_mut_obj_add_val(doc, obj, key_ptr, value_obj);
 	}
 }
 

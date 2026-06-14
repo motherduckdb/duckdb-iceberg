@@ -54,7 +54,7 @@ void CompletedPlanningWithIDResult::Object6::PopulateJSON(yyjson_mut_doc *doc, y
 	}
 
 	// Serialize: plan-id
-	yyjson_mut_obj_add_str(doc, obj, "plan-id", plan_id.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "plan-id", plan_id.c_str());
 }
 
 yyjson_mut_val *CompletedPlanningWithIDResult::Object6::ToJSON(yyjson_mut_doc *doc) const {

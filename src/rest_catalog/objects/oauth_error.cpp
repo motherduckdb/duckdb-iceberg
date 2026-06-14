@@ -83,18 +83,18 @@ void OAuthError::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
 	}
 
 	// Serialize: error
-	yyjson_mut_obj_add_str(doc, obj, "error", _error.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "error", _error.c_str());
 
 	// Serialize: error_description
 	if (error_description.has_value()) {
 		auto &error_description_value = *error_description;
-		yyjson_mut_obj_add_str(doc, obj, "error_description", error_description_value.c_str());
+		yyjson_mut_obj_add_strcpy(doc, obj, "error_description", error_description_value.c_str());
 	}
 
 	// Serialize: error_uri
 	if (error_uri.has_value()) {
 		auto &error_uri_value = *error_uri;
-		yyjson_mut_obj_add_str(doc, obj, "error_uri", error_uri_value.c_str());
+		yyjson_mut_obj_add_strcpy(doc, obj, "error_uri", error_uri_value.c_str());
 	}
 }
 

@@ -64,10 +64,10 @@ void AssertViewUUID::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) cons
 	}
 
 	// Serialize: type
-	yyjson_mut_obj_add_str(doc, obj, "type", type.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
 
 	// Serialize: uuid
-	yyjson_mut_obj_add_str(doc, obj, "uuid", uuid.c_str());
+	yyjson_mut_obj_add_strcpy(doc, obj, "uuid", uuid.c_str());
 }
 
 yyjson_mut_val *AssertViewUUID::ToJSON(yyjson_mut_doc *doc) const {
