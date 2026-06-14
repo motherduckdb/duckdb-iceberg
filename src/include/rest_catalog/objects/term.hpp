@@ -15,13 +15,24 @@ namespace rest_api_objects {
 
 class Term {
 public:
+	Term();
+	Term(const Term &) = delete;
+	Term &operator=(const Term &) = delete;
+	Term(Term &&) = default;
+	Term &operator=(Term &&) = default;
+
+public:
 	// Deserialization
 	static Term FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	Term Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	Reference reference;
 	bool has_reference = false;
 	TransformTerm transform_term;

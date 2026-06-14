@@ -12,12 +12,29 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+OAuthError::OAuthError() {
+}
+
 OAuthError OAuthError::FromJSON(yyjson_val *obj) {
 	OAuthError res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+OAuthError OAuthError::Copy() const {
+	OAuthError res;
+	res._error = _error;
+	if (has_error_description) {
+		res.error_description = error_description;
+	}
+	res.has_error_description = has_error_description;
+	if (has_error_uri) {
+		res.error_uri = error_uri;
+	}
+	res.has_error_uri = has_error_uri;
 	return res;
 }
 
@@ -35,7 +52,7 @@ string OAuthError::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto error_description_val = yyjson_obj_get(obj, "error_description");
-	if (error_description_val) {
+	if (error_description_val && !yyjson_is_null(error_description_val)) {
 		has_error_description = true;
 		if (yyjson_is_str(error_description_val)) {
 			error_description = yyjson_get_str(error_description_val);
@@ -46,7 +63,7 @@ string OAuthError::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto error_uri_val = yyjson_obj_get(obj, "error_uri");
-	if (error_uri_val) {
+	if (error_uri_val && !yyjson_is_null(error_uri_val)) {
 		has_error_uri = true;
 		if (yyjson_is_str(error_uri_val)) {
 			error_uri = yyjson_get_str(error_uri_val);

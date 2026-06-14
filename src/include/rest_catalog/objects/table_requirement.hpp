@@ -21,13 +21,24 @@ namespace rest_api_objects {
 
 class TableRequirement {
 public:
+	TableRequirement();
+	TableRequirement(const TableRequirement &) = delete;
+	TableRequirement &operator=(const TableRequirement &) = delete;
+	TableRequirement(TableRequirement &&) = default;
+	TableRequirement &operator=(TableRequirement &&) = default;
+
+public:
 	// Deserialization
 	static TableRequirement FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	TableRequirement Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	AssertCreate assert_create;
 	bool has_assert_create = false;
 	AssertTableUUID assert_table_uuid;

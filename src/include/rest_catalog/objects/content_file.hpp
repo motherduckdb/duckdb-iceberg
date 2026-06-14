@@ -16,13 +16,24 @@ namespace rest_api_objects {
 
 class ContentFile {
 public:
+	ContentFile();
+	ContentFile(const ContentFile &) = delete;
+	ContentFile &operator=(const ContentFile &) = delete;
+	ContentFile(ContentFile &&) = default;
+	ContentFile &operator=(ContentFile &&) = default;
+
+public:
 	// Deserialization
 	static ContentFile FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	ContentFile Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	int32_t spec_id;
 	vector<PrimitiveTypeValue> partition;
 	string content;

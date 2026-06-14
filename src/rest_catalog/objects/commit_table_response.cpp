@@ -12,12 +12,22 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+CommitTableResponse::CommitTableResponse() {
+}
+
 CommitTableResponse CommitTableResponse::FromJSON(yyjson_val *obj) {
 	CommitTableResponse res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+CommitTableResponse CommitTableResponse::Copy() const {
+	CommitTableResponse res;
+	res.metadata_location = metadata_location;
+	res.metadata = metadata.Copy();
 	return res;
 }
 

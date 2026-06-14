@@ -12,12 +12,33 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+BlobMetadata::BlobMetadata() {
+}
+
 BlobMetadata BlobMetadata::FromJSON(yyjson_val *obj) {
 	BlobMetadata res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+BlobMetadata BlobMetadata::Copy() const {
+	BlobMetadata res;
+	res.type = type;
+	res.snapshot_id = snapshot_id;
+	res.sequence_number = sequence_number;
+	res.fields.reserve(fields.size());
+	for (auto &item : fields) {
+		res.fields.emplace_back(item);
+	}
+	if (has_properties) {
+		for (auto &entry : properties) {
+			res.properties.emplace(entry.first, entry.second);
+		}
+	}
+	res.has_properties = has_properties;
 	return res;
 }
 
@@ -86,7 +107,7 @@ string BlobMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto properties_val = yyjson_obj_get(obj, "properties");
-	if (properties_val) {
+	if (properties_val && !yyjson_is_null(properties_val)) {
 		has_properties = true;
 		if (yyjson_is_obj(properties_val)) {
 			size_t idx, max;

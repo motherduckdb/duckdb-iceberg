@@ -12,12 +12,21 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+AssertCreate::AssertCreate() {
+}
+
 AssertCreate AssertCreate::FromJSON(yyjson_val *obj) {
 	AssertCreate res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+AssertCreate AssertCreate::Copy() const {
+	AssertCreate res;
+	res.type = type.Copy();
 	return res;
 }
 

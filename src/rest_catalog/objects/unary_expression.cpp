@@ -12,12 +12,22 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+UnaryExpression::UnaryExpression() {
+}
+
 UnaryExpression UnaryExpression::FromJSON(yyjson_val *obj) {
 	UnaryExpression res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+UnaryExpression UnaryExpression::Copy() const {
+	UnaryExpression res;
+	res.type = type.Copy();
+	res.term = term.Copy();
 	return res;
 }
 
@@ -39,16 +49,6 @@ string UnaryExpression::TryFromJSON(yyjson_val *obj) {
 		error = term.TryFromJSON(term_val);
 		if (!error.empty()) {
 			return error;
-		}
-	}
-	auto value_val = yyjson_obj_get(obj, "value");
-	if (!value_val) {
-		return "UnaryExpression required property 'value' is missing";
-	} else {
-		if (yyjson_is_obj(value_val)) {
-			value = value_val;
-		} else {
-			return "UnaryExpression property 'value' is not of type 'object'";
 		}
 	}
 	return "";

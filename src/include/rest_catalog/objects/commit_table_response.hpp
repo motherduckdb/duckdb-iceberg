@@ -14,13 +14,24 @@ namespace rest_api_objects {
 
 class CommitTableResponse {
 public:
+	CommitTableResponse();
+	CommitTableResponse(const CommitTableResponse &) = delete;
+	CommitTableResponse &operator=(const CommitTableResponse &) = delete;
+	CommitTableResponse(CommitTableResponse &&) = default;
+	CommitTableResponse &operator=(CommitTableResponse &&) = default;
+
+public:
 	// Deserialization
 	static CommitTableResponse FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	CommitTableResponse Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	string metadata_location;
 	TableMetadata metadata;
 };

@@ -16,13 +16,24 @@ class Expression;
 
 class ScanReport {
 public:
+	ScanReport();
+	ScanReport(const ScanReport &) = delete;
+	ScanReport &operator=(const ScanReport &) = delete;
+	ScanReport(ScanReport &&) = default;
+	ScanReport &operator=(ScanReport &&) = default;
+
+public:
 	// Deserialization
 	static ScanReport FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	ScanReport Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	string table_name;
 	int64_t snapshot_id;
 	unique_ptr<Expression> filter;

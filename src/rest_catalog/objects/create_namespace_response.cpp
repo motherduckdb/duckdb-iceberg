@@ -12,12 +12,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+CreateNamespaceResponse::CreateNamespaceResponse() {
+}
+
 CreateNamespaceResponse CreateNamespaceResponse::FromJSON(yyjson_val *obj) {
 	CreateNamespaceResponse res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+CreateNamespaceResponse CreateNamespaceResponse::Copy() const {
+	CreateNamespaceResponse res;
+	res._namespace = _namespace.Copy();
+	if (has_properties) {
+		for (auto &entry : properties) {
+			res.properties.emplace(entry.first, entry.second);
+		}
+	}
+	res.has_properties = has_properties;
 	return res;
 }
 
@@ -33,7 +48,7 @@ string CreateNamespaceResponse::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto properties_val = yyjson_obj_get(obj, "properties");
-	if (properties_val) {
+	if (properties_val && !yyjson_is_null(properties_val)) {
 		has_properties = true;
 		if (yyjson_is_obj(properties_val)) {
 			size_t idx, max;

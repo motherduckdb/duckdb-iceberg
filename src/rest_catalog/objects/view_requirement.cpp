@@ -12,12 +12,24 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+ViewRequirement::ViewRequirement() {
+}
+
 ViewRequirement ViewRequirement::FromJSON(yyjson_val *obj) {
 	ViewRequirement res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+ViewRequirement ViewRequirement::Copy() const {
+	ViewRequirement res;
+	if (has_assert_view_uuid) {
+		res.assert_view_uuid = assert_view_uuid.Copy();
+	}
+	res.has_assert_view_uuid = has_assert_view_uuid;
 	return res;
 }
 

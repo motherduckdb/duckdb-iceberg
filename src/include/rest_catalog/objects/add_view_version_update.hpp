@@ -15,13 +15,24 @@ namespace rest_api_objects {
 
 class AddViewVersionUpdate {
 public:
+	AddViewVersionUpdate();
+	AddViewVersionUpdate(const AddViewVersionUpdate &) = delete;
+	AddViewVersionUpdate &operator=(const AddViewVersionUpdate &) = delete;
+	AddViewVersionUpdate(AddViewVersionUpdate &&) = default;
+	AddViewVersionUpdate &operator=(AddViewVersionUpdate &&) = default;
+
+public:
 	// Deserialization
 	static AddViewVersionUpdate FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	AddViewVersionUpdate Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	BaseUpdate base_update;
 	ViewVersion view_version;
 	string action;

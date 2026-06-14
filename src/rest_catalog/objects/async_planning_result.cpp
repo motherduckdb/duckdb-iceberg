@@ -12,12 +12,22 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+AsyncPlanningResult::AsyncPlanningResult() {
+}
+
 AsyncPlanningResult AsyncPlanningResult::FromJSON(yyjson_val *obj) {
 	AsyncPlanningResult res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+AsyncPlanningResult AsyncPlanningResult::Copy() const {
+	AsyncPlanningResult res;
+	res.status = status.Copy();
+	res.plan_id = plan_id;
 	return res;
 }
 
@@ -33,8 +43,9 @@ string AsyncPlanningResult::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto plan_id_val = yyjson_obj_get(obj, "plan-id");
-	if (plan_id_val) {
-		has_plan_id = true;
+	if (!plan_id_val) {
+		return "AsyncPlanningResult required property 'plan-id' is missing";
+	} else {
 		if (yyjson_is_str(plan_id_val)) {
 			plan_id = yyjson_get_str(plan_id_val);
 		} else {
@@ -54,9 +65,7 @@ yyjson_mut_val *AsyncPlanningResult::ToJSON(yyjson_mut_doc *doc) const {
 	yyjson_mut_obj_add_val(doc, obj, "status", status_val);
 
 	// Serialize: plan-id
-	if (has_plan_id) {
-		yyjson_mut_obj_add_str(doc, obj, "plan-id", plan_id.c_str());
-	}
+	yyjson_mut_obj_add_str(doc, obj, "plan-id", plan_id.c_str());
 
 	return obj;
 }

@@ -12,12 +12,30 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+AddSchemaUpdate::AddSchemaUpdate() {
+}
+
 AddSchemaUpdate AddSchemaUpdate::FromJSON(yyjson_val *obj) {
 	AddSchemaUpdate res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+AddSchemaUpdate AddSchemaUpdate::Copy() const {
+	AddSchemaUpdate res;
+	res.base_update = base_update.Copy();
+	res.schema = schema.Copy();
+	if (has_action) {
+		res.action = action;
+	}
+	res.has_action = has_action;
+	if (has_last_column_id) {
+		res.last_column_id = last_column_id;
+	}
+	res.has_last_column_id = has_last_column_id;
 	return res;
 }
 
@@ -37,7 +55,7 @@ string AddSchemaUpdate::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto action_val = yyjson_obj_get(obj, "action");
-	if (action_val) {
+	if (action_val && !yyjson_is_null(action_val)) {
 		has_action = true;
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);
@@ -47,7 +65,7 @@ string AddSchemaUpdate::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto last_column_id_val = yyjson_obj_get(obj, "last-column-id");
-	if (last_column_id_val) {
+	if (last_column_id_val && !yyjson_is_null(last_column_id_val)) {
 		has_last_column_id = true;
 		if (yyjson_is_int(last_column_id_val)) {
 			last_column_id = yyjson_get_int(last_column_id_val);

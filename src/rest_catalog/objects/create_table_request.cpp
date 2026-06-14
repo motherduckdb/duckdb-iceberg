@@ -12,12 +12,44 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+CreateTableRequest::CreateTableRequest() {
+}
+
 CreateTableRequest CreateTableRequest::FromJSON(yyjson_val *obj) {
 	CreateTableRequest res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+CreateTableRequest CreateTableRequest::Copy() const {
+	CreateTableRequest res;
+	res.name = name;
+	res.schema = schema.Copy();
+	if (has_location) {
+		res.location = location;
+	}
+	res.has_location = has_location;
+	if (has_partition_spec) {
+		res.partition_spec = partition_spec.Copy();
+	}
+	res.has_partition_spec = has_partition_spec;
+	if (has_write_order) {
+		res.write_order = write_order.Copy();
+	}
+	res.has_write_order = has_write_order;
+	if (has_stage_create) {
+		res.stage_create = stage_create;
+	}
+	res.has_stage_create = has_stage_create;
+	if (has_properties) {
+		for (auto &entry : properties) {
+			res.properties.emplace(entry.first, entry.second);
+		}
+	}
+	res.has_properties = has_properties;
 	return res;
 }
 
@@ -44,7 +76,7 @@ string CreateTableRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto location_val = yyjson_obj_get(obj, "location");
-	if (location_val) {
+	if (location_val && !yyjson_is_null(location_val)) {
 		has_location = true;
 		if (yyjson_is_str(location_val)) {
 			location = yyjson_get_str(location_val);
@@ -55,7 +87,7 @@ string CreateTableRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto partition_spec_val = yyjson_obj_get(obj, "partition-spec");
-	if (partition_spec_val) {
+	if (partition_spec_val && !yyjson_is_null(partition_spec_val)) {
 		has_partition_spec = true;
 		error = partition_spec.TryFromJSON(partition_spec_val);
 		if (!error.empty()) {
@@ -63,7 +95,7 @@ string CreateTableRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto write_order_val = yyjson_obj_get(obj, "write-order");
-	if (write_order_val) {
+	if (write_order_val && !yyjson_is_null(write_order_val)) {
 		has_write_order = true;
 		error = write_order.TryFromJSON(write_order_val);
 		if (!error.empty()) {
@@ -71,7 +103,7 @@ string CreateTableRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto stage_create_val = yyjson_obj_get(obj, "stage-create");
-	if (stage_create_val) {
+	if (stage_create_val && !yyjson_is_null(stage_create_val)) {
 		has_stage_create = true;
 		if (yyjson_is_bool(stage_create_val)) {
 			stage_create = yyjson_get_bool(stage_create_val);
@@ -82,7 +114,7 @@ string CreateTableRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto properties_val = yyjson_obj_get(obj, "properties");
-	if (properties_val) {
+	if (properties_val && !yyjson_is_null(properties_val)) {
 		has_properties = true;
 		if (yyjson_is_obj(properties_val)) {
 			size_t idx, max;

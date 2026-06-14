@@ -12,12 +12,29 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+EqualityDeleteFile::EqualityDeleteFile() {
+}
+
 EqualityDeleteFile EqualityDeleteFile::FromJSON(yyjson_val *obj) {
 	EqualityDeleteFile res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+EqualityDeleteFile EqualityDeleteFile::Copy() const {
+	EqualityDeleteFile res;
+	res.content_file = content_file.Copy();
+	res.content = content;
+	if (has_equality_ids) {
+		res.equality_ids.reserve(equality_ids.size());
+		for (auto &item : equality_ids) {
+			res.equality_ids.emplace_back(item);
+		}
+	}
+	res.has_equality_ids = has_equality_ids;
 	return res;
 }
 
@@ -40,7 +57,7 @@ string EqualityDeleteFile::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto equality_ids_val = yyjson_obj_get(obj, "equality-ids");
-	if (equality_ids_val) {
+	if (equality_ids_val && !yyjson_is_null(equality_ids_val)) {
 		has_equality_ids = true;
 		if (yyjson_is_arr(equality_ids_val)) {
 			size_t idx, max;

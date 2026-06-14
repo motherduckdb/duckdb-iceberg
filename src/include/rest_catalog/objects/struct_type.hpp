@@ -15,13 +15,24 @@ class StructField;
 
 class StructType {
 public:
+	StructType();
+	StructType(const StructType &) = delete;
+	StructType &operator=(const StructType &) = delete;
+	StructType(StructType &&) = default;
+	StructType &operator=(StructType &&) = default;
+
+public:
 	// Deserialization
 	static StructType FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	StructType Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	string type;
 	vector<unique_ptr<StructField>> fields;
 };

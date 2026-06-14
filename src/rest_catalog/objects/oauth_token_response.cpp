@@ -12,12 +12,38 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+OAuthTokenResponse::OAuthTokenResponse() {
+}
+
 OAuthTokenResponse OAuthTokenResponse::FromJSON(yyjson_val *obj) {
 	OAuthTokenResponse res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+OAuthTokenResponse OAuthTokenResponse::Copy() const {
+	OAuthTokenResponse res;
+	res.access_token = access_token;
+	res.token_type = token_type;
+	if (has_expires_in) {
+		res.expires_in = expires_in;
+	}
+	res.has_expires_in = has_expires_in;
+	if (has_issued_token_type) {
+		res.issued_token_type = issued_token_type.Copy();
+	}
+	res.has_issued_token_type = has_issued_token_type;
+	if (has_refresh_token) {
+		res.refresh_token = refresh_token;
+	}
+	res.has_refresh_token = has_refresh_token;
+	if (has_scope) {
+		res.scope = scope;
+	}
+	res.has_scope = has_scope;
 	return res;
 }
 
@@ -48,7 +74,7 @@ string OAuthTokenResponse::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto expires_in_val = yyjson_obj_get(obj, "expires_in");
-	if (expires_in_val) {
+	if (expires_in_val && !yyjson_is_null(expires_in_val)) {
 		has_expires_in = true;
 		if (yyjson_is_int(expires_in_val)) {
 			expires_in = yyjson_get_int(expires_in_val);
@@ -59,7 +85,7 @@ string OAuthTokenResponse::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto issued_token_type_val = yyjson_obj_get(obj, "issued_token_type");
-	if (issued_token_type_val) {
+	if (issued_token_type_val && !yyjson_is_null(issued_token_type_val)) {
 		has_issued_token_type = true;
 		error = issued_token_type.TryFromJSON(issued_token_type_val);
 		if (!error.empty()) {
@@ -67,7 +93,7 @@ string OAuthTokenResponse::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto refresh_token_val = yyjson_obj_get(obj, "refresh_token");
-	if (refresh_token_val) {
+	if (refresh_token_val && !yyjson_is_null(refresh_token_val)) {
 		has_refresh_token = true;
 		if (yyjson_is_str(refresh_token_val)) {
 			refresh_token = yyjson_get_str(refresh_token_val);
@@ -78,7 +104,7 @@ string OAuthTokenResponse::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto scope_val = yyjson_obj_get(obj, "scope");
-	if (scope_val) {
+	if (scope_val && !yyjson_is_null(scope_val)) {
 		has_scope = true;
 		if (yyjson_is_str(scope_val)) {
 			scope = yyjson_get_str(scope_val);

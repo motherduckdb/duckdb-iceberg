@@ -15,13 +15,24 @@ namespace rest_api_objects {
 
 class AddPartitionSpecUpdate {
 public:
+	AddPartitionSpecUpdate();
+	AddPartitionSpecUpdate(const AddPartitionSpecUpdate &) = delete;
+	AddPartitionSpecUpdate &operator=(const AddPartitionSpecUpdate &) = delete;
+	AddPartitionSpecUpdate(AddPartitionSpecUpdate &&) = default;
+	AddPartitionSpecUpdate &operator=(AddPartitionSpecUpdate &&) = default;
+
+public:
 	// Deserialization
 	static AddPartitionSpecUpdate FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	AddPartitionSpecUpdate Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	BaseUpdate base_update;
 	PartitionSpec spec;
 	string action;

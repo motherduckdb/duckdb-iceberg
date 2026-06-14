@@ -16,13 +16,24 @@ namespace rest_api_objects {
 
 class ScanTasks {
 public:
+	ScanTasks();
+	ScanTasks(const ScanTasks &) = delete;
+	ScanTasks &operator=(const ScanTasks &) = delete;
+	ScanTasks(ScanTasks &&) = default;
+	ScanTasks &operator=(ScanTasks &&) = default;
+
+public:
 	// Deserialization
 	static ScanTasks FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	ScanTasks Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	vector<DeleteFile> delete_files;
 	bool has_delete_files = false;
 	vector<FileScanTask> file_scan_tasks;

@@ -12,12 +12,22 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+AssertDefaultSortOrderId::AssertDefaultSortOrderId() {
+}
+
 AssertDefaultSortOrderId AssertDefaultSortOrderId::FromJSON(yyjson_val *obj) {
 	AssertDefaultSortOrderId res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+AssertDefaultSortOrderId AssertDefaultSortOrderId::Copy() const {
+	AssertDefaultSortOrderId res;
+	res.type = type.Copy();
+	res.default_sort_order_id = default_sort_order_id;
 	return res;
 }
 

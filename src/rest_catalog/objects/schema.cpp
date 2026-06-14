@@ -12,7 +12,12 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-Object1 Object1::FromJSON(yyjson_val *obj) {
+Schema::Schema() {
+}
+Schema::Object1::Object1() {
+}
+
+Schema::Object1 Schema::Object1::FromJSON(yyjson_val *obj) {
 	Object1 res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -21,10 +26,26 @@ Object1 Object1::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string Object1::TryFromJSON(yyjson_val *obj) {
+Schema::Object1 Schema::Object1::Copy() const {
+	Object1 res;
+	if (has_schema_id) {
+		res.schema_id = schema_id;
+	}
+	res.has_schema_id = has_schema_id;
+	if (has_identifier_field_ids) {
+		res.identifier_field_ids.reserve(identifier_field_ids.size());
+		for (auto &item : identifier_field_ids) {
+			res.identifier_field_ids.emplace_back(item);
+		}
+	}
+	res.has_identifier_field_ids = has_identifier_field_ids;
+	return res;
+}
+
+string Schema::Object1::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto schema_id_val = yyjson_obj_get(obj, "schema-id");
-	if (schema_id_val) {
+	if (schema_id_val && !yyjson_is_null(schema_id_val)) {
 		has_schema_id = true;
 		if (yyjson_is_int(schema_id_val)) {
 			schema_id = yyjson_get_int(schema_id_val);
@@ -34,7 +55,7 @@ string Object1::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto identifier_field_ids_val = yyjson_obj_get(obj, "identifier-field-ids");
-	if (identifier_field_ids_val) {
+	if (identifier_field_ids_val && !yyjson_is_null(identifier_field_ids_val)) {
 		has_identifier_field_ids = true;
 		if (yyjson_is_arr(identifier_field_ids_val)) {
 			size_t idx, max;
@@ -58,7 +79,7 @@ string Object1::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *Object1::ToJSON(yyjson_mut_doc *doc) const {
+yyjson_mut_val *Schema::Object1::ToJSON(yyjson_mut_doc *doc) const {
 	yyjson_mut_val *obj = yyjson_mut_obj(doc);
 
 	// Serialize: schema-id
@@ -85,6 +106,13 @@ Schema Schema::FromJSON(yyjson_val *obj) {
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+Schema Schema::Copy() const {
+	Schema res;
+	res.struct_type = struct_type.Copy();
+	res.object_1 = object_1.Copy();
 	return res;
 }
 

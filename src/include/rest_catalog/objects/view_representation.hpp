@@ -14,13 +14,24 @@ namespace rest_api_objects {
 
 class ViewRepresentation {
 public:
+	ViewRepresentation();
+	ViewRepresentation(const ViewRepresentation &) = delete;
+	ViewRepresentation &operator=(const ViewRepresentation &) = delete;
+	ViewRepresentation(ViewRepresentation &&) = default;
+	ViewRepresentation &operator=(ViewRepresentation &&) = default;
+
+public:
 	// Deserialization
 	static ViewRepresentation FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	ViewRepresentation Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	SQLViewRepresentation sqlview_representation;
 	bool has_sqlview_representation = false;
 };

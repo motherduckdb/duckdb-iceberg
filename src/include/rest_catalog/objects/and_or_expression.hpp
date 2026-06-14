@@ -16,13 +16,24 @@ class Expression;
 
 class AndOrExpression {
 public:
+	AndOrExpression();
+	AndOrExpression(const AndOrExpression &) = delete;
+	AndOrExpression &operator=(const AndOrExpression &) = delete;
+	AndOrExpression(AndOrExpression &&) = default;
+	AndOrExpression &operator=(AndOrExpression &&) = default;
+
+public:
 	// Deserialization
 	static AndOrExpression FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	AndOrExpression Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	ExpressionType type;
 	unique_ptr<Expression> left;
 	unique_ptr<Expression> right;

@@ -14,13 +14,24 @@ namespace rest_api_objects {
 
 class FetchScanTasksRequest {
 public:
+	FetchScanTasksRequest();
+	FetchScanTasksRequest(const FetchScanTasksRequest &) = delete;
+	FetchScanTasksRequest &operator=(const FetchScanTasksRequest &) = delete;
+	FetchScanTasksRequest(FetchScanTasksRequest &&) = default;
+	FetchScanTasksRequest &operator=(FetchScanTasksRequest &&) = default;
+
+public:
 	// Deserialization
 	static FetchScanTasksRequest FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	FetchScanTasksRequest Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	PlanTask plan_task;
 };
 

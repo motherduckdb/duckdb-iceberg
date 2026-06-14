@@ -3,35 +3,81 @@ import os
 import datetime
 from decimal import Decimal
 from math import inf
+from dataclasses import dataclass
+from packaging.version import Version
+from packaging.specifiers import SpecifierSet
+
+from conftest import *
 
 from pprint import pprint
 
 SCRIPT_DIR = os.path.dirname(__file__)
 
-
-pyspark = pytest.importorskip("pyspark")
 pyspark_sql = pytest.importorskip("pyspark.sql")
 SparkSession = pyspark_sql.SparkSession
 SparkContext = pyspark.SparkContext
 Row = pyspark_sql.Row
 
 
+@dataclass
+class IcebergRuntimeConfig:
+    spark_version: Version
+    scala_binary_version: str
+    iceberg_library_version: str
+
+
+# uses {spark}_{scala}-{iceberg}
+def generate_jar_location(config: IcebergRuntimeConfig) -> str:
+    return f"iceberg-spark-runtime-{config.spark_version}_{config.scala_binary_version}-{config.iceberg_library_version}.jar"
+
+
+# uses {spark}_{scala}:{iceberg}
+def generate_package(config: IcebergRuntimeConfig) -> str:
+    return f"org.apache.iceberg:iceberg-spark-runtime-{config.spark_version}_{config.scala_binary_version}:{config.iceberg_library_version}"
+
+
 # List of runtimes you want to test
 ICEBERG_RUNTIMES = [
-    "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.4.1",
-    "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.9.0",
-    "org.apache.iceberg:iceberg-spark-runtime-3.5_2.13:1.9.1",
+    IcebergRuntimeConfig(
+        spark_version=Version("3.5"),
+        scala_binary_version="2.12",
+        iceberg_library_version="1.4.1",
+    ),
+    IcebergRuntimeConfig(
+        spark_version=Version("3.5"),
+        scala_binary_version="2.12",
+        iceberg_library_version="1.9.0",
+    ),
+    IcebergRuntimeConfig(
+        spark_version=Version("3.5"),
+        scala_binary_version="2.13",
+        iceberg_library_version="1.9.1",
+    ),
+    IcebergRuntimeConfig(
+        spark_version=Version("4.0"),
+        scala_binary_version="2.13",
+        iceberg_library_version="1.10.0",
+    ),
 ]
 
 
 @pytest.fixture(params=ICEBERG_RUNTIMES, scope="session")
 def spark_con(request):
-    runtime_pkg = request.param
-    runtime_pkg_jar = (runtime_pkg[len("org.apache.iceberg:") :] + ".jar").replace(":", "-")
-    runtime_path = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..', 'scripts', 'data_generators', runtime_pkg_jar))
+    runtime_config = request.param
+    if runtime_config.spark_version.major != PYSPARK_VERSION.major:
+        pytest.skip(
+            f"Skipping Iceberg runtime "
+            f"(Spark {runtime_config.spark_version}, Scala {runtime_config.scala_binary_version}, "
+            f"Iceberg {runtime_config.iceberg_library_version}) "
+            f"because current PySpark version is {PYSPARK_VERSION}"
+        )
+
+    runtime_jar = generate_jar_location(runtime_config)
+    runtime_pkg = generate_package(runtime_config)
+    runtime_path = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", "scripts", "data_generators", runtime_jar))
 
     os.environ["PYSPARK_SUBMIT_ARGS"] = (
-        f"--packages {runtime_pkg},org.apache.iceberg:iceberg-aws-bundle:1.9.0 pyspark-shell"
+        f"--packages {runtime_pkg},org.apache.iceberg:iceberg-aws-bundle:{runtime_config.iceberg_library_version} pyspark-shell"
     )
     os.environ["AWS_REGION"] = "us-east-1"
     os.environ["AWS_ACCESS_KEY_ID"] = "admin"
@@ -50,7 +96,7 @@ def spark_con(request):
         .config("spark.sql.catalog.demo.s3.endpoint", "http://127.0.0.1:9000")
         .config("spark.sql.catalog.demo.s3.path-style-access", "true")
         .config("spark.driver.memory", "10g")
-        .config('spark.jars', runtime_path)
+        .config("spark.jars", runtime_path)
         .config("spark.sql.catalogImplementation", "in-memory")
         .config("spark.sql.catalog.demo.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
         .getOrCreate()
@@ -61,11 +107,22 @@ def spark_con(request):
     return spark
 
 
-@pytest.mark.skipif(
-    os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None, reason="Test data wasn't generated, run 'make data' first"
+requires_iceberg_server = pytest.mark.skipif(
+    os.getenv("FIXTURE_SERVER_AVAILABLE", None) is None,
+    reason="Test data wasn't generated, run tests in test/sql/local/irc first (and set 'export FIXTURE_SERVER_AVAILABLE=1')",
 )
+
+
+requires_equality_deletes_available = pytest.mark.skipif(
+    (os.getenv("EQUALITY_DELETE_WRITES_ENABLED", None) is None)
+    or (os.getenv("EQUALITY_DELETE_WRITES_ENABLED", '0') == '0'),
+    reason="Test data wasn't generated, run tests in test/sql/local/irc first (and set 'export EQUALITY_DELETE_WRITES_ENABLED=1')",
+)
+
+
+@requires_iceberg_server
 class TestSparkRead:
-    def test_spark_read(self, spark_con):
+    def test_spark_read_insert_test(self, spark_con):
         df = spark_con.sql(
             """
             select * from default.insert_test order by col1, col2, col3
@@ -73,21 +130,15 @@ class TestSparkRead:
         )
         res = df.collect()
         assert res == [
-            Row(col1=datetime.date(2010, 6, 11), col2=42, col3='test'),
-            Row(col1=datetime.date(2020, 8, 12), col2=45345, col3='inserted by con1'),
-            Row(col1=datetime.date(2020, 8, 13), col2=1, col3='insert 1'),
-            Row(col1=datetime.date(2020, 8, 14), col2=2, col3='insert 2'),
-            Row(col1=datetime.date(2020, 8, 15), col2=3, col3='insert 3'),
-            Row(col1=datetime.date(2020, 8, 16), col2=4, col3='insert 4'),
+            Row(col1=datetime.date(2010, 6, 11), col2=42, col3="test"),
+            Row(col1=datetime.date(2020, 8, 12), col2=45345, col3="inserted by con1"),
+            Row(col1=datetime.date(2020, 8, 13), col2=1, col3="insert 1"),
+            Row(col1=datetime.date(2020, 8, 14), col2=2, col3="insert 2"),
+            Row(col1=datetime.date(2020, 8, 15), col2=3, col3="insert 3"),
+            Row(col1=datetime.date(2020, 8, 16), col2=4, col3="insert 4"),
         ]
 
-
-@pytest.mark.skipif(
-    os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None,
-    reason="Test data wasn't generated, run tests in test/sql/local/irc first",
-)
-class TestSparkReadDuckDBTable:
-    def test_spark_read(self, spark_con):
+    def test_spark_read_duckdb_table(self, spark_con):
         df = spark_con.sql(
             """
             select * from default.duckdb_written_table order by a
@@ -107,13 +158,7 @@ class TestSparkReadDuckDBTable:
             Row(a=9),
         ]
 
-
-@pytest.mark.skipif(
-    os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None,
-    reason="Test data wasn't generated, run tests in test/sql/local/irc first",
-)
-class TestSparkReadDuckDBTableWithDeletes:
-    def test_spark_read(self, spark_con):
+    def test_spark_read_table_with_deletes(self, spark_con):
         df = spark_con.sql(
             """
             select * from default.duckdb_deletes_for_other_engines order by a
@@ -133,13 +178,7 @@ class TestSparkReadDuckDBTableWithDeletes:
             Row(a=59),
         ]
 
-
-@pytest.mark.skipif(
-    os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None,
-    reason="Test data wasn't generated, run tests in test/sql/local/irc first",
-)
-class TestSparkReadUpperLowerBounds:
-    def test_spark_read(self, spark_con):
+    def test_spark_read_upper_and_lower_bounds(self, spark_con):
         df = spark_con.sql(
             """
             select * from default.lower_upper_bounds_test;
@@ -151,26 +190,26 @@ class TestSparkReadUpperLowerBounds:
             Row(
                 int_type=-2147483648,
                 long_type=-9223372036854775808,
-                varchar_type='',
+                varchar_type="",
                 bool_type=False,
                 float_type=-3.4028234663852886e38,
                 double_type=-1.7976931348623157e308,
-                decimal_type_18_3=Decimal('-9999999999999.999'),
+                decimal_type_18_3=Decimal("-9999999999999.999"),
                 date_type=datetime.date(1, 1, 1),
                 timestamp_type=datetime.datetime(1, 1, 1, 0, 0),
-                binary_type=bytearray(b''),
+                binary_type=bytearray(b""),
             ),
             Row(
                 int_type=2147483647,
                 long_type=9223372036854775807,
-                varchar_type='ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ',
+                varchar_type="ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ",
                 bool_type=True,
                 float_type=3.4028234663852886e38,
                 double_type=1.7976931348623157e308,
-                decimal_type_18_3=Decimal('9999999999999.999'),
+                decimal_type_18_3=Decimal("9999999999999.999"),
                 date_type=datetime.date(9999, 12, 31),
                 timestamp_type=datetime.datetime(9999, 12, 31, 23, 59, 59, 999999),
-                binary_type=bytearray(b'\xff\xff\xff\xff\xff\xff\xff\xff'),
+                binary_type=bytearray(b"\xff\xff\xff\xff\xff\xff\xff\xff"),
             ),
             Row(
                 int_type=None,
@@ -186,13 +225,7 @@ class TestSparkReadUpperLowerBounds:
             ),
         ]
 
-
-@pytest.mark.skipif(
-    os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None,
-    reason="Test data wasn't generated, run tests in test/sql/local/irc first",
-)
-class TestSparkReadInfinities:
-    def test_spark_read(self, spark_con):
+    def test_spark_read_infinities(self, spark_con):
         df = spark_con.sql(
             """
             select * from default.test_infinities;
@@ -205,13 +238,7 @@ class TestSparkReadInfinities:
             Row(float_type=-inf, double_type=-inf),
         ]
 
-
-@pytest.mark.skipif(
-    os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None,
-    reason="Test data wasn't generated, run tests in test/sql/local/irc first",
-)
-class TestSparkReadDuckDBNestedTypes:
-    def test_spark_read(self, spark_con):
+    def test_duckdb_written_nested_types(self, spark_con):
         df = spark_con.sql(
             """
             select * from default.duckdb_nested_types;
@@ -222,9 +249,170 @@ class TestSparkReadDuckDBNestedTypes:
         assert res == [
             Row(
                 id=1,
-                name='Alice',
-                address=Row(street='123 Main St', city='Metropolis', zip='12345'),
-                phone_numbers=['123-456-7890', '987-654-3210'],
-                metadata={'age': '30', 'membership': 'gold'},
+                name="Alice",
+                address=Row(street="123 Main St", city="Metropolis", zip="12345"),
+                phone_numbers=["123-456-7890", "987-654-3210"],
+                metadata={"age": "30", "membership": "gold"},
             ),
+        ]
+
+    @pytest.mark.requires_spark(">=4.0")
+    def test_duckdb_written_deletion_vectors(self, spark_con):
+        # requires test_delete_consolidation_transactional.test to run
+        res = spark_con.sql(
+            """
+            select * from default.write_v3_update_and_delete order by all
+            """
+        ).collect()
+        assert (
+            str(res)
+            == "[Row(id=1, data='a'), Row(id=2, data='b_u1'), Row(id=3, data='c'), Row(id=4, data='d_u1'), Row(id=5, data='e')]"
+        )
+
+    @pytest.mark.requires_spark(">=4.0")
+    def test_spark_read_duckdb_created_variant(self, spark_con):
+        VariantVal = pyspark.sql.VariantVal
+
+        def assert_variant_equal(actual, value_bytes, metadata_bytes):
+            assert bytes(actual.value) == value_bytes
+            assert bytes(actual.metadata) == metadata_bytes
+
+        res = spark_con.sql(
+            """
+            select * from default.my_variant_tbl order by b
+            """
+        ).collect()
+
+        row = res[0]
+        assert row.b == 42
+        assert_variant_equal(
+            row.a,
+            b"\x11test",
+            b"\x11\x00\x00",
+        )
+        row = res[1]
+        assert row.b == 43
+        assert_variant_equal(
+            row.a,
+            b"\x02\x02\x00\x01\x00\x05&\x149\x05\x00\x00\x03\x03\x00\x05\x11\x1b\x14\x01\x00\x00\x00-hello world\x02\x01\x02\x00\x05\x14)\x00\x00\x00",
+            b"\x11\x03\x00\x01\x02\x03abd",
+        )
+
+    @pytest.mark.requires_spark(">=4.0")
+    def test_duckdb_written_row_lineage(self, spark_con):
+        df = spark_con.sql(
+            """
+            select _last_updated_sequence_number, _row_id, * from default.duckdb_row_lineage order by _row_id;
+            """
+        )
+        res = df.collect()
+        print(res)
+        assert res == [
+            Row(_last_updated_sequence_number=5, _row_id=0, id=1, data="replaced"),
+            Row(_last_updated_sequence_number=2, _row_id=1, id=2, data="b_u1"),
+            Row(_last_updated_sequence_number=2, _row_id=3, id=4, data="d_u1"),
+            Row(_last_updated_sequence_number=5, _row_id=7, id=6, data="replaced"),
+            Row(_last_updated_sequence_number=7, _row_id=11, id=7, data="g_new"),
+        ]
+
+    # Written by Spark, read by Spark
+    # See https://github.com/duckdb/duckdb-iceberg/pull/908 on why spark behavior is unclear
+    @pytest.mark.skip(reason="Failures due to unclear Spark behavior regarding row ids")
+    @pytest.mark.requires_spark(">=4.0")
+    def test_spark_read_row_lineage_from_upgraded(self, spark_con):
+        df = spark_con.sql(
+            """
+            select _last_updated_sequence_number, _row_id, * from default.row_lineage_test_upgraded_insert order by id;
+            """
+        )
+        res = df.collect()
+        assert res == [
+            Row(_last_updated_sequence_number=5, _row_id=3, id=1, data="replaced"),
+            Row(_last_updated_sequence_number=8, _row_id=0, id=2, data="replaced_again"),
+            Row(_last_updated_sequence_number=2, _row_id=6, id=4, data="d_u1"),
+            Row(_last_updated_sequence_number=8, _row_id=1, id=6, data="replaced_again"),
+            Row(_last_updated_sequence_number=7, _row_id=2, id=7, data="g_new"),
+        ]
+
+    # Written by DuckDB (after upgrading with Spark), read by Spark
+    @pytest.mark.requires_spark(">=4.0")
+    @pytest.mark.skip(reason="Failures due to unclear Spark behavior regarding row ids")
+    def test_spark_read_row_lineage_from_upgraded_by_duckdb(self, spark_con):
+        df = spark_con.sql(
+            """
+            select _last_updated_sequence_number, _row_id, * from default.row_lineage_test_upgraded order by id;
+            """
+        )
+        res = df.collect()
+        assert res == [
+            Row(_last_updated_sequence_number=8, _row_id=3, id=2, data="replaced_again"),
+            Row(_last_updated_sequence_number=7, _row_id=0, id=7, data="g_new"),
+        ]
+
+
+@requires_equality_deletes_available
+class TestSparkReadEqualityDeletes:
+    @pytest.mark.skip(
+        reason="Spark errors when reading tables with a column that has an equality delete applied and the column has been dropped"
+    )
+    def test_spark_read_equality_deletes_with_dropped_column(self, spark_con):
+        df = spark_con.sql(
+            """
+            select * from default.equality_delete_table_1 order by all
+            """
+        )
+        res = df.collect()
+        assert res == [
+            Row(a=0, c=0),
+            Row(a=2, c=2),
+            Row(a=3, c=3),
+            Row(a=4, c=4),
+            Row(a=5, c=5),
+            Row(a=7, c=7),
+            Row(a=8, c=8),
+            Row(a=9, c=9),
+            Row(a=10, c=0),
+            Row(a=12, c=2),
+            Row(a=13, c=3),
+            Row(a=14, c=4),
+            Row(a=15, c=5),
+            Row(a=17, c=7),
+            Row(a=18, c=8),
+            Row(a=19, c=9),
+            Row(a=20, c=0),
+            Row(a=100, c=100),
+            Row(a=101, c=101),
+            Row(a=102, c=102),
+            Row(a=103, c=103),
+            Row(a=104, c=104),
+            Row(a=105, c=105),
+        ]
+
+    def test_spark_read_equality_deletes(self, spark_con):
+        df = spark_con.sql(
+            """
+            select * from default.equality_delete_table_test_multiple_equality_deletes order by all
+            """
+        )
+        res = df.collect()
+        assert res == [
+            Row(a=0, b=0, c=0),
+            Row(a=1, b=1, c=1),
+            Row(a=2, b=2, c=2),
+            Row(a=3, b=3, c=3),
+            Row(a=4, b=4, c=4),
+            Row(a=5, b=0, c=5),
+            Row(a=7, b=2, c=7),
+            Row(a=8, b=3, c=8),
+            Row(a=9, b=4, c=9),
+            Row(a=10, b=0, c=0),
+            Row(a=11, b=1, c=1),
+            Row(a=12, b=2, c=2),
+            Row(a=13, b=3, c=3),
+            Row(a=14, b=4, c=4),
+            Row(a=15, b=0, c=5),
+            Row(a=17, b=2, c=7),
+            Row(a=18, b=3, c=8),
+            Row(a=19, b=4, c=9),
+            Row(a=20, b=0, c=0),
         ]

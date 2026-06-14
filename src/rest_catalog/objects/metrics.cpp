@@ -12,11 +12,22 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+Metrics::Metrics() {
+}
+
 Metrics Metrics::FromJSON(yyjson_val *obj) {
 	Metrics res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
+	}
+	return res;
+}
+
+Metrics Metrics::Copy() const {
+	Metrics res;
+	for (auto &entry : additional_properties) {
+		res.additional_properties.emplace(entry.first, entry.second.Copy());
 	}
 	return res;
 }

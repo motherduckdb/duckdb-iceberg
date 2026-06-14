@@ -14,13 +14,24 @@ namespace rest_api_objects {
 
 class IcebergErrorResponse {
 public:
+	IcebergErrorResponse();
+	IcebergErrorResponse(const IcebergErrorResponse &) = delete;
+	IcebergErrorResponse &operator=(const IcebergErrorResponse &) = delete;
+	IcebergErrorResponse(IcebergErrorResponse &&) = default;
+	IcebergErrorResponse &operator=(IcebergErrorResponse &&) = default;
+
+public:
 	// Deserialization
 	static IcebergErrorResponse FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	IcebergErrorResponse Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	ErrorModel _error;
 };
 

@@ -14,13 +14,24 @@ namespace rest_api_objects {
 
 class SortOrder {
 public:
+	SortOrder();
+	SortOrder(const SortOrder &) = delete;
+	SortOrder &operator=(const SortOrder &) = delete;
+	SortOrder(SortOrder &&) = default;
+	SortOrder &operator=(SortOrder &&) = default;
+
+public:
 	// Deserialization
 	static SortOrder FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	SortOrder Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	int32_t order_id;
 	vector<SortField> fields;
 };

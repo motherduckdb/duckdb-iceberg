@@ -15,13 +15,24 @@ namespace rest_api_objects {
 
 class AddSchemaUpdate {
 public:
+	AddSchemaUpdate();
+	AddSchemaUpdate(const AddSchemaUpdate &) = delete;
+	AddSchemaUpdate &operator=(const AddSchemaUpdate &) = delete;
+	AddSchemaUpdate(AddSchemaUpdate &&) = default;
+	AddSchemaUpdate &operator=(AddSchemaUpdate &&) = default;
+
+public:
 	// Deserialization
 	static AddSchemaUpdate FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	AddSchemaUpdate Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	BaseUpdate base_update;
 	Schema schema;
 	string action;

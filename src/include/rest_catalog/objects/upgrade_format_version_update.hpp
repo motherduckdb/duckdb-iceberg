@@ -14,13 +14,24 @@ namespace rest_api_objects {
 
 class UpgradeFormatVersionUpdate {
 public:
+	UpgradeFormatVersionUpdate();
+	UpgradeFormatVersionUpdate(const UpgradeFormatVersionUpdate &) = delete;
+	UpgradeFormatVersionUpdate &operator=(const UpgradeFormatVersionUpdate &) = delete;
+	UpgradeFormatVersionUpdate(UpgradeFormatVersionUpdate &&) = default;
+	UpgradeFormatVersionUpdate &operator=(UpgradeFormatVersionUpdate &&) = default;
+
+public:
 	// Deserialization
 	static UpgradeFormatVersionUpdate FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	UpgradeFormatVersionUpdate Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	BaseUpdate base_update;
 	int32_t format_version;
 	string action;

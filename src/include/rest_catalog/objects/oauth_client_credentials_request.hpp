@@ -13,13 +13,24 @@ namespace rest_api_objects {
 
 class OAuthClientCredentialsRequest {
 public:
+	OAuthClientCredentialsRequest();
+	OAuthClientCredentialsRequest(const OAuthClientCredentialsRequest &) = delete;
+	OAuthClientCredentialsRequest &operator=(const OAuthClientCredentialsRequest &) = delete;
+	OAuthClientCredentialsRequest(OAuthClientCredentialsRequest &&) = default;
+	OAuthClientCredentialsRequest &operator=(OAuthClientCredentialsRequest &&) = default;
+
+public:
 	// Deserialization
 	static OAuthClientCredentialsRequest FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	OAuthClientCredentialsRequest Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	string grant_type;
 	string client_id;
 	string client_secret;

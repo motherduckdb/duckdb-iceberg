@@ -12,12 +12,30 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+CreateViewRequest::CreateViewRequest() {
+}
+
 CreateViewRequest CreateViewRequest::FromJSON(yyjson_val *obj) {
 	CreateViewRequest res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+CreateViewRequest CreateViewRequest::Copy() const {
+	CreateViewRequest res;
+	res.name = name;
+	res.schema = schema.Copy();
+	res.view_version = view_version.Copy();
+	for (auto &entry : properties) {
+		res.properties.emplace(entry.first, entry.second);
+	}
+	if (has_location) {
+		res.location = location;
+	}
+	res.has_location = has_location;
 	return res;
 }
 
@@ -76,7 +94,7 @@ string CreateViewRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto location_val = yyjson_obj_get(obj, "location");
-	if (location_val) {
+	if (location_val && !yyjson_is_null(location_val)) {
 		has_location = true;
 		if (yyjson_is_str(location_val)) {
 			location = yyjson_get_str(location_val);

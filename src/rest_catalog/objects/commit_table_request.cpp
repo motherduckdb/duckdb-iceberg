@@ -12,12 +12,32 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+CommitTableRequest::CommitTableRequest() {
+}
+
 CommitTableRequest CommitTableRequest::FromJSON(yyjson_val *obj) {
 	CommitTableRequest res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+CommitTableRequest CommitTableRequest::Copy() const {
+	CommitTableRequest res;
+	res.requirements.reserve(requirements.size());
+	for (auto &item : requirements) {
+		res.requirements.emplace_back(item.Copy());
+	}
+	res.updates.reserve(updates.size());
+	for (auto &item : updates) {
+		res.updates.emplace_back(item.Copy());
+	}
+	if (has_identifier) {
+		res.identifier = identifier.Copy();
+	}
+	res.has_identifier = has_identifier;
 	return res;
 }
 
@@ -66,7 +86,7 @@ string CommitTableRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto identifier_val = yyjson_obj_get(obj, "identifier");
-	if (identifier_val) {
+	if (identifier_val && !yyjson_is_null(identifier_val)) {
 		has_identifier = true;
 		error = identifier.TryFromJSON(identifier_val);
 		if (!error.empty()) {

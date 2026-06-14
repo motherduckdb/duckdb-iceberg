@@ -14,13 +14,24 @@ namespace rest_api_objects {
 
 class SetDefaultSpecUpdate {
 public:
+	SetDefaultSpecUpdate();
+	SetDefaultSpecUpdate(const SetDefaultSpecUpdate &) = delete;
+	SetDefaultSpecUpdate &operator=(const SetDefaultSpecUpdate &) = delete;
+	SetDefaultSpecUpdate(SetDefaultSpecUpdate &&) = default;
+	SetDefaultSpecUpdate &operator=(SetDefaultSpecUpdate &&) = default;
+
+public:
 	// Deserialization
 	static SetDefaultSpecUpdate FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	SetDefaultSpecUpdate Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	BaseUpdate base_update;
 	int32_t spec_id;
 	string action;

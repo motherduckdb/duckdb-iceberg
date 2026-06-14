@@ -15,13 +15,24 @@ namespace rest_api_objects {
 
 class CreateViewRequest {
 public:
+	CreateViewRequest();
+	CreateViewRequest(const CreateViewRequest &) = delete;
+	CreateViewRequest &operator=(const CreateViewRequest &) = delete;
+	CreateViewRequest(CreateViewRequest &&) = default;
+	CreateViewRequest &operator=(CreateViewRequest &&) = default;
+
+public:
 	// Deserialization
 	static CreateViewRequest FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	CreateViewRequest Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	string name;
 	Schema schema;
 	ViewVersion view_version;

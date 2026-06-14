@@ -13,13 +13,24 @@ namespace rest_api_objects {
 
 class Transform {
 public:
+	Transform();
+	Transform(const Transform &) = delete;
+	Transform &operator=(const Transform &) = delete;
+	Transform(Transform &&) = default;
+	Transform &operator=(Transform &&) = default;
+
+public:
 	// Deserialization
 	static Transform FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	Transform Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	string value;
 };
 

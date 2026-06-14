@@ -14,13 +14,24 @@ namespace rest_api_objects {
 
 class RemoveEncryptionKeyUpdate {
 public:
+	RemoveEncryptionKeyUpdate();
+	RemoveEncryptionKeyUpdate(const RemoveEncryptionKeyUpdate &) = delete;
+	RemoveEncryptionKeyUpdate &operator=(const RemoveEncryptionKeyUpdate &) = delete;
+	RemoveEncryptionKeyUpdate(RemoveEncryptionKeyUpdate &&) = default;
+	RemoveEncryptionKeyUpdate &operator=(RemoveEncryptionKeyUpdate &&) = default;
+
+public:
 	// Deserialization
 	static RemoveEncryptionKeyUpdate FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	RemoveEncryptionKeyUpdate Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	BaseUpdate base_update;
 	string key_id;
 	string action;

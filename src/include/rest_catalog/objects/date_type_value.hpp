@@ -13,13 +13,24 @@ namespace rest_api_objects {
 
 class DateTypeValue {
 public:
+	DateTypeValue();
+	DateTypeValue(const DateTypeValue &) = delete;
+	DateTypeValue &operator=(const DateTypeValue &) = delete;
+	DateTypeValue(DateTypeValue &&) = default;
+	DateTypeValue &operator=(DateTypeValue &&) = default;
+
+public:
 	// Deserialization
 	static DateTypeValue FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	DateTypeValue Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	string value;
 };
 

@@ -12,12 +12,26 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+RemoveStatisticsUpdate::RemoveStatisticsUpdate() {
+}
+
 RemoveStatisticsUpdate RemoveStatisticsUpdate::FromJSON(yyjson_val *obj) {
 	RemoveStatisticsUpdate res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+RemoveStatisticsUpdate RemoveStatisticsUpdate::Copy() const {
+	RemoveStatisticsUpdate res;
+	res.base_update = base_update.Copy();
+	res.snapshot_id = snapshot_id;
+	if (has_action) {
+		res.action = action;
+	}
+	res.has_action = has_action;
 	return res;
 }
 
@@ -42,7 +56,7 @@ string RemoveStatisticsUpdate::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto action_val = yyjson_obj_get(obj, "action");
-	if (action_val) {
+	if (action_val && !yyjson_is_null(action_val)) {
 		has_action = true;
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);

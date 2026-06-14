@@ -12,12 +12,39 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+ScanReport::ScanReport() {
+}
+
 ScanReport ScanReport::FromJSON(yyjson_val *obj) {
 	ScanReport res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+ScanReport ScanReport::Copy() const {
+	ScanReport res;
+	res.table_name = table_name;
+	res.snapshot_id = snapshot_id;
+	res.filter = filter ? make_uniq<Expression>(filter->Copy()) : nullptr;
+	res.schema_id = schema_id;
+	res.projected_field_ids.reserve(projected_field_ids.size());
+	for (auto &item : projected_field_ids) {
+		res.projected_field_ids.emplace_back(item);
+	}
+	res.projected_field_names.reserve(projected_field_names.size());
+	for (auto &item : projected_field_names) {
+		res.projected_field_names.emplace_back(item);
+	}
+	res.metrics = metrics.Copy();
+	if (has_metadata) {
+		for (auto &entry : metadata) {
+			res.metadata.emplace(entry.first, entry.second);
+		}
+	}
+	res.has_metadata = has_metadata;
 	return res;
 }
 
@@ -124,7 +151,7 @@ string ScanReport::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto metadata_val = yyjson_obj_get(obj, "metadata");
-	if (metadata_val) {
+	if (metadata_val && !yyjson_is_null(metadata_val)) {
 		has_metadata = true;
 		if (yyjson_is_obj(metadata_val)) {
 			size_t idx, max;

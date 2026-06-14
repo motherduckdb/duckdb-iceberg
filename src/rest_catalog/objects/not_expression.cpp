@@ -12,12 +12,22 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+NotExpression::NotExpression() {
+}
+
 NotExpression NotExpression::FromJSON(yyjson_val *obj) {
 	NotExpression res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+NotExpression NotExpression::Copy() const {
+	NotExpression res;
+	res.type = type.Copy();
+	res.child = child ? make_uniq<Expression>(child->Copy()) : nullptr;
 	return res;
 }
 

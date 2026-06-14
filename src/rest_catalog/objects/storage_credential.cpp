@@ -12,11 +12,23 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+StorageCredential::StorageCredential() {
+}
+
 StorageCredential StorageCredential::FromJSON(yyjson_val *obj) {
 	StorageCredential res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
+	}
+	return res;
+}
+
+StorageCredential StorageCredential::Copy() const {
+	StorageCredential res;
+	res.prefix = prefix;
+	for (auto &entry : config) {
+		res.config.emplace(entry.first, entry.second);
 	}
 	return res;
 }

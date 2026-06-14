@@ -12,7 +12,12 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-Object2 Object2::FromJSON(yyjson_val *obj) {
+Snapshot::Snapshot() {
+}
+Snapshot::Object2::Object2() {
+}
+
+Snapshot::Object2 Snapshot::Object2::FromJSON(yyjson_val *obj) {
 	Object2 res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -21,11 +26,20 @@ Object2 Object2::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string Object2::TryFromJSON(yyjson_val *obj) {
+Snapshot::Object2 Snapshot::Object2::Copy() const {
+	Object2 res;
+	res.operation = operation;
+	for (auto &entry : additional_properties) {
+		res.additional_properties.emplace(entry.first, entry.second);
+	}
+	return res;
+}
+
+string Snapshot::Object2::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto operation_val = yyjson_obj_get(obj, "operation");
 	if (!operation_val) {
-		operation = "overwrite";
+		return "Object2 required property 'operation' is missing";
 	} else {
 		if (yyjson_is_str(operation_val)) {
 			operation = yyjson_get_str(operation_val);
@@ -54,7 +68,7 @@ string Object2::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *Object2::ToJSON(yyjson_mut_doc *doc) const {
+yyjson_mut_val *Snapshot::Object2::ToJSON(yyjson_mut_doc *doc) const {
 	yyjson_mut_val *obj = yyjson_mut_obj(doc);
 
 	// Serialize: operation
@@ -76,6 +90,35 @@ Snapshot Snapshot::FromJSON(yyjson_val *obj) {
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+Snapshot Snapshot::Copy() const {
+	Snapshot res;
+	res.snapshot_id = snapshot_id;
+	res.timestamp_ms = timestamp_ms;
+	res.manifest_list = manifest_list;
+	res.summary = summary.Copy();
+	if (has_parent_snapshot_id) {
+		res.parent_snapshot_id = parent_snapshot_id;
+	}
+	res.has_parent_snapshot_id = has_parent_snapshot_id;
+	if (has_sequence_number) {
+		res.sequence_number = sequence_number;
+	}
+	res.has_sequence_number = has_sequence_number;
+	if (has_first_row_id) {
+		res.first_row_id = first_row_id;
+	}
+	res.has_first_row_id = has_first_row_id;
+	if (has_added_rows) {
+		res.added_rows = added_rows;
+	}
+	res.has_added_rows = has_added_rows;
+	if (has_schema_id) {
+		res.schema_id = schema_id;
+	}
+	res.has_schema_id = has_schema_id;
 	return res;
 }
 
@@ -128,7 +171,7 @@ string Snapshot::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto parent_snapshot_id_val = yyjson_obj_get(obj, "parent-snapshot-id");
-	if (parent_snapshot_id_val) {
+	if (parent_snapshot_id_val && !yyjson_is_null(parent_snapshot_id_val)) {
 		has_parent_snapshot_id = true;
 		if (yyjson_is_sint(parent_snapshot_id_val)) {
 			parent_snapshot_id = yyjson_get_sint(parent_snapshot_id_val);
@@ -141,7 +184,7 @@ string Snapshot::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto sequence_number_val = yyjson_obj_get(obj, "sequence-number");
-	if (sequence_number_val) {
+	if (sequence_number_val && !yyjson_is_null(sequence_number_val)) {
 		has_sequence_number = true;
 		if (yyjson_is_sint(sequence_number_val)) {
 			sequence_number = yyjson_get_sint(sequence_number_val);
@@ -154,7 +197,7 @@ string Snapshot::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto first_row_id_val = yyjson_obj_get(obj, "first-row-id");
-	if (first_row_id_val) {
+	if (first_row_id_val && !yyjson_is_null(first_row_id_val)) {
 		has_first_row_id = true;
 		if (yyjson_is_sint(first_row_id_val)) {
 			first_row_id = yyjson_get_sint(first_row_id_val);
@@ -165,8 +208,20 @@ string Snapshot::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(first_row_id_val));
 		}
 	}
+	auto added_rows_val = yyjson_obj_get(obj, "added-rows");
+	if (added_rows_val && !yyjson_is_null(added_rows_val)) {
+		has_added_rows = true;
+		if (yyjson_is_sint(added_rows_val)) {
+			added_rows = yyjson_get_sint(added_rows_val);
+		} else if (yyjson_is_uint(added_rows_val)) {
+			added_rows = yyjson_get_uint(added_rows_val);
+		} else {
+			return StringUtil::Format("Snapshot property 'added_rows' is not of type 'integer', found '%s' instead",
+			                          yyjson_get_type_desc(added_rows_val));
+		}
+	}
 	auto schema_id_val = yyjson_obj_get(obj, "schema-id");
-	if (schema_id_val) {
+	if (schema_id_val && !yyjson_is_null(schema_id_val)) {
 		has_schema_id = true;
 		if (yyjson_is_int(schema_id_val)) {
 			schema_id = yyjson_get_int(schema_id_val);
@@ -207,6 +262,11 @@ yyjson_mut_val *Snapshot::ToJSON(yyjson_mut_doc *doc) const {
 	// Serialize: first-row-id
 	if (has_first_row_id) {
 		yyjson_mut_obj_add_sint(doc, obj, "first-row-id", first_row_id);
+	}
+
+	// Serialize: added-rows
+	if (has_added_rows) {
+		yyjson_mut_obj_add_sint(doc, obj, "added-rows", added_rows);
 	}
 
 	// Serialize: schema-id

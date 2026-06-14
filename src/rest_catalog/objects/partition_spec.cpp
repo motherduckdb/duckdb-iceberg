@@ -12,12 +12,28 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+PartitionSpec::PartitionSpec() {
+}
+
 PartitionSpec PartitionSpec::FromJSON(yyjson_val *obj) {
 	PartitionSpec res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+PartitionSpec PartitionSpec::Copy() const {
+	PartitionSpec res;
+	res.fields.reserve(fields.size());
+	for (auto &item : fields) {
+		res.fields.emplace_back(item.Copy());
+	}
+	if (has_spec_id) {
+		res.spec_id = spec_id;
+	}
+	res.has_spec_id = has_spec_id;
 	return res;
 }
 
@@ -44,7 +60,7 @@ string PartitionSpec::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto spec_id_val = yyjson_obj_get(obj, "spec-id");
-	if (spec_id_val) {
+	if (spec_id_val && !yyjson_is_null(spec_id_val)) {
 		has_spec_id = true;
 		if (yyjson_is_int(spec_id_val)) {
 			spec_id = yyjson_get_int(spec_id_val);

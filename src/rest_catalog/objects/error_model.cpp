@@ -12,12 +12,30 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+ErrorModel::ErrorModel() {
+}
+
 ErrorModel ErrorModel::FromJSON(yyjson_val *obj) {
 	ErrorModel res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+ErrorModel ErrorModel::Copy() const {
+	ErrorModel res;
+	res.message = message;
+	res.type = type;
+	res.code = code;
+	if (has_stack) {
+		res.stack.reserve(stack.size());
+		for (auto &item : stack) {
+			res.stack.emplace_back(item);
+		}
+	}
+	res.has_stack = has_stack;
 	return res;
 }
 
@@ -57,7 +75,7 @@ string ErrorModel::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto stack_val = yyjson_obj_get(obj, "stack");
-	if (stack_val) {
+	if (stack_val && !yyjson_is_null(stack_val)) {
 		has_stack = true;
 		if (yyjson_is_arr(stack_val)) {
 			size_t idx, max;

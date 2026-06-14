@@ -12,12 +12,35 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+UpdateNamespacePropertiesResponse::UpdateNamespacePropertiesResponse() {
+}
+
 UpdateNamespacePropertiesResponse UpdateNamespacePropertiesResponse::FromJSON(yyjson_val *obj) {
 	UpdateNamespacePropertiesResponse res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+UpdateNamespacePropertiesResponse UpdateNamespacePropertiesResponse::Copy() const {
+	UpdateNamespacePropertiesResponse res;
+	res.updated.reserve(updated.size());
+	for (auto &item : updated) {
+		res.updated.emplace_back(item);
+	}
+	res.removed.reserve(removed.size());
+	for (auto &item : removed) {
+		res.removed.emplace_back(item);
+	}
+	if (has_missing) {
+		res.missing.reserve(missing.size());
+		for (auto &item : missing) {
+			res.missing.emplace_back(item);
+		}
+	}
+	res.has_missing = has_missing;
 	return res;
 }
 

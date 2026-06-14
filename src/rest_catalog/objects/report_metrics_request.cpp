@@ -12,12 +12,29 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+ReportMetricsRequest::ReportMetricsRequest() {
+}
+
 ReportMetricsRequest ReportMetricsRequest::FromJSON(yyjson_val *obj) {
 	ReportMetricsRequest res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+ReportMetricsRequest ReportMetricsRequest::Copy() const {
+	ReportMetricsRequest res;
+	if (has_scan_report) {
+		res.scan_report = scan_report.Copy();
+	}
+	res.has_scan_report = has_scan_report;
+	if (has_commit_report) {
+		res.commit_report = commit_report.Copy();
+	}
+	res.has_commit_report = has_commit_report;
+	res.report_type = report_type;
 	return res;
 }
 

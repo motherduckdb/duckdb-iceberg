@@ -16,13 +16,24 @@ class Type;
 
 class StructField {
 public:
+	StructField();
+	StructField(const StructField &) = delete;
+	StructField &operator=(const StructField &) = delete;
+	StructField(StructField &&) = default;
+	StructField &operator=(StructField &&) = default;
+
+public:
 	// Deserialization
 	static StructField FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	StructField Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	int32_t id;
 	string name;
 	unique_ptr<Type> type;

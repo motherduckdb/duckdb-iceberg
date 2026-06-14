@@ -12,12 +12,31 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+CommitReport::CommitReport() {
+}
+
 CommitReport CommitReport::FromJSON(yyjson_val *obj) {
 	CommitReport res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+CommitReport CommitReport::Copy() const {
+	CommitReport res;
+	res.table_name = table_name;
+	res.snapshot_id = snapshot_id;
+	res.sequence_number = sequence_number;
+	res.operation = operation;
+	res.metrics = metrics.Copy();
+	if (has_metadata) {
+		for (auto &entry : metadata) {
+			res.metadata.emplace(entry.first, entry.second);
+		}
+	}
+	res.has_metadata = has_metadata;
 	return res;
 }
 
@@ -83,7 +102,7 @@ string CommitReport::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto metadata_val = yyjson_obj_get(obj, "metadata");
-	if (metadata_val) {
+	if (metadata_val && !yyjson_is_null(metadata_val)) {
 		has_metadata = true;
 		if (yyjson_is_obj(metadata_val)) {
 			size_t idx, max;

@@ -13,17 +13,30 @@ namespace rest_api_objects {
 
 class CatalogConfig {
 public:
+	CatalogConfig();
+	CatalogConfig(const CatalogConfig &) = delete;
+	CatalogConfig &operator=(const CatalogConfig &) = delete;
+	CatalogConfig(CatalogConfig &&) = default;
+	CatalogConfig &operator=(CatalogConfig &&) = default;
+
+public:
 	// Deserialization
 	static CatalogConfig FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	CatalogConfig Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	case_insensitive_map_t<string> defaults;
 	case_insensitive_map_t<string> overrides;
 	vector<string> endpoints;
 	bool has_endpoints = false;
+	string idempotency_key_lifetime;
+	bool has_idempotency_key_lifetime = false;
 };
 
 } // namespace rest_api_objects

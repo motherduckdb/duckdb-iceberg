@@ -12,12 +12,21 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+DateTypeValue::DateTypeValue() {
+}
+
 DateTypeValue DateTypeValue::FromJSON(yyjson_val *obj) {
 	DateTypeValue res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+DateTypeValue DateTypeValue::Copy() const {
+	DateTypeValue res;
+	res.value = value;
 	return res;
 }
 

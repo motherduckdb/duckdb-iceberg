@@ -12,12 +12,35 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+CommitViewRequest::CommitViewRequest() {
+}
+
 CommitViewRequest CommitViewRequest::FromJSON(yyjson_val *obj) {
 	CommitViewRequest res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+CommitViewRequest CommitViewRequest::Copy() const {
+	CommitViewRequest res;
+	res.updates.reserve(updates.size());
+	for (auto &item : updates) {
+		res.updates.emplace_back(item.Copy());
+	}
+	if (has_identifier) {
+		res.identifier = identifier.Copy();
+	}
+	res.has_identifier = has_identifier;
+	if (has_requirements) {
+		res.requirements.reserve(requirements.size());
+		for (auto &item : requirements) {
+			res.requirements.emplace_back(item.Copy());
+		}
+	}
+	res.has_requirements = has_requirements;
 	return res;
 }
 
@@ -44,7 +67,7 @@ string CommitViewRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto identifier_val = yyjson_obj_get(obj, "identifier");
-	if (identifier_val) {
+	if (identifier_val && !yyjson_is_null(identifier_val)) {
 		has_identifier = true;
 		error = identifier.TryFromJSON(identifier_val);
 		if (!error.empty()) {
@@ -52,7 +75,7 @@ string CommitViewRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto requirements_val = yyjson_obj_get(obj, "requirements");
-	if (requirements_val) {
+	if (requirements_val && !yyjson_is_null(requirements_val)) {
 		has_requirements = true;
 		if (yyjson_is_arr(requirements_val)) {
 			size_t idx, max;

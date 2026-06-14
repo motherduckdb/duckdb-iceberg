@@ -12,11 +12,23 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+Namespace::Namespace() {
+}
+
 Namespace Namespace::FromJSON(yyjson_val *obj) {
 	Namespace res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
+	}
+	return res;
+}
+
+Namespace Namespace::Copy() const {
+	Namespace res;
+	res.value.reserve(value.size());
+	for (auto &item : value) {
+		res.value.emplace_back(item);
 	}
 	return res;
 }

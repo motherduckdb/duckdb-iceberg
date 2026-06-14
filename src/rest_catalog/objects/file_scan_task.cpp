@@ -12,12 +12,32 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+FileScanTask::FileScanTask() {
+}
+
 FileScanTask FileScanTask::FromJSON(yyjson_val *obj) {
 	FileScanTask res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+FileScanTask FileScanTask::Copy() const {
+	FileScanTask res;
+	res.data_file = data_file.Copy();
+	if (has_delete_file_references) {
+		res.delete_file_references.reserve(delete_file_references.size());
+		for (auto &item : delete_file_references) {
+			res.delete_file_references.emplace_back(item);
+		}
+	}
+	res.has_delete_file_references = has_delete_file_references;
+	if (has_residual_filter) {
+		res.residual_filter = residual_filter ? make_uniq<Expression>(residual_filter->Copy()) : nullptr;
+	}
+	res.has_residual_filter = has_residual_filter;
 	return res;
 }
 
@@ -33,7 +53,7 @@ string FileScanTask::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto delete_file_references_val = yyjson_obj_get(obj, "delete-file-references");
-	if (delete_file_references_val) {
+	if (delete_file_references_val && !yyjson_is_null(delete_file_references_val)) {
 		has_delete_file_references = true;
 		if (yyjson_is_arr(delete_file_references_val)) {
 			size_t idx, max;
@@ -56,7 +76,7 @@ string FileScanTask::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto residual_filter_val = yyjson_obj_get(obj, "residual-filter");
-	if (residual_filter_val) {
+	if (residual_filter_val && !yyjson_is_null(residual_filter_val)) {
 		has_residual_filter = true;
 		residual_filter = make_uniq<Expression>();
 		error = residual_filter->TryFromJSON(residual_filter_val);

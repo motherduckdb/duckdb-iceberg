@@ -12,12 +12,26 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+AssertRefSnapshotId::AssertRefSnapshotId() {
+}
+
 AssertRefSnapshotId AssertRefSnapshotId::FromJSON(yyjson_val *obj) {
 	AssertRefSnapshotId res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+AssertRefSnapshotId AssertRefSnapshotId::Copy() const {
+	AssertRefSnapshotId res;
+	res.type = type.Copy();
+	res.ref = ref;
+	if (has_snapshot_id) {
+		res.snapshot_id = snapshot_id;
+	}
+	res.has_snapshot_id = has_snapshot_id;
 	return res;
 }
 
@@ -44,10 +58,12 @@ string AssertRefSnapshotId::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
-	if (!snapshot_id_val) {
-		return "AssertRefSnapshotId required property 'snapshot-id' is missing";
-	} else {
-		if (yyjson_is_sint(snapshot_id_val)) {
+	if (snapshot_id_val) {
+		has_snapshot_id = true;
+		if (yyjson_is_null(snapshot_id_val)) {
+			//! do nothing, property is explicitly nullable
+			has_snapshot_id = false;
+		} else if (yyjson_is_sint(snapshot_id_val)) {
 			snapshot_id = yyjson_get_sint(snapshot_id_val);
 		} else if (yyjson_is_uint(snapshot_id_val)) {
 			snapshot_id = yyjson_get_uint(snapshot_id_val);
@@ -71,7 +87,9 @@ yyjson_mut_val *AssertRefSnapshotId::ToJSON(yyjson_mut_doc *doc) const {
 	yyjson_mut_obj_add_str(doc, obj, "ref", ref.c_str());
 
 	// Serialize: snapshot-id
-	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+	if (has_snapshot_id) {
+		yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+	}
 
 	return obj;
 }

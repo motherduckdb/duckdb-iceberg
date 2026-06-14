@@ -12,12 +12,22 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+AssertLastAssignedFieldId::AssertLastAssignedFieldId() {
+}
+
 AssertLastAssignedFieldId AssertLastAssignedFieldId::FromJSON(yyjson_val *obj) {
 	AssertLastAssignedFieldId res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+AssertLastAssignedFieldId AssertLastAssignedFieldId::Copy() const {
+	AssertLastAssignedFieldId res;
+	res.type = type.Copy();
+	res.last_assigned_field_id = last_assigned_field_id;
 	return res;
 }
 

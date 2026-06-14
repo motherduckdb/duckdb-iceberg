@@ -12,7 +12,12 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-Object7 Object7::FromJSON(yyjson_val *obj) {
+FailedPlanningResult::FailedPlanningResult() {
+}
+FailedPlanningResult::Object7::Object7() {
+}
+
+FailedPlanningResult::Object7 FailedPlanningResult::Object7::FromJSON(yyjson_val *obj) {
 	Object7 res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -21,7 +26,13 @@ Object7 Object7::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string Object7::TryFromJSON(yyjson_val *obj) {
+FailedPlanningResult::Object7 FailedPlanningResult::Object7::Copy() const {
+	Object7 res;
+	res.status = status.Copy();
+	return res;
+}
+
+string FailedPlanningResult::Object7::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto status_val = yyjson_obj_get(obj, "status");
 	if (!status_val) {
@@ -35,7 +46,7 @@ string Object7::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *Object7::ToJSON(yyjson_mut_doc *doc) const {
+yyjson_mut_val *FailedPlanningResult::Object7::ToJSON(yyjson_mut_doc *doc) const {
 	yyjson_mut_val *obj = yyjson_mut_obj(doc);
 
 	// Serialize: status
@@ -51,6 +62,13 @@ FailedPlanningResult FailedPlanningResult::FromJSON(yyjson_val *obj) {
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+FailedPlanningResult FailedPlanningResult::Copy() const {
+	FailedPlanningResult res;
+	res.iceberg_error_response = iceberg_error_response.Copy();
+	res.object_7 = object_7.Copy();
 	return res;
 }
 

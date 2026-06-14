@@ -12,12 +12,28 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+LoadViewResult::LoadViewResult() {
+}
+
 LoadViewResult LoadViewResult::FromJSON(yyjson_val *obj) {
 	LoadViewResult res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+LoadViewResult LoadViewResult::Copy() const {
+	LoadViewResult res;
+	res.metadata_location = metadata_location;
+	res.metadata = metadata.Copy();
+	if (has_config) {
+		for (auto &entry : config) {
+			res.config.emplace(entry.first, entry.second);
+		}
+	}
+	res.has_config = has_config;
 	return res;
 }
 
@@ -45,7 +61,7 @@ string LoadViewResult::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto config_val = yyjson_obj_get(obj, "config");
-	if (config_val) {
+	if (config_val && !yyjson_is_null(config_val)) {
 		has_config = true;
 		if (yyjson_is_obj(config_val)) {
 			size_t idx, max;

@@ -16,13 +16,24 @@ namespace rest_api_objects {
 
 class SortField {
 public:
+	SortField();
+	SortField(const SortField &) = delete;
+	SortField &operator=(const SortField &) = delete;
+	SortField(SortField &&) = default;
+	SortField &operator=(SortField &&) = default;
+
+public:
 	// Deserialization
 	static SortField FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	SortField Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	int32_t source_id;
 	Transform transform;
 	SortDirection direction;

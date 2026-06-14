@@ -16,19 +16,32 @@ class Expression;
 
 class PlanTableScanRequest {
 public:
+	PlanTableScanRequest();
+	PlanTableScanRequest(const PlanTableScanRequest &) = delete;
+	PlanTableScanRequest &operator=(const PlanTableScanRequest &) = delete;
+	PlanTableScanRequest(PlanTableScanRequest &&) = default;
+	PlanTableScanRequest &operator=(PlanTableScanRequest &&) = default;
+
+public:
 	// Deserialization
 	static PlanTableScanRequest FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	PlanTableScanRequest Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	int64_t snapshot_id;
 	bool has_snapshot_id = false;
 	vector<FieldName> select;
 	bool has_select = false;
 	unique_ptr<Expression> filter;
 	bool has_filter = false;
+	int64_t min_rows_requested;
+	bool has_min_rows_requested = false;
 	bool case_sensitive;
 	bool has_case_sensitive = false;
 	bool use_snapshot_schema;

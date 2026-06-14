@@ -23,12 +23,18 @@ import pyspark.sql
 from pyspark import SparkContext
 
 from ..base import IcebergConnection
+from ..spark_settings import iceberg_runtime_configuration
+
+RUNTIME_CONFIG = iceberg_runtime_configuration()
+SPARK_VERSION = RUNTIME_CONFIG['spark_version']
+SCALA_BINARY_VERSION = RUNTIME_CONFIG['scala_binary_version']
+ICEBERG_LIBRARY_VERSION = RUNTIME_CONFIG['iceberg_library_version']
 
 import sys
 import os
 
 CONNECTION_KEY = 'spark-rest-single-thread'
-SPARK_RUNTIME_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'iceberg-spark-runtime-3.5_2.12-1.9.0.jar')
+SPARK_RUNTIME_PATH = os.path.join(os.path.dirname(__file__), '..', '..', f'iceberg-spark-runtime-{SPARK_VERSION}_{SCALA_BINARY_VERSION}-{ICEBERG_LIBRARY_VERSION}.jar')
 
 @IcebergConnection.register(CONNECTION_KEY)
 class IcebergSparkRestSingleThreaded(IcebergConnection):
@@ -38,11 +44,11 @@ class IcebergSparkRestSingleThreaded(IcebergConnection):
 
     def get_connection(self):
         os.environ["PYSPARK_SUBMIT_ARGS"] = (
-            "--packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.9.0,org.apache.iceberg:iceberg-aws-bundle:1.9.0 pyspark-shell"
+            f"--packages org.apache.iceberg:iceberg-spark-runtime-{SPARK_VERSION}_{SCALA_BINARY_VERSION}:{ICEBERG_LIBRARY_VERSION},org.apache.iceberg:iceberg-aws-bundle:{ICEBERG_LIBRARY_VERSION} pyspark-shell"
         )
         os.environ["AWS_REGION"] = "us-east-1"
-        os.environ["AWS_ACCESS_KEY_ID"] = "admin"
-        os.environ["AWS_SECRET_ACCESS_KEY"] = "password"
+        os.environ["AWS_ACCESS_KEY_ID"] = os.getenv("S3_KEY_ID", "admin")
+        os.environ["AWS_SECRET_ACCESS_KEY"] = os.getenv("S3_SECRET", "password")
         if SparkContext._active_spark_context is not None:
             SparkContext._active_spark_context.stop()
 
@@ -57,9 +63,9 @@ class IcebergSparkRestSingleThreaded(IcebergConnection):
             .config("spark.sql.parquet.int96RebaseModeInWrite", "CORRECTED")
             .config("spark.sql.catalog.demo", "org.apache.iceberg.spark.SparkCatalog")
             .config("spark.sql.catalog.demo.type", "rest")
-            .config("spark.sql.catalog.demo.uri", "http://127.0.0.1:8181")
-            .config("spark.sql.catalog.demo.warehouse", "s3://warehouse/wh/")
-            .config("spark.sql.catalog.demo.s3.endpoint", "http://127.0.0.1:9000")
+            .config("spark.sql.catalog.demo.uri", os.getenv("ICEBERG_ENDPOINT", "http://127.0.0.1:8181"))
+            .config("spark.sql.catalog.demo.warehouse", os.getenv("WAREHOUSE", "s3://warehouse/wh/"))
+            .config("spark.sql.catalog.demo.s3.endpoint", os.getenv("S3_ENDPOINT", "http://127.0.0.1:9000"))
             .config("spark.sql.catalog.demo.s3.path-style-access", "true")
             .config('spark.driver.memory', '10g')
             .config('spark.sql.session.timeZone', 'UTC')

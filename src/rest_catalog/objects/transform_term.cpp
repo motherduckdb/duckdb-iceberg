@@ -12,12 +12,23 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+TransformTerm::TransformTerm() {
+}
+
 TransformTerm TransformTerm::FromJSON(yyjson_val *obj) {
 	TransformTerm res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+TransformTerm TransformTerm::Copy() const {
+	TransformTerm res;
+	res.type = type;
+	res.transform = transform.Copy();
+	res.term = term.Copy();
 	return res;
 }
 

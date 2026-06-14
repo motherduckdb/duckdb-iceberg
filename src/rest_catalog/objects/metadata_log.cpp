@@ -12,7 +12,12 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-Object4 Object4::FromJSON(yyjson_val *obj) {
+MetadataLog::MetadataLog() {
+}
+MetadataLog::Object4::Object4() {
+}
+
+MetadataLog::Object4 MetadataLog::Object4::FromJSON(yyjson_val *obj) {
 	Object4 res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -21,7 +26,14 @@ Object4 Object4::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string Object4::TryFromJSON(yyjson_val *obj) {
+MetadataLog::Object4 MetadataLog::Object4::Copy() const {
+	Object4 res;
+	res.metadata_file = metadata_file;
+	res.timestamp_ms = timestamp_ms;
+	return res;
+}
+
+string MetadataLog::Object4::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto metadata_file_val = yyjson_obj_get(obj, "metadata-file");
 	if (!metadata_file_val) {
@@ -50,7 +62,7 @@ string Object4::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *Object4::ToJSON(yyjson_mut_doc *doc) const {
+yyjson_mut_val *MetadataLog::Object4::ToJSON(yyjson_mut_doc *doc) const {
 	yyjson_mut_val *obj = yyjson_mut_obj(doc);
 
 	// Serialize: metadata-file
@@ -67,6 +79,15 @@ MetadataLog MetadataLog::FromJSON(yyjson_val *obj) {
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
+	}
+	return res;
+}
+
+MetadataLog MetadataLog::Copy() const {
+	MetadataLog res;
+	res.value.reserve(value.size());
+	for (auto &item : value) {
+		res.value.emplace_back(item.Copy());
 	}
 	return res;
 }

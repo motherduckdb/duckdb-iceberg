@@ -12,12 +12,28 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+OAuthTokenRequest::OAuthTokenRequest() {
+}
+
 OAuthTokenRequest OAuthTokenRequest::FromJSON(yyjson_val *obj) {
 	OAuthTokenRequest res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+OAuthTokenRequest OAuthTokenRequest::Copy() const {
+	OAuthTokenRequest res;
+	if (has_oauth_client_credentials_request) {
+		res.oauth_client_credentials_request = oauth_client_credentials_request.Copy();
+	}
+	res.has_oauth_client_credentials_request = has_oauth_client_credentials_request;
+	if (has_oauth_token_exchange_request) {
+		res.oauth_token_exchange_request = oauth_token_exchange_request.Copy();
+	}
+	res.has_oauth_token_exchange_request = has_oauth_token_exchange_request;
 	return res;
 }
 

@@ -29,13 +29,24 @@ namespace rest_api_objects {
 
 class PrimitiveTypeValue {
 public:
+	PrimitiveTypeValue();
+	PrimitiveTypeValue(const PrimitiveTypeValue &) = delete;
+	PrimitiveTypeValue &operator=(const PrimitiveTypeValue &) = delete;
+	PrimitiveTypeValue(PrimitiveTypeValue &&) = default;
+	PrimitiveTypeValue &operator=(PrimitiveTypeValue &&) = default;
+
+public:
 	// Deserialization
 	static PrimitiveTypeValue FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	PrimitiveTypeValue Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	BooleanTypeValue boolean_type_value;
 	bool has_boolean_type_value = false;
 	IntegerTypeValue integer_type_value;

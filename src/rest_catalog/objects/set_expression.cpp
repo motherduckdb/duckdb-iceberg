@@ -12,11 +12,25 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+SetExpression::SetExpression() {
+}
+
 SetExpression SetExpression::FromJSON(yyjson_val *obj) {
 	SetExpression res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
+	}
+	return res;
+}
+
+SetExpression SetExpression::Copy() const {
+	SetExpression res;
+	res.type = type.Copy();
+	res.term = term.Copy();
+	res.values.reserve(values.size());
+	for (auto &item : values) {
+		res.values.emplace_back(item.Copy());
 	}
 	return res;
 }
@@ -49,11 +63,10 @@ string SetExpression::TryFromJSON(yyjson_val *obj) {
 			size_t idx, max;
 			yyjson_val *val;
 			yyjson_arr_foreach(values_val, idx, max, val) {
-				yyjson_val *tmp;
-				if (yyjson_is_obj(val)) {
-					tmp = val;
-				} else {
-					return "SetExpression property 'tmp' is not of type 'object'";
+				PrimitiveTypeValue tmp;
+				error = tmp.TryFromJSON(val);
+				if (!error.empty()) {
+					return error;
 				}
 				values.emplace_back(std::move(tmp));
 			}
@@ -79,8 +92,10 @@ yyjson_mut_val *SetExpression::ToJSON(yyjson_mut_doc *doc) const {
 	// Serialize: values
 	yyjson_mut_val *values_arr = yyjson_mut_arr(doc);
 	for (const auto &item : values) {
-		throw InvalidInputException("Can't serialize this object");
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(values_arr, item_val);
 	}
+	yyjson_mut_obj_add_val(doc, obj, "values", values_arr);
 
 	return obj;
 }

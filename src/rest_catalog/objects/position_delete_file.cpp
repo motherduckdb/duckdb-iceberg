@@ -12,12 +12,30 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+PositionDeleteFile::PositionDeleteFile() {
+}
+
 PositionDeleteFile PositionDeleteFile::FromJSON(yyjson_val *obj) {
 	PositionDeleteFile res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+PositionDeleteFile PositionDeleteFile::Copy() const {
+	PositionDeleteFile res;
+	res.content_file = content_file.Copy();
+	res.content = content;
+	if (has_content_offset) {
+		res.content_offset = content_offset;
+	}
+	res.has_content_offset = has_content_offset;
+	if (has_content_size_in_bytes) {
+		res.content_size_in_bytes = content_size_in_bytes;
+	}
+	res.has_content_size_in_bytes = has_content_size_in_bytes;
 	return res;
 }
 
@@ -40,7 +58,7 @@ string PositionDeleteFile::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto content_offset_val = yyjson_obj_get(obj, "content-offset");
-	if (content_offset_val) {
+	if (content_offset_val && !yyjson_is_null(content_offset_val)) {
 		has_content_offset = true;
 		if (yyjson_is_sint(content_offset_val)) {
 			content_offset = yyjson_get_sint(content_offset_val);
@@ -53,7 +71,7 @@ string PositionDeleteFile::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto content_size_in_bytes_val = yyjson_obj_get(obj, "content-size-in-bytes");
-	if (content_size_in_bytes_val) {
+	if (content_size_in_bytes_val && !yyjson_is_null(content_size_in_bytes_val)) {
 		has_content_size_in_bytes = true;
 		if (yyjson_is_sint(content_size_in_bytes_val)) {
 			content_size_in_bytes = yyjson_get_sint(content_size_in_bytes_val);

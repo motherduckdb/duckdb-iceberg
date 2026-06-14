@@ -21,13 +21,24 @@ namespace rest_api_objects {
 
 class ViewUpdate {
 public:
+	ViewUpdate();
+	ViewUpdate(const ViewUpdate &) = delete;
+	ViewUpdate &operator=(const ViewUpdate &) = delete;
+	ViewUpdate(ViewUpdate &&) = default;
+	ViewUpdate &operator=(ViewUpdate &&) = default;
+
+public:
 	// Deserialization
 	static ViewUpdate FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	ViewUpdate Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	AssignUUIDUpdate assign_uuidupdate;
 	bool has_assign_uuidupdate = false;
 	UpgradeFormatVersionUpdate upgrade_format_version_update;

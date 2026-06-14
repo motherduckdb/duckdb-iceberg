@@ -36,6 +36,7 @@ class IcebergTest:
         "lakekeeper": "lakekeeper",
         "spark-rest": "spark-rest",
         "local": "local",
+        "nessie": "nessie",
     }
 
     def resolve_target_for_catalog(self, catalog: str, target: Optional[str] = None) -> str:
@@ -79,16 +80,17 @@ class IcebergTest:
                 with open(full_file_path, 'r') as file:
                     snapshot_name = os.path.basename(path)[:-4]
                     last_file = snapshot_name
-                    query = file.read()
+                    queries = [x for x in file.read().split(';') if x.strip() != '']
 
-                    # Execute query on the underlying engine (e.g., Spark)
-                    con.con.sql(query)
+                    for query in queries:
+                        # Execute query on the underlying engine (e.g., Spark)
+                        con.con.sql(query)
 
-                    if self.write_intermediates:
-                        namespace = '.'.join(self.namespace)
-                        df = con.con.read.table(f"{namespace}.{self.table}")
-                        intermediate_data_path = os.path.join(intermediate_dir, snapshot_name, 'data.parquet')
-                        df.write.mode("overwrite").parquet(intermediate_data_path)
+                        if self.write_intermediates:
+                            namespace = '.'.join(self.namespace)
+                            df = con.con.read.table(f"{namespace}.{self.table}")
+                            intermediate_data_path = os.path.join(intermediate_dir, snapshot_name, 'data.parquet')
+                            df.write.mode("overwrite").parquet(intermediate_data_path)
 
             if self.write_intermediates and last_file:
                 # Finally, copy the latest results to a "last" dir for easy test writing

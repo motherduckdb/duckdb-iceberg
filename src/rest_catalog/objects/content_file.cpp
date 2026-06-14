@@ -12,12 +12,45 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+ContentFile::ContentFile() {
+}
+
 ContentFile ContentFile::FromJSON(yyjson_val *obj) {
 	ContentFile res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+ContentFile ContentFile::Copy() const {
+	ContentFile res;
+	res.spec_id = spec_id;
+	res.partition.reserve(partition.size());
+	for (auto &item : partition) {
+		res.partition.emplace_back(item.Copy());
+	}
+	res.content = content;
+	res.file_path = file_path;
+	res.file_format = file_format.Copy();
+	res.file_size_in_bytes = file_size_in_bytes;
+	res.record_count = record_count;
+	if (has_key_metadata) {
+		res.key_metadata = key_metadata.Copy();
+	}
+	res.has_key_metadata = has_key_metadata;
+	if (has_split_offsets) {
+		res.split_offsets.reserve(split_offsets.size());
+		for (auto &item : split_offsets) {
+			res.split_offsets.emplace_back(item);
+		}
+	}
+	res.has_split_offsets = has_split_offsets;
+	if (has_sort_order_id) {
+		res.sort_order_id = sort_order_id;
+	}
+	res.has_sort_order_id = has_sort_order_id;
 	return res;
 }
 
@@ -114,7 +147,7 @@ string ContentFile::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto key_metadata_val = yyjson_obj_get(obj, "key-metadata");
-	if (key_metadata_val) {
+	if (key_metadata_val && !yyjson_is_null(key_metadata_val)) {
 		has_key_metadata = true;
 		error = key_metadata.TryFromJSON(key_metadata_val);
 		if (!error.empty()) {
@@ -122,7 +155,7 @@ string ContentFile::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto split_offsets_val = yyjson_obj_get(obj, "split-offsets");
-	if (split_offsets_val) {
+	if (split_offsets_val && !yyjson_is_null(split_offsets_val)) {
 		has_split_offsets = true;
 		if (yyjson_is_arr(split_offsets_val)) {
 			size_t idx, max;
@@ -145,7 +178,7 @@ string ContentFile::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto sort_order_id_val = yyjson_obj_get(obj, "sort-order-id");
-	if (sort_order_id_val) {
+	if (sort_order_id_val && !yyjson_is_null(sort_order_id_val)) {
 		has_sort_order_id = true;
 		if (yyjson_is_int(sort_order_id_val)) {
 			sort_order_id = yyjson_get_int(sort_order_id_val);

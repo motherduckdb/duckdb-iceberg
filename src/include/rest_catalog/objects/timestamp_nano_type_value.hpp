@@ -13,13 +13,24 @@ namespace rest_api_objects {
 
 class TimestampNanoTypeValue {
 public:
+	TimestampNanoTypeValue();
+	TimestampNanoTypeValue(const TimestampNanoTypeValue &) = delete;
+	TimestampNanoTypeValue &operator=(const TimestampNanoTypeValue &) = delete;
+	TimestampNanoTypeValue(TimestampNanoTypeValue &&) = default;
+	TimestampNanoTypeValue &operator=(TimestampNanoTypeValue &&) = default;
+
+public:
 	// Deserialization
 	static TimestampNanoTypeValue FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	TimestampNanoTypeValue Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	string value;
 };
 

@@ -12,12 +12,26 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+SetPartitionStatisticsUpdate::SetPartitionStatisticsUpdate() {
+}
+
 SetPartitionStatisticsUpdate SetPartitionStatisticsUpdate::FromJSON(yyjson_val *obj) {
 	SetPartitionStatisticsUpdate res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+SetPartitionStatisticsUpdate SetPartitionStatisticsUpdate::Copy() const {
+	SetPartitionStatisticsUpdate res;
+	res.base_update = base_update.Copy();
+	res.partition_statistics = partition_statistics.Copy();
+	if (has_action) {
+		res.action = action;
+	}
+	res.has_action = has_action;
 	return res;
 }
 
@@ -37,7 +51,7 @@ string SetPartitionStatisticsUpdate::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto action_val = yyjson_obj_get(obj, "action");
-	if (action_val) {
+	if (action_val && !yyjson_is_null(action_val)) {
 		has_action = true;
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);

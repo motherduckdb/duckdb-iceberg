@@ -12,12 +12,32 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+EncryptedKey::EncryptedKey() {
+}
+
 EncryptedKey EncryptedKey::FromJSON(yyjson_val *obj) {
 	EncryptedKey res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+EncryptedKey EncryptedKey::Copy() const {
+	EncryptedKey res;
+	res.key_id = key_id;
+	res.encrypted_key_metadata = encrypted_key_metadata;
+	if (has_encrypted_by_id) {
+		res.encrypted_by_id = encrypted_by_id;
+	}
+	res.has_encrypted_by_id = has_encrypted_by_id;
+	if (has_properties) {
+		for (auto &entry : properties) {
+			res.properties.emplace(entry.first, entry.second);
+		}
+	}
+	res.has_properties = has_properties;
 	return res;
 }
 
@@ -47,7 +67,7 @@ string EncryptedKey::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto encrypted_by_id_val = yyjson_obj_get(obj, "encrypted-by-id");
-	if (encrypted_by_id_val) {
+	if (encrypted_by_id_val && !yyjson_is_null(encrypted_by_id_val)) {
 		has_encrypted_by_id = true;
 		if (yyjson_is_str(encrypted_by_id_val)) {
 			encrypted_by_id = yyjson_get_str(encrypted_by_id_val);
@@ -58,7 +78,7 @@ string EncryptedKey::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto properties_val = yyjson_obj_get(obj, "properties");
-	if (properties_val) {
+	if (properties_val && !yyjson_is_null(properties_val)) {
 		has_properties = true;
 		if (yyjson_is_obj(properties_val)) {
 			size_t idx, max;

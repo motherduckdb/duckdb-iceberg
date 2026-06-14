@@ -38,21 +38,28 @@ set ignore_error_messages
 statement ok
 use glue_lake.myblognamespace;
 
-statement error
+statement ok
 use glue_lake;
-----
-Catalog Error
 
 statement error
-use glue_secret;
+select * from some_table;
 ----
-Catalog Error
+<REGEX>:.*Forbidden_403.*
 
-# even after showing all tables. use statement needs catalog + schema.
+statement ok
+use glue_secret;
+
+# error is surfaced for forbidden_403. 
+# Table does not exist, but this is returned by the catalog 
+statement error
+select * from some_table
+----
+<REGEX>:.*Forbidden_403.*
+
+statement ok
+RESET SCHEMA;
+
+# We can still show all tables when the schema is reset
 statement ok
 show all tables;
 
-statement error
-use glue_lake;
-----
-Catalog Error

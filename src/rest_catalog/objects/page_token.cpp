@@ -12,12 +12,21 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+PageToken::PageToken() {
+}
+
 PageToken PageToken::FromJSON(yyjson_val *obj) {
 	PageToken res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+PageToken PageToken::Copy() const {
+	PageToken res;
+	res.value = value;
 	return res;
 }
 

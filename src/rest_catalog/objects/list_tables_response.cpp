@@ -12,6 +12,9 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+ListTablesResponse::ListTablesResponse() {
+}
+
 ListTablesResponse ListTablesResponse::FromJSON(yyjson_val *obj) {
 	ListTablesResponse res;
 	auto error = res.TryFromJSON(obj);
@@ -21,10 +24,26 @@ ListTablesResponse ListTablesResponse::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+ListTablesResponse ListTablesResponse::Copy() const {
+	ListTablesResponse res;
+	if (has_next_page_token) {
+		res.next_page_token = next_page_token.Copy();
+	}
+	res.has_next_page_token = has_next_page_token;
+	if (has_identifiers) {
+		res.identifiers.reserve(identifiers.size());
+		for (auto &item : identifiers) {
+			res.identifiers.emplace_back(item.Copy());
+		}
+	}
+	res.has_identifiers = has_identifiers;
+	return res;
+}
+
 string ListTablesResponse::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto next_page_token_val = yyjson_obj_get(obj, "next-page-token");
-	if (next_page_token_val) {
+	if (next_page_token_val && !yyjson_is_null(next_page_token_val)) {
 		has_next_page_token = true;
 		error = next_page_token.TryFromJSON(next_page_token_val);
 		if (!error.empty()) {
@@ -32,7 +51,7 @@ string ListTablesResponse::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto identifiers_val = yyjson_obj_get(obj, "identifiers");
-	if (identifiers_val) {
+	if (identifiers_val && !yyjson_is_null(identifiers_val)) {
 		has_identifiers = true;
 		if (yyjson_is_arr(identifiers_val)) {
 			size_t idx, max;

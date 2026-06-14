@@ -12,12 +12,36 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+StructField::StructField() {
+}
+
 StructField StructField::FromJSON(yyjson_val *obj) {
 	StructField res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+StructField StructField::Copy() const {
+	StructField res;
+	res.id = id;
+	res.name = name;
+	res.type = type ? make_uniq<Type>(type->Copy()) : nullptr;
+	res.required = required;
+	if (has__doc) {
+		res._doc = _doc;
+	}
+	res.has__doc = has__doc;
+	if (has_initial_default) {
+		res.initial_default = initial_default.Copy();
+	}
+	res.has_initial_default = has_initial_default;
+	if (has_write_default) {
+		res.write_default = write_default.Copy();
+	}
+	res.has_write_default = has_write_default;
 	return res;
 }
 
@@ -67,7 +91,7 @@ string StructField::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto _doc_val = yyjson_obj_get(obj, "doc");
-	if (_doc_val) {
+	if (_doc_val && !yyjson_is_null(_doc_val)) {
 		has__doc = true;
 		if (yyjson_is_str(_doc_val)) {
 			_doc = yyjson_get_str(_doc_val);
@@ -77,7 +101,7 @@ string StructField::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto initial_default_val = yyjson_obj_get(obj, "initial-default");
-	if (initial_default_val) {
+	if (initial_default_val && !yyjson_is_null(initial_default_val)) {
 		has_initial_default = true;
 		error = initial_default.TryFromJSON(initial_default_val);
 		if (!error.empty()) {
@@ -85,7 +109,7 @@ string StructField::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto write_default_val = yyjson_obj_get(obj, "write-default");
-	if (write_default_val) {
+	if (write_default_val && !yyjson_is_null(write_default_val)) {
 		has_write_default = true;
 		error = write_default.TryFromJSON(write_default_val);
 		if (!error.empty()) {

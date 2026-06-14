@@ -14,13 +14,24 @@ namespace rest_api_objects {
 
 class RemoveStatisticsUpdate {
 public:
+	RemoveStatisticsUpdate();
+	RemoveStatisticsUpdate(const RemoveStatisticsUpdate &) = delete;
+	RemoveStatisticsUpdate &operator=(const RemoveStatisticsUpdate &) = delete;
+	RemoveStatisticsUpdate(RemoveStatisticsUpdate &&) = default;
+	RemoveStatisticsUpdate &operator=(RemoveStatisticsUpdate &&) = default;
+
+public:
 	// Deserialization
 	static RemoveStatisticsUpdate FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	RemoveStatisticsUpdate Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	BaseUpdate base_update;
 	int64_t snapshot_id;
 	string action;

@@ -13,13 +13,24 @@ namespace rest_api_objects {
 
 class PlanStatus {
 public:
+	PlanStatus();
+	PlanStatus(const PlanStatus &) = delete;
+	PlanStatus &operator=(const PlanStatus &) = delete;
+	PlanStatus(PlanStatus &&) = default;
+	PlanStatus &operator=(PlanStatus &&) = default;
+
+public:
 	// Deserialization
 	static PlanStatus FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	PlanStatus Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	string value;
 };
 

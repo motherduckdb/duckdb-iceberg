@@ -12,12 +12,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+PartitionField::PartitionField() {
+}
+
 PartitionField PartitionField::FromJSON(yyjson_val *obj) {
 	PartitionField res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+PartitionField PartitionField::Copy() const {
+	PartitionField res;
+	res.source_id = source_id;
+	res.transform = transform.Copy();
+	res.name = name;
+	if (has_field_id) {
+		res.field_id = field_id;
+	}
+	res.has_field_id = has_field_id;
 	return res;
 }
 
@@ -56,7 +71,7 @@ string PartitionField::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto field_id_val = yyjson_obj_get(obj, "field-id");
-	if (field_id_val) {
+	if (field_id_val && !yyjson_is_null(field_id_val)) {
 		has_field_id = true;
 		if (yyjson_is_int(field_id_val)) {
 			field_id = yyjson_get_int(field_id_val);

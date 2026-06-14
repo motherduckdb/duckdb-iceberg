@@ -12,12 +12,21 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+FetchScanTasksRequest::FetchScanTasksRequest() {
+}
+
 FetchScanTasksRequest FetchScanTasksRequest::FromJSON(yyjson_val *obj) {
 	FetchScanTasksRequest res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+FetchScanTasksRequest FetchScanTasksRequest::Copy() const {
+	FetchScanTasksRequest res;
+	res.plan_task = plan_task.Copy();
 	return res;
 }
 

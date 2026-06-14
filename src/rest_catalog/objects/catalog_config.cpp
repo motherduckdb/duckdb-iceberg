@@ -12,12 +12,37 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+CatalogConfig::CatalogConfig() {
+}
+
 CatalogConfig CatalogConfig::FromJSON(yyjson_val *obj) {
 	CatalogConfig res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+CatalogConfig CatalogConfig::Copy() const {
+	CatalogConfig res;
+	for (auto &entry : defaults) {
+		res.defaults.emplace(entry.first, entry.second);
+	}
+	for (auto &entry : overrides) {
+		res.overrides.emplace(entry.first, entry.second);
+	}
+	if (has_endpoints) {
+		res.endpoints.reserve(endpoints.size());
+		for (auto &item : endpoints) {
+			res.endpoints.emplace_back(item);
+		}
+	}
+	res.has_endpoints = has_endpoints;
+	if (has_idempotency_key_lifetime) {
+		res.idempotency_key_lifetime = idempotency_key_lifetime;
+	}
+	res.has_idempotency_key_lifetime = has_idempotency_key_lifetime;
 	return res;
 }
 
@@ -70,7 +95,7 @@ string CatalogConfig::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto endpoints_val = yyjson_obj_get(obj, "endpoints");
-	if (endpoints_val) {
+	if (endpoints_val && !yyjson_is_null(endpoints_val)) {
 		has_endpoints = true;
 		if (yyjson_is_arr(endpoints_val)) {
 			size_t idx, max;
@@ -89,6 +114,17 @@ string CatalogConfig::TryFromJSON(yyjson_val *obj) {
 		} else {
 			return StringUtil::Format("CatalogConfig property 'endpoints' is not of type 'array', found '%s' instead",
 			                          yyjson_get_type_desc(endpoints_val));
+		}
+	}
+	auto idempotency_key_lifetime_val = yyjson_obj_get(obj, "idempotency-key-lifetime");
+	if (idempotency_key_lifetime_val && !yyjson_is_null(idempotency_key_lifetime_val)) {
+		has_idempotency_key_lifetime = true;
+		if (yyjson_is_str(idempotency_key_lifetime_val)) {
+			idempotency_key_lifetime = yyjson_get_str(idempotency_key_lifetime_val);
+		} else {
+			return StringUtil::Format(
+			    "CatalogConfig property 'idempotency_key_lifetime' is not of type 'string', found '%s' instead",
+			    yyjson_get_type_desc(idempotency_key_lifetime_val));
 		}
 	}
 	return "";
@@ -123,6 +159,11 @@ yyjson_mut_val *CatalogConfig::ToJSON(yyjson_mut_doc *doc) const {
 			yyjson_mut_arr_append(endpoints_arr, item_val);
 		}
 		yyjson_mut_obj_add_val(doc, obj, "endpoints", endpoints_arr);
+	}
+
+	// Serialize: idempotency-key-lifetime
+	if (has_idempotency_key_lifetime) {
+		yyjson_mut_obj_add_str(doc, obj, "idempotency-key-lifetime", idempotency_key_lifetime.c_str());
 	}
 
 	return obj;

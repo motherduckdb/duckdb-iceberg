@@ -14,13 +14,24 @@ namespace rest_api_objects {
 
 class SetPropertiesUpdate {
 public:
+	SetPropertiesUpdate();
+	SetPropertiesUpdate(const SetPropertiesUpdate &) = delete;
+	SetPropertiesUpdate &operator=(const SetPropertiesUpdate &) = delete;
+	SetPropertiesUpdate(SetPropertiesUpdate &&) = default;
+	SetPropertiesUpdate &operator=(SetPropertiesUpdate &&) = default;
+
+public:
 	// Deserialization
 	static SetPropertiesUpdate FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	SetPropertiesUpdate Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	BaseUpdate base_update;
 	case_insensitive_map_t<string> updates;
 	string action;

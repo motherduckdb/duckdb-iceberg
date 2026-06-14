@@ -12,7 +12,12 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-Object5 Object5::FromJSON(yyjson_val *obj) {
+CompletedPlanningResult::CompletedPlanningResult() {
+}
+CompletedPlanningResult::Object5::Object5() {
+}
+
+CompletedPlanningResult::Object5 CompletedPlanningResult::Object5::FromJSON(yyjson_val *obj) {
 	Object5 res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -21,7 +26,20 @@ Object5 Object5::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string Object5::TryFromJSON(yyjson_val *obj) {
+CompletedPlanningResult::Object5 CompletedPlanningResult::Object5::Copy() const {
+	Object5 res;
+	res.status = status.Copy();
+	if (has_storage_credentials) {
+		res.storage_credentials.reserve(storage_credentials.size());
+		for (auto &item : storage_credentials) {
+			res.storage_credentials.emplace_back(item.Copy());
+		}
+	}
+	res.has_storage_credentials = has_storage_credentials;
+	return res;
+}
+
+string CompletedPlanningResult::Object5::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto status_val = yyjson_obj_get(obj, "status");
 	if (!status_val) {
@@ -32,15 +50,45 @@ string Object5::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
+	auto storage_credentials_val = yyjson_obj_get(obj, "storage-credentials");
+	if (storage_credentials_val && !yyjson_is_null(storage_credentials_val)) {
+		has_storage_credentials = true;
+		if (yyjson_is_arr(storage_credentials_val)) {
+			size_t idx, max;
+			yyjson_val *val;
+			yyjson_arr_foreach(storage_credentials_val, idx, max, val) {
+				StorageCredential tmp;
+				error = tmp.TryFromJSON(val);
+				if (!error.empty()) {
+					return error;
+				}
+				storage_credentials.emplace_back(std::move(tmp));
+			}
+		} else {
+			return StringUtil::Format(
+			    "Object5 property 'storage_credentials' is not of type 'array', found '%s' instead",
+			    yyjson_get_type_desc(storage_credentials_val));
+		}
+	}
 	return "";
 }
 
-yyjson_mut_val *Object5::ToJSON(yyjson_mut_doc *doc) const {
+yyjson_mut_val *CompletedPlanningResult::Object5::ToJSON(yyjson_mut_doc *doc) const {
 	yyjson_mut_val *obj = yyjson_mut_obj(doc);
 
 	// Serialize: status
 	yyjson_mut_val *status_val = status.ToJSON(doc);
 	yyjson_mut_obj_add_val(doc, obj, "status", status_val);
+
+	// Serialize: storage-credentials
+	if (has_storage_credentials) {
+		yyjson_mut_val *storage_credentials_arr = yyjson_mut_arr(doc);
+		for (const auto &item : storage_credentials) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(storage_credentials_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "storage-credentials", storage_credentials_arr);
+	}
 
 	return obj;
 }
@@ -51,6 +99,13 @@ CompletedPlanningResult CompletedPlanningResult::FromJSON(yyjson_val *obj) {
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+CompletedPlanningResult CompletedPlanningResult::Copy() const {
+	CompletedPlanningResult res;
+	res.scan_tasks = scan_tasks.Copy();
+	res.object_5 = object_5.Copy();
 	return res;
 }
 

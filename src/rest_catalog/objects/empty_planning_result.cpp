@@ -12,12 +12,21 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+EmptyPlanningResult::EmptyPlanningResult() {
+}
+
 EmptyPlanningResult EmptyPlanningResult::FromJSON(yyjson_val *obj) {
 	EmptyPlanningResult res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+EmptyPlanningResult EmptyPlanningResult::Copy() const {
+	EmptyPlanningResult res;
+	res.status = status.Copy();
 	return res;
 }
 

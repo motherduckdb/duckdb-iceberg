@@ -12,12 +12,22 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+CounterResult::CounterResult() {
+}
+
 CounterResult CounterResult::FromJSON(yyjson_val *obj) {
 	CounterResult res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+CounterResult CounterResult::Copy() const {
+	CounterResult res;
+	res.unit = unit;
+	res.value = value;
 	return res;
 }
 

@@ -12,12 +12,38 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+LoadTableResult::LoadTableResult() {
+}
+
 LoadTableResult LoadTableResult::FromJSON(yyjson_val *obj) {
 	LoadTableResult res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+LoadTableResult LoadTableResult::Copy() const {
+	LoadTableResult res;
+	res.metadata = metadata.Copy();
+	if (has_metadata_location) {
+		res.metadata_location = metadata_location;
+	}
+	res.has_metadata_location = has_metadata_location;
+	if (has_config) {
+		for (auto &entry : config) {
+			res.config.emplace(entry.first, entry.second);
+		}
+	}
+	res.has_config = has_config;
+	if (has_storage_credentials) {
+		res.storage_credentials.reserve(storage_credentials.size());
+		for (auto &item : storage_credentials) {
+			res.storage_credentials.emplace_back(item.Copy());
+		}
+	}
+	res.has_storage_credentials = has_storage_credentials;
 	return res;
 }
 
@@ -37,6 +63,7 @@ string LoadTableResult::TryFromJSON(yyjson_val *obj) {
 		has_metadata_location = true;
 		if (yyjson_is_null(metadata_location_val)) {
 			//! do nothing, property is explicitly nullable
+			has_metadata_location = false;
 		} else if (yyjson_is_str(metadata_location_val)) {
 			metadata_location = yyjson_get_str(metadata_location_val);
 		} else {
@@ -46,7 +73,7 @@ string LoadTableResult::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto config_val = yyjson_obj_get(obj, "config");
-	if (config_val) {
+	if (config_val && !yyjson_is_null(config_val)) {
 		has_config = true;
 		if (yyjson_is_obj(config_val)) {
 			size_t idx, max;
@@ -68,7 +95,7 @@ string LoadTableResult::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto storage_credentials_val = yyjson_obj_get(obj, "storage-credentials");
-	if (storage_credentials_val) {
+	if (storage_credentials_val && !yyjson_is_null(storage_credentials_val)) {
 		has_storage_credentials = true;
 		if (yyjson_is_arr(storage_credentials_val)) {
 			size_t idx, max;

@@ -16,7 +16,7 @@ statement ok
 create schema my_datalake.default;
 
 statement ok
-create view my_datalake.default.filtering_on_partition_bounds as select * from ICEBERG_SCAN('__WORKING_DIRECTORY__/data/generated/iceberg/spark-local/default/filtering_on_partition_bounds');
+create view my_datalake.default.filtering_on_partition_bounds as select * from ICEBERG_SCAN('{WORKING_DIRECTORY}/data/generated/iceberg/spark-local/default/filtering_on_partition_bounds');
 
 statement ok
 CALL enable_logging('Iceberg');
@@ -39,10 +39,10 @@ select count(*) from my_datalake.default.filtering_on_partition_bounds where seq
 query I
 SELECT SUM(meta.record_count) AS total_record_count
 FROM (
-	SELECT message.split(': ')[2][2:-2] AS msg
+	SELECT message.split(': ')[2].split('''')[2] AS msg
 	FROM duckdb_logs() where type = 'Iceberg' and message.contains('manifest_file')
 ) logs
-JOIN ICEBERG_METADATA('__WORKING_DIRECTORY__/data/generated/iceberg/spark-local/default/filtering_on_partition_bounds') meta
+JOIN ICEBERG_METADATA('{WORKING_DIRECTORY}/data/generated/iceberg/spark-local/default/filtering_on_partition_bounds') meta
 ON logs.msg = meta.manifest_path;
 ----
 4000
@@ -61,10 +61,10 @@ select count(*) from my_datalake.default.filtering_on_partition_bounds where seq
 query I
 SELECT SUM(meta.record_count) AS total_record_count
 FROM (
-	SELECT message.split(': ')[2][2:-2] AS msg
+	SELECT message.split(': ')[2].split('''')[2] AS msg
 	FROM duckdb_logs() where type = 'Iceberg' and message.contains('manifest_file')
 ) logs
-JOIN ICEBERG_METADATA('__WORKING_DIRECTORY__/data/generated/iceberg/spark-local/default/filtering_on_partition_bounds') meta
+JOIN ICEBERG_METADATA('{WORKING_DIRECTORY}/data/generated/iceberg/spark-local/default/filtering_on_partition_bounds') meta
 ON logs.msg = meta.manifest_path;
 ----
 3000
@@ -81,10 +81,10 @@ query I
 WITH result as (
 	SELECT SUM(meta.record_count) AS total_record_count
 	FROM (
-		SELECT message.split(': ')[2][2:-2] AS msg
+		SELECT message.split(': ')[2].split('''')[2] AS msg
 		FROM duckdb_logs() where type = 'Iceberg' and message.contains('manifest_file')
 	) logs
-	JOIN ICEBERG_METADATA('__WORKING_DIRECTORY__/data/generated/iceberg/spark-local/default/filtering_on_partition_bounds') meta
+	JOIN ICEBERG_METADATA('{WORKING_DIRECTORY}/data/generated/iceberg/spark-local/default/filtering_on_partition_bounds') meta
 	ON logs.msg = meta.manifest_path
 )
 select total_record_count from result;

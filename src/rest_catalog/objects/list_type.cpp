@@ -12,12 +12,24 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+ListType::ListType() {
+}
+
 ListType ListType::FromJSON(yyjson_val *obj) {
 	ListType res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+ListType ListType::Copy() const {
+	ListType res;
+	res.type = type;
+	res.element_id = element_id;
+	res.element = element ? make_uniq<Type>(element->Copy()) : nullptr;
+	res.element_required = element_required;
 	return res;
 }
 

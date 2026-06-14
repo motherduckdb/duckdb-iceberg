@@ -12,12 +12,23 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+AndOrExpression::AndOrExpression() {
+}
+
 AndOrExpression AndOrExpression::FromJSON(yyjson_val *obj) {
 	AndOrExpression res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+AndOrExpression AndOrExpression::Copy() const {
+	AndOrExpression res;
+	res.type = type.Copy();
+	res.left = left ? make_uniq<Expression>(left->Copy()) : nullptr;
+	res.right = right ? make_uniq<Expression>(right->Copy()) : nullptr;
 	return res;
 }
 

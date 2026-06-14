@@ -16,7 +16,7 @@ statement ok
 create schema my_datalake.default;
 
 statement ok
-create view my_datalake.default.is_not_null as select * from ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/is_null_is_not_null');
+create view my_datalake.default.is_not_null as select * from ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/is_null_is_not_null');
 
 statement ok
 CALL enable_logging('Iceberg');
@@ -48,7 +48,7 @@ select * from my_datalake.default.is_not_null WHERE value IS NULL ORDER BY id AS
 query I
 SELECT SUM(meta.record_count) AS total_record_count
 FROM (
-	SELECT message.split(': ')[2][2:-2] AS msg
+	SELECT message.split(': ')[2].split('''')[2] AS msg
 	FROM duckdb_logs() where type = 'Iceberg'
 ) logs
 JOIN ICEBERG_METADATA(my_datalake.default.is_not_null) meta
@@ -71,7 +71,7 @@ select * from my_datalake.default.is_not_null WHERE value IS NOT NULL ORDER BY i
 query I
 SELECT SUM(meta.record_count) AS total_record_count
 FROM (
-	SELECT message.split(': ')[2][2:-2] AS msg
+	SELECT message.split(': ')[2].split('''')[2] AS msg
 	FROM duckdb_logs() where type = 'Iceberg'
 ) logs
 JOIN ICEBERG_METADATA(my_datalake.default.is_not_null) meta

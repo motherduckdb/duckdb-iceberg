@@ -12,11 +12,23 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+LoadCredentialsResponse::LoadCredentialsResponse() {
+}
+
 LoadCredentialsResponse LoadCredentialsResponse::FromJSON(yyjson_val *obj) {
 	LoadCredentialsResponse res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
+	}
+	return res;
+}
+
+LoadCredentialsResponse LoadCredentialsResponse::Copy() const {
+	LoadCredentialsResponse res;
+	res.storage_credentials.reserve(storage_credentials.size());
+	for (auto &item : storage_credentials) {
+		res.storage_credentials.emplace_back(item.Copy());
 	}
 	return res;
 }

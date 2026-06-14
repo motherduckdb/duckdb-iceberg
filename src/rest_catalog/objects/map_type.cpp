@@ -12,12 +12,26 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+MapType::MapType() {
+}
+
 MapType MapType::FromJSON(yyjson_val *obj) {
 	MapType res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+MapType MapType::Copy() const {
+	MapType res;
+	res.type = type;
+	res.key_id = key_id;
+	res.key = key ? make_uniq<Type>(key->Copy()) : nullptr;
+	res.value_id = value_id;
+	res.value = value ? make_uniq<Type>(value->Copy()) : nullptr;
+	res.value_required = value_required;
 	return res;
 }
 

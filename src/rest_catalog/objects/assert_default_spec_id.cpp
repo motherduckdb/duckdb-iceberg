@@ -12,12 +12,22 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+AssertDefaultSpecId::AssertDefaultSpecId() {
+}
+
 AssertDefaultSpecId AssertDefaultSpecId::FromJSON(yyjson_val *obj) {
 	AssertDefaultSpecId res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+AssertDefaultSpecId AssertDefaultSpecId::Copy() const {
+	AssertDefaultSpecId res;
+	res.type = type.Copy();
+	res.default_spec_id = default_spec_id;
 	return res;
 }
 

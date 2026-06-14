@@ -12,6 +12,9 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+ListNamespacesResponse::ListNamespacesResponse() {
+}
+
 ListNamespacesResponse ListNamespacesResponse::FromJSON(yyjson_val *obj) {
 	ListNamespacesResponse res;
 	auto error = res.TryFromJSON(obj);
@@ -21,10 +24,26 @@ ListNamespacesResponse ListNamespacesResponse::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+ListNamespacesResponse ListNamespacesResponse::Copy() const {
+	ListNamespacesResponse res;
+	if (has_next_page_token) {
+		res.next_page_token = next_page_token.Copy();
+	}
+	res.has_next_page_token = has_next_page_token;
+	if (has_namespaces) {
+		res.namespaces.reserve(namespaces.size());
+		for (auto &item : namespaces) {
+			res.namespaces.emplace_back(item.Copy());
+		}
+	}
+	res.has_namespaces = has_namespaces;
+	return res;
+}
+
 string ListNamespacesResponse::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto next_page_token_val = yyjson_obj_get(obj, "next-page-token");
-	if (next_page_token_val) {
+	if (next_page_token_val && !yyjson_is_null(next_page_token_val)) {
 		has_next_page_token = true;
 		error = next_page_token.TryFromJSON(next_page_token_val);
 		if (!error.empty()) {
@@ -32,7 +51,7 @@ string ListNamespacesResponse::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto namespaces_val = yyjson_obj_get(obj, "namespaces");
-	if (namespaces_val) {
+	if (namespaces_val && !yyjson_is_null(namespaces_val)) {
 		has_namespaces = true;
 		if (yyjson_is_arr(namespaces_val)) {
 			size_t idx, max;

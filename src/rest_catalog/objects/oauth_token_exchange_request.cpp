@@ -12,12 +12,39 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+OAuthTokenExchangeRequest::OAuthTokenExchangeRequest() {
+}
+
 OAuthTokenExchangeRequest OAuthTokenExchangeRequest::FromJSON(yyjson_val *obj) {
 	OAuthTokenExchangeRequest res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+OAuthTokenExchangeRequest OAuthTokenExchangeRequest::Copy() const {
+	OAuthTokenExchangeRequest res;
+	res.grant_type = grant_type;
+	res.subject_token = subject_token;
+	res.subject_token_type = subject_token_type.Copy();
+	if (has_scope) {
+		res.scope = scope;
+	}
+	res.has_scope = has_scope;
+	if (has_requested_token_type) {
+		res.requested_token_type = requested_token_type.Copy();
+	}
+	res.has_requested_token_type = has_requested_token_type;
+	if (has_actor_token) {
+		res.actor_token = actor_token;
+	}
+	res.has_actor_token = has_actor_token;
+	if (has_actor_token_type) {
+		res.actor_token_type = actor_token_type.Copy();
+	}
+	res.has_actor_token_type = has_actor_token_type;
 	return res;
 }
 
@@ -57,7 +84,7 @@ string OAuthTokenExchangeRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto scope_val = yyjson_obj_get(obj, "scope");
-	if (scope_val) {
+	if (scope_val && !yyjson_is_null(scope_val)) {
 		has_scope = true;
 		if (yyjson_is_str(scope_val)) {
 			scope = yyjson_get_str(scope_val);
@@ -68,7 +95,7 @@ string OAuthTokenExchangeRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto requested_token_type_val = yyjson_obj_get(obj, "requested_token_type");
-	if (requested_token_type_val) {
+	if (requested_token_type_val && !yyjson_is_null(requested_token_type_val)) {
 		has_requested_token_type = true;
 		error = requested_token_type.TryFromJSON(requested_token_type_val);
 		if (!error.empty()) {
@@ -76,7 +103,7 @@ string OAuthTokenExchangeRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto actor_token_val = yyjson_obj_get(obj, "actor_token");
-	if (actor_token_val) {
+	if (actor_token_val && !yyjson_is_null(actor_token_val)) {
 		has_actor_token = true;
 		if (yyjson_is_str(actor_token_val)) {
 			actor_token = yyjson_get_str(actor_token_val);
@@ -87,7 +114,7 @@ string OAuthTokenExchangeRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto actor_token_type_val = yyjson_obj_get(obj, "actor_token_type");
-	if (actor_token_type_val) {
+	if (actor_token_type_val && !yyjson_is_null(actor_token_type_val)) {
 		has_actor_token_type = true;
 		error = actor_token_type.TryFromJSON(actor_token_type_val);
 		if (!error.empty()) {

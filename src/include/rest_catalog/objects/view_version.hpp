@@ -15,13 +15,24 @@ namespace rest_api_objects {
 
 class ViewVersion {
 public:
+	ViewVersion();
+	ViewVersion(const ViewVersion &) = delete;
+	ViewVersion &operator=(const ViewVersion &) = delete;
+	ViewVersion(ViewVersion &&) = default;
+	ViewVersion &operator=(ViewVersion &&) = default;
+
+public:
 	// Deserialization
 	static ViewVersion FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	ViewVersion Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	int32_t version_id;
 	int64_t timestamp_ms;
 	int32_t schema_id;

@@ -14,13 +14,24 @@ namespace rest_api_objects {
 
 class CommitTransactionRequest {
 public:
+	CommitTransactionRequest();
+	CommitTransactionRequest(const CommitTransactionRequest &) = delete;
+	CommitTransactionRequest &operator=(const CommitTransactionRequest &) = delete;
+	CommitTransactionRequest(CommitTransactionRequest &&) = default;
+	CommitTransactionRequest &operator=(CommitTransactionRequest &&) = default;
+
+public:
 	// Deserialization
 	static CommitTransactionRequest FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	CommitTransactionRequest Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	vector<CommitTableRequest> table_changes;
 };
 

@@ -13,13 +13,24 @@ namespace rest_api_objects {
 
 class ErrorModel {
 public:
+	ErrorModel();
+	ErrorModel(const ErrorModel &) = delete;
+	ErrorModel &operator=(const ErrorModel &) = delete;
+	ErrorModel(ErrorModel &&) = default;
+	ErrorModel &operator=(ErrorModel &&) = default;
+
+public:
 	// Deserialization
 	static ErrorModel FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	ErrorModel Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	string message;
 	string type;
 	int32_t code;

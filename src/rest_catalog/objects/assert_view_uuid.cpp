@@ -12,12 +12,22 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+AssertViewUUID::AssertViewUUID() {
+}
+
 AssertViewUUID AssertViewUUID::FromJSON(yyjson_val *obj) {
 	AssertViewUUID res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+AssertViewUUID AssertViewUUID::Copy() const {
+	AssertViewUUID res;
+	res.type = type;
+	res.uuid = uuid;
 	return res;
 }
 

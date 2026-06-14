@@ -14,13 +14,24 @@ namespace rest_api_objects {
 
 class TableIdentifier {
 public:
+	TableIdentifier();
+	TableIdentifier(const TableIdentifier &) = delete;
+	TableIdentifier &operator=(const TableIdentifier &) = delete;
+	TableIdentifier(TableIdentifier &&) = default;
+	TableIdentifier &operator=(TableIdentifier &&) = default;
+
+public:
 	// Deserialization
 	static TableIdentifier FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	TableIdentifier Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	Namespace _namespace;
 	string name;
 };

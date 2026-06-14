@@ -12,12 +12,22 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+AssertCurrentSchemaId::AssertCurrentSchemaId() {
+}
+
 AssertCurrentSchemaId AssertCurrentSchemaId::FromJSON(yyjson_val *obj) {
 	AssertCurrentSchemaId res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+AssertCurrentSchemaId AssertCurrentSchemaId::Copy() const {
+	AssertCurrentSchemaId res;
+	res.type = type.Copy();
+	res.current_schema_id = current_schema_id;
 	return res;
 }
 

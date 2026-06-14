@@ -12,12 +12,28 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+Term::Term() {
+}
+
 Term Term::FromJSON(yyjson_val *obj) {
 	Term res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+Term Term::Copy() const {
+	Term res;
+	if (has_reference) {
+		res.reference = reference.Copy();
+	}
+	res.has_reference = has_reference;
+	if (has_transform_term) {
+		res.transform_term = transform_term.Copy();
+	}
+	res.has_transform_term = has_transform_term;
 	return res;
 }
 

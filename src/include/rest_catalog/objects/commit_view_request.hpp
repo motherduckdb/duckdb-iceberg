@@ -16,13 +16,24 @@ namespace rest_api_objects {
 
 class CommitViewRequest {
 public:
+	CommitViewRequest();
+	CommitViewRequest(const CommitViewRequest &) = delete;
+	CommitViewRequest &operator=(const CommitViewRequest &) = delete;
+	CommitViewRequest(CommitViewRequest &&) = default;
+	CommitViewRequest &operator=(CommitViewRequest &&) = default;
+
+public:
 	// Deserialization
 	static CommitViewRequest FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	CommitViewRequest Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	vector<ViewUpdate> updates;
 	TableIdentifier identifier;
 	bool has_identifier = false;

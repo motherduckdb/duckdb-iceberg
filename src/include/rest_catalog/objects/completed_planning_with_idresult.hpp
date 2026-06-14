@@ -12,28 +12,48 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-class Object6 {
-public:
-	// Deserialization
-	static Object6 FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
-
-	// Serialization
-	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
-
-	string plan_id;
-	bool has_plan_id = false;
-};
-
 class CompletedPlanningWithIDResult {
+public:
+	CompletedPlanningWithIDResult();
+	CompletedPlanningWithIDResult(const CompletedPlanningWithIDResult &) = delete;
+	CompletedPlanningWithIDResult &operator=(const CompletedPlanningWithIDResult &) = delete;
+	CompletedPlanningWithIDResult(CompletedPlanningWithIDResult &&) = default;
+	CompletedPlanningWithIDResult &operator=(CompletedPlanningWithIDResult &&) = default;
+	class Object6 {
+	public:
+		Object6();
+		Object6(const Object6 &) = delete;
+		Object6 &operator=(const Object6 &) = delete;
+		Object6(Object6 &&) = default;
+		Object6 &operator=(Object6 &&) = default;
+
+	public:
+		// Deserialization
+		static Object6 FromJSON(yyjson_val *obj);
+		string TryFromJSON(yyjson_val *obj);
+
+		// Copy
+		Object6 Copy() const;
+
+		// Serialization
+		yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+
+	public:
+		string plan_id;
+	};
+
 public:
 	// Deserialization
 	static CompletedPlanningWithIDResult FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	CompletedPlanningWithIDResult Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	CompletedPlanningResult completed_planning_result;
 	Object6 object_6;
 };

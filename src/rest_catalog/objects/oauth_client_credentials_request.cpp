@@ -12,12 +12,27 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+OAuthClientCredentialsRequest::OAuthClientCredentialsRequest() {
+}
+
 OAuthClientCredentialsRequest OAuthClientCredentialsRequest::FromJSON(yyjson_val *obj) {
 	OAuthClientCredentialsRequest res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+OAuthClientCredentialsRequest OAuthClientCredentialsRequest::Copy() const {
+	OAuthClientCredentialsRequest res;
+	res.grant_type = grant_type;
+	res.client_id = client_id;
+	res.client_secret = client_secret;
+	if (has_scope) {
+		res.scope = scope;
+	}
+	res.has_scope = has_scope;
 	return res;
 }
 
@@ -60,7 +75,7 @@ string OAuthClientCredentialsRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto scope_val = yyjson_obj_get(obj, "scope");
-	if (scope_val) {
+	if (scope_val && !yyjson_is_null(scope_val)) {
 		has_scope = true;
 		if (yyjson_is_str(scope_val)) {
 			scope = yyjson_get_str(scope_val);

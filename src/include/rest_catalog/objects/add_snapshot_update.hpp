@@ -15,13 +15,24 @@ namespace rest_api_objects {
 
 class AddSnapshotUpdate {
 public:
+	AddSnapshotUpdate();
+	AddSnapshotUpdate(const AddSnapshotUpdate &) = delete;
+	AddSnapshotUpdate &operator=(const AddSnapshotUpdate &) = delete;
+	AddSnapshotUpdate(AddSnapshotUpdate &&) = default;
+	AddSnapshotUpdate &operator=(AddSnapshotUpdate &&) = default;
+
+public:
 	// Deserialization
 	static AddSnapshotUpdate FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	AddSnapshotUpdate Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	BaseUpdate base_update;
 	Snapshot snapshot;
 	string action;

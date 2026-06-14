@@ -12,11 +12,23 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+CommitTransactionRequest::CommitTransactionRequest() {
+}
+
 CommitTransactionRequest CommitTransactionRequest::FromJSON(yyjson_val *obj) {
 	CommitTransactionRequest res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
+	}
+	return res;
+}
+
+CommitTransactionRequest CommitTransactionRequest::Copy() const {
+	CommitTransactionRequest res;
+	res.table_changes.reserve(table_changes.size());
+	for (auto &item : table_changes) {
+		res.table_changes.emplace_back(item.Copy());
 	}
 	return res;
 }

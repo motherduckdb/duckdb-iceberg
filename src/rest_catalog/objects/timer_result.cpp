@@ -12,12 +12,23 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+TimerResult::TimerResult() {
+}
+
 TimerResult TimerResult::FromJSON(yyjson_val *obj) {
 	TimerResult res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+TimerResult TimerResult::Copy() const {
+	TimerResult res;
+	res.time_unit = time_unit;
+	res.count = count;
+	res.total_duration = total_duration;
 	return res;
 }
 

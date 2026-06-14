@@ -14,13 +14,24 @@ namespace rest_api_objects {
 
 class RemovePartitionStatisticsUpdate {
 public:
+	RemovePartitionStatisticsUpdate();
+	RemovePartitionStatisticsUpdate(const RemovePartitionStatisticsUpdate &) = delete;
+	RemovePartitionStatisticsUpdate &operator=(const RemovePartitionStatisticsUpdate &) = delete;
+	RemovePartitionStatisticsUpdate(RemovePartitionStatisticsUpdate &&) = default;
+	RemovePartitionStatisticsUpdate &operator=(RemovePartitionStatisticsUpdate &&) = default;
+
+public:
 	// Deserialization
 	static RemovePartitionStatisticsUpdate FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	RemovePartitionStatisticsUpdate Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	BaseUpdate base_update;
 	int64_t snapshot_id;
 	string action;

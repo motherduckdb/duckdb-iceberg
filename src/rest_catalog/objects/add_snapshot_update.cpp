@@ -12,12 +12,26 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+AddSnapshotUpdate::AddSnapshotUpdate() {
+}
+
 AddSnapshotUpdate AddSnapshotUpdate::FromJSON(yyjson_val *obj) {
 	AddSnapshotUpdate res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+AddSnapshotUpdate AddSnapshotUpdate::Copy() const {
+	AddSnapshotUpdate res;
+	res.base_update = base_update.Copy();
+	res.snapshot = snapshot.Copy();
+	if (has_action) {
+		res.action = action;
+	}
+	res.has_action = has_action;
 	return res;
 }
 
@@ -37,7 +51,7 @@ string AddSnapshotUpdate::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto action_val = yyjson_obj_get(obj, "action");
-	if (action_val) {
+	if (action_val && !yyjson_is_null(action_val)) {
 		has_action = true;
 		if (yyjson_is_str(action_val)) {
 			action = yyjson_get_str(action_val);

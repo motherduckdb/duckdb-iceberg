@@ -12,12 +12,23 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+SQLViewRepresentation::SQLViewRepresentation() {
+}
+
 SQLViewRepresentation SQLViewRepresentation::FromJSON(yyjson_val *obj) {
 	SQLViewRepresentation res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+SQLViewRepresentation SQLViewRepresentation::Copy() const {
+	SQLViewRepresentation res;
+	res.type = type;
+	res.sql = sql;
+	res.dialect = dialect;
 	return res;
 }
 

@@ -12,12 +12,23 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+PartitionStatisticsFile::PartitionStatisticsFile() {
+}
+
 PartitionStatisticsFile PartitionStatisticsFile::FromJSON(yyjson_val *obj) {
 	PartitionStatisticsFile res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+PartitionStatisticsFile PartitionStatisticsFile::Copy() const {
+	PartitionStatisticsFile res;
+	res.snapshot_id = snapshot_id;
+	res.statistics_path = statistics_path;
+	res.file_size_in_bytes = file_size_in_bytes;
 	return res;
 }
 

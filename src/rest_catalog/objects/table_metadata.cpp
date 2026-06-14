@@ -12,12 +12,129 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+TableMetadata::TableMetadata() {
+}
+
 TableMetadata TableMetadata::FromJSON(yyjson_val *obj) {
 	TableMetadata res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+TableMetadata TableMetadata::Copy() const {
+	TableMetadata res;
+	res.format_version = format_version;
+	res.table_uuid = table_uuid;
+	if (has_location) {
+		res.location = location;
+	}
+	res.has_location = has_location;
+	if (has_last_updated_ms) {
+		res.last_updated_ms = last_updated_ms;
+	}
+	res.has_last_updated_ms = has_last_updated_ms;
+	if (has_next_row_id) {
+		res.next_row_id = next_row_id;
+	}
+	res.has_next_row_id = has_next_row_id;
+	if (has_properties) {
+		for (auto &entry : properties) {
+			res.properties.emplace(entry.first, entry.second);
+		}
+	}
+	res.has_properties = has_properties;
+	if (has_schemas) {
+		res.schemas.reserve(schemas.size());
+		for (auto &item : schemas) {
+			res.schemas.emplace_back(item.Copy());
+		}
+	}
+	res.has_schemas = has_schemas;
+	if (has_current_schema_id) {
+		res.current_schema_id = current_schema_id;
+	}
+	res.has_current_schema_id = has_current_schema_id;
+	if (has_last_column_id) {
+		res.last_column_id = last_column_id;
+	}
+	res.has_last_column_id = has_last_column_id;
+	if (has_partition_specs) {
+		res.partition_specs.reserve(partition_specs.size());
+		for (auto &item : partition_specs) {
+			res.partition_specs.emplace_back(item.Copy());
+		}
+	}
+	res.has_partition_specs = has_partition_specs;
+	if (has_default_spec_id) {
+		res.default_spec_id = default_spec_id;
+	}
+	res.has_default_spec_id = has_default_spec_id;
+	if (has_last_partition_id) {
+		res.last_partition_id = last_partition_id;
+	}
+	res.has_last_partition_id = has_last_partition_id;
+	if (has_sort_orders) {
+		res.sort_orders.reserve(sort_orders.size());
+		for (auto &item : sort_orders) {
+			res.sort_orders.emplace_back(item.Copy());
+		}
+	}
+	res.has_sort_orders = has_sort_orders;
+	if (has_default_sort_order_id) {
+		res.default_sort_order_id = default_sort_order_id;
+	}
+	res.has_default_sort_order_id = has_default_sort_order_id;
+	if (has_encryption_keys) {
+		res.encryption_keys.reserve(encryption_keys.size());
+		for (auto &item : encryption_keys) {
+			res.encryption_keys.emplace_back(item.Copy());
+		}
+	}
+	res.has_encryption_keys = has_encryption_keys;
+	if (has_snapshots) {
+		res.snapshots.reserve(snapshots.size());
+		for (auto &item : snapshots) {
+			res.snapshots.emplace_back(item.Copy());
+		}
+	}
+	res.has_snapshots = has_snapshots;
+	if (has_refs) {
+		res.refs = refs.Copy();
+	}
+	res.has_refs = has_refs;
+	if (has_current_snapshot_id) {
+		res.current_snapshot_id = current_snapshot_id;
+	}
+	res.has_current_snapshot_id = has_current_snapshot_id;
+	if (has_last_sequence_number) {
+		res.last_sequence_number = last_sequence_number;
+	}
+	res.has_last_sequence_number = has_last_sequence_number;
+	if (has_snapshot_log) {
+		res.snapshot_log = snapshot_log.Copy();
+	}
+	res.has_snapshot_log = has_snapshot_log;
+	if (has_metadata_log) {
+		res.metadata_log = metadata_log.Copy();
+	}
+	res.has_metadata_log = has_metadata_log;
+	if (has_statistics) {
+		res.statistics.reserve(statistics.size());
+		for (auto &item : statistics) {
+			res.statistics.emplace_back(item.Copy());
+		}
+	}
+	res.has_statistics = has_statistics;
+	if (has_partition_statistics) {
+		res.partition_statistics.reserve(partition_statistics.size());
+		for (auto &item : partition_statistics) {
+			res.partition_statistics.emplace_back(item.Copy());
+		}
+	}
+	res.has_partition_statistics = has_partition_statistics;
 	return res;
 }
 
@@ -47,7 +164,7 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto location_val = yyjson_obj_get(obj, "location");
-	if (location_val) {
+	if (location_val && !yyjson_is_null(location_val)) {
 		has_location = true;
 		if (yyjson_is_str(location_val)) {
 			location = yyjson_get_str(location_val);
@@ -57,7 +174,7 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto last_updated_ms_val = yyjson_obj_get(obj, "last-updated-ms");
-	if (last_updated_ms_val) {
+	if (last_updated_ms_val && !yyjson_is_null(last_updated_ms_val)) {
 		has_last_updated_ms = true;
 		if (yyjson_is_sint(last_updated_ms_val)) {
 			last_updated_ms = yyjson_get_sint(last_updated_ms_val);
@@ -70,7 +187,7 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto next_row_id_val = yyjson_obj_get(obj, "next-row-id");
-	if (next_row_id_val) {
+	if (next_row_id_val && !yyjson_is_null(next_row_id_val)) {
 		has_next_row_id = true;
 		if (yyjson_is_sint(next_row_id_val)) {
 			next_row_id = yyjson_get_sint(next_row_id_val);
@@ -83,7 +200,7 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto properties_val = yyjson_obj_get(obj, "properties");
-	if (properties_val) {
+	if (properties_val && !yyjson_is_null(properties_val)) {
 		has_properties = true;
 		if (yyjson_is_obj(properties_val)) {
 			size_t idx, max;
@@ -105,7 +222,7 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto schemas_val = yyjson_obj_get(obj, "schemas");
-	if (schemas_val) {
+	if (schemas_val && !yyjson_is_null(schemas_val)) {
 		has_schemas = true;
 		if (yyjson_is_arr(schemas_val)) {
 			size_t idx, max;
@@ -124,7 +241,7 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto current_schema_id_val = yyjson_obj_get(obj, "current-schema-id");
-	if (current_schema_id_val) {
+	if (current_schema_id_val && !yyjson_is_null(current_schema_id_val)) {
 		has_current_schema_id = true;
 		if (yyjson_is_int(current_schema_id_val)) {
 			current_schema_id = yyjson_get_int(current_schema_id_val);
@@ -135,7 +252,7 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto last_column_id_val = yyjson_obj_get(obj, "last-column-id");
-	if (last_column_id_val) {
+	if (last_column_id_val && !yyjson_is_null(last_column_id_val)) {
 		has_last_column_id = true;
 		if (yyjson_is_int(last_column_id_val)) {
 			last_column_id = yyjson_get_int(last_column_id_val);
@@ -146,7 +263,7 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto partition_specs_val = yyjson_obj_get(obj, "partition-specs");
-	if (partition_specs_val) {
+	if (partition_specs_val && !yyjson_is_null(partition_specs_val)) {
 		has_partition_specs = true;
 		if (yyjson_is_arr(partition_specs_val)) {
 			size_t idx, max;
@@ -166,7 +283,7 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto default_spec_id_val = yyjson_obj_get(obj, "default-spec-id");
-	if (default_spec_id_val) {
+	if (default_spec_id_val && !yyjson_is_null(default_spec_id_val)) {
 		has_default_spec_id = true;
 		if (yyjson_is_int(default_spec_id_val)) {
 			default_spec_id = yyjson_get_int(default_spec_id_val);
@@ -177,7 +294,7 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto last_partition_id_val = yyjson_obj_get(obj, "last-partition-id");
-	if (last_partition_id_val) {
+	if (last_partition_id_val && !yyjson_is_null(last_partition_id_val)) {
 		has_last_partition_id = true;
 		if (yyjson_is_int(last_partition_id_val)) {
 			last_partition_id = yyjson_get_int(last_partition_id_val);
@@ -188,7 +305,7 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto sort_orders_val = yyjson_obj_get(obj, "sort-orders");
-	if (sort_orders_val) {
+	if (sort_orders_val && !yyjson_is_null(sort_orders_val)) {
 		has_sort_orders = true;
 		if (yyjson_is_arr(sort_orders_val)) {
 			size_t idx, max;
@@ -207,7 +324,7 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto default_sort_order_id_val = yyjson_obj_get(obj, "default-sort-order-id");
-	if (default_sort_order_id_val) {
+	if (default_sort_order_id_val && !yyjson_is_null(default_sort_order_id_val)) {
 		has_default_sort_order_id = true;
 		if (yyjson_is_int(default_sort_order_id_val)) {
 			default_sort_order_id = yyjson_get_int(default_sort_order_id_val);
@@ -218,7 +335,7 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto encryption_keys_val = yyjson_obj_get(obj, "encryption-keys");
-	if (encryption_keys_val) {
+	if (encryption_keys_val && !yyjson_is_null(encryption_keys_val)) {
 		has_encryption_keys = true;
 		if (yyjson_is_arr(encryption_keys_val)) {
 			size_t idx, max;
@@ -238,7 +355,7 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto snapshots_val = yyjson_obj_get(obj, "snapshots");
-	if (snapshots_val) {
+	if (snapshots_val && !yyjson_is_null(snapshots_val)) {
 		has_snapshots = true;
 		if (yyjson_is_arr(snapshots_val)) {
 			size_t idx, max;
@@ -257,7 +374,7 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto refs_val = yyjson_obj_get(obj, "refs");
-	if (refs_val) {
+	if (refs_val && !yyjson_is_null(refs_val)) {
 		has_refs = true;
 		error = refs.TryFromJSON(refs_val);
 		if (!error.empty()) {
@@ -267,7 +384,10 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 	auto current_snapshot_id_val = yyjson_obj_get(obj, "current-snapshot-id");
 	if (current_snapshot_id_val) {
 		has_current_snapshot_id = true;
-		if (yyjson_is_sint(current_snapshot_id_val)) {
+		if (yyjson_is_null(current_snapshot_id_val)) {
+			//! do nothing, property is explicitly nullable
+			has_current_snapshot_id = false;
+		} else if (yyjson_is_sint(current_snapshot_id_val)) {
 			current_snapshot_id = yyjson_get_sint(current_snapshot_id_val);
 		} else if (yyjson_is_uint(current_snapshot_id_val)) {
 			current_snapshot_id = yyjson_get_uint(current_snapshot_id_val);
@@ -278,7 +398,7 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto last_sequence_number_val = yyjson_obj_get(obj, "last-sequence-number");
-	if (last_sequence_number_val) {
+	if (last_sequence_number_val && !yyjson_is_null(last_sequence_number_val)) {
 		has_last_sequence_number = true;
 		if (yyjson_is_sint(last_sequence_number_val)) {
 			last_sequence_number = yyjson_get_sint(last_sequence_number_val);
@@ -291,7 +411,7 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto snapshot_log_val = yyjson_obj_get(obj, "snapshot-log");
-	if (snapshot_log_val) {
+	if (snapshot_log_val && !yyjson_is_null(snapshot_log_val)) {
 		has_snapshot_log = true;
 		error = snapshot_log.TryFromJSON(snapshot_log_val);
 		if (!error.empty()) {
@@ -299,7 +419,7 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto metadata_log_val = yyjson_obj_get(obj, "metadata-log");
-	if (metadata_log_val) {
+	if (metadata_log_val && !yyjson_is_null(metadata_log_val)) {
 		has_metadata_log = true;
 		error = metadata_log.TryFromJSON(metadata_log_val);
 		if (!error.empty()) {
@@ -307,7 +427,7 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto statistics_val = yyjson_obj_get(obj, "statistics");
-	if (statistics_val) {
+	if (statistics_val && !yyjson_is_null(statistics_val)) {
 		has_statistics = true;
 		if (yyjson_is_arr(statistics_val)) {
 			size_t idx, max;
@@ -326,7 +446,7 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto partition_statistics_val = yyjson_obj_get(obj, "partition-statistics");
-	if (partition_statistics_val) {
+	if (partition_statistics_val && !yyjson_is_null(partition_statistics_val)) {
 		has_partition_statistics = true;
 		if (yyjson_is_arr(partition_statistics_val)) {
 			size_t idx, max;

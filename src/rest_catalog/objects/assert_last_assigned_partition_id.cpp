@@ -12,12 +12,22 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+AssertLastAssignedPartitionId::AssertLastAssignedPartitionId() {
+}
+
 AssertLastAssignedPartitionId AssertLastAssignedPartitionId::FromJSON(yyjson_val *obj) {
 	AssertLastAssignedPartitionId res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+AssertLastAssignedPartitionId AssertLastAssignedPartitionId::Copy() const {
+	AssertLastAssignedPartitionId res;
+	res.type = type.Copy();
+	res.last_assigned_partition_id = last_assigned_partition_id;
 	return res;
 }
 

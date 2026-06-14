@@ -12,11 +12,24 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+SortOrder::SortOrder() {
+}
+
 SortOrder SortOrder::FromJSON(yyjson_val *obj) {
 	SortOrder res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
+	}
+	return res;
+}
+
+SortOrder SortOrder::Copy() const {
+	SortOrder res;
+	res.order_id = order_id;
+	res.fields.reserve(fields.size());
+	for (auto &item : fields) {
+		res.fields.emplace_back(item.Copy());
 	}
 	return res;
 }

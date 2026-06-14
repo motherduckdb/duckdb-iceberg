@@ -14,13 +14,24 @@ namespace rest_api_objects {
 
 class Metrics {
 public:
+	Metrics();
+	Metrics(const Metrics &) = delete;
+	Metrics &operator=(const Metrics &) = delete;
+	Metrics(Metrics &&) = default;
+	Metrics &operator=(Metrics &&) = default;
+
+public:
 	// Deserialization
 	static Metrics FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	Metrics Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	case_insensitive_map_t<MetricResult> additional_properties;
 };
 

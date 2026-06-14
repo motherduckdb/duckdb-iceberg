@@ -12,6 +12,9 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+ValueMap::ValueMap() {
+}
+
 ValueMap ValueMap::FromJSON(yyjson_val *obj) {
 	ValueMap res;
 	auto error = res.TryFromJSON(obj);
@@ -21,10 +24,29 @@ ValueMap ValueMap::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+ValueMap ValueMap::Copy() const {
+	ValueMap res;
+	if (has_keys) {
+		res.keys.reserve(keys.size());
+		for (auto &item : keys) {
+			res.keys.emplace_back(item.Copy());
+		}
+	}
+	res.has_keys = has_keys;
+	if (has_values) {
+		res.values.reserve(values.size());
+		for (auto &item : values) {
+			res.values.emplace_back(item.Copy());
+		}
+	}
+	res.has_values = has_values;
+	return res;
+}
+
 string ValueMap::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto keys_val = yyjson_obj_get(obj, "keys");
-	if (keys_val) {
+	if (keys_val && !yyjson_is_null(keys_val)) {
 		has_keys = true;
 		if (yyjson_is_arr(keys_val)) {
 			size_t idx, max;
@@ -43,7 +65,7 @@ string ValueMap::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto values_val = yyjson_obj_get(obj, "values");
-	if (values_val) {
+	if (values_val && !yyjson_is_null(values_val)) {
 		has_values = true;
 		if (yyjson_is_arr(values_val)) {
 			size_t idx, max;

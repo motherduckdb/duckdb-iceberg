@@ -12,12 +12,23 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+LiteralExpression::LiteralExpression() {
+}
+
 LiteralExpression LiteralExpression::FromJSON(yyjson_val *obj) {
 	LiteralExpression res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+LiteralExpression LiteralExpression::Copy() const {
+	LiteralExpression res;
+	res.type = type.Copy();
+	res.term = term.Copy();
+	res.value = value.Copy();
 	return res;
 }
 
@@ -45,10 +56,9 @@ string LiteralExpression::TryFromJSON(yyjson_val *obj) {
 	if (!value_val) {
 		return "LiteralExpression required property 'value' is missing";
 	} else {
-		if (yyjson_is_obj(value_val)) {
-			value = value_val;
-		} else {
-			return "LiteralExpression property 'value' is not of type 'object'";
+		error = value.TryFromJSON(value_val);
+		if (!error.empty()) {
+			return error;
 		}
 	}
 	return "";

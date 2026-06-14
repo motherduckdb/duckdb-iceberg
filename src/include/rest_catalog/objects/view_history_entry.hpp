@@ -13,13 +13,24 @@ namespace rest_api_objects {
 
 class ViewHistoryEntry {
 public:
+	ViewHistoryEntry();
+	ViewHistoryEntry(const ViewHistoryEntry &) = delete;
+	ViewHistoryEntry &operator=(const ViewHistoryEntry &) = delete;
+	ViewHistoryEntry(ViewHistoryEntry &&) = default;
+	ViewHistoryEntry &operator=(ViewHistoryEntry &&) = default;
+
+public:
 	// Deserialization
 	static ViewHistoryEntry FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	ViewHistoryEntry Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	int32_t version_id;
 	int64_t timestamp_ms;
 };

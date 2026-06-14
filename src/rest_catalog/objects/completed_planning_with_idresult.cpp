@@ -12,7 +12,12 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
-Object6 Object6::FromJSON(yyjson_val *obj) {
+CompletedPlanningWithIDResult::CompletedPlanningWithIDResult() {
+}
+CompletedPlanningWithIDResult::Object6::Object6() {
+}
+
+CompletedPlanningWithIDResult::Object6 CompletedPlanningWithIDResult::Object6::FromJSON(yyjson_val *obj) {
 	Object6 res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -21,11 +26,18 @@ Object6 Object6::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string Object6::TryFromJSON(yyjson_val *obj) {
+CompletedPlanningWithIDResult::Object6 CompletedPlanningWithIDResult::Object6::Copy() const {
+	Object6 res;
+	res.plan_id = plan_id;
+	return res;
+}
+
+string CompletedPlanningWithIDResult::Object6::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto plan_id_val = yyjson_obj_get(obj, "plan-id");
-	if (plan_id_val) {
-		has_plan_id = true;
+	if (!plan_id_val) {
+		return "Object6 required property 'plan-id' is missing";
+	} else {
 		if (yyjson_is_str(plan_id_val)) {
 			plan_id = yyjson_get_str(plan_id_val);
 		} else {
@@ -36,13 +48,11 @@ string Object6::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *Object6::ToJSON(yyjson_mut_doc *doc) const {
+yyjson_mut_val *CompletedPlanningWithIDResult::Object6::ToJSON(yyjson_mut_doc *doc) const {
 	yyjson_mut_val *obj = yyjson_mut_obj(doc);
 
 	// Serialize: plan-id
-	if (has_plan_id) {
-		yyjson_mut_obj_add_str(doc, obj, "plan-id", plan_id.c_str());
-	}
+	yyjson_mut_obj_add_str(doc, obj, "plan-id", plan_id.c_str());
 
 	return obj;
 }
@@ -53,6 +63,13 @@ CompletedPlanningWithIDResult CompletedPlanningWithIDResult::FromJSON(yyjson_val
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+CompletedPlanningWithIDResult CompletedPlanningWithIDResult::Copy() const {
+	CompletedPlanningWithIDResult res;
+	res.completed_planning_result = completed_planning_result.Copy();
+	res.object_6 = object_6.Copy();
 	return res;
 }
 

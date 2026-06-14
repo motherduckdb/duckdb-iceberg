@@ -13,13 +13,24 @@ namespace rest_api_objects {
 
 class PlanTask {
 public:
+	PlanTask();
+	PlanTask(const PlanTask &) = delete;
+	PlanTask &operator=(const PlanTask &) = delete;
+	PlanTask(PlanTask &&) = default;
+	PlanTask &operator=(PlanTask &&) = default;
+
+public:
 	// Deserialization
 	static PlanTask FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	PlanTask Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	string value;
 };
 

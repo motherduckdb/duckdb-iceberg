@@ -12,12 +12,35 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+ViewVersion::ViewVersion() {
+}
+
 ViewVersion ViewVersion::FromJSON(yyjson_val *obj) {
 	ViewVersion res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+ViewVersion ViewVersion::Copy() const {
+	ViewVersion res;
+	res.version_id = version_id;
+	res.timestamp_ms = timestamp_ms;
+	res.schema_id = schema_id;
+	for (auto &entry : summary) {
+		res.summary.emplace(entry.first, entry.second);
+	}
+	res.representations.reserve(representations.size());
+	for (auto &item : representations) {
+		res.representations.emplace_back(item.Copy());
+	}
+	res.default_namespace = default_namespace.Copy();
+	if (has_default_catalog) {
+		res.default_catalog = default_catalog;
+	}
+	res.has_default_catalog = has_default_catalog;
 	return res;
 }
 
@@ -112,7 +135,7 @@ string ViewVersion::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto default_catalog_val = yyjson_obj_get(obj, "default-catalog");
-	if (default_catalog_val) {
+	if (default_catalog_val && !yyjson_is_null(default_catalog_val)) {
 		has_default_catalog = true;
 		if (yyjson_is_str(default_catalog_val)) {
 			default_catalog = yyjson_get_str(default_catalog_val);

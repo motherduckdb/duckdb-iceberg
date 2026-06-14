@@ -12,12 +12,34 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+SnapshotReference::SnapshotReference() {
+}
+
 SnapshotReference SnapshotReference::FromJSON(yyjson_val *obj) {
 	SnapshotReference res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
 	}
+	return res;
+}
+
+SnapshotReference SnapshotReference::Copy() const {
+	SnapshotReference res;
+	res.type = type;
+	res.snapshot_id = snapshot_id;
+	if (has_max_ref_age_ms) {
+		res.max_ref_age_ms = max_ref_age_ms;
+	}
+	res.has_max_ref_age_ms = has_max_ref_age_ms;
+	if (has_max_snapshot_age_ms) {
+		res.max_snapshot_age_ms = max_snapshot_age_ms;
+	}
+	res.has_max_snapshot_age_ms = has_max_snapshot_age_ms;
+	if (has_min_snapshots_to_keep) {
+		res.min_snapshots_to_keep = min_snapshots_to_keep;
+	}
+	res.has_min_snapshots_to_keep = has_min_snapshots_to_keep;
 	return res;
 }
 
@@ -49,7 +71,7 @@ string SnapshotReference::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto max_ref_age_ms_val = yyjson_obj_get(obj, "max-ref-age-ms");
-	if (max_ref_age_ms_val) {
+	if (max_ref_age_ms_val && !yyjson_is_null(max_ref_age_ms_val)) {
 		has_max_ref_age_ms = true;
 		if (yyjson_is_sint(max_ref_age_ms_val)) {
 			max_ref_age_ms = yyjson_get_sint(max_ref_age_ms_val);
@@ -62,7 +84,7 @@ string SnapshotReference::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto max_snapshot_age_ms_val = yyjson_obj_get(obj, "max-snapshot-age-ms");
-	if (max_snapshot_age_ms_val) {
+	if (max_snapshot_age_ms_val && !yyjson_is_null(max_snapshot_age_ms_val)) {
 		has_max_snapshot_age_ms = true;
 		if (yyjson_is_sint(max_snapshot_age_ms_val)) {
 			max_snapshot_age_ms = yyjson_get_sint(max_snapshot_age_ms_val);
@@ -75,7 +97,7 @@ string SnapshotReference::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto min_snapshots_to_keep_val = yyjson_obj_get(obj, "min-snapshots-to-keep");
-	if (min_snapshots_to_keep_val) {
+	if (min_snapshots_to_keep_val && !yyjson_is_null(min_snapshots_to_keep_val)) {
 		has_min_snapshots_to_keep = true;
 		if (yyjson_is_int(min_snapshots_to_keep_val)) {
 			min_snapshots_to_keep = yyjson_get_int(min_snapshots_to_keep_val);

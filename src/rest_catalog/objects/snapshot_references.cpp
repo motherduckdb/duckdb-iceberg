@@ -12,11 +12,22 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+SnapshotReferences::SnapshotReferences() {
+}
+
 SnapshotReferences SnapshotReferences::FromJSON(yyjson_val *obj) {
 	SnapshotReferences res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
+	}
+	return res;
+}
+
+SnapshotReferences SnapshotReferences::Copy() const {
+	SnapshotReferences res;
+	for (auto &entry : additional_properties) {
+		res.additional_properties.emplace(entry.first, entry.second.Copy());
 	}
 	return res;
 }

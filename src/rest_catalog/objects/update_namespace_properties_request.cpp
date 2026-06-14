@@ -12,6 +12,9 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+UpdateNamespacePropertiesRequest::UpdateNamespacePropertiesRequest() {
+}
+
 UpdateNamespacePropertiesRequest UpdateNamespacePropertiesRequest::FromJSON(yyjson_val *obj) {
 	UpdateNamespacePropertiesRequest res;
 	auto error = res.TryFromJSON(obj);
@@ -21,10 +24,28 @@ UpdateNamespacePropertiesRequest UpdateNamespacePropertiesRequest::FromJSON(yyjs
 	return res;
 }
 
+UpdateNamespacePropertiesRequest UpdateNamespacePropertiesRequest::Copy() const {
+	UpdateNamespacePropertiesRequest res;
+	if (has_removals) {
+		res.removals.reserve(removals.size());
+		for (auto &item : removals) {
+			res.removals.emplace_back(item);
+		}
+	}
+	res.has_removals = has_removals;
+	if (has_updates) {
+		for (auto &entry : updates) {
+			res.updates.emplace(entry.first, entry.second);
+		}
+	}
+	res.has_updates = has_updates;
+	return res;
+}
+
 string UpdateNamespacePropertiesRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto removals_val = yyjson_obj_get(obj, "removals");
-	if (removals_val) {
+	if (removals_val && !yyjson_is_null(removals_val)) {
 		has_removals = true;
 		if (yyjson_is_arr(removals_val)) {
 			size_t idx, max;
@@ -47,7 +68,7 @@ string UpdateNamespacePropertiesRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto updates_val = yyjson_obj_get(obj, "updates");
-	if (updates_val) {
+	if (updates_val && !yyjson_is_null(updates_val)) {
 		has_updates = true;
 		if (yyjson_is_obj(updates_val)) {
 			size_t idx, max;

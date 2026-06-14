@@ -6,6 +6,7 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/expression_type.hpp"
+#include "rest_catalog/objects/primitive_type_value.hpp"
 #include "rest_catalog/objects/term.hpp"
 
 using namespace duckdb_yyjson;
@@ -15,16 +16,27 @@ namespace rest_api_objects {
 
 class SetExpression {
 public:
+	SetExpression();
+	SetExpression(const SetExpression &) = delete;
+	SetExpression &operator=(const SetExpression &) = delete;
+	SetExpression(SetExpression &&) = default;
+	SetExpression &operator=(SetExpression &&) = default;
+
+public:
 	// Deserialization
 	static SetExpression FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	SetExpression Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	ExpressionType type;
 	Term term;
-	vector<yyjson_val *> values;
+	vector<PrimitiveTypeValue> values;
 };
 
 } // namespace rest_api_objects

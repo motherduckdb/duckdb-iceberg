@@ -20,13 +20,24 @@ namespace rest_api_objects {
 
 class Expression {
 public:
+	Expression();
+	Expression(const Expression &) = delete;
+	Expression &operator=(const Expression &) = delete;
+	Expression(Expression &&) = default;
+	Expression &operator=(Expression &&) = default;
+
+public:
 	// Deserialization
 	static Expression FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	Expression Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	TrueExpression true_expression;
 	bool has_true_expression = false;
 	FalseExpression false_expression;

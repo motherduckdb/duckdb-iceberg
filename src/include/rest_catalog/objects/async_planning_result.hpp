@@ -14,16 +14,26 @@ namespace rest_api_objects {
 
 class AsyncPlanningResult {
 public:
+	AsyncPlanningResult();
+	AsyncPlanningResult(const AsyncPlanningResult &) = delete;
+	AsyncPlanningResult &operator=(const AsyncPlanningResult &) = delete;
+	AsyncPlanningResult(AsyncPlanningResult &&) = default;
+	AsyncPlanningResult &operator=(AsyncPlanningResult &&) = default;
+
+public:
 	// Deserialization
 	static AsyncPlanningResult FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	AsyncPlanningResult Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	PlanStatus status;
 	string plan_id;
-	bool has_plan_id = false;
 };
 
 } // namespace rest_api_objects

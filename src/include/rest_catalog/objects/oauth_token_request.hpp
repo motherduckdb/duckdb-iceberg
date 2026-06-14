@@ -15,13 +15,24 @@ namespace rest_api_objects {
 
 class OAuthTokenRequest {
 public:
+	OAuthTokenRequest();
+	OAuthTokenRequest(const OAuthTokenRequest &) = delete;
+	OAuthTokenRequest &operator=(const OAuthTokenRequest &) = delete;
+	OAuthTokenRequest(OAuthTokenRequest &&) = default;
+	OAuthTokenRequest &operator=(OAuthTokenRequest &&) = default;
+
+public:
 	// Deserialization
 	static OAuthTokenRequest FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	OAuthTokenRequest Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	OAuthClientCredentialsRequest oauth_client_credentials_request;
 	bool has_oauth_client_credentials_request = false;
 	OAuthTokenExchangeRequest oauth_token_exchange_request;

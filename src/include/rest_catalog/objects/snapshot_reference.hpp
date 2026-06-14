@@ -13,13 +13,24 @@ namespace rest_api_objects {
 
 class SnapshotReference {
 public:
+	SnapshotReference();
+	SnapshotReference(const SnapshotReference &) = delete;
+	SnapshotReference &operator=(const SnapshotReference &) = delete;
+	SnapshotReference(SnapshotReference &&) = default;
+	SnapshotReference &operator=(SnapshotReference &&) = default;
+
+public:
 	// Deserialization
 	static SnapshotReference FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	SnapshotReference Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	string type;
 	int64_t snapshot_id;
 	int64_t max_ref_age_ms;

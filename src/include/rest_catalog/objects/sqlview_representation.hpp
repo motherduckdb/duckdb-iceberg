@@ -13,13 +13,24 @@ namespace rest_api_objects {
 
 class SQLViewRepresentation {
 public:
+	SQLViewRepresentation();
+	SQLViewRepresentation(const SQLViewRepresentation &) = delete;
+	SQLViewRepresentation &operator=(const SQLViewRepresentation &) = delete;
+	SQLViewRepresentation(SQLViewRepresentation &&) = default;
+	SQLViewRepresentation &operator=(SQLViewRepresentation &&) = default;
+
+public:
 	// Deserialization
 	static SQLViewRepresentation FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	SQLViewRepresentation Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	string type;
 	string sql;
 	string dialect;

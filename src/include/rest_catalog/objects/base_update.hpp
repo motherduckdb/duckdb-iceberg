@@ -13,13 +13,24 @@ namespace rest_api_objects {
 
 class BaseUpdate {
 public:
+	BaseUpdate();
+	BaseUpdate(const BaseUpdate &) = delete;
+	BaseUpdate &operator=(const BaseUpdate &) = delete;
+	BaseUpdate(BaseUpdate &&) = default;
+	BaseUpdate &operator=(BaseUpdate &&) = default;
+
+public:
 	// Deserialization
 	static BaseUpdate FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	BaseUpdate Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	string action;
 };
 

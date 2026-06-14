@@ -7,33 +7,57 @@
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/plan_status.hpp"
 #include "rest_catalog/objects/scan_tasks.hpp"
+#include "rest_catalog/objects/storage_credential.hpp"
 
 using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
 
-class Object5 {
-public:
-	// Deserialization
-	static Object5 FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
-
-	// Serialization
-	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
-
-	PlanStatus status;
-};
-
 class CompletedPlanningResult {
+public:
+	CompletedPlanningResult();
+	CompletedPlanningResult(const CompletedPlanningResult &) = delete;
+	CompletedPlanningResult &operator=(const CompletedPlanningResult &) = delete;
+	CompletedPlanningResult(CompletedPlanningResult &&) = default;
+	CompletedPlanningResult &operator=(CompletedPlanningResult &&) = default;
+	class Object5 {
+	public:
+		Object5();
+		Object5(const Object5 &) = delete;
+		Object5 &operator=(const Object5 &) = delete;
+		Object5(Object5 &&) = default;
+		Object5 &operator=(Object5 &&) = default;
+
+	public:
+		// Deserialization
+		static Object5 FromJSON(yyjson_val *obj);
+		string TryFromJSON(yyjson_val *obj);
+
+		// Copy
+		Object5 Copy() const;
+
+		// Serialization
+		yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+
+	public:
+		PlanStatus status;
+		vector<StorageCredential> storage_credentials;
+		bool has_storage_credentials = false;
+	};
+
 public:
 	// Deserialization
 	static CompletedPlanningResult FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	CompletedPlanningResult Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	ScanTasks scan_tasks;
 	Object5 object_5;
 };

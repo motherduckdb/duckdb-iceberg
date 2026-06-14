@@ -14,13 +14,24 @@ namespace rest_api_objects {
 
 class LoadViewResult {
 public:
+	LoadViewResult();
+	LoadViewResult(const LoadViewResult &) = delete;
+	LoadViewResult &operator=(const LoadViewResult &) = delete;
+	LoadViewResult(LoadViewResult &&) = default;
+	LoadViewResult &operator=(LoadViewResult &&) = default;
+
+public:
 	// Deserialization
 	static LoadViewResult FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *val);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	LoadViewResult Copy() const;
 
 	// Serialization
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
+public:
 	string metadata_location;
 	ViewMetadata metadata;
 	case_insensitive_map_t<string> config;

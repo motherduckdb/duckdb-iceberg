@@ -12,11 +12,24 @@ using namespace duckdb_yyjson;
 namespace duckdb {
 namespace rest_api_objects {
 
+StructType::StructType() {
+}
+
 StructType StructType::FromJSON(yyjson_val *obj) {
 	StructType res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
+	}
+	return res;
+}
+
+StructType StructType::Copy() const {
+	StructType res;
+	res.type = type;
+	res.fields.reserve(fields.size());
+	for (auto &item : fields) {
+		res.fields.emplace_back(item ? make_uniq<StructField>(item->Copy()) : nullptr);
 	}
 	return res;
 }
