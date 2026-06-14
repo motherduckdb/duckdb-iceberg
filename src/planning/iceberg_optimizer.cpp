@@ -36,13 +36,10 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 			return;
 		}
 		auto &iceberg_list = mfbd.file_list->Cast<IcebergMultiFileList>();
-		{
-			lock_guard<mutex> guard(iceberg_list.delete_lock);
-			iceberg_list.EnumerateDeleteManifestEntries();
-		}
+		auto delete_manifest_entries = iceberg_list.GetDeleteManifestEntries();
 
 		unordered_set<int32_t> required_field_ids;
-		for (auto &entry : iceberg_list.delete_manifest_entries) {
+		for (auto &entry : delete_manifest_entries) {
 			auto &mft = entry.entry;
 			if (mft.data_file.content != IcebergManifestEntryContentType::EQUALITY_DELETES) {
 				continue;
@@ -72,7 +69,9 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 				// column was deleted and exists most likely in an old schemas
 				// TODO: if the type of the equality delete column was evolved, then grabbing just any schema could be a
 				// problem
-				auto col_info = iceberg_list.table->table_info.table_metadata.FindColumnByFieldId(fid);
+				auto table = iceberg_list.GetTable();
+				D_ASSERT(table);
+				auto col_info = table->table_info.table_metadata.FindColumnByFieldId(fid);
 				if (!col_info) {
 					throw InvalidConfigurationException(
 					    "column %d must apply equality deletes, but no schema has a column with that field id", fid);
@@ -86,7 +85,7 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 
 				// modify the multi file reader bind data to add the extra column
 				mfbd.types.push_back(col_type);
-				mfbd.names.push_back(col_info->name);
+				mfbd.names.push_back(Identifier(col_info->name));
 
 				auto new_col = col_info->GetMultiFileColumnDefinition();
 				if (!new_col.default_expression) {
@@ -118,8 +117,8 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 		}
 
 		auto &catalog = Catalog::GetSystemCatalog(context);
-		auto &fn_entry =
-		    catalog.GetEntry<ScalarFunctionCatalogEntry>(context, DEFAULT_SCHEMA, "iceberg_verify_equality_deletes");
+		auto &fn_entry = catalog.GetEntry<ScalarFunctionCatalogEntry>(context, Identifier::DefaultSchema(),
+		                                                              "iceberg_verify_equality_deletes");
 		FunctionBinder function_binder(context);
 		vector<LogicalType> arg_types;
 		for (auto &a : args) {

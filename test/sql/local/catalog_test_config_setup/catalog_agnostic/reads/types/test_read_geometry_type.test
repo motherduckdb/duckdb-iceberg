@@ -1,0 +1,53 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/types/test_read_geometry_type.test
+# group: [types]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+set enable_logging=true
+
+statement ok
+set logging_level='debug'
+
+# Verifies that DuckDB writes Iceberg v3 geometry lower_bounds / upper_bounds
+# as a packed little-endian sequence of f64 doubles (16/24/32 bytes for
+# XY/XYZ-or-XYM/XYZM), per Iceberg spec Appendix D.
+
+# --- XY ------------------------------------------------------------------
+
+statement ok
+drop table if exists my_datalake.default.geom_bounds_xy;
+
+statement ok
+create table my_datalake.default.geom_bounds_xy (g GEOMETRY) with ('format-version'='3');
+
+statement ok
+insert into my_datalake.default.geom_bounds_xy VALUES
+    ('POINT(1 2)'::GEOMETRY),
+    ('POINT(5 7)'::GEOMETRY),
+    ('LINESTRING(-3 -4, 10 10)'::GEOMETRY);
+
+# insert only geometry points outside of filter in the above query
+statement ok
+insert into my_datalake.default.geom_bounds_xy VALUES
+    ('POINT(100 100)'::GEOMETRY),
+    ('LINESTRING(100 100, 120 120)'::GEOMETRY);
+
+# result is the same
+query I
+select * from my_datalake.default.geom_bounds_xy where g && 'LINESTRING(5 5, 10 10)';
+----
+POINT (5 7)
+LINESTRING (-3 -4, 10 10)
+

@@ -72,13 +72,13 @@ static optional_ptr<const IcebergColumnDefinition> GetColumnChild(const IcebergC
 }
 
 optional_ptr<const IcebergColumnDefinition>
-IcebergTableSchema::GetFromPath(const vector<string> &path, optional_ptr<optional_idx> name_offset) const {
+IcebergTableSchema::GetFromPath(const vector<Identifier> &path, optional_ptr<optional_idx> name_offset) const {
 	D_ASSERT(!path.empty());
 
 	optional_ptr<const IcebergColumnDefinition> result;
 	for (idx_t i = 0; i < columns.size(); i++) {
 		auto &column = *columns[i];
-		if (!StringUtil::CIEquals(column.name, path[0])) {
+		if (column.name != path[0]) {
 			continue;
 		}
 		result = column;
@@ -96,9 +96,9 @@ IcebergTableSchema::GetFromPath(const vector<string> &path, optional_ptr<optiona
 			}
 			throw InvalidInputException(
 			    "Column path %s points to child of variant column %s - but no name_offset is provided",
-			    StringUtil::Join(path, "."), res.get().name);
+			    StringUtil::Join(IdentifiersToStrings(path), "."), res.get().name);
 		}
-		auto next_child = GetColumnChild(column, path[i]);
+		auto next_child = GetColumnChild(column, path[i].GetIdentifierName());
 		if (!next_child) {
 			return nullptr;
 		}
@@ -107,7 +107,7 @@ IcebergTableSchema::GetFromPath(const vector<string> &path, optional_ptr<optiona
 	return res.get();
 }
 
-optional_ptr<IcebergColumnDefinition> IcebergTableSchema::GetMutableFromPath(const vector<string> &path,
+optional_ptr<IcebergColumnDefinition> IcebergTableSchema::GetMutableFromPath(const vector<Identifier> &path,
                                                                              optional_ptr<optional_idx> names_offset) {
 	auto res = GetFromPath(path, names_offset);
 	if (!res) {

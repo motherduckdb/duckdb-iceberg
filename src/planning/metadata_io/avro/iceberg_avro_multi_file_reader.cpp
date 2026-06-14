@@ -394,7 +394,7 @@ BuildManifestSchema(const IcebergSnapshot &snapshot, const IcebergTableMetadata 
 } // namespace manifest_file
 
 bool IcebergAvroMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &files,
-                                      vector<LogicalType> &return_types, vector<string> &names,
+                                      vector<LogicalType> &return_types, vector<Identifier> &names,
                                       MultiFileReaderBindData &bind_data) {
 	auto &iceberg_avro_list = dynamic_cast<IcebergAvroMultiFileList &>(files);
 
@@ -417,7 +417,7 @@ bool IcebergAvroMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &
 	// Populate return_types and names from schema
 	for (auto &col : schema) {
 		return_types.push_back(col.type);
-		names.push_back(col.name);
+		names.push_back(Identifier(col.name));
 	}
 
 	// Set the schema in bind_data - framework will use this for mapping

@@ -1,5 +1,5 @@
-# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_create_geometry_type.test
-# group: [insert]
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/test_create_geometry_type.test
+# group: [iceberg_types]
 
 require-env CATALOG_TEST_CONFIG_SETUP
 

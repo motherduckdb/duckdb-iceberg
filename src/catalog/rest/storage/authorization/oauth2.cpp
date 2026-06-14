@@ -388,12 +388,12 @@ unique_ptr<BaseSecret> OAuth2Authorization::CreateCatalogSecretFunction(ClientCo
 			// Special handling for extra_http_headers (MAP type)
 			if (StringUtil::Lower(param_name) == "extra_http_headers") {
 				// Store the MAP value directly, will be parsed later when creating authorization
-				result->secret_map[param_name] = named_param.second;
+				result->secret_map[Identifier(param_name)] = named_param.second;
 			} else if (StringUtil::Lower(param_name) == "expires_in") {
 				// Store expires_in as INTEGER (not string)
-				result->secret_map[param_name] = named_param.second;
+				result->secret_map[Identifier(param_name)] = named_param.second;
 			} else {
-				result->secret_map[param_name] = named_param.second.ToString();
+				result->secret_map[Identifier(param_name)] = named_param.second.ToString();
 			}
 		} else {
 			throw InvalidInputException("Unknown named parameter passed to CreateIRCSecretFunction: %s", param_name);
@@ -426,7 +426,7 @@ unique_ptr<BaseSecret> OAuth2Authorization::CreateCatalogSecretFunction(ClientCo
 	//! ---- Client ID + Client Secret ----
 	case_insensitive_set_t required_parameters {"client_id", "client_secret"};
 	for (auto &param : required_parameters) {
-		if (!result->secret_map.count(param)) {
+		if (!result->secret_map.count(Identifier(param))) {
 			throw InvalidInputException("Missing required parameter '%s' for authorization_type 'oauth2'", param);
 		}
 	}
@@ -544,7 +544,9 @@ unique_ptr<HTTPResponse> OAuth2Authorization::Request(RequestType request_type, 
 
 void OAuth2Authorization::SetCatalogSecretParameters(CreateSecretFunction &function) {
 	auto &options = IcebergSecretOptions();
-	function.named_parameters.insert(options.begin(), options.end());
+	for (auto &option : options) {
+		function.named_parameters[Identifier(option.first)] = option.second;
+	}
 }
 
 void OAuth2Authorization::UpdateTokenState(const string &new_token, int32_t expires_in_seconds,

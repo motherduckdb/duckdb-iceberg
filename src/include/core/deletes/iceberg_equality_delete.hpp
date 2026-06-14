@@ -47,7 +47,6 @@ public:
 	//! scan output projection is known.
 	unordered_map<int32_t, vector<Value>> equality_values;
 	vector<IcebergEqualityDeleteRow> rows;
-	bool finalized = false;
 };
 
 struct IcebergEqualityDeleteData {

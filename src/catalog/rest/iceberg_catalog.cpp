@@ -56,7 +56,7 @@ optional_ptr<SchemaCatalogEntry> IcebergCatalog::LookupSchema(CatalogTransaction
 		if (default_schema.empty() && if_not_found == OnEntryNotFound::RETURN_NULL) {
 			return nullptr;
 		}
-		return GetSchema(transaction, default_schema, if_not_found);
+		return GetSchema(transaction, Identifier(default_schema), if_not_found);
 	}
 
 	auto &schema_name = schema_lookup.GetEntryName();
@@ -78,19 +78,19 @@ optional_ptr<CatalogEntry> IcebergCatalog::CreateSchema(CatalogTransaction trans
 	D_ASSERT(context);
 
 	// Verify schema existence on the server first
-	bool schema_exists = IRCAPI::VerifySchemaExistence(*context, *this, info.schema);
+	bool schema_exists = IRCAPI::VerifySchemaExistence(*context, *this, info.schema.GetIdentifierName());
 
 	if (schema_exists) {
 		if (info.on_conflict == OnCreateConflict::IGNORE_ON_CONFLICT) {
 			// Schema already exists on the server - get or create a local entry and return it
-			auto entry = schemas.GetEntry(*context, info.schema, OnEntryNotFound::RETURN_NULL);
+			auto entry = schemas.GetEntry(*context, info.schema.GetIdentifierName(), OnEntryNotFound::RETURN_NULL);
 			if (entry) {
 				return entry;
 			}
 			auto new_schema = make_uniq<IcebergSchemaEntry>(*this, info);
 			auto schema_name = new_schema->name;
-			schemas.AddEntry(schema_name, std::move(new_schema));
-			return &schemas.GetEntry(info.schema);
+			schemas.AddEntry(schema_name.GetIdentifierName(), std::move(new_schema));
+			return &schemas.GetEntry(info.schema.GetIdentifierName());
 		}
 		throw CatalogException("Schema with name \"%s\" already exists", info.schema);
 	}
@@ -99,9 +99,9 @@ optional_ptr<CatalogEntry> IcebergCatalog::CreateSchema(CatalogTransaction trans
 	auto &iceberg_transaction = IcebergTransaction::Get(*context, *this);
 	auto new_schema = make_uniq<IcebergSchemaEntry>(*this, info);
 	auto schema_name = new_schema->name;
-	schemas.AddEntry(schema_name, std::move(new_schema));
-	iceberg_transaction.created_schemas.insert(info.schema);
-	return &schemas.GetEntry(info.schema);
+	schemas.AddEntry(schema_name.GetIdentifierName(), std::move(new_schema));
+	iceberg_transaction.created_schemas.insert(info.schema.GetIdentifierName());
+	return &schemas.GetEntry(info.schema.GetIdentifierName());
 }
 
 void IcebergCatalog::DropSchema(ClientContext &context, DropInfo &info) {
@@ -111,13 +111,13 @@ void IcebergCatalog::DropSchema(ClientContext &context, DropInfo &info) {
 	}
 
 	// Verify schema existence on the server first
-	bool schema_exists = IRCAPI::VerifySchemaExistence(context, *this, info.name);
+	bool schema_exists = IRCAPI::VerifySchemaExistence(context, *this, info.name.GetIdentifierName());
 
 	if (!schema_exists) {
 		if (info.if_not_found == OnEntryNotFound::RETURN_NULL) {
 			// remove the entry if it exists locally
 			// it could have been created during the bind phase.
-			GetSchemas().RemoveEntry(info.name);
+			GetSchemas().RemoveEntry(info.name.GetIdentifierName());
 			return;
 		}
 		throw CatalogException("Schema with name \"%s\" does not exist", info.name);
@@ -125,7 +125,7 @@ void IcebergCatalog::DropSchema(ClientContext &context, DropInfo &info) {
 
 	// Schema exists - defer the server deletion to commit
 	auto &iceberg_transaction = IcebergTransaction::Get(context, *this);
-	iceberg_transaction.deleted_schemas.insert(info.name);
+	iceberg_transaction.deleted_schemas.insert(info.name.GetIdentifierName());
 }
 
 unique_ptr<LogicalOperator> IcebergCatalog::BindCreateIndex(Binder &binder, CreateStatement &stmt,
@@ -177,7 +177,7 @@ unique_ptr<SecretEntry> IcebergCatalog::GetStorageSecret(ClientContext &context,
 		auto secret_entry = context.db->GetSecretManager().GetSecretByName(transaction, secret_name);
 		if (secret_entry) {
 			auto secret_type = secret_entry->secret->GetType();
-			if (accepted_secret_types.count(secret_type)) {
+			if (accepted_secret_types.count(secret_type.GetIdentifierName())) {
 				return secret_entry;
 			}
 			throw InvalidConfigurationException(
@@ -507,9 +507,11 @@ static void GlueAttach(ClientContext &context, IcebergAttachOptions &input) {
 
 void IcebergCatalog::SetAWSCatalogOptions(IcebergAttachOptions &attach_options,
                                           case_insensitive_set_t &set_by_attach_options) {
-	attach_options.allows_deletes = false;
-	if (set_by_attach_options.find("support_stage_create") == set_by_attach_options.end()) {
-		attach_options.supports_stage_create = false;
+	if (set_by_attach_options.find("remove_files_on_delete") == set_by_attach_options.end()) {
+		attach_options.remove_files_on_delete = false;
+	}
+	if (set_by_attach_options.find("stage_create_tables") == set_by_attach_options.end()) {
+		attach_options.stage_create_tables = false;
 	}
 	if (set_by_attach_options.find("purge_requested") == set_by_attach_options.end()) {
 		attach_options.purge_requested = true;
@@ -543,12 +545,21 @@ unique_ptr<Catalog> IcebergCatalog::Attach(optional_ptr<StorageExtensionInfo> st
 		} else if (lower_name == "access_delegation_mode") {
 			access_mode_string = StringUtil::Lower(entry.second.ToString());
 		} else if (lower_name == "endpoint") {
-			attach_options.endpoint = StringUtil::Lower(entry.second.ToString());
+			attach_options.endpoint = entry.second.ToString();
 			StringUtil::RTrim(attach_options.endpoint, "/");
-		} else if (lower_name == "support_stage_create") {
+		} else if (lower_name == "stage_create_tables") {
 			auto result = entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
-			attach_options.supports_stage_create = result;
-			set_by_attach_options.insert("supports_stage_create");
+			attach_options.stage_create_tables = result;
+			set_by_attach_options.insert("stage_create_tables");
+		} else if (lower_name == "disable_multi_table_commit") {
+			attach_options.disable_multi_table_commit =
+			    entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+		} else if (lower_name == "skip_create_table_metadata_updates") {
+			attach_options.skip_create_table_metadata_updates =
+			    entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+		} else if (lower_name == "remove_files_on_delete") {
+			attach_options.remove_files_on_delete = entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+			set_by_attach_options.insert("remove_files_on_delete");
 		} else if (lower_name == "support_nested_namespaces") {
 			attach_options.support_nested_namespaces =
 			    entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
@@ -652,8 +663,32 @@ unique_ptr<Catalog> IcebergCatalog::Attach(optional_ptr<StorageExtensionInfo> st
 	D_ASSERT(auth_handler);
 	auto catalog =
 	    make_uniq<IcebergCatalog>(db, options.access_mode, std::move(auth_handler), attach_options, default_schema);
+	//! Remember the raw attach options so that a later ATTACH OR REPLACE can detect when they change.
+	catalog->raw_attach_options.insert(options.options.begin(), options.options.end());
 	catalog->GetConfig(context, endpoint_type);
 	return std::move(catalog);
+}
+
+bool IcebergCatalog::HasConflictingAttachOptions(const string &path, const AttachOptions &options) {
+	//! If the base catalog already considers the path or catalog type to conflict, re-attach.
+	if (Catalog::HasConflictingAttachOptions(path, options)) {
+		return true;
+	}
+	//! Otherwise compare the iceberg-specific attach options (endpoint, credentials, MAX_TABLE_STALENESS, ...)
+	//! so that ATTACH OR REPLACE re-runs Attach when any of them changes.
+	if (options.options.size() != raw_attach_options.size()) {
+		return true;
+	}
+	for (auto &entry : options.options) {
+		auto it = raw_attach_options.find(entry.first);
+		if (it == raw_attach_options.end()) {
+			return true;
+		}
+		if (it->second.type() != entry.second.type() || it->second.ToString() != entry.second.ToString()) {
+			return true;
+		}
+	}
+	return false;
 }
 
 string IcebergCatalog::GetOnlyMergeOnReadSupportedErrorMessage(const string &table_name, const string &property,

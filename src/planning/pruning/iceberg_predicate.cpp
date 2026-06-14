@@ -15,6 +15,7 @@
 #include "duckdb/planner/filter/expression_filter.hpp"
 #include "duckdb/planner/logical_operator_visitor.hpp"
 #include "duckdb/execution/expression_executor.hpp"
+#include "duckdb/storage/statistics/geometry_stats.hpp"
 
 namespace duckdb {
 
@@ -193,8 +194,9 @@ static bool IsDirectReference(const Expression &expr) {
 }
 
 template <class TRANSFORM>
-static bool MatchBoundsExpression(ClientContext &context, const Expression &expr, const IcebergPredicateStats &stats,
-                                  const IcebergTransform &transform) {
+static bool MatchBoundsExpression(ClientContext &context, const unique_ptr<Expression> &expr_p,
+                                  const IcebergPredicateStats &stats, const IcebergTransform &transform) {
+	auto &expr = *expr_p;
 	if (BoundComparisonExpression::IsComparison(expr)) {
 		auto &compare_expr = expr.Cast<BoundFunctionExpression>();
 		auto comparison_type = compare_expr.GetExpressionType();
@@ -225,7 +227,7 @@ static bool MatchBoundsExpression(ClientContext &context, const Expression &expr
 			return true;
 		}
 		for (auto &child : conjunction.GetChildren()) {
-			if (!MatchBoundsExpression<TRANSFORM>(context, *child, stats, transform)) {
+			if (!MatchBoundsExpression<TRANSFORM>(context, child, stats, transform)) {
 				return false;
 			}
 		}
@@ -273,11 +275,16 @@ static bool MatchBoundsExpression(ClientContext &context, const Expression &expr
 		}
 	}
 	case ExpressionClass::BOUND_FUNCTION: {
+		if (stats.geometry_stats) {
+			auto result = GeometryStats::CheckZonemap(*stats.geometry_stats, expr_p);
+			return result != FilterPropagateResult::FILTER_ALWAYS_FALSE;
+		}
+
 		auto &func = expr.Cast<BoundFunctionExpression>();
 		if (func.Function().GetName() == OptionalFilterScalarFun::NAME && func.BindInfo()) {
 			auto &data = func.BindInfo()->Cast<OptionalFilterFunctionData>();
 			if (data.child_filter_expr) {
-				return MatchBoundsExpression<TRANSFORM>(context, *data.child_filter_expr, stats, transform);
+				return MatchBoundsExpression<TRANSFORM>(context, data.child_filter_expr, stats, transform);
 			}
 			//! child filter wasn't populated (yet?) for some reason, just be conservative
 			return true;
@@ -285,7 +292,7 @@ static bool MatchBoundsExpression(ClientContext &context, const Expression &expr
 		if (func.Function().GetName() == SelectivityOptionalFilterScalarFun::NAME && func.BindInfo()) {
 			auto &data = func.BindInfo()->Cast<SelectivityOptionalFilterFunctionData>();
 			if (data.child_filter_expr) {
-				return MatchBoundsExpression<TRANSFORM>(context, *data.child_filter_expr, stats, transform);
+				return MatchBoundsExpression<TRANSFORM>(context, data.child_filter_expr, stats, transform);
 			}
 			//! child filter wasn't populated (yet?) for some reason, just be conservative
 			return true;
@@ -301,7 +308,7 @@ static bool MatchBoundsExpression(ClientContext &context, const Expression &expr
 template <class TRANSFORM>
 bool MatchBoundsTemplated(ClientContext &context, const ExpressionFilter &filter, const IcebergPredicateStats &stats,
                           const IcebergTransform &transform) {
-	return MatchBoundsExpression<TRANSFORM>(context, *filter.expr, stats, transform);
+	return MatchBoundsExpression<TRANSFORM>(context, filter.expr, stats, transform);
 }
 
 bool IcebergPredicate::MatchBounds(ClientContext &context, const ExpressionFilter &filter,

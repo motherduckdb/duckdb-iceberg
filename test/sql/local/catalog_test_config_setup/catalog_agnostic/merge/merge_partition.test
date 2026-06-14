@@ -47,7 +47,7 @@ MERGE INTO my_datalake.default.my_timeseries
     WHEN NOT MATCHED THEN INSERT;
 
 query II
-SELECT * FROM my_datalake.default.my_timeseries
+SELECT * FROM my_datalake.default.my_timeseries order by all
 ----
 2025-09-15 00:00:00	42.0
 2025-09-17 00:00:00	42.0
@@ -63,7 +63,7 @@ ON my_datalake.default.my_timeseries.ts = timeseries_updates.ts
 WHEN MATCHED THEN UPDATE;
 
 query II
-SELECT * FROM my_datalake.default.my_timeseries
+SELECT * FROM my_datalake.default.my_timeseries order by all
 ----
 2025-09-15 00:00:00	42.0
 2025-09-17 00:00:00	43.0

@@ -174,7 +174,8 @@ void IcebergDelete::WriteEqualityDeleteFile(ClientContext &context, IcebergDelet
 	auto &copy_fun = IcebergUtils::GetCopyFunction(context, "parquet");
 	CopyFunctionBindInput bind_input(*info);
 
-	auto function_data = copy_fun.function.copy_to_bind(context, bind_input, names_to_write, types_to_write);
+	auto function_data =
+	    copy_fun.function.copy_to_bind(context, bind_input, StringsToIdentifiers(names_to_write), types_to_write);
 	auto copy_global_state = copy_fun.function.copy_to_initialize_global(context, *function_data, delete_file_path);
 
 	ThreadContext thread_context(context);

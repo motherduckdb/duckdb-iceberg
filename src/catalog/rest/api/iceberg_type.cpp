@@ -20,8 +20,12 @@ string IcebergTypeHelper::LogicalTypeToIcebergType(const LogicalType &type) {
 		return "int";
 	case LogicalTypeId::BOOLEAN:
 		return "boolean";
-	case LogicalTypeId::VARCHAR:
+	case LogicalTypeId::VARCHAR: {
+		if (type.IsJSONType()) {
+			throw InvalidTypeException("Type JSON is not a valid Iceberg Type");
+		}
 		return "string";
+	}
 	case LogicalTypeId::DATE:
 		return "date";
 	case LogicalTypeId::BIGINT:
@@ -98,7 +102,7 @@ rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(const LogicalTyp
 		auto &children = StructType::GetChildTypes(type);
 		for (auto &child : children) {
 			auto struct_child = make_uniq<rest_api_objects::StructField>();
-			struct_child->name = child.first;
+			struct_child->name = child.first.GetIdentifierName();
 			struct_child->id = get_next_id();
 			struct_child->type =
 			    make_uniq<rest_api_objects::Type>(IcebergTypeHelper::CreateIcebergRestType(child.second, get_next_id));

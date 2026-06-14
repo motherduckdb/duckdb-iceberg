@@ -90,6 +90,17 @@ void IcebergTableSet::Scan(ClientContext &context, const std::function<void(Cata
 		auto table_key = table_info.GetTableKey();
 		iceberg_transaction.tables[table_key] = entry.second;
 
+		if (!table_info.schema_versions.empty()) {
+			// The table has already been resolved (e.g. via DESCRIBE or a scan), so its full schema -
+			// including column comments mapped from the Iceberg field 'doc' - is available. Surface the
+			// resolved entry instead of the placeholder so listings reflect the real columns.
+			auto resolved = table_info.GetLatestSchema(context);
+			if (resolved) {
+				callback(*resolved);
+				continue;
+			}
+		}
+
 		if (table_info.dummy_entry) {
 			// FIXME: why do we need to return the same entry again?
 			auto &optional = table_info.dummy_entry.get()->Cast<CatalogEntry>();
@@ -99,9 +110,9 @@ void IcebergTableSet::Scan(ClientContext &context, const std::function<void(Cata
 
 		// create a table entry with fake schema data to avoid calling the LoadTableInformation endpoint for every
 		// table while listing schemas
-		CreateTableInfo info(schema, table_info.name);
+		CreateTableInfo info(schema, Identifier(table_info.name));
 		vector<ColumnDefinition> columns;
-		auto col = ColumnDefinition(string("__"), LogicalType::UNKNOWN);
+		auto col = ColumnDefinition(Identifier("__"), LogicalType::UNKNOWN);
 		columns.push_back(std::move(col));
 		info.columns = ColumnList(std::move(columns));
 		auto table_entry = make_uniq<IcebergTableEntry>(table_info, catalog, schema, info, optional_idx());
@@ -136,8 +147,8 @@ mutex &IcebergTableSet::GetEntryLock() {
 
 void IcebergTableSet::LoadEntries(ClientContext &context) {
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
-	bool schema_listed =
-	    iceberg_transaction.listed_schemas.find(schema.name) != iceberg_transaction.listed_schemas.end();
+	bool schema_listed = iceberg_transaction.listed_schemas.find(schema.name.GetIdentifierName()) !=
+	                     iceberg_transaction.listed_schemas.end();
 	if (schema_listed) {
 		return;
 	}
@@ -146,7 +157,7 @@ void IcebergTableSet::LoadEntries(ClientContext &context) {
 	for (auto &table : tables) {
 		entries.emplace(table.name, make_shared_ptr<IcebergTableInformation>(ic_catalog, schema, table.name));
 	}
-	iceberg_transaction.listed_schemas.insert(schema.name);
+	iceberg_transaction.listed_schemas.insert(schema.name.GetIdentifierName());
 }
 
 static Value ParseTableProperty(TableFunctionBinder &binder, ClientContext &context, const ParsedExpression &expr_ref,
@@ -210,9 +221,10 @@ IcebergTableInformation &IcebergTableSet::CreateNewEntry(ClientContext &context,
 		               .GetValue<string>();
 	}
 
-	auto key = IcebergTableInformation::GetTableKey(schema.namespace_items, info.table);
+	auto key = IcebergTableInformation::GetTableKey(schema.namespace_items, info.table.GetIdentifierName());
 	auto &alter_update = iceberg_transaction.GetOrCreateAlter();
-	auto &table_info = alter_update.CreateTable(key, IcebergTableInformation(catalog, schema, info.table));
+	auto &table_info =
+	    alter_update.CreateTable(key, IcebergTableInformation(catalog, schema, info.table.GetIdentifierName()));
 	// auto &table_info = emplace_res.first->second;
 	auto &table_metadata = table_info.table_metadata;
 	auto table_entry = make_uniq<IcebergTableEntry>(table_info, catalog, schema, info, 0);
@@ -266,8 +278,11 @@ IcebergTableInformation &IcebergTableSet::CreateNewEntry(ClientContext &context,
 
 	// if we stage created the table, we add an assert create
 	auto &transaction_data = table_info.GetOrCreateTransactionData(iceberg_transaction);
-	if (catalog.attach_options.supports_stage_create) {
+	if (catalog.attach_options.stage_create_tables) {
 		transaction_data.TableAddAssertCreate();
+	}
+	if (!catalog.attach_options.stage_create_tables && catalog.attach_options.skip_create_table_metadata_updates) {
+		return table_info;
 	}
 	// other required updates to the table
 	transaction_data.TableAssignUUID();

@@ -180,7 +180,8 @@ void IcebergDelete::WritePositionalDeleteFile(ClientContext &context, IcebergDel
 	auto &copy_fun = IcebergUtils::GetCopyFunction(context, "parquet");
 	CopyFunctionBindInput bind_input(*info);
 
-	auto function_data = copy_fun.function.copy_to_bind(context, bind_input, names_to_write, types_to_write);
+	auto function_data =
+	    copy_fun.function.copy_to_bind(context, bind_input, StringsToIdentifiers(names_to_write), types_to_write);
 	auto copy_global_state = copy_fun.function.copy_to_initialize_global(context, *function_data, delete_file_path);
 
 	// generate the physical copy to file
@@ -262,14 +263,6 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 	if (!multi_file_list) {
 		throw InternalException("IcebergDelete multi_file_list is NULL");
 	}
-	{
-		lock_guard<mutex> guard(multi_file_list->lock);
-		lock_guard<mutex> delete_guard(multi_file_list->delete_lock);
-		if (!multi_file_list->FinishedScanningDeletes() ||
-		    multi_file_list->transaction_delete_idx < multi_file_list->transaction_delete_manifests.size()) {
-			multi_file_list->ProcessDeletes();
-		}
-	}
 
 	lock_guard<mutex> guard(global_state.lock);
 	for (auto &entry : global_state.deleted_rows) {
@@ -287,9 +280,9 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 		}
 		if (write_deletion_vector) {
 			//! Addd the existing delete we're replacing
-			auto it = multi_file_list->positional_delete_data.find(filename);
-			if (it != multi_file_list->positional_delete_data.end()) {
-				auto &delete_data = *it->second;
+			auto existing_delete = multi_file_list->GetExistingPositionalDeleteData(filename);
+			if (existing_delete) {
+				auto &delete_data = *existing_delete;
 				PopulateAlteredManifests(*multi_file_list, global_state.altered_manifests, delete_data);
 				delete_data.ToSet(sorted_deletes);
 			}
@@ -453,7 +446,7 @@ string IcebergDelete::GetName() const {
 
 InsertionOrderPreservingMap<string> IcebergDelete::ParamsToString() const {
 	InsertionOrderPreservingMap<string> result;
-	result["Table Name"] = table.name;
+	result["Table Name"] = table.name.GetIdentifierName();
 	return result;
 }
 
@@ -534,7 +527,7 @@ PhysicalOperator &IcebergCatalog::PlanDelete(ClientContext &context, PhysicalPla
 	}
 	for (idx_t i = 0; i < 2; i++) {
 		auto &bound_ref = op.expressions[column_offset + i]->Cast<BoundReferenceExpression>();
-		row_id_indexes.push_back(bound_ref.index);
+		row_id_indexes.push_back(bound_ref.Index());
 	}
 
 	auto allows_positional_deletes = updated_table_entry.table_info.table_metadata.PropertiesAllowPositionalDeletes(
@@ -542,7 +535,7 @@ PhysicalOperator &IcebergCatalog::PlanDelete(ClientContext &context, PhysicalPla
 	if (!allows_positional_deletes) {
 		auto delete_table_property = updated_table_entry.table_info.table_metadata.GetTableProperty(WRITE_DELETE_MODE);
 		auto error_message = IcebergCatalog::GetOnlyMergeOnReadSupportedErrorMessage(
-		    updated_table_entry.name, WRITE_DELETE_MODE, delete_table_property);
+		    updated_table_entry.name.GetIdentifierName(), WRITE_DELETE_MODE, delete_table_property);
 		throw NotImplementedException(error_message);
 	}
 

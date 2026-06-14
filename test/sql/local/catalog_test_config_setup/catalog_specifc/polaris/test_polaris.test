@@ -78,7 +78,7 @@ attach or replace 'quickstart_catalog' as my_datalake (
 	ENDPOINT 'http://0.0.0.0:8181/api/catalog',
 	SUPPORT_NESTED_NAMESPACES true,
 	DEFAULT_REGION 'us-west-2',
-	support_stage_create false
+	stage_create_tables false
 );
 
 statement ok

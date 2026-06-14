@@ -321,6 +321,10 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 		} else {
 			//! SPEC: Data file field content must default to 0 (data)
 			data_file.content = IcebergManifestEntryContentType::DATA;
+			//! SPEC: Manifest entry field sequence_number must default to 0
+			entry.SetSequenceNumber(0);
+			//! SPEC: Manifest entry field file_sequence_number must default to 0
+			entry.SetFileSequenceNumber(0);
 		}
 
 		//! >= V3

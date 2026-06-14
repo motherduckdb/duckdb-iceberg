@@ -75,6 +75,7 @@ IcebergColumnDefinition::ParseType(const string &name, int32_t field_id, bool re
 	res->id = field_id;
 	res->required = required;
 	res->name = name;
+	res->doc = doc;
 
 	if (type.has_primitive_type) {
 		res->type = ParsePrimitiveType(type.primitive_type);
@@ -84,7 +85,7 @@ IcebergColumnDefinition::ParseType(const string &name, int32_t field_id, bool re
 		for (auto &field_p : struct_type.fields) {
 			auto &field = *field_p;
 			auto child = ParseStructField(field);
-			struct_children.push_back(std::make_pair(child->name, child->type));
+			struct_children.emplace_back(std::make_pair(child->name, child->type));
 			res->children.push_back(std::move(child));
 		}
 		res->type = LogicalType::STRUCT(std::move(struct_children));
@@ -185,7 +186,10 @@ LogicalType IcebergColumnDefinition::ParsePrimitiveTypeString(const string &type
 		// Geometry is an Iceberg v3 type stored as WKB binary in parquet.
 		// The type string may include a CRS parameter: geometry(<crs>)
 		if (type_str == "geometry") {
-			return LogicalType::GEOMETRY(IcebergConstants::DefaultGeometryCRS);
+			// If we use IcebergConstants::DefaultGeometryCRS, file pruning does not work as well
+			// since LogicalType::Geometry(<crs>) != LogicalType::Geometry(), so casts get introduced
+			// on Iceberg predicates.
+			return LogicalType::GEOMETRY();
 		}
 		if (type_str.size() > 9 && type_str[8] == '(' && type_str.back() == ')') {
 			auto crs_str = type_str.substr(9, type_str.size() - 10);
@@ -248,6 +252,7 @@ unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::Copy() const {
 	auto res = make_uniq<IcebergColumnDefinition>();
 	res->id = id;
 	res->name = name;
+	res->doc = doc;
 	res->type = type;
 	// TODO: initial default and write default need more support here
 	if (initial_default) {
@@ -286,14 +291,19 @@ ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
 		//! If it's not set, use the initial-default (if that *is* set)
 		default_to_use = initial_default.get();
 	}
+	auto res = ColumnDefinition(Identifier(name), type);
 	if (default_to_use) {
 		//! FIXME: the expression needs to be more advanced for nested types
 		if (type.IsNested()) {
 			throw NotImplementedException("DEFAULT values for nested types are not supported currently");
 		}
-		return ColumnDefinition(name, type, make_uniq<ConstantExpression>(*default_to_use), TableColumnType::STANDARD);
+		res.SetDefaultValue(make_uniq<ConstantExpression>(*default_to_use));
 	}
-	return ColumnDefinition(name, type);
+	if (!doc.empty()) {
+		//! Surface the Iceberg field `doc` as the DuckDB column comment
+		res.SetComment(Value(doc));
+	}
+	return res;
 }
 
 static bool DefaultsAreEqual(const unique_ptr<Value> &a, const unique_ptr<Value> &b) {

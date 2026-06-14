@@ -224,7 +224,8 @@ IcebergCreateTableRequest::CreateIcebergColumn(const ColumnDefinition &column_de
 		type.primitive_type = rest_api_objects::PrimitiveType();
 		type.primitive_type.value = IcebergTypeHelper::LogicalTypeToIcebergType(logical_type);
 	}
-	auto iceberg_column_def = IcebergColumnDefinition::ParseType(name, first_id, required, type, "", nullptr);
+	auto iceberg_column_def =
+	    IcebergColumnDefinition::ParseType(name.GetIdentifierName(), first_id, required, type, "", nullptr);
 	if (column_def.HasDefaultValue()) {
 		auto &default_expr = column_def.DefaultValue();
 		auto val = default_binder.Evaluate(default_expr, logical_type);
