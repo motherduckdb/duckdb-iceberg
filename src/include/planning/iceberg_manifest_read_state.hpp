@@ -24,18 +24,12 @@ public:
 struct ManifestEntryReadState {
 public:
 	void PushBatch(ManifestReadBatch &&batch);
-	bool HasCurrentBatch() const;
-	optional_ptr<ManifestReadBatch> GetCurrentBatch();
-	void FinishBatch();
-
-private:
-	bool has_batch = false;
-	ManifestReadBatch current_batch;
+	bool GetBatch(idx_t batch_idx, ManifestReadBatch &result) const;
 
 private:
 	//! Lock guarding the batches against concurrent access
-	mutex lock;
-	queue<ManifestReadBatch> batches;
+	mutable mutex lock;
+	vector<ManifestReadBatch> batches;
 };
 
 } // namespace duckdb

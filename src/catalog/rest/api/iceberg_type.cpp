@@ -20,8 +20,12 @@ string IcebergTypeHelper::LogicalTypeToIcebergType(const LogicalType &type) {
 		return "int";
 	case LogicalTypeId::BOOLEAN:
 		return "boolean";
-	case LogicalTypeId::VARCHAR:
+	case LogicalTypeId::VARCHAR: {
+		if (type.IsJSONType()) {
+			throw InvalidTypeException("Type JSON is not a valid Iceberg Type");
+		}
 		return "string";
+	}
 	case LogicalTypeId::DATE:
 		return "date";
 	case LogicalTypeId::BIGINT:

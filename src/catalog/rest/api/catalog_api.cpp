@@ -209,6 +209,7 @@ APIResult<unique_ptr<const rest_api_objects::LoadTableResult>> IRCAPI::GetTable(
 	    make_uniq<const rest_api_objects::LoadTableResult>(rest_api_objects::LoadTableResult::FromJSON(metadata_root));
 	return ret;
 }
+
 APIResult<unique_ptr<const rest_api_objects::GetNamespaceResponse>>
 IRCAPI::GetNamespace(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema) {
 	if (catalog.supported_urls.find("GET /v1/{prefix}/namespaces/{namespace}") == catalog.supported_urls.end()) {
@@ -531,8 +532,8 @@ rest_api_objects::LoadTableResult IRCAPI::CommitNewTable(ClientContext &context,
 	auto create_transaction = make_uniq<IcebergCreateTableRequest>(table.table_info);
 	// if stage create is supported, create the table with stage_create = true and the table update will
 	// commit the table.
-	auto support_stage_create = catalog.attach_options.supports_stage_create;
-	yyjson_mut_obj_add_bool(doc, root_object, "stage-create", support_stage_create);
+	auto stage_create_tables = catalog.attach_options.stage_create_tables;
+	yyjson_mut_obj_add_bool(doc, root_object, "stage-create", stage_create_tables);
 	auto create_table_json = create_transaction->CreateTableToJSON(std::move(doc_p));
 
 	try {

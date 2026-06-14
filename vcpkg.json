@@ -10,7 +10,8 @@
 			"features": [
 				"sso",
 				"sts",
-				"identity-management"
+				"identity-management",
+				"rds"
 			]
 		}
 	],

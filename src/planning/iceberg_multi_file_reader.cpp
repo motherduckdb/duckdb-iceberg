@@ -52,6 +52,7 @@ bool IcebergMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &file
                                   vector<Identifier> &names, MultiFileReaderBindData &bind_data) {
 	auto &iceberg_multi_file_list = dynamic_cast<IcebergMultiFileList &>(files);
 
+	iceberg_multi_file_list.SetOptions(this->options);
 	iceberg_multi_file_list.Bind(return_types, names);
 	// FIXME: apply final transformation for 'file_row_number' ???
 	auto &schema = iceberg_multi_file_list.GetSchema().columns;
@@ -180,7 +181,7 @@ static void ApplyPartitionConstants(const IcebergMultiFileList &multi_file_list,
 	// Get the metadata for this file
 	auto &reader = *reader_data.reader;
 	auto file_id = reader.file_list_idx.GetIndex();
-	auto &bound_manifest_entry = multi_file_list.GetManifestEntry(file_id);
+	auto bound_manifest_entry = multi_file_list.GetManifestEntry(file_id);
 	auto &manifest_file =
 	    multi_file_list.GetManifestFileForEntry(bound_manifest_entry, IcebergManifestContentType::DATA);
 	auto &manifest_entry = bound_manifest_entry.entry;
@@ -289,26 +290,10 @@ void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, cons
 	auto &reader = *reader_data.reader;
 	auto file_id = reader.file_list_idx.GetIndex();
 
-	{
-		lock_guard<mutex> guard(multi_file_list.lock);
-		const auto &bound_manifest_entry = multi_file_list.GetManifestEntry(file_id);
-		const auto &manifest_entry = bound_manifest_entry.entry;
-		const auto &data_file = manifest_entry.data_file;
-		// The path of the data file where this chunk was read from
-		const auto &file_path = data_file.file_path;
-		lock_guard<mutex> delete_guard(multi_file_list.delete_lock);
-		if (!multi_file_list.FinishedScanningDeletes() ||
-		    multi_file_list.transaction_delete_idx < multi_file_list.transaction_delete_manifests.size()) {
-			multi_file_list.ProcessDeletes();
-		}
-		if (!multi_file_list.scanned_delete_manifests) {
-			multi_file_list.ScanDeleteFiles();
-		}
-		if (!multi_file_list.EqualityDeletesFinalized()) {
-			multi_file_list.FinalizeEqualityDeletes(global_columns, global_column_ids, gstate.projection_ids);
-		}
-		reader.deletion_filter = multi_file_list.GetPositionalDeletesForFile(file_path);
-	}
+	auto bound_manifest_entry = multi_file_list.GetManifestEntry(file_id);
+	const auto &file_path = bound_manifest_entry.entry.data_file.file_path;
+	multi_file_list.ProcessDeletes(global_columns, global_column_ids, gstate.projection_ids);
+	reader.deletion_filter = multi_file_list.GetPositionalDeletesForFile(file_path);
 
 	auto &local_columns = reader_data.reader->columns;
 	auto &metadata = multi_file_list.GetMetadata();
@@ -446,7 +431,7 @@ void IcebergMultiFileReader::FinalizeChunk(ClientContext &context, const MultiFi
 	D_ASSERT(global_state);
 	// Get the metadata for this file
 	auto file_id = reader.file_list_idx.GetIndex();
-	auto &bound_manifest_entry = multi_file_list.GetManifestEntry(file_id);
+	auto bound_manifest_entry = multi_file_list.GetManifestEntry(file_id);
 
 	auto &local_columns = reader.columns;
 	ApplyEqualityDeletes(context, output_chunk, multi_file_list, bound_manifest_entry, local_columns);
