@@ -2,6 +2,8 @@
 # description: file pruning on deeply nested shredded VARIANT fields via upper/lower bounds
 # group: [variant]
 
+mode skip Needs merge with v1.5-variegata for 'variant_bytes_to_variant'
+
 require-env CATALOG_TEST_CONFIG_SETUP
 
 require avro

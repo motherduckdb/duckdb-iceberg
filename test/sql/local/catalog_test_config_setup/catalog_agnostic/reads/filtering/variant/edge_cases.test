@@ -2,6 +2,8 @@
 # description: VARIANT bound pruning must not crash on empty objects, missing fields, or NULL variants
 # group: [variant]
 
+mode skip Needs merge with v1.5-variegata for 'variant_bytes_to_variant'
+
 require-env CATALOG_TEST_CONFIG_SETUP
 
 require avro

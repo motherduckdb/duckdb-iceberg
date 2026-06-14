@@ -2,6 +2,8 @@
 # description: filters on different VARIANT fields prune different data files (and combine)
 # group: [variant]
 
+mode skip Needs merge with v1.5-variegata for 'variant_bytes_to_variant'
+
 require-env CATALOG_TEST_CONFIG_SETUP
 
 require avro

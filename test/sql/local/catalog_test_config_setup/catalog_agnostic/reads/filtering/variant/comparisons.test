@@ -2,6 +2,8 @@
 # description: VARIANT bound pruning across all comparison operators (> >= < <= =), including boundary cases
 # group: [variant]
 
+mode skip Needs merge with v1.5-variegata for 'variant_bytes_to_variant'
+
 require-env CATALOG_TEST_CONFIG_SETUP
 
 require avro

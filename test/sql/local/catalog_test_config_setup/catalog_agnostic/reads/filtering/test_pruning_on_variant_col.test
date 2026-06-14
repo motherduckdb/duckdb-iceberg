@@ -2,6 +2,8 @@
 # description: writing lower/upper bounds for shredded VARIANT columns into the manifest
 # group: [filtering]
 
+mode skip Needs merge with v1.5-variegata for 'variant_bytes_to_variant'
+
 require-env CATALOG_TEST_CONFIG_SETUP
 
 require avro
