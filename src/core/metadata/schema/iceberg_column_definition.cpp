@@ -135,7 +135,10 @@ LogicalType IcebergColumnDefinition::ParsePrimitiveTypeString(const string &type
 		// Geometry is an Iceberg v3 type stored as WKB binary in parquet.
 		// The type string may include a CRS parameter: geometry(<crs>)
 		if (type_str == "geometry") {
-			return LogicalType::GEOMETRY(IcebergConstants::DefaultGeometryCRS);
+			// If we use IcebergConstants::DefaultGeometryCRS, file pruning does not work as well
+			// since LogicalType::Geometry(<crs>) != LogicalType::Geometry(), so casts get introduced
+			// on Iceberg predicates.
+			return LogicalType::GEOMETRY();
 		}
 		if (type_str.size() > 9 && type_str[8] == '(' && type_str.back() == ')') {
 			auto crs_str = type_str.substr(9, type_str.size() - 10);
@@ -256,6 +259,7 @@ unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::Copy() const {
 	auto res = make_uniq<IcebergColumnDefinition>();
 	res->id = id;
 	res->name = name;
+	res->doc = doc;
 	res->type = type;
 	// TODO: initial default and write default need more support here
 	if (initial_default) {
@@ -306,6 +310,7 @@ Value IcebergColumnDefinition::GetWriteDefault() const {
 		//! If it's not set, use the initial-default (if that *is* set)
 		default_to_use = initial_default.get();
 	}
+	auto res = ColumnDefinition(Identifier(name), type);
 	if (default_to_use) {
 		return *default_to_use;
 	}
@@ -313,13 +318,14 @@ Value IcebergColumnDefinition::GetWriteDefault() const {
 }
 
 ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
+	auto res = ColumnDefinition(Identifier(name), type);
+
 	auto write_default = GetWriteDefault();
 	if (!write_default.IsNull()) {
 		if (type.IsNested()) {
 			throw NotImplementedException("{} DEFAULT not supported for STRUCT yet");
 		}
-		return ColumnDefinition(Identifier(name), type, make_uniq<ConstantExpression>(write_default),
-		                        TableColumnType::STANDARD);
+		res.SetDefaultValue(make_uniq<ConstantExpression>(write_default));
 	} else if (type.id() == LogicalTypeId::STRUCT) {
 		vector<Value> child_values;
 		for (auto &child : children) {
@@ -332,12 +338,14 @@ ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
 			}
 		}
 		auto default_value = Value::STRUCT(type, child_values);
-		return ColumnDefinition(Identifier(name), type, make_uniq<ConstantExpression>(default_value),
-		                        TableColumnType::STANDARD);
-	} else {
-		return ColumnDefinition(Identifier(name), type);
+		res.SetDefaultValue(make_uniq<ConstantExpression>(default_value));
 	}
-	return ColumnDefinition(Identifier(name), type);
+
+	if (!doc.empty()) {
+		//! Surface the Iceberg field `doc` as the DuckDB column comment
+		res.SetComment(Value(doc));
+	}
+	return res;
 }
 
 static bool DefaultsAreEqual(const unique_ptr<Value> &a, const unique_ptr<Value> &b) {

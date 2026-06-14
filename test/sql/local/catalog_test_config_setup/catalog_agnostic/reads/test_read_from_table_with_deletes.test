@@ -22,7 +22,7 @@ DROP TABLE if EXISTS my_datalake."default".test_filter_deletes;
 
 statement ok
 create table my_datalake."default".test_filter_deletes as
-from values (NULL, 'b') t(a, b);
+from values (NULL::INTEGER, 'b') t(a, b);
 
 statement ok
 insert into my_datalake."default".test_filter_deletes values (NULL, 'b');

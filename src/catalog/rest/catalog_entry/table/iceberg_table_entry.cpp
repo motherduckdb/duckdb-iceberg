@@ -244,9 +244,10 @@ TableFunction IcebergTableEntry::GetScanFunction(ClientContext &context, unique_
 	names = StringsToIdentifiers(bind_names);
 	bind_data = std::move(result);
 	auto &file_bind_data = bind_data->Cast<MultiFileBindData>();
+	file_bind_data.virtual_columns = GetVirtualColumns();
 	D_ASSERT(file_bind_data.file_list);
 	auto &ic_file_list = file_bind_data.file_list->Cast<IcebergMultiFileList>();
-	ic_file_list.table = this;
+	ic_file_list.SetTable(this);
 	return iceberg_scan_function;
 }
 

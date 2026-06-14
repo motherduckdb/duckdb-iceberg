@@ -9,7 +9,6 @@
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
 #include "duckdb/execution/operator/projection/physical_projection.hpp"
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
-#include "duckdb/common/types/uuid.hpp"
 #include "duckdb/function/function_binder.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
@@ -28,6 +27,7 @@
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 #include "core/expression/iceberg_value.hpp"
 #include "core/expression/iceberg_transform.hpp"
+#include "storage/statistics/iceberg_variant_statistics.hpp"
 #include "catalog/rest/api/iceberg_type.hpp"
 #include "common/iceberg_utils.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
@@ -97,44 +97,6 @@ unique_ptr<GlobalSinkState> IcebergInsert::GetGlobalSinkState(ClientContext &con
 //===--------------------------------------------------------------------===//
 // Sink
 //===--------------------------------------------------------------------===//
-static IcebergColumnStats ParseColumnStats(const LogicalType &type, const vector<Value> &col_stats,
-                                           ClientContext &context) {
-	IcebergColumnStats column_stats(type);
-	for (idx_t stats_idx = 0; stats_idx < col_stats.size(); stats_idx++) {
-		auto &stats_children = StructValue::GetChildren(col_stats[stats_idx]);
-		auto &stats_name = StringValue::Get(stats_children[0]);
-		if (stats_name == "min") {
-			D_ASSERT(!column_stats.has_min);
-			column_stats.min = StringValue::Get(stats_children[1]);
-			column_stats.has_min = true;
-		} else if (stats_name == "max") {
-			D_ASSERT(!column_stats.has_max);
-			column_stats.max = StringValue::Get(stats_children[1]);
-			column_stats.has_max = true;
-		} else if (stats_name == "null_count") {
-			D_ASSERT(!column_stats.has_null_count);
-			column_stats.has_null_count = true;
-			column_stats.null_count = StringUtil::ToUnsigned(StringValue::Get(stats_children[1]));
-		} else if (stats_name == "num_values") {
-			D_ASSERT(!column_stats.has_num_values);
-			column_stats.has_num_values = true;
-			column_stats.num_values = StringUtil::ToUnsigned(StringValue::Get(stats_children[1]));
-		} else if (stats_name == "column_size_bytes") {
-			column_stats.has_column_size_bytes = true;
-			column_stats.column_size_bytes = StringUtil::ToUnsigned(StringValue::Get(stats_children[1]));
-		} else if (stats_name == "has_nan") {
-			column_stats.has_contains_nan = true;
-			column_stats.contains_nan = StringValue::Get(stats_children[1]) == "true";
-		} else if (stats_name == "variant_type") {
-			//! Should be handled elsewhere
-			continue;
-		} else {
-			// Ignore other stats types.s
-			DUCKDB_LOG_INFO(context, StringUtil::Format("Did not write column stats %s", stats_name));
-		}
-	}
-	return column_stats;
-}
 
 static bool IsMapType(string col_name, IcebergTableSchema &table_schema) {
 	for (auto &col : table_schema.columns) {
@@ -292,6 +254,10 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 
 		insert_count += data_file.record_count;
 
+		// variant columns emit one stats entry per shredded leaf - accumulate them per variant column
+		// (keyed by field id) and serialize the lower/upper bound variants once all entries are seen
+		unordered_map<int32_t, IcebergVariantBounds> variant_bounds;
+
 		for (idx_t col_idx = 0; col_idx < map_children.size(); col_idx++) {
 			auto &struct_children = StructValue::GetChildren(map_children[col_idx]);
 			auto &col_name = StringValue::Get(struct_children[0]);
@@ -309,11 +275,12 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 				                        normalized_col_name);
 			}
 			if (name_offset.IsValid()) {
-				//! FIXME: deal with variant stats
+				// stats path descends into a variant column - buffer it for bounds serialization
+				variant_bounds[column_info_p->id].AddStatsEntry(column_names, name_offset.GetIndex(), col_stats);
 				continue;
 			}
 			auto &column_info = *column_info_p;
-			auto stats = ParseColumnStats(column_info.type, col_stats, context);
+			auto stats = IcebergColumnStats::ParseColumnStats(column_info.type, col_stats, context);
 
 			// a map type cannot violate not null constraints.
 			// Null value counts can be off since an empty map is the same as a null map.
@@ -342,6 +309,33 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 					data_file.upper_bounds[column_info.id] = serialized_value.GetValue();
 				}
 			}
+			// See Iceberg v3 (Appendix D) for geometry stats info
+			if (column_info.type.id() == LogicalTypeId::GEOMETRY && stats.has_bbox_xy) {
+				vector<double> lower {stats.bbox_xmin, stats.bbox_ymin};
+				vector<double> upper {stats.bbox_xmax, stats.bbox_ymax};
+				if (stats.has_bbox_z) {
+					lower.push_back(stats.bbox_zmin);
+					upper.push_back(stats.bbox_zmax);
+				} else if (stats.has_bbox_m) {
+					// Spark treats a 3-double bound as XYZ always, so for an
+					// XYM column we'd otherwise be misread as XYZ. Pad the Z slot with
+					// +infinity in both bounds so the encoding is unambiguously 4D and
+					// the M value lands in the right slot.
+					const auto z_max = GeometryExtent::UNKNOWN_MAX;
+					const auto z_min = GeometryExtent::UNKNOWN_MIN;
+					lower.push_back(z_min);
+					upper.push_back(z_max);
+				}
+				if (stats.has_bbox_m) {
+					lower.push_back(stats.bbox_mmin);
+					upper.push_back(stats.bbox_mmax);
+				}
+				const auto byte_count = lower.size() * sizeof(double);
+				data_file.lower_bounds[column_info.id] =
+				    Value::BLOB(const_data_ptr_cast<double>(lower.data()), byte_count);
+				data_file.upper_bounds[column_info.id] =
+				    Value::BLOB(const_data_ptr_cast<double>(upper.data()), byte_count);
+			}
 			if (stats.has_column_size_bytes) {
 				data_file.column_sizes[column_info.id] = stats.column_size_bytes;
 			}
@@ -355,6 +349,23 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 		DUCKDB_LOG(context, IcebergLogType,
 		           "Iceberg INSERT, wrote data_file '%s', record_count=%lld, file_size=%lld bytes", data_file.file_path,
 		           data_file.record_count, data_file.file_size_in_bytes);
+
+		// serialize the accumulated variant bounds into the data file's lower/upper bounds
+		for (auto &entry : variant_bounds) {
+			bool has_lower = false;
+			bool has_upper = false;
+			string lower_blob;
+			string upper_blob;
+			if (!entry.second.Finalize(context, has_lower, lower_blob, has_upper, upper_blob)) {
+				continue;
+			}
+			if (has_lower) {
+				data_file.lower_bounds[entry.first] = Value::BLOB_RAW(lower_blob);
+			}
+			if (has_upper) {
+				data_file.upper_bounds[entry.first] = Value::BLOB_RAW(upper_blob);
+			}
+		}
 
 		written_files.push_back(std::move(manifest_entry));
 	}

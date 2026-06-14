@@ -101,7 +101,7 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 	    IcebergManifestListEntry::CreateFromEntries(fs, bogus_snapshot_id, temp_sequence_number, table_metadata,
 	                                                manifest_content_type, std::move(data_files), next_row_id);
 
-	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info);
+	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info, operation);
 	add_snapshot->AddManifestFile(std::move(manifest_file));
 	// make sure we are still inserting into the current schema
 	if (table_metadata.has_current_snapshot) {

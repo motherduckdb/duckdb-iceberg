@@ -10,6 +10,7 @@ test/python/__pycache__/
 test/sql/tmp.test
 data/iceberg/generated_*
 scripts/metastore_db/
+scripts/data/generated
 scripts/derby.log
 scripts/test-script-with-path.sql
 scripts/data_generators/__pycache__/
