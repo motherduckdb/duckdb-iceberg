@@ -23,11 +23,16 @@ public:
 	ScanTasks &operator=(ScanTasks &&) = default;
 
 public:
+	// Deserialization
 	static ScanTasks FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	ScanTasks Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	vector<DeleteFile> delete_files;

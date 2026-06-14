@@ -32,6 +32,7 @@ StorageCredential StorageCredential::Copy() const {
 	}
 	return res;
 }
+
 string StorageCredential::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto prefix_val = yyjson_obj_get(obj, "prefix");
@@ -68,7 +69,32 @@ string StorageCredential::TryFromJSON(yyjson_val *obj) {
 			return "StorageCredential property 'config' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+void StorageCredential::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: prefix
+	yyjson_mut_obj_add_strcpy(doc, obj, "prefix", prefix.c_str());
+
+	// Serialize: config
+	yyjson_mut_val *config_obj = yyjson_mut_obj(doc);
+	for (const auto &it : config) {
+		auto &key = it.first;
+		auto &value = it.second;
+		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+		yyjson_mut_obj_add_strcpy(doc, config_obj, key_ptr, value.c_str());
+	}
+	yyjson_mut_obj_add_val(doc, obj, "config", config_obj);
+}
+
+yyjson_mut_val *StorageCredential::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

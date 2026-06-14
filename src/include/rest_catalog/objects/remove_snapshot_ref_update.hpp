@@ -21,17 +21,20 @@ public:
 	RemoveSnapshotRefUpdate &operator=(RemoveSnapshotRefUpdate &&) = default;
 
 public:
+	// Deserialization
 	static RemoveSnapshotRefUpdate FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	RemoveSnapshotRefUpdate Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	BaseUpdate base_update;
 	string ref_name;
-	string action;
-	bool has_action = false;
 };
 
 } // namespace rest_api_objects

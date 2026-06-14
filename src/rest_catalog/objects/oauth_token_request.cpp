@@ -36,6 +36,7 @@ OAuthTokenRequest OAuthTokenRequest::Copy() const {
 	res.has_oauth_token_exchange_request = has_oauth_token_exchange_request;
 	return res;
 }
+
 string OAuthTokenRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	error = oauth_client_credentials_request.TryFromJSON(obj);
@@ -49,7 +50,25 @@ string OAuthTokenRequest::TryFromJSON(yyjson_val *obj) {
 	if (!has_oauth_client_credentials_request && !has_oauth_token_exchange_request) {
 		return "OAuthTokenRequest failed to parse, none of the anyOf candidates matched";
 	}
-	return string();
+	return "";
+}
+
+void OAuthTokenRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	if (has_oauth_client_credentials_request) {
+		oauth_client_credentials_request.PopulateJSON(doc, obj);
+	} else if (has_oauth_token_exchange_request) {
+		oauth_token_exchange_request.PopulateJSON(doc, obj);
+	}
+}
+
+yyjson_mut_val *OAuthTokenRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

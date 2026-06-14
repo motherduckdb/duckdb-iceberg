@@ -29,6 +29,7 @@ EmptyPlanningResult EmptyPlanningResult::Copy() const {
 	res.status = status.Copy();
 	return res;
 }
+
 string EmptyPlanningResult::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto status_val = yyjson_obj_get(obj, "status");
@@ -40,7 +41,23 @@ string EmptyPlanningResult::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+void EmptyPlanningResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: status
+	yyjson_mut_val *status_val = status.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "status", status_val);
+}
+
+yyjson_mut_val *EmptyPlanningResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

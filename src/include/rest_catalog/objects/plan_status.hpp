@@ -20,11 +20,15 @@ public:
 	PlanStatus &operator=(PlanStatus &&) = default;
 
 public:
+	// Deserialization
 	static PlanStatus FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	PlanStatus Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	string value;

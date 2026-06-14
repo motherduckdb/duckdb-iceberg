@@ -43,6 +43,7 @@ UpdateNamespacePropertiesResponse UpdateNamespacePropertiesResponse::Copy() cons
 	res.has_missing = has_missing;
 	return res;
 }
+
 string UpdateNamespacePropertiesResponse::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto updated_val = yyjson_obj_get(obj, "updated");
@@ -118,7 +119,45 @@ string UpdateNamespacePropertiesResponse::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(missing_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void UpdateNamespacePropertiesResponse::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: updated
+	yyjson_mut_val *updated_arr = yyjson_mut_arr(doc);
+	for (const auto &item : updated) {
+		yyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());
+		yyjson_mut_arr_append(updated_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "updated", updated_arr);
+
+	// Serialize: removed
+	yyjson_mut_val *removed_arr = yyjson_mut_arr(doc);
+	for (const auto &item : removed) {
+		yyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());
+		yyjson_mut_arr_append(removed_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "removed", removed_arr);
+
+	// Serialize: missing
+	if (has_missing) {
+		yyjson_mut_val *missing_arr = yyjson_mut_arr(doc);
+		for (const auto &item : missing) {
+			yyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());
+			yyjson_mut_arr_append(missing_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "missing", missing_arr);
+	}
+}
+
+yyjson_mut_val *UpdateNamespacePropertiesResponse::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

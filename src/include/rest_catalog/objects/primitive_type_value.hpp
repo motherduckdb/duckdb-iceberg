@@ -36,11 +36,15 @@ public:
 	PrimitiveTypeValue &operator=(PrimitiveTypeValue &&) = default;
 
 public:
+	// Deserialization
 	static PrimitiveTypeValue FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	PrimitiveTypeValue Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	BooleanTypeValue boolean_type_value;

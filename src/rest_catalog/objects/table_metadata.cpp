@@ -137,6 +137,7 @@ TableMetadata TableMetadata::Copy() const {
 	res.has_partition_statistics = has_partition_statistics;
 	return res;
 }
+
 string TableMetadata::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto format_version_val = yyjson_obj_get(obj, "format-version");
@@ -464,7 +465,175 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(partition_statistics_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void TableMetadata::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: format-version
+	yyjson_mut_obj_add_int(doc, obj, "format-version", format_version);
+
+	// Serialize: table-uuid
+	yyjson_mut_obj_add_strcpy(doc, obj, "table-uuid", table_uuid.c_str());
+
+	// Serialize: location
+	if (has_location) {
+		yyjson_mut_obj_add_strcpy(doc, obj, "location", location.c_str());
+	}
+
+	// Serialize: last-updated-ms
+	if (has_last_updated_ms) {
+		yyjson_mut_obj_add_sint(doc, obj, "last-updated-ms", last_updated_ms);
+	}
+
+	// Serialize: next-row-id
+	if (has_next_row_id) {
+		yyjson_mut_obj_add_sint(doc, obj, "next-row-id", next_row_id);
+	}
+
+	// Serialize: properties
+	if (has_properties) {
+		yyjson_mut_val *properties_obj = yyjson_mut_obj(doc);
+		for (const auto &it : properties) {
+			auto &key = it.first;
+			auto &value = it.second;
+			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+			yyjson_mut_obj_add_strcpy(doc, properties_obj, key_ptr, value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
+	}
+
+	// Serialize: schemas
+	if (has_schemas) {
+		yyjson_mut_val *schemas_arr = yyjson_mut_arr(doc);
+		for (const auto &item : schemas) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(schemas_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "schemas", schemas_arr);
+	}
+
+	// Serialize: current-schema-id
+	if (has_current_schema_id) {
+		yyjson_mut_obj_add_int(doc, obj, "current-schema-id", current_schema_id);
+	}
+
+	// Serialize: last-column-id
+	if (has_last_column_id) {
+		yyjson_mut_obj_add_int(doc, obj, "last-column-id", last_column_id);
+	}
+
+	// Serialize: partition-specs
+	if (has_partition_specs) {
+		yyjson_mut_val *partition_specs_arr = yyjson_mut_arr(doc);
+		for (const auto &item : partition_specs) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(partition_specs_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "partition-specs", partition_specs_arr);
+	}
+
+	// Serialize: default-spec-id
+	if (has_default_spec_id) {
+		yyjson_mut_obj_add_int(doc, obj, "default-spec-id", default_spec_id);
+	}
+
+	// Serialize: last-partition-id
+	if (has_last_partition_id) {
+		yyjson_mut_obj_add_int(doc, obj, "last-partition-id", last_partition_id);
+	}
+
+	// Serialize: sort-orders
+	if (has_sort_orders) {
+		yyjson_mut_val *sort_orders_arr = yyjson_mut_arr(doc);
+		for (const auto &item : sort_orders) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(sort_orders_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "sort-orders", sort_orders_arr);
+	}
+
+	// Serialize: default-sort-order-id
+	if (has_default_sort_order_id) {
+		yyjson_mut_obj_add_int(doc, obj, "default-sort-order-id", default_sort_order_id);
+	}
+
+	// Serialize: encryption-keys
+	if (has_encryption_keys) {
+		yyjson_mut_val *encryption_keys_arr = yyjson_mut_arr(doc);
+		for (const auto &item : encryption_keys) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(encryption_keys_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "encryption-keys", encryption_keys_arr);
+	}
+
+	// Serialize: snapshots
+	if (has_snapshots) {
+		yyjson_mut_val *snapshots_arr = yyjson_mut_arr(doc);
+		for (const auto &item : snapshots) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(snapshots_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "snapshots", snapshots_arr);
+	}
+
+	// Serialize: refs
+	if (has_refs) {
+		yyjson_mut_val *refs_val = refs.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "refs", refs_val);
+	}
+
+	// Serialize: current-snapshot-id
+	if (has_current_snapshot_id) {
+		yyjson_mut_obj_add_sint(doc, obj, "current-snapshot-id", current_snapshot_id);
+	}
+
+	// Serialize: last-sequence-number
+	if (has_last_sequence_number) {
+		yyjson_mut_obj_add_sint(doc, obj, "last-sequence-number", last_sequence_number);
+	}
+
+	// Serialize: snapshot-log
+	if (has_snapshot_log) {
+		yyjson_mut_val *snapshot_log_val = snapshot_log.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "snapshot-log", snapshot_log_val);
+	}
+
+	// Serialize: metadata-log
+	if (has_metadata_log) {
+		yyjson_mut_val *metadata_log_val = metadata_log.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "metadata-log", metadata_log_val);
+	}
+
+	// Serialize: statistics
+	if (has_statistics) {
+		yyjson_mut_val *statistics_arr = yyjson_mut_arr(doc);
+		for (const auto &item : statistics) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(statistics_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "statistics", statistics_arr);
+	}
+
+	// Serialize: partition-statistics
+	if (has_partition_statistics) {
+		yyjson_mut_val *partition_statistics_arr = yyjson_mut_arr(doc);
+		for (const auto &item : partition_statistics) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(partition_statistics_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "partition-statistics", partition_statistics_arr);
+	}
+}
+
+yyjson_mut_val *TableMetadata::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

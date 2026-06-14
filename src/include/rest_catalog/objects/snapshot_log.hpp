@@ -27,11 +27,16 @@ public:
 		Object3 &operator=(Object3 &&) = default;
 
 	public:
+		// Deserialization
 		static Object3 FromJSON(yyjson_val *obj);
+		string TryFromJSON(yyjson_val *obj);
+
+		// Copy
 		Object3 Copy() const;
 
-	public:
-		string TryFromJSON(yyjson_val *obj);
+		// Serialization
+		void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+		yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 	public:
 		int64_t snapshot_id;
@@ -39,11 +44,15 @@ public:
 	};
 
 public:
+	// Deserialization
 	static SnapshotLog FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	SnapshotLog Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	vector<Object3> value;

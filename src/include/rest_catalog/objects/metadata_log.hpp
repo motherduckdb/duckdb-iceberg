@@ -27,11 +27,16 @@ public:
 		Object4 &operator=(Object4 &&) = default;
 
 	public:
+		// Deserialization
 		static Object4 FromJSON(yyjson_val *obj);
+		string TryFromJSON(yyjson_val *obj);
+
+		// Copy
 		Object4 Copy() const;
 
-	public:
-		string TryFromJSON(yyjson_val *obj);
+		// Serialization
+		void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+		yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 	public:
 		string metadata_file;
@@ -39,11 +44,15 @@ public:
 	};
 
 public:
+	// Deserialization
 	static MetadataLog FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	MetadataLog Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	vector<Object4> value;

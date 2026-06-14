@@ -39,6 +39,7 @@ ListNamespacesResponse ListNamespacesResponse::Copy() const {
 	res.has_namespaces = has_namespaces;
 	return res;
 }
+
 string ListNamespacesResponse::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto next_page_token_val = yyjson_obj_get(obj, "next-page-token");
@@ -69,7 +70,35 @@ string ListNamespacesResponse::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(namespaces_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void ListNamespacesResponse::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: next-page-token
+	if (has_next_page_token) {
+		yyjson_mut_val *next_page_token_val = next_page_token.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "next-page-token", next_page_token_val);
+	}
+
+	// Serialize: namespaces
+	if (has_namespaces) {
+		yyjson_mut_val *namespaces_arr = yyjson_mut_arr(doc);
+		for (const auto &item : namespaces) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(namespaces_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "namespaces", namespaces_arr);
+	}
+}
+
+yyjson_mut_val *ListNamespacesResponse::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

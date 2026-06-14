@@ -40,6 +40,7 @@ FileScanTask FileScanTask::Copy() const {
 	res.has_residual_filter = has_residual_filter;
 	return res;
 }
+
 string FileScanTask::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto data_file_val = yyjson_obj_get(obj, "data-file");
@@ -83,7 +84,39 @@ string FileScanTask::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+void FileScanTask::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: data-file
+	yyjson_mut_val *data_file_val = data_file.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "data-file", data_file_val);
+
+	// Serialize: delete-file-references
+	if (has_delete_file_references) {
+		yyjson_mut_val *delete_file_references_arr = yyjson_mut_arr(doc);
+		for (const auto &item : delete_file_references) {
+			yyjson_mut_val *item_val = yyjson_mut_int(doc, item);
+			yyjson_mut_arr_append(delete_file_references_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "delete-file-references", delete_file_references_arr);
+	}
+
+	// Serialize: residual-filter
+	if (has_residual_filter) {
+		yyjson_mut_val *residual_filter_val = residual_filter->ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "residual-filter", residual_filter_val);
+	}
+}
+
+yyjson_mut_val *FileScanTask::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

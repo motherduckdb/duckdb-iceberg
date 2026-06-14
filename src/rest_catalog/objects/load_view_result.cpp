@@ -36,6 +36,7 @@ LoadViewResult LoadViewResult::Copy() const {
 	res.has_config = has_config;
 	return res;
 }
+
 string LoadViewResult::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto metadata_location_val = yyjson_obj_get(obj, "metadata-location");
@@ -81,7 +82,38 @@ string LoadViewResult::TryFromJSON(yyjson_val *obj) {
 			return "LoadViewResult property 'config' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+void LoadViewResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: metadata-location
+	yyjson_mut_obj_add_strcpy(doc, obj, "metadata-location", metadata_location.c_str());
+
+	// Serialize: metadata
+	yyjson_mut_val *metadata_val = metadata.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "metadata", metadata_val);
+
+	// Serialize: config
+	if (has_config) {
+		yyjson_mut_val *config_obj = yyjson_mut_obj(doc);
+		for (const auto &it : config) {
+			auto &key = it.first;
+			auto &value = it.second;
+			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+			yyjson_mut_obj_add_strcpy(doc, config_obj, key_ptr, value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "config", config_obj);
+	}
+}
+
+yyjson_mut_val *LoadViewResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

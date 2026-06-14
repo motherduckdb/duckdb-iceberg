@@ -40,6 +40,7 @@ EncryptedKey EncryptedKey::Copy() const {
 	res.has_properties = has_properties;
 	return res;
 }
+
 string EncryptedKey::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto key_id_val = yyjson_obj_get(obj, "key-id");
@@ -97,7 +98,42 @@ string EncryptedKey::TryFromJSON(yyjson_val *obj) {
 			return "EncryptedKey property 'properties' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+void EncryptedKey::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: key-id
+	yyjson_mut_obj_add_strcpy(doc, obj, "key-id", key_id.c_str());
+
+	// Serialize: encrypted-key-metadata
+	yyjson_mut_obj_add_strcpy(doc, obj, "encrypted-key-metadata", encrypted_key_metadata.c_str());
+
+	// Serialize: encrypted-by-id
+	if (has_encrypted_by_id) {
+		yyjson_mut_obj_add_strcpy(doc, obj, "encrypted-by-id", encrypted_by_id.c_str());
+	}
+
+	// Serialize: properties
+	if (has_properties) {
+		yyjson_mut_val *properties_obj = yyjson_mut_obj(doc);
+		for (const auto &it : properties) {
+			auto &key = it.first;
+			auto &value = it.second;
+			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+			yyjson_mut_obj_add_strcpy(doc, properties_obj, key_ptr, value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
+	}
+}
+
+yyjson_mut_val *EncryptedKey::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

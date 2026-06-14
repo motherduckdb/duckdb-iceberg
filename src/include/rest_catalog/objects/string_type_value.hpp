@@ -20,11 +20,15 @@ public:
 	StringTypeValue &operator=(StringTypeValue &&) = default;
 
 public:
+	// Deserialization
 	static StringTypeValue FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	StringTypeValue Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	string value;

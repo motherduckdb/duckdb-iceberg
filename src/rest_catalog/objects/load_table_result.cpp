@@ -46,6 +46,7 @@ LoadTableResult LoadTableResult::Copy() const {
 	res.has_storage_credentials = has_storage_credentials;
 	return res;
 }
+
 string LoadTableResult::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto metadata_val = yyjson_obj_get(obj, "metadata");
@@ -113,7 +114,50 @@ string LoadTableResult::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(storage_credentials_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void LoadTableResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: metadata
+	yyjson_mut_val *metadata_val = metadata.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "metadata", metadata_val);
+
+	// Serialize: metadata-location
+	if (has_metadata_location) {
+		yyjson_mut_obj_add_strcpy(doc, obj, "metadata-location", metadata_location.c_str());
+	}
+
+	// Serialize: config
+	if (has_config) {
+		yyjson_mut_val *config_obj = yyjson_mut_obj(doc);
+		for (const auto &it : config) {
+			auto &key = it.first;
+			auto &value = it.second;
+			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+			yyjson_mut_obj_add_strcpy(doc, config_obj, key_ptr, value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "config", config_obj);
+	}
+
+	// Serialize: storage-credentials
+	if (has_storage_credentials) {
+		yyjson_mut_val *storage_credentials_arr = yyjson_mut_arr(doc);
+		for (const auto &item : storage_credentials) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(storage_credentials_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "storage-credentials", storage_credentials_arr);
+	}
+}
+
+yyjson_mut_val *LoadTableResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

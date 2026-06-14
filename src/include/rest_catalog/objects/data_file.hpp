@@ -23,15 +23,19 @@ public:
 	DataFile &operator=(DataFile &&) = default;
 
 public:
+	// Deserialization
 	static DataFile FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	DataFile Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	ContentFile content_file;
-	string content;
 	int64_t first_row_id;
 	bool has_first_row_id = false;
 	CountMap column_sizes;

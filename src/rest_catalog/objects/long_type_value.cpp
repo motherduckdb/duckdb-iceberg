@@ -29,6 +29,7 @@ LongTypeValue LongTypeValue::Copy() const {
 	res.value = value;
 	return res;
 }
+
 string LongTypeValue::TryFromJSON(yyjson_val *obj) {
 	string error;
 	if (yyjson_is_sint(obj)) {
@@ -39,7 +40,11 @@ string LongTypeValue::TryFromJSON(yyjson_val *obj) {
 		return StringUtil::Format("LongTypeValue property 'value' is not of type 'integer', found '%s' instead",
 		                          yyjson_get_type_desc(obj));
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *LongTypeValue::ToJSON(yyjson_mut_doc *doc) const {
+	return yyjson_mut_sint(doc, value);
 }
 
 } // namespace rest_api_objects

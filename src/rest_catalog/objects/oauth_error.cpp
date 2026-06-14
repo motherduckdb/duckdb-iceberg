@@ -37,6 +37,7 @@ OAuthError OAuthError::Copy() const {
 	res.has_error_uri = has_error_uri;
 	return res;
 }
+
 string OAuthError::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto _error_val = yyjson_obj_get(obj, "error");
@@ -71,7 +72,32 @@ string OAuthError::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(error_uri_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void OAuthError::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: error
+	yyjson_mut_obj_add_strcpy(doc, obj, "error", _error.c_str());
+
+	// Serialize: error_description
+	if (has_error_description) {
+		yyjson_mut_obj_add_strcpy(doc, obj, "error_description", error_description.c_str());
+	}
+
+	// Serialize: error_uri
+	if (has_error_uri) {
+		yyjson_mut_obj_add_strcpy(doc, obj, "error_uri", error_uri.c_str());
+	}
+}
+
+yyjson_mut_val *OAuthError::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

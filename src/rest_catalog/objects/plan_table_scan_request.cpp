@@ -70,6 +70,7 @@ PlanTableScanRequest PlanTableScanRequest::Copy() const {
 	res.has_stats_fields = has_stats_fields;
 	return res;
 }
+
 string PlanTableScanRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
@@ -195,7 +196,75 @@ string PlanTableScanRequest::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(stats_fields_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void PlanTableScanRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: snapshot-id
+	if (has_snapshot_id) {
+		yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+	}
+
+	// Serialize: select
+	if (has_select) {
+		yyjson_mut_val *select_arr = yyjson_mut_arr(doc);
+		for (const auto &item : select) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(select_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "select", select_arr);
+	}
+
+	// Serialize: filter
+	if (has_filter) {
+		yyjson_mut_val *filter_val = filter->ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "filter", filter_val);
+	}
+
+	// Serialize: min-rows-requested
+	if (has_min_rows_requested) {
+		yyjson_mut_obj_add_sint(doc, obj, "min-rows-requested", min_rows_requested);
+	}
+
+	// Serialize: case-sensitive
+	if (has_case_sensitive) {
+		yyjson_mut_obj_add_bool(doc, obj, "case-sensitive", case_sensitive);
+	}
+
+	// Serialize: use-snapshot-schema
+	if (has_use_snapshot_schema) {
+		yyjson_mut_obj_add_bool(doc, obj, "use-snapshot-schema", use_snapshot_schema);
+	}
+
+	// Serialize: start-snapshot-id
+	if (has_start_snapshot_id) {
+		yyjson_mut_obj_add_sint(doc, obj, "start-snapshot-id", start_snapshot_id);
+	}
+
+	// Serialize: end-snapshot-id
+	if (has_end_snapshot_id) {
+		yyjson_mut_obj_add_sint(doc, obj, "end-snapshot-id", end_snapshot_id);
+	}
+
+	// Serialize: stats-fields
+	if (has_stats_fields) {
+		yyjson_mut_val *stats_fields_arr = yyjson_mut_arr(doc);
+		for (const auto &item : stats_fields) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(stats_fields_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "stats-fields", stats_fields_arr);
+	}
+}
+
+yyjson_mut_val *PlanTableScanRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

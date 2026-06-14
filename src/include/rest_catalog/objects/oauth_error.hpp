@@ -20,11 +20,16 @@ public:
 	OAuthError &operator=(OAuthError &&) = default;
 
 public:
+	// Deserialization
 	static OAuthError FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	OAuthError Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	string _error;

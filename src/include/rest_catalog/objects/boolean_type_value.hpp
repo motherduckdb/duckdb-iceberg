@@ -20,11 +20,15 @@ public:
 	BooleanTypeValue &operator=(BooleanTypeValue &&) = default;
 
 public:
+	// Deserialization
 	static BooleanTypeValue FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	BooleanTypeValue Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	bool value;

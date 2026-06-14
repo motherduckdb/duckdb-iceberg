@@ -34,6 +34,7 @@ RegisterTableRequest RegisterTableRequest::Copy() const {
 	res.has_overwrite = has_overwrite;
 	return res;
 }
+
 string RegisterTableRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto name_val = yyjson_obj_get(obj, "name");
@@ -71,7 +72,30 @@ string RegisterTableRequest::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(overwrite_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void RegisterTableRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: name
+	yyjson_mut_obj_add_strcpy(doc, obj, "name", name.c_str());
+
+	// Serialize: metadata-location
+	yyjson_mut_obj_add_strcpy(doc, obj, "metadata-location", metadata_location.c_str());
+
+	// Serialize: overwrite
+	if (has_overwrite) {
+		yyjson_mut_obj_add_bool(doc, obj, "overwrite", overwrite);
+	}
+}
+
+yyjson_mut_val *RegisterTableRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

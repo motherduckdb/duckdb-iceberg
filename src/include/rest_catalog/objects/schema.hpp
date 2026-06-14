@@ -28,11 +28,16 @@ public:
 		Object1 &operator=(Object1 &&) = default;
 
 	public:
+		// Deserialization
 		static Object1 FromJSON(yyjson_val *obj);
+		string TryFromJSON(yyjson_val *obj);
+
+		// Copy
 		Object1 Copy() const;
 
-	public:
-		string TryFromJSON(yyjson_val *obj);
+		// Serialization
+		void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+		yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 	public:
 		int32_t schema_id;
@@ -42,11 +47,16 @@ public:
 	};
 
 public:
+	// Deserialization
 	static Schema FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	Schema Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	StructType struct_type;

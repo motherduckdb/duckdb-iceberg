@@ -22,11 +22,16 @@ public:
 	CreateViewRequest &operator=(CreateViewRequest &&) = default;
 
 public:
+	// Deserialization
 	static CreateViewRequest FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	CreateViewRequest Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	string name;

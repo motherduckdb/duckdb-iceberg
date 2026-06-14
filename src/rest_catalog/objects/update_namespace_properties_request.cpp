@@ -41,6 +41,7 @@ UpdateNamespacePropertiesRequest UpdateNamespacePropertiesRequest::Copy() const 
 	res.has_updates = has_updates;
 	return res;
 }
+
 string UpdateNamespacePropertiesRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto removals_val = yyjson_obj_get(obj, "removals");
@@ -88,7 +89,41 @@ string UpdateNamespacePropertiesRequest::TryFromJSON(yyjson_val *obj) {
 			return "UpdateNamespacePropertiesRequest property 'updates' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+void UpdateNamespacePropertiesRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: removals
+	if (has_removals) {
+		yyjson_mut_val *removals_arr = yyjson_mut_arr(doc);
+		for (const auto &item : removals) {
+			yyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());
+			yyjson_mut_arr_append(removals_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "removals", removals_arr);
+	}
+
+	// Serialize: updates
+	if (has_updates) {
+		yyjson_mut_val *updates_obj = yyjson_mut_obj(doc);
+		for (const auto &it : updates) {
+			auto &key = it.first;
+			auto &value = it.second;
+			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+			yyjson_mut_obj_add_strcpy(doc, updates_obj, key_ptr, value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "updates", updates_obj);
+	}
+}
+
+yyjson_mut_val *UpdateNamespacePropertiesRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -21,11 +21,16 @@ public:
 	IcebergErrorResponse &operator=(IcebergErrorResponse &&) = default;
 
 public:
+	// Deserialization
 	static IcebergErrorResponse FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	IcebergErrorResponse Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	ErrorModel _error;

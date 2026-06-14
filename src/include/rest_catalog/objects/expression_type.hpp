@@ -20,11 +20,15 @@ public:
 	ExpressionType &operator=(ExpressionType &&) = default;
 
 public:
+	// Deserialization
 	static ExpressionType FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	ExpressionType Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	string value;

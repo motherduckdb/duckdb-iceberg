@@ -43,6 +43,7 @@ CommitViewRequest CommitViewRequest::Copy() const {
 	res.has_requirements = has_requirements;
 	return res;
 }
+
 string CommitViewRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto updates_val = yyjson_obj_get(obj, "updates");
@@ -93,7 +94,43 @@ string CommitViewRequest::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(requirements_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void CommitViewRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: updates
+	yyjson_mut_val *updates_arr = yyjson_mut_arr(doc);
+	for (const auto &item : updates) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(updates_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "updates", updates_arr);
+
+	// Serialize: identifier
+	if (has_identifier) {
+		yyjson_mut_val *identifier_val = identifier.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "identifier", identifier_val);
+	}
+
+	// Serialize: requirements
+	if (has_requirements) {
+		yyjson_mut_val *requirements_arr = yyjson_mut_arr(doc);
+		for (const auto &item : requirements) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(requirements_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "requirements", requirements_arr);
+	}
+}
+
+yyjson_mut_val *CommitViewRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

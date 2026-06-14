@@ -21,15 +21,19 @@ public:
 	PositionDeleteFile &operator=(PositionDeleteFile &&) = default;
 
 public:
+	// Deserialization
 	static PositionDeleteFile FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	PositionDeleteFile Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	ContentFile content_file;
-	string content;
 	int64_t content_offset;
 	bool has_content_offset = false;
 	int64_t content_size_in_bytes;

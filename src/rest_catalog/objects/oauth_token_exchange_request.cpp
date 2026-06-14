@@ -47,6 +47,7 @@ OAuthTokenExchangeRequest OAuthTokenExchangeRequest::Copy() const {
 	res.has_actor_token_type = has_actor_token_type;
 	return res;
 }
+
 string OAuthTokenExchangeRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto grant_type_val = yyjson_obj_get(obj, "grant_type");
@@ -120,7 +121,51 @@ string OAuthTokenExchangeRequest::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+void OAuthTokenExchangeRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: grant_type
+	yyjson_mut_obj_add_strcpy(doc, obj, "grant_type", grant_type.c_str());
+
+	// Serialize: subject_token
+	yyjson_mut_obj_add_strcpy(doc, obj, "subject_token", subject_token.c_str());
+
+	// Serialize: subject_token_type
+	yyjson_mut_val *subject_token_type_val = subject_token_type.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "subject_token_type", subject_token_type_val);
+
+	// Serialize: scope
+	if (has_scope) {
+		yyjson_mut_obj_add_strcpy(doc, obj, "scope", scope.c_str());
+	}
+
+	// Serialize: requested_token_type
+	if (has_requested_token_type) {
+		yyjson_mut_val *requested_token_type_val = requested_token_type.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "requested_token_type", requested_token_type_val);
+	}
+
+	// Serialize: actor_token
+	if (has_actor_token) {
+		yyjson_mut_obj_add_strcpy(doc, obj, "actor_token", actor_token.c_str());
+	}
+
+	// Serialize: actor_token_type
+	if (has_actor_token_type) {
+		yyjson_mut_val *actor_token_type_val = actor_token_type.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "actor_token_type", actor_token_type_val);
+	}
+}
+
+yyjson_mut_val *OAuthTokenExchangeRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

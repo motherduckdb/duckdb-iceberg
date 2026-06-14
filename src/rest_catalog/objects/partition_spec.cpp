@@ -36,6 +36,7 @@ PartitionSpec PartitionSpec::Copy() const {
 	res.has_spec_id = has_spec_id;
 	return res;
 }
+
 string PartitionSpec::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto fields_val = yyjson_obj_get(obj, "fields");
@@ -68,7 +69,32 @@ string PartitionSpec::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(spec_id_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void PartitionSpec::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: fields
+	yyjson_mut_val *fields_arr = yyjson_mut_arr(doc);
+	for (const auto &item : fields) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(fields_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "fields", fields_arr);
+
+	// Serialize: spec-id
+	if (has_spec_id) {
+		yyjson_mut_obj_add_int(doc, obj, "spec-id", spec_id);
+	}
+}
+
+yyjson_mut_val *PartitionSpec::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

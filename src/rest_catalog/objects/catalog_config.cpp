@@ -45,6 +45,7 @@ CatalogConfig CatalogConfig::Copy() const {
 	res.has_idempotency_key_lifetime = has_idempotency_key_lifetime;
 	return res;
 }
+
 string CatalogConfig::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto defaults_val = yyjson_obj_get(obj, "defaults");
@@ -126,7 +127,54 @@ string CatalogConfig::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(idempotency_key_lifetime_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void CatalogConfig::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: defaults
+	yyjson_mut_val *defaults_obj = yyjson_mut_obj(doc);
+	for (const auto &it : defaults) {
+		auto &key = it.first;
+		auto &value = it.second;
+		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+		yyjson_mut_obj_add_strcpy(doc, defaults_obj, key_ptr, value.c_str());
+	}
+	yyjson_mut_obj_add_val(doc, obj, "defaults", defaults_obj);
+
+	// Serialize: overrides
+	yyjson_mut_val *overrides_obj = yyjson_mut_obj(doc);
+	for (const auto &it : overrides) {
+		auto &key = it.first;
+		auto &value = it.second;
+		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+		yyjson_mut_obj_add_strcpy(doc, overrides_obj, key_ptr, value.c_str());
+	}
+	yyjson_mut_obj_add_val(doc, obj, "overrides", overrides_obj);
+
+	// Serialize: endpoints
+	if (has_endpoints) {
+		yyjson_mut_val *endpoints_arr = yyjson_mut_arr(doc);
+		for (const auto &item : endpoints) {
+			yyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());
+			yyjson_mut_arr_append(endpoints_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "endpoints", endpoints_arr);
+	}
+
+	// Serialize: idempotency-key-lifetime
+	if (has_idempotency_key_lifetime) {
+		yyjson_mut_obj_add_strcpy(doc, obj, "idempotency-key-lifetime", idempotency_key_lifetime.c_str());
+	}
+}
+
+yyjson_mut_val *CatalogConfig::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -35,6 +35,7 @@ GetNamespaceResponse GetNamespaceResponse::Copy() const {
 	res.has_properties = has_properties;
 	return res;
 }
+
 string GetNamespaceResponse::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto _namespace_val = yyjson_obj_get(obj, "namespace");
@@ -71,7 +72,35 @@ string GetNamespaceResponse::TryFromJSON(yyjson_val *obj) {
 			return "GetNamespaceResponse property 'properties' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+void GetNamespaceResponse::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: namespace
+	yyjson_mut_val *_namespace_val = _namespace.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "namespace", _namespace_val);
+
+	// Serialize: properties
+	if (has_properties) {
+		yyjson_mut_val *properties_obj = yyjson_mut_obj(doc);
+		for (const auto &it : properties) {
+			auto &key = it.first;
+			auto &value = it.second;
+			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+			yyjson_mut_obj_add_strcpy(doc, properties_obj, key_ptr, value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
+	}
+}
+
+yyjson_mut_val *GetNamespaceResponse::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -29,6 +29,7 @@ BaseUpdate BaseUpdate::Copy() const {
 	res.action = action;
 	return res;
 }
+
 string BaseUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto action_val = yyjson_obj_get(obj, "action");
@@ -42,7 +43,22 @@ string BaseUpdate::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(action_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void BaseUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: action
+	yyjson_mut_obj_add_strcpy(doc, obj, "action", action.c_str());
+}
+
+yyjson_mut_val *BaseUpdate::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

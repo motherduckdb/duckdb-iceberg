@@ -20,11 +20,15 @@ public:
 	IntegerTypeValue &operator=(IntegerTypeValue &&) = default;
 
 public:
+	// Deserialization
 	static IntegerTypeValue FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	IntegerTypeValue Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	int32_t value;

@@ -31,6 +31,7 @@ LiteralExpression LiteralExpression::Copy() const {
 	res.value = value.Copy();
 	return res;
 }
+
 string LiteralExpression::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -60,7 +61,11 @@ string LiteralExpression::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *LiteralExpression::ToJSON(yyjson_mut_doc *doc) const {
+	throw InternalException("Can't serialize this class (LiteralExpression)");
 }
 
 } // namespace rest_api_objects

@@ -41,6 +41,7 @@ Schema::Object1 Schema::Object1::Copy() const {
 	res.has_identifier_field_ids = has_identifier_field_ids;
 	return res;
 }
+
 string Schema::Object1::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto schema_id_val = yyjson_obj_get(obj, "schema-id");
@@ -75,7 +76,34 @@ string Schema::Object1::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(identifier_field_ids_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void Schema::Object1::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: schema-id
+	if (has_schema_id) {
+		yyjson_mut_obj_add_int(doc, obj, "schema-id", schema_id);
+	}
+
+	// Serialize: identifier-field-ids
+	if (has_identifier_field_ids) {
+		yyjson_mut_val *identifier_field_ids_arr = yyjson_mut_arr(doc);
+		for (const auto &item : identifier_field_ids) {
+			yyjson_mut_val *item_val = yyjson_mut_int(doc, item);
+			yyjson_mut_arr_append(identifier_field_ids_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "identifier-field-ids", identifier_field_ids_arr);
+	}
+}
+
+yyjson_mut_val *Schema::Object1::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 Schema Schema::FromJSON(yyjson_val *obj) {
@@ -93,6 +121,7 @@ Schema Schema::Copy() const {
 	res.object_1 = object_1.Copy();
 	return res;
 }
+
 string Schema::TryFromJSON(yyjson_val *obj) {
 	string error;
 	error = struct_type.TryFromJSON(obj);
@@ -103,7 +132,25 @@ string Schema::TryFromJSON(yyjson_val *obj) {
 	if (!error.empty()) {
 		return error;
 	}
-	return string();
+	return "";
+}
+
+void Schema::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize base class: StructType
+	struct_type.PopulateJSON(doc, obj);
+
+	// Serialize base class: Object1
+	object_1.PopulateJSON(doc, obj);
+}
+
+yyjson_mut_val *Schema::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

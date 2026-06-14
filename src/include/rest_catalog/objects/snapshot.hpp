@@ -27,11 +27,16 @@ public:
 		Object2 &operator=(Object2 &&) = default;
 
 	public:
+		// Deserialization
 		static Object2 FromJSON(yyjson_val *obj);
+		string TryFromJSON(yyjson_val *obj);
+
+		// Copy
 		Object2 Copy() const;
 
-	public:
-		string TryFromJSON(yyjson_val *obj);
+		// Serialization
+		void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+		yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 	public:
 		string operation;
@@ -39,11 +44,16 @@ public:
 	};
 
 public:
+	// Deserialization
 	static Snapshot FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	Snapshot Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	int64_t snapshot_id;

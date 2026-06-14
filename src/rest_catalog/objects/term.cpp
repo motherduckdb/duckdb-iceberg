@@ -36,6 +36,7 @@ Term Term::Copy() const {
 	res.has_transform_term = has_transform_term;
 	return res;
 }
+
 string Term::TryFromJSON(yyjson_val *obj) {
 	string error;
 	do {
@@ -51,7 +52,17 @@ string Term::TryFromJSON(yyjson_val *obj) {
 		}
 		return "Term failed to parse, none of the oneOf candidates matched";
 	} while (false);
-	return string();
+	return "";
+}
+
+yyjson_mut_val *Term::ToJSON(yyjson_mut_doc *doc) const {
+	if (has_reference) {
+		return reference.ToJSON(doc);
+	} else if (has_transform_term) {
+		return transform_term.ToJSON(doc);
+	}
+	// No variant is active - return empty object
+	return yyjson_mut_obj(doc);
 }
 
 } // namespace rest_api_objects

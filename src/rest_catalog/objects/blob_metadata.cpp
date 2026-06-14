@@ -41,6 +41,7 @@ BlobMetadata BlobMetadata::Copy() const {
 	res.has_properties = has_properties;
 	return res;
 }
+
 string BlobMetadata::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -126,7 +127,48 @@ string BlobMetadata::TryFromJSON(yyjson_val *obj) {
 			return "BlobMetadata property 'properties' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+void BlobMetadata::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: type
+	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
+
+	// Serialize: snapshot-id
+	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+
+	// Serialize: sequence-number
+	yyjson_mut_obj_add_sint(doc, obj, "sequence-number", sequence_number);
+
+	// Serialize: fields
+	yyjson_mut_val *fields_arr = yyjson_mut_arr(doc);
+	for (const auto &item : fields) {
+		yyjson_mut_val *item_val = yyjson_mut_int(doc, item);
+		yyjson_mut_arr_append(fields_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "fields", fields_arr);
+
+	// Serialize: properties
+	if (has_properties) {
+		yyjson_mut_val *properties_obj = yyjson_mut_obj(doc);
+		for (const auto &it : properties) {
+			auto &key = it.first;
+			auto &value = it.second;
+			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+			yyjson_mut_obj_add_strcpy(doc, properties_obj, key_ptr, value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
+	}
+}
+
+yyjson_mut_val *BlobMetadata::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

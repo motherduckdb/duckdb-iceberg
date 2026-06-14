@@ -35,6 +35,7 @@ OAuthClientCredentialsRequest OAuthClientCredentialsRequest::Copy() const {
 	res.has_scope = has_scope;
 	return res;
 }
+
 string OAuthClientCredentialsRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto grant_type_val = yyjson_obj_get(obj, "grant_type");
@@ -84,7 +85,33 @@ string OAuthClientCredentialsRequest::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(scope_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void OAuthClientCredentialsRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: grant_type
+	yyjson_mut_obj_add_strcpy(doc, obj, "grant_type", grant_type.c_str());
+
+	// Serialize: client_id
+	yyjson_mut_obj_add_strcpy(doc, obj, "client_id", client_id.c_str());
+
+	// Serialize: client_secret
+	yyjson_mut_obj_add_strcpy(doc, obj, "client_secret", client_secret.c_str());
+
+	// Serialize: scope
+	if (has_scope) {
+		yyjson_mut_obj_add_strcpy(doc, obj, "scope", scope.c_str());
+	}
+}
+
+yyjson_mut_val *OAuthClientCredentialsRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

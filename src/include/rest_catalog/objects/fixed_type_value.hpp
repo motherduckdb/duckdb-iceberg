@@ -20,11 +20,15 @@ public:
 	FixedTypeValue &operator=(FixedTypeValue &&) = default;
 
 public:
+	// Deserialization
 	static FixedTypeValue FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	FixedTypeValue Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	string value;

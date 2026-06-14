@@ -38,6 +38,7 @@ CompletedPlanningResult::Object5 CompletedPlanningResult::Object5::Copy() const 
 	res.has_storage_credentials = has_storage_credentials;
 	return res;
 }
+
 string CompletedPlanningResult::Object5::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto status_val = yyjson_obj_get(obj, "status");
@@ -69,7 +70,33 @@ string CompletedPlanningResult::Object5::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(storage_credentials_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void CompletedPlanningResult::Object5::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: status
+	yyjson_mut_val *status_val = status.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "status", status_val);
+
+	// Serialize: storage-credentials
+	if (has_storage_credentials) {
+		yyjson_mut_val *storage_credentials_arr = yyjson_mut_arr(doc);
+		for (const auto &item : storage_credentials) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(storage_credentials_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "storage-credentials", storage_credentials_arr);
+	}
+}
+
+yyjson_mut_val *CompletedPlanningResult::Object5::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 CompletedPlanningResult CompletedPlanningResult::FromJSON(yyjson_val *obj) {
@@ -87,6 +114,7 @@ CompletedPlanningResult CompletedPlanningResult::Copy() const {
 	res.object_5 = object_5.Copy();
 	return res;
 }
+
 string CompletedPlanningResult::TryFromJSON(yyjson_val *obj) {
 	string error;
 	error = scan_tasks.TryFromJSON(obj);
@@ -97,7 +125,25 @@ string CompletedPlanningResult::TryFromJSON(yyjson_val *obj) {
 	if (!error.empty()) {
 		return error;
 	}
-	return string();
+	return "";
+}
+
+void CompletedPlanningResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize base class: ScanTasks
+	scan_tasks.PopulateJSON(doc, obj);
+
+	// Serialize base class: Object5
+	object_5.PopulateJSON(doc, obj);
+}
+
+yyjson_mut_val *CompletedPlanningResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

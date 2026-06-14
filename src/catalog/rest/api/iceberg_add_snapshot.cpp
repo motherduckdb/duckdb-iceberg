@@ -31,8 +31,6 @@ static rest_api_objects::TableUpdate CreateAddSnapshotUpdate(const IcebergTableI
 	table_update.has_add_snapshot_update = true;
 	auto &update = table_update.add_snapshot_update;
 	update.base_update.action = "add-snapshot";
-	update.has_action = true;
-	update.action = "add-snapshot";
 	update.snapshot = snapshot.ToRESTObject(table_info.table_metadata);
 	return table_update;
 }

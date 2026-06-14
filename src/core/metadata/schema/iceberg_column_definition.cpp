@@ -206,7 +206,7 @@ LogicalType IcebergColumnDefinition::ParsePrimitiveTypeString(const string &type
 unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::ParseStructField(rest_api_objects::StructField &field) {
 	auto field_initial_default = field.has_initial_default ? &field.initial_default : nullptr;
 	auto field_write_default = field.has_write_default ? &field.write_default : nullptr;
-	return ParseType(field.name, field.id, field.required, *field.type, field.doc, field_initial_default,
+	return ParseType(field.name, field.id, field.required, *field.type, field._doc, field_initial_default,
 	                 field_write_default);
 }
 

@@ -38,6 +38,7 @@ CreateViewRequest CreateViewRequest::Copy() const {
 	res.has_location = has_location;
 	return res;
 }
+
 string CreateViewRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto name_val = yyjson_obj_get(obj, "name");
@@ -103,7 +104,45 @@ string CreateViewRequest::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(location_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void CreateViewRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: name
+	yyjson_mut_obj_add_strcpy(doc, obj, "name", name.c_str());
+
+	// Serialize: schema
+	yyjson_mut_val *schema_val = schema.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "schema", schema_val);
+
+	// Serialize: view-version
+	yyjson_mut_val *view_version_val = view_version.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "view-version", view_version_val);
+
+	// Serialize: properties
+	yyjson_mut_val *properties_obj = yyjson_mut_obj(doc);
+	for (const auto &it : properties) {
+		auto &key = it.first;
+		auto &value = it.second;
+		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+		yyjson_mut_obj_add_strcpy(doc, properties_obj, key_ptr, value.c_str());
+	}
+	yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
+
+	// Serialize: location
+	if (has_location) {
+		yyjson_mut_obj_add_strcpy(doc, obj, "location", location.c_str());
+	}
+}
+
+yyjson_mut_val *CreateViewRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

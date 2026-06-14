@@ -39,6 +39,7 @@ CommitReport CommitReport::Copy() const {
 	res.has_metadata = has_metadata;
 	return res;
 }
+
 string CommitReport::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto table_name_val = yyjson_obj_get(obj, "table-name");
@@ -121,7 +122,47 @@ string CommitReport::TryFromJSON(yyjson_val *obj) {
 			return "CommitReport property 'metadata' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+void CommitReport::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: table-name
+	yyjson_mut_obj_add_strcpy(doc, obj, "table-name", table_name.c_str());
+
+	// Serialize: snapshot-id
+	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+
+	// Serialize: sequence-number
+	yyjson_mut_obj_add_sint(doc, obj, "sequence-number", sequence_number);
+
+	// Serialize: operation
+	yyjson_mut_obj_add_strcpy(doc, obj, "operation", operation.c_str());
+
+	// Serialize: metrics
+	yyjson_mut_val *metrics_val = metrics.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "metrics", metrics_val);
+
+	// Serialize: metadata
+	if (has_metadata) {
+		yyjson_mut_val *metadata_obj = yyjson_mut_obj(doc);
+		for (const auto &it : metadata) {
+			auto &key = it.first;
+			auto &value = it.second;
+			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+			yyjson_mut_obj_add_strcpy(doc, metadata_obj, key_ptr, value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "metadata", metadata_obj);
+	}
+}
+
+yyjson_mut_val *CommitReport::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

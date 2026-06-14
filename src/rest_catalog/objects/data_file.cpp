@@ -27,7 +27,6 @@ DataFile DataFile::FromJSON(yyjson_val *obj) {
 DataFile DataFile::Copy() const {
 	DataFile res;
 	res.content_file = content_file.Copy();
-	res.content = content;
 	if (has_first_row_id) {
 		res.first_row_id = first_row_id;
 	}
@@ -58,22 +57,12 @@ DataFile DataFile::Copy() const {
 	res.has_upper_bounds = has_upper_bounds;
 	return res;
 }
+
 string DataFile::TryFromJSON(yyjson_val *obj) {
 	string error;
 	error = content_file.TryFromJSON(obj);
 	if (!error.empty()) {
 		return error;
-	}
-	auto content_val = yyjson_obj_get(obj, "content");
-	if (!content_val) {
-		return "DataFile required property 'content' is missing";
-	} else {
-		if (yyjson_is_str(content_val)) {
-			content = yyjson_get_str(content_val);
-		} else {
-			return StringUtil::Format("DataFile property 'content' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(content_val));
-		}
 	}
 	auto first_row_id_val = yyjson_obj_get(obj, "first-row-id");
 	if (first_row_id_val && !yyjson_is_null(first_row_id_val)) {
@@ -135,7 +124,63 @@ string DataFile::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+void DataFile::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize base class: ContentFile
+	content_file.PopulateJSON(doc, obj);
+
+	// Serialize: first-row-id
+	if (has_first_row_id) {
+		yyjson_mut_obj_add_sint(doc, obj, "first-row-id", first_row_id);
+	}
+
+	// Serialize: column-sizes
+	if (has_column_sizes) {
+		yyjson_mut_val *column_sizes_val = column_sizes.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "column-sizes", column_sizes_val);
+	}
+
+	// Serialize: value-counts
+	if (has_value_counts) {
+		yyjson_mut_val *value_counts_val = value_counts.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "value-counts", value_counts_val);
+	}
+
+	// Serialize: null-value-counts
+	if (has_null_value_counts) {
+		yyjson_mut_val *null_value_counts_val = null_value_counts.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "null-value-counts", null_value_counts_val);
+	}
+
+	// Serialize: nan-value-counts
+	if (has_nan_value_counts) {
+		yyjson_mut_val *nan_value_counts_val = nan_value_counts.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "nan-value-counts", nan_value_counts_val);
+	}
+
+	// Serialize: lower-bounds
+	if (has_lower_bounds) {
+		yyjson_mut_val *lower_bounds_val = lower_bounds.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "lower-bounds", lower_bounds_val);
+	}
+
+	// Serialize: upper-bounds
+	if (has_upper_bounds) {
+		yyjson_mut_val *upper_bounds_val = upper_bounds.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "upper-bounds", upper_bounds_val);
+	}
+}
+
+yyjson_mut_val *DataFile::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

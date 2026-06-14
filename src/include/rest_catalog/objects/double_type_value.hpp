@@ -20,11 +20,15 @@ public:
 	DoubleTypeValue &operator=(DoubleTypeValue &&) = default;
 
 public:
+	// Deserialization
 	static DoubleTypeValue FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	DoubleTypeValue Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	double value;

@@ -42,6 +42,7 @@ SnapshotReference SnapshotReference::Copy() const {
 	res.has_min_snapshots_to_keep = has_min_snapshots_to_keep;
 	return res;
 }
+
 string SnapshotReference::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -106,7 +107,40 @@ string SnapshotReference::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(min_snapshots_to_keep_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void SnapshotReference::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: type
+	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
+
+	// Serialize: snapshot-id
+	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+
+	// Serialize: max-ref-age-ms
+	if (has_max_ref_age_ms) {
+		yyjson_mut_obj_add_sint(doc, obj, "max-ref-age-ms", max_ref_age_ms);
+	}
+
+	// Serialize: max-snapshot-age-ms
+	if (has_max_snapshot_age_ms) {
+		yyjson_mut_obj_add_sint(doc, obj, "max-snapshot-age-ms", max_snapshot_age_ms);
+	}
+
+	// Serialize: min-snapshots-to-keep
+	if (has_min_snapshots_to_keep) {
+		yyjson_mut_obj_add_int(doc, obj, "min-snapshots-to-keep", min_snapshots_to_keep);
+	}
+}
+
+yyjson_mut_val *SnapshotReference::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

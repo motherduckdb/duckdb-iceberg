@@ -22,11 +22,15 @@ public:
 	UnaryExpression &operator=(UnaryExpression &&) = default;
 
 public:
+	// Deserialization
 	static UnaryExpression FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	UnaryExpression Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	ExpressionType type;

@@ -34,6 +34,7 @@ Snapshot::Object2 Snapshot::Object2::Copy() const {
 	}
 	return res;
 }
+
 string Snapshot::Object2::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto operation_val = yyjson_obj_get(obj, "operation");
@@ -64,7 +65,30 @@ string Snapshot::Object2::TryFromJSON(yyjson_val *obj) {
 		}
 		additional_properties.emplace(key_str, std::move(tmp));
 	}
-	return string();
+	return "";
+}
+
+void Snapshot::Object2::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: operation
+	yyjson_mut_obj_add_strcpy(doc, obj, "operation", operation.c_str());
+
+	// Serialize additional properties
+	for (const auto &it : additional_properties) {
+		auto &key = it.first;
+		auto &value = it.second;
+		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+		yyjson_mut_obj_add_strcpy(doc, obj, key_ptr, value.c_str());
+	}
+}
+
+yyjson_mut_val *Snapshot::Object2::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 Snapshot Snapshot::FromJSON(yyjson_val *obj) {
@@ -104,6 +128,7 @@ Snapshot Snapshot::Copy() const {
 	res.has_schema_id = has_schema_id;
 	return res;
 }
+
 string Snapshot::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
@@ -212,7 +237,57 @@ string Snapshot::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(schema_id_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void Snapshot::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: snapshot-id
+	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+
+	// Serialize: timestamp-ms
+	yyjson_mut_obj_add_sint(doc, obj, "timestamp-ms", timestamp_ms);
+
+	// Serialize: manifest-list
+	yyjson_mut_obj_add_strcpy(doc, obj, "manifest-list", manifest_list.c_str());
+
+	// Serialize: summary
+	yyjson_mut_val *summary_val = summary.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "summary", summary_val);
+
+	// Serialize: parent-snapshot-id
+	if (has_parent_snapshot_id) {
+		yyjson_mut_obj_add_sint(doc, obj, "parent-snapshot-id", parent_snapshot_id);
+	}
+
+	// Serialize: sequence-number
+	if (has_sequence_number) {
+		yyjson_mut_obj_add_sint(doc, obj, "sequence-number", sequence_number);
+	}
+
+	// Serialize: first-row-id
+	if (has_first_row_id) {
+		yyjson_mut_obj_add_sint(doc, obj, "first-row-id", first_row_id);
+	}
+
+	// Serialize: added-rows
+	if (has_added_rows) {
+		yyjson_mut_obj_add_sint(doc, obj, "added-rows", added_rows);
+	}
+
+	// Serialize: schema-id
+	if (has_schema_id) {
+		yyjson_mut_obj_add_int(doc, obj, "schema-id", schema_id);
+	}
+}
+
+yyjson_mut_val *Snapshot::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

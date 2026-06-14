@@ -42,6 +42,7 @@ CountMap CountMap::Copy() const {
 	res.has_values = has_values;
 	return res;
 }
+
 string CountMap::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto keys_val = yyjson_obj_get(obj, "keys");
@@ -82,7 +83,39 @@ string CountMap::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(values_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void CountMap::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: keys
+	if (has_keys) {
+		yyjson_mut_val *keys_arr = yyjson_mut_arr(doc);
+		for (const auto &item : keys) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(keys_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "keys", keys_arr);
+	}
+
+	// Serialize: values
+	if (has_values) {
+		yyjson_mut_val *values_arr = yyjson_mut_arr(doc);
+		for (const auto &item : values) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(values_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "values", values_arr);
+	}
+}
+
+yyjson_mut_val *CountMap::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

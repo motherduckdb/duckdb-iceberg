@@ -35,6 +35,7 @@ PartitionField PartitionField::Copy() const {
 	res.has_field_id = has_field_id;
 	return res;
 }
+
 string PartitionField::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto source_id_val = yyjson_obj_get(obj, "source-id");
@@ -79,7 +80,34 @@ string PartitionField::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(field_id_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void PartitionField::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: source-id
+	yyjson_mut_obj_add_int(doc, obj, "source-id", source_id);
+
+	// Serialize: transform
+	yyjson_mut_val *transform_val = transform.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "transform", transform_val);
+
+	// Serialize: name
+	yyjson_mut_obj_add_strcpy(doc, obj, "name", name.c_str());
+
+	// Serialize: field-id
+	if (has_field_id) {
+		yyjson_mut_obj_add_int(doc, obj, "field-id", field_id);
+	}
+}
+
+yyjson_mut_val *PartitionField::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

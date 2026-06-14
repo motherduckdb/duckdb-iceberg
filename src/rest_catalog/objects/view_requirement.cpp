@@ -32,6 +32,7 @@ ViewRequirement ViewRequirement::Copy() const {
 	res.has_assert_view_uuid = has_assert_view_uuid;
 	return res;
 }
+
 string ViewRequirement::TryFromJSON(yyjson_val *obj) {
 	string error;
 	do {
@@ -42,7 +43,23 @@ string ViewRequirement::TryFromJSON(yyjson_val *obj) {
 		}
 		return "ViewRequirement failed to parse, none of the oneOf candidates matched";
 	} while (false);
-	return string();
+	return "";
+}
+
+void ViewRequirement::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	if (has_assert_view_uuid) {
+		assert_view_uuid.PopulateJSON(doc, obj);
+	}
+}
+
+yyjson_mut_val *ViewRequirement::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -36,6 +36,7 @@ DeleteFile DeleteFile::Copy() const {
 	res.has_equality_delete_file = has_equality_delete_file;
 	return res;
 }
+
 string DeleteFile::TryFromJSON(yyjson_val *obj) {
 	string error;
 	do {
@@ -51,7 +52,25 @@ string DeleteFile::TryFromJSON(yyjson_val *obj) {
 		}
 		return "DeleteFile failed to parse, none of the oneOf candidates matched";
 	} while (false);
-	return string();
+	return "";
+}
+
+void DeleteFile::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	if (has_position_delete_file) {
+		position_delete_file.PopulateJSON(doc, obj);
+	} else if (has_equality_delete_file) {
+		equality_delete_file.PopulateJSON(doc, obj);
+	}
+}
+
+yyjson_mut_val *DeleteFile::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

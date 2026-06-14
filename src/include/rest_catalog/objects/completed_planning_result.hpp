@@ -30,11 +30,16 @@ public:
 		Object5 &operator=(Object5 &&) = default;
 
 	public:
+		// Deserialization
 		static Object5 FromJSON(yyjson_val *obj);
+		string TryFromJSON(yyjson_val *obj);
+
+		// Copy
 		Object5 Copy() const;
 
-	public:
-		string TryFromJSON(yyjson_val *obj);
+		// Serialization
+		void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+		yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 	public:
 		PlanStatus status;
@@ -43,11 +48,16 @@ public:
 	};
 
 public:
+	// Deserialization
 	static CompletedPlanningResult FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	CompletedPlanningResult Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	ScanTasks scan_tasks;

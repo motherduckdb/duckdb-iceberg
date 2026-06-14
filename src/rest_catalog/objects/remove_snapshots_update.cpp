@@ -31,12 +31,9 @@ RemoveSnapshotsUpdate RemoveSnapshotsUpdate::Copy() const {
 	for (auto &item : snapshot_ids) {
 		res.snapshot_ids.emplace_back(item);
 	}
-	if (has_action) {
-		res.action = action;
-	}
-	res.has_action = has_action;
 	return res;
 }
+
 string RemoveSnapshotsUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
 	error = base_update.TryFromJSON(obj);
@@ -69,18 +66,30 @@ string RemoveSnapshotsUpdate::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(snapshot_ids_val));
 		}
 	}
-	auto action_val = yyjson_obj_get(obj, "action");
-	if (action_val && !yyjson_is_null(action_val)) {
-		has_action = true;
-		if (yyjson_is_str(action_val)) {
-			action = yyjson_get_str(action_val);
-		} else {
-			return StringUtil::Format(
-			    "RemoveSnapshotsUpdate property 'action' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_val));
-		}
+	return "";
+}
+
+void RemoveSnapshotsUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
-	return string();
+
+	// Serialize base class: BaseUpdate
+	base_update.PopulateJSON(doc, obj);
+
+	// Serialize: snapshot-ids
+	yyjson_mut_val *snapshot_ids_arr = yyjson_mut_arr(doc);
+	for (const auto &item : snapshot_ids) {
+		yyjson_mut_val *item_val = yyjson_mut_sint(doc, item);
+		yyjson_mut_arr_append(snapshot_ids_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "snapshot-ids", snapshot_ids_arr);
+}
+
+yyjson_mut_val *RemoveSnapshotsUpdate::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -32,6 +32,7 @@ ViewRepresentation ViewRepresentation::Copy() const {
 	res.has_sqlview_representation = has_sqlview_representation;
 	return res;
 }
+
 string ViewRepresentation::TryFromJSON(yyjson_val *obj) {
 	string error;
 	do {
@@ -42,7 +43,23 @@ string ViewRepresentation::TryFromJSON(yyjson_val *obj) {
 		}
 		return "ViewRepresentation failed to parse, none of the oneOf candidates matched";
 	} while (false);
-	return string();
+	return "";
+}
+
+void ViewRepresentation::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	if (has_sqlview_representation) {
+		sqlview_representation.PopulateJSON(doc, obj);
+	}
+}
+
+yyjson_mut_val *ViewRepresentation::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

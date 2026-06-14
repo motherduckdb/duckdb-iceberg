@@ -50,6 +50,7 @@ ViewMetadata ViewMetadata::Copy() const {
 	res.has_properties = has_properties;
 	return res;
 }
+
 string ViewMetadata::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto view_uuid_val = yyjson_obj_get(obj, "view-uuid");
@@ -179,7 +180,67 @@ string ViewMetadata::TryFromJSON(yyjson_val *obj) {
 			return "ViewMetadata property 'properties' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+void ViewMetadata::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: view-uuid
+	yyjson_mut_obj_add_strcpy(doc, obj, "view-uuid", view_uuid.c_str());
+
+	// Serialize: format-version
+	yyjson_mut_obj_add_int(doc, obj, "format-version", format_version);
+
+	// Serialize: location
+	yyjson_mut_obj_add_strcpy(doc, obj, "location", location.c_str());
+
+	// Serialize: current-version-id
+	yyjson_mut_obj_add_int(doc, obj, "current-version-id", current_version_id);
+
+	// Serialize: versions
+	yyjson_mut_val *versions_arr = yyjson_mut_arr(doc);
+	for (const auto &item : versions) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(versions_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "versions", versions_arr);
+
+	// Serialize: version-log
+	yyjson_mut_val *version_log_arr = yyjson_mut_arr(doc);
+	for (const auto &item : version_log) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(version_log_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "version-log", version_log_arr);
+
+	// Serialize: schemas
+	yyjson_mut_val *schemas_arr = yyjson_mut_arr(doc);
+	for (const auto &item : schemas) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(schemas_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "schemas", schemas_arr);
+
+	// Serialize: properties
+	if (has_properties) {
+		yyjson_mut_val *properties_obj = yyjson_mut_obj(doc);
+		for (const auto &it : properties) {
+			auto &key = it.first;
+			auto &value = it.second;
+			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+			yyjson_mut_obj_add_strcpy(doc, properties_obj, key_ptr, value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
+	}
+}
+
+yyjson_mut_val *ViewMetadata::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -53,6 +53,7 @@ ContentFile ContentFile::Copy() const {
 	res.has_sort_order_id = has_sort_order_id;
 	return res;
 }
+
 string ContentFile::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto spec_id_val = yyjson_obj_get(obj, "spec-id");
@@ -187,7 +188,67 @@ string ContentFile::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(sort_order_id_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void ContentFile::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: spec-id
+	yyjson_mut_obj_add_int(doc, obj, "spec-id", spec_id);
+
+	// Serialize: partition
+	yyjson_mut_val *partition_arr = yyjson_mut_arr(doc);
+	for (const auto &item : partition) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(partition_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "partition", partition_arr);
+
+	// Serialize: content
+	yyjson_mut_obj_add_strcpy(doc, obj, "content", content.c_str());
+
+	// Serialize: file-path
+	yyjson_mut_obj_add_strcpy(doc, obj, "file-path", file_path.c_str());
+
+	// Serialize: file-format
+	yyjson_mut_val *file_format_val = file_format.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "file-format", file_format_val);
+
+	// Serialize: file-size-in-bytes
+	yyjson_mut_obj_add_sint(doc, obj, "file-size-in-bytes", file_size_in_bytes);
+
+	// Serialize: record-count
+	yyjson_mut_obj_add_sint(doc, obj, "record-count", record_count);
+
+	// Serialize: key-metadata
+	if (has_key_metadata) {
+		yyjson_mut_val *key_metadata_val = key_metadata.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "key-metadata", key_metadata_val);
+	}
+
+	// Serialize: split-offsets
+	if (has_split_offsets) {
+		yyjson_mut_val *split_offsets_arr = yyjson_mut_arr(doc);
+		for (const auto &item : split_offsets) {
+			yyjson_mut_val *item_val = yyjson_mut_sint(doc, item);
+			yyjson_mut_arr_append(split_offsets_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "split-offsets", split_offsets_arr);
+	}
+
+	// Serialize: sort-order-id
+	if (has_sort_order_id) {
+		yyjson_mut_obj_add_int(doc, obj, "sort-order-id", sort_order_id);
+	}
+}
+
+yyjson_mut_val *ContentFile::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

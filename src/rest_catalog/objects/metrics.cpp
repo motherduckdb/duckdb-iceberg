@@ -31,6 +31,7 @@ Metrics Metrics::Copy() const {
 	}
 	return res;
 }
+
 string Metrics::TryFromJSON(yyjson_val *obj) {
 	string error;
 	size_t idx, max;
@@ -44,7 +45,28 @@ string Metrics::TryFromJSON(yyjson_val *obj) {
 		}
 		additional_properties.emplace(key_str, std::move(tmp));
 	}
-	return string();
+	return "";
+}
+
+void Metrics::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize additional properties
+	for (const auto &it : additional_properties) {
+		auto &key = it.first;
+		auto &value = it.second;
+		yyjson_mut_val *value_obj = value.ToJSON(doc);
+		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+		yyjson_mut_obj_add_val(doc, obj, key_ptr, value_obj);
+	}
+}
+
+yyjson_mut_val *Metrics::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

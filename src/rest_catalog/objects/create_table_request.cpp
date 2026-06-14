@@ -52,6 +52,7 @@ CreateTableRequest CreateTableRequest::Copy() const {
 	res.has_properties = has_properties;
 	return res;
 }
+
 string CreateTableRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto name_val = yyjson_obj_get(obj, "name");
@@ -134,7 +135,60 @@ string CreateTableRequest::TryFromJSON(yyjson_val *obj) {
 			return "CreateTableRequest property 'properties' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+void CreateTableRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: name
+	yyjson_mut_obj_add_strcpy(doc, obj, "name", name.c_str());
+
+	// Serialize: schema
+	yyjson_mut_val *schema_val = schema.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "schema", schema_val);
+
+	// Serialize: location
+	if (has_location) {
+		yyjson_mut_obj_add_strcpy(doc, obj, "location", location.c_str());
+	}
+
+	// Serialize: partition-spec
+	if (has_partition_spec) {
+		yyjson_mut_val *partition_spec_val = partition_spec.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "partition-spec", partition_spec_val);
+	}
+
+	// Serialize: write-order
+	if (has_write_order) {
+		yyjson_mut_val *write_order_val = write_order.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "write-order", write_order_val);
+	}
+
+	// Serialize: stage-create
+	if (has_stage_create) {
+		yyjson_mut_obj_add_bool(doc, obj, "stage-create", stage_create);
+	}
+
+	// Serialize: properties
+	if (has_properties) {
+		yyjson_mut_val *properties_obj = yyjson_mut_obj(doc);
+		for (const auto &it : properties) {
+			auto &key = it.first;
+			auto &value = it.second;
+			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+			yyjson_mut_obj_add_strcpy(doc, properties_obj, key_ptr, value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
+	}
+}
+
+yyjson_mut_val *CreateTableRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

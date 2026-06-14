@@ -23,19 +23,24 @@ public:
 	StructField &operator=(StructField &&) = default;
 
 public:
+	// Deserialization
 	static StructField FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	StructField Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	int32_t id;
 	string name;
 	unique_ptr<Type> type;
 	bool required;
-	string doc;
-	bool has_doc = false;
+	string _doc;
+	bool has__doc = false;
 	PrimitiveTypeValue initial_default;
 	bool has_initial_default = false;
 	PrimitiveTypeValue write_default;

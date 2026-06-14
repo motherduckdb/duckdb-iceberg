@@ -22,17 +22,20 @@ public:
 	AddSnapshotUpdate &operator=(AddSnapshotUpdate &&) = default;
 
 public:
+	// Deserialization
 	static AddSnapshotUpdate FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	AddSnapshotUpdate Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	BaseUpdate base_update;
 	Snapshot snapshot;
-	string action;
-	bool has_action = false;
 };
 
 } // namespace rest_api_objects

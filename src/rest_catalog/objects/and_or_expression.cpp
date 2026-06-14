@@ -31,6 +31,7 @@ AndOrExpression AndOrExpression::Copy() const {
 	res.right = right ? make_uniq<Expression>(right->Copy()) : nullptr;
 	return res;
 }
+
 string AndOrExpression::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -62,7 +63,31 @@ string AndOrExpression::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+void AndOrExpression::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: type
+	yyjson_mut_val *type_val = type.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+
+	// Serialize: left
+	yyjson_mut_val *left_val = left->ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "left", left_val);
+
+	// Serialize: right
+	yyjson_mut_val *right_val = right->ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "right", right_val);
+}
+
+yyjson_mut_val *AndOrExpression::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

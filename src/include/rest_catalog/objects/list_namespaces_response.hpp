@@ -22,11 +22,16 @@ public:
 	ListNamespacesResponse &operator=(ListNamespacesResponse &&) = default;
 
 public:
+	// Deserialization
 	static ListNamespacesResponse FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	ListNamespacesResponse Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	PageToken next_page_token;

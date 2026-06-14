@@ -32,6 +32,7 @@ SortField SortField::Copy() const {
 	res.null_order = null_order.Copy();
 	return res;
 }
+
 string SortField::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto source_id_val = yyjson_obj_get(obj, "source-id");
@@ -72,7 +73,34 @@ string SortField::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+void SortField::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: source-id
+	yyjson_mut_obj_add_int(doc, obj, "source-id", source_id);
+
+	// Serialize: transform
+	yyjson_mut_val *transform_val = transform.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "transform", transform_val);
+
+	// Serialize: direction
+	yyjson_mut_val *direction_val = direction.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "direction", direction_val);
+
+	// Serialize: null-order
+	yyjson_mut_val *null_order_val = null_order.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "null-order", null_order_val);
+}
+
+yyjson_mut_val *SortField::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

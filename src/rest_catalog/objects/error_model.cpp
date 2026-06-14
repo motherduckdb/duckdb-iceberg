@@ -38,6 +38,7 @@ ErrorModel ErrorModel::Copy() const {
 	res.has_stack = has_stack;
 	return res;
 }
+
 string ErrorModel::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto message_val = yyjson_obj_get(obj, "message");
@@ -94,7 +95,38 @@ string ErrorModel::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(stack_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void ErrorModel::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: message
+	yyjson_mut_obj_add_strcpy(doc, obj, "message", message.c_str());
+
+	// Serialize: type
+	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
+
+	// Serialize: code
+	yyjson_mut_obj_add_int(doc, obj, "code", code);
+
+	// Serialize: stack
+	if (has_stack) {
+		yyjson_mut_val *stack_arr = yyjson_mut_arr(doc);
+		for (const auto &item : stack) {
+			yyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());
+			yyjson_mut_arr_append(stack_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "stack", stack_arr);
+	}
+}
+
+yyjson_mut_val *ErrorModel::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

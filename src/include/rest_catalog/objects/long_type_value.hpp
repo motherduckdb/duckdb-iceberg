@@ -20,11 +20,15 @@ public:
 	LongTypeValue &operator=(LongTypeValue &&) = default;
 
 public:
+	// Deserialization
 	static LongTypeValue FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	LongTypeValue Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	int64_t value;

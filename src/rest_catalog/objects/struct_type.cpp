@@ -33,6 +33,7 @@ StructType StructType::Copy() const {
 	}
 	return res;
 }
+
 string StructType::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -67,7 +68,30 @@ string StructType::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(fields_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void StructType::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: type
+	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
+
+	// Serialize: fields
+	yyjson_mut_val *fields_arr = yyjson_mut_arr(doc);
+	for (const auto &item : fields) {
+		yyjson_mut_val *item_val = item->ToJSON(doc);
+		yyjson_mut_arr_append(fields_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "fields", fields_arr);
+}
+
+yyjson_mut_val *StructType::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects
