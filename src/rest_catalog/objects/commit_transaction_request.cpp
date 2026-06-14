@@ -32,6 +32,7 @@ CommitTransactionRequest CommitTransactionRequest::Copy() const {
 	}
 	return res;
 }
+
 string CommitTransactionRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto table_changes_val = yyjson_obj_get(obj, "table-changes");
@@ -55,7 +56,27 @@ string CommitTransactionRequest::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(table_changes_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void CommitTransactionRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: table-changes
+	yyjson_mut_val *table_changes_arr = yyjson_mut_arr(doc);
+	for (const auto &item : table_changes) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(table_changes_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "table-changes", table_changes_arr);
+}
+
+yyjson_mut_val *CommitTransactionRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

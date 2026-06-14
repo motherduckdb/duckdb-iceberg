@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -21,24 +22,25 @@ public:
 	OAuthTokenExchangeRequest &operator=(OAuthTokenExchangeRequest &&) = default;
 
 public:
+	// Deserialization
 	static OAuthTokenExchangeRequest FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	OAuthTokenExchangeRequest Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	string grant_type;
 	string subject_token;
 	TokenType subject_token_type;
-	string scope;
-	bool has_scope = false;
-	TokenType requested_token_type;
-	bool has_requested_token_type = false;
-	string actor_token;
-	bool has_actor_token = false;
-	TokenType actor_token_type;
-	bool has_actor_token_type = false;
+	optional<string> scope;
+	optional<TokenType> requested_token_type;
+	optional<string> actor_token;
+	optional<TokenType> actor_token_type;
 };
 
 } // namespace rest_api_objects

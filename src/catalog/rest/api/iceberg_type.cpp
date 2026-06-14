@@ -96,48 +96,48 @@ string IcebergTypeHelper::LogicalTypeToIcebergType(const LogicalType &type) {
 
 yyjson_mut_val *IcebergTypeHelper::PrimitiveTypeValueToJSON(yyjson_mut_doc *doc,
                                                             const rest_api_objects::PrimitiveTypeValue &value) {
-	if (value.has_boolean_type_value) {
-		return yyjson_mut_bool(doc, value.boolean_type_value.value);
-	} else if (value.has_long_type_value) {
-		return yyjson_mut_int(doc, value.long_type_value.value);
-	} else if (value.has_integer_type_value) {
-		return yyjson_mut_int(doc, value.integer_type_value.value);
-	} else if (value.has_double_type_value) {
-		return yyjson_mut_real(doc, value.double_type_value.value);
-	} else if (value.has_float_type_value) {
-		return yyjson_mut_real(doc, value.float_type_value.value);
-	} else if (value.has_decimal_type_value) {
-		auto &str = value.decimal_type_value.value;
+	if (value.boolean_type_value) {
+		return yyjson_mut_bool(doc, value.boolean_type_value->value);
+	} else if (value.long_type_value) {
+		return yyjson_mut_int(doc, value.long_type_value->value);
+	} else if (value.integer_type_value) {
+		return yyjson_mut_int(doc, value.integer_type_value->value);
+	} else if (value.double_type_value) {
+		return yyjson_mut_real(doc, value.double_type_value->value);
+	} else if (value.float_type_value) {
+		return yyjson_mut_real(doc, value.float_type_value->value);
+	} else if (value.decimal_type_value) {
+		auto &str = value.decimal_type_value->value;
 		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else if (value.has_string_type_value) {
-		auto &str = value.string_type_value.value;
+	} else if (value.string_type_value) {
+		auto &str = value.string_type_value->value;
 		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else if (value.has_uuidtype_value) {
-		auto &str = value.uuidtype_value.value;
+	} else if (value.uuidtype_value) {
+		auto &str = value.uuidtype_value->value;
 		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else if (value.has_date_type_value) {
-		auto &str = value.date_type_value.value;
+	} else if (value.date_type_value) {
+		auto &str = value.date_type_value->value;
 		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else if (value.has_time_type_value) {
-		auto &str = value.time_type_value.value;
+	} else if (value.time_type_value) {
+		auto &str = value.time_type_value->value;
 		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else if (value.has_timestamp_type_value) {
-		auto &str = value.timestamp_type_value.value;
+	} else if (value.timestamp_type_value) {
+		auto &str = value.timestamp_type_value->value;
 		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else if (value.has_timestamp_tz_type_value) {
-		auto &str = value.timestamp_tz_type_value.value;
+	} else if (value.timestamp_tz_type_value) {
+		auto &str = value.timestamp_tz_type_value->value;
 		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else if (value.has_timestamp_nano_type_value) {
-		auto &str = value.timestamp_nano_type_value.value;
+	} else if (value.timestamp_nano_type_value) {
+		auto &str = value.timestamp_nano_type_value->value;
 		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else if (value.has_timestamp_tz_nano_type_value) {
-		auto &str = value.timestamp_tz_nano_type_value.value;
+	} else if (value.timestamp_tz_nano_type_value) {
+		auto &str = value.timestamp_tz_nano_type_value->value;
 		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else if (value.has_fixed_type_value) {
-		auto &str = value.fixed_type_value.value;
+	} else if (value.fixed_type_value) {
+		auto &str = value.fixed_type_value->value;
 		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else if (value.has_binary_type_value) {
-		auto &str = value.binary_type_value.value;
+	} else if (value.binary_type_value) {
+		auto &str = value.binary_type_value->value;
 		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
 	} else {
 		return yyjson_mut_null(doc);
@@ -157,39 +157,35 @@ rest_api_objects::PrimitiveTypeValue IcebergTypeHelper::PrimitiveTypeFromValue(c
 	}
 	//! BooleanTypeValue
 	case LogicalTypeId::BOOLEAN: {
-		result.boolean_type_value.value = value.GetValue<bool>();
-		result.has_boolean_type_value = true;
+		result.boolean_type_value = rest_api_objects::BooleanTypeValue();
+		result.boolean_type_value->value = value.GetValue<bool>();
 		return result;
 	}
-	//! IntegerTypeValue
 	case LogicalTypeId::INTEGER: {
-		result.integer_type_value.value = value.GetValue<int32_t>();
-		result.has_integer_type_value = true;
+		result.integer_type_value = rest_api_objects::IntegerTypeValue();
+		result.integer_type_value->value = value.GetValue<int32_t>();
 		return result;
 	}
-	//! LongTypeValue
 	case LogicalTypeId::BIGINT: {
-		result.long_type_value.value = value.GetValue<int64_t>();
-		result.has_long_type_value = true;
+		result.long_type_value = rest_api_objects::LongTypeValue();
+		result.long_type_value->value = value.GetValue<int64_t>();
 		return result;
 	}
-	//! FloatTypeValue
 	case LogicalTypeId::FLOAT: {
-		result.float_type_value.value = value.GetValue<float>();
-		result.has_float_type_value = true;
+		result.float_type_value = rest_api_objects::FloatTypeValue();
+		result.float_type_value->value = value.GetValue<float>();
 		return result;
 	}
-	//! DoubleTypeValue
 	case LogicalTypeId::DOUBLE: {
-		result.double_type_value.value = value.GetValue<double>();
-		result.has_double_type_value = true;
+		result.double_type_value = rest_api_objects::DoubleTypeValue();
+		result.double_type_value->value = value.GetValue<double>();
 		return result;
 	}
 	//! DecimalTypeValue
 	case LogicalTypeId::DECIMAL: {
 		//! FIXME: Spec says scientific notation should be used for negative scale decimals
-		result.string_type_value.value = value.ToString();
-		result.has_string_type_value = true;
+		result.string_type_value = rest_api_objects::StringTypeValue();
+		result.string_type_value->value = value.ToString();
 		return result;
 	}
 	//! NOTE: when parsing we can't differentiate between these, so we set string_type
@@ -201,8 +197,8 @@ rest_api_objects::PrimitiveTypeValue IcebergTypeHelper::PrimitiveTypeFromValue(c
 	case LogicalTypeId::DATE:
 	case LogicalTypeId::TIME:
 	case LogicalTypeId::VARCHAR: {
-		result.string_type_value.value = value.ToString();
-		result.has_string_type_value = true;
+		result.string_type_value = rest_api_objects::StringTypeValue();
+		result.string_type_value->value = value.ToString();
 		return result;
 	}
 	//! TimestampTypeValue
@@ -219,14 +215,15 @@ rest_api_objects::PrimitiveTypeValue IcebergTypeHelper::PrimitiveTypeFromValue(c
 		auto str = StringUtil::Join(splits, "T");
 
 		if (type.id() == LogicalTypeId::TIMESTAMP || type.id() == LogicalTypeId::TIMESTAMP_NS) {
-			result.string_type_value.value = str;
-			result.has_string_type_value = true;
+			result.string_type_value = rest_api_objects::StringTypeValue();
+			result.string_type_value->value = str;
 			return result;
 		}
 
 		str += ":00";
-		result.string_type_value.value = str;
-		result.has_string_type_value = true;
+		result.string_type_value = rest_api_objects::StringTypeValue();
+		result.string_type_value->value = str;
+		return result;
 	}
 	//! FIXME: missing FixedTypeValue
 	//! BinaryTypeValue
@@ -234,8 +231,8 @@ rest_api_objects::PrimitiveTypeValue IcebergTypeHelper::PrimitiveTypeFromValue(c
 		auto str = value.GetValueUnsafe<string_t>();
 		auto blob_str = ConvertBlobDefault(str);
 
-		result.binary_type_value.value = blob_str;
-		result.has_binary_type_value = true;
+		result.binary_type_value = rest_api_objects::BinaryTypeValue();
+		result.binary_type_value->value = blob_str;
 		return result;
 	}
 	default:
@@ -253,20 +250,17 @@ rest_api_objects::StructField IcebergTypeHelper::CreateIcebergRestType(const str
 	result.type = make_uniq<rest_api_objects::Type>();
 	result.required = required;
 	if (!doc.empty()) {
-		result.has_doc = true;
-		result.doc = doc;
+		result._doc = doc;
 	}
 
 	case_insensitive_map_t<reference<const Value>> child_defaults;
 	if (!default_val.IsNull() && type.id() != LogicalTypeId::STRUCT) {
-		result.has_initial_default = true;
 		result.initial_default = std::move(IcebergTypeHelper::PrimitiveTypeFromValue(default_val));
 	}
 	auto &rest_type = *result.type;
 
 	switch (type.id()) {
 	case LogicalTypeId::MAP: {
-		rest_type.has_map_type = true;
 		rest_type.map_type = rest_api_objects::MapType();
 
 		//! Key
@@ -274,22 +268,20 @@ rest_api_objects::StructField IcebergTypeHelper::CreateIcebergRestType(const str
 		auto key_field = IcebergTypeHelper::CreateIcebergRestType("key", key_type, true, "",
 		                                                          Value(), //! FIXME: extract from parent
 		                                                          get_next_id);
-		rest_type.map_type.key_id = key_field.id;
-		rest_type.map_type.key = std::move(key_field.type);
+		rest_type.map_type->key_id = key_field.id;
+		rest_type.map_type->key = std::move(key_field.type);
 
 		//! Value
 		auto value_type = MapType::ValueType(type);
-		auto value_field = IcebergTypeHelper::CreateIcebergRestType("value", value_type, false, "",
-		                                                            Value(), //! FIXME: extract from parent
-		                                                            get_next_id);
-		rest_type.map_type.value_id = value_field.id;
-		rest_type.map_type.value = std::move(value_field.type);
-		rest_type.map_type.value_required = value_field.required;
+		auto value_field =
+		    IcebergTypeHelper::CreateIcebergRestType("value", value_type, false, "", Value(), get_next_id);
+		rest_type.map_type->value_id = value_field.id;
+		rest_type.map_type->value = std::move(value_field.type);
+		rest_type.map_type->value_required = value_field.required;
 
 		return result;
 	}
 	case LogicalTypeId::STRUCT: {
-		rest_type.has_struct_type = true;
 		rest_type.struct_type = rest_api_objects::StructType();
 		auto &children = StructType::GetChildTypes(type);
 
@@ -300,12 +292,11 @@ rest_api_objects::StructField IcebergTypeHelper::CreateIcebergRestType(const str
 			auto child_default = !default_val.IsNull() ? StructValue::GetChildren(default_val)[i] : Value();
 			auto struct_child = make_uniq<rest_api_objects::StructField>(IcebergTypeHelper::CreateIcebergRestType(
 			    child_name.GetIdentifierName(), child_type, false, "", child_default, get_next_id));
-			rest_type.struct_type.fields.push_back(std::move(struct_child));
+			rest_type.struct_type->fields.push_back(std::move(struct_child));
 		}
 		return result;
 	}
 	case LogicalTypeId::LIST: {
-		rest_type.has_list_type = true;
 		rest_type.list_type = rest_api_objects::ListType();
 
 		//! Element
@@ -313,19 +304,18 @@ rest_api_objects::StructField IcebergTypeHelper::CreateIcebergRestType(const str
 		auto element_field = IcebergTypeHelper::CreateIcebergRestType("element", element_type, false, "",
 		                                                              Value(), //! FIXME: extract default from parent
 		                                                              get_next_id);
-		rest_type.list_type.type = "list";
-		rest_type.list_type.element_id = element_field.id;
-		rest_type.list_type.element = std::move(element_field.type);
-		rest_type.list_type.element_required = element_field.required;
+		rest_type.list_type->type = "list";
+		rest_type.list_type->element_id = element_field.id;
+		rest_type.list_type->element = std::move(element_field.type);
+		rest_type.list_type->element_required = element_field.required;
 		return result;
 	}
 	case LogicalTypeId::ARRAY: {
 		throw InvalidConfigurationException("Array type not supported in Iceberg type. Please cast to LIST");
 	}
 	default:
-		rest_type.has_primitive_type = true;
 		rest_type.primitive_type = rest_api_objects::PrimitiveType();
-		rest_type.primitive_type.value = IcebergTypeHelper::LogicalTypeToIcebergType(type);
+		rest_type.primitive_type->value = IcebergTypeHelper::LogicalTypeToIcebergType(type);
 		return result;
 	}
 }

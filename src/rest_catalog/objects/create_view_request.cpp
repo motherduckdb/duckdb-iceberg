@@ -32,12 +32,13 @@ CreateViewRequest CreateViewRequest::Copy() const {
 	for (auto &entry : properties) {
 		res.properties.emplace(entry.first, entry.second);
 	}
-	if (has_location) {
-		res.location = location;
+	if (location.has_value()) {
+		res.location.emplace();
+		(*res.location) = (*location);
 	}
-	res.has_location = has_location;
 	return res;
 }
+
 string CreateViewRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto name_val = yyjson_obj_get(obj, "name");
@@ -93,17 +94,57 @@ string CreateViewRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto location_val = yyjson_obj_get(obj, "location");
-	if (location_val && !yyjson_is_null(location_val)) {
-		has_location = true;
+	if (location_val) {
+		string location_tmp;
 		if (yyjson_is_str(location_val)) {
-			location = yyjson_get_str(location_val);
+			location_tmp = yyjson_get_str(location_val);
 		} else {
 			return StringUtil::Format(
-			    "CreateViewRequest property 'location' is not of type 'string', found '%s' instead",
+			    "CreateViewRequest property 'location_tmp' is not of type 'string', found '%s' instead",
 			    yyjson_get_type_desc(location_val));
 		}
+		location = std::move(location_tmp);
 	}
-	return string();
+	return "";
+}
+
+void CreateViewRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: name
+	yyjson_mut_obj_add_strcpy(doc, obj, "name", name.c_str());
+
+	// Serialize: schema
+	yyjson_mut_val *schema_val = schema.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "schema", schema_val);
+
+	// Serialize: view-version
+	yyjson_mut_val *view_version_val = view_version.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "view-version", view_version_val);
+
+	// Serialize: properties
+	yyjson_mut_val *properties_obj = yyjson_mut_obj(doc);
+	for (const auto &it : properties) {
+		auto &key = it.first;
+		auto &value = it.second;
+		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+		yyjson_mut_obj_add_strcpy(doc, properties_obj, key_ptr, value.c_str());
+	}
+	yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
+
+	// Serialize: location
+	if (location.has_value()) {
+		auto &location_value = *location;
+		yyjson_mut_obj_add_strcpy(doc, obj, "location", location_value.c_str());
+	}
+}
+
+yyjson_mut_val *CreateViewRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

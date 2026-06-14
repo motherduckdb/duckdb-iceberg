@@ -29,6 +29,7 @@ TimestampTypeValue TimestampTypeValue::Copy() const {
 	res.value = value;
 	return res;
 }
+
 string TimestampTypeValue::TryFromJSON(yyjson_val *obj) {
 	string error;
 	if (yyjson_is_str(obj)) {
@@ -37,7 +38,11 @@ string TimestampTypeValue::TryFromJSON(yyjson_val *obj) {
 		return StringUtil::Format("TimestampTypeValue property 'value' is not of type 'string', found '%s' instead",
 		                          yyjson_get_type_desc(obj));
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *TimestampTypeValue::ToJSON(yyjson_mut_doc *doc) const {
+	return yyjson_mut_strcpy(doc, value.c_str());
 }
 
 } // namespace rest_api_objects

@@ -30,6 +30,7 @@ CommitTableResponse CommitTableResponse::Copy() const {
 	res.metadata = metadata.Copy();
 	return res;
 }
+
 string CommitTableResponse::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto metadata_location_val = yyjson_obj_get(obj, "metadata-location");
@@ -53,7 +54,26 @@ string CommitTableResponse::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+void CommitTableResponse::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: metadata-location
+	yyjson_mut_obj_add_strcpy(doc, obj, "metadata-location", metadata_location.c_str());
+
+	// Serialize: metadata
+	yyjson_mut_val *metadata_val = metadata.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "metadata", metadata_val);
+}
+
+yyjson_mut_val *CommitTableResponse::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

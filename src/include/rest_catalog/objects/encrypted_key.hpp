@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -20,19 +21,22 @@ public:
 	EncryptedKey &operator=(EncryptedKey &&) = default;
 
 public:
+	// Deserialization
 	static EncryptedKey FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	EncryptedKey Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	string key_id;
 	string encrypted_key_metadata;
-	string encrypted_by_id;
-	bool has_encrypted_by_id = false;
-	case_insensitive_map_t<string> properties;
-	bool has_properties = false;
+	optional<string> encrypted_by_id;
+	optional<case_insensitive_map_t<string>> properties;
 };
 
 } // namespace rest_api_objects

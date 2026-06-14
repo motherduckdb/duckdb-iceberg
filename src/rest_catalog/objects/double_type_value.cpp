@@ -29,6 +29,7 @@ DoubleTypeValue DoubleTypeValue::Copy() const {
 	res.value = value;
 	return res;
 }
+
 string DoubleTypeValue::TryFromJSON(yyjson_val *obj) {
 	string error;
 	if (yyjson_is_num(obj)) {
@@ -37,7 +38,11 @@ string DoubleTypeValue::TryFromJSON(yyjson_val *obj) {
 		return StringUtil::Format("DoubleTypeValue property 'value' is not of type 'number', found '%s' instead",
 		                          yyjson_get_type_desc(obj));
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *DoubleTypeValue::ToJSON(yyjson_mut_doc *doc) const {
+	return yyjson_mut_real(doc, value);
 }
 
 } // namespace rest_api_objects

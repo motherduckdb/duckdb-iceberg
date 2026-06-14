@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -21,18 +22,22 @@ public:
 	PartitionField &operator=(PartitionField &&) = default;
 
 public:
+	// Deserialization
 	static PartitionField FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	PartitionField Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	int32_t source_id;
 	Transform transform;
 	string name;
-	int32_t field_id;
-	bool has_field_id = false;
+	optional<int32_t> field_id;
 };
 
 } // namespace rest_api_objects

@@ -30,6 +30,7 @@ ViewHistoryEntry ViewHistoryEntry::Copy() const {
 	res.timestamp_ms = timestamp_ms;
 	return res;
 }
+
 string ViewHistoryEntry::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto version_id_val = yyjson_obj_get(obj, "version-id");
@@ -58,7 +59,25 @@ string ViewHistoryEntry::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(timestamp_ms_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void ViewHistoryEntry::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: version-id
+	yyjson_mut_obj_add_int(doc, obj, "version-id", version_id);
+
+	// Serialize: timestamp-ms
+	yyjson_mut_obj_add_sint(doc, obj, "timestamp-ms", timestamp_ms);
+}
+
+yyjson_mut_val *ViewHistoryEntry::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

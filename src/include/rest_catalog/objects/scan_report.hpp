@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -23,11 +24,16 @@ public:
 	ScanReport &operator=(ScanReport &&) = default;
 
 public:
+	// Deserialization
 	static ScanReport FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	ScanReport Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	string table_name;
@@ -37,8 +43,7 @@ public:
 	vector<int32_t> projected_field_ids;
 	vector<string> projected_field_names;
 	Metrics metrics;
-	case_insensitive_map_t<string> metadata;
-	bool has_metadata = false;
+	optional<case_insensitive_map_t<string>> metadata;
 };
 
 } // namespace rest_api_objects

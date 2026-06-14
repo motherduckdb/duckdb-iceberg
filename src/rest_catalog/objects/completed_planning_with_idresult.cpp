@@ -31,6 +31,7 @@ CompletedPlanningWithIDResult::Object6 CompletedPlanningWithIDResult::Object6::C
 	res.plan_id = plan_id;
 	return res;
 }
+
 string CompletedPlanningWithIDResult::Object6::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto plan_id_val = yyjson_obj_get(obj, "plan-id");
@@ -44,7 +45,22 @@ string CompletedPlanningWithIDResult::Object6::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(plan_id_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void CompletedPlanningWithIDResult::Object6::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: plan-id
+	yyjson_mut_obj_add_strcpy(doc, obj, "plan-id", plan_id.c_str());
+}
+
+yyjson_mut_val *CompletedPlanningWithIDResult::Object6::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 CompletedPlanningWithIDResult CompletedPlanningWithIDResult::FromJSON(yyjson_val *obj) {
@@ -62,6 +78,7 @@ CompletedPlanningWithIDResult CompletedPlanningWithIDResult::Copy() const {
 	res.object_6 = object_6.Copy();
 	return res;
 }
+
 string CompletedPlanningWithIDResult::TryFromJSON(yyjson_val *obj) {
 	string error;
 	error = completed_planning_result.TryFromJSON(obj);
@@ -72,7 +89,25 @@ string CompletedPlanningWithIDResult::TryFromJSON(yyjson_val *obj) {
 	if (!error.empty()) {
 		return error;
 	}
-	return string();
+	return "";
+}
+
+void CompletedPlanningWithIDResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize base class: CompletedPlanningResult
+	completed_planning_result.PopulateJSON(doc, obj);
+
+	// Serialize base class: Object6
+	object_6.PopulateJSON(doc, obj);
+}
+
+yyjson_mut_val *CompletedPlanningWithIDResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

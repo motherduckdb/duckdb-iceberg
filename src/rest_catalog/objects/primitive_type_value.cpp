@@ -26,146 +26,219 @@ PrimitiveTypeValue PrimitiveTypeValue::FromJSON(yyjson_val *obj) {
 
 PrimitiveTypeValue PrimitiveTypeValue::Copy() const {
 	PrimitiveTypeValue res;
-	if (has_boolean_type_value) {
-		res.boolean_type_value = boolean_type_value.Copy();
+	if (boolean_type_value.has_value()) {
+		res.boolean_type_value.emplace();
+		(*res.boolean_type_value) = (*boolean_type_value).Copy();
 	}
-	res.has_boolean_type_value = has_boolean_type_value;
-	if (has_integer_type_value) {
-		res.integer_type_value = integer_type_value.Copy();
+	if (integer_type_value.has_value()) {
+		res.integer_type_value.emplace();
+		(*res.integer_type_value) = (*integer_type_value).Copy();
 	}
-	res.has_integer_type_value = has_integer_type_value;
-	if (has_long_type_value) {
-		res.long_type_value = long_type_value.Copy();
+	if (long_type_value.has_value()) {
+		res.long_type_value.emplace();
+		(*res.long_type_value) = (*long_type_value).Copy();
 	}
-	res.has_long_type_value = has_long_type_value;
-	if (has_float_type_value) {
-		res.float_type_value = float_type_value.Copy();
+	if (float_type_value.has_value()) {
+		res.float_type_value.emplace();
+		(*res.float_type_value) = (*float_type_value).Copy();
 	}
-	res.has_float_type_value = has_float_type_value;
-	if (has_double_type_value) {
-		res.double_type_value = double_type_value.Copy();
+	if (double_type_value.has_value()) {
+		res.double_type_value.emplace();
+		(*res.double_type_value) = (*double_type_value).Copy();
 	}
-	res.has_double_type_value = has_double_type_value;
-	if (has_decimal_type_value) {
-		res.decimal_type_value = decimal_type_value.Copy();
+	if (decimal_type_value.has_value()) {
+		res.decimal_type_value.emplace();
+		(*res.decimal_type_value) = (*decimal_type_value).Copy();
 	}
-	res.has_decimal_type_value = has_decimal_type_value;
-	if (has_string_type_value) {
-		res.string_type_value = string_type_value.Copy();
+	if (string_type_value.has_value()) {
+		res.string_type_value.emplace();
+		(*res.string_type_value) = (*string_type_value).Copy();
 	}
-	res.has_string_type_value = has_string_type_value;
-	if (has_uuidtype_value) {
-		res.uuidtype_value = uuidtype_value.Copy();
+	if (uuidtype_value.has_value()) {
+		res.uuidtype_value.emplace();
+		(*res.uuidtype_value) = (*uuidtype_value).Copy();
 	}
-	res.has_uuidtype_value = has_uuidtype_value;
-	if (has_date_type_value) {
-		res.date_type_value = date_type_value.Copy();
+	if (date_type_value.has_value()) {
+		res.date_type_value.emplace();
+		(*res.date_type_value) = (*date_type_value).Copy();
 	}
-	res.has_date_type_value = has_date_type_value;
-	if (has_time_type_value) {
-		res.time_type_value = time_type_value.Copy();
+	if (time_type_value.has_value()) {
+		res.time_type_value.emplace();
+		(*res.time_type_value) = (*time_type_value).Copy();
 	}
-	res.has_time_type_value = has_time_type_value;
-	if (has_timestamp_type_value) {
-		res.timestamp_type_value = timestamp_type_value.Copy();
+	if (timestamp_type_value.has_value()) {
+		res.timestamp_type_value.emplace();
+		(*res.timestamp_type_value) = (*timestamp_type_value).Copy();
 	}
-	res.has_timestamp_type_value = has_timestamp_type_value;
-	if (has_timestamp_tz_type_value) {
-		res.timestamp_tz_type_value = timestamp_tz_type_value.Copy();
+	if (timestamp_tz_type_value.has_value()) {
+		res.timestamp_tz_type_value.emplace();
+		(*res.timestamp_tz_type_value) = (*timestamp_tz_type_value).Copy();
 	}
-	res.has_timestamp_tz_type_value = has_timestamp_tz_type_value;
-	if (has_timestamp_nano_type_value) {
-		res.timestamp_nano_type_value = timestamp_nano_type_value.Copy();
+	if (timestamp_nano_type_value.has_value()) {
+		res.timestamp_nano_type_value.emplace();
+		(*res.timestamp_nano_type_value) = (*timestamp_nano_type_value).Copy();
 	}
-	res.has_timestamp_nano_type_value = has_timestamp_nano_type_value;
-	if (has_timestamp_tz_nano_type_value) {
-		res.timestamp_tz_nano_type_value = timestamp_tz_nano_type_value.Copy();
+	if (timestamp_tz_nano_type_value.has_value()) {
+		res.timestamp_tz_nano_type_value.emplace();
+		(*res.timestamp_tz_nano_type_value) = (*timestamp_tz_nano_type_value).Copy();
 	}
-	res.has_timestamp_tz_nano_type_value = has_timestamp_tz_nano_type_value;
-	if (has_fixed_type_value) {
-		res.fixed_type_value = fixed_type_value.Copy();
+	if (fixed_type_value.has_value()) {
+		res.fixed_type_value.emplace();
+		(*res.fixed_type_value) = (*fixed_type_value).Copy();
 	}
-	res.has_fixed_type_value = has_fixed_type_value;
-	if (has_binary_type_value) {
-		res.binary_type_value = binary_type_value.Copy();
+	if (binary_type_value.has_value()) {
+		res.binary_type_value.emplace();
+		(*res.binary_type_value) = (*binary_type_value).Copy();
 	}
-	res.has_binary_type_value = has_binary_type_value;
 	return res;
 }
+
 string PrimitiveTypeValue::TryFromJSON(yyjson_val *obj) {
 	string error;
-	error = boolean_type_value.TryFromJSON(obj);
+	boolean_type_value.emplace();
+	error = boolean_type_value->TryFromJSON(obj);
 	if (error.empty()) {
-		has_boolean_type_value = true;
+	} else {
+		boolean_type_value = nullopt;
 	}
-	error = integer_type_value.TryFromJSON(obj);
+	integer_type_value.emplace();
+	error = integer_type_value->TryFromJSON(obj);
 	if (error.empty()) {
-		has_integer_type_value = true;
+	} else {
+		integer_type_value = nullopt;
 	}
-	error = long_type_value.TryFromJSON(obj);
+	long_type_value.emplace();
+	error = long_type_value->TryFromJSON(obj);
 	if (error.empty()) {
-		has_long_type_value = true;
+	} else {
+		long_type_value = nullopt;
 	}
-	error = float_type_value.TryFromJSON(obj);
+	float_type_value.emplace();
+	error = float_type_value->TryFromJSON(obj);
 	if (error.empty()) {
-		has_float_type_value = true;
+	} else {
+		float_type_value = nullopt;
 	}
-	error = double_type_value.TryFromJSON(obj);
+	double_type_value.emplace();
+	error = double_type_value->TryFromJSON(obj);
 	if (error.empty()) {
-		has_double_type_value = true;
+	} else {
+		double_type_value = nullopt;
 	}
-	error = decimal_type_value.TryFromJSON(obj);
+	decimal_type_value.emplace();
+	error = decimal_type_value->TryFromJSON(obj);
 	if (error.empty()) {
-		has_decimal_type_value = true;
+	} else {
+		decimal_type_value = nullopt;
 	}
-	error = string_type_value.TryFromJSON(obj);
+	string_type_value.emplace();
+	error = string_type_value->TryFromJSON(obj);
 	if (error.empty()) {
-		has_string_type_value = true;
+	} else {
+		string_type_value = nullopt;
 	}
-	error = uuidtype_value.TryFromJSON(obj);
+	uuidtype_value.emplace();
+	error = uuidtype_value->TryFromJSON(obj);
 	if (error.empty()) {
-		has_uuidtype_value = true;
+	} else {
+		uuidtype_value = nullopt;
 	}
-	error = date_type_value.TryFromJSON(obj);
+	date_type_value.emplace();
+	error = date_type_value->TryFromJSON(obj);
 	if (error.empty()) {
-		has_date_type_value = true;
+	} else {
+		date_type_value = nullopt;
 	}
-	error = time_type_value.TryFromJSON(obj);
+	time_type_value.emplace();
+	error = time_type_value->TryFromJSON(obj);
 	if (error.empty()) {
-		has_time_type_value = true;
+	} else {
+		time_type_value = nullopt;
 	}
-	error = timestamp_type_value.TryFromJSON(obj);
+	timestamp_type_value.emplace();
+	error = timestamp_type_value->TryFromJSON(obj);
 	if (error.empty()) {
-		has_timestamp_type_value = true;
+	} else {
+		timestamp_type_value = nullopt;
 	}
-	error = timestamp_tz_type_value.TryFromJSON(obj);
+	timestamp_tz_type_value.emplace();
+	error = timestamp_tz_type_value->TryFromJSON(obj);
 	if (error.empty()) {
-		has_timestamp_tz_type_value = true;
+	} else {
+		timestamp_tz_type_value = nullopt;
 	}
-	error = timestamp_nano_type_value.TryFromJSON(obj);
+	timestamp_nano_type_value.emplace();
+	error = timestamp_nano_type_value->TryFromJSON(obj);
 	if (error.empty()) {
-		has_timestamp_nano_type_value = true;
+	} else {
+		timestamp_nano_type_value = nullopt;
 	}
-	error = timestamp_tz_nano_type_value.TryFromJSON(obj);
+	timestamp_tz_nano_type_value.emplace();
+	error = timestamp_tz_nano_type_value->TryFromJSON(obj);
 	if (error.empty()) {
-		has_timestamp_tz_nano_type_value = true;
+	} else {
+		timestamp_tz_nano_type_value = nullopt;
 	}
-	error = fixed_type_value.TryFromJSON(obj);
+	fixed_type_value.emplace();
+	error = fixed_type_value->TryFromJSON(obj);
 	if (error.empty()) {
-		has_fixed_type_value = true;
+	} else {
+		fixed_type_value = nullopt;
 	}
-	error = binary_type_value.TryFromJSON(obj);
+	binary_type_value.emplace();
+	error = binary_type_value->TryFromJSON(obj);
 	if (error.empty()) {
-		has_binary_type_value = true;
+	} else {
+		binary_type_value = nullopt;
 	}
-	if (!has_binary_type_value && !has_boolean_type_value && !has_date_type_value && !has_decimal_type_value &&
-	    !has_double_type_value && !has_fixed_type_value && !has_float_type_value && !has_integer_type_value &&
-	    !has_long_type_value && !has_string_type_value && !has_time_type_value && !has_timestamp_nano_type_value &&
-	    !has_timestamp_type_value && !has_timestamp_tz_nano_type_value && !has_timestamp_tz_type_value &&
-	    !has_uuidtype_value) {
+	if (!(binary_type_value.has_value()) && !(boolean_type_value.has_value()) && !(date_type_value.has_value()) &&
+	    !(decimal_type_value.has_value()) && !(double_type_value.has_value()) && !(fixed_type_value.has_value()) &&
+	    !(float_type_value.has_value()) && !(integer_type_value.has_value()) && !(long_type_value.has_value()) &&
+	    !(string_type_value.has_value()) && !(time_type_value.has_value()) &&
+	    !(timestamp_nano_type_value.has_value()) && !(timestamp_type_value.has_value()) &&
+	    !(timestamp_tz_nano_type_value.has_value()) && !(timestamp_tz_type_value.has_value()) &&
+	    !(uuidtype_value.has_value())) {
 		return "PrimitiveTypeValue failed to parse, none of the anyOf candidates matched";
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *PrimitiveTypeValue::ToJSON(yyjson_mut_doc *doc) const {
+	if (long_type_value.has_value()) {
+		return long_type_value->ToJSON(doc);
+	} else if (double_type_value.has_value()) {
+		return double_type_value->ToJSON(doc);
+	} else if (integer_type_value.has_value()) {
+		return integer_type_value->ToJSON(doc);
+	} else if (float_type_value.has_value()) {
+		return float_type_value->ToJSON(doc);
+	} else if (boolean_type_value.has_value()) {
+		return boolean_type_value->ToJSON(doc);
+	} else if (decimal_type_value.has_value()) {
+		return decimal_type_value->ToJSON(doc);
+	} else if (string_type_value.has_value()) {
+		return string_type_value->ToJSON(doc);
+	} else if (uuidtype_value.has_value()) {
+		return uuidtype_value->ToJSON(doc);
+	} else if (date_type_value.has_value()) {
+		return date_type_value->ToJSON(doc);
+	} else if (time_type_value.has_value()) {
+		return time_type_value->ToJSON(doc);
+	} else if (timestamp_type_value.has_value()) {
+		return timestamp_type_value->ToJSON(doc);
+	} else if (timestamp_tz_type_value.has_value()) {
+		return timestamp_tz_type_value->ToJSON(doc);
+	} else if (timestamp_nano_type_value.has_value()) {
+		return timestamp_nano_type_value->ToJSON(doc);
+	} else if (timestamp_tz_nano_type_value.has_value()) {
+		return timestamp_tz_nano_type_value->ToJSON(doc);
+	} else if (fixed_type_value.has_value()) {
+		return fixed_type_value->ToJSON(doc);
+	} else if (binary_type_value.has_value()) {
+		return binary_type_value->ToJSON(doc);
+	}
+	// No variant is active - return null
+	return yyjson_mut_null(doc);
 }
 
 } // namespace rest_api_objects

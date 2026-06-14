@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -23,31 +24,27 @@ public:
 	PlanTableScanRequest &operator=(PlanTableScanRequest &&) = default;
 
 public:
+	// Deserialization
 	static PlanTableScanRequest FromJSON(yyjson_val *obj);
-	PlanTableScanRequest Copy() const;
-
-public:
 	string TryFromJSON(yyjson_val *obj);
 
+	// Copy
+	PlanTableScanRequest Copy() const;
+
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+
 public:
-	int64_t snapshot_id;
-	bool has_snapshot_id = false;
-	vector<FieldName> select;
-	bool has_select = false;
+	optional<int64_t> snapshot_id;
+	optional<vector<FieldName>> select;
 	unique_ptr<Expression> filter;
-	bool has_filter = false;
-	int64_t min_rows_requested;
-	bool has_min_rows_requested = false;
-	bool case_sensitive;
-	bool has_case_sensitive = false;
-	bool use_snapshot_schema;
-	bool has_use_snapshot_schema = false;
-	int64_t start_snapshot_id;
-	bool has_start_snapshot_id = false;
-	int64_t end_snapshot_id;
-	bool has_end_snapshot_id = false;
-	vector<FieldName> stats_fields;
-	bool has_stats_fields = false;
+	optional<int64_t> min_rows_requested;
+	optional<bool> case_sensitive;
+	optional<bool> use_snapshot_schema;
+	optional<int64_t> start_snapshot_id;
+	optional<int64_t> end_snapshot_id;
+	optional<vector<FieldName>> stats_fields;
 };
 
 } // namespace rest_api_objects

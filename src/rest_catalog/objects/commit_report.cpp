@@ -31,14 +31,15 @@ CommitReport CommitReport::Copy() const {
 	res.sequence_number = sequence_number;
 	res.operation = operation;
 	res.metrics = metrics.Copy();
-	if (has_metadata) {
-		for (auto &entry : metadata) {
-			res.metadata.emplace(entry.first, entry.second);
+	if (metadata.has_value()) {
+		res.metadata.emplace();
+		for (auto &entry : (*metadata)) {
+			(*res.metadata).emplace(entry.first, entry.second);
 		}
 	}
-	res.has_metadata = has_metadata;
 	return res;
 }
+
 string CommitReport::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto table_name_val = yyjson_obj_get(obj, "table-name");
@@ -101,8 +102,8 @@ string CommitReport::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto metadata_val = yyjson_obj_get(obj, "metadata");
-	if (metadata_val && !yyjson_is_null(metadata_val)) {
-		has_metadata = true;
+	if (metadata_val) {
+		case_insensitive_map_t<string> metadata_tmp;
 		if (yyjson_is_obj(metadata_val)) {
 			size_t idx, max;
 			yyjson_val *key, *val;
@@ -115,13 +116,55 @@ string CommitReport::TryFromJSON(yyjson_val *obj) {
 					return StringUtil::Format("CommitReport property 'tmp' is not of type 'string', found '%s' instead",
 					                          yyjson_get_type_desc(val));
 				}
-				metadata.emplace(key_str, std::move(tmp));
+				metadata_tmp.emplace(key_str, std::move(tmp));
 			}
 		} else {
-			return "CommitReport property 'metadata' is not of type 'object'";
+			return "CommitReport property 'metadata_tmp' is not of type 'object'";
 		}
+		metadata = std::move(metadata_tmp);
 	}
-	return string();
+	return "";
+}
+
+void CommitReport::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: table-name
+	yyjson_mut_obj_add_strcpy(doc, obj, "table-name", table_name.c_str());
+
+	// Serialize: snapshot-id
+	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+
+	// Serialize: sequence-number
+	yyjson_mut_obj_add_sint(doc, obj, "sequence-number", sequence_number);
+
+	// Serialize: operation
+	yyjson_mut_obj_add_strcpy(doc, obj, "operation", operation.c_str());
+
+	// Serialize: metrics
+	yyjson_mut_val *metrics_val = metrics.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "metrics", metrics_val);
+
+	// Serialize: metadata
+	if (metadata.has_value()) {
+		auto &metadata_value = *metadata;
+		yyjson_mut_val *metadata_value_obj = yyjson_mut_obj(doc);
+		for (const auto &it : metadata_value) {
+			auto &key = it.first;
+			auto &value = it.second;
+			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+			yyjson_mut_obj_add_strcpy(doc, metadata_value_obj, key_ptr, value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "metadata", metadata_value_obj);
+	}
+}
+
+yyjson_mut_val *CommitReport::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

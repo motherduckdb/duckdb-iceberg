@@ -27,14 +27,15 @@ CreateNamespaceResponse CreateNamespaceResponse::FromJSON(yyjson_val *obj) {
 CreateNamespaceResponse CreateNamespaceResponse::Copy() const {
 	CreateNamespaceResponse res;
 	res._namespace = _namespace.Copy();
-	if (has_properties) {
-		for (auto &entry : properties) {
-			res.properties.emplace(entry.first, entry.second);
+	if (properties.has_value()) {
+		res.properties.emplace();
+		for (auto &entry : (*properties)) {
+			(*res.properties).emplace(entry.first, entry.second);
 		}
 	}
-	res.has_properties = has_properties;
 	return res;
 }
+
 string CreateNamespaceResponse::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto _namespace_val = yyjson_obj_get(obj, "namespace");
@@ -47,8 +48,8 @@ string CreateNamespaceResponse::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto properties_val = yyjson_obj_get(obj, "properties");
-	if (properties_val && !yyjson_is_null(properties_val)) {
-		has_properties = true;
+	if (properties_val) {
+		case_insensitive_map_t<string> properties_tmp;
 		if (yyjson_is_obj(properties_val)) {
 			size_t idx, max;
 			yyjson_val *key, *val;
@@ -62,13 +63,43 @@ string CreateNamespaceResponse::TryFromJSON(yyjson_val *obj) {
 					    "CreateNamespaceResponse property 'tmp' is not of type 'string', found '%s' instead",
 					    yyjson_get_type_desc(val));
 				}
-				properties.emplace(key_str, std::move(tmp));
+				properties_tmp.emplace(key_str, std::move(tmp));
 			}
 		} else {
-			return "CreateNamespaceResponse property 'properties' is not of type 'object'";
+			return "CreateNamespaceResponse property 'properties_tmp' is not of type 'object'";
 		}
+		properties = std::move(properties_tmp);
 	}
-	return string();
+	return "";
+}
+
+void CreateNamespaceResponse::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: namespace
+	yyjson_mut_val *_namespace_val = _namespace.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "namespace", _namespace_val);
+
+	// Serialize: properties
+	if (properties.has_value()) {
+		auto &properties_value = *properties;
+		yyjson_mut_val *properties_value_obj = yyjson_mut_obj(doc);
+		for (const auto &it : properties_value) {
+			auto &key = it.first;
+			auto &value = it.second;
+			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+			yyjson_mut_obj_add_strcpy(doc, properties_value_obj, key_ptr, value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "properties", properties_value_obj);
+	}
+}
+
+yyjson_mut_val *CreateNamespaceResponse::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

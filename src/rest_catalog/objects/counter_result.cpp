@@ -30,6 +30,7 @@ CounterResult CounterResult::Copy() const {
 	res.value = value;
 	return res;
 }
+
 string CounterResult::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto unit_val = yyjson_obj_get(obj, "unit");
@@ -56,7 +57,25 @@ string CounterResult::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(value_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void CounterResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: unit
+	yyjson_mut_obj_add_strcpy(doc, obj, "unit", unit.c_str());
+
+	// Serialize: value
+	yyjson_mut_obj_add_sint(doc, obj, "value", value);
+}
+
+yyjson_mut_val *CounterResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

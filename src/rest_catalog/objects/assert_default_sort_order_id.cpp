@@ -30,6 +30,7 @@ AssertDefaultSortOrderId AssertDefaultSortOrderId::Copy() const {
 	res.default_sort_order_id = default_sort_order_id;
 	return res;
 }
+
 string AssertDefaultSortOrderId::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -53,7 +54,26 @@ string AssertDefaultSortOrderId::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(default_sort_order_id_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void AssertDefaultSortOrderId::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: type
+	yyjson_mut_val *type_val = type.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+
+	// Serialize: default-sort-order-id
+	yyjson_mut_obj_add_int(doc, obj, "default-sort-order-id", default_sort_order_id);
+}
+
+yyjson_mut_val *AssertDefaultSortOrderId::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

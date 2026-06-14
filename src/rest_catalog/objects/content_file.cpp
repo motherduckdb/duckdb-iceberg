@@ -36,23 +36,24 @@ ContentFile ContentFile::Copy() const {
 	res.file_format = file_format.Copy();
 	res.file_size_in_bytes = file_size_in_bytes;
 	res.record_count = record_count;
-	if (has_key_metadata) {
-		res.key_metadata = key_metadata.Copy();
+	if (key_metadata.has_value()) {
+		res.key_metadata.emplace();
+		(*res.key_metadata) = (*key_metadata).Copy();
 	}
-	res.has_key_metadata = has_key_metadata;
-	if (has_split_offsets) {
-		res.split_offsets.reserve(split_offsets.size());
-		for (auto &item : split_offsets) {
-			res.split_offsets.emplace_back(item);
+	if (split_offsets.has_value()) {
+		res.split_offsets.emplace();
+		(*res.split_offsets).reserve((*split_offsets).size());
+		for (auto &item : (*split_offsets)) {
+			(*res.split_offsets).emplace_back(item);
 		}
 	}
-	res.has_split_offsets = has_split_offsets;
-	if (has_sort_order_id) {
-		res.sort_order_id = sort_order_id;
+	if (sort_order_id.has_value()) {
+		res.sort_order_id.emplace();
+		(*res.sort_order_id) = (*sort_order_id);
 	}
-	res.has_sort_order_id = has_sort_order_id;
 	return res;
 }
+
 string ContentFile::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto spec_id_val = yyjson_obj_get(obj, "spec-id");
@@ -146,16 +147,17 @@ string ContentFile::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto key_metadata_val = yyjson_obj_get(obj, "key-metadata");
-	if (key_metadata_val && !yyjson_is_null(key_metadata_val)) {
-		has_key_metadata = true;
-		error = key_metadata.TryFromJSON(key_metadata_val);
+	if (key_metadata_val) {
+		BinaryTypeValue key_metadata_tmp;
+		error = key_metadata_tmp.TryFromJSON(key_metadata_val);
 		if (!error.empty()) {
 			return error;
 		}
+		key_metadata = std::move(key_metadata_tmp);
 	}
 	auto split_offsets_val = yyjson_obj_get(obj, "split-offsets");
-	if (split_offsets_val && !yyjson_is_null(split_offsets_val)) {
-		has_split_offsets = true;
+	if (split_offsets_val) {
+		vector<int64_t> split_offsets_tmp;
 		if (yyjson_is_arr(split_offsets_val)) {
 			size_t idx, max;
 			yyjson_val *val;
@@ -169,25 +171,91 @@ string ContentFile::TryFromJSON(yyjson_val *obj) {
 					return StringUtil::Format("ContentFile property 'tmp' is not of type 'integer', found '%s' instead",
 					                          yyjson_get_type_desc(val));
 				}
-				split_offsets.emplace_back(std::move(tmp));
+				split_offsets_tmp.emplace_back(std::move(tmp));
 			}
 		} else {
-			return StringUtil::Format("ContentFile property 'split_offsets' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(split_offsets_val));
+			return StringUtil::Format(
+			    "ContentFile property 'split_offsets_tmp' is not of type 'array', found '%s' instead",
+			    yyjson_get_type_desc(split_offsets_val));
 		}
+		split_offsets = std::move(split_offsets_tmp);
 	}
 	auto sort_order_id_val = yyjson_obj_get(obj, "sort-order-id");
-	if (sort_order_id_val && !yyjson_is_null(sort_order_id_val)) {
-		has_sort_order_id = true;
+	if (sort_order_id_val) {
+		int32_t sort_order_id_tmp;
 		if (yyjson_is_int(sort_order_id_val)) {
-			sort_order_id = yyjson_get_int(sort_order_id_val);
+			sort_order_id_tmp = yyjson_get_int(sort_order_id_val);
 		} else {
 			return StringUtil::Format(
-			    "ContentFile property 'sort_order_id' is not of type 'integer', found '%s' instead",
+			    "ContentFile property 'sort_order_id_tmp' is not of type 'integer', found '%s' instead",
 			    yyjson_get_type_desc(sort_order_id_val));
 		}
+		sort_order_id = std::move(sort_order_id_tmp);
 	}
-	return string();
+	return "";
+}
+
+void ContentFile::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: spec-id
+	yyjson_mut_obj_add_int(doc, obj, "spec-id", spec_id);
+
+	// Serialize: partition
+	yyjson_mut_val *partition_arr = yyjson_mut_arr(doc);
+	for (const auto &item : partition) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(partition_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "partition", partition_arr);
+
+	// Serialize: content
+	yyjson_mut_obj_add_strcpy(doc, obj, "content", content.c_str());
+
+	// Serialize: file-path
+	yyjson_mut_obj_add_strcpy(doc, obj, "file-path", file_path.c_str());
+
+	// Serialize: file-format
+	yyjson_mut_val *file_format_val = file_format.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "file-format", file_format_val);
+
+	// Serialize: file-size-in-bytes
+	yyjson_mut_obj_add_sint(doc, obj, "file-size-in-bytes", file_size_in_bytes);
+
+	// Serialize: record-count
+	yyjson_mut_obj_add_sint(doc, obj, "record-count", record_count);
+
+	// Serialize: key-metadata
+	if (key_metadata.has_value()) {
+		auto &key_metadata_value = *key_metadata;
+		yyjson_mut_val *key_metadata_value_val = key_metadata_value.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "key-metadata", key_metadata_value_val);
+	}
+
+	// Serialize: split-offsets
+	if (split_offsets.has_value()) {
+		auto &split_offsets_value = *split_offsets;
+		yyjson_mut_val *split_offsets_value_arr = yyjson_mut_arr(doc);
+		for (const auto &item : split_offsets_value) {
+			yyjson_mut_val *item_val = yyjson_mut_sint(doc, item);
+			yyjson_mut_arr_append(split_offsets_value_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "split-offsets", split_offsets_value_arr);
+	}
+
+	// Serialize: sort-order-id
+	if (sort_order_id.has_value()) {
+		auto &sort_order_id_value = *sort_order_id;
+		yyjson_mut_obj_add_int(doc, obj, "sort-order-id", sort_order_id_value);
+	}
+}
+
+yyjson_mut_val *ContentFile::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

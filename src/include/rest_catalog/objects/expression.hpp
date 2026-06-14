@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -27,27 +28,25 @@ public:
 	Expression &operator=(Expression &&) = default;
 
 public:
+	// Deserialization
 	static Expression FromJSON(yyjson_val *obj);
-	Expression Copy() const;
-
-public:
 	string TryFromJSON(yyjson_val *obj);
 
+	// Copy
+	Expression Copy() const;
+
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+
 public:
-	TrueExpression true_expression;
-	bool has_true_expression = false;
-	FalseExpression false_expression;
-	bool has_false_expression = false;
-	AndOrExpression and_or_expression;
-	bool has_and_or_expression = false;
-	NotExpression not_expression;
-	bool has_not_expression = false;
-	SetExpression set_expression;
-	bool has_set_expression = false;
-	LiteralExpression literal_expression;
-	bool has_literal_expression = false;
-	UnaryExpression unary_expression;
-	bool has_unary_expression = false;
+	optional<TrueExpression> true_expression;
+	optional<FalseExpression> false_expression;
+	optional<AndOrExpression> and_or_expression;
+	optional<NotExpression> not_expression;
+	optional<SetExpression> set_expression;
+	optional<LiteralExpression> literal_expression;
+	optional<UnaryExpression> unary_expression;
 };
 
 } // namespace rest_api_objects

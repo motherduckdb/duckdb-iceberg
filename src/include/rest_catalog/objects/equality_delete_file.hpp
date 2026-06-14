@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -21,17 +22,20 @@ public:
 	EqualityDeleteFile &operator=(EqualityDeleteFile &&) = default;
 
 public:
+	// Deserialization
 	static EqualityDeleteFile FromJSON(yyjson_val *obj);
+	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
 	EqualityDeleteFile Copy() const;
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	ContentFile content_file;
-	string content;
-	vector<int32_t> equality_ids;
-	bool has_equality_ids = false;
+	optional<vector<int32_t>> equality_ids;
 };
 
 } // namespace rest_api_objects

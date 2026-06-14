@@ -32,6 +32,7 @@ ListType ListType::Copy() const {
 	res.element_required = element_required;
 	return res;
 }
+
 string ListType::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -78,7 +79,32 @@ string ListType::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(element_required_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void ListType::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: type
+	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
+
+	// Serialize: element-id
+	yyjson_mut_obj_add_int(doc, obj, "element-id", element_id);
+
+	// Serialize: element
+	yyjson_mut_val *element_val = element->ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "element", element_val);
+
+	// Serialize: element-required
+	yyjson_mut_obj_add_bool(doc, obj, "element-required", element_required);
+}
+
+yyjson_mut_val *ListType::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

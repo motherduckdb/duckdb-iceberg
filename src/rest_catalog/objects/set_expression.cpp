@@ -34,6 +34,7 @@ SetExpression SetExpression::Copy() const {
 	}
 	return res;
 }
+
 string SetExpression::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -74,7 +75,35 @@ string SetExpression::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(values_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void SetExpression::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: type
+	yyjson_mut_val *type_val = type.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+
+	// Serialize: term
+	yyjson_mut_val *term_val = term.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "term", term_val);
+
+	// Serialize: values
+	yyjson_mut_val *values_arr = yyjson_mut_arr(doc);
+	for (const auto &item : values) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(values_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "values", values_arr);
+}
+
+yyjson_mut_val *SetExpression::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

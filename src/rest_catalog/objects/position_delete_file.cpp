@@ -27,62 +27,79 @@ PositionDeleteFile PositionDeleteFile::FromJSON(yyjson_val *obj) {
 PositionDeleteFile PositionDeleteFile::Copy() const {
 	PositionDeleteFile res;
 	res.content_file = content_file.Copy();
-	res.content = content;
-	if (has_content_offset) {
-		res.content_offset = content_offset;
+	if (content_offset.has_value()) {
+		res.content_offset.emplace();
+		(*res.content_offset) = (*content_offset);
 	}
-	res.has_content_offset = has_content_offset;
-	if (has_content_size_in_bytes) {
-		res.content_size_in_bytes = content_size_in_bytes;
+	if (content_size_in_bytes.has_value()) {
+		res.content_size_in_bytes.emplace();
+		(*res.content_size_in_bytes) = (*content_size_in_bytes);
 	}
-	res.has_content_size_in_bytes = has_content_size_in_bytes;
 	return res;
 }
+
 string PositionDeleteFile::TryFromJSON(yyjson_val *obj) {
 	string error;
 	error = content_file.TryFromJSON(obj);
 	if (!error.empty()) {
 		return error;
 	}
-	auto content_val = yyjson_obj_get(obj, "content");
-	if (!content_val) {
-		return "PositionDeleteFile required property 'content' is missing";
-	} else {
-		if (yyjson_is_str(content_val)) {
-			content = yyjson_get_str(content_val);
-		} else {
-			return StringUtil::Format(
-			    "PositionDeleteFile property 'content' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(content_val));
-		}
-	}
 	auto content_offset_val = yyjson_obj_get(obj, "content-offset");
-	if (content_offset_val && !yyjson_is_null(content_offset_val)) {
-		has_content_offset = true;
+	if (content_offset_val) {
+		int64_t content_offset_tmp;
 		if (yyjson_is_sint(content_offset_val)) {
-			content_offset = yyjson_get_sint(content_offset_val);
+			content_offset_tmp = yyjson_get_sint(content_offset_val);
 		} else if (yyjson_is_uint(content_offset_val)) {
-			content_offset = yyjson_get_uint(content_offset_val);
+			content_offset_tmp = yyjson_get_uint(content_offset_val);
 		} else {
 			return StringUtil::Format(
-			    "PositionDeleteFile property 'content_offset' is not of type 'integer', found '%s' instead",
+			    "PositionDeleteFile property 'content_offset_tmp' is not of type 'integer', found '%s' instead",
 			    yyjson_get_type_desc(content_offset_val));
 		}
+		content_offset = std::move(content_offset_tmp);
 	}
 	auto content_size_in_bytes_val = yyjson_obj_get(obj, "content-size-in-bytes");
-	if (content_size_in_bytes_val && !yyjson_is_null(content_size_in_bytes_val)) {
-		has_content_size_in_bytes = true;
+	if (content_size_in_bytes_val) {
+		int64_t content_size_in_bytes_tmp;
 		if (yyjson_is_sint(content_size_in_bytes_val)) {
-			content_size_in_bytes = yyjson_get_sint(content_size_in_bytes_val);
+			content_size_in_bytes_tmp = yyjson_get_sint(content_size_in_bytes_val);
 		} else if (yyjson_is_uint(content_size_in_bytes_val)) {
-			content_size_in_bytes = yyjson_get_uint(content_size_in_bytes_val);
+			content_size_in_bytes_tmp = yyjson_get_uint(content_size_in_bytes_val);
 		} else {
 			return StringUtil::Format(
-			    "PositionDeleteFile property 'content_size_in_bytes' is not of type 'integer', found '%s' instead",
+			    "PositionDeleteFile property 'content_size_in_bytes_tmp' is not of type 'integer', found '%s' instead",
 			    yyjson_get_type_desc(content_size_in_bytes_val));
 		}
+		content_size_in_bytes = std::move(content_size_in_bytes_tmp);
 	}
-	return string();
+	return "";
+}
+
+void PositionDeleteFile::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize base class: ContentFile
+	content_file.PopulateJSON(doc, obj);
+
+	// Serialize: content-offset
+	if (content_offset.has_value()) {
+		auto &content_offset_value = *content_offset;
+		yyjson_mut_obj_add_sint(doc, obj, "content-offset", content_offset_value);
+	}
+
+	// Serialize: content-size-in-bytes
+	if (content_size_in_bytes.has_value()) {
+		auto &content_size_in_bytes_value = *content_size_in_bytes;
+		yyjson_mut_obj_add_sint(doc, obj, "content-size-in-bytes", content_size_in_bytes_value);
+	}
+}
+
+yyjson_mut_val *PositionDeleteFile::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -27,24 +27,24 @@ static Value ParseDefaultForType(const LogicalType &type, const rest_api_objects
 
 	switch (type.id()) {
 	case LogicalTypeId::BOOLEAN: {
-		D_ASSERT(default_value.has_boolean_type_value);
-		return Value::BOOLEAN(default_value.boolean_type_value.value);
+		D_ASSERT(default_value.boolean_type_value);
+		return Value::BOOLEAN(default_value.boolean_type_value->value);
 	}
 	case LogicalTypeId::INTEGER: {
-		D_ASSERT(default_value.has_integer_type_value);
-		return Value::INTEGER(default_value.integer_type_value.value);
+		D_ASSERT(default_value.integer_type_value);
+		return Value::INTEGER(default_value.integer_type_value->value);
 	}
 	case LogicalTypeId::BIGINT: {
-		D_ASSERT(default_value.has_long_type_value);
-		return Value::BIGINT(default_value.long_type_value.value);
+		D_ASSERT(default_value.long_type_value);
+		return Value::BIGINT(default_value.long_type_value->value);
 	}
 	case LogicalTypeId::FLOAT: {
-		D_ASSERT(default_value.has_float_type_value);
-		return Value::FLOAT(default_value.float_type_value.value);
+		D_ASSERT(default_value.float_type_value);
+		return Value::FLOAT(default_value.float_type_value->value);
 	}
 	case LogicalTypeId::DOUBLE: {
-		D_ASSERT(default_value.has_double_type_value);
-		return Value::DOUBLE(default_value.double_type_value.value);
+		D_ASSERT(default_value.double_type_value);
+		return Value::DOUBLE(default_value.double_type_value->value);
 	}
 	case LogicalTypeId::DECIMAL:
 	case LogicalTypeId::DATE:
@@ -54,12 +54,12 @@ static Value ParseDefaultForType(const LogicalType &type, const rest_api_objects
 	case LogicalTypeId::TIMESTAMP_NS:
 	case LogicalTypeId::VARCHAR:
 	case LogicalTypeId::UUID: {
-		D_ASSERT(default_value.has_string_type_value);
-		return Value(default_value.string_type_value.value).DefaultCastAs(type);
+		D_ASSERT(default_value.string_type_value);
+		return Value(default_value.string_type_value->value).DefaultCastAs(type);
 	}
 	case LogicalTypeId::BLOB: {
-		D_ASSERT(default_value.has_binary_type_value);
-		return Value::BLOB(AddEscapesToBlob(default_value.binary_type_value.value));
+		D_ASSERT(default_value.binary_type_value);
+		return Value::BLOB(AddEscapesToBlob(default_value.binary_type_value->value));
 	}
 	default:
 		throw NotImplementedException("ParseDefaultForType not implemented for type: %s", type.ToString());
@@ -154,23 +154,19 @@ LogicalType IcebergColumnDefinition::ParsePrimitiveTypeString(const string &type
 
 static rest_api_objects::StructField
 CreateStructField(const string &name, int32_t field_id, bool required, const rest_api_objects::Type &iceberg_type,
-                  const string &doc, optional_ptr<const rest_api_objects::PrimitiveTypeValue> initial_default = nullptr,
-                  optional_ptr<const rest_api_objects::PrimitiveTypeValue> write_default = nullptr) {
+                  const optional<string> &doc = std::nullopt,
+                  const optional<rest_api_objects::PrimitiveTypeValue> &initial_default = std::nullopt,
+                  const optional<rest_api_objects::PrimitiveTypeValue> &write_default = std::nullopt) {
 	rest_api_objects::StructField result;
 	result.id = field_id;
 	result.name = name;
 	result.type = make_uniq<rest_api_objects::Type>(iceberg_type.Copy());
 	result.required = required;
-	if (!doc.empty()) {
-		result.has_doc = true;
-		result.doc = doc;
-	}
+	result._doc = doc;
 	if (initial_default) {
-		result.has_initial_default = true;
 		result.initial_default = initial_default->Copy();
 	}
 	if (write_default) {
-		result.has_write_default = true;
 		result.write_default = write_default->Copy();
 	}
 	return result;
@@ -184,10 +180,10 @@ IcebergColumnDefinition::ParseStructField(const rest_api_objects::StructField &f
 	res->name = field.name;
 
 	auto &type = *field.type;
-	if (type.has_primitive_type) {
-		res->type = ParsePrimitiveType(type.primitive_type);
-	} else if (type.has_struct_type) {
-		auto &struct_type = type.struct_type;
+	if (type.primitive_type) {
+		res->type = ParsePrimitiveType(*type.primitive_type);
+	} else if (type.struct_type) {
+		auto &struct_type = *type.struct_type;
 		child_list_t<LogicalType> struct_children;
 		for (auto &field_p : struct_type.fields) {
 			auto &child_field = *field_p;
@@ -196,18 +192,17 @@ IcebergColumnDefinition::ParseStructField(const rest_api_objects::StructField &f
 			res->AddChild(std::move(child));
 		}
 		res->type = LogicalType::STRUCT(std::move(struct_children));
-	} else if (type.has_list_type) {
-		auto &list_type = type.list_type;
-		auto child_field = CreateStructField("element", list_type.element_id, list_type.element_required,
-		                                     *list_type.element, "", nullptr, nullptr);
+	} else if (type.list_type) {
+		auto &list_type = *type.list_type;
+		auto child_field =
+		    CreateStructField("element", list_type.element_id, list_type.element_required, *list_type.element);
 		auto child = ParseStructField(child_field);
 		res->type = LogicalType::LIST(child->type);
 		res->AddChild(std::move(child));
-	} else if (type.has_map_type) {
-		auto &map_type = type.map_type;
-		auto key_field = CreateStructField("key", map_type.key_id, true, *map_type.key, "", nullptr);
-		auto value_field = CreateStructField("value", map_type.value_id, map_type.value_required, *map_type.value, "",
-		                                     nullptr, nullptr);
+	} else if (type.map_type) {
+		auto &map_type = *type.map_type;
+		auto key_field = CreateStructField("key", map_type.key_id, true, *map_type.key);
+		auto value_field = CreateStructField("value", map_type.value_id, map_type.value_required, *map_type.value);
 
 		auto key = ParseStructField(key_field);
 		auto value = ParseStructField(value_field);
@@ -218,11 +213,11 @@ IcebergColumnDefinition::ParseStructField(const rest_api_objects::StructField &f
 		throw InvalidConfigurationException("Encountered an invalid type in JSON schema");
 	}
 
-	if (field.has_initial_default) {
-		res->initial_default = make_uniq<Value>(ParseDefaultForType(res->type, field.initial_default));
+	if (field.initial_default) {
+		res->initial_default = make_uniq<Value>(ParseDefaultForType(res->type, *field.initial_default));
 	}
-	if (field.has_write_default) {
-		res->write_default = make_uniq<Value>(ParseDefaultForType(res->type, field.write_default));
+	if (field.write_default) {
+		res->write_default = make_uniq<Value>(ParseDefaultForType(res->type, *field.write_default));
 	}
 
 	return res;

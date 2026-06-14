@@ -28,12 +28,13 @@ RegisterTableRequest RegisterTableRequest::Copy() const {
 	RegisterTableRequest res;
 	res.name = name;
 	res.metadata_location = metadata_location;
-	if (has_overwrite) {
-		res.overwrite = overwrite;
+	if (overwrite.has_value()) {
+		res.overwrite.emplace();
+		(*res.overwrite) = (*overwrite);
 	}
-	res.has_overwrite = has_overwrite;
 	return res;
 }
+
 string RegisterTableRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto name_val = yyjson_obj_get(obj, "name");
@@ -61,17 +62,42 @@ string RegisterTableRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto overwrite_val = yyjson_obj_get(obj, "overwrite");
-	if (overwrite_val && !yyjson_is_null(overwrite_val)) {
-		has_overwrite = true;
+	if (overwrite_val) {
+		bool overwrite_tmp;
 		if (yyjson_is_bool(overwrite_val)) {
-			overwrite = yyjson_get_bool(overwrite_val);
+			overwrite_tmp = yyjson_get_bool(overwrite_val);
 		} else {
 			return StringUtil::Format(
-			    "RegisterTableRequest property 'overwrite' is not of type 'boolean', found '%s' instead",
+			    "RegisterTableRequest property 'overwrite_tmp' is not of type 'boolean', found '%s' instead",
 			    yyjson_get_type_desc(overwrite_val));
 		}
+		overwrite = std::move(overwrite_tmp);
 	}
-	return string();
+	return "";
+}
+
+void RegisterTableRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: name
+	yyjson_mut_obj_add_strcpy(doc, obj, "name", name.c_str());
+
+	// Serialize: metadata-location
+	yyjson_mut_obj_add_strcpy(doc, obj, "metadata-location", metadata_location.c_str());
+
+	// Serialize: overwrite
+	if (overwrite.has_value()) {
+		auto &overwrite_value = *overwrite;
+		yyjson_mut_obj_add_bool(doc, obj, "overwrite", overwrite_value);
+	}
+}
+
+yyjson_mut_val *RegisterTableRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects
