@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -36,20 +37,13 @@ public:
 
 public:
 	ContentFile content_file;
-	int64_t first_row_id;
-	bool has_first_row_id = false;
-	CountMap column_sizes;
-	bool has_column_sizes = false;
-	CountMap value_counts;
-	bool has_value_counts = false;
-	CountMap null_value_counts;
-	bool has_null_value_counts = false;
-	CountMap nan_value_counts;
-	bool has_nan_value_counts = false;
-	ValueMap lower_bounds;
-	bool has_lower_bounds = false;
-	ValueMap upper_bounds;
-	bool has_upper_bounds = false;
+	optional<int64_t> first_row_id;
+	optional<CountMap> column_sizes;
+	optional<CountMap> value_counts;
+	optional<CountMap> null_value_counts;
+	optional<CountMap> nan_value_counts;
+	optional<ValueMap> lower_bounds;
+	optional<ValueMap> upper_bounds;
 };
 
 } // namespace rest_api_objects

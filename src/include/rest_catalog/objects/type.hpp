@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -35,14 +36,10 @@ public:
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
-	PrimitiveType primitive_type;
-	bool has_primitive_type = false;
-	StructType struct_type;
-	bool has_struct_type = false;
-	ListType list_type;
-	bool has_list_type = false;
-	MapType map_type;
-	bool has_map_type = false;
+	optional<PrimitiveType> primitive_type;
+	optional<StructType> struct_type;
+	optional<ListType> list_type;
+	optional<MapType> map_type;
 };
 
 } // namespace rest_api_objects

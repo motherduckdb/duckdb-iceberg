@@ -29,10 +29,10 @@ PartitionField PartitionField::Copy() const {
 	res.source_id = source_id;
 	res.transform = transform.Copy();
 	res.name = name;
-	if (has_field_id) {
-		res.field_id = field_id;
+	if (field_id.has_value()) {
+		res.field_id.emplace();
+		(*res.field_id) = (*field_id);
 	}
-	res.has_field_id = has_field_id;
 	return res;
 }
 
@@ -71,14 +71,16 @@ string PartitionField::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto field_id_val = yyjson_obj_get(obj, "field-id");
-	if (field_id_val && !yyjson_is_null(field_id_val)) {
-		has_field_id = true;
+	if (field_id_val) {
+		int32_t field_id_tmp;
 		if (yyjson_is_int(field_id_val)) {
-			field_id = yyjson_get_int(field_id_val);
+			field_id_tmp = yyjson_get_int(field_id_val);
 		} else {
-			return StringUtil::Format("PartitionField property 'field_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(field_id_val));
+			return StringUtil::Format(
+			    "PartitionField property 'field_id_tmp' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(field_id_val));
 		}
+		field_id = std::move(field_id_tmp);
 	}
 	return "";
 }
@@ -99,8 +101,9 @@ void PartitionField::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) cons
 	yyjson_mut_obj_add_str(doc, obj, "name", name.c_str());
 
 	// Serialize: field-id
-	if (has_field_id) {
-		yyjson_mut_obj_add_int(doc, obj, "field-id", field_id);
+	if (field_id.has_value()) {
+		auto &field_id_value = *field_id;
+		yyjson_mut_obj_add_int(doc, obj, "field-id", field_id_value);
 	}
 }
 

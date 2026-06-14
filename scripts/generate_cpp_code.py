@@ -62,6 +62,7 @@ HEADER_FORMAT = """
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -173,6 +174,7 @@ class OptionalProperty:
     body: List[str]
     schema: Property  # Store the property schema for serialization
     nullable: bool
+    uses_optional_wrapper: bool
 
 
 @dataclass
@@ -194,6 +196,7 @@ class CPPMember:
     schema: Optional[Property]
     initializer: Optional[str] = None
     copy_guard: Optional[str] = None
+    uses_optional_wrapper: bool = False
 
 
 @dataclass
@@ -248,6 +251,7 @@ class CPPClass:
         schema: Optional[Property],
         initializer: Optional[str] = None,
         copy_guard: Optional[str] = None,
+        uses_optional_wrapper: bool = False,
     ) -> None:
         initializer_text = f' = {initializer}' if initializer is not None else ''
         self.variables.append(f'\t{variable_type} {variable_name}{initializer_text};')
@@ -258,6 +262,7 @@ class CPPClass:
                 schema=schema,
                 initializer=initializer,
                 copy_guard=copy_guard,
+                uses_optional_wrapper=uses_optional_wrapper,
             )
         )
 
@@ -367,18 +372,24 @@ class CPPClass:
 
     def write_optional_property(self, optional_property: OptionalProperty) -> List[str]:
         res = []
-        if optional_property.nullable:
-            optionally_null = ''
-        else:
-            optionally_null = f' && !yyjson_is_null({optional_property.variable_name}_val)'
         res.extend(
             [
                 f'auto {optional_property.variable_name}_val = yyjson_obj_get(obj, "{optional_property.property_name}");',
-                f'if ({optional_property.variable_name}_val{optionally_null}) {{',
-                f'\thas_{optional_property.variable_name} = true;',
+                f'if ({optional_property.variable_name}_val) {{',
             ]
         )
-        res.extend([f'\t{x}' for x in optional_property.body])
+        if optional_property.nullable:
+            res.extend(
+                [
+                    f'\tif (yyjson_is_null({optional_property.variable_name}_val)) {{',
+                    '\t\t//! do nothing, property is explicitly nullable',
+                    '\t} else {',
+                ]
+            )
+            res.extend([f'\t\t{x}' for x in optional_property.body])
+            res.append('\t}')
+        else:
+            res.extend([f'\t{x}' for x in optional_property.body])
         res.append('}')
         return res
 
@@ -429,14 +440,18 @@ class CPPClass:
         res = []
         res.append('do {')
         for item in self.one_of:
-            if item.dereference_style == '->':
+            is_recursive = item.class_name in self.parse_info.recursive_schemas
+            if is_recursive:
                 res.append(f'{item.name} = make_uniq<{item.class_name}>();')
+            else:
+                res.append(f'{item.name}.emplace();')
             res.extend(
                 [
-                    f'error = {item.name}{item.dereference_style}TryFromJSON(obj);',
+                    f'error = {item.name}->TryFromJSON(obj);',
                     'if (error.empty()) {',
-                    f'\thas_{item.name} = true;',
                     '\tbreak;',
+                    '} else {',
+                    f'\t{item.name} = {"nullptr" if is_recursive else "nullopt"};',
                     '}',
                 ]
             )
@@ -449,17 +464,26 @@ class CPPClass:
             return []
         res = []
 
-        all_options = sorted([f'!has_{item.name}' for item in self.any_of])
+        all_options = sorted(
+            [
+                f'!({self.presence_condition(item.name, item.class_name not in self.parse_info.recursive_schemas)})'
+                for item in self.any_of
+            ]
+        )
         condition = ' && '.join(all_options)
 
         for item in self.any_of:
-            if item.dereference_style == '->':
+            is_recursive = item.class_name in self.parse_info.recursive_schemas
+            if is_recursive:
                 res.append(f'{item.name} = make_uniq<{item.class_name}>();')
+            else:
+                res.append(f'{item.name}.emplace();')
             res.extend(
                 [
-                    f'error = {item.name}{item.dereference_style}TryFromJSON(obj);',
+                    f'error = {item.name}->TryFromJSON(obj);',
                     'if (error.empty()) {',
-                    f'\thas_{item.name} = true;',
+                    '} else {',
+                    f'\t{item.name} = {"nullptr" if is_recursive else "nullopt"};',
                     '}',
                 ]
             )
@@ -556,6 +580,41 @@ class CPPClass:
         print(f"Unhandled direct copy expression type for '{source}': {schema.type}")
         exit(1)
 
+    def uses_pointer_storage(self, schema: Property) -> bool:
+        return (
+            schema.type == Property.Type.SCHEMA_REFERENCE
+            and cast(SchemaReferenceProperty, schema).ref in self.parse_info.recursive_schemas
+        )
+
+    def uses_optional_wrapper(self, schema: Property) -> bool:
+        return not self.uses_pointer_storage(schema)
+
+    def presence_condition(self, variable_name: str, uses_optional_wrapper: bool) -> str:
+        if uses_optional_wrapper:
+            return f'{variable_name}.has_value()'
+        return f'{variable_name} != nullptr'
+
+    def optional_member_type(self, schema: Property) -> str:
+        variable_type = self.generate_variable_type(schema)
+        if self.uses_optional_wrapper(schema):
+            return f'optional<{variable_type}>'
+        return variable_type
+
+    def value_access_expression(self, variable_name: str, uses_optional_wrapper: bool) -> str:
+        if uses_optional_wrapper:
+            return f'(*{variable_name})'
+        return variable_name
+
+    def generate_optional_assignment(self, schema: Property, target: str, source: str) -> List[str]:
+        if self.uses_optional_wrapper(schema):
+            tmp_name = f'{target}_tmp'
+            variable_type = self.generate_variable_type(schema)
+            res = [f'{variable_type} {tmp_name};']
+            res.extend(self.generate_assignment(schema, tmp_name, source, True, handle_nullable=False))
+            res.append(f'{target} = std::move({tmp_name});')
+            return res
+        return self.generate_assignment(schema, target, source, True, handle_nullable=False)
+
     def write_copy_assignment_lines(self, target: str, source: str, schema: Optional[Property]) -> List[str]:
         if schema is None:
             return [f'{target} = {source};']
@@ -587,7 +646,19 @@ class CPPClass:
             f'\t{self.name} res;',
         ]
         for member in self.members:
-            lines = self.write_copy_assignment_lines(f'res.{member.variable_name}', member.variable_name, member.schema)
+            target = f'res.{member.variable_name}'
+            source = member.variable_name
+            if member.uses_optional_wrapper:
+                lines = [f'{target}.emplace();']
+                lines.extend(
+                    self.write_copy_assignment_lines(
+                        self.value_access_expression(target, True),
+                        self.value_access_expression(source, True),
+                        member.schema,
+                    )
+                )
+            else:
+                lines = self.write_copy_assignment_lines(target, source, member.schema)
             if member.copy_guard is not None:
                 lines = [f'if ({member.copy_guard}) {{'] + [f'\t{x}' for x in lines] + ['}']
             res.extend([f'\t{x}' for x in lines])
@@ -713,10 +784,16 @@ class CPPClass:
             class_name = item.ref
             property_name = to_snake_case(class_name)
             dereference_style = '->' if item.ref in self.parse_info.recursive_schemas else '.'
+            uses_optional_wrapper = item.ref not in self.parse_info.recursive_schemas
 
             self.any_of.append(AnyOf(name=property_name, dereference_style=dereference_style, class_name=class_name))
-            self.add_member(property_name, self.generate_variable_type(item), item, copy_guard=f'has_{property_name}')
-            self.add_member(f'has_{property_name}', 'bool', None, 'false')
+            self.add_member(
+                property_name,
+                self.optional_member_type(item),
+                item,
+                copy_guard=self.presence_condition(property_name, uses_optional_wrapper),
+                uses_optional_wrapper=uses_optional_wrapper,
+            )
 
     def generate_one_of(self, property: Property):
         if not property.one_of:
@@ -728,12 +805,20 @@ class CPPClass:
             class_name = item.ref
             property_name = to_snake_case(class_name)
             dereference_style = '->' if item.ref in self.parse_info.recursive_schemas else '.'
+            uses_optional_wrapper = item.ref not in self.parse_info.recursive_schemas
 
             self.one_of.append(OneOf(name=property_name, dereference_style=dereference_style, class_name=class_name))
-            self.add_member(property_name, self.generate_variable_type(item), item, copy_guard=f'has_{property_name}')
-            self.add_member(f'has_{property_name}', 'bool', None, 'false')
+            self.add_member(
+                property_name,
+                self.optional_member_type(item),
+                item,
+                copy_guard=self.presence_condition(property_name, uses_optional_wrapper),
+                uses_optional_wrapper=uses_optional_wrapper,
+            )
 
-    def generate_array_loop(self, array_name, destination_name, array_property: ArrayProperty) -> List[str]:
+    def generate_array_loop(
+        self, array_name, destination_name, array_property: ArrayProperty, handle_nullable: bool = True
+    ) -> List[str]:
         item_type = array_property.item_type
         body = []
         body.append('size_t idx, max;')
@@ -759,7 +844,7 @@ class CPPClass:
 
         res = []
         prefix = ''
-        if array_property.nullable is not None:
+        if handle_nullable and array_property.nullable is not None:
             prefix = '} else '
             if array_property.nullable == True:
                 res.extend(
@@ -785,10 +870,12 @@ class CPPClass:
 
         return res
 
-    def generate_item_parse(self, property: Property, source: str, target: str, is_required: bool) -> List[str]:
+    def generate_item_parse(
+        self, property: Property, source: str, target: str, is_required: bool, handle_nullable: bool = True
+    ) -> List[str]:
         res = []
         prefix = ''
-        if property.nullable is not None:
+        if handle_nullable and property.nullable is not None:
             prefix = '} else '
             if property.nullable == True:
                 res.extend(
@@ -797,8 +884,6 @@ class CPPClass:
                         '\t//! do nothing, property is explicitly nullable',
                     ]
                 )
-                if not is_required:
-                    res.extend([f'\thas_{target} = false;'])
             else:
                 res.extend(
                     [
@@ -918,10 +1003,12 @@ class CPPClass:
             exit(1)
         return res
 
-    def generate_assignment(self, schema: Property, target: str, source: str, is_required: bool) -> List[str]:
+    def generate_assignment(
+        self, schema: Property, target: str, source: str, is_required: bool, handle_nullable: bool = True
+    ) -> List[str]:
         if schema.type == Property.Type.ARRAY:
             array_property = cast(ArrayProperty, schema)
-            return self.generate_array_loop(source, target, array_property)
+            return self.generate_array_loop(source, target, array_property, handle_nullable=handle_nullable)
         elif schema.type == Property.Type.SCHEMA_REFERENCE:
             schema_property = cast(SchemaReferenceProperty, schema)
             self.referenced_schemas.add(schema_property.ref)
@@ -940,7 +1027,7 @@ class CPPClass:
             )
             return result
         else:
-            return self.generate_item_parse(schema, source, target, is_required)
+            return self.generate_item_parse(schema, source, target, is_required, handle_nullable=handle_nullable)
 
     def generate_optional_properties(self, name: str, properties: Dict[str, Property]):
         if not properties:
@@ -948,17 +1035,24 @@ class CPPClass:
         res = []
         for item, optional_property in properties.items():
             variable_name = safe_cpp_name(item)
-            body = self.generate_assignment(optional_property, variable_name, f'{variable_name}_val', False)
+            uses_optional_wrapper = self.uses_optional_wrapper(optional_property)
+            body = self.generate_optional_assignment(optional_property, variable_name, f'{variable_name}_val')
             self.optional_properties[item] = OptionalProperty(
                 property_name=item,
                 variable_name=variable_name,
                 body=body,
                 schema=optional_property,
                 nullable=optional_property.nullable,
+                uses_optional_wrapper=uses_optional_wrapper,
             )
-            variable_type = self.generate_variable_type(optional_property)
-            self.add_member(variable_name, variable_type, optional_property, copy_guard=f'has_{variable_name}')
-            self.add_member(f'has_{variable_name}', 'bool', None, 'false')
+            variable_type = self.optional_member_type(optional_property)
+            self.add_member(
+                variable_name,
+                variable_type,
+                optional_property,
+                copy_guard=self.presence_condition(variable_name, uses_optional_wrapper),
+                uses_optional_wrapper=uses_optional_wrapper,
+            )
 
     def generate_required_properties(self, name: str, properties: Dict[str, Property]):
         if not properties:
@@ -1109,6 +1203,12 @@ class CPPClass:
             self.parse_info.parsed_schemas[class_name]
         )
 
+    def variant_uses_optional_wrapper(self, class_name: str) -> bool:
+        return class_name not in self.parse_info.recursive_schemas
+
+    def variant_presence_condition(self, variant_name: str, class_name: str) -> str:
+        return self.presence_condition(variant_name, self.variant_uses_optional_wrapper(class_name))
+
     def _generate_json_object_merge(self, source_expr: str, temp_name: str, indent: int = 1) -> List[str]:
         prefix = '\t' * indent
         return [
@@ -1137,17 +1237,14 @@ class CPPClass:
         if self.one_of:
             for i, variant in enumerate(self.one_of):
                 if i == 0:
-                    lines.append(f"\tif (has_{variant.name}) {{")
+                    lines.append(f"\tif ({self.variant_presence_condition(variant.name, variant.class_name)}) {{")
                 else:
-                    lines.append(f"\t}} else if (has_{variant.name}) {{")
+                    lines.append(f"\t}} else if ({self.variant_presence_condition(variant.name, variant.class_name)}) {{")
 
                 if self.class_supports_json_object_population(variant.class_name):
-                    if variant.dereference_style == '->':
-                        lines.append(f"\t\t{variant.name}->PopulateJSON(doc, obj);")
-                    else:
-                        lines.append(f"\t\t{variant.name}.PopulateJSON(doc, obj);")
+                    lines.append(f"\t\t{variant.name}->PopulateJSON(doc, obj);")
                 else:
-                    accessor = f"{variant.name}{variant.dereference_style}ToJSON(doc)"
+                    accessor = f"{variant.name}->ToJSON(doc)"
                     lines.extend(self._generate_json_object_merge(accessor, f"{variant.name}_obj", indent=2))
 
             lines.extend([
@@ -1166,17 +1263,14 @@ class CPPClass:
         if self.any_of and not any_of_has_properties:
             for i, variant in enumerate(self.any_of):
                 if i == 0:
-                    lines.append(f"\tif (has_{variant.name}) {{")
+                    lines.append(f"\tif ({self.variant_presence_condition(variant.name, variant.class_name)}) {{")
                 else:
-                    lines.append(f"\t}} else if (has_{variant.name}) {{")
+                    lines.append(f"\t}} else if ({self.variant_presence_condition(variant.name, variant.class_name)}) {{")
 
                 if self.class_supports_json_object_population(variant.class_name):
-                    if variant.dereference_style == '->':
-                        lines.append(f"\t\t{variant.name}->PopulateJSON(doc, obj);")
-                    else:
-                        lines.append(f"\t\t{variant.name}.PopulateJSON(doc, obj);")
+                    lines.append(f"\t\t{variant.name}->PopulateJSON(doc, obj);")
                 else:
-                    accessor = f"{variant.name}{variant.dereference_style}ToJSON(doc)"
+                    accessor = f"{variant.name}->ToJSON(doc)"
                     lines.extend(self._generate_json_object_merge(accessor, f"{variant.name}_obj", indent=2))
 
             lines.extend([
@@ -1188,17 +1282,14 @@ class CPPClass:
         if self.any_of:
             for i, variant in enumerate(self.any_of):
                 if i == 0:
-                    lines.append(f"\tif (has_{variant.name}) {{")
+                    lines.append(f"\tif ({self.variant_presence_condition(variant.name, variant.class_name)}) {{")
                 else:
-                    lines.append(f"\t}} else if (has_{variant.name}) {{")
+                    lines.append(f"\t}} else if ({self.variant_presence_condition(variant.name, variant.class_name)}) {{")
 
                 if self.class_supports_json_object_population(variant.class_name):
-                    if variant.dereference_style == '->':
-                        lines.append(f"\t\t{variant.name}->PopulateJSON(doc, obj);")
-                    else:
-                        lines.append(f"\t\t{variant.name}.PopulateJSON(doc, obj);")
+                    lines.append(f"\t\t{variant.name}->PopulateJSON(doc, obj);")
                 else:
-                    accessor = f"{variant.name}{variant.dereference_style}ToJSON(doc)"
+                    accessor = f"{variant.name}->ToJSON(doc)"
                     lines.extend(self._generate_json_object_merge(accessor, f"{variant.name}_obj", indent=2))
 
             lines.append("\t}")
@@ -1330,14 +1421,11 @@ class CPPClass:
         if self.one_of:
             for i, variant in enumerate(self.one_of):
                 if i == 0:
-                    lines.append(f"\tif (has_{variant.name}) {{")
+                    lines.append(f"\tif ({self.variant_presence_condition(variant.name, variant.class_name)}) {{")
                 else:
-                    lines.append(f"\t}} else if (has_{variant.name}) {{")
+                    lines.append(f"\t}} else if ({self.variant_presence_condition(variant.name, variant.class_name)}) {{")
 
-                if variant.dereference_style == '->':
-                    lines.append(f"\t\treturn {variant.name}->ToJSON(doc);")
-                else:
-                    lines.append(f"\t\treturn {variant.name}.ToJSON(doc);")
+                lines.append(f"\t\treturn {variant.name}->ToJSON(doc);")
 
             lines.extend([
                 "\t}",
@@ -1372,14 +1460,11 @@ class CPPClass:
         if self.any_of and not any_of_has_properties:
             for i, variant in enumerate(serialization_any_of):
                 if i == 0:
-                    lines.append(f"\tif (has_{variant.name}) {{")
+                    lines.append(f"\tif ({self.variant_presence_condition(variant.name, variant.class_name)}) {{")
                 else:
-                    lines.append(f"\t}} else if (has_{variant.name}) {{")
+                    lines.append(f"\t}} else if ({self.variant_presence_condition(variant.name, variant.class_name)}) {{")
 
-                if variant.dereference_style == '->':
-                    lines.append(f"\t\treturn {variant.name}->ToJSON(doc);")
-                else:
-                    lines.append(f"\t\treturn {variant.name}.ToJSON(doc);")
+                lines.append(f"\t\treturn {variant.name}->ToJSON(doc);")
 
             lines.extend([
                 "\t}",
@@ -1412,10 +1497,14 @@ class CPPClass:
         lines.append(f"\t// Serialize: {json_name}")
         
         if not required:
-            # Wrap optional properties in has_XXX check
-            lines.append(f"\tif (has_{var_name}) {{")
+            uses_optional_wrapper = self.uses_optional_wrapper(property_schema)
+            lines.append(f"\tif ({self.presence_condition(var_name, uses_optional_wrapper)}) {{")
+            serialization_var_name = var_name
+            if uses_optional_wrapper:
+                serialization_var_name = f"{var_name}_value"
+                lines.append(f"\t\tauto &{serialization_var_name} = *{var_name};")
             inner_lines = self._serialize_value(
-                var_name, json_name, property_schema, indent=2
+                serialization_var_name, json_name, property_schema, indent=2
             )
             lines.extend(inner_lines)
             lines.append("\t}")

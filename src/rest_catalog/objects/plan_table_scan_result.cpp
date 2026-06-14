@@ -26,47 +26,55 @@ PlanTableScanResult PlanTableScanResult::FromJSON(yyjson_val *obj) {
 
 PlanTableScanResult PlanTableScanResult::Copy() const {
 	PlanTableScanResult res;
-	if (has_completed_planning_with_idresult) {
-		res.completed_planning_with_idresult = completed_planning_with_idresult.Copy();
+	if (completed_planning_with_idresult.has_value()) {
+		res.completed_planning_with_idresult.emplace();
+		(*res.completed_planning_with_idresult) = (*completed_planning_with_idresult).Copy();
 	}
-	res.has_completed_planning_with_idresult = has_completed_planning_with_idresult;
-	if (has_failed_planning_result) {
-		res.failed_planning_result = failed_planning_result.Copy();
+	if (failed_planning_result.has_value()) {
+		res.failed_planning_result.emplace();
+		(*res.failed_planning_result) = (*failed_planning_result).Copy();
 	}
-	res.has_failed_planning_result = has_failed_planning_result;
-	if (has_async_planning_result) {
-		res.async_planning_result = async_planning_result.Copy();
+	if (async_planning_result.has_value()) {
+		res.async_planning_result.emplace();
+		(*res.async_planning_result) = (*async_planning_result).Copy();
 	}
-	res.has_async_planning_result = has_async_planning_result;
-	if (has_empty_planning_result) {
-		res.empty_planning_result = empty_planning_result.Copy();
+	if (empty_planning_result.has_value()) {
+		res.empty_planning_result.emplace();
+		(*res.empty_planning_result) = (*empty_planning_result).Copy();
 	}
-	res.has_empty_planning_result = has_empty_planning_result;
 	return res;
 }
 
 string PlanTableScanResult::TryFromJSON(yyjson_val *obj) {
 	string error;
 	do {
-		error = completed_planning_with_idresult.TryFromJSON(obj);
+		completed_planning_with_idresult.emplace();
+		error = completed_planning_with_idresult->TryFromJSON(obj);
 		if (error.empty()) {
-			has_completed_planning_with_idresult = true;
 			break;
+		} else {
+			completed_planning_with_idresult = nullopt;
 		}
-		error = failed_planning_result.TryFromJSON(obj);
+		failed_planning_result.emplace();
+		error = failed_planning_result->TryFromJSON(obj);
 		if (error.empty()) {
-			has_failed_planning_result = true;
 			break;
+		} else {
+			failed_planning_result = nullopt;
 		}
-		error = async_planning_result.TryFromJSON(obj);
+		async_planning_result.emplace();
+		error = async_planning_result->TryFromJSON(obj);
 		if (error.empty()) {
-			has_async_planning_result = true;
 			break;
+		} else {
+			async_planning_result = nullopt;
 		}
-		error = empty_planning_result.TryFromJSON(obj);
+		empty_planning_result.emplace();
+		error = empty_planning_result->TryFromJSON(obj);
 		if (error.empty()) {
-			has_empty_planning_result = true;
 			break;
+		} else {
+			empty_planning_result = nullopt;
 		}
 		return "PlanTableScanResult failed to parse, none of the oneOf candidates matched";
 	} while (false);
@@ -78,14 +86,14 @@ void PlanTableScanResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj)
 		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
 
-	if (has_completed_planning_with_idresult) {
-		completed_planning_with_idresult.PopulateJSON(doc, obj);
-	} else if (has_failed_planning_result) {
-		failed_planning_result.PopulateJSON(doc, obj);
-	} else if (has_async_planning_result) {
-		async_planning_result.PopulateJSON(doc, obj);
-	} else if (has_empty_planning_result) {
-		empty_planning_result.PopulateJSON(doc, obj);
+	if (completed_planning_with_idresult.has_value()) {
+		completed_planning_with_idresult->PopulateJSON(doc, obj);
+	} else if (failed_planning_result.has_value()) {
+		failed_planning_result->PopulateJSON(doc, obj);
+	} else if (async_planning_result.has_value()) {
+		async_planning_result->PopulateJSON(doc, obj);
+	} else if (empty_planning_result.has_value()) {
+		empty_planning_result->PopulateJSON(doc, obj);
 	}
 }
 

@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -40,22 +41,14 @@ public:
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
-	AssertCreate assert_create;
-	bool has_assert_create = false;
-	AssertTableUUID assert_table_uuid;
-	bool has_assert_table_uuid = false;
-	AssertRefSnapshotId assert_ref_snapshot_id;
-	bool has_assert_ref_snapshot_id = false;
-	AssertLastAssignedFieldId assert_last_assigned_field_id;
-	bool has_assert_last_assigned_field_id = false;
-	AssertCurrentSchemaId assert_current_schema_id;
-	bool has_assert_current_schema_id = false;
-	AssertLastAssignedPartitionId assert_last_assigned_partition_id;
-	bool has_assert_last_assigned_partition_id = false;
-	AssertDefaultSpecId assert_default_spec_id;
-	bool has_assert_default_spec_id = false;
-	AssertDefaultSortOrderId assert_default_sort_order_id;
-	bool has_assert_default_sort_order_id = false;
+	optional<AssertCreate> assert_create;
+	optional<AssertTableUUID> assert_table_uuid;
+	optional<AssertRefSnapshotId> assert_ref_snapshot_id;
+	optional<AssertLastAssignedFieldId> assert_last_assigned_field_id;
+	optional<AssertCurrentSchemaId> assert_current_schema_id;
+	optional<AssertLastAssignedPartitionId> assert_last_assigned_partition_id;
+	optional<AssertDefaultSpecId> assert_default_spec_id;
+	optional<AssertDefaultSortOrderId> assert_default_sort_order_id;
 };
 
 } // namespace rest_api_objects

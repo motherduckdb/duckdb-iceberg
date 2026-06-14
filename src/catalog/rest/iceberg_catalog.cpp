@@ -387,19 +387,19 @@ void IcebergCatalog::GetConfig(ClientContext &context, IcebergEndpointType &endp
 		prefix_is_one_component = true;
 	}
 
-	if (catalog_config.has_endpoints) {
-		for (auto &endpoint : catalog_config.endpoints) {
+	if (auto &endpoints = catalog_config.endpoints) {
+		for (auto &endpoint : *endpoints) {
 			supported_urls.insert(endpoint);
 		}
 	}
 	// should be if s3tables
-	if (!catalog_config.has_endpoints && endpoint_type == IcebergEndpointType::AWS_S3TABLES) {
+	if (!catalog_config.endpoints && endpoint_type == IcebergEndpointType::AWS_S3TABLES) {
 		supported_urls.clear();
 		AddS3TablesEndpoints();
-	} else if (!catalog_config.has_endpoints && endpoint_type == IcebergEndpointType::AWS_GLUE) {
+	} else if (!catalog_config.endpoints && endpoint_type == IcebergEndpointType::AWS_GLUE) {
 		supported_urls.clear();
 		AddGlueEndpoints();
-	} else if (!catalog_config.has_endpoints) {
+	} else if (!catalog_config.endpoints) {
 		AddDefaultSupportedEndpoints();
 	}
 

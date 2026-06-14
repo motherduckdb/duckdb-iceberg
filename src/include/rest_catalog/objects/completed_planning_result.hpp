@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -43,8 +44,7 @@ public:
 
 	public:
 		PlanStatus status;
-		vector<StorageCredential> storage_credentials;
-		bool has_storage_credentials = false;
+		optional<vector<StorageCredential>> storage_credentials;
 	};
 
 public:

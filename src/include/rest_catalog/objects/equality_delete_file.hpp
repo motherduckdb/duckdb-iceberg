@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -34,8 +35,7 @@ public:
 
 public:
 	ContentFile content_file;
-	vector<int32_t> equality_ids;
-	bool has_equality_ids = false;
+	optional<vector<int32_t>> equality_ids;
 };
 
 } // namespace rest_api_objects

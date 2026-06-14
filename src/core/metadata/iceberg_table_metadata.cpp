@@ -367,90 +367,107 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_obje
 	IcebergTableMetadata res;
 
 	res.table_uuid = table_metadata.table_uuid;
-	res.location = table_metadata.location;
+	D_ASSERT(table_metadata.location);
+	res.location = *table_metadata.location;
 	res.iceberg_version = table_metadata.format_version;
-	res.last_updated_ms = timestamp_t(table_metadata.last_updated_ms);
-	for (auto &schema : table_metadata.schemas) {
-		res.schemas.emplace(schema.object_1.schema_id, IcebergTableSchema::ParseSchema(schema));
+	D_ASSERT(table_metadata.last_updated_ms);
+	res.last_updated_ms = timestamp_t(*table_metadata.last_updated_ms);
+	if (table_metadata.schemas) {
+		for (auto &schema : *table_metadata.schemas) {
+			D_ASSERT(schema.object_1.schema_id);
+			res.schemas.emplace(*schema.object_1.schema_id, IcebergTableSchema::ParseSchema(schema));
+		}
 	}
-	for (auto &snapshot : table_metadata.snapshots) {
-		res.snapshots.emplace(snapshot.snapshot_id, IcebergSnapshot::ParseSnapshot(snapshot, res));
+	if (table_metadata.snapshots) {
+		for (auto &snapshot : *table_metadata.snapshots) {
+			res.snapshots.emplace(snapshot.snapshot_id, IcebergSnapshot::ParseSnapshot(snapshot, res));
+		}
 	}
-	if (table_metadata.has_snapshot_log) {
-		res.snapshot_log.reserve(table_metadata.snapshot_log.value.size());
-		for (auto &entry : table_metadata.snapshot_log.value) {
+	if (table_metadata.snapshot_log) {
+		res.snapshot_log.reserve(table_metadata.snapshot_log->value.size());
+		for (auto &entry : table_metadata.snapshot_log->value) {
 			res.snapshot_log.emplace_back(entry.snapshot_id, entry.timestamp_ms);
 		}
 		std::sort(res.snapshot_log.begin(), res.snapshot_log.end(),
 		          [](const pair<int64_t, int64_t> &a, const pair<int64_t, int64_t> &b) { return a.second < b.second; });
 	}
-	for (auto &spec : table_metadata.partition_specs) {
-		res.partition_specs.emplace(spec.spec_id, IcebergPartitionSpec::ParseFromJson(spec));
+	if (table_metadata.partition_specs) {
+		for (auto &spec : *table_metadata.partition_specs) {
+			D_ASSERT(spec.spec_id);
+			res.partition_specs.emplace(*spec.spec_id, IcebergPartitionSpec::ParseFromJson(spec));
+		}
 	}
-	for (auto &sort_order : table_metadata.sort_orders) {
-		res.sort_specs.emplace(sort_order.order_id, IcebergSortOrder::ParseFromJson(sort_order));
+	if (table_metadata.sort_orders) {
+		for (auto &sort_order : *table_metadata.sort_orders) {
+			res.sort_specs.emplace(sort_order.order_id, IcebergSortOrder::ParseFromJson(sort_order));
+		}
 	}
-	if (!table_metadata.has_current_schema_id) {
+	if (!table_metadata.current_schema_id) {
 		if (res.iceberg_version == 1) {
 			throw NotImplementedException("Reading of the V1 'schema' field is not currently supported");
 		}
 		throw InvalidConfigurationException("'current_schema_id' field is missing from the metadata.json file");
 	}
-	res.current_schema_id = table_metadata.current_schema_id;
-	if (table_metadata.has_next_row_id) {
+	res.current_schema_id = *table_metadata.current_schema_id;
+	if (table_metadata.next_row_id) {
 		res.has_next_row_id = true;
-		res.next_row_id = table_metadata.next_row_id;
+		res.next_row_id = *table_metadata.next_row_id;
 	}
 
-	if (table_metadata.has_current_snapshot_id && table_metadata.current_snapshot_id != -1) {
+	if (table_metadata.current_snapshot_id && *table_metadata.current_snapshot_id != -1) {
 		res.has_current_snapshot = true;
-		res.current_snapshot_id = table_metadata.current_snapshot_id;
+		res.current_snapshot_id = *table_metadata.current_snapshot_id;
 	} else {
 		res.has_current_snapshot = false;
 	}
 
-	if (table_metadata.has_last_sequence_number) {
-		res.last_sequence_number = table_metadata.last_sequence_number;
+	if (table_metadata.last_sequence_number) {
+		res.last_sequence_number = *table_metadata.last_sequence_number;
 	} else {
 		//! SPEC: Table metadata field last-sequence-number must default to 0
 		res.last_sequence_number = 0;
 	}
 
-	res.default_spec_id = table_metadata.default_spec_id;
-	if (table_metadata.has_default_sort_order_id) {
-		res.default_sort_order_id = table_metadata.default_sort_order_id;
+	D_ASSERT(table_metadata.default_spec_id);
+	res.default_spec_id = *table_metadata.default_spec_id;
+	if (table_metadata.default_sort_order_id) {
+		res.default_sort_order_id = *table_metadata.default_sort_order_id;
 	}
 
-	auto &properties = table_metadata.properties;
-	auto name_mapping = properties.find("schema.name-mapping.default");
-	if (name_mapping != properties.end()) {
-		auto doc = std::unique_ptr<yyjson_doc, YyjsonDocDeleter>(
-		    yyjson_read(name_mapping->second.c_str(), name_mapping->second.size(), 0));
-		if (doc == nullptr) {
-			throw InvalidInputException("Fails to parse iceberg metadata 'schema.name-mapping.default' property");
+	if (table_metadata.properties) {
+		auto &properties = *table_metadata.properties;
+		auto name_mapping = properties.find("schema.name-mapping.default");
+		if (name_mapping != properties.end()) {
+			auto doc = std::unique_ptr<yyjson_doc, YyjsonDocDeleter>(
+			    yyjson_read(name_mapping->second.c_str(), name_mapping->second.size(), 0));
+			if (doc == nullptr) {
+				throw InvalidInputException("Fails to parse iceberg metadata 'schema.name-mapping.default' property");
+			}
+			auto root = yyjson_doc_get_root(doc.get());
+			idx_t mapping_index = 0;
+			res.mappings.emplace_back();
+			mapping_index++;
+			IcebergFieldMapping::ParseFieldMappings(root, res.mappings, mapping_index, 0);
 		}
-		auto root = yyjson_doc_get_root(doc.get());
-		idx_t mapping_index = 0;
-		res.mappings.emplace_back();
-		mapping_index++;
-		IcebergFieldMapping::ParseFieldMappings(root, res.mappings, mapping_index, 0);
+
+		// parse all table properties
+		for (auto &property : properties) {
+			res.table_properties.emplace(property.first, property.second);
+		}
 	}
 
-	// parse all table properties
-	for (auto &property : properties) {
-		res.table_properties.emplace(property.first, property.second);
+	if (table_metadata.last_column_id) {
+		res.last_column_id = *table_metadata.last_column_id;
 	}
 
-	if (table_metadata.has_last_column_id) {
-		res.last_column_id = table_metadata.last_column_id;
+	if (table_metadata.last_partition_id) {
+		res.last_partition_field_id = *table_metadata.last_partition_id;
 	}
 
-	if (table_metadata.has_last_partition_id) {
-		res.last_partition_field_id = table_metadata.last_partition_id;
-	}
-
-	for (auto &item : table_metadata.metadata_log.value) {
-		res.metadata_log.emplace_back(item.metadata_file, item.timestamp_ms);
+	if (table_metadata.metadata_log) {
+		for (auto &item : table_metadata.metadata_log->value) {
+			res.metadata_log.emplace_back(item.metadata_file, item.timestamp_ms);
+		}
 	}
 	return res;
 }

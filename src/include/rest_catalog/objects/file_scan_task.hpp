@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -36,10 +37,8 @@ public:
 
 public:
 	DataFile data_file;
-	vector<int32_t> delete_file_references;
-	bool has_delete_file_references = false;
+	optional<vector<int32_t>> delete_file_references;
 	unique_ptr<Expression> residual_filter;
-	bool has_residual_filter = false;
 };
 
 } // namespace rest_api_objects

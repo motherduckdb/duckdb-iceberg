@@ -698,12 +698,17 @@ IcebergTransactionData &IcebergTableInformation::GetOrCreateTransactionData(Iceb
 void IcebergTableInformation::InitializeFromLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result,
                                                             bool initialize_schemas) {
 	table_metadata = IcebergTableMetadata::FromTableMetadata(load_table_result.metadata);
-	config = load_table_result.config;
-	storage_credentials.clear();
-	for (auto &credential : load_table_result.storage_credentials) {
-		storage_credentials.push_back(credential);
+	if (auto &val = load_table_result.config) {
+		config = *val;
 	}
-	latest_metadata_json = load_table_result.metadata_location;
+	storage_credentials.clear();
+
+	if (auto &credentials = load_table_result.storage_credentials) {
+		for (auto &credential : *credentials) {
+			storage_credentials.push_back(credential);
+		}
+	}
+	latest_metadata_json = load_table_result.metadata_location.value_or("");
 
 	if (initialize_schemas) {
 		auto &schemas = table_metadata.GetSchemas();

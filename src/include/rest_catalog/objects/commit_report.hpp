@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -38,8 +39,7 @@ public:
 	int64_t sequence_number;
 	string operation;
 	Metrics metrics;
-	case_insensitive_map_t<string> metadata;
-	bool has_metadata = false;
+	optional<case_insensitive_map_t<string>> metadata;
 };
 
 } // namespace rest_api_objects

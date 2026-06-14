@@ -28,12 +28,12 @@ LoadViewResult LoadViewResult::Copy() const {
 	LoadViewResult res;
 	res.metadata_location = metadata_location;
 	res.metadata = metadata.Copy();
-	if (has_config) {
-		for (auto &entry : config) {
-			res.config.emplace(entry.first, entry.second);
+	if (config.has_value()) {
+		res.config.emplace();
+		for (auto &entry : (*config)) {
+			(*res.config).emplace(entry.first, entry.second);
 		}
 	}
-	res.has_config = has_config;
 	return res;
 }
 
@@ -61,8 +61,8 @@ string LoadViewResult::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto config_val = yyjson_obj_get(obj, "config");
-	if (config_val && !yyjson_is_null(config_val)) {
-		has_config = true;
+	if (config_val) {
+		case_insensitive_map_t<string> config_tmp;
 		if (yyjson_is_obj(config_val)) {
 			size_t idx, max;
 			yyjson_val *key, *val;
@@ -76,11 +76,12 @@ string LoadViewResult::TryFromJSON(yyjson_val *obj) {
 					    "LoadViewResult property 'tmp' is not of type 'string', found '%s' instead",
 					    yyjson_get_type_desc(val));
 				}
-				config.emplace(key_str, std::move(tmp));
+				config_tmp.emplace(key_str, std::move(tmp));
 			}
 		} else {
-			return "LoadViewResult property 'config' is not of type 'object'";
+			return "LoadViewResult property 'config_tmp' is not of type 'object'";
 		}
+		config = std::move(config_tmp);
 	}
 	return "";
 }
@@ -98,14 +99,15 @@ void LoadViewResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) cons
 	yyjson_mut_obj_add_val(doc, obj, "metadata", metadata_val);
 
 	// Serialize: config
-	if (has_config) {
-		yyjson_mut_val *config_obj = yyjson_mut_obj(doc);
-		for (const auto &it : config) {
+	if (config.has_value()) {
+		auto &config_value = *config;
+		yyjson_mut_val *config_value_obj = yyjson_mut_obj(doc);
+		for (const auto &it : config_value) {
 			auto &key = it.first;
 			auto &value = it.second;
-			yyjson_mut_obj_add_str(doc, config_obj, key.c_str(), value.c_str());
+			yyjson_mut_obj_add_str(doc, config_value_obj, key.c_str(), value.c_str());
 		}
-		yyjson_mut_obj_add_val(doc, obj, "config", config_obj);
+		yyjson_mut_obj_add_val(doc, obj, "config", config_value_obj);
 	}
 }
 

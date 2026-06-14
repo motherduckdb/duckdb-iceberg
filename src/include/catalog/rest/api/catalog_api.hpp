@@ -33,8 +33,7 @@ public:
 
 	T result_;
 	HTTPStatusCode status_;
-	bool has_error;
-	rest_api_objects::IcebergErrorResponse error_;
+	std::optional<rest_api_objects::IcebergErrorResponse> error_;
 };
 
 class IRCAPI {

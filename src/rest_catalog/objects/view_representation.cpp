@@ -26,20 +26,22 @@ ViewRepresentation ViewRepresentation::FromJSON(yyjson_val *obj) {
 
 ViewRepresentation ViewRepresentation::Copy() const {
 	ViewRepresentation res;
-	if (has_sqlview_representation) {
-		res.sqlview_representation = sqlview_representation.Copy();
+	if (sqlview_representation.has_value()) {
+		res.sqlview_representation.emplace();
+		(*res.sqlview_representation) = (*sqlview_representation).Copy();
 	}
-	res.has_sqlview_representation = has_sqlview_representation;
 	return res;
 }
 
 string ViewRepresentation::TryFromJSON(yyjson_val *obj) {
 	string error;
 	do {
-		error = sqlview_representation.TryFromJSON(obj);
+		sqlview_representation.emplace();
+		error = sqlview_representation->TryFromJSON(obj);
 		if (error.empty()) {
-			has_sqlview_representation = true;
 			break;
+		} else {
+			sqlview_representation = nullopt;
 		}
 		return "ViewRepresentation failed to parse, none of the oneOf candidates matched";
 	} while (false);
@@ -51,8 +53,8 @@ void ViewRepresentation::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) 
 		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
 
-	if (has_sqlview_representation) {
-		sqlview_representation.PopulateJSON(doc, obj);
+	if (sqlview_representation.has_value()) {
+		sqlview_representation->PopulateJSON(doc, obj);
 	}
 }
 

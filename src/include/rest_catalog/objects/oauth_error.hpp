@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -33,10 +34,8 @@ public:
 
 public:
 	string _error;
-	string error_description;
-	bool has_error_description = false;
-	string error_uri;
-	bool has_error_uri = false;
+	optional<string> error_description;
+	optional<string> error_uri;
 };
 
 } // namespace rest_api_objects

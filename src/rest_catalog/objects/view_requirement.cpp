@@ -26,20 +26,22 @@ ViewRequirement ViewRequirement::FromJSON(yyjson_val *obj) {
 
 ViewRequirement ViewRequirement::Copy() const {
 	ViewRequirement res;
-	if (has_assert_view_uuid) {
-		res.assert_view_uuid = assert_view_uuid.Copy();
+	if (assert_view_uuid.has_value()) {
+		res.assert_view_uuid.emplace();
+		(*res.assert_view_uuid) = (*assert_view_uuid).Copy();
 	}
-	res.has_assert_view_uuid = has_assert_view_uuid;
 	return res;
 }
 
 string ViewRequirement::TryFromJSON(yyjson_val *obj) {
 	string error;
 	do {
-		error = assert_view_uuid.TryFromJSON(obj);
+		assert_view_uuid.emplace();
+		error = assert_view_uuid->TryFromJSON(obj);
 		if (error.empty()) {
-			has_assert_view_uuid = true;
 			break;
+		} else {
+			assert_view_uuid = nullopt;
 		}
 		return "ViewRequirement failed to parse, none of the oneOf candidates matched";
 	} while (false);
@@ -51,8 +53,8 @@ void ViewRequirement::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) con
 		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
 
-	if (has_assert_view_uuid) {
-		assert_view_uuid.PopulateJSON(doc, obj);
+	if (assert_view_uuid.has_value()) {
+		assert_view_uuid->PopulateJSON(doc, obj);
 	}
 }
 

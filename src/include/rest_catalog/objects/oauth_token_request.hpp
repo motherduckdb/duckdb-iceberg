@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -34,10 +35,8 @@ public:
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
-	OAuthClientCredentialsRequest oauth_client_credentials_request;
-	bool has_oauth_client_credentials_request = false;
-	OAuthTokenExchangeRequest oauth_token_exchange_request;
-	bool has_oauth_token_exchange_request = false;
+	optional<OAuthClientCredentialsRequest> oauth_client_credentials_request;
+	optional<OAuthTokenExchangeRequest> oauth_token_exchange_request;
 };
 
 } // namespace rest_api_objects

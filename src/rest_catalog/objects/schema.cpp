@@ -28,35 +28,36 @@ Schema::Object1 Schema::Object1::FromJSON(yyjson_val *obj) {
 
 Schema::Object1 Schema::Object1::Copy() const {
 	Object1 res;
-	if (has_schema_id) {
-		res.schema_id = schema_id;
+	if (schema_id.has_value()) {
+		res.schema_id.emplace();
+		(*res.schema_id) = (*schema_id);
 	}
-	res.has_schema_id = has_schema_id;
-	if (has_identifier_field_ids) {
-		res.identifier_field_ids.reserve(identifier_field_ids.size());
-		for (auto &item : identifier_field_ids) {
-			res.identifier_field_ids.emplace_back(item);
+	if (identifier_field_ids.has_value()) {
+		res.identifier_field_ids.emplace();
+		(*res.identifier_field_ids).reserve((*identifier_field_ids).size());
+		for (auto &item : (*identifier_field_ids)) {
+			(*res.identifier_field_ids).emplace_back(item);
 		}
 	}
-	res.has_identifier_field_ids = has_identifier_field_ids;
 	return res;
 }
 
 string Schema::Object1::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto schema_id_val = yyjson_obj_get(obj, "schema-id");
-	if (schema_id_val && !yyjson_is_null(schema_id_val)) {
-		has_schema_id = true;
+	if (schema_id_val) {
+		int32_t schema_id_tmp;
 		if (yyjson_is_int(schema_id_val)) {
-			schema_id = yyjson_get_int(schema_id_val);
+			schema_id_tmp = yyjson_get_int(schema_id_val);
 		} else {
-			return StringUtil::Format("Object1 property 'schema_id' is not of type 'integer', found '%s' instead",
+			return StringUtil::Format("Object1 property 'schema_id_tmp' is not of type 'integer', found '%s' instead",
 			                          yyjson_get_type_desc(schema_id_val));
 		}
+		schema_id = std::move(schema_id_tmp);
 	}
 	auto identifier_field_ids_val = yyjson_obj_get(obj, "identifier-field-ids");
-	if (identifier_field_ids_val && !yyjson_is_null(identifier_field_ids_val)) {
-		has_identifier_field_ids = true;
+	if (identifier_field_ids_val) {
+		vector<int32_t> identifier_field_ids_tmp;
 		if (yyjson_is_arr(identifier_field_ids_val)) {
 			size_t idx, max;
 			yyjson_val *val;
@@ -68,13 +69,14 @@ string Schema::Object1::TryFromJSON(yyjson_val *obj) {
 					return StringUtil::Format("Object1 property 'tmp' is not of type 'integer', found '%s' instead",
 					                          yyjson_get_type_desc(val));
 				}
-				identifier_field_ids.emplace_back(std::move(tmp));
+				identifier_field_ids_tmp.emplace_back(std::move(tmp));
 			}
 		} else {
 			return StringUtil::Format(
-			    "Object1 property 'identifier_field_ids' is not of type 'array', found '%s' instead",
+			    "Object1 property 'identifier_field_ids_tmp' is not of type 'array', found '%s' instead",
 			    yyjson_get_type_desc(identifier_field_ids_val));
 		}
+		identifier_field_ids = std::move(identifier_field_ids_tmp);
 	}
 	return "";
 }
@@ -85,18 +87,20 @@ void Schema::Object1::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) con
 	}
 
 	// Serialize: schema-id
-	if (has_schema_id) {
-		yyjson_mut_obj_add_int(doc, obj, "schema-id", schema_id);
+	if (schema_id.has_value()) {
+		auto &schema_id_value = *schema_id;
+		yyjson_mut_obj_add_int(doc, obj, "schema-id", schema_id_value);
 	}
 
 	// Serialize: identifier-field-ids
-	if (has_identifier_field_ids) {
-		yyjson_mut_val *identifier_field_ids_arr = yyjson_mut_arr(doc);
-		for (const auto &item : identifier_field_ids) {
+	if (identifier_field_ids.has_value()) {
+		auto &identifier_field_ids_value = *identifier_field_ids;
+		yyjson_mut_val *identifier_field_ids_value_arr = yyjson_mut_arr(doc);
+		for (const auto &item : identifier_field_ids_value) {
 			yyjson_mut_val *item_val = yyjson_mut_int(doc, item);
-			yyjson_mut_arr_append(identifier_field_ids_arr, item_val);
+			yyjson_mut_arr_append(identifier_field_ids_value_arr, item_val);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "identifier-field-ids", identifier_field_ids_arr);
+		yyjson_mut_obj_add_val(doc, obj, "identifier-field-ids", identifier_field_ids_value_arr);
 	}
 }
 

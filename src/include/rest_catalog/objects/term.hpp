@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -33,10 +34,8 @@ public:
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
-	Reference reference;
-	bool has_reference = false;
-	TransformTerm transform_term;
-	bool has_transform_term = false;
+	optional<Reference> reference;
+	optional<TransformTerm> transform_term;
 };
 
 } // namespace rest_api_objects

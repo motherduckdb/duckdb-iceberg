@@ -81,23 +81,19 @@ rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(const LogicalTyp
 
 	switch (type.id()) {
 	case LogicalTypeId::MAP: {
-		rest_type.has_primitive_type = false;
-		rest_type.has_map_type = true;
 		rest_type.map_type = rest_api_objects::MapType();
 		auto key_type = MapType::KeyType(type);
 		auto value_type = MapType::ValueType(type);
-		rest_type.map_type.key_id = static_cast<int32_t>(get_next_id());
-		rest_type.map_type.key =
+		rest_type.map_type->key_id = static_cast<int32_t>(get_next_id());
+		rest_type.map_type->key =
 		    make_uniq<rest_api_objects::Type>(IcebergTypeHelper::CreateIcebergRestType(key_type, get_next_id));
-		rest_type.map_type.value_id = static_cast<int32_t>(get_next_id());
-		rest_type.map_type.value =
+		rest_type.map_type->value_id = static_cast<int32_t>(get_next_id());
+		rest_type.map_type->value =
 		    make_uniq<rest_api_objects::Type>(IcebergTypeHelper::CreateIcebergRestType(value_type, get_next_id));
-		rest_type.map_type.value_required = false;
+		rest_type.map_type->value_required = false;
 		return rest_type;
 	}
 	case LogicalTypeId::STRUCT: {
-		rest_type.has_primitive_type = false;
-		rest_type.has_struct_type = true;
 		rest_type.struct_type = rest_api_objects::StructType();
 		auto &children = StructType::GetChildTypes(type);
 		for (auto &child : children) {
@@ -106,23 +102,19 @@ rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(const LogicalTyp
 			struct_child->id = get_next_id();
 			struct_child->type =
 			    make_uniq<rest_api_objects::Type>(IcebergTypeHelper::CreateIcebergRestType(child.second, get_next_id));
-			struct_child->has__doc = false;
 			struct_child->required = false;
-			struct_child->has_initial_default = false;
-			rest_type.struct_type.fields.push_back(std::move(struct_child));
+			rest_type.struct_type->fields.push_back(std::move(struct_child));
 		}
 		return rest_type;
 	}
 	case LogicalTypeId::LIST: {
-		rest_type.has_primitive_type = false;
-		rest_type.has_list_type = true;
 		rest_type.list_type = rest_api_objects::ListType();
 		auto list_child_type = ListType::GetChildType(type);
-		rest_type.list_type.type = IcebergTypeHelper::LogicalTypeToIcebergType(list_child_type);
-		rest_type.list_type.element_id = get_next_id();
-		rest_type.list_type.element =
+		rest_type.list_type->type = IcebergTypeHelper::LogicalTypeToIcebergType(list_child_type);
+		rest_type.list_type->element_id = get_next_id();
+		rest_type.list_type->element =
 		    make_uniq<rest_api_objects::Type>(IcebergTypeHelper::CreateIcebergRestType(list_child_type, get_next_id));
-		rest_type.list_type.element_required = false;
+		rest_type.list_type->element_required = false;
 		return rest_type;
 	}
 	case LogicalTypeId::ARRAY: {
@@ -131,9 +123,8 @@ rest_api_objects::Type IcebergTypeHelper::CreateIcebergRestType(const LogicalTyp
 	default:
 		break;
 	}
-	rest_type.has_primitive_type = true;
 	rest_type.primitive_type = rest_api_objects::PrimitiveType();
-	rest_type.primitive_type.value = IcebergTypeHelper::LogicalTypeToIcebergType(type);
+	rest_type.primitive_type->value = IcebergTypeHelper::LogicalTypeToIcebergType(type);
 	return rest_type;
 }
 

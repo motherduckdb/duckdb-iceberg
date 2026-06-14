@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -35,12 +36,9 @@ public:
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
-	vector<DeleteFile> delete_files;
-	bool has_delete_files = false;
-	vector<FileScanTask> file_scan_tasks;
-	bool has_file_scan_tasks = false;
-	vector<PlanTask> plan_tasks;
-	bool has_plan_tasks = false;
+	optional<vector<DeleteFile>> delete_files;
+	optional<vector<FileScanTask>> file_scan_tasks;
+	optional<vector<PlanTask>> plan_tasks;
 };
 
 } // namespace rest_api_objects

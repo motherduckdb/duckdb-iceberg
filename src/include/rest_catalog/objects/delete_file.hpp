@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -34,10 +35,8 @@ public:
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
-	PositionDeleteFile position_delete_file;
-	bool has_position_delete_file = false;
-	EqualityDeleteFile equality_delete_file;
-	bool has_equality_delete_file = false;
+	optional<PositionDeleteFile> position_delete_file;
+	optional<EqualityDeleteFile> equality_delete_file;
 };
 
 } // namespace rest_api_objects

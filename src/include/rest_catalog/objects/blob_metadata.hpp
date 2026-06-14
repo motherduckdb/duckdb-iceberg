@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -36,8 +37,7 @@ public:
 	int64_t snapshot_id;
 	int64_t sequence_number;
 	vector<int32_t> fields;
-	case_insensitive_map_t<string> properties;
-	bool has_properties = false;
+	optional<case_insensitive_map_t<string>> properties;
 };
 
 } // namespace rest_api_objects

@@ -780,13 +780,15 @@ void IcebergSchemaEntry::LoadProperties(ClientContext &context) {
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 
 	auto get_namespace_result = IRCAPI::GetNamespace(context, ic_catalog, *this);
-	if (get_namespace_result.has_error) {
+	if (get_namespace_result.error_) {
 		throw HTTPException(StringUtil::Format("GetNamespace endpoint returned response code %s with message \"%s\"",
 		                                       EnumUtil::ToString(get_namespace_result.status_),
-		                                       get_namespace_result.error_._error.message));
+		                                       get_namespace_result.error_->_error.message));
 	}
 
-	schema_info.properties = get_namespace_result.result_->properties;
+	if (auto &properties = get_namespace_result.result_->properties) {
+		schema_info.properties = *properties;
+	}
 	schema_info.properties_loaded = true;
 	// TODO: eventually set up caching for this response?
 };

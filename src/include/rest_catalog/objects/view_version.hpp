@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -40,8 +41,7 @@ public:
 	case_insensitive_map_t<string> summary;
 	vector<ViewRepresentation> representations;
 	Namespace default_namespace;
-	string default_catalog;
-	bool has_default_catalog = false;
+	optional<string> default_catalog;
 };
 
 } // namespace rest_api_objects

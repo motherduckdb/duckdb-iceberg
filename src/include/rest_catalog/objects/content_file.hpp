@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -42,12 +43,9 @@ public:
 	FileFormat file_format;
 	int64_t file_size_in_bytes;
 	int64_t record_count;
-	BinaryTypeValue key_metadata;
-	bool has_key_metadata = false;
-	vector<int64_t> split_offsets;
-	bool has_split_offsets = false;
-	int32_t sort_order_id;
-	bool has_sort_order_id = false;
+	optional<BinaryTypeValue> key_metadata;
+	optional<vector<int64_t>> split_offsets;
+	optional<int32_t> sort_order_id;
 };
 
 } // namespace rest_api_objects

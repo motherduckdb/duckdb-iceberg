@@ -28,10 +28,10 @@ SetStatisticsUpdate SetStatisticsUpdate::Copy() const {
 	SetStatisticsUpdate res;
 	res.base_update = base_update.Copy();
 	res.statistics = statistics.Copy();
-	if (has_snapshot_id) {
-		res.snapshot_id = snapshot_id;
+	if (snapshot_id.has_value()) {
+		res.snapshot_id.emplace();
+		(*res.snapshot_id) = (*snapshot_id);
 	}
-	res.has_snapshot_id = has_snapshot_id;
 	return res;
 }
 
@@ -51,17 +51,18 @@ string SetStatisticsUpdate::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
-	if (snapshot_id_val && !yyjson_is_null(snapshot_id_val)) {
-		has_snapshot_id = true;
+	if (snapshot_id_val) {
+		int64_t snapshot_id_tmp;
 		if (yyjson_is_sint(snapshot_id_val)) {
-			snapshot_id = yyjson_get_sint(snapshot_id_val);
+			snapshot_id_tmp = yyjson_get_sint(snapshot_id_val);
 		} else if (yyjson_is_uint(snapshot_id_val)) {
-			snapshot_id = yyjson_get_uint(snapshot_id_val);
+			snapshot_id_tmp = yyjson_get_uint(snapshot_id_val);
 		} else {
 			return StringUtil::Format(
-			    "SetStatisticsUpdate property 'snapshot_id' is not of type 'integer', found '%s' instead",
+			    "SetStatisticsUpdate property 'snapshot_id_tmp' is not of type 'integer', found '%s' instead",
 			    yyjson_get_type_desc(snapshot_id_val));
 		}
+		snapshot_id = std::move(snapshot_id_tmp);
 	}
 	return "";
 }
@@ -79,8 +80,9 @@ void SetStatisticsUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj)
 	yyjson_mut_obj_add_val(doc, obj, "statistics", statistics_val);
 
 	// Serialize: snapshot-id
-	if (has_snapshot_id) {
-		yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+	if (snapshot_id.has_value()) {
+		auto &snapshot_id_value = *snapshot_id;
+		yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id_value);
 	}
 }
 
