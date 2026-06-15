@@ -185,16 +185,25 @@ public:
 	//! Allow ATTACH OR REPLACE to actually re-attach when iceberg-specific options change
 	bool HasConflictingAttachOptions(const string &path, const AttachOptions &options) override;
 	void SetAttachOptions(const unordered_map<string, Value> &options);
-	optional_idx GetCatalogVersion(ClientContext &context) override {
-		return internal_catalog_version.load();
-	}
+	optional_idx GetCatalogVersion(ClientContext &context) override;
 
 	void IncrementCatalogVersion() {
 		internal_catalog_version.fetch_add(1);
 	}
+
 	//! Throws if the write mode property doesn't allow merge-on-read delete files, which is all DuckDB-Iceberg writes
 	static void VerifyMergeOnRead(const IcebergTableMetadata &metadata, const string &table_name,
 	                              const string &write_mode_property);
+
+	idx_t GetCommittedCatalogVersion() const {
+		return internal_catalog_version.load();
+	}
+
+	//! Allocate a fresh transaction-local catalog version. Values are >= TRANSACTION_ID_START and strictly
+	//! increase on every staged catalog change, mirroring DuckDB core and ducklake.
+	idx_t GetNewUncommittedCatalogVersion() {
+		return ++last_uncommitted_catalog_version;
+	}
 
 public:
 	AccessMode access_mode;
@@ -212,9 +221,14 @@ public:
 	optional<Identifier> default_schema;
 
 private:
-	std::atomic<idx_t> internal_catalog_version {TRANSACTION_ID_START + 1};
 	//! Original client selector, used for ATTACH OR REPLACE comparisons.
 	const string attach_path;
+	//! Committed catalog version, incremented on every committed transaction that modified the catalog.
+	//! Stays below TRANSACTION_ID_START, GetCatalogVersion reports values above TRANSACTION_ID_START
+	//! for transactions with uncommitted changes.
+	std::atomic<idx_t> internal_catalog_version {1};
+	//! Source of transaction-local catalog versions, handed out by GetNewUncommittedCatalogVersion.
+	std::atomic<idx_t> last_uncommitted_catalog_version {TRANSACTION_ID_START};
 	//! warehouse
 	string warehouse;
 	//! Normalized attach options (after core stripping) used to detect a conflicting ATTACH OR REPLACE

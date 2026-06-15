@@ -69,6 +69,8 @@ private:
 	//! Called with lock held, since MERGE action pipelines may finalize concurrently.
 	void AddSnapshotUpdate(unique_ptr<IcebergAddSnapshot> add_snapshot, IcebergManifestDeletes &&altered_manifests,
 	                       bool merge_action);
+	//! Advance the owning transaction's catalog version: called when a real catalog change is staged.
+	void MarkChanged();
 
 	//! Query IDs distinguish MERGE executions within the same transaction.
 	optional<transaction_t> merge_query_id;

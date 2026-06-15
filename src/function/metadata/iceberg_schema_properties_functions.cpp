@@ -184,6 +184,7 @@ static void SetIcebergSchemaPropertiesFunction(ClientContext &context, TableFunc
 			updates[property.first] = property.second;
 		}
 	}
+	iceberg_transaction.MarkCatalogChanged();
 
 	global_state.properties_set = true;
 	// set success output, failure happens during transaction commit.
@@ -234,6 +235,7 @@ static void RemoveIcebergSchemaPropertiesFunction(ClientContext &context, TableF
 			removals.insert(property_to_remove);
 		}
 	}
+	iceberg_transaction.MarkCatalogChanged();
 
 	global_state.properties_removed = true;
 	// set success output, failure happens during transaction commit.

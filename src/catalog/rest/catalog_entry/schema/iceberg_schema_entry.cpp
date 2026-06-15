@@ -1007,7 +1007,50 @@ void IcebergSchemaEntry::Scan(ClientContext &context, CatalogType type,
 		GetCatalogSet(type).ScanViews(context, callback);
 		return;
 	}
-	GetCatalogSet(type).Scan(context, callback);
+	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
+	unordered_set<string> scanned_table_keys;
+	GetCatalogSet(type).Scan(context, [&](CatalogEntry &entry) {
+		auto table_key =
+		    IcebergTable::GetTableKey(catalog.Cast<IcebergCatalog>(), namespace_items, entry.name.GetIdentifierName());
+		scanned_table_keys.insert(table_key);
+
+		// Surface the transaction-local state of tables modified within this transaction, so that staged
+		// changes (e.g. an uncommitted ALTER) are visible instead of the (stale) dummy entry.
+		auto latest_state = iceberg_transaction.GetLatestTableState(table_key);
+		if (latest_state) {
+			if (!latest_state->IsAlive()) {
+				// dropped or renamed away within this transaction
+				return;
+			}
+			auto &transaction_table_info = latest_state->GetInfo();
+			if (transaction_table_info.HasTransactionUpdates()) {
+				auto transaction_entry = transaction_table_info.GetLatestSchema(context);
+				if (transaction_entry) {
+					callback(*transaction_entry);
+					return;
+				}
+			}
+		}
+		callback(entry);
+	});
+	// Tables created (or renamed to) within this transaction are only known to the transaction state
+	for (auto &it : iceberg_transaction.current_table_data) {
+		auto &state = it.second;
+		if (!state.IsAlive() || scanned_table_keys.count(it.first)) {
+			continue;
+		}
+		auto &transaction_table_info = state.GetInfo();
+		// Do not require HasTransactionUpdates(): a rename target is a fresh copy with no transaction_data
+		// of its own, so it would be wrongly skipped. IsAlive() + scanned_table_keys already exclude
+		// renamed-away/dropped tables and committed tables surfaced in the first loop.
+		if (&transaction_table_info.schema != this) {
+			continue;
+		}
+		auto transaction_entry = transaction_table_info.GetLatestSchema(context);
+		if (transaction_entry) {
+			callback(*transaction_entry);
+		}
+	}
 }
 void IcebergSchemaEntry::Scan(CatalogType type, const std::function<void(CatalogEntry &)> &callback) {
 	throw NotImplementedException("Scan without context not supported");
