@@ -1,8 +1,6 @@
 #include "maintenance/rewrite_data_files_executor.hpp"
 
 #include "duckdb/common/exception.hpp"
-#include "duckdb/common/file_system.hpp"
-
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
@@ -43,9 +41,9 @@ Value BuildRewriteFieldIds(const IcebergTableSchema &schema) {
 	return Value::STRUCT(std::move(values));
 }
 
-IcebergManifestEntry BuildRewriteManifestEntry(ClientContext &context, const vector<RewriteCandidate> &group,
-                                               int64_t starting_sequence_number, int64_t record_count,
-                                               const string &produced_file) {
+IcebergManifestEntry BuildRewriteManifestEntry(const vector<RewriteCandidate> &group, int64_t starting_sequence_number,
+                                               int64_t record_count, const string &produced_file,
+                                               int64_t file_size_in_bytes) {
 	if (group.empty()) {
 		throw InternalException("iceberg_rewrite_data_files: cannot build a manifest entry for an empty group");
 	}
@@ -58,9 +56,7 @@ IcebergManifestEntry BuildRewriteManifestEntry(ClientContext &context, const vec
 	entry.data_file.file_format = "parquet";
 	entry.data_file.file_path = produced_file;
 	entry.data_file.record_count = record_count;
-	auto &fs = FileSystem::GetFileSystem(context);
-	auto file_handle = fs.OpenFile(produced_file, FileFlags::FILE_FLAGS_READ);
-	entry.data_file.file_size_in_bytes = static_cast<int64_t>(file_handle->GetFileSize());
+	entry.data_file.file_size_in_bytes = file_size_in_bytes;
 	//! The planner buckets candidates so every file in one group shares the same
 	//! partition tuple. Reuse candidate 0 instead of re-deriving it.
 	entry.data_file.partition_info = group.front().partition_info;

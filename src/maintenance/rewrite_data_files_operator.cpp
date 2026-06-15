@@ -146,9 +146,9 @@ SinkResultType PhysicalRewriteDataFiles::Sink(ExecutionContext &context, DataChu
                                               OperatorSinkInput &input) const {
 	auto &gstate = input.global_state.Cast<RewriteDataFilesGlobalState>();
 	for (idx_t row = 0; row < chunk.size(); row++) {
-		if (chunk.ColumnCount() < 3) {
+		if (chunk.ColumnCount() < 4) {
 			throw InternalException(
-			    "iceberg_rewrite_data_files: expected COPY RETURN_STATS result with at least three columns");
+			    "iceberg_rewrite_data_files: expected COPY RETURN_STATS result with at least four columns");
 		}
 		auto group_idx = chunk.GetValue(0, row).GetValue<uint64_t>();
 		if (static_cast<idx_t>(group_idx) >= gstate.plan.file_groups.size()) {
@@ -165,14 +165,15 @@ SinkResultType PhysicalRewriteDataFiles::Sink(ExecutionContext &context, DataChu
 			                        group_idx);
 		}
 		auto count = NumericCast<int64_t>(chunk.GetValue(2, row).GetValue<uint64_t>());
+		auto file_size_in_bytes = NumericCast<int64_t>(chunk.GetValue(3, row).GetValue<uint64_t>());
 		auto &group = gstate.plan.file_groups[group_idx];
 		{
 			lock_guard<mutex> guard(gstate.lock);
 			gstate.group_seen[group_idx] = true;
 			gstate.produced_paths.push_back(produced_file);
 		}
-		auto entry = BuildRewriteManifestEntry(context.client, group, gstate.plan.starting_sequence_number, count,
-		                                       produced_file);
+		auto entry = BuildRewriteManifestEntry(group, gstate.plan.starting_sequence_number, count, produced_file,
+		                                       file_size_in_bytes);
 
 		{
 			lock_guard<mutex> guard(gstate.lock);

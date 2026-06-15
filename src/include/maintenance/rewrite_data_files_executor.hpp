@@ -25,12 +25,11 @@ struct RewriteExecutionResult {
 //! Build the structured FIELD_IDS value consumed by parquet COPY.
 Value BuildRewriteFieldIds(const IcebergTableSchema &schema);
 
-//! Convert the single-file result of one rewrite-group COPY into an ADDED
-//! manifest entry. The COPY result supplies the row count and path; partition
+//! Convert one COPY RETURN_STATS row into an ADDED manifest entry. Partition
 //! values and sequence-number semantics come from the frozen rewrite plan.
-IcebergManifestEntry BuildRewriteManifestEntry(ClientContext &context, const vector<RewriteCandidate> &group,
-                                               int64_t starting_sequence_number, int64_t record_count,
-                                               const string &produced_file);
+IcebergManifestEntry BuildRewriteManifestEntry(const vector<RewriteCandidate> &group, int64_t starting_sequence_number,
+                                               int64_t record_count, const string &produced_file,
+                                               int64_t file_size_in_bytes);
 
 //! Commit all completed rewrite groups as one Iceberg REPLACE snapshot.
 void CommitRewrite(ClientContext &context, const RewritePlan &plan, RewriteExecutionResult &result);
