@@ -8,7 +8,6 @@
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "maintenance/maintenance_table_loader.hpp"
 #include "maintenance/rewrite_data_files_executor.hpp"
-#include "maintenance/table_lock_registry.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/execution/operator/projection/physical_projection.hpp"
@@ -24,12 +23,6 @@ static vector<LogicalType> RewriteResultTypes() {
 struct RewriteDataFilesGlobalState : public GlobalSinkState {
 	RewriteDataFilesGlobalState(ClientContext &context_p, const RewritePlan &source_plan)
 	    : context(context_p), plan(source_plan), group_states(source_plan.file_groups.size(), 0) {
-		guard = TableLockRegistry::GetInstance().TryAcquire(plan.table_key, "rewrite_data_files");
-		if (!guard.Owns()) {
-			throw CatalogException("iceberg_rewrite_data_files: table '%s' is already being compacted by another "
-			                       "maintenance action",
-			                       plan.table_key.table);
-		}
 		plan.table_info = ReloadIcebergTableShared(context, plan.table_key, "iceberg_rewrite_data_files");
 		ValidateRewriteSnapshot(plan, *plan.table_info, "execution");
 	}
@@ -42,7 +35,6 @@ struct RewriteDataFilesGlobalState : public GlobalSinkState {
 
 	ClientContext &context;
 	RewritePlan plan;
-	MaintenanceTableLockGuard guard;
 	mutex lock;
 	//! 0 = unseen, 1 = processing, 2 = complete.
 	vector<uint8_t> group_states;
@@ -55,17 +47,10 @@ struct RewriteDataFilesGlobalSourceState : public GlobalSourceState {
 	RewriteDataFilesGlobalSourceState() = default;
 
 	explicit RewriteDataFilesGlobalSourceState(ClientContext &context, const RewritePlan &source_plan) {
-		guard = TableLockRegistry::GetInstance().TryAcquire(source_plan.table_key, "rewrite_data_files");
-		if (!guard.Owns()) {
-			throw CatalogException("iceberg_rewrite_data_files: table '%s' is already being compacted by another "
-			                       "maintenance action",
-			                       source_plan.table_key.table);
-		}
 		auto table_info = ReloadIcebergTableShared(context, source_plan.table_key, "iceberg_rewrite_data_files");
 		ValidateRewriteSnapshot(source_plan, *table_info, "execution");
 	}
 
-	MaintenanceTableLockGuard guard;
 	bool emitted = false;
 };
 

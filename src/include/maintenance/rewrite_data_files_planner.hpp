@@ -8,7 +8,7 @@
 #include "duckdb/main/client_context.hpp"
 
 #include "core/metadata/manifest/iceberg_manifest.hpp"
-#include "maintenance/table_lock_registry.hpp"
+#include "maintenance/table_identifier.hpp"
 
 namespace duckdb {
 

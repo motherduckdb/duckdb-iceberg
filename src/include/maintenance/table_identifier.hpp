@@ -2,9 +2,14 @@
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
-#include "maintenance/table_lock_registry.hpp"
 
 namespace duckdb {
+
+struct MaintenanceTableKey {
+	string catalog;
+	string schema;
+	string table;
+};
 
 inline bool IsSimpleIdentifier(const string &part) {
 	if (part.empty()) {
@@ -39,8 +44,6 @@ inline MaintenanceTableKey ParseMaintenanceTableIdentifier(const string &functio
 			                            function_name, identifier);
 		}
 	}
-	//! Normalize to lower-case for consistent lock keys — DuckDB resolves
-	//! unquoted identifiers case-insensitively.
 	return MaintenanceTableKey {StringUtil::Lower(parts[0]), StringUtil::Lower(parts[1]), StringUtil::Lower(parts[2])};
 }
 
