@@ -157,7 +157,7 @@ static unique_ptr<LogicalOperator> RewriteDataFilesBindOperator(ClientContext &c
 
 TableFunctionSet IcebergFunctions::GetIcebergRewriteDataFilesFunction() {
 	TableFunctionSet function_set("iceberg_rewrite_data_files");
-	TableFunction function({LogicalType::VARCHAR}, nullptr);
+	TableFunction function("iceberg_rewrite_data_files", {LogicalType::VARCHAR}, nullptr);
 	function.bind_operator = RewriteDataFilesBindOperator;
 	function.named_parameters["strategy"] = LogicalType::VARCHAR;
 	function.named_parameters["target_file_size_bytes"] = LogicalType::BIGINT;
