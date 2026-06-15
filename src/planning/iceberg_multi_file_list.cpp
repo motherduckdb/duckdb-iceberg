@@ -253,7 +253,14 @@ IcebergMultiFileListSharedState::IcebergMultiFileListSharedState(ClientContext &
 IcebergMultiFileListSharedState::~IcebergMultiFileListSharedState() {
 	if (data_manifest_read_state) {
 		//! FIXME: this could throw, if the tasks encountered an error
-		data_manifest_read_state->executor.WorkOnTasks();
+		try {
+			data_manifest_read_state->executor.WorkOnTasks();
+		} catch (duckdb::Exception &e) {
+			// temporary fix for the FIX ME. Not having this in place causes crashes on the server because we throw
+			// an exception during stack unwinding. I unfortunately dont even know which exception we throw because this
+			// second exception crashes the duckling
+			std::cerr << e.what() << std::endl;
+		}
 	}
 }
 
