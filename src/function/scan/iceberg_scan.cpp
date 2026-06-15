@@ -59,10 +59,11 @@ static unique_ptr<FunctionData> IcebergScanDeserialize(Deserializer &deserialize
 BindInfo IcebergBindInfo(const optional_ptr<FunctionData> bind_data) {
 	auto &multi_file_data = bind_data->Cast<MultiFileBindData>();
 	auto &file_list = multi_file_data.file_list->Cast<IcebergMultiFileList>();
-	if (!file_list.table) {
+	auto table = file_list.GetTable();
+	if (!table) {
 		return BindInfo(ScanType::EXTERNAL);
 	}
-	return BindInfo(*file_list.table);
+	return BindInfo(*table);
 }
 
 //! FIXME: needs v1.5.1, causes a crash on v1.5.0

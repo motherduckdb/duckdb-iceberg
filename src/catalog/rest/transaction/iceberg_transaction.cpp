@@ -316,7 +316,7 @@ TableTransactionInfo IcebergTransaction::GetTransactionRequest(IcebergTransactio
 			continue;
 		}
 		auto &table_info = updated_table.second;
-		if (!table_info.transaction_data) {
+		if (!table_info.HasTransactionUpdates()) {
 			continue;
 		}
 		IcebergCommitState commit_state(table_info, context);
@@ -449,8 +449,15 @@ void IcebergTransaction::DoTableUpdates(IcebergTransactionAlterUpdate &alter_upd
 
 	// if there are no new tables, we can post to the transactions/commit endpoint
 	// otherwise we fall back to posting a commit for each table.
-	const bool can_use_multi_table_commit =
-	    !transaction_info.has_assert_create && catalog.supported_urls.count("POST /v1/{prefix}/transactions/commit");
+	if (transaction.table_changes.empty()) {
+		alter_update.updated_tables.clear();
+		DropSecrets(context);
+		return;
+	}
+
+	const bool can_use_multi_table_commit = !transaction_info.has_assert_create &&
+	                                        !catalog.attach_options.disable_multi_table_commit &&
+	                                        catalog.supported_urls.count("POST /v1/{prefix}/transactions/commit");
 	if (can_use_multi_table_commit) {
 		// commit all transactions at once
 		std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
@@ -644,7 +651,7 @@ public:
 
 void IcebergTransaction::CleanupFiles() {
 	// remove any files that were written
-	if (!catalog.attach_options.allows_deletes) {
+	if (!catalog.attach_options.remove_files_on_delete) {
 		// certain catalogs don't allow deletes and will have a s3.deletes attribute in the config describing this
 		// aws s3 tables rejects deletes and will handle garbage collection on its own, any attempt to delete the files
 		// on the aws side will result in an error.

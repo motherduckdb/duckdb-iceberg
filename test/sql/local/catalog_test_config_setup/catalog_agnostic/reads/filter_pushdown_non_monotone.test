@@ -1,0 +1,52 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filter_pushdown_non_monotone.test
+# description: Filters whose column side is not a direct column reference (e.g. pk % 8 = 2) must not be used for stats-based file pruning (duckdb/duckdb-iceberg#1052)
+# group: [reads]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.non_monotone_pruning;
+
+statement ok
+CREATE TABLE my_datalake.default.non_monotone_pruning AS
+SELECT r.range::INT AS pk FROM range(50) r;
+
+# The single data file has pk bounds [0, 49]. Evaluating the column-side
+# expression at the bounds gives [0 % 8, 49 % 8] = [0, 1] — using that as the
+# expression's range over the file is only valid for monotone expressions, so
+# it must not prune: residues 2..7 each have 6 matching rows in the file.
+query I
+SELECT count(*) FROM my_datalake.default.non_monotone_pruning WHERE pk % 8 = 2;
+----
+6
+
+query I
+SELECT count(*) FROM my_datalake.default.non_monotone_pruning WHERE pk % 8 = 7;
+----
+6
+
+# Residues that happen to "pass" the bounds-folded check must of course also work.
+query I
+SELECT count(*) FROM my_datalake.default.non_monotone_pruning WHERE pk % 8 = 0;
+----
+7
+
+# Direct-reference comparisons keep pruning soundly.
+query I
+SELECT count(*) FROM my_datalake.default.non_monotone_pruning WHERE pk = 4;
+----
+1
+
+statement ok
+DROP TABLE my_datalake.default.non_monotone_pruning;

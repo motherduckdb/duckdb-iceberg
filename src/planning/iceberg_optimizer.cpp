@@ -36,13 +36,10 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 			return;
 		}
 		auto &iceberg_list = mfbd.file_list->Cast<IcebergMultiFileList>();
-		{
-			lock_guard<mutex> guard(iceberg_list.delete_lock);
-			iceberg_list.EnumerateDeleteManifestEntries();
-		}
+		auto delete_manifest_entries = iceberg_list.GetDeleteManifestEntries();
 
 		unordered_set<int32_t> required_field_ids;
-		for (auto &entry : iceberg_list.delete_manifest_entries) {
+		for (auto &entry : delete_manifest_entries) {
 			auto &mft = entry.entry;
 			if (mft.data_file.content != IcebergManifestEntryContentType::EQUALITY_DELETES) {
 				continue;
@@ -72,7 +69,9 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 				// column was deleted and exists most likely in an old schemas
 				// TODO: if the type of the equality delete column was evolved, then grabbing just any schema could be a
 				// problem
-				auto col_info = iceberg_list.table->table_info.table_metadata.FindColumnByFieldId(fid);
+				auto table = iceberg_list.GetTable();
+				D_ASSERT(table);
+				auto col_info = table->table_info.table_metadata.FindColumnByFieldId(fid);
 				if (!col_info) {
 					throw InvalidConfigurationException(
 					    "column %d must apply equality deletes, but no schema has a column with that field id", fid);
