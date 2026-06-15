@@ -22,7 +22,8 @@ static vector<LogicalType> RewriteResultTypes() {
 
 struct RewriteDataFilesGlobalState : public GlobalSinkState {
 	RewriteDataFilesGlobalState(ClientContext &context_p, const RewritePlan &source_plan)
-	    : context(context_p), plan(source_plan), group_states(source_plan.file_groups.size(), 0) {
+	    : context(context_p), plan(source_plan), group_seen(source_plan.file_groups.size(), false),
+	      group_accounted(source_plan.file_groups.size(), false) {
 		plan.table_info = ReloadIcebergTableShared(context, plan.table_key, "iceberg_rewrite_data_files");
 		ValidateRewriteSnapshot(plan, *plan.table_info, "execution");
 	}
@@ -36,8 +37,8 @@ struct RewriteDataFilesGlobalState : public GlobalSinkState {
 	ClientContext &context;
 	RewritePlan plan;
 	mutex lock;
-	//! 0 = unseen, 1 = processing, 2 = complete.
-	vector<uint8_t> group_states;
+	vector<bool> group_seen;
+	vector<bool> group_accounted;
 	vector<string> produced_paths;
 	RewriteExecutionResult result;
 	bool committed = false;
@@ -167,11 +168,7 @@ SinkResultType PhysicalRewriteDataFiles::Sink(ExecutionContext &context, DataChu
 		auto &group = gstate.plan.file_groups[group_idx];
 		{
 			lock_guard<mutex> guard(gstate.lock);
-			if (gstate.group_states[group_idx] != 0) {
-				throw InternalException("iceberg_rewrite_data_files: COPY returned duplicate result for group %lld",
-				                        group_idx);
-			}
-			gstate.group_states[group_idx] = 1;
+			gstate.group_seen[group_idx] = true;
 			gstate.produced_paths.push_back(produced_file);
 		}
 		auto entry = BuildRewriteManifestEntry(context.client, group, gstate.plan.starting_sequence_number, count,
@@ -179,13 +176,15 @@ SinkResultType PhysicalRewriteDataFiles::Sink(ExecutionContext &context, DataChu
 
 		{
 			lock_guard<mutex> guard(gstate.lock);
-			gstate.group_states[group_idx] = 2;
 			gstate.result.new_entries.push_back(std::move(entry));
 			gstate.result.added_data_files++;
-			gstate.result.rewritten_data_files += static_cast<int64_t>(group.size());
-			for (auto &candidate : group) {
-				gstate.result.rewritten_bytes += candidate.file_size_in_bytes;
-				gstate.result.rewritten_candidates.push_back(candidate);
+			if (!gstate.group_accounted[group_idx]) {
+				gstate.group_accounted[group_idx] = true;
+				gstate.result.rewritten_data_files += static_cast<int64_t>(group.size());
+				for (auto &candidate : group) {
+					gstate.result.rewritten_bytes += candidate.file_size_in_bytes;
+					gstate.result.rewritten_candidates.push_back(candidate);
+				}
 			}
 		}
 	}
@@ -197,8 +196,8 @@ SinkFinalizeType PhysicalRewriteDataFiles::Finalize(Pipeline &pipeline, Event &e
 	auto &gstate = input.global_state.Cast<RewriteDataFilesGlobalState>();
 	{
 		lock_guard<mutex> guard(gstate.lock);
-		for (idx_t group_idx = 0; group_idx < gstate.group_states.size(); group_idx++) {
-			if (gstate.group_states[group_idx] != 2) {
+		for (idx_t group_idx = 0; group_idx < gstate.group_seen.size(); group_idx++) {
+			if (!gstate.group_seen[group_idx]) {
 				throw InternalException("iceberg_rewrite_data_files: COPY returned no result for group %llu",
 				                        static_cast<unsigned long long>(group_idx));
 			}
