@@ -30,6 +30,7 @@ struct RewritePlan {
 	MaintenanceTableKey table_key;
 	int64_t starting_snapshot_id = -1;
 	int64_t starting_sequence_number = 0;
+	int64_t target_file_size_bytes = 134217728;
 	//! Keep the loaded metadata alive until commit.
 	shared_ptr<IcebergTableInformation> table_info;
 	vector<RewriteCandidate> candidates;

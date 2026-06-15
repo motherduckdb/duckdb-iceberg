@@ -101,6 +101,7 @@ vector<vector<RewriteCandidate>> BinPackPartition(vector<RewriteCandidate> files
 RewritePlan PlanRewrite(ClientContext &context, const RewriteDataFilesPlanInput &input) {
 	RewritePlan plan;
 	plan.table_key = input.table_key;
+	plan.target_file_size_bytes = input.target_file_size_bytes;
 
 	auto table_info_ptr = ReloadIcebergTableShared(context, input.table_key, "iceberg_rewrite_data_files");
 	auto &table_info = *table_info_ptr;

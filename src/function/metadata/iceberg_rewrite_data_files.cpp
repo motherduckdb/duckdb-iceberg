@@ -108,15 +108,9 @@ static unique_ptr<LogicalOperator> BindGroupCopy(Binder &binder, const RewritePl
 	//! parquet files stay schema-compatible with regular Iceberg writes.
 	copy_statement.info->options["field_ids"].push_back(BuildRewriteFieldIds(*schema_it->second));
 	copy_statement.info->options["filename_pattern"].push_back(Value("{uuidv7}"));
-	//! Force COPY through DuckDB's rotated-file path creation even though we
-	//! still expect exactly one output file per rewrite group. The huge
-	//! ROW_GROUPS_PER_FILE value keeps rotation from actually happening while
-	//! ensuring COPY resolves `filename_pattern` into a concrete parquet path.
-	copy_statement.info->options["row_groups_per_file"].push_back(
-	    Value::UBIGINT(NumericLimits<uint64_t>::Maximum() - 1));
-	//! RETURN_STATS then reports that concrete parquet path. RETURN_FILES only
-	//! reports the directory root for the plain single-file COPY TO <dir> path,
-	//! which breaks follow-up rewrites.
+	copy_statement.info->options["file_size_bytes"].push_back(Value::UBIGINT(static_cast<uint64_t>(plan.target_file_size_bytes)));
+	//! FILE_SIZE_BYTES forces COPY through DuckDB's rotated-file path creation so
+	//! RETURN_STATS reports concrete parquet paths instead of the directory root.
 	copy_statement.info->options["return_stats"].push_back(Value::BOOLEAN(true));
 	copy_statement.info->options["per_thread_output"].push_back(Value::BOOLEAN(false));
 	copy_statement.info->options["overwrite_or_ignore"].push_back(Value::BOOLEAN(true));
