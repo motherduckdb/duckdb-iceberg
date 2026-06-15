@@ -1,4 +1,6 @@
 #include "catalog/rest/transaction/iceberg_transaction_data.hpp"
+#include "catalog/rest/transaction/iceberg_transaction.hpp"
+#include "catalog/rest/iceberg_catalog.hpp"
 
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
 #include "duckdb/common/types/uuid.hpp"
@@ -188,6 +190,10 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 
 	alters.push_back(*add_snapshot);
 	updates.push_back(std::move(add_snapshot));
+	// A data-only append/delete creates a new snapshot but does not change the catalog (schema, table
+	// set, properties). Mirroring ducklake and plain DuckDB storage, INSERT/UPDATE/DELETE must not bump
+	// the catalog version - only DDL does. The new snapshot is still surfaced within the transaction via
+	// HasTransactionUpdates()/GetLatestSchema(), which does not depend on the catalog version.
 }
 
 void IcebergTransactionData::AddUpdateSnapshot(vector<IcebergManifestEntry> &&delete_files,
@@ -222,6 +228,7 @@ void IcebergTransactionData::AddUpdateSnapshot(vector<IcebergManifestEntry> &&de
 
 	alters.push_back(*add_snapshot);
 	updates.push_back(std::move(add_snapshot));
+	// See AddSnapshot: a merge-on-read UPDATE is a data-only change and must not bump the catalog version.
 }
 
 void IcebergTransactionData::TableAddSchema(int32_t schema_id) {
@@ -233,6 +240,7 @@ void IcebergTransactionData::TableAddSchema(int32_t schema_id) {
 	updates.push_back(std::move(add_schema_update));
 	assert_schema_id = true;
 	pending_current_schema_id = schema_id;
+	MarkChanged();
 }
 
 void IcebergTransactionData::TableSetCurrentSchema(int32_t schema_id) {
@@ -280,6 +288,7 @@ void IcebergTransactionData::TableAddUpradeFormatVersion() {
 
 void IcebergTransactionData::TableAddPartitionSpec() {
 	updates.push_back(make_uniq<AddPartitionSpec>(table_info.table_metadata.GetLatestPartitionSpec()));
+	MarkChanged();
 }
 
 void IcebergTransactionData::TableAddSortOrder() {
@@ -297,10 +306,16 @@ void IcebergTransactionData::TableSetDefaultSpec() {
 
 void IcebergTransactionData::TableSetProperties(const case_insensitive_map_t<string> &properties) {
 	updates.push_back(make_uniq<SetProperties>(properties));
+	MarkChanged();
 }
 
 void IcebergTransactionData::TableRemoveProperties(const vector<string> &properties) {
 	updates.push_back(make_uniq<RemoveProperties>(properties));
+	MarkChanged();
+}
+
+void IcebergTransactionData::MarkChanged() {
+	IcebergTransaction::Get(context, table_info.catalog).MarkCatalogChanged();
 }
 
 void IcebergTransactionData::TableSetLocation() {

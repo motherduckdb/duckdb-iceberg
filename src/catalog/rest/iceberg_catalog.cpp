@@ -104,6 +104,7 @@ optional_ptr<CatalogEntry> IcebergCatalog::CreateSchema(CatalogTransaction trans
 	auto schema_name = new_schema->name;
 	schemas.AddEntry(schema_name.GetIdentifierName(), std::move(new_schema));
 	iceberg_transaction.created_schemas.insert(info.GetQualifiedName().Schema().GetIdentifierName());
+	iceberg_transaction.MarkCatalogChanged();
 	return &schemas.GetEntry(info.GetQualifiedName().Schema().GetIdentifierName());
 }
 
@@ -130,12 +131,24 @@ void IcebergCatalog::DropSchema(ClientContext &context, DropInfo &info) {
 	// Schema exists - defer the server deletion to commit
 	auto &iceberg_transaction = IcebergTransaction::Get(context, *this);
 	iceberg_transaction.deleted_schemas.insert(info.GetQualifiedName().Name().GetIdentifierName());
+	iceberg_transaction.MarkCatalogChanged();
 }
 
 unique_ptr<LogicalOperator> IcebergCatalog::BindCreateIndex(Binder &binder, CreateStatement &stmt,
                                                             TableCatalogEntry &table,
                                                             unique_ptr<LogicalOperator> plan) {
 	throw NotImplementedException("IcebergCatalog BindCreateIndex");
+}
+
+optional_idx IcebergCatalog::GetCatalogVersion(ClientContext &context) {
+	auto &iceberg_transaction = IcebergTransaction::Get(context, *this);
+	// While this transaction has staged catalog changes, report the transaction-local version it was
+	// assigned (a value >= TRANSACTION_ID_START that advances on every change). Otherwise report the
+	// committed version observed at transaction start, so it is not affected by concurrent commits.
+	if (iceberg_transaction.local_catalog_version != 0) {
+		return iceberg_transaction.local_catalog_version;
+	}
+	return iceberg_transaction.start_catalog_version;
 }
 
 bool IcebergCatalog::InMemory() {

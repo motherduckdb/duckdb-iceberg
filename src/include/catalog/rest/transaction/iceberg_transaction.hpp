@@ -94,6 +94,8 @@ public:
 	IcebergTransactionTableState &SetLatestTableState(IcebergTableInformation &table, IcebergTableStatus status);
 	IcebergTransactionTableState &SetLatestTableState(const string &table_key, IcebergTableStatus status);
 	bool StartedBefore(timestamp_t timestamp_ms) const;
+	//! Record that this transaction staged a catalog change, advancing its transaction-local catalog version.
+	void MarkCatalogChanged();
 	IcebergTransactionAlterUpdate &GetOrCreateAlter();
 	IcebergTableInformation &DeleteTable(IcebergTableInformation &table);
 	IcebergTableInformation &RenameTable(IcebergTableInformation &table, const string &new_name);
@@ -116,6 +118,14 @@ private:
 	AccessMode access_mode;
 
 public:
+	//! The committed catalog version at the time this transaction started. Reported by GetCatalogVersion
+	//! while this transaction has no uncommitted changes, so the version this transaction observes is not
+	//! affected by other transactions committing.
+	const idx_t start_catalog_version;
+	//! Transaction-local catalog version. 0 while the transaction is clean (GetCatalogVersion then reports
+	//! start_catalog_version); set to a fresh value >= TRANSACTION_ID_START on each staged change, and to the
+	//! new committed version after a successful commit.
+	idx_t local_catalog_version = 0;
 	//! Tables referenced by this transaction that have to stay alive for the duration of the transaction.
 	case_insensitive_map_t<shared_ptr<IcebergTableInformation>> tables;
 	vector<unique_ptr<IcebergTransactionUpdate>> transaction_updates;

@@ -191,12 +191,20 @@ public:
 	string GetDBPath() override;
 	//! Allow ATTACH OR REPLACE to actually re-attach when iceberg-specific options change
 	bool HasConflictingAttachOptions(const string &path, const AttachOptions &options) override;
-	optional_idx GetCatalogVersion(ClientContext &context) override {
-		return internal_catalog_version.load();
-	}
+	optional_idx GetCatalogVersion(ClientContext &context) override;
 
 	void IncrementCatalogVersion() {
 		internal_catalog_version.fetch_add(1);
+	}
+
+	idx_t GetCommittedCatalogVersion() const {
+		return internal_catalog_version.load();
+	}
+
+	//! Allocate a fresh transaction-local catalog version. Values are >= TRANSACTION_ID_START and strictly
+	//! increase on every staged catalog change, mirroring DuckDB core and ducklake.
+	idx_t GetNewUncommittedCatalogVersion() {
+		return ++last_uncommitted_catalog_version;
 	}
 	static string GetOnlyMergeOnReadSupportedErrorMessage(const string &table_name, const string &property,
 	                                                      const string &property_value);
@@ -216,7 +224,12 @@ public:
 	string default_schema;
 
 private:
-	std::atomic<idx_t> internal_catalog_version {TRANSACTION_ID_START + 1};
+	//! Committed catalog version, incremented on every committed transaction that modified the catalog.
+	//! Stays below TRANSACTION_ID_START, GetCatalogVersion reports values above TRANSACTION_ID_START
+	//! for transactions with uncommitted changes.
+	std::atomic<idx_t> internal_catalog_version {1};
+	//! Source of transaction-local catalog versions, handed out by GetNewUncommittedCatalogVersion.
+	std::atomic<idx_t> last_uncommitted_catalog_version {TRANSACTION_ID_START};
 	//! warehouse
 	string warehouse;
 	// defaults and overrides provided by a catalog.

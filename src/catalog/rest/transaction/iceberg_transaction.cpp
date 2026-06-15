@@ -41,7 +41,8 @@ IcebergTransactionTableState::IcebergTransactionTableState(optional_ptr<IcebergT
 }
 
 IcebergTransaction::IcebergTransaction(IcebergCatalog &ic_catalog, TransactionManager &manager, ClientContext &context)
-    : Transaction(manager, context), db(*context.db), catalog(ic_catalog), access_mode(ic_catalog.access_mode) {
+    : Transaction(manager, context), db(*context.db), catalog(ic_catalog), access_mode(ic_catalog.access_mode),
+      start_catalog_version(ic_catalog.GetCommittedCatalogVersion()) {
 }
 
 IcebergTransaction::~IcebergTransaction() = default;
@@ -477,6 +478,8 @@ void IcebergTransaction::Commit() {
 
 	// Only reached when all Do*() calls succeeded - exceptions re-throw from the catch block above
 	catalog.IncrementCatalogVersion();
+	// Reflect the new committed version for any reads after commit in this transaction (mirrors ducklake).
+	local_catalog_version = catalog.GetCommittedCatalogVersion();
 	temp_con.Rollback();
 }
 
@@ -847,6 +850,10 @@ IcebergTransactionTableState &IcebergTransaction::SetLatestTableState(IcebergTab
 	return state;
 }
 
+void IcebergTransaction::MarkCatalogChanged() {
+	local_catalog_version = catalog.GetNewUncommittedCatalogVersion();
+}
+
 IcebergTransactionAlterUpdate &IcebergTransaction::GetOrCreateAlter() {
 	if (transaction_updates.empty() || transaction_updates.back()->type != IcebergTransactionUpdateType::ALTER) {
 		auto alter_p = make_uniq<IcebergTransactionAlterUpdate>(*this);
@@ -871,6 +878,7 @@ IcebergTableInformation &IcebergTransaction::DeleteTable(IcebergTableInformation
 	auto &deleted_table = delete_update->deleted_table;
 	state = SetLatestTableState(deleted_table, IcebergTableStatus::DROPPED);
 	transaction_updates.push_back(std::move(delete_update));
+	MarkCatalogChanged();
 	return state->GetInfo();
 }
 
@@ -890,6 +898,7 @@ IcebergTableInformation &IcebergTransaction::RenameTable(IcebergTableInformation
 	auto rename = make_uniq<IcebergTransactionRenameUpdate>(*this, state->GetInfo(), new_name);
 	auto &rename_update = *rename;
 	transaction_updates.push_back(std::move(rename));
+	MarkCatalogChanged();
 
 	//! Update the state of the renamed table
 	auto &new_table = rename_update.new_table;
