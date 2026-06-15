@@ -80,14 +80,18 @@ string IcebergTypeHelper::LogicalTypeToIcebergType(const LogicalType &type) {
 		return "timestamp_ns";
 	case LogicalTypeId::MAP:
 		return "map";
-	case LogicalTypeId::VARIANT:
+	case LogicalTypeId::VARIANT: {
 		return "variant";
+	}
 	case LogicalTypeId::GEOMETRY: {
 		if (GeoType::HasCRS(type)) {
 			return StringUtil::Format("geometry(%s)", GeoType::GetCRS(type).GetIdentifier());
 		}
 		// use default coordinate system
 		return "geometry(" + StringUtil::Lower(IcebergConstants::DefaultGeometryCRS) + ")";
+	}
+	case LogicalTypeId::SQLNULL: {
+		return "unknown";
 	}
 	default:
 		throw InvalidInputException("Column type %s is not a valid Iceberg Type.", LogicalTypeIdToString(type.id()));
