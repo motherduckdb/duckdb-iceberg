@@ -14,5 +14,9 @@ IcebergTableInformation &LoadIcebergTable(ClientContext &context, const Maintena
                                           const string &function_name);
 shared_ptr<IcebergTableInformation> LoadIcebergTableShared(ClientContext &context, const MaintenanceTableKey &key,
                                                            const string &function_name);
+//! Load metadata into a new table-information instance instead of reusing an
+//! already-filled catalog entry.
+shared_ptr<IcebergTableInformation> ReloadIcebergTableShared(ClientContext &context, const MaintenanceTableKey &key,
+                                                             const string &function_name);
 
 } // namespace duckdb

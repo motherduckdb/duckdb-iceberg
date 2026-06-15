@@ -1,6 +1,6 @@
 #pragma once
 
-#include "duckdb/common/string.hpp"
+#include "duckdb/common/types/value.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/main/client_context.hpp"
 
@@ -22,22 +22,25 @@ struct RewriteExecutionResult {
 	vector<RewriteCandidate> rewritten_candidates;
 };
 
-IcebergManifestEntry ExecuteOneGroup(ClientContext &context, const IcebergTableInformation &table_info,
-                                     const MaintenanceTableKey &table_key,
-                                     const vector<RewriteCandidate> &group, int64_t starting_sequence_number);
+//! Build the structured FIELD_IDS value consumed by parquet COPY.
+Value BuildRewriteFieldIds(const IcebergTableSchema &schema);
 
-RewriteExecutionResult ExecuteRewrite(ClientContext &context, const RewritePlan &plan);
+//! Convert the single-file result of one rewrite-group COPY into an ADDED
+//! manifest entry. The COPY result supplies the row count and path; partition
+//! values and sequence-number semantics come from the frozen rewrite plan.
+IcebergManifestEntry BuildRewriteManifestEntry(ClientContext &context, const vector<RewriteCandidate> &group,
+                                               int64_t starting_sequence_number, int64_t record_count,
+                                               const string &produced_file);
 
-namespace rewrite_executor_internal {
+//! Commit all completed rewrite groups as one Iceberg REPLACE snapshot.
+void CommitRewrite(ClientContext &context, const RewritePlan &plan, RewriteExecutionResult &result);
 
-//! Render the FIELD_IDS struct literal for the parquet COPY option.
-string BuildFieldIdsLiteral(const IcebergTableSchema &schema);
+//! Best-effort cleanup for files produced before a rewrite failure.
+void CleanupRewriteFiles(ClientContext &context, const IcebergTableInformation &table_info,
+                         const vector<string> &produced_paths);
 
-//! Build the COPY SQL for one rewrite group.
-string BuildRewriteCopySql(const string &catalog, const string &schema, const string &table,
-                           const vector<string> &file_paths, const string &target_dir,
-                           const string &field_ids_literal);
-
-} // namespace rewrite_executor_internal
+//! Validate that the currently loaded table snapshot still matches the frozen
+//! rewrite plan. Empty-table plans require the table to remain snapshot-less.
+void ValidateRewriteSnapshot(const RewritePlan &plan, const IcebergTableInformation &table_info, const string &phase);
 
 } // namespace duckdb

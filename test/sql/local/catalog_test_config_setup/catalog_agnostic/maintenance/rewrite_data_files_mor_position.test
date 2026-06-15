@@ -1,4 +1,4 @@
-# name: test/sql/local/irc_any_catalog/maintenance/rewrite_data_files_mor_position.test
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/maintenance/rewrite_data_files_mor_position.test
 # description: end-to-end V2 merge-on-read rewrite with position deletes
 # group: [maintenance]
 

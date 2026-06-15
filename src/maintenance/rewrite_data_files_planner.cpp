@@ -102,7 +102,7 @@ RewritePlan PlanRewrite(ClientContext &context, const RewriteDataFilesPlanInput 
 	RewritePlan plan;
 	plan.table_key = input.table_key;
 
-	auto table_info_ptr = LoadIcebergTableShared(context, input.table_key, "iceberg_rewrite_data_files");
+	auto table_info_ptr = ReloadIcebergTableShared(context, input.table_key, "iceberg_rewrite_data_files");
 	auto &table_info = *table_info_ptr;
 	auto &table_metadata = table_info.table_metadata;
 	plan.table_info = std::move(table_info_ptr);
@@ -128,8 +128,8 @@ RewritePlan PlanRewrite(ClientContext &context, const RewriteDataFilesPlanInput 
 	snapshot_info.schema_id = table_metadata.GetCurrentSchemaId();
 
 	IcebergOptions options;
-	auto manifest_list = IcebergManifestList::Load(table_metadata.GetLocation(), table_metadata, snapshot_info,
-	                                               context, options);
+	auto manifest_list =
+	    IcebergManifestList::Load(table_metadata.GetLocation(), table_metadata, snapshot_info, context, options);
 
 	const auto &manifest_files = manifest_list->GetManifestFilesConst();
 	if (manifest_files.empty()) {

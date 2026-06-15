@@ -99,6 +99,7 @@ set(EXTENSION_SOURCES
 	src/iceberg_logging.cpp
 	src/maintenance/maintenance_table_loader.cpp
 	src/maintenance/rewrite_data_files_executor.cpp
+	src/maintenance/rewrite_data_files_operator.cpp
 	src/maintenance/rewrite_data_files_planner.cpp
 	src/maintenance/table_lock_registry.cpp
 	src/planning/iceberg_multi_file_list.cpp
