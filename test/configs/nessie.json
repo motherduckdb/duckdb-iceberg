@@ -47,6 +47,7 @@
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/update/partitions/update_bucket_tables_v3.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/update/partitions/update_truncate_tables_v3.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/create/test_create_default.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/create/test_create_unknown_type.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/update/update_with_default.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/merge/merge_into_default.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/other_engines/test_create_partitioned_tables.test",
