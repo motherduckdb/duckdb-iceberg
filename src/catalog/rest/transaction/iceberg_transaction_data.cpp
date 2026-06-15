@@ -1,4 +1,6 @@
 #include "catalog/rest/transaction/iceberg_transaction_data.hpp"
+#include "catalog/rest/transaction/iceberg_transaction.hpp"
+#include "catalog/rest/iceberg_catalog.hpp"
 
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
 #include "duckdb/common/types/uuid.hpp"
@@ -111,6 +113,7 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 
 	alters.push_back(*add_snapshot);
 	updates.push_back(std::move(add_snapshot));
+	MarkChanged();
 }
 
 void IcebergTransactionData::AddUpdateSnapshot(vector<IcebergManifestEntry> &&delete_files,
@@ -145,6 +148,7 @@ void IcebergTransactionData::AddUpdateSnapshot(vector<IcebergManifestEntry> &&de
 
 	alters.push_back(*add_snapshot);
 	updates.push_back(std::move(add_snapshot));
+	MarkChanged();
 }
 
 void IcebergTransactionData::TableAddSchema(int32_t schema_id) {
@@ -152,6 +156,7 @@ void IcebergTransactionData::TableAddSchema(int32_t schema_id) {
 	updates.push_back(std::move(add_schema_update));
 	assert_schema_id = true;
 	set_schema_id = true;
+	MarkChanged();
 }
 
 void IcebergTransactionData::TableSetCurrentSchema() {
@@ -192,6 +197,7 @@ void IcebergTransactionData::TableAddUpradeFormatVersion() {
 
 void IcebergTransactionData::TableAddPartitionSpec() {
 	updates.push_back(make_uniq<AddPartitionSpec>(table_info));
+	MarkChanged();
 }
 
 void IcebergTransactionData::TableAddSortOrder() {
@@ -208,10 +214,16 @@ void IcebergTransactionData::TableSetDefaultSpec() {
 
 void IcebergTransactionData::TableSetProperties(const case_insensitive_map_t<string> &properties) {
 	updates.push_back(make_uniq<SetProperties>(table_info, properties));
+	MarkChanged();
 }
 
 void IcebergTransactionData::TableRemoveProperties(const vector<string> &properties) {
 	updates.push_back(make_uniq<RemoveProperties>(table_info, properties));
+	MarkChanged();
+}
+
+void IcebergTransactionData::MarkChanged() {
+	IcebergTransaction::Get(context, table_info.catalog).MarkCatalogChanged();
 }
 
 void IcebergTransactionData::TableSetLocation() {
