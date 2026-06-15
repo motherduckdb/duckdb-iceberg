@@ -68,7 +68,8 @@ IcebergTableInformation &IcebergTransactionTableState::GetOrCreateTransactionInf
 }
 
 IcebergTransaction::IcebergTransaction(IcebergCatalog &ic_catalog, TransactionManager &manager, ClientContext &context)
-    : Transaction(manager, context), db(*context.db), catalog(ic_catalog), access_mode(ic_catalog.access_mode) {
+    : Transaction(manager, context), db(*context.db), catalog(ic_catalog), access_mode(ic_catalog.access_mode),
+      start_catalog_version(ic_catalog.GetCommittedCatalogVersion()) {
 }
 
 IcebergTransaction::~IcebergTransaction() = default;
@@ -531,6 +532,8 @@ void IcebergTransaction::Commit() {
 
 	// Only reached when all Do*() calls succeeded - exceptions re-throw from the catch block above
 	catalog.IncrementCatalogVersion();
+	// Reflect the new committed version for any reads after commit in this transaction (mirrors ducklake).
+	local_catalog_version = catalog.GetCommittedCatalogVersion();
 	temp_con.Rollback();
 }
 
@@ -884,6 +887,10 @@ IcebergTransaction::GetOrCreateTransactionTableState(const IcebergTableInformati
 	return SetTransactionTableState(table_key, std::move(copy), IcebergTableStatus::ALIVE);
 }
 
+void IcebergTransaction::MarkCatalogChanged() {
+	local_catalog_version = catalog.GetNewUncommittedCatalogVersion();
+}
+
 IcebergTransactionAlterUpdate &IcebergTransaction::GetOrCreateAlter() {
 	if (!HasTableUpdate()) {
 		transaction_update.emplace<IcebergTransactionAlterUpdate>(*this);
@@ -910,6 +917,7 @@ IcebergTableInformation &IcebergTransaction::DeleteTable(IcebergTableInformation
 	auto &deleted_table = state->GetOrCreateTransactionInfo(*this);
 	state->SetStatus(IcebergTableStatus::DROPPED);
 	transaction_update.emplace<IcebergTransactionDeleteUpdate>(*this, deleted_table);
+	MarkCatalogChanged();
 	return state->GetInfo();
 }
 
@@ -933,6 +941,7 @@ IcebergTableInformation &IcebergTransaction::RenameTable(IcebergTableInformation
 
 	//! Create the rename update, creating the new IcebergTableInformation in the process
 	transaction_update.emplace<IcebergTransactionRenameUpdate>(*this, source_table, new_state.GetInfo(), new_name);
+	MarkCatalogChanged();
 	return state->GetInfo();
 }
 

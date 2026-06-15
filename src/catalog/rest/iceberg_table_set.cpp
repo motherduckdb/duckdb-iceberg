@@ -100,10 +100,30 @@ void IcebergTableSet::Scan(ClientContext &context, const std::function<void(Cata
 	lock_guard<mutex> lock(entry_lock);
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
 	LoadEntries(context);
+	case_insensitive_set_t scanned_table_keys;
 	for (auto &entry : entries) {
 		auto &table_info = *entry.second;
 		auto table_key = table_info.GetTableKey();
 		iceberg_transaction.tables[table_key] = entry.second;
+		scanned_table_keys.insert(table_key);
+
+		// Surface the transaction-local state of tables modified within this transaction, so that staged
+		// changes (e.g. an uncommitted ALTER) are visible instead of the (stale) dummy entry.
+		auto latest_state = iceberg_transaction.GetLatestTableState(table_key);
+		if (latest_state) {
+			if (!latest_state->IsAlive()) {
+				// dropped or renamed away within this transaction
+				continue;
+			}
+			auto &transaction_table_info = latest_state->GetInfo();
+			if (transaction_table_info.HasTransactionUpdates()) {
+				auto transaction_entry = transaction_table_info.GetLatestSchema(context);
+				if (transaction_entry) {
+					callback(*transaction_entry);
+					continue;
+				}
+			}
+		}
 
 		if (!table_info.schema_versions.empty()) {
 			// The table has already been resolved (e.g. via DESCRIBE or a scan), so its full schema -
@@ -118,6 +138,24 @@ void IcebergTableSet::Scan(ClientContext &context, const std::function<void(Cata
 
 		auto &dummy = GetOrCreateDummy(table_info);
 		callback(dummy);
+	}
+	// Tables created (or renamed to) within this transaction are only known to the transaction state
+	for (auto &it : iceberg_transaction.current_table_data) {
+		auto &state = it.second;
+		if (!state.IsAlive() || scanned_table_keys.count(it.first)) {
+			continue;
+		}
+		auto &transaction_table_info = state.GetInfo();
+		// Do not require HasTransactionUpdates(): a rename target is a fresh copy with no transaction_data
+		// of its own, so it would be wrongly skipped. IsAlive() + scanned_table_keys already exclude
+		// renamed-away/dropped tables and committed tables surfaced in the first loop.
+		if (&transaction_table_info.schema != &schema) {
+			continue;
+		}
+		auto transaction_entry = transaction_table_info.GetLatestSchema(context);
+		if (transaction_entry) {
+			callback(*transaction_entry);
+		}
 	}
 }
 

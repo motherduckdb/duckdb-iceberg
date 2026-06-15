@@ -57,6 +57,8 @@ public:
 
 private:
 	void CacheExistingManifestList(lock_guard<mutex> &guard, const IcebergTableMetadata &metadata);
+	//! Advance the owning transaction's catalog version: called when a real catalog change is staged.
+	void MarkChanged();
 
 public:
 	string initial_table_uuid;
