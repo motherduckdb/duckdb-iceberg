@@ -70,6 +70,11 @@ static unique_ptr<FunctionData> SetIcebergSchemaPropertiesBind(ClientContext &co
 		throw InvalidInputException("Cannot call set_iceberg_schema_properties on non-iceberg schema");
 	}
 	ret->iceberg_schema = iceberg_schema->Cast<IcebergSchemaEntry>();
+	if (input.binder) {
+		DatabaseModificationType modification;
+		modification |= DatabaseModificationType::ALTER_TABLE;
+		input.binder->GetStatementProperties().RegisterDBModify(iceberg_schema->ParentCatalog(), context, modification);
+	}
 	auto map = Value(input.inputs[1]).DefaultCastAs(LogicalType::MAP(LogicalType::VARCHAR, LogicalType::VARCHAR));
 
 	auto &map_children = MapValue::GetChildren(map);
@@ -95,6 +100,11 @@ static unique_ptr<FunctionData> RemoveIcebergSchemaPropertiesBind(ClientContext 
 		throw InvalidInputException("Cannot call remove_iceberg_schema_properties on non-iceberg schema");
 	}
 	ret->iceberg_schema = iceberg_schema->Cast<IcebergSchemaEntry>();
+	if (input.binder) {
+		DatabaseModificationType modification;
+		modification |= DatabaseModificationType::ALTER_TABLE;
+		input.binder->GetStatementProperties().RegisterDBModify(iceberg_schema->ParentCatalog(), context, modification);
+	}
 
 	auto &remove_values = input.inputs[1];
 	auto &list_children = ListValue::GetChildren(remove_values);
