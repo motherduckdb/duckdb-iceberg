@@ -21,6 +21,7 @@
 #include "catalog/rest/storage/authorization/sigv4.hpp"
 #include "rest_catalog/objects/list.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "common/iceberg_default.hpp"
 
 namespace duckdb {
 class OAuth2Authorization;
@@ -280,6 +281,22 @@ vector<column_t> IcebergTableEntry::GetRowIdColumns() const {
 	result.push_back(MultiFileReader::COLUMN_IDENTIFIER_FILENAME);
 	result.push_back(MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER);
 	return result;
+}
+
+LogicalType IcebergTableEntry::GetExpectedTypeForInsert(const ColumnDefinition &column) const {
+	auto type = column.Type();
+	if (type.id() == LogicalTypeId::STRUCT) {
+		return LogicalType::INVALID;
+	}
+	return type;
+}
+
+unique_ptr<Expression> IcebergTableEntry::GetDefaultExpressionForColumn(ClientContext &context,
+                                                                        const LogicalType &input_type,
+                                                                        const LogicalType &result_type,
+                                                                        ColumnBinding binding,
+                                                                        const Expression &constant_value) const {
+	return IcebergDefaultProjectionResolver::ResolveDefault(context, input_type, result_type, binding, constant_value);
 }
 
 TableStorageInfo IcebergTableEntry::GetStorageInfo(ClientContext &context) {

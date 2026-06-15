@@ -21,7 +21,7 @@ static string AddEscapesToBlob(const string &hexadecimal_string) {
 }
 
 static Value ParseDefaultForType(const LogicalType &type, const rest_api_objects::PrimitiveTypeValue &default_value) {
-	if (type.IsNested()) {
+	if (type.IsNested() && type.id() != LogicalTypeId::STRUCT) {
 		throw InvalidConfigurationException("Can't parse default value for nested type (%s)", type.ToString());
 	}
 
@@ -66,59 +66,8 @@ static Value ParseDefaultForType(const LogicalType &type, const rest_api_objects
 	}
 }
 
-unique_ptr<IcebergColumnDefinition>
-IcebergColumnDefinition::ParseType(const string &name, int32_t field_id, bool required, rest_api_objects::Type &type,
-                                   const std::optional<string> &doc,
-                                   const std::optional<rest_api_objects::PrimitiveTypeValue> &initial_default,
-                                   const std::optional<rest_api_objects::PrimitiveTypeValue> &write_default) {
-	auto res = make_uniq<IcebergColumnDefinition>();
-	res->id = field_id;
-	res->required = required;
-	res->name = name;
-	if (doc) {
-		res->doc = *doc;
-	}
-
-	if (type.primitive_type) {
-		res->type = ParsePrimitiveType(*type.primitive_type);
-	} else if (type.struct_type) {
-		auto &struct_type = *type.struct_type;
-		child_list_t<LogicalType> struct_children;
-		for (auto &field_p : struct_type.fields) {
-			auto &field = *field_p;
-			auto child = ParseStructField(field);
-			struct_children.emplace_back(std::make_pair(child->name, child->type));
-			res->children.push_back(std::move(child));
-		}
-		res->type = LogicalType::STRUCT(std::move(struct_children));
-	} else if (type.list_type) {
-		auto &list_type = *type.list_type;
-		auto child = ParseType("element", list_type.element_id, list_type.element_required, *list_type.element);
-		res->type = LogicalType::LIST(child->type);
-		res->children.push_back(std::move(child));
-	} else if (type.map_type) {
-		auto &map_type = *type.map_type;
-		auto key = ParseType("key", map_type.key_id, true, *map_type.key);
-		auto value = ParseType("value", map_type.value_id, map_type.value_required, *map_type.value);
-		res->type = LogicalType::MAP(key->type, value->type);
-		res->children.push_back(std::move(key));
-		res->children.push_back(std::move(value));
-	} else {
-		throw InvalidConfigurationException("Encountered an invalid type in JSON schema");
-	}
-
-	if (initial_default) {
-		res->initial_default = make_uniq<Value>(ParseDefaultForType(res->type, *initial_default));
-	}
-	if (write_default) {
-		res->write_default = make_uniq<Value>(ParseDefaultForType(res->type, *write_default));
-	}
-	return res;
-}
-
-LogicalType IcebergColumnDefinition::ParsePrimitiveType(rest_api_objects::PrimitiveType &type) {
+LogicalType IcebergColumnDefinition::ParsePrimitiveType(const rest_api_objects::PrimitiveType &type) {
 	auto &type_str = type.value;
-
 	return ParsePrimitiveTypeString(type_str);
 }
 
@@ -203,20 +152,78 @@ LogicalType IcebergColumnDefinition::ParsePrimitiveTypeString(const string &type
 	throw InvalidConfigurationException("Unrecognized primitive type: %s", type_str);
 }
 
-unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::ParseStructField(rest_api_objects::StructField &field) {
-	return ParseType(field.name, field.id, field.required, *field.type, field._doc, field.initial_default,
-	                 field.write_default);
+static rest_api_objects::StructField
+CreateStructField(const string &name, int32_t field_id, bool required, const rest_api_objects::Type &iceberg_type,
+                  const optional<string> &doc = std::nullopt,
+                  const optional<rest_api_objects::PrimitiveTypeValue> &initial_default = std::nullopt,
+                  const optional<rest_api_objects::PrimitiveTypeValue> &write_default = std::nullopt) {
+	rest_api_objects::StructField result;
+	result.id = field_id;
+	result.name = name;
+	result.type = make_uniq<rest_api_objects::Type>(iceberg_type.Copy());
+	result.required = required;
+	result._doc = doc;
+	if (initial_default) {
+		result.initial_default = initial_default->Copy();
+	}
+	if (write_default) {
+		result.write_default = write_default->Copy();
+	}
+	return result;
 }
 
-vector<unique_ptr<IcebergColumnDefinition>>::const_iterator
-IcebergColumnDefinition::GetChildIterator(const string &child_name) const {
-	for (auto it = children.begin(); it != children.end(); it++) {
-		auto &child = *(*it);
-		if (StringUtil::CIEquals(child.name, child_name)) {
-			return it;
-		}
+unique_ptr<IcebergColumnDefinition>
+IcebergColumnDefinition::ParseStructField(const rest_api_objects::StructField &field) {
+	auto res = make_uniq<IcebergColumnDefinition>();
+	res->id = field.id;
+	res->required = field.required;
+	res->name = field.name;
+	if (field._doc) {
+		res->doc = *field._doc;
 	}
-	return children.end();
+
+	auto &type = *field.type;
+	if (type.primitive_type) {
+		res->type = ParsePrimitiveType(*type.primitive_type);
+	} else if (type.struct_type) {
+		auto &struct_type = *type.struct_type;
+		child_list_t<LogicalType> struct_children;
+		for (auto &field_p : struct_type.fields) {
+			auto &child_field = *field_p;
+			auto child = ParseStructField(child_field);
+			struct_children.emplace_back(child->name, child->type);
+			res->AddChild(std::move(child));
+		}
+		res->type = LogicalType::STRUCT(std::move(struct_children));
+	} else if (type.list_type) {
+		auto &list_type = *type.list_type;
+		auto child_field =
+		    CreateStructField("element", list_type.element_id, list_type.element_required, *list_type.element);
+		auto child = ParseStructField(child_field);
+		res->type = LogicalType::LIST(child->type);
+		res->AddChild(std::move(child));
+	} else if (type.map_type) {
+		auto &map_type = *type.map_type;
+		auto key_field = CreateStructField("key", map_type.key_id, true, *map_type.key);
+		auto value_field = CreateStructField("value", map_type.value_id, map_type.value_required, *map_type.value);
+
+		auto key = ParseStructField(key_field);
+		auto value = ParseStructField(value_field);
+		res->type = LogicalType::MAP(key->type, value->type);
+		res->AddChild(std::move(key));
+		res->AddChild(std::move(value));
+	} else {
+		throw InvalidConfigurationException("Encountered an invalid type in JSON schema");
+	}
+
+	if (field.initial_default) {
+		res->initial_default = make_uniq<Value>(ParseDefaultForType(res->type, *field.initial_default));
+	}
+	if (field.write_default) {
+		res->write_default = make_uniq<Value>(ParseDefaultForType(res->type, *field.write_default));
+	}
+
+	return res;
 }
 
 bool IcebergColumnDefinition::IsIcebergPrimitiveType() const {
@@ -261,7 +268,7 @@ unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::Copy() const {
 	}
 	res->required = required;
 	for (auto &child : children) {
-		res->children.push_back(child->Copy());
+		res->AddChild(child->Copy());
 	}
 	return res;
 }
@@ -269,7 +276,19 @@ unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::Copy() const {
 MultiFileColumnDefinition IcebergColumnDefinition::GetMultiFileColumnDefinition() const {
 	MultiFileColumnDefinition column(name, type);
 	if (!initial_default || initial_default->IsNull()) {
-		column.default_expression = make_uniq<ConstantExpression>(Value(type));
+		if (type.id() == LogicalTypeId::STRUCT) {
+			//! NOTE: spec defines {} as default value, but in practice no engine/catalog supports this
+			vector<Value> child_values;
+			for (auto &child : children) {
+				auto child_column = child->GetMultiFileColumnDefinition();
+				auto &child_default = child_column.default_expression->Cast<ConstantExpression>().GetValue();
+				child_values.emplace_back(child_default);
+			}
+			auto default_value = Value::STRUCT(type, child_values);
+			column.default_expression = make_uniq<ConstantExpression>(default_value);
+		} else {
+			column.default_expression = make_uniq<ConstantExpression>(Value(type));
+		}
 	} else {
 		column.default_expression = make_uniq<ConstantExpression>(*initial_default);
 	}
@@ -280,7 +299,7 @@ MultiFileColumnDefinition IcebergColumnDefinition::GetMultiFileColumnDefinition(
 	return column;
 }
 
-ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
+Value IcebergColumnDefinition::GetWriteDefault() const {
 	optional_ptr<Value> default_to_use;
 	if (write_default) {
 		//! Use write-default if it's set
@@ -291,12 +310,35 @@ ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
 	}
 	auto res = ColumnDefinition(Identifier(name), type);
 	if (default_to_use) {
-		//! FIXME: the expression needs to be more advanced for nested types
-		if (type.IsNested()) {
-			throw NotImplementedException("DEFAULT values for nested types are not supported currently");
-		}
-		res.SetDefaultValue(make_uniq<ConstantExpression>(*default_to_use));
+		return *default_to_use;
 	}
+	return Value(type);
+}
+
+ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
+	auto res = ColumnDefinition(Identifier(name), type);
+
+	auto write_default = GetWriteDefault();
+	if (!write_default.IsNull()) {
+		if (type.IsNested()) {
+			throw NotImplementedException("{} DEFAULT not supported for STRUCT yet");
+		}
+		res.SetDefaultValue(make_uniq<ConstantExpression>(write_default));
+	} else if (type.id() == LogicalTypeId::STRUCT) {
+		vector<Value> child_values;
+		for (auto &child : children) {
+			auto child_column = child->GetColumnDefinition();
+			if (child_column.HasDefaultValue()) {
+				auto &child_default = child_column.DefaultValue().Cast<ConstantExpression>();
+				child_values.emplace_back(child_default.GetValue());
+			} else {
+				child_values.emplace_back(Value(child->type));
+			}
+		}
+		auto default_value = Value::STRUCT(type, child_values);
+		res.SetDefaultValue(make_uniq<ConstantExpression>(default_value));
+	}
+
 	if (!doc.empty()) {
 		//! Surface the Iceberg field `doc` as the DuckDB column comment
 		res.SetComment(Value(doc));
@@ -315,6 +357,84 @@ static bool DefaultsAreEqual(const unique_ptr<Value> &a, const unique_ptr<Value>
 		return false;
 	}
 	return ValueOperations::NotDistinctFrom(*a, *b);
+}
+
+void IcebergColumnDefinition::RemoveChild(const string &name) {
+	auto it = std::find_if(children.begin(), children.end(), [&name](const unique_ptr<IcebergColumnDefinition> &child) {
+		return StringUtil::CIEquals(child->name, name);
+	});
+	if (it == children.end()) {
+		throw InternalException("Can't delete child by name '%s', no child by that name exists", name);
+	}
+	children.erase(it);
+	RewriteType();
+}
+
+void IcebergColumnDefinition::AddChild(unique_ptr<IcebergColumnDefinition> &&child) {
+	child->parent = this;
+	children.emplace_back(std::move(child));
+	RewriteType();
+}
+
+idx_t IcebergColumnDefinition::GetChildCount() const {
+	return children.size();
+}
+
+void IcebergColumnDefinition::RewriteType() {
+	switch (type.id()) {
+	case LogicalTypeId::STRUCT: {
+		child_list_t<LogicalType> struct_children;
+		struct_children.reserve(children.size());
+		for (auto &child : children) {
+			struct_children.emplace_back(child->name, child->type);
+		}
+		type = LogicalType::STRUCT(std::move(struct_children));
+		break;
+	}
+	case LogicalTypeId::LIST: {
+		if (children.size() != 1) {
+			return;
+		}
+		type = LogicalType::LIST(children[0]->type);
+		break;
+	}
+	case LogicalTypeId::MAP: {
+		if (children.size() != 2) {
+			return;
+		}
+		type = LogicalType::MAP(children[0]->type, children[1]->type);
+		break;
+	}
+	default:
+		if (parent) {
+			parent->RewriteType();
+		}
+		return;
+	}
+	if (parent) {
+		parent->RewriteType();
+	}
+}
+
+optional_ptr<const IcebergColumnDefinition> IcebergColumnDefinition::GetChild(const string &name) const {
+	auto it = std::find_if(children.begin(), children.end(), [&name](const unique_ptr<IcebergColumnDefinition> &child) {
+		return StringUtil::CIEquals(child->name, name);
+	});
+	if (it == children.end()) {
+		return nullptr;
+	}
+	return (*it).get();
+}
+
+optional_ptr<const IcebergColumnDefinition> IcebergColumnDefinition::GetChild(idx_t index) const {
+	if (index >= children.size()) {
+		return nullptr;
+	}
+	return children[index].get();
+}
+
+const vector<unique_ptr<IcebergColumnDefinition>> &IcebergColumnDefinition::GetChildren() const {
+	return children;
 }
 
 bool IcebergColumnDefinition::Equals(const IcebergColumnDefinition &other) const {

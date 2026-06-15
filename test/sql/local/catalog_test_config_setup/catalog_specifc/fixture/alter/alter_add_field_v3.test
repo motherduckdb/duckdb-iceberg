@@ -1,0 +1,257 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_specifc/fixture/alter/alter_add_field_v3.test
+# group: [alter]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require-env FIXTURE_SERVER_AVAILABLE
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS my_datalake.default;
+
+# The rows are inserted before the ALTER, so any default visible afterward must come from the read path.
+
+statement ok
+drop table if exists my_datalake.default.alter_add_field_root_struct;
+
+statement ok
+CREATE TABLE my_datalake.default.alter_add_field_root_struct (
+	id INTEGER,
+	payload STRUCT(
+		a VARCHAR,
+		nested STRUCT(
+			x VARCHAR
+		)
+	)
+) WITH (
+	'format-version' = 3
+);
+
+statement ok
+INSERT INTO my_datalake.default.alter_add_field_root_struct VALUES
+	(1, {'a': 'alpha', 'nested': {'x': 'one'}}),
+	(2, {'a': 'beta', 'nested': {'x': 'two'}});
+
+statement ok
+ALTER TABLE my_datalake.default.alter_add_field_root_struct ADD COLUMN payload.b INTEGER DEFAULT 42;
+
+query II
+select id, payload from my_datalake.default.alter_add_field_root_struct order by id;
+----
+1	{'a': alpha, 'nested': {'x': one}, 'b': 42}
+2	{'a': beta, 'nested': {'x': two}, 'b': 42}
+
+# Add a field one level down inside an existing nested STRUCT.
+
+statement ok
+drop table if exists my_datalake.default.alter_add_field_nested_struct;
+
+statement ok
+CREATE TABLE my_datalake.default.alter_add_field_nested_struct (
+	id INTEGER,
+	payload STRUCT(
+		a VARCHAR,
+		nested STRUCT(
+			x VARCHAR
+		)
+	)
+) WITH (
+	'format-version' = 3
+);
+
+statement ok
+INSERT INTO my_datalake.default.alter_add_field_nested_struct VALUES
+	(1, {'a': 'alpha', 'nested': {'x': 'one'}}),
+	(2, {'a': 'beta', 'nested': {'x': 'two'}});
+
+statement ok
+ALTER TABLE my_datalake.default.alter_add_field_nested_struct ADD COLUMN payload.nested.y VARCHAR DEFAULT 'child-default';
+
+query II
+select id, payload from my_datalake.default.alter_add_field_nested_struct order by id;
+----
+1	{'a': alpha, 'nested': {'x': one, 'y': child-default}}
+2	{'a': beta, 'nested': {'x': two, 'y': child-default}}
+
+# Add a field two levels down inside a nested STRUCT of a nested STRUCT.
+
+statement ok
+drop table if exists my_datalake.default.alter_add_field_grandchild_struct;
+
+statement ok
+CREATE TABLE my_datalake.default.alter_add_field_grandchild_struct (
+	id INTEGER,
+	payload STRUCT(
+		a VARCHAR,
+		nested STRUCT(
+			x STRUCT(
+				z VARCHAR
+			)
+		)
+	)
+) WITH (
+	'format-version' = 3
+);
+
+statement ok
+INSERT INTO my_datalake.default.alter_add_field_grandchild_struct VALUES
+	(1, {'a': 'alpha', 'nested': {'x': {'z': 'one'}}}),
+	(2, {'a': 'beta', 'nested': {'x': {'z': 'two'}}});
+
+statement ok
+ALTER TABLE my_datalake.default.alter_add_field_grandchild_struct ADD COLUMN payload.nested.x.y VARCHAR DEFAULT 'grandchild-default';
+
+query II
+select id, payload from my_datalake.default.alter_add_field_grandchild_struct order by id;
+----
+1	{'a': alpha, 'nested': {'x': {'z': one, 'y': grandchild-default}}}
+2	{'a': beta, 'nested': {'x': {'z': two, 'y': grandchild-default}}}
+
+# Add a field of type STRUCT, then rename and delete nested fields inside it.
+
+statement ok
+drop table if exists my_datalake.default.alter_add_field_struct;
+
+statement ok
+CREATE TABLE my_datalake.default.alter_add_field_struct (
+	id INTEGER,
+	payload STRUCT(
+		a VARCHAR,
+		nested STRUCT(
+			x VARCHAR
+		)
+	)
+) WITH (
+	'format-version' = 3
+);
+
+statement ok
+INSERT INTO my_datalake.default.alter_add_field_struct VALUES
+	(1, {'a': 'alpha', 'nested': {'x': 'one'}}),
+	(2, {'a': 'beta', 'nested': {'x': 'two'}});
+
+statement ok
+ALTER TABLE my_datalake.default.alter_add_field_struct ADD COLUMN payload.extra STRUCT(
+	flag BOOLEAN,
+	"inner" STRUCT(
+		z VARCHAR,
+		w INTEGER
+	),
+	flag2 BOOLEAN
+) DEFAULT {
+	'flag': true,
+	'inner': {
+		'z': 'alpha-default',
+		'w': 7
+	}
+};
+
+query II
+select id, payload from my_datalake.default.alter_add_field_struct order by id;
+----
+1	{'a': alpha, 'nested': {'x': one}, 'extra': {'flag': true, 'inner': {'z': alpha-default, 'w': 7}, 'flag2': NULL}}
+2	{'a': beta, 'nested': {'x': two}, 'extra': {'flag': true, 'inner': {'z': alpha-default, 'w': 7}, 'flag2': NULL}}
+
+statement ok
+ALTER TABLE my_datalake.default.alter_add_field_struct RENAME COLUMN payload.extra."inner".z TO renamed_z;
+
+query II
+select id, payload from my_datalake.default.alter_add_field_struct order by id;
+----
+1	{'a': alpha, 'nested': {'x': one}, 'extra': {'flag': true, 'inner': {'renamed_z': alpha-default, 'w': 7}, 'flag2': NULL}}
+2	{'a': beta, 'nested': {'x': two}, 'extra': {'flag': true, 'inner': {'renamed_z': alpha-default, 'w': 7}, 'flag2': NULL}}
+
+statement ok
+ALTER TABLE my_datalake.default.alter_add_field_struct DROP COLUMN payload.extra."inner".w;
+
+query II
+select id, payload from my_datalake.default.alter_add_field_struct order by id;
+----
+1	{'a': alpha, 'nested': {'x': one}, 'extra': {'flag': true, 'inner': {'renamed_z': alpha-default}, 'flag2': NULL}}
+2	{'a': beta, 'nested': {'x': two}, 'extra': {'flag': true, 'inner': {'renamed_z': alpha-default}, 'flag2': NULL}}
+
+# Add a field of type STRUCT with DEFAULT NULL. Existing rows currently read it back
+# as a struct whose fields are all NULL rather than NULL.
+
+statement ok
+drop table if exists my_datalake.default.alter_add_field_struct_default_null;
+
+statement ok
+CREATE TABLE my_datalake.default.alter_add_field_struct_default_null (
+	id INTEGER,
+	payload STRUCT(
+		a VARCHAR,
+		nested STRUCT(
+			x VARCHAR
+		)
+	)
+) WITH (
+	'format-version' = 3
+);
+
+statement ok
+INSERT INTO my_datalake.default.alter_add_field_struct_default_null VALUES
+	(1, {'a': 'alpha', 'nested': {'x': 'one'}}),
+	(2, {'a': 'beta', 'nested': {'x': 'two'}});
+
+statement ok
+ALTER TABLE my_datalake.default.alter_add_field_struct_default_null ADD COLUMN payload.extra STRUCT(
+	flag BOOLEAN,
+	"inner" STRUCT(
+		z VARCHAR
+	),
+	flag2 BOOLEAN
+) DEFAULT NULL;
+
+# FIXME: 'inner' should be NULL, but this needs support for {} first
+query II
+select id, payload from my_datalake.default.alter_add_field_struct_default_null order by id;
+----
+1	{'a': alpha, 'nested': {'x': one}, 'extra': {'flag': NULL, 'inner': {'z': NULL}, 'flag2': NULL}}
+2	{'a': beta, 'nested': {'x': two}, 'extra': {'flag': NULL, 'inner': {'z': NULL}, 'flag2': NULL}}
+
+# Add a nested field of type STRUCT with DEFAULT NULL. Existing rows currently read it
+# back as a struct whose fields are all NULL rather than NULL.
+
+statement ok
+drop table if exists my_datalake.default.alter_add_field_nested_struct_default_null;
+
+statement ok
+CREATE TABLE my_datalake.default.alter_add_field_nested_struct_default_null (
+	id INTEGER,
+	payload STRUCT(
+		a VARCHAR,
+		nested STRUCT(
+			x VARCHAR
+		)
+	)
+) WITH (
+	'format-version' = 3
+);
+
+statement ok
+INSERT INTO my_datalake.default.alter_add_field_nested_struct_default_null VALUES
+	(1, {'a': 'alpha', 'nested': {'x': 'one'}}),
+	(2, {'a': 'beta', 'nested': {'x': 'two'}});
+
+statement ok
+ALTER TABLE my_datalake.default.alter_add_field_nested_struct_default_null ADD COLUMN payload.nested.extra STRUCT(
+	y VARCHAR,
+	z INTEGER
+) DEFAULT NULL;
+
+query II
+select id, payload from my_datalake.default.alter_add_field_nested_struct_default_null order by id;
+----
+1	{'a': alpha, 'nested': {'x': one, 'extra': {'y': NULL, 'z': NULL}}}
+2	{'a': beta, 'nested': {'x': two, 'extra': {'y': NULL, 'z': NULL}}}

@@ -1,0 +1,136 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/update/test_update_default_struct_nested.test
+# description: Regression for nested default struct values during UPDATE
+# group: [update]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+# Struct nested within another struct within another struct
+
+statement ok
+drop table if exists my_datalake.default.nested_nested_tbl;
+
+# NOTE: Since no engine/catalog supports the {} default for STRUCT, we write NULL (omit the initial-default) for STRUCT instead
+# This changes the behavior matrix, and will need to be updated when support for {} is added
+statement ok
+create table my_datalake.default.nested_nested_tbl(
+	id INTEGER,
+	col STRUCT(
+		a VARCHAR,
+		b STRUCT(
+			v1 BIGINT,
+			v2 STRUCT(
+				f1 VARCHAR,
+				f2 VARCHAR,
+				f3 VARCHAR
+			),
+			v3 BIGINT
+		),
+		e BOOLEAN
+	) DEFAULT {
+		'a': 'test',
+		'b': {
+			'v1': 1000,
+			'v2': {
+				'f1': 'alpha',
+				'f3': 'gamma'
+			},
+			'v3': -500
+		},
+		'e': NULL
+	},
+	col2 INTEGER
+) WITH (
+	'format-version'= 3
+);
+
+statement ok
+insert into my_datalake.default.nested_nested_tbl values
+	(1, {'a': 'seed', 'b': {'v1': 0, 'v2': {'f1': 'seed', 'f2': 'seed', 'f3': 'seed'}, 'v3': 0}, 'e': false}, 12),
+	(2, {'a': 'seed', 'b': {'v1': 0, 'v2': {'f1': 'seed', 'f2': 'seed', 'f3': 'seed'}, 'v3': 0}, 'e': false}, 24),
+	(3, {'a': 'seed', 'b': {'v1': 0, 'v2': {'f1': 'seed', 'f2': 'seed', 'f3': 'seed'}, 'v3': 0}, 'e': false}, 36);
+
+# col.b.in: -
+# col.b.default: {}
+# col.b.v2.f1.default: alpha
+# col.b.v2.f2.default: -
+# col.b.v2.f3.default: gamma
+# col.b.v2.result: {'f1': alpha, 'f2': NULL, 'f3': gamma}
+statement ok
+UPDATE my_datalake.default.nested_nested_tbl
+	SET col = {
+		'b': {
+			'v2': {
+				'f3': NULL
+			}
+		}
+	},
+	col2 = 12
+WHERE id = 1;
+
+query III
+select * from my_datalake.default.nested_nested_tbl where id = 1;
+----
+1	{'a': test, 'b': {'v1': 1000, 'v2': {'f1': alpha, 'f2': NULL, 'f3': NULL}, 'v3': -500}, 'e': NULL}	12
+
+# Only supply b.v2.f2, which has no default; f1 and f3 retain their defaults
+
+# col.b.in: {'v2': {'f2': 'world'}}
+# col.b.default: {}
+# col.b.v2.f1.default: alpha
+# col.b.v2.f2.default: -
+# col.b.v2.f3.default: gamma
+# col.b.v2.result: {'f1': alpha, 'f2': world, 'f3': gamma}
+statement ok
+UPDATE my_datalake.default.nested_nested_tbl
+	SET col = {
+		'b': {
+			'v2': {
+				'f2': 'world'
+			}
+		}
+	},
+	col2 = 24
+WHERE id = 2;
+
+query III
+select * from my_datalake.default.nested_nested_tbl where id = 2;
+----
+2	{'a': test, 'b': {'v1': 1000, 'v2': {'f1': alpha, 'f2': world, 'f3': gamma}, 'v3': -500}, 'e': NULL}	24
+
+# Supply all three inner fields, fully overriding all defaults in v2
+
+# col.b.in: {'v2': {'f1': 'foo', 'f2': 'bar', 'f3': 'baz'}}
+# col.b.default: {}
+# col.b.v2.f1.default: alpha
+# col.b.v2.f2.default: -
+# col.b.v2.f3.default: gamma
+# col.b.v2.result: {'f1': foo, 'f2': bar, 'f3': baz}
+statement ok
+UPDATE my_datalake.default.nested_nested_tbl
+	SET col = {
+		'b': {
+			'v2': {
+				'f1': 'foo',
+				'f2': 'bar',
+				'f3': 'baz'
+			}
+		}
+	},
+	col2 = 36
+WHERE id = 3;
+
+query III
+select * from my_datalake.default.nested_nested_tbl where id = 3;
+----
+3	{'a': test, 'b': {'v1': 1000, 'v2': {'f1': foo, 'f2': bar, 'f3': baz}, 'v3': -500}, 'e': NULL}	36

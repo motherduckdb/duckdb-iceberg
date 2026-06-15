@@ -496,14 +496,15 @@ InsertionOrderPreservingMap<string> IcebergInsert::ParamsToString() const {
 //===--------------------------------------------------------------------===//
 static Value GetFieldIdValue(const IcebergColumnDefinition &column) {
 	auto column_value = Value::BIGINT(column.id);
-	if (column.children.empty()) {
+	if (!column.GetChildCount()) {
 		// primitive type - return the field-id directly
 		return column_value;
 	}
 	// nested type - generate a struct and recurse into children
 	child_list_t<Value> values;
 	values.emplace_back("__duckdb_field_id", std::move(column_value));
-	for (auto &child : column.children) {
+	for (idx_t i = 0; i < column.GetChildCount(); i++) {
+		auto child = column.GetChild(i);
 		values.emplace_back(child->name, GetFieldIdValue(*child));
 	}
 	return Value::STRUCT(std::move(values));
@@ -939,17 +940,6 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 	}
 
 	return physical_copy;
-}
-
-void VerifyDirectInsertionOrder(LogicalInsert &op) {
-	idx_t column_index = 0;
-	for (auto &mapping : op.column_index_map) {
-		if (mapping == DConstants::INVALID_INDEX || mapping != column_index) {
-			//! See issue#444
-			throw NotImplementedException("Iceberg inserts don't support targeted inserts yet (i.e tbl(col1,col2))");
-		}
-		column_index++;
-	}
 }
 
 PhysicalOperator &IcebergInsert::PlanInsert(ClientContext &context, PhysicalPlanGenerator &planner,

@@ -17,23 +17,30 @@ namespace duckdb {
 
 struct IcebergColumnDefinition {
 public:
-	static unique_ptr<IcebergColumnDefinition> ParseStructField(rest_api_objects::StructField &field);
+	static unique_ptr<IcebergColumnDefinition> ParseStructField(const rest_api_objects::StructField &field);
 
 public:
-	static LogicalType ParsePrimitiveType(rest_api_objects::PrimitiveType &type);
+	static LogicalType ParsePrimitiveType(const rest_api_objects::PrimitiveType &type);
 	static LogicalType ParsePrimitiveTypeString(const string &type_str);
-	static unique_ptr<IcebergColumnDefinition>
-	ParseType(const string &name, int32_t field_id, bool required, rest_api_objects::Type &iceberg_type,
-	          const std::optional<string> &doc = std::nullopt,
-	          const std::optional<rest_api_objects::PrimitiveTypeValue> &initial_default = std::nullopt,
-	          const std::optional<rest_api_objects::PrimitiveTypeValue> &write_default = std::nullopt);
 	bool IsIcebergPrimitiveType() const;
-	vector<unique_ptr<IcebergColumnDefinition>>::const_iterator GetChildIterator(const string &child_name) const;
 
 	ColumnDefinition GetColumnDefinition() const;
 	MultiFileColumnDefinition GetMultiFileColumnDefinition() const;
 	unique_ptr<IcebergColumnDefinition> Copy() const;
 	bool Equals(const IcebergColumnDefinition &other) const;
+
+public:
+	void AddChild(unique_ptr<IcebergColumnDefinition> &&child);
+	void ReplaceChild(const string &name, unique_ptr<IcebergColumnDefinition> &&child);
+	void RemoveChild(const string &name);
+	optional_ptr<const IcebergColumnDefinition> GetChild(const string &name) const;
+	optional_ptr<const IcebergColumnDefinition> GetChild(idx_t index) const;
+	const vector<unique_ptr<IcebergColumnDefinition>> &GetChildren() const;
+	idx_t GetChildCount() const;
+	void RewriteType();
+
+private:
+	Value GetWriteDefault() const;
 
 public:
 	int32_t id;
@@ -43,6 +50,9 @@ public:
 	unique_ptr<Value> initial_default;
 	unique_ptr<Value> write_default;
 	bool required;
+
+private:
+	optional_ptr<IcebergColumnDefinition> parent;
 	vector<unique_ptr<IcebergColumnDefinition>> children;
 };
 
