@@ -30,13 +30,10 @@ void GroupCandidates(RewritePlan &plan, int64_t target_file_size_bytes, int64_t 
 	}
 
 	for (auto &kv : per_partition) {
-		auto bins = rewrite_planner_internal::BinPackPartition(std::move(kv.second), target_file_size_bytes);
-		for (auto &bin : bins) {
-			if (!rewrite_all && static_cast<int64_t>(bin.size()) < min_input_files) {
-				continue;
-			}
-			plan.file_groups.push_back(std::move(bin));
+		if (!rewrite_all && static_cast<int64_t>(kv.second.size()) < min_input_files) {
+			continue;
 		}
+		plan.file_groups.push_back(std::move(kv.second));
 	}
 }
 
@@ -67,33 +64,6 @@ string PartitionBucketKey(const vector<IcebergPartitionInfo> &partition_info) {
 		out += ";";
 	}
 	return out;
-}
-
-vector<vector<RewriteCandidate>> BinPackPartition(vector<RewriteCandidate> files, int64_t target_size) {
-	std::sort(files.begin(), files.end(), [](const RewriteCandidate &a, const RewriteCandidate &b) {
-		return a.file_size_in_bytes > b.file_size_in_bytes;
-	});
-
-	vector<vector<RewriteCandidate>> bins;
-	vector<int64_t> bin_sizes;
-
-	for (auto &file : files) {
-		int64_t placed_bin = -1;
-		for (idx_t i = 0; i < bins.size(); ++i) {
-			if (bin_sizes[i] + file.file_size_in_bytes <= target_size) {
-				placed_bin = static_cast<int64_t>(i);
-				break;
-			}
-		}
-		if (placed_bin < 0) {
-			bins.emplace_back();
-			bin_sizes.push_back(0);
-			placed_bin = static_cast<int64_t>(bins.size()) - 1;
-		}
-		bin_sizes[placed_bin] += file.file_size_in_bytes;
-		bins[placed_bin].push_back(std::move(file));
-	}
-	return bins;
 }
 
 } // namespace rewrite_planner_internal

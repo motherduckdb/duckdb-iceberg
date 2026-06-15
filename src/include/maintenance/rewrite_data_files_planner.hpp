@@ -52,9 +52,6 @@ namespace rewrite_planner_internal {
 //! Canonical partition key used by the bin-packer.
 string PartitionBucketKey(const vector<IcebergPartitionInfo> &partition_info);
 
-//! First-Fit Decreasing bin-pack over candidates within a single partition.
-vector<vector<RewriteCandidate>> BinPackPartition(vector<RewriteCandidate> files, int64_t target_size);
-
 } // namespace rewrite_planner_internal
 
 } // namespace duckdb
