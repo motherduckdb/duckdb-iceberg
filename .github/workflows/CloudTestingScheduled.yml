@@ -13,18 +13,8 @@ jobs:
     uses: ./.github/workflows/CloudTestingReusable.yml
     with:
       duckdb_ref: ''
-      duckdb_iceberg_ref: 'main'
       httpfs_fork: 'https://github.com/duckdb/duckdb-httpfs'
       httpfs_ref: ''
     secrets: inherit
 
-  cloud-tests-v1.5-variegata:
-    name: Run Cloud tests on v1.5-variegata
-    uses: ./.github/workflows/CloudTestingReusable.yml
-    with:
-      duckdb_ref: ''
-      duckdb_iceberg_ref: 'v1.5-variegata'
-      httpfs_fork: 'https://github.com/duckdb/duckdb-httpfs'
-      httpfs_ref: ''
-    secrets: inherit
 
