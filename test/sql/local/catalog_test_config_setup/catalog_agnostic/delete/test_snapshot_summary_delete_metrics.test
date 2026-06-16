@@ -12,11 +12,13 @@ require iceberg
 
 require httpfs
 
+require json
+
 statement ok
 DROP TABLE IF EXISTS my_datalake.default.test_snapshot_summary_delete_metrics;
 
-# Default (v2) format-version so this runs on every configured catalog
-# (e.g. the Nessie fixture rejects v3 creates).
+# Default (v2) format-version so the delete writes a positional delete file (no v3 upgrade),
+# which is supported on every configured catalog.
 statement ok
 CREATE TABLE my_datalake.default.test_snapshot_summary_delete_metrics (id INTEGER, data VARCHAR);
 
@@ -28,20 +30,27 @@ INSERT INTO my_datalake.default.test_snapshot_summary_delete_metrics VALUES (1, 
 statement ok
 DELETE FROM my_datalake.default.test_snapshot_summary_delete_metrics WHERE id IN (2, 4);
 
-# Exactly two snapshots: append then delete. metadata.snapshots is in creation order,
-# so snapshots[1] is the append and snapshots[2] is the delete.
+# Sanity: an append snapshot and a delete snapshot exist.
 query I
 select count(*) from iceberg_snapshots(my_datalake.default.test_snapshot_summary_delete_metrics);
 ----
 2
 
+# Read the per-snapshot summaries out of the load-table response. Snapshots are selected by
+# their operation rather than by array position, because the order of metadata.snapshots is
+# not guaranteed across catalogs.
+#
 # The append snapshot is accounted as a data-only snapshot and seeds total-delete-files at 0.
 query III
-SELECT
-    metadata."snapshots"[1]."summary"."operation",
-    metadata."snapshots"[1]."summary"."total-data-files",
-    metadata."snapshots"[1]."summary"."total-delete-files"
-FROM iceberg_load_table_response(my_datalake.default.test_snapshot_summary_delete_metrics);
+WITH snaps AS (
+    SELECT unnest(json_extract(metadata::JSON, '$.snapshots[*]')) AS snap
+    FROM iceberg_load_table_response(my_datalake.default.test_snapshot_summary_delete_metrics)
+)
+SELECT json_extract_string(snap, '$.summary.operation'),
+       json_extract_string(snap, '$.summary."total-data-files"'),
+       json_extract_string(snap, '$.summary."total-delete-files"')
+FROM snaps
+WHERE json_extract_string(snap, '$.summary.operation') = 'append';
 ----
 append	1	0
 
@@ -50,15 +59,19 @@ append	1	0
 # file, which would have bumped total-data-files to 2).
 #
 # The position-delete metrics (added-position-deletes / total-position-deletes) are
-# intentionally not asserted here: they are compiled out under
+# intentionally not asserted: they are compiled out under
 # ICEBERG_ENABLE_EQUALITY_DELETE_WRITES, whereas the delete-file counts below are
 # emitted in every build.
 query IIII
-SELECT
-    metadata."snapshots"[2]."summary"."operation",
-    metadata."snapshots"[2]."summary"."total-data-files",
-    metadata."snapshots"[2]."summary"."added-delete-files",
-    metadata."snapshots"[2]."summary"."total-delete-files"
-FROM iceberg_load_table_response(my_datalake.default.test_snapshot_summary_delete_metrics);
+WITH snaps AS (
+    SELECT unnest(json_extract(metadata::JSON, '$.snapshots[*]')) AS snap
+    FROM iceberg_load_table_response(my_datalake.default.test_snapshot_summary_delete_metrics)
+)
+SELECT json_extract_string(snap, '$.summary.operation'),
+       json_extract_string(snap, '$.summary."total-data-files"'),
+       json_extract_string(snap, '$.summary."added-delete-files"'),
+       json_extract_string(snap, '$.summary."total-delete-files"')
+FROM snaps
+WHERE json_extract_string(snap, '$.summary.operation') = 'delete';
 ----
 delete	1	1	1
