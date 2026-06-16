@@ -24,16 +24,16 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 		auto &child = op->children[child_index];
 		if (child->type != LogicalOperatorType::LOGICAL_GET) {
 			VisitOperator(child);
-			return;
+			continue;
 		}
 		auto &get = child->Cast<LogicalGet>();
 		if (get.function.name != "iceberg_scan" || !get.bind_data) {
 			VisitOperator(child);
-			return;
+			continue;
 		}
 		auto &mfbd = get.bind_data->Cast<MultiFileBindData>();
 		if (!mfbd.file_list) {
-			return;
+			continue;
 		}
 		auto &iceberg_list = mfbd.file_list->Cast<IcebergMultiFileList>();
 		auto delete_manifest_entries = iceberg_list.GetDeleteManifestEntries();
@@ -50,7 +50,7 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 		}
 
 		if (required_field_ids.empty()) {
-			return;
+			continue;
 		}
 
 		auto &schema_columns = iceberg_list.GetSchema().columns;
@@ -113,7 +113,7 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 			args.push_back(make_uniq<BoundColumnRefExpression>(col_type, bindings[local_idx]));
 		}
 		if (args.empty()) {
-			return;
+			continue;
 		}
 
 		auto &catalog = Catalog::GetSystemCatalog(context);
