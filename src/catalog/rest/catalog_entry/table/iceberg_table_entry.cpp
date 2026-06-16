@@ -203,7 +203,14 @@ TableFunction IcebergTableEntry::GetScanFunction(ClientContext &context, unique_
 
 	IcebergSnapshotScanInfo snapshot_info;
 	snapshot_info = metadata.GetSnapshot(snapshot_lookup);
-	if (snapshot_info.snapshot && snapshot_info.snapshot->GetSchemaId() > schema_id) {
+	// A snapshot can legitimately carry a higher schema id than the table's current schema: a
+	// schema-reducing alter (e.g. DROP COLUMN / DROP DEFAULT) can revert the current schema to an earlier,
+	// identical schema whose id is reused, while older snapshots stay tagged with the higher id. Scanning
+	// such a snapshot with the current schema is safe because iceberg projects data files by field id. Only
+	// reject the mismatch for a time-travel scan pinned to a historical schema, where reading a newer
+	// snapshot would be incorrect.
+	const bool scanning_current_schema = schema_id == static_cast<idx_t>(metadata.GetCurrentSchemaId());
+	if (snapshot_info.snapshot && snapshot_info.snapshot->GetSchemaId() > schema_id && !scanning_current_schema) {
 		throw InternalException("Tried to scan a snapshot created with a newer schema id (%d) than the schema id "
 		                        "selected for the scan (%d)",
 		                        snapshot_info.snapshot->GetSchemaId(), schema_id);

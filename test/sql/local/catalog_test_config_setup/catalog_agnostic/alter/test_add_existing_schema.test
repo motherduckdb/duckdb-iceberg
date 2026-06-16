@@ -48,6 +48,18 @@ select * from my_datalake.default.existing_schema_add order by all
 ----
 test	true	NULL
 
+# Snapshot written at the 3-column schema id.
+statement ok
+insert into my_datalake.default.existing_schema_add VALUES ('with_c', false, 42)
+
+query III
+select * from my_datalake.default.existing_schema_add order by all
+----
+test	true	NULL
+with_c	false	42
+
+# DROP COLUMN reuses the earlier 2-column schema, leaving the current schema id below the snapshot's.
+# Reading must still work (iceberg projects by field id).
 statement ok
 ALTER TABLE my_datalake.default.existing_schema_add DROP COLUMN c;
 
@@ -55,3 +67,4 @@ query II
 select * from my_datalake.default.existing_schema_add order by all
 ----
 test	true
+with_c	false
