@@ -148,6 +148,14 @@ public:
 	FileExpandResult GetExpandResult() const override;
 	idx_t GetTotalFileCount() const override;
 	unique_ptr<NodeStatistics> GetCardinality(ClientContext &context) const override;
+	
+	//! Equality-delete columns that are needed to evaluate the deletes but are NOT part of the scan's projection
+	//! (field_id -> the extra result position it is read into, appended after the projected output columns). This
+	//! happens when the GuaranteeEqualityDeleteColumnsOptimizer did not run for this scan, e.g. for MotherDuck hybrid
+	//! scans where the optimizer sees a remote-function wrapper instead of the iceberg scan. We read these columns as
+	//! extra columns and strip them again in FinalizeChunk so the delete filter can reference them without leaking
+	//! them into the scan output.
+	mutable unordered_map<int32_t, idx_t> equality_id_to_result_id;
 
 protected:
 	//! Get the i-th expanded file
