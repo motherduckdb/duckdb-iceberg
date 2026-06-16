@@ -1,0 +1,64 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/test_snapshot_summary_delete_metrics.test
+# description: Verify a DELETE populates the standard Iceberg snapshot-summary delete-file metrics (added/total delete-files + position-deletes) and no longer inflates the data-file metrics
+# group: [delete]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.test_snapshot_summary_delete_metrics;
+
+statement ok
+CREATE TABLE my_datalake.default.test_snapshot_summary_delete_metrics (id INTEGER, data VARCHAR) WITH ('format-version' = 3);
+
+# Single INSERT -> one data file -> one 'append' snapshot
+statement ok
+INSERT INTO my_datalake.default.test_snapshot_summary_delete_metrics VALUES (1, 'a'), (2, 'b'), (3, 'c'), (4, 'd'), (5, 'e');
+
+# DELETE two rows from the single data file -> one deletion vector -> one 'delete' snapshot
+statement ok
+DELETE FROM my_datalake.default.test_snapshot_summary_delete_metrics WHERE id IN (2, 4);
+
+# Exactly two snapshots: append then delete. metadata.snapshots is in creation order,
+# so snapshots[1] is the append and snapshots[2] is the delete.
+query I
+select count(*) from iceberg_snapshots(my_datalake.default.test_snapshot_summary_delete_metrics);
+----
+2
+
+# The append snapshot carries the (seeded) delete metrics at zero and is correctly
+# accounted as a data-only snapshot.
+query III
+SELECT
+    metadata."snapshots"[1]."summary"."operation",
+    metadata."snapshots"[1]."summary"."total-data-files",
+    metadata."snapshots"[1]."summary"."total-delete-files"
+FROM iceberg_load_table_response(my_datalake.default.test_snapshot_summary_delete_metrics);
+----
+append	1	0
+
+# The delete snapshot now populates the delete-file metrics, AND does not inflate
+# total-data-files (the delete manifest was previously mis-counted as an added data
+# file, which would have bumped total-data-files to 2).
+# The position-delete metrics assume the default build (ICEBERG_ENABLE_EQUALITY_DELETE_WRITES off).
+query IIIIII
+SELECT
+    metadata."snapshots"[2]."summary"."operation",
+    metadata."snapshots"[2]."summary"."total-data-files",
+    metadata."snapshots"[2]."summary"."added-delete-files",
+    metadata."snapshots"[2]."summary"."total-delete-files",
+    metadata."snapshots"[2]."summary"."added-position-deletes",
+    metadata."snapshots"[2]."summary"."total-position-deletes"
+FROM iceberg_load_table_response(my_datalake.default.test_snapshot_summary_delete_metrics);
+----
+delete	1	1	1	2	2
