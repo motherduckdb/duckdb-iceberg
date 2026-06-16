@@ -10,6 +10,7 @@
 #include "core/metadata/schema/iceberg_column_definition.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "planning/iceberg_multi_file_list.hpp"
+#include "planning/iceberg_multi_file_reader.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 
@@ -27,7 +28,15 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 			return;
 		}
 		auto &get = child->Cast<LogicalGet>();
-		if (get.function.name != "iceberg_scan" || !get.bind_data) {
+		// Identify our iceberg scan by the multi file reader it installs, not by
+		// function name alone. Other extensions might create their own
+		// iceberg_scan function or overload ours, so we cannot just depend on
+		// the name. We avoid dynamic_cast here because it does not behave
+		// reliably across the extension linking boundary; instead the function
+		// pointer uniquely identifies our scan, which guarantees the bind data
+		// and file list are the iceberg types we expect.
+		if (get.function.name != "iceberg_scan" ||
+		    get.function.get_multi_file_reader != IcebergMultiFileReader::CreateInstance || !get.bind_data) {
 			VisitOperator(child);
 			return;
 		}
