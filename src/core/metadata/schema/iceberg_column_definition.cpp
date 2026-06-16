@@ -131,6 +131,9 @@ LogicalType IcebergColumnDefinition::ParsePrimitiveTypeString(const string &type
 	if (type_str == "variant") {
 		return LogicalType::VARIANT();
 	}
+	if (type_str == "unknown") {
+		return LogicalType::SQLNULL;
+	}
 	if (StringUtil::StartsWith(type_str, "geometry")) {
 		// Geometry is an Iceberg v3 type stored as WKB binary in parquet.
 		// The type string may include a CRS parameter: geometry(<crs>)

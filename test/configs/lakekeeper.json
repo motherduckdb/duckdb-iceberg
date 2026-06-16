@@ -16,6 +16,12 @@
       ]
     },
     {
+      "reason": "UNKNOWN type is not supported yet",
+      "paths": [
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/create/test_create_unknown_type.test"
+      ]
+    },
+    {
       "reason": "Not yet supported with Lakekeeper",
       "paths": [
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_write_upper_and_lower_bounds.test",

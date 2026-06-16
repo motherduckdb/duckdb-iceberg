@@ -194,6 +194,10 @@ static void VerifySchemaEvolution(const IcebergTableMetadata &table_metadata, co
 
 	string extra_info;
 	switch (original_type.id()) {
+	case LogicalTypeId::SQLNULL: {
+		//! UNKNOWN can be upgraded to anything
+		return;
+	}
 	case LogicalTypeId::DECIMAL: {
 		if (target_type.id() != LogicalTypeId::DECIMAL) {
 			break;
