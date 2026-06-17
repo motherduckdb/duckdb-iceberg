@@ -1,5 +1,6 @@
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/file_system.hpp"
+#include "duckdb/common/numeric_utils.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/function/table_function.hpp"
@@ -23,12 +24,41 @@ namespace duckdb {
 
 namespace {
 
+constexpr int64_t MIN_TARGET_FILE_SIZE_BYTES = 100;
+
 struct RewriteDataFilesOptions {
 	MaintenanceTableKey table_key;
 	int64_t target_file_size_bytes = 134217728;
 	int64_t min_input_files = 5;
 	bool rewrite_all = false;
 };
+
+static int64_t ParseTargetFileSizeBytes(const Value &value) {
+	idx_t parsed_value;
+	if (value.type().id() == LogicalTypeId::VARCHAR) {
+		auto error = StringUtil::TryParseFormattedBytes(StringValue::Get(value), parsed_value);
+		if (!error.empty()) {
+			throw InvalidInputException("iceberg_rewrite_data_files: invalid 'target_file_size_bytes': %s", error);
+		}
+	} else {
+		auto numeric_value = value.DefaultCastAs(LogicalType::BIGINT).GetValue<int64_t>();
+		if (numeric_value < MIN_TARGET_FILE_SIZE_BYTES) {
+			throw InvalidInputException(
+			    "iceberg_rewrite_data_files: 'target_file_size_bytes' must be >= %lld bytes, got %lld",
+			    MIN_TARGET_FILE_SIZE_BYTES, numeric_value);
+		}
+		return numeric_value;
+	}
+	if (parsed_value < static_cast<idx_t>(MIN_TARGET_FILE_SIZE_BYTES)) {
+		throw InvalidInputException(
+		    "iceberg_rewrite_data_files: 'target_file_size_bytes' must be >= %lld bytes, got %llu",
+		    MIN_TARGET_FILE_SIZE_BYTES, static_cast<unsigned long long>(parsed_value));
+	}
+	if (parsed_value > static_cast<idx_t>(NumericLimits<int64_t>::Maximum())) {
+		throw InvalidInputException("iceberg_rewrite_data_files: 'target_file_size_bytes' is too large");
+	}
+	return static_cast<int64_t>(parsed_value);
+}
 
 static RewriteDataFilesOptions ParseOptions(TableFunctionBindInput &input) {
 	RewriteDataFilesOptions result;
@@ -44,12 +74,7 @@ static RewriteDataFilesOptions ParseOptions(TableFunctionBindInput &input) {
 				    "iceberg_rewrite_data_files: only 'binpack' strategy is supported, got '%s'", strategy);
 			}
 		} else if (opt == "target_file_size_bytes") {
-			auto value = val.GetValue<int64_t>();
-			if (value <= 0) {
-				throw InvalidInputException(
-				    "iceberg_rewrite_data_files: 'target_file_size_bytes' must be > 0, got %lld", value);
-			}
-			result.target_file_size_bytes = value;
+			result.target_file_size_bytes = ParseTargetFileSizeBytes(val);
 		} else if (opt == "min_input_files") {
 			auto value = val.GetValue<int64_t>();
 			if (value < 1) {
@@ -154,7 +179,7 @@ TableFunctionSet IcebergFunctions::GetIcebergRewriteDataFilesFunction() {
 	TableFunction function("iceberg_rewrite_data_files", {LogicalType::VARCHAR}, nullptr);
 	function.bind_operator = RewriteDataFilesBindOperator;
 	function.named_parameters["strategy"] = LogicalType::VARCHAR;
-	function.named_parameters["target_file_size_bytes"] = LogicalType::BIGINT;
+	function.named_parameters["target_file_size_bytes"] = LogicalType::ANY;
 	function.named_parameters["min_input_files"] = LogicalType::BIGINT;
 	function.named_parameters["rewrite_all"] = LogicalType::BOOLEAN;
 	function_set.AddFunction(function);
