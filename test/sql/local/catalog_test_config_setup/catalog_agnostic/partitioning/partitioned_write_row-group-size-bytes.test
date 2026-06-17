@@ -26,13 +26,7 @@ To ignore this error run "SET ignore_row_group_size_for_partitioned_tables=true"
 statement ok
 SET ignore_row_group_size_for_partitioned_tables=true
 
-statement error
+query I
 INSERT INTO my_datalake.default.my_table SELECT * FROM range(1000);
 ----
-Binder Error: ROW_GROUP_SIZE_BYTES does not work while preserving insertion order. Use "SET preserve_insertion_order=false;" to disable preserving insertion order.
-
-statement ok
-SET preserve_insertion_order=false;
-
-statement ok
-INSERT INTO my_datalake.default.my_table SELECT * FROM range(1000);
+1000

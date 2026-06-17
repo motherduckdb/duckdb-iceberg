@@ -20,12 +20,12 @@ namespace {
 //! one slot per child. Mirrors the parquet field-id metadata written by the
 //! regular Iceberg insert path so APPEND and REWRITE stay compatible.
 static Value GetFieldIdValue(const IcebergColumnDefinition &column) {
-	if (column.children.empty()) {
+	if (column.GetChildCount() == 0) {
 		return Value::BIGINT(column.id);
 	}
 	child_list_t<Value> values;
 	values.emplace_back("__duckdb_field_id", Value::BIGINT(column.id));
-	for (auto &child : column.children) {
+	for (auto &child : column.GetChildren()) {
 		values.emplace_back(child->name, GetFieldIdValue(*child));
 	}
 	return Value::STRUCT(std::move(values));
@@ -81,9 +81,6 @@ void ValidateRewriteSnapshot(const RewritePlan &plan, const IcebergTableInformat
 
 void CleanupRewriteFiles(ClientContext &context, const IcebergTableInformation &table_info,
                          const vector<string> &produced_paths) {
-	if (!table_info.catalog.attach_options.allows_deletes) {
-		return;
-	}
 	auto &fs = FileSystem::GetFileSystem(context);
 	for (auto &path : produced_paths) {
 		try {

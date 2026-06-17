@@ -5,6 +5,8 @@
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/common/types.hpp"
 
+#include "storage/statistics/iceberg_statistics.hpp"
+
 namespace duckdb {
 
 enum class SerializeBound : uint8_t {
@@ -80,6 +82,8 @@ public:
 
 public:
 	static DeserializeResult DeserializeValue(const string_t &blob, const LogicalType &target);
+	static SerializeResult SerializeValue(IcebergColumnStats &stats, const LogicalType &column_type,
+	                                      SerializeBound bound_type);
 	static SerializeResult SerializeValue(Value input_value, const LogicalType &column_type, SerializeBound bound_type);
 	static string TruncateString(const string &input);
 	// Computes a truncated, incremented upper bound for a string. Returns false

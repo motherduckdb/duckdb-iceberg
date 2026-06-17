@@ -90,6 +90,9 @@ where key = 'foo';
 ----
 foo	buzz
 
+statement ok
+SET debug_verification_mode='verify_vectors';
+
 query I
 select count(*) from iceberg_metadata(my_datalake.default.ctas_partitioned_with_options)
 where file_path like '%identity_category_2=%'

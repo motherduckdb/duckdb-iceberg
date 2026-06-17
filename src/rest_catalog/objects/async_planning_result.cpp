@@ -24,6 +24,13 @@ AsyncPlanningResult AsyncPlanningResult::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+AsyncPlanningResult AsyncPlanningResult::Copy() const {
+	AsyncPlanningResult res;
+	res.status = status.Copy();
+	res.plan_id = plan_id;
+	return res;
+}
+
 string AsyncPlanningResult::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto status_val = yyjson_obj_get(obj, "status");
@@ -47,7 +54,26 @@ string AsyncPlanningResult::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(plan_id_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void AsyncPlanningResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: status
+	yyjson_mut_val *status_val = status.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "status", status_val);
+
+	// Serialize: plan-id
+	yyjson_mut_obj_add_strcpy(doc, obj, "plan-id", plan_id.c_str());
+}
+
+yyjson_mut_val *AsyncPlanningResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

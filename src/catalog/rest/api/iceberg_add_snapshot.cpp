@@ -5,7 +5,7 @@
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/main/extension_helper.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
-#include "duckdb/storage/caching_file_system.hpp"
+#include "duckdb/storage/external_file_cache/caching_file_system.hpp"
 #include "duckdb/common/types/uuid.hpp"
 
 #include "core/metadata/manifest/iceberg_manifest_list.hpp"
@@ -28,11 +28,9 @@ static rest_api_objects::TableUpdate CreateAddSnapshotUpdate(const IcebergTableI
                                                              const IcebergSnapshot &snapshot) {
 	rest_api_objects::TableUpdate table_update;
 
-	table_update.has_add_snapshot_update = true;
-	auto &update = table_update.add_snapshot_update;
+	table_update.add_snapshot_update = rest_api_objects::AddSnapshotUpdate();
+	auto &update = *table_update.add_snapshot_update;
 	update.base_update.action = "add-snapshot";
-	update.has_action = true;
-	update.action = "add-snapshot";
 	update.snapshot = snapshot.ToRESTObject(table_info.table_metadata);
 	return table_update;
 }
@@ -165,7 +163,7 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
                                       IcebergCommitState &commit_state) const {
 	auto &system_catalog = Catalog::GetSystemCatalog(db);
 	auto data = CatalogTransaction::GetSystemTransaction(db);
-	auto &schema = system_catalog.GetSchema(data, DEFAULT_SCHEMA);
+	auto &schema = system_catalog.GetSchema(data, Identifier::DefaultSchema());
 	auto avro_copy_p = schema.GetEntry(data, CatalogType::COPY_FUNCTION_ENTRY, "avro");
 	D_ASSERT(avro_copy_p);
 	auto &avro_copy = avro_copy_p->Cast<CopyFunctionCatalogEntry>().function;

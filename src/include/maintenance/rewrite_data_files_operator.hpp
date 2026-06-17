@@ -17,7 +17,7 @@ public:
 
 	PhysicalOperator &CreatePlan(ClientContext &context, PhysicalPlanGenerator &planner) override;
 	vector<ColumnBinding> GetColumnBindings() override;
-	vector<idx_t> GetTableIndex() const override;
+	vector<TableIndex> GetTableIndex() const override;
 	string GetName() const override;
 	bool SupportSerialization() const override {
 		return false;

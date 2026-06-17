@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.5...3.29)
 set(TARGET_NAME iceberg)
 project(${TARGET_NAME})
 
-set(CMAKE_CXX_STANDARD 14 CACHE STRING "C++ standard")
+set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard")
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
@@ -115,6 +115,8 @@ set(EXTENSION_SOURCES
 	src/planning/metadata_io/manifest_list/iceberg_manifest_list_reader.cpp
 	src/planning/pruning/iceberg_predicate.cpp
 	src/planning/snapshot/iceberg_snapshot_lookup.cpp
+	src/storage/statistics/iceberg_variant_statistics.cpp
+	src/storage/statistics/iceberg_statistics.cpp
 )
 
 add_subdirectory(src/rest_catalog/objects)

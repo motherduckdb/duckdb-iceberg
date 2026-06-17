@@ -26,6 +26,13 @@ MetadataLog::Object4 MetadataLog::Object4::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+MetadataLog::Object4 MetadataLog::Object4::Copy() const {
+	Object4 res;
+	res.metadata_file = metadata_file;
+	res.timestamp_ms = timestamp_ms;
+	return res;
+}
+
 string MetadataLog::Object4::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto metadata_file_val = yyjson_obj_get(obj, "metadata-file");
@@ -52,7 +59,25 @@ string MetadataLog::Object4::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(timestamp_ms_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void MetadataLog::Object4::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: metadata-file
+	yyjson_mut_obj_add_strcpy(doc, obj, "metadata-file", metadata_file.c_str());
+
+	// Serialize: timestamp-ms
+	yyjson_mut_obj_add_sint(doc, obj, "timestamp-ms", timestamp_ms);
+}
+
+yyjson_mut_val *MetadataLog::Object4::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 MetadataLog MetadataLog::FromJSON(yyjson_val *obj) {
@@ -60,6 +85,15 @@ MetadataLog MetadataLog::FromJSON(yyjson_val *obj) {
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
+	}
+	return res;
+}
+
+MetadataLog MetadataLog::Copy() const {
+	MetadataLog res;
+	res.value.reserve(value.size());
+	for (auto &item : value) {
+		res.value.emplace_back(item.Copy());
 	}
 	return res;
 }
@@ -81,7 +115,15 @@ string MetadataLog::TryFromJSON(yyjson_val *obj) {
 		return StringUtil::Format("MetadataLog property 'value' is not of type 'array', found '%s' instead",
 		                          yyjson_get_type_desc(obj));
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *MetadataLog::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *arr = yyjson_mut_arr(doc);
+	for (const auto &item : value) {
+		yyjson_mut_arr_append(arr, item.ToJSON(doc));
+	}
+	return arr;
 }
 
 } // namespace rest_api_objects

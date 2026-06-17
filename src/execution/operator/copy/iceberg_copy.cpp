@@ -175,7 +175,7 @@ SourceResultType IcebergPhysicalCopy::GetDataInternal(ExecutionContext &context,
 	auto &gstate = sink_state->Cast<IcebergInsertGlobalState>();
 	auto value = Value::BIGINT(gstate.insert_count);
 	chunk.SetCardinality(1);
-	chunk.SetValue(0, 0, value);
+	chunk.data[0].Append(value);
 	return SourceResultType::FINISHED;
 }
 

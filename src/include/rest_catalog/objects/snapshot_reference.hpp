@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -20,20 +21,23 @@ public:
 	SnapshotReference &operator=(SnapshotReference &&) = default;
 
 public:
+	// Deserialization
 	static SnapshotReference FromJSON(yyjson_val *obj);
-
-public:
 	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	SnapshotReference Copy() const;
+
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	string type;
 	int64_t snapshot_id;
-	int64_t max_ref_age_ms;
-	bool has_max_ref_age_ms = false;
-	int64_t max_snapshot_age_ms;
-	bool has_max_snapshot_age_ms = false;
-	int32_t min_snapshots_to_keep;
-	bool has_min_snapshots_to_keep = false;
+	optional<int64_t> max_ref_age_ms;
+	optional<int64_t> max_snapshot_age_ms;
+	optional<int32_t> min_snapshots_to_keep;
 };
 
 } // namespace rest_api_objects

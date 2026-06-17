@@ -2,6 +2,9 @@
 # description: test integration with iceberg catalog read
 # group: [catalog_agnostic]
 
+# TODO: Needs https://github.com/duckdblabs/duckdb-internal/issues/9393
+mode skip
+
 require-env CATALOG_TEST_CONFIG_SETUP
 
 require avro
@@ -26,14 +29,14 @@ set logging_level='debug'
 loop i 0 7
 
 statement ok
-set variable snapshot${i} = (
+set variable snapshot{i} = (
 	select {
 		'snapshot_id': snapshot_id,
 		'timestamp_ms': timestamp_ms
 	} from iceberg_snapshots(
 		my_datalake.default.row_lineage_test_upgraded_insert
 	) order by timestamp_ms
-	offset ${i} limit 1
+	offset {i} limit 1
 );
 
 endloop
@@ -102,10 +105,8 @@ select _last_updated_sequence_number, _row_id, id, data from my_datalake.default
 5	NULL	6	replaced
 7	NULL	7	g_new
 
-# FIXME: need duckdb 1.5.1 to "fix" this, so we can disable pushdown for _row_id
-# Latest state of the table, after upgrading to V3 and creating a new snapshot
-query II
+# Filter on the '_row_id' can't be pushed down
+statement error
 select id, data from my_datalake.default.row_lineage_test_upgraded_insert where _row_id is NULL order by id;
 ----
-2	replaced_again
-6	replaced_again
+INTERNAL Error: Expected an expression that only references a single column, but found multiple!

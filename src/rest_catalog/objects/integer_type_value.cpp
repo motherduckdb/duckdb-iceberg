@@ -24,6 +24,12 @@ IntegerTypeValue IntegerTypeValue::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+IntegerTypeValue IntegerTypeValue::Copy() const {
+	IntegerTypeValue res;
+	res.value = value;
+	return res;
+}
+
 string IntegerTypeValue::TryFromJSON(yyjson_val *obj) {
 	string error;
 	if (yyjson_is_int(obj)) {
@@ -32,7 +38,11 @@ string IntegerTypeValue::TryFromJSON(yyjson_val *obj) {
 		return StringUtil::Format("IntegerTypeValue property 'value' is not of type 'integer', found '%s' instead",
 		                          yyjson_get_type_desc(obj));
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *IntegerTypeValue::ToJSON(yyjson_mut_doc *doc) const {
+	return yyjson_mut_int(doc, value);
 }
 
 } // namespace rest_api_objects

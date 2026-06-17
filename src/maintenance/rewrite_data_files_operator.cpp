@@ -68,11 +68,11 @@ void LogicalRewriteDataFiles::ResolveTypes() {
 }
 
 vector<ColumnBinding> LogicalRewriteDataFiles::GetColumnBindings() {
-	return GenerateColumnBindings(bind_index, 3);
+	return GenerateColumnBindings(TableIndex(bind_index), 3);
 }
 
-vector<idx_t> LogicalRewriteDataFiles::GetTableIndex() const {
-	return {bind_index};
+vector<TableIndex> LogicalRewriteDataFiles::GetTableIndex() const {
+	return {TableIndex(bind_index)};
 }
 
 string LogicalRewriteDataFiles::GetName() const {

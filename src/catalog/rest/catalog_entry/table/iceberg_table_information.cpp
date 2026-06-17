@@ -8,6 +8,7 @@
 #include "duckdb/common/exception/transaction_exception.hpp"
 #include "duckdb/common/types/string.hpp"
 #include "duckdb/common/types/timestamp.hpp"
+#include "duckdb/common/operator/cast_operators.hpp"
 
 #include "catalog/rest/api/catalog_api.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
@@ -236,9 +237,10 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 				create_secret_input.scope.push_back(table_location);
 			}
 		}
-		create_secret_input.name = StringUtil::Format("%s_%d_%s", secret_base_name, index, credential.prefix);
+		create_secret_input.name =
+		    Identifier(StringUtil::Format("%s_%d_%s", secret_base_name, index, credential.prefix));
 
-		create_secret_input.type = storage_type;
+		create_secret_input.type = Identifier(storage_type);
 		create_secret_input.provider = "config";
 		create_secret_input.storage_type = "memory";
 		create_secret_input.options = config_options;
@@ -257,8 +259,8 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 
 		//! TODO: apply the 'overrides' retrieved from the /v1/config endpoint
 		config.options = config_options;
-		config.name = secret_base_name;
-		config.type = storage_type;
+		config.name = Identifier(secret_base_name);
+		config.type = Identifier(storage_type);
 		config.provider = "config";
 		config.storage_type = "memory";
 	}
@@ -268,7 +270,7 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 
 optional_ptr<CatalogEntry> IcebergTableInformation::CreateSchemaVersion(const IcebergTableSchema &table_schema) {
 	CreateTableInfo info;
-	info.table = name;
+	info.table = Identifier(name);
 	for (auto &col : table_schema.columns) {
 		info.columns.AddColumn(col->GetColumnDefinition());
 	}
@@ -353,46 +355,49 @@ IcebergTableInformation::BuildPartitionSpec(const vector<unique_ptr<ParsedExpres
 		string transform = "identity";
 		idx_t bucket_modulo_val;
 
-		if (key->type == ExpressionType::COLUMN_REF) {
+		auto key_type = key->GetExpressionType();
+		if (key_type == ExpressionType::COLUMN_REF) {
 			auto &colref = key->Cast<ColumnRefExpression>();
-			column_name = colref.column_names.back();
-		} else if (key->type == ExpressionType::FUNCTION) {
+			column_name = colref.ColumnNames().back().GetIdentifierName();
+		} else if (key_type == ExpressionType::FUNCTION) {
 			auto &funcexpr = key->Cast<FunctionExpression>();
-			transform = funcexpr.function_name;
-			if (funcexpr.children.empty()) {
+			transform = funcexpr.FunctionName().GetIdentifierName();
+			if (funcexpr.GetArguments().empty()) {
 				throw NotImplementedException("Unrecognized transform ('%s')", transform);
 			} else if (!IcebergTransform::TransformFunctionSupported(transform)) {
 				throw NotImplementedException("Unrecognized transform ('%s')", transform);
 			}
 			if (transform == "bucket" || transform == "truncate") {
 				// Spark-compatible syntax: bucket(N, col) / truncate(W, col)
-				if (funcexpr.children.size() < 2) {
+				if (funcexpr.GetArguments().size() < 2) {
 					throw InvalidInputException("%s requires two arguments, e.g. %s(16, col)", transform, transform);
 				}
-				auto &param_expr = *funcexpr.children[0];
-				if (param_expr.type != ExpressionType::VALUE_CONSTANT) {
+				auto &param_expr = funcexpr.GetArguments()[0].GetExpression();
+				if (param_expr.GetExpressionType() != ExpressionType::VALUE_CONSTANT) {
 					throw InvalidInputException("%s first argument must be a constant integer", transform);
 				}
 				auto &const_expr = param_expr.Cast<ConstantExpression>();
-				auto raw_val = const_expr.value.GetValue<int32_t>();
+				auto raw_val = const_expr.GetValue().GetValue<int32_t>();
 				if (raw_val <= 0) {
 					throw InvalidInputException("%s requires a positive integer argument, got %d", transform, raw_val);
 				}
-				bucket_modulo_val = const_expr.value.GetValue<idx_t>();
+				bucket_modulo_val = const_expr.GetValue().GetValue<idx_t>();
 				transform = StringUtil::Format("%s[%d]", transform, bucket_modulo_val);
-				if (funcexpr.children[1]->type != ExpressionType::COLUMN_REF) {
-					throw NotImplementedException("Transforms are only supported on column references, not %s",
-					                              EnumUtil::ToChars(funcexpr.children[1]->type));
+				if (funcexpr.GetArguments()[1].GetExpression().GetExpressionType() != ExpressionType::COLUMN_REF) {
+					throw NotImplementedException(
+					    "Transforms are only supported on column references, not %s",
+					    EnumUtil::ToChars(funcexpr.GetArguments()[1].GetExpression().GetExpressionType()));
 				}
-				auto &colref = funcexpr.children[1]->Cast<ColumnRefExpression>();
-				column_name = colref.column_names.back();
+				auto &colref = funcexpr.GetArguments()[1].GetExpression().Cast<ColumnRefExpression>();
+				column_name = colref.ColumnNames().back().GetIdentifierName();
 			} else {
-				if (funcexpr.children[0]->type != ExpressionType::COLUMN_REF) {
-					throw NotImplementedException("Transforms are only supported on column references, not %s",
-					                              EnumUtil::ToChars(funcexpr.children[0]->type));
+				if (funcexpr.GetArguments()[0].GetExpression().GetExpressionType() != ExpressionType::COLUMN_REF) {
+					throw NotImplementedException(
+					    "Transforms are only supported on column references, not %s",
+					    EnumUtil::ToChars(funcexpr.GetArguments()[0].GetExpression().GetExpressionType()));
 				}
-				auto &colref = funcexpr.children[0]->Cast<ColumnRefExpression>();
-				column_name = colref.column_names.back();
+				auto &colref = funcexpr.GetArguments()[0].GetExpression().Cast<ColumnRefExpression>();
+				column_name = colref.ColumnNames().back().GetIdentifierName();
 			}
 		} else {
 			throw NotImplementedException("Unsupported partition key type: %s", key->ToString());
@@ -558,14 +563,9 @@ IcebergSnapshotLookup IcebergTableInformation::GetSnapshotLookup(ClientContext &
 }
 
 bool IcebergTableInformation::TableIsEmpty(const IcebergSnapshotLookup &snapshot_lookup) const {
-	// edge case tables before data is inserted. There is no snapshot information, so we defer to latest.
-	if (table_metadata.snapshots.empty() && snapshot_lookup.IsFromTimestamp()) {
-		auto timestamp_millis = timestamp_t(Timestamp::GetEpochMs(snapshot_lookup.snapshot_timestamp));
-		if (timestamp_millis >= table_metadata.last_updated_ms) {
-			// current table was made before the transaction but is empty.
-			// you can return current table information in an as-is form
-			return true;
-		}
+	(void)snapshot_lookup;
+	if (!table_metadata.GetLatestSnapshot()) {
+		return true;
 	}
 	return false;
 }
@@ -616,9 +616,10 @@ IcebergTableMetadata IcebergTableInformation::CreateMetadataFromLog(ClientContex
 		}
 	}
 	if (!log_item_index.IsValid()) {
+		auto timestamp = duckdb::Cast::Operation<timestamp_ms_t, timestamp_t>(timestamp_ms_t(transaction_start_millis));
 		throw InternalException(
 		    "Metadata-log exists but none of the entries were valid for the current transaction start time (%s)",
-		    Timestamp::ToString(timestamp_ms_t(transaction_start_millis)));
+		    Timestamp::ToString(timestamp));
 	}
 
 	auto fs = make_shared_ptr<CachingFileSystemWrapper>(FileSystem::GetFileSystem(context), *context.db);
@@ -697,12 +698,17 @@ IcebergTransactionData &IcebergTableInformation::GetOrCreateTransactionData(Iceb
 void IcebergTableInformation::InitializeFromLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result,
                                                             bool initialize_schemas) {
 	table_metadata = IcebergTableMetadata::FromTableMetadata(load_table_result.metadata);
-	config = load_table_result.config;
-	storage_credentials.clear();
-	for (auto &credential : load_table_result.storage_credentials) {
-		storage_credentials.push_back(credential);
+	if (auto &val = load_table_result.config) {
+		config = *val;
 	}
-	latest_metadata_json = load_table_result.metadata_location;
+	storage_credentials.clear();
+
+	if (auto &credentials = load_table_result.storage_credentials) {
+		for (auto &credential : *credentials) {
+			storage_credentials.push_back(credential);
+		}
+	}
+	latest_metadata_json = load_table_result.metadata_location.value_or("");
 
 	if (initialize_schemas) {
 		auto &schemas = table_metadata.GetSchemas();

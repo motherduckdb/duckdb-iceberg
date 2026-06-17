@@ -20,8 +20,8 @@ public:
 public:
 	shared_ptr<MultiFileList> CreateFileList(ClientContext &context, const vector<string> &paths,
 	                                         const FileGlobInput &glob_input) override;
-	bool Bind(MultiFileOptions &options, MultiFileList &files, vector<LogicalType> &return_types, vector<string> &names,
-	          MultiFileReaderBindData &bind_data) override;
+	bool Bind(MultiFileOptions &options, MultiFileList &files, vector<LogicalType> &return_types,
+	          vector<Identifier> &names, MultiFileReaderBindData &bind_data) override;
 
 	ReaderInitializeType InitializeReader(MultiFileReaderData &reader_data, const MultiFileBindData &bind_data,
 	                                      const vector<MultiFileColumnDefinition> &global_columns,

@@ -1,6 +1,6 @@
 #include "duckdb/common/file_opener.hpp"
 #include "duckdb/common/file_system.hpp"
-#include "duckdb/storage/caching_file_system_wrapper.hpp"
+#include "duckdb/storage/external_file_cache/caching_file_system_wrapper.hpp"
 
 #include "function/iceberg_functions.hpp"
 #include "iceberg_options.hpp"
@@ -61,7 +61,7 @@ static unique_ptr<FunctionData> IcebergSnapshotsBind(ClientContext &context, Tab
                                                      vector<LogicalType> &return_types, vector<string> &names) {
 	auto bind_data = make_uniq<IcebergSnaphotsBindData>();
 	for (auto &kv : input.named_parameters) {
-		auto loption = StringUtil::Lower(kv.first);
+		auto loption = StringUtil::Lower(kv.first.GetIdentifierName());
 		if (loption == "metadata_compression_codec") {
 			bind_data->options.metadata_compression_codec = StringValue::Get(kv.second);
 		} else if (loption == "version") {
@@ -110,16 +110,17 @@ static void IcebergSnapshotsFunction(ClientContext &context, TableFunctionInput 
 		}
 
 		auto &snapshot = it->second;
-		FlatVector::GetData<uint64_t>(output.data[0])[i] = snapshot.sequence_number;
-		FlatVector::GetData<uint64_t>(output.data[1])[i] = snapshot.snapshot_id;
-		FlatVector::GetData<timestamp_t>(output.data[2])[i] = snapshot.timestamp_ms;
+		FlatVector::GetDataMutable<uint64_t>(output.data[0])[i] = snapshot.sequence_number;
+		FlatVector::GetDataMutable<uint64_t>(output.data[1])[i] = snapshot.snapshot_id;
+		FlatVector::GetDataMutable<timestamp_t>(output.data[2])[i] = snapshot.timestamp_ms;
 		string_t manifest_string_t = StringVector::AddString(output.data[3], string_t(snapshot.manifest_list));
-		FlatVector::GetData<string_t>(output.data[3])[i] = manifest_string_t;
-		auto operation_str = SnapshotOperationToString(snapshot.operation);
-		FlatVector::GetData<string_t>(output.data[4])[i] = StringVector::AddString(output.data[4], operation_str);
+			FlatVector::GetDataMutable<string_t>(output.data[3])[i] = manifest_string_t;
+			auto operation_str = SnapshotOperationToString(snapshot.operation);
+			FlatVector::GetDataMutable<string_t>(output.data[4])[i] =
+			    StringVector::AddString(output.data[4], operation_str);
 		i++;
 	}
-	output.SetCardinality(i);
+	output.SetChildCardinality(i);
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergSnapshotsFunction() {

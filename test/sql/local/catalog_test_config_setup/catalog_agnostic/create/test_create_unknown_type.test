@@ -1,0 +1,181 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/create/test_create_unknown_type.test
+# description: test create table
+# group: [create]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+create schema if not exists my_datalake.default;
+
+statement ok
+use my_datalake.default;
+
+statement ok
+drop table if exists create_unknown_type;
+
+statement error
+create table create_unknown_type (
+	a int,
+	b "NULL"
+);
+----
+Invalid Configuration Error
+
+# Can't set DEFAULT to a non-null value
+statement error
+create table create_unknown_type (
+	a int,
+	b "NULL" DEFAULT 42
+) WITH (
+	'format-version'='3'
+);
+----
+Invalid Input Error: Non-null DEFAULT values are not accepted for columns of type unknown
+
+statement ok
+create table create_unknown_type (
+	a int,
+	b "NULL" DEFAULT NULL
+) WITH (
+	'format-version'='3'
+);
+
+statement ok
+insert into create_unknown_type select
+	range a,
+	NULL b
+from range(10);
+
+query II
+select * from create_unknown_type order by all;
+----
+0	NULL
+1	NULL
+2	NULL
+3	NULL
+4	NULL
+5	NULL
+6	NULL
+7	NULL
+8	NULL
+9	NULL
+
+# Can't add column of type UNKNOWN with non-null DEFAULT
+statement error
+ALTER TABLE create_unknown_type ADD COLUMN c "NULL" DEFAULT 42
+----
+Invalid Input Error: Non-null DEFAULT values are not accepted for columns of type unknown
+
+# With a NULL default it passes
+statement ok
+ALTER TABLE create_unknown_type ADD COLUMN c "NULL" DEFAULT NULL
+
+# Can't alter the DEFAULT of UNKNOWN column to non-null value
+statement error
+ALTER TABLE create_unknown_type ALTER COLUMN b SET DEFAULT 42
+----
+Invalid Input Error: Non-null DEFAULT values are not accepted for columns of type unknown
+
+query III
+select * from create_unknown_type order by all;
+----
+0	NULL	NULL
+1	NULL	NULL
+2	NULL	NULL
+3	NULL	NULL
+4	NULL	NULL
+5	NULL	NULL
+6	NULL	NULL
+7	NULL	NULL
+8	NULL	NULL
+9	NULL	NULL
+
+statement ok
+ALTER TABLE create_unknown_type ALTER COLUMN b SET DEFAULT NULL
+
+statement ok
+INSERT INTO create_unknown_type DEFAULT VALUES;
+
+query III
+select * from create_unknown_type order by all;
+----
+0	NULL	NULL
+1	NULL	NULL
+2	NULL	NULL
+3	NULL	NULL
+4	NULL	NULL
+5	NULL	NULL
+6	NULL	NULL
+7	NULL	NULL
+8	NULL	NULL
+9	NULL	NULL
+NULL	NULL	NULL
+
+query I
+select typeof(c) from create_unknown_type limit 1;
+----
+"NULL"
+
+statement ok
+ALTER TABLE create_unknown_type ALTER COLUMN c TYPE DATE
+
+# UNKNOWN can be upgraded to anything
+query I
+select typeof(c) from create_unknown_type limit 1;
+----
+DATE
+
+query III
+select * from create_unknown_type order by all;
+----
+0	NULL	NULL
+1	NULL	NULL
+2	NULL	NULL
+3	NULL	NULL
+4	NULL	NULL
+5	NULL	NULL
+6	NULL	NULL
+7	NULL	NULL
+8	NULL	NULL
+9	NULL	NULL
+NULL	NULL	NULL
+
+# Now we can safely change the DEFAULT value
+statement ok
+ALTER TABLE create_unknown_type ALTER COLUMN c SET DEFAULT '1990/5/12'::DATE
+
+statement ok
+INSERT INTO create_unknown_type DEFAULT VALUES;
+
+
+query III
+select * from create_unknown_type order by all;
+----
+0	NULL	NULL
+1	NULL	NULL
+2	NULL	NULL
+3	NULL	NULL
+4	NULL	NULL
+5	NULL	NULL
+6	NULL	NULL
+7	NULL	NULL
+8	NULL	NULL
+9	NULL	NULL
+NULL	NULL	1990-05-12
+NULL	NULL	NULL
+
+statement error
+ALTER TABLE create_unknown_type ALTER COLUMN c TYPE "NULL"
+----
+Catalog Error: Column 'c' of type 'DATE' can't be altered to type '"NULL"'

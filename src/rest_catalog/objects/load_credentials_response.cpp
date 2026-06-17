@@ -24,6 +24,15 @@ LoadCredentialsResponse LoadCredentialsResponse::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+LoadCredentialsResponse LoadCredentialsResponse::Copy() const {
+	LoadCredentialsResponse res;
+	res.storage_credentials.reserve(storage_credentials.size());
+	for (auto &item : storage_credentials) {
+		res.storage_credentials.emplace_back(item.Copy());
+	}
+	return res;
+}
+
 string LoadCredentialsResponse::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto storage_credentials_val = yyjson_obj_get(obj, "storage-credentials");
@@ -47,7 +56,27 @@ string LoadCredentialsResponse::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(storage_credentials_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void LoadCredentialsResponse::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: storage-credentials
+	yyjson_mut_val *storage_credentials_arr = yyjson_mut_arr(doc);
+	for (const auto &item : storage_credentials) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(storage_credentials_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "storage-credentials", storage_credentials_arr);
+}
+
+yyjson_mut_val *LoadCredentialsResponse::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

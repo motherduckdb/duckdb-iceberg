@@ -1,0 +1,190 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/test_write_geometry_bounds.test
+# group: [iceberg_types]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+set enable_logging=true
+
+statement ok
+set logging_level='debug'
+
+# Verifies that DuckDB writes Iceberg v3 geometry lower_bounds / upper_bounds
+# as a packed little-endian sequence of f64 doubles (16/24/32 bytes for
+# XY/XYZ-or-XYM/XYZM), per Iceberg spec Appendix D.
+
+# --- XY ------------------------------------------------------------------
+
+statement ok
+drop table if exists my_datalake.default.geom_bounds_xy;
+
+statement ok
+create table my_datalake.default.geom_bounds_xy (g GEOMETRY) with ('format-version'='3');
+
+statement ok
+insert into my_datalake.default.geom_bounds_xy VALUES
+    ('POINT(1 2)'::GEOMETRY),
+    ('POINT(5 7)'::GEOMETRY),
+    ('LINESTRING(-3 -4, 10 10)'::GEOMETRY);
+
+statement ok
+set variable manifest_path_xy = (select manifest_path from iceberg_metadata(my_datalake.default.geom_bounds_xy) order by manifest_sequence_number desc limit 1);
+
+# 16-byte bounds: [xmin, ymin] / [xmax, ymax]
+query II
+select octet_length(map_extract(lower_bounds, 1)[1]), octet_length(map_extract(upper_bounds, 1)[1])
+from (select unnest(data_file) from read_avro(getvariable('manifest_path_xy')));
+----
+16	16
+
+# Exact byte assertion: across all inserted geometries
+#   xmin = -3.0 -> 00 00 00 00 00 00 08 c0
+#   ymin = -4.0 -> 00 00 00 00 00 00 10 c0
+#   xmax = 10.0 -> 00 00 00 00 00 00 24 40
+#   ymax = 10.0 -> 00 00 00 00 00 00 24 40
+query II
+select map_extract(lower_bounds, 1)[1] = '\x00\x00\x00\x00\x00\x00\x08\xc0\x00\x00\x00\x00\x00\x00\x10\xc0'::BLOB,
+       map_extract(upper_bounds, 1)[1] = '\x00\x00\x00\x00\x00\x00\x24\x40\x00\x00\x00\x00\x00\x00\x24\x40'::BLOB
+from (select unnest(data_file) from read_avro(getvariable('manifest_path_xy')));
+----
+true	true
+
+# --- XYZ -----------------------------------------------------------------
+
+statement ok
+drop table if exists my_datalake.default.geom_bounds_xyz;
+
+statement ok
+create table my_datalake.default.geom_bounds_xyz (g GEOMETRY) with ('format-version'='3');
+
+statement ok
+insert into my_datalake.default.geom_bounds_xyz VALUES
+    ('POINT Z (1 2 3)'::GEOMETRY),
+    ('POINT Z (5 7 9)'::GEOMETRY),
+    ('LINESTRING Z (5 5 5, 10 10 10)'::GEOMETRY);
+
+statement ok
+set variable manifest_path_xyz = (select manifest_path from iceberg_metadata(my_datalake.default.geom_bounds_xyz) order by manifest_sequence_number desc limit 1);
+
+# 24-byte bounds: [xmin, ymin, zmin] / [xmax, ymax, zmax]
+query II
+select octet_length(map_extract(lower_bounds, 1)[1]), octet_length(map_extract(upper_bounds, 1)[1])
+from (select unnest(data_file) from read_avro(getvariable('manifest_path_xyz')));
+----
+24	24
+
+# --- XYM -----------------------------------------------------------------
+#
+# Spark interprets a 3-double bound as XYZ, so we pad the Z slot with
+# DBL_MAX in both lower and upper bounds. Result is unambiguously 32 bytes.
+
+statement ok
+drop table if exists my_datalake.default.geom_bounds_xym;
+
+statement ok
+create table my_datalake.default.geom_bounds_xym (g GEOMETRY) with ('format-version'='3');
+
+statement ok
+insert into my_datalake.default.geom_bounds_xym VALUES
+    ('POINT M (1 2 3)'::GEOMETRY),
+    ('POINT M (5 7 9)'::GEOMETRY);
+
+statement ok
+set variable manifest_path_xym = (select manifest_path from iceberg_metadata(my_datalake.default.geom_bounds_xym) order by manifest_sequence_number desc limit 1);
+
+# 32-byte bounds: [xmin, ymin, DBL_MIN, mmin] / [xmax, ymax, DBL_MAX, mmax]
+query II
+select octet_length(map_extract(lower_bounds, 1)[1]), octet_length(map_extract(upper_bounds, 1)[1])
+from (select unnest(data_file) from read_avro(getvariable('manifest_path_xym')));
+----
+32	32
+
+# Verify the Z slot holds UNKNOWN_MAX (+infinity) in the z slot and UNKNOWN_MIN (-infinity)
+# The Z slot occupies bytes 17..24 (1-indexed) after [xmin, ymin].
+query II
+select map_extract(lower_bounds, 1)[1][17:24] = '\x00\x00\x00\x00\x00\x00\xF0\xFF'::BLOB,
+       map_extract(upper_bounds, 1)[1][17:24] = '\x00\x00\x00\x00\x00\x00\xF0\x7F'::BLOB
+from (select unnest(data_file) from read_avro(getvariable('manifest_path_xym')));
+----
+true	true
+
+# --- XYZM ----------------------------------------------------------------
+
+statement ok
+drop table if exists my_datalake.default.geom_bounds_xyzm;
+
+statement ok
+create table my_datalake.default.geom_bounds_xyzm (g GEOMETRY) with ('format-version'='3');
+
+statement ok
+insert into my_datalake.default.geom_bounds_xyzm VALUES
+    ('POINT ZM (1 2 3 4)'::GEOMETRY),
+    ('POINT ZM (5 7 9 11)'::GEOMETRY);
+
+statement ok
+set variable manifest_path_xyzm = (select manifest_path from iceberg_metadata(my_datalake.default.geom_bounds_xyzm) order by manifest_sequence_number desc limit 1);
+
+# 32-byte bounds: [xmin, ymin, zmin, mmin] / [xmax, ymax, zmax, mmax]
+query II
+select octet_length(map_extract(lower_bounds, 1)[1]), octet_length(map_extract(upper_bounds, 1)[1])
+from (select unnest(data_file) from read_avro(getvariable('manifest_path_xyzm')));
+----
+32	32
+
+# --- All-NULL ------------------------------------------------------------
+#
+# When the column has only NULL values the writer doesn't emit bbox_* keys,
+# so no lower/upper bound should be written.
+
+statement ok
+drop table if exists my_datalake.default.geom_bounds_null;
+
+statement ok
+create table my_datalake.default.geom_bounds_null (g GEOMETRY) with ('format-version'='3');
+
+statement ok
+insert into my_datalake.default.geom_bounds_null VALUES (NULL), (NULL), (NULL);
+
+statement ok
+set variable manifest_path_null = (select manifest_path from iceberg_metadata(my_datalake.default.geom_bounds_null) order by manifest_sequence_number desc limit 1);
+
+query II
+select len(map_extract(lower_bounds, 1)), len(map_extract(upper_bounds, 1))
+from (select unnest(data_file) from read_avro(getvariable('manifest_path_null')));
+----
+0	0
+
+# null_value_counts is still emitted for the geometry column
+query I
+select map_extract(null_value_counts, 1)[1]
+from (select unnest(data_file) from read_avro(getvariable('manifest_path_null')));
+----
+3
+
+# --- Read with a predicate on the geometry column -----------------------
+#
+# Before geometry bounds deserialization was implemented, any predicate on
+# a geometry column would cause the read to fail with
+# "geometry bound deserialization failed". Now the bound deserializes into
+# a WKB POINT so the pruning path can evaluate the filter.
+
+query I
+select count(*) from my_datalake.default.geom_bounds_xy where g is not null;
+----
+3
+
+query I
+select count(*) from my_datalake.default.geom_bounds_null where g is null;
+----
+3

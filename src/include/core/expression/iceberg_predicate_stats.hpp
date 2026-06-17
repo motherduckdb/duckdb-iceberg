@@ -1,8 +1,11 @@
 #pragma once
 
 #include "duckdb/common/types/value.hpp"
+#include "duckdb/common/shared_ptr.hpp"
 
 namespace duckdb {
+
+class BaseStatistics;
 
 struct IcebergPredicateStats {
 public:
@@ -25,6 +28,10 @@ public:
 	bool has_null = false;
 	bool has_not_null = false;
 	bool has_nan = false;
+	//! For GEOMETRY columns: a GEOMETRY_STATS BaseStatistics carrying the file's
+	//! bounding-box extent, used to delegate spatial predicate pruning to
+	//! GeometryStats::CheckZonemap. Null for non-geometry columns.
+	shared_ptr<BaseStatistics> geometry_stats;
 };
 
 } // namespace duckdb

@@ -24,17 +24,35 @@ ReportMetricsRequest ReportMetricsRequest::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+ReportMetricsRequest ReportMetricsRequest::Copy() const {
+	ReportMetricsRequest res;
+	if (scan_report.has_value()) {
+		res.scan_report.emplace();
+		(*res.scan_report) = (*scan_report).Copy();
+	}
+	if (commit_report.has_value()) {
+		res.commit_report.emplace();
+		(*res.commit_report) = (*commit_report).Copy();
+	}
+	res.report_type = report_type;
+	return res;
+}
+
 string ReportMetricsRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
-	error = scan_report.TryFromJSON(obj);
+	scan_report.emplace();
+	error = scan_report->TryFromJSON(obj);
 	if (error.empty()) {
-		has_scan_report = true;
+	} else {
+		scan_report = nullopt;
 	}
-	error = commit_report.TryFromJSON(obj);
+	commit_report.emplace();
+	error = commit_report->TryFromJSON(obj);
 	if (error.empty()) {
-		has_commit_report = true;
+	} else {
+		commit_report = nullopt;
 	}
-	if (!has_commit_report && !has_scan_report) {
+	if (!(commit_report.has_value()) && !(scan_report.has_value())) {
 		return "ReportMetricsRequest failed to parse, none of the anyOf candidates matched";
 	}
 	auto report_type_val = yyjson_obj_get(obj, "report-type");
@@ -49,7 +67,28 @@ string ReportMetricsRequest::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(report_type_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void ReportMetricsRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	if (scan_report.has_value()) {
+		scan_report->PopulateJSON(doc, obj);
+	} else if (commit_report.has_value()) {
+		commit_report->PopulateJSON(doc, obj);
+	}
+
+	// Serialize: report-type
+	yyjson_mut_obj_add_strcpy(doc, obj, "report-type", report_type.c_str());
+}
+
+yyjson_mut_val *ReportMetricsRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

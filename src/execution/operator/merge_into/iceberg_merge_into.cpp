@@ -39,9 +39,55 @@ void IcebergMergeInto::ProjectAndCastForCopy(ClientContext &context, DataChunk &
 	cast_chunk.SetCardinality(chunk_ref.get().size());
 }
 
-void IcebergMergeInto::FinalizeCopyToInsert(Pipeline &pipeline, Event &event, ClientContext &context,
-                                            PhysicalOperator &copy_op, PhysicalOperator &insert_op,
-                                            InterruptState &interrupt_state) {
+namespace {
+
+class CaptureEvent : public Event {
+public:
+	explicit CaptureEvent(Executor &executor) : Event(executor) {
+	}
+
+	void Schedule() override {
+		// No-op
+	}
+
+	shared_ptr<Event> GetCapturedEvent() {
+		if (parents.empty()) {
+			return nullptr;
+		}
+		return parents[0].lock();
+	}
+};
+
+} // namespace
+
+SinkFinalizeType IcebergMergeInto::FinalizeCopyToInsert(Pipeline &pipeline, Event &event, ClientContext &context,
+                                                        PhysicalOperator &copy_op, PhysicalOperator &insert_op,
+                                                        InterruptState &interrupt_state) {
+	OperatorSinkFinalizeInput copy_finalize {*copy_op.sink_state, interrupt_state};
+	CaptureEvent capture_event(pipeline.executor);
+	auto finalize_result = copy_op.Finalize(pipeline, capture_event, context, copy_finalize);
+	if (finalize_result == SinkFinalizeType::BLOCKED) {
+		return finalize_result;
+	}
+
+	//! PhysicalCopyToFile creates an Event as part of Finalize
+	//! We need to intercept and execute this event's tasks, to finish the finalize work
+	auto captured_event = capture_event.GetCapturedEvent();
+	if (captured_event) {
+		// Schedule the event's tasks with our token
+		captured_event->Schedule();
+
+		// Work on tasks until the event is finished
+		shared_ptr<Task> task;
+		auto &token = pipeline.executor.GetToken();
+		while (!captured_event->IsFinished()) {
+			if (TaskScheduler::GetScheduler(context).GetTaskFromProducer(token, task)) {
+				task->Execute(TaskExecutionMode::PROCESS_ALL);
+				task.reset();
+			}
+		}
+	}
+
 	DataChunk chunk;
 	chunk.Initialize(context, copy_op.types);
 
@@ -81,6 +127,7 @@ void IcebergMergeInto::FinalizeCopyToInsert(Pipeline &pipeline, Event &event, Cl
 	if (finalize_res == SinkFinalizeType::BLOCKED) {
 		throw InternalException("BLOCKED not supported in IcebergMerge");
 	}
+	return SinkFinalizeType::READY;
 }
 
 //===--------------------------------------------------------------------===//
@@ -151,7 +198,7 @@ static unique_ptr<MergeIntoOperator> IcebergPlanMergeIntoAction(IcebergCatalog &
 		break;
 	}
 	case MergeActionType::MERGE_DELETE: {
-		LogicalDelete delete_op(op.table, 0);
+		LogicalDelete delete_op(op.table, TableIndex(0));
 
 		// we only push 2 columns for positional deletes
 		idx_t column_offset = 0;
@@ -170,12 +217,12 @@ static unique_ptr<MergeIntoOperator> IcebergPlanMergeIntoAction(IcebergCatalog &
 		break;
 	}
 	case MergeActionType::MERGE_INSERT: {
-		LogicalInsert insert_op(op.table, 0);
+		LogicalInsert insert_op(op.table, TableIndex(0));
 		insert_op.bound_constraints = std::move(bound_constraints);
 		for (auto &def : op.bound_defaults) {
 			insert_op.bound_defaults.push_back(def->Copy());
 		}
-		// transform expressions if required
+		//! DEPRECATED: transform expressions if required
 		if (!action.column_index_map.empty()) {
 			vector<unique_ptr<Expression>> new_expressions;
 			for (auto &col : op.table.GetColumns().Physical()) {

@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -22,19 +23,22 @@ public:
 	LoadTableResult &operator=(LoadTableResult &&) = default;
 
 public:
+	// Deserialization
 	static LoadTableResult FromJSON(yyjson_val *obj);
-
-public:
 	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	LoadTableResult Copy() const;
+
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	TableMetadata metadata;
-	string metadata_location;
-	bool has_metadata_location = false;
-	case_insensitive_map_t<string> config;
-	bool has_config = false;
-	vector<StorageCredential> storage_credentials;
-	bool has_storage_credentials = false;
+	optional<string> metadata_location;
+	optional<case_insensitive_map_t<string>> config;
+	optional<vector<StorageCredential>> storage_credentials;
 };
 
 } // namespace rest_api_objects

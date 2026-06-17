@@ -107,7 +107,7 @@ static unique_ptr<FunctionData> IcebergMetaDataBind(ClientContext &context, Tabl
 	auto &snapshot_lookup = options.snapshot_lookup;
 
 	for (auto &kv : input.named_parameters) {
-		auto loption = StringUtil::Lower(kv.first);
+		auto loption = StringUtil::Lower(kv.first.GetIdentifierName());
 		auto &val = kv.second;
 		if (loption == "allow_moved_paths") {
 			options.allow_moved_paths = BooleanValue::Get(val);
@@ -168,7 +168,7 @@ static unique_ptr<FunctionData> IcebergMetaDataBind(ClientContext &context, Tabl
 }
 
 static void AddString(Vector &vec, idx_t index, string_t &&str) {
-	FlatVector::GetData<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
+	FlatVector::GetDataMutable<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
 }
 
 static void IcebergMetaDataFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
@@ -187,7 +187,7 @@ static void IcebergMetaDataFunction(ClientContext &context, TableFunctionInput &
 		auto &entries = table_entry.manifest_entries;
 		for (; global_state.current_manifest_entry_idx < entries.size(); global_state.current_manifest_entry_idx++) {
 			if (out >= STANDARD_VECTOR_SIZE) {
-				output.SetCardinality(out);
+				output.SetChildCardinality(out);
 				return;
 			}
 			auto &manifest = table_entry.file;
@@ -197,7 +197,7 @@ static void IcebergMetaDataFunction(ClientContext &context, TableFunctionInput &
 			//! manifest_path
 			AddString(output.data[0], out, string_t(manifest.manifest_path));
 			//! manifest_sequence_number
-			FlatVector::GetData<int64_t>(output.data[1])[out] = manifest.sequence_number;
+			FlatVector::GetDataMutable<int64_t>(output.data[1])[out] = manifest.sequence_number;
 			//! manifest_content
 			AddString(output.data[2], out, string_t(IcebergManifestContentTypeToString(manifest.content)));
 
@@ -210,18 +210,18 @@ static void IcebergMetaDataFunction(ClientContext &context, TableFunctionInput &
 			//! file_format
 			AddString(output.data[6], out, string_t(data_file.file_format));
 			//! record_count
-			FlatVector::GetData<int64_t>(output.data[7])[out] = data_file.record_count;
-			FlatVector::GetData<int64_t>(output.data[8])[out] = manifest_entry.HasSequenceNumber()
-			                                                        ? manifest_entry.GetExplicitSequenceNumber()
-			                                                        : manifest.sequence_number;
-			FlatVector::GetData<int64_t>(output.data[9])[out] = manifest_entry.HasFileSequenceNumber()
-			                                                        ? manifest_entry.GetExplicitFileSequenceNumber()
-			                                                        : manifest.sequence_number;
+				FlatVector::GetDataMutable<int64_t>(output.data[7])[out] = data_file.record_count;
+				FlatVector::GetDataMutable<int64_t>(output.data[8])[out] = manifest_entry.HasSequenceNumber()
+				                                                        ? manifest_entry.GetExplicitSequenceNumber()
+				                                                        : manifest.sequence_number;
+				FlatVector::GetDataMutable<int64_t>(output.data[9])[out] = manifest_entry.HasFileSequenceNumber()
+				                                                        ? manifest_entry.GetExplicitFileSequenceNumber()
+				                                                        : manifest.sequence_number;
 			out++;
 		}
 		global_state.current_manifest_entry_idx = 0;
 	}
-	output.SetCardinality(out);
+	output.SetChildCardinality(out);
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergMetadataFunction() {

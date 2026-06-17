@@ -80,7 +80,7 @@ static RewriteDataFilesOptions ParseOptions(TableFunctionBindInput &input) {
 	result.table_name = ParseRewriteTableName(StringValue::Get(input.inputs[0]));
 
 	for (auto &kv : input.named_parameters) {
-		auto opt = StringUtil::Lower(kv.first);
+		auto opt = StringUtil::Lower(kv.first.GetIdentifierName());
 		auto &val = kv.second;
 		if (opt == "target_file_size_bytes") {
 			result.target_file_size_bytes = ParseTargetFileSizeBytes(val);
@@ -151,14 +151,14 @@ static unique_ptr<LogicalOperator> BindGroupCopy(Binder &binder, const RewritePl
 
 	auto copy_binder = Binder::CreateBinder(binder.context, &binder);
 	auto bound_copy = copy_binder->Bind(copy_statement);
-	if (bound_copy.types.size() != 6) {
-		throw InternalException("iceberg_rewrite_data_files: expected COPY RETURN_STATS to return six columns");
+	if (bound_copy.types.size() < 4) {
+		throw InternalException("iceberg_rewrite_data_files: expected COPY RETURN_STATS to return at least four columns");
 	}
 	return std::move(bound_copy.plan);
 }
 
 static unique_ptr<LogicalOperator> RewriteDataFilesBindOperator(ClientContext &context, TableFunctionBindInput &input,
-                                                                idx_t bind_index, vector<string> &return_names) {
+                                                                TableIndex bind_index, vector<string> &return_names) {
 	if (!input.binder) {
 		throw InternalException("iceberg_rewrite_data_files: bind_operator called without a binder");
 	}
@@ -172,7 +172,7 @@ static unique_ptr<LogicalOperator> RewriteDataFilesBindOperator(ClientContext &c
 	plan_input.rewrite_all = options.rewrite_all;
 	auto plan = PlanRewrite(context, plan_input);
 
-	auto result = make_uniq<LogicalRewriteDataFiles>(bind_index, std::move(plan));
+	auto result = make_uniq<LogicalRewriteDataFiles>(bind_index.index, std::move(plan));
 	for (idx_t group_idx = 0; group_idx < result->plan.file_groups.size(); group_idx++) {
 		result->children.push_back(BindGroupCopy(*input.binder, result->plan, result->plan.file_groups[group_idx]));
 	}

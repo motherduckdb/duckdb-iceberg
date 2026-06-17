@@ -5,8 +5,10 @@
 #include "duckdb/common/bswap.hpp"
 #include "duckdb/common/exception/conversion_exception.hpp"
 #include "duckdb/common/types/date.hpp"
+#include "duckdb/common/types/geometry.hpp"
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/common/types/value.hpp"
+#include "duckdb/common/types/vector.hpp"
 #include "utf8proc_wrapper.hpp"
 
 namespace duckdb {
@@ -45,28 +47,22 @@ static Value DeserializeDecimalTemplated(const string_t &blob, uint8_t width, ui
 }
 
 static Value DeserializeHugeintDecimal(const string_t &blob, uint8_t width, uint8_t scale) {
-	hugeint_t ret;
-
 	//! The blob has to be smaller or equal to the size of the type
 	D_ASSERT(blob.GetSize() <= sizeof(hugeint_t));
 
-	// Convert from big-endian to host byte order
-	// read all bytes into a single 128-bit value
 	const uint8_t *src = reinterpret_cast<const uint8_t *>(blob.GetData());
 	bool is_negative = blob.GetSize() > 0 && (src[0] & 0x80);
 
-	// sign extension: 0 for positive, -1 for negative
-	int64_t upper_val = is_negative ? -1 : 0;
+	// use unsigned integers for shifting
+	uint64_t upper_val = is_negative ? ~uint64_t(0) : 0;
 	uint64_t lower_val = is_negative ? ~uint64_t(0) : 0;
 
-	// then split into upper/lower, by shifting each byte from MSB to LSB
 	for (idx_t i = 0; i < blob.GetSize(); i++) {
-		// shift the entire 128 bit value left by 8 bits
-		upper_val = (upper_val << 8) | static_cast<int64_t>(static_cast<uint64_t>(lower_val) >> 56);
+		upper_val = (upper_val << 8) | (lower_val >> 56);
 		lower_val = (lower_val << 8) | src[i];
 	}
 
-	ret = hugeint_t(upper_val, lower_val);
+	hugeint_t ret(static_cast<int64_t>(upper_val), lower_val);
 	return Value::DECIMAL(ret, width, scale);
 }
 
@@ -236,7 +232,6 @@ DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const Log
 		}
 	case LogicalTypeId::UUID:
 		return DeserializeUUID(blob, type);
-		// Add more types as needed
 	default:
 		break;
 	}
@@ -482,7 +477,12 @@ SerializeResult IcebergValue::SerializeValue(Value input_value, const LogicalTyp
 		auto ret = SerializeResult(column_type, ret_val);
 		return ret;
 	}
-	// boolean does not yet return proper values so we skip
+		// GEOMETRY and VARIANT bounds are not produced via this string-Value path;
+		// they require multi-double / variant-binary encodings built inline at the
+		// stats-collection site (see IcebergInsertGlobalState::AddFiles).
+	case LogicalTypeId::GEOMETRY:
+	case LogicalTypeId::VARIANT:
+		// boolean does not yet return proper values so we skip
 	case LogicalTypeId::BOOLEAN:
 	default:
 		break;
