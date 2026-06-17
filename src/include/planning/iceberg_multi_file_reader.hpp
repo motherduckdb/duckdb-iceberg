@@ -75,11 +75,10 @@ public:
 	                          const vector<MultiFileColumnDefinition> &local_columns);
 	bool ParseOption(const string &key, const Value &val, MultiFileOptions &options, ClientContext &context) override;
 
-	unique_ptr<Expression>
+	MultiFileReaderVirtualColumnBinding
 	GetVirtualColumnExpression(ClientContext &context, MultiFileReaderData &reader_data,
-	                           const vector<MultiFileColumnDefinition> &local_columns, idx_t &column_id,
-	                           const LogicalType &type, MultiFileLocalIndex local_idx,
-	                           optional_ptr<MultiFileColumnDefinition> &global_column_reference) override;
+	                           const vector<MultiFileColumnDefinition> &local_columns, const idx_t column_id,
+	                           const LogicalType &type, MultiFileLocalIndex local_idx) override;
 
 public:
 	shared_ptr<TableFunctionInfo> function_info;

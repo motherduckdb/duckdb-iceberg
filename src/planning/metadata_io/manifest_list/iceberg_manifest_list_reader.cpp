@@ -175,9 +175,9 @@ void ManifestListReader::ReadChunk(DataChunk &chunk, idx_t iceberg_version, vect
 		}
 
 		if (iceberg_version >= 3) {
-			int64_t first_row_id;
-			if (ReadOptionalField<int64_t>(first_row_id_format, i, first_row_id)) {
-				manifest.first_row_id = first_row_id;
+			int64_t first_row_id_value;
+			if (ReadOptionalField<int64_t>(first_row_id_format, i, first_row_id_value)) {
+				manifest.first_row_id = first_row_id_value;
 				manifest.has_first_row_id = true;
 			}
 		}

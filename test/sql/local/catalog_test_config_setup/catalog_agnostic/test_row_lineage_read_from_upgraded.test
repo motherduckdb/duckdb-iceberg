@@ -2,9 +2,6 @@
 # description: test integration with iceberg catalog read
 # group: [catalog_agnostic]
 
-# TODO: Needs https://github.com/duckdblabs/duckdb-internal/issues/9393
-mode skip
-
 require-env CATALOG_TEST_CONFIG_SETUP
 
 require avro
@@ -105,8 +102,15 @@ select _last_updated_sequence_number, _row_id, id, data from my_datalake.default
 5	NULL	6	replaced
 7	NULL	7	g_new
 
-# Filter on the '_row_id' can't be pushed down
-statement error
+query II
 select id, data from my_datalake.default.row_lineage_test_upgraded_insert where _row_id is NULL order by id;
 ----
-INTERNAL Error: Expected an expression that only references a single column, but found multiple!
+
+query II
+select id, data from my_datalake.default.row_lineage_test_upgraded_insert where _row_id is NOT NULL order by id;
+----
+1	replaced
+2	replaced_again
+4	d_u1
+6	replaced_again
+7	g_new
