@@ -82,13 +82,7 @@ static RewriteDataFilesOptions ParseOptions(TableFunctionBindInput &input) {
 	for (auto &kv : input.named_parameters) {
 		auto opt = StringUtil::Lower(kv.first);
 		auto &val = kv.second;
-		if (opt == "strategy") {
-			auto strategy = StringValue::Get(val);
-			if (strategy != "binpack") {
-				throw InvalidInputException(
-				    "iceberg_rewrite_data_files: only 'binpack' strategy is supported, got '%s'", strategy);
-			}
-		} else if (opt == "target_file_size_bytes") {
+		if (opt == "target_file_size_bytes") {
 			result.target_file_size_bytes = ParseTargetFileSizeBytes(val);
 		} else if (opt == "min_input_files") {
 			auto value = val.GetValue<int64_t>();
@@ -193,7 +187,6 @@ TableFunctionSet IcebergFunctions::GetIcebergRewriteDataFilesFunction() {
 	TableFunctionSet function_set("iceberg_rewrite_data_files");
 	TableFunction function("iceberg_rewrite_data_files", {LogicalType::VARCHAR}, nullptr);
 	function.bind_operator = RewriteDataFilesBindOperator;
-	function.named_parameters["strategy"] = LogicalType::VARCHAR;
 	function.named_parameters["target_file_size_bytes"] = LogicalType::ANY;
 	function.named_parameters["min_input_files"] = LogicalType::BIGINT;
 	function.named_parameters["rewrite_all"] = LogicalType::BOOLEAN;
