@@ -6,9 +6,9 @@
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/main/client_context.hpp"
+#include "duckdb/parser/qualified_name.hpp"
 
 #include "core/metadata/manifest/iceberg_manifest.hpp"
-#include "maintenance/table_lock_registry.hpp"
 
 namespace duckdb {
 
@@ -27,9 +27,10 @@ struct RewriteCandidate {
 
 struct RewritePlan {
 	bool table_is_empty = false;
-	MaintenanceTableKey table_key;
+	QualifiedName table_name;
 	int64_t starting_snapshot_id = -1;
 	int64_t starting_sequence_number = 0;
+	int64_t target_file_size_bytes = 134217728;
 	//! Keep the loaded metadata alive until commit.
 	shared_ptr<IcebergTableInformation> table_info;
 	vector<RewriteCandidate> candidates;
@@ -38,7 +39,7 @@ struct RewritePlan {
 };
 
 struct RewriteDataFilesPlanInput {
-	MaintenanceTableKey table_key;
+	QualifiedName table_name;
 	int64_t target_file_size_bytes = 134217728;
 	int64_t min_input_files = 5;
 	bool rewrite_all = false;
@@ -50,9 +51,6 @@ namespace rewrite_planner_internal {
 
 //! Canonical partition key used by the bin-packer.
 string PartitionBucketKey(const vector<IcebergPartitionInfo> &partition_info);
-
-//! First-Fit Decreasing bin-pack over candidates within a single partition.
-vector<vector<RewriteCandidate>> BinPackPartition(vector<RewriteCandidate> files, int64_t target_size);
 
 } // namespace rewrite_planner_internal
 

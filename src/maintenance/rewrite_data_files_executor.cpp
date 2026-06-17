@@ -1,152 +1,51 @@
 #include "maintenance/rewrite_data_files_executor.hpp"
 
-#include "duckdb/common/assert.hpp"
 #include "duckdb/common/exception.hpp"
-#include "duckdb/common/file_system.hpp"
-#include "duckdb/common/string_util.hpp"
-#include "duckdb/common/types/value.hpp"
-#include "duckdb/main/connection.hpp"
-#include "duckdb/main/database.hpp"
-#include "duckdb/main/materialized_query_result.hpp"
-
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/transaction/iceberg_transaction.hpp"
+#include "catalog/rest/transaction/iceberg_transaction_data.hpp"
+#include "catalog/rest/transaction/iceberg_transaction_metadata.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
 #include "core/metadata/schema/iceberg_column_definition.hpp"
 #include "core/metadata/schema/iceberg_table_schema.hpp"
 
 namespace duckdb {
 
-namespace rewrite_executor_internal {
+namespace {
 
-static string QuoteSqlString(const string &s) {
-	string out;
-	out.reserve(s.size() + 2);
-	out.push_back('\'');
-	for (char c : s) {
-		if (c == '\'') {
-			out.push_back('\'');
-		}
-		out.push_back(c);
+//! Recursive walk over an Iceberg column definition emitting the FIELD_IDS
+//! value tree. For primitives the value is the field_id as an integer; for
+//! nested types it's a struct with a sentinel `__duckdb_field_id` slot plus
+//! one slot per child. Mirrors the parquet field-id metadata written by the
+//! regular Iceberg insert path so APPEND and REWRITE stay compatible.
+static Value GetFieldIdValue(const IcebergColumnDefinition &column) {
+	if (column.children.empty()) {
+		return Value::BIGINT(column.id);
 	}
-	out.push_back('\'');
-	return out;
+	child_list_t<Value> values;
+	values.emplace_back("__duckdb_field_id", Value::BIGINT(column.id));
+	for (auto &child : column.children) {
+		values.emplace_back(child->name, GetFieldIdValue(*child));
+	}
+	return Value::STRUCT(std::move(values));
 }
 
-static string RenderFieldIdValue(const IcebergColumnDefinition &col) {
-	if (col.children.empty()) {
-		return std::to_string(col.id);
+} // namespace
+
+Value BuildRewriteFieldIds(const IcebergTableSchema &schema) {
+	child_list_t<Value> values;
+	for (auto &column : schema.columns) {
+		values.emplace_back(column->name, GetFieldIdValue(*column));
 	}
-	string out = "{'__duckdb_field_id': ";
-	out += std::to_string(col.id);
-	for (auto &child : col.children) {
-		out += ", ";
-		out += QuoteSqlString(child->name);
-		out += ": ";
-		out += RenderFieldIdValue(*child);
-	}
-	out += "}";
-	return out;
+	return Value::STRUCT(std::move(values));
 }
 
-string BuildFieldIdsLiteral(const IcebergTableSchema &schema) {
-	string out = "{";
-	for (idx_t i = 0; i < schema.columns.size(); ++i) {
-		if (i > 0) {
-			out += ", ";
-		}
-		out += QuoteSqlString(schema.columns[i]->name);
-		out += ": ";
-		out += RenderFieldIdValue(*schema.columns[i]);
-	}
-	out += "}";
-	return out;
-}
-
-static string BuildSimpleTableReference(const string &catalog, const string &schema, const string &table) {
-	D_ASSERT(!catalog.empty() && !schema.empty() && !table.empty());
-	return catalog + "." + schema + "." + table;
-}
-
-string BuildRewriteCopySql(const string &catalog, const string &schema, const string &table,
-                           const vector<string> &file_paths, const string &target_dir,
-                           const string &field_ids_literal) {
-	string file_list = "[";
-	for (idx_t i = 0; i < file_paths.size(); ++i) {
-		if (i > 0) {
-			file_list += ", ";
-		}
-		file_list += QuoteSqlString(file_paths[i]);
-	}
-	file_list += "]";
-
-	string sql = "COPY (SELECT * FROM ";
-	sql += BuildSimpleTableReference(catalog, schema, table);
-	sql += " WHERE filename IN ";
-	sql += file_list;
-	sql += ") TO ";
-	sql += QuoteSqlString(target_dir);
-	sql += " (FORMAT PARQUET, FIELD_IDS ";
-	sql += field_ids_literal;
-	sql += ", FILENAME_PATTERN '{uuidv7}', RETURN_FILES TRUE, PER_THREAD_OUTPUT FALSE";
-	sql += ", OVERWRITE_OR_IGNORE TRUE)";
-	return sql;
-}
-
-} // namespace rewrite_executor_internal
-
-IcebergManifestEntry ExecuteOneGroup(ClientContext &context, const IcebergTableInformation &table_info,
-                                     const MaintenanceTableKey &table_key,
-                                     const vector<RewriteCandidate> &group, int64_t starting_sequence_number) {
+IcebergManifestEntry BuildRewriteManifestEntry(const vector<RewriteCandidate> &group, int64_t starting_sequence_number,
+                                               int64_t record_count, const string &produced_file,
+                                               int64_t file_size_in_bytes) {
 	if (group.empty()) {
-		throw InternalException("iceberg_rewrite_data_files: ExecuteOneGroup called with an empty group");
-	}
-	auto &metadata = table_info.table_metadata;
-	auto &fs = FileSystem::GetFileSystem(context);
-	auto data_path = metadata.GetDataPath(fs);
-
-	auto schema_id = metadata.GetCurrentSchemaId();
-	auto schema_it = metadata.GetSchemas().find(schema_id);
-	if (schema_it == metadata.GetSchemas().end()) {
-		throw InternalException("iceberg_rewrite_data_files: current schema id %d not found in metadata", schema_id);
-	}
-	auto &schema = *schema_it->second;
-
-	vector<string> file_paths;
-	file_paths.reserve(group.size());
-	for (auto &cand : group) {
-		file_paths.push_back(cand.file_path);
-	}
-
-	auto field_ids = rewrite_executor_internal::BuildFieldIdsLiteral(schema);
-	auto sql = rewrite_executor_internal::BuildRewriteCopySql(table_key.catalog, table_key.schema, table_key.table,
-	                                                          file_paths, data_path, field_ids);
-
-	//! Use a nested connection so COPY does not re-enter the table function pipeline.
-	auto &db = DatabaseInstance::GetDatabase(context);
-	Connection conn(db);
-	auto result = conn.Query(sql);
-	if (result->HasError()) {
-		result->ThrowError("iceberg_rewrite_data_files: failed to write rewrite group: ");
-	}
-	auto chunk = result->Fetch();
-	if (!chunk || chunk->size() == 0) {
-		throw InternalException(
-		    "iceberg_rewrite_data_files: COPY returned no rows from RETURN_FILES — expected exactly one");
-	}
-	if (chunk->size() > 1) {
-		throw InternalException(
-		    "iceberg_rewrite_data_files: COPY returned %llu summary rows (expected 1)",
-		    (unsigned long long)chunk->size());
-	}
-
-	auto count_val = chunk->GetValue(0, 0);
-	auto files_val = chunk->GetValue(1, 0);
-	auto &produced_files = ListValue::GetChildren(files_val);
-	if (produced_files.size() != 1) {
-		throw InternalException(
-		    "iceberg_rewrite_data_files: COPY produced %llu files for a single rewrite group (expected 1)",
-		    (unsigned long long)produced_files.size());
+		throw InternalException("iceberg_rewrite_data_files: cannot build a manifest entry for an empty group");
 	}
 
 	IcebergManifestEntry entry;
@@ -155,52 +54,69 @@ IcebergManifestEntry ExecuteOneGroup(ClientContext &context, const IcebergTableI
 	entry.SetSequenceNumber(starting_sequence_number);
 	entry.data_file.content = IcebergManifestEntryContentType::DATA;
 	entry.data_file.file_format = "parquet";
-	entry.data_file.file_path = produced_files[0].GetValue<string>();
-	entry.data_file.record_count = count_val.GetValue<int64_t>();
-	auto file_handle = fs.OpenFile(entry.data_file.file_path, FileFlags::FILE_FLAGS_READ);
-	entry.data_file.file_size_in_bytes = static_cast<int64_t>(file_handle->GetFileSize());
-	//! The planner keeps every rewrite group within one partition.
+	entry.data_file.file_path = produced_file;
+	entry.data_file.record_count = record_count;
+	entry.data_file.file_size_in_bytes = file_size_in_bytes;
+	//! The planner buckets candidates so every file in one group shares the same
+	//! partition tuple. Reuse candidate 0 instead of re-deriving it.
 	entry.data_file.partition_info = group.front().partition_info;
 	return entry;
 }
 
-RewriteExecutionResult ExecuteRewrite(ClientContext &context, const RewritePlan &plan) {
-	RewriteExecutionResult result;
-	if (plan.table_is_empty || plan.file_groups.empty()) {
-		return result;
+void ValidateRewriteSnapshot(const RewritePlan &plan, const IcebergTableInformation &table_info, const string &phase) {
+	auto snapshot = table_info.table_metadata.GetLatestSnapshot();
+	if (plan.starting_snapshot_id < 0) {
+		if (snapshot) {
+			throw CatalogException(
+			    "iceberg_rewrite_data_files: table snapshot changed after planning an empty rewrite during %s", phase);
+		}
+		return;
 	}
-	if (!plan.table_info) {
-		throw InternalException(
-		    "iceberg_rewrite_data_files: RewritePlan.table_info is null but file_groups is non-empty");
+	if (!snapshot || snapshot->snapshot_id != plan.starting_snapshot_id) {
+		throw CatalogException("iceberg_rewrite_data_files: table snapshot changed between planning (%lld) and %s (%s)",
+		                       plan.starting_snapshot_id, phase,
+		                       snapshot ? std::to_string(snapshot->snapshot_id) : "none");
 	}
-	auto &table_info = *plan.table_info;
+}
 
-	for (auto &group : plan.file_groups) {
+void CleanupRewriteFiles(ClientContext &context, const IcebergTableInformation &table_info,
+                         const vector<string> &produced_paths) {
+	if (!table_info.catalog.attach_options.allows_deletes) {
+		return;
+	}
+	auto &fs = FileSystem::GetFileSystem(context);
+	for (auto &path : produced_paths) {
 		try {
-			auto new_entry =
-			    ExecuteOneGroup(context, table_info, plan.table_key, group, plan.starting_sequence_number);
-			int64_t group_bytes = 0;
-			for (auto &cand : group) {
-				group_bytes += cand.file_size_in_bytes;
-			}
-			result.rewritten_data_files += static_cast<int64_t>(group.size());
-			result.rewritten_bytes += group_bytes;
-			result.added_data_files += 1;
-			result.new_entries.push_back(std::move(new_entry));
-			for (auto &cand : group) {
-				result.rewritten_candidates.push_back(cand);
-			}
+			fs.TryRemoveFile(path);
 		} catch (...) {
-			if (table_info.catalog.attach_options.allows_deletes) {
-				auto &fs = FileSystem::GetFileSystem(context);
-				for (auto &entry : result.new_entries) {
-					fs.TryRemoveFile(entry.data_file.file_path);
-				}
-			}
-			throw;
+			//! Best-effort cleanup only. Failures here should not mask the original
+			//! COPY/validation/commit error.
 		}
 	}
-	return result;
+}
+
+void CommitRewrite(ClientContext &context, const RewritePlan &plan, RewriteExecutionResult &result) {
+	if (result.new_entries.empty()) {
+		return;
+	}
+	if (!plan.table_info) {
+		throw InternalException("iceberg_rewrite_data_files: rewrite plan has no table information");
+	}
+	auto &table_info = *plan.table_info;
+	ValidateRewriteSnapshot(plan, table_info, "commit");
+
+	auto &iceberg_transaction = IcebergTransaction::Get(context, table_info.catalog);
+	IcebergManifestDeletes deletes;
+	for (auto &cand : result.rewritten_candidates) {
+		deletes.InvalidateFile(cand.file_path);
+	}
+
+	ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTableInformation &tbl) {
+		ValidateRewriteSnapshot(plan, tbl, "transaction commit");
+		auto &transaction_data = tbl.GetOrCreateTransactionData(iceberg_transaction);
+		transaction_data.AddSnapshot(IcebergSnapshotOperationType::REPLACE, std::move(result.new_entries),
+		                             std::move(deletes));
+	});
 }
 
 } // namespace duckdb

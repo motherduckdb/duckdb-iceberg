@@ -51,8 +51,13 @@ static vector<LogicalType> IcebergManifestEntryTypes() {
 }
 
 static vector<string> IcebergManifestEntryNames() {
-	return {"status",       "content",          "file_path",         "file_format",
-	        "record_count", "data_sequence_number", "file_sequence_number"};
+	return {"status",
+	        "content",
+	        "file_path",
+	        "file_format",
+	        "record_count",
+	        "data_sequence_number",
+	        "file_sequence_number"};
 }
 
 static vector<LogicalType> IcebergManifestTypes() {
@@ -206,11 +211,12 @@ static void IcebergMetaDataFunction(ClientContext &context, TableFunctionInput &
 			AddString(output.data[6], out, string_t(data_file.file_format));
 			//! record_count
 			FlatVector::GetData<int64_t>(output.data[7])[out] = data_file.record_count;
-			FlatVector::GetData<int64_t>(output.data[8])[out] =
-			    manifest_entry.HasSequenceNumber() ? manifest_entry.GetExplicitSequenceNumber() : manifest.sequence_number;
-			FlatVector::GetData<int64_t>(output.data[9])[out] =
-			    manifest_entry.HasFileSequenceNumber() ? manifest_entry.GetExplicitFileSequenceNumber()
-			                                           : manifest.sequence_number;
+			FlatVector::GetData<int64_t>(output.data[8])[out] = manifest_entry.HasSequenceNumber()
+			                                                        ? manifest_entry.GetExplicitSequenceNumber()
+			                                                        : manifest.sequence_number;
+			FlatVector::GetData<int64_t>(output.data[9])[out] = manifest_entry.HasFileSequenceNumber()
+			                                                        ? manifest_entry.GetExplicitFileSequenceNumber()
+			                                                        : manifest.sequence_number;
 			out++;
 		}
 		global_state.current_manifest_entry_idx = 0;
