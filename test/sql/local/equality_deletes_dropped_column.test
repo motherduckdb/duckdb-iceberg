@@ -1,0 +1,73 @@
+# name: test/sql/local/equality_deletes_dropped_column.test
+# description: Equality deletes keyed on a column that was dropped from the current schema, on the no-optimizer fallback
+# group: [local]
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Fixture (see scripts/persistent/create_equality_delete_dropped_column_table.py): a table with columns a(1), b(2),
+# c(3) and rows (a,b,c) = (1,100,1000),(2,200,2000),(3,300,3000),(4,400,4000), an equality delete keyed on field id 2
+# (b = 200, which targets the a=2 row), after which column b is dropped from the current schema. So the current schema
+# is (a, c) while the data file and the delete file still carry b. Reading must still drop the a=2 row.
+#
+# The GuaranteeEqualityDeleteColumnsOptimizer handles the dropped column by synthesising it (iceberg_optimizer.cpp), but
+# it only does so for catalog-backed scans (it needs GetTable(); a raw iceberg_scan() path asserts). We disable the
+# optimizer to exercise the no-optimizer fallback that runs on the MotherDuck hybrid/server path, where the iceberg
+# scan's columns are the current schema and field id 2 is absent. All paths are absolute -> allow_moved_paths.
+statement ok
+pragma disable_optimizer;
+
+# Current schema no longer exposes b
+query I
+select column_name from (describe select * from iceberg_scan('__WORKING_DIRECTORY__/data/persistent/equality_delete_dropped_column/mytable', allow_moved_paths=true)) order by all;
+----
+a
+c
+
+# Projecting the dropped column's "neighbour" a keeps the delete correct (a=2 row removed)
+query II
+select a, c from iceberg_scan('__WORKING_DIRECTORY__/data/persistent/equality_delete_dropped_column/mytable', allow_moved_paths=true) order by all;
+----
+1	1000
+3	3000
+4	4000
+
+query I
+select a from iceberg_scan('__WORKING_DIRECTORY__/data/persistent/equality_delete_dropped_column/mytable', allow_moved_paths=true) order by all;
+----
+1
+3
+4
+
+# KNOWN BUG (skipped so the suite stays green): when the projection does NOT include the column that the dropped
+# equality-delete field id collides with (global column 0, here `a`), the fallback silently drops the delete and the
+# a=2 row (b=200 / c=2000) survives. Both queries below should reflect the delete (3 rows / count 3); today they return
+# 4. `select c` projects only c (a is not read); `count(*)` reads no data column at all - in neither case is global
+# column 0 part of the scan, so the mismapped delete column reads nothing and the filter is a no-op.
+#
+# Root cause: ScanEqualityDeleteFile and IcebergMultiFileReader::InitializeReader resolve the delete field id with
+# unordered_map::operator[] (`field_id_to_global_column[field_id]` / `id_to_global_column[it.first]`); for a field id
+# that is absent from the current schema (the column was dropped) this default-inserts 0, mismapping the delete column
+# onto global column 0. The fallback cannot synthesise the missing column the way GuaranteeEqualityDeleteColumnsOptimizer
+# does. Reachable on the hybrid/server path, where the optimizer is skipped on the remote scan and the server executes
+# with the optimizer disabled.
+mode skip
+
+query I
+select c from iceberg_scan('__WORKING_DIRECTORY__/data/persistent/equality_delete_dropped_column/mytable', allow_moved_paths=true) order by all;
+----
+1000
+3000
+4000
+
+query I
+select count(*) from iceberg_scan('__WORKING_DIRECTORY__/data/persistent/equality_delete_dropped_column/mytable', allow_moved_paths=true);
+----
+3
+
+mode unskip

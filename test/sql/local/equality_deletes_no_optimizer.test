@@ -1,0 +1,88 @@
+# name: test/sql/local/equality_deletes_no_optimizer.test
+# description: Equality deletes must apply even when the GuaranteeEqualityDeleteColumnsOptimizer does not run
+# group: [local]
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# `GuaranteeEqualityDeleteColumnsOptimizer` normally adds the equality-delete columns to the scan's projection. It does
+# not run for every scan though: on MotherDuck's hybrid path the optimizer sees a remote-function wrapper instead of the
+# iceberg scan, and the server then executes with the optimizer disabled. Disabling the optimizer here reproduces that
+# environment, so these queries exercise the non-projected fallback in ScanEqualityDeleteFile / IcebergMultiFileReader
+# rather than the optimizer-driven path. Without the fallback the scan hits
+# `D_ASSERT(it != global_id_to_projection_index.end())` and drops every row's deletes.
+statement ok
+pragma disable_optimizer;
+
+# Sanity check that the optimizer really is bypassed: the optimizer-only iceberg_verify_equality_deletes filter must not
+# be present, so any correct delete application below comes from the reader fallback.
+query II
+explain SELECT bir FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable');
+----
+physical_plan	<!REGEX>:.*iceberg_verify_equality_del.*
+
+# none of the equality-delete columns (id, name) are projected
+query I
+SELECT bir FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable') order by all;
+----
+2025-01-04
+2025-01-05
+
+# only one of the two equality-delete columns is projected, the other is read via the fallback
+query I
+SELECT name FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable') order by all;
+----
+d
+e
+
+# one equality-delete column projected together with a non-delete column
+query II
+SELECT name, bir FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable') order by all;
+----
+d	2025-01-04
+e	2025-01-05
+
+# both equality-delete columns projected (no fallback column needed), still correct without the optimizer
+query II
+SELECT id, name FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable') order by all;
+----
+4	d
+5	e
+
+query III
+SELECT * FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable') order by all;
+----
+4	d	2025-01-04
+5	e	2025-01-05
+
+query I
+SELECT count(*) FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable');
+----
+2
+
+# Same, for the partitioned table, where deletes are tracked per partition
+query I
+SELECT id FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable_partitioned') order by all;
+----
+1
+4
+5
+
+query I
+SELECT name FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable_partitioned') order by all;
+----
+a
+d
+e
+
+query III
+SELECT * FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable_partitioned') order by all;
+----
+1	a	2025-01-01
+4	d	2025-01-04
+5	e	2025-01-05
