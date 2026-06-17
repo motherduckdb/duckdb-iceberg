@@ -24,7 +24,7 @@ struct RewriteDataFilesGlobalState : public GlobalSinkState {
 	RewriteDataFilesGlobalState(ClientContext &context_p, const RewritePlan &source_plan)
 	    : context(context_p), plan(source_plan), group_seen(source_plan.file_groups.size(), false),
 	      group_accounted(source_plan.file_groups.size(), false) {
-		plan.table_info = ReloadIcebergTableShared(context, plan.table_key, "iceberg_rewrite_data_files");
+		plan.table_info = ReloadIcebergTableShared(context, plan.table_name, "iceberg_rewrite_data_files");
 		ValidateRewriteSnapshot(plan, *plan.table_info, "execution");
 	}
 
@@ -48,7 +48,7 @@ struct RewriteDataFilesGlobalSourceState : public GlobalSourceState {
 	RewriteDataFilesGlobalSourceState() = default;
 
 	explicit RewriteDataFilesGlobalSourceState(ClientContext &context, const RewritePlan &source_plan) {
-		auto table_info = ReloadIcebergTableShared(context, source_plan.table_key, "iceberg_rewrite_data_files");
+		auto table_info = ReloadIcebergTableShared(context, source_plan.table_name, "iceberg_rewrite_data_files");
 		ValidateRewriteSnapshot(source_plan, *table_info, "execution");
 	}
 

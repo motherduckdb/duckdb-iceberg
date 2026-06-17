@@ -70,10 +70,10 @@ string PartitionBucketKey(const vector<IcebergPartitionInfo> &partition_info) {
 
 RewritePlan PlanRewrite(ClientContext &context, const RewriteDataFilesPlanInput &input) {
 	RewritePlan plan;
-	plan.table_key = input.table_key;
+	plan.table_name = input.table_name;
 	plan.target_file_size_bytes = input.target_file_size_bytes;
 
-	auto table_info_ptr = ReloadIcebergTableShared(context, input.table_key, "iceberg_rewrite_data_files");
+	auto table_info_ptr = ReloadIcebergTableShared(context, input.table_name, "iceberg_rewrite_data_files");
 	auto &table_info = *table_info_ptr;
 	auto &table_metadata = table_info.table_metadata;
 	plan.table_info = std::move(table_info_ptr);

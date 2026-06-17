@@ -8,6 +8,7 @@
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/parser/expression/operator_expression.hpp"
 #include "duckdb/parser/expression/star_expression.hpp"
+#include "duckdb/parser/qualified_name.hpp"
 #include "duckdb/parser/query_node/select_node.hpp"
 #include "duckdb/parser/statement/copy_statement.hpp"
 #include "duckdb/parser/tableref/basetableref.hpp"
@@ -18,7 +19,6 @@
 #include "maintenance/rewrite_data_files_executor.hpp"
 #include "maintenance/rewrite_data_files_operator.hpp"
 #include "maintenance/rewrite_data_files_planner.hpp"
-#include "maintenance/table_identifier.hpp"
 
 namespace duckdb {
 
@@ -27,11 +27,26 @@ namespace {
 constexpr int64_t MIN_TARGET_FILE_SIZE_BYTES = 100;
 
 struct RewriteDataFilesOptions {
-	MaintenanceTableKey table_key;
+	QualifiedName table_name;
 	int64_t target_file_size_bytes = 134217728;
 	int64_t min_input_files = 5;
 	bool rewrite_all = false;
 };
+
+static QualifiedName ParseRewriteTableName(const string &identifier) {
+	auto parts = QualifiedName::ParseComponents(identifier);
+	if (parts.size() != 3) {
+		throw InvalidInputException("iceberg_rewrite_data_files: table identifier must be 'catalog.schema.table', got '%s'",
+		                            identifier);
+	}
+	for (auto &part : parts) {
+		if (part.empty()) {
+			throw InvalidInputException("iceberg_rewrite_data_files: table identifier '%s' has an empty component",
+			                            identifier);
+		}
+	}
+	return QualifiedName {parts[0], parts[1], parts[2]};
+}
 
 static int64_t ParseTargetFileSizeBytes(const Value &value) {
 	idx_t parsed_value;
@@ -62,7 +77,7 @@ static int64_t ParseTargetFileSizeBytes(const Value &value) {
 
 static RewriteDataFilesOptions ParseOptions(TableFunctionBindInput &input) {
 	RewriteDataFilesOptions result;
-	result.table_key = ParseMaintenanceTableIdentifier("iceberg_rewrite_data_files", StringValue::Get(input.inputs[0]));
+	result.table_name = ParseRewriteTableName(StringValue::Get(input.inputs[0]));
 
 	for (auto &kv : input.named_parameters) {
 		auto opt = StringUtil::Lower(kv.first);
@@ -89,15 +104,15 @@ static RewriteDataFilesOptions ParseOptions(TableFunctionBindInput &input) {
 	return result;
 }
 
-static unique_ptr<QueryNode> BuildGroupSelect(const MaintenanceTableKey &table_key,
+static unique_ptr<QueryNode> BuildGroupSelect(const QualifiedName &table_name,
                                               const vector<RewriteCandidate> &group) {
 	auto select = make_uniq<SelectNode>();
 	select->select_list.push_back(make_uniq<StarExpression>());
 
 	auto table = make_uniq<BaseTableRef>();
-	table->catalog_name = table_key.catalog;
-	table->schema_name = table_key.schema;
-	table->table_name = table_key.table;
+	table->catalog_name = table_name.catalog;
+	table->schema_name = table_name.schema;
+	table->table_name = table_name.name;
 	table->alias = "rewrite_source";
 	select->from_table = std::move(table);
 
@@ -124,7 +139,7 @@ static unique_ptr<LogicalOperator> BindGroupCopy(Binder &binder, const RewritePl
 
 	auto &fs = FileSystem::GetFileSystem(binder.context);
 	CopyStatement copy_statement;
-	copy_statement.info->select_statement = BuildGroupSelect(plan.table_key, group);
+	copy_statement.info->select_statement = BuildGroupSelect(plan.table_name, group);
 	copy_statement.info->file_path = metadata.GetDataPath(fs);
 	copy_statement.info->format = "parquet";
 	copy_statement.info->is_from = false;
@@ -157,7 +172,7 @@ static unique_ptr<LogicalOperator> RewriteDataFilesBindOperator(ClientContext &c
 	input.binder->SetAlwaysRequireRebind();
 
 	RewriteDataFilesPlanInput plan_input;
-	plan_input.table_key = options.table_key;
+	plan_input.table_name = options.table_name;
 	plan_input.target_file_size_bytes = options.target_file_size_bytes;
 	plan_input.min_input_files = options.min_input_files;
 	plan_input.rewrite_all = options.rewrite_all;
