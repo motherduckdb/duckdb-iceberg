@@ -1,6 +1,5 @@
 # name: test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_snapshot_operation_type.test
 # description: Test that snapshot operation type is correctly set (APPEND for insert, DELETE for delete, OVERWRITE for update)
-
 # group: [insert]
 
 require-env CATALOG_TEST_CONFIG_SETUP

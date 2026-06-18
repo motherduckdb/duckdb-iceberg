@@ -183,13 +183,13 @@ IcebergSnapshot IcebergSnapshot::ParseSnapshot(const rest_api_objects::Snapshot 
 		ret.operation = IcebergSnapshotOperationType::APPEND;
 	} else if (op == "replace") {
 		ret.operation = IcebergSnapshotOperationType::REPLACE;
-		} else if (op == "overwrite") {
-			ret.operation = IcebergSnapshotOperationType::OVERWRITE;
-		} else if (op == "delete") {
-			ret.operation = IcebergSnapshotOperationType::DELETE;
-		} else {
-			throw InvalidConfigurationException("Unknown snapshot operation type: '%s'", op);
-		}
+	} else if (op == "overwrite") {
+		ret.operation = IcebergSnapshotOperationType::OVERWRITE;
+	} else if (op == "delete") {
+		ret.operation = IcebergSnapshotOperationType::DELETE;
+	} else {
+		throw InvalidConfigurationException("Unknown snapshot operation type: '%s'", op);
+	}
 
 	if (snapshot.first_row_id) {
 		ret.first_row_id = *snapshot.first_row_id;

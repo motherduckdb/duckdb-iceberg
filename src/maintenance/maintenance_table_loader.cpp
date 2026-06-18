@@ -26,7 +26,8 @@ static IcebergSchemaEntry &LoadIcebergSchema(ClientContext &context, const Quali
 
 	auto &schema_set = iceberg_catalog.GetSchemas();
 	schema_set.LoadEntries(context);
-	auto schema_entry_opt = schema_set.GetEntry(context, table_name.schema.GetIdentifierName(), OnEntryNotFound::RETURN_NULL);
+	auto schema_entry_opt =
+	    schema_set.GetEntry(context, table_name.schema.GetIdentifierName(), OnEntryNotFound::RETURN_NULL);
 	if (!schema_entry_opt) {
 		throw InvalidInputException("%s: schema '%s' not found in catalog '%s'", function_name,
 		                            table_name.schema.GetIdentifierName(), table_name.catalog.GetIdentifierName());

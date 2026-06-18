@@ -55,9 +55,9 @@ static void AddExplicitNullSnapshotIds(yyjson_mut_doc *doc, yyjson_mut_val *root
 		if (!requirement.assert_ref_snapshot_id || requirement.assert_ref_snapshot_id->snapshot_id) {
 			continue;
 		}
-			auto requirement_json = yyjson_mut_arr_get(requirements_array, i);
-			D_ASSERT(requirement_json);
-			yyjson_mut_obj_add_null(doc, requirement_json, "snapshot-id");
+		auto requirement_json = yyjson_mut_arr_get(requirements_array, i);
+		D_ASSERT(requirement_json);
+		yyjson_mut_obj_add_null(doc, requirement_json, "snapshot-id");
 	}
 }
 

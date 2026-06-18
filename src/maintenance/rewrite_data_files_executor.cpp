@@ -7,39 +7,9 @@
 #include "catalog/rest/transaction/iceberg_transaction_data.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_metadata.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
-#include "core/metadata/schema/iceberg_column_definition.hpp"
 #include "core/metadata/schema/iceberg_table_schema.hpp"
 
 namespace duckdb {
-
-namespace {
-
-//! Recursive walk over an Iceberg column definition emitting the FIELD_IDS
-//! value tree. For primitives the value is the field_id as an integer; for
-//! nested types it's a struct with a sentinel `__duckdb_field_id` slot plus
-//! one slot per child. Mirrors the parquet field-id metadata written by the
-//! regular Iceberg insert path so APPEND and REWRITE stay compatible.
-static Value GetFieldIdValue(const IcebergColumnDefinition &column) {
-	if (column.GetChildCount() == 0) {
-		return Value::BIGINT(column.id);
-	}
-	child_list_t<Value> values;
-	values.emplace_back("__duckdb_field_id", Value::BIGINT(column.id));
-	for (auto &child : column.GetChildren()) {
-		values.emplace_back(child->name, GetFieldIdValue(*child));
-	}
-	return Value::STRUCT(std::move(values));
-}
-
-} // namespace
-
-Value BuildRewriteFieldIds(const IcebergTableSchema &schema) {
-	child_list_t<Value> values;
-	for (auto &column : schema.columns) {
-		values.emplace_back(column->name, GetFieldIdValue(*column));
-	}
-	return Value::STRUCT(std::move(values));
-}
 
 IcebergManifestEntry BuildRewriteManifestEntry(const vector<RewriteCandidate> &group, int64_t starting_sequence_number,
                                                int64_t record_count, const string &produced_file,

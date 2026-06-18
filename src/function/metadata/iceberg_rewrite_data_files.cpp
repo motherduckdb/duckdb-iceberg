@@ -36,8 +36,8 @@ struct RewriteDataFilesOptions {
 static QualifiedName ParseRewriteTableName(const string &identifier) {
 	auto parts = QualifiedName::ParseComponents(identifier);
 	if (parts.size() != 3) {
-		throw InvalidInputException("iceberg_rewrite_data_files: table identifier must be 'catalog.schema.table', got '%s'",
-		                            identifier);
+		throw InvalidInputException(
+		    "iceberg_rewrite_data_files: table identifier must be 'catalog.schema.table', got '%s'", identifier);
 	}
 	for (auto &part : parts) {
 		if (part.empty()) {
@@ -98,8 +98,7 @@ static RewriteDataFilesOptions ParseOptions(TableFunctionBindInput &input) {
 	return result;
 }
 
-static unique_ptr<QueryNode> BuildGroupSelect(const QualifiedName &table_name,
-                                              const vector<RewriteCandidate> &group) {
+static unique_ptr<QueryNode> BuildGroupSelect(const QualifiedName &table_name, const vector<RewriteCandidate> &group) {
 	auto select = make_uniq<SelectNode>();
 	select->select_list.push_back(make_uniq<StarExpression>());
 
@@ -138,11 +137,10 @@ static unique_ptr<LogicalOperator> BindGroupCopy(Binder &binder, const RewritePl
 	copy_statement.info->format = "parquet";
 	copy_statement.info->is_from = false;
 	copy_statement.info->is_format_auto_detected = false;
-	//! Mirrors the structured field-id metadata used by APPEND so rewritten
-	//! parquet files stay schema-compatible with regular Iceberg writes.
-	copy_statement.info->options["field_ids"].push_back(BuildRewriteFieldIds(*schema_it->second));
+	copy_statement.info->options["field_ids"].push_back(schema_it->second->GetFieldIds());
 	copy_statement.info->options["filename_pattern"].push_back(Value("{uuidv7}"));
-	copy_statement.info->options["file_size_bytes"].push_back(Value::UBIGINT(static_cast<uint64_t>(plan.target_file_size_bytes)));
+	copy_statement.info->options["file_size_bytes"].push_back(
+	    Value::UBIGINT(static_cast<uint64_t>(plan.target_file_size_bytes)));
 	//! FILE_SIZE_BYTES forces COPY through DuckDB's rotated-file path creation so
 	//! RETURN_STATS reports concrete parquet paths instead of the directory root.
 	copy_statement.info->options["return_stats"].push_back(Value::BOOLEAN(true));
@@ -152,7 +150,8 @@ static unique_ptr<LogicalOperator> BindGroupCopy(Binder &binder, const RewritePl
 	auto copy_binder = Binder::CreateBinder(binder.context, &binder);
 	auto bound_copy = copy_binder->Bind(copy_statement);
 	if (bound_copy.types.size() < 4) {
-		throw InternalException("iceberg_rewrite_data_files: expected COPY RETURN_STATS to return at least four columns");
+		throw InternalException(
+		    "iceberg_rewrite_data_files: expected COPY RETURN_STATS to return at least four columns");
 	}
 	return std::move(bound_copy.plan);
 }

@@ -132,18 +132,8 @@ public:
 	void SetFileSequenceNumber(sequence_number_t value);
 	sequence_number_t GetSequenceNumber(const IcebergManifestFile &manifest_file) const;
 	sequence_number_t GetFileSequenceNumber(const IcebergManifestFile &manifest_file) const;
-	bool HasSequenceNumber() const {
-		return has_sequence_number;
-	}
-	bool HasFileSequenceNumber() const {
-		return has_file_sequence_number;
-	}
-	sequence_number_t GetExplicitSequenceNumber() const {
-		return sequence_number;
-	}
-	sequence_number_t GetExplicitFileSequenceNumber() const {
-		return file_sequence_number;
-	}
+	optional<sequence_number_t> ExplicitSequenceNumber() const;
+	optional<sequence_number_t> ExplicitFileSequenceNumber() const;
 
 private:
 	bool has_snapshot_id = false;

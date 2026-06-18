@@ -10,8 +10,6 @@
 namespace duckdb {
 
 struct IcebergTableInformation;
-class IcebergTableSchema;
-
 struct RewriteExecutionResult {
 	int64_t rewritten_data_files = 0;
 	int64_t added_data_files = 0;
@@ -21,9 +19,6 @@ struct RewriteExecutionResult {
 	//! Input files to remove in the same REPLACE snapshot.
 	vector<RewriteCandidate> rewritten_candidates;
 };
-
-//! Build the structured FIELD_IDS value consumed by parquet COPY.
-Value BuildRewriteFieldIds(const IcebergTableSchema &schema);
 
 //! Convert one COPY RETURN_STATS row into an ADDED manifest entry. Partition
 //! values and sequence-number semantics come from the frozen rewrite plan.

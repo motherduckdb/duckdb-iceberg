@@ -92,6 +92,7 @@ PhysicalOperator &LogicalRewriteDataFiles::CreatePlan(ClientContext &context, Ph
 		auto child_types = child_plan.GetTypes();
 
 		vector<unique_ptr<Expression>> projection_expressions;
+		//! Prefix COPY RETURN_STATS rows so the Sink can map each output file back to its rewrite group.
 		projection_expressions.push_back(make_uniq<BoundConstantExpression>(Value::UBIGINT(group_idx)));
 		for (idx_t i = 0; i < child_types.size(); i++) {
 			auto &child_type = child_types[i];
