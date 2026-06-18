@@ -6,6 +6,7 @@
 #include "duckdb/common/vector/string_vector.hpp"
 #include "duckdb/common/vector/struct_vector.hpp"
 #include "duckdb/common/vector/list_vector.hpp"
+#include "duckdb/common/optional.hpp"
 
 namespace duckdb {
 
@@ -28,6 +29,9 @@ using IntStringMapEntries = VectorIterator<VectorListType<VectorStructType<int32
 using IntIntMapEntries = VectorIterator<VectorListType<VectorStructType<int32_t, int64_t>>>;
 using Int32ListEntries = VectorIterator<VectorListType<int32_t>>;
 using Int64ListEntries = VectorIterator<VectorListType<int64_t>>;
+using Int32Entries = VectorIterator<int32_t>;
+using Int64Entries = VectorIterator<int64_t>;
+using StringEntries = VectorIterator<string_t>;
 
 template <class T, class ENTRY>
 static T ReadRequiredField(const char *name, const ENTRY &entry) {
@@ -137,8 +141,10 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 	auto &data_file_entries = StructVector::GetEntries(data_file);
 
 	optional_ptr<Vector> content;
+	optional<Int32Entries> content_entries;
 	if (iceberg_version >= 2) {
 		content = data_file_entries[entry_index++];
+		content_entries.emplace(content->Values<int32_t>());
 	}
 
 	auto &file_path = data_file_entries[entry_index++];
@@ -183,20 +189,28 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 	auto sort_order_id_entries = sort_order_id.Values<int32_t>();
 
 	optional_ptr<Vector> first_row_id;
+	optional<Int64Entries> first_row_id_entries;
 	if (iceberg_version >= 3) {
 		first_row_id = data_file_entries[entry_index++];
+		first_row_id_entries.emplace(first_row_id->Values<int64_t>());
 	}
 
 	optional_ptr<Vector> referenced_data_file;
+	optional<StringEntries> referenced_data_file_entries;
 	if (iceberg_version >= 2) {
 		referenced_data_file = data_file_entries[entry_index++];
+		referenced_data_file_entries.emplace(referenced_data_file->Values<string_t>());
 	}
 	optional_ptr<Vector> content_offset;
+	optional<Int64Entries> content_offset_entries;
 
 	optional_ptr<Vector> content_size_in_bytes;
+	optional<Int64Entries> content_size_in_bytes_entries;
 	if (iceberg_version >= 3) {
 		content_offset = data_file_entries[entry_index++];
 		content_size_in_bytes = data_file_entries[entry_index++];
+		content_offset_entries.emplace(content_offset->Values<int64_t>());
+		content_size_in_bytes_entries.emplace(content_size_in_bytes->Values<int64_t>());
 	}
 
 	vector<std::pair<int32_t, reference<Vector>>> partition_vectors;
@@ -243,7 +257,7 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 		//! >= V2
 		if (iceberg_version >= 2) {
 			data_file.content =
-			    (IcebergManifestEntryContentType)ReadRequiredField<int32_t>("content", content->Values<int32_t>()[i]);
+			    (IcebergManifestEntryContentType)ReadRequiredField<int32_t>("content", (*content_entries)[i]);
 			data_file.equality_ids = GetEqualityIds(equality_ids_entries[i]);
 
 			int64_t sequence_number;
@@ -256,7 +270,7 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 			}
 
 			string_t referenced_data_file_val;
-			if (ReadOptionalField<string_t>(referenced_data_file->Values<string_t>()[i], referenced_data_file_val)) {
+			if (ReadOptionalField<string_t>((*referenced_data_file_entries)[i], referenced_data_file_val)) {
 				data_file.referenced_data_file = referenced_data_file_val.GetString();
 			}
 		} else {
@@ -271,19 +285,19 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 		//! >= V3
 		if (iceberg_version >= 3) {
 			int64_t first_row_id_val;
-			if (ReadOptionalField<int64_t>(first_row_id->Values<int64_t>()[i], first_row_id_val)) {
+			if (ReadOptionalField<int64_t>((*first_row_id_entries)[i], first_row_id_val)) {
 				data_file.SetFirstRowId(first_row_id_val);
 			}
 
 			int64_t content_offset_val;
-			if (ReadOptionalField<int64_t>(content_offset->Values<int64_t>()[i], content_offset_val)) {
+			if (ReadOptionalField<int64_t>((*content_offset_entries)[i], content_offset_val)) {
 				data_file.content_offset = Value::BIGINT(content_offset_val);
 			} else {
 				data_file.content_offset = Value(LogicalType::BIGINT);
 			}
 
 			int64_t content_size_in_bytes_val;
-			if (ReadOptionalField<int64_t>(content_size_in_bytes->Values<int64_t>()[i], content_size_in_bytes_val)) {
+			if (ReadOptionalField<int64_t>((*content_size_in_bytes_entries)[i], content_size_in_bytes_val)) {
 				data_file.content_size_in_bytes = Value::BIGINT(content_size_in_bytes_val);
 			} else {
 				data_file.content_size_in_bytes = Value(LogicalType::BIGINT);

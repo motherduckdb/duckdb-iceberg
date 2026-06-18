@@ -4,6 +4,7 @@
 
 #include "duckdb/common/vector/vector_iterator.hpp"
 #include "duckdb/common/vector/struct_vector.hpp"
+#include "duckdb/common/optional.hpp"
 
 namespace duckdb {
 
@@ -58,14 +59,20 @@ void ManifestListReader::ReadChunk(DataChunk &chunk, idx_t iceberg_version, vect
 	auto partition_spec_id_entries = partition_spec_id.Values<int32_t>();
 
 	optional_ptr<Vector> content;
+	optional<VectorIterator<int32_t>> content_entries;
 
 	optional_ptr<Vector> sequence_number;
+	optional<VectorIterator<int64_t>> sequence_number_entries;
 
 	optional_ptr<Vector> min_sequence_number;
+	optional<VectorIterator<int64_t>> min_sequence_number_entries;
 	if (iceberg_version >= 2) {
 		content = chunk.data[vector_index++];
 		sequence_number = chunk.data[vector_index++];
 		min_sequence_number = chunk.data[vector_index++];
+		content_entries.emplace(content->Values<int32_t>());
+		sequence_number_entries.emplace(sequence_number->Values<int64_t>());
+		min_sequence_number_entries.emplace(min_sequence_number->Values<int64_t>());
 	}
 
 	auto &added_snapshot_id = chunk.data[vector_index++];
@@ -94,8 +101,10 @@ void ManifestListReader::ReadChunk(DataChunk &chunk, idx_t iceberg_version, vect
 	auto partitions_entries = partitions.Values<VectorListType<VectorStructType<bool, bool, string_t, string_t>>>();
 
 	optional_ptr<Vector> first_row_id;
+	optional<VectorIterator<int64_t>> first_row_id_entries;
 	if (iceberg_version >= 3) {
 		first_row_id = chunk.data[vector_index++];
+		first_row_id_entries.emplace(first_row_id->Values<int64_t>());
 	}
 
 	//! Conversion logic
@@ -109,12 +118,10 @@ void ManifestListReader::ReadChunk(DataChunk &chunk, idx_t iceberg_version, vect
 		manifest.has_min_sequence_number = true;
 
 		if (iceberg_version >= 2) {
-			manifest.content =
-			    IcebergManifestContentType(ReadRequiredField<int32_t>("content", content->Values<int32_t>()[i]));
-			manifest.sequence_number =
-			    ReadRequiredField<int64_t>("sequence_number", sequence_number->Values<int64_t>()[i]);
+			manifest.content = IcebergManifestContentType(ReadRequiredField<int32_t>("content", (*content_entries)[i]));
+			manifest.sequence_number = ReadRequiredField<int64_t>("sequence_number", (*sequence_number_entries)[i]);
 			manifest.min_sequence_number =
-			    ReadRequiredField<int64_t>("min_sequence_number", min_sequence_number->Values<int64_t>()[i]);
+			    ReadRequiredField<int64_t>("min_sequence_number", (*min_sequence_number_entries)[i]);
 			manifest.added_files_count = ReadRequiredField<int32_t>("added_files_count", added_files_count_entries[i]);
 			manifest.existing_files_count =
 			    ReadRequiredField<int32_t>("existing_files_count", existing_files_count_entries[i]);
@@ -137,7 +144,7 @@ void ManifestListReader::ReadChunk(DataChunk &chunk, idx_t iceberg_version, vect
 
 		if (iceberg_version >= 3) {
 			int64_t first_row_id_val;
-			if (ReadOptionalField<int64_t>(first_row_id->Values<int64_t>()[i], first_row_id_val)) {
+			if (ReadOptionalField<int64_t>((*first_row_id_entries)[i], first_row_id_val)) {
 				manifest.first_row_id = first_row_id_val;
 				manifest.has_first_row_id = true;
 			}
