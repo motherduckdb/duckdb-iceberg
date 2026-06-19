@@ -95,11 +95,12 @@ def _generator_status(request: pytest.FixtureRequest, active_catalog: str, gener
 @pytest.fixture(scope="session")
 def _connection_manager() -> Iterator[dict[str, object]]:
     manager = {
-        "cache": {},
-        "active_cache_key": None,
+        "active_connection": None,
+        "active_connection_key": None,
     }
     yield manager
-    for connection in manager["cache"].values():
+    connection = manager["active_connection"]
+    if connection is not None:
         connection.close()
 
 
@@ -112,22 +113,17 @@ def iceberg_connection(
     connection_args: dict[str, str],
 ) -> IcebergConnection:
     connection_key = catalog_mapping.get(active_catalog, active_catalog)
-    cache_key = (connection_key, tuple(sorted(connection_args.items())))
-    cache: dict[tuple[str, tuple[tuple[str, str], ...]], IcebergConnection] = _connection_manager["cache"]
-    active_cache_key: tuple[str, tuple[tuple[str, str], ...]] | None = _connection_manager["active_cache_key"]
+    resolved_connection_key = (connection_key, tuple(sorted(connection_args.items())))
+    active_connection = _connection_manager["active_connection"]
+    active_connection_key: tuple[str, tuple[tuple[str, str], ...]] | None = _connection_manager["active_connection_key"]
 
-    # Spark only supports one active SparkContext per process, and the single-threaded
-    # connection explicitly stops any existing one before recreating itself. When a test
-    # switches connection implementations, drop the cached Spark session so later tests
-    # do not reuse a dead connection object.
-    if active_cache_key is not None and active_cache_key != cache_key:
-        for connection in cache.values():
-            connection.close()
-        cache.clear()
+    if active_connection_key != resolved_connection_key:
+        if active_connection is not None:
+            active_connection.close()
 
-    if cache_key not in cache:
         connection_class = IcebergConnection.get_class(connection_key)
-        cache[cache_key] = connection_class(**connection_args)
-    _connection_manager["active_cache_key"] = cache_key
+        active_connection = connection_class(**connection_args)
+        _connection_manager["active_connection"] = active_connection
+        _connection_manager["active_connection_key"] = resolved_connection_key
 
-    return cache[cache_key]
+    return active_connection
