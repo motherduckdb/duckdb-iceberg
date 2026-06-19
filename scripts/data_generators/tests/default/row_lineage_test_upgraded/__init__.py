@@ -1,5 +1,4 @@
 from scripts.data_generators.tests.base import IcebergTest
-import pathlib
 
 
 @IcebergTest.register()
@@ -8,6 +7,5 @@ class Test(IcebergTest):
         "nessie": "format-version update not supported yet"
     }
 
-    def __init__(self):
-        path = pathlib.PurePath(__file__)
-        super().__init__(__file__)
+    def __init__(self, *, write_intermediates=True):
+        super().__init__(__file__, write_intermediates=write_intermediates)

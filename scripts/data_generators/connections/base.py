@@ -26,3 +26,12 @@ class IcebergConnection:
         spark = getattr(self, "con", None)
         if spark is not None and hasattr(spark, "stop"):
             spark.stop()
+
+    def restart(self):
+        get_connection = getattr(self, "get_connection", None)
+        if not callable(get_connection):
+            raise NotImplementedError(f"Connection '{self.name}' does not implement restart()")
+
+        self.close()
+        self.con = get_connection()
+        return self.con

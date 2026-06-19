@@ -1,37 +1,42 @@
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
-from test_spark_read import Row, SparkSession, requires_iceberg_server, spark_con
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-ROW_LINEAGE_GENERATOR_SQL = (
-    SCRIPT_DIR.parent.parent
-    / "scripts"
-    / "data_generators"
-    / "tests"
-    / "default"
-    / "row_lineage_test_upgraded"
-    / "test.sql"
+from scripts.data_generators.connections import IcebergConnection
+from scripts.data_generators.tests.default.row_lineage_test_upgraded import Test as RowLineageTestUpgraded
+from test_spark_read import Row, requires_iceberg_server
+
+FIXTURE_CONFIG_PATH = REPO_ROOT / "test" / "configs" / "fixture.json"
+ROW_LINEAGE_DUCKDB_TEST_PATH = (
+    REPO_ROOT
+    / "test"
+    / "sql"
+    / "local"
+    / "catalog_test_config_setup"
+    / "catalog_agnostic"
+    / "test_row_lineage_write_after_upgrade.test"
 )
 
 
-def _seed_row_lineage_table(spark_con) -> None:
-    sql_text = ROW_LINEAGE_GENERATOR_SQL.read_text()
-
-    spark_con.sql(f"CREATE NAMESPACE IF NOT EXISTS default")
+@pytest.fixture()
+def spark_rest_connection():
+    connection = IcebergConnection.get_class("spark-rest")()
     try:
-        spark_con.sql(f"DROP TABLE default.row_lineage_test_upgraded")
-    except Exception:
-        pass
+        yield connection
+    finally:
+        connection.close()
 
-    for query in sql_text.split(";"):
-        statement = query.strip()
-        print(statement)
-        if statement:
-            spark_con.sql(statement)
+
+def _seed_row_lineage_table(connection) -> None:
+    generator = RowLineageTestUpgraded(write_intermediates=False)
+    generator.generate(connection)
 
 
 def _run_duckdb_stdin_test(unittest_binary: str) -> tuple[str, str, int]:
@@ -40,7 +45,7 @@ def _run_duckdb_stdin_test(unittest_binary: str) -> tuple[str, str, int]:
             unittest_binary,
             "--stdin",
             "--test-config",
-            "/Users/thijs/DuckDBLabs/duckdb_iceberg/test/configs/fixture.json",
+            str(FIXTURE_CONFIG_PATH),
         ],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -49,9 +54,7 @@ def _run_duckdb_stdin_test(unittest_binary: str) -> tuple[str, str, int]:
         env={**os.environ},
     )
 
-    sql_text = Path(
-        '/Users/thijs/DuckDBLabs/duckdb_iceberg/test/sql/local/catalog_test_config_setup/catalog_agnostic/test_row_lineage_write_after_upgrade.test'
-    ).read_text()
+    sql_text = ROW_LINEAGE_DUCKDB_TEST_PATH.read_text()
 
     try:
         proc.stdin.write(sql_text)
@@ -69,29 +72,11 @@ def _run_duckdb_stdin_test(unittest_binary: str) -> tuple[str, str, int]:
     return stdout, stderr, proc.returncode
 
 
-def _restart_spark_session(existing_spark):
-    app_name = existing_spark.sparkContext.appName
-    configs = dict(existing_spark.sparkContext.getConf().getAll())
-
-    existing_spark.stop()
-
-    builder = SparkSession.builder.appName(app_name)
-    for key, value in configs.items():
-        # Reapply the existing session config so the restarted session talks to the same REST catalog.
-        builder = builder.config(key, value)
-
-    restarted_spark = builder.getOrCreate()
-    restarted_spark.sql("USE demo")
-    restarted_spark.sql("CREATE NAMESPACE IF NOT EXISTS default")
-    restarted_spark.sql("USE NAMESPACE default")
-    return restarted_spark
-
-
 @requires_iceberg_server
 class TestRowLineageUnittestStdin:
     @pytest.mark.requires_spark(">=4.0")
-    def test_row_lineage_test_upgraded_end_to_end(self, spark_con, unittest_binary):
-        _seed_row_lineage_table(spark_con)
+    def test_row_lineage_test_upgraded_end_to_end(self, spark_rest_connection, unittest_binary):
+        _seed_row_lineage_table(spark_rest_connection)
 
         stdout, stderr, returncode = _run_duckdb_stdin_test(unittest_binary)
 
@@ -101,8 +86,8 @@ class TestRowLineageUnittestStdin:
         assert "All tests passed" in stdout, f"stdout:\n{stdout}\nstderr:\n{stderr}"
         assert "<stdin>" in stdout, f"stdout:\n{stdout}\nstderr:\n{stderr}"
 
-        spark_con = _restart_spark_session(spark_con)
-        df = spark_con.sql(
+        spark_rest_connection.restart()
+        df = spark_rest_connection.con.sql(
             """
             select _last_updated_sequence_number, _row_id IS NOT NULL as has_row_id, * from default.row_lineage_test_upgraded order by id;
             """
