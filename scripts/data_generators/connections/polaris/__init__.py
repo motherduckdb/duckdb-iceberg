@@ -34,6 +34,7 @@ class IcebergSparkLocal(IcebergConnection):
         config = SparkConf()
         config.set("spark.jars.packages", f"{self.runtime.runtime_package},{self.runtime.aws_bundle_package}")
         config.set("spark.sql.iceberg.vectorization.enabled", "false")
+        config.set("spark.sql.session.timeZone", "UTC")
         config.set("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
         config.set("spark.sql.catalog.quickstart_catalog.type", "rest")
         config.set("spark.driver.memory", "10g")
