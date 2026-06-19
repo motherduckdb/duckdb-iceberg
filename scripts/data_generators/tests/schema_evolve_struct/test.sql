@@ -75,7 +75,7 @@ ALTER TABLE default.schema_evolve_struct
 ALTER COLUMN user_details.age TYPE BIGINT;
 
 ALTER TABLE default.schema_evolve_struct
-ALTER COLUMN tags.element TYPE BIGINT
+ALTER COLUMN tags.element TYPE BIGINT;
 
 ALTER TABLE default.schema_evolve_struct
 ALTER COLUMN preferences.value TYPE BIGINT;
