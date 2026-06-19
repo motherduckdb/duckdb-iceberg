@@ -1,18 +1,12 @@
 import os
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from scripts.data_generators.connections import IcebergConnection
-from scripts.data_generators.tests.default.row_lineage_test_upgraded import Test as RowLineageTestUpgraded
 from test_spark_read import Row, requires_iceberg_server
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_CONFIG_PATH = REPO_ROOT / "test" / "configs" / "fixture.json"
 ROW_LINEAGE_DUCKDB_TEST_PATH = (
     REPO_ROOT
@@ -23,20 +17,6 @@ ROW_LINEAGE_DUCKDB_TEST_PATH = (
     / "catalog_agnostic"
     / "test_row_lineage_write_after_upgrade.test"
 )
-
-
-@pytest.fixture()
-def spark_rest_connection():
-    connection = IcebergConnection.get_class("spark-rest")()
-    try:
-        yield connection
-    finally:
-        connection.close()
-
-
-def _seed_row_lineage_table(connection) -> None:
-    generator = RowLineageTestUpgraded(write_intermediates=False)
-    generator.generate(connection)
 
 
 def _run_duckdb_stdin_test(unittest_binary: str) -> tuple[str, str, int]:
@@ -75,9 +55,8 @@ def _run_duckdb_stdin_test(unittest_binary: str) -> tuple[str, str, int]:
 @requires_iceberg_server
 class TestRowLineageUnittestStdin:
     @pytest.mark.requires_spark(">=4.0")
+    @pytest.mark.spark_seed_tables("row_lineage_test_upgraded")
     def test_row_lineage_test_upgraded_end_to_end(self, spark_rest_connection, unittest_binary):
-        _seed_row_lineage_table(spark_rest_connection)
-
         stdout, stderr, returncode = _run_duckdb_stdin_test(unittest_binary)
 
         assert returncode == 0, (
