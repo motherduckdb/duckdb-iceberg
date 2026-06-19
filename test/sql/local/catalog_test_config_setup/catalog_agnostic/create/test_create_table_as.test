@@ -284,3 +284,27 @@ DROP TABLE IF EXISTS hugeint_agg;
 
 statement ok
 DROP TABLE IF EXISTS hugeint_insert_test;
+
+statement ok
+DROP TABLE IF EXISTS hugeint_nested;
+
+# Nested HUGEINT (inside LIST/STRUCT) must be cast recursively to the stored DECIMAL(38,0).
+statement ok
+CREATE TABLE hugeint_nested AS
+    SELECT [i::HUGEINT] AS lst, {'x': i::HUGEINT} AS strct FROM range(3) t(i);
+
+query II
+SELECT column_name, column_type FROM (DESCRIBE hugeint_nested) ORDER BY column_name;
+----
+lst	DECIMAL(38,0)[]
+strct	STRUCT(x DECIMAL(38,0))
+
+query II
+SELECT lst[1], strct.x FROM hugeint_nested ORDER BY lst[1];
+----
+0	0
+1	1
+2	2
+
+statement ok
+DROP TABLE IF EXISTS hugeint_nested;
