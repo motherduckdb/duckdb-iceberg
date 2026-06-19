@@ -10,7 +10,13 @@ POLARIS_SKIP_REASON = (
 
 @IcebergTest.register()
 class Test(IcebergTest):
-    skips = {"polaris": POLARIS_SKIP_REASON}
+    skips = {
+        "polaris": POLARIS_SKIP_REASON,
+        "lakekeeper": "Nested namespaces can't be created this way"
+    }
+    expected_failures = {
+        "nessie": "Nested namespaces are not supported"
+    }
 
     def __init__(self):
         path = pathlib.PurePath(__file__)
