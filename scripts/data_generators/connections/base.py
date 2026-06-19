@@ -19,6 +19,10 @@ class IcebergConnection:
     @classmethod
     def get_class(cls, name: str):
         if name not in cls.registry:
-            print(f"'{name}' not in registry, exiting!")
-            exit(1)
+            raise KeyError(f"Connection '{name}' is not registered")
         return cls.registry[name]
+
+    def close(self) -> None:
+        spark = getattr(self, "con", None)
+        if spark is not None and hasattr(spark, "stop"):
+            spark.stop()
