@@ -12,6 +12,7 @@
 #include "duckdb/function/function_binder.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
+#include "duckdb/planner/expression/bound_cast_expression.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
 
 #include "catalog/rest/iceberg_catalog.hpp"
@@ -29,6 +30,7 @@
 #include "core/expression/iceberg_transform.hpp"
 #include "storage/statistics/iceberg_variant_statistics.hpp"
 #include "catalog/rest/api/iceberg_type.hpp"
+#include "catalog/rest/api/iceberg_create_table_request.hpp"
 #include "common/iceberg_utils.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
 #include "iceberg_logging.hpp"
@@ -1034,14 +1036,57 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(BoundCreateTabl
 	return metadata;
 }
 
+// CTAS stores columns using Iceberg storage types (e.g. HUGEINT -> DECIMAL(38,0)), which can differ from
+// the SELECT output. The write pipeline is typed with the storage types, so without a cast the append fails
+// with a type mismatch.
+static PhysicalOperator &CastCtasToIcebergStorageTypes(ClientContext &context, PhysicalPlanGenerator &planner,
+                                                       PhysicalOperator &plan, BoundCreateTableInfo &info,
+                                                       const IcebergTableMetadata &metadata) {
+	auto &create_info = info.Base().Cast<CreateTableInfo>();
+	int32_t last_column_id = 0;
+	auto storage_schema = IcebergCreateTableRequest::CreateIcebergSchema(context, metadata, create_info.columns,
+	                                                                     &create_info.constraints, last_column_id);
+	auto &src_types = plan.types;
+	D_ASSERT(src_types.size() == storage_schema->columns.size());
+
+	bool needs_cast = false;
+	vector<LogicalType> target_types;
+	target_types.reserve(src_types.size());
+	for (idx_t i = 0; i < src_types.size(); i++) {
+		auto &target = storage_schema->columns[i]->type;
+		if (target != src_types[i]) {
+			needs_cast = true;
+		}
+		target_types.push_back(target);
+	}
+	if (!needs_cast) {
+		return plan;
+	}
+
+	vector<unique_ptr<Expression>> expressions;
+	expressions.reserve(src_types.size());
+	for (idx_t i = 0; i < src_types.size(); i++) {
+		unique_ptr<Expression> expr = make_uniq<BoundReferenceExpression>(src_types[i], i);
+		if (target_types[i] != src_types[i]) {
+			expr = BoundCastExpression::AddCastToType(context, std::move(expr), target_types[i]);
+		}
+		expressions.push_back(std::move(expr));
+	}
+	auto &proj =
+	    planner.Make<PhysicalProjection>(std::move(target_types), std::move(expressions), plan.estimated_cardinality);
+	proj.children.push_back(plan);
+	return proj;
+}
+
 PhysicalOperator &IcebergCatalog::PlanCreateTableAs(ClientContext &context, PhysicalPlanGenerator &planner,
-                                                    LogicalCreateTable &op, PhysicalOperator &plan) {
+                                                    LogicalCreateTable &op, PhysicalOperator &plan_p) {
 	auto &schema = op.schema;
 	auto &ic_schema_entry = schema.Cast<IcebergSchemaEntry>();
 
 	// create a fake local iceberg table with desired columns
 	auto placeholder_metadata = BuildPlaceholderMetadata(*op.info);
 	auto &placeholder_schema = placeholder_metadata->GetLatestSchema();
+	auto &plan = CastCtasToIcebergStorageTypes(context, planner, plan_p, *op.info, *placeholder_metadata);
 	IcebergCopyInput copy_input(context, *placeholder_metadata, placeholder_schema);
 	auto &physical_copy_op = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, &plan);
 	auto &physical_copy = physical_copy_op.Cast<PhysicalCopyToFile>();
