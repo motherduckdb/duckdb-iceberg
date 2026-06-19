@@ -136,6 +136,12 @@ ORDER BY ALL;
 statement ok
 SET disabled_optimizers = '';
 
+query I
+SELECT bir FROM ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_deletes/warehouse/mydb/mytable') where name > 'a' order by all;
+----
+2025-01-04
+2025-01-05
+
 # for partitioned table:
 # create table  :  mytable_partitioned(id int,name string,bir date ) partitioned by (name);
 
