@@ -1,0 +1,15 @@
+CREATE OR REPLACE TABLE default.all_types_table (
+      byte_col TINYINT,
+      short_col SMALLINT,
+      int_col INT,
+      long_col BIGINT,
+      float_col FLOAT,
+      double_col DOUBLE,
+      decimal_col DECIMAL(15, 5),
+      date_col DATE
+) USING ICEBERG;
+
+INSERT INTO default.all_types_table VALUES
+     (1, 100, 1000, 10000000000, 1.23, 123.456, 12345.67890, DATE '2023-01-01'),
+     (2, 200, 2000, 20000000000, 2.34, 234.567, 23456.78901, DATE '2023-06-15'),
+     (3, 300, 3000, 30000000000, 3.45, 345.678, 34567.89012, DATE '2024-12-25');
