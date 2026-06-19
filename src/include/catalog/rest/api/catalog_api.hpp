@@ -2,6 +2,7 @@
 #pragma once
 
 #include "duckdb/common/types.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/parser/parsed_data/create_table_info.hpp"
 #include "duckdb/parser/parsed_data/create_secret_info.hpp"
 
@@ -33,7 +34,7 @@ public:
 
 	T result_;
 	HTTPStatusCode status_;
-	std::optional<rest_api_objects::IcebergErrorResponse> error_;
+	optional<rest_api_objects::IcebergErrorResponse> error_;
 };
 
 class IRCAPI {
