@@ -12,7 +12,6 @@ POLARIS_SKIP_REASON = (
 class Test(IcebergTest):
     catalog_mapping = {
         "spark-rest": "spark-rest-single-thread",
-        "local": "spark-rest-single-thread",
         "nessie": "spark-rest-single-thread",
         "polaris": "spark-rest-single-thread",
     }
