@@ -2,9 +2,9 @@
 #include "planning/metadata_io/manifest_list/iceberg_manifest_list_reader.hpp"
 #include "core/metadata/manifest/iceberg_manifest_list.hpp"
 
-#include "duckdb/common/vector/list_vector.hpp"
-#include "duckdb/common/vector/map_vector.hpp"
+#include "duckdb/common/vector/vector_iterator.hpp"
 #include "duckdb/common/vector/struct_vector.hpp"
+#include "duckdb/common/optional.hpp"
 
 namespace duckdb {
 
@@ -24,21 +24,17 @@ void ManifestListReader::Read() {
 }
 
 template <class T>
-static T ReadRequiredField(const char *name, UnifiedVectorFormat &format, idx_t i) {
-	auto data = format.GetDataUnsafe<T>(format);
-	auto index = format.sel->get_index(i);
-	if (!format.validity.RowIsValid(index)) {
+static T ReadRequiredField(const char *name, const typename VectorIterator<T>::ValueEntry &entry) {
+	if (!entry.IsValid()) {
 		throw InvalidConfigurationException("required field '%s' is NULL!", name);
 	}
-	return data[index];
+	return entry.GetValueUnsafe();
 }
 
 template <class T>
-static bool ReadOptionalField(UnifiedVectorFormat &format, idx_t i, T &result) {
-	auto data = format.GetDataUnsafe<T>(format);
-	auto index = format.sel->get_index(i);
-	if (format.validity.RowIsValid(index)) {
-		result = data[index];
+static bool ReadOptionalField(const typename VectorIterator<T>::ValueEntry &entry, T &result) {
+	if (entry.IsValid()) {
+		result = entry.GetValueUnsafe();
 		return true;
 	}
 	return false;
@@ -54,117 +50,89 @@ void ManifestListReader::ReadChunk(DataChunk &chunk, idx_t iceberg_version, vect
 	idx_t vector_index = 0;
 
 	auto &manifest_path = chunk.data[vector_index++];
-	UnifiedVectorFormat manifest_path_format;
-	manifest_path.ToUnifiedFormat(manifest_path_format);
+	auto manifest_path_entries = manifest_path.Values<string_t>();
 
 	auto &manifest_length = chunk.data[vector_index++];
-	UnifiedVectorFormat manifest_length_format;
-	manifest_length.ToUnifiedFormat(manifest_length_format);
+	auto manifest_length_entries = manifest_length.Values<int64_t>();
 
 	auto &partition_spec_id = chunk.data[vector_index++];
-	UnifiedVectorFormat partition_spec_id_format;
-	partition_spec_id.ToUnifiedFormat(partition_spec_id_format);
+	auto partition_spec_id_entries = partition_spec_id.Values<int32_t>();
 
-	UnifiedVectorFormat content_format;
 	optional_ptr<Vector> content;
+	optional<VectorIterator<int32_t>> content_entries;
 
-	UnifiedVectorFormat sequence_number_format;
 	optional_ptr<Vector> sequence_number;
+	optional<VectorIterator<int64_t>> sequence_number_entries;
 
-	UnifiedVectorFormat min_sequence_number_format;
 	optional_ptr<Vector> min_sequence_number;
+	optional<VectorIterator<int64_t>> min_sequence_number_entries;
 	if (iceberg_version >= 2) {
 		content = chunk.data[vector_index++];
 		sequence_number = chunk.data[vector_index++];
 		min_sequence_number = chunk.data[vector_index++];
-
-		content->ToUnifiedFormat(content_format);
-		sequence_number->ToUnifiedFormat(sequence_number_format);
-		min_sequence_number->ToUnifiedFormat(min_sequence_number_format);
+		content_entries.emplace(content->Values<int32_t>());
+		sequence_number_entries.emplace(sequence_number->Values<int64_t>());
+		min_sequence_number_entries.emplace(min_sequence_number->Values<int64_t>());
 	}
 
 	auto &added_snapshot_id = chunk.data[vector_index++];
-	UnifiedVectorFormat added_snapshot_id_format;
-	added_snapshot_id.ToUnifiedFormat(added_snapshot_id_format);
+	auto added_snapshot_id_entries = added_snapshot_id.Values<int64_t>();
 
 	auto &added_files_count = chunk.data[vector_index++];
-	UnifiedVectorFormat added_files_count_format;
-	added_files_count.ToUnifiedFormat(added_files_count_format);
+	auto added_files_count_entries = added_files_count.Values<int32_t>();
 
 	auto &existing_files_count = chunk.data[vector_index++];
-	UnifiedVectorFormat existing_files_count_format;
-	existing_files_count.ToUnifiedFormat(existing_files_count_format);
+	auto existing_files_count_entries = existing_files_count.Values<int32_t>();
 
 	auto &deleted_files_count = chunk.data[vector_index++];
-	UnifiedVectorFormat deleted_files_count_format;
-	deleted_files_count.ToUnifiedFormat(deleted_files_count_format);
+	auto deleted_files_count_entries = deleted_files_count.Values<int32_t>();
 
 	auto &added_rows_count = chunk.data[vector_index++];
-	UnifiedVectorFormat added_rows_count_format;
-	added_rows_count.ToUnifiedFormat(added_rows_count_format);
+	auto added_rows_count_entries = added_rows_count.Values<int64_t>();
 
 	auto &existing_rows_count = chunk.data[vector_index++];
-	UnifiedVectorFormat existing_rows_count_format;
-	existing_rows_count.ToUnifiedFormat(existing_rows_count_format);
+	auto existing_rows_count_entries = existing_rows_count.Values<int64_t>();
 
 	auto &deleted_rows_count = chunk.data[vector_index++];
-	UnifiedVectorFormat deleted_rows_count_format;
-	deleted_rows_count.ToUnifiedFormat(deleted_rows_count_format);
+	auto deleted_rows_count_entries = deleted_rows_count.Values<int64_t>();
 
 	//! 'partitions'
 	auto &partitions = chunk.data[vector_index++];
-	RecursiveUnifiedVectorFormat partitions_format;
-	Vector::RecursiveToUnifiedFormat(partitions, partitions_format);
+	auto partitions_entries = partitions.Values<VectorListType<VectorStructType<bool, bool, string_t, string_t>>>();
 
-	auto &field_summary_format = partitions_format.children[0];
-	auto list_data = partitions_format.unified.GetData<list_entry_t>(partitions_format.unified);
-
-	idx_t partition_index = 0;
-	auto &contains_null_format = field_summary_format.children[partition_index++].unified;
-	auto contains_null_data = contains_null_format.GetData<bool>(contains_null_format);
-
-	auto &contains_nan_format = field_summary_format.children[partition_index++].unified;
-	auto contains_nan_data = contains_nan_format.GetData<bool>(contains_nan_format);
-
-	auto &lower_bound_format = field_summary_format.children[partition_index++].unified;
-	auto lower_bound_data = lower_bound_format.GetData<string_t>(lower_bound_format);
-
-	auto &upper_bound_format = field_summary_format.children[partition_index++].unified;
-	auto upper_bound_data = upper_bound_format.GetData<string_t>(upper_bound_format);
-
-	UnifiedVectorFormat first_row_id_format;
 	optional_ptr<Vector> first_row_id;
+	optional<VectorIterator<int64_t>> first_row_id_entries;
 	if (iceberg_version >= 3) {
 		first_row_id = chunk.data[vector_index++];
-		first_row_id->ToUnifiedFormat(first_row_id_format);
+		first_row_id_entries.emplace(first_row_id->Values<int64_t>());
 	}
 
 	//! Conversion logic
 	for (idx_t i = 0; i < count; i++) {
-		auto manifest_path = ReadRequiredField<string_t>("manifest_path", manifest_path_format, i).GetString();
+		auto manifest_path = ReadRequiredField<string_t>("manifest_path", manifest_path_entries[i]).GetString();
 		IcebergManifestFile manifest(manifest_path);
-		manifest.manifest_length = ReadRequiredField<int64_t>("manifest_length", manifest_length_format, i);
-		manifest.added_snapshot_id = ReadRequiredField<int64_t>("added_snapshot_id", added_snapshot_id_format, i);
-		manifest.partition_spec_id = ReadRequiredField<int32_t>("partition_spec_id", partition_spec_id_format, i);
+		manifest.manifest_length = ReadRequiredField<int64_t>("manifest_length", manifest_length_entries[i]);
+		manifest.added_snapshot_id = ReadRequiredField<int64_t>("added_snapshot_id", added_snapshot_id_entries[i]);
+		manifest.partition_spec_id = ReadRequiredField<int32_t>("partition_spec_id", partition_spec_id_entries[i]);
 		//! This flag is only used for writing, not for reading
 		manifest.has_min_sequence_number = true;
 
 		if (iceberg_version >= 2) {
-			manifest.content = IcebergManifestContentType(ReadRequiredField<int32_t>("content", content_format, i));
-			manifest.sequence_number = ReadRequiredField<int64_t>("sequence_number", sequence_number_format, i);
+			manifest.content = IcebergManifestContentType(ReadRequiredField<int32_t>("content", (*content_entries)[i]));
+			manifest.sequence_number = ReadRequiredField<int64_t>("sequence_number", (*sequence_number_entries)[i]);
 			manifest.min_sequence_number =
-			    ReadRequiredField<int64_t>("min_sequence_number", min_sequence_number_format, i);
-			manifest.added_files_count = ReadRequiredField<int32_t>("added_files_count", added_files_count_format, i);
+			    ReadRequiredField<int64_t>("min_sequence_number", (*min_sequence_number_entries)[i]);
+			manifest.added_files_count = ReadRequiredField<int32_t>("added_files_count", added_files_count_entries[i]);
 			manifest.existing_files_count =
-			    ReadRequiredField<int32_t>("existing_files_count", existing_files_count_format, i);
+			    ReadRequiredField<int32_t>("existing_files_count", existing_files_count_entries[i]);
 			manifest.deleted_files_count =
-			    ReadRequiredField<int32_t>("deleted_files_count", deleted_files_count_format, i);
+			    ReadRequiredField<int32_t>("deleted_files_count", deleted_files_count_entries[i]);
 
-			manifest.added_rows_count = ReadRequiredField<int64_t>("added_rows_count", added_rows_count_format, i);
+			manifest.added_rows_count = ReadRequiredField<int64_t>("added_rows_count", added_rows_count_entries[i]);
 			manifest.existing_rows_count =
-			    ReadRequiredField<int64_t>("existing_rows_count", existing_rows_count_format, i);
+			    ReadRequiredField<int64_t>("existing_rows_count", existing_rows_count_entries[i]);
 			manifest.deleted_rows_count =
-			    ReadRequiredField<int64_t>("deleted_rows_count", deleted_rows_count_format, i);
+			    ReadRequiredField<int64_t>("deleted_rows_count", deleted_rows_count_entries[i]);
 		} else {
 			//! SPEC: Manifest list field sequence-number must default to 0
 			manifest.sequence_number = 0;
@@ -175,38 +143,37 @@ void ManifestListReader::ReadChunk(DataChunk &chunk, idx_t iceberg_version, vect
 		}
 
 		if (iceberg_version >= 3) {
-			int64_t first_row_id;
-			if (ReadOptionalField<int64_t>(first_row_id_format, i, first_row_id)) {
-				manifest.first_row_id = first_row_id;
+			int64_t first_row_id_val;
+			if (ReadOptionalField<int64_t>((*first_row_id_entries)[i], first_row_id_val)) {
+				manifest.first_row_id = first_row_id_val;
 				manifest.has_first_row_id = true;
 			}
 		}
 
-		idx_t partitions_index = partitions_format.unified.sel->get_index(i);
-		if (partitions_format.unified.validity.RowIsValid(partitions_index)) {
+		auto partition_entry = partitions_entries[i];
+		if (partition_entry.IsValid()) {
 			manifest.partitions.has_partitions = true;
 			auto &summaries = manifest.partitions.field_summary;
-			auto list_entry = list_data[partitions_index];
-			for (idx_t j = 0; j < list_entry.length; j++) {
+			for (const auto summary_entry : partition_entry.GetChildValues()) {
 				FieldSummary summary;
-				auto contains_null_index = contains_null_format.sel->get_index(list_entry.offset + j);
-				if (contains_null_format.validity.RowIsValid(contains_null_index)) {
-					summary.contains_null = contains_null_data[contains_null_index];
+				auto contains_null_entry = summary_entry.template GetChildValue<0>();
+				if (contains_null_entry.IsValid()) {
+					summary.contains_null = contains_null_entry.GetValueUnsafe();
 				}
-				auto contains_nan_index = contains_nan_format.sel->get_index(list_entry.offset + j);
-				if (contains_nan_format.validity.RowIsValid(contains_nan_index)) {
-					summary.contains_nan = contains_nan_data[contains_nan_index];
+				auto contains_nan_entry = summary_entry.template GetChildValue<1>();
+				if (contains_nan_entry.IsValid()) {
+					summary.contains_nan = contains_nan_entry.GetValueUnsafe();
 				}
-				auto lower_bound_index = lower_bound_format.sel->get_index(list_entry.offset + j);
-				if (lower_bound_format.validity.RowIsValid(lower_bound_index)) {
-					auto &str = lower_bound_data[lower_bound_index];
+				auto lower_bound_entry = summary_entry.template GetChildValue<2>();
+				if (lower_bound_entry.IsValid()) {
+					auto &str = lower_bound_entry.GetValueUnsafe();
 					summary.lower_bound = Value::BLOB(const_data_ptr_cast(str.GetData()), str.GetSize());
 				} else {
 					summary.lower_bound = Value(LogicalType::BLOB);
 				}
-				auto upper_bound_index = upper_bound_format.sel->get_index(list_entry.offset + j);
-				if (upper_bound_format.validity.RowIsValid(upper_bound_index)) {
-					auto &str = upper_bound_data[upper_bound_index];
+				auto upper_bound_entry = summary_entry.template GetChildValue<3>();
+				if (upper_bound_entry.IsValid()) {
+					auto &str = upper_bound_entry.GetValueUnsafe();
 					summary.upper_bound = Value::BLOB(const_data_ptr_cast(str.GetData()), str.GetSize());
 				} else {
 					summary.upper_bound = Value(LogicalType::BLOB);
