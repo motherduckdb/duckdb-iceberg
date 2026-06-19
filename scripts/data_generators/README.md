@@ -27,7 +27,9 @@ Intermediates for each step are saved to `data/generated/intermediates/{connecti
 - value deletes?
 
 ### To add a test (generate an iceberg table):
-- Create a new folder in `scripts/data_generators/tests`
+- Create a folder under `scripts/data_generators/tests/<namespace>/<table>`
+- Most generators should live under `scripts/data_generators/tests/default/<table>`
+- Nested namespaces should mirror the full namespace path, for example `scripts/data_generators/tests/level1/level2/level3/nested_namespaces`
 - Write the `__init__.py`, which is usually as simple as:
 ```py
 from scripts.data_generators.tests.base import IcebergTest
@@ -36,10 +38,10 @@ import pathlib
 @IcebergTest.register()
 class Test(IcebergTest):
     def __init__(self):
-        path = pathlib.PurePath(__file__)
-        super().__init__(path.parent.name)
+        super().__init__(__file__)
 ```
 - Add the `.sql` files to the folder (one statement per file)
+- The namespace and table name are derived from the directory structure, and the generator will run `DROP TABLE IF EXISTS <namespace>.<table>` before executing the case
 - If the case should use a different connection implementation for a specific catalog, set `catalog_mapping`, for example:
 ```py
 class Test(IcebergTest):
