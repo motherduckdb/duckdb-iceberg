@@ -1,1 +1,0 @@
-ALTER table default.table_sort_order write ordered by l_orderkey, l_partkey
