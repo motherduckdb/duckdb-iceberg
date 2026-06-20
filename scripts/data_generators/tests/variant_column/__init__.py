@@ -6,6 +6,10 @@ import duckdb
 
 @IcebergTest.register()
 class Test(IcebergTest):
+    expected_failures = {
+        "nessie": "VARIANT is not supported yet"
+    }
+
     def __init__(self):
         path = pathlib.PurePath(__file__)
         super().__init__(path.parent.name)

@@ -3,7 +3,6 @@ import pathlib
 import duckdb
 
 import os
-from typing import Type, List, Optional
 
 SCRIPT_DIR = os.path.dirname(__file__)
 FILES_DIR = os.path.join(SCRIPT_DIR, '..', '..', '..', 'data', 'generated', 'files')
@@ -54,16 +53,14 @@ def generate_files():
 
 @IcebergTest.register()
 class Test(IcebergTest):
+    supported_catalogs = {"local"}
+
     def __init__(self):
         path = pathlib.PurePath(__file__)
         super().__init__(path.parent.name)
 
-    def generate(self, catalog: str, *, target: Optional[str] = None, connection_kwargs: Optional[dict] = None):
+    def generate(self, con):
         generate_files()
-
-        if catalog != "local":
-            return
-        con = self.get_connection(catalog, target=target, **(connection_kwargs or {}))
 
         con.con.sql("CREATE NAMESPACE IF NOT EXISTS test_add_files")
 
@@ -93,6 +90,3 @@ class Test(IcebergTest):
         source_table => 'parquet.`{FILES_DIR}`'
         )
         """)
-
-    #def setup(self, con):
-    #    con.con.read.parquet(self.parquet_file.as_posix()).createOrReplaceTempView('parquet_file_view')

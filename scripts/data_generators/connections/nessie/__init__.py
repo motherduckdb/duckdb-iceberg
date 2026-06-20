@@ -49,6 +49,8 @@ class IcebergSparkRest(IcebergConnection):
         os.environ["AWS_REGION"] = "us-east-1"
         os.environ["AWS_ACCESS_KEY_ID"] = os.getenv("S3_KEY_ID", "minioadmin")
         os.environ["AWS_SECRET_ACCESS_KEY"] = os.getenv("S3_SECRET", "minioadmin")
+        if SparkContext._active_spark_context is not None:
+            SparkContext._active_spark_context.stop()
 
         spark = (
             SparkSession.builder.appName("DuckDB REST Integration test")
