@@ -11,6 +11,8 @@ require httpfs
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
+require-env FIXTURE_SERVER_AVAILABLE
+
 query I
 select count(snapshot_id::BIGINT) from iceberg_snapshots(
 	my_datalake.default.pyspark_iceberg_table_v2

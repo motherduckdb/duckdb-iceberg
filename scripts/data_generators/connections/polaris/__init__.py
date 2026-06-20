@@ -38,6 +38,8 @@ class IcebergSparkLocal(IcebergConnection):
         os.environ["AWS_REGION"] = "us-west-2"
         os.environ["AWS_ACCESS_KEY_ID"] = "minio_root"
         os.environ["AWS_SECRET_ACCESS_KEY"] = "m1n1opwd"
+        if SparkContext._active_spark_context is not None:
+            SparkContext._active_spark_context.stop()
 
         config = SparkConf()
         config.set(
