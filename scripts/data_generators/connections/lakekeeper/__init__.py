@@ -47,6 +47,8 @@ class IcebergSparkLocal(IcebergConnection):
             "spark.sql.catalog.lakekeeper.scope": "lakekeeper",
             "spark.sql.catalog.lakekeeper.oauth2-server-uri": KEYCLOAK_TOKEN_URL,
         }
+        if SparkContext._active_spark_context is not None:
+            SparkContext._active_spark_context.stop()
 
         spark_config = SparkConf().setMaster('local').setAppName("Iceberg-REST")
         for k, v in conf.items():
