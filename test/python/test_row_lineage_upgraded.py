@@ -64,8 +64,25 @@ ROW_LINEAGE_SEED = SparkSeedTable(
 class TestRowLineageUnittestStdin:
     @pytest.mark.requires_spark(">=4.0")
     @pytest.mark.spark_seed_tables(ROW_LINEAGE_SEED)
-    def test_row_lineage_test_upgraded_end_to_end(self, spark_rest_connection, unittest_binary, print_unittest_stdin):
-        with DuckDBUnittestRunner(unittest_binary, print_stdin=print_unittest_stdin) as test:
+    def test_row_lineage_test_upgraded_end_to_end(
+        self,
+        catalog_connection,
+        catalog_profile,
+        spark_runtime,
+        unittest_binary,
+        unittest_test_config,
+        print_unittest_stdin,
+    ):
+        if not catalog_profile.supports_row_lineage:
+            pytest.skip(f"Catalog '{catalog_profile.name}' does not support row-lineage coverage in this suite")
+        if not spark_runtime.supports_v3:
+            pytest.skip(f"Spark runtime {spark_runtime.name} does not support row-lineage coverage in this suite")
+
+        with DuckDBUnittestRunner(
+            unittest_binary,
+            test_config=unittest_test_config,
+            print_stdin=print_unittest_stdin,
+        ) as test:
             with test.with_transaction(commit=False):
                 test.statement_ok(
                     f"""
@@ -190,8 +207,8 @@ class TestRowLineageUnittestStdin:
                 [(True,)],
             )
 
-        spark_rest_connection.restart()
-        df = spark_rest_connection.con.sql(
+        catalog_connection.restart()
+        df = catalog_connection.con.sql(
             f"""
             select _last_updated_sequence_number, _row_id IS NOT NULL as has_row_id, *
             from {QUALIFIED_TABLE_NAME}

@@ -31,4 +31,4 @@ lakekeeper-data: lakekeeper
 	python3 -m venv .venv-spark4 && \
 	. .venv-spark4/bin/activate && \
 	python3 -m pip install -r scripts/requirements.txt && \
-	python3 -m pytest scripts/data_generators/test_generate_data.py --catalog lakekeeper $(if $(TEST),-k $(TEST)) -vv
+	python3 -m pytest scripts/data_generators/test_generate_data.py --catalog lakekeeper --spark-runtime 4.0 $(if $(TEST),-k $(TEST)) -vv

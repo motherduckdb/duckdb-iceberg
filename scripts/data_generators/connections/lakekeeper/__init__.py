@@ -1,43 +1,30 @@
-from pyspark.sql import SparkSession
 from pyspark import SparkContext
 from pyspark.conf import SparkConf
-import pyspark
-import pyspark.sql
+from pyspark.sql import SparkSession
 
 from ..base import IcebergConnection
-from ..spark_settings import iceberg_runtime_configuration
-
-RUNTIME_CONFIG = iceberg_runtime_configuration()
-SPARK_VERSION = RUNTIME_CONFIG['spark_version']
-SCALA_BINARY_VERSION = RUNTIME_CONFIG['scala_binary_version']
-ICEBERG_LIBRARY_VERSION = RUNTIME_CONFIG['iceberg_library_version']
-
-import sys
-import os
-
-CONNECTION_KEY = 'lakekeeper'
+from scripts.data_generators.integration_config import get_spark_runtime
 
 
-SCRIPT_DIR = os.path.dirname(__file__)
-DATA_GENERATION_DIR = os.path.join(SCRIPT_DIR, '..', '..', '..', 'data', 'generated', 'iceberg', 'spark-local')
+CONNECTION_KEY = "lakekeeper"
 
 CATALOG_URL = "http://localhost:8181/catalog"
-MANAGEMENT_URL = "http://localhost:8181/management"
 KEYCLOAK_TOKEN_URL = "http://localhost:30080/realms/iceberg/protocol/openid-connect/token"
 WAREHOUSE = "demo"
-
 CLIENT_ID = "spark"
 CLIENT_SECRET = "2OR3eRvYfSZzzZ16MlPd95jhLnOaLM52"
 
+
 @IcebergConnection.register(CONNECTION_KEY)
 class IcebergSparkLocal(IcebergConnection):
-    def __init__(self):
-        super().__init__(CONNECTION_KEY, 'lakekeeper')
+    def __init__(self, runtime=None):
+        super().__init__(CONNECTION_KEY, "lakekeeper")
+        self.runtime = get_spark_runtime(runtime)
         self.con = self.get_connection()
 
     def get_connection(self):
         conf = {
-            "spark.jars.packages": f"org.apache.iceberg:iceberg-spark-runtime-{SPARK_VERSION}_{SCALA_BINARY_VERSION}:{ICEBERG_LIBRARY_VERSION},org.apache.iceberg:iceberg-aws-bundle:{ICEBERG_LIBRARY_VERSION}",
+            "spark.jars.packages": f"{self.runtime.runtime_package},{self.runtime.aws_bundle_package}",
             "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
             "spark.sql.catalog.lakekeeper": "org.apache.iceberg.spark.SparkCatalog",
             "spark.sql.catalog.lakekeeper.type": "rest",
@@ -46,16 +33,16 @@ class IcebergSparkLocal(IcebergConnection):
             "spark.sql.catalog.lakekeeper.warehouse": WAREHOUSE,
             "spark.sql.catalog.lakekeeper.scope": "lakekeeper",
             "spark.sql.catalog.lakekeeper.oauth2-server-uri": KEYCLOAK_TOKEN_URL,
+            "spark.jars": self.runtime.jar_path.as_posix(),
         }
         if SparkContext._active_spark_context is not None:
             SparkContext._active_spark_context.stop()
 
-        spark_config = SparkConf().setMaster('local').setAppName("Iceberg-REST")
-        for k, v in conf.items():
-            spark_config = spark_config.set(k, v)
+        spark_config = SparkConf().setMaster("local").setAppName("Iceberg-REST")
+        for key, value in conf.items():
+            spark_config = spark_config.set(key, value)
 
         spark = SparkSession.builder.config(conf=spark_config).getOrCreate()
-
         spark.sql("USE lakekeeper")
         spark.sql("CREATE NAMESPACE IF NOT EXISTS default")
         spark.sql("USE NAMESPACE default")

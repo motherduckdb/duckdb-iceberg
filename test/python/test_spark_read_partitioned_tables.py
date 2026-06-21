@@ -18,128 +18,19 @@ time.tzset()
 
 SCRIPT_DIR = os.path.dirname(__file__)
 
+pyspark = pytest.importorskip("pyspark")
 pyspark_sql = pytest.importorskip("pyspark.sql")
 SparkSession = pyspark_sql.SparkSession
 SparkContext = pyspark.SparkContext
 Row = pyspark_sql.Row
 
 
-from dataclasses import dataclass
-from packaging.version import Version
-from packaging.specifiers import SpecifierSet
+def _get_spark(spark_con, spark_runtime, catalog_profile, table_name=None):
+    """Extract the Spark session, skipping v3 tables for runtimes or catalogs that do not support them."""
+    if table_name:
+        require_table_support(table_name, spark_runtime, catalog_profile)
+    return spark_con
 
-
-@dataclass
-class IcebergRuntimeConfig:
-    spark_version: Version
-    scala_binary_version: str
-    iceberg_library_version: str
-    supports_v3: bool = True
-
-
-def generate_jar_location(config: IcebergRuntimeConfig) -> str:
-    return f"iceberg-spark-runtime-{config.spark_version}_{config.scala_binary_version}-{config.iceberg_library_version}.jar"
-
-
-def generate_package(config: IcebergRuntimeConfig) -> str:
-    return f"org.apache.iceberg:iceberg-spark-runtime-{config.spark_version}_{config.scala_binary_version}:{config.iceberg_library_version}"
-
-
-ICEBERG_RUNTIMES = [
-    IcebergRuntimeConfig(
-        spark_version=Version("3.5"),
-        scala_binary_version="2.12",
-        iceberg_library_version="1.4.1",
-        supports_v3=False,
-    ),
-    IcebergRuntimeConfig(
-        spark_version=Version("3.5"),
-        scala_binary_version="2.12",
-        iceberg_library_version="1.9.0",
-        supports_v3=False,
-    ),
-    IcebergRuntimeConfig(
-        spark_version=Version("3.5"),
-        scala_binary_version="2.13",
-        iceberg_library_version="1.9.1",
-        supports_v3=False,
-    ),
-    IcebergRuntimeConfig(
-        spark_version=Version("4.0"),
-        scala_binary_version="2.13",
-        iceberg_library_version="1.10.0",
-    ),
-]
-
-
-def _get_spark(spark_con, table_name=None):
-    """Extract the Spark session, skipping v3 tables for runtimes that don't support them."""
-    spark, runtime = spark_con
-    if table_name and "format_version_3" in table_name and not runtime.supports_v3:
-        pytest.skip(
-            f"Iceberg {runtime.iceberg_library_version} (Spark {runtime.spark_version} "
-            f"Scala {runtime.scala_binary_version}) does not support format version 3"
-        )
-    return spark
-
-
-@pytest.fixture(params=ICEBERG_RUNTIMES, scope="session")
-def spark_con(request):
-    runtime_config = request.param
-    if runtime_config.spark_version.major != PYSPARK_VERSION.major:
-        pytest.skip(
-            f"Skipping Iceberg runtime "
-            f"Iceberg {runtime_config.iceberg_library_version}) "
-            f"because current PySpark version is {PYSPARK_VERSION}"
-        )
-
-    runtime_jar = generate_jar_location(runtime_config)
-    runtime_pkg = generate_package(runtime_config)
-    runtime_path = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", "scripts", "data_generators", runtime_jar))
-
-    os.environ["PYSPARK_SUBMIT_ARGS"] = (
-        f"--packages {runtime_pkg},org.apache.iceberg:iceberg-aws-bundle:{runtime_config.iceberg_library_version} pyspark-shell"
-    )
-    os.environ["AWS_REGION"] = "us-east-1"
-    os.environ["AWS_ACCESS_KEY_ID"] = "admin"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "password"
-
-    # SparkSession.getOrCreate() returns the cached active session, so we must
-    # explicitly stop any existing session before creating one with new config.
-    active = SparkSession.getActiveSession()
-    if active is not None:
-        active.stop()
-
-    spark = (
-        SparkSession.builder.appName(f"DuckDB Partitioned Tables Read Test")
-        .config(
-            "spark.sql.extensions",
-            "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
-        )
-        .config("spark.sql.catalog.demo", "org.apache.iceberg.spark.SparkCatalog")
-        .config("spark.sql.catalog.demo.type", "rest")
-        .config("spark.sql.catalog.demo.uri", "http://127.0.0.1:8181")
-        .config("spark.sql.catalog.demo.warehouse", "s3://warehouse/wh/")
-        .config("spark.sql.catalog.demo.s3.endpoint", "http://127.0.0.1:9000")
-        .config("spark.sql.catalog.demo.s3.path-style-access", "true")
-        .config("spark.driver.memory", "10g")
-        .config("spark.jars", runtime_path)
-        .config("spark.sql.catalogImplementation", "in-memory")
-        .config("spark.sql.catalog.demo.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
-        .config("spark.sql.session.timeZone", "UTC")
-        .getOrCreate()
-    )
-    spark.sql("USE demo")
-    spark.sql("CREATE NAMESPACE IF NOT EXISTS default")
-    spark.sql("USE NAMESPACE default")
-    yield spark, runtime_config
-    spark.stop()
-
-
-requires_iceberg_server = pytest.mark.skipif(
-    os.getenv("FIXTURE_SERVER_AVAILABLE", None) is None,
-    reason="Test data wasn't generated, run tests in test/sql/local/irc first (and set 'export FIXTURE_SERVER_AVAILABLE=1')",
-)
 
 # ---------------------------------------------------------------------------
 # Expected rows — defined once, shared across same-type tables regardless of
@@ -243,7 +134,6 @@ TIMESTAMPNS_ROWS = TIMESTAMP_ROWS
 # ---------------------------------------------------------------------------
 
 
-@requires_iceberg_server
 class TestSparkReadPartitionedTables:
     # ------------------------------------------------------------------ INT
     @pytest.mark.parametrize(
@@ -253,8 +143,8 @@ class TestSparkReadPartitionedTables:
             "test_table_partitioned_by_int_format_version_3",
         ],
     )
-    def test_int_partitioned(self, spark_con, table_name):
-        spark = _get_spark(spark_con, table_name)
+    def test_int_partitioned(self, spark_con, spark_runtime, catalog_profile, table_name):
+        spark = _get_spark(spark_con, spark_runtime, catalog_profile, table_name)
         res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == INT_ROWS
 
@@ -266,8 +156,8 @@ class TestSparkReadPartitionedTables:
             "test_table_partitioned_by_bigint_format_version_3",
         ],
     )
-    def test_bigint_partitioned(self, spark_con, table_name):
-        spark = _get_spark(spark_con, table_name)
+    def test_bigint_partitioned(self, spark_con, spark_runtime, catalog_profile, table_name):
+        spark = _get_spark(spark_con, spark_runtime, catalog_profile, table_name)
         res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == BIGINT_ROWS
 
@@ -279,8 +169,8 @@ class TestSparkReadPartitionedTables:
             "test_table_partitioned_by_varchar_format_version_3",
         ],
     )
-    def test_varchar_partitioned(self, spark_con, table_name):
-        spark = _get_spark(spark_con, table_name)
+    def test_varchar_partitioned(self, spark_con, spark_runtime, catalog_profile, table_name):
+        spark = _get_spark(spark_con, spark_runtime, catalog_profile, table_name)
         res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == VARCHAR_ROWS
 
@@ -292,8 +182,8 @@ class TestSparkReadPartitionedTables:
             "test_table_partitioned_by_decimal_format_version_3",
         ],
     )
-    def test_decimal_partitioned(self, spark_con, table_name):
-        spark = _get_spark(spark_con, table_name)
+    def test_decimal_partitioned(self, spark_con, spark_runtime, catalog_profile, table_name):
+        spark = _get_spark(spark_con, spark_runtime, catalog_profile, table_name)
         res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == DECIMAL_ROWS
 
@@ -317,8 +207,8 @@ class TestSparkReadPartitionedTables:
             "test_table_partitioned_by_float_format_version_3",
         ],
     )
-    def test_float_partitioned(self, spark_con, table_name):
-        spark = _get_spark(spark_con, table_name)
+    def test_float_partitioned(self, spark_con, spark_runtime, catalog_profile, table_name):
+        spark = _get_spark(spark_con, spark_runtime, catalog_profile, table_name)
         res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == FLOAT_ROWS
 
@@ -330,8 +220,8 @@ class TestSparkReadPartitionedTables:
             "test_table_partitioned_by_double_format_version_3",
         ],
     )
-    def test_double_partitioned(self, spark_con, table_name):
-        spark = _get_spark(spark_con, table_name)
+    def test_double_partitioned(self, spark_con, spark_runtime, catalog_profile, table_name):
+        spark = _get_spark(spark_con, spark_runtime, catalog_profile, table_name)
         res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == DOUBLE_ROWS
 
@@ -380,15 +270,15 @@ class TestSparkReadPartitionedTables:
             "test_table_partitioned_by_date_day_format_version_3",
         ],
     )
-    def test_date_partitioned(self, spark_con, table_name):
-        spark = _get_spark(spark_con, table_name)
+    def test_date_partitioned(self, spark_con, spark_runtime, catalog_profile, table_name):
+        spark = _get_spark(spark_con, spark_runtime, catalog_profile, table_name)
         res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == DATE_ROWS
 
     # ------------------------------------------------------------ TIMESTAMP
     # The v2 identity table was inserted with duplicate id=1 (linter-applied).
     def test_timestamp_identity_v2(self, spark_con):
-        spark, _ = spark_con
+        spark = spark_con
         res = spark.sql(
             "SELECT * FROM default.test_table_partitioned_by_timestamp_format_version_2 ORDER BY id, val"
         ).collect()
@@ -408,8 +298,8 @@ class TestSparkReadPartitionedTables:
             "test_table_partitioned_by_timestamp_hour_format_version_3",
         ],
     )
-    def test_timestamp_partitioned(self, spark_con, table_name):
-        spark = _get_spark(spark_con, table_name)
+    def test_timestamp_partitioned(self, spark_con, spark_runtime, catalog_profile, table_name):
+        spark = _get_spark(spark_con, spark_runtime, catalog_profile, table_name)
         res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == TIMESTAMP_ROWS
 
@@ -429,8 +319,8 @@ class TestSparkReadPartitionedTables:
             "test_table_partitioned_by_timestamptz_hour_format_version_3",
         ],
     )
-    def test_timestamptz_partitioned(self, spark_con, table_name):
-        spark = _get_spark(spark_con, table_name)
+    def test_timestamptz_partitioned(self, spark_con, spark_runtime, catalog_profile, table_name):
+        spark = _get_spark(spark_con, spark_runtime, catalog_profile, table_name)
         res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == TIMESTAMPTZ_ROWS
 
@@ -542,7 +432,6 @@ TEST_TRUNCATE_DECIMAL_ROWS = [
 ] + [Row(id=11, amount=None, label="null_row")]
 
 
-@requires_iceberg_server
 class TestSparkReadBucketTruncateForInsert:
     """
     Cross-engine round-trip tests for bucket- and truncate-partitioned tables.

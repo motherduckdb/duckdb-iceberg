@@ -3,9 +3,6 @@ import os
 import datetime
 from decimal import Decimal
 from math import inf
-from dataclasses import dataclass
-from packaging.version import Version
-from packaging.specifiers import SpecifierSet
 
 from conftest import *
 
@@ -13,105 +10,11 @@ from pprint import pprint
 
 SCRIPT_DIR = os.path.dirname(__file__)
 
+pyspark = pytest.importorskip("pyspark")
 pyspark_sql = pytest.importorskip("pyspark.sql")
 SparkSession = pyspark_sql.SparkSession
 SparkContext = pyspark.SparkContext
 Row = pyspark_sql.Row
-
-
-@dataclass
-class IcebergRuntimeConfig:
-    spark_version: Version
-    scala_binary_version: str
-    iceberg_library_version: str
-
-
-# uses {spark}_{scala}-{iceberg}
-def generate_jar_location(config: IcebergRuntimeConfig) -> str:
-    return f"iceberg-spark-runtime-{config.spark_version}_{config.scala_binary_version}-{config.iceberg_library_version}.jar"
-
-
-# uses {spark}_{scala}:{iceberg}
-def generate_package(config: IcebergRuntimeConfig) -> str:
-    return f"org.apache.iceberg:iceberg-spark-runtime-{config.spark_version}_{config.scala_binary_version}:{config.iceberg_library_version}"
-
-
-# List of runtimes you want to test
-ICEBERG_RUNTIMES = [
-    IcebergRuntimeConfig(
-        spark_version=Version("3.5"),
-        scala_binary_version="2.12",
-        iceberg_library_version="1.4.1",
-    ),
-    IcebergRuntimeConfig(
-        spark_version=Version("3.5"),
-        scala_binary_version="2.12",
-        iceberg_library_version="1.9.0",
-    ),
-    IcebergRuntimeConfig(
-        spark_version=Version("3.5"),
-        scala_binary_version="2.13",
-        iceberg_library_version="1.9.1",
-    ),
-    IcebergRuntimeConfig(
-        spark_version=Version("4.0"),
-        scala_binary_version="2.13",
-        iceberg_library_version="1.10.0",
-    ),
-]
-
-
-@pytest.fixture(params=ICEBERG_RUNTIMES, scope="session")
-def spark_con(request):
-    runtime_config = request.param
-    if runtime_config.spark_version.major != PYSPARK_VERSION.major:
-        pytest.skip(
-            f"Skipping Iceberg runtime "
-            f"(Spark {runtime_config.spark_version}, Scala {runtime_config.scala_binary_version}, "
-            f"Iceberg {runtime_config.iceberg_library_version}) "
-            f"because current PySpark version is {PYSPARK_VERSION}"
-        )
-
-    runtime_jar = generate_jar_location(runtime_config)
-    runtime_pkg = generate_package(runtime_config)
-    runtime_path = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", "scripts", "data_generators", runtime_jar))
-
-    os.environ["PYSPARK_SUBMIT_ARGS"] = (
-        f"--packages {runtime_pkg},org.apache.iceberg:iceberg-aws-bundle:{runtime_config.iceberg_library_version} pyspark-shell"
-    )
-    os.environ["AWS_REGION"] = "us-east-1"
-    os.environ["AWS_ACCESS_KEY_ID"] = "admin"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "password"
-
-    spark = (
-        SparkSession.builder.appName(f"DuckDB REST Integration tes")
-        .config(
-            "spark.sql.extensions",
-            "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
-        )
-        .config("spark.sql.catalog.demo", "org.apache.iceberg.spark.SparkCatalog")
-        .config("spark.sql.catalog.demo.type", "rest")
-        .config("spark.sql.catalog.demo.uri", "http://127.0.0.1:8181")
-        .config("spark.sql.catalog.demo.warehouse", "s3://warehouse/wh/")
-        .config("spark.sql.catalog.demo.s3.endpoint", "http://127.0.0.1:9000")
-        .config("spark.sql.catalog.demo.s3.path-style-access", "true")
-        .config("spark.driver.memory", "10g")
-        .config("spark.jars", runtime_path)
-        .config("spark.sql.catalogImplementation", "in-memory")
-        .config("spark.sql.catalog.demo.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
-        .getOrCreate()
-    )
-    spark.sql("USE demo")
-    spark.sql("CREATE NAMESPACE IF NOT EXISTS default")
-    spark.sql("USE NAMESPACE default")
-    return spark
-
-
-requires_iceberg_server = pytest.mark.skipif(
-    os.getenv("FIXTURE_SERVER_AVAILABLE", None) is None,
-    reason="Test data wasn't generated, run tests in test/sql/local/irc first (and set 'export FIXTURE_SERVER_AVAILABLE=1')",
-)
-
 
 requires_equality_deletes_available = pytest.mark.skipif(
     (os.getenv("EQUALITY_DELETE_WRITES_ENABLED", None) is None)
@@ -120,7 +23,6 @@ requires_equality_deletes_available = pytest.mark.skipif(
 )
 
 
-@requires_iceberg_server
 class TestSparkRead:
     def test_spark_read_insert_test(self, spark_con):
         df = spark_con.sql(

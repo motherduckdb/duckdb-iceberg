@@ -5,9 +5,14 @@ from collections.abc import Iterator
 import pytest
 
 from scripts.data_generators.connections import IcebergConnection
+from scripts.data_generators.integration_config import (
+    DEFAULT_SPARK_RUNTIME_NAME,
+    GENERATOR_CATALOG_NAMES,
+    SPARK_RUNTIME_NAMES,
+    get_spark_runtime,
+)
 
-
-CATALOG_CHOICES = ("polaris", "lakekeeper", "local", "spark-rest", "nessie")
+CATALOG_CHOICES = GENERATOR_CATALOG_NAMES
 
 
 def parse_connection_args(values: list[str]) -> dict[str, str]:
@@ -47,6 +52,13 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         metavar="KEY=VALUE",
         help="Extra keyword arguments passed to the resolved connection constructor",
     )
+    parser.addoption(
+        "--spark-runtime",
+        action="store",
+        choices=SPARK_RUNTIME_NAMES,
+        default=DEFAULT_SPARK_RUNTIME_NAME,
+        help="Named Spark runtime used for generator-backed catalogs",
+    )
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -60,6 +72,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
     config._active_catalog = catalogs[0]
     config._connection_args = parse_connection_args(config.getoption("connection_arg"))
+    config._spark_runtime = get_spark_runtime(config.getoption("spark_runtime"))
 
 
 @pytest.fixture(scope="session")
@@ -70,6 +83,11 @@ def active_catalog(pytestconfig: pytest.Config) -> str:
 @pytest.fixture(scope="session")
 def connection_args(pytestconfig: pytest.Config) -> dict[str, str]:
     return dict(pytestconfig._connection_args)
+
+
+@pytest.fixture(scope="session")
+def spark_runtime(pytestconfig: pytest.Config):
+    return pytestconfig._spark_runtime
 
 
 @pytest.fixture
@@ -111,9 +129,10 @@ def iceberg_connection(
     active_catalog: str,
     catalog_mapping: dict[str, str],
     connection_args: dict[str, str],
+    spark_runtime,
 ) -> IcebergConnection:
     connection_key = catalog_mapping.get(active_catalog, active_catalog)
-    resolved_connection_key = (connection_key, tuple(sorted(connection_args.items())))
+    resolved_connection_key = (connection_key, spark_runtime.name, tuple(sorted(connection_args.items())))
     active_connection = _connection_manager["active_connection"]
     active_connection_key: tuple[str, tuple[tuple[str, str], ...]] | None = _connection_manager["active_connection_key"]
 
@@ -122,7 +141,7 @@ def iceberg_connection(
             active_connection.close()
 
         connection_class = IcebergConnection.get_class(connection_key)
-        active_connection = connection_class(**connection_args)
+        active_connection = connection_class(runtime=spark_runtime, **connection_args)
         _connection_manager["active_connection"] = active_connection
         _connection_manager["active_connection_key"] = resolved_connection_key
 
