@@ -95,8 +95,20 @@ def test_unittest_runner_reports_process_output(fake_popen):
         with DuckDBUnittestRunner("unittest"):
             pass
 
+    assert "require-env CATALOG_TEST_CONFIG_SETUP" in str(exc.value)
     assert "failed output" in str(exc.value)
     assert "failure details" in str(exc.value)
+
+
+def test_unittest_runner_prints_recorded_stdin_when_requested(fake_popen, capsys):
+    fake_popen()
+
+    with DuckDBUnittestRunner("unittest", print_stdin=True) as runner:
+        runner.statement_ok("select 42")
+
+    captured = capsys.readouterr()
+    assert "DuckDBUnittestRunner stdin:" in captured.out
+    assert "statement ok\nselect 42" in captured.out
 
 
 @pytest.mark.parametrize(

@@ -36,6 +36,12 @@ def pytest_addoption(parser):
         default=None,
         help="Provide the unittest binary to use for stdin-driven integration tests",
     )
+    parser.addoption(
+        "--print-unittest-stdin",
+        action="store_true",
+        default=False,
+        help="Print the sqllogictest stdin transcript for stdin-driven integration tests",
+    )
 
 
 @pytest.fixture()
@@ -46,6 +52,11 @@ def unittest_binary(request):
             "Please provide a unittest binary path to the tester, using '--unittest-binary <path_to_unittest>'"
         )
     return custom_arg
+
+
+@pytest.fixture()
+def print_unittest_stdin(pytestconfig):
+    return pytestconfig.getoption("--print-unittest-stdin")
 
 
 def _find_generator_case(table_name: str):

@@ -40,11 +40,14 @@ class DuckDBUnittestRunner:
         *,
         test_config: Path | str = DEFAULT_TEST_CONFIG,
         env: dict[str, str] | None = None,
+        print_stdin: bool = False,
     ) -> None:
         self.unittest_binary = unittest_binary
         self.test_config = Path(test_config)
         self.env = env
+        self.print_stdin = print_stdin
         self.process: subprocess.Popen[str] | None = None
+        self.stdin_log: list[str] = []
 
     def __enter__(self):
         self.process = subprocess.Popen(
@@ -71,7 +74,10 @@ class DuckDBUnittestRunner:
         stdout, stderr, returncode = self._finish()
         if returncode != 0:
             raise AssertionError(
-                f"stdin unittest exited with code {returncode}\n" f"stdout:\n{stdout}\n" f"stderr:\n{stderr}"
+                f"stdin unittest exited with code {returncode}\n"
+                f"stdin:\n{self.stdin_text}\n"
+                f"stdout:\n{stdout}\n"
+                f"stderr:\n{stderr}"
             )
         return False
 
@@ -85,8 +91,15 @@ class DuckDBUnittestRunner:
         block = textwrap.dedent(text).strip()
         if not block:
             return
+        self.stdin_log.append(block)
         process.stdin.write(f"{block}\n\n")
         process.stdin.flush()
+
+    @property
+    def stdin_text(self) -> str:
+        if not self.stdin_log:
+            return ""
+        return "\n\n".join(self.stdin_log) + "\n\n"
 
     def statement_ok(self, sql: str) -> None:
         self.send(f"statement ok\n{textwrap.dedent(sql).strip()}")
@@ -131,6 +144,8 @@ class DuckDBUnittestRunner:
         process.stdin.close()
         process.stdin = None
         stdout, stderr = process.communicate()
+        if self.print_stdin:
+            print(f"DuckDBUnittestRunner stdin:\n{self.stdin_text}", end="")
         return stdout, stderr, process.returncode
 
     def _terminate(self) -> None:

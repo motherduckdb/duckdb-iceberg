@@ -64,8 +64,8 @@ ROW_LINEAGE_SEED = SparkSeedTable(
 class TestRowLineageUnittestStdin:
     @pytest.mark.requires_spark(">=4.0")
     @pytest.mark.spark_seed_tables(ROW_LINEAGE_SEED)
-    def test_row_lineage_test_upgraded_end_to_end(self, spark_rest_connection, unittest_binary):
-        with DuckDBUnittestRunner(unittest_binary) as test:
+    def test_row_lineage_test_upgraded_end_to_end(self, spark_rest_connection, unittest_binary, print_unittest_stdin):
+        with DuckDBUnittestRunner(unittest_binary, print_stdin=print_unittest_stdin) as test:
             with test.with_transaction(commit=False):
                 test.statement_ok(
                     f"""
