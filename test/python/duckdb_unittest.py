@@ -32,6 +32,8 @@ statement ok
 set logging_level='debug'
 """
 
+ALL_TESTS_SKIPPED_MARKER = "All tests were skipped"
+
 
 class DuckDBUnittestRunner:
     def __init__(
@@ -48,6 +50,7 @@ class DuckDBUnittestRunner:
         self.print_stdin = print_stdin
         self.process: subprocess.Popen[str] | None = None
         self.stdin_log: list[str] = []
+        self._final_result: tuple[str, str, int] | None = None
 
     def __enter__(self):
         self.process = subprocess.Popen(
@@ -68,17 +71,14 @@ class DuckDBUnittestRunner:
 
     def __exit__(self, exc_type, exc_value, traceback) -> bool:
         if exc_type is not None:
-            self._terminate()
+            stdout, stderr, returncode = self._terminate()
+            if exc_value is not None and (returncode != 0 or stderr):
+                exc_value.add_note(self._failure_message(stdout, stderr, returncode))
             return False
 
         stdout, stderr, returncode = self._finish()
-        if returncode != 0:
-            raise AssertionError(
-                f"stdin unittest exited with code {returncode}\n"
-                f"stdin:\n{self.stdin_text}\n"
-                f"stdout:\n{stdout}\n"
-                f"stderr:\n{stderr}"
-            )
+        if returncode != 0 or self._all_tests_skipped(stdout, stderr):
+            raise AssertionError(self._failure_message(stdout, stderr, returncode))
         return False
 
     def _active_process(self) -> subprocess.Popen[str]:
@@ -140,22 +140,49 @@ class DuckDBUnittestRunner:
         return str(value)
 
     def _finish(self) -> tuple[str, str, int]:
+        if self._final_result is not None:
+            return self._final_result
+
         process = self._active_process()
-        process.stdin.close()
+        if process.stdin is not None and not process.stdin.closed:
+            process.stdin.close()
         process.stdin = None
         stdout, stderr = process.communicate()
         if self.print_stdin:
             print(f"DuckDBUnittestRunner stdin:\n{self.stdin_text}", end="")
-        return stdout, stderr, process.returncode
+        self._final_result = (stdout, stderr, process.returncode)
+        return self._final_result
 
-    def _terminate(self) -> None:
+    def _failure_message(self, stdout: str, stderr: str, returncode: int) -> str:
+        skipped_suffix = ""
+        if self._all_tests_skipped(stdout, stderr):
+            skipped_suffix = " (all tests were skipped)"
+        return (
+            f"stdin unittest exited with code {returncode}{skipped_suffix}\n"
+            f"stdin:\n{self.stdin_text}\n"
+            f"stdout:\n{stdout}\n"
+            f"stderr:\n{stderr}"
+        )
+
+    @staticmethod
+    def _all_tests_skipped(stdout: str, stderr: str) -> bool:
+        return ALL_TESTS_SKIPPED_MARKER in stdout or ALL_TESTS_SKIPPED_MARKER in stderr
+
+    def _terminate(self) -> tuple[str, str, int]:
         if self.process is None:
-            return
+            return "", "", 0
+        if self._final_result is not None:
+            return self._final_result
         if self.process.poll() is None:
             self.process.kill()
-        self.process.wait()
+        if self.process.stdin is not None and not self.process.stdin.closed:
+            self.process.stdin.close()
+        self.process.stdin = None
+        stdout, stderr = self.process.communicate()
+        self._final_result = (stdout, stderr, self.process.returncode)
 
         for stream_name in ("stdin", "stdout", "stderr"):
             stream = getattr(self.process, stream_name, None)
             if stream is not None:
                 stream.close()
+        return self._final_result

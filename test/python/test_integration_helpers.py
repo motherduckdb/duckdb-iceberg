@@ -100,6 +100,25 @@ def test_unittest_runner_reports_process_output(fake_popen):
     assert "failure details" in str(exc.value)
 
 
+def test_unittest_runner_treats_all_tests_skipped_as_failure(fake_popen):
+    fake_popen(
+        FakeProcess(
+            returncode=0,
+            stdout=(
+                "All tests were skipped (total skipped 1)\n\n"
+                "Skipped tests for the following reasons:\n"
+                "require-env CATALOG_TEST_CONFIG_SETUP: 1\n"
+            ),
+        )
+    )
+
+    with pytest.raises(AssertionError, match="all tests were skipped") as exc:
+        with DuckDBUnittestRunner("unittest"):
+            pass
+
+    assert "require-env CATALOG_TEST_CONFIG_SETUP: 1" in str(exc.value)
+
+
 def test_unittest_runner_prints_recorded_stdin_when_requested(fake_popen, capsys):
     fake_popen()
 
@@ -145,6 +164,20 @@ def test_unittest_runner_preserves_body_exception(fake_popen):
             raise RuntimeError("test body failed")
 
     assert process.killed
+
+
+def test_unittest_runner_attaches_cleanup_process_output(fake_popen):
+    process = fake_popen(FakeProcess(returncode=1, stdout="cleanup output", stderr="cleanup failure"))
+
+    with pytest.raises(RuntimeError, match="test body failed") as exc:
+        with DuckDBUnittestRunner("unittest"):
+            raise RuntimeError("test body failed")
+
+    assert process.killed
+    notes = getattr(exc.value, "__notes__", [])
+    assert any("stdin unittest exited with code 1" in note for note in notes)
+    assert any("cleanup output" in note for note in notes)
+    assert any("cleanup failure" in note for note in notes)
 
 
 class RecordingSparkSQL:
