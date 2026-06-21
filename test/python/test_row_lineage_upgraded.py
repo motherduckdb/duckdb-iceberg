@@ -5,7 +5,7 @@ from spark_seed import SparkSeedTable
 from test_spark_read import Row
 
 
-TABLE_NAME = "row_lineage_unittest_stdin"
+TABLE_NAME = "row_lineage_test_upgraded"
 QUALIFIED_TABLE_NAME = f"default.{TABLE_NAME}"
 CATALOG_TABLE_NAME = f"my_datalake.{QUALIFIED_TABLE_NAME}"
 
