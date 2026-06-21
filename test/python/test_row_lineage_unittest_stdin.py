@@ -11,8 +11,8 @@ CATALOG_TABLE_NAME = f"my_datalake.{QUALIFIED_TABLE_NAME}"
 
 ROW_LINEAGE_SEED = SparkSeedTable(
     QUALIFIED_TABLE_NAME,
-    """
-    CREATE OR REPLACE TABLE default.row_lineage_unittest_stdin (
+    f"""
+    CREATE OR REPLACE TABLE {QUALIFIED_TABLE_NAME} (
       id INT,
       data STRING
     )
@@ -23,34 +23,34 @@ ROW_LINEAGE_SEED = SparkSeedTable(
         'write.update.mode' = 'merge-on-read'
     );
 
-    INSERT INTO default.row_lineage_unittest_stdin VALUES
+    INSERT INTO {QUALIFIED_TABLE_NAME} VALUES
     (1, 'a'),
     (2, 'b'),
     (3, 'c'),
     (4, 'd'),
     (5, 'e');
 
-    UPDATE default.row_lineage_unittest_stdin
+    UPDATE {QUALIFIED_TABLE_NAME}
     SET data = CONCAT(data, '_u1')
     WHERE id IN (2, 4);
 
-    DELETE FROM default.row_lineage_unittest_stdin
+    DELETE FROM {QUALIFIED_TABLE_NAME}
     WHERE id IN (3, 5);
 
-    INSERT INTO default.row_lineage_unittest_stdin VALUES
+    INSERT INTO {QUALIFIED_TABLE_NAME} VALUES
     (6, 'f'),
     (7, 'g');
 
-    UPDATE default.row_lineage_unittest_stdin
+    UPDATE {QUALIFIED_TABLE_NAME}
     SET data = 'replaced'
     WHERE id IN (1, 6);
 
-    DELETE FROM default.row_lineage_unittest_stdin WHERE id = 7;
+    DELETE FROM {QUALIFIED_TABLE_NAME} WHERE id = 7;
 
-    INSERT INTO default.row_lineage_unittest_stdin VALUES
+    INSERT INTO {QUALIFIED_TABLE_NAME} VALUES
     (7, 'g_new');
 
-    ALTER TABLE default.row_lineage_unittest_stdin
+    ALTER TABLE {QUALIFIED_TABLE_NAME}
     SET TBLPROPERTIES (
         'format-version'='3',
         'write.delete.mode' = 'merge-on-read',
