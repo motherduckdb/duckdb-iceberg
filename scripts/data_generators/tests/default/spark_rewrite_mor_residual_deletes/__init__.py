@@ -4,17 +4,8 @@ import pathlib
 
 @IcebergTest.register()
 class Test(IcebergTest):
+    catalog_mapping = {"spark-rest": "spark-rest-single-thread"}
+
     def __init__(self):
         path = pathlib.PurePath(__file__)
-        super().__init__(path.parent.name)
-
-    def get_connection(self, catalog: str, *, target: str | None = None, **kwargs):
-        target = "spark-rest-single-thread"
-        if catalog == "spark-rest":
-            from scripts.data_generators.connections import IcebergConnection
-
-            registry_key = self.resolve_target_for_catalog(catalog, target)
-            cls = IcebergConnection.get_class(registry_key)
-            con = cls(**kwargs) if kwargs else cls()
-            return con
-        return super().get_connection(catalog, target=target, **kwargs)
+        super().__init__(__file__)
