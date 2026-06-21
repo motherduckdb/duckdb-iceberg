@@ -7,6 +7,25 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 INTERMEDIATE_DIR = SCRIPT_DIR.parent.parent.parent / 'data' / 'generated' / 'intermediates'
 
 
+def cleanup_generated_table(con, qualified_name: str) -> None:
+    namespace_parts = qualified_name.split(".")[:-1]
+    if not namespace_parts:
+        raise ValueError(
+            f"Expected a namespace-qualified table name, got '{qualified_name}'"
+        )
+
+    namespace_name = ".".join(namespace_parts)
+    con.con.sql(f"CREATE NAMESPACE IF NOT EXISTS {namespace_name}")
+    try:
+        con.con.sql(f"DROP TABLE {qualified_name}")
+    except Exception:
+        pass
+
+
+def sql_statements(sql: str) -> list[str]:
+    return [statement for statement in sql.split(";") if statement.strip()]
+
+
 class IcebergTest:
     registry: List[Type['IcebergTest']] = []
     catalog_mapping: dict[str, str] = {}
@@ -42,12 +61,7 @@ class IcebergTest:
         return sql_files
 
     def cleanup_generated_tables(self, con) -> None:
-        namespace_name = '.'.join(self.namespace)
-        con.con.sql(f"CREATE NAMESPACE IF NOT EXISTS {namespace_name}")
-        try:
-            con.con.sql(f"DROP TABLE {self.qualified_name}")
-        except Exception:
-            pass
+        cleanup_generated_table(con, self.qualified_name)
 
     def setup(self, con) -> None:
         pass
@@ -63,7 +77,7 @@ class IcebergTest:
             with open(full_file_path, 'r') as file:
                 snapshot_name = Path(path).stem
                 last_file = snapshot_name
-                queries = [x for x in file.read().split(';') if x.strip() != '']
+                queries = sql_statements(file.read())
 
                 for query in queries:
                     # Execute query on the underlying engine (e.g., Spark)
