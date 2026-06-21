@@ -1,14 +1,18 @@
 #!/usr/bin/python3
-import os
-from typing import Type, List, Optional
+from pathlib import Path
+from typing import Type, List
 import shutil
 
-SCRIPT_DIR = os.path.dirname(__file__)
-INTERMEDIATE_DIR = os.path.join(SCRIPT_DIR, '..', '..', '..', 'data', 'generated', 'intermediates')
+SCRIPT_DIR = Path(__file__).resolve().parent
+INTERMEDIATE_DIR = SCRIPT_DIR.parent.parent.parent / 'data' / 'generated' / 'intermediates'
 
 
 class IcebergTest:
     registry: List[Type['IcebergTest']] = []
+    catalog_mapping: dict[str, str] = {}
+    skips: dict[str, str] = {}
+    supported_catalogs: set[str] | None = None
+    expected_failures: dict[str, str] = {}
 
     @classmethod
     def register(cls):
@@ -18,86 +22,62 @@ class IcebergTest:
 
         return decorator
 
-    def __init__(self, table: str, *, namespace=None, write_intermediates=True):
-        self.table = table
+    def __init__(self, source_file: str, *, write_intermediates=True):
+        self.test_dir = Path(source_file).resolve().parent
+        relative_parts = self.test_dir.relative_to(SCRIPT_DIR).parts
+        if len(relative_parts) < 2:
+            raise ValueError(
+                f"Expected test directories to include at least namespace/table under {SCRIPT_DIR}, got {self.test_dir}"
+            )
+
+        self.table = relative_parts[-1]
         self.write_intermediates = write_intermediates
-        self.namespace = ['default'] if not namespace else namespace
+        self.namespace = list(relative_parts[:-1])
         self.files = self.get_files()
+        self.qualified_name = '.'.join([*self.namespace, self.table])
 
     def get_files(self):
-        sql_files = [f for f in os.listdir(os.path.join(SCRIPT_DIR, self.table)) if f.endswith('.sql')]
+        sql_files = [path.name for path in self.test_dir.iterdir() if path.suffix == '.sql']
         sql_files.sort()
         return sql_files
 
-    # Default mapping from high-level catalog names to connection registry keys.
-    # Extend this map as you introduce new catalogs/targets.
-    CATALOG_DEFAULT_TARGET = {
-        "polaris": "polaris",
-        "lakekeeper": "lakekeeper",
-        "spark-rest": "spark-rest",
-        "local": "local",
-        "nessie": "nessie",
-    }
-
-    def resolve_target_for_catalog(self, catalog: str, target: Optional[str] = None) -> str:
-        if target:
-            return target
-        if catalog in self.CATALOG_DEFAULT_TARGET:
-            return self.CATALOG_DEFAULT_TARGET[catalog]
-        raise ValueError(
-            f"No default target mapping for catalog '{catalog}'. Supply an explicit target or extend CATALOG_DEFAULT_TARGET."
-        )
-
-    def get_connection(self, catalog: str, *, target: Optional[str] = None, **kwargs):
-        # Import here to avoid heavy imports at module import time and prevent cycles
-        from scripts.data_generators.connections import IcebergConnection
-
-        registry_key = self.resolve_target_for_catalog(catalog, target)
-        connection_class = IcebergConnection.get_class(registry_key)
-        return connection_class(**kwargs) if kwargs else connection_class()
-
-    def close_connection(self, con) -> None:
-        # Try to gracefully stop Spark if present
+    def cleanup_generated_tables(self, con) -> None:
+        namespace_name = '.'.join(self.namespace)
+        con.con.sql(f"CREATE NAMESPACE IF NOT EXISTS {namespace_name}")
         try:
-            spark = getattr(con, "con", None)
-            if spark is not None and hasattr(spark, "stop"):
-                spark.stop()
+            con.con.sql(f"DROP TABLE {self.qualified_name}")
         except Exception:
             pass
 
     def setup(self, con) -> None:
         pass
 
-    def generate(self, catalog: str, *, target: Optional[str] = None, connection_kwargs: Optional[dict] = None):
-        con = self.get_connection(catalog, target=target, **(connection_kwargs or {}))
-        try:
-            self.setup(con)
+    def generate(self, con):
+        self.cleanup_generated_tables(con)
+        self.setup(con)
 
-            intermediate_dir = os.path.join(INTERMEDIATE_DIR, con.name, self.table)
-            last_file = None
-            for path in self.files:
-                full_file_path = os.path.join(SCRIPT_DIR, self.table, path)
-                with open(full_file_path, 'r') as file:
-                    snapshot_name = os.path.basename(path)[:-4]
-                    last_file = snapshot_name
-                    queries = [x for x in file.read().split(';') if x.strip() != '']
+        intermediate_dir = INTERMEDIATE_DIR / con.name / Path(*self.namespace) / self.table
+        last_file = None
+        for path in self.files:
+            full_file_path = self.test_dir / path
+            with open(full_file_path, 'r') as file:
+                snapshot_name = Path(path).stem
+                last_file = snapshot_name
+                queries = [x for x in file.read().split(';') if x.strip() != '']
 
-                    for query in queries:
-                        # Execute query on the underlying engine (e.g., Spark)
-                        con.con.sql(query)
+                for query in queries:
+                    # Execute query on the underlying engine (e.g., Spark)
+                    con.con.sql(query)
 
-                        if self.write_intermediates:
-                            namespace = '.'.join(self.namespace)
-                            df = con.con.read.table(f"{namespace}.{self.table}")
-                            intermediate_data_path = os.path.join(intermediate_dir, snapshot_name, 'data.parquet')
-                            df.write.mode("overwrite").parquet(intermediate_data_path)
+                    if self.write_intermediates:
+                        df = con.con.read.table(self.qualified_name)
+                        intermediate_data_path = intermediate_dir / snapshot_name / 'data.parquet'
+                        df.write.mode("overwrite").parquet(intermediate_data_path.as_posix())
 
-            if self.write_intermediates and last_file:
-                # Finally, copy the latest results to a "last" dir for easy test writing
-                shutil.copytree(
-                    os.path.join(intermediate_dir, last_file, 'data.parquet'),
-                    os.path.join(intermediate_dir, 'last', 'data.parquet'),
-                    dirs_exist_ok=True,
-                )
-        finally:
-            self.close_connection(con)
+        if self.write_intermediates and last_file:
+            # Finally, copy the latest results to a "last" dir for easy test writing
+            shutil.copytree(
+                (intermediate_dir / last_file / 'data.parquet').as_posix(),
+                (intermediate_dir / 'last' / 'data.parquet').as_posix(),
+                dirs_exist_ok=True,
+            )
