@@ -1,0 +1,146 @@
+import os
+import subprocess
+import textwrap
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Iterator, Sequence
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_TEST_CONFIG = REPO_ROOT / "test" / "configs" / "fixture.json"
+
+STANDARD_PREAMBLE = """
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+require core_functions
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+set enable_logging=true
+
+statement ok
+set logging_level='debug'
+"""
+
+
+class DuckDBUnittestRunner:
+    def __init__(
+        self,
+        unittest_binary: str,
+        *,
+        test_config: Path | str = DEFAULT_TEST_CONFIG,
+        env: dict[str, str] | None = None,
+    ) -> None:
+        self.unittest_binary = unittest_binary
+        self.test_config = Path(test_config)
+        self.env = env
+        self.process: subprocess.Popen[str] | None = None
+
+    def __enter__(self):
+        self.process = subprocess.Popen(
+            [
+                self.unittest_binary,
+                "--stdin",
+                "--test-config",
+                str(self.test_config),
+            ],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={**os.environ, **(self.env or {})},
+        )
+        self.send(STANDARD_PREAMBLE)
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> bool:
+        if exc_type is not None:
+            self._terminate()
+            return False
+
+        stdout, stderr, returncode = self._finish()
+        if returncode != 0:
+            raise AssertionError(
+                f"stdin unittest exited with code {returncode}\n" f"stdout:\n{stdout}\n" f"stderr:\n{stderr}"
+            )
+        return False
+
+    def _active_process(self) -> subprocess.Popen[str]:
+        if self.process is None or self.process.stdin is None:
+            raise RuntimeError("DuckDBUnittestRunner is not active")
+        return self.process
+
+    def send(self, text: str) -> None:
+        process = self._active_process()
+        block = textwrap.dedent(text).strip()
+        if not block:
+            return
+        process.stdin.write(f"{block}\n\n")
+        process.stdin.flush()
+
+    def statement_ok(self, sql: str) -> None:
+        self.send(f"statement ok\n{textwrap.dedent(sql).strip()}")
+
+    def statement_error(self, sql: str, expected_error: str | None = None) -> None:
+        block = f"statement error\n{textwrap.dedent(sql).strip()}"
+        if expected_error is not None:
+            block += f"\n----\n{textwrap.dedent(expected_error).strip()}"
+        self.send(block)
+
+    @contextmanager
+    def with_transaction(self, commit: bool = True) -> Iterator[None]:
+        self.statement_ok("begin transaction")
+        try:
+            yield
+        except BaseException:
+            self.statement_ok("abort")
+            raise
+        else:
+            self.statement_ok("commit" if commit else "abort")
+
+    def query(self, column_types: str, sql: str, expected_rows: Sequence[Sequence[object]]) -> None:
+        rows = []
+        for row in expected_rows:
+            if isinstance(row, (str, bytes)) or len(row) != len(column_types):
+                raise ValueError(f"Expected {len(column_types)} values for query type '{column_types}', got {len(row)}")
+            rows.append("\t".join(self._format_value(value) for value in row))
+
+        expected = "\n".join(rows)
+        self.send(f"query {column_types}\n{textwrap.dedent(sql).strip()}\n----\n{expected}")
+
+    @staticmethod
+    def _format_value(value: object) -> str:
+        if value is None:
+            return "NULL"
+        if isinstance(value, bool):
+            return str(value).lower()
+        return str(value)
+
+    def _finish(self) -> tuple[str, str, int]:
+        process = self._active_process()
+        process.stdin.close()
+        process.stdin = None
+        stdout, stderr = process.communicate()
+        return stdout, stderr, process.returncode
+
+    def _terminate(self) -> None:
+        if self.process is None:
+            return
+        if self.process.poll() is None:
+            self.process.kill()
+        self.process.wait()
+
+        for stream_name in ("stdin", "stdout", "stderr"):
+            stream = getattr(self.process, stream_name, None)
+            if stream is not None:
+                stream.close()

@@ -14,6 +14,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from scripts.data_generators.connections import IcebergConnection
 from scripts.data_generators.tests import IcebergTest
+from spark_seed import SparkSeedTable
 
 
 def pytest_configure(config):
@@ -24,7 +25,7 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers",
-        "spark_seed_tables(*names): seed the spark_rest_connection fixture with one or more generator tables",
+        "spark_seed_tables(*tables): seed spark_rest_connection with registered names or SparkSeedTable objects",
     )
 
 
@@ -65,6 +66,17 @@ def _find_generator_case(table_name: str):
     return matches[0]
 
 
+def _resolve_seed_table(table):
+    if isinstance(table, str):
+        return _find_generator_case(table)
+    if isinstance(table, SparkSeedTable):
+        return table
+    raise ValueError(
+        "spark_seed_tables entries must be registered table names or SparkSeedTable objects, "
+        f"got {type(table).__name__}"
+    )
+
+
 @pytest.fixture()
 def spark_rest_connection(request):
     connection = IcebergConnection.get_class("spark-rest")()
@@ -72,10 +84,11 @@ def spark_rest_connection(request):
         seed_marker = request.node.get_closest_marker("spark_seed_tables")
         seed_names = list(seed_marker.args) if seed_marker else []
 
-        for table_name in seed_names:
-            generator = _find_generator_case(table_name)
-            generator.write_intermediates = False
-            generator.generate(connection)
+        for table in seed_names:
+            seed_table = _resolve_seed_table(table)
+            if isinstance(seed_table, IcebergTest):
+                seed_table.write_intermediates = False
+            seed_table.generate(connection)
 
         yield connection
     finally:
