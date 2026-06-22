@@ -68,4 +68,4 @@ jobs:
           CATALOG_TEST_CONFIG_SETUP: 1
         run: |
           source .venv-spark4/bin/activate
-          python3 -m pytest test/python --unittest-binary ./build/release/test/unittest
+          python3 -m pytest -vv test/python --unittest-binary ./build/release/test/unittest --test-python-verbosity verbose

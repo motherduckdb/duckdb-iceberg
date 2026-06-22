@@ -66,6 +66,8 @@ source scripts/catalog_test_config.sh
 
 `active_catalog_test_config` reads `.catalogs/.active_catalog`, returns the matching config for `fixture`, `lakekeeper`, `polaris`, or `nessie`, and fails with a descriptive error if no active catalog is set or if the active catalog does not use a REST catalog config.
 
+For `test/python` runs, pass `--test-python-verbosity verbose` to print the resolved catalog/runtime environment and any capability-based skips.
+
 #### Running the local S3 test server
 
 Running the S3 test cases requires the minio test server to be running and populated with `scripts/upload_iceberg_to_s3_test_server.sh`.

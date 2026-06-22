@@ -30,6 +30,9 @@ else:
     PYSPARK_VERSION = None
 
 
+TEST_PYTHON_VERBOSITY_LEVELS = ("normal", "verbose")
+
+
 def _requires_catalog_options(path: str) -> bool:
     return "cloud" not in Path(path).parts
 
@@ -53,6 +56,47 @@ def _selected_spark_runtime(config: pytest.Config):
     return runtime
 
 
+def _test_python_verbosity(config: pytest.Config) -> str:
+    return config.getoption("--test-python-verbosity")
+
+
+def _is_verbose_test_python_run(config: pytest.Config) -> bool:
+    return _test_python_verbosity(config) == "verbose"
+
+
+def _requirement_failure_message(requirement: str, catalog_profile, spark_runtime) -> list[str]:
+    if requirement == "format_v3":
+        failures = []
+        if "format_v3" not in spark_runtime.capabilities:
+            failures.append(f"Spark runtime {spark_runtime.name} does not support Iceberg format version 3")
+        if "format_v3" not in catalog_profile.capabilities:
+            failures.append(f"Catalog '{catalog_profile.name}' does not support Iceberg format version 3 in this suite")
+        return failures
+    if requirement == "row_lineage":
+        if "row_lineage" not in catalog_profile.capabilities:
+            return [f"Catalog '{catalog_profile.name}' does not support row-lineage coverage in this suite"]
+        return []
+    raise pytest.UsageError(
+        f"Unknown test/python capability requirement '{requirement}'. "
+        "Supported requirements: format_v3, row_lineage."
+    )
+
+
+def _collect_requirement_failures(item, catalog_profile, spark_runtime) -> list[str]:
+    marker = item.get_closest_marker("requires_capabilities")
+    if marker is None:
+        return []
+
+    failures = []
+    for requirement in marker.args:
+        if not isinstance(requirement, str):
+            raise pytest.UsageError(
+                f"{item.nodeid} uses requires_capabilities with a non-string requirement: {requirement!r}"
+            )
+        failures.extend(_requirement_failure_message(requirement, catalog_profile, spark_runtime))
+    return failures
+
+
 def pytest_configure(config):
     config.addinivalue_line(
         "markers",
@@ -62,6 +106,11 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers",
         "spark_seed_tables(*tables): seed catalog_connection with registered names or SparkSeedTable objects",
+    )
+    config.addinivalue_line(
+        "markers",
+        "requires_capabilities(*requirements): require named catalog/runtime capabilities before test setup "
+        "(currently: 'format_v3', 'row_lineage')",
     )
 
 
@@ -77,6 +126,13 @@ def pytest_addoption(parser):
         action="store_true",
         default=False,
         help="Print the sqllogictest stdin transcript for stdin-driven integration tests",
+    )
+    parser.addoption(
+        "--test-python-verbosity",
+        action="store",
+        choices=TEST_PYTHON_VERBOSITY_LEVELS,
+        default="normal",
+        help="Higher-level verbosity for test/python runs. 'verbose' prints selected environment and requirement skips.",
     )
 
 
@@ -215,13 +271,28 @@ def require_table_support(table_name: str, spark_runtime, catalog_profile) -> No
         pytest.skip(f"Catalog '{catalog_profile.name}' does not support Iceberg format version 3 in this suite")
 
 
+def pytest_report_header(config):
+    if not _is_verbose_test_python_run(config):
+        return None
+
+    return [f"test/python verbosity: {_test_python_verbosity(config)}"]
+
+
 def pytest_collection_modifyitems(config, items):
     needs_catalog_options = any(_requires_catalog_options(str(item.fspath)) for item in items)
     if needs_catalog_options:
         config._catalog_profile = _selected_catalog_profile(config)
         config._spark_runtime = _selected_spark_runtime(config)
+        config._requirement_skip_log = []
 
     for item in items:
+        if needs_catalog_options and _requires_catalog_options(str(item.fspath)):
+            failures = _collect_requirement_failures(item, config._catalog_profile, config._spark_runtime)
+            if failures:
+                skip_reason = "Test requirements not met: " + "; ".join(failures)
+                item.add_marker(pytest.mark.skip(reason=skip_reason))
+                config._requirement_skip_log.append((item.nodeid, failures))
+
         marker = item.get_closest_marker("requires_spark")
         if marker is None:
             continue
@@ -233,3 +304,31 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(
                 pytest.mark.skip(reason=f"Requires Spark {spec}, but current PySpark version is {PYSPARK_VERSION}")
             )
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    if not _is_verbose_test_python_run(config):
+        return
+
+    profile = getattr(config, "_catalog_profile", None)
+    runtime = getattr(config, "_spark_runtime", None)
+    if profile is not None or runtime is not None:
+        terminalreporter.section("test/python environment", sep="-", blue=True, bold=False)
+        if profile is not None:
+            terminalreporter.line(
+                f"active catalog: {profile.name} (capabilities: {', '.join(sorted(profile.capabilities)) or 'none'})"
+            )
+        if runtime is not None:
+            terminalreporter.line(
+                f"spark runtime: {runtime.name} (capabilities: {', '.join(sorted(runtime.capabilities)) or 'none'})"
+            )
+
+    requirement_skips = getattr(config, "_requirement_skip_log", [])
+    if not requirement_skips:
+        return
+
+    terminalreporter.section("test/python requirement skips", sep="-", blue=True, bold=False)
+    for nodeid, failures in requirement_skips:
+        terminalreporter.line(nodeid)
+        for failure in failures:
+            terminalreporter.line(f"  - {failure}")

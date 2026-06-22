@@ -53,6 +53,13 @@ class SparkRuntime:
     def matches_pyspark(self, pyspark_version: Version) -> bool:
         return tuple(pyspark_version.release[:2]) == tuple(self.spark_version.release[:2])
 
+    @property
+    def capabilities(self) -> frozenset[str]:
+        capabilities = set()
+        if self.supports_v3:
+            capabilities.add("format_v3")
+        return frozenset(capabilities)
+
 
 @dataclass(frozen=True)
 class CatalogProfile:
@@ -78,6 +85,15 @@ class CatalogProfile:
             "warehouse": self.pyiceberg_warehouse,
             **self.pyiceberg_options,
         }
+
+    @property
+    def capabilities(self) -> frozenset[str]:
+        capabilities = set()
+        if self.supports_v3_tables:
+            capabilities.add("format_v3")
+        if self.supports_row_lineage:
+            capabilities.add("row_lineage")
+        return frozenset(capabilities)
 
 
 SPARK_RUNTIMES = {

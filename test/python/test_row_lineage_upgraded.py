@@ -63,21 +63,15 @@ ROW_LINEAGE_SEED = SparkSeedTable(
 
 class TestRowLineageUnittestStdin:
     @pytest.mark.requires_spark(">=4.0")
+    @pytest.mark.requires_capabilities("row_lineage", "format_v3")
     @pytest.mark.spark_seed_tables(ROW_LINEAGE_SEED)
     def test_row_lineage_test_upgraded_end_to_end(
         self,
         catalog_connection,
-        catalog_profile,
-        spark_runtime,
         unittest_binary,
         unittest_test_config,
         print_unittest_stdin,
     ):
-        if not catalog_profile.supports_row_lineage:
-            pytest.skip(f"Catalog '{catalog_profile.name}' does not support row-lineage coverage in this suite")
-        if not spark_runtime.supports_v3:
-            pytest.skip(f"Spark runtime {spark_runtime.name} does not support row-lineage coverage in this suite")
-
         with DuckDBUnittestRunner(
             unittest_binary,
             test_config=unittest_test_config,
