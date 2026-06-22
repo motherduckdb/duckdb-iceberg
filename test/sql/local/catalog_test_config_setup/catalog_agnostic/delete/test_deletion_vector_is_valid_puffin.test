@@ -12,6 +12,8 @@ require iceberg
 
 require httpfs
 
+require json
+
 statement ok
 DROP TABLE IF EXISTS my_datalake.default.dv_puffin_container;
 
@@ -39,10 +41,32 @@ set variable dv_path = (
     LIMIT 1
 );
 
-# The deletion-vector file must be a valid Puffin file: it begins AND ends with the Puffin
-# magic "PFA1" (0x50 0x46 0x41 0x31). A bare deletion-vector blob (the bug this guards
-# against) would instead begin with the blob's 4-byte big-endian length.
-query II
-SELECT content[1:4]::VARCHAR, content[size - 3:size]::VARCHAR FROM read_blob(getvariable('dv_path'));
+# Parse the file as a real Puffin container (not just a magic-byte check): verify the
+# leading, footer-start, and trailing PFA1 magic, parse the footer FileMetadata JSON, and
+# recover the deletion-vector blob via the footer's own offset/length -- confirming it is a
+# deletion-vector-v1 blob (magic 0xD1D33964, right after the blob's 4-byte length prefix).
+# A bare deletion-vector blob (the bug this guards against) has no footer to parse at all.
+query TTTTII
+WITH f AS (
+    SELECT content AS b, size AS n FROM read_blob(getvariable('dv_path'))
+), loc AS (
+    -- byte offset of the footer JSON object, located via the hex of '{"blobs"' (7b22626c6f627322)
+    SELECT b, n, CAST((position('7b22626c6f627322' IN lower(hex(b))) + 1) / 2 AS BIGINT) AS js_start FROM f
+), parsed AS (
+    -- the footer payload JSON ends 12 bytes before EOF (FooterPayloadSize + Flags + trailing magic)
+    SELECT b, n,
+           b[js_start - 4 : js_start - 1]::VARCHAR AS footer_magic,
+           json_extract_string(decode(b[js_start : n - 12]), '$.blobs[0].type') AS blob_type,
+           json_extract(decode(b[js_start : n - 12]), '$.blobs[0].offset')::BIGINT AS off
+    FROM loc
+)
+SELECT
+    b[1:4]::VARCHAR,                                          -- leading magic
+    b[n - 3:n]::VARCHAR,                                      -- trailing magic
+    footer_magic,                                             -- footer-start magic
+    blob_type,                                                -- blob type from the parsed footer
+    off,                                                      -- content_offset from the footer (blob at offset 4)
+    CASE WHEN upper(hex(b[off + 5 : off + 8])) = 'D1D33964' THEN 1 ELSE 0 END  -- DV magic at recovered blob
+FROM parsed;
 ----
-PFA1	PFA1
+PFA1	PFA1	PFA1	deletion-vector-v1	4	1
