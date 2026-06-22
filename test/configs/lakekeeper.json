@@ -58,12 +58,6 @@
       "paths": [
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/should_do_filter_pruning_on_expressionless_string_filters.test"
       ]
-    },
-    {
-      "reason": "Lakekeeper does not have this table generated due to weird bugs in spark table creation logic",
-      "paths": [
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/other_engines/partitions/truncate/test_append_truncate_varchar_for_insert.test"
-      ]
     }
   ]
 }
