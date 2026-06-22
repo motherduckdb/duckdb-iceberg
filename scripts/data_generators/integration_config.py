@@ -20,6 +20,10 @@ REST_CATALOG_NAMES = ("fixture", "lakekeeper", "polaris", "nessie")
 GENERATOR_CATALOG_NAMES = ("fixture", "lakekeeper", "local", "polaris", "nessie")
 
 
+def _env_or_default(name: str, default: str) -> str:
+    return os.getenv(name) or default
+
+
 @dataclass(frozen=True)
 class SparkRuntime:
     name: str
@@ -169,8 +173,8 @@ REST_CATALOG_PROFILES = {
         pyiceberg_oauth_token_url=os.getenv("OAUTH2_SERVER_URI", "http://localhost:8181/api/catalog/v1/oauth/tokens"),
         pyiceberg_oauth_payload={
             "grant_type": "client_credentials",
-            "client_id": os.getenv("POLARIS_CLIENT_ID", "root"),
-            "client_secret": os.getenv("POLARIS_CLIENT_SECRET", "s3cr3t"),
+            "client_id": _env_or_default("POLARIS_CLIENT_ID", "root"),
+            "client_secret": _env_or_default("POLARIS_CLIENT_SECRET", "s3cr3t"),
             "scope": "PRINCIPAL_ROLE:ALL",
         },
         pyiceberg_options={

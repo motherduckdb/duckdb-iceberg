@@ -11,6 +11,10 @@ from scripts.data_generators.integration_config import get_spark_runtime
 CONNECTION_KEY = "polaris"
 
 
+def _env_or_default(name, default):
+    return os.getenv(name) or default
+
+
 @IcebergConnection.register(CONNECTION_KEY)
 class IcebergSparkLocal(IcebergConnection):
     def __init__(self, runtime=None):
@@ -23,8 +27,8 @@ class IcebergSparkLocal(IcebergConnection):
             f"--packages {self.runtime.runtime_package},{self.runtime.aws_bundle_package} pyspark-shell"
         )
 
-        client_id = os.getenv("POLARIS_CLIENT_ID", "root")
-        client_secret = os.getenv("POLARIS_CLIENT_SECRET", "s3cr3t")
+        client_id = _env_or_default("POLARIS_CLIENT_ID", "root")
+        client_secret = _env_or_default("POLARIS_CLIENT_SECRET", "s3cr3t")
         os.environ["AWS_REGION"] = "us-west-2"
         os.environ["AWS_ACCESS_KEY_ID"] = "minio_root"
         os.environ["AWS_SECRET_ACCESS_KEY"] = "m1n1opwd"
