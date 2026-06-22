@@ -13,8 +13,6 @@ require httpfs
 
 require icu
 
-require ducklake
-
 # Do not ignore 'HTTP' error messages!
 set ignore_error_messages
 

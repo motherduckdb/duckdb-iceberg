@@ -13,8 +13,6 @@ require httpfs
 
 require icu
 
-require ducklake
-
 statement ok
 call enable_logging('Iceberg');
 

@@ -13,8 +13,6 @@ require httpfs
 
 require icu
 
-require ducklake
-
 require core_functions
 
 # Do not ignore 'HTTP' error messages!
