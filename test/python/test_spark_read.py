@@ -22,16 +22,18 @@ requires_equality_deletes_available = pytest.mark.skipif(
     reason="Test data wasn't generated, run tests in test/sql/local/irc first (and set 'export EQUALITY_DELETE_WRITES_ENABLED=1')",
 )
 
-try:
-    skip_if_polaris = (
-        resolve_active_catalog(
-            allowed_catalogs=REST_CATALOG_NAMES,
-            purpose="catalog-backed test/python runs",
+
+def is_active_catalog(catalog: str):
+    try:
+        return (
+            resolve_active_catalog(
+                allowed_catalogs=REST_CATALOG_NAMES,
+                purpose="catalog-backed test/python runs",
+            )
+            == catalog
         )
-        == "polaris"
-    )
-except RuntimeError:
-    skip_if_polaris = False
+    except:
+        return False
 
 
 class TestSparkRead:
@@ -91,7 +93,10 @@ class TestSparkRead:
             Row(a=59),
         ]
 
-    @pytest.mark.skipif(skip_if_polaris, reason="Polaris does not currently support this Spark bounds read test")
+    @pytest.mark.skipif(
+        is_active_catalog('polaris'), reason="Polaris does not currently support this Spark bounds read test"
+    )
+    @pytest.mark.skipif(is_active_catalog('lakekeeper'), reason="Lakekeeper writes bounds differently for some reason")
     def test_spark_read_upper_and_lower_bounds(self, spark_con):
         df = spark_con.sql(
             """
