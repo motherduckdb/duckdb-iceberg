@@ -1,7 +1,7 @@
 ## README
 Script used to generate test data for this repo.
 Run it with pytest, one catalog per invocation:
-`python3 -m pytest scripts/data_generators/test_generate_data.py --catalog <catalog> --spark-runtime <3.5|4.0>`
+`python3 -m pytest scripts/data_generators/test_generate_data.py`
 
 Prefer `make data` or the catalog-specific make targets.
 

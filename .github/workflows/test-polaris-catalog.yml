@@ -74,7 +74,7 @@ jobs:
           export POLARIS_CLIENT_ID=$(cat tmp/polaris_client_id.txt)
           export POLARIS_CLIENT_SECRET=$(cat tmp/polaris_client_secret.txt)
           source .venv-spark4/bin/activate
-          python3 -m pytest test/python --catalog polaris --spark-runtime 4.0 --unittest-binary ./build/release/test/unittest
+          python3 -m pytest test/python --unittest-binary ./build/release/test/unittest
 
       - name: Upload Polaris Logs
         if: always()

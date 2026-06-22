@@ -14,9 +14,9 @@ if str(REPO_ROOT) not in sys.path:
 
 from scripts.data_generators.integration_config import (
     REST_CATALOG_NAMES,
-    SPARK_RUNTIME_NAMES,
     get_rest_catalog_profile,
-    get_spark_runtime,
+    resolve_active_catalog,
+    resolve_pyspark_runtime,
 )
 from scripts.data_generators.tests import IcebergTest
 from spark_seed import SparkSeedTable
@@ -34,29 +34,22 @@ def _requires_catalog_options(path: str) -> bool:
     return "cloud" not in Path(path).parts
 
 
-def _has_catalog_selection(config: pytest.Config) -> bool:
-    return bool(config.getoption("--catalog") or config.getoption("--spark-runtime"))
-
-
 def _selected_catalog_profile(config: pytest.Config):
-    catalog = config.getoption("--catalog")
-    if not catalog:
-        raise pytest.UsageError("Missing required --catalog option for catalog-backed test/python runs")
+    try:
+        catalog = resolve_active_catalog(
+            allowed_catalogs=REST_CATALOG_NAMES,
+            purpose="catalog-backed test/python runs",
+        )
+    except RuntimeError as exc:
+        raise pytest.UsageError(str(exc)) from exc
     return get_rest_catalog_profile(catalog)
 
 
 def _selected_spark_runtime(config: pytest.Config):
-    runtime_name = config.getoption("--spark-runtime")
-    if not runtime_name:
-        raise pytest.UsageError("Missing required --spark-runtime option for catalog-backed test/python runs")
-    runtime = get_spark_runtime(runtime_name)
-    if pyspark is None or PYSPARK_VERSION is None:
-        raise pytest.UsageError("PySpark is required for catalog-backed test/python runs")
-    if not runtime.matches_pyspark(PYSPARK_VERSION):
-        raise pytest.UsageError(
-            f"Selected --spark-runtime {runtime.name} expects PySpark {runtime.spark_version}.*, "
-            f"but installed PySpark is {PYSPARK_VERSION}"
-        )
+    try:
+        runtime, _ = resolve_pyspark_runtime(purpose="catalog-backed test/python runs")
+    except RuntimeError as exc:
+        raise pytest.UsageError(str(exc)) from exc
     return runtime
 
 
@@ -74,20 +67,6 @@ def pytest_configure(config):
 
 def pytest_addoption(parser):
     parser.addoption(
-        "--catalog",
-        action="store",
-        choices=REST_CATALOG_NAMES,
-        default=None,
-        help="Active REST catalog profile for catalog-backed Python integration tests",
-    )
-    parser.addoption(
-        "--spark-runtime",
-        action="store",
-        choices=SPARK_RUNTIME_NAMES,
-        default=None,
-        help="Spark runtime to use for catalog-backed Python integration tests",
-    )
-    parser.addoption(
         "--unittest-binary",
         action="store",
         default=None,
@@ -102,7 +81,9 @@ def pytest_addoption(parser):
 
 
 def pytest_ignore_collect(collection_path, config):
-    if _has_catalog_selection(config) and "cloud" in Path(str(collection_path)).parts:
+    requested_paths = [Path(arg) for arg in config.args if not arg.startswith("-")]
+    explicit_cloud_run = any("cloud" in path.parts for path in requested_paths)
+    if not explicit_cloud_run and "cloud" in Path(str(collection_path)).parts:
         return True
     return False
 

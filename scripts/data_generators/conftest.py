@@ -6,13 +6,10 @@ import pytest
 
 from scripts.data_generators.connections import IcebergConnection
 from scripts.data_generators.integration_config import (
-    DEFAULT_SPARK_RUNTIME_NAME,
     GENERATOR_CATALOG_NAMES,
-    SPARK_RUNTIME_NAMES,
-    get_spark_runtime,
+    resolve_active_catalog,
+    resolve_pyspark_runtime,
 )
-
-CATALOG_CHOICES = GENERATOR_CATALOG_NAMES
 
 
 def parse_connection_args(values: list[str]) -> dict[str, str]:
@@ -39,40 +36,24 @@ def parse_connection_args(values: list[str]) -> dict[str, str]:
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
-        "--catalog",
-        action="append",
-        choices=CATALOG_CHOICES,
-        default=[],
-        help="Run generators against exactly one active catalog",
-    )
-    parser.addoption(
         "--connection-arg",
         action="append",
         default=[],
         metavar="KEY=VALUE",
         help="Extra keyword arguments passed to the resolved connection constructor",
     )
-    parser.addoption(
-        "--spark-runtime",
-        action="store",
-        choices=SPARK_RUNTIME_NAMES,
-        default=DEFAULT_SPARK_RUNTIME_NAME,
-        help="Named Spark runtime used for generator-backed catalogs",
-    )
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    catalogs = config.getoption("catalog")
-    if not catalogs:
-        raise pytest.UsageError("Missing required --catalog option")
-    if len(catalogs) != 1:
-        raise pytest.UsageError(
-            f"Expected exactly one --catalog value, got {len(catalogs)}"
-        )
-
-    config._active_catalog = catalogs[0]
     config._connection_args = parse_connection_args(config.getoption("connection_arg"))
-    config._spark_runtime = get_spark_runtime(config.getoption("spark_runtime"))
+    try:
+        config._active_catalog = resolve_active_catalog(
+            allowed_catalogs=GENERATOR_CATALOG_NAMES,
+            purpose="data generator tests",
+        )
+        config._spark_runtime, _ = resolve_pyspark_runtime(purpose="data generator tests")
+    except RuntimeError as exc:
+        raise pytest.UsageError(str(exc)) from exc
 
 
 @pytest.fixture(scope="session")

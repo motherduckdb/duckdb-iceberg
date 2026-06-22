@@ -23,12 +23,16 @@ install_requirements:
 
 # Custom makefile targets
 data: data_clean fixture_start
-	python3 -m pytest scripts/data_generators/test_generate_data.py --catalog fixture --spark-runtime 4.0
-	python3 -m pytest scripts/data_generators/test_generate_data.py --catalog local --spark-runtime 4.0
+	python3 -m pytest scripts/data_generators/test_generate_data.py
+	$(call set_active_catalog,local)
+	python3 -m pytest scripts/data_generators/test_generate_data.py
+	$(call set_active_catalog,fixture)
 
 data_large: data data_clean
-	python3 -m pytest scripts/data_generators/test_generate_data.py --catalog fixture --spark-runtime 4.0
-	python3 -m pytest scripts/data_generators/test_generate_data.py --catalog local --spark-runtime 4.0
+	python3 -m pytest scripts/data_generators/test_generate_data.py
+	$(call set_active_catalog,local)
+	python3 -m pytest scripts/data_generators/test_generate_data.py
+	$(call set_active_catalog,fixture)
 
 data_clean:
 	rm -rf data/generated
