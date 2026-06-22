@@ -13,11 +13,23 @@ lakekeeper-stop:
 	@echo "Stopping Lakekeeper catalog..."
 	(cd .catalogs/lakekeeper/examples/access-control-simple && docker compose down -v)
 
+lakekeeper-configure-auth:
+	@echo "Allowing local HTTP OAuth for Lakekeeper Keycloak realm..."
+	(cd .catalogs/lakekeeper/examples/access-control-simple && \
+	docker compose exec -T keycloak /opt/keycloak/bin/kcadm.sh config credentials \
+		--server http://localhost:8080 \
+		--realm master \
+		--user admin \
+		--password admin && \
+	docker compose exec -T keycloak /opt/keycloak/bin/kcadm.sh update realms/iceberg \
+		-s sslRequired=NONE)
+
 lakekeeper: lakekeeper-clone lakekeeper-stop
 	$(call stop_active_catalog)
 	@echo "Starting Lakekeeper catalog..."
 	@grep -q '127.0.0.1 minio' /etc/hosts || (echo "Adding minio host entry..." && echo "127.0.0.1 minio" | sudo tee -a /etc/hosts)
 	(cd .catalogs/lakekeeper/examples/access-control-simple && docker compose up -d)
+	$(MAKE) lakekeeper-configure-auth
 	@echo "Bootstrapping Lakekeeper..."
 	cd .catalogs/lakekeeper/examples/access-control-simple && \
 	docker compose exec jupyter start.sh bash -lc "\
