@@ -1,4 +1,5 @@
 LAKEKEEPER_ENV_FILE ?= scripts/envs/lakekeeper.env
+LAKEKEEPER_SPARK_LOCAL_DIR ?= /home/jovyan/.spark-local
 
 lakekeeper-clone:
 	@if [ ! -d ".catalogs/lakekeeper" ]; then \
@@ -32,10 +33,14 @@ lakekeeper: lakekeeper-clone lakekeeper-stop
 	$(MAKE) lakekeeper-configure-auth
 	@echo "Bootstrapping Lakekeeper..."
 	cd .catalogs/lakekeeper/examples/access-control-simple && \
-	docker compose exec jupyter start.sh bash -lc "\
-		jupyter nbconvert --to notebook --execute --output-dir=/tmp /home/jovyan/examples/01-Bootstrap.ipynb && \
-		jupyter nbconvert --to notebook --execute --output-dir=/tmp /home/jovyan/examples/02-Create-Warehouse.ipynb && \
-		jupyter nbconvert --to notebook --execute --output-dir=/tmp /home/jovyan/examples/03-01-Spark.ipynb"
+	docker compose run --rm --no-deps \
+		-e SPARK_LOCAL_DIRS='$(LAKEKEEPER_SPARK_LOCAL_DIR)' \
+		jupyter bash -lc '\
+			rm -rf "$$SPARK_LOCAL_DIRS" /tmp/blockmgr-* /tmp/spark-* && \
+			mkdir -p "$$SPARK_LOCAL_DIRS" && \
+			jupyter nbconvert --to notebook --execute --output-dir=/tmp /home/jovyan/examples/01-Bootstrap.ipynb && \
+			jupyter nbconvert --to notebook --execute --output-dir=/tmp /home/jovyan/examples/02-Create-Warehouse.ipynb && \
+			jupyter nbconvert --to notebook --execute --output-dir=/tmp /home/jovyan/examples/03-01-Spark.ipynb'
 	$(call set_active_catalog,lakekeeper)
 
 lakekeeper-data: lakekeeper
