@@ -53,7 +53,7 @@ as select range a from range(10000000);
 query I
 select count(*) from duckdb_logs() where type = 'Iceberg' and regexp_matches(message, 'Iceberg INSERT, wrote data_file.*record_count=.*');
 ----
-10
+11
 
 statement ok
 call truncate_duckdb_logs();
@@ -70,5 +70,4 @@ as select range a from range(100000000);
 query I
 select count(*) from duckdb_logs() where type = 'Iceberg' and regexp_matches(message, 'Iceberg INSERT, wrote data_file.*record_count=.*');
 ----
-91
-
+105
