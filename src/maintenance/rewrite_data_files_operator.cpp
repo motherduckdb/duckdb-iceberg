@@ -237,7 +237,7 @@ SourceResultType PhysicalRewriteDataFiles::GetDataInternal(ExecutionContext &con
 	chunk.SetValue(0, 0, Value::BIGINT(rewritten_data_files));
 	chunk.SetValue(1, 0, Value::BIGINT(added_data_files));
 	chunk.SetValue(2, 0, Value::BIGINT(rewritten_bytes));
-	chunk.SetCardinality(1);
+	chunk.SetChildCardinality(1);
 	return SourceResultType::FINISHED;
 }
 
