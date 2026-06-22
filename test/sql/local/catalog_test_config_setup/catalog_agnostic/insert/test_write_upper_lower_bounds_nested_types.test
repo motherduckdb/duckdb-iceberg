@@ -29,6 +29,9 @@ SET TimeZone = 'UTC';
 
 
 statement ok
+create schema if not exists my_datalake.default;
+
+statement ok
 drop table if exists my_datalake.default.bounds_nested_types;
 
 statement ok

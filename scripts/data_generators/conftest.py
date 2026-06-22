@@ -5,9 +5,11 @@ from collections.abc import Iterator
 import pytest
 
 from scripts.data_generators.connections import IcebergConnection
-
-
-CATALOG_CHOICES = ("polaris", "lakekeeper", "local", "spark-rest", "nessie")
+from scripts.data_generators.integration_config import (
+    GENERATOR_CATALOG_NAMES,
+    resolve_active_catalog,
+    resolve_pyspark_runtime,
+)
 
 
 def parse_connection_args(values: list[str]) -> dict[str, str]:
@@ -34,13 +36,6 @@ def parse_connection_args(values: list[str]) -> dict[str, str]:
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
-        "--catalog",
-        action="append",
-        choices=CATALOG_CHOICES,
-        default=[],
-        help="Run generators against exactly one active catalog",
-    )
-    parser.addoption(
         "--connection-arg",
         action="append",
         default=[],
@@ -50,16 +45,15 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    catalogs = config.getoption("catalog")
-    if not catalogs:
-        raise pytest.UsageError("Missing required --catalog option")
-    if len(catalogs) != 1:
-        raise pytest.UsageError(
-            f"Expected exactly one --catalog value, got {len(catalogs)}"
-        )
-
-    config._active_catalog = catalogs[0]
     config._connection_args = parse_connection_args(config.getoption("connection_arg"))
+    try:
+        config._active_catalog = resolve_active_catalog(
+            allowed_catalogs=GENERATOR_CATALOG_NAMES,
+            purpose="data generator tests",
+        )
+        config._spark_runtime, _ = resolve_pyspark_runtime(purpose="data generator tests")
+    except RuntimeError as exc:
+        raise pytest.UsageError(str(exc)) from exc
 
 
 @pytest.fixture(scope="session")
@@ -70,6 +64,11 @@ def active_catalog(pytestconfig: pytest.Config) -> str:
 @pytest.fixture(scope="session")
 def connection_args(pytestconfig: pytest.Config) -> dict[str, str]:
     return dict(pytestconfig._connection_args)
+
+
+@pytest.fixture(scope="session")
+def spark_runtime(pytestconfig: pytest.Config):
+    return pytestconfig._spark_runtime
 
 
 @pytest.fixture
@@ -111,9 +110,10 @@ def iceberg_connection(
     active_catalog: str,
     catalog_mapping: dict[str, str],
     connection_args: dict[str, str],
+    spark_runtime,
 ) -> IcebergConnection:
     connection_key = catalog_mapping.get(active_catalog, active_catalog)
-    resolved_connection_key = (connection_key, tuple(sorted(connection_args.items())))
+    resolved_connection_key = (connection_key, spark_runtime.name, tuple(sorted(connection_args.items())))
     active_connection = _connection_manager["active_connection"]
     active_connection_key: tuple[str, tuple[tuple[str, str], ...]] | None = _connection_manager["active_connection_key"]
 
@@ -122,7 +122,7 @@ def iceberg_connection(
             active_connection.close()
 
         connection_class = IcebergConnection.get_class(connection_key)
-        active_connection = connection_class(**connection_args)
+        active_connection = connection_class(runtime=spark_runtime, **connection_args)
         _connection_manager["active_connection"] = active_connection
         _connection_manager["active_connection_key"] = resolved_connection_key
 

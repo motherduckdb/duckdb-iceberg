@@ -1,7 +1,7 @@
 ## README
 Script used to generate test data for this repo.
 Run it with pytest, one catalog per invocation:
-`python3 -m pytest scripts/data_generators/test_generate_data.py --catalog <catalog>`
+`python3 -m pytest scripts/data_generators/test_generate_data.py`
 
 Prefer `make data` or the catalog-specific make targets.
 
@@ -45,7 +45,7 @@ class Test(IcebergTest):
 - If the case should use a different connection implementation for a specific catalog, set `catalog_mapping`, for example:
 ```py
 class Test(IcebergTest):
-    catalog_mapping = {"spark-rest": "spark-rest-single-thread"}
+    catalog_mapping = {"fixture": "fixture-single-thread"}
 ```
 - If a case should be skipped for a specific catalog, set `skips = {"catalog": "reason"}`.
 - If the case only applies to some catalogs, set `supported_catalogs`.

@@ -26,7 +26,7 @@ services:
           - warehouse.minio
     volumes:
       - type: bind
-        source: ../data/generated/iceberg/spark-rest/
+        source: ../data/generated/iceberg/fixture/
         target: /data
     ports:
       - 9001:9001
