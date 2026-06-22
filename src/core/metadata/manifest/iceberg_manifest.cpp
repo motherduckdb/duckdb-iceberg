@@ -648,9 +648,6 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	metadata_values.emplace_back("partition-spec", current_partition_spec.FieldsToJSONString());
 	metadata_values.emplace_back("partition-spec-id", std::to_string(current_partition_spec.spec_id));
 	metadata_values.emplace_back("format-version", std::to_string(table_metadata.iceberg_version));
-	// The 'content' metadata must reflect what the manifest holds ("data" or "deletes"), not be
-	// hardcoded. A delete manifest written as "data" is rejected by spec-strict readers that
-	// cross-check this key against the manifest list entry's content type.
 	metadata_values.emplace_back("content",
 	                             manifest_file.content == IcebergManifestContentType::DATA ? "data" : "deletes");
 	auto metadata_map = Value::STRUCT(std::move(metadata_values));
