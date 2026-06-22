@@ -190,22 +190,9 @@ def duckdb_catalog_init_sql(catalog_profile):
 
 
 @pytest.fixture(scope="session")
-def bearer_token(catalog_profile):
-    requests = pytest.importorskip("requests")
-    response = requests.post(
-        catalog_profile.pyiceberg_oauth_token_url,
-        data=catalog_profile.pyiceberg_oauth_payload,
-    )
-    assert response.status_code == 200
-    access_token = response.json().get("access_token")
-    assert access_token
-    return access_token
-
-
-@pytest.fixture(scope="session")
-def rest_catalog(catalog_profile, bearer_token):
+def rest_catalog(catalog_profile):
     pyice_rest = pytest.importorskip("pyiceberg.catalog.rest")
-    return pyice_rest.RestCatalog("rest", **catalog_profile.build_pyiceberg_config(bearer_token))
+    return pyice_rest.RestCatalog("rest", **catalog_profile.build_pyiceberg_config())
 
 
 def _find_generator_case(table_name: str):

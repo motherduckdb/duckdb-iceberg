@@ -78,11 +78,17 @@ class CatalogProfile:
     def duckdb_catalog_init_sql(self) -> str:
         return load_test_config(self.unittest_config)["on_init"]
 
-    def build_pyiceberg_config(self, token: str) -> dict[str, str]:
+    def build_pyiceberg_config(self) -> dict[str, str]:
+        credential = self.pyiceberg_oauth_payload["client_secret"]
+        if client_id := self.pyiceberg_oauth_payload.get("client_id"):
+            credential = f"{client_id}:{credential}"
+
         return {
             "uri": self.pyiceberg_uri,
-            "token": token,
             "warehouse": self.pyiceberg_warehouse,
+            "credential": credential,
+            "oauth2-server-uri": self.pyiceberg_oauth_token_url,
+            "scope": self.pyiceberg_oauth_payload.get("scope", "catalog"),
             **self.pyiceberg_options,
         }
 

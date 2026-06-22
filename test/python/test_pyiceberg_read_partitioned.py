@@ -150,6 +150,8 @@ TIMESTAMPTZ_ROWS = [
 # ---------------------------------------------------------------------------
 
 
+# All of these tables are generated together, so all of them need V3 as a result
+@pytest.mark.requires_capabilities("format_v3")
 class TestPyIcebergReadPartitioned:
     # ------------------------------------------------------------------ INT
     @pytest.mark.parametrize(

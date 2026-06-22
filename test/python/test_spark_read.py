@@ -159,6 +159,7 @@ class TestSparkRead:
         ]
 
     @pytest.mark.requires_spark(">=4.0")
+    @pytest.mark.requires_capabilities("format_v3")
     def test_duckdb_written_deletion_vectors(self, spark_con):
         # requires test_delete_consolidation_transactional.test to run
         res = spark_con.sql(
@@ -172,6 +173,7 @@ class TestSparkRead:
         )
 
     @pytest.mark.requires_spark(">=4.0")
+    @pytest.mark.requires_capabilities("format_v3")
     def test_spark_read_duckdb_created_variant(self, spark_con):
         VariantVal = pyspark.sql.VariantVal
 
@@ -201,6 +203,7 @@ class TestSparkRead:
         )
 
     @pytest.mark.requires_spark(">=4.0")
+    @pytest.mark.requires_capabilities("row_lineage", "format_v3")
     def test_duckdb_written_row_lineage(self, spark_con):
         df = spark_con.sql(
             """
