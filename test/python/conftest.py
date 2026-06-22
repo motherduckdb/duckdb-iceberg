@@ -83,18 +83,22 @@ def _requirement_failure_message(requirement: str, catalog_profile, spark_runtim
 
 
 def _collect_requirement_failures(item, catalog_profile, spark_runtime) -> list[str]:
-    marker = item.get_closest_marker("requires_capabilities")
-    if marker is None:
-        return []
-
     failures = []
-    for requirement in marker.args:
-        if not isinstance(requirement, str):
-            raise pytest.UsageError(
-                f"{item.nodeid} uses requires_capabilities with a non-string requirement: {requirement!r}"
-            )
-        failures.extend(_requirement_failure_message(requirement, catalog_profile, spark_runtime))
+    for marker in item.iter_markers(name="requires_capabilities"):
+        for requirement in marker.args:
+            if not isinstance(requirement, str):
+                raise pytest.UsageError(
+                    f"{item.nodeid} uses requires_capabilities with a non-string requirement: {requirement!r}"
+                )
+            failures.extend(_requirement_failure_message(requirement, catalog_profile, spark_runtime))
     return failures
+
+
+def capability_param(value, *requirements: str, id: str | None = None):
+    marks = ()
+    if requirements:
+        marks = (pytest.mark.requires_capabilities(*requirements),)
+    return pytest.param(value, marks=marks, id=id)
 
 
 def pytest_configure(config):
@@ -260,15 +264,6 @@ def catalog_connection(request, catalog_session_connection):
 @pytest.fixture()
 def spark_con(catalog_connection):
     return catalog_connection.con
-
-
-def require_table_support(table_name: str, spark_runtime, catalog_profile) -> None:
-    if "format_version_3" not in table_name:
-        return
-    if not spark_runtime.supports_v3:
-        pytest.skip(f"Spark runtime {spark_runtime.name} does not support Iceberg format version 3")
-    if not catalog_profile.supports_v3_tables:
-        pytest.skip(f"Catalog '{catalog_profile.name}' does not support Iceberg format version 3 in this suite")
 
 
 def pytest_report_header(config):

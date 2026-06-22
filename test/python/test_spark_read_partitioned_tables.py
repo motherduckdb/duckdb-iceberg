@@ -25,11 +25,8 @@ SparkContext = pyspark.SparkContext
 Row = pyspark_sql.Row
 
 
-def _get_spark(spark_con, spark_runtime, catalog_profile, table_name=None):
-    """Extract the Spark session, skipping v3 tables for runtimes or catalogs that do not support them."""
-    if table_name:
-        require_table_support(table_name, spark_runtime, catalog_profile)
-    return spark_con
+def _table_param(table_name, *requirements):
+    return capability_param(table_name, *requirements, id=table_name)
 
 
 # ---------------------------------------------------------------------------
@@ -139,90 +136,82 @@ class TestSparkReadPartitionedTables:
     @pytest.mark.parametrize(
         "table_name",
         [
-            "test_table_partitioned_by_int_format_version_2",
-            "test_table_partitioned_by_int_format_version_3",
+            _table_param("test_table_partitioned_by_int_format_version_2"),
+            _table_param("test_table_partitioned_by_int_format_version_3", "format_v3"),
         ],
     )
-    def test_int_partitioned(self, spark_con, spark_runtime, catalog_profile, table_name):
-        spark = _get_spark(spark_con, spark_runtime, catalog_profile, table_name)
-        res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
+    def test_int_partitioned(self, spark_con, table_name):
+        res = spark_con.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == INT_ROWS
 
     # --------------------------------------------------------------- BIGINT
     @pytest.mark.parametrize(
         "table_name",
         [
-            "test_table_partitioned_by_bigint_format_version_2",
-            "test_table_partitioned_by_bigint_format_version_3",
+            _table_param("test_table_partitioned_by_bigint_format_version_2"),
+            _table_param("test_table_partitioned_by_bigint_format_version_3", "format_v3"),
         ],
     )
-    def test_bigint_partitioned(self, spark_con, spark_runtime, catalog_profile, table_name):
-        spark = _get_spark(spark_con, spark_runtime, catalog_profile, table_name)
-        res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
+    def test_bigint_partitioned(self, spark_con, table_name):
+        res = spark_con.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == BIGINT_ROWS
 
     # -------------------------------------------------------------- VARCHAR
     @pytest.mark.parametrize(
         "table_name",
         [
-            "test_table_partitioned_by_varchar_format_version_2",
-            "test_table_partitioned_by_varchar_format_version_3",
+            _table_param("test_table_partitioned_by_varchar_format_version_2"),
+            _table_param("test_table_partitioned_by_varchar_format_version_3", "format_v3"),
         ],
     )
-    def test_varchar_partitioned(self, spark_con, spark_runtime, catalog_profile, table_name):
-        spark = _get_spark(spark_con, spark_runtime, catalog_profile, table_name)
-        res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
+    def test_varchar_partitioned(self, spark_con, table_name):
+        res = spark_con.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == VARCHAR_ROWS
 
     # -------------------------------------------------------------- DECIMAL
     @pytest.mark.parametrize(
         "table_name",
         [
-            "test_table_partitioned_by_decimal_format_version_2",
-            "test_table_partitioned_by_decimal_format_version_3",
+            _table_param("test_table_partitioned_by_decimal_format_version_2"),
+            _table_param("test_table_partitioned_by_decimal_format_version_3", "format_v3"),
         ],
     )
-    def test_decimal_partitioned(self, spark_con, spark_runtime, catalog_profile, table_name):
-        spark = _get_spark(spark_con, spark_runtime, catalog_profile, table_name)
-        res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
+    def test_decimal_partitioned(self, spark_con, table_name):
+        res = spark_con.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == DECIMAL_ROWS
 
     # -------------------------------- DECIMAL / BUCKET (DuckDB-created table)
     def test_bucket_decimal_duckdb_created(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql("SELECT * FROM default.test_bucket_decimal ORDER BY id").collect()
+        res = spark_con.sql("SELECT * FROM default.test_bucket_decimal ORDER BY id").collect()
         assert res == TEST_BUCKET_DECIMAL_ROWS
 
     # ------------------------------- DECIMAL / TRUNCATE (DuckDB-created table)
     def test_truncate_decimal_duckdb_created(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql("SELECT * FROM default.test_truncate_decimal ORDER BY id").collect()
+        res = spark_con.sql("SELECT * FROM default.test_truncate_decimal ORDER BY id").collect()
         assert res == TEST_TRUNCATE_DECIMAL_ROWS
 
     # ---------------------------------------------------------------- FLOAT
     @pytest.mark.parametrize(
         "table_name",
         [
-            "test_table_partitioned_by_float_format_version_2",
-            "test_table_partitioned_by_float_format_version_3",
+            _table_param("test_table_partitioned_by_float_format_version_2"),
+            _table_param("test_table_partitioned_by_float_format_version_3", "format_v3"),
         ],
     )
-    def test_float_partitioned(self, spark_con, spark_runtime, catalog_profile, table_name):
-        spark = _get_spark(spark_con, spark_runtime, catalog_profile, table_name)
-        res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
+    def test_float_partitioned(self, spark_con, table_name):
+        res = spark_con.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == FLOAT_ROWS
 
     # --------------------------------------------------------------- DOUBLE
     @pytest.mark.parametrize(
         "table_name",
         [
-            "test_table_partitioned_by_double_format_version_2",
-            "test_table_partitioned_by_double_format_version_3",
+            _table_param("test_table_partitioned_by_double_format_version_2"),
+            _table_param("test_table_partitioned_by_double_format_version_3", "format_v3"),
         ],
     )
-    def test_double_partitioned(self, spark_con, spark_runtime, catalog_profile, table_name):
-        spark = _get_spark(spark_con, spark_runtime, catalog_profile, table_name)
-        res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
+    def test_double_partitioned(self, spark_con, table_name):
+        res = spark_con.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == DOUBLE_ROWS
 
     # ----------------------------------------------------------------- UUID
@@ -260,19 +249,18 @@ class TestSparkReadPartitionedTables:
     @pytest.mark.parametrize(
         "table_name",
         [
-            "test_table_partitioned_by_date_format_version_2",
-            "test_table_partitioned_by_date_format_version_3",
-            "test_table_partitioned_by_date_year_format_version_2",
-            "test_table_partitioned_by_date_year_format_version_3",
-            "test_table_partitioned_by_date_month_format_version_2",
-            "test_table_partitioned_by_date_month_format_version_3",
-            "test_table_partitioned_by_date_day_format_version_2",
-            "test_table_partitioned_by_date_day_format_version_3",
+            _table_param("test_table_partitioned_by_date_format_version_2"),
+            _table_param("test_table_partitioned_by_date_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_date_year_format_version_2"),
+            _table_param("test_table_partitioned_by_date_year_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_date_month_format_version_2"),
+            _table_param("test_table_partitioned_by_date_month_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_date_day_format_version_2"),
+            _table_param("test_table_partitioned_by_date_day_format_version_3", "format_v3"),
         ],
     )
-    def test_date_partitioned(self, spark_con, spark_runtime, catalog_profile, table_name):
-        spark = _get_spark(spark_con, spark_runtime, catalog_profile, table_name)
-        res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
+    def test_date_partitioned(self, spark_con, table_name):
+        res = spark_con.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == DATE_ROWS
 
     # ------------------------------------------------------------ TIMESTAMP
@@ -287,41 +275,39 @@ class TestSparkReadPartitionedTables:
     @pytest.mark.parametrize(
         "table_name",
         [
-            "test_table_partitioned_by_timestamp_format_version_3",
-            "test_table_partitioned_by_timestamp_year_format_version_2",
-            "test_table_partitioned_by_timestamp_year_format_version_3",
-            "test_table_partitioned_by_timestamp_month_format_version_2",
-            "test_table_partitioned_by_timestamp_month_format_version_3",
-            "test_table_partitioned_by_timestamp_day_format_version_2",
-            "test_table_partitioned_by_timestamp_day_format_version_3",
-            "test_table_partitioned_by_timestamp_hour_format_version_2",
-            "test_table_partitioned_by_timestamp_hour_format_version_3",
+            _table_param("test_table_partitioned_by_timestamp_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_timestamp_year_format_version_2"),
+            _table_param("test_table_partitioned_by_timestamp_year_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_timestamp_month_format_version_2"),
+            _table_param("test_table_partitioned_by_timestamp_month_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_timestamp_day_format_version_2"),
+            _table_param("test_table_partitioned_by_timestamp_day_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_timestamp_hour_format_version_2"),
+            _table_param("test_table_partitioned_by_timestamp_hour_format_version_3", "format_v3"),
         ],
     )
-    def test_timestamp_partitioned(self, spark_con, spark_runtime, catalog_profile, table_name):
-        spark = _get_spark(spark_con, spark_runtime, catalog_profile, table_name)
-        res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
+    def test_timestamp_partitioned(self, spark_con, table_name):
+        res = spark_con.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == TIMESTAMP_ROWS
 
     # --------------------------------------------------------- TIMESTAMPTZ
     @pytest.mark.parametrize(
         "table_name",
         [
-            "test_table_partitioned_by_timestamptz_format_version_2",
-            "test_table_partitioned_by_timestamptz_format_version_3",
-            "test_table_partitioned_by_timestamptz_year_format_version_2",
-            "test_table_partitioned_by_timestamptz_year_format_version_3",
-            "test_table_partitioned_by_timestamptz_month_format_version_2",
-            "test_table_partitioned_by_timestamptz_month_format_version_3",
-            "test_table_partitioned_by_timestamptz_day_format_version_2",
-            "test_table_partitioned_by_timestamptz_day_format_version_3",
-            "test_table_partitioned_by_timestamptz_hour_format_version_2",
-            "test_table_partitioned_by_timestamptz_hour_format_version_3",
+            _table_param("test_table_partitioned_by_timestamptz_format_version_2"),
+            _table_param("test_table_partitioned_by_timestamptz_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_timestamptz_year_format_version_2"),
+            _table_param("test_table_partitioned_by_timestamptz_year_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_timestamptz_month_format_version_2"),
+            _table_param("test_table_partitioned_by_timestamptz_month_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_timestamptz_day_format_version_2"),
+            _table_param("test_table_partitioned_by_timestamptz_day_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_timestamptz_hour_format_version_2"),
+            _table_param("test_table_partitioned_by_timestamptz_hour_format_version_3", "format_v3"),
         ],
     )
-    def test_timestamptz_partitioned(self, spark_con, spark_runtime, catalog_profile, table_name):
-        spark = _get_spark(spark_con, spark_runtime, catalog_profile, table_name)
-        res = spark.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
+    def test_timestamptz_partitioned(self, spark_con, table_name):
+        res = spark_con.sql(f"SELECT * FROM default.{table_name} ORDER BY id, val").collect()
         assert res == TIMESTAMPTZ_ROWS
 
     # --------------------------------------------------------- TIMESTAMP_NS
@@ -448,50 +434,44 @@ class TestSparkReadBucketTruncateForInsert:
 
     # --------------------------------------------------- BUCKET / INTEGER
     def test_bucket_int_total_rows(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql("SELECT * FROM default.bucket_partitioned_int_for_insert ORDER BY id").collect()
+        res = spark_con.sql("SELECT * FROM default.bucket_partitioned_int_for_insert ORDER BY id").collect()
         assert res == BUCKET_INT_FOR_INSERT_ROWS
 
     def test_bucket_int_filter(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql("SELECT * FROM default.bucket_partitioned_int_for_insert WHERE value = 1 ORDER BY id").collect()
+        res = spark_con.sql(
+            "SELECT * FROM default.bucket_partitioned_int_for_insert WHERE value = 1 ORDER BY id"
+        ).collect()
         assert res == [Row(id=1, value=1), Row(id=101, value=1)]
 
     # --------------------------------------------------- BUCKET / BIGINT
     def test_bucket_bigint_total_rows(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql("SELECT * FROM default.bucket_partitioned_bigint_for_insert ORDER BY id").collect()
+        res = spark_con.sql("SELECT * FROM default.bucket_partitioned_bigint_for_insert ORDER BY id").collect()
         assert res == BUCKET_BIGINT_FOR_INSERT_ROWS
 
     def test_bucket_bigint_filter(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql(
+        res = spark_con.sql(
             "SELECT * FROM default.bucket_partitioned_bigint_for_insert WHERE value = 1 ORDER BY id"
         ).collect()
         assert res == [Row(id=1, value=1), Row(id=101, value=1)]
 
     # --------------------------------------------------- BUCKET / VARCHAR
     def test_bucket_varchar_total_rows(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql("SELECT * FROM default.bucket_partitioned_varchar_for_insert ORDER BY id").collect()
+        res = spark_con.sql("SELECT * FROM default.bucket_partitioned_varchar_for_insert ORDER BY id").collect()
         assert res == BUCKET_VARCHAR_FOR_INSERT_ROWS
 
     def test_bucket_varchar_filter(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql(
+        res = spark_con.sql(
             "SELECT * FROM default.bucket_partitioned_varchar_for_insert WHERE value = 'aardvark' ORDER BY id"
         ).collect()
         assert res == [Row(id=1, value="aardvark"), Row(id=101, value="aardvark")]
 
     # ----------------------------------------------------- BUCKET / DATE
     def test_bucket_date_total_rows(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql("SELECT * FROM default.bucket_partitioned_date_for_insert ORDER BY id").collect()
+        res = spark_con.sql("SELECT * FROM default.bucket_partitioned_date_for_insert ORDER BY id").collect()
         assert res == BUCKET_DATE_FOR_INSERT_ROWS
 
     def test_bucket_date_filter(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql(
+        res = spark_con.sql(
             "SELECT * FROM default.bucket_partitioned_date_for_insert WHERE value = DATE '2020-01-01' ORDER BY id"
         ).collect()
         d = datetime.date(2020, 1, 1)
@@ -499,13 +479,11 @@ class TestSparkReadBucketTruncateForInsert:
 
     # -------------------------------------------------- BUCKET / TIMESTAMP
     def test_bucket_timestamp_total_rows(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql("SELECT * FROM default.bucket_partitioned_timestamp_for_insert ORDER BY id").collect()
+        res = spark_con.sql("SELECT * FROM default.bucket_partitioned_timestamp_for_insert ORDER BY id").collect()
         assert res == BUCKET_TIMESTAMP_FOR_INSERT_ROWS
 
     def test_bucket_timestamp_filter(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql(
+        res = spark_con.sql(
             "SELECT * FROM default.bucket_partitioned_timestamp_for_insert "
             "WHERE value = TIMESTAMP '2023-01-01 00:00:00' ORDER BY id"
         ).collect()
@@ -519,52 +497,44 @@ class TestSparkReadBucketTruncateForInsert:
 
     # ------------------------------------------------- TRUNCATE / INTEGER
     def test_truncate_int_total_rows(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql("SELECT * FROM default.truncate_partitioned_int_for_insert ORDER BY id").collect()
+        res = spark_con.sql("SELECT * FROM default.truncate_partitioned_int_for_insert ORDER BY id").collect()
         assert res == TRUNCATE_INT_FOR_INSERT_ROWS
 
     def test_truncate_int_filter(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql(
+        res = spark_con.sql(
             "SELECT * FROM default.truncate_partitioned_int_for_insert WHERE value = 1 ORDER BY id"
         ).collect()
         assert res == [Row(id=1, value=1), Row(id=101, value=1)]
 
     # -------------------------------------------------- TRUNCATE / BIGINT
     def test_truncate_bigint_total_rows(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql("SELECT * FROM default.truncate_partitioned_bigint_for_insert ORDER BY id").collect()
+        res = spark_con.sql("SELECT * FROM default.truncate_partitioned_bigint_for_insert ORDER BY id").collect()
         assert res == TRUNCATE_BIGINT_FOR_INSERT_ROWS
 
     def test_truncate_bigint_filter(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql(
+        res = spark_con.sql(
             "SELECT * FROM default.truncate_partitioned_bigint_for_insert WHERE value = 1 ORDER BY id"
         ).collect()
         assert res == [Row(id=1, value=1), Row(id=101, value=1)]
 
     # ------------------------------------------------- TRUNCATE / VARCHAR
     def test_truncate_varchar_total_rows(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql("SELECT * FROM default.truncate_partitioned_varchar_for_insert ORDER BY id").collect()
+        res = spark_con.sql("SELECT * FROM default.truncate_partitioned_varchar_for_insert ORDER BY id").collect()
         assert res == TRUNCATE_VARCHAR_FOR_INSERT_ROWS
 
     def test_truncate_varchar_filter(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql(
+        res = spark_con.sql(
             "SELECT * FROM default.truncate_partitioned_varchar_for_insert WHERE value = 'aardvark' ORDER BY id"
         ).collect()
         assert res == [Row(id=1, value="aardvark"), Row(id=101, value="aardvark")]
 
     # -------------------------------------------------- TRUNCATE / BINARY
     def test_truncate_binary_total_rows(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql("SELECT * FROM default.truncate_partitioned_binary_for_insert ORDER BY id").collect()
+        res = spark_con.sql("SELECT * FROM default.truncate_partitioned_binary_for_insert ORDER BY id").collect()
         assert res == TRUNCATE_BINARY_FOR_INSERT_ROWS
 
     def test_truncate_binary_filter(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql(
+        res = spark_con.sql(
             "SELECT * FROM default.truncate_partitioned_binary_for_insert WHERE value = X'010203' ORDER BY id"
         ).collect()
         v = bytearray(b"\x01\x02\x03")
@@ -572,13 +542,11 @@ class TestSparkReadBucketTruncateForInsert:
 
     # -------------------------------------------------- BUCKET / DECIMAL
     def test_bucket_decimal_total_rows(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql("SELECT * FROM default.bucket_partitioned_decimal_for_insert ORDER BY id").collect()
+        res = spark_con.sql("SELECT * FROM default.bucket_partitioned_decimal_for_insert ORDER BY id").collect()
         assert res == BUCKET_DECIMAL_FOR_INSERT_ROWS
 
     def test_bucket_decimal_filter(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql(
+        res = spark_con.sql(
             "SELECT * FROM default.bucket_partitioned_decimal_for_insert WHERE amount = 10.00 ORDER BY id"
         ).collect()
         v = Decimal("10.00")
@@ -586,13 +554,11 @@ class TestSparkReadBucketTruncateForInsert:
 
     # ------------------------------------------------- TRUNCATE / DECIMAL
     def test_truncate_decimal_total_rows(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql("SELECT * FROM default.truncate_partitioned_decimal_for_insert ORDER BY id").collect()
+        res = spark_con.sql("SELECT * FROM default.truncate_partitioned_decimal_for_insert ORDER BY id").collect()
         assert res == TRUNCATE_DECIMAL_FOR_INSERT_ROWS
 
     def test_truncate_decimal_filter(self, spark_con):
-        spark = _get_spark(spark_con)
-        res = spark.sql(
+        res = spark_con.sql(
             "SELECT * FROM default.truncate_partitioned_decimal_for_insert WHERE amount = 1.00 ORDER BY id"
         ).collect()
         v = Decimal("1.00")

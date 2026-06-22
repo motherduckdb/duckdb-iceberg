@@ -44,8 +44,11 @@ def _collected(arrow_table):
     return _sorted([_normalize_row(r) for r in arrow_table.to_pylist()])
 
 
-def _load_table(rest_catalog, spark_runtime, catalog_profile, table_name):
-    require_table_support(table_name, spark_runtime, catalog_profile)
+def _table_param(table_name, *requirements):
+    return capability_param(table_name, *requirements, id=table_name)
+
+
+def _load_table(rest_catalog, table_name):
     return rest_catalog.load_table(f"default.{table_name}")
 
 
@@ -152,113 +155,113 @@ class TestPyIcebergReadPartitioned:
     @pytest.mark.parametrize(
         "table_name",
         [
-            "test_table_partitioned_by_int_format_version_2",
-            "test_table_partitioned_by_int_format_version_3",
+            _table_param("test_table_partitioned_by_int_format_version_2"),
+            _table_param("test_table_partitioned_by_int_format_version_3", "format_v3"),
         ],
     )
-    def test_int_partitioned(self, rest_catalog, spark_runtime, catalog_profile, table_name):
-        table = _load_table(rest_catalog, spark_runtime, catalog_profile, table_name)
+    def test_int_partitioned(self, rest_catalog, table_name):
+        table = _load_table(rest_catalog, table_name)
         assert _collected(table.scan().to_arrow()) == _sorted(INT_ROWS)
 
     # --------------------------------------------------------------- BIGINT
     @pytest.mark.parametrize(
         "table_name",
         [
-            "test_table_partitioned_by_bigint_format_version_2",
-            "test_table_partitioned_by_bigint_format_version_3",
+            _table_param("test_table_partitioned_by_bigint_format_version_2"),
+            _table_param("test_table_partitioned_by_bigint_format_version_3", "format_v3"),
         ],
     )
-    def test_bigint_partitioned(self, rest_catalog, spark_runtime, catalog_profile, table_name):
-        table = _load_table(rest_catalog, spark_runtime, catalog_profile, table_name)
+    def test_bigint_partitioned(self, rest_catalog, table_name):
+        table = _load_table(rest_catalog, table_name)
         assert _collected(table.scan().to_arrow()) == _sorted(BIGINT_ROWS)
 
     # -------------------------------------------------------------- VARCHAR
     @pytest.mark.parametrize(
         "table_name",
         [
-            "test_table_partitioned_by_varchar_format_version_2",
-            "test_table_partitioned_by_varchar_format_version_3",
+            _table_param("test_table_partitioned_by_varchar_format_version_2"),
+            _table_param("test_table_partitioned_by_varchar_format_version_3", "format_v3"),
         ],
     )
-    def test_varchar_partitioned(self, rest_catalog, spark_runtime, catalog_profile, table_name):
-        table = _load_table(rest_catalog, spark_runtime, catalog_profile, table_name)
+    def test_varchar_partitioned(self, rest_catalog, table_name):
+        table = _load_table(rest_catalog, table_name)
         assert _collected(table.scan().to_arrow()) == _sorted(VARCHAR_ROWS)
 
     # -------------------------------------------------------------- DECIMAL
     @pytest.mark.parametrize(
         "table_name",
         [
-            "test_table_partitioned_by_decimal_format_version_2",
-            "test_table_partitioned_by_decimal_format_version_3",
+            _table_param("test_table_partitioned_by_decimal_format_version_2"),
+            _table_param("test_table_partitioned_by_decimal_format_version_3", "format_v3"),
         ],
     )
-    def test_decimal_partitioned(self, rest_catalog, spark_runtime, catalog_profile, table_name):
-        table = _load_table(rest_catalog, spark_runtime, catalog_profile, table_name)
+    def test_decimal_partitioned(self, rest_catalog, table_name):
+        table = _load_table(rest_catalog, table_name)
         assert _collected(table.scan().to_arrow()) == _sorted(DECIMAL_ROWS)
 
     # ---------------------------------------------------------------- FLOAT
     @pytest.mark.parametrize(
         "table_name",
         [
-            "test_table_partitioned_by_float_format_version_2",
-            "test_table_partitioned_by_float_format_version_3",
+            _table_param("test_table_partitioned_by_float_format_version_2"),
+            _table_param("test_table_partitioned_by_float_format_version_3", "format_v3"),
         ],
     )
-    def test_float_partitioned(self, rest_catalog, spark_runtime, catalog_profile, table_name):
-        table = _load_table(rest_catalog, spark_runtime, catalog_profile, table_name)
+    def test_float_partitioned(self, rest_catalog, table_name):
+        table = _load_table(rest_catalog, table_name)
         assert _collected(table.scan().to_arrow()) == _sorted(FLOAT_ROWS)
 
     # --------------------------------------------------------------- DOUBLE
     @pytest.mark.parametrize(
         "table_name",
         [
-            "test_table_partitioned_by_double_format_version_2",
+            _table_param("test_table_partitioned_by_double_format_version_2"),
         ],
     )
-    def test_double_partitioned(self, rest_catalog, spark_runtime, catalog_profile, table_name):
-        table = _load_table(rest_catalog, spark_runtime, catalog_profile, table_name)
+    def test_double_partitioned(self, rest_catalog, table_name):
+        table = _load_table(rest_catalog, table_name)
         assert _collected(table.scan().to_arrow()) == _sorted(DOUBLE_ROWS)
 
     # ----------------------------------------------------------------- UUID
     @pytest.mark.parametrize(
         "table_name",
         [
-            "test_table_partitioned_by_uuid_format_version_2",
-            "test_table_partitioned_by_uuid_format_version_3",
+            _table_param("test_table_partitioned_by_uuid_format_version_2"),
+            _table_param("test_table_partitioned_by_uuid_format_version_3", "format_v3"),
         ],
     )
-    def test_uuid_partitioned(self, rest_catalog, spark_runtime, catalog_profile, table_name):
-        table = _load_table(rest_catalog, spark_runtime, catalog_profile, table_name)
+    def test_uuid_partitioned(self, rest_catalog, table_name):
+        table = _load_table(rest_catalog, table_name)
         assert _collected(table.scan().to_arrow()) == _sorted(UUID_ROWS)
 
     # ----------------------------------------------------------------- TIME
     @pytest.mark.parametrize(
         "table_name",
         [
-            "test_table_partitioned_by_time_format_version_2",
-            "test_table_partitioned_by_time_format_version_3",
+            _table_param("test_table_partitioned_by_time_format_version_2"),
+            _table_param("test_table_partitioned_by_time_format_version_3", "format_v3"),
         ],
     )
-    def test_time_partitioned(self, rest_catalog, spark_runtime, catalog_profile, table_name):
-        table = _load_table(rest_catalog, spark_runtime, catalog_profile, table_name)
+    def test_time_partitioned(self, rest_catalog, table_name):
+        table = _load_table(rest_catalog, table_name)
         assert _collected(table.scan().to_arrow()) == _sorted(TIME_ROWS)
 
     # ----------------------------------------------------------------- DATE
     @pytest.mark.parametrize(
         "table_name",
         [
-            "test_table_partitioned_by_date_format_version_2",
-            "test_table_partitioned_by_date_format_version_3",
-            "test_table_partitioned_by_date_year_format_version_2",
-            "test_table_partitioned_by_date_year_format_version_3",
-            "test_table_partitioned_by_date_month_format_version_2",
-            "test_table_partitioned_by_date_month_format_version_3",
-            "test_table_partitioned_by_date_day_format_version_2",
-            "test_table_partitioned_by_date_day_format_version_3",
+            _table_param("test_table_partitioned_by_date_format_version_2"),
+            _table_param("test_table_partitioned_by_date_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_date_year_format_version_2"),
+            _table_param("test_table_partitioned_by_date_year_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_date_month_format_version_2"),
+            _table_param("test_table_partitioned_by_date_month_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_date_day_format_version_2"),
+            _table_param("test_table_partitioned_by_date_day_format_version_3", "format_v3"),
         ],
     )
-    def test_date_partitioned(self, rest_catalog, spark_runtime, catalog_profile, table_name):
-        table = _load_table(rest_catalog, spark_runtime, catalog_profile, table_name)
+    def test_date_partitioned(self, rest_catalog, table_name):
+        table = _load_table(rest_catalog, table_name)
         assert _collected(table.scan().to_arrow()) == _sorted(DATE_ROWS)
 
     # ------------------------------------------------------------ TIMESTAMP
@@ -269,37 +272,37 @@ class TestPyIcebergReadPartitioned:
     @pytest.mark.parametrize(
         "table_name",
         [
-            "test_table_partitioned_by_timestamp_format_version_3",
-            "test_table_partitioned_by_timestamp_year_format_version_2",
-            "test_table_partitioned_by_timestamp_year_format_version_3",
-            "test_table_partitioned_by_timestamp_month_format_version_2",
-            "test_table_partitioned_by_timestamp_month_format_version_3",
-            "test_table_partitioned_by_timestamp_day_format_version_2",
-            "test_table_partitioned_by_timestamp_day_format_version_3",
-            "test_table_partitioned_by_timestamp_hour_format_version_2",
-            "test_table_partitioned_by_timestamp_hour_format_version_3",
+            _table_param("test_table_partitioned_by_timestamp_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_timestamp_year_format_version_2"),
+            _table_param("test_table_partitioned_by_timestamp_year_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_timestamp_month_format_version_2"),
+            _table_param("test_table_partitioned_by_timestamp_month_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_timestamp_day_format_version_2"),
+            _table_param("test_table_partitioned_by_timestamp_day_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_timestamp_hour_format_version_2"),
+            _table_param("test_table_partitioned_by_timestamp_hour_format_version_3", "format_v3"),
         ],
     )
-    def test_timestamp_partitioned(self, rest_catalog, spark_runtime, catalog_profile, table_name):
-        table = _load_table(rest_catalog, spark_runtime, catalog_profile, table_name)
+    def test_timestamp_partitioned(self, rest_catalog, table_name):
+        table = _load_table(rest_catalog, table_name)
         assert _collected(table.scan().to_arrow()) == _sorted(TIMESTAMP_ROWS)
 
     # --------------------------------------------------------- TIMESTAMPTZ
     @pytest.mark.parametrize(
         "table_name",
         [
-            "test_table_partitioned_by_timestamptz_format_version_2",
-            "test_table_partitioned_by_timestamptz_format_version_3",
-            "test_table_partitioned_by_timestamptz_year_format_version_2",
-            "test_table_partitioned_by_timestamptz_year_format_version_3",
-            "test_table_partitioned_by_timestamptz_month_format_version_2",
-            "test_table_partitioned_by_timestamptz_month_format_version_3",
-            "test_table_partitioned_by_timestamptz_day_format_version_2",
-            "test_table_partitioned_by_timestamptz_day_format_version_3",
-            "test_table_partitioned_by_timestamptz_hour_format_version_2",
-            "test_table_partitioned_by_timestamptz_hour_format_version_3",
+            _table_param("test_table_partitioned_by_timestamptz_format_version_2"),
+            _table_param("test_table_partitioned_by_timestamptz_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_timestamptz_year_format_version_2"),
+            _table_param("test_table_partitioned_by_timestamptz_year_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_timestamptz_month_format_version_2"),
+            _table_param("test_table_partitioned_by_timestamptz_month_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_timestamptz_day_format_version_2"),
+            _table_param("test_table_partitioned_by_timestamptz_day_format_version_3", "format_v3"),
+            _table_param("test_table_partitioned_by_timestamptz_hour_format_version_2"),
+            _table_param("test_table_partitioned_by_timestamptz_hour_format_version_3", "format_v3"),
         ],
     )
-    def test_timestamptz_partitioned(self, rest_catalog, spark_runtime, catalog_profile, table_name):
-        table = _load_table(rest_catalog, spark_runtime, catalog_profile, table_name)
+    def test_timestamptz_partitioned(self, rest_catalog, table_name):
+        table = _load_table(rest_catalog, table_name)
         assert _collected(table.scan().to_arrow()) == _sorted(TIMESTAMPTZ_ROWS)
