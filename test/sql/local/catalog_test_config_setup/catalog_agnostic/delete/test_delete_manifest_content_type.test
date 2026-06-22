@@ -1,0 +1,49 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/test_delete_manifest_content_type.test
+# description: A v3 DELETE must write its delete manifest's Avro 'content' file metadata as 'deletes', not 'data'
+# group: [delete]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.delete_manifest_content;
+
+statement ok
+CREATE TABLE my_datalake.default.delete_manifest_content (id INTEGER, data VARCHAR) WITH ('format-version' = 3);
+
+statement ok
+INSERT INTO my_datalake.default.delete_manifest_content VALUES (1, 'a'), (2, 'b'), (3, 'c'), (4, 'd'), (5, 'e');
+
+# A v3 DELETE writes a delete manifest (content type DELETE) that holds the deletion vector.
+statement ok
+DELETE FROM my_datalake.default.delete_manifest_content WHERE id IN (2, 4);
+
+# Resolve the path of the manifest holding the deletion vector (POSITION_DELETES) entries.
+statement ok
+set variable delete_manifest = (
+    SELECT DISTINCT manifest_path FROM iceberg_metadata(my_datalake.default.delete_manifest_content)
+    WHERE content = 'POSITION_DELETES'
+    LIMIT 1
+);
+
+# The delete manifest's Avro file metadata must carry content='deletes' (not 'data'). The Avro
+# OCF header stores the metadata map as [key][value] with zig-zag length prefixes, so the
+# 'content' -> 'deletes' pair is the byte sequence 0x0E "content" 0x0E "deletes" (each 7-byte
+# string prefixed by its length 7, zig-zag encoded as 0x0E). A delete manifest mislabeled as
+# 'data' would instead contain 0x0E "content" 0x08 "data".
+#   has_deletes : count of read manifests carrying content='deletes' (expected 1)
+#   has_data    : count carrying the mislabeled content='data'        (expected 0)
+query II
+SELECT
+    count(*) FILTER (WHERE position('0e636f6e74656e740e64656c65746573' IN lower(hex(content))) > 0) AS has_deletes,
+    count(*) FILTER (WHERE position('0e636f6e74656e740864617461' IN lower(hex(content))) > 0)       AS has_data
+FROM read_blob(getvariable('delete_manifest'));
+----
+1	0
