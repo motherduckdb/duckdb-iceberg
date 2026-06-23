@@ -184,6 +184,19 @@ class TestSparkReadPartitionedTables:
 
     # -------------------------------- DECIMAL / BUCKET (DuckDB-created table)
     def test_bucket_decimal_duckdb_created(self, spark_con):
+        _BUCKET_DECIMAL_LABELS = [
+            "ten",
+            "twenty",
+            "thirty",
+            "forty",
+            "fifty",
+            "sixty",
+            "seventy",
+            "eighty",
+            "ninety",
+            "hundred",
+        ]
+        _BUCKET_DECIMAL_AMOUNTS = [Decimal(f"{v}.00") for v in [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]]
         TEST_BUCKET_DECIMAL_ROWS = [
             Row(id=i, amount=a, label=l)
             for i, a, l in zip(range(1, 11), _BUCKET_DECIMAL_AMOUNTS, _BUCKET_DECIMAL_LABELS)
@@ -193,6 +206,8 @@ class TestSparkReadPartitionedTables:
 
     # ------------------------------- DECIMAL / TRUNCATE (DuckDB-created table)
     def test_truncate_decimal_duckdb_created(self, spark_con):
+        _TRUNCATE_DECIMAL_LABELS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
+        _TRUNCATE_DECIMAL_AMOUNTS = [Decimal(f"{v}.00") for v in range(1, 11)]
         TEST_TRUNCATE_DECIMAL_ROWS = [
             Row(id=i, amount=a, label=l)
             for i, a, l in zip(range(1, 11), _TRUNCATE_DECIMAL_AMOUNTS, _TRUNCATE_DECIMAL_LABELS)
