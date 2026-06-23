@@ -13,7 +13,7 @@ CORE_EXTENSIONS='httpfs;parquet;tpch'
 ifdef CI
 TEST_FLAGS:=--stabilize-tests
 endif
-T ?= $(TEST_FLAGS) "test/*"
+T ?= $(TEST_FLAGS) --test-config "$(PWD)/test/configs/fixture.json" "test/*"
 
 # Include the Makefile from extension-ci-tools
 include extension-ci-tools/makefiles/duckdb_extension.Makefile

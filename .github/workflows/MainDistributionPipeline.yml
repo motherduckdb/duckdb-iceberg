@@ -81,6 +81,8 @@ jobs:
           evict-old-files: job
       - name: Build (relassert → ASan + UBSan + LSan)
         uses: duckdb/duckdb-ci/build-duckdb@main
+        env:
+          CATALOG_TEST_CONFIG_SETUP: 1
         with:
           build-type: relassert
           build: python3 duckdb/scripts/ci/retry.py -- make relassert
