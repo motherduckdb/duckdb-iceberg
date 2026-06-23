@@ -17,34 +17,30 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from pyspark.sql import SparkSession
+import os
+
 import pyspark
 import pyspark.sql
 from pyspark import SparkContext
+from pyspark.sql import SparkSession
 
 from ..base import IcebergConnection
-from ..spark_settings import iceberg_runtime_configuration
+from scripts.data_generators.integration_config import get_spark_runtime
 
-RUNTIME_CONFIG = iceberg_runtime_configuration()
-SPARK_VERSION = RUNTIME_CONFIG['spark_version']
-SCALA_BINARY_VERSION = RUNTIME_CONFIG['scala_binary_version']
-ICEBERG_LIBRARY_VERSION = RUNTIME_CONFIG['iceberg_library_version']
 
-import sys
-import os
+CONNECTION_KEY = "fixture"
 
-CONNECTION_KEY = 'spark-rest'
-SPARK_RUNTIME_PATH = os.path.join(os.path.dirname(__file__), '..', '..', f'iceberg-spark-runtime-{SPARK_VERSION}_{SCALA_BINARY_VERSION}-{ICEBERG_LIBRARY_VERSION}.jar')
 
 @IcebergConnection.register(CONNECTION_KEY)
 class IcebergSparkRest(IcebergConnection):
-    def __init__(self):
-        super().__init__(CONNECTION_KEY, 'demo')
+    def __init__(self, runtime=None):
+        super().__init__(CONNECTION_KEY, "demo")
+        self.runtime = get_spark_runtime(runtime)
         self.con = self.get_connection()
 
     def get_connection(self):
         os.environ["PYSPARK_SUBMIT_ARGS"] = (
-            f"--packages org.apache.iceberg:iceberg-spark-runtime-{SPARK_VERSION}_{SCALA_BINARY_VERSION}:{ICEBERG_LIBRARY_VERSION},org.apache.iceberg:iceberg-aws-bundle:{ICEBERG_LIBRARY_VERSION} pyspark-shell"
+            f"--packages {self.runtime.runtime_package},{self.runtime.aws_bundle_package} pyspark-shell"
         )
         os.environ["AWS_REGION"] = "us-east-1"
         os.environ["AWS_ACCESS_KEY_ID"] = os.getenv("S3_KEY_ID", "admin")
@@ -58,7 +54,6 @@ class IcebergSparkRest(IcebergConnection):
                 "spark.sql.extensions",
                 "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
             )
-            # Pin driver to loopback so multi-homed machines / LAN IPs don't confuse Spark's internal RPC.
             .config("spark.driver.host", "127.0.0.1")
             .config("spark.driver.bindAddress", "127.0.0.1")
             .config("spark.sql.catalog.demo", "org.apache.iceberg.spark.SparkCatalog")
@@ -67,21 +62,18 @@ class IcebergSparkRest(IcebergConnection):
             .config("spark.sql.catalog.demo.warehouse", os.getenv("WAREHOUSE", "s3://warehouse/wh/"))
             .config("spark.sql.catalog.demo.s3.endpoint", os.getenv("S3_ENDPOINT", "http://127.0.0.1:9000"))
             .config("spark.sql.catalog.demo.s3.path-style-access", "true")
-            .config('spark.driver.memory', '10g')
-            .config('spark.sql.session.timeZone', 'UTC')
+            .config("spark.driver.memory", "10g")
+            .config("spark.sql.session.timeZone", "UTC")
             .config("spark.sql.catalogImplementation", "in-memory")
             .config("spark.sql.catalog.demo.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
-            .config('spark.jars', SPARK_RUNTIME_PATH)
+            .config("spark.jars", self.runtime.jar_path.as_posix())
             .getOrCreate()
         )
-        # Reduce noisy WARNs from S3FileIO by lowering its log level
         try:
             jvm = spark.sparkContext._jvm
-            # Spark 3.x ships a log4j-1.2 bridge, so org.apache.log4j.* APIs are available
             logger = jvm.org.apache.log4j.LogManager.getLogger("org.apache.iceberg.aws.s3.S3FileIO")
             logger.setLevel(jvm.org.apache.log4j.Level.ERROR)
         except Exception:
-            # Best-effort; ignore if logging backend is different/unavailable
             pass
         spark.sql("USE demo")
         spark.sql("CREATE NAMESPACE IF NOT EXISTS default")
