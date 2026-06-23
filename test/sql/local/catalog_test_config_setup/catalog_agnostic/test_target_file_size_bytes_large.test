@@ -1,0 +1,40 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/test_target_file_size_bytes_large.test
+# description: test write.target-file-size-bytes property controls file rotation
+# group: [catalog_agnostic]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+require aws
+
+set ignore_error_messages
+
+statement ok
+attach 'tpch_sf10.db' as tpch_db;
+
+statement ok
+drop table if exists my_datalake.default.test_target_file_size_bytes;
+
+statement ok
+create table my_datalake.default.test_target_file_size_bytes WITH ('write.target-file-size-bytes'='512mb') as select * from tpch_db.main.lineitem limit 0;
+
+query II
+select * from iceberg_table_properties(my_datalake.default.test_target_file_size_bytes) where key not like '%created-at%' order by all;
+----
+write.parquet.compression-codec	zstd
+write.target-file-size-bytes	512mb
+
+statement ok
+insert into my_datalake.default.test_target_file_size_bytes select * from tpch_db.main.lineitem;
+
+query I
+select count(*) from iceberg_metadata(my_datalake.default.test_target_file_size_bytes);
+----
+16

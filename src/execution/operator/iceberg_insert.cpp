@@ -1025,6 +1025,10 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(BoundCreateTabl
 	metadata->AddSchemaOrGetExisting(schema);
 	metadata->SetCurrentSchemaId(0);
 
+	for (auto &option : create_info.options) {
+		metadata->table_properties[option.first] = option.second->ToString();
+	}
+
 	// Build a placeholder partition spec from the parsed PARTITIONED BY clause so that
 	// PlanCopyForInsert appends the partition projection at plan time. The real spec is
 	// applied during PhysicalIcebergCreateTable::MakeCreateTableRequest, but the projection
