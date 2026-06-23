@@ -184,11 +184,19 @@ class TestSparkReadPartitionedTables:
 
     # -------------------------------- DECIMAL / BUCKET (DuckDB-created table)
     def test_bucket_decimal_duckdb_created(self, spark_con):
+        TEST_BUCKET_DECIMAL_ROWS = [
+            Row(id=i, amount=a, label=l)
+            for i, a, l in zip(range(1, 11), _BUCKET_DECIMAL_AMOUNTS, _BUCKET_DECIMAL_LABELS)
+        ] + [Row(id=11, amount=None, label="null_row")]
         res = spark_con.sql("SELECT * FROM default.test_bucket_decimal ORDER BY id").collect()
         assert res == TEST_BUCKET_DECIMAL_ROWS
 
     # ------------------------------- DECIMAL / TRUNCATE (DuckDB-created table)
     def test_truncate_decimal_duckdb_created(self, spark_con):
+        TEST_TRUNCATE_DECIMAL_ROWS = [
+            Row(id=i, amount=a, label=l)
+            for i, a, l in zip(range(1, 11), _TRUNCATE_DECIMAL_AMOUNTS, _TRUNCATE_DECIMAL_LABELS)
+        ] + [Row(id=11, amount=None, label="null_row")]
         res = spark_con.sql("SELECT * FROM default.test_truncate_decimal ORDER BY id").collect()
         assert res == TEST_TRUNCATE_DECIMAL_ROWS
 
