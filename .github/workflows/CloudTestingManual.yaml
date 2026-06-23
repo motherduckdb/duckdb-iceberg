@@ -5,7 +5,7 @@ on:
       duckdb_ref:
         description: 'DuckDB branch name or commit hash'
         required: false
-        default: 'v1.5-variegata'
+        default: 'main'
       httpfs_fork:
         description: 'URL of a duckdb-httpfs fork. Leave empty to use default duckdb/duckdb-httpfs.'
         required: false
