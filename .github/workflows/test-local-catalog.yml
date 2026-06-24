@@ -23,12 +23,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.artifact-name }}
-          path: build/release
+          path: build/relassert
 
       - name: Restore permissions
         run: |
-          find ./build/release -type f -name 'duckdb*' -exec chmod +x {} \;
-          find ./build/release -type f -name 'unittest*' -exec chmod +x {} \;
+          find ./build/relassert -type f -name 'duckdb*' -exec chmod +x {} \;
+          find ./build/relassert -type f -name 'unittest*' -exec chmod +x {} \;
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -64,5 +64,5 @@ jobs:
         env:
           DUCKDB_ICEBERG_HAVE_GENERATED_DATA: 1
         run: |
-          ./build/release/test/unittest --order lex "$PWD/test/*" --list-test-names-only || true ./build/release/test/unittest --order lex "$PWD/test/*"
+          ./build/relassert/test/unittest --order lex "$PWD/test/*" --list-test-names-only || true ./build/relassert/test/unittest --order lex "$PWD/test/*"
 

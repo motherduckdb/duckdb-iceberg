@@ -22,7 +22,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.artifact-name }}
-          path: build/release
+          path: build/relassert
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -36,8 +36,8 @@ jobs:
 
       - name: Restore permissions
         run: |
-          find ./build/release -type f -name 'duckdb*' -exec chmod +x {} \;
-          find ./build/release -type f -name 'unittest*' -exec chmod +x {} \;
+          find ./build/relassert -type f -name 'duckdb*' -exec chmod +x {} \;
+          find ./build/relassert -type f -name 'unittest*' -exec chmod +x {} \;
 
       - name: Install Lakekeeper dependencies
         run: |
@@ -52,20 +52,20 @@ jobs:
         env:
           LAKEKEEPER_SERVER_AVAILABLE: 1
         run: |
-          ./build/release/test/unittest --order lex "$PWD/test/*" --list-test-names-only || true
-          ./build/release/test/unittest --order lex "$PWD/test/*"
+          ./build/relassert/test/unittest --order lex "$PWD/test/*" --list-test-names-only || true
+          ./build/relassert/test/unittest --order lex "$PWD/test/*"
 
       - name: Run Generic IRC Tests
         env:
           CATALOG_TEST_CONFIG_SETUP: 1
           LAKEKEEPER_SERVER_AVAILABLE: 1
         run: |
-          ./build/release/test/unittest --order lex "$PWD/test/sql/local/catalog_test_config_setup/*" --list-test-names-only || true
-          ./build/release/test/unittest --order lex "$PWD/test/sql/local/catalog_test_config_setup/*" --test-config test/configs/lakekeeper.json
+          ./build/relassert/test/unittest --order lex "$PWD/test/sql/local/catalog_test_config_setup/*" --list-test-names-only || true
+          ./build/relassert/test/unittest --order lex "$PWD/test/sql/local/catalog_test_config_setup/*" --test-config test/configs/lakekeeper.json
 
       - name: Test reads with PyIceberg and Spark
         env:
           CATALOG_TEST_CONFIG_SETUP: 1
         run: |
           source .venv-spark4/bin/activate
-          python3 -m pytest -vv test/python --unittest-binary ./build/release/test/unittest --test-python-verbosity verbose
+          python3 -m pytest -vv test/python --unittest-binary ./build/relassert/test/unittest --test-python-verbosity verbose
