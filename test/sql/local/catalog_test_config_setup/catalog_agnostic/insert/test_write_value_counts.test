@@ -1,0 +1,243 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_write_value_counts.test
+# description: Verify value_counts are written to manifest on INSERT
+# group: [insert]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+require icu
+
+require core_functions
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+SET TimeZone = 'UTC';
+
+# --- All NULLs: value_counts includes nulls (100 rows), null_value_counts = 100 ---
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.value_counts_all_null;
+
+statement ok
+CREATE TABLE my_datalake.default.value_counts_all_null (
+	int_type INT,
+	float_type FLOAT,
+	double_type DOUBLE,
+	varchar_type VARCHAR
+);
+
+statement ok
+INSERT INTO my_datalake.default.value_counts_all_null
+SELECT NULL, NULL, NULL, NULL FROM range(100);
+
+statement ok
+SET VARIABLE manifest_all_null = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.value_counts_all_null)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+query II
+SELECT unnest(map_keys(value_counts)), unnest(map_values(value_counts))
+FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_all_null')))
+ORDER BY ALL;
+----
+1	100
+2	100
+3	100
+4	100
+
+query II
+SELECT unnest(map_keys(null_value_counts)), unnest(map_values(null_value_counts))
+FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_all_null')))
+ORDER BY ALL;
+----
+1	100
+2	100
+3	100
+4	100
+
+# --- All NaN floats: value_counts = 100, null_value_counts = 0 ---
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.value_counts_all_nan;
+
+statement ok
+CREATE TABLE my_datalake.default.value_counts_all_nan (
+	float_type FLOAT,
+	double_type DOUBLE
+);
+
+statement ok
+INSERT INTO my_datalake.default.value_counts_all_nan
+SELECT 'NaN'::FLOAT, 'NaN'::DOUBLE FROM range(100);
+
+statement ok
+SET VARIABLE manifest_all_nan = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.value_counts_all_nan)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+query II
+SELECT unnest(map_keys(value_counts)), unnest(map_values(value_counts))
+FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_all_nan')))
+ORDER BY ALL;
+----
+1	100
+2	100
+
+query II
+SELECT unnest(map_keys(null_value_counts)), unnest(map_values(null_value_counts))
+FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_all_nan')))
+ORDER BY ALL;
+----
+1	0
+2	0
+
+# nan_value_counts not yet written by DuckDB parquet writer (see iceberg_insert.cpp TODO)
+query I
+SELECT count(*) FROM iceberg_column_stats(my_datalake.default.value_counts_all_nan)
+WHERE nan_value_count IS NOT NULL;
+----
+0
+
+# --- Nested types from test_all_types (3 rows) ---
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.value_counts_nested;
+
+statement ok
+CREATE TABLE my_datalake.default.value_counts_nested AS
+SELECT
+	struct,
+	int_array,
+	map,
+	varchar_array
+FROM test_all_types();
+
+statement ok
+SET VARIABLE manifest_nested = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.value_counts_nested)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+# Leaf fields get value_counts; container columns do not
+query II
+SELECT column_name, value_count
+FROM iceberg_column_stats(my_datalake.default.value_counts_nested)
+WHERE column_name IN ('a', 'b', 'element', 'key', 'value')
+ORDER BY column_name, value_count;
+----
+a	3
+b	3
+element	6
+element	7
+key	4
+value	4
+
+query II
+SELECT field_id, value_count FROM (
+	SELECT unnest(map_keys(value_counts)) AS field_id, unnest(map_values(value_counts)) AS value_count
+	FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_nested')))
+)
+ORDER BY ALL;
+----
+5	3
+6	3
+7	7
+8	4
+9	4
+10	6
+
+# --- Very long strings (50 rows, 10k chars each) ---
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.value_counts_long_string;
+
+statement ok
+CREATE TABLE my_datalake.default.value_counts_long_string (long_varchar VARCHAR);
+
+statement ok
+INSERT INTO my_datalake.default.value_counts_long_string
+SELECT repeat('Z', 10000) FROM range(50);
+
+statement ok
+SET VARIABLE manifest_long = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.value_counts_long_string)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+query II
+SELECT unnest(map_keys(value_counts)), unnest(map_values(value_counts))
+FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_long')))
+ORDER BY ALL;
+----
+1	50
+
+query II
+SELECT unnest(map_keys(null_value_counts)), unnest(map_values(null_value_counts))
+FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_long')))
+ORDER BY ALL;
+----
+1	0
+
+# --- Struct/List/Map table with manifest avro verification ---
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.duckdb_nested_types;
+
+statement ok
+CREATE TABLE my_datalake.default.duckdb_nested_types (
+	id INT,
+	name VARCHAR,
+	address STRUCT(street VARCHAR, city VARCHAR, zip VARCHAR),
+	phone_numbers VARCHAR[],
+	metadata MAP(VARCHAR, VARCHAR)
+);
+
+statement ok
+INSERT INTO my_datalake.default.duckdb_nested_types VALUES (
+	1,
+	'Alice',
+	{'street': '123 Main St', 'city': 'Metropolis', 'zip': '12345'},
+	['123-456-7890', '987-654-3210'],
+	MAP(['age', 'membership'], ['30', 'gold'])
+);
+
+query II
+SELECT column_name, value_count
+FROM iceberg_column_stats(my_datalake.default.duckdb_nested_types)
+WHERE column_name IN ('id', 'name', 'street', 'city', 'zip', 'element', 'key', 'value')
+ORDER BY column_name;
+----
+city	1
+element	2
+id	1
+key	2
+name	1
+street	1
+value	2
+zip	1
+
+statement ok
+SET VARIABLE avro_file = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.duckdb_nested_types)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+query II
+SELECT unnest(map_keys(value_counts)), unnest(map_values(value_counts))
+FROM (SELECT unnest(data_file) FROM read_avro(getvariable('avro_file')))
+ORDER BY ALL;
+----
+1	1
+2	1
+6	1
+7	1
+8	1
+9	2
+10	2
+11	2
