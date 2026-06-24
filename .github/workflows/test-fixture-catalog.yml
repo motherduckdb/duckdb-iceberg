@@ -101,7 +101,6 @@ jobs:
       - name: Run Generic IRC tests
         if: inputs.local-extension-repo == ''
         env:
-          CATALOG_TEST_CONFIG_SETUP: 1
           FIXTURE_SERVER_AVAILABLE: 1
           EQUALITY_DELETE_WRITES_ENABLED: ${{ inputs.equality-delete-writes-enabled }}
         run: |

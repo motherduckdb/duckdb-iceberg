@@ -53,6 +53,30 @@ FROM iceberg_schema_properties(my_datalake.myschema123) WHERE key != 'location' 
 myprop1	1
 myprop3	3
 
+# set/remove_iceberg_schema_properties mutate the catalog, so they must be rejected inside a read-only
+# transaction. This only holds if the bind declares the modification (RegisterDBModify).
+statement ok
+BEGIN TRANSACTION READ ONLY;
+
+statement error
+CALL set_iceberg_schema_properties(my_datalake.myschema123, {'k' : 'v'});
+----
+<REGEX>:.*read-only.*
+
+statement ok
+ROLLBACK;
+
+statement ok
+BEGIN TRANSACTION READ ONLY;
+
+statement error
+CALL remove_iceberg_schema_properties(my_datalake.myschema123, ['myprop1']);
+----
+<REGEX>:.*read-only.*
+
+statement ok
+ROLLBACK;
+
 #cleanup
 statement ok
 DROP SCHEMA my_datalake.myschema123;

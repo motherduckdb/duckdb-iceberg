@@ -9,6 +9,11 @@ require iceberg
 
 require httpfs
 
+# require catalog test config setup so this doesn't run on cloud tests
+# on cloud tests the AWS credentials are used, which causes an error
+# when requesting from google
+require-env CATALOG_TEST_CONFIG_SETUP 1
+
 # Do not ignore 'HTTP' error messages!
 set ignore_error_messages
 
