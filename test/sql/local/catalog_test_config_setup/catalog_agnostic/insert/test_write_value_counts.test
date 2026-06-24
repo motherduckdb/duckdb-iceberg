@@ -140,19 +140,26 @@ element	7
 key	4
 value	4
 
-query II
-SELECT field_id, value_count FROM (
-	SELECT unnest(map_keys(value_counts)) AS field_id, unnest(map_values(value_counts)) AS value_count
+# Manifest avro: Iceberg field ids are assigned by the catalog (Nessie vs fixture use
+# different ids for nested columns), but value_counts values are stable. For example
+# test_all_types nested leaf fields are 5->3,6->3,7->7,... on fixture but
+# 2->3,3->3,5->7,... on Nessie — same multiset [3,3,4,4,6,7], different keys.
+# Assert on the value_count multiset, not field_id pairs.
+query I
+SELECT count(*) FROM (
+	SELECT unnest(map_values(value_counts)) AS value_count
 	FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_nested')))
-)
-ORDER BY ALL;
+);
 ----
-5	3
-6	3
-7	7
-8	4
-9	4
-10	6
+6
+
+query I
+SELECT list_sort(list(value_count::BIGINT)) = [3, 3, 4, 4, 6, 7]::BIGINT[] FROM (
+	SELECT unnest(map_values(value_counts)) AS value_count
+	FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_nested')))
+);
+----
+true
 
 # --- Very long strings (50 rows, 10k chars each) ---
 statement ok
@@ -228,16 +235,20 @@ SET VARIABLE avro_file = (
 	ORDER BY manifest_sequence_number DESC LIMIT 1
 );
 
-query II
-SELECT unnest(map_keys(value_counts)), unnest(map_values(value_counts))
-FROM (SELECT unnest(data_file) FROM read_avro(getvariable('avro_file')))
-ORDER BY ALL;
+# Same field-id caveat as above: compare sorted value_counts from the manifest,
+# not map keys, so this passes across fixture, Nessie, and other catalogs.
+query I
+SELECT count(*) FROM (
+	SELECT unnest(map_values(value_counts)) AS value_count
+	FROM (SELECT unnest(data_file) FROM read_avro(getvariable('avro_file')))
+);
 ----
-1	1
-2	1
-6	1
-7	1
-8	1
-9	2
-10	2
-11	2
+8
+
+query I
+SELECT list_sort(list(value_count::BIGINT)) = [1, 1, 1, 1, 1, 2, 2, 2]::BIGINT[] FROM (
+	SELECT unnest(map_values(value_counts)) AS value_count
+	FROM (SELECT unnest(data_file) FROM read_avro(getvariable('avro_file')))
+);
+----
+true
