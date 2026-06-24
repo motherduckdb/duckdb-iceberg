@@ -9,17 +9,8 @@ EXT_CONFIG=${PROJ_DIR}extension_config.cmake
 # We need this for testing
 CORE_EXTENSIONS='httpfs;parquet;tpch'
 
-# Stabilize all tests in CI
-ifdef CI
-TEST_FLAGS:=--stabilize-tests
-endif
-T ?= $(TEST_FLAGS) --test-config "$(PWD)/test/configs/fixture.json" "test/*"
-
 # Include the Makefile from extension-ci-tools
 include extension-ci-tools/makefiles/duckdb_extension.Makefile
-
-unittest_relassert:
-	build/relassert/test/run $(T)
 
 include make/util.mk
 include make/catalogs/fixture.mk
