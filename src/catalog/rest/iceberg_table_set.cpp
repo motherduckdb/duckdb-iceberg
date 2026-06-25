@@ -314,6 +314,12 @@ IcebergTableInformation &IcebergTableSet::CreateNewEntry(ClientContext &context,
 		transaction_data.TableAddAssertCreate();
 	}
 	if (!catalog.attach_options.stage_create_tables && catalog.attach_options.skip_create_table_metadata_updates) {
+		// The table was already created remotely (CommitNewTable above) and stages no per-table metadata
+		// updates, so the TableAdd*/SetLatestTableState calls below are skipped. Creating a table still
+		// changes the catalog, so mark it: otherwise local_catalog_version stays 0, the commit skips the
+		// catalog-version bump, and the new table is never propagated to clients (the next statement
+		// fails to resolve it).
+		iceberg_transaction.MarkCatalogChanged();
 		return table_info;
 	}
 	// other required updates to the table
