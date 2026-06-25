@@ -229,6 +229,9 @@ IcebergCreateTableRequest::CreateIcebergColumn(const ColumnDefinition &column_de
 			throw InvalidInputException("non-null DEFAULT values are not supported for <V3 tables");
 		}
 		iceberg_column_def->initial_default = make_uniq<Value>(val);
+		if (iceberg_version >= 3) {
+			iceberg_column_def->write_default = make_uniq<Value>(val);
+		}
 	}
 	return iceberg_column_def;
 }
