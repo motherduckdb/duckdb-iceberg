@@ -2,8 +2,6 @@
 # description: iceberg_column_stats deserializes the VARIANT lower/upper bound blobs into readable values
 # group: [iceberg_column_stats]
 
-mode skip Needs merge with v1.5-variegata for 'variant_bytes_to_variant'
-
 require-env CATALOG_TEST_CONFIG_SETUP
 
 require avro
