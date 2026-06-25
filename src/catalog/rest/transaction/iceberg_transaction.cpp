@@ -476,10 +476,17 @@ void IcebergTransaction::Commit() {
 		error.Throw("Failed to commit Iceberg transaction: ");
 	}
 
-	// Only reached when all Do*() calls succeeded - exceptions re-throw from the catch block above
-	catalog.IncrementCatalogVersion();
-	// Reflect the new committed version for any reads after commit in this transaction (mirrors ducklake).
-	local_catalog_version = catalog.GetCommittedCatalogVersion();
+	// Only reached when all Do*() calls succeeded - exceptions re-throw from the catch block above.
+	// Only a transaction that staged a catalog (DDL) change advances the committed catalog version;
+	// local_catalog_version is non-zero exactly when MarkCatalogChanged() ran. Data-only DML
+	// (INSERT/UPDATE/DELETE) must leave the committed version untouched, mirroring ducklake and plain
+	// DuckDB storage - otherwise the bump is never propagated to clients (the server gates catalog
+	// refresh on a version above TRANSACTION_ID_START) and they fail the catalog-version check.
+	if (local_catalog_version != 0) {
+		catalog.IncrementCatalogVersion();
+		// Reflect the new committed version for any reads after commit in this transaction.
+		local_catalog_version = catalog.GetCommittedCatalogVersion();
+	}
 	temp_con.Rollback();
 }
 
