@@ -204,11 +204,6 @@ TableFunction IcebergTableEntry::GetScanFunction(ClientContext &context, unique_
 
 	IcebergSnapshotScanInfo snapshot_info;
 	snapshot_info = metadata.GetSnapshot(snapshot_lookup);
-	if (snapshot_info.snapshot && snapshot_info.snapshot->GetSchemaId() > schema_id) {
-		throw InternalException("Tried to scan a snapshot created with a newer schema id (%d) than the schema id "
-		                        "selected for the scan (%d)",
-		                        snapshot_info.snapshot->GetSchemaId(), schema_id);
-	}
 	//! Override whatever schema id the lookup resulted in
 	//! The schema is preset by the IcebergCatalogEntry and we can not deviate from that
 	snapshot_info.schema_id = schema_id;
