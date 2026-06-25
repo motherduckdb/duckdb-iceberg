@@ -281,8 +281,8 @@ IcebergColumnDefinition &ResolveColumn(T &alter_table_info, const shared_ptr<Ice
 
 	auto column_p = new_schema->GetMutableFromPath({column_name}, nullptr);
 	if (!column_p) {
-		throw CatalogException("Column with name '%s' does not exist on the table '%s'", column_name,
-		                       alter_table_info.GetAlterEntryData().name);
+		throw BinderException("Binder Error: Table \"%s\" does not have a column with name \"%s\"",
+		                      alter_table_info.GetAlterEntryData().name, column_name);
 	}
 	auto &column = *column_p;
 	return column;
@@ -461,13 +461,13 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 
 		auto column_p = new_schema->GetMutableFromPath({column_name}, nullptr);
 		if (!column_p) {
-			throw CatalogException("Column with name '%s' does not exist on the table '%s', RENAME COLUMN failed",
-			                       column_name, table_entry.name);
+			throw BinderException("Column with name '%s' does not exist on the table '%s', RENAME COLUMN failed",
+			                      column_name, table_entry.name);
 		}
 		auto collision_column_p = new_schema->GetMutableFromPath({new_name}, nullptr);
 		if (collision_column_p) {
-			throw CatalogException("Column with name '%s' already exists on the table '%s', RENAME COLUMN failed",
-			                       new_name, table_entry.name);
+			throw BinderException("Column with name '%s' already exists on the table '%s', RENAME COLUMN failed",
+			                      new_name, table_entry.name);
 		}
 		auto &column = *column_p;
 		column.name = new_name;
@@ -561,8 +561,8 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 
 		auto column_p = new_schema->GetMutableFromPath({column_name}, nullptr);
 		if (!column_p) {
-			throw CatalogException("Column with name '%s' does not exist on the table '%s', SET DEFAULT failed",
-			                       column_name, table_entry.name);
+			throw BinderException("Binder Error: Table \"%s\" does not have a column with name \"%s\"",
+			                      table_entry.name, column_name);
 		}
 		auto &column = *column_p;
 
