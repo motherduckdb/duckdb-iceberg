@@ -25,7 +25,6 @@ struct RewriteCandidate {
 };
 
 struct RewritePlan {
-	bool table_is_empty = false;
 	QualifiedName table_name;
 	int64_t starting_snapshot_id = -1;
 	int64_t starting_sequence_number = 0;

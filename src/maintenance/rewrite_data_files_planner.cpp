@@ -127,7 +127,6 @@ RewritePlan PlanRewrite(ClientContext &context, const RewriteDataFilesPlanInput 
 	if (!latest_snapshot) {
 		//! Brand-new table — no snapshot to rewrite against. Caller treats this
 		//! as a no-op success; executor and commit step must not run on this plan.
-		plan.table_is_empty = true;
 		return plan;
 	}
 
@@ -145,7 +144,6 @@ RewritePlan PlanRewrite(ClientContext &context, const RewriteDataFilesPlanInput 
 
 	const auto &manifest_files = manifest_list->GetManifestFilesConst();
 	if (manifest_files.empty()) {
-		plan.table_is_empty = true;
 		return plan;
 	}
 
@@ -190,15 +188,11 @@ RewritePlan PlanRewrite(ClientContext &context, const RewriteDataFilesPlanInput 
 	}
 
 	if (plan.candidates.empty()) {
-		plan.table_is_empty = true;
 		return plan;
 	}
 
 	GroupCandidates(plan, plan.target_file_size_bytes, input.min_input_files, input.rewrite_all);
 
-	if (plan.file_groups.empty()) {
-		plan.table_is_empty = true;
-	}
 	return plan;
 }
 
