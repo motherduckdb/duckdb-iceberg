@@ -1,6 +1,7 @@
 #include "maintenance/rewrite_data_files_executor.hpp"
 
 #include "duckdb/common/exception.hpp"
+#include "iceberg_logging.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
@@ -56,8 +57,7 @@ void CleanupRewriteFiles(ClientContext &context, const IcebergTableInformation &
 		try {
 			fs.TryRemoveFile(path);
 		} catch (...) {
-			//! Best-effort cleanup only. Failures here should not mask the original
-			//! COPY/validation/commit error.
+			DUCKDB_LOG_DEBUG(context, "Failed to clean up rewrite output file '%s'", path);
 		}
 	}
 }

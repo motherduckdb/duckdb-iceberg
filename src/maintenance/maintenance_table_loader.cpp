@@ -37,29 +37,6 @@ static IcebergSchemaEntry &LoadIcebergSchema(ClientContext &context, const Quali
 
 } // namespace
 
-shared_ptr<IcebergTableInformation> LoadIcebergTableShared(ClientContext &context, const QualifiedName &table_name,
-                                                           const string &function_name) {
-	auto &iceberg_schema = LoadIcebergSchema(context, table_name, function_name);
-
-	auto &tables = iceberg_schema.tables;
-	tables.LoadEntries(context);
-	auto table_name_string = table_name.name.GetIdentifierName();
-	auto &entries = tables.GetEntriesMutable();
-	auto it = entries.find(table_name_string);
-	if (it == entries.end()) {
-		throw InvalidInputException("%s: table '%s' not found in schema '%s.%s'", function_name, table_name_string,
-		                            table_name.catalog.GetIdentifierName(), table_name.schema.GetIdentifierName());
-	}
-
-	auto table_info = it->second;
-	if (!tables.FillEntry(context, *table_info)) {
-		throw InvalidInputException("%s: failed to load table metadata for '%s.%s.%s'", function_name,
-		                            table_name.catalog.GetIdentifierName(), table_name.schema.GetIdentifierName(),
-		                            table_name_string);
-	}
-	return table_info;
-}
-
 shared_ptr<IcebergTableInformation> ReloadIcebergTableShared(ClientContext &context, const QualifiedName &table_name,
                                                              const string &function_name) {
 	auto &iceberg_schema = LoadIcebergSchema(context, table_name, function_name);
@@ -72,11 +49,6 @@ shared_ptr<IcebergTableInformation> ReloadIcebergTableShared(ClientContext &cont
 		                            table_name.catalog.GetIdentifierName(), table_name.schema.GetIdentifierName());
 	}
 	return table_info;
-}
-
-IcebergTableInformation &LoadIcebergTable(ClientContext &context, const QualifiedName &table_name,
-                                          const string &function_name) {
-	return *LoadIcebergTableShared(context, table_name, function_name);
 }
 
 } // namespace duckdb

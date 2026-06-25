@@ -26,13 +26,6 @@ namespace {
 
 constexpr int64_t MIN_TARGET_FILE_SIZE_BYTES = 100;
 
-struct RewriteDataFilesOptions {
-	QualifiedName table_name;
-	int64_t target_file_size_bytes = 134217728;
-	int64_t min_input_files = 5;
-	bool rewrite_all = false;
-};
-
 static QualifiedName ParseRewriteTableName(const string &identifier) {
 	auto parts = QualifiedName::ParseComponents(identifier);
 	if (parts.size() != 3) {
@@ -75,8 +68,8 @@ static int64_t ParseTargetFileSizeBytes(const Value &value) {
 	return static_cast<int64_t>(parsed_value);
 }
 
-static RewriteDataFilesOptions ParseOptions(TableFunctionBindInput &input) {
-	RewriteDataFilesOptions result;
+static RewriteDataFilesPlanInput ParseRewritePlanInput(TableFunctionBindInput &input) {
+	RewriteDataFilesPlanInput result;
 	result.table_name = ParseRewriteTableName(StringValue::Get(input.inputs[0]));
 
 	for (auto &kv : input.named_parameters) {
@@ -145,7 +138,7 @@ static unique_ptr<LogicalOperator> BindGroupCopy(Binder &binder, const RewritePl
 	//! RETURN_STATS reports concrete parquet paths instead of the directory root.
 	copy_statement.info->options["return_stats"].push_back(Value::BOOLEAN(true));
 	copy_statement.info->options["per_thread_output"].push_back(Value::BOOLEAN(false));
-	copy_statement.info->options["overwrite_or_ignore"].push_back(Value::BOOLEAN(true));
+	copy_statement.info->options["append"].push_back(Value::BOOLEAN(true));
 
 	auto copy_binder = Binder::CreateBinder(binder.context, &binder);
 	auto bound_copy = copy_binder->Bind(copy_statement);
@@ -161,14 +154,8 @@ static unique_ptr<LogicalOperator> RewriteDataFilesBindOperator(ClientContext &c
 	if (!input.binder) {
 		throw InternalException("iceberg_rewrite_data_files: bind_operator called without a binder");
 	}
-	auto options = ParseOptions(input);
+	auto plan_input = ParseRewritePlanInput(input);
 	input.binder->SetAlwaysRequireRebind();
-
-	RewriteDataFilesPlanInput plan_input;
-	plan_input.table_name = options.table_name;
-	plan_input.target_file_size_bytes = options.target_file_size_bytes;
-	plan_input.min_input_files = options.min_input_files;
-	plan_input.rewrite_all = options.rewrite_all;
 	auto plan = PlanRewrite(context, plan_input);
 
 	auto result = make_uniq<LogicalRewriteDataFiles>(bind_index.index, std::move(plan));

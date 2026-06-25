@@ -1,7 +1,10 @@
 #include "maintenance/rewrite_data_files_planner.hpp"
 
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/numeric_utils.hpp"
+#include "duckdb/common/operator/cast_operators.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/common/types/value.hpp"
 
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "core/metadata/manifest/iceberg_manifest_list.hpp"
@@ -15,6 +18,44 @@
 namespace duckdb {
 
 namespace {
+
+constexpr int64_t DEFAULT_TARGET_FILE_SIZE_BYTES = 134217728;
+constexpr int64_t MIN_TARGET_FILE_SIZE_BYTES = 100;
+
+static int64_t ParseTargetFileSizeProperty(const string &value, const string &property) {
+	idx_t parsed_value;
+	if (!TryCast::Operation<string_t, idx_t>(string_t(value), parsed_value)) {
+		auto error = StringUtil::TryParseFormattedBytes(value, parsed_value);
+		if (!error.empty()) {
+			throw InvalidInputException("iceberg_rewrite_data_files: invalid '%s': %s", property, error);
+		}
+	}
+	if (parsed_value < static_cast<idx_t>(MIN_TARGET_FILE_SIZE_BYTES)) {
+		throw InvalidInputException("iceberg_rewrite_data_files: '%s' must be >= %lld bytes, got %llu", property,
+		                            MIN_TARGET_FILE_SIZE_BYTES, static_cast<unsigned long long>(parsed_value));
+	}
+	if (parsed_value > static_cast<idx_t>(NumericLimits<int64_t>::Maximum())) {
+		throw InvalidInputException("iceberg_rewrite_data_files: '%s' is too large", property);
+	}
+	return static_cast<int64_t>(parsed_value);
+}
+
+static int64_t ResolveTargetFileSizeBytes(const RewriteDataFilesPlanInput &input,
+                                          const IcebergTableMetadata &metadata) {
+	if (input.target_file_size_bytes) {
+		return input.target_file_size_bytes.value();
+	}
+	auto &properties = metadata.GetTableProperties();
+	auto it = properties.find("write.parquet.target-file-size-bytes");
+	if (it != properties.end()) {
+		return ParseTargetFileSizeProperty(it->second, "write.parquet.target-file-size-bytes");
+	}
+	it = properties.find("write.target-file-size-bytes");
+	if (it != properties.end()) {
+		return ParseTargetFileSizeProperty(it->second, "write.target-file-size-bytes");
+	}
+	return DEFAULT_TARGET_FILE_SIZE_BYTES;
+}
 
 void GroupCandidates(RewritePlan &plan, int64_t target_file_size_bytes, int64_t min_input_files, bool rewrite_all) {
 	if (plan.candidates.empty()) {
@@ -71,11 +112,11 @@ string PartitionBucketKey(const vector<IcebergPartitionInfo> &partition_info) {
 RewritePlan PlanRewrite(ClientContext &context, const RewriteDataFilesPlanInput &input) {
 	RewritePlan plan;
 	plan.table_name = input.table_name;
-	plan.target_file_size_bytes = input.target_file_size_bytes;
 
 	auto table_info_ptr = ReloadIcebergTableShared(context, input.table_name, "iceberg_rewrite_data_files");
 	auto &table_info = *table_info_ptr;
 	auto &table_metadata = table_info.table_metadata;
+	plan.target_file_size_bytes = ResolveTargetFileSizeBytes(input, table_metadata);
 	plan.table_info = std::move(table_info_ptr);
 
 	if (table_metadata.iceberg_version >= 3) {
@@ -142,7 +183,6 @@ RewritePlan PlanRewrite(ClientContext &context, const RewriteDataFilesPlanInput 
 			cand.file_size_in_bytes = entry.data_file.file_size_in_bytes;
 			cand.record_count = entry.data_file.record_count;
 			cand.partition_info = entry.data_file.partition_info;
-			cand.partition_spec_id = list_entry.file.partition_spec_id;
 			cand.manifest_idx = mi;
 			cand.entry_idx = ei;
 			plan.candidates.push_back(std::move(cand));
@@ -154,7 +194,7 @@ RewritePlan PlanRewrite(ClientContext &context, const RewriteDataFilesPlanInput 
 		return plan;
 	}
 
-	GroupCandidates(plan, input.target_file_size_bytes, input.min_input_files, input.rewrite_all);
+	GroupCandidates(plan, plan.target_file_size_bytes, input.min_input_files, input.rewrite_all);
 
 	if (plan.file_groups.empty()) {
 		plan.table_is_empty = true;

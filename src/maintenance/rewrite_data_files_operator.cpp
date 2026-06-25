@@ -168,16 +168,13 @@ SinkResultType PhysicalRewriteDataFiles::Sink(ExecutionContext &context, DataChu
 		auto count = NumericCast<int64_t>(chunk.GetValue(2, row).GetValue<uint64_t>());
 		auto file_size_in_bytes = NumericCast<int64_t>(chunk.GetValue(3, row).GetValue<uint64_t>());
 		auto &group = gstate.plan.file_groups[group_idx];
-		{
-			lock_guard<mutex> guard(gstate.lock);
-			gstate.group_seen[group_idx] = true;
-			gstate.produced_paths.push_back(produced_file);
-		}
 		auto entry = BuildRewriteManifestEntry(group, gstate.plan.starting_sequence_number, count, produced_file,
 		                                       file_size_in_bytes);
 
 		{
 			lock_guard<mutex> guard(gstate.lock);
+			gstate.group_seen[group_idx] = true;
+			gstate.produced_paths.push_back(produced_file);
 			gstate.result.new_entries.push_back(std::move(entry));
 			gstate.result.added_data_files++;
 			if (!gstate.group_accounted[group_idx]) {
