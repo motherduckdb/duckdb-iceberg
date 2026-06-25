@@ -46,6 +46,7 @@ public:
 	int64_t next_row_id = 0;
 
 	ClientContext &context;
+	vector<string> created_metadata_files;
 
 	//! All the 'manifest_file' entries we will write to the new manifest list
 	vector<IcebergManifestListEntry> manifests;
@@ -60,6 +61,9 @@ public:
 
 public:
 	virtual void CreateUpdate(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state) const = 0;
+	virtual bool IsRetryable() const {
+		return false;
+	}
 
 public:
 	template <class TARGET>

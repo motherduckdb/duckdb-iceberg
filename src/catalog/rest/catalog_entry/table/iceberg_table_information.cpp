@@ -3,6 +3,7 @@
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/common/exception/http_exception.hpp"
 #include "duckdb/parser/expression/columnref_expression.hpp"
 #include "duckdb/parser/expression/function_expression.hpp"
 #include "duckdb/common/exception/transaction_exception.hpp"
@@ -588,6 +589,27 @@ bool IcebergTableInformation::HasTransactionUpdates() const {
 		return true;
 	}
 	return false;
+}
+
+void IcebergTableInformation::RefreshFromCatalog(ClientContext &context) {
+	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
+	auto table_key = GetTableKey();
+	auto get_table_result = IRCAPI::GetTable(context, ic_catalog, schema, name);
+	if (get_table_result.error_) {
+		throw HTTPException(
+		    StringUtil::Format("GetTableInformation endpoint returned response code %s with message \"%s\"",
+		                       EnumUtil::ToString(get_table_result.status_), get_table_result.error_->_error.message));
+	}
+	ic_catalog.table_request_cache.SetOrOverwrite(context, table_key, std::move(get_table_result.result_));
+	schema_versions.clear();
+	dummy_entry.reset();
+	{
+		lock_guard<std::mutex> cache_lock(ic_catalog.table_request_cache.Lock());
+		auto cached_table_result = ic_catalog.table_request_cache.Get(context, table_key, cache_lock, false);
+		D_ASSERT(cached_table_result);
+		auto &load_table_result = *cached_table_result->load_table_result;
+		InitializeFromLoadTableResult(load_table_result);
+	}
 }
 
 IcebergTableInformation IcebergTableInformation::Copy(ClientContext &context) const {

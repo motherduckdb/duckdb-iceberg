@@ -18,11 +18,22 @@ struct TableTransactionInfo {
 
 	rest_api_objects::CommitTransactionRequest request;
 	case_insensitive_map_t<idx_t> table_requests;
+	case_insensitive_map_t<vector<string>> created_metadata_files;
 
 	// if a table is created with assert create, we cannot use the
 	// transactions/commit endpoint. Instead we iterate through each table
 	// update and update each table individually
 	bool has_assert_create = false;
+};
+
+struct RetryCommitState {
+public:
+	RetryCommitState() {
+	}
+
+public:
+	idx_t max_retries = 0;
+	bool retryable = false;
 };
 
 enum class IcebergTableStatus : uint8_t { ALIVE, DROPPED, RENAMED, MISSING };
@@ -89,6 +100,7 @@ public:
 	IcebergCatalog &GetCatalog();
 	void DropSecrets(ClientContext &context);
 	TableTransactionInfo GetTransactionRequest(IcebergTransactionAlterUpdate &alter_update, ClientContext &context);
+	RetryCommitState GetRetryCommitState(const IcebergTransactionAlterUpdate &alter_update) const;
 	optional_ptr<IcebergTransactionTableState> GetLatestTableState(const string &table_key);
 	IcebergTransactionTableState &SetLatestTableState(IcebergTableInformation &table, IcebergTableStatus status);
 	IcebergTransactionTableState &SetLatestTableState(const string &table_key, IcebergTableStatus status);
@@ -98,6 +110,12 @@ public:
 	IcebergTableInformation &RenameTable(IcebergTableInformation &table, const string &new_name);
 
 private:
+	void CleanupMetadataFiles(ClientContext &context, const vector<string> &paths);
+	void RefreshRetryTables(IcebergTransactionAlterUpdate &alter_update, const case_insensitive_set_t &table_keys,
+	                        ClientContext &context);
+	bool RetryCommittedTable(IcebergTransactionAlterUpdate &alter_update, const string &table_key, idx_t attempt,
+	                         const RetryCommitState &retry_state, const CommitResult &result,
+	                         const vector<string> &created_metadata_files, ClientContext &context);
 	void CleanupFiles();
 
 private:
