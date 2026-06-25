@@ -38,11 +38,10 @@ from range(4096) t(i);
 statement ok
 call enable_logging('Iceberg');
 
-# i stores str and varchar types, so the two need to be cast
-statement error
+query I
 select * from my_datalake.default.variant_partial_tbl where variant_col.i = 1500;
 ----
-<REGEX>:.*an explicit cast is required.*
+{'i': 1500}
 
 statement ok
 select * from my_datalake.default.variant_partial_tbl where variant_col.i::VARCHAR = '1500';
