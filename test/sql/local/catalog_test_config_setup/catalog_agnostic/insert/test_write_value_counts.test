@@ -1,0 +1,589 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_write_value_counts.test
+# description: Verify value_counts are written to manifest on INSERT
+# group: [insert]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+require icu
+
+require core_functions
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+SET TimeZone = 'UTC';
+
+# --- All NULLs: value_counts includes nulls (100 rows), null_value_counts = 100 ---
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.value_counts_all_null;
+
+statement ok
+CREATE TABLE my_datalake.default.value_counts_all_null (
+	int_type INT,
+	float_type FLOAT,
+	double_type DOUBLE,
+	varchar_type VARCHAR
+);
+
+statement ok
+INSERT INTO my_datalake.default.value_counts_all_null
+SELECT NULL, NULL, NULL, NULL FROM range(100);
+
+statement ok
+SET VARIABLE manifest_all_null = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.value_counts_all_null)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+query II
+SELECT unnest(map_keys(value_counts)), unnest(map_values(value_counts))
+FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_all_null')))
+ORDER BY ALL;
+----
+1	100
+2	100
+3	100
+4	100
+
+query II
+SELECT unnest(map_keys(null_value_counts)), unnest(map_values(null_value_counts))
+FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_all_null')))
+ORDER BY ALL;
+----
+1	100
+2	100
+3	100
+4	100
+
+# --- All NaN floats: value_counts = 100, null_value_counts = 0 ---
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.value_counts_all_nan;
+
+statement ok
+CREATE TABLE my_datalake.default.value_counts_all_nan (
+	float_type FLOAT,
+	double_type DOUBLE
+);
+
+statement ok
+INSERT INTO my_datalake.default.value_counts_all_nan
+SELECT 'NaN'::FLOAT, 'NaN'::DOUBLE FROM range(100);
+
+statement ok
+SET VARIABLE manifest_all_nan = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.value_counts_all_nan)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+query II
+SELECT unnest(map_keys(value_counts)), unnest(map_values(value_counts))
+FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_all_nan')))
+ORDER BY ALL;
+----
+1	100
+2	100
+
+query II
+SELECT unnest(map_keys(null_value_counts)), unnest(map_values(null_value_counts))
+FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_all_nan')))
+ORDER BY ALL;
+----
+1	0
+2	0
+
+# nan_value_counts not yet written by DuckDB parquet writer (see iceberg_insert.cpp TODO)
+query I
+SELECT count(*) FROM iceberg_column_stats(my_datalake.default.value_counts_all_nan)
+WHERE nan_value_count IS NOT NULL;
+----
+0
+
+# --- Nested types from test_all_types (3 rows) ---
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.value_counts_nested;
+
+statement ok
+CREATE TABLE my_datalake.default.value_counts_nested AS
+SELECT
+	struct,
+	int_array,
+	map,
+	varchar_array
+FROM test_all_types();
+
+statement ok
+SET VARIABLE manifest_nested = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.value_counts_nested)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+# Leaf fields get value_counts; container columns do not
+query II
+SELECT column_name, value_count
+FROM iceberg_column_stats(my_datalake.default.value_counts_nested)
+WHERE column_name IN ('a', 'b', 'element', 'key', 'value')
+ORDER BY column_name, value_count;
+----
+a	3
+b	3
+element	6
+element	7
+key	4
+value	4
+
+# Manifest avro: Iceberg field ids are assigned by the catalog (Nessie vs fixture use
+# different ids for nested columns), but value_counts values are stable. For example
+# test_all_types nested leaf fields are 5->3,6->3,7->7,... on fixture but
+# 2->3,3->3,5->7,... on Nessie — same multiset [3,3,4,4,6,7], different keys.
+# Assert on the value_count multiset, not field_id pairs.
+query I
+SELECT count(*) FROM (
+	SELECT unnest(map_values(value_counts)) AS value_count
+	FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_nested')))
+);
+----
+6
+
+query I
+SELECT list_sort(list(value_count::BIGINT)) = [3, 3, 4, 4, 6, 7]::BIGINT[] FROM (
+	SELECT unnest(map_values(value_counts)) AS value_count
+	FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_nested')))
+);
+----
+true
+
+# --- struct_of_arrays from test_all_types (struct containing lists) ---
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.value_counts_struct_of_arrays;
+
+statement ok
+CREATE TABLE my_datalake.default.value_counts_struct_of_arrays AS
+SELECT struct_of_arrays FROM test_all_types();
+
+statement ok
+SET VARIABLE manifest_struct_of_arrays = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.value_counts_struct_of_arrays)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+query IIII
+SELECT column_name, column_type, value_count, null_value_count
+FROM iceberg_column_stats(my_datalake.default.value_counts_struct_of_arrays)
+WHERE value_count IS NOT NULL
+ORDER BY column_name, column_type;
+----
+element	INTEGER	7	4
+element	VARCHAR	6	3
+
+query I
+SELECT list_sort(list(value_count::BIGINT)) = [6, 7]::BIGINT[] FROM (
+	SELECT unnest(map_values(value_counts)) AS value_count
+	FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_struct_of_arrays')))
+);
+----
+true
+
+# --- nested_int_array from test_all_types (list of lists) ---
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.value_counts_nested_int_array;
+
+statement ok
+CREATE TABLE my_datalake.default.value_counts_nested_int_array AS
+SELECT nested_int_array FROM test_all_types();
+
+statement ok
+SET VARIABLE manifest_nested_int_array = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.value_counts_nested_int_array)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+query IIII
+SELECT column_name, column_type, value_count, null_value_count
+FROM iceberg_column_stats(my_datalake.default.value_counts_nested_int_array)
+WHERE value_count IS NOT NULL
+ORDER BY column_name, column_type;
+----
+element	INTEGER	15	9
+
+query I
+SELECT list_sort(list(value_count::BIGINT)) = [15]::BIGINT[] FROM (
+	SELECT unnest(map_values(value_counts)) AS value_count
+	FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_nested_int_array')))
+);
+----
+true
+
+# --- array_of_structs from test_all_types (list of structs) ---
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.value_counts_array_of_structs;
+
+statement ok
+CREATE TABLE my_datalake.default.value_counts_array_of_structs AS
+SELECT array_of_structs FROM test_all_types();
+
+statement ok
+SET VARIABLE manifest_array_of_structs = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.value_counts_array_of_structs)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+query IIII
+SELECT column_name, column_type, value_count, null_value_count
+FROM iceberg_column_stats(my_datalake.default.value_counts_array_of_structs)
+WHERE value_count IS NOT NULL
+ORDER BY column_name, column_type;
+----
+a	INTEGER	5	5
+b	VARCHAR	5	5
+
+query I
+SELECT list_sort(list(value_count::BIGINT)) = [5, 5]::BIGINT[] FROM (
+	SELECT unnest(map_values(value_counts)) AS value_count
+	FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_array_of_structs')))
+);
+----
+true
+
+# --- double_array from test_all_types (list with NaN/infinity) ---
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.value_counts_double_array;
+
+statement ok
+CREATE TABLE my_datalake.default.value_counts_double_array AS
+SELECT double_array FROM test_all_types();
+
+statement ok
+SET VARIABLE manifest_double_array = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.value_counts_double_array)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+query IIII
+SELECT column_name, column_type, value_count, null_value_count
+FROM iceberg_column_stats(my_datalake.default.value_counts_double_array)
+WHERE value_count IS NOT NULL
+ORDER BY column_name, column_type;
+----
+element	DOUBLE	8	3
+
+query I
+SELECT list_sort(list(value_count::BIGINT)) = [8]::BIGINT[] FROM (
+	SELECT unnest(map_values(value_counts)) AS value_count
+	FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_double_array')))
+);
+----
+true
+
+# --- fixed_struct_array from test_all_types (ARRAY cast to LIST) ---
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.value_counts_fixed_struct_array;
+
+statement ok
+CREATE TABLE my_datalake.default.value_counts_fixed_struct_array AS
+SELECT fixed_struct_array::STRUCT(a INTEGER, b VARCHAR)[] AS fixed_struct_array
+FROM test_all_types();
+
+statement ok
+SET VARIABLE manifest_fixed_struct_array = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.value_counts_fixed_struct_array)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+query IIII
+SELECT column_name, column_type, value_count, null_value_count
+FROM iceberg_column_stats(my_datalake.default.value_counts_fixed_struct_array)
+WHERE value_count IS NOT NULL
+ORDER BY column_name, column_type;
+----
+a	INTEGER	7	4
+b	VARCHAR	7	4
+
+query I
+SELECT list_sort(list(value_count::BIGINT)) = [7, 7]::BIGINT[] FROM (
+	SELECT unnest(map_values(value_counts)) AS value_count
+	FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_fixed_struct_array')))
+);
+----
+true
+
+# --- struct_of_fixed_array from test_all_types (fixed arrays inside struct, cast to LIST) ---
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.value_counts_struct_of_fixed_array;
+
+statement ok
+CREATE TABLE my_datalake.default.value_counts_struct_of_fixed_array AS
+SELECT struct_of_fixed_array::STRUCT(a INTEGER[], b VARCHAR[]) AS struct_of_fixed_array
+FROM test_all_types();
+
+statement ok
+SET VARIABLE manifest_struct_of_fixed_array = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.value_counts_struct_of_fixed_array)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+query IIII
+SELECT column_name, column_type, value_count, null_value_count
+FROM iceberg_column_stats(my_datalake.default.value_counts_struct_of_fixed_array)
+WHERE value_count IS NOT NULL
+ORDER BY column_name, column_type;
+----
+element	INTEGER	7	2
+element	VARCHAR	7	2
+
+query I
+SELECT list_sort(list(value_count::BIGINT)) = [7, 7]::BIGINT[] FROM (
+	SELECT unnest(map_values(value_counts)) AS value_count
+	FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_struct_of_fixed_array')))
+);
+----
+true
+
+# --- fixed_array_of_int_list from test_all_types (fixed array of lists, cast to LIST) ---
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.value_counts_fixed_array_of_int_list;
+
+statement ok
+CREATE TABLE my_datalake.default.value_counts_fixed_array_of_int_list AS
+SELECT fixed_array_of_int_list::INTEGER[][] AS fixed_array_of_int_list
+FROM test_all_types();
+
+statement ok
+SET VARIABLE manifest_fixed_array_of_int_list = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.value_counts_fixed_array_of_int_list)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+query IIII
+SELECT column_name, column_type, value_count, null_value_count
+FROM iceberg_column_stats(my_datalake.default.value_counts_fixed_array_of_int_list)
+WHERE value_count IS NOT NULL
+ORDER BY column_name, column_type;
+----
+element	INTEGER	19	10
+
+query I
+SELECT list_sort(list(value_count::BIGINT)) = [19]::BIGINT[] FROM (
+	SELECT unnest(map_values(value_counts)) AS value_count
+	FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_fixed_array_of_int_list')))
+);
+----
+true
+
+# --- list_of_fixed_int_array from test_all_types (list of fixed arrays, cast to LIST) ---
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.value_counts_list_of_fixed_int_array;
+
+statement ok
+CREATE TABLE my_datalake.default.value_counts_list_of_fixed_int_array AS
+SELECT list_of_fixed_int_array::INTEGER[][] AS list_of_fixed_int_array
+FROM test_all_types();
+
+statement ok
+SET VARIABLE manifest_list_of_fixed_int_array = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.value_counts_list_of_fixed_int_array)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+query IIII
+SELECT column_name, column_type, value_count, null_value_count
+FROM iceberg_column_stats(my_datalake.default.value_counts_list_of_fixed_int_array)
+WHERE value_count IS NOT NULL
+ORDER BY column_name, column_type;
+----
+element	INTEGER	19	4
+
+query I
+SELECT list_sort(list(value_count::BIGINT)) = [19]::BIGINT[] FROM (
+	SELECT unnest(map_values(value_counts)) AS value_count
+	FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_list_of_fixed_int_array')))
+);
+----
+true
+
+# --- fixed_int_array from test_all_types (fixed-length int array, cast to LIST) ---
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.value_counts_fixed_int_array;
+
+statement ok
+CREATE TABLE my_datalake.default.value_counts_fixed_int_array AS
+SELECT fixed_int_array::INTEGER[] AS fixed_int_array
+FROM test_all_types();
+
+statement ok
+SET VARIABLE manifest_fixed_int_array = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.value_counts_fixed_int_array)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+query IIII
+SELECT column_name, column_type, value_count, null_value_count
+FROM iceberg_column_stats(my_datalake.default.value_counts_fixed_int_array)
+WHERE value_count IS NOT NULL
+ORDER BY column_name, column_type;
+----
+element	INTEGER	7	2
+
+query I
+SELECT list_sort(list(value_count::BIGINT)) = [7]::BIGINT[] FROM (
+	SELECT unnest(map_values(value_counts)) AS value_count
+	FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_fixed_int_array')))
+);
+----
+true
+
+# --- Very long strings (50 rows, 10k chars each) ---
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.value_counts_long_string;
+
+statement ok
+CREATE TABLE my_datalake.default.value_counts_long_string (long_varchar VARCHAR);
+
+statement ok
+INSERT INTO my_datalake.default.value_counts_long_string
+SELECT repeat('Z', 10000) FROM range(50);
+
+statement ok
+SET VARIABLE manifest_long = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.value_counts_long_string)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+query II
+SELECT unnest(map_keys(value_counts)), unnest(map_values(value_counts))
+FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_long')))
+ORDER BY ALL;
+----
+1	50
+
+query II
+SELECT unnest(map_keys(null_value_counts)), unnest(map_values(null_value_counts))
+FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_long')))
+ORDER BY ALL;
+----
+1	0
+
+# --- Struct/List/Map table with manifest avro verification ---
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.duckdb_nested_types;
+
+statement ok
+CREATE TABLE my_datalake.default.duckdb_nested_types (
+	id INT,
+	name VARCHAR,
+	address STRUCT(street VARCHAR, city VARCHAR, zip VARCHAR),
+	phone_numbers VARCHAR[],
+	metadata MAP(VARCHAR, VARCHAR)
+);
+
+statement ok
+INSERT INTO my_datalake.default.duckdb_nested_types VALUES (
+	1,
+	'Alice',
+	{'street': '123 Main St', 'city': 'Metropolis', 'zip': '12345'},
+	['123-456-7890', '987-654-3210'],
+	MAP(['age', 'membership'], ['30', 'gold'])
+);
+
+query II
+SELECT column_name, value_count
+FROM iceberg_column_stats(my_datalake.default.duckdb_nested_types)
+WHERE column_name IN ('id', 'name', 'street', 'city', 'zip', 'element', 'key', 'value')
+ORDER BY column_name;
+----
+city	1
+element	2
+id	1
+key	2
+name	1
+street	1
+value	2
+zip	1
+
+statement ok
+SET VARIABLE avro_file = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.duckdb_nested_types)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+# Same field-id caveat as above: compare sorted value_counts from the manifest,
+# not map keys, so this passes across fixture, Nessie, and other catalogs.
+query I
+SELECT count(*) FROM (
+	SELECT unnest(map_values(value_counts)) AS value_count
+	FROM (SELECT unnest(data_file) FROM read_avro(getvariable('avro_file')))
+);
+----
+8
+
+query I
+SELECT list_sort(list(value_count::BIGINT)) = [1, 1, 1, 1, 1, 2, 2, 2]::BIGINT[] FROM (
+	SELECT unnest(map_values(value_counts)) AS value_count
+	FROM (SELECT unnest(data_file) FROM read_avro(getvariable('avro_file')))
+);
+----
+true
+
+# --- Multi-row duckdb_nested_types (NULL struct, empty list, varying map sizes) ---
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.duckdb_nested_types_multi;
+
+statement ok
+CREATE TABLE my_datalake.default.duckdb_nested_types_multi (
+	id INT,
+	name VARCHAR,
+	address STRUCT(street VARCHAR, city VARCHAR, zip VARCHAR),
+	phone_numbers VARCHAR[],
+	metadata MAP(VARCHAR, VARCHAR)
+);
+
+statement ok
+INSERT INTO my_datalake.default.duckdb_nested_types_multi VALUES
+	(1, 'Alice', {'street': '123 Main St', 'city': 'Metropolis', 'zip': '12345'}, ['111-111-1111', '222-222-2222'], MAP(['age'], ['30'])),
+	(2, 'Bob', {'street': '456 Oak Ave', 'city': 'Gotham', 'zip': '67890'}, ['333-333-3333'], MAP(['age', 'tier'], ['25', 'silver'])),
+	(3, 'Carol', NULL, [], MAP(['status'], ['active']));
+
+query IIII
+SELECT column_name, column_type, value_count, null_value_count
+FROM iceberg_column_stats(my_datalake.default.duckdb_nested_types_multi)
+WHERE value_count IS NOT NULL
+ORDER BY column_name, column_type, value_count;
+----
+city	VARCHAR	3	1
+element	VARCHAR	4	1
+id	INTEGER	3	0
+key	VARCHAR	4	0
+name	VARCHAR	3	0
+street	VARCHAR	3	1
+value	VARCHAR	4	0
+zip	VARCHAR	3	1
+
+statement ok
+SET VARIABLE manifest_nested_multi = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.duckdb_nested_types_multi)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+query I
+SELECT count(*) FROM (
+	SELECT unnest(map_values(value_counts)) AS value_count
+	FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_nested_multi')))
+);
+----
+8
+
+query I
+SELECT list_sort(list(value_count::BIGINT)) = [3, 3, 3, 3, 3, 4, 4, 4]::BIGINT[] FROM (
+	SELECT unnest(map_values(value_counts)) AS value_count
+	FROM (SELECT unnest(data_file) FROM read_avro(getvariable('manifest_nested_multi')))
+);
+----
+true
