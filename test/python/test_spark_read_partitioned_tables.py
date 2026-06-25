@@ -184,11 +184,34 @@ class TestSparkReadPartitionedTables:
 
     # -------------------------------- DECIMAL / BUCKET (DuckDB-created table)
     def test_bucket_decimal_duckdb_created(self, spark_con):
+        _BUCKET_DECIMAL_LABELS = [
+            "ten",
+            "twenty",
+            "thirty",
+            "forty",
+            "fifty",
+            "sixty",
+            "seventy",
+            "eighty",
+            "ninety",
+            "hundred",
+        ]
+        _BUCKET_DECIMAL_AMOUNTS = [Decimal(f"{v}.00") for v in [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]]
+        TEST_BUCKET_DECIMAL_ROWS = [
+            Row(id=i, amount=a, label=l)
+            for i, a, l in zip(range(1, 11), _BUCKET_DECIMAL_AMOUNTS, _BUCKET_DECIMAL_LABELS)
+        ] + [Row(id=11, amount=None, label="null_row")]
         res = spark_con.sql("SELECT * FROM default.test_bucket_decimal ORDER BY id").collect()
         assert res == TEST_BUCKET_DECIMAL_ROWS
 
     # ------------------------------- DECIMAL / TRUNCATE (DuckDB-created table)
     def test_truncate_decimal_duckdb_created(self, spark_con):
+        _TRUNCATE_DECIMAL_LABELS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
+        _TRUNCATE_DECIMAL_AMOUNTS = [Decimal(f"{v}.00") for v in range(1, 11)]
+        TEST_TRUNCATE_DECIMAL_ROWS = [
+            Row(id=i, amount=a, label=l)
+            for i, a, l in zip(range(1, 11), _TRUNCATE_DECIMAL_AMOUNTS, _TRUNCATE_DECIMAL_LABELS)
+        ] + [Row(id=11, amount=None, label="null_row")]
         res = spark_con.sql("SELECT * FROM default.test_truncate_decimal ORDER BY id").collect()
         assert res == TEST_TRUNCATE_DECIMAL_ROWS
 
@@ -357,211 +380,3 @@ _BUCKET_BLOB_VALUES = [
     bytearray(b"\x41\x42\x43\x44\x45"),
     bytearray(b"\x46\x47\x48\x49\x50"),
 ]
-
-_BUCKET_DECIMAL_AMOUNTS = [Decimal(f"{v}.00") for v in [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]]
-_TRUNCATE_DECIMAL_AMOUNTS = [Decimal(f"{v}.00") for v in range(1, 11)]
-
-_TRUNCATE_BINARY_VALUES = [
-    bytearray(b"\x01\x02\x03"),
-    bytearray(b"\x02\x03\x04"),
-    bytearray(b"\x03\x04\x05"),
-    bytearray(b"\x04\x05\x06"),
-    bytearray(b"\x05\x06\x07"),
-    bytearray(b"\x06\x07\x08"),
-    bytearray(b"\x07\x08\x09"),
-    bytearray(b"\x08\x09\x0a"),
-    bytearray(b"\x09\x00\x0a"),
-    bytearray(b"\x0a\x00\x0b"),
-]
-
-
-def _cross_engine_rows(values, null_id=11):
-    """Build 22-row expected list: Spark rows (ids 1-10 + null) then DuckDB rows (ids 101-110 + null)."""
-    rows = [Row(id=i, value=v) for i, v in zip(range(1, 11), values)]
-    rows.append(Row(id=null_id, value=None))
-    rows += [Row(id=i + 100, value=v) for i, v in zip(range(1, 11), values)]
-    rows.append(Row(id=null_id + 100, value=None))
-    return rows
-
-
-BUCKET_INT_FOR_INSERT_ROWS = _cross_engine_rows(list(range(1, 11)))
-BUCKET_BIGINT_FOR_INSERT_ROWS = _cross_engine_rows(list(range(1, 11)))
-BUCKET_VARCHAR_FOR_INSERT_ROWS = _cross_engine_rows(_ANIMALS)
-BUCKET_DATE_FOR_INSERT_ROWS = _cross_engine_rows(_BUCKET_DATES)
-BUCKET_TIMESTAMP_FOR_INSERT_ROWS = _cross_engine_rows(_BUCKET_TIMESTAMPS)
-# BUCKET_BLOB_FOR_INSERT_ROWS — omitted: Spark binary handling is unreliable across versions
-BUCKET_DECIMAL_FOR_INSERT_ROWS = _cross_engine_rows(_BUCKET_DECIMAL_AMOUNTS)
-
-TRUNCATE_INT_FOR_INSERT_ROWS = _cross_engine_rows(_TRUNCATE_INT_VALUES)
-TRUNCATE_BIGINT_FOR_INSERT_ROWS = _cross_engine_rows(_TRUNCATE_INT_VALUES)
-TRUNCATE_VARCHAR_FOR_INSERT_ROWS = _cross_engine_rows(_ANIMALS)
-TRUNCATE_BINARY_FOR_INSERT_ROWS = _cross_engine_rows(_TRUNCATE_BINARY_VALUES)
-TRUNCATE_DECIMAL_FOR_INSERT_ROWS = _cross_engine_rows(_TRUNCATE_DECIMAL_AMOUNTS)
-
-# Rows written by DuckDB alone into bucket/truncate decimal tables (3 columns: id, amount, label)
-_BUCKET_DECIMAL_LABELS = [
-    "ten",
-    "twenty",
-    "thirty",
-    "forty",
-    "fifty",
-    "sixty",
-    "seventy",
-    "eighty",
-    "ninety",
-    "hundred",
-]
-TEST_BUCKET_DECIMAL_ROWS = [
-    Row(id=i, amount=a, label=l) for i, a, l in zip(range(1, 11), _BUCKET_DECIMAL_AMOUNTS, _BUCKET_DECIMAL_LABELS)
-] + [Row(id=11, amount=None, label="null_row")]
-_TRUNCATE_DECIMAL_LABELS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
-TEST_TRUNCATE_DECIMAL_ROWS = [
-    Row(id=i, amount=a, label=l) for i, a, l in zip(range(1, 11), _TRUNCATE_DECIMAL_AMOUNTS, _TRUNCATE_DECIMAL_LABELS)
-] + [Row(id=11, amount=None, label="null_row")]
-
-
-class TestSparkReadBucketTruncateForInsert:
-    """
-    Cross-engine round-trip tests for bucket- and truncate-partitioned tables.
-
-    Each table was populated by two engines:
-      - Spark (ids 1-11, via data generators)
-      - DuckDB (ids 101-111, via sqllogictest INSERT statements in
-        other_engines/partitions/bucket and other_engines/partitions/truncate)
-
-    Tests verify that Spark reads back all 22 rows and that filtering on the
-    partitioned column returns exactly the two matching rows (one per engine),
-    proving both engines computed the same partition value.
-    """
-
-    # --------------------------------------------------- BUCKET / INTEGER
-    def test_bucket_int_total_rows(self, spark_con):
-        res = spark_con.sql("SELECT * FROM default.bucket_partitioned_int_for_insert ORDER BY id").collect()
-        assert res == BUCKET_INT_FOR_INSERT_ROWS
-
-    def test_bucket_int_filter(self, spark_con):
-        res = spark_con.sql(
-            "SELECT * FROM default.bucket_partitioned_int_for_insert WHERE value = 1 ORDER BY id"
-        ).collect()
-        assert res == [Row(id=1, value=1), Row(id=101, value=1)]
-
-    # --------------------------------------------------- BUCKET / BIGINT
-    def test_bucket_bigint_total_rows(self, spark_con):
-        res = spark_con.sql("SELECT * FROM default.bucket_partitioned_bigint_for_insert ORDER BY id").collect()
-        assert res == BUCKET_BIGINT_FOR_INSERT_ROWS
-
-    def test_bucket_bigint_filter(self, spark_con):
-        res = spark_con.sql(
-            "SELECT * FROM default.bucket_partitioned_bigint_for_insert WHERE value = 1 ORDER BY id"
-        ).collect()
-        assert res == [Row(id=1, value=1), Row(id=101, value=1)]
-
-    # --------------------------------------------------- BUCKET / VARCHAR
-    def test_bucket_varchar_total_rows(self, spark_con):
-        res = spark_con.sql("SELECT * FROM default.bucket_partitioned_varchar_for_insert ORDER BY id").collect()
-        assert res == BUCKET_VARCHAR_FOR_INSERT_ROWS
-
-    def test_bucket_varchar_filter(self, spark_con):
-        res = spark_con.sql(
-            "SELECT * FROM default.bucket_partitioned_varchar_for_insert WHERE value = 'aardvark' ORDER BY id"
-        ).collect()
-        assert res == [Row(id=1, value="aardvark"), Row(id=101, value="aardvark")]
-
-    # ----------------------------------------------------- BUCKET / DATE
-    def test_bucket_date_total_rows(self, spark_con):
-        res = spark_con.sql("SELECT * FROM default.bucket_partitioned_date_for_insert ORDER BY id").collect()
-        assert res == BUCKET_DATE_FOR_INSERT_ROWS
-
-    def test_bucket_date_filter(self, spark_con):
-        res = spark_con.sql(
-            "SELECT * FROM default.bucket_partitioned_date_for_insert WHERE value = DATE '2020-01-01' ORDER BY id"
-        ).collect()
-        d = datetime.date(2020, 1, 1)
-        assert res == [Row(id=1, value=d), Row(id=101, value=d)]
-
-    # -------------------------------------------------- BUCKET / TIMESTAMP
-    def test_bucket_timestamp_total_rows(self, spark_con):
-        res = spark_con.sql("SELECT * FROM default.bucket_partitioned_timestamp_for_insert ORDER BY id").collect()
-        assert res == BUCKET_TIMESTAMP_FOR_INSERT_ROWS
-
-    def test_bucket_timestamp_filter(self, spark_con):
-        res = spark_con.sql(
-            "SELECT * FROM default.bucket_partitioned_timestamp_for_insert "
-            "WHERE value = TIMESTAMP '2023-01-01 00:00:00' ORDER BY id"
-        ).collect()
-        ts = datetime.datetime(2023, 1, 1, 0, 0, 0)
-        assert res == [Row(id=1, value=ts), Row(id=101, value=ts)]
-
-    # ------------------------------------------------------- BUCKET / BLOB
-    # Spark binary round-trip is unreliable across runtime versions; skipped.
-    # def test_bucket_blob_total_rows(self, spark_con): ...
-    # def test_bucket_blob_filter(self, spark_con): ...
-
-    # ------------------------------------------------- TRUNCATE / INTEGER
-    def test_truncate_int_total_rows(self, spark_con):
-        res = spark_con.sql("SELECT * FROM default.truncate_partitioned_int_for_insert ORDER BY id").collect()
-        assert res == TRUNCATE_INT_FOR_INSERT_ROWS
-
-    def test_truncate_int_filter(self, spark_con):
-        res = spark_con.sql(
-            "SELECT * FROM default.truncate_partitioned_int_for_insert WHERE value = 1 ORDER BY id"
-        ).collect()
-        assert res == [Row(id=1, value=1), Row(id=101, value=1)]
-
-    # -------------------------------------------------- TRUNCATE / BIGINT
-    def test_truncate_bigint_total_rows(self, spark_con):
-        res = spark_con.sql("SELECT * FROM default.truncate_partitioned_bigint_for_insert ORDER BY id").collect()
-        assert res == TRUNCATE_BIGINT_FOR_INSERT_ROWS
-
-    def test_truncate_bigint_filter(self, spark_con):
-        res = spark_con.sql(
-            "SELECT * FROM default.truncate_partitioned_bigint_for_insert WHERE value = 1 ORDER BY id"
-        ).collect()
-        assert res == [Row(id=1, value=1), Row(id=101, value=1)]
-
-    # ------------------------------------------------- TRUNCATE / VARCHAR
-    def test_truncate_varchar_total_rows(self, spark_con):
-        res = spark_con.sql("SELECT * FROM default.truncate_partitioned_varchar_for_insert ORDER BY id").collect()
-        assert res == TRUNCATE_VARCHAR_FOR_INSERT_ROWS
-
-    def test_truncate_varchar_filter(self, spark_con):
-        res = spark_con.sql(
-            "SELECT * FROM default.truncate_partitioned_varchar_for_insert WHERE value = 'aardvark' ORDER BY id"
-        ).collect()
-        assert res == [Row(id=1, value="aardvark"), Row(id=101, value="aardvark")]
-
-    # -------------------------------------------------- TRUNCATE / BINARY
-    def test_truncate_binary_total_rows(self, spark_con):
-        res = spark_con.sql("SELECT * FROM default.truncate_partitioned_binary_for_insert ORDER BY id").collect()
-        assert res == TRUNCATE_BINARY_FOR_INSERT_ROWS
-
-    def test_truncate_binary_filter(self, spark_con):
-        res = spark_con.sql(
-            "SELECT * FROM default.truncate_partitioned_binary_for_insert WHERE value = X'010203' ORDER BY id"
-        ).collect()
-        v = bytearray(b"\x01\x02\x03")
-        assert res == [Row(id=1, value=v), Row(id=101, value=v)]
-
-    # -------------------------------------------------- BUCKET / DECIMAL
-    def test_bucket_decimal_total_rows(self, spark_con):
-        res = spark_con.sql("SELECT * FROM default.bucket_partitioned_decimal_for_insert ORDER BY id").collect()
-        assert res == BUCKET_DECIMAL_FOR_INSERT_ROWS
-
-    def test_bucket_decimal_filter(self, spark_con):
-        res = spark_con.sql(
-            "SELECT * FROM default.bucket_partitioned_decimal_for_insert WHERE amount = 10.00 ORDER BY id"
-        ).collect()
-        v = Decimal("10.00")
-        assert res == [Row(id=1, amount=v), Row(id=101, amount=v)]
-
-    # ------------------------------------------------- TRUNCATE / DECIMAL
-    def test_truncate_decimal_total_rows(self, spark_con):
-        res = spark_con.sql("SELECT * FROM default.truncate_partitioned_decimal_for_insert ORDER BY id").collect()
-        assert res == TRUNCATE_DECIMAL_FOR_INSERT_ROWS
-
-    def test_truncate_decimal_filter(self, spark_con):
-        res = spark_con.sql(
-            "SELECT * FROM default.truncate_partitioned_decimal_for_insert WHERE amount = 1.00 ORDER BY id"
-        ).collect()
-        v = Decimal("1.00")
-        assert res == [Row(id=1, amount=v), Row(id=101, amount=v)]

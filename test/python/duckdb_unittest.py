@@ -101,27 +101,40 @@ class DuckDBUnittestRunner:
             return ""
         return "\n\n".join(self.stdin_log) + "\n\n"
 
-    def statement_ok(self, sql: str) -> None:
-        self.send(f"statement ok\n{textwrap.dedent(sql).strip()}")
+    @staticmethod
+    def _header(prefix: str, connection: str | None = None) -> str:
+        if connection is None:
+            return prefix
+        return f"{prefix} {connection}"
 
-    def statement_error(self, sql: str, expected_error: str | None = None) -> None:
-        block = f"statement error\n{textwrap.dedent(sql).strip()}"
+    def statement_ok(self, sql: str, *, connection: str | None = None) -> None:
+        self.send(f"{self._header('statement ok', connection)}\n{textwrap.dedent(sql).strip()}")
+
+    def statement_error(self, sql: str, expected_error: str | None = None, *, connection: str | None = None) -> None:
+        block = f"{self._header('statement error', connection)}\n{textwrap.dedent(sql).strip()}"
         if expected_error is not None:
             block += f"\n----\n{textwrap.dedent(expected_error).strip()}"
         self.send(block)
 
     @contextmanager
-    def with_transaction(self, commit: bool = True) -> Iterator[None]:
-        self.statement_ok("begin transaction")
+    def with_transaction(self, commit: bool = True, *, connection: str | None = None) -> Iterator[None]:
+        self.statement_ok("begin transaction", connection=connection)
         try:
             yield
         except BaseException:
-            self.statement_ok("abort")
+            self.statement_ok("abort", connection=connection)
             raise
         else:
-            self.statement_ok("commit" if commit else "abort")
+            self.statement_ok("commit" if commit else "abort", connection=connection)
 
-    def query(self, column_types: str, sql: str, expected_rows: Sequence[Sequence[object]]) -> None:
+    def query(
+        self,
+        column_types: str,
+        sql: str,
+        expected_rows: Sequence[Sequence[object]],
+        *,
+        connection: str | None = None,
+    ) -> None:
         rows = []
         for row in expected_rows:
             if isinstance(row, (str, bytes)) or len(row) != len(column_types):
@@ -129,7 +142,9 @@ class DuckDBUnittestRunner:
             rows.append("\t".join(self._format_value(value) for value in row))
 
         expected = "\n".join(rows)
-        self.send(f"query {column_types}\n{textwrap.dedent(sql).strip()}\n----\n{expected}")
+        self.send(
+            f"{self._header(f'query {column_types}', connection)}\n{textwrap.dedent(sql).strip()}\n----\n{expected}"
+        )
 
     @staticmethod
     def _format_value(value: object) -> str:

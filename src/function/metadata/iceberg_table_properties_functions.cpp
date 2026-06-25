@@ -81,6 +81,13 @@ static unique_ptr<FunctionData> SetIcebergTablePropertiesBind(ClientContext &con
 		throw InvalidInputException("Cannot call set_iceberg_table_properties on non-iceberg table");
 	}
 	ret->iceberg_table = iceberg_table->Cast<IcebergTableEntry>();
+	// This mutates the catalog: declare the modification so the statement is treated as a write (e.g. so it
+	// is rejected against a read-only transaction, and so catalog-version tracking observes the change).
+	if (input.binder) {
+		DatabaseModificationType modification;
+		modification |= DatabaseModificationType::ALTER_TABLE;
+		input.binder->GetStatementProperties().RegisterDBModify(iceberg_table->ParentCatalog(), context, modification);
+	}
 	auto map = Value(input.inputs[1]).DefaultCastAs(LogicalType::MAP(LogicalType::VARCHAR, LogicalType::VARCHAR));
 
 	auto &map_children = MapValue::GetChildren(map);
@@ -108,6 +115,13 @@ static unique_ptr<FunctionData> RemoveIcebergTablePropertiesBind(ClientContext &
 		throw InvalidInputException("Cannot call set_iceberg_table_properties on non-iceberg table");
 	}
 	ret->iceberg_table = iceberg_table->Cast<IcebergTableEntry>();
+	// This mutates the catalog: declare the modification so the statement is treated as a write (e.g. so it
+	// is rejected against a read-only transaction, and so catalog-version tracking observes the change).
+	if (input.binder) {
+		DatabaseModificationType modification;
+		modification |= DatabaseModificationType::ALTER_TABLE;
+		input.binder->GetStatementProperties().RegisterDBModify(iceberg_table->ParentCatalog(), context, modification);
+	}
 
 	auto &remove_values = input.inputs[1];
 	auto &list_children = ListValue::GetChildren(remove_values);

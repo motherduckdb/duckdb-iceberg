@@ -116,3 +116,28 @@ statement error
 select * from iceberg_table_properties('default.test.blah.blah');
 ----
 <REGEX>:.*Invalid Input Error.*Too many identifiers.*
+
+# set/remove_iceberg_table_properties mutate the catalog, so they must be rejected inside a read-only
+# transaction. This only holds if the bind declares the modification (RegisterDBModify); otherwise the
+# property change slips past the read-only check and runs against a read-only transaction.
+statement ok
+BEGIN TRANSACTION READ ONLY;
+
+statement error
+CALL set_iceberg_table_properties(my_datalake.default.test, {'k' : 'v'});
+----
+<REGEX>:.*read-only.*
+
+statement ok
+ROLLBACK;
+
+statement ok
+BEGIN TRANSACTION READ ONLY;
+
+statement error
+CALL remove_iceberg_table_properties(my_datalake.default.test, ['write.delete.mode']);
+----
+<REGEX>:.*read-only.*
+
+statement ok
+ROLLBACK;
