@@ -13,7 +13,6 @@ jobs:
     uses: ./.github/workflows/CloudTestingReusable.yml
     with:
       duckdb_ref: ''
-      duckdb_iceberg_ref: 'main'
       httpfs_fork: 'https://github.com/duckdb/duckdb-httpfs'
       httpfs_ref: ''
     secrets: inherit
