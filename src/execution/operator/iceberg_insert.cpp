@@ -3,6 +3,7 @@
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
 #include "duckdb/main/client_data.hpp"
 #include "duckdb/execution/physical_operator_states.hpp"
+#include "duckdb/planner/expression_binder/table_function_binder.hpp"
 #include "duckdb/planner/operator/logical_copy_to_file.hpp"
 #include "duckdb/planner/operator/logical_insert.hpp"
 #include "duckdb/planner/operator/logical_create_table.hpp"
@@ -839,7 +840,12 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 		// file_size_bytes is currently only supported for unpartitioned writes
 		auto write_target_file_size = table_properties.find("write.target-file-size-bytes");
 		if (write_target_file_size != table_properties.end()) {
-			result.file_size_bytes = std::stoull(write_target_file_size->second);
+			try {
+				result.file_size_bytes = context.db->config.ParseMemoryLimit(write_target_file_size->second.c_str());
+			} catch (ParserException &e) {
+				DUCKDB_LOG_INFO(context, "table property write.target-file-size-bytes has invalid value %s. Reason %s",
+				                write_target_file_size->second, e.what());
+			}
 		} else {
 			result.file_size_bytes = IcebergCatalog::DEFAULT_TARGET_FILE_SIZE;
 		}
@@ -1006,7 +1012,7 @@ PhysicalOperator &IcebergCatalog::PlanInsert(ClientContext &context, PhysicalPla
 	return insert;
 }
 
-static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(BoundCreateTableInfo &info) {
+static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(ClientContext &context, BoundCreateTableInfo &info) {
 	auto metadata = make_uniq<IcebergTableMetadata>();
 	metadata->iceberg_version = 2;
 	metadata->default_spec_id = 0;
@@ -1027,8 +1033,16 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(BoundCreateTabl
 	metadata->AddSchemaOrGetExisting(schema);
 	metadata->SetCurrentSchemaId(0);
 
+	auto binder = Binder::CreateBinder(context);
+	TableFunctionBinder property_binder(*binder, context, "format-version");
 	for (auto &option : create_info.options) {
-		metadata->table_properties[option.first] = option.second->ToString();
+		auto expr_copy = option.second->Copy();
+		auto bound_expr = property_binder.Bind(expr_copy);
+		if (bound_expr->HasParameter()) {
+			throw ParameterNotResolvedException();
+		}
+		auto val = ExpressionExecutor::EvaluateScalar(context, *bound_expr, true);
+		metadata->table_properties[option.first] = val.GetValue<string>();
 	}
 
 	// Build a placeholder partition spec from the parsed PARTITIONED BY clause so that
@@ -1088,7 +1102,7 @@ PhysicalOperator &IcebergCatalog::PlanCreateTableAs(ClientContext &context, Phys
 	auto &ic_schema_entry = schema.Cast<IcebergSchemaEntry>();
 
 	// create a fake local iceberg table with desired columns
-	auto placeholder_metadata = BuildPlaceholderMetadata(*op.info);
+	auto placeholder_metadata = BuildPlaceholderMetadata(context, *op.info);
 	auto &placeholder_schema = placeholder_metadata->GetLatestSchema();
 	auto &plan = CastCtasToIcebergStorageTypes(context, planner, plan_p, *op.info, *placeholder_metadata);
 	IcebergCopyInput copy_input(context, *placeholder_metadata, placeholder_schema);
