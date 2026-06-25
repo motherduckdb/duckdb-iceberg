@@ -1,0 +1,86 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/merge/merge_into_multiple_update_delete_actions.test
+# group: [merge]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.entry;
+
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.new_entry;
+
+statement ok
+CREATE TABLE my_datalake.default.entry(
+    type VARCHAR,
+    number INTEGER,
+    text VARCHAR,
+    country VARCHAR,
+    date DATE
+) WITH (
+    'format-version'='3'
+);
+
+statement ok
+INSERT INTO my_datalake.default.entry VALUES
+    ('number', 50, NULL, NULL, NULL),
+    ('text', NULL, 'Hello', NULL, NULL),
+    ('country', NULL, NULL, 'Netherlands', NULL),
+    ('date', NULL, NULL, NULL, DATE '2000-01-01');
+
+statement ok
+CREATE TABLE my_datalake.default.new_entry(
+    type VARCHAR,
+    number INTEGER,
+    text VARCHAR,
+    country VARCHAR,
+    date DATE
+) WITH (
+    'format-version'='3'
+);
+
+statement ok
+INSERT INTO my_datalake.default.new_entry VALUES
+    ('number', 100, NULL, NULL, NULL),
+    ('text', NULL, 'World', NULL, NULL),
+    ('country', NULL, NULL, 'Germany', NULL),
+    ('date', NULL, NULL, NULL, DATE '2010-01-01');
+
+
+query IIIII
+FROM my_datalake.default.entry ORDER BY type
+----
+country	NULL	NULL	Netherlands	NULL
+date	NULL	NULL	NULL	2000-01-01
+number	50	NULL	NULL	NULL
+text	NULL	Hello	NULL	NULL
+
+statement error
+MERGE INTO my_datalake.default.entry AS entry
+USING my_datalake.default.new_entry AS new_entry
+ON entry.type = new_entry.type
+WHEN MATCHED AND entry.type = 'number' THEN UPDATE SET number = new_entry.number
+WHEN MATCHED AND entry.type = 'text' THEN UPDATE SET text = new_entry.text
+WHEN MATCHED AND entry.type = 'country' THEN UPDATE SET country = new_entry.country
+WHEN MATCHED AND entry.type = 'date' THEN UPDATE SET date = new_entry.date
+WHEN MATCHED THEN ERROR;
+----
+MERGE INTO with Iceberg only supports a single UPDATE/DELETE action currently
+
+# Expected result when the limitation is lifted
+mode skip
+
+query IIIII
+FROM my_datalake.default.entry ORDER BY type
+----
+country	NULL	NULL	Germany	NULL
+date	NULL	NULL	NULL	2010-01-01
+number	100	NULL	NULL	NULL
+text	NULL	World	NULL	NULL
