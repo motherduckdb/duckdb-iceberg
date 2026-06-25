@@ -8,11 +8,18 @@
     "iceberg",
     "httpfs"
   ],
+  "test_env": [
+    {
+      "env_name": "CATALOG_TEST_CONFIG_SETUP",
+      "env_value": "nessie"
+    }
+  ],
   "skip_tests": [
     {
       "reason": "V3 tests, not yet supported with Nessie",
       "paths": [
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/test_delete_from_v3_table.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/test_deletion_vector_is_valid_puffin.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_insert_to_v3_tables.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_transactional_insert_v3.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/table_properties/test_many_table_properties.test",
@@ -47,16 +54,40 @@
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/update/partitions/update_bucket_tables_v3.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/update/partitions/update_truncate_tables_v3.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/create/test_create_default.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/create/test_create_unknown_type.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/update/update_with_default.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/merge/merge_into_default.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/merge/merge_into_multiple_update_delete_actions.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/other_engines/test_create_partitioned_tables.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_create_geometry_type.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/other_engines/test_create_partitioned_tables.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/update/update_with_default.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/test_geometry_type.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/test_geometry_type_nested.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/alter_type_v3.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/create/default/test_create_default_struct.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/create/default/test_create_default_struct_nested.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/merge/merge_into_default_struct.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/merge/merge_into_default_struct_nested.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/update/test_update_default_struct.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/update/test_update_default_struct_nested.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/table_properties/test_alter_table_options.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/table_properties/test_upgrade_format_version_2_to_3.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/alter_default.test"
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/alter_default.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/test_write_geometry_bounds.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/test_filtering_geometry_predicates.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/types/test_read_geometry_type.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/test_create_geometry_type.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/functions/iceberg_column_stats/geometry/test_geometry_column_stats.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/functions/iceberg_column_stats/deserialize_variant.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/variant/test_write_variant_bounds.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/variant/test_write_variant_bounds_simple.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/test_pruning_on_variant_col.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/variant/arrays.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/variant/combinations.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/variant/comparisons.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/variant/edge_cases.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/variant/nested.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/variant/partial_shredding.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/variant/test_partial_paths.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/variant/types.test"
       ]
     },
     {
@@ -76,7 +107,10 @@
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transactional_updates.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transactional_updates_error_omits_stacktrace.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/add_column/alter_add_column_time_travel.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/alter_rename_column.test"
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/alter_rename_column.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_snapshot_operation_type.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_snapshot_operation_in_transaction.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/test_snapshot_summary_delete_metrics.test"
       ]
     },
     {

@@ -63,7 +63,7 @@ optional_ptr<CatalogEntry> IcebergSchemaSet::GetEntry(ClientContext &context, co
 				throw CatalogException("default schema '%s' does not exist", name);
 			}
 		}
-		info.schema = name;
+		info.schema = Identifier(name);
 		info.internal = false;
 		auto schema_entry = make_uniq<IcebergSchemaEntry>(catalog, info);
 		// we will not create entries with empty names
@@ -124,7 +124,7 @@ void IcebergSchemaSet::LoadEntries(ClientContext &context) {
 	auto schemas = IRCAPI::GetSchemas(context, ic_catalog, {});
 	for (const auto &schema : schemas) {
 		CreateSchemaInfo info;
-		info.schema = GetSchemaName(schema.items);
+		info.schema = Identifier(GetSchemaName(schema.items));
 		info.internal = false;
 		auto schema_entry = make_uniq<IcebergSchemaEntry>(catalog, info);
 		schema_entry->namespace_items = std::move(schema.items);

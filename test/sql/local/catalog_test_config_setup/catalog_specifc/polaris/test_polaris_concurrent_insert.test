@@ -2,9 +2,7 @@
 # description: Test concurrent inserts to a newly created table with no snapshots
 # group: [polaris]
 
-require-env CATALOG_TEST_CONFIG_SETUP
-
-require-env POLARIS_SERVER_AVAILABLE
+require-env CATALOG_TEST_CONFIG_SETUP polaris
 
 require avro
 
@@ -67,7 +65,7 @@ attach or replace 'quickstart_catalog' as my_datalake (
 	type ICEBERG,
 	ENDPOINT 'http://0.0.0.0:8181/api/catalog',
 	SUPPORT_NESTED_NAMESPACES true,
-	support_stage_create false,
+	stage_create_tables false,
 	DEFAULT_REGION 'us-west-2'
 );
 

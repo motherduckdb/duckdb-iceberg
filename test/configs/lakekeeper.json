@@ -8,11 +8,23 @@
     "iceberg",
     "httpfs"
   ],
+  "test_env": [
+    {
+      "env_name": "CATALOG_TEST_CONFIG_SETUP",
+      "env_value": "lakekeeper"
+    }
+  ],
   "skip_tests": [
     {
       "reason": "TIMESTAMP_NS CREATE DEFAULT: catalog does not handle default correctly, instead responds with NULL",
       "paths": [
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/create/default/test_create_default_timestamp_ns.test"
+      ]
+    },
+    {
+      "reason": "UNKNOWN type is not supported yet",
+      "paths": [
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/create/test_create_unknown_type.test"
       ]
     },
     {
@@ -31,8 +43,13 @@
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/test_read_partitioned_table_type_promotion.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/merge/merge_multi_partition_timestamp.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/create/default/test_create_default_blob.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/test_basic_variant.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_create_geometry_type.test"
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/test_geometry_type.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/test_geometry_type_nested.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/test_write_geometry_bounds.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/test_filtering_geometry_predicates.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/types/test_read_geometry_type.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/test_create_geometry_type.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/functions/iceberg_column_stats/geometry/test_geometry_column_stats.test"
       ]
     },
     {
@@ -44,13 +61,7 @@
     {
       "reason": "Lakekeeper data generation insert results in a single parquet file",
       "paths": [
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/should_do_filter_pruning_on_expressionless_string_filters.test"
-      ]
-    },
-    {
-      "reason": "Lakekeeper does not have this table generated due to weird bugs in spark table creation logic",
-      "paths": [
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/other_engines/partitions/truncate/test_append_truncate_varchar_for_insert.test"
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/should_do_filter_pruning_on_expressionless_string_filters.test"
       ]
     }
   ]

@@ -24,6 +24,13 @@ RegisterViewRequest RegisterViewRequest::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+RegisterViewRequest RegisterViewRequest::Copy() const {
+	RegisterViewRequest res;
+	res.name = name;
+	res.metadata_location = metadata_location;
+	return res;
+}
+
 string RegisterViewRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto name_val = yyjson_obj_get(obj, "name");
@@ -49,7 +56,25 @@ string RegisterViewRequest::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(metadata_location_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void RegisterViewRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: name
+	yyjson_mut_obj_add_strcpy(doc, obj, "name", name.c_str());
+
+	// Serialize: metadata-location
+	yyjson_mut_obj_add_strcpy(doc, obj, "metadata-location", metadata_location.c_str());
+}
+
+yyjson_mut_val *RegisterViewRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -1,6 +1,5 @@
 import ctypes
 import glob
-import os
 import pathlib
 
 import pytest
@@ -8,12 +7,6 @@ import pytest
 
 # SQL PREPARE does not accept CTAS, but ADBC prepares and executes CTAS through
 # DuckDB's C API. Exercise that path directly to cover issue #595 without dbt.
-pytestmark = pytest.mark.skipif(
-    os.getenv("FIXTURE_SERVER_AVAILABLE") is None,
-    reason="Iceberg test catalog is not available",
-)
-
-
 def _load_duckdb_library():
     repo = pathlib.Path(__file__).resolve().parents[2]
     candidates = []
@@ -123,18 +116,12 @@ class DuckDB:
 
 
 @pytest.fixture()
-def duckdb_capi():
+def duckdb_capi(duckdb_catalog_init_sql):
     db = DuckDB()
     try:
         for extension in ("core_functions", "parquet", "avro", "httpfs", "iceberg"):
             db.query(f"LOAD {extension}")
-        db.query(
-            "CREATE SECRET (TYPE S3,KEY_ID 'admin',SECRET 'password',ENDPOINT '127.0.0.1:9000',"
-            "URL_STYLE 'path',USE_SSL 0); "
-            "ATTACH '' AS my_datalake (TYPE ICEBERG,CLIENT_ID 'admin',CLIENT_SECRET 'password',"
-            "ENDPOINT 'http://127.0.0.1:8181'); "
-            "CREATE SCHEMA IF NOT EXISTS my_datalake.default;"
-        )
+        db.query(duckdb_catalog_init_sql)
         yield db
     finally:
         db.close()

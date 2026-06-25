@@ -1,0 +1,77 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/test_snapshot_summary_delete_metrics.test
+# description: Verify a DELETE populates the standard Iceberg snapshot-summary delete-file metrics (added-delete-files / total-delete-files) via iceberg_load_table_response, and no longer inflates the data-file metrics
+# group: [delete]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+require json
+
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.test_snapshot_summary_delete_metrics;
+
+# Default (v2) format-version so the delete writes a positional delete file (no v3 upgrade),
+# which is supported on every configured catalog.
+statement ok
+CREATE TABLE my_datalake.default.test_snapshot_summary_delete_metrics (id INTEGER, data VARCHAR);
+
+# Single INSERT -> one data file -> one 'append' snapshot
+statement ok
+INSERT INTO my_datalake.default.test_snapshot_summary_delete_metrics VALUES (1, 'a'), (2, 'b'), (3, 'c'), (4, 'd'), (5, 'e');
+
+# DELETE two rows from the single data file -> one delete file -> one 'delete' snapshot
+statement ok
+DELETE FROM my_datalake.default.test_snapshot_summary_delete_metrics WHERE id IN (2, 4);
+
+# Sanity: an append snapshot and a delete snapshot exist.
+query I
+select count(*) from iceberg_snapshots(my_datalake.default.test_snapshot_summary_delete_metrics);
+----
+2
+
+# Read the per-snapshot summaries out of the load-table response. Snapshots are selected by
+# their operation rather than by array position, because the order of metadata.snapshots is
+# not guaranteed across catalogs.
+#
+# The append snapshot is accounted as a data-only snapshot and seeds total-delete-files at 0.
+query III
+WITH snaps AS (
+    SELECT unnest(json_extract(metadata::JSON, '$.snapshots[*]')) AS snap
+    FROM iceberg_load_table_response(my_datalake.default.test_snapshot_summary_delete_metrics)
+)
+SELECT json_extract_string(snap, '$.summary.operation'),
+       json_extract_string(snap, '$.summary."total-data-files"'),
+       json_extract_string(snap, '$.summary."total-delete-files"')
+FROM snaps
+WHERE json_extract_string(snap, '$.summary.operation') = 'append';
+----
+append	1	0
+
+# The delete snapshot now populates the delete-file metrics, AND does not inflate
+# total-data-files (the delete manifest was previously mis-counted as an added data
+# file, which would have bumped total-data-files to 2).
+#
+# The position-delete metrics (added-position-deletes / total-position-deletes) are
+# intentionally not asserted: they are compiled out under
+# ICEBERG_ENABLE_EQUALITY_DELETE_WRITES, whereas the delete-file counts below are
+# emitted in every build.
+query IIII
+WITH snaps AS (
+    SELECT unnest(json_extract(metadata::JSON, '$.snapshots[*]')) AS snap
+    FROM iceberg_load_table_response(my_datalake.default.test_snapshot_summary_delete_metrics)
+)
+SELECT json_extract_string(snap, '$.summary.operation'),
+       json_extract_string(snap, '$.summary."total-data-files"'),
+       json_extract_string(snap, '$.summary."added-delete-files"'),
+       json_extract_string(snap, '$.summary."total-delete-files"')
+FROM snaps
+WHERE json_extract_string(snap, '$.summary.operation') = 'delete';
+----
+delete	1	1	1

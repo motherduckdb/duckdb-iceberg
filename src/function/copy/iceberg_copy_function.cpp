@@ -15,7 +15,7 @@ static BoundStatement IcebergCopyPlan(Binder &binder, CopyStatement &stmt) {
 	auto child_statement = binder.Bind(*node_copy);
 
 	// Create bind data with metadata and schema
-	auto bind_data = make_uniq<CopyIcebergBindData>(copy_info, std::move(child_statement.names),
+	auto bind_data = make_uniq<CopyIcebergBindData>(copy_info, IdentifiersToStrings(child_statement.names),
 	                                                std::move(child_statement.types), binder.context);
 
 	// Create logical copy operator
@@ -52,7 +52,7 @@ CopyIcebergBindData::CopyIcebergBindData(const CopyInfo &info, vector<string> &&
 	// Create ColumnList from query output
 	ColumnList columns;
 	for (idx_t i = 0; i < names.size(); i++) {
-		columns.AddColumn(ColumnDefinition(names[i], types[i]));
+		columns.AddColumn(ColumnDefinition(Identifier(names[i]), types[i]));
 	}
 
 	int32_t last_column_id;

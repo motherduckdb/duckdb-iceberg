@@ -15,8 +15,9 @@
 
 namespace duckdb {
 
-IcebergAddSnapshot::IcebergAddSnapshot(const IcebergTableInformation &table_info)
-    : IcebergTableUpdate(IcebergTableUpdateType::ADD_SNAPSHOT, table_info) {
+IcebergAddSnapshot::IcebergAddSnapshot(const IcebergTableInformation &table_info,
+                                       IcebergSnapshotOperationType operation)
+    : IcebergTableUpdate(IcebergTableUpdateType::ADD_SNAPSHOT, table_info), operation(operation) {
 	//! FIXME: Do we also need to capture the current partition spec and sort order?
 	//! This is a bit of a code smell, the `IcebergTableInformation` should instead be const
 	//! and all transactional changes should live in the IcebergTransactionData
@@ -27,11 +28,9 @@ static rest_api_objects::TableUpdate CreateAddSnapshotUpdate(const IcebergTableI
                                                              const IcebergSnapshot &snapshot) {
 	rest_api_objects::TableUpdate table_update;
 
-	table_update.has_add_snapshot_update = true;
-	auto &update = table_update.add_snapshot_update;
+	table_update.add_snapshot_update = rest_api_objects::AddSnapshotUpdate();
+	auto &update = *table_update.add_snapshot_update;
 	update.base_update.action = "add-snapshot";
-	update.has_action = true;
-	update.action = "add-snapshot";
 	update.snapshot = snapshot.ToRESTObject(table_info.table_metadata);
 	return table_update;
 }
@@ -164,7 +163,7 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
                                       IcebergCommitState &commit_state) const {
 	auto &system_catalog = Catalog::GetSystemCatalog(db);
 	auto data = CatalogTransaction::GetSystemTransaction(db);
-	auto &schema = system_catalog.GetSchema(data, DEFAULT_SCHEMA);
+	auto &schema = system_catalog.GetSchema(data, Identifier::DefaultSchema());
 	auto avro_copy_p = schema.GetEntry(data, CatalogType::COPY_FUNCTION_ENTRY, "avro");
 	D_ASSERT(avro_copy_p);
 	auto &avro_copy = avro_copy_p->Cast<CopyFunctionCatalogEntry>().function;
@@ -188,7 +187,7 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 
 	//! Construct the snapshot
 	IcebergSnapshot new_snapshot;
-	new_snapshot.operation = IcebergSnapshotOperationType::OVERWRITE;
+	new_snapshot.operation = operation;
 	new_snapshot.snapshot_id = snapshot_id;
 	new_snapshot.sequence_number = sequence_number;
 	new_snapshot.SetSchemaId(schema_id);

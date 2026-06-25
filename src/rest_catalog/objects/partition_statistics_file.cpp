@@ -24,6 +24,14 @@ PartitionStatisticsFile PartitionStatisticsFile::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+PartitionStatisticsFile PartitionStatisticsFile::Copy() const {
+	PartitionStatisticsFile res;
+	res.snapshot_id = snapshot_id;
+	res.statistics_path = statistics_path;
+	res.file_size_in_bytes = file_size_in_bytes;
+	return res;
+}
+
 string PartitionStatisticsFile::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
@@ -66,7 +74,28 @@ string PartitionStatisticsFile::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(file_size_in_bytes_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void PartitionStatisticsFile::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: snapshot-id
+	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+
+	// Serialize: statistics-path
+	yyjson_mut_obj_add_strcpy(doc, obj, "statistics-path", statistics_path.c_str());
+
+	// Serialize: file-size-in-bytes
+	yyjson_mut_obj_add_sint(doc, obj, "file-size-in-bytes", file_size_in_bytes);
+}
+
+yyjson_mut_val *PartitionStatisticsFile::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -27,8 +27,8 @@ CopyFunctionCatalogEntry &IcebergUtils::GetCopyFunction(ClientContext &context, 
 	D_ASSERT(!name.empty());
 	auto &system_catalog = Catalog::GetSystemCatalog(db);
 
-	auto entry =
-	    system_catalog.GetEntry<CopyFunctionCatalogEntry>(context, DEFAULT_SCHEMA, name, OnEntryNotFound::RETURN_NULL);
+	auto entry = system_catalog.GetEntry<CopyFunctionCatalogEntry>(context, Identifier::DefaultSchema(),
+	                                                               Identifier(name), OnEntryNotFound::RETURN_NULL);
 	if (!entry) {
 		throw MissingExtensionException(
 		    "Could not load the copy function for \"%s\". Try explicitly loading the \"%s\" extension", name, name);
@@ -97,24 +97,24 @@ static string ExtractIcebergScanPath(const string &sql) {
 optional_ptr<CatalogEntry> IcebergUtils::GetTableEntry(ClientContext &context, string &input_string) {
 	auto qualified_name = QualifiedName::ParseComponents(input_string);
 	auto default_db = DatabaseManager::GetDefaultDatabase(context);
-	auto &catalog = Catalog::GetCatalog(context, default_db);
+	auto &catalog = Catalog::GetCatalog(context, Identifier(default_db));
 	switch (qualified_name.size()) {
 	case 3: {
-		auto lookup_info = EntryLookupInfo(CatalogType::TABLE_ENTRY, qualified_name[2]);
-		auto table = Catalog::GetEntry(context, qualified_name[0], qualified_name[1], lookup_info,
-		                               OnEntryNotFound::THROW_EXCEPTION);
+		auto lookup_info = EntryLookupInfo(CatalogType::TABLE_ENTRY, Identifier(qualified_name[2]));
+		auto table = Catalog::GetEntry(context, Identifier(qualified_name[0]), Identifier(qualified_name[1]),
+		                               lookup_info, OnEntryNotFound::THROW_EXCEPTION);
 		return table;
 	}
 	case 2: {
 		// make sure default catalog is iceberg
-		auto table_entry = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, qualified_name[0], qualified_name[1],
-		                                    OnEntryNotFound::THROW_EXCEPTION);
+		auto table_entry = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, Identifier(qualified_name[0]),
+		                                    Identifier(qualified_name[1]), OnEntryNotFound::THROW_EXCEPTION);
 		return table_entry;
 	}
 	case 1: {
 		auto schema = catalog.GetDefaultSchema();
-		auto table_entry = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, schema, qualified_name[0],
-		                                    OnEntryNotFound::THROW_EXCEPTION);
+		auto table_entry = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, Identifier(schema),
+		                                    Identifier(qualified_name[0]), OnEntryNotFound::THROW_EXCEPTION);
 		return table_entry;
 	}
 	default:
@@ -130,17 +130,17 @@ optional_ptr<SchemaCatalogEntry> IcebergUtils::GetSchemaEntry(ClientContext &con
 	case 1: {
 		// input: schema
 		// we assume the catalog from context
-		auto &catalog = Catalog::GetCatalog(context, default_db);
-		return catalog.GetSchema(context, qualified_name[0], OnEntryNotFound::THROW_EXCEPTION);
+		auto &catalog = Catalog::GetCatalog(context, Identifier(default_db));
+		return catalog.GetSchema(context, Identifier(qualified_name[0]), OnEntryNotFound::THROW_EXCEPTION);
 	}
 	default: {
 		// input: catalog.schema (schema may contain dots for nested namespaces)
 		auto catalog_name = qualified_name[0];
 		vector<string> schema_parts(qualified_name.begin() + 1, qualified_name.end());
 		auto schema_name = StringUtil::Join(schema_parts, ".");
-		auto lookup_info = EntryLookupInfo(CatalogType::SCHEMA_ENTRY, schema_name);
+		auto lookup_info = EntryLookupInfo(CatalogType::SCHEMA_ENTRY, Identifier(schema_name));
 		auto retriever = CatalogEntryRetriever(context);
-		return retriever.GetSchema(catalog_name, lookup_info, OnEntryNotFound::THROW_EXCEPTION);
+		return retriever.GetSchema(Identifier(catalog_name), lookup_info, OnEntryNotFound::THROW_EXCEPTION);
 	}
 	}
 }
@@ -154,9 +154,9 @@ string IcebergUtils::GetStorageLocation(ClientContext &context, const string &in
 			break;
 		}
 		//! Fully qualified table reference, let's do a lookup
-		EntryLookupInfo table_info(CatalogType::TABLE_ENTRY, qualified_name[2]);
-		auto catalog_entry =
-		    Catalog::GetEntry(context, qualified_name[0], qualified_name[1], table_info, OnEntryNotFound::RETURN_NULL);
+		EntryLookupInfo table_info(CatalogType::TABLE_ENTRY, Identifier(qualified_name[2]));
+		auto catalog_entry = Catalog::GetEntry(context, Identifier(qualified_name[0]), Identifier(qualified_name[1]),
+		                                       table_info, OnEntryNotFound::RETURN_NULL);
 		if (!catalog_entry) {
 			break;
 		}
@@ -197,9 +197,14 @@ string IcebergUtils::GetFullPath(const string &iceberg_path, const string &relat
 		return fs.JoinPath(iceberg_path, relative_file_path.substr(found + 1));
 	}
 
-	found = lpath.rfind("/data/");
+	if (StringUtil::StartsWith(lpath, "data")) {
+		found = 0;
+	} else {
+		found = lpath.rfind("/data/") + 1;
+	}
+
 	if (found != string::npos) {
-		return fs.JoinPath(iceberg_path, relative_file_path.substr(found + 1));
+		return fs.JoinPath(iceberg_path, relative_file_path.substr(found));
 	}
 
 	throw InvalidConfigurationException("Could not create full path from Iceberg Path (%s) and the relative path (%s)",

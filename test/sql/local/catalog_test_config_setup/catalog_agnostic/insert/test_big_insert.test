@@ -20,6 +20,19 @@ set enable_logging=true
 statement ok
 set logging_level='debug'
 
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.insert_test_big;
+
+statement ok
+CREATE TABLE my_datalake.default.insert_test_big (
+	col1 INTEGER,
+	col2 VARCHAR(17)
+) WITH (
+    'format-version'='2',
+    'write.update.mode'='merge-on-read',
+    'write.parquet.compression-codec'='snappy'
+);
+
 # Default TARGET_FILE_SIZE = 8.4MB
 # We create ~18MB of data, which spreads out over 3 files
 query I

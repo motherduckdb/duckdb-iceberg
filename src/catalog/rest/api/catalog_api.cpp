@@ -197,18 +197,17 @@ APIResult<unique_ptr<const rest_api_objects::LoadTableResult>> IRCAPI::GetTable(
 		if (error_obj == nullptr) {
 			throw InvalidConfigurationException(result->body);
 		}
-		ret.has_error = true;
 		ret.status_ = result->status;
 		ret.error_ = rest_api_objects::IcebergErrorResponse::FromJSON(error_obj);
 		return ret;
 	}
-	ret.has_error = false;
 	auto doc = ICUtils::APIResultToDoc(result->body);
 	auto *metadata_root = yyjson_doc_get_root(doc.get());
 	ret.result_ =
 	    make_uniq<const rest_api_objects::LoadTableResult>(rest_api_objects::LoadTableResult::FromJSON(metadata_root));
 	return ret;
 }
+
 APIResult<unique_ptr<const rest_api_objects::GetNamespaceResponse>>
 IRCAPI::GetNamespace(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema) {
 	if (catalog.supported_urls.find("GET /v1/{prefix}/namespaces/{namespace}") == catalog.supported_urls.end()) {
@@ -234,12 +233,10 @@ IRCAPI::GetNamespace(ClientContext &context, IcebergCatalog &catalog, const Iceb
 		if (error_obj == nullptr) {
 			throw InvalidConfigurationException(result->body);
 		}
-		ret.has_error = true;
 		ret.status_ = result->status;
 		ret.error_ = rest_api_objects::IcebergErrorResponse::FromJSON(error_obj);
 		return ret;
 	}
-	ret.has_error = false;
 	auto doc = ICUtils::APIResultToDoc(result->body);
 	auto *metadata_root = yyjson_doc_get_root(doc.get());
 	ret.result_ = make_uniq<const rest_api_objects::GetNamespaceResponse>(
@@ -288,15 +285,16 @@ vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &conte
 		auto *root = yyjson_doc_get_root(doc.get());
 		auto list_tables_response = rest_api_objects::ListTablesResponse::FromJSON(root);
 
-		if (!list_tables_response.has_identifiers) {
+		if (!list_tables_response.identifiers) {
 			throw NotImplementedException("List of 'identifiers' is missing, missing support for Iceberg V1");
 		}
+		auto &identifiers = *list_tables_response.identifiers;
 
-		all_identifiers.insert(all_identifiers.end(), std::make_move_iterator(list_tables_response.identifiers.begin()),
-		                       std::make_move_iterator(list_tables_response.identifiers.end()));
+		all_identifiers.insert(all_identifiers.end(), std::make_move_iterator(identifiers.begin()),
+		                       std::make_move_iterator(identifiers.end()));
 
-		if (list_tables_response.has_next_page_token) {
-			page_token = list_tables_response.next_page_token.value;
+		if (list_tables_response.next_page_token) {
+			page_token = list_tables_response.next_page_token->value;
 		} else {
 			page_token.clear();
 		}
@@ -339,14 +337,14 @@ vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IcebergCatalog &
 		auto doc = ICUtils::APIResultToDoc(response->body);
 		auto *root = yyjson_doc_get_root(doc.get());
 		auto list_namespaces_response = rest_api_objects::ListNamespacesResponse::FromJSON(root);
-		if (!list_namespaces_response.has_namespaces) {
+		if (!list_namespaces_response.namespaces) {
 			//! FIXME: old code expected 'namespaces' to always be present, but it's not a required property
 			return result;
 		}
-		auto &schemas = list_namespaces_response.namespaces;
+		auto &schemas = *list_namespaces_response.namespaces;
 		for (auto &schema : schemas) {
 			IRCAPISchema schema_result;
-			schema_result.catalog_name = catalog.GetName();
+			schema_result.catalog_name = catalog.GetName().GetIdentifierName();
 			schema_result.items = std::move(schema.value);
 
 			if (catalog.attach_options.support_nested_namespaces) {
@@ -359,8 +357,8 @@ vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IcebergCatalog &
 			result.push_back(schema_result);
 		}
 
-		if (list_namespaces_response.has_next_page_token) {
-			page_token = list_namespaces_response.next_page_token.value;
+		if (list_namespaces_response.next_page_token) {
+			page_token = list_namespaces_response.next_page_token->value;
 		} else {
 			page_token.clear();
 		}
@@ -386,8 +384,10 @@ void IRCAPI::CommitMultiTableUpdate(ClientContext &context, IcebergCatalog &cata
 		}
 		auto error = rest_api_objects::IcebergErrorResponse::FromJSON(error_obj);
 		string stack_trace;
-		for (const auto &str : error._error.stack) {
-			stack_trace.append(str + "\n");
+		if (error._error.stack) {
+			for (const auto &str : *error._error.stack) {
+				stack_trace.append(str + "\n");
+			}
 		}
 		DUCKDB_LOG(context, IcebergLogType, stack_trace);
 
@@ -531,8 +531,8 @@ rest_api_objects::LoadTableResult IRCAPI::CommitNewTable(ClientContext &context,
 	auto create_transaction = make_uniq<IcebergCreateTableRequest>(table.table_info);
 	// if stage create is supported, create the table with stage_create = true and the table update will
 	// commit the table.
-	auto support_stage_create = catalog.attach_options.supports_stage_create;
-	yyjson_mut_obj_add_bool(doc, root_object, "stage-create", support_stage_create);
+	auto stage_create_tables = catalog.attach_options.stage_create_tables;
+	yyjson_mut_obj_add_bool(doc, root_object, "stage-create", stage_create_tables);
 	auto create_table_json = create_transaction->CreateTableToJSON(std::move(doc_p));
 
 	try {

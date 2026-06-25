@@ -1,0 +1,1 @@
+"""Nested-namespace data generators."""

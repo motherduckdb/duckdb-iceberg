@@ -65,7 +65,7 @@ public:
 	bool write_partition_columns;
 	bool write_empty_file = true;
 	vector<idx_t> partition_columns;
-	vector<string> names;
+	vector<Identifier> names;
 	vector<LogicalType> expected_types;
 
 	//! Set of projection columns to execute prior to inserting (if any)
@@ -84,41 +84,6 @@ public:
 	mutex lock;
 	vector<IcebergManifestEntry> written_files;
 	atomic<idx_t> insert_count;
-};
-
-struct IcebergColumnStats {
-	explicit IcebergColumnStats(LogicalType type_p) : type(std::move(type_p)) {
-	}
-
-	// Copy constructor
-	IcebergColumnStats(const IcebergColumnStats &other);
-	IcebergColumnStats &operator=(const IcebergColumnStats &other);
-	IcebergColumnStats(IcebergColumnStats &&other) noexcept = default;
-	IcebergColumnStats &operator=(IcebergColumnStats &&other) noexcept = default;
-
-	LogicalType type;
-	string min;
-	string max;
-	idx_t null_count = 0;
-	idx_t num_values = 0;
-	idx_t column_size_bytes = 0;
-	bool contains_nan = false;
-	bool has_null_count = false;
-	bool has_num_values = false;
-	bool has_min = false;
-	bool has_max = false;
-	bool any_valid = true;
-	bool has_contains_nan = false;
-	bool has_column_size_bytes = false;
-
-public:
-	unique_ptr<BaseStatistics> ToStats() const;
-	void MergeStats(const IcebergColumnStats &new_stats);
-	IcebergColumnStats Copy() const;
-
-private:
-	unique_ptr<BaseStatistics> CreateNumericStats() const;
-	unique_ptr<BaseStatistics> CreateStringStats() const;
 };
 
 class IcebergInsert : public PhysicalOperator {

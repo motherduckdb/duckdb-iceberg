@@ -70,11 +70,10 @@ static void SchemaToColumnsInternal(const vector<unique_ptr<IcebergColumnDefinit
 	for (idx_t i = 0; i < columns.size(); i++) {
 		auto &column = *columns[i];
 		result.emplace(column.id, DuckLakeColumn(column, i, parent));
-		if (column.children.empty()) {
+		if (!column.GetChildCount()) {
 			continue;
 		}
-		auto &children = column.children;
-		SchemaToColumnsInternal(children, result, column);
+		SchemaToColumnsInternal(column.GetChildren(), result, column);
 	}
 }
 
@@ -115,7 +114,7 @@ public:
 		}
 
 		auto &schema_entry = table_info.schema;
-		auto &schema = GetSchema(schema_entry.name);
+		auto &schema = GetSchema(schema_entry.name.GetIdentifierName());
 
 		auto &table = GetTable(table_info);
 		schema.tables.push_back(table.table_uuid);
@@ -800,7 +799,7 @@ static unique_ptr<FunctionData> IcebergToDuckLakeBind(ClientContext &context, Ta
 	auto input_string = input.inputs[0].ToString();
 	ret->ducklake_catalog = input.inputs[1].ToString();
 
-	auto &catalog = Catalog::GetCatalog(context, input_string);
+	auto &catalog = Catalog::GetCatalog(context, Identifier(input_string));
 	auto catalog_type = catalog.GetCatalogType();
 	if (catalog_type != "iceberg") {
 		throw InvalidInputException("First parameter must be the name of an attached Iceberg catalog");
@@ -810,7 +809,7 @@ static unique_ptr<FunctionData> IcebergToDuckLakeBind(ClientContext &context, Ta
 
 	IcebergOptions options;
 	for (auto &kv : input.named_parameters) {
-		auto loption = StringUtil::Lower(kv.first);
+		auto loption = StringUtil::Lower(kv.first.GetIdentifierName());
 		auto &val = kv.second;
 		if (loption == "allow_moved_paths") {
 			options.allow_moved_paths = BooleanValue::Get(val);
@@ -940,7 +939,7 @@ public:
 		auto &bind_data = input.bind_data->Cast<iceberg::ducklake::IcebergToDuckLakeBindData>();
 		auto &input_string = bind_data.ducklake_catalog;
 
-		auto &catalog = Catalog::GetCatalog(context, input_string);
+		auto &catalog = Catalog::GetCatalog(context, Identifier(input_string));
 		auto catalog_type = catalog.GetCatalogType();
 		if (catalog_type != "ducklake") {
 			throw InvalidInputException("Second parameter must be the name of an attached DuckLake catalog");
@@ -948,7 +947,7 @@ public:
 
 		auto metadata_catalog = StringUtil::Format("__ducklake_metadata_%s", input_string);
 		//! Verify the existence of the metadata catalog and that it's attached as well.
-		(void)Catalog::GetCatalog(context, metadata_catalog);
+		(void)Catalog::GetCatalog(context, Identifier(metadata_catalog));
 
 		auto &db = DatabaseInstance::GetDatabase(context);
 		auto connection = make_uniq<Connection>(db);

@@ -15,8 +15,14 @@ enum class IcebergSnapshotMetricType : uint8_t {
 	ADDED_RECORDS,
 	DELETED_DATA_FILES,
 	DELETED_RECORDS,
+	ADDED_DELETE_FILES,
+	ADDED_POSITION_DELETES,
+	REMOVED_DELETE_FILES,
+	REMOVED_POSITION_DELETE_FILES,
 	TOTAL_DATA_FILES,
-	TOTAL_RECORDS
+	TOTAL_RECORDS,
+	TOTAL_DELETE_FILES,
+	TOTAL_POSITION_DELETES
 };
 
 class IcebergSnapshot;
@@ -42,7 +48,6 @@ public:
 	static int64_t NewSnapshotId();
 	static IcebergSnapshot ParseSnapshot(const rest_api_objects::Snapshot &snapshot, IcebergTableMetadata &metadata);
 	rest_api_objects::Snapshot ToRESTObject(const IcebergTableMetadata &table_metadata) const;
-	static yyjson_mut_val *ToJSON(const rest_api_objects::Snapshot &snapshot, yyjson_mut_doc *doc);
 
 public:
 	void SetSchemaId(int32_t schema_id);

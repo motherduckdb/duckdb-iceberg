@@ -65,9 +65,11 @@ void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntr
 
 	const auto sequence_number = manifest_entry.GetSequenceNumber(manifest_file);
 	//! Get or create the equality delete data for this sequence number
-	auto it = equality_delete_data.find(sequence_number);
-	if (it == equality_delete_data.end()) {
-		it = equality_delete_data.emplace(sequence_number, make_uniq<IcebergEqualityDeleteData>(sequence_number)).first;
+	auto it = shared_state->equality_delete_data.find(sequence_number);
+	if (it == shared_state->equality_delete_data.end()) {
+		it = shared_state->equality_delete_data
+		         .emplace(sequence_number, make_uniq<IcebergEqualityDeleteData>(sequence_number))
+		         .first;
 	}
 	auto &deletes = *it->second;
 
@@ -129,15 +131,13 @@ void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntr
 			auto constant = vec.GetValue(i);
 
 			unique_ptr<Expression> equality_filter;
-			// this bound ref is on the position of the output_chunk data.
+			// This bound ref is on the position of the output_chunk data.
 			auto bound_ref = make_uniq<BoundReferenceExpression>(col.type, result_column_id);
 			if (!constant.IsNull()) {
-				//! Create a COMPARE_NOT_EQUAL expression
 				equality_filter =
 				    BoundComparisonExpression::Create(ExpressionType::COMPARE_NOTEQUAL, std::move(bound_ref),
 				                                      make_uniq<BoundConstantExpression>(constant));
 			} else {
-				//! Construct an OPERATOR_IS_NOT_NULL expression instead
 				auto is_not_null =
 				    make_uniq<BoundOperatorExpression>(ExpressionType::OPERATOR_IS_NOT_NULL, LogicalType::BOOLEAN);
 				is_not_null->GetChildrenMutable().push_back(std::move(bound_ref));

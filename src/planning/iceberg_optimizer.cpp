@@ -10,6 +10,7 @@
 #include "core/metadata/schema/iceberg_column_definition.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "planning/iceberg_multi_file_list.hpp"
+#include "planning/iceberg_multi_file_reader.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 
@@ -24,25 +25,30 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 		auto &child = op->children[child_index];
 		if (child->type != LogicalOperatorType::LOGICAL_GET) {
 			VisitOperator(child);
-			return;
+			continue;
 		}
 		auto &get = child->Cast<LogicalGet>();
-		if (get.function.name != "iceberg_scan" || !get.bind_data) {
+		// Identify our iceberg scan by the multi file reader it installs, not by
+		// function name alone. Other extensions might create their own
+		// iceberg_scan function or overload ours, so we cannot just depend on
+		// the name. We avoid dynamic_cast here because it does not behave
+		// reliably across the extension linking boundary; instead the function
+		// pointer uniquely identifies our scan, which guarantees the bind data
+		// and file list are the iceberg types we expect.
+		if (get.function.name != "iceberg_scan" ||
+		    get.function.get_multi_file_reader != IcebergMultiFileReader::CreateInstance || !get.bind_data) {
 			VisitOperator(child);
-			return;
+			continue;
 		}
 		auto &mfbd = get.bind_data->Cast<MultiFileBindData>();
 		if (!mfbd.file_list) {
-			return;
+			continue;
 		}
 		auto &iceberg_list = mfbd.file_list->Cast<IcebergMultiFileList>();
-		{
-			lock_guard<mutex> guard(iceberg_list.delete_lock);
-			iceberg_list.EnumerateDeleteManifestEntries();
-		}
+		auto delete_manifest_entries = iceberg_list.GetDeleteManifestEntries();
 
 		unordered_set<int32_t> required_field_ids;
-		for (auto &entry : iceberg_list.delete_manifest_entries) {
+		for (auto &entry : delete_manifest_entries) {
 			auto &mft = entry.entry;
 			if (mft.data_file.content != IcebergManifestEntryContentType::EQUALITY_DELETES) {
 				continue;
@@ -53,7 +59,7 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 		}
 
 		if (required_field_ids.empty()) {
-			return;
+			continue;
 		}
 
 		auto &schema_columns = iceberg_list.GetSchema().columns;
@@ -72,7 +78,9 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 				// column was deleted and exists most likely in an old schemas
 				// TODO: if the type of the equality delete column was evolved, then grabbing just any schema could be a
 				// problem
-				auto col_info = iceberg_list.table->table_info.table_metadata.FindColumnByFieldId(fid);
+				auto table = iceberg_list.GetTable();
+				D_ASSERT(table);
+				auto col_info = table->table_info.table_metadata.FindColumnByFieldId(fid);
 				if (!col_info) {
 					throw InvalidConfigurationException(
 					    "column %d must apply equality deletes, but no schema has a column with that field id", fid);
@@ -86,7 +94,7 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 
 				// modify the multi file reader bind data to add the extra column
 				mfbd.types.push_back(col_type);
-				mfbd.names.push_back(col_info->name);
+				mfbd.names.push_back(Identifier(col_info->name));
 
 				auto new_col = col_info->GetMultiFileColumnDefinition();
 				if (!new_col.default_expression) {
@@ -114,12 +122,12 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 			args.push_back(make_uniq<BoundColumnRefExpression>(col_type, bindings[local_idx]));
 		}
 		if (args.empty()) {
-			return;
+			continue;
 		}
 
 		auto &catalog = Catalog::GetSystemCatalog(context);
-		auto &fn_entry =
-		    catalog.GetEntry<ScalarFunctionCatalogEntry>(context, DEFAULT_SCHEMA, "iceberg_verify_equality_deletes");
+		auto &fn_entry = catalog.GetEntry<ScalarFunctionCatalogEntry>(context, Identifier::DefaultSchema(),
+		                                                              "iceberg_verify_equality_deletes");
 		FunctionBinder function_binder(context);
 		vector<LogicalType> arg_types;
 		for (auto &a : args) {

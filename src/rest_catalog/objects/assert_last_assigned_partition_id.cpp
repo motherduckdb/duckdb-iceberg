@@ -24,6 +24,13 @@ AssertLastAssignedPartitionId AssertLastAssignedPartitionId::FromJSON(yyjson_val
 	return res;
 }
 
+AssertLastAssignedPartitionId AssertLastAssignedPartitionId::Copy() const {
+	AssertLastAssignedPartitionId res;
+	res.type = type.Copy();
+	res.last_assigned_partition_id = last_assigned_partition_id;
+	return res;
+}
+
 string AssertLastAssignedPartitionId::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -47,7 +54,26 @@ string AssertLastAssignedPartitionId::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(last_assigned_partition_id_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void AssertLastAssignedPartitionId::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: type
+	yyjson_mut_val *type_val = type.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+
+	// Serialize: last-assigned-partition-id
+	yyjson_mut_obj_add_int(doc, obj, "last-assigned-partition-id", last_assigned_partition_id);
+}
+
+yyjson_mut_val *AssertLastAssignedPartitionId::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

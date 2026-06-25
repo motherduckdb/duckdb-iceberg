@@ -9,7 +9,8 @@ on:
         type: string
       duckdb_iceberg_ref:
         description: 'duckdb-iceberg branch name or commit hash'
-        required: true
+        required: false
+        default: ''
         type: string
       httpfs_fork:
         description: 'URL of a duckdb-httpfs fork (e.g. https://github.com/myfork/duckdb-httpfs). Leave empty to use the default duckdb/duckdb-httpfs.'
@@ -64,7 +65,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.duckdb_iceberg_ref }}
+          ref: ${{ inputs.duckdb_iceberg_ref || github.ref }}
           fetch-depth: 0
           submodules: 'true'
 
@@ -136,6 +137,22 @@ jobs:
           ICEBERG_SNOWFLAKE_REMOTE_AVAILABLE: 1
         run: |
           make test_release
+
+      - name: Test python cloud tests
+        env:
+          ICEBERG_CATALOG_CLIENT_ID: ${{ secrets.SNOWFLAKE_KEY_ID_S3 }}
+          ICEBERG_CATALOG_CLIENT_SECRET: ${{ secrets.SNOWFLAKE_SECRET_KEY_S3 }}
+          ICEBERG_CATALOG_ENDPOINT: ${{ secrets.SNOWFLAKE_CATALOG_URI_GCS }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+          SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          ICEBERG_CATALOG_NAME: 's3-catalog'
+          ICEBERG_CATALOG_REGION: 'eu-west-2'
+          SNOWFLAKE_PAT: ${{ secrets.SNOWFLAKE_PAT }}
+          ICEBERG_SNOWFLAKE_REMOTE_AVAILABLE: 1
+        run: |
+          python3 -m pytest test/python/cloud/
 
       - name: Test with no region set
         env:

@@ -2,9 +2,11 @@
 
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/types/string.hpp"
+#include "duckdb/common/vector/vector_iterator.hpp"
 #include "duckdb/common/vector/string_vector.hpp"
 #include "duckdb/common/vector/struct_vector.hpp"
 #include "duckdb/common/vector/list_vector.hpp"
+#include "duckdb/common/optional.hpp"
 
 namespace duckdb {
 
@@ -23,120 +25,91 @@ void ManifestReader::Read() {
 	ScanInternal();
 }
 
-static unordered_map<int32_t, Value> GetBounds(RecursiveUnifiedVectorFormat &format, idx_t i) {
-	unordered_map<int32_t, Value> parsed_bounds;
+using IntStringMapEntries = VectorIterator<VectorListType<VectorStructType<int32_t, string_t>>>;
+using IntIntMapEntries = VectorIterator<VectorListType<VectorStructType<int32_t, int64_t>>>;
+using Int32ListEntries = VectorIterator<VectorListType<int32_t>>;
+using Int64ListEntries = VectorIterator<VectorListType<int64_t>>;
+using Int32Entries = VectorIterator<int32_t>;
+using Int64Entries = VectorIterator<int64_t>;
+using StringEntries = VectorIterator<string_t>;
 
-	auto &validity = format.unified.validity;
-	auto index = format.unified.sel->get_index(i);
-	if (!validity.RowIsValid(index)) {
+template <class T, class ENTRY>
+static T ReadRequiredField(const char *name, const ENTRY &entry) {
+	if (!entry.IsValid()) {
+		throw InvalidConfigurationException("required field '%s' is NULL!", name);
+	}
+	return entry.GetValueUnsafe();
+}
+
+template <class T, class ENTRY>
+static bool ReadOptionalField(const ENTRY &entry, T &result) {
+	if (entry.IsValid()) {
+		result = entry.GetValueUnsafe();
+		return true;
+	}
+	return false;
+}
+
+static unordered_map<int32_t, Value> GetBounds(const IntStringMapEntries::ValueEntry &entry) {
+	unordered_map<int32_t, Value> parsed_bounds;
+	if (!entry.IsValid()) {
 		return parsed_bounds;
 	}
-	auto bounds_data = format.unified.GetData<list_entry_t>(format.unified);
-	auto list_entry = bounds_data[index];
 
-	auto &inner_struct_format = format.children[0];
-	auto &keys_format = inner_struct_format.children[0].unified;
-	auto &values_format = inner_struct_format.children[1].unified;
-	auto keys_data = keys_format.GetData<int32_t>(keys_format);
-	auto values_data = values_format.GetData<string_t>(values_format);
-	for (idx_t j = 0; j < list_entry.length; j++) {
-		auto keys_idx = keys_format.sel->get_index(list_entry.offset + j);
-		auto values_idx = values_format.sel->get_index(list_entry.offset + j);
-
+	for (const auto bounds_entry : entry.GetChildValues()) {
+		auto key_entry = bounds_entry.template GetChildValue<0>();
+		auto value_entry = bounds_entry.template GetChildValue<1>();
 		auto value = Value(LogicalType::BLOB);
-		if (values_format.validity.RowIsValid(values_idx)) {
-			auto &str = values_data[values_idx];
+		if (value_entry.IsValid()) {
+			auto &str = value_entry.GetValueUnsafe();
 			value = Value::BLOB(const_data_ptr_cast(str.GetData()), str.GetSize());
 		}
-		parsed_bounds[keys_data[keys_idx]] = value;
+		parsed_bounds[key_entry.GetValueUnsafe()] = value;
 	}
 	return parsed_bounds;
 }
 
-static unordered_map<int32_t, int64_t> GetCounts(const char *name, RecursiveUnifiedVectorFormat &format, idx_t i) {
+static unordered_map<int32_t, int64_t> GetCounts(const char *name, const IntIntMapEntries::ValueEntry &entry) {
 	unordered_map<int32_t, int64_t> parsed_counts;
-
-	auto &validity = format.unified.validity;
-	auto index = format.unified.sel->get_index(i);
-	if (!validity.RowIsValid(index)) {
+	if (!entry.IsValid()) {
 		return parsed_counts;
 	}
-	auto bounds_data = format.unified.GetDataUnsafe<list_entry_t>(format.unified);
-	auto list_entry = bounds_data[index];
 
-	auto &inner_struct_format = format.children[0];
-	auto &keys_format = inner_struct_format.children[0].unified;
-	auto &values_format = inner_struct_format.children[1].unified;
-	auto keys_data = keys_format.GetData<int32_t>(keys_format);
-	auto values_data = values_format.GetData<int64_t>(values_format);
-	for (idx_t j = 0; j < list_entry.length; j++) {
-		auto keys_idx = keys_format.sel->get_index(list_entry.offset + j);
-		auto values_idx = values_format.sel->get_index(list_entry.offset + j);
-
-		auto key = keys_data[keys_idx];
-		if (!values_format.validity.RowIsValid(values_idx)) {
+	for (const auto count_entry : entry.GetChildValues()) {
+		auto key_entry = count_entry.template GetChildValue<0>();
+		auto value_entry = count_entry.template GetChildValue<1>();
+		auto key = key_entry.GetValueUnsafe();
+		if (!value_entry.IsValid()) {
 			throw InvalidConfigurationException("'%s' map's value for key '%d' is NULL", name, key);
 		}
-		parsed_counts[key] = values_data[values_idx];
+		parsed_counts[key] = value_entry.GetValueUnsafe();
 	}
 	return parsed_counts;
 }
 
 template <class T>
-static vector<T> GetListTemplated(const char *name, RecursiveUnifiedVectorFormat &item_format, idx_t i) {
+static vector<T> GetListTemplated(const char *name,
+                                  const typename VectorIterator<VectorListType<T>>::ValueEntry &entry) {
 	vector<T> result;
-	auto &format = item_format.unified;
-
-	auto &validity = format.validity;
-	auto index = format.sel->get_index(i);
-	if (!validity.RowIsValid(index)) {
+	if (!entry.IsValid()) {
 		return result;
 	}
-
-	auto &child_format = item_format.children[0].unified;
-	auto child_data = child_format.GetDataUnsafe<T>(child_format);
-
-	auto list_data = format.GetDataUnsafe<list_entry_t>(format);
-	auto list_entry = list_data[index];
-
-	for (idx_t j = 0; j < list_entry.length; j++) {
-		auto list_idx = child_format.sel->get_index(list_entry.offset + j);
-		if (!child_format.validity.RowIsValid(list_idx)) {
+	for (const auto list_entry : entry.GetChildValues()) {
+		if (!list_entry.IsValid()) {
 			throw InvalidConfigurationException("'%s' list contains NULL", name);
 		}
-		result.push_back(child_data[list_idx]);
+		result.push_back(list_entry.GetValueUnsafe());
 	}
 
 	return result;
 }
 
-static vector<int32_t> GetEqualityIds(RecursiveUnifiedVectorFormat &equality_ids, idx_t i) {
-	return GetListTemplated<int32_t>("equality_ids", equality_ids, i);
+static vector<int32_t> GetEqualityIds(const Int32ListEntries::ValueEntry &entry) {
+	return GetListTemplated<int32_t>("equality_ids", entry);
 }
 
-static vector<int64_t> GetSplitOffsets(RecursiveUnifiedVectorFormat &split_offsets, idx_t i) {
-	return GetListTemplated<int64_t>("split_offsets", split_offsets, i);
-}
-
-template <class T>
-static T ReadRequiredField(const char *name, UnifiedVectorFormat &format, idx_t i) {
-	auto data = format.GetDataUnsafe<T>(format);
-	auto index = format.sel->get_index(i);
-	if (!format.validity.RowIsValid(index)) {
-		throw InvalidConfigurationException("required field '%s' is NULL!", name);
-	}
-	return data[index];
-}
-
-template <class T>
-static bool ReadOptionalField(UnifiedVectorFormat &format, idx_t i, T &result) {
-	auto data = format.GetDataUnsafe<T>(format);
-	auto index = format.sel->get_index(i);
-	if (format.validity.RowIsValid(index)) {
-		result = data[index];
-		return true;
-	}
-	return false;
+static vector<int64_t> GetSplitOffsets(const Int64ListEntries::ValueEntry &entry) {
+	return GetListTemplated<int64_t>("split_offsets", entry);
 }
 
 void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &partition_field_id_to_type,
@@ -152,110 +125,92 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 	idx_t vector_index = 0;
 
 	auto &status = chunk.data[vector_index++];
-	UnifiedVectorFormat status_format;
-	status.ToUnifiedFormat(status_format);
+	auto status_entries = status.Values<int32_t>();
 
 	auto &snapshot_id = chunk.data[vector_index++];
-	UnifiedVectorFormat snapshot_id_format;
-	snapshot_id.ToUnifiedFormat(snapshot_id_format);
+	auto snapshot_id_entries = snapshot_id.Values<int64_t>();
 
 	auto &sequence_number = chunk.data[vector_index++];
-	UnifiedVectorFormat sequence_number_format;
-	sequence_number.ToUnifiedFormat(sequence_number_format);
+	auto sequence_number_entries = sequence_number.Values<int64_t>();
 
 	auto &file_sequence_number = chunk.data[vector_index++];
-	UnifiedVectorFormat file_sequence_number_format;
-	file_sequence_number.ToUnifiedFormat(file_sequence_number_format);
+	auto file_sequence_number_entries = file_sequence_number.Values<int64_t>();
 
 	auto &data_file = chunk.data[vector_index++];
 	idx_t entry_index = 0;
 	auto &data_file_entries = StructVector::GetEntries(data_file);
 
-	UnifiedVectorFormat content_format;
 	optional_ptr<Vector> content;
+	optional<Int32Entries> content_entries;
 	if (iceberg_version >= 2) {
 		content = data_file_entries[entry_index++];
-		content->ToUnifiedFormat(content_format);
+		content_entries.emplace(content->Values<int32_t>());
 	}
 
 	auto &file_path = data_file_entries[entry_index++];
-	UnifiedVectorFormat file_path_format;
-	file_path.ToUnifiedFormat(file_path_format);
+	auto file_path_entries = file_path.Values<string_t>();
 
 	auto &file_format = data_file_entries[entry_index++];
-	UnifiedVectorFormat file_format_format;
-	file_format.ToUnifiedFormat(file_format_format);
+	auto file_format_entries = file_format.Values<string_t>();
 
 	auto &partition = data_file_entries[entry_index++];
 
 	auto &record_count = data_file_entries[entry_index++];
-	UnifiedVectorFormat record_count_format;
-	record_count.ToUnifiedFormat(record_count_format);
+	auto record_count_entries = record_count.Values<int64_t>();
 
 	auto &file_size_in_bytes = data_file_entries[entry_index++];
-	UnifiedVectorFormat file_size_in_bytes_format;
-	file_size_in_bytes.ToUnifiedFormat(file_size_in_bytes_format);
+	auto file_size_in_bytes_entries = file_size_in_bytes.Values<int64_t>();
 
 	auto &column_sizes = data_file_entries[entry_index++];
-	RecursiveUnifiedVectorFormat column_sizes_format;
-	Vector::RecursiveToUnifiedFormat(column_sizes, column_sizes_format);
+	auto column_sizes_entries = column_sizes.Values<VectorListType<VectorStructType<int32_t, int64_t>>>();
 
 	auto &value_counts = data_file_entries[entry_index++];
-	RecursiveUnifiedVectorFormat value_counts_format;
-	Vector::RecursiveToUnifiedFormat(value_counts, value_counts_format);
+	auto value_counts_entries = value_counts.Values<VectorListType<VectorStructType<int32_t, int64_t>>>();
 
 	auto &null_value_counts = data_file_entries[entry_index++];
-	RecursiveUnifiedVectorFormat null_value_counts_format;
-	Vector::RecursiveToUnifiedFormat(null_value_counts, null_value_counts_format);
+	auto null_value_counts_entries = null_value_counts.Values<VectorListType<VectorStructType<int32_t, int64_t>>>();
 
 	auto &nan_value_counts = data_file_entries[entry_index++];
-	RecursiveUnifiedVectorFormat nan_value_counts_format;
-	Vector::RecursiveToUnifiedFormat(nan_value_counts, nan_value_counts_format);
+	auto nan_value_counts_entries = nan_value_counts.Values<VectorListType<VectorStructType<int32_t, int64_t>>>();
 
 	auto &lower_bounds = data_file_entries[entry_index++];
-	RecursiveUnifiedVectorFormat lower_bounds_format;
-	Vector::RecursiveToUnifiedFormat(lower_bounds, lower_bounds_format);
+	auto lower_bounds_entries = lower_bounds.Values<VectorListType<VectorStructType<int32_t, string_t>>>();
 
 	auto &upper_bounds = data_file_entries[entry_index++];
-	RecursiveUnifiedVectorFormat upper_bounds_format;
-	Vector::RecursiveToUnifiedFormat(upper_bounds, upper_bounds_format);
+	auto upper_bounds_entries = upper_bounds.Values<VectorListType<VectorStructType<int32_t, string_t>>>();
 
 	auto &split_offsets = data_file_entries[entry_index++];
-	RecursiveUnifiedVectorFormat split_offsets_format;
-	Vector::RecursiveToUnifiedFormat(split_offsets, split_offsets_format);
+	auto split_offsets_entries = split_offsets.Values<VectorListType<int64_t>>();
 
 	auto &equality_ids = data_file_entries[entry_index++];
-	RecursiveUnifiedVectorFormat equality_ids_format;
-	Vector::RecursiveToUnifiedFormat(equality_ids, equality_ids_format);
+	auto equality_ids_entries = equality_ids.Values<VectorListType<int32_t>>();
 
 	auto &sort_order_id = data_file_entries[entry_index++];
-	UnifiedVectorFormat sort_order_id_format;
-	sort_order_id.ToUnifiedFormat(sort_order_id_format);
+	auto sort_order_id_entries = sort_order_id.Values<int32_t>();
 
-	UnifiedVectorFormat first_row_id_format;
 	optional_ptr<Vector> first_row_id;
+	optional<Int64Entries> first_row_id_entries;
 	if (iceberg_version >= 3) {
 		first_row_id = data_file_entries[entry_index++];
-		first_row_id->ToUnifiedFormat(first_row_id_format);
+		first_row_id_entries.emplace(first_row_id->Values<int64_t>());
 	}
 
-	UnifiedVectorFormat referenced_data_file_format;
 	optional_ptr<Vector> referenced_data_file;
+	optional<StringEntries> referenced_data_file_entries;
 	if (iceberg_version >= 2) {
 		referenced_data_file = data_file_entries[entry_index++];
-		referenced_data_file->ToUnifiedFormat(referenced_data_file_format);
+		referenced_data_file_entries.emplace(referenced_data_file->Values<string_t>());
 	}
-	UnifiedVectorFormat content_offset_format;
 	optional_ptr<Vector> content_offset;
+	optional<Int64Entries> content_offset_entries;
 
-	UnifiedVectorFormat content_size_in_bytes_format;
 	optional_ptr<Vector> content_size_in_bytes;
+	optional<Int64Entries> content_size_in_bytes_entries;
 	if (iceberg_version >= 3) {
 		content_offset = data_file_entries[entry_index++];
 		content_size_in_bytes = data_file_entries[entry_index++];
-
-		content_offset->ToUnifiedFormat(content_offset_format);
-		content_size_in_bytes->ToUnifiedFormat(content_size_in_bytes_format);
+		content_offset_entries.emplace(content_offset->Values<int64_t>());
+		content_size_in_bytes_entries.emplace(content_size_in_bytes->Values<int64_t>());
 	}
 
 	vector<std::pair<int32_t, reference<Vector>>> partition_vectors;
@@ -272,74 +227,78 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 	for (idx_t i = 0; i < count; i++) {
 		IcebergManifestEntry entry;
 
-		entry.status = (IcebergManifestEntryStatusType)ReadRequiredField<int32_t>("status", status_format, i);
+		entry.status = (IcebergManifestEntryStatusType)ReadRequiredField<int32_t>("status", status_entries[i]);
 
 		auto &data_file = entry.data_file;
-		data_file.file_path = ReadRequiredField<string_t>("file_path", file_path_format, i).GetString();
-		data_file.file_format = ReadRequiredField<string_t>("file_format", file_format_format, i).GetString();
-		data_file.record_count = ReadRequiredField<int64_t>("record_count", record_count_format, i);
-		data_file.file_size_in_bytes = ReadRequiredField<int64_t>("file_size_in_bytes", file_size_in_bytes_format, i);
+		data_file.file_path = ReadRequiredField<string_t>("file_path", file_path_entries[i]).GetString();
+		data_file.file_format = ReadRequiredField<string_t>("file_format", file_format_entries[i]).GetString();
+		data_file.record_count = ReadRequiredField<int64_t>("record_count", record_count_entries[i]);
+		data_file.file_size_in_bytes = ReadRequiredField<int64_t>("file_size_in_bytes", file_size_in_bytes_entries[i]);
 
-		data_file.lower_bounds = GetBounds(lower_bounds_format, i);
-		data_file.upper_bounds = GetBounds(upper_bounds_format, i);
-		data_file.column_sizes = GetCounts("column_sizes", column_sizes_format, i);
-		data_file.value_counts = GetCounts("value_counts", value_counts_format, i);
-		data_file.null_value_counts = GetCounts("null_value_counts", null_value_counts_format, i);
-		data_file.nan_value_counts = GetCounts("nan_value_counts", nan_value_counts_format, i);
+		data_file.lower_bounds = GetBounds(lower_bounds_entries[i]);
+		data_file.upper_bounds = GetBounds(upper_bounds_entries[i]);
+		data_file.column_sizes = GetCounts("column_sizes", column_sizes_entries[i]);
+		data_file.value_counts = GetCounts("value_counts", value_counts_entries[i]);
+		data_file.null_value_counts = GetCounts("null_value_counts", null_value_counts_entries[i]);
+		data_file.nan_value_counts = GetCounts("nan_value_counts", nan_value_counts_entries[i]);
 
-		data_file.split_offsets = GetSplitOffsets(split_offsets_format, i);
+		data_file.split_offsets = GetSplitOffsets(split_offsets_entries[i]);
 		int32_t sort_order_id;
-		if (ReadOptionalField<int32_t>(sort_order_id_format, i, sort_order_id)) {
+		if (ReadOptionalField<int32_t>(sort_order_id_entries[i], sort_order_id)) {
 			data_file.has_sort_order_id = true;
 			data_file.sort_order_id = sort_order_id;
 		}
 
 		int64_t snapshot_id;
-		if (ReadOptionalField<int64_t>(snapshot_id_format, i, snapshot_id)) {
+		if (ReadOptionalField<int64_t>(snapshot_id_entries[i], snapshot_id)) {
 			entry.SetSnapshotId(snapshot_id);
 		}
 
 		//! >= V2
 		if (iceberg_version >= 2) {
 			data_file.content =
-			    (IcebergManifestEntryContentType)ReadRequiredField<int32_t>("content", content_format, i);
-			data_file.equality_ids = GetEqualityIds(equality_ids_format, i);
+			    (IcebergManifestEntryContentType)ReadRequiredField<int32_t>("content", (*content_entries)[i]);
+			data_file.equality_ids = GetEqualityIds(equality_ids_entries[i]);
 
 			int64_t sequence_number;
-			if (ReadOptionalField<int64_t>(sequence_number_format, i, sequence_number)) {
+			if (ReadOptionalField<int64_t>(sequence_number_entries[i], sequence_number)) {
 				entry.SetSequenceNumber(sequence_number);
 			}
 			int64_t file_sequence_number;
-			if (ReadOptionalField<int64_t>(file_sequence_number_format, i, file_sequence_number)) {
+			if (ReadOptionalField<int64_t>(file_sequence_number_entries[i], file_sequence_number)) {
 				entry.SetFileSequenceNumber(file_sequence_number);
 			}
 
-			string_t referenced_data_file;
-			if (ReadOptionalField<string_t>(referenced_data_file_format, i, referenced_data_file)) {
-				data_file.referenced_data_file = referenced_data_file.GetString();
+			string_t referenced_data_file_val;
+			if (ReadOptionalField<string_t>((*referenced_data_file_entries)[i], referenced_data_file_val)) {
+				data_file.referenced_data_file = referenced_data_file_val.GetString();
 			}
 		} else {
 			//! SPEC: Data file field content must default to 0 (data)
 			data_file.content = IcebergManifestEntryContentType::DATA;
+			//! SPEC: Manifest entry field sequence_number must default to 0
+			entry.SetSequenceNumber(0);
+			//! SPEC: Manifest entry field file_sequence_number must default to 0
+			entry.SetFileSequenceNumber(0);
 		}
 
 		//! >= V3
 		if (iceberg_version >= 3) {
-			int64_t first_row_id;
-			if (ReadOptionalField<int64_t>(first_row_id_format, i, first_row_id)) {
-				data_file.SetFirstRowId(first_row_id);
+			int64_t first_row_id_val;
+			if (ReadOptionalField<int64_t>((*first_row_id_entries)[i], first_row_id_val)) {
+				data_file.SetFirstRowId(first_row_id_val);
 			}
 
-			int64_t content_offset;
-			if (ReadOptionalField<int64_t>(content_offset_format, i, content_offset)) {
-				data_file.content_offset = Value::BIGINT(content_offset);
+			int64_t content_offset_val;
+			if (ReadOptionalField<int64_t>((*content_offset_entries)[i], content_offset_val)) {
+				data_file.content_offset = Value::BIGINT(content_offset_val);
 			} else {
 				data_file.content_offset = Value(LogicalType::BIGINT);
 			}
 
-			int64_t content_size_in_bytes;
-			if (ReadOptionalField<int64_t>(content_size_in_bytes_format, i, content_size_in_bytes)) {
-				data_file.content_size_in_bytes = Value::BIGINT(content_size_in_bytes);
+			int64_t content_size_in_bytes_val;
+			if (ReadOptionalField<int64_t>((*content_size_in_bytes_entries)[i], content_size_in_bytes_val)) {
+				data_file.content_size_in_bytes = Value::BIGINT(content_size_in_bytes_val);
 			} else {
 				data_file.content_size_in_bytes = Value(LogicalType::BIGINT);
 			}
