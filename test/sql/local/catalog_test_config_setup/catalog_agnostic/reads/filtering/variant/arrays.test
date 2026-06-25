@@ -2,8 +2,6 @@
 # description: min/max bounds for shredded VARIANT fields that contain arrays. Per the Iceberg spec an
 # group: [variant]
 
-mode skip Needs merge with v1.5-variegata for 'variant_bytes_to_variant'
-
 #              array's bound is keyed at the array field itself ("$['scores']") and covers every element.
 
 require-env CATALOG_TEST_CONFIG_SETUP
