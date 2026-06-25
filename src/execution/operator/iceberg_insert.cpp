@@ -839,14 +839,33 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 		result.write_empty_file = false;
 		// file_size_bytes is currently only supported for unpartitioned writes
 		auto write_target_file_size = table_properties.find("write.target-file-size-bytes");
+		bool target_file_size_set = false;
 		if (write_target_file_size != table_properties.end()) {
 			try {
 				result.file_size_bytes = context.db->config.ParseMemoryLimit(write_target_file_size->second.c_str());
+				target_file_size_set = true;
 			} catch (ParserException &e) {
-				DUCKDB_LOG_INFO(context, "table property write.target-file-size-bytes has invalid value %s. Reason %s",
+				DUCKDB_LOG_INFO(context,
+				                "table property write.target-file-size-bytes = %s could not be parsed by "
+				                "ParseMemoryLimit(). Reason %s",
 				                write_target_file_size->second, e.what());
 			}
-		} else {
+			if (!target_file_size_set) {
+				try {
+					result.file_size_bytes = std::stoll(write_target_file_size->second);
+					target_file_size_set = true;
+				} catch (std::invalid_argument const &e) {
+					DUCKDB_LOG_INFO(
+					    context,
+					    "table property write.target-file-size-bytes = %s could not be parsed by std::stoll. Reason %s",
+					    write_target_file_size->second, e.what());
+				}
+			}
+			if (!target_file_size_set) {
+				throw InvalidInputException("Table property write.target-file-size-bytes is not a valid number");
+			}
+		}
+		if (!target_file_size_set) {
 			result.file_size_bytes = IcebergCatalog::DEFAULT_TARGET_FILE_SIZE;
 		}
 		result.rotate = true;
