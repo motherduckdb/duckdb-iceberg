@@ -13,10 +13,8 @@
       "reason": "Not yet supported with Polaris",
       "paths": [
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/test_no_head_request_for_deletes.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/test_spark_can_read_duckdb_table.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/time_travel_after_uncommitted_delete.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transactional_updates_error_omits_stacktrace.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/other_engines/test_create_table_then_read_with_other_engine.test"
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transactional_updates_error_omits_stacktrace.test"
       ]
     },
     {

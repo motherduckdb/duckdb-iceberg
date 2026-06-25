@@ -56,6 +56,18 @@ running `python3 -m pip install duckdb "pyspark[sql]==3.5.0"` should do the tric
 make test 
 ```
 
+To run a catalog-backed `unittest` file directly against whichever REST catalog is currently active, source the helper below and use it to resolve the matching `--test-config` path:
+
+```shell
+source scripts/catalog_test_config.sh
+./build/debug/test/unittest --test-config "$(active_catalog_test_config)" \
+  test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_write_upper_lower_bounds_nested_types.test
+```
+
+`active_catalog_test_config` reads `.catalogs/.active_catalog`, returns the matching config for `fixture`, `lakekeeper`, `polaris`, or `nessie`, and fails with a descriptive error if no active catalog is set or if the active catalog does not use a REST catalog config.
+
+For `test/python` runs, pass `--test-python-verbosity verbose` to print the resolved catalog/runtime environment and any capability-based skips.
+
 #### Running the local S3 test server
 
 Running the S3 test cases requires the minio test server to be running and populated with `scripts/upload_iceberg_to_s3_test_server.sh`.
