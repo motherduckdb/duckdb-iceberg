@@ -77,6 +77,7 @@ jobs:
           ENABLE_EXTENSION_AUTOINSTALL: 1
           # Enable -DDEBUG slow verifiers (expression verifier, operator
           # round-trips, etc.) without changing the optimization level.
+          EXPORT_DYNAMIC_SYMBOLS: 1
           FORCE_DEBUG: 1
           FORCE_ASSERT: 1
         with:
