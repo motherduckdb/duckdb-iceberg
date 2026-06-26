@@ -161,7 +161,9 @@ TableTransactionInfo IcebergTransaction::GetTransactionRequest(IcebergTransactio
 	TableTransactionInfo info;
 	auto &transaction = info.request;
 	for (auto &updated_table : alter_update.updated_tables) {
-		if (alter_update.committed_tables.count(updated_table.first)) {
+		auto &table_key = updated_table.first;
+
+		if (alter_update.committed_tables.count(table_key)) {
 			//! Table is already committed
 			continue;
 		}
@@ -231,8 +233,8 @@ TableTransactionInfo IcebergTransaction::GetTransactionRequest(IcebergTransactio
 			update.CreateUpdate(db, context, commit_state);
 		}
 
-		info.created_metadata_files.emplace(updated_table.first, std::move(commit_state.created_metadata_files));
-		info.table_requests.emplace(updated_table.first, transaction.table_changes.size());
+		info.created_metadata_files.emplace(table_key, std::move(commit_state.created_metadata_files));
+		info.table_requests.emplace(table_key, transaction.table_changes.size());
 		transaction.table_changes.push_back(std::move(table_change));
 	}
 	return info;
@@ -303,17 +305,19 @@ void IcebergTransaction::RefreshRetryTables(IcebergTransactionAlterUpdate &alter
 	}
 }
 
-bool IcebergTransaction::RetryCommittedTable(IcebergTransactionAlterUpdate &alter_update, const string &table_key,
-                                             idx_t attempt, const RetryCommitState &retry_state,
-                                             const CommitResult &result, const vector<string> &created_metadata_files,
-                                             ClientContext &context) {
-	if (!retry_state.retryable || !result.IsConflict() || attempt >= retry_state.max_retries) {
+static bool CommitIsRetryable(const RetryCommitState &retry_state, const CommitResult &result, idx_t attempt) {
+	if (attempt >= retry_state.max_retries) {
+		//! We've reached the max amount of retries
 		return false;
 	}
-	CleanupMetadataFiles(context, created_metadata_files);
-	case_insensitive_set_t retry_tables;
-	retry_tables.insert(table_key);
-	RefreshRetryTables(alter_update, retry_tables, context);
+	if (!retry_state.retryable) {
+		//! The operation isn't retryable in general
+		return false;
+	}
+	if (!result.IsConflict()) {
+		//! Only conflicts (409) are retryable
+		return false;
+	}
 	return true;
 }
 
@@ -407,19 +411,21 @@ void IcebergTransaction::DoTableUpdates(IcebergTransactionAlterUpdate &alter_upd
 				}
 				break;
 			}
-			if (!retry_state.retryable || !result.IsConflict() || multi_attempt >= retry_state.max_retries) {
-				result.Throw(catalog.GetBaseUrl().GetURLEncoded());
-			}
 			vector<string> created_metadata_files;
 			for (const auto &entry : transaction_info.created_metadata_files) {
 				created_metadata_files.insert(created_metadata_files.end(), entry.second.begin(), entry.second.end());
 			}
-			CleanupMetadataFiles(context, created_metadata_files);
-			case_insensitive_set_t retry_tables;
-			for (const auto &entry : transaction_info.table_requests) {
-				retry_tables.insert(entry.first);
+			if (!CommitIsRetryable(retry_state, result, multi_attempt)) {
+				result.Throw(catalog.GetBaseUrl().GetURLEncoded());
 			}
-			RefreshRetryTables(alter_update, retry_tables, context);
+
+			CleanupMetadataFiles(context, created_metadata_files);
+			case_insensitive_set_t table_keys;
+			for (const auto &entry : transaction_info.table_requests) {
+				auto &table_key = entry.first;
+				table_keys.insert(table_key);
+			}
+			RefreshRetryTables(alter_update, table_keys, context);
 			multi_attempt++;
 			continue;
 		}
@@ -427,6 +433,7 @@ void IcebergTransaction::DoTableUpdates(IcebergTransactionAlterUpdate &alter_upd
 		D_ASSERT(catalog.supported_urls.count("POST /v1/{prefix}/namespaces/{namespace}/tables/{table}"));
 		bool rebuilt_requests = false;
 		for (auto &it : transaction_info.table_requests) {
+			auto &table_key = it.first;
 			auto &table_change = transaction.table_changes[it.second];
 			D_ASSERT(table_change.identifier);
 			auto &identifier = *table_change.identifier;
@@ -435,28 +442,32 @@ void IcebergTransaction::DoTableUpdates(IcebergTransactionAlterUpdate &alter_upd
 			                                        transaction_json);
 			if (!result.Success()) {
 				RetryCommitState retry_state;
-				auto updated_table = alter_update.updated_tables.find(it.first);
+				auto updated_table = alter_update.updated_tables.find(table_key);
 				if (updated_table != alter_update.updated_tables.end() && updated_table->second.transaction_data) {
 					retry_state.retryable = updated_table->second.transaction_data->SupportsAppendRetry();
 					retry_state.max_retries =
 					    NumericCast<idx_t>(updated_table->second.transaction_data->GetCommitRetryCount());
 				}
-				auto attempt_it = single_table_attempts.find(it.first);
+				auto attempt_it = single_table_attempts.find(table_key);
 				idx_t attempt = attempt_it == single_table_attempts.end() ? 0 : attempt_it->second;
 				vector<string> created_metadata_files;
 				for (const auto &entry : transaction_info.created_metadata_files) {
 					created_metadata_files.insert(created_metadata_files.end(), entry.second.begin(),
 					                              entry.second.end());
 				}
-				if (!RetryCommittedTable(alter_update, it.first, attempt, retry_state, result, created_metadata_files,
-				                         context)) {
+				if (!CommitIsRetryable(retry_state, result, attempt)) {
 					result.Throw(catalog.GetBaseUrl().GetURLEncoded());
 				}
-				single_table_attempts[it.first] = attempt + 1;
+				CleanupMetadataFiles(context, created_metadata_files);
+				case_insensitive_set_t retry_tables;
+				retry_tables.insert(table_key);
+				RefreshRetryTables(alter_update, retry_tables, context);
+
+				single_table_attempts[table_key] = attempt + 1;
 				rebuilt_requests = true;
 				break;
 			}
-			alter_update.committed_tables.insert(it.first);
+			alter_update.committed_tables.insert(table_key);
 		}
 		if (!rebuilt_requests) {
 			break;
@@ -607,7 +618,7 @@ void IcebergTransaction::CleanupFiles() {
 		auto &alter_update = transaction_update->Cast<IcebergTransactionAlterUpdate>();
 		for (auto &up_table : alter_update.updated_tables) {
 			if (alter_update.committed_tables.count(up_table.first)) {
-				//! Successively committed, no need to roll back
+				//! Successfully committed, no need to roll back
 				continue;
 			}
 			auto &table = up_table.second;

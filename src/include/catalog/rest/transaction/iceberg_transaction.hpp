@@ -113,9 +113,6 @@ private:
 	void CleanupMetadataFiles(ClientContext &context, const vector<string> &paths);
 	void RefreshRetryTables(IcebergTransactionAlterUpdate &alter_update, const case_insensitive_set_t &table_keys,
 	                        ClientContext &context);
-	bool RetryCommittedTable(IcebergTransactionAlterUpdate &alter_update, const string &table_key, idx_t attempt,
-	                         const RetryCommitState &retry_state, const CommitResult &result,
-	                         const vector<string> &created_metadata_files, ClientContext &context);
 	void CleanupFiles();
 
 private:
