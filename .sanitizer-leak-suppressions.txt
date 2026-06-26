@@ -5,3 +5,4 @@
 leak:duckdb::AWSInput::ExecuteRequestLegacy
 leak:duckdb::InitAWSAPI
 leak:Aws::InitAPI
+leak:CRYPTO_zalloc
