@@ -1,0 +1,66 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transactional_deletes_not_retried.test
+# group: [transactions]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+drop table if exists my_datalake.default.multi_transaction_delete;
+
+statement ok
+create table my_datalake.default.multi_transaction_delete (a int, b int);
+
+# Insert 0,0
+statement ok
+insert into my_datalake.default.multi_transaction_delete select 0, 0;
+
+statement ok con1
+begin
+
+statement ok con2
+begin
+
+# Insert 2,2
+statement ok con2
+insert into my_datalake.default.multi_transaction_delete select 2, 2;
+
+statement ok con2
+commit
+
+# con1 doesn't see 2,2 yet
+query II con1
+select * from my_datalake.default.multi_transaction_delete;
+----
+0	0
+
+# con1 deletes 0,0 from the old snapshot
+statement ok con1
+delete from my_datalake.default.multi_transaction_delete where a = 0;
+
+query I con1
+select count(*) from my_datalake.default.multi_transaction_delete;
+----
+0
+
+# NOTE: Delete isn't retried yet
+statement error con1
+commit;
+----
+<REGEX>:.*TransactionContext Error: Failed to commit:.*
+
+# con1 DELETE didn't go through
+query II
+select * from my_datalake.default.multi_transaction_delete order by all
+----
+0	0
+2	2

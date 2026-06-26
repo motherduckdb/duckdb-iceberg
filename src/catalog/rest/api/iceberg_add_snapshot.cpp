@@ -25,7 +25,8 @@ IcebergAddSnapshot::IcebergAddSnapshot(const IcebergTableInformation &table_info
 }
 
 bool IcebergAddSnapshot::IsRetryable() const {
-	return altered_manifests.IsEmpty();
+	//! Only retry INSERT for now
+	return operation == IcebergSnapshotOperationType::APPEND;
 }
 
 static rest_api_objects::TableUpdate CreateAddSnapshotUpdate(const IcebergTableInformation &table_info,
