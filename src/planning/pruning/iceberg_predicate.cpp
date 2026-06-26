@@ -178,7 +178,6 @@ static bool MatchBoundsExpression(ClientContext &context, const unique_ptr<Expre
 		auto comparison_type = compare_expr.GetExpressionType();
 		auto &left = BoundComparisonExpression::Left(compare_expr);
 		auto &right = BoundComparisonExpression::Right(compare_expr);
-
 		const bool right_is_const = right.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT;
 		const bool left_is_const = left.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT;
 
