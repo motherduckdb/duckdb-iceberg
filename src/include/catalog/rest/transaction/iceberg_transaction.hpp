@@ -19,11 +19,6 @@ struct TableTransactionInfo {
 	rest_api_objects::CommitTransactionRequest request;
 	case_insensitive_map_t<idx_t> table_requests;
 	case_insensitive_map_t<vector<string>> created_metadata_files;
-
-	// if a table is created with assert create, we cannot use the
-	// transactions/commit endpoint. Instead we iterate through each table
-	// update and update each table individually
-	bool has_assert_create = false;
 };
 
 struct RetryCommitState {
@@ -101,6 +96,8 @@ public:
 	void DropSecrets(ClientContext &context);
 	TableTransactionInfo GetTransactionRequest(IcebergTransactionAlterUpdate &alter_update, ClientContext &context);
 	RetryCommitState GetRetryCommitState(const IcebergTransactionAlterUpdate &alter_update) const;
+	void DoMultiTableCommitUpdates(IcebergTransactionAlterUpdate &alter_update, ClientContext &context);
+	void DoSingleTableCommitUpdates(IcebergTransactionAlterUpdate &alter_update, ClientContext &context);
 	optional_ptr<IcebergTransactionTableState> GetLatestTableState(const string &table_key);
 	IcebergTransactionTableState &SetLatestTableState(IcebergTableInformation &table, IcebergTableStatus status);
 	IcebergTransactionTableState &SetLatestTableState(const string &table_key, IcebergTableStatus status);
@@ -110,6 +107,7 @@ public:
 	IcebergTableInformation &RenameTable(IcebergTableInformation &table, const string &new_name);
 
 private:
+	bool CanUseMultiTableCommit(const IcebergTransactionAlterUpdate &alter_update) const;
 	void CleanupMetadataFiles(ClientContext &context, const vector<string> &paths);
 	void RefreshRetryTables(IcebergTransactionAlterUpdate &alter_update, const case_insensitive_set_t &table_keys,
 	                        ClientContext &context);
