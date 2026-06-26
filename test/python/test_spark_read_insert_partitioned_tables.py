@@ -83,6 +83,14 @@ def spark_con():
     os.environ["AWS_ACCESS_KEY_ID"] = "admin"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "password"
 
+    active = SparkSession.getActiveSession()
+    if active is not None:
+        active.stop()
+    # A SparkContext from an earlier test module may still be alive in the JVM
+    # even when no SparkSession is registered as active on the Python side.
+    if SparkContext._active_spark_context is not None:
+        SparkContext._active_spark_context.stop()
+
     spark = (
         SparkSession.builder.appName("DuckDB Insert Partitioned Tables Read Test")
         .config(
