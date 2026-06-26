@@ -27,7 +27,6 @@ public:
 	int64_t GetCommitRetryCount() const;
 	bool SupportsAppendRetry() const;
 	bool RetryStateMatches(const IcebergTableInformation &table_info) const;
-	void RefreshExistingManifestList(ClientContext &context, const IcebergTableMetadata &metadata);
 
 	void AddSnapshot(IcebergSnapshotOperationType operation, vector<IcebergManifestEntry> &&data_files,
 	                 IcebergManifestDeletes &&altered_manifests);

@@ -146,19 +146,6 @@ void IcebergTransactionData::CacheExistingManifestList(lock_guard<mutex> &guard,
 	next_row_id = loaded_next_row_id;
 }
 
-void IcebergTransactionData::RefreshExistingManifestList(ClientContext &context, const IcebergTableMetadata &metadata) {
-	lock_guard<mutex> guard(lock);
-	if (alters.empty()) {
-		existing_manifest_list.clear();
-		return;
-	}
-	int64_t refreshed_next_row_id = 0;
-	if (metadata.has_next_row_id) {
-		refreshed_next_row_id = metadata.next_row_id;
-	}
-	LoadExistingManifestList(context, metadata, existing_manifest_list, refreshed_next_row_id);
-}
-
 void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
                                          vector<IcebergManifestEntry> &&data_files,
                                          IcebergManifestDeletes &&altered_manifests) {

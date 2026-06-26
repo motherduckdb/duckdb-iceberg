@@ -213,23 +213,6 @@ static void CreateTableRequirements(DatabaseInstance &db, ClientContext &context
 	}
 }
 
-static int64_t GetCommitStartRowId(const IcebergTransactionData &transaction_data,
-                                   const IcebergTableMetadata &metadata) {
-	int64_t next_row_id = 0;
-	if (metadata.has_next_row_id) {
-		next_row_id = metadata.next_row_id;
-	}
-	for (const auto &manifest_list_entry : transaction_data.existing_manifest_list) {
-		const auto &manifest_file = manifest_list_entry.file;
-		if (manifest_file.content != IcebergManifestContentType::DATA || !manifest_file.has_first_row_id) {
-			continue;
-		}
-		next_row_id = MaxValue<int64_t>(next_row_id, manifest_file.first_row_id + manifest_file.added_rows_count +
-		                                                 manifest_file.existing_rows_count);
-	}
-	return next_row_id;
-}
-
 static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, IcebergTableInformation &table_info,
                                                       ClientContext &context) {
 	SingleTableStagedCommit info;
@@ -245,9 +228,8 @@ static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, Iceb
 	auto &transaction_data = *commit_state.table_info.transaction_data;
 	info.retryable = transaction_data.SupportsAppendRetry();
 	if (!transaction_data.alters.empty()) {
-		commit_state.manifests = transaction_data.existing_manifest_list;
+		commit_state.LoadExistingManifests(std::move(transaction_data.existing_manifest_list));
 	}
-	commit_state.next_row_id = GetCommitStartRowId(transaction_data, metadata);
 	commit_state.latest_snapshot = current_snapshot;
 
 	for (auto &update : transaction_data.updates) {
