@@ -165,7 +165,8 @@ static IcebergManifestListEntry WriteManifestListEntry(const IcebergTableInforma
 
 static vector<IcebergManifestListEntry>
 CreateCommitManifestFiles(const vector<IcebergManifestListEntry> &manifest_files,
-                          const IcebergTableInformation &table_info, IcebergCommitState &commit_state) {
+                          const IcebergTableInformation &table_info, IcebergCommitState &commit_state,
+                          int64_t snapshot_id, int64_t sequence_number) {
 	vector<IcebergManifestListEntry> result;
 	result.reserve(manifest_files.size());
 	auto &fs = FileSystem::GetFileSystem(commit_state.context);
@@ -173,8 +174,8 @@ CreateCommitManifestFiles(const vector<IcebergManifestListEntry> &manifest_files
 	for (const auto &manifest_entry : manifest_files) {
 		auto copied_entries = manifest_entry.manifest_entries;
 		auto copied_manifest = IcebergManifestListEntry::CreateFromEntries(
-		    fs, IcebergSnapshot::NewSnapshotId(), commit_state.next_sequence_number, table_info.table_metadata,
-		    manifest_entry.file.content, std::move(copied_entries), next_row_id);
+		    fs, snapshot_id, sequence_number, table_info.table_metadata, manifest_entry.file.content,
+		    std::move(copied_entries), next_row_id);
 		result.push_back(std::move(copied_manifest));
 	}
 	return result;
@@ -189,13 +190,12 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 	D_ASSERT(avro_copy_p);
 	auto &avro_copy = avro_copy_p->Cast<CopyFunctionCatalogEntry>().function;
 
-	auto uncommitted_manifest_files = CreateCommitManifestFiles(manifest_files, table_info, commit_state);
-	D_ASSERT(!uncommitted_manifest_files.empty());
-
 	auto &table_metadata = commit_state.table_info.table_metadata;
-
 	const auto snapshot_id = IcebergSnapshot::NewSnapshotId();
 	const auto sequence_number = commit_state.next_sequence_number++;
+	auto uncommitted_manifest_files =
+	    CreateCommitManifestFiles(manifest_files, table_info, commit_state, snapshot_id, sequence_number);
+	D_ASSERT(!uncommitted_manifest_files.empty());
 
 	auto &fs = FileSystem::GetFileSystem(context);
 	auto manifest_list_uuid = UUID::ToString(UUID::GenerateRandomUUID());

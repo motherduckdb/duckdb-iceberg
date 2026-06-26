@@ -610,6 +610,9 @@ void IcebergTableInformation::RefreshFromCatalog(ClientContext &context) {
 		auto &load_table_result = *cached_table_result->load_table_result;
 		InitializeFromLoadTableResult(load_table_result);
 	}
+	if (transaction_data) {
+		transaction_data->RefreshExistingManifestList(context, table_metadata);
+	}
 }
 
 IcebergTableInformation IcebergTableInformation::Copy(ClientContext &context) const {

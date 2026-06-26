@@ -15,6 +15,50 @@
 
 namespace duckdb {
 
+static void LoadExistingManifestList(ClientContext &context, const IcebergTableMetadata &metadata,
+                                     vector<IcebergManifestListEntry> &existing_manifest_list, int64_t &next_row_id) {
+	existing_manifest_list.clear();
+
+	auto current_snapshot = metadata.GetLatestSnapshot();
+	if (!current_snapshot) {
+		return;
+	}
+
+	IcebergSnapshotScanInfo snapshot_info;
+	snapshot_info.snapshot = current_snapshot;
+	snapshot_info.schema_id = metadata.GetCurrentSchemaId();
+
+	auto &manifest_list_path = current_snapshot->manifest_list;
+	auto scan =
+	    AvroScan::ScanManifestList(snapshot_info, metadata, context, manifest_list_path, existing_manifest_list);
+	auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
+	while (!manifest_list_reader->Finished()) {
+		manifest_list_reader->Read();
+	}
+
+	if (metadata.iceberg_version < 3) {
+		return;
+	}
+
+	for (auto &manifest_list_entry : existing_manifest_list) {
+		auto &manifest_file = manifest_list_entry.file;
+		if (manifest_file.content != IcebergManifestContentType::DATA) {
+			continue;
+		}
+		if (manifest_file.has_first_row_id) {
+			continue;
+		}
+		if (current_snapshot->has_first_row_id) {
+			throw InternalException("Table is corrupted, snapshot has 'first-row-id' but not all 'manifest_file' "
+			                        "entries have a 'first_row_id'");
+		}
+		manifest_file.has_first_row_id = true;
+		manifest_file.first_row_id = next_row_id;
+		next_row_id += manifest_file.added_rows_count;
+		next_row_id += manifest_file.existing_rows_count;
+	}
+}
+
 IcebergTransactionData::IcebergTransactionData(ClientContext &context, const IcebergTableInformation &table_info)
     : context(context), table_info(table_info) {
 	initial_table_uuid = table_info.table_metadata.table_uuid;
@@ -93,47 +137,20 @@ void IcebergTransactionData::CacheExistingManifestList(lock_guard<mutex> &guard,
 	if (!alters.empty()) {
 		return;
 	}
+	LoadExistingManifestList(context, metadata, existing_manifest_list, next_row_id);
+}
 
-	auto current_snapshot = metadata.GetLatestSnapshot();
-	if (!current_snapshot) {
+void IcebergTransactionData::RefreshExistingManifestList(ClientContext &context, const IcebergTableMetadata &metadata) {
+	lock_guard<mutex> guard(lock);
+	if (alters.empty()) {
+		existing_manifest_list.clear();
 		return;
 	}
-
-	IcebergSnapshotScanInfo snapshot_info;
-	snapshot_info.snapshot = current_snapshot;
-	snapshot_info.schema_id = metadata.GetCurrentSchemaId();
-
-	auto &manifest_list_path = current_snapshot->manifest_list;
-	//! Read the manifest list
-	auto scan =
-	    AvroScan::ScanManifestList(snapshot_info, metadata, context, manifest_list_path, existing_manifest_list);
-	auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
-	while (!manifest_list_reader->Finished()) {
-		manifest_list_reader->Read();
+	int64_t refreshed_next_row_id = 0;
+	if (metadata.has_next_row_id) {
+		refreshed_next_row_id = metadata.next_row_id;
 	}
-
-	if (metadata.iceberg_version < 3) {
-		return;
-	}
-
-	//! Deal with upgraded tables, if the snapshot originated from V2
-	for (auto &manifest_list_entry : existing_manifest_list) {
-		auto &manifest_file = manifest_list_entry.file;
-		if (manifest_file.content != IcebergManifestContentType::DATA) {
-			continue;
-		}
-		if (manifest_file.has_first_row_id) {
-			continue;
-		}
-		if (current_snapshot->has_first_row_id) {
-			throw InternalException("Table is corrupted, snapshot has 'first-row-id' but not all 'manifest_file' "
-			                        "entries have a 'first_row_id'");
-		}
-		manifest_file.has_first_row_id = true;
-		manifest_file.first_row_id = next_row_id;
-		next_row_id += manifest_file.added_rows_count;
-		next_row_id += manifest_file.existing_rows_count;
-	}
+	LoadExistingManifestList(context, metadata, existing_manifest_list, refreshed_next_row_id);
 }
 
 void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
