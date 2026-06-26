@@ -74,6 +74,7 @@ public:
 	bool HasTransactionUpdates() const;
 	void InitializeFromLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result,
 	                                   bool initialize_schemas = true);
+	void RefreshFromCatalog(ClientContext &context);
 
 public:
 	IcebergCatalog &catalog;

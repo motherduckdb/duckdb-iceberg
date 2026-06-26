@@ -32,6 +32,7 @@
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/update/test_update_deletion_vector_consolidation_commit.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/test_row_lineage_read_from_upgraded.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/test_row_lineage_write_after_upgrade.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_append_retry_v3_row_lineage.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/test_basic_variant.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/update/partitions/update_v3_row_lineage.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/create/default/test_create_default_varchar.test",
@@ -103,6 +104,7 @@
       "paths": [
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_get_transaction_snapshot.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/update/test_one_update_one_snapshot.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transactional_deletes_not_retried.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transaction_get_from_transaction_start.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transactional_updates.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transactional_updates_error_omits_stacktrace.test",

@@ -24,6 +24,22 @@
 using namespace duckdb_yyjson;
 namespace duckdb {
 
+void CommitResult::Throw(const string &url) const {
+	if (success) {
+		return;
+	}
+	if (error_) {
+		auto error_copy = error_->Copy();
+		error_copy._error.stack = vector<string>();
+		throw InvalidConfigurationException(
+		    "Request to '%s' returned a non-200 status code (%s). \n message: %s\n type: %s\n reason: %s\n", url,
+		    EnumUtil::ToString(status), error_copy._error.message, error_copy._error.type, reason);
+	}
+	throw InvalidConfigurationException(
+	    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s", url,
+	    EnumUtil::ToString(status), reason, body);
+}
+
 vector<string> IRCAPI::ParseSchemaName(const string &namespace_name) {
 	idx_t start = 0;
 	idx_t end = namespace_name.find(".", start);
@@ -367,7 +383,32 @@ vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IcebergCatalog &
 	return result;
 }
 
-void IRCAPI::CommitMultiTableUpdate(ClientContext &context, IcebergCatalog &catalog, const string &body) {
+static CommitResult BuildCommitResult(ClientContext &context, const unique_ptr<HTTPResponse> &response) {
+	CommitResult result;
+	result.status = response->status;
+	result.reason = response->reason;
+	result.body = response->body;
+	result.success = response->status == HTTPStatusCode::OK_200 || response->status == HTTPStatusCode::NoContent_204;
+	if (result.success) {
+		return result;
+	}
+
+	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> out_doc;
+	yyjson_val *error_obj = ICUtils::GetErrorMessage(response->body, out_doc);
+	if (error_obj != nullptr) {
+		result.error_ = rest_api_objects::IcebergErrorResponse::FromJSON(error_obj);
+		if (result.error_->_error.stack) {
+			string stack_trace;
+			for (const auto &str : *result.error_->_error.stack) {
+				stack_trace.append(str + "\n");
+			}
+			DUCKDB_LOG(context, IcebergLogType, stack_trace);
+		}
+	}
+	return result;
+}
+
+CommitResult IRCAPI::CommitMultiTableUpdate(ClientContext &context, IcebergCatalog &catalog, const string &body) {
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPrefixComponent(catalog.prefix, catalog.prefix_is_one_component);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("transactions"));
@@ -376,32 +417,11 @@ void IRCAPI::CommitMultiTableUpdate(ClientContext &context, IcebergCatalog &cata
 	headers.Insert("Content-Type", "application/json");
 	LogPostBody(context, url_builder, body);
 	auto response = catalog.auth_handler->Request(RequestType::POST_REQUEST, context, url_builder, headers, body);
-	if (response->status != HTTPStatusCode::OK_200 && response->status != HTTPStatusCode::NoContent_204) {
-		std::unique_ptr<yyjson_doc, YyjsonDocDeleter> out_doc;
-		yyjson_val *error_obj = ICUtils::GetErrorMessage(response->body, out_doc);
-		if (error_obj == nullptr) {
-			throw InvalidConfigurationException(response->body);
-		}
-		auto error = rest_api_objects::IcebergErrorResponse::FromJSON(error_obj);
-		string stack_trace;
-		if (error._error.stack) {
-			for (const auto &str : *error._error.stack) {
-				stack_trace.append(str + "\n");
-			}
-		}
-		DUCKDB_LOG(context, IcebergLogType, stack_trace);
-
-		// Omit stack from error output
-		error._error.stack = vector<string>();
-		throw InvalidConfigurationException(
-		    "Request to '%s' returned a non-200 status code (%s). \n message: %s\n type: %s\n reason: %s\n",
-		    url_builder.GetURLEncoded(), EnumUtil::ToString(response->status), error._error.message, error._error.type,
-		    response->reason);
-	}
+	return BuildCommitResult(context, response);
 }
 
-void IRCAPI::CommitTableUpdate(ClientContext &context, IcebergCatalog &catalog, const vector<string> &schema,
-                               const string &table, const string &body) {
+CommitResult IRCAPI::CommitTableUpdate(ClientContext &context, IcebergCatalog &catalog, const vector<string> &schema,
+                                       const string &table, const string &body) {
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPrefixComponent(catalog.prefix, catalog.prefix_is_one_component);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
@@ -412,11 +432,7 @@ void IRCAPI::CommitTableUpdate(ClientContext &context, IcebergCatalog &catalog, 
 	headers.Insert("Content-Type", "application/json");
 	LogPostBody(context, url_builder, body);
 	auto response = catalog.auth_handler->Request(RequestType::POST_REQUEST, context, url_builder, headers, body);
-	if (response->status != HTTPStatusCode::OK_200 && response->status != HTTPStatusCode::NoContent_204) {
-		throw InvalidConfigurationException(
-		    "Request to '%s' returned a non-200 status code (%s), with reason: %s, body: %s",
-		    url_builder.GetURLEncoded(), EnumUtil::ToString(response->status), response->reason, response->body);
-	}
+	return BuildCommitResult(context, response);
 }
 
 void IRCAPI::CommitTableDelete(ClientContext &context, IcebergCatalog &catalog, const vector<string> &schema,

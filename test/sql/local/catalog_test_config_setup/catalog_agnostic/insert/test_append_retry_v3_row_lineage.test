@@ -1,0 +1,61 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_append_retry_v3_row_lineage.test
+# group: [insert]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+set ignore_error_messages
+
+statement ok
+create schema if not exists my_datalake.default;
+
+statement ok
+drop table if exists my_datalake.default.append_retry_v3_row_lineage;
+
+statement ok
+create table my_datalake.default.append_retry_v3_row_lineage (
+	id int,
+	payload varchar
+) WITH (
+	'format-version' = 3
+);
+
+statement ok
+insert into my_datalake.default.append_retry_v3_row_lineage values
+	(0, 'base');
+
+statement ok con1
+begin
+
+statement ok con2
+begin
+
+statement ok con1
+insert into my_datalake.default.append_retry_v3_row_lineage values
+	(1, 'one');
+
+statement ok con2
+insert into my_datalake.default.append_retry_v3_row_lineage values
+	(2, 'two');
+
+statement ok con1
+commit
+
+statement ok con2
+commit
+
+query IIII
+select _last_updated_sequence_number, _row_id, id, payload
+from my_datalake.default.append_retry_v3_row_lineage
+order by _row_id;
+----
+1	0	0	base
+2	1	1	one
+3	2	2	two

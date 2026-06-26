@@ -24,6 +24,10 @@ public:
 	IcebergTransactionData(ClientContext &context, const IcebergTableInformation &table_info);
 
 public:
+	int64_t GetCommitRetryCount() const;
+	bool SupportsAppendRetry() const;
+	bool RetryStateMatches(const IcebergTableInformation &table_info) const;
+
 	void AddSnapshot(IcebergSnapshotOperationType operation, vector<IcebergManifestEntry> &&data_files,
 	                 IcebergManifestDeletes &&altered_manifests);
 	void AddUpdateSnapshot(vector<IcebergManifestEntry> &&delete_files, vector<IcebergManifestEntry> &&data_files,
@@ -51,7 +55,10 @@ private:
 	void CacheExistingManifestList(lock_guard<mutex> &guard, const IcebergTableMetadata &metadata);
 
 public:
+	string initial_table_uuid;
 	int32_t initial_schema_id;
+	int32_t initial_default_spec_id = 0;
+	optional_idx initial_default_sort_order_id;
 
 	ClientContext &context;
 	const IcebergTableInformation &table_info;
@@ -70,6 +77,8 @@ public:
 
 	//! If we perform an update that relies on the current schema id staying unchanged
 	bool assert_schema_id = false;
+	//! Whether this transaction explicitly requires the table to be newly created.
+	bool has_assert_create = false;
 	//! Whether the current schema of the table should be updated
 	bool set_schema_id = false;
 	mutex lock;

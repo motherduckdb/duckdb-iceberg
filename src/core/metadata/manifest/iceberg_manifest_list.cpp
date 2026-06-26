@@ -41,7 +41,7 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 	auto manifest_file_uuid = UUID::ToString(UUID::GenerateRandomUUID());
 	auto manifest_file_path = fs.JoinPath(table_metadata.GetMetadataPath(fs), manifest_file_uuid + "-m0.avro");
 
-	// Add a manifest list entry for the delete files
+	// Add a manifest list entry for the entries
 	IcebergManifestListEntry manifest_list_entry(manifest_file_path);
 	auto &manifest_file = manifest_list_entry.file;
 	manifest_file.manifest_path = manifest_file_path;

@@ -21,7 +21,8 @@ INSERT_TEST_SEED = SparkSeedTable(
     )
     TBLPROPERTIES (
         'format-version'='2',
-        'write.update.mode'='merge-on-read'
+        'write.update.mode'='merge-on-read',
+        'commit.retry.num-retries'='0'
     );
     """,
 )
