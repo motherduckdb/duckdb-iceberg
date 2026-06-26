@@ -1,7 +1,8 @@
 # name: test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_manifest_compression.test
 # description: write.manifest.compression-codec - manifests are written with the configured Avro
-#              codec (default deflate, matching Java), applied natively by the Avro COPY writer.
 # group: [insert]
+
+#              codec (default deflate, matching Java), applied natively by the Avro COPY writer.
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
