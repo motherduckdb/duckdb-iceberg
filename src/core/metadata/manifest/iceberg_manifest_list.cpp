@@ -1,5 +1,7 @@
 #include "core/metadata/manifest/iceberg_manifest_list.hpp"
 
+#include "core/metadata/manifest/iceberg_avro_codec.hpp"
+#include "duckdb/common/string_util.hpp"
 #include "duckdb/common/exception/conversion_exception.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
@@ -455,6 +457,14 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
 	copy_info.is_from = false;
 	copy_info.options["root_name"].push_back(Value("manifest_file"));
 	copy_info.options["field_ids"].push_back(Value::STRUCT(metadata.field_ids));
+
+	//! write.manifest.compression-codec: let the Avro COPY writer emit the codec natively.
+	//! "null" is the COPY default (uncompressed), so only set the option for a compressing codec.
+	auto avro_codec =
+	    iceberg_avro_codec::ResolveAvroCodec(table_metadata.GetTableProperty("write.manifest.compression-codec"));
+	if (!StringUtil::CIEquals(avro_codec, "null")) {
+		copy_info.options["codec"].push_back(Value(avro_codec));
+	}
 
 	CopyFunctionBindInput input(copy_info);
 	input.file_extension = "avro";
