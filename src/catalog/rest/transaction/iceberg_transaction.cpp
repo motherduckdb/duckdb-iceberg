@@ -505,18 +505,32 @@ void IcebergTransaction::DoMultiTableCommitUpdates(IcebergTransactionAlterUpdate
 void IcebergTransaction::DoSingleTableCommitUpdates(IcebergTransactionAlterUpdate &alter_update,
                                                     ClientContext &context) {
 	D_ASSERT(catalog.supported_urls.count("POST /v1/{prefix}/namespaces/{namespace}/tables/{table}"));
-	case_insensitive_map_t<idx_t> single_table_attempts;
-	while (true) {
-		auto transaction_info = GetTransactionRequest(alter_update, context);
-		if (transaction_info.request.table_changes.empty()) {
-			alter_update.updated_tables.clear();
-			return;
-		}
-		auto &transaction = transaction_info.request;
-		bool should_retry = false;
-		for (auto &it : transaction_info.table_requests) {
-			auto &table_key = it.first;
-			auto &table_change = transaction.table_changes[it.second];
+	auto transaction_info = GetTransactionRequest(alter_update, context);
+	if (transaction_info.request.table_changes.empty()) {
+		alter_update.updated_tables.clear();
+		return;
+	}
+
+	vector<string> table_keys;
+	table_keys.reserve(transaction_info.table_requests.size());
+	for (const auto &entry : transaction_info.table_requests) {
+		table_keys.push_back(entry.first);
+	}
+
+	for (const auto &table_key : table_keys) {
+		for (idx_t attempt = 0;; attempt++) {
+			auto current_info = GetTransactionRequest(alter_update, context);
+			if (current_info.request.table_changes.empty()) {
+				alter_update.updated_tables.clear();
+				return;
+			}
+
+			auto table_request_it = current_info.table_requests.find(table_key);
+			if (table_request_it == current_info.table_requests.end()) {
+				break;
+			}
+
+			auto &table_change = current_info.request.table_changes[table_request_it->second];
 			D_ASSERT(table_change.identifier);
 			auto &identifier = *table_change.identifier;
 			auto transaction_json = ConstructTableUpdateJSON(table_change);
@@ -524,13 +538,11 @@ void IcebergTransaction::DoSingleTableCommitUpdates(IcebergTransactionAlterUpdat
 			                                        transaction_json);
 			if (result.Success()) {
 				alter_update.committed_tables.insert(table_key);
-				continue;
+				break;
 			}
 
 			auto retry_state = GetSingleTableRetryCommitState(alter_update, table_key);
-			auto attempt_it = single_table_attempts.find(table_key);
-			idx_t attempt = attempt_it == single_table_attempts.end() ? 0 : attempt_it->second;
-			auto created_metadata_files = GetCreatedMetadataFiles(transaction_info);
+			auto created_metadata_files = GetCreatedMetadataFiles(current_info);
 			if (!CommitIsRetryable(retry_state, result, attempt)) {
 				result.Throw(catalog.GetBaseUrl().GetURLEncoded());
 			}
@@ -538,12 +550,6 @@ void IcebergTransaction::DoSingleTableCommitUpdates(IcebergTransactionAlterUpdat
 			case_insensitive_set_t retry_tables;
 			retry_tables.insert(table_key);
 			RefreshRetryTables(alter_update, retry_tables, context);
-			single_table_attempts[table_key] = attempt + 1;
-			should_retry = true;
-			break;
-		}
-		if (!should_retry) {
-			return;
 		}
 	}
 }
