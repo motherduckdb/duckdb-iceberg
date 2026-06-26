@@ -73,11 +73,13 @@ jobs:
         env:
           CATALOG_TEST_CONFIG_SETUP: 1
           STATIC_LIBCPP: 1
-          ENABLE_EXTENSION_AUTOLOADING: 1
-          ENABLE_EXTENSION_AUTOINSTALL: 1
+          # Add debug symbol names.
+          # Reduce the binary size and dynamically link extensions.
+          EXPORT_DYNAMIC_SYMBOLS: 1
+          REDUCE_SYMBOLS: 1
+          EXTENSION_STATIC_BUILD: 0
           # Enable -DDEBUG slow verifiers (expression verifier, operator
           # round-trips, etc.) without changing the optimization level.
-          EXPORT_DYNAMIC_SYMBOLS: 1
           FORCE_DEBUG: 1
           FORCE_ASSERT: 1
         with:
@@ -86,6 +88,7 @@ jobs:
           vcpkg-commit: 84bab45d415d22042bd0b9081aea57f362da3f35
           bundle: bash duckdb/scripts/prepare_build_artifact.sh relassert
           upload-name: duckdb-iceberg
+          upload-path: build/relassert-artifact.tar.gz
 
       #- name: Build extension Enable Equality Delete
       #  env:
