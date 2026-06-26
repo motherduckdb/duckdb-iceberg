@@ -19,7 +19,6 @@ struct TableTransactionInfo {
 	rest_api_objects::CommitTransactionRequest request;
 	case_insensitive_map_t<idx_t> table_requests;
 	case_insensitive_map_t<vector<string>> created_metadata_files;
-	idx_t max_retries = 0;
 	bool retryable = false;
 };
 

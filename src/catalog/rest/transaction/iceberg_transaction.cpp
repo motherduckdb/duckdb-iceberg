@@ -158,20 +158,36 @@ static bool NeedsAssertSchemaId(const IcebergTransactionData &transaction_data,
 
 namespace {
 
-struct SingleTableTransactionInfo {
+struct SingleTableStagedCommit {
 	rest_api_objects::CommitTableRequest request;
 	vector<string> created_metadata_files;
-	idx_t max_retries = 0;
 	bool retryable = false;
 };
 
-static void InitializeRetryInfo(const IcebergTransactionData &transaction_data, SingleTableTransactionInfo &info) {
-	info.retryable = transaction_data.SupportsAppendRetry();
-	if (!info.retryable) {
-		info.max_retries = 0;
-		return;
+static idx_t GetMaxRetries(const IcebergTransactionData &transaction_data) {
+	return NumericCast<idx_t>(transaction_data.GetCommitRetryCount());
+}
+
+static idx_t GetMaxRetries(const IcebergTransactionAlterUpdate &alter_update) {
+	idx_t max_retries = 0;
+	bool saw_table = false;
+	for (const auto &entry : alter_update.updated_tables) {
+		if (alter_update.committed_tables.count(entry.first)) {
+			continue;
+		}
+		const auto &table_info = entry.second;
+		if (!table_info.transaction_data || !table_info.HasTransactionUpdates()) {
+			continue;
+		}
+		auto table_max_retries = GetMaxRetries(*table_info.transaction_data);
+		if (!saw_table) {
+			max_retries = table_max_retries;
+			saw_table = true;
+		} else {
+			max_retries = MinValue<idx_t>(max_retries, table_max_retries);
+		}
 	}
-	info.max_retries = NumericCast<idx_t>(transaction_data.GetCommitRetryCount());
+	return max_retries;
 }
 
 static void CreateTableRequirements(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state,
@@ -197,9 +213,9 @@ static void CreateTableRequirements(DatabaseInstance &db, ClientContext &context
 	}
 }
 
-static SingleTableTransactionInfo
-GetSingleTableTransactionInfo(DatabaseInstance &db, IcebergTableInformation &table_info, ClientContext &context) {
-	SingleTableTransactionInfo info;
+static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, IcebergTableInformation &table_info,
+                                                      ClientContext &context) {
+	SingleTableStagedCommit info;
 	IcebergCommitState commit_state(table_info, context);
 	auto &table_change = commit_state.table_change;
 	auto &schema = table_info.schema.Cast<IcebergSchemaEntry>();
@@ -210,7 +226,7 @@ GetSingleTableTransactionInfo(DatabaseInstance &db, IcebergTableInformation &tab
 	auto &metadata = commit_state.table_info.table_metadata;
 	auto current_snapshot = metadata.GetLatestSnapshot();
 	auto &transaction_data = *commit_state.table_info.transaction_data;
-	InitializeRetryInfo(transaction_data, info);
+	info.retryable = transaction_data.SupportsAppendRetry();
 	if (!transaction_data.alters.empty()) {
 		commit_state.manifests = transaction_data.existing_manifest_list;
 	}
@@ -263,23 +279,14 @@ TableTransactionInfo IcebergTransaction::GetTransactionRequest(IcebergTransactio
 			continue;
 		}
 
-		auto table_transaction_info = GetSingleTableTransactionInfo(db, table_info, context);
+		auto table_transaction_info = StageSingleTableCommit(db, table_info, context);
 		info.created_metadata_files.emplace(table_key, std::move(table_transaction_info.created_metadata_files));
 		info.table_requests.emplace(table_key, transaction.table_changes.size());
 		transaction.table_changes.push_back(std::move(table_transaction_info.request));
-
-		if (!saw_table) {
-			info.max_retries = table_transaction_info.max_retries;
-			saw_table = true;
-		} else {
-			info.max_retries = MinValue<idx_t>(info.max_retries, table_transaction_info.max_retries);
-		}
+		saw_table = true;
 		all_retryable = all_retryable && table_transaction_info.retryable;
 	}
 	info.retryable = saw_table && all_retryable;
-	if (!info.retryable) {
-		info.max_retries = 0;
-	}
 	return info;
 }
 
@@ -475,6 +482,7 @@ void IcebergTransaction::DoTableRename(IcebergTransactionRenameUpdate &rename_up
 
 void IcebergTransaction::DoMultiTableCommitUpdates(IcebergTransactionAlterUpdate &alter_update,
                                                    ClientContext &context) {
+	const auto max_retries = GetMaxRetries(alter_update);
 	for (idx_t attempt = 0;; attempt++) {
 		auto transaction_info = GetTransactionRequest(alter_update, context);
 		if (transaction_info.request.table_changes.empty()) {
@@ -496,7 +504,7 @@ void IcebergTransaction::DoMultiTableCommitUpdates(IcebergTransactionAlterUpdate
 			return;
 		}
 		auto created_metadata_files = GetCreatedMetadataFiles(transaction_info);
-		if (!CommitIsRetryable(transaction_info.retryable, transaction_info.max_retries, result, attempt)) {
+		if (!CommitIsRetryable(transaction_info.retryable, max_retries, result, attempt)) {
 			result.Throw(catalog.GetBaseUrl().GetURLEncoded());
 		}
 		CleanupMetadataFiles(context, created_metadata_files);
@@ -510,6 +518,8 @@ void IcebergTransaction::DoSingleTableCommitUpdates(IcebergTransactionAlterUpdat
 	D_ASSERT(catalog.supported_urls.count("POST /v1/{prefix}/namespaces/{namespace}/tables/{table}"));
 	for (auto &entry : alter_update.updated_tables) {
 		auto &table_key = entry.first;
+		const auto max_retries =
+		    entry.second.transaction_data ? GetMaxRetries(*entry.second.transaction_data) : idx_t(0);
 		for (idx_t attempt = 0;; attempt++) {
 			if (alter_update.committed_tables.count(table_key)) {
 				break;
@@ -519,7 +529,7 @@ void IcebergTransaction::DoSingleTableCommitUpdates(IcebergTransactionAlterUpdat
 				break;
 			}
 
-			auto table_transaction_info = GetSingleTableTransactionInfo(db, table_info, context);
+			auto table_transaction_info = StageSingleTableCommit(db, table_info, context);
 			auto &table_change = table_transaction_info.request;
 			D_ASSERT(table_change.identifier);
 			auto &identifier = *table_change.identifier;
@@ -531,8 +541,7 @@ void IcebergTransaction::DoSingleTableCommitUpdates(IcebergTransactionAlterUpdat
 				break;
 			}
 
-			if (!CommitIsRetryable(table_transaction_info.retryable, table_transaction_info.max_retries, result,
-			                       attempt)) {
+			if (!CommitIsRetryable(table_transaction_info.retryable, max_retries, result, attempt)) {
 				result.Throw(catalog.GetBaseUrl().GetURLEncoded());
 			}
 			CleanupMetadataFiles(context, table_transaction_info.created_metadata_files);
