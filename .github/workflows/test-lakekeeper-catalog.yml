@@ -29,6 +29,12 @@ jobs:
           name: ${{ inputs.artifact-name }}
           path: build/relassert
 
+      - name: Extract relassert build artifact
+        run: |
+          rm -rf build/relassert
+          tar -xzf build/relassert-artifact.tar.gz -C build
+          ls -lh build/relassert/test/unittest
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:

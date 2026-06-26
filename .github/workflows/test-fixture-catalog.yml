@@ -45,6 +45,12 @@ jobs:
           name: ${{ inputs.artifact-name }}
           path: ${{ inputs.build-path }}
 
+      - name: Extract release build artifact
+        run: |
+          rm -rf build/release
+          tar -xzf build/release-artifact.tar.gz -C build
+          ls -lh build/release/test/unittest
+
       - name: Restore permissions
         run: |
           find ${{ inputs.build-path }} -type f -name 'duckdb*' -exec chmod +x {} \;
