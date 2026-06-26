@@ -45,11 +45,11 @@ jobs:
           name: ${{ inputs.artifact-name }}
           path: ${{ inputs.build-path }}
 
-      - name: Extract release build artifact
+      - name: Extract build artifact
         run: |
-          rm -rf build/release
-          tar -xzf build/release-artifact.tar.gz -C build
-          ls -lh build/release/test/unittest
+          rm -rf "${{ inputs.build-path }}"
+          tar -xzf "${{ inputs.build-path }}-artifact.tar.gz" -C build
+          ls -lh "${{ inputs.build-path }}"test/unittest
 
       - name: Restore permissions
         run: |
