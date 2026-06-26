@@ -36,6 +36,7 @@ enum class IcebergTableUpdateType : uint8_t {
 struct IcebergCommitState {
 public:
 	IcebergCommitState(const IcebergTableInformation &table_info, ClientContext &context);
+	void RefreshFromTable();
 
 public:
 	const IcebergTableInformation &table_info;

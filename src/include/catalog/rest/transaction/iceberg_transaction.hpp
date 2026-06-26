@@ -19,14 +19,6 @@ struct TableTransactionInfo {
 	rest_api_objects::CommitTransactionRequest request;
 	case_insensitive_map_t<idx_t> table_requests;
 	case_insensitive_map_t<vector<string>> created_metadata_files;
-};
-
-struct RetryCommitState {
-public:
-	RetryCommitState() {
-	}
-
-public:
 	idx_t max_retries = 0;
 	bool retryable = false;
 };
@@ -95,7 +87,6 @@ public:
 	IcebergCatalog &GetCatalog();
 	void DropSecrets(ClientContext &context);
 	TableTransactionInfo GetTransactionRequest(IcebergTransactionAlterUpdate &alter_update, ClientContext &context);
-	RetryCommitState GetRetryCommitState(const IcebergTransactionAlterUpdate &alter_update) const;
 	void DoMultiTableCommitUpdates(IcebergTransactionAlterUpdate &alter_update, ClientContext &context);
 	void DoSingleTableCommitUpdates(IcebergTransactionAlterUpdate &alter_update, ClientContext &context);
 	optional_ptr<IcebergTransactionTableState> GetLatestTableState(const string &table_key);

@@ -152,6 +152,7 @@ void IcebergTransactionData::RefreshExistingManifestList(ClientContext &context,
 		refreshed_next_row_id = metadata.next_row_id;
 	}
 	LoadExistingManifestList(context, metadata, existing_manifest_list, refreshed_next_row_id);
+	next_row_id = refreshed_next_row_id;
 }
 
 void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
