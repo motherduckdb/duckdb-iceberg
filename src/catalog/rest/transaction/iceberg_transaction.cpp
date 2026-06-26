@@ -181,7 +181,7 @@ TableTransactionInfo IcebergTransaction::GetTransactionRequest(IcebergTransactio
 		auto &metadata = commit_state.table_info.table_metadata;
 		auto current_snapshot = metadata.GetLatestSnapshot();
 		auto &transaction_data = *commit_state.table_info.transaction_data;
-		bool has_assert_create = false;
+		const bool has_assert_create = transaction_data.has_assert_create;
 		if (!transaction_data.alters.empty()) {
 			commit_state.manifests = transaction_data.existing_manifest_list;
 		}
@@ -197,7 +197,6 @@ TableTransactionInfo IcebergTransaction::GetTransactionRequest(IcebergTransactio
 		}
 		for (auto &requirement : transaction_data.requirements) {
 			requirement->CreateRequirement(db, context, commit_state);
-			has_assert_create |= requirement->type == IcebergTableRequirementType::ASSERT_CREATE;
 		}
 		if (!has_assert_create && NeedsAssertSchemaId(transaction_data, table_info)) {
 			// Ensure schema is the same as current
@@ -251,10 +250,8 @@ bool IcebergTransaction::CanUseMultiTableCommit(const IcebergTransactionAlterUpd
 		if (!table_info.transaction_data) {
 			continue;
 		}
-		for (const auto &requirement : table_info.transaction_data->requirements) {
-			if (requirement->type == IcebergTableRequirementType::ASSERT_CREATE) {
-				return false;
-			}
+		if (table_info.transaction_data->has_assert_create) {
+			return false;
 		}
 	}
 	return true;

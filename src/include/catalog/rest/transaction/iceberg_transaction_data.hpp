@@ -78,6 +78,8 @@ public:
 
 	//! If we perform an update that relies on the current schema id staying unchanged
 	bool assert_schema_id = false;
+	//! Whether this transaction explicitly requires the table to be newly created.
+	bool has_assert_create = false;
 	//! Whether the current schema of the table should be updated
 	bool set_schema_id = false;
 	mutex lock;

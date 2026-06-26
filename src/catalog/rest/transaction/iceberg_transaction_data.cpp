@@ -245,6 +245,7 @@ void IcebergTransactionData::TableAssignUUID() {
 }
 
 void IcebergTransactionData::TableAddAssertCreate() {
+	has_assert_create = true;
 	requirements.push_back(make_uniq<AssertCreateRequirement>(table_info));
 }
 
