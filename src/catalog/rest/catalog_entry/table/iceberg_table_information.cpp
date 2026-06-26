@@ -182,6 +182,10 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(
 		// start with the credentials needed for the catalog and overwrite information contained
 		// in the vended credentials. We do it this way to maintain the region info from the catalog credentials
 		if (catalog_credentials) {
+			// Refresh before snapshotting the values into per-table secrets
+			sigv4_auth.MaybeRefreshSecret(context);
+			catalog_credentials = IcebergCatalog::GetStorageSecret(context, sigv4_auth.secret);
+
 			auto kv_secret = dynamic_cast<const KeyValueSecret &>(*catalog_credentials->secret);
 			for (auto &option : kv_secret.secret_map) {
 				// Ignore refresh info.
