@@ -43,7 +43,7 @@ statement ok
 INSERT INTO my_datalake.default.my_table VALUES (NULL);
 
 query I
-FROM my_datalake.default.my_table;
+FROM my_datalake.default.my_table ORDER BY ALL;
 ----
 42
 NULL

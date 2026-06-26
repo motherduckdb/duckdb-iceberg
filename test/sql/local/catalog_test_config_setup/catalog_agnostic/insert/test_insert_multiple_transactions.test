@@ -65,7 +65,7 @@ commit
 <REGEX>:.*TransactionContext Error.*Conflict_409.*
 
 query II
-select * from my_datalake.default.multi_transaction_insert;
+select * from my_datalake.default.multi_transaction_insert order by all;
 ----
 0	0
 1	1
