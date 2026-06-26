@@ -40,6 +40,7 @@ static void LoadExistingManifestList(ClientContext &context, const IcebergTableM
 		return;
 	}
 
+	//! Deal with upgraded tables, if the snapshot originated from V2
 	for (auto &manifest_list_entry : existing_manifest_list) {
 		auto &manifest_file = manifest_list_entry.file;
 		if (manifest_file.content != IcebergManifestContentType::DATA) {
