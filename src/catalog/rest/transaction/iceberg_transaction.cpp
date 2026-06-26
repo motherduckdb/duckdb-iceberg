@@ -299,7 +299,12 @@ void IcebergTransaction::CleanupMetadataFiles(ClientContext &context, const vect
 		if (!deleted.insert(path).second) {
 			continue;
 		}
-		(void)fs.TryRemoveFile(path);
+		if (fs.TryRemoveFile(path)) {
+			DUCKDB_LOG(context, IcebergLogType, "Iceberg Transaction Cleanup, deleted retry metadata file: '%s'", path);
+		} else {
+			DUCKDB_LOG(context, IcebergLogType,
+			           "Iceberg Transaction Cleanup, failed to delete retry metadata file: '%s'", path);
+		}
 	}
 }
 
