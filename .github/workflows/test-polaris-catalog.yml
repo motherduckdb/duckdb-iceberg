@@ -12,7 +12,8 @@ jobs:
     name: Test against Polaris Catalog
     runs-on: ubuntu-latest
     env:
-      ASAN_OPTIONS: "detect_leaks=1:halt_on_error=1:abort_on_error=0"
+      ASAN_SYMBOLIZER_PATH: "/usr/bin/llvm-symbolizer"
+      ASAN_OPTIONS: "detect_leaks=1:halt_on_error=1:abort_on_error=0:external_symbolizer_path=/usr/bin/llvm-symbolizer"
       LSAN_OPTIONS: "suppressions=${{ github.workspace }}/.combined-sanitizer-leak-suppressions.txt"
       UBSAN_OPTIONS: "halt_on_error=1:print_stacktrace=1"
 
@@ -50,7 +51,7 @@ jobs:
         run: |
           sudo apt update -y -qq
           sudo apt-get install -y docker-ce docker-ce-cli containerd.io
-          sudo apt install -y -qq python3-venv
+          sudo apt install -y -qq python3-venv llvm
 
       - uses: actions/setup-python@v6
         with:
