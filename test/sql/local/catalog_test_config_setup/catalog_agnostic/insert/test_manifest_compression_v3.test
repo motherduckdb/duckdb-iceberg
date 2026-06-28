@@ -1,6 +1,5 @@
 # name: test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_manifest_compression_v3.test
-# description: write.manifest.compression-codec on a format-version 3 table. Split from
-#              test_manifest_compression.test because not every catalog supports v3 (skipped there).
+# description: write.manifest.compression-codec on a format-version 3 table (split out; not every catalog supports v3)
 # group: [insert]
 
 require-env CATALOG_TEST_CONFIG_SETUP
