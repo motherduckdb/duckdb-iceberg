@@ -16,6 +16,8 @@ struct CreateTableInfo;
 class IcebergSchemaEntry;
 struct IcebergManifestEntry;
 
+enum class VendedCredentialsSecretTracking : uint8_t { TRACK_CREATED_SECRETS, SKIP_CREATED_SECRETS };
+
 struct IRCAPITableCredentials {
 	unique_ptr<CreateSecretInput> config;
 	vector<CreateSecretInput> storage_credentials;
@@ -51,7 +53,9 @@ public:
 	static IcebergPartitionSpec BuildPartitionSpec(const vector<unique_ptr<ParsedExpression>> &partition_keys,
 	                                               const IcebergTableSchema &schema, int32_t spec_id,
 	                                               idx_t base_partition_field_id);
-	IRCAPITableCredentials GetVendedCredentials(ClientContext &context);
+	IRCAPITableCredentials GetVendedCredentials(
+	    ClientContext &context,
+	    VendedCredentialsSecretTracking secret_tracking = VendedCredentialsSecretTracking::TRACK_CREATED_SECRETS);
 	const string &BaseFilePath() const;
 
 	IcebergTransactionData &GetOrCreateTransactionData(IcebergTransaction &transaction);

@@ -3,11 +3,16 @@
 
 #include "catalog/rest/api/catalog_api.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
+#include "duckdb/common/case_insensitive_map.hpp"
+#include "duckdb/common/types/value.hpp"
 #include "duckdb/parser/parsed_data/create_table_info.hpp"
 
 namespace duckdb {
 
+struct SecretEntry;
 struct IcebergTableInformation;
+
+void AddHTTPSecretsToOptions(SecretEntry &http_secret_entry, case_insensitive_map_t<Value> &options);
 
 class IcebergTableEntry : public TableCatalogEntry {
 public:
