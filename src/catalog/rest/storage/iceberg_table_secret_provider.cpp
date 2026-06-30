@@ -162,7 +162,6 @@ unique_ptr<BaseSecret> IcebergTableSecretProvider::CreateSecret(ClientContext &c
 	if (input.options.find("catalog_name") != input.options.end()) {
 		DUCKDB_LOG_INFO(context, "Refreshing Iceberg vended credentials for secret '%s'", input.name);
 		auto revended = ReVendVendedCredentials(context, input);
-		revended.options["refreshed_secret"] = Value("true");
 		return BuildVendedSecret(revended);
 	}
 	return BuildVendedSecret(input);
@@ -204,8 +203,6 @@ void IcebergTableSecretProvider::Register(ExtensionLoader &loader) {
 		function.named_parameters["http_proxy_username"] = LogicalType::VARCHAR;
 		function.named_parameters["http_proxy_password"] = LogicalType::VARCHAR;
 		function.named_parameters["extra_http_headers"] = LogicalType::MAP(LogicalType::VARCHAR, LogicalType::VARCHAR);
-
-		function.named_parameters["refreshed_secret"] = LogicalType::VARCHAR;
 
 		loader.RegisterFunction(function);
 	}
