@@ -34,7 +34,7 @@ IcebergUpdate::IcebergUpdate(PhysicalPlan &physical_plan, IcebergTableEntry &tab
 		D_ASSERT(bound_defaults.size() == expressions.size());
 		for (idx_t i = 0; i < expressions.size(); i++) {
 			auto &expr = expressions[i];
-			if (expr->type == ExpressionType::VALUE_DEFAULT) {
+			if (expr->GetExpressionType() == ExpressionType::VALUE_DEFAULT) {
 				expr = bound_defaults[i]->Copy();
 			}
 		}
@@ -85,7 +85,7 @@ IcebergUpdate &IcebergUpdate::PlanUpdateOperator(ClientContext &context, Physica
 	// Set output types: physical columns + optional _row_id for v3
 	vector<LogicalType> update_output_types;
 	for (auto &expr : update_op.expressions) {
-		update_output_types.push_back(expr->return_type);
+		update_output_types.push_back(expr->GetReturnType());
 	}
 	if (table_metadata.iceberg_version >= 3) {
 		update_output_types.push_back(LogicalType::BIGINT); // _row_id
@@ -129,7 +129,7 @@ unique_ptr<OperatorState> IcebergUpdate::GetOperatorState(ExecutionContext &cont
 	vector<LogicalType> expression_types;
 	result->expression_executor = make_uniq<ExpressionExecutor>(context.client, expressions);
 	for (auto &expr : result->expression_executor->expressions) {
-		expression_types.push_back(expr->return_type);
+		expression_types.push_back(expr->GetReturnType());
 	}
 
 	result->update_expression_chunk.Initialize(context.client, expression_types);
@@ -226,7 +226,7 @@ string IcebergUpdate::GetName() const {
 
 InsertionOrderPreservingMap<string> IcebergUpdate::ParamsToString() const {
 	InsertionOrderPreservingMap<string> result;
-	result["Table Name"] = table.name;
+	result["Table Name"] = table.name.GetIdentifierName();
 	return result;
 }
 
@@ -301,9 +301,9 @@ void IcebergTableEntry::BindUpdateConstraints(Binder &binder, LogicalGet &get, L
 		}
 		// column is not projected yet: project it by adding the clause "i=i" to the set of updated columns
 		update.expressions.push_back(make_uniq<BoundColumnRefExpression>(
-		    column.Type(), ColumnBinding(proj.table_index, proj.expressions.size())));
+		    column.Type(), ColumnBinding(proj.table_index, ProjectionIndex(proj.expressions.size()))));
 		proj.expressions.push_back(make_uniq<BoundColumnRefExpression>(
-		    column.Type(), ColumnBinding(get.table_index, column_id_index.GetIndex())));
+		    column.Type(), ColumnBinding(get.table_index, ProjectionIndex(column_id_index.GetIndex()))));
 		get.AddColumnId(physical_index.index);
 		update.columns.push_back(physical_index);
 	}

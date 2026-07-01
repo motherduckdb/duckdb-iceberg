@@ -103,7 +103,7 @@ struct YearTransform {
 			return Value::INTEGER(components.year - 1970);
 		}
 		case LogicalTypeId::TIMESTAMP_TZ: {
-			auto val = constant.GetValue<timestamp_tz_t>();
+			timestamp_t val(constant.GetValue<timestamp_tz_t>());
 			auto components = Timestamp::GetComponents(val);
 			return Value::INTEGER(components.year - 1970);
 		}
@@ -151,7 +151,7 @@ struct MonthTransform {
 			return Value::INTEGER(diff.months);
 		}
 		case LogicalTypeId::TIMESTAMP_TZ: {
-			auto val = constant.GetValue<timestamp_tz_t>();
+			timestamp_t val(constant.GetValue<timestamp_tz_t>());
 			auto diff = Interval::GetAge(val, timestamp_t::epoch());
 			return Value::INTEGER(diff.months);
 		}
@@ -197,7 +197,7 @@ struct DayTransform {
 			return Value::INTEGER(diff.days);
 		}
 		case LogicalTypeId::TIMESTAMP_TZ: {
-			auto val = constant.GetValue<timestamp_tz_t>();
+			timestamp_t val(constant.GetValue<timestamp_tz_t>());
 			auto diff = Interval::GetDifference(val, timestamp_t::epoch());
 			return Value::INTEGER(diff.days);
 		}

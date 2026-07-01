@@ -65,7 +65,7 @@ public:
 	bool write_partition_columns;
 	bool write_empty_file = true;
 	vector<idx_t> partition_columns;
-	vector<string> names;
+	vector<Identifier> names;
 	vector<LogicalType> expected_types;
 
 	//! Set of projection columns to execute prior to inserting (if any)

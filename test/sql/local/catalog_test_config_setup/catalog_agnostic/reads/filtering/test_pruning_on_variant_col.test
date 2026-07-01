@@ -47,9 +47,9 @@ select * from my_datalake.default.variant_bounds_tbl where variant_col.age > 60 
 {'age': 100, 'name': Ian}
 {'age': 110, 'name': Jill}
 
+# FIXME: not being skipped currently
 # skipped the first file.
 query I
 select count(*) from duckdb_logs() where type = 'Iceberg' and message like '%skipped%';
 ----
 1
-

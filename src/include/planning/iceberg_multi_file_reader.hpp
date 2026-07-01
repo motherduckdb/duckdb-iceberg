@@ -44,10 +44,10 @@ public:
 public:
 	shared_ptr<MultiFileList> CreateFileList(ClientContext &context, const vector<string> &paths,
 	                                         const FileGlobInput &glob_input) override;
-	bool Bind(MultiFileOptions &options, MultiFileList &files, vector<LogicalType> &return_types, vector<string> &names,
-	          MultiFileReaderBindData &bind_data) override;
+	bool Bind(MultiFileOptions &options, MultiFileList &files, vector<LogicalType> &return_types,
+	          vector<Identifier> &names, MultiFileReaderBindData &bind_data) override;
 	void BindOptions(MultiFileOptions &options, MultiFileList &files, vector<LogicalType> &return_types,
-	                 vector<string> &names, MultiFileReaderBindData &bind_data) override;
+	                 vector<Identifier> &names, MultiFileReaderBindData &bind_data) override;
 	unique_ptr<MultiFileReaderGlobalState>
 	InitializeGlobalState(ClientContext &context, const MultiFileOptions &file_options,
 	                      const MultiFileReaderBindData &bind_data, const MultiFileList &file_list,
@@ -75,11 +75,10 @@ public:
 	                          const vector<MultiFileColumnDefinition> &local_columns);
 	bool ParseOption(const string &key, const Value &val, MultiFileOptions &options, ClientContext &context) override;
 
-	unique_ptr<Expression>
+	MultiFileReaderVirtualColumnBinding
 	GetVirtualColumnExpression(ClientContext &context, MultiFileReaderData &reader_data,
-	                           const vector<MultiFileColumnDefinition> &local_columns, idx_t &column_id,
-	                           const LogicalType &type, MultiFileLocalIndex local_idx,
-	                           optional_ptr<MultiFileColumnDefinition> &global_column_reference) override;
+	                           const vector<MultiFileColumnDefinition> &local_columns, const idx_t column_id,
+	                           const LogicalType &type, MultiFileLocalIndex local_idx) override;
 
 public:
 	shared_ptr<TableFunctionInfo> function_info;

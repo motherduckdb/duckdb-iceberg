@@ -131,18 +131,16 @@ void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntr
 			auto constant = vec.GetValue(i);
 
 			unique_ptr<Expression> equality_filter;
-			// this bound ref is on the position of the output_chunk data.
+			// This bound ref is on the position of the output_chunk data.
 			auto bound_ref = make_uniq<BoundReferenceExpression>(col.type, result_column_id);
 			if (!constant.IsNull()) {
-				//! Create a COMPARE_NOT_EQUAL expression
 				equality_filter =
-				    make_uniq<BoundComparisonExpression>(ExpressionType::COMPARE_NOTEQUAL, std::move(bound_ref),
-				                                         make_uniq<BoundConstantExpression>(constant));
+				    BoundComparisonExpression::Create(ExpressionType::COMPARE_NOTEQUAL, std::move(bound_ref),
+				                                      make_uniq<BoundConstantExpression>(constant));
 			} else {
-				//! Construct an OPERATOR_IS_NOT_NULL expression instead
 				auto is_not_null =
 				    make_uniq<BoundOperatorExpression>(ExpressionType::OPERATOR_IS_NOT_NULL, LogicalType::BOOLEAN);
-				is_not_null->children.push_back(std::move(bound_ref));
+				is_not_null->GetChildrenMutable().push_back(std::move(bound_ref));
 				equality_filter = std::move(is_not_null);
 			}
 			row.filters.emplace(std::make_pair(field_id, std::move(equality_filter)));

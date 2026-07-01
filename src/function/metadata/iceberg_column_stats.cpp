@@ -70,7 +70,7 @@ static unique_ptr<FunctionData> IcebergColumnStatsBind(ClientContext &context, T
 	auto &snapshot_lookup = options.snapshot_lookup;
 
 	for (auto &kv : input.named_parameters) {
-		auto loption = StringUtil::Lower(kv.first);
+		auto loption = StringUtil::Lower(kv.first.GetIdentifierName());
 		auto &val = kv.second;
 		if (loption == "allow_moved_paths") {
 			options.allow_moved_paths = BooleanValue::Get(val);
@@ -157,7 +157,7 @@ static unique_ptr<FunctionData> IcebergColumnStatsBind(ClientContext &context, T
 }
 
 static void AddString(Vector &vec, idx_t index, string_t &&str) {
-	FlatVector::GetData<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
+	FlatVector::GetDataMutable<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
 }
 
 static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
@@ -181,7 +181,7 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 
 			for (; global_state.column_it != bind_data.source_to_column_id.end(); global_state.column_it++) {
 				if (out >= STANDARD_VECTOR_SIZE) {
-					output.SetCardinality(out);
+					output.SetChildCardinality(out);
 					return;
 				}
 				idx_t col = 0;
@@ -288,7 +288,7 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 		}
 		global_state.current_manifest_entry_idx = 0;
 	}
-	output.SetCardinality(out);
+	output.SetChildCardinality(out);
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergColumnStatsFunction() {

@@ -14,6 +14,6 @@ require httpfs
 require core_functions
 
 statement error
-select * from iceberg_table_properties('__WORKING_DIRECTORY__/data/persistent/equality_deletes');
+select * from iceberg_table_properties('{WORKING_DIRECTORY}/data/persistent/equality_deletes');
 ----
 <REGEX>:.*Cannot call iceberg_table_properties.*on a file.*directory.*

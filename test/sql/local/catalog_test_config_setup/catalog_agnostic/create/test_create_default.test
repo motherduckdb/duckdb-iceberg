@@ -27,6 +27,9 @@ statement ok
 DROP TABLE IF EXISTS my_datalake.default.tbl;
 
 statement ok
+DROP TABLE IF EXISTS my_datalake.default.struct_tbl;
+
+statement ok
 DROP TABLE IF EXISTS my_datalake.default.tbl_multi;
 
 statement error
@@ -38,13 +41,11 @@ CREATE TABLE my_datalake.default.tbl(
 Invalid Input Error: non-null DEFAULT values are not supported for <V3 tables
 
 # STRUCT default not supported yet
-statement error
-CREATE TABLE my_datalake.default.tbl(
+statement ok
+CREATE TABLE my_datalake.default.struct_tbl(
 	item_id int,
 	balance STRUCT(a VARCHAR, b BOOLEAN) DEFAULT {'a': 'test', 'b': true}
 ) WITH ('format-version'='3');
-----
-Not implemented Error: DEFAULT values for nested types (like STRUCT(a VARCHAR, b BOOLEAN)) not implemented
 
 # MAP default not supported yet
 statement error
@@ -64,14 +65,20 @@ CREATE TABLE my_datalake.default.tbl(
 ----
 Not implemented Error: DEFAULT values for nested types (like VARCHAR[]) not implemented
 
-# VARIANT default not supported yet
+# VARIANT DEFAULT that is non-null is not allowed
 statement error
 CREATE TABLE my_datalake.default.tbl(
 	item_id int,
 	balance VARIANT DEFAULT [42, 'hello'::VARIANT, 'world', {'a': true}]
 ) WITH ('format-version'='3');
 ----
-Not implemented Error: DEFAULT values for VARIANT are not supported yet
+Invalid Input Error: Non-null DEFAULT values are not accepted for columns of type variant
+
+statement ok
+CREATE TABLE my_datalake.default.variant_tbl_default(
+	item_id int,
+	balance VARIANT DEFAULT NULL
+) WITH ('format-version'='3');
 
 # DEFAULT value of unsupported type
 statement error

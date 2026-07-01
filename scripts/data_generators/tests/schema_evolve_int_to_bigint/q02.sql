@@ -1,1 +1,0 @@
-ALTER TABLE default.schema_evolve_int_to_bigint ALTER col TYPE BIGINT;

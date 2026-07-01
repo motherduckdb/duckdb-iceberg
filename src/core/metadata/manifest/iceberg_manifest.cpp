@@ -1,7 +1,9 @@
 #include "core/metadata/manifest/iceberg_manifest.hpp"
 #include "core/metadata/manifest/iceberg_manifest_list.hpp"
+#include "core/metadata/manifest/iceberg_avro_codec.hpp"
 
-#include "duckdb/storage/caching_file_system.hpp"
+#include "duckdb/storage/external_file_cache/caching_file_system.hpp"
+#include "duckdb/storage/buffer_manager.hpp"
 
 #include "catalog/rest/iceberg_table_set.hpp"
 #include "catalog/rest/api/iceberg_create_table_request.hpp"
@@ -299,11 +301,20 @@ Value IcebergDataFile::ToValue(const IcebergTableMetadata &table_metadata, const
 		upper_bounds_values.push_back(Value::STRUCT({{"key", child.first}, {"value", child.second}}));
 	}
 	children.push_back(Value::MAP(LogicalType::STRUCT(bounds_types), upper_bounds_values));
-	// null_value_counts
+
+	// counts struct (shared shape for value_counts / null_value_counts)
 	child_list_t<LogicalType> null_value_count_types;
 	null_value_count_types.emplace_back("key", LogicalType::INTEGER);
 	null_value_count_types.emplace_back("value", LogicalType::BIGINT);
 
+	// value_counts
+	vector<Value> value_counts_values;
+	for (auto &child : value_counts) {
+		value_counts_values.push_back(Value::STRUCT({{"key", child.first}, {"value", child.second}}));
+	}
+	children.push_back(Value::MAP(LogicalType::STRUCT(null_value_count_types), value_counts_values));
+
+	// null_value_counts
 	vector<Value> null_value_counts_values;
 	for (auto &child : null_value_counts) {
 		null_value_counts_values.push_back(Value::STRUCT({{"key", child.first}, {"value", child.second}}));
@@ -435,7 +446,7 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	//! Create the types for the DataChunk
 
 	child_list_t<Value> field_ids;
-	vector<string> names;
+	vector<Identifier> names;
 	vector<LogicalType> types;
 
 	auto &current_partition_spec = table_metadata.GetLatestPartitionSpec();
@@ -543,12 +554,28 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 
 	data_file_field_ids.emplace_back("upper_bounds", Value::STRUCT(upper_bound_record_field_ids));
 
-	// null_value_counts_struct
+	// counts struct (shared shape for value_counts / null_value_counts)
 	child_list_t<LogicalType> null_value_counts_fields;
 	null_value_counts_fields.emplace_back("key", LogicalType::INTEGER);
 	null_value_counts_fields.emplace_back("value", LogicalType::BIGINT);
 
-	// null_value_counts: map<int, binary>
+	// value_counts: map<int, long>
+	children.emplace_back("value_counts", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
+
+	child_list_t<Value> value_counts_record_field_ids;
+	value_counts_record_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(VALUE_COUNTS));
+	child_list_t<Value> value_counts_key_field;
+	value_counts_key_field.emplace_back("__duckdb_field_id", Value::INTEGER(VALUE_COUNTS_KEY));
+	value_counts_key_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
+	value_counts_record_field_ids.emplace_back("key", Value::STRUCT(value_counts_key_field));
+	child_list_t<Value> value_counts_value_field;
+	value_counts_value_field.emplace_back("__duckdb_field_id", Value::INTEGER(VALUE_COUNTS_VALUE));
+	value_counts_value_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
+	value_counts_record_field_ids.emplace_back("value", Value::STRUCT(value_counts_value_field));
+
+	data_file_field_ids.emplace_back("value_counts", Value::STRUCT(value_counts_record_field_ids));
+
+	// null_value_counts: map<int, long>
 	children.emplace_back("null_value_counts", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
 
 	child_list_t<Value> null_values_counts_record_field_ids;
@@ -608,31 +635,31 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 		idx_t col_idx = 0;
 
 		// status: int
-		chunk.SetValue(col_idx++, i, Value::INTEGER(static_cast<int32_t>(manifest_entry.status)));
+		chunk.data[col_idx++].Append(Value::INTEGER(static_cast<int32_t>(manifest_entry.status)));
 		//! FIXME: this is missing logic, needs to be looked into
 		//! SPEC: Snapshot id where the file was added, or deleted if status is 2. Inherited when null.
 		// snapshot_id: long
 		if (manifest_entry.HasSnapshotId()) {
-			chunk.SetValue(col_idx++, i, Value::BIGINT(manifest_entry.GetSnapshotId()));
+			chunk.data[col_idx++].Append(Value::BIGINT(manifest_entry.GetSnapshotId()));
 		} else {
-			chunk.SetValue(col_idx++, i, Value(LogicalType::BIGINT));
+			chunk.data[col_idx++].Append(Value(LogicalType::BIGINT));
 		}
 		// sequence_number: long
 		// file_sequence_number: long
 		if (manifest_entry.status == IcebergManifestEntryStatusType::ADDED) {
-			chunk.SetValue(col_idx++, i, Value(LogicalType::BIGINT));
-			chunk.SetValue(col_idx++, i, Value(LogicalType::BIGINT));
+			chunk.data[col_idx++].Append(Value(LogicalType::BIGINT));
+			chunk.data[col_idx++].Append(Value(LogicalType::BIGINT));
 		} else {
-			chunk.SetValue(col_idx++, i, Value::BIGINT(manifest_entry.GetFileSequenceNumber(manifest_file)));
-			chunk.SetValue(col_idx++, i, Value::BIGINT(manifest_entry.GetSequenceNumber(manifest_file)));
+			chunk.data[col_idx++].Append(Value::BIGINT(manifest_entry.GetFileSequenceNumber(manifest_file)));
+			chunk.data[col_idx++].Append(Value::BIGINT(manifest_entry.GetSequenceNumber(manifest_file)));
 		}
 
 		auto &data_file = manifest_entry.data_file;
 		// data_file: struct(...)
-		chunk.SetValue(col_idx, i, data_file.ToValue(table_metadata, chunk.data[col_idx].GetType()));
+		chunk.data[col_idx].Append(data_file.ToValue(table_metadata, chunk.data[col_idx].GetType()));
 		col_idx++;
 	}
-	chunk.SetCardinality(manifest_entries.size());
+	chunk.SetChildCardinality(manifest_entries.size());
 
 	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> schema_doc_p(yyjson_mut_doc_new(nullptr));
 	auto schema_doc = schema_doc_p.get();
@@ -657,6 +684,14 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	copy_info.options["root_name"].push_back(Value("manifest_entry"));
 	copy_info.options["field_ids"].push_back(Value::STRUCT(field_ids));
 	copy_info.options["metadata"].push_back(metadata_map);
+
+	//! write.manifest.compression-codec: let the Avro COPY writer emit the codec natively.
+	//! "null" is the COPY default (uncompressed), so only set the option for a compressing codec.
+	auto avro_codec =
+	    iceberg_avro_codec::ResolveAvroCodec(table_metadata.GetTableProperty("write.manifest.compression-codec"));
+	if (!StringUtil::CIEquals(avro_codec, "null")) {
+		copy_info.options["codec"].push_back(Value(avro_codec));
+	}
 
 	CopyFunctionBindInput input(copy_info);
 	input.file_extension = "avro";

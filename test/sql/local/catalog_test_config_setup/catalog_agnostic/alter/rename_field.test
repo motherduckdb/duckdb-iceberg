@@ -11,8 +11,6 @@ require iceberg
 
 require httpfs
 
-require ducklake
-
 # Do not ignore 'HTTP' error messages!
 set ignore_error_messages
 
@@ -66,3 +64,8 @@ Catalog Error: The column ('col.d') doesn't exist on the table 'rename_struct_fi
 
 statement ok
 ALTER TABLE my_datalake.default.rename_struct_field RENAME COLUMN col.b TO not_b
+
+query I
+select typeof(col) from my_datalake.default.rename_struct_field limit 1;
+----
+STRUCT(a VARCHAR, not_b FLOAT, nested STRUCT(d DATE), also_nested STRUCT(e VARCHAR, f BIGINT))

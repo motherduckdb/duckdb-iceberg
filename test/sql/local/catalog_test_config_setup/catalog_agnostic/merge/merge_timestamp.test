@@ -27,16 +27,31 @@ statement ok
 DROP TABLE IF EXISTS my_datalake.default.t;
 
 statement ok
-create table my_datalake.default.t (id uuid, ts timestamptz);
+create table my_datalake.default.t (
+	id uuid,
+	ts timestamptz
+);
 
 statement ok
-alter table my_datalake.default.t set partitioned by (year(ts));
+alter table my_datalake.default.t set partitioned by
+	(year(ts));
 
 statement ok
 merge into my_datalake.default.t
-using (select uuidv7() id, current_timestamp ts) m on (my_datalake.default.t.id = m.id)
-when matched then update set id = m.id, ts=m.ts
-when not matched then insert (id, ts) values (m.id, m.ts);
+using (
+	select uuidv7() id,
+	current_timestamp ts
+) m on (my_datalake.default.t.id = m.id)
+when matched then
+	update set
+		id = m.id,
+		ts = m.ts
+when not matched then
+	insert (id, ts)
+values (
+	m.id,
+	m.ts
+);
 
 query I
 SELECT count (*) FROM my_datalake.default.t;

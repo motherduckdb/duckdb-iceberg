@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.5...3.29)
 set(TARGET_NAME iceberg)
 project(${TARGET_NAME})
 
-set(CMAKE_CXX_STANDARD 14 CACHE STRING "C++ standard")
+set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard")
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
@@ -57,6 +57,7 @@ set(EXTENSION_SOURCES
 	src/core/metadata/iceberg_table_metadata.cpp
 	src/core/metadata/manifest/iceberg_manifest_list.cpp
 	src/core/metadata/manifest/iceberg_manifest.cpp
+	src/core/metadata/manifest/iceberg_avro_codec.cpp
 	src/core/metadata/partition/iceberg_partition_spec.cpp
 	src/core/metadata/schema/iceberg_column_definition.cpp
 	src/core/metadata/schema/iceberg_field_mapping.cpp

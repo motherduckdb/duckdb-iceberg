@@ -5,6 +5,8 @@
 #include "duckdb/planner/expression/bound_cast_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/function/cast/bound_cast_data.hpp"
+#include "duckdb/common/vector/map_vector.hpp"
+#include "duckdb/common/vector/struct_vector.hpp"
 
 #include "planning/metadata_io/avro/iceberg_avro_multi_file_list.hpp"
 #include "core/metadata/manifest/iceberg_manifest_list.hpp"
@@ -392,7 +394,7 @@ BuildManifestSchema(const IcebergSnapshot &snapshot, const IcebergTableMetadata 
 } // namespace manifest_file
 
 bool IcebergAvroMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &files,
-                                      vector<LogicalType> &return_types, vector<string> &names,
+                                      vector<LogicalType> &return_types, vector<Identifier> &names,
                                       MultiFileReaderBindData &bind_data) {
 	auto &iceberg_avro_list = dynamic_cast<IcebergAvroMultiFileList &>(files);
 
@@ -415,7 +417,7 @@ bool IcebergAvroMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &
 	// Populate return_types and names from schema
 	for (auto &col : schema) {
 		return_types.push_back(col.type);
-		names.push_back(col.name);
+		names.push_back(Identifier(col.name));
 	}
 
 	// Set the schema in bind_data - framework will use this for mapping
@@ -433,16 +435,17 @@ bool IcebergAvroMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &
 static void FixSamePhysicalTypeCasts(BoundCastInfo &cast_info, const LogicalType &source_type,
                                      const LogicalType &target_type) {
 	if (source_type.id() == LogicalTypeId::DATE && target_type.id() == LogicalTypeId::INTEGER) {
-		cast_info.function = DefaultCasts::ReinterpretCast;
+		cast_info.SetFunction(DefaultCasts::ReinterpretCast);
 		return;
 	}
-	if (!cast_info.cast_data) {
+	auto cast_data = cast_info.GetCastData();
+	if (!cast_data) {
 		return;
 	}
 	if (source_type.id() != LogicalTypeId::STRUCT || target_type.id() != LogicalTypeId::STRUCT) {
 		return;
 	}
-	auto &struct_data = cast_info.cast_data->Cast<StructBoundCastData>();
+	auto &struct_data = cast_data->Cast<StructBoundCastData>();
 	auto &src_children = StructType::GetChildTypes(source_type);
 	auto &tgt_children = StructType::GetChildTypes(target_type);
 	for (idx_t i = 0; i < struct_data.child_cast_info.size(); i++) {
@@ -457,11 +460,12 @@ static void FixSamePhysicalTypeCasts(BoundCastInfo &cast_info, const LogicalType
 }
 
 static void FixSamePhysicalTypeCastsInExpr(Expression &expr) {
-	if (expr.type == ExpressionType::OPERATOR_CAST) {
+	auto expression_type = expr.GetExpressionType();
+	if (expression_type == ExpressionType::OPERATOR_CAST) {
 		auto &cast_expr = expr.Cast<BoundCastExpression>();
-		FixSamePhysicalTypeCasts(cast_expr.bound_cast, cast_expr.source_type(), cast_expr.return_type);
-	} else if (expr.type == ExpressionType::BOUND_FUNCTION) {
-		for (auto &child : expr.Cast<BoundFunctionExpression>().children) {
+		FixSamePhysicalTypeCasts(cast_expr.GetBoundCastMutable(), cast_expr.source_type(), cast_expr.GetReturnType());
+	} else if (expression_type == ExpressionType::BOUND_FUNCTION) {
+		for (auto &child : expr.Cast<BoundFunctionExpression>().GetChildrenMutable()) {
 			if (child) {
 				FixSamePhysicalTypeCastsInExpr(*child);
 			}

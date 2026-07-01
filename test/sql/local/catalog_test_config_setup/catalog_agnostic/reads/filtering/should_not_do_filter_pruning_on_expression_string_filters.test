@@ -17,7 +17,7 @@ statement ok
 SET logging_level='trace';
 
 query I
-SELECT item_id FROM my_datalake.default.issue_791 WHERE length(item_id) = 36;
+SELECT item_id FROM my_datalake.default.issue_791 WHERE length(item_id) = 36 order by all;
 ----
 10000000-0000-0000-0000-000000000001
 20000000-0000-0000-0000-000000000002
@@ -29,13 +29,13 @@ select count(*) FROM duckdb_logs() where type = 'Iceberg' and message.contains('
 0
 
 query I
-SELECT item_id FROM my_datalake.default.issue_791 WHERE length(item_id) > 35 AND length(item_id) < 37;
+SELECT item_id FROM my_datalake.default.issue_791 WHERE length(item_id) > 35 AND length(item_id) < 37 order by all;
 ----
 10000000-0000-0000-0000-000000000001
 20000000-0000-0000-0000-000000000002
 
 query I
-SELECT item_id FROM my_datalake.default.issue_791 WHERE length(item_id) IN (36);
+SELECT item_id FROM my_datalake.default.issue_791 WHERE length(item_id) IN (36) order by all;
 ----
 10000000-0000-0000-0000-000000000001
 20000000-0000-0000-0000-000000000002

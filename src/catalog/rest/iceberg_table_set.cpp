@@ -9,6 +9,7 @@
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/planner/tableref/bound_at_clause.hpp"
 #include "duckdb/planner/expression_binder/table_function_binder.hpp"
+#include "duckdb/execution/expression_executor.hpp"
 
 #include "catalog/rest/api/catalog_api.hpp"
 #include "catalog/rest/api/catalog_utils.hpp"
@@ -49,14 +50,14 @@ bool IcebergTableSet::FillEntry(ClientContext &context, IcebergTableInformation 
 
 	// No valid cached result or caching disabled, make a new request
 	auto get_table_result = IRCAPI::GetTable(context, ic_catalog, schema, table.name);
-	if (get_table_result.has_error) {
+	if (get_table_result.error_) {
 		if (get_table_result.status_ == HTTPStatusCode::NotFound_404) {
 			// Glue returns 404 when a table is not an Iceberg Table with the error message
 			// "input table is not an iceberg table" of type "NoSuchIcebergTableException"
 			// Otherwise the error is a standard 404, we return false and duckdb will return
 			// that the table does not exist.
 			// see test/sql/cloud/test_glue_catalog_with_other_tables.test for testing
-			if (get_table_result.error_._error.type != "NoSuchIcebergTableException") {
+			if (get_table_result.error_->_error.type != "NoSuchIcebergTableException") {
 				return false;
 			}
 		}
@@ -64,7 +65,7 @@ bool IcebergTableSet::FillEntry(ClientContext &context, IcebergTableInformation 
 		// User should not if they do not have permission or if they are not authorized (or 500)
 		throw HTTPException(
 		    StringUtil::Format("GetTableInformation endpoint returned response code %s with message \"%s\"",
-		                       EnumUtil::ToString(get_table_result.status_), get_table_result.error_._error.message));
+		                       EnumUtil::ToString(get_table_result.status_), get_table_result.error_->_error.message));
 	}
 	ic_catalog.table_request_cache.SetOrOverwrite(context, table_key, std::move(get_table_result.result_));
 	{
@@ -109,9 +110,9 @@ void IcebergTableSet::Scan(ClientContext &context, const std::function<void(Cata
 
 		// create a table entry with fake schema data to avoid calling the LoadTableInformation endpoint for every
 		// table while listing schemas
-		CreateTableInfo info(schema, table_info.name);
+		CreateTableInfo info(schema, Identifier(table_info.name));
 		vector<ColumnDefinition> columns;
-		auto col = ColumnDefinition(string("__"), LogicalType::UNKNOWN);
+		auto col = ColumnDefinition(Identifier("__"), LogicalType::UNKNOWN);
 		columns.push_back(std::move(col));
 		info.columns = ColumnList(std::move(columns));
 		auto table_entry = make_uniq<IcebergTableEntry>(table_info, catalog, schema, info, optional_idx());
@@ -146,8 +147,8 @@ mutex &IcebergTableSet::GetEntryLock() {
 
 void IcebergTableSet::LoadEntries(ClientContext &context) {
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
-	bool schema_listed =
-	    iceberg_transaction.listed_schemas.find(schema.name) != iceberg_transaction.listed_schemas.end();
+	bool schema_listed = iceberg_transaction.listed_schemas.find(schema.name.GetIdentifierName()) !=
+	                     iceberg_transaction.listed_schemas.end();
 	if (schema_listed) {
 		return;
 	}
@@ -156,7 +157,7 @@ void IcebergTableSet::LoadEntries(ClientContext &context) {
 	for (auto &table : tables) {
 		entries.emplace(table.name, make_shared_ptr<IcebergTableInformation>(ic_catalog, schema, table.name));
 	}
-	iceberg_transaction.listed_schemas.insert(schema.name);
+	iceberg_transaction.listed_schemas.insert(schema.name.GetIdentifierName());
 }
 
 static Value ParseTableProperty(TableFunctionBinder &binder, ClientContext &context, const ParsedExpression &expr_ref,
@@ -220,9 +221,10 @@ IcebergTableInformation &IcebergTableSet::CreateNewEntry(ClientContext &context,
 		               .GetValue<string>();
 	}
 
-	auto key = IcebergTableInformation::GetTableKey(schema.namespace_items, info.table);
+	auto key = IcebergTableInformation::GetTableKey(schema.namespace_items, info.table.GetIdentifierName());
 	auto &alter_update = iceberg_transaction.GetOrCreateAlter();
-	auto &table_info = alter_update.CreateTable(key, IcebergTableInformation(catalog, schema, info.table));
+	auto &table_info =
+	    alter_update.CreateTable(key, IcebergTableInformation(catalog, schema, info.table.GetIdentifierName()));
 	// auto &table_info = emplace_res.first->second;
 	auto &table_metadata = table_info.table_metadata;
 	auto table_entry = make_uniq<IcebergTableEntry>(table_info, catalog, schema, info, 0);

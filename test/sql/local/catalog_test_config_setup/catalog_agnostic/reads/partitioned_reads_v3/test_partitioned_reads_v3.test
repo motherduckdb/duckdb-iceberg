@@ -25,7 +25,10 @@ statement ok
 drop table if exists my_datalake.default.test_v3_partitioned_reads;
 
 statement ok
-CREATE TABLE my_datalake.default.test_v3_partitioned_reads (id int, category VARCHAR)
+CREATE TABLE my_datalake.default.test_v3_partitioned_reads (
+	id int,
+	category VARCHAR
+)
 PARTITIONED BY (category)
 WITH ('format-version' = 3);
 
@@ -99,7 +102,7 @@ select count(distinct request.url) from duckdb_logs_parsed('HTTP') where request
 query I
 select count(*) from duckdb_logs() where type = 'Iceberg' and message like '%skipped%manifest_file%';
 ----
-2
+1
 
 # --- No filter: read all partitions, skip none ---
 

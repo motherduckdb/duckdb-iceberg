@@ -24,6 +24,23 @@ CommitTableRequest CommitTableRequest::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+CommitTableRequest CommitTableRequest::Copy() const {
+	CommitTableRequest res;
+	res.requirements.reserve(requirements.size());
+	for (auto &item : requirements) {
+		res.requirements.emplace_back(item.Copy());
+	}
+	res.updates.reserve(updates.size());
+	for (auto &item : updates) {
+		res.updates.emplace_back(item.Copy());
+	}
+	if (identifier.has_value()) {
+		res.identifier.emplace();
+		(*res.identifier) = (*identifier).Copy();
+	}
+	return res;
+}
+
 string CommitTableRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto requirements_val = yyjson_obj_get(obj, "requirements");
@@ -69,14 +86,50 @@ string CommitTableRequest::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto identifier_val = yyjson_obj_get(obj, "identifier");
-	if (identifier_val && !yyjson_is_null(identifier_val)) {
-		has_identifier = true;
-		error = identifier.TryFromJSON(identifier_val);
+	if (identifier_val) {
+		TableIdentifier identifier_tmp;
+		error = identifier_tmp.TryFromJSON(identifier_val);
 		if (!error.empty()) {
 			return error;
 		}
+		identifier = std::move(identifier_tmp);
 	}
-	return string();
+	return "";
+}
+
+void CommitTableRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: requirements
+	yyjson_mut_val *requirements_arr = yyjson_mut_arr(doc);
+	for (const auto &item : requirements) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(requirements_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "requirements", requirements_arr);
+
+	// Serialize: updates
+	yyjson_mut_val *updates_arr = yyjson_mut_arr(doc);
+	for (const auto &item : updates) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(updates_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "updates", updates_arr);
+
+	// Serialize: identifier
+	if (identifier.has_value()) {
+		auto &identifier_value = *identifier;
+		yyjson_mut_val *identifier_value_val = identifier_value.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "identifier", identifier_value_val);
+	}
+}
+
+yyjson_mut_val *CommitTableRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

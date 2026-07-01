@@ -22,6 +22,12 @@
       ]
     },
     {
+      "reason": "UNKNOWN type is not supported yet",
+      "paths": [
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/create/test_create_unknown_type.test"
+      ]
+    },
+    {
       "reason": "Not yet supported with Lakekeeper",
       "paths": [
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_write_upper_and_lower_bounds.test",
@@ -37,7 +43,6 @@
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/test_read_partitioned_table_type_promotion.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/merge/merge_multi_partition_timestamp.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/create/default/test_create_default_blob.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/test_basic_variant.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/test_geometry_type.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/test_geometry_type_nested.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/iceberg_types/test_write_geometry_bounds.test",
@@ -57,12 +62,6 @@
       "reason": "Lakekeeper data generation insert results in a single parquet file",
       "paths": [
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/should_do_filter_pruning_on_expressionless_string_filters.test"
-      ]
-    },
-    {
-      "reason": "Lakekeeper does not have this table generated due to weird bugs in spark table creation logic",
-      "paths": [
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/other_engines/partitions/truncate/test_append_truncate_varchar_for_insert.test"
       ]
     }
   ]

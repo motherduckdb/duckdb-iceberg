@@ -24,22 +24,57 @@ DeleteFile DeleteFile::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+DeleteFile DeleteFile::Copy() const {
+	DeleteFile res;
+	if (position_delete_file.has_value()) {
+		res.position_delete_file.emplace();
+		(*res.position_delete_file) = (*position_delete_file).Copy();
+	}
+	if (equality_delete_file.has_value()) {
+		res.equality_delete_file.emplace();
+		(*res.equality_delete_file) = (*equality_delete_file).Copy();
+	}
+	return res;
+}
+
 string DeleteFile::TryFromJSON(yyjson_val *obj) {
 	string error;
 	do {
-		error = position_delete_file.TryFromJSON(obj);
+		position_delete_file.emplace();
+		error = position_delete_file->TryFromJSON(obj);
 		if (error.empty()) {
-			has_position_delete_file = true;
 			break;
+		} else {
+			position_delete_file = nullopt;
 		}
-		error = equality_delete_file.TryFromJSON(obj);
+		equality_delete_file.emplace();
+		error = equality_delete_file->TryFromJSON(obj);
 		if (error.empty()) {
-			has_equality_delete_file = true;
 			break;
+		} else {
+			equality_delete_file = nullopt;
 		}
 		return "DeleteFile failed to parse, none of the oneOf candidates matched";
 	} while (false);
-	return string();
+	return "";
+}
+
+void DeleteFile::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	if (position_delete_file.has_value()) {
+		position_delete_file->PopulateJSON(doc, obj);
+	} else if (equality_delete_file.has_value()) {
+		equality_delete_file->PopulateJSON(doc, obj);
+	}
+}
+
+yyjson_mut_val *DeleteFile::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

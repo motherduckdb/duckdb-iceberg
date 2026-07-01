@@ -210,11 +210,11 @@ static rest_api_objects::OAuthTokenResponse FetchOAuth2TokenResponse(ClientConte
 				auto oauth_error = rest_api_objects::OAuthError::FromJSON(root);
 				string error_msg = StringUtil::Format("OAuth2 token request failed (%s): %s",
 				                                      EnumUtil::ToString(response->status), oauth_error._error);
-				if (oauth_error.has_error_description) {
-					error_msg += StringUtil::Format(" - %s", oauth_error.error_description);
+				if (oauth_error.error_description) {
+					error_msg += StringUtil::Format(" - %s", *oauth_error.error_description);
 				}
-				if (oauth_error.has_error_uri) {
-					error_msg += StringUtil::Format(" (see %s)", oauth_error.error_uri);
+				if (oauth_error.error_uri) {
+					error_msg += StringUtil::Format(" (see %s)", *oauth_error.error_uri);
 				}
 				throw InvalidConfigurationException(error_msg);
 			} catch (InvalidInputException &) {
@@ -388,12 +388,12 @@ unique_ptr<BaseSecret> OAuth2Authorization::CreateCatalogSecretFunction(ClientCo
 			// Special handling for extra_http_headers (MAP type)
 			if (StringUtil::Lower(param_name) == "extra_http_headers") {
 				// Store the MAP value directly, will be parsed later when creating authorization
-				result->secret_map[param_name] = named_param.second;
+				result->secret_map[Identifier(param_name)] = named_param.second;
 			} else if (StringUtil::Lower(param_name) == "expires_in") {
 				// Store expires_in as INTEGER (not string)
-				result->secret_map[param_name] = named_param.second;
+				result->secret_map[Identifier(param_name)] = named_param.second;
 			} else {
-				result->secret_map[param_name] = named_param.second.ToString();
+				result->secret_map[Identifier(param_name)] = named_param.second.ToString();
 			}
 		} else {
 			throw InvalidInputException("Unknown named parameter passed to CreateIRCSecretFunction: %s", param_name);
@@ -426,7 +426,7 @@ unique_ptr<BaseSecret> OAuth2Authorization::CreateCatalogSecretFunction(ClientCo
 	//! ---- Client ID + Client Secret ----
 	case_insensitive_set_t required_parameters {"client_id", "client_secret"};
 	for (auto &param : required_parameters) {
-		if (!result->secret_map.count(param)) {
+		if (!result->secret_map.count(Identifier(param))) {
 			throw InvalidInputException("Missing required parameter '%s' for authorization_type 'oauth2'", param);
 		}
 	}
@@ -476,13 +476,13 @@ unique_ptr<BaseSecret> OAuth2Authorization::CreateCatalogSecretFunction(ClientCo
 	result->secret_map["token"] = token_response.access_token;
 
 	// Store refresh_token if present (RFC 6749 Section 6)
-	if (token_response.has_refresh_token && !token_response.refresh_token.empty()) {
-		result->secret_map["refresh_token"] = token_response.refresh_token;
+	if (token_response.refresh_token && !token_response.refresh_token->empty()) {
+		result->secret_map["refresh_token"] = *token_response.refresh_token;
 	}
 
 	// Store expires_in if present
-	if (token_response.has_expires_in) {
-		result->secret_map["expires_in"] = Value::INTEGER(token_response.expires_in);
+	if (token_response.expires_in) {
+		result->secret_map["expires_in"] = Value::INTEGER(*token_response.expires_in);
 	}
 
 	// Store the credentials for later refresh (already in secret_map)
@@ -544,7 +544,9 @@ unique_ptr<HTTPResponse> OAuth2Authorization::Request(RequestType request_type, 
 
 void OAuth2Authorization::SetCatalogSecretParameters(CreateSecretFunction &function) {
 	auto &options = IcebergSecretOptions();
-	function.named_parameters.insert(options.begin(), options.end());
+	for (auto &option : options) {
+		function.named_parameters[Identifier(option.first)] = option.second;
+	}
 }
 
 void OAuth2Authorization::UpdateTokenState(const string &new_token, int32_t expires_in_seconds,
@@ -659,8 +661,8 @@ void OAuth2Authorization::RefreshAccessTokenUnlocked(ClientContext &context, std
 	}
 
 	// Update our token state with the new token (UpdateTokenState assumes lock is held)
-	UpdateTokenState(token_response.access_token, token_response.has_expires_in ? token_response.expires_in : 0,
-	                 token_response.has_refresh_token ? token_response.refresh_token : "");
+	UpdateTokenState(token_response.access_token, token_response.expires_in.value_or(0),
+	                 token_response.refresh_token.value_or(""));
 }
 
 } // namespace duckdb

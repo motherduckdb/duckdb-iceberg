@@ -24,6 +24,16 @@ RemovePropertiesUpdate RemovePropertiesUpdate::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+RemovePropertiesUpdate RemovePropertiesUpdate::Copy() const {
+	RemovePropertiesUpdate res;
+	res.base_update = base_update.Copy();
+	res.removals.reserve(removals.size());
+	for (auto &item : removals) {
+		res.removals.emplace_back(item);
+	}
+	return res;
+}
+
 string RemovePropertiesUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
 	error = base_update.TryFromJSON(obj);
@@ -54,18 +64,30 @@ string RemovePropertiesUpdate::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(removals_val));
 		}
 	}
-	auto action_val = yyjson_obj_get(obj, "action");
-	if (action_val && !yyjson_is_null(action_val)) {
-		has_action = true;
-		if (yyjson_is_str(action_val)) {
-			action = yyjson_get_str(action_val);
-		} else {
-			return StringUtil::Format(
-			    "RemovePropertiesUpdate property 'action' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_val));
-		}
+	return "";
+}
+
+void RemovePropertiesUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
-	return string();
+
+	// Serialize base class: BaseUpdate
+	base_update.PopulateJSON(doc, obj);
+
+	// Serialize: removals
+	yyjson_mut_val *removals_arr = yyjson_mut_arr(doc);
+	for (const auto &item : removals) {
+		yyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());
+		yyjson_mut_arr_append(removals_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "removals", removals_arr);
+}
+
+yyjson_mut_val *RemovePropertiesUpdate::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

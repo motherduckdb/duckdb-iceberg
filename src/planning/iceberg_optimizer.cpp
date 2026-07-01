@@ -94,7 +94,7 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 
 				// modify the multi file reader bind data to add the extra column
 				mfbd.types.push_back(col_type);
-				mfbd.names.push_back(col_info->name);
+				mfbd.names.push_back(Identifier(col_info->name));
 
 				auto new_col = col_info->GetMultiFileColumnDefinition();
 				if (!new_col.default_expression) {
@@ -126,12 +126,12 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 		}
 
 		auto &catalog = Catalog::GetSystemCatalog(context);
-		auto &fn_entry =
-		    catalog.GetEntry<ScalarFunctionCatalogEntry>(context, DEFAULT_SCHEMA, "iceberg_verify_equality_deletes");
+		auto &fn_entry = catalog.GetEntry<ScalarFunctionCatalogEntry>(context, Identifier::DefaultSchema(),
+		                                                              "iceberg_verify_equality_deletes");
 		FunctionBinder function_binder(context);
 		vector<LogicalType> arg_types;
 		for (auto &a : args) {
-			arg_types.push_back(a->return_type);
+			arg_types.push_back(a->GetReturnType());
 		}
 		auto fn = fn_entry.functions.GetFunctionByArguments(context, arg_types);
 		auto bound_call = function_binder.BindScalarFunction(fn, std::move(args));

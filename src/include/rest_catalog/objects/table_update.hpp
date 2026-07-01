@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -41,54 +42,39 @@ public:
 	TableUpdate &operator=(TableUpdate &&) = default;
 
 public:
+	// Deserialization
 	static TableUpdate FromJSON(yyjson_val *obj);
-
-public:
 	string TryFromJSON(yyjson_val *obj);
 
+	// Copy
+	TableUpdate Copy() const;
+
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+
 public:
-	AssignUUIDUpdate assign_uuidupdate;
-	bool has_assign_uuidupdate = false;
-	UpgradeFormatVersionUpdate upgrade_format_version_update;
-	bool has_upgrade_format_version_update = false;
-	AddSchemaUpdate add_schema_update;
-	bool has_add_schema_update = false;
-	SetCurrentSchemaUpdate set_current_schema_update;
-	bool has_set_current_schema_update = false;
-	AddPartitionSpecUpdate add_partition_spec_update;
-	bool has_add_partition_spec_update = false;
-	SetDefaultSpecUpdate set_default_spec_update;
-	bool has_set_default_spec_update = false;
-	AddSortOrderUpdate add_sort_order_update;
-	bool has_add_sort_order_update = false;
-	SetDefaultSortOrderUpdate set_default_sort_order_update;
-	bool has_set_default_sort_order_update = false;
-	AddSnapshotUpdate add_snapshot_update;
-	bool has_add_snapshot_update = false;
-	SetSnapshotRefUpdate set_snapshot_ref_update;
-	bool has_set_snapshot_ref_update = false;
-	RemoveSnapshotsUpdate remove_snapshots_update;
-	bool has_remove_snapshots_update = false;
-	RemoveSnapshotRefUpdate remove_snapshot_ref_update;
-	bool has_remove_snapshot_ref_update = false;
-	SetLocationUpdate set_location_update;
-	bool has_set_location_update = false;
-	SetPropertiesUpdate set_properties_update;
-	bool has_set_properties_update = false;
-	RemovePropertiesUpdate remove_properties_update;
-	bool has_remove_properties_update = false;
-	SetStatisticsUpdate set_statistics_update;
-	bool has_set_statistics_update = false;
-	RemoveStatisticsUpdate remove_statistics_update;
-	bool has_remove_statistics_update = false;
-	RemovePartitionSpecsUpdate remove_partition_specs_update;
-	bool has_remove_partition_specs_update = false;
-	RemoveSchemasUpdate remove_schemas_update;
-	bool has_remove_schemas_update = false;
-	AddEncryptionKeyUpdate add_encryption_key_update;
-	bool has_add_encryption_key_update = false;
-	RemoveEncryptionKeyUpdate remove_encryption_key_update;
-	bool has_remove_encryption_key_update = false;
+	optional<AssignUUIDUpdate> assign_uuidupdate;
+	optional<UpgradeFormatVersionUpdate> upgrade_format_version_update;
+	optional<AddSchemaUpdate> add_schema_update;
+	optional<SetCurrentSchemaUpdate> set_current_schema_update;
+	optional<AddPartitionSpecUpdate> add_partition_spec_update;
+	optional<SetDefaultSpecUpdate> set_default_spec_update;
+	optional<AddSortOrderUpdate> add_sort_order_update;
+	optional<SetDefaultSortOrderUpdate> set_default_sort_order_update;
+	optional<AddSnapshotUpdate> add_snapshot_update;
+	optional<SetSnapshotRefUpdate> set_snapshot_ref_update;
+	optional<RemoveSnapshotsUpdate> remove_snapshots_update;
+	optional<RemoveSnapshotRefUpdate> remove_snapshot_ref_update;
+	optional<SetLocationUpdate> set_location_update;
+	optional<SetPropertiesUpdate> set_properties_update;
+	optional<RemovePropertiesUpdate> remove_properties_update;
+	optional<SetStatisticsUpdate> set_statistics_update;
+	optional<RemoveStatisticsUpdate> remove_statistics_update;
+	optional<RemovePartitionSpecsUpdate> remove_partition_specs_update;
+	optional<RemoveSchemasUpdate> remove_schemas_update;
+	optional<AddEncryptionKeyUpdate> add_encryption_key_update;
+	optional<RemoveEncryptionKeyUpdate> remove_encryption_key_update;
 };
 
 } // namespace rest_api_objects

@@ -1,7 +1,9 @@
 #include "core/deletes/iceberg_deletion_vector.hpp"
 
-#include "duckdb/storage/caching_file_system.hpp"
+#include "duckdb/common/allocator.hpp"
 #include "duckdb/common/bswap.hpp"
+#include "duckdb/common/file_system.hpp"
+#include "duckdb/common/vector_operations/unary_executor.hpp"
 
 #include "planning/iceberg_multi_file_list.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
@@ -139,7 +141,8 @@ shared_ptr<IcebergDeletionVectorData> IcebergDeletionVectorData::FromBlob(const 
 //! footer can parse the FileMetadata without a decompressor. In debug builds we additionally parse
 //! the whole container -- leading/footer/trailing magic, the footer JSON, and that the single
 //! blob's offset/length agree with the manifest content_offset/content_size_in_bytes used below.
-static void VerifyPuffinDeletionVector(CachingFileHandle &handle, int64_t content_offset, int64_t content_size) {
+static void VerifyPuffinDeletionVector(FileSystem &fs, FileHandle &handle, int64_t content_offset,
+                                       int64_t content_size) {
 	constexpr data_t PUFFIN_MAGIC[4] = {0x50, 0x46, 0x41, 0x31}; //! "PFA1"
 	//! Footer trailer layout: FooterPayloadSize (4) | Flags (4) | Magic (4)
 	constexpr idx_t FOOTER_TRAILER_SIZE = sizeof(int32_t) + sizeof(uint32_t) + sizeof(PUFFIN_MAGIC);
@@ -150,9 +153,9 @@ static void VerifyPuffinDeletionVector(CachingFileHandle &handle, int64_t conten
 	}
 
 	//! Read the footer trailer: validate the trailing magic and that the footer payload is uncompressed.
-	data_ptr_t trailer_ptr = nullptr;
-	auto trailer_buffer = handle.Read(trailer_ptr, FOOTER_TRAILER_SIZE, file_size - FOOTER_TRAILER_SIZE);
-	auto trailer = trailer_buffer.Ptr();
+	auto trailer_buffer = Allocator::DefaultAllocator().Allocate(file_size);
+	auto trailer = trailer_buffer.get();
+	fs.Read(handle, trailer, FOOTER_TRAILER_SIZE, file_size - FOOTER_TRAILER_SIZE);
 	if (memcmp(trailer + sizeof(int32_t) + sizeof(uint32_t), PUFFIN_MAGIC, sizeof(PUFFIN_MAGIC)) != 0) {
 		throw InvalidConfigurationException("Deletion vector file is not a valid Puffin file (bad trailing magic)");
 	}
@@ -167,9 +170,9 @@ static void VerifyPuffinDeletionVector(CachingFileHandle &handle, int64_t conten
 	//! Parse the full container and assert it round-trips with the manifest content_offset/size.
 	auto payload_size = Load<int32_t>(trailer);
 	D_ASSERT(payload_size > 0);
-	data_ptr_t file_ptr = nullptr;
-	auto file_buffer = handle.Read(file_ptr, file_size, 0);
-	auto data = file_buffer.Ptr();
+	auto debug_buffer = Allocator::DefaultAllocator().Allocate(file_size);
+	auto data = debug_buffer.get();
+	fs.Read(handle, data, file_size, 0);
 	D_ASSERT(memcmp(data, PUFFIN_MAGIC, sizeof(PUFFIN_MAGIC)) == 0); //! leading magic
 	idx_t payload_start = file_size - FOOTER_TRAILER_SIZE - static_cast<idx_t>(payload_size);
 	D_ASSERT(payload_start >= sizeof(PUFFIN_MAGIC));
@@ -202,10 +205,9 @@ void IcebergMultiFileList::ScanPuffinFile(const BoundIcebergManifestEntry &bound
 	auto file_path = data_file.file_path;
 	D_ASSERT(!data_file.referenced_data_file.empty());
 
-	auto caching_file_system = CachingFileSystem::Get(context);
-
-	auto caching_file_handle = caching_file_system.OpenFile(file_path, FileOpenFlags::FILE_FLAGS_READ);
-	data_ptr_t data = nullptr;
+	FileOpenFlags flags = FileFlags::FILE_FLAGS_READ;
+	flags.SetCachingMode(CachingMode::CACHE_REMOTE_ONLY);
+	auto file_handle = fs.OpenFile(file_path, flags);
 
 	D_ASSERT(!data_file.content_offset.IsNull());
 	D_ASSERT(!data_file.content_size_in_bytes.IsNull());
@@ -213,10 +215,10 @@ void IcebergMultiFileList::ScanPuffinFile(const BoundIcebergManifestEntry &bound
 	auto offset = data_file.content_offset.GetValue<int64_t>();
 	auto length = data_file.content_size_in_bytes.GetValue<int64_t>();
 
-	VerifyPuffinDeletionVector(*caching_file_handle, offset, length);
+	VerifyPuffinDeletionVector(fs, *file_handle, offset, length);
 
-	auto buf_handle = caching_file_handle->Read(data, length, offset);
-	auto buffer_data = buf_handle.Ptr();
+	auto local_buffer = Allocator::DefaultAllocator().Allocate(length);
+	fs.Read(*file_handle, local_buffer.get(), length, offset);
 
 	auto it = shared_state->positional_delete_data.find(data_file.referenced_data_file);
 	if (it != shared_state->positional_delete_data.end()) {
@@ -229,7 +231,7 @@ void IcebergMultiFileList::ScanPuffinFile(const BoundIcebergManifestEntry &bound
 	}
 	//! NOTE: assign, don't emplace, deletion vectors take priority over any remaining positional delete files
 	shared_state->positional_delete_data[data_file.referenced_data_file] =
-	    IcebergDeletionVectorData::FromBlob(bound_entry, buffer_data, length);
+	    IcebergDeletionVectorData::FromBlob(bound_entry, local_buffer.get(), length);
 }
 
 idx_t IcebergDeletionVector::Filter(row_t start_row_index, idx_t count, SelectionVector &result_sel) {

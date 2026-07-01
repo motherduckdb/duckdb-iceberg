@@ -10,8 +10,9 @@
 
 #include "duckdb/common/printer.hpp"
 #include "duckdb/common/file_system.hpp"
+#include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
 #include "yyjson.hpp"
-#include "duckdb/storage/caching_file_system.hpp"
+#include "duckdb/storage/external_file_cache/caching_file_system.hpp"
 
 #include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
 
