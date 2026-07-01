@@ -637,7 +637,7 @@ public:
 		//! Prevent the connection from destructing with an active transaction
 		//! As that causes it to ROLLBACK and enter CleanupFiles - resulting in a stack overflow due to recursion
 		auto result = connection.Query("COMMIT");
-		if(result->HasError()){
+		if (result->HasError()) {
 			connection.Query("ROLLBACK");
 		}
 	}
