@@ -42,8 +42,12 @@ CREATE SCHEMA IF NOT EXISTS my_datalake.default;
 statement ok
 DROP TABLE IF EXISTS my_datalake.default.conflict_cache_test;
 
+# Disable the built-in commit retry (default: 4 retries, refreshing metadata
+# and reattempting on a 409) so a conflicting append surfaces to the user
+# immediately instead of being silently healed within the same statement.
 statement ok
-CREATE TABLE my_datalake.default.conflict_cache_test (id INTEGER, val VARCHAR);
+CREATE TABLE my_datalake.default.conflict_cache_test (id INTEGER, val VARCHAR)
+WITH ('commit.retry.num-retries' = '0');
 
 statement ok
 INSERT INTO my_datalake.default.conflict_cache_test VALUES (1, 'seed');
