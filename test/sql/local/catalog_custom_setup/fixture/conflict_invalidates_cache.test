@@ -1,5 +1,5 @@
 # name: test/sql/local/catalog_custom_setup/fixture/conflict_invalidates_cache.test
-# description: A 409 conflict must evict the stale LoadTableResult from the staleness cache so the next auto-commit statement succeeds
+# description: A 409 conflict must evict the stale LoadTableResult from the staleness cache so the next auto-commit statement succeeds, but transaction-local table state must remain stable once touched
 # group: [fixture]
 
 require-env FIXTURE_SERVER_AVAILABLE
@@ -89,3 +89,58 @@ SELECT id, val FROM my_datalake.default.conflict_cache_test ORDER BY id;
 # Cleanup
 statement ok
 DROP TABLE IF EXISTS my_datalake.default.conflict_cache_test;
+
+# ------------------------------------------------------------------
+# Transaction-local table state must remain stable once touched, even
+# when the shared staleness cache is evicted by commits on other
+# connections.
+# ------------------------------------------------------------------
+
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.txn_local_test;
+
+statement ok
+CREATE TABLE my_datalake.default.txn_local_test (id INTEGER, val VARCHAR);
+
+statement ok
+INSERT INTO my_datalake.default.txn_local_test VALUES (1, 'seed');
+
+# con1 begins an explicit transaction and touches the table,
+# pinning the snapshot in its transaction-local state.
+statement ok con1
+BEGIN;
+
+query IT con1
+SELECT id, val FROM my_datalake.default.txn_local_test ORDER BY id;
+----
+1	seed
+
+# External writes advance the server snapshot and evict the shared
+# staleness cache (successful commits evict when MAX_TABLE_STALENESS is set).
+statement ok
+INSERT INTO my_datalake.default.txn_local_test VALUES (2, 'external_1');
+
+statement ok
+INSERT INTO my_datalake.default.txn_local_test VALUES (3, 'external_2');
+
+# con1's transaction-local state must be unaffected by the shared cache evictions.
+# It should still see only the original snapshot.
+query IT con1
+SELECT id, val FROM my_datalake.default.txn_local_test ORDER BY id;
+----
+1	seed
+
+statement ok con1
+COMMIT;
+
+# Outside the transaction, the latest data is visible.
+query IT
+SELECT id, val FROM my_datalake.default.txn_local_test ORDER BY id;
+----
+1	seed
+2	external_1
+3	external_2
+
+# Cleanup
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.txn_local_test;
