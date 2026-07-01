@@ -99,6 +99,9 @@ public:
 
 private:
 	void CleanupFiles();
+	//! Evict the touched tables' cached LoadTableResult so a retry after a failed commit (e.g. a 409
+	//! conflict) doesn't keep reusing the same stale metadata.
+	void EvictCachedTables();
 
 private:
 	DatabaseInstance &db;
