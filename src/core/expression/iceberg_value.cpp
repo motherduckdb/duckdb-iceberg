@@ -276,7 +276,7 @@ bool IcebergValue::TruncateAndIncrementString(const string &input, string &resul
 			last_start--;
 		}
 		int cp_size;
-		int32_t codepoint = Utf8Proc::UTF8ToCodepoint(input.c_str() + last_start, cp_size) + 1;
+		int32_t codepoint = Utf8Proc::UTF8ToCodepoint(input.c_str() + last_start, cp_size, input.size()) + 1;
 		if (codepoint >= 0xD800 && codepoint <= 0xDFFF) {
 			// skip the surrogate range to the next valid scalar value
 			codepoint = 0xE000;

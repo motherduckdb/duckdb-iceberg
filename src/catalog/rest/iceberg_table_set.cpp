@@ -221,10 +221,10 @@ IcebergTableInformation &IcebergTableSet::CreateNewEntry(ClientContext &context,
 		               .GetValue<string>();
 	}
 
-	auto key = IcebergTableInformation::GetTableKey(schema.namespace_items, info.table.GetIdentifierName());
+	auto key = IcebergTableInformation::GetTableKey(schema.namespace_items, info.GetTableName().GetIdentifierName());
 	auto &alter_update = iceberg_transaction.GetOrCreateAlter();
-	auto &table_info =
-	    alter_update.CreateTable(key, IcebergTableInformation(catalog, schema, info.table.GetIdentifierName()));
+	auto &table_info = alter_update.CreateTable(
+	    key, IcebergTableInformation(catalog, schema, info.GetTableName().GetIdentifierName()));
 	// auto &table_info = emplace_res.first->second;
 	auto &table_metadata = table_info.table_metadata;
 	auto table_entry = make_uniq<IcebergTableEntry>(table_info, catalog, schema, info, 0);

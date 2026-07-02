@@ -467,7 +467,7 @@ void IcebergTransaction::DoTableRename(IcebergTransactionRenameUpdate &rename_up
 	IRCAPI::CommitTableRename(context, catalog, transaction_json);
 
 	DropInfo drop_info;
-	drop_info.NameMutable() = Identifier(table_name);
+	drop_info.GetQualifiedNameMutable() = Identifier(table_name);
 	drop_info.if_not_found = OnEntryNotFound::THROW_EXCEPTION;
 	schema.DropEntry(context, drop_info, true);
 
@@ -563,7 +563,7 @@ void IcebergTransaction::DoTableDeletes(IcebergTransactionDeleteUpdate &delete_u
 	// remove the table entry from the catalog
 	auto &schema_entry = ic_catalog.schemas.GetEntry(schema_key.GetIdentifierName()).Cast<IcebergSchemaEntry>();
 	DropInfo drop_info;
-	drop_info.NameMutable() = Identifier(table_name);
+	drop_info.GetQualifiedNameMutable() = Identifier(table_name);
 	drop_info.if_not_found = OnEntryNotFound::RETURN_NULL;
 	schema_entry.DropEntry(context, drop_info, true);
 }
