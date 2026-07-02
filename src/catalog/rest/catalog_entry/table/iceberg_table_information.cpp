@@ -271,7 +271,7 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 
 optional_ptr<CatalogEntry> IcebergTableInformation::CreateSchemaVersion(const IcebergTableSchema &table_schema) {
 	CreateTableInfo info;
-	info.table = Identifier(name);
+	info.SetTableName(Identifier(name));
 	for (auto &col : table_schema.columns) {
 		info.columns.AddColumn(col->GetColumnDefinition());
 	}

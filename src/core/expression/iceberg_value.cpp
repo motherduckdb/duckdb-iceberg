@@ -213,7 +213,7 @@ DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const Log
 		}
 		//! bound stores microseconds since midnight
 		dtime_t val;
-		std::memcpy(&val.micros, blob.GetData(), sizeof(int64_t));
+		std::memcpy(&val.value, blob.GetData(), sizeof(int64_t));
 		return Value::TIME(val);
 	}
 	case LogicalTypeId::TIMESTAMP_NS:
