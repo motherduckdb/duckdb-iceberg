@@ -21,6 +21,7 @@
 #include "catalog/rest/storage/authorization/sigv4.hpp"
 #include "rest_catalog/objects/list.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/transaction/iceberg_transaction.hpp"
 
 namespace duckdb {
 class OAuth2Authorization;
@@ -58,6 +59,7 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 	auto &fs = FileSystem::GetFileSystem(context);
 	auto table_credentials = table_info.GetVendedCredentials(context);
 	auto metadata_path = table_info.table_metadata.GetMetadataPath(fs);
+	auto &transaction = IcebergTransaction::Get(context, ic_catalog);
 
 	unique_ptr<SecretEntry> http_secret_entry;
 
@@ -143,7 +145,8 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 			AddHTTPSecretsToOptions(*http_secret_entry, info.options);
 		}
 
-		(void)secret_manager.CreateSecret(context, info);
+		auto created_secret = secret_manager.CreateSecret(context, info);
+		transaction.created_secrets.insert(created_secret->secret->GetName());
 		// if there is no key_id, secret, token (S3/GCS) or account_name, connection_string (Azure) in the info,
 		// log that vended credentials has not worked
 		bool has_s3_creds = info.options.find("key_id") != info.options.end() ||
@@ -161,7 +164,8 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 			if (http_secret_entry) {
 				AddHTTPSecretsToOptions(*http_secret_entry, info.options);
 			}
-			(void)secret_manager.CreateSecret(context, info);
+			auto created_secret = secret_manager.CreateSecret(context, info);
+			transaction.created_secrets.insert(created_secret->secret->GetName());
 		}
 	}
 }

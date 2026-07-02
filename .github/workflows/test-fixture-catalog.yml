@@ -111,14 +111,15 @@ jobs:
         shell: bash
         env:
           FIXTURE_SERVER_AVAILABLE: 1
-          VENDED_CREDENTIAL_REFRESH_PROXY_AVAILABLE: 1
+          VENDED_CREDENTIAL_REFRESH_PROXY: http://127.0.0.1:19133
         run: |
-          python3 -u scripts/vended_credentials_refresh_proxy.py --verbose > vended_credentials_refresh_proxy.log 2>&1 &
+          source .venv-spark4/bin/activate
+          mitmdump --mode regular@19133 -s scripts/vended_credentials_refresh_proxy.py --flow-detail 2 > vended_credentials_refresh_proxy.log 2>&1 &
           proxy_pid=$!
           trap 'kill "$proxy_pid" || true; wait "$proxy_pid" 2>/dev/null || true' EXIT
 
           for i in {1..30}; do
-            if curl -fsS http://127.0.0.1:19131/v1/config > /dev/null; then
+            if curl -fsS --proxy "${VENDED_CREDENTIAL_REFRESH_PROXY}" http://127.0.0.1:8181/v1/config > /dev/null; then
               ./build/release/test/unittest --order lex "$PWD/test/sql/local/catalog_custom_setup/fixture/vended_credentials_refresh.test"
               exit 0
             fi

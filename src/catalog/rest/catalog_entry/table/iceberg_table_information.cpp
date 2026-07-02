@@ -163,17 +163,12 @@ static void ParseConfigOptions(const case_insensitive_map_t<string> &config, cas
 	endpoint_it->second = endpoint;
 }
 
-IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientContext &context,
-                                                                     VendedCredentialsSecretTracking secret_tracking) {
+IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientContext &context) {
 	IRCAPITableCredentials result;
 	auto transaction_id = MetaTransaction::Get(context).global_transaction_id;
 
 	auto secret_base_name =
 	    StringUtil::Format("__internal_ic_%s__%s__%s__%s", table_id, schema.name, name, to_string(transaction_id));
-	if (secret_tracking == VendedCredentialsSecretTracking::TRACK_CREATED_SECRETS) {
-		auto &transaction = IcebergTransaction::Get(context, catalog);
-		transaction.created_secrets.insert(secret_base_name);
-	}
 	case_insensitive_map_t<Value> user_defaults;
 	if (catalog.auth_handler->type == IcebergAuthorizationType::SIGV4) {
 		auto &sigv4_auth = catalog.auth_handler->Cast<SIGV4Authorization>();

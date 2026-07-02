@@ -113,8 +113,8 @@ static CreateSecretInput ReVendVendedCredentials(ClientContext &context, CreateS
 	}
 
 	auto table_info = IcebergTableInformation(ic_catalog, iceberg_schema, table_name);
-	table_info.InitializeFromLoadTableResult(*get_table_result.result_);
-	auto credentials = table_info.GetVendedCredentials(context, VendedCredentialsSecretTracking::SKIP_CREATED_SECRETS);
+	table_info.InitializeFromLoadTableResult(*get_table_result.result_, false);
+	auto credentials = table_info.GetVendedCredentials(context);
 
 	optional_ptr<CreateSecretInput> match;
 	if (credentials.config) {
