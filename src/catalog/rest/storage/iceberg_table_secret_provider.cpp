@@ -11,7 +11,6 @@
 
 #include "catalog/rest/api/catalog_api.hpp"
 #include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/storage/authorization/oauth2.hpp"
@@ -22,6 +21,28 @@ namespace duckdb {
 
 const char *IcebergTableSecretProvider::Provider() {
 	return "iceberg";
+}
+
+static void AddHTTPSecretValueToOptions(const KeyValueSecret &http_secret, const string &key,
+                                        case_insensitive_map_t<Value> &options) {
+	auto value = http_secret.TryGetValue(key);
+	if (!value.IsNull()) {
+		options[key] = value;
+	}
+}
+
+void IcebergTableSecretProvider::AddHTTPSecretsToOptions(SecretEntry &http_secret_entry,
+                                                         case_insensitive_map_t<Value> &options) {
+	auto http_kv_secret = dynamic_cast<const KeyValueSecret &>(*http_secret_entry.secret);
+
+	options["http_proxy"] =
+	    http_kv_secret.TryGetValue("http_proxy").IsNull() ? "" : http_kv_secret.TryGetValue("http_proxy").ToString();
+	options["verify_ssl"] = http_kv_secret.TryGetValue("verify_ssl").IsNull()
+	                            ? Value::BOOLEAN(true)
+	                            : http_kv_secret.TryGetValue("verify_ssl").DefaultCastAs(LogicalType::BOOLEAN);
+	AddHTTPSecretValueToOptions(http_kv_secret, "http_proxy_username", options);
+	AddHTTPSecretValueToOptions(http_kv_secret, "http_proxy_password", options);
+	AddHTTPSecretValueToOptions(http_kv_secret, "extra_http_headers", options);
 }
 
 static Value RefreshInfoToStruct(const Value &refresh_info) {
@@ -148,7 +169,7 @@ static CreateSecretInput ReVendVendedCredentials(ClientContext &context, CreateS
 
 	auto http_secret_entry = GetHTTPSecretForCatalog(context, ic_catalog);
 	if (http_secret_entry) {
-		AddHTTPSecretsToOptions(*http_secret_entry, result.options);
+		IcebergTableSecretProvider::AddHTTPSecretsToOptions(*http_secret_entry, result.options);
 	}
 	return result;
 }

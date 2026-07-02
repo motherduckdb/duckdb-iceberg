@@ -1,11 +1,14 @@
 #pragma once
 
+#include "duckdb/common/case_insensitive_map.hpp"
+#include "duckdb/common/types/value.hpp"
 #include "duckdb/main/secret/secret.hpp"
 
 namespace duckdb {
 class ExtensionLoader;
 class ClientContext;
 class BaseSecret;
+struct SecretEntry;
 
 //! Secret provider for Iceberg vended table credentials.
 //!
@@ -18,6 +21,7 @@ public:
 	static const char *Provider();
 	static bool SupportsStorageType(const string &storage_type);
 	static void Register(ExtensionLoader &loader);
+	static void AddHTTPSecretsToOptions(SecretEntry &http_secret_entry, case_insensitive_map_t<Value> &options);
 	static Value MakeRefreshInfo(const string &catalog_name, const string &schema_name, const string &table_name);
 	static unique_ptr<BaseSecret> CreateSecret(ClientContext &context, CreateSecretInput &input);
 };
