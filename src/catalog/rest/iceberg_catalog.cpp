@@ -78,21 +78,23 @@ optional_ptr<CatalogEntry> IcebergCatalog::CreateSchema(CatalogTransaction trans
 	D_ASSERT(context);
 
 	// Verify schema existence on the server first
-	bool schema_exists = IRCAPI::VerifySchemaExistence(*context, *this, info.schema.GetIdentifierName());
+	bool schema_exists =
+	    IRCAPI::VerifySchemaExistence(*context, *this, info.GetQualifiedName().Schema().GetIdentifierName());
 
 	if (schema_exists) {
 		if (info.on_conflict == OnCreateConflict::IGNORE_ON_CONFLICT) {
 			// Schema already exists on the server - get or create a local entry and return it
-			auto entry = schemas.GetEntry(*context, info.schema.GetIdentifierName(), OnEntryNotFound::RETURN_NULL);
+			auto entry = schemas.GetEntry(*context, info.GetQualifiedName().Schema().GetIdentifierName(),
+			                              OnEntryNotFound::RETURN_NULL);
 			if (entry) {
 				return entry;
 			}
 			auto new_schema = make_uniq<IcebergSchemaEntry>(*this, info);
 			auto schema_name = new_schema->name;
 			schemas.AddEntry(schema_name.GetIdentifierName(), std::move(new_schema));
-			return &schemas.GetEntry(info.schema.GetIdentifierName());
+			return &schemas.GetEntry(info.GetQualifiedName().Schema().GetIdentifierName());
 		}
-		throw CatalogException("Schema with name \"%s\" already exists", info.schema);
+		throw CatalogException("Schema with name \"%s\" already exists", info.GetQualifiedName().Schema());
 	}
 
 	// Schema does not exist - create it locally and defer the server creation to commit
@@ -100,8 +102,8 @@ optional_ptr<CatalogEntry> IcebergCatalog::CreateSchema(CatalogTransaction trans
 	auto new_schema = make_uniq<IcebergSchemaEntry>(*this, info);
 	auto schema_name = new_schema->name;
 	schemas.AddEntry(schema_name.GetIdentifierName(), std::move(new_schema));
-	iceberg_transaction.created_schemas.insert(info.schema.GetIdentifierName());
-	return &schemas.GetEntry(info.schema.GetIdentifierName());
+	iceberg_transaction.created_schemas.insert(info.GetQualifiedName().Schema().GetIdentifierName());
+	return &schemas.GetEntry(info.GetQualifiedName().Schema().GetIdentifierName());
 }
 
 void IcebergCatalog::DropSchema(ClientContext &context, DropInfo &info) {
@@ -111,21 +113,22 @@ void IcebergCatalog::DropSchema(ClientContext &context, DropInfo &info) {
 	}
 
 	// Verify schema existence on the server first
-	bool schema_exists = IRCAPI::VerifySchemaExistence(context, *this, info.name.GetIdentifierName());
+	bool schema_exists =
+	    IRCAPI::VerifySchemaExistence(context, *this, info.GetQualifiedName().Name().GetIdentifierName());
 
 	if (!schema_exists) {
 		if (info.if_not_found == OnEntryNotFound::RETURN_NULL) {
 			// remove the entry if it exists locally
 			// it could have been created during the bind phase.
-			GetSchemas().RemoveEntry(info.name.GetIdentifierName());
+			GetSchemas().RemoveEntry(info.GetQualifiedName().Name().GetIdentifierName());
 			return;
 		}
-		throw CatalogException("Schema with name \"%s\" does not exist", info.name);
+		throw CatalogException("Schema with name \"%s\" does not exist", info.GetQualifiedName().Name());
 	}
 
 	// Schema exists - defer the server deletion to commit
 	auto &iceberg_transaction = IcebergTransaction::Get(context, *this);
-	iceberg_transaction.deleted_schemas.insert(info.name.GetIdentifierName());
+	iceberg_transaction.deleted_schemas.insert(info.GetQualifiedName().Name().GetIdentifierName());
 }
 
 unique_ptr<LogicalOperator> IcebergCatalog::BindCreateIndex(Binder &binder, CreateStatement &stmt,

@@ -488,7 +488,7 @@ InsertionOrderPreservingMap<string> IcebergInsert::ParamsToString() const {
 	if (table) {
 		result["Table Name"] = table->name.GetIdentifierName();
 	} else if (info) {
-		result["Table Name"] = info->Base().table.GetIdentifierName();
+		result["Table Name"] = info->Base().GetTableName().GetIdentifierName();
 	} else if (create_state) {
 		lock_guard<mutex> guard(create_state->lock);
 		if (create_state->table_entry) {

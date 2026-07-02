@@ -27,61 +27,12 @@ unique_ptr<MultiFileReader> IcebergAvroMultiFileReader::CreateInstance(const Tab
 	return make_uniq<IcebergAvroMultiFileReader>(table.function_info);
 }
 
-static unordered_map<string, string> GetAvroMetadata(ClientContext &context, const string &path) {
-	auto &instance = DatabaseInstance::GetDatabase(context);
-	auto &system_catalog = Catalog::GetSystemCatalog(instance);
-	auto transaction = CatalogTransaction::GetSystemTransaction(instance);
-	auto &schema = system_catalog.GetSchema(transaction, Identifier::DefaultSchema());
-	auto catalog_entry = schema.GetEntry(transaction, CatalogType::TABLE_FUNCTION_ENTRY, "avro_metadata");
-	if (!catalog_entry) {
-		throw InvalidInputException("Function with name \"avro_metadata\" not found!");
+static unordered_map<string, string> GetAvroMetadata(InsertionOrderPreservingMap<Value> &&metadata) {
+	unordered_map<string, string> result;
+	for (auto &[key, value] : metadata) {
+		result.emplace(key, value.GetValue<string>());
 	}
-
-	auto avro_metadata_function = catalog_entry->Cast<TableFunctionCatalogEntry>().functions.functions[0];
-
-	vector<Value> inputs;
-	inputs.emplace_back(path);
-	named_parameter_map_t named_parameters;
-	vector<LogicalType> input_types;
-	vector<Identifier> input_names;
-	TableFunctionRef empty;
-	vector<LogicalType> return_types;
-	vector<string> return_names;
-	TableFunctionBindInput bind_input(inputs, named_parameters, input_types, input_names, nullptr, nullptr,
-	                                  avro_metadata_function, empty);
-	auto bind_data = avro_metadata_function.bind(context, bind_input, return_types, return_names);
-
-	DataChunk chunk;
-	chunk.Initialize(context, return_types, STANDARD_VECTOR_SIZE);
-
-	ThreadContext thread_context(context);
-	ExecutionContext execution_context(context, thread_context, nullptr);
-
-	vector<column_t> column_ids;
-	for (idx_t i = 0; i < return_types.size(); i++) {
-		column_ids.push_back(i);
-	}
-	TableFunctionInitInput init_input(bind_data.get(), column_ids, vector<idx_t>(), nullptr);
-	auto global_state = avro_metadata_function.init_global(context, init_input);
-	unique_ptr<LocalTableFunctionState> local_state;
-	if (avro_metadata_function.init_local) {
-		local_state = avro_metadata_function.init_local(execution_context, init_input, global_state.get());
-	}
-
-	unordered_map<string, string> metadata;
-	do {
-		TableFunctionInput function_input(bind_data.get(), local_state.get(), global_state.get());
-		chunk.Reset();
-		avro_metadata_function.function(context, function_input, chunk);
-		chunk.Flatten();
-		for (idx_t row = 0; row < chunk.size(); row++) {
-			auto metadata_key = chunk.GetValue(0, row).GetValue<string>();
-			auto metadata_value = chunk.GetValue(1, row).GetValue<string>();
-			metadata.emplace(std::move(metadata_key), std::move(metadata_value));
-		}
-	} while (chunk.size() != 0);
-
-	return metadata;
+	return result;
 }
 
 namespace manifest_list {
@@ -550,7 +501,7 @@ ReaderInitializeType IcebergAvroMultiFileReader::InitializeReader(
 			auto &manifest_scan_info = avro_scan_info.Cast<IcebergManifestFileScanInfo>();
 			auto file_idx = reader_data.reader->file_list_idx.GetIndex();
 			auto &manifest_list_entry = manifest_scan_info.manifest_files[file_idx];
-			manifest_list_entry.metadata = GetAvroMetadata(context, manifest_list_entry.file.manifest_path);
+			manifest_list_entry.metadata = GetAvroMetadata(reader_data.reader->GetMetadata());
 		}
 		for (auto &partition_spec : avro_scan_info.metadata.partition_specs) {
 			for (auto &spec_field : partition_spec.second.fields) {
