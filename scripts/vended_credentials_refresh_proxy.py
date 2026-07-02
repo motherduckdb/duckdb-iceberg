@@ -38,6 +38,8 @@ POST_TABLE = "vended_post_refresh"
 LIST_TABLE = "vended_list_refresh"
 DELETE_TABLE = "vended_delete_refresh"
 DIRECT_DELETE_TABLE = "vended_direct_delete_refresh"
+MIXED_REFRESH_A_TABLE = "vended_mixed_delete_refresh_a"
+MIXED_REFRESH_B_TABLE = "vended_mixed_delete_refresh_b"
 SAME_BAD_TABLE = "vended_same_bad_refresh"
 RANGE_FAIL_TABLE = "vended_range_fail_refresh"
 
@@ -64,6 +66,9 @@ NEW_DIRECT_DELETE_KEY = "NEW_DIRECT_DELETE_KEY"
 MIXED_DELETE_ROOT_KEY = "MIXED_DELETE_ROOT_KEY"
 MIXED_DELETE_A_KEY = "MIXED_DELETE_A_KEY"
 MIXED_DELETE_B_KEY = "MIXED_DELETE_B_KEY"
+OLD_MIXED_REFRESH_KEY = "OLD_MIXED_REFRESH_KEY"
+NEW_MIXED_REFRESH_A_KEY = "NEW_MIXED_REFRESH_A_KEY"
+NEW_MIXED_REFRESH_B_KEY = "NEW_MIXED_REFRESH_B_KEY"
 OLD_SAME_BAD_KEY = "OLD_SAME_BAD_KEY"
 OLD_RANGE_FAIL_KEY = "OLD_RANGE_FAIL_KEY"
 NEW_RANGE_FAIL_KEY = "NEW_RANGE_FAIL_KEY"
@@ -104,6 +109,8 @@ class VendedCredentialRefreshAddon:
             LIST_TABLE: False,
             DELETE_TABLE: False,
             DIRECT_DELETE_TABLE: False,
+            MIXED_REFRESH_A_TABLE: False,
+            MIXED_REFRESH_B_TABLE: False,
             SAME_BAD_TABLE: False,
             RANGE_FAIL_TABLE: False,
         }
@@ -235,6 +242,18 @@ class VendedCredentialRefreshAddon:
             self.refresh_unlocked[DIRECT_DELETE_TABLE] = True
             self._forbidden(flow, "stale direct delete credentials")
             return
+        if key_id == OLD_MIXED_REFRESH_KEY and is_delete_post and self._is_mixed_refresh_delete_request(flow):
+            has_a, has_b = self._mixed_refresh_delete_parts(flow)
+            if has_a and not has_b:
+                self.refresh_unlocked[MIXED_REFRESH_A_TABLE] = True
+                self._forbidden(flow, "stale mixed refresh partition a credentials")
+                return
+            if has_b and not has_a:
+                self.refresh_unlocked[MIXED_REFRESH_B_TABLE] = True
+                self._forbidden(flow, "stale mixed refresh partition b credentials")
+                return
+            self._forbidden(flow, "mixed refresh credentials batched together")
+            return
         if key_id == OLD_SAME_BAD_KEY:
             self.refresh_unlocked[SAME_BAD_TABLE] = True
             self._forbidden(flow, "same bad credentials")
@@ -248,6 +267,9 @@ class VendedCredentialRefreshAddon:
             return
         if is_delete_post and self._is_mixed_delete_request(flow):
             if not self._validate_mixed_delete_request(flow, key_id):
+                return
+        if is_delete_post and self._is_mixed_refresh_delete_request(flow):
+            if not self._validate_mixed_refresh_delete_request(flow, key_id):
                 return
         if key_id not in {
             NEW_SCAN_KEY,
@@ -271,6 +293,9 @@ class VendedCredentialRefreshAddon:
             MIXED_DELETE_ROOT_KEY,
             MIXED_DELETE_A_KEY,
             MIXED_DELETE_B_KEY,
+            OLD_MIXED_REFRESH_KEY,
+            NEW_MIXED_REFRESH_A_KEY,
+            NEW_MIXED_REFRESH_B_KEY,
             OLD_RANGE_FAIL_KEY,
         }:
             self._forbidden(flow, "unknown test credentials")
@@ -310,6 +335,21 @@ class VendedCredentialRefreshAddon:
             and b"vended_credentials_refresh/mixed_delete/" in flow.request.content
         )
 
+    @staticmethod
+    def _is_mixed_refresh_delete_request(flow: http.HTTPFlow):
+        return (
+            flow.request.method == "POST"
+            and VendedCredentialRefreshAddon._has_query_key(flow, "delete")
+            and b"vended_credentials_refresh/mixed_delete_refresh/" in flow.request.content
+        )
+
+    @staticmethod
+    def _mixed_refresh_delete_parts(flow: http.HTTPFlow):
+        body = flow.request.content
+        has_a = b"vended_credentials_refresh/mixed_delete_refresh/part_col=a/" in body
+        has_b = b"vended_credentials_refresh/mixed_delete_refresh/part_col=b/" in body
+        return has_a, has_b
+
     def _validate_mixed_delete_request(self, flow: http.HTTPFlow, key_id):
         body = flow.request.content
         has_a = b"vended_credentials_refresh/mixed_delete/part_col=a/" in body
@@ -323,6 +363,20 @@ class VendedCredentialRefreshAddon:
             return False
         if has_b and key_id != MIXED_DELETE_B_KEY:
             self._forbidden(flow, "mixed delete partition b used wrong credentials")
+            return False
+        return True
+
+    def _validate_mixed_refresh_delete_request(self, flow: http.HTTPFlow, key_id):
+        has_a, has_b = self._mixed_refresh_delete_parts(flow)
+
+        if has_a and has_b:
+            self._forbidden(flow, "mixed refresh delete credentials batched together")
+            return False
+        if has_a and key_id != NEW_MIXED_REFRESH_A_KEY:
+            self._forbidden(flow, "mixed refresh partition a used wrong credentials")
+            return False
+        if has_b and key_id != NEW_MIXED_REFRESH_B_KEY:
+            self._forbidden(flow, "mixed refresh partition b used wrong credentials")
             return False
         return True
 
@@ -360,6 +414,10 @@ class VendedCredentialRefreshAddon:
             return NEW_DELETE_KEY if self.refresh_unlocked[table] else OLD_DELETE_KEY
         if table == DIRECT_DELETE_TABLE:
             return NEW_DIRECT_DELETE_KEY if self.refresh_unlocked[table] else OLD_DIRECT_DELETE_KEY
+        if table == MIXED_REFRESH_A_TABLE:
+            return NEW_MIXED_REFRESH_A_KEY if self.refresh_unlocked[table] else OLD_MIXED_REFRESH_KEY
+        if table == MIXED_REFRESH_B_TABLE:
+            return NEW_MIXED_REFRESH_B_KEY if self.refresh_unlocked[table] else OLD_MIXED_REFRESH_KEY
         if table == SAME_BAD_TABLE:
             return OLD_SAME_BAD_KEY
         if table == RANGE_FAIL_TABLE:
@@ -388,6 +446,10 @@ class VendedCredentialRefreshAddon:
             return "s3://warehouse/vended_credentials_refresh/delete"
         if table == DIRECT_DELETE_TABLE:
             return "s3://warehouse/"
+        if table == MIXED_REFRESH_A_TABLE:
+            return "s3://warehouse/vended_credentials_refresh/mixed_delete_refresh/part_col=a"
+        if table == MIXED_REFRESH_B_TABLE:
+            return "s3://warehouse/vended_credentials_refresh/mixed_delete_refresh/part_col=b"
         if table == SAME_BAD_TABLE:
             return "s3://warehouse/vended_credentials_refresh/same_bad"
         if table == RANGE_FAIL_TABLE:

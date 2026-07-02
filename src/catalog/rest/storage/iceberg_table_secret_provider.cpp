@@ -238,9 +238,6 @@ void IcebergTableSecretProvider::Register(ExtensionLoader &loader) {
 		CreateSecretFunction function = {type, Provider(), CreateSecret};
 
 		function.named_parameters["refresh_info"] = LogicalType::MAP(LogicalType::VARCHAR, LogicalType::VARCHAR);
-		function.named_parameters["catalog_name"] = LogicalType::VARCHAR;
-		function.named_parameters["schema"] = LogicalType::VARCHAR;
-		function.named_parameters["table"] = LogicalType::VARCHAR;
 
 		function.named_parameters["key_id"] = LogicalType::VARCHAR;
 		function.named_parameters["secret"] = LogicalType::VARCHAR;
