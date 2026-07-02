@@ -201,7 +201,7 @@ static CreateSecretInput ReVendVendedCredentials(ClientContext &context, CreateS
 	result.provider = input.provider;
 	result.storage_type = input.storage_type;
 	result.on_conflict = OnCreateConflict::REPLACE_ON_CONFLICT;
-	result.persist_type = SecretPersistType::TEMPORARY;
+	result.persist_type = input.persist_type;
 
 	auto http_secret_entry = IcebergTableSecretProvider::GetHTTPSecretForCatalog(context, ic_catalog);
 	if (http_secret_entry) {
