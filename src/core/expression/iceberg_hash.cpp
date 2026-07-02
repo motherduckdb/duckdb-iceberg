@@ -206,7 +206,7 @@ int32_t IcebergHash::HashDecimalHugeInt(hugeint_t unscaled) {
 
 //! Hash time value (Iceberg spec: int64 microseconds from midnight)
 int32_t IcebergHash::HashTime(dtime_t t) {
-	return HashInt64(t.micros);
+	return HashInt64(t.value);
 }
 
 //! Hash timestamp_ns value (Iceberg spec: int64 nanoseconds from epoch)

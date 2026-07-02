@@ -66,7 +66,7 @@ static Value CreateStructMapping(const LogicalType &struct_type, const string &n
 		//! Root column
 		return struct_value;
 	}
-	return Value::STRUCT({{"", Value(name)}, {"", struct_value}});
+	return Value::TUPLE({Value(name), struct_value});
 }
 
 static Value CreateStructDefault(const Value &value, const case_insensitive_map_t<StructFieldMapping> &mapping = {}) {
