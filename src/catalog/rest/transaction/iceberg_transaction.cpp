@@ -390,6 +390,8 @@ TableTransactionInfo IcebergTransaction::GetTransactionRequest(IcebergTransactio
 void IcebergTransaction::Commit() {
 	if (transaction_updates.empty() && created_schemas.empty() && deleted_schemas.empty() &&
 	    schema_property_updates.empty()) {
+		// Read-only scans can create temporary vended storage secrets. Keep the existing lifetime for now;
+		// tests inspect those internal secrets after scans.
 		return;
 	}
 
