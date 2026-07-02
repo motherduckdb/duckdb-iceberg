@@ -61,6 +61,9 @@ OLD_DELETE_KEY = "OLD_DELETE_KEY"
 NEW_DELETE_KEY = "NEW_DELETE_KEY"
 OLD_DIRECT_DELETE_KEY = "OLD_DIRECT_DELETE_KEY"
 NEW_DIRECT_DELETE_KEY = "NEW_DIRECT_DELETE_KEY"
+MIXED_DELETE_ROOT_KEY = "MIXED_DELETE_ROOT_KEY"
+MIXED_DELETE_A_KEY = "MIXED_DELETE_A_KEY"
+MIXED_DELETE_B_KEY = "MIXED_DELETE_B_KEY"
 OLD_SAME_BAD_KEY = "OLD_SAME_BAD_KEY"
 OLD_RANGE_FAIL_KEY = "OLD_RANGE_FAIL_KEY"
 NEW_RANGE_FAIL_KEY = "NEW_RANGE_FAIL_KEY"
@@ -243,6 +246,9 @@ class VendedCredentialRefreshAddon:
         if key_id == NEW_RANGE_FAIL_KEY:
             self._forbidden(flow, "refreshed range-fail credentials")
             return
+        if is_delete_post and self._is_mixed_delete_request(flow):
+            if not self._validate_mixed_delete_request(flow, key_id):
+                return
         if key_id not in {
             NEW_SCAN_KEY,
             NEW_INIT_KEY,
@@ -262,6 +268,9 @@ class VendedCredentialRefreshAddon:
             NEW_DELETE_KEY,
             OLD_DIRECT_DELETE_KEY,
             NEW_DIRECT_DELETE_KEY,
+            MIXED_DELETE_ROOT_KEY,
+            MIXED_DELETE_A_KEY,
+            MIXED_DELETE_B_KEY,
             OLD_RANGE_FAIL_KEY,
         }:
             self._forbidden(flow, "unknown test credentials")
@@ -292,6 +301,30 @@ class VendedCredentialRefreshAddon:
     @staticmethod
     def _is_list_request(flow: http.HTTPFlow):
         return flow.request.method == "GET" and VendedCredentialRefreshAddon._has_query_key(flow, "list-type")
+
+    @staticmethod
+    def _is_mixed_delete_request(flow: http.HTTPFlow):
+        return (
+            flow.request.method == "POST"
+            and VendedCredentialRefreshAddon._has_query_key(flow, "delete")
+            and b"vended_credentials_refresh/mixed_delete/" in flow.request.content
+        )
+
+    def _validate_mixed_delete_request(self, flow: http.HTTPFlow, key_id):
+        body = flow.request.content
+        has_a = b"vended_credentials_refresh/mixed_delete/part_col=a/" in body
+        has_b = b"vended_credentials_refresh/mixed_delete/part_col=b/" in body
+
+        if has_a and has_b:
+            self._forbidden(flow, "mixed delete credentials batched together")
+            return False
+        if has_a and key_id != MIXED_DELETE_A_KEY:
+            self._forbidden(flow, "mixed delete partition a used wrong credentials")
+            return False
+        if has_b and key_id != MIXED_DELETE_B_KEY:
+            self._forbidden(flow, "mixed delete partition b used wrong credentials")
+            return False
+        return True
 
     def _credentials_for_table(self, table):
         key_id = self._key_for_table(table)
