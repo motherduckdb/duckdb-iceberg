@@ -52,29 +52,7 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 	auto metadata_path = table_info.table_metadata.GetMetadataPath(fs);
 	auto &transaction = IcebergTransaction::Get(context, ic_catalog);
 
-	unique_ptr<SecretEntry> http_secret_entry;
-
-	switch (ic_catalog.auth_handler->type) {
-	case IcebergAuthorizationType::SIGV4: {
-		auto &sigv4 = ic_catalog.auth_handler->Cast<SIGV4Authorization>();
-		http_secret_entry = IcebergCatalog::GetHTTPSecret(context, sigv4.secret);
-		break;
-	}
-	case IcebergAuthorizationType::OAUTH2: {
-		http_secret_entry = IcebergCatalog::GetHTTPSecret(context, "");
-
-		if (!http_secret_entry || http_secret_entry->secret->GetScope().size() == 0) {
-			break;
-		}
-		for (auto scope : http_secret_entry->secret->GetScope()) {
-			if (scope.find(ic_catalog.GetBaseUrl().GetHost()) != string::npos) {
-				break;
-			}
-		}
-	}
-	default:
-		break;
-	}
+	auto http_secret_entry = IcebergTableSecretProvider::GetHTTPSecretForCatalog(context, ic_catalog);
 
 	if (table_credentials.config) {
 		auto &info = *table_credentials.config;

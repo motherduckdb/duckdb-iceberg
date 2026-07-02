@@ -28,15 +28,39 @@ S3_HOST = "127.0.0.1"
 S3_PORT = 9000
 
 TABLE_SOURCE = "table_unpartitioned"
+SCAN_TABLE = "empty_table"
 INIT_TABLE = "vended_init_refresh"
 RANGE_TABLE = "vended_range_refresh"
+HEAD_TABLE = "vended_head_refresh"
+GET_TABLE = "vended_get_refresh"
+PUT_TABLE = "vended_put_refresh"
+POST_TABLE = "vended_post_refresh"
+LIST_TABLE = "vended_list_refresh"
+DELETE_TABLE = "vended_delete_refresh"
+DIRECT_DELETE_TABLE = "vended_direct_delete_refresh"
 SAME_BAD_TABLE = "vended_same_bad_refresh"
 RANGE_FAIL_TABLE = "vended_range_fail_refresh"
 
+OLD_SCAN_KEY = "OLD_SCAN_KEY"
+NEW_SCAN_KEY = "NEW_SCAN_KEY"
 OLD_INIT_KEY = "OLD_INIT_KEY"
 NEW_INIT_KEY = "NEW_INIT_KEY"
 OLD_RANGE_KEY = "OLD_RANGE_KEY"
 NEW_RANGE_KEY = "NEW_RANGE_KEY"
+OLD_HEAD_KEY = "OLD_HEAD_KEY"
+NEW_HEAD_KEY = "NEW_HEAD_KEY"
+OLD_GET_KEY = "OLD_GET_KEY"
+NEW_GET_KEY = "NEW_GET_KEY"
+OLD_PUT_KEY = "OLD_PUT_KEY"
+NEW_PUT_KEY = "NEW_PUT_KEY"
+OLD_POST_KEY = "OLD_POST_KEY"
+NEW_POST_KEY = "NEW_POST_KEY"
+OLD_LIST_KEY = "OLD_LIST_KEY"
+NEW_LIST_KEY = "NEW_LIST_KEY"
+OLD_DELETE_KEY = "OLD_DELETE_KEY"
+NEW_DELETE_KEY = "NEW_DELETE_KEY"
+OLD_DIRECT_DELETE_KEY = "OLD_DIRECT_DELETE_KEY"
+NEW_DIRECT_DELETE_KEY = "NEW_DIRECT_DELETE_KEY"
 OLD_SAME_BAD_KEY = "OLD_SAME_BAD_KEY"
 OLD_RANGE_FAIL_KEY = "OLD_RANGE_FAIL_KEY"
 NEW_RANGE_FAIL_KEY = "NEW_RANGE_FAIL_KEY"
@@ -57,6 +81,8 @@ LOCAL_RANGE_PARQUET_SOURCE = (
 LOCAL_PARQUET_OBJECTS = {
     "/warehouse/vended_credentials_refresh/init/data.parquet": LOCAL_TINY_PARQUET_SOURCE,
     "/warehouse/vended_credentials_refresh/range/data.parquet": LOCAL_RANGE_PARQUET_SOURCE,
+    "/warehouse/vended_credentials_refresh/head/data.parquet": LOCAL_TINY_PARQUET_SOURCE,
+    "/warehouse/vended_credentials_refresh/get/data.parquet": LOCAL_TINY_PARQUET_SOURCE,
     "/warehouse/vended_credentials_refresh/same_bad/data.parquet": LOCAL_TINY_PARQUET_SOURCE,
     "/warehouse/vended_credentials_refresh/range_fail/data.parquet": LOCAL_RANGE_PARQUET_SOURCE,
 }
@@ -65,11 +91,22 @@ LOCAL_PARQUET_OBJECTS = {
 class VendedCredentialRefreshAddon:
     def __init__(self):
         self.refresh_unlocked = {
+            SCAN_TABLE: False,
             INIT_TABLE: False,
             RANGE_TABLE: False,
+            HEAD_TABLE: False,
+            GET_TABLE: False,
+            PUT_TABLE: False,
+            POST_TABLE: False,
+            LIST_TABLE: False,
+            DELETE_TABLE: False,
+            DIRECT_DELETE_TABLE: False,
             SAME_BAD_TABLE: False,
             RANGE_FAIL_TABLE: False,
         }
+        # Force a rollback if this branch reaches the catalog commit after writing the
+        # direct-delete data file. Some fixture versions fail earlier while building metadata.
+        self.direct_delete_data_written = False
 
     def request(self, flow: http.HTTPFlow):
         if self._is_catalog_request(flow):
@@ -103,10 +140,15 @@ class VendedCredentialRefreshAddon:
         table_match = re.fullmatch(r"/v1/namespaces/default/tables/([^/]+)", path)
         credentials_match = re.fullmatch(r"/v1/namespaces/default/tables/([^/]+)/credentials", path)
 
-        if table_match and table_match.group(1) in self.refresh_unlocked:
+        if self._is_direct_delete_commit_request(flow, path):
+            self._forced_catalog_commit_failure(flow)
+            return
+
+        if flow.request.method == "GET" and table_match and table_match.group(1) in self.refresh_unlocked:
             table = table_match.group(1)
             flow.metadata["vended_table"] = table
-            flow.request.path = f"/v1/namespaces/default/tables/{TABLE_SOURCE}{query}"
+            source_table = table if table in {SCAN_TABLE, DIRECT_DELETE_TABLE} else TABLE_SOURCE
+            flow.request.path = f"/v1/namespaces/default/tables/{source_table}{query}"
             return
 
         if credentials_match and credentials_match.group(1) in self.refresh_unlocked:
@@ -114,10 +156,46 @@ class VendedCredentialRefreshAddon:
             body = json.dumps({"storage-credentials": [self._credentials_for_table(table)]}).encode()
             flow.response = http.Response.make(200, body, {"Content-Type": "application/json"})
 
+    def _is_direct_delete_commit_request(self, flow: http.HTTPFlow, path):
+        if flow.request.method != "POST":
+            return False
+        if not self.direct_delete_data_written:
+            return False
+        if path != f"/v1/namespaces/default/tables/{DIRECT_DELETE_TABLE}" and path != "/v1/transactions/commit":
+            return False
+        if path == f"/v1/namespaces/default/tables/{DIRECT_DELETE_TABLE}":
+            return True
+        return DIRECT_DELETE_TABLE in flow.request.text
+
+    @staticmethod
+    def _forced_catalog_commit_failure(flow: http.HTTPFlow):
+        body = json.dumps(
+            {
+                "error": {
+                    "message": "forced direct delete refresh rollback",
+                    "type": "TestFailure",
+                    "code": 500,
+                    "stack": [],
+                }
+            }
+        ).encode()
+        flow.response = http.Response.make(500, body, {"Content-Type": "application/json"})
+
     def _handle_s3_request(self, flow: http.HTTPFlow):
+        if self._is_direct_delete_data_write(flow):
+            self.direct_delete_data_written = True
+
         key_id = self._extract_access_key(flow.request.headers)
         has_range = flow.request.headers.get("Range") is not None
+        is_full_get = flow.request.method == "GET" and not has_range and not self._is_list_request(flow)
+        is_put = flow.request.method == "PUT"
+        is_multipart_post = flow.request.method == "POST" and self._has_query_key(flow, "uploads")
+        is_delete_post = flow.request.method == "POST" and self._has_query_key(flow, "delete")
 
+        if key_id == OLD_SCAN_KEY:
+            self.refresh_unlocked[SCAN_TABLE] = True
+            self._forbidden(flow, "stale scan credentials")
+            return
         if key_id == OLD_INIT_KEY:
             self.refresh_unlocked[INIT_TABLE] = True
             self._forbidden(flow, "stale init credentials")
@@ -125,6 +203,34 @@ class VendedCredentialRefreshAddon:
         if key_id == OLD_RANGE_KEY and flow.request.method == "GET" and has_range:
             self.refresh_unlocked[RANGE_TABLE] = True
             self._forbidden(flow, "stale range credentials")
+            return
+        if key_id == OLD_HEAD_KEY and flow.request.method == "HEAD":
+            self.refresh_unlocked[HEAD_TABLE] = True
+            self._forbidden(flow, "stale head credentials")
+            return
+        if key_id == OLD_GET_KEY and is_full_get:
+            self.refresh_unlocked[GET_TABLE] = True
+            self._forbidden(flow, "stale get credentials")
+            return
+        if key_id == OLD_PUT_KEY and is_put:
+            self.refresh_unlocked[PUT_TABLE] = True
+            self._forbidden(flow, "stale put credentials")
+            return
+        if key_id == OLD_POST_KEY and is_multipart_post:
+            self.refresh_unlocked[POST_TABLE] = True
+            self._forbidden(flow, "stale multipart post credentials")
+            return
+        if key_id == OLD_LIST_KEY and self._is_list_request(flow):
+            self.refresh_unlocked[LIST_TABLE] = True
+            self._forbidden(flow, "stale list credentials")
+            return
+        if key_id == OLD_DELETE_KEY and is_delete_post:
+            self.refresh_unlocked[DELETE_TABLE] = True
+            self._forbidden(flow, "stale delete credentials")
+            return
+        if key_id == OLD_DIRECT_DELETE_KEY and flow.request.method == "DELETE":
+            self.refresh_unlocked[DIRECT_DELETE_TABLE] = True
+            self._forbidden(flow, "stale direct delete credentials")
             return
         if key_id == OLD_SAME_BAD_KEY:
             self.refresh_unlocked[SAME_BAD_TABLE] = True
@@ -137,7 +243,27 @@ class VendedCredentialRefreshAddon:
         if key_id == NEW_RANGE_FAIL_KEY:
             self._forbidden(flow, "refreshed range-fail credentials")
             return
-        if key_id not in {NEW_INIT_KEY, OLD_RANGE_KEY, NEW_RANGE_KEY, OLD_RANGE_FAIL_KEY}:
+        if key_id not in {
+            NEW_SCAN_KEY,
+            NEW_INIT_KEY,
+            OLD_RANGE_KEY,
+            NEW_RANGE_KEY,
+            OLD_HEAD_KEY,
+            NEW_HEAD_KEY,
+            OLD_GET_KEY,
+            NEW_GET_KEY,
+            OLD_PUT_KEY,
+            NEW_PUT_KEY,
+            OLD_POST_KEY,
+            NEW_POST_KEY,
+            OLD_LIST_KEY,
+            NEW_LIST_KEY,
+            OLD_DELETE_KEY,
+            NEW_DELETE_KEY,
+            OLD_DIRECT_DELETE_KEY,
+            NEW_DIRECT_DELETE_KEY,
+            OLD_RANGE_FAIL_KEY,
+        }:
             self._forbidden(flow, "unknown test credentials")
             return
 
@@ -147,6 +273,25 @@ class VendedCredentialRefreshAddon:
             return
 
         self._resign_s3_request(flow)
+
+    @staticmethod
+    def _is_direct_delete_data_write(flow: http.HTTPFlow):
+        return flow.request.method == "PUT" and urllib.parse.urlparse(flow.request.path).path.startswith(
+            "/warehouse/default/vended_direct_delete_refresh/data/"
+        )
+
+    @staticmethod
+    def _query_keys(flow: http.HTTPFlow):
+        parsed = urllib.parse.urlparse(flow.request.path)
+        return {key for key, _ in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)}
+
+    @staticmethod
+    def _has_query_key(flow: http.HTTPFlow, key):
+        return key in VendedCredentialRefreshAddon._query_keys(flow)
+
+    @staticmethod
+    def _is_list_request(flow: http.HTTPFlow):
+        return flow.request.method == "GET" and VendedCredentialRefreshAddon._has_query_key(flow, "list-type")
 
     def _credentials_for_table(self, table):
         key_id = self._key_for_table(table)
@@ -162,10 +307,26 @@ class VendedCredentialRefreshAddon:
         }
 
     def _key_for_table(self, table):
+        if table == SCAN_TABLE:
+            return NEW_SCAN_KEY if self.refresh_unlocked[table] else OLD_SCAN_KEY
         if table == INIT_TABLE:
             return NEW_INIT_KEY if self.refresh_unlocked[table] else OLD_INIT_KEY
         if table == RANGE_TABLE:
             return NEW_RANGE_KEY if self.refresh_unlocked[table] else OLD_RANGE_KEY
+        if table == HEAD_TABLE:
+            return NEW_HEAD_KEY if self.refresh_unlocked[table] else OLD_HEAD_KEY
+        if table == GET_TABLE:
+            return NEW_GET_KEY if self.refresh_unlocked[table] else OLD_GET_KEY
+        if table == PUT_TABLE:
+            return NEW_PUT_KEY if self.refresh_unlocked[table] else OLD_PUT_KEY
+        if table == POST_TABLE:
+            return NEW_POST_KEY if self.refresh_unlocked[table] else OLD_POST_KEY
+        if table == LIST_TABLE:
+            return NEW_LIST_KEY if self.refresh_unlocked[table] else OLD_LIST_KEY
+        if table == DELETE_TABLE:
+            return NEW_DELETE_KEY if self.refresh_unlocked[table] else OLD_DELETE_KEY
+        if table == DIRECT_DELETE_TABLE:
+            return NEW_DIRECT_DELETE_KEY if self.refresh_unlocked[table] else OLD_DIRECT_DELETE_KEY
         if table == SAME_BAD_TABLE:
             return OLD_SAME_BAD_KEY
         if table == RANGE_FAIL_TABLE:
@@ -174,10 +335,26 @@ class VendedCredentialRefreshAddon:
 
     @staticmethod
     def _credentials_prefix(table):
+        if table == SCAN_TABLE:
+            return "s3://warehouse/"
         if table == INIT_TABLE:
             return "s3://warehouse/vended_credentials_refresh/init"
         if table == RANGE_TABLE:
             return "s3://warehouse/vended_credentials_refresh/range"
+        if table == HEAD_TABLE:
+            return "s3://warehouse/vended_credentials_refresh/head"
+        if table == GET_TABLE:
+            return "s3://warehouse/vended_credentials_refresh/get"
+        if table == PUT_TABLE:
+            return "s3://warehouse/vended_credentials_refresh/put"
+        if table == POST_TABLE:
+            return "s3://warehouse/vended_credentials_refresh/post"
+        if table == LIST_TABLE:
+            return "s3://warehouse/vended_credentials_refresh/list"
+        if table == DELETE_TABLE:
+            return "s3://warehouse/vended_credentials_refresh/delete"
+        if table == DIRECT_DELETE_TABLE:
+            return "s3://warehouse/"
         if table == SAME_BAD_TABLE:
             return "s3://warehouse/vended_credentials_refresh/same_bad"
         if table == RANGE_FAIL_TABLE:
@@ -225,6 +402,11 @@ class VendedCredentialRefreshAddon:
             return
 
         headers = {"Accept-Ranges": "bytes", "Content-Type": "application/octet-stream"}
+        if flow.request.method == "HEAD":
+            flow.response = http.Response.make(200, b"", headers)
+            flow.response.headers["Content-Length"] = str(file_size)
+            return
+
         if byte_range:
             start, end = byte_range
             content_length = end - start + 1
@@ -266,20 +448,25 @@ class VendedCredentialRefreshAddon:
         return start, min(end, file_size - 1)
 
     def _resign_s3_request(self, flow: http.HTTPFlow):
-        range_header = flow.request.headers.get("Range")
+        preserved_headers = {}
+        for header in ["Range", "Content-Length", "Content-Type", "Content-MD5"]:
+            value = flow.request.headers.get(header)
+            if value is not None:
+                preserved_headers[header] = value
         flow.request.headers.clear()
-        flow.request.headers.update(self._signed_s3_headers(flow.request.method, flow.request.path, range_header))
+        flow.request.headers.update(self._signed_s3_headers(flow.request.method, flow.request.path))
+        flow.request.headers.update(preserved_headers)
         flow.request.headers["Host"] = f"{S3_HOST}:{S3_PORT}"
 
     @staticmethod
-    def _signed_s3_headers(method, path, range_header):
+    def _signed_s3_headers(method, path):
         now = datetime.datetime.utcnow()
         amz_date = now.strftime("%Y%m%dT%H%M%SZ")
         date_stamp = now.strftime("%Y%m%d")
         payload_hash = "UNSIGNED-PAYLOAD"
         host_header = f"{S3_HOST}:{S3_PORT}"
         parsed_path = urllib.parse.urlparse(path)
-        canonical_uri = urllib.parse.quote(parsed_path.path or "/", safe="/-_.~")
+        canonical_uri = urllib.parse.quote(parsed_path.path or "/", safe="/-_.~%")
         canonical_query = VendedCredentialRefreshAddon._canonical_query_string(parsed_path.query)
         signed_headers = "host;x-amz-content-sha256;x-amz-date"
         canonical_headers = (
@@ -321,8 +508,6 @@ class VendedCredentialRefreshAddon:
             "x-amz-content-sha256": payload_hash,
             "x-amz-date": amz_date,
         }
-        if range_header:
-            headers["Range"] = range_header
         return headers
 
     @staticmethod
