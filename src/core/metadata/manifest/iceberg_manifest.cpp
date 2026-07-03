@@ -2,6 +2,8 @@
 #include "core/metadata/manifest/iceberg_manifest_list.hpp"
 #include "core/metadata/manifest/iceberg_avro_codec.hpp"
 
+#include "duckdb/common/vector/flat_vector.hpp"
+#include "duckdb/common/vector/struct_vector.hpp"
 #include "duckdb/storage/external_file_cache/caching_file_system.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 
@@ -11,7 +13,176 @@
 #include "core/expression/iceberg_value.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 
+#include <optional>
+
 namespace duckdb {
+
+namespace {
+
+using std::optional;
+
+using IntIntMapWriter = VectorWriter<VectorListType<VectorStructType<int32_t, int64_t>>>;
+using IntStringMapWriter = VectorWriter<VectorListType<VectorStructType<int32_t, string_t>>>;
+using Int32ListWriter = VectorWriter<VectorListType<int32_t>>;
+using Int64ListWriter = VectorWriter<VectorListType<int64_t>>;
+
+template <class MAP>
+static void WriteIntIntMap(IntIntMapWriter &writer, const MAP &map);
+static void WriteBoundsMap(IntStringMapWriter &writer, const unordered_map<int32_t, Value> &bounds);
+static void WriteInt32List(Int32ListWriter &writer, const vector<int32_t> &values);
+static void WriteInt64List(Int64ListWriter &writer, const vector<int64_t> &values);
+static void WritePartitionStructRow(Vector &partition_vector, idx_t row_idx, const IcebergDataFile &data_file,
+                                    const IcebergTableMetadata &table_metadata,
+                                    const vector<IcebergExtendedPartitionInfo> &schema_partition_info);
+
+struct DataFileVectorWriters {
+	explicit DataFileVectorWriters(Vector &data_file_vector, idx_t row_count,
+	                               const IcebergTableMetadata &table_metadata)
+	    : table_metadata(table_metadata), data_file_entries(StructVector::GetEntries(data_file_vector)),
+	      file_path(data_file_entries[FILE_PATH_INDEX], row_count, 0),
+	      file_format(data_file_entries[FILE_FORMAT_INDEX], row_count, 0),
+	      partition(data_file_entries[PARTITION_INDEX]),
+	      record_count(data_file_entries[RECORD_COUNT_INDEX], row_count, 0),
+	      file_size_in_bytes(data_file_entries[FILE_SIZE_IN_BYTES_INDEX], row_count, 0),
+	      column_sizes(data_file_entries[COLUMN_SIZES_INDEX], row_count, 0),
+	      value_counts(data_file_entries[VALUE_COUNTS_INDEX], row_count, 0),
+	      null_value_counts(data_file_entries[NULL_VALUE_COUNTS_INDEX], row_count, 0),
+	      nan_value_counts(data_file_entries[NAN_VALUE_COUNTS_INDEX], row_count, 0),
+	      lower_bounds(data_file_entries[LOWER_BOUNDS_INDEX], row_count, 0),
+	      upper_bounds(data_file_entries[UPPER_BOUNDS_INDEX], row_count, 0),
+	      split_offsets(data_file_entries[SPLIT_OFFSETS_INDEX], row_count, 0),
+	      equality_ids(data_file_entries[EQUALITY_IDS_INDEX], row_count, 0),
+	      sort_order_id(data_file_entries[SORT_ORDER_ID_INDEX], row_count, 0) {
+		if (table_metadata.iceberg_version >= 2) {
+			content.emplace(data_file_entries[CONTENT_INDEX], row_count, 0);
+			referenced_data_file.emplace(data_file_entries[REFERENCED_DATA_FILE_INDEX], row_count, 0);
+		}
+		if (table_metadata.iceberg_version >= 3) {
+			first_row_id.emplace(data_file_entries[FIRST_ROW_ID_INDEX], row_count, 0);
+			content_offset.emplace(data_file_entries[CONTENT_OFFSET_INDEX], row_count, 0);
+			content_size_in_bytes.emplace(data_file_entries[CONTENT_SIZE_IN_BYTES_INDEX], row_count, 0);
+		}
+	}
+
+	void WriteRow(idx_t row_idx, const IcebergDataFile &data_file,
+	              const vector<IcebergExtendedPartitionInfo> &schema_partition_info) {
+		if (content) {
+			content->WriteValue(static_cast<int32_t>(data_file.content));
+		}
+
+		file_path.WriteValue(string_t(data_file.file_path));
+		file_format.WriteValue(string_t(data_file.file_format));
+
+		WritePartitionStructRow(partition, row_idx, data_file, table_metadata, schema_partition_info);
+
+		record_count.WriteValue(data_file.record_count);
+		file_size_in_bytes.WriteValue(data_file.file_size_in_bytes);
+
+		WriteIntIntMap(column_sizes, data_file.column_sizes);
+		WriteIntIntMap(value_counts, data_file.value_counts);
+		WriteIntIntMap(null_value_counts, data_file.null_value_counts);
+		WriteIntIntMap(nan_value_counts, data_file.nan_value_counts);
+
+		WriteBoundsMap(lower_bounds, data_file.lower_bounds);
+		WriteBoundsMap(upper_bounds, data_file.upper_bounds);
+
+		if (data_file.split_offsets.empty()) {
+			split_offsets.WriteNull();
+		} else {
+			WriteInt64List(split_offsets, data_file.split_offsets);
+		}
+
+		if (data_file.equality_ids.empty()) {
+			equality_ids.WriteNull();
+		} else {
+			WriteInt32List(equality_ids, data_file.equality_ids);
+		}
+
+		if (data_file.has_sort_order_id) {
+			sort_order_id.WriteValue(data_file.sort_order_id);
+		} else {
+			sort_order_id.WriteNull();
+		}
+
+		if (first_row_id) {
+			if (data_file.HasFirstRowId()) {
+				first_row_id->WriteValue(data_file.GetFirstRowId());
+			} else {
+				first_row_id->WriteNull();
+			}
+		}
+
+		if (referenced_data_file) {
+			if (data_file.referenced_data_file.empty()) {
+				referenced_data_file->WriteNull();
+			} else {
+				referenced_data_file->WriteValue(string_t(data_file.referenced_data_file));
+			}
+		}
+
+		if (content_offset) {
+			if (data_file.content_offset.IsNull()) {
+				content_offset->WriteNull();
+			} else {
+				content_offset->WriteValue(data_file.content_offset.GetValue<int64_t>());
+			}
+		}
+
+		if (content_size_in_bytes) {
+			if (data_file.content_size_in_bytes.IsNull()) {
+				content_size_in_bytes->WriteNull();
+			} else {
+				content_size_in_bytes->WriteValue(data_file.content_size_in_bytes.GetValue<int64_t>());
+			}
+		}
+	}
+
+private:
+	static constexpr idx_t FILE_PATH_INDEX = 0;
+	static constexpr idx_t FILE_FORMAT_INDEX = 1;
+	static constexpr idx_t PARTITION_INDEX = 2;
+	static constexpr idx_t RECORD_COUNT_INDEX = 3;
+	static constexpr idx_t FILE_SIZE_IN_BYTES_INDEX = 4;
+	static constexpr idx_t COLUMN_SIZES_INDEX = 5;
+	static constexpr idx_t VALUE_COUNTS_INDEX = 6;
+	static constexpr idx_t NULL_VALUE_COUNTS_INDEX = 7;
+	static constexpr idx_t NAN_VALUE_COUNTS_INDEX = 8;
+	static constexpr idx_t LOWER_BOUNDS_INDEX = 9;
+	static constexpr idx_t UPPER_BOUNDS_INDEX = 10;
+	static constexpr idx_t SPLIT_OFFSETS_INDEX = 11;
+	static constexpr idx_t EQUALITY_IDS_INDEX = 12;
+	static constexpr idx_t SORT_ORDER_ID_INDEX = 13;
+	static constexpr idx_t CONTENT_INDEX = 14;
+	static constexpr idx_t REFERENCED_DATA_FILE_INDEX = 15;
+	static constexpr idx_t FIRST_ROW_ID_INDEX = 16;
+	static constexpr idx_t CONTENT_OFFSET_INDEX = 17;
+	static constexpr idx_t CONTENT_SIZE_IN_BYTES_INDEX = 18;
+
+public:
+	const IcebergTableMetadata &table_metadata;
+	vector<Vector> &data_file_entries;
+	VectorWriter<string_t> file_path;
+	VectorWriter<string_t> file_format;
+	Vector &partition;
+	VectorWriter<int64_t> record_count;
+	VectorWriter<int64_t> file_size_in_bytes;
+	IntIntMapWriter column_sizes;
+	IntIntMapWriter value_counts;
+	IntIntMapWriter null_value_counts;
+	IntIntMapWriter nan_value_counts;
+	IntStringMapWriter lower_bounds;
+	IntStringMapWriter upper_bounds;
+	Int64ListWriter split_offsets;
+	Int32ListWriter equality_ids;
+	VectorWriter<int32_t> sort_order_id;
+	optional<VectorWriter<int32_t>> content;
+	optional<VectorWriter<string_t>> referenced_data_file;
+	optional<VectorWriter<int64_t>> first_row_id;
+	optional<VectorWriter<int64_t>> content_offset;
+	optional<VectorWriter<int64_t>> content_size_in_bytes;
+};
+
+} // namespace
 
 string IcebergManifestEntryContentTypeToString(IcebergManifestEntryContentType type) {
 	switch (type) {
@@ -166,10 +337,6 @@ LogicalType IcebergDataFile::GetType(const IcebergTableMetadata &metadata, const
 
 	child_list_t<LogicalType> children;
 
-	if (iceberg_version >= 2) {
-		// content: int
-		children.emplace_back("content", LogicalType::INTEGER);
-	}
 	// file_path: string
 	children.emplace_back("file_path", LogicalType::VARCHAR);
 	// file_format: string
@@ -198,155 +365,26 @@ LogicalType IcebergDataFile::GetType(const IcebergTableMetadata &metadata, const
 	children.emplace_back("equality_ids", LogicalType::LIST(LogicalType::INTEGER));
 	// sort_id: int
 	children.emplace_back("sort_order_id", LogicalType::INTEGER);
-	// first_row_id: long
-	if (iceberg_version >= 3) {
-		children.emplace_back("first_row_id", LogicalType::BIGINT);
-	}
-	// referenced_data_file: string
+
+	// v2-only suffix
 	if (iceberg_version >= 2) {
+		// content: int
+		children.emplace_back("content", LogicalType::INTEGER);
+		// referenced_data_file: string
 		children.emplace_back("referenced_data_file", LogicalType::VARCHAR);
 	}
-	// content_offset: long
+
+	// v3-only suffix
 	if (iceberg_version >= 3) {
+		// first_row_id: long
+		children.emplace_back("first_row_id", LogicalType::BIGINT);
+		// content_offset: long
 		children.emplace_back("content_offset", LogicalType::BIGINT);
-	}
-	// content_size_in_bytes: long
-	if (iceberg_version >= 3) {
+		// content_size_in_bytes: long
 		children.emplace_back("content_size_in_bytes", LogicalType::BIGINT);
 	}
 
 	return LogicalType::STRUCT(std::move(children));
-}
-
-Value IcebergDataFile::ToValue(const IcebergTableMetadata &table_metadata, const LogicalType &type) const {
-	vector<Value> children;
-
-	// content: int
-	children.push_back(Value::INTEGER(static_cast<int32_t>(content)));
-	// file_path: string
-	children.push_back(Value(file_path));
-	// file_format: string
-	children.push_back(Value(file_format));
-	// partition: struct(...)
-	if (partition_info.empty()) {
-		//! NOTE: Spark does *not* like it when this column is NULL, so we populate it with an empty struct value
-		//! instead
-		children.push_back(
-		    Value::STRUCT(child_list_t<Value> {{"__duckdb_empty_struct_marker", Value(LogicalTypeId::VARCHAR)}}));
-	} else {
-		child_list_t<Value> partition_children;
-		auto extended_partition_info = GetExtendedPartitionInfo(table_metadata);
-		for (auto &entry : extended_partition_info) {
-			auto new_value = Value();
-			string error_message;
-			LogicalType partition_result_type;
-			switch (entry.transform.Type()) {
-			case IcebergTransformType::IDENTITY: {
-				if (entry.source_type.IsNested()) {
-					throw NotImplementedException("Using an identity partition on a nested column");
-				}
-				partition_result_type = entry.source_type;
-				break;
-			}
-			case IcebergTransformType::BUCKET:
-			case IcebergTransformType::TRUNCATE:
-				partition_result_type = LogicalType::VARCHAR;
-				break;
-			case IcebergTransformType::DAY:
-			case IcebergTransformType::MONTH:
-			case IcebergTransformType::YEAR:
-			case IcebergTransformType::HOUR:
-				partition_result_type = LogicalType::BIGINT;
-				break;
-			case IcebergTransformType::INVALID:
-			case IcebergTransformType::VOID: {
-				throw InvalidInputException("Cannot use transform type %s in IcebergDataFile::ToValue %s",
-				                            entry.transform.RawType());
-				break;
-			}
-			default:
-				throw InvalidInputException("Unrecognized transform %s", entry.transform.RawType());
-			}
-			const LogicalType actual_type = partition_result_type;
-			bool cast_worked = entry.value.DefaultTryCastAs(actual_type, new_value, &error_message, true);
-			if (cast_worked) {
-				partition_children.emplace_back(entry.name, new_value);
-			} else {
-				throw InvalidInputException("Could not cast %s to %s", entry.value.type().ToString(),
-				                            actual_type.ToString());
-			}
-		}
-		children.push_back(Value::STRUCT(partition_children));
-	}
-
-	// record_count: long
-	children.push_back(Value::BIGINT(record_count));
-	// file_size_in_bytes: long
-	children.push_back(Value::BIGINT(file_size_in_bytes));
-
-	child_list_t<LogicalType> bounds_types;
-	bounds_types.emplace_back("key", LogicalType::INTEGER);
-	bounds_types.emplace_back("value", LogicalType::BLOB);
-
-	vector<Value> lower_bounds_values;
-	// lower bounds: map<int, binary>
-	for (auto &child : lower_bounds) {
-		lower_bounds_values.push_back(Value::STRUCT({{"key", child.first}, {"value", child.second}}));
-	}
-	children.push_back(Value::MAP(LogicalType::STRUCT(bounds_types), lower_bounds_values));
-
-	vector<Value> upper_bounds_values;
-	// upper bounds: map<int, binary>
-	for (auto &child : upper_bounds) {
-		upper_bounds_values.push_back(Value::STRUCT({{"key", child.first}, {"value", child.second}}));
-	}
-	children.push_back(Value::MAP(LogicalType::STRUCT(bounds_types), upper_bounds_values));
-
-	// counts struct (shared shape for value_counts / null_value_counts)
-	child_list_t<LogicalType> null_value_count_types;
-	null_value_count_types.emplace_back("key", LogicalType::INTEGER);
-	null_value_count_types.emplace_back("value", LogicalType::BIGINT);
-
-	// value_counts
-	vector<Value> value_counts_values;
-	for (auto &child : value_counts) {
-		value_counts_values.push_back(Value::STRUCT({{"key", child.first}, {"value", child.second}}));
-	}
-	children.push_back(Value::MAP(LogicalType::STRUCT(null_value_count_types), value_counts_values));
-
-	// null_value_counts
-	vector<Value> null_value_counts_values;
-	for (auto &child : null_value_counts) {
-		null_value_counts_values.push_back(Value::STRUCT({{"key", child.first}, {"value", child.second}}));
-	}
-	children.push_back(Value::MAP(LogicalType::STRUCT(null_value_count_types), null_value_counts_values));
-
-	// equality_ids: list<int> (empty for non equality-delete files)
-	vector<Value> equality_id_values;
-	for (auto &id : equality_ids) {
-		equality_id_values.push_back(Value::INTEGER(id));
-	}
-	if (equality_id_values.empty()) {
-		//! Not an equality-delete file - emit a NULL list rather than an empty list.
-		children.push_back(Value(LogicalType::LIST(LogicalType::INTEGER)));
-	} else {
-		children.push_back(Value::LIST(LogicalType::INTEGER, std::move(equality_id_values)));
-	}
-
-	// referenced_data_file
-	if (table_metadata.iceberg_version >= 3) {
-		children.push_back(Value(referenced_data_file));
-	}
-	// content_size_in_bytes
-	if (table_metadata.iceberg_version >= 3) {
-		children.push_back(content_size_in_bytes);
-	}
-	// content_offset
-	if (table_metadata.iceberg_version >= 3) {
-		children.push_back(content_offset);
-	}
-
-	return Value::STRUCT(type, children);
 }
 
 void IcebergManifestEntry::SetSequenceNumber(sequence_number_t value) {
@@ -401,6 +439,95 @@ static Value CreateFieldID(int32_t field_id, bool nullable) {
 	fields.emplace_back("__duckdb_nullable", Value::BOOLEAN(nullable));
 	return Value::STRUCT(fields);
 }
+
+namespace {
+
+template <class MAP>
+static void WriteIntIntMap(IntIntMapWriter &writer, const MAP &map) {
+	auto list = writer.WriteList(map.size());
+	auto it = map.begin();
+	for (auto &entry_writer : list) {
+		auto &entry = *it++;
+		entry_writer.WriteValue([&](auto &key_writer, auto &value_writer) {
+			key_writer.WriteValue(entry.first);
+			value_writer.WriteValue(entry.second);
+		});
+	}
+}
+
+static void WriteBoundsMap(IntStringMapWriter &writer, const unordered_map<int32_t, Value> &bounds) {
+	auto list = writer.WriteList(bounds.size());
+	auto it = bounds.begin();
+	for (auto &entry_writer : list) {
+		auto &entry = *it++;
+		entry_writer.WriteValue([&](auto &key_writer, auto &value_writer) {
+			key_writer.WriteValue(entry.first);
+			if (entry.second.IsNull()) {
+				value_writer.WriteNull();
+			} else {
+				value_writer.WriteValue(entry.second.GetValueUnsafe<string_t>());
+			}
+		});
+	}
+}
+
+static void WriteInt32List(Int32ListWriter &writer, const vector<int32_t> &values) {
+	auto list = writer.WriteList(values.size());
+	auto it = values.begin();
+	for (auto &entry_writer : list) {
+		entry_writer.WriteValue(*it++);
+	}
+}
+
+static void WriteInt64List(Int64ListWriter &writer, const vector<int64_t> &values) {
+	auto list = writer.WriteList(values.size());
+	auto it = values.begin();
+	for (auto &entry_writer : list) {
+		entry_writer.WriteValue(*it++);
+	}
+}
+
+static void WritePartitionValue(Vector &vector, idx_t row_idx, const Value &value) {
+	if (value.IsNull()) {
+		FlatVector::SetNull(vector, row_idx, true);
+		return;
+	}
+	Value cast_value;
+	string error_message;
+	if (!value.DefaultTryCastAs(vector.GetType(), cast_value, &error_message, true)) {
+		throw InvalidInputException("Could not cast partition value %s to %s", value.type().ToString(),
+		                            vector.GetType().ToString());
+	}
+	vector.SetValue(row_idx, cast_value);
+}
+
+static void WritePartitionStructRow(Vector &partition_vector, idx_t row_idx, const IcebergDataFile &data_file,
+                                    const IcebergTableMetadata &table_metadata,
+                                    const vector<IcebergExtendedPartitionInfo> &schema_partition_info) {
+	auto &partition_children = StructVector::GetEntries(partition_vector);
+	if (schema_partition_info.empty()) {
+		D_ASSERT(!partition_children.empty());
+		FlatVector::SetNull(partition_children[0], row_idx, true);
+		return;
+	}
+
+	auto extended_partition_info = data_file.GetExtendedPartitionInfo(table_metadata);
+	unordered_map<uint64_t, const Value *> value_by_field_id;
+	for (auto &entry : extended_partition_info) {
+		value_by_field_id.emplace(entry.field_id, &entry.value);
+	}
+	for (idx_t child_idx = 0; child_idx < schema_partition_info.size(); child_idx++) {
+		auto &schema_entry = schema_partition_info[child_idx];
+		auto value_it = value_by_field_id.find(schema_entry.field_id);
+		if (value_it == value_by_field_id.end()) {
+			FlatVector::SetNull(partition_children[child_idx], row_idx, true);
+			continue;
+		}
+		WritePartitionValue(partition_children[child_idx], row_idx, *value_it->second);
+	}
+}
+
+} // namespace
 
 namespace manifest_file {
 
@@ -476,10 +603,6 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	child_list_t<Value> data_file_field_ids;
 	child_list_t<LogicalType> children;
 
-	// content: int
-	children.emplace_back("content", LogicalType::INTEGER);
-	data_file_field_ids.emplace_back("content", CreateFieldID(CONTENT, false));
-
 	// file_path: string
 	children.emplace_back("file_path", LogicalType::VARCHAR);
 	data_file_field_ids.emplace_back("file_path", CreateFieldID(FILE_PATH, false));
@@ -510,11 +633,73 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	children.emplace_back("file_size_in_bytes", LogicalType::BIGINT);
 	data_file_field_ids.emplace_back("file_size_in_bytes", CreateFieldID(FILE_SIZE_IN_BYTES, false));
 
-	//! NOTE: These are optional but we should probably add them, to support better filtering
-	//! column_sizes
-	//! value_counts
-	//! null_value_counts
-	//! nan_value_count
+	child_list_t<LogicalType> null_value_counts_fields;
+	null_value_counts_fields.emplace_back("key", LogicalType::INTEGER);
+	null_value_counts_fields.emplace_back("value", LogicalType::BIGINT);
+
+	// column_sizes: map<int, long>
+	children.emplace_back("column_sizes", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
+
+	child_list_t<Value> column_sizes_record_field_ids;
+	column_sizes_record_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(COLUMN_SIZES));
+	child_list_t<Value> column_sizes_key_field;
+	column_sizes_key_field.emplace_back("__duckdb_field_id", Value::INTEGER(COLUMN_SIZES_KEY));
+	column_sizes_key_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
+	column_sizes_record_field_ids.emplace_back("key", Value::STRUCT(column_sizes_key_field));
+	child_list_t<Value> column_sizes_value_field;
+	column_sizes_value_field.emplace_back("__duckdb_field_id", Value::INTEGER(COLUMN_SIZES_VALUE));
+	column_sizes_value_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
+	column_sizes_record_field_ids.emplace_back("value", Value::STRUCT(column_sizes_value_field));
+
+	data_file_field_ids.emplace_back("column_sizes", Value::STRUCT(column_sizes_record_field_ids));
+
+	// value_counts: map<int, long>
+	children.emplace_back("value_counts", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
+
+	child_list_t<Value> value_counts_record_field_ids;
+	value_counts_record_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(VALUE_COUNTS));
+	child_list_t<Value> value_counts_key_field;
+	value_counts_key_field.emplace_back("__duckdb_field_id", Value::INTEGER(VALUE_COUNTS_KEY));
+	value_counts_key_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
+	value_counts_record_field_ids.emplace_back("key", Value::STRUCT(value_counts_key_field));
+	child_list_t<Value> value_counts_value_field;
+	value_counts_value_field.emplace_back("__duckdb_field_id", Value::INTEGER(VALUE_COUNTS_VALUE));
+	value_counts_value_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
+	value_counts_record_field_ids.emplace_back("value", Value::STRUCT(value_counts_value_field));
+
+	data_file_field_ids.emplace_back("value_counts", Value::STRUCT(value_counts_record_field_ids));
+
+	// null_value_counts: map<int, long>
+	children.emplace_back("null_value_counts", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
+
+	child_list_t<Value> null_values_counts_record_field_ids;
+	null_values_counts_record_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(NULL_VALUE_COUNTS));
+	child_list_t<Value> null_value_counts_key_field;
+	null_value_counts_key_field.emplace_back("__duckdb_field_id", Value::INTEGER(NULL_VALUE_COUNTS_KEY));
+	null_value_counts_key_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
+	null_values_counts_record_field_ids.emplace_back("key", Value::STRUCT(null_value_counts_key_field));
+	child_list_t<Value> null_value_counts_value_field;
+	null_value_counts_value_field.emplace_back("__duckdb_field_id", Value::INTEGER(NULL_VALUE_COUNTS_VALUE));
+	null_value_counts_value_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
+	null_values_counts_record_field_ids.emplace_back("value", Value::STRUCT(null_value_counts_value_field));
+
+	data_file_field_ids.emplace_back("null_value_counts", Value::STRUCT(null_values_counts_record_field_ids));
+
+	// nan_value_counts: map<int, long>
+	children.emplace_back("nan_value_counts", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
+
+	child_list_t<Value> nan_value_counts_record_field_ids;
+	nan_value_counts_record_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(NAN_VALUE_COUNTS));
+	child_list_t<Value> nan_value_counts_key_field;
+	nan_value_counts_key_field.emplace_back("__duckdb_field_id", Value::INTEGER(NAN_VALUE_COUNTS_KEY));
+	nan_value_counts_key_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
+	nan_value_counts_record_field_ids.emplace_back("key", Value::STRUCT(nan_value_counts_key_field));
+	child_list_t<Value> nan_value_counts_value_field;
+	nan_value_counts_value_field.emplace_back("__duckdb_field_id", Value::INTEGER(NAN_VALUE_COUNTS_VALUE));
+	nan_value_counts_value_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
+	nan_value_counts_record_field_ids.emplace_back("value", Value::STRUCT(nan_value_counts_value_field));
+
+	data_file_field_ids.emplace_back("nan_value_counts", Value::STRUCT(nan_value_counts_record_field_ids));
 
 	// lower bounds struct
 	child_list_t<LogicalType> bounds_fields;
@@ -553,43 +738,13 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	upper_bound_record_field_ids.emplace_back("value", Value::STRUCT(upper_bounds_value_field));
 
 	data_file_field_ids.emplace_back("upper_bounds", Value::STRUCT(upper_bound_record_field_ids));
+	// split_offsets: list<long>
+	children.emplace_back("split_offsets", LogicalType::LIST(LogicalType::BIGINT));
 
-	// counts struct (shared shape for value_counts / null_value_counts)
-	child_list_t<LogicalType> null_value_counts_fields;
-	null_value_counts_fields.emplace_back("key", LogicalType::INTEGER);
-	null_value_counts_fields.emplace_back("value", LogicalType::BIGINT);
-
-	// value_counts: map<int, long>
-	children.emplace_back("value_counts", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
-
-	child_list_t<Value> value_counts_record_field_ids;
-	value_counts_record_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(VALUE_COUNTS));
-	child_list_t<Value> value_counts_key_field;
-	value_counts_key_field.emplace_back("__duckdb_field_id", Value::INTEGER(VALUE_COUNTS_KEY));
-	value_counts_key_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	value_counts_record_field_ids.emplace_back("key", Value::STRUCT(value_counts_key_field));
-	child_list_t<Value> value_counts_value_field;
-	value_counts_value_field.emplace_back("__duckdb_field_id", Value::INTEGER(VALUE_COUNTS_VALUE));
-	value_counts_value_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	value_counts_record_field_ids.emplace_back("value", Value::STRUCT(value_counts_value_field));
-
-	data_file_field_ids.emplace_back("value_counts", Value::STRUCT(value_counts_record_field_ids));
-
-	// null_value_counts: map<int, long>
-	children.emplace_back("null_value_counts", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
-
-	child_list_t<Value> null_values_counts_record_field_ids;
-	null_values_counts_record_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(NULL_VALUE_COUNTS));
-	child_list_t<Value> null_value_counts_key_field;
-	null_value_counts_key_field.emplace_back("__duckdb_field_id", Value::INTEGER(NULL_VALUE_COUNTS_KEY));
-	null_value_counts_key_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	null_values_counts_record_field_ids.emplace_back("key", Value::STRUCT(null_value_counts_key_field));
-	child_list_t<Value> null_value_counts_value_field;
-	null_value_counts_value_field.emplace_back("__duckdb_field_id", Value::INTEGER(NULL_VALUE_COUNTS_VALUE));
-	null_value_counts_value_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	null_values_counts_record_field_ids.emplace_back("value", Value::STRUCT(null_value_counts_value_field));
-
-	data_file_field_ids.emplace_back("null_value_counts", Value::STRUCT(null_values_counts_record_field_ids));
+	child_list_t<Value> split_offsets_list_field;
+	split_offsets_list_field.emplace_back("list", CreateFieldID(SPLIT_OFFSETS_ELEMENT, false));
+	split_offsets_list_field.emplace_back("__duckdb_field_id", Value::INTEGER(SPLIT_OFFSETS));
+	data_file_field_ids.emplace_back("split_offsets", Value::STRUCT(split_offsets_list_field));
 
 	// equality_ids: list<int> - the field-ids an equality-delete file applies to
 	children.emplace_back("equality_ids", LogicalType::LIST(LogicalType::INTEGER));
@@ -599,23 +754,34 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	equality_ids_list_field.emplace_back("__duckdb_field_id", Value::INTEGER(EQUALITY_IDS));
 	data_file_field_ids.emplace_back("equality_ids", Value::STRUCT(equality_ids_list_field));
 
-	// referenced_data_file
-	if (table_metadata.iceberg_version >= 3) {
-		// referenced_data_file: long
+	// sort_order_id: optional int
+	children.emplace_back("sort_order_id", LogicalType::INTEGER);
+	data_file_field_ids.emplace_back("sort_order_id", CreateFieldID(SORT_ORDER_ID, true));
+
+	// v2-only suffix
+	if (table_metadata.iceberg_version >= 2) {
+		// content: int
+		children.emplace_back("content", LogicalType::INTEGER);
+		data_file_field_ids.emplace_back("content", CreateFieldID(CONTENT, false));
+
+		// referenced_data_file: string
 		children.emplace_back("referenced_data_file", LogicalType::VARCHAR);
 		data_file_field_ids.emplace_back("referenced_data_file", CreateFieldID(REFERENCED_DATA_FILE, true));
 	}
-	// content_size_in_bytes
+
+	// v3-only suffix
 	if (table_metadata.iceberg_version >= 3) {
-		// content_size_in_bytes: long
-		children.emplace_back("content_size_in_bytes", LogicalType::BIGINT);
-		data_file_field_ids.emplace_back("content_size_in_bytes", CreateFieldID(CONTENT_SIZE_IN_BYTES, true));
-	}
-	// content_offset
-	if (table_metadata.iceberg_version >= 3) {
+		// first_row_id: optional long
+		children.emplace_back("first_row_id", LogicalType::BIGINT);
+		data_file_field_ids.emplace_back("first_row_id", CreateFieldID(FIRST_ROW_ID, true));
+
 		// content_offset: long
 		children.emplace_back("content_offset", LogicalType::BIGINT);
 		data_file_field_ids.emplace_back("content_offset", CreateFieldID(CONTENT_OFFSET, true));
+
+		// content_size_in_bytes: long
+		children.emplace_back("content_size_in_bytes", LogicalType::BIGINT);
+		data_file_field_ids.emplace_back("content_size_in_bytes", CreateFieldID(CONTENT_SIZE_IN_BYTES, true));
 	}
 
 	// data_file: struct(...)
@@ -630,34 +796,34 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	DataChunk chunk;
 	chunk.Initialize(allocator, types, manifest_entries.size());
 
+	auto status_writer = FlatVector::Writer<int32_t>(chunk.data[0], manifest_entries.size());
+	auto snapshot_id_writer = FlatVector::Writer<int64_t>(chunk.data[1], manifest_entries.size());
+	auto sequence_number_writer = FlatVector::Writer<int64_t>(chunk.data[2], manifest_entries.size());
+	auto file_sequence_number_writer = FlatVector::Writer<int64_t>(chunk.data[3], manifest_entries.size());
+	DataFileVectorWriters data_file_writers(chunk.data[4], manifest_entries.size(), table_metadata);
+
 	for (idx_t i = 0; i < manifest_entries.size(); i++) {
 		auto &manifest_entry = manifest_entries[i];
-		idx_t col_idx = 0;
-
-		// status: int
-		chunk.data[col_idx++].Append(Value::INTEGER(static_cast<int32_t>(manifest_entry.status)));
+		status_writer.WriteValue(static_cast<int32_t>(manifest_entry.status));
 		//! FIXME: this is missing logic, needs to be looked into
 		//! SPEC: Snapshot id where the file was added, or deleted if status is 2. Inherited when null.
 		// snapshot_id: long
 		if (manifest_entry.HasSnapshotId()) {
-			chunk.data[col_idx++].Append(Value::BIGINT(manifest_entry.GetSnapshotId()));
+			snapshot_id_writer.WriteValue(manifest_entry.GetSnapshotId());
 		} else {
-			chunk.data[col_idx++].Append(Value(LogicalType::BIGINT));
+			snapshot_id_writer.WriteNull();
 		}
 		// sequence_number: long
 		// file_sequence_number: long
 		if (manifest_entry.status == IcebergManifestEntryStatusType::ADDED) {
-			chunk.data[col_idx++].Append(Value(LogicalType::BIGINT));
-			chunk.data[col_idx++].Append(Value(LogicalType::BIGINT));
+			sequence_number_writer.WriteNull();
+			file_sequence_number_writer.WriteNull();
 		} else {
-			chunk.data[col_idx++].Append(Value::BIGINT(manifest_entry.GetFileSequenceNumber(manifest_file)));
-			chunk.data[col_idx++].Append(Value::BIGINT(manifest_entry.GetSequenceNumber(manifest_file)));
+			sequence_number_writer.WriteValue(manifest_entry.GetSequenceNumber(manifest_file));
+			file_sequence_number_writer.WriteValue(manifest_entry.GetFileSequenceNumber(manifest_file));
 		}
 
-		auto &data_file = manifest_entry.data_file;
-		// data_file: struct(...)
-		chunk.data[col_idx].Append(data_file.ToValue(table_metadata, chunk.data[col_idx].GetType()));
-		col_idx++;
+		data_file_writers.WriteRow(i, manifest_entry.data_file, extended_partition_info);
 	}
 	chunk.SetChildCardinality(manifest_entries.size());
 

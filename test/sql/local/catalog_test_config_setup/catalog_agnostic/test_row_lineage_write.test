@@ -40,6 +40,22 @@ insert into my_datalake.default.duckdb_row_lineage values
 	(4, 'd'),
 	(5, 'e');
 
+statement ok
+SET VARIABLE row_lineage_manifest = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.duckdb_row_lineage)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+query IIII
+SELECT
+	first_row_id IS NULL, -- Left NULL for inheritance purposes (OCC reasons)
+	referenced_data_file IS NULL,
+	content_offset IS NULL,
+	content_size_in_bytes IS NULL
+FROM (SELECT unnest(data_file) FROM read_avro(getvariable('row_lineage_manifest')));
+----
+true	true	true	true
+
 query IIII
 select _last_updated_sequence_number, _row_id, id, data from my_datalake.default.duckdb_row_lineage order by _row_id;
 ----
