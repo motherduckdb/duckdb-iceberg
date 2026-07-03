@@ -13,7 +13,183 @@
 #include "core/expression/iceberg_value.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 
+#include <optional>
+
 namespace duckdb {
+
+namespace {
+
+using std::optional;
+
+using IntIntMapWriter = VectorWriter<VectorListType<VectorStructType<int32_t, int64_t>>>;
+using IntStringMapWriter = VectorWriter<VectorListType<VectorStructType<int32_t, string_t>>>;
+using Int32ListWriter = VectorWriter<VectorListType<int32_t>>;
+using Int64ListWriter = VectorWriter<VectorListType<int64_t>>;
+
+template <class MAP>
+static void WriteIntIntMap(IntIntMapWriter &writer, const MAP &map);
+static void WriteBoundsMap(IntStringMapWriter &writer, const duckdb::unordered_map<int32_t, Value> &bounds);
+static void WriteInt32List(Int32ListWriter &writer, const duckdb::vector<int32_t> &values);
+static void WriteInt64List(Int64ListWriter &writer, const duckdb::vector<int64_t> &values);
+static void WritePartitionStructRow(Vector &partition_vector, idx_t row_idx, const IcebergDataFile &data_file,
+                                    const IcebergTableMetadata &table_metadata,
+                                    const duckdb::vector<IcebergExtendedPartitionInfo> &schema_partition_info);
+
+struct DataFileVectorWriters {
+	explicit DataFileVectorWriters(Vector &data_file_vector, idx_t row_count,
+	                               const IcebergTableMetadata &table_metadata)
+	    : table_metadata(table_metadata), data_file_entries(StructVector::GetEntries(data_file_vector)),
+	      content(table_metadata.iceberg_version >= 2
+	                  ? optional<VectorWriter<int32_t>>(std::in_place, data_file_entries[entry_index], row_count, 0)
+	                  : std::nullopt),
+	      file_path(data_file_entries[entry_index + static_cast<idx_t>(content.has_value())], row_count, 0),
+	      file_format(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 1], row_count, 0),
+	      partition(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 2]),
+	      record_count(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 3], row_count, 0),
+	      file_size_in_bytes(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 4], row_count,
+	                         0),
+	      column_sizes(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 5], row_count, 0),
+	      value_counts(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 6], row_count, 0),
+	      null_value_counts(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 7], row_count, 0),
+	      nan_value_counts(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 8], row_count, 0),
+	      lower_bounds(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 9], row_count, 0),
+	      upper_bounds(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 10], row_count, 0),
+	      split_offsets(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 11], row_count, 0),
+	      equality_ids(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 12], row_count, 0),
+	      sort_order_id(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 13], row_count, 0),
+	      first_row_id(table_metadata.iceberg_version >= 3
+	                       ? optional<VectorWriter<int64_t>>(
+	                             std::in_place,
+	                             data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 14],
+	                             row_count, 0)
+	                       : std::nullopt),
+	      referenced_data_file(table_metadata.iceberg_version >= 2
+	                               ? optional<VectorWriter<string_t>>(
+	                                     std::in_place,
+	                                     data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 14 +
+	                                                       static_cast<idx_t>(first_row_id.has_value())],
+	                                     row_count, 0)
+	                               : std::nullopt),
+	      content_offset(table_metadata.iceberg_version >= 3
+	                         ? optional<VectorWriter<int64_t>>(
+	                               std::in_place,
+	                               data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 14 +
+	                                                 static_cast<idx_t>(first_row_id.has_value()) +
+	                                                 static_cast<idx_t>(referenced_data_file.has_value())],
+	                               row_count, 0)
+	                         : std::nullopt),
+	      content_size_in_bytes(table_metadata.iceberg_version >= 3
+	                                ? optional<VectorWriter<int64_t>>(
+	                                      std::in_place,
+	                                      data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 14 +
+	                                                        static_cast<idx_t>(first_row_id.has_value()) +
+	                                                        static_cast<idx_t>(referenced_data_file.has_value()) +
+	                                                        static_cast<idx_t>(content_offset.has_value())],
+	                                      row_count, 0)
+	                                : std::nullopt) {
+	}
+
+	void WriteRow(idx_t row_idx, const IcebergDataFile &data_file,
+	              const duckdb::vector<IcebergExtendedPartitionInfo> &schema_partition_info) {
+		if (content) {
+			content->WriteValue(static_cast<int32_t>(data_file.content));
+		}
+
+		file_path.WriteValue(string_t(data_file.file_path));
+		file_format.WriteValue(string_t(data_file.file_format));
+
+		WritePartitionStructRow(partition, row_idx, data_file, table_metadata, schema_partition_info);
+
+		record_count.WriteValue(data_file.record_count);
+		file_size_in_bytes.WriteValue(data_file.file_size_in_bytes);
+
+		WriteIntIntMap(column_sizes, data_file.column_sizes);
+		WriteIntIntMap(value_counts, data_file.value_counts);
+		WriteIntIntMap(null_value_counts, data_file.null_value_counts);
+		WriteIntIntMap(nan_value_counts, data_file.nan_value_counts);
+
+		WriteBoundsMap(lower_bounds, data_file.lower_bounds);
+		WriteBoundsMap(upper_bounds, data_file.upper_bounds);
+
+		if (data_file.split_offsets.empty()) {
+			split_offsets.WriteNull();
+		} else {
+			WriteInt64List(split_offsets, data_file.split_offsets);
+		}
+
+		if (data_file.equality_ids.empty()) {
+			equality_ids.WriteNull();
+		} else {
+			WriteInt32List(equality_ids, data_file.equality_ids);
+		}
+
+		if (data_file.has_sort_order_id) {
+			sort_order_id.WriteValue(data_file.sort_order_id);
+		} else {
+			sort_order_id.WriteNull();
+		}
+
+		if (first_row_id) {
+			if (data_file.HasFirstRowId()) {
+				first_row_id->WriteValue(data_file.GetFirstRowId());
+			} else {
+				first_row_id->WriteNull();
+			}
+		}
+
+		if (referenced_data_file) {
+			if (data_file.referenced_data_file.empty()) {
+				referenced_data_file->WriteNull();
+			} else {
+				referenced_data_file->WriteValue(string_t(data_file.referenced_data_file));
+			}
+		}
+
+		if (content_offset) {
+			if (data_file.content_offset.IsNull()) {
+				content_offset->WriteNull();
+			} else {
+				content_offset->WriteValue(data_file.content_offset.GetValue<int64_t>());
+			}
+		}
+
+		if (content_size_in_bytes) {
+			if (data_file.content_size_in_bytes.IsNull()) {
+				content_size_in_bytes->WriteNull();
+			} else {
+				content_size_in_bytes->WriteValue(data_file.content_size_in_bytes.GetValue<int64_t>());
+			}
+		}
+	}
+
+private:
+	static constexpr idx_t entry_index = 0;
+
+public:
+	const IcebergTableMetadata &table_metadata;
+	duckdb::vector<Vector> &data_file_entries;
+	optional<VectorWriter<int32_t>> content;
+	VectorWriter<string_t> file_path;
+	VectorWriter<string_t> file_format;
+	Vector &partition;
+	VectorWriter<int64_t> record_count;
+	VectorWriter<int64_t> file_size_in_bytes;
+	IntIntMapWriter column_sizes;
+	IntIntMapWriter value_counts;
+	IntIntMapWriter null_value_counts;
+	IntIntMapWriter nan_value_counts;
+	IntStringMapWriter lower_bounds;
+	IntStringMapWriter upper_bounds;
+	Int64ListWriter split_offsets;
+	Int32ListWriter equality_ids;
+	VectorWriter<int32_t> sort_order_id;
+	optional<VectorWriter<int64_t>> first_row_id;
+	optional<VectorWriter<string_t>> referenced_data_file;
+	optional<VectorWriter<int64_t>> content_offset;
+	optional<VectorWriter<int64_t>> content_size_in_bytes;
+};
+
+} // namespace
 
 string IcebergManifestEntryContentTypeToString(IcebergManifestEntryContentType type) {
 	switch (type) {
@@ -273,12 +449,7 @@ static Value CreateFieldID(int32_t field_id, bool nullable) {
 	return Value::STRUCT(fields);
 }
 
-namespace manifest_file {
-
-using IntIntMapWriter = VectorWriter<VectorListType<VectorStructType<int32_t, int64_t>>>;
-using IntStringMapWriter = VectorWriter<VectorListType<VectorStructType<int32_t, string_t>>>;
-using Int32ListWriter = VectorWriter<VectorListType<int32_t>>;
-using Int64ListWriter = VectorWriter<VectorListType<int64_t>>;
+namespace {
 
 template <class MAP>
 static void WriteIntIntMap(IntIntMapWriter &writer, const MAP &map) {
@@ -364,113 +535,9 @@ static void WritePartitionStructRow(Vector &partition_vector, idx_t row_idx, con
 	}
 }
 
-static void WriteDataFileRow(const IcebergTableMetadata &table_metadata, Vector &data_file_vector, idx_t row_idx,
-                             const IcebergDataFile &data_file,
-                             const vector<IcebergExtendedPartitionInfo> &schema_partition_info) {
-	auto &data_file_entries = StructVector::GetEntries(data_file_vector);
-	idx_t entry_index = 0;
+} // namespace
 
-	if (table_metadata.iceberg_version >= 2) {
-		auto content_writer = FlatVector::Writer<int32_t>(data_file_entries[entry_index++], 1, row_idx);
-		content_writer.WriteValue(static_cast<int32_t>(data_file.content));
-	}
-
-	auto file_path_writer = FlatVector::Writer<string_t>(data_file_entries[entry_index++], 1, row_idx);
-	file_path_writer.WriteValue(string_t(data_file.file_path));
-
-	auto file_format_writer = FlatVector::Writer<string_t>(data_file_entries[entry_index++], 1, row_idx);
-	file_format_writer.WriteValue(string_t(data_file.file_format));
-
-	WritePartitionStructRow(data_file_entries[entry_index++], row_idx, data_file, table_metadata,
-	                        schema_partition_info);
-
-	auto record_count_writer = FlatVector::Writer<int64_t>(data_file_entries[entry_index++], 1, row_idx);
-	record_count_writer.WriteValue(data_file.record_count);
-
-	auto file_size_writer = FlatVector::Writer<int64_t>(data_file_entries[entry_index++], 1, row_idx);
-	file_size_writer.WriteValue(data_file.file_size_in_bytes);
-
-	auto column_sizes_writer = FlatVector::Writer<VectorListType<VectorStructType<int32_t, int64_t>>>(
-	    data_file_entries[entry_index++], 1, row_idx);
-	WriteIntIntMap(column_sizes_writer, data_file.column_sizes);
-
-	auto value_counts_writer = FlatVector::Writer<VectorListType<VectorStructType<int32_t, int64_t>>>(
-	    data_file_entries[entry_index++], 1, row_idx);
-	WriteIntIntMap(value_counts_writer, data_file.value_counts);
-
-	auto null_value_counts_writer = FlatVector::Writer<VectorListType<VectorStructType<int32_t, int64_t>>>(
-	    data_file_entries[entry_index++], 1, row_idx);
-	WriteIntIntMap(null_value_counts_writer, data_file.null_value_counts);
-
-	auto nan_value_counts_writer = FlatVector::Writer<VectorListType<VectorStructType<int32_t, int64_t>>>(
-	    data_file_entries[entry_index++], 1, row_idx);
-	WriteIntIntMap(nan_value_counts_writer, data_file.nan_value_counts);
-
-	auto lower_bounds_writer = FlatVector::Writer<VectorListType<VectorStructType<int32_t, string_t>>>(
-	    data_file_entries[entry_index++], 1, row_idx);
-	WriteBoundsMap(lower_bounds_writer, data_file.lower_bounds);
-
-	auto upper_bounds_writer = FlatVector::Writer<VectorListType<VectorStructType<int32_t, string_t>>>(
-	    data_file_entries[entry_index++], 1, row_idx);
-	WriteBoundsMap(upper_bounds_writer, data_file.upper_bounds);
-
-	auto split_offsets_writer =
-	    FlatVector::Writer<VectorListType<int64_t>>(data_file_entries[entry_index++], 1, row_idx);
-	if (data_file.split_offsets.empty()) {
-		split_offsets_writer.WriteNull();
-	} else {
-		WriteInt64List(split_offsets_writer, data_file.split_offsets);
-	}
-
-	auto equality_ids_writer =
-	    FlatVector::Writer<VectorListType<int32_t>>(data_file_entries[entry_index++], 1, row_idx);
-	if (data_file.equality_ids.empty()) {
-		equality_ids_writer.WriteNull();
-	} else {
-		WriteInt32List(equality_ids_writer, data_file.equality_ids);
-	}
-
-	auto sort_order_writer = FlatVector::Writer<int32_t>(data_file_entries[entry_index++], 1, row_idx);
-	if (data_file.has_sort_order_id) {
-		sort_order_writer.WriteValue(data_file.sort_order_id);
-	} else {
-		sort_order_writer.WriteNull();
-	}
-
-	if (table_metadata.iceberg_version >= 3) {
-		auto first_row_id_writer = FlatVector::Writer<int64_t>(data_file_entries[entry_index++], 1, row_idx);
-		if (data_file.HasFirstRowId()) {
-			first_row_id_writer.WriteValue(data_file.GetFirstRowId());
-		} else {
-			first_row_id_writer.WriteNull();
-		}
-	}
-
-	if (table_metadata.iceberg_version >= 2) {
-		auto referenced_data_file_writer = FlatVector::Writer<string_t>(data_file_entries[entry_index++], 1, row_idx);
-		if (data_file.referenced_data_file.empty()) {
-			referenced_data_file_writer.WriteNull();
-		} else {
-			referenced_data_file_writer.WriteValue(string_t(data_file.referenced_data_file));
-		}
-	}
-
-	if (table_metadata.iceberg_version >= 3) {
-		auto content_offset_writer = FlatVector::Writer<int64_t>(data_file_entries[entry_index++], 1, row_idx);
-		if (data_file.content_offset.IsNull()) {
-			content_offset_writer.WriteNull();
-		} else {
-			content_offset_writer.WriteValue(data_file.content_offset.GetValue<int64_t>());
-		}
-
-		auto content_size_writer = FlatVector::Writer<int64_t>(data_file_entries[entry_index++], 1, row_idx);
-		if (data_file.content_size_in_bytes.IsNull()) {
-			content_size_writer.WriteNull();
-		} else {
-			content_size_writer.WriteValue(data_file.content_size_in_bytes.GetValue<int64_t>());
-		}
-	}
-}
+namespace manifest_file {
 
 static LogicalType PartitionStructType(vector<IcebergExtendedPartitionInfo> extended_partition_info) {
 	child_list_t<LogicalType> children;
@@ -746,6 +813,7 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	auto snapshot_id_writer = FlatVector::Writer<int64_t>(chunk.data[1], manifest_entries.size());
 	auto sequence_number_writer = FlatVector::Writer<int64_t>(chunk.data[2], manifest_entries.size());
 	auto file_sequence_number_writer = FlatVector::Writer<int64_t>(chunk.data[3], manifest_entries.size());
+	DataFileVectorWriters data_file_writers(chunk.data[4], manifest_entries.size(), table_metadata);
 
 	for (idx_t i = 0; i < manifest_entries.size(); i++) {
 		auto &manifest_entry = manifest_entries[i];
@@ -768,7 +836,7 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 			file_sequence_number_writer.WriteValue(manifest_entry.GetFileSequenceNumber(manifest_file));
 		}
 
-		WriteDataFileRow(table_metadata, chunk.data[4], i, manifest_entry.data_file, extended_partition_info);
+		data_file_writers.WriteRow(i, manifest_entry.data_file, extended_partition_info);
 	}
 	chunk.SetChildCardinality(manifest_entries.size());
 
