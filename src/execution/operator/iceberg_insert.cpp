@@ -7,12 +7,14 @@
 #include "duckdb/planner/operator/logical_insert.hpp"
 #include "duckdb/planner/operator/logical_create_table.hpp"
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
+#include "duckdb/execution/operator/order/physical_order.hpp"
 #include "duckdb/execution/operator/projection/physical_projection.hpp"
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 #include "duckdb/function/function_binder.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_cast_expression.hpp"
+#include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
 
 #include "catalog/rest/iceberg_catalog.hpp"
@@ -251,6 +253,13 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 					info.value = Value();
 				}
 				data_file.partition_info.push_back(std::move(info));
+			}
+		}
+		if (table_metadata.HasSortOrder()) {
+			auto &sort_order = table_metadata.GetLatestSortOrder();
+			if (sort_order.IsSorted()) {
+				data_file.has_sort_order_id = true;
+				data_file.sort_order_id = sort_order.sort_order_id;
 			}
 		}
 
@@ -559,8 +568,19 @@ static unique_ptr<Expression> CreateColumnReference(const IcebergCopyInput &copy
 	return make_uniq<BoundReferenceExpression>(type, column_index);
 }
 
-//! Get a date_diff function expression for temporal partition transforms
-//! Iceberg partition transforms for year/month/day/hour are defined as:
+static unique_ptr<Expression> BindTransformFunction(ClientContext &context, const string &name,
+                                                    vector<unique_ptr<Expression>> children) {
+	ErrorData error;
+	FunctionBinder binder(context);
+	auto function =
+	    binder.BindScalarFunction(Identifier::DefaultSchema(), Identifier(name), std::move(children), error, false);
+	if (!function) {
+		error.Throw();
+	}
+	return function;
+}
+
+//! Iceberg partition/sort transforms for year/month/day/hour are defined as:
 //! - years: date_diff('year', DATE '1970-01-01', source_column)
 //! - months: date_diff('month', DATE '1970-01-01', source_column)
 //! - days: date_diff('day', DATE '1970-01-01', source_column)
@@ -569,96 +589,100 @@ static unique_ptr<Expression> GetDateDiffFunction(ClientContext &context, const 
                                                   const string &date_part, uint64_t source_id) {
 	auto col_idx = GetColumnIndexBySourceId(copy_input.schema.columns, source_id);
 	auto col_type = GetSourceColumnType(copy_input, source_id);
-
 	vector<unique_ptr<Expression>> children;
-	// First argument: the date part string (e.g., 'year', 'month', 'day', 'hour')
 	children.push_back(make_uniq<BoundConstantExpression>(Value(date_part)));
-	// Second argument: the epoch date/timestamp
 	if (date_part == "hour") {
 		children.push_back(make_uniq<BoundConstantExpression>(Value::TIMESTAMP(Timestamp::FromEpochSeconds(0))));
 	} else {
 		children.push_back(make_uniq<BoundConstantExpression>(Value::DATE(Date::FromDate(1970, 1, 1))));
 	}
-	// Third argument: the source column
 	children.push_back(CreateColumnReference(copy_input, col_type, col_idx));
-
-	ErrorData error;
-	FunctionBinder binder(context);
-	auto function =
-	    binder.BindScalarFunction(Identifier::DefaultSchema(), "date_diff", std::move(children), error, false);
-	if (!function) {
-		error.Throw();
-	}
-	return function;
+	return BindTransformFunction(context, "date_diff", std::move(children));
 }
 
-//! Get an iceberg_bucket(N, col) expression for bucket partition transforms
 static unique_ptr<Expression> GetBucketExpression(ClientContext &context, const IcebergCopyInput &copy_input,
-                                                  const IcebergPartitionSpecField &field) {
-	auto col_idx = GetColumnIndexBySourceId(copy_input.schema.columns, field.source_id);
-	auto col_type = GetSourceColumnType(copy_input, field.source_id);
-
+                                                  uint64_t source_id, const IcebergTransform &transform) {
+	auto col_idx = GetColumnIndexBySourceId(copy_input.schema.columns, source_id);
+	auto col_type = GetSourceColumnType(copy_input, source_id);
 	vector<unique_ptr<Expression>> children;
 	children.push_back(
-	    make_uniq<BoundConstantExpression>(Value::INTEGER(static_cast<int32_t>(field.transform.GetBucketModulo()))));
+	    make_uniq<BoundConstantExpression>(Value::INTEGER(static_cast<int32_t>(transform.GetBucketModulo()))));
 	children.push_back(CreateColumnReference(copy_input, col_type, col_idx));
-
-	ErrorData error;
-	FunctionBinder binder(context);
-	auto function =
-	    binder.BindScalarFunction(Identifier::DefaultSchema(), "iceberg_bucket", std::move(children), error, false);
-	if (!function) {
-		error.Throw();
-	}
-	return function;
+	return BindTransformFunction(context, "iceberg_bucket", std::move(children));
 }
 
-//! Get an iceberg_truncate(W, col) expression for truncate partition transforms
 static unique_ptr<Expression> GetTruncateExpression(ClientContext &context, const IcebergCopyInput &copy_input,
-                                                    const IcebergPartitionSpecField &field) {
-	auto col_idx = GetColumnIndexBySourceId(copy_input.schema.columns, field.source_id);
-	auto col_type = GetSourceColumnType(copy_input, field.source_id);
-
+                                                    uint64_t source_id, const IcebergTransform &transform) {
+	auto col_idx = GetColumnIndexBySourceId(copy_input.schema.columns, source_id);
+	auto col_type = GetSourceColumnType(copy_input, source_id);
 	vector<unique_ptr<Expression>> children;
 	children.push_back(
-	    make_uniq<BoundConstantExpression>(Value::INTEGER(static_cast<int32_t>(field.transform.GetTruncateWidth()))));
+	    make_uniq<BoundConstantExpression>(Value::INTEGER(static_cast<int32_t>(transform.GetTruncateWidth()))));
 	children.push_back(CreateColumnReference(copy_input, col_type, col_idx));
-
-	ErrorData error;
-	FunctionBinder binder(context);
-	auto function =
-	    binder.BindScalarFunction(Identifier::DefaultSchema(), "iceberg_truncate", std::move(children), error, false);
-	if (!function) {
-		error.Throw();
-	}
-	return function;
+	return BindTransformFunction(context, "iceberg_truncate", std::move(children));
 }
 
-//! Get the partition expression for a partition field based on its transform type
-static unique_ptr<Expression> GetPartitionExpression(ClientContext &context, const IcebergCopyInput &copy_input,
-                                                     const IcebergPartitionSpecField &field) {
-	switch (field.transform.Type()) {
+static unique_ptr<Expression> GetTransformExpression(ClientContext &context, const IcebergCopyInput &copy_input,
+                                                     uint64_t source_id, const IcebergTransform &transform,
+                                                     const char *usage) {
+	switch (transform.Type()) {
 	case IcebergTransformType::IDENTITY: {
-		auto col_idx = GetColumnIndexBySourceId(copy_input.schema.columns, field.source_id);
-		auto col_type = GetSourceColumnType(copy_input, field.source_id);
+		auto col_idx = GetColumnIndexBySourceId(copy_input.schema.columns, source_id);
+		auto col_type = GetSourceColumnType(copy_input, source_id);
 		return CreateColumnReference(copy_input, col_type, col_idx);
 	}
 	case IcebergTransformType::YEAR:
-		return GetDateDiffFunction(context, copy_input, "year", field.source_id);
+		return GetDateDiffFunction(context, copy_input, "year", source_id);
 	case IcebergTransformType::MONTH:
-		return GetDateDiffFunction(context, copy_input, "month", field.source_id);
+		return GetDateDiffFunction(context, copy_input, "month", source_id);
 	case IcebergTransformType::DAY:
-		return GetDateDiffFunction(context, copy_input, "day", field.source_id);
+		return GetDateDiffFunction(context, copy_input, "day", source_id);
 	case IcebergTransformType::HOUR:
-		return GetDateDiffFunction(context, copy_input, "hour", field.source_id);
+		return GetDateDiffFunction(context, copy_input, "hour", source_id);
 	case IcebergTransformType::BUCKET:
-		return GetBucketExpression(context, copy_input, field);
+		return GetBucketExpression(context, copy_input, source_id, transform);
 	case IcebergTransformType::TRUNCATE:
-		return GetTruncateExpression(context, copy_input, field);
+		return GetTruncateExpression(context, copy_input, source_id, transform);
 	case IcebergTransformType::VOID:
-		throw InvalidInputException("VOID partition transform should not be used for partitioning");
+		throw InvalidInputException("VOID partition transform should not be used for %s", usage);
 	default:
-		throw NotImplementedException("Unsupported partition transform type");
+		throw NotImplementedException("Unsupported %s transform type", usage);
+	}
+}
+
+static OrderType GetDuckDBOrderType(const string &direction) {
+	if (StringUtil::CIEquals(direction, "asc")) {
+		return OrderType::ASCENDING;
+	}
+	if (StringUtil::CIEquals(direction, "desc")) {
+		return OrderType::DESCENDING;
+	}
+	throw NotImplementedException("Unsupported Iceberg sort direction '%s'", direction);
+}
+
+static OrderByNullType GetDuckDBNullOrder(const string &null_order) {
+	if (StringUtil::CIEquals(null_order, "nulls-first")) {
+		return OrderByNullType::NULLS_FIRST;
+	}
+	if (StringUtil::CIEquals(null_order, "nulls-last")) {
+		return OrderByNullType::NULLS_LAST;
+	}
+	throw NotImplementedException("Unsupported Iceberg null order '%s'", null_order);
+}
+
+static void GenerateSortOrderExpressions(ClientContext &context, const IcebergCopyInput &copy_input,
+                                         IcebergCopyOptions &result) {
+	if (!copy_input.table_metadata.HasSortOrder()) {
+		return;
+	}
+	auto &sort_order = copy_input.table_metadata.GetLatestSortOrder();
+	if (!sort_order.IsSorted()) {
+		return;
+	}
+	for (auto &field : sort_order.fields) {
+		auto expr = GetTransformExpression(context, copy_input, field.source_id, field.transform, "sorting");
+		result.order_columns.emplace_back(GetDuckDBOrderType(field.direction), GetDuckDBNullOrder(field.null_order),
+		                                  std::move(expr));
 	}
 }
 
@@ -719,7 +743,7 @@ static void GeneratePartitionExpressions(ClientContext &context, const IcebergCo
 		}
 		partition_columns.push_back(partition_column_start++);
 
-		auto expr = GetPartitionExpression(context, copy_input, field);
+		auto expr = GetTransformExpression(context, copy_input, field.source_id, field.transform, "partitioning");
 		projection_names.push_back(Identifier(field.GetPartitionSpecFieldName()));
 		projection_types.push_back(expr->GetReturnType());
 		projection_expressions.push_back(std::move(expr));
@@ -814,6 +838,7 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 	// Get Parquet Copy function
 	auto &copy_fun = IcebergUtils::GetCopyFunction(context, file_format);
 	IcebergCopyOptions result(std::move(info), copy_fun.function);
+	GenerateSortOrderExpressions(context, copy_input, result);
 
 	result.use_tmp_file = false;
 	if (copy_input.partition_spec) {
@@ -844,7 +869,6 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 		result.filename_pattern.SetFilenamePattern("{uuidv7}");
 		result.partition_output = false;
 		result.write_empty_file = false;
-		// file_size_bytes is currently only supported for unpartitioned writes
 		auto write_target_file_size = table_properties.find("write.target-file-size-bytes");
 		if (write_target_file_size != table_properties.end()) {
 			result.file_size_bytes = std::stoull(write_target_file_size->second);
@@ -908,6 +932,20 @@ static void GenerateProjection(ClientContext &context, PhysicalPlanGenerator &pl
 	plan = proj;
 }
 
+static void GeneratePhysicalOrder(PhysicalPlanGenerator &planner, vector<BoundOrderByNode> &orders,
+                                  optional_ptr<PhysicalOperator> &plan) {
+	D_ASSERT(plan);
+	vector<idx_t> projections;
+	projections.reserve(plan->GetTypes().size());
+	for (idx_t i = 0; i < plan->GetTypes().size(); i++) {
+		projections.push_back(i);
+	}
+	auto &order = planner.Make<PhysicalOrder>(plan->GetTypes(), std::move(orders), std::move(projections),
+	                                          plan->estimated_cardinality);
+	order.children.push_back(*plan);
+	plan = order;
+}
+
 PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, PhysicalPlanGenerator &planner,
                                                    const IcebergCopyInput &copy_input,
                                                    optional_ptr<PhysicalOperator> plan) {
@@ -917,6 +955,10 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 	// that computes them on top of the child plan.
 	if (!copy_options.projection_list.empty() && plan) {
 		GenerateProjection(context, planner, copy_options.projection_list, plan);
+	}
+
+	if (!copy_input.partition_spec && !copy_options.order_columns.empty() && plan) {
+		GeneratePhysicalOrder(planner, copy_options.order_columns, plan);
 	}
 
 	auto copy_return_types = GetCopyFunctionReturnLogicalTypes(CopyFunctionReturnType::WRITTEN_FILE_STATISTICS);
@@ -938,6 +980,7 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 	physical_copy.write_partition_columns = copy_options.write_partition_columns;
 	physical_copy.write_empty_file = copy_options.write_empty_file;
 	physical_copy.partition_columns = std::move(copy_options.partition_columns);
+	physical_copy.order_columns = std::move(copy_options.order_columns);
 	physical_copy.names = std::move(copy_options.names);
 	physical_copy.expected_types = std::move(copy_options.expected_types);
 	physical_copy.parallel = true;
@@ -980,20 +1023,6 @@ PhysicalOperator &IcebergCatalog::PlanInsert(ClientContext &context, PhysicalPla
 	auto &table_metadata = updated_table.table_metadata;
 	auto &schema = table_metadata.GetLatestSchema();
 	auto &updated_table_entry = *updated_table.schema_versions[schema.schema_id];
-
-	if (table_metadata.HasSortOrder()) {
-		auto &sort_spec = table_metadata.GetLatestSortOrder();
-		if (sort_spec.IsSorted()) {
-			Value unsafe_ignore_sort_order;
-			if (!context.TryGetCurrentSetting("unsafe_iceberg_ignore_sort_order", unsafe_ignore_sort_order) ||
-			    !unsafe_ignore_sort_order.GetValue<bool>()) {
-				throw NotImplementedException(
-				    "INSERT into a sorted iceberg table is not supported yet.\nTo bypass this guard and "
-				    "write without applying the table's declared sort order, "
-				    "run \"SET unsafe_iceberg_ignore_sort_order=true\"");
-			}
-		}
-	}
 
 	// Create Copy Info
 	IcebergCopyInput info(context, table_metadata, schema);
