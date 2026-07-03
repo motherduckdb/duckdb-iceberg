@@ -4,6 +4,7 @@
 #include "duckdb/parser/expression/columnref_expression.hpp"
 #include "duckdb/parser/expression/function_expression.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
+#include "duckdb/parser/expression/operator_expression.hpp"
 
 #include "utf8proc_wrapper.hpp"
 #include "core/expression/iceberg_hash.hpp"
@@ -32,9 +33,42 @@ IcebergTransform IcebergTransform::FromExpression(const ParsedExpression &expr, 
 		auto &colref = expr.Cast<ColumnRefExpression>();
 		auto column_lookup = schema.GetFromPath(colref.ColumnNames(), nullptr);
 		if (!column_lookup) {
-			auto column_name = colref.ColumnNames().back();
-			throw InvalidInputException("No column by the name '%s' exists in the current schema (id: %d)",
-			                            column_name.GetIdentifierName(), schema.schema_id);
+			auto column_name = StringUtil::Join(colref.ColumnNames(), ".");
+			throw InvalidInputException("No column by the name '%s' exists in the current schema (id: %d)", column_name,
+			                            schema.schema_id);
+		}
+		source_columns.push_back(*column_lookup);
+		return IcebergTransform("identity");
+	}
+	case ExpressionType::STRUCT_EXTRACT: {
+		auto &struct_extract = expr.Cast<OperatorExpression>();
+		auto &children = struct_extract.GetChildren();
+		if (children.size() != 2) {
+			break;
+		}
+		auto &base = children[0];
+		auto &remaining_fields = children[1];
+		if (base->GetExpressionType() != ExpressionType::COLUMN_REF) {
+			break;
+		}
+		if (remaining_fields->GetExpressionType() != ExpressionType::VALUE_CONSTANT) {
+			break;
+		}
+		auto &base_column = base->Cast<ColumnRefExpression>();
+		auto &fields_constant = remaining_fields->Cast<ConstantExpression>();
+		if (fields_constant.GetValue().type().id() != LogicalTypeId::VARCHAR) {
+			break;
+		}
+		auto fields = base_column.ColumnNames();
+		auto parsed_fields = QualifiedName::ParseComponents(fields_constant.GetValue().GetValue<string>());
+		for (auto &parsed_field : parsed_fields) {
+			fields.push_back(std::move(parsed_field));
+		}
+		auto column_lookup = schema.GetFromPath(fields, nullptr);
+		if (!column_lookup) {
+			auto column_name = StringUtil::Join(fields, ".");
+			throw InvalidInputException("No column by the name '%s' exists in the current schema (id: %d)", column_name,
+			                            schema.schema_id);
 		}
 		source_columns.push_back(*column_lookup);
 		return IcebergTransform("identity");
@@ -82,9 +116,9 @@ IcebergTransform IcebergTransform::FromExpression(const ParsedExpression &expr, 
 			auto &colref = argument_expression.Cast<ColumnRefExpression>();
 			auto column_lookup = schema.GetFromPath(colref.ColumnNames(), nullptr);
 			if (!column_lookup) {
-				auto column_name = colref.ColumnNames().back();
+				auto column_name = StringUtil::Join(colref.ColumnNames(), ".");
 				throw InvalidInputException("No column by the name '%s' exists in the current schema (id: %d)",
-				                            column_name.GetIdentifierName(), schema.schema_id);
+				                            column_name, schema.schema_id);
 			}
 			source_columns.push_back(*column_lookup);
 		}
@@ -96,8 +130,9 @@ IcebergTransform IcebergTransform::FromExpression(const ParsedExpression &expr, 
 		return res;
 	}
 	default:
-		throw NotImplementedException("Unsupported partition key type: %s", expr.ToString());
+		break;
 	}
+	throw NotImplementedException("Unsupported partition key type: %s", expr.ToString());
 }
 
 IcebergTransform::IcebergTransform(const string &transform) : raw_transform(transform) {
