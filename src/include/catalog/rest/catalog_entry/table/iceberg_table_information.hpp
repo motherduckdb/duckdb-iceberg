@@ -44,13 +44,19 @@ public:
 	optional_ptr<CatalogEntry> CreateSchemaVersion(const IcebergTableSchema &table_schema);
 	idx_t GetMaxSchemaId();
 	idx_t GetNextPartitionSpecId();
-	int64_t GetExistingSpecId(IcebergPartitionSpec &spec);
+	idx_t GetNextSortOrderId();
+	optional<int64_t> GetExistingSpecId(IcebergPartitionSpec &spec);
+	optional<int64_t> GetExistingSortOrderId(IcebergSortOrder &sort_order);
 	void SetPartitionedBy(IcebergTransaction &transaction, const vector<unique_ptr<ParsedExpression>> &partition_keys,
 	                      const IcebergTableSchema &schema, bool first_partition_spec = false);
+	void SetSortedBy(IcebergTransaction &transaction, const vector<OrderByNode> &orders,
+	                 const IcebergTableSchema &schema, bool first_sort_spec = false);
 	//! Build an IcebergPartitionSpec from parsed PARTITIONED BY expressions and a schema.
 	static IcebergPartitionSpec BuildPartitionSpec(const vector<unique_ptr<ParsedExpression>> &partition_keys,
 	                                               const IcebergTableSchema &schema, int32_t spec_id,
 	                                               idx_t base_partition_field_id);
+	static IcebergSortOrder BuildSortOrder(const vector<OrderByNode> &orders, const IcebergTableSchema &schema,
+	                                       int32_t sort_order_id);
 	IRCAPITableCredentials GetVendedCredentials(ClientContext &context);
 	const string &BaseFilePath() const;
 

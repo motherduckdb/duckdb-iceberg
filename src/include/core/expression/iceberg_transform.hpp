@@ -6,6 +6,9 @@
 
 namespace duckdb {
 
+class IcebergTableSchema;
+struct IcebergColumnDefinition;
+
 enum class IcebergTransformType : uint8_t { IDENTITY, BUCKET, TRUNCATE, YEAR, MONTH, DAY, HOUR, VOID, INVALID };
 
 struct IcebergTransform {
@@ -39,6 +42,9 @@ public:
 	const string &RawType() const {
 		return raw_transform;
 	}
+
+	static IcebergTransform FromExpression(const ParsedExpression &expr, const IcebergTableSchema &schema,
+	                                       vector<reference<const IcebergColumnDefinition>> &source_columns);
 
 	static bool TransformFunctionSupported(const string &transform_name);
 	LogicalType GetSerializedType(const LogicalType &input) const;
