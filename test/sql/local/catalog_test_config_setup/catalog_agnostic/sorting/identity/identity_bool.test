@@ -23,13 +23,23 @@ statement ok
 drop table if exists my_datalake.default.sort_identity_bool;
 
 statement ok
-create table my_datalake.default.sort_identity_bool (id int, sort_col boolean);
+create table my_datalake.default.sort_identity_bool (
+	id int,
+	sort_col boolean
+);
 
 statement ok
-alter table my_datalake.default.sort_identity_bool set sorted by (sort_col asc nulls last, id asc nulls last);
+alter table my_datalake.default.sort_identity_bool set sorted by (
+	sort_col asc nulls last,
+	id asc nulls last
+);
 
 statement ok
-insert into my_datalake.default.sort_identity_bool values (4, true), (2, false), (3, true), (1, false);
+insert into my_datalake.default.sort_identity_bool values
+	(4, true),
+	(2, false),
+	(3, true),
+	(1, false);
 
 statement ok
 set variable latest_manifest_sequence = (select max(manifest_sequence_number) from iceberg_metadata(my_datalake.default.sort_identity_bool));
