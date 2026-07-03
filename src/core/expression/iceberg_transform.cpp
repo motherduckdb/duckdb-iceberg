@@ -107,20 +107,11 @@ IcebergTransform IcebergTransform::FromExpression(const ParsedExpression &expr, 
 
 		//! Figure out the source id(s) of the transforms
 		for (idx_t i = source_columns_offset; i < arguments.size(); i++) {
-			auto &argument_expression = arguments[i].GetExpression();
-			auto argument_expr_type = argument_expression.GetExpressionType();
-			if (argument_expr_type != ExpressionType::COLUMN_REF) {
-				throw NotImplementedException("Transforms are only supported on column references, not %s",
-				                              EnumUtil::ToChars(argument_expr_type));
+			auto tmp = FromExpression(*arguments[i], schema, source_columns);
+			if (tmp.Type() != IcebergTransformType::IDENTITY) {
+				throw InvalidInputException("Encountered a non-column source for the transform (%s)",
+				                            arguments[i]->ToString());
 			}
-			auto &colref = argument_expression.Cast<ColumnRefExpression>();
-			auto column_lookup = schema.GetFromPath(colref.ColumnNames(), nullptr);
-			if (!column_lookup) {
-				auto column_name = StringUtil::Join(colref.ColumnNames(), ".");
-				throw InvalidInputException("No column by the name '%s' exists in the current schema (id: %d)",
-				                            column_name, schema.schema_id);
-			}
-			source_columns.push_back(*column_lookup);
 		}
 
 		auto res = IcebergTransform(transform);
