@@ -51,6 +51,22 @@ commit
 statement ok con2
 commit
 
+statement ok
+SET VARIABLE append_retry_manifest = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.append_retry_v3_row_lineage)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+query IIII
+SELECT
+	first_row_id IS NULL,
+	referenced_data_file IS NULL,
+	content_offset IS NULL,
+	content_size_in_bytes IS NULL
+FROM (SELECT unnest(data_file) FROM read_avro(getvariable('append_retry_manifest')));
+----
+true	true	true	true
+
 query IIII
 select _last_updated_sequence_number, _row_id, id, payload
 from my_datalake.default.append_retry_v3_row_lineage
