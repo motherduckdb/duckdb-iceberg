@@ -139,14 +139,6 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 	auto &data_file = chunk.data[vector_index++];
 	idx_t entry_index = 0;
 	auto &data_file_entries = StructVector::GetEntries(data_file);
-
-	optional_ptr<Vector> content;
-	optional<Int32Entries> content_entries;
-	if (iceberg_version >= 2) {
-		content = data_file_entries[entry_index++];
-		content_entries.emplace(content->Values<int32_t>());
-	}
-
 	auto &file_path = data_file_entries[entry_index++];
 	auto file_path_entries = file_path.Values<string_t>();
 
@@ -188,18 +180,23 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 	auto &sort_order_id = data_file_entries[entry_index++];
 	auto sort_order_id_entries = sort_order_id.Values<int32_t>();
 
+	optional_ptr<Vector> content;
+	optional<Int32Entries> content_entries;
+	optional_ptr<Vector> referenced_data_file;
+	optional<StringEntries> referenced_data_file_entries;
+	if (iceberg_version >= 2) {
+		content = data_file_entries[entry_index++];
+		content_entries.emplace(content->Values<int32_t>());
+
+		referenced_data_file = data_file_entries[entry_index++];
+		referenced_data_file_entries.emplace(referenced_data_file->Values<string_t>());
+	}
+
 	optional_ptr<Vector> first_row_id;
 	optional<Int64Entries> first_row_id_entries;
 	if (iceberg_version >= 3) {
 		first_row_id = data_file_entries[entry_index++];
 		first_row_id_entries.emplace(first_row_id->Values<int64_t>());
-	}
-
-	optional_ptr<Vector> referenced_data_file;
-	optional<StringEntries> referenced_data_file_entries;
-	if (iceberg_version >= 2) {
-		referenced_data_file = data_file_entries[entry_index++];
-		referenced_data_file_entries.emplace(referenced_data_file->Values<string_t>());
 	}
 	optional_ptr<Vector> content_offset;
 	optional<Int64Entries> content_offset_entries;
