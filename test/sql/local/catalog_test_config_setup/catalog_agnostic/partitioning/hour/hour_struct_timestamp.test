@@ -1,5 +1,5 @@
-# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/partitioning/identity/identity_struct_bool.test
-# group: [identity]
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/partitioning/hour/hour_struct_timestamp.test
+# group: [hour]
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
@@ -20,43 +20,43 @@ statement ok
 CREATE SCHEMA IF NOT EXISTS my_datalake.default;
 
 statement ok
-drop table if exists my_datalake.default.partition_identity_bool_struct_field;
+drop table if exists my_datalake.default.partition_hour_timestamp_struct_field;
 
 statement ok
-create table my_datalake.default.partition_identity_bool_struct_field (
+create table my_datalake.default.partition_hour_timestamp_struct_field (
 	id int,
 	nested STRUCT(
 		filler VARCHAR,
-		partition_col boolean
+		partition_col timestamp
 	)
 );
 
 statement ok
-alter table my_datalake.default.partition_identity_bool_struct_field set partitioned by (
+alter table my_datalake.default.partition_hour_timestamp_struct_field set partitioned by (
 	nested.partition_col
 );
 
 statement ok
-insert into my_datalake.default.partition_identity_bool_struct_field values
-	(4, {'partition_col': true}),
-	(2, {'partition_col': false}),
-	(3, {'partition_col': true}),
-	(1, {'partition_col': false});
+insert into my_datalake.default.partition_hour_timestamp_struct_field values
+	(4, {'partition_col': '2020-02-02 10:45:00'}),
+	(2, {'partition_col': '2020-02-02 09:30:00'}),
+	(3, {'partition_col': '2020-02-02 10:15:00'}),
+	(1, {'partition_col': '2020-02-02 08:00:00'});
 
 statement ok
-set variable latest_manifest_sequence = (select max(manifest_sequence_number) from iceberg_metadata(my_datalake.default.partition_identity_bool_struct_field));
+set variable latest_manifest_sequence = (select max(manifest_sequence_number) from iceberg_metadata(my_datalake.default.partition_hour_timestamp_struct_field));
 
 statement ok
 set variable table_data_glob = (
 	select metadata.location || '/data/*/*.parquet'
-	from iceberg_load_table_response(my_datalake.default.partition_identity_bool_struct_field)
+	from iceberg_load_table_response(my_datalake.default.partition_hour_timestamp_struct_field)
 );
 
 # Verify that each written file contains only 1 distinct value
 query I
 with latest_files as (
 	select file_path
-	from iceberg_metadata(my_datalake.default.partition_identity_bool_struct_field)
+	from iceberg_metadata(my_datalake.default.partition_hour_timestamp_struct_field)
 	where manifest_sequence_number = cast(getvariable('latest_manifest_sequence') as bigint)
 	and manifest_content = 'DATA'
 	and status = 'ADDED'
@@ -73,4 +73,4 @@ select
 1
 
 statement ok
-drop table my_datalake.default.partition_identity_bool_struct_field;
+drop table my_datalake.default.partition_hour_timestamp_struct_field;
