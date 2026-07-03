@@ -11,45 +11,113 @@ require iceberg
 
 require httpfs
 
-require tpch
-
 # Do not ignore 'HTTP' error messages!
 set ignore_error_messages
 
 statement ok
-set enable_logging=true
+set threads=1;
 
 statement ok
-set logging_level='debug'
+set variable table_sort_order_id = (
+	select metadata."default-sort-order-id"
+	from iceberg_load_table_response(my_datalake.default.table_sort_order)
+);
 
-# Without the override, UPDATE on a sorted iceberg table is rejected
-statement error
-update my_datalake.default.table_sort_order set l_partkey = l_partkey + 1 where l_orderkey = 1;
+statement ok
+insert into my_datalake.default.table_sort_order values
+(910003, 30, 7101, 1, 1.00, 10.00, 0.00, 0.00, 'N', 'O', DATE '1998-01-01', DATE '1998-01-02', DATE '1998-01-03', 'DELIVER IN PERSON', 'MAIL', 'sorted_update_marker'),
+(910001, 40, 7102, 1, 1.00, 10.00, 0.00, 0.00, 'N', 'O', DATE '1998-01-01', DATE '1998-01-02', DATE '1998-01-03', 'DELIVER IN PERSON', 'MAIL', 'sorted_update_marker'),
+(910002, 10, 7103, 1, 1.00, 10.00, 0.00, 0.00, 'N', 'O', DATE '1998-01-01', DATE '1998-01-02', DATE '1998-01-03', 'DELIVER IN PERSON', 'MAIL', 'sorted_update_marker'),
+(910001, 10, 7104, 1, 1.00, 10.00, 0.00, 0.00, 'N', 'O', DATE '1998-01-01', DATE '1998-01-02', DATE '1998-01-03', 'DELIVER IN PERSON', 'MAIL', 'sorted_update_marker'),
+(910002, 20, 7105, 1, 1.00, 10.00, 0.00, 0.00, 'N', 'O', DATE '1998-01-01', DATE '1998-01-02', DATE '1998-01-03', 'DELIVER IN PERSON', 'MAIL', 'sorted_update_marker'),
+(910001, 30, 7106, 1, 1.00, 10.00, 0.00, 0.00, 'N', 'O', DATE '1998-01-01', DATE '1998-01-02', DATE '1998-01-03', 'DELIVER IN PERSON', 'MAIL', 'sorted_update_marker');
+
+statement ok
+begin transaction;
+
+statement ok
+update my_datalake.default.table_sort_order
+set l_partkey = l_partkey + 1000,
+    l_comment = 'sorted_update_marker_updated'
+where l_comment = 'sorted_update_marker';
+
+statement ok
+commit;
+
+query II
+select l_orderkey, l_partkey
+from my_datalake.default.table_sort_order
+where l_comment = 'sorted_update_marker_updated'
+order by l_orderkey, l_partkey;
 ----
-<REGEX>:.*Not implemented Error.*Update on a sorted iceberg table is not supported yet.*
-
-# With the unsafe override enabled, the UPDATE succeeds. The written data is
-# not sorted by the table's declared sort order, which the Iceberg spec permits
-# (writers are not required to honour the declared order, and readers do not
-# assume files are sorted).
-# Wrap in a transaction so we don't leak state into other tests.
-statement ok
-BEGIN;
+910001	1010
+910001	1030
+910001	1040
+910002	1010
+910002	1020
+910003	1030
 
 statement ok
-SET unsafe_iceberg_ignore_sort_order=true;
+set variable snapshot_id = (
+	select snapshot_id
+	from iceberg_snapshots(my_datalake.default.table_sort_order)
+	order by sequence_number desc
+	limit 1
+);
 
-statement ok
-update my_datalake.default.table_sort_order set l_partkey = l_partkey + 1 where l_orderkey = 1;
-
-statement ok
-ABORT;
-
-statement ok
-SET unsafe_iceberg_ignore_sort_order=false;
-
-# Without the override the guard still applies
-statement error
-update my_datalake.default.table_sort_order set l_partkey = l_partkey + 1 where l_orderkey = 1;
+query I
+select count(*)
+from iceberg_metadata(my_datalake.default.table_sort_order, snapshot_from_id=getvariable('snapshot_id'))
+where content = 'DATA' and status <> 'DELETED';
 ----
-<REGEX>:.*Not implemented Error.*Update on a sorted iceberg table is not supported yet.*
+1
+
+statement ok
+set variable file_path = (
+	select file_path
+	from iceberg_metadata(my_datalake.default.table_sort_order, snapshot_from_id=getvariable('snapshot_id'))
+	where content = 'DATA' and status <> 'DELETED'
+	limit 1
+);
+
+statement ok
+set variable manifest_path = (
+	select manifest_path
+	from iceberg_metadata(my_datalake.default.table_sort_order, snapshot_from_id=getvariable('snapshot_id'))
+	where content = 'DATA' and status <> 'DELETED'
+	limit 1
+);
+
+query I
+with ordered_rows as (
+	select
+		filename,
+		file_row_number,
+		l_orderkey,
+		l_partkey,
+		lag(l_orderkey) over(partition by filename order by file_row_number) prev_orderkey,
+		lag(l_partkey) over(partition by filename order by file_row_number) prev_partkey
+	from read_parquet(getvariable('file_path'), filename=true, file_row_number=true)
+)
+select count(*)
+from ordered_rows
+where prev_orderkey is not null
+and (l_orderkey < prev_orderkey or (l_orderkey = prev_orderkey and l_partkey < prev_partkey));
+----
+0
+
+query I
+select min(sort_order_id) = cast(getvariable('table_sort_order_id') as integer)
+from (select unnest(data_file) from read_avro(getvariable('manifest_path')))
+where sort_order_id is not null;
+----
+1
+
+statement ok
+begin transaction;
+
+statement ok
+delete from my_datalake.default.table_sort_order where l_comment = 'sorted_update_marker_updated';
+
+statement ok
+commit;

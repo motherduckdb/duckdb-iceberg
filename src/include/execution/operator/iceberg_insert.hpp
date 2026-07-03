@@ -65,6 +65,7 @@ public:
 	bool write_partition_columns;
 	bool write_empty_file = true;
 	vector<idx_t> partition_columns;
+	vector<BoundOrderByNode> order_columns;
 	vector<Identifier> names;
 	vector<LogicalType> expected_types;
 
