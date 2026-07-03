@@ -39,9 +39,11 @@ ALTER TABLE my_datalake.default.test_set_sorted_by_orderings SET SORTED BY (
 query ITT
 SELECT
 	metadata."default-sort-order-id",
-	metadata."sort-orders"[2].fields[1].direction,
-	metadata."sort-orders"[2].fields[1]."null-order"
-FROM iceberg_load_table_response(my_datalake.default.test_set_sorted_by_orderings);
+	sort_order.fields[1].direction,
+	sort_order.fields[1]."null-order"
+FROM iceberg_load_table_response(my_datalake.default.test_set_sorted_by_orderings),
+unnest(metadata."sort-orders"::VARIANT[]) AS t(sort_order)
+WHERE try_cast(sort_order."order-id" AS INTEGER) = metadata."default-sort-order-id";
 ----
 1	asc	nulls-first
 
@@ -55,9 +57,11 @@ ALTER TABLE my_datalake.default.test_set_sorted_by_orderings SET SORTED BY (
 query ITT
 SELECT
 	metadata."default-sort-order-id",
-	metadata."sort-orders"[3].fields[1].direction,
-	metadata."sort-orders"[3].fields[1]."null-order"
-FROM iceberg_load_table_response(my_datalake.default.test_set_sorted_by_orderings);
+	sort_order.fields[1].direction,
+	sort_order.fields[1]."null-order"
+FROM iceberg_load_table_response(my_datalake.default.test_set_sorted_by_orderings),
+unnest(metadata."sort-orders"::VARIANT[]) AS t(sort_order)
+WHERE try_cast(sort_order."order-id" AS INTEGER) = metadata."default-sort-order-id";
 ----
 2	asc	nulls-last
 
@@ -70,9 +74,11 @@ ALTER TABLE my_datalake.default.test_set_sorted_by_orderings SET SORTED BY (
 query ITT
 SELECT
 	metadata."default-sort-order-id",
-	metadata."sort-orders"[4].fields[1].direction,
-	metadata."sort-orders"[4].fields[1]."null-order"
-FROM iceberg_load_table_response(my_datalake.default.test_set_sorted_by_orderings);
+	sort_order.fields[1].direction,
+	sort_order.fields[1]."null-order"
+FROM iceberg_load_table_response(my_datalake.default.test_set_sorted_by_orderings),
+unnest(metadata."sort-orders"::VARIANT[]) AS t(sort_order)
+WHERE try_cast(sort_order."order-id" AS INTEGER) = metadata."default-sort-order-id";
 ----
 3	desc	nulls-first
 
@@ -85,9 +91,11 @@ ALTER TABLE my_datalake.default.test_set_sorted_by_orderings SET SORTED BY (
 query ITT
 SELECT
 	metadata."default-sort-order-id",
-	metadata."sort-orders"[5].fields[1].direction,
-	metadata."sort-orders"[5].fields[1]."null-order"
-FROM iceberg_load_table_response(my_datalake.default.test_set_sorted_by_orderings);
+	sort_order.fields[1].direction,
+	sort_order.fields[1]."null-order"
+FROM iceberg_load_table_response(my_datalake.default.test_set_sorted_by_orderings),
+unnest(metadata."sort-orders"::VARIANT[]) AS t(sort_order)
+WHERE try_cast(sort_order."order-id" AS INTEGER) = metadata."default-sort-order-id";
 ----
 4	desc	nulls-last
 
