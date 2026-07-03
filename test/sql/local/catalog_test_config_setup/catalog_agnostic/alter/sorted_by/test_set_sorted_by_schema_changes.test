@@ -47,10 +47,9 @@ CREATE TABLE my_datalake.default.test_set_sorted_by_rename_column (
 statement ok
 ALTER TABLE my_datalake.default.test_set_sorted_by_rename_column SET SORTED BY (a DESC NULLS FIRST);
 
-statement error
+# Rename is allowed because sort specs target source-id, which doesn't change through a rename
+statement ok
 ALTER TABLE my_datalake.default.test_set_sorted_by_rename_column RENAME COLUMN a TO a_new;
-----
-<REGEX>:.*sort order.*a.*
 
 statement ok
 drop table if exists my_datalake.default.test_set_sorted_by_alter_type;

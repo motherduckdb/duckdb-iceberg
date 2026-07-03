@@ -188,11 +188,27 @@ optional_ptr<CatalogEntry> IcebergSchemaEntry::CreateCollation(CatalogTransactio
 	throw BinderException("Iceberg databases do not support creating collations");
 }
 
+static optional_ptr<const IcebergSortOrderField>
+FindCurrentSortOrderFieldBySourceId(const IcebergTableMetadata &table_metadata, idx_t column_id,
+                                    int32_t &sort_order_id);
+
 static void VerifySchemaEvolution(const IcebergTableMetadata &table_metadata, const IcebergColumnDefinition &column,
                                   const LogicalType &target_type) {
 	auto &original_type = column.type;
 
 	string extra_info;
+	int32_t sort_order_id;
+	auto sort_order_field = FindCurrentSortOrderFieldBySourceId(table_metadata, column.id, sort_order_id);
+	if (sort_order_field) {
+		extra_info = StringUtil::Format(
+		    " (there is a sort order that refers to the column (sort_order_id: %d, transform: %s, direction: %s, "
+		    "null_order: %s))",
+		    sort_order_id, sort_order_field->transform.RawType(), sort_order_field->direction,
+		    sort_order_field->null_order);
+		auto error = StringUtil::Format("Column '%s' of type '%s' can't be altered to type '%s'%s", column.name,
+		                                original_type.ToString(), target_type.ToString(), extra_info);
+		throw CatalogException(error);
+	}
 	switch (original_type.id()) {
 	case LogicalTypeId::SQLNULL: {
 		//! UNKNOWN can be upgraded to anything
@@ -260,6 +276,39 @@ static void VerifySchemaEvolution(const IcebergTableMetadata &table_metadata, co
 	auto error = StringUtil::Format("Column '%s' of type '%s' can't be altered to type '%s'%s", column.name,
 	                                original_type.ToString(), target_type.ToString(), extra_info);
 	throw CatalogException(error);
+}
+
+static optional_ptr<const IcebergSortOrderField>
+FindCurrentSortOrderFieldBySourceId(const IcebergTableMetadata &table_metadata, idx_t column_id,
+                                    int32_t &sort_order_id) {
+	if (!table_metadata.HasSortOrder()) {
+		return nullptr;
+	}
+	auto &sort_order = table_metadata.GetLatestSortOrder();
+	if (sort_order.fields.empty()) {
+		return nullptr;
+	}
+	for (auto &sort_field : sort_order.fields) {
+		if (sort_field.source_id != column_id) {
+			continue;
+		}
+		sort_order_id = sort_order.sort_order_id;
+		return sort_field;
+	}
+	return nullptr;
+}
+
+static void ThrowIfColumnReferencedBySortOrder(const IcebergTableMetadata &table_metadata, idx_t column_id,
+                                               const string &column_name, const string &action) {
+	int32_t sort_order_id;
+	auto sort_order_field = FindCurrentSortOrderFieldBySourceId(table_metadata, column_id, sort_order_id);
+	if (!sort_order_field) {
+		return;
+	}
+	throw CatalogException(
+	    "Can't %s column '%s' as it is referenced by sort order %d (transform: %s, direction: %s, null_order: %s)",
+	    action, column_name, sort_order_id, sort_order_field->transform.RawType(), sort_order_field->direction,
+	    sort_order_field->null_order);
 }
 
 void IntroduceNewSchema(IcebergTableInformation &updated_table, IcebergTransactionData &transaction_data,
@@ -401,6 +450,8 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			    "Can't drop column '%s' as it is referenced by the current partition spec's field: '%s' (field id: %d)",
 			    to_remove_column, partition_field->GetPartitionSpecFieldName(), partition_field->partition_field_id);
 		}
+		ThrowIfColumnReferencedBySortOrder(updated_table.table_metadata, column_id.GetIndex(),
+		                                   to_remove_column.GetIdentifierName(), "drop");
 
 		if (new_schema->columns.empty()) {
 			throw CatalogException("Cannot drop column: table '%s' only has one column remaining!", table_entry.name);
