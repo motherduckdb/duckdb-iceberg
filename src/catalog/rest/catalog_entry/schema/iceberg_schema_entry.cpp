@@ -323,6 +323,17 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		updated_table.SetPartitionedBy(irc_transaction, partition_info.partition_keys, current_schema);
 		return;
 	}
+	case AlterTableType::SET_SORTED_BY: {
+		auto &sort_info = alter_table_info.Cast<SetSortedByInfo>();
+
+		// Ensure schema is the same as current
+		transaction_data.TableAddAssertCurrentSchemaId();
+		// Ensure last assigned partition field id is up to date
+		transaction_data.TableAddAssertLastAssignedPartitionId();
+
+		updated_table.SetSortedBy(irc_transaction, sort_info.orders, current_schema);
+		return;
+	}
 	case AlterTableType::ADD_COLUMN: {
 		auto &add_column_info = alter_table_info.Cast<AddColumnInfo>();
 		auto &column_definition = add_column_info.new_column;
