@@ -11,6 +11,8 @@ require iceberg
 
 require httpfs
 
+require icu
+
 statement ok
 SET Calendar='gregorian';
 
