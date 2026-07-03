@@ -1,8 +1,14 @@
 #include "core/expression/iceberg_transform.hpp"
 
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/parser/expression/columnref_expression.hpp"
+#include "duckdb/parser/expression/function_expression.hpp"
+#include "duckdb/parser/expression/constant_expression.hpp"
+
 #include "utf8proc_wrapper.hpp"
 #include "core/expression/iceberg_hash.hpp"
+#include "core/metadata/schema/iceberg_table_schema.hpp"
+#include "core/metadata/schema/iceberg_column_definition.hpp"
 
 namespace duckdb {
 
@@ -16,6 +22,82 @@ bool IcebergTransform::TransformFunctionSupported(const string &transform_name) 
 		return true;
 	}
 	return false;
+}
+
+IcebergTransform IcebergTransform::FromExpression(const ParsedExpression &expr, const IcebergTableSchema &schema,
+                                                  vector<reference<const IcebergColumnDefinition>> &source_columns) {
+	auto expr_type = expr.GetExpressionType();
+	switch (expr_type) {
+	case ExpressionType::COLUMN_REF: {
+		auto &colref = expr.Cast<ColumnRefExpression>();
+		auto column_name = colref.ColumnNames().back();
+		auto column_lookup = schema.GetFromPath({column_name}, nullptr);
+		if (!column_lookup) {
+			throw InvalidInputException("No column by the name '%s' exists in the current schema (id: %d)",
+			                            column_name.GetIdentifierName(), schema.schema_id);
+		}
+		source_columns.push_back(*column_lookup);
+		return IcebergTransform("identity");
+	}
+	case ExpressionType::FUNCTION: {
+		auto &funcexpr = expr.Cast<FunctionExpression>();
+		auto transform = funcexpr.FunctionName().GetIdentifierName();
+		if (funcexpr.GetArguments().empty()) {
+			throw NotImplementedException("Unrecognized transform ('%s')", transform);
+		} else if (!IcebergTransform::TransformFunctionSupported(transform)) {
+			throw NotImplementedException("Unrecognized transform ('%s')", transform);
+		}
+
+		auto &arguments = funcexpr.GetArguments();
+		idx_t source_columns_offset = 0;
+		idx_t constant_value;
+		if (transform == "bucket" || transform == "truncate") {
+			// Spark-compatible syntax: bucket(N, col) / truncate(W, col)
+			if (arguments.size() < 2) {
+				throw InvalidInputException("%s requires two arguments, e.g. %s(16, col)", transform, transform);
+			}
+			auto &param_expr = arguments[0].GetExpression();
+			if (param_expr.GetExpressionType() != ExpressionType::VALUE_CONSTANT) {
+				throw InvalidInputException("%s first argument must be a constant integer", transform);
+			}
+			auto &const_expr = param_expr.Cast<ConstantExpression>();
+			auto raw_val = const_expr.GetValue().GetValue<int32_t>();
+			if (raw_val <= 0) {
+				throw InvalidInputException("%s requires a positive integer argument, got %d", transform, raw_val);
+			}
+			constant_value = const_expr.GetValue().GetValue<idx_t>();
+			transform = StringUtil::Format("%s[%d]", transform, constant_value);
+			//! Source columns start behind the constant argument
+			source_columns_offset = 1;
+		}
+
+		//! Figure out the source id(s) of the transforms
+		for (idx_t i = source_columns_offset; i < arguments.size(); i++) {
+			auto &argument_expression = arguments[i].GetExpression();
+			auto argument_expr_type = argument_expression.GetExpressionType();
+			if (argument_expr_type != ExpressionType::COLUMN_REF) {
+				throw NotImplementedException("Transforms are only supported on column references, not %s",
+				                              EnumUtil::ToChars(argument_expr_type));
+			}
+			auto &colref = argument_expression.Cast<ColumnRefExpression>();
+			auto column_name = colref.ColumnNames().back();
+			auto column_lookup = schema.GetFromPath({column_name}, nullptr);
+			if (!column_lookup) {
+				throw InvalidInputException("No column by the name '%s' exists in the current schema (id: %d)",
+				                            column_name.GetIdentifierName(), schema.schema_id);
+			}
+			source_columns.push_back(*column_lookup);
+		}
+
+		auto res = IcebergTransform(transform);
+		if (res.Type() == IcebergTransformType::BUCKET || res.Type() == IcebergTransformType::TRUNCATE) {
+			res.SetBucketOrTruncateValue(constant_value);
+		}
+		return res;
+	}
+	default:
+		throw NotImplementedException("Unsupported partition key type: %s", expr.ToString());
+	}
 }
 
 IcebergTransform::IcebergTransform(const string &transform) : raw_transform(transform) {
