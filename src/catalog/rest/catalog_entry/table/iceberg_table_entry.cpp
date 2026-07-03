@@ -28,71 +28,6 @@ namespace duckdb {
 class OAuth2Authorization;
 constexpr column_t IcebergMultiFileReader::COLUMN_IDENTIFIER_LAST_SEQUENCE_NUMBER;
 
-static void DropTemporaryIcebergSecrets(ClientContext &context, vector<string> &secret_names) {
-	if (secret_names.empty()) {
-		return;
-	}
-
-	bool started_transaction = false;
-	try {
-		if (!context.transaction.HasActiveTransaction()) {
-			context.transaction.BeginTransaction();
-			started_transaction = true;
-		}
-
-		auto &secret_manager = SecretManager::Get(context);
-		for (auto &secret_name : secret_names) {
-			secret_manager.DropSecretByName(context, secret_name, OnEntryNotFound::RETURN_NULL,
-			                                SecretPersistType::TEMPORARY, SecretManager::TEMPORARY_STORAGE_NAME);
-		}
-
-		if (started_transaction) {
-			context.transaction.Commit();
-		}
-	} catch (...) {
-		if (started_transaction && context.transaction.HasActiveTransaction()) {
-			context.transaction.Rollback(nullptr);
-		}
-		// Query-end cleanup must not mask the query result.
-	}
-	secret_names.clear();
-}
-
-class IcebergTemporarySecretCleanupState : public ClientContextState {
-public:
-	void TrackSecret(string secret_name) {
-		lock_guard<mutex> guard(lock);
-		temporary_secret_names.push_back(std::move(secret_name));
-	}
-
-	void QueryBegin(ClientContext &context) override {
-		lock_guard<mutex> guard(lock);
-		temporary_secret_names.clear();
-	}
-
-	void QueryEnd(ClientContext &context, optional_ptr<ErrorData> error) override {
-		vector<string> secret_names;
-		{
-			lock_guard<mutex> guard(lock);
-			secret_names.swap(temporary_secret_names);
-		}
-		DropTemporaryIcebergSecrets(context, secret_names);
-	}
-
-private:
-	mutex lock;
-	vector<string> temporary_secret_names;
-};
-
-static void TrackTemporarySecretForQuery(ClientContext &context, const string &secret_name) {
-	if (!context.transaction.HasActiveTransaction() || context.transaction.GetActiveQuery() == MAXIMUM_QUERY_ID) {
-		return;
-	}
-	auto state =
-	    context.registered_state->GetOrCreate<IcebergTemporarySecretCleanupState>("iceberg_temporary_secret_cleanup");
-	state->TrackSecret(secret_name);
-}
-
 IcebergTableEntry::IcebergTableEntry(IcebergTableInformation &table_info, Catalog &catalog, SchemaCatalogEntry &schema,
                                      CreateTableInfo &info, optional_idx schema_id)
     : TableCatalogEntry(catalog, schema, info), table_info(table_info), schema_id(schema_id) {
@@ -180,9 +115,7 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 		}
 
 		auto created_secret = secret_manager.CreateSecret(context, info);
-		auto secret_name = created_secret->secret->GetName();
-		transaction.created_secrets.insert(secret_name);
-		TrackTemporarySecretForQuery(context, secret_name);
+		transaction.created_secrets.insert(created_secret->secret->GetName());
 		// if there is no key_id, secret, token (S3/GCS) or account_name, connection_string (Azure) in the info,
 		// log that vended credentials has not worked
 		bool has_s3_creds = info.options.find("key_id") != info.options.end() ||
@@ -201,9 +134,7 @@ void IcebergTableEntry::PrepareIcebergScanFromEntry(ClientContext &context) cons
 				IcebergTableSecretProvider::AddHTTPSecretsToOptions(*http_secret_entry, info.options);
 			}
 			auto created_secret = secret_manager.CreateSecret(context, info);
-			auto secret_name = created_secret->secret->GetName();
-			transaction.created_secrets.insert(secret_name);
-			TrackTemporarySecretForQuery(context, secret_name);
+			transaction.created_secrets.insert(created_secret->secret->GetName());
 		}
 	}
 }

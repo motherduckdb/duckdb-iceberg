@@ -411,6 +411,8 @@ TableTransactionInfo IcebergTransaction::GetTransactionRequest(IcebergTransactio
 void IcebergTransaction::Commit() {
 	if (transaction_updates.empty() && created_schemas.empty() && deleted_schemas.empty() &&
 	    schema_property_updates.empty()) {
+		// Read-only scans can create temporary vended storage secrets that later statements use
+		// for manifest/data paths derived from the scan.
 		return;
 	}
 
