@@ -25,8 +25,10 @@ namespace duckdb {
 // Iceberg spec: bucket = (murmur3_hash(value) & 0x7FFFFFFF) % num_buckets
 //===--------------------------------------------------------------------===//
 
-static unique_ptr<FunctionData> IcebergBucketBind(ClientContext &context, ScalarFunction &bound_function,
-                                                  vector<unique_ptr<Expression>> &arguments) {
+static unique_ptr<FunctionData> IcebergBucketBind(BindScalarFunctionInput &input) {
+	auto &arguments = input.GetArguments();
+	auto &context = input.GetClientContext();
+
 	D_ASSERT(arguments.size() == 2);
 	auto &num_buckets_expr = *arguments[0];
 	if (num_buckets_expr.IsFoldable()) {
@@ -127,8 +129,11 @@ static void IcebergBucketDecimalHugeInt(DataChunk &input, ExpressionState &state
 	    [](int32_t n, hugeint_t val) -> int32_t { return (IcebergHash::HashDecimalHugeInt(val) & 0x7FFFFFFF) % n; });
 }
 
-static unique_ptr<FunctionData> IcebergBucketDecimalBind(ClientContext &context, ScalarFunction &bound_function,
-                                                         vector<unique_ptr<Expression>> &arguments) {
+static unique_ptr<FunctionData> IcebergBucketDecimalBind(BindScalarFunctionInput &input) {
+	auto &arguments = input.GetArguments();
+	auto &context = input.GetClientContext();
+	auto &bound_function = input.GetBoundFunction();
+
 	D_ASSERT(arguments.size() == 2);
 	auto &num_buckets_expr = *arguments[0];
 	if (num_buckets_expr.IsFoldable()) {
@@ -138,8 +143,8 @@ static unique_ptr<FunctionData> IcebergBucketDecimalBind(ClientContext &context,
 			                            num_buckets_val.GetValue<int32_t>());
 		}
 	}
-	auto &decimal_type = arguments[1]->return_type;
-	bound_function.arguments[1] = decimal_type;
+	auto &decimal_type = arguments[1]->GetReturnType();
+	bound_function.GetArguments()[1] = decimal_type;
 	switch (decimal_type.InternalType()) {
 	case PhysicalType::INT16:
 		bound_function.SetFunctionCallback(IcebergBucketDecimalInt16);
@@ -196,8 +201,10 @@ ScalarFunctionSet IcebergFunctions::GetIcebergBucketFunction() {
 //   binary:    first L bytes
 //===--------------------------------------------------------------------===//
 
-static unique_ptr<FunctionData> IcebergTruncateBind(ClientContext &context, ScalarFunction &bound_function,
-                                                    vector<unique_ptr<Expression>> &arguments) {
+static unique_ptr<FunctionData> IcebergTruncateBind(BindScalarFunctionInput &input) {
+	auto &arguments = input.GetArguments();
+	auto &context = input.GetClientContext();
+
 	D_ASSERT(arguments.size() == 2);
 	auto &width_expr = *arguments[0];
 	if (width_expr.IsFoldable()) {
@@ -281,8 +288,11 @@ static void IcebergTruncateDecimalHugeInt(DataChunk &input, ExpressionState &sta
 	                                                       });
 }
 
-static unique_ptr<FunctionData> IcebergTruncateDecimalBind(ClientContext &context, ScalarFunction &bound_function,
-                                                           vector<unique_ptr<Expression>> &arguments) {
+static unique_ptr<FunctionData> IcebergTruncateDecimalBind(BindScalarFunctionInput &input) {
+	auto &arguments = input.GetArguments();
+	auto &context = input.GetClientContext();
+	auto &bound_function = input.GetBoundFunction();
+
 	D_ASSERT(arguments.size() == 2);
 	auto &width_expr = *arguments[0];
 	if (width_expr.IsFoldable()) {
@@ -292,8 +302,8 @@ static unique_ptr<FunctionData> IcebergTruncateDecimalBind(ClientContext &contex
 			                            width_val.GetValue<int32_t>());
 		}
 	}
-	auto &decimal_type = arguments[1]->return_type;
-	bound_function.arguments[1] = decimal_type;
+	auto &decimal_type = arguments[1]->GetReturnType();
+	bound_function.GetArguments()[1] = decimal_type;
 	bound_function.SetReturnType(decimal_type);
 	switch (decimal_type.InternalType()) {
 	case PhysicalType::INT16:

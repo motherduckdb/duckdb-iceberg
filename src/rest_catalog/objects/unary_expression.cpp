@@ -24,6 +24,13 @@ UnaryExpression UnaryExpression::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+UnaryExpression UnaryExpression::Copy() const {
+	UnaryExpression res;
+	res.type = type.Copy();
+	res.term = term.Copy();
+	return res;
+}
+
 string UnaryExpression::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -44,7 +51,11 @@ string UnaryExpression::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *UnaryExpression::ToJSON(yyjson_mut_doc *doc) const {
+	throw InternalException("Can't serialize this class (UnaryExpression)");
 }
 
 } // namespace rest_api_objects

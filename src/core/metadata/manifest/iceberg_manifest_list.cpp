@@ -1,5 +1,7 @@
 #include "core/metadata/manifest/iceberg_manifest_list.hpp"
 
+#include "core/metadata/manifest/iceberg_avro_codec.hpp"
+#include "duckdb/common/string_util.hpp"
 #include "duckdb/common/exception/conversion_exception.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
@@ -41,7 +43,7 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 	auto manifest_file_uuid = UUID::ToString(UUID::GenerateRandomUUID());
 	auto manifest_file_path = fs.JoinPath(table_metadata.GetMetadataPath(fs), manifest_file_uuid + "-m0.avro");
 
-	// Add a manifest list entry for the delete files
+	// Add a manifest list entry for the entries
 	IcebergManifestListEntry manifest_list_entry(manifest_file_path);
 	auto &manifest_file = manifest_list_entry.file;
 	manifest_file.manifest_path = manifest_file_path;
@@ -270,7 +272,7 @@ namespace {
 
 struct AvroBindSchemaMetadata {
 	child_list_t<Value> field_ids;
-	vector<string> names;
+	vector<Identifier> names;
 	vector<LogicalType> types;
 };
 
@@ -283,7 +285,7 @@ static Value CreateFieldID(int32_t field_id, bool nullable) {
 
 static void AddSimpleColumn(AvroBindSchemaMetadata &metadata, const string &name, const LogicalType &type,
                             int32_t field_id, bool nullable) {
-	metadata.names.push_back(name);
+	metadata.names.push_back(Identifier(name));
 	metadata.types.push_back(type);
 	metadata.field_ids.emplace_back(name, CreateFieldID(field_id, nullable));
 }
@@ -383,51 +385,51 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
 		idx_t col_idx = 0;
 
 		// manifest_path: string - 500
-		data.SetValue(col_idx++, i, Value(manifest.manifest_path));
+		data.data[col_idx++].Append(Value(manifest.manifest_path));
 
 		// manifest_length: long - 501
-		data.SetValue(col_idx++, i, Value::BIGINT(manifest.manifest_length));
+		data.data[col_idx++].Append(Value::BIGINT(manifest.manifest_length));
 
 		// partition_spec_id: long - 502
-		data.SetValue(col_idx++, i, Value::BIGINT(manifest.partition_spec_id));
+		data.data[col_idx++].Append(Value::BIGINT(manifest.partition_spec_id));
 
 		// content: int - 517
-		data.SetValue(col_idx++, i, Value::INTEGER(static_cast<int32_t>(manifest.content)));
+		data.data[col_idx++].Append(Value::INTEGER(static_cast<int32_t>(manifest.content)));
 
 		// sequence_number: long - 515
-		data.SetValue(col_idx++, i, Value::BIGINT(manifest.sequence_number));
+		data.data[col_idx++].Append(Value::BIGINT(manifest.sequence_number));
 
 		// min_sequence_number: long - 516
 		if (!manifest.has_min_sequence_number) {
 			//! Behavior copied from pyiceberg
-			data.SetValue(col_idx++, i, Value::BIGINT(-1));
+			data.data[col_idx++].Append(Value::BIGINT(-1));
 		} else {
-			data.SetValue(col_idx++, i, Value::BIGINT(manifest.min_sequence_number));
+			data.data[col_idx++].Append(Value::BIGINT(manifest.min_sequence_number));
 		}
 
 		// added_snapshot_id: long - 503
-		data.SetValue(col_idx++, i, Value::BIGINT(manifest.added_snapshot_id));
+		data.data[col_idx++].Append(Value::BIGINT(manifest.added_snapshot_id));
 
 		// added_files_count: int - 504
-		data.SetValue(col_idx++, i, Value::INTEGER(manifest.added_files_count));
+		data.data[col_idx++].Append(Value::INTEGER(manifest.added_files_count));
 
 		// existing_files_count: int - 505
-		data.SetValue(col_idx++, i, Value::INTEGER(manifest.existing_files_count));
+		data.data[col_idx++].Append(Value::INTEGER(manifest.existing_files_count));
 
 		// deleted_files_count: int - 506
-		data.SetValue(col_idx++, i, Value::INTEGER(manifest.deleted_files_count));
+		data.data[col_idx++].Append(Value::INTEGER(manifest.deleted_files_count));
 
 		// added_rows_count: long - 512
-		data.SetValue(col_idx++, i, Value::BIGINT(static_cast<int64_t>(manifest.added_rows_count)));
+		data.data[col_idx++].Append(Value::BIGINT(static_cast<int64_t>(manifest.added_rows_count)));
 
 		// existing_rows_count: long - 513
-		data.SetValue(col_idx++, i, Value::BIGINT(static_cast<int64_t>(manifest.existing_rows_count)));
+		data.data[col_idx++].Append(Value::BIGINT(static_cast<int64_t>(manifest.existing_rows_count)));
 
 		// deleted_rows_count: long - 514
-		data.SetValue(col_idx++, i, Value::BIGINT(static_cast<int64_t>(manifest.deleted_rows_count)));
+		data.data[col_idx++].Append(Value::BIGINT(static_cast<int64_t>(manifest.deleted_rows_count)));
 
 		// partitions: list<508: field_summary> - 507
-		data.SetValue(col_idx++, i, manifest.partitions.ToValue());
+		data.data[col_idx++].Append(manifest.partitions.ToValue());
 
 		if (table_metadata.iceberg_version < 3) {
 			continue;
@@ -444,15 +446,25 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
 		}
 
 		if (has_first_row_id) {
-			data.SetValue(col_idx++, i, first_row_id);
+			data.data[col_idx++].Append(first_row_id);
+		} else {
+			data.data[col_idx++].Append(Value(LogicalType::BIGINT));
 		}
 	}
-	data.SetCardinality(manifest_files.size());
+	data.SetChildCardinality(manifest_files.size());
 
 	CopyInfo copy_info;
 	copy_info.is_from = false;
 	copy_info.options["root_name"].push_back(Value("manifest_file"));
 	copy_info.options["field_ids"].push_back(Value::STRUCT(metadata.field_ids));
+
+	//! write.manifest.compression-codec: let the Avro COPY writer emit the codec natively.
+	//! "null" is the COPY default (uncompressed), so only set the option for a compressing codec.
+	auto avro_codec =
+	    iceberg_avro_codec::ResolveAvroCodec(table_metadata.GetTableProperty("write.manifest.compression-codec"));
+	if (!StringUtil::CIEquals(avro_codec, "null")) {
+		copy_info.options["codec"].push_back(Value(avro_codec));
+	}
 
 	CopyFunctionBindInput input(copy_info);
 	input.file_extension = "avro";

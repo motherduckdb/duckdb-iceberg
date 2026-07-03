@@ -3,6 +3,7 @@
 
 #include "duckdb/transaction/transaction.hpp"
 #include "catalog/rest/iceberg_schema_set.hpp"
+#include "catalog/rest/api/iceberg_retry.hpp"
 
 namespace duckdb {
 class IcebergCatalog;
@@ -18,11 +19,9 @@ struct TableTransactionInfo {
 
 	rest_api_objects::CommitTransactionRequest request;
 	case_insensitive_map_t<idx_t> table_requests;
-
-	// if a table is created with assert create, we cannot use the
-	// transactions/commit endpoint. Instead we iterate through each table
-	// update and update each table individually
-	bool has_assert_create = false;
+	case_insensitive_map_t<vector<string>> created_metadata_files;
+	bool retryable = false;
+	IcebergRetryConfig retry_config;
 };
 
 enum class IcebergTableStatus : uint8_t { ALIVE, DROPPED, RENAMED, MISSING };
@@ -89,6 +88,8 @@ public:
 	IcebergCatalog &GetCatalog();
 	void DropSecrets(ClientContext &context);
 	TableTransactionInfo GetTransactionRequest(IcebergTransactionAlterUpdate &alter_update, ClientContext &context);
+	void DoMultiTableCommitUpdates(IcebergTransactionAlterUpdate &alter_update, ClientContext &context);
+	void DoSingleTableCommitUpdates(IcebergTransactionAlterUpdate &alter_update, ClientContext &context);
 	optional_ptr<IcebergTransactionTableState> GetLatestTableState(const string &table_key);
 	IcebergTransactionTableState &SetLatestTableState(IcebergTableInformation &table, IcebergTableStatus status);
 	IcebergTransactionTableState &SetLatestTableState(const string &table_key, IcebergTableStatus status);
@@ -98,7 +99,13 @@ public:
 	IcebergTableInformation &RenameTable(IcebergTableInformation &table, const string &new_name);
 
 private:
+	bool CanUseMultiTableCommit(const IcebergTransactionAlterUpdate &alter_update) const;
+	void CleanupMetadataFiles(ClientContext &context, const vector<string> &paths);
+	void RefreshRetryTables(IcebergTransactionAlterUpdate &alter_update, const case_insensitive_set_t &table_keys,
+	                        ClientContext &context);
 	void CleanupFiles();
+	//! Commit outcome unknown (5xx / no HTTP status); CleanupFiles() then keeps the written files.
+	bool commit_state_unknown = false;
 
 private:
 	DatabaseInstance &db;

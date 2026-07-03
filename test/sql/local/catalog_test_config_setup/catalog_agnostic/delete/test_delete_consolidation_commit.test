@@ -112,11 +112,11 @@ select count(*) from read_avro(getvariable('last_manifest_list')) where content 
 loop i 0 3
 
 statement ok
-set variable delete_manifest${i} = (
+set variable delete_manifest{i} = (
 	select manifest_path from read_avro(
 		getvariable('last_manifest_list')
 	) where content = 1 order by sequence_number
-	offset ${i} limit 1
+	offset {i} limit 1
 );
 
 endloop

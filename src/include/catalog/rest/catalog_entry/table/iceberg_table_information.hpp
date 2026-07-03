@@ -1,7 +1,7 @@
 #pragma once
 
 #include "duckdb/catalog/catalog_entry.hpp"
-#include "duckdb/storage/caching_file_system_wrapper.hpp"
+#include "duckdb/storage/external_file_cache/caching_file_system_wrapper.hpp"
 
 #include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
 #include "core/metadata/manifest/iceberg_manifest.hpp"
@@ -74,6 +74,7 @@ public:
 	bool HasTransactionUpdates() const;
 	void InitializeFromLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result,
 	                                   bool initialize_schemas = true);
+	void RefreshFromCatalog(ClientContext &context);
 
 public:
 	IcebergCatalog &catalog;

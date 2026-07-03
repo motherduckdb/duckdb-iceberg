@@ -32,7 +32,7 @@ TableFunctionSet IcebergFunctions::GetIcebergDeletesScanFunction(ClientContext &
 	//! in which case we need to rely on the `'schema.column-mapping.default'` property just like data files do.
 	auto &system_catalog = Catalog::GetSystemCatalog(instance);
 	auto data = CatalogTransaction::GetSystemTransaction(instance);
-	auto &schema = system_catalog.GetSchema(data, DEFAULT_SCHEMA);
+	auto &schema = system_catalog.GetSchema(data, Identifier::DefaultSchema());
 	auto catalog_entry = schema.GetEntry(data, CatalogType::TABLE_FUNCTION_ENTRY, "parquet_scan");
 	if (!catalog_entry) {
 		throw InvalidInputException("Function with name \"parquet_scan\" not found!");
@@ -57,10 +57,10 @@ TableFunctionSet IcebergFunctions::GetIcebergDeletesScanFunction(ClientContext &
 
 		// Schema param is just confusing here
 		function.named_parameters.erase("schema");
-		function.name = "iceberg_deletes_scan";
+		function.SetName("iceberg_deletes_scan");
 	}
 
-	parquet_scan_copy.name = "iceberg_deletes_scan";
+	parquet_scan_copy.SetName("iceberg_deletes_scan");
 	return parquet_scan_copy;
 }
 

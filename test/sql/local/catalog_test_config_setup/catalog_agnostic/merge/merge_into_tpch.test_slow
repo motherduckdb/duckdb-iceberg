@@ -2,6 +2,8 @@
 # description: Test merge into with TPC-H SF1
 # group: [merge]
 
+mode skip Big MERGE INTO chunk sizes cause a crash due to async parquet writer work (see https://github.com/duckdblabs/duckdb-internal/issues/9753)
+
 require-env CATALOG_TEST_CONFIG_SETUP
 
 require avro

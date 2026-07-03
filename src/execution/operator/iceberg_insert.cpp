@@ -270,7 +270,7 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 			}
 
 			optional_idx name_offset;
-			auto column_info_p = ic_schema->GetFromPath(column_names, &name_offset);
+			auto column_info_p = ic_schema->GetFromPath(StringsToIdentifiers(column_names), &name_offset);
 			if (!column_info_p) {
 				auto normalized_col_name = StringUtil::Join(column_names, ".");
 				throw InternalException("Column '%s' can not be found in the schema, but returned by RETURN_STATS",
@@ -344,6 +344,11 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 			if (stats.has_null_count) {
 				data_file.null_value_counts[column_info.id] = stats.null_count;
 			}
+			if (stats.has_num_values) {
+				//! Iceberg 'value_counts' is the total number of values (including nulls). The Parquet writer's
+				//! 'num_values' has the same semantics.
+				data_file.value_counts[column_info.id] = stats.num_values;
+			}
 
 			//! nan_value_counts won't work, we can only indicate if they exist.
 			//! TODO: revisit when duckdb/duckdb can record nan_value_counts
@@ -378,7 +383,7 @@ void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, Data
 	D_ASSERT(table);
 	auto &ic_table = table->Cast<IcebergTableEntry>();
 	auto &table_metadata = ic_table.table_info.table_metadata;
-	global_state.AddFiles(chunk, ic_table.name, table_metadata);
+	global_state.AddFiles(chunk, ic_table.name.GetIdentifierName(), table_metadata);
 }
 
 optional_ptr<TableCatalogEntry> IcebergInsert::GetEffectiveTable() const {
@@ -413,7 +418,7 @@ SourceResultType IcebergInsert::GetDataInternal(ExecutionContext &context, DataC
 	auto &global_state = sink_state->Cast<IcebergInsertGlobalState>();
 	auto value = Value::BIGINT(global_state.insert_count);
 	chunk.SetCardinality(1);
-	chunk.SetValue(0, 0, value);
+	chunk.data[0].Append(value);
 	return SourceResultType::FINISHED;
 }
 
@@ -481,13 +486,13 @@ string IcebergInsert::GetName() const {
 InsertionOrderPreservingMap<string> IcebergInsert::ParamsToString() const {
 	InsertionOrderPreservingMap<string> result;
 	if (table) {
-		result["Table Name"] = table->name;
+		result["Table Name"] = table->name.GetIdentifierName();
 	} else if (info) {
-		result["Table Name"] = info->Base().table;
+		result["Table Name"] = info->Base().GetTableName().GetIdentifierName();
 	} else if (create_state) {
 		lock_guard<mutex> guard(create_state->lock);
 		if (create_state->table_entry) {
-			result["Table Name"] = create_state->table_entry->name;
+			result["Table Name"] = create_state->table_entry->name.GetIdentifierName();
 		}
 	}
 	return result;
@@ -498,14 +503,15 @@ InsertionOrderPreservingMap<string> IcebergInsert::ParamsToString() const {
 //===--------------------------------------------------------------------===//
 static Value GetFieldIdValue(const IcebergColumnDefinition &column) {
 	auto column_value = Value::BIGINT(column.id);
-	if (column.children.empty()) {
+	if (!column.GetChildCount()) {
 		// primitive type - return the field-id directly
 		return column_value;
 	}
 	// nested type - generate a struct and recurse into children
 	child_list_t<Value> values;
 	values.emplace_back("__duckdb_field_id", std::move(column_value));
-	for (auto &child : column.children) {
+	for (idx_t i = 0; i < column.GetChildCount(); i++) {
+		auto child = column.GetChild(i);
 		values.emplace_back(child->name, GetFieldIdValue(*child));
 	}
 	return Value::STRUCT(std::move(values));
@@ -546,7 +552,7 @@ static unique_ptr<Expression> CreateColumnReference(const IcebergCopyInput &copy
                                                     idx_t column_index) {
 	if (copy_input.get_table_index.IsValid()) {
 		// logical plan generation: generate a bound column ref
-		ColumnBinding column_binding(copy_input.get_table_index.GetIndex(), column_index);
+		ColumnBinding column_binding(TableIndex(copy_input.get_table_index.GetIndex()), ProjectionIndex(column_index));
 		return make_uniq<BoundColumnRefExpression>(type, column_binding);
 	}
 	// physical plan generation: generate a reference directly
@@ -578,7 +584,8 @@ static unique_ptr<Expression> GetDateDiffFunction(ClientContext &context, const 
 
 	ErrorData error;
 	FunctionBinder binder(context);
-	auto function = binder.BindScalarFunction(DEFAULT_SCHEMA, "date_diff", std::move(children), error, false);
+	auto function =
+	    binder.BindScalarFunction(Identifier::DefaultSchema(), "date_diff", std::move(children), error, false);
 	if (!function) {
 		error.Throw();
 	}
@@ -598,7 +605,8 @@ static unique_ptr<Expression> GetBucketExpression(ClientContext &context, const 
 
 	ErrorData error;
 	FunctionBinder binder(context);
-	auto function = binder.BindScalarFunction(DEFAULT_SCHEMA, "iceberg_bucket", std::move(children), error, false);
+	auto function =
+	    binder.BindScalarFunction(Identifier::DefaultSchema(), "iceberg_bucket", std::move(children), error, false);
 	if (!function) {
 		error.Throw();
 	}
@@ -618,7 +626,8 @@ static unique_ptr<Expression> GetTruncateExpression(ClientContext &context, cons
 
 	ErrorData error;
 	FunctionBinder binder(context);
-	auto function = binder.BindScalarFunction(DEFAULT_SCHEMA, "iceberg_truncate", std::move(children), error, false);
+	auto function =
+	    binder.BindScalarFunction(Identifier::DefaultSchema(), "iceberg_truncate", std::move(children), error, false);
 	if (!function) {
 		error.Throw();
 	}
@@ -711,8 +720,8 @@ static void GeneratePartitionExpressions(ClientContext &context, const IcebergCo
 		partition_columns.push_back(partition_column_start++);
 
 		auto expr = GetPartitionExpression(context, copy_input, field);
-		projection_names.push_back(field.GetPartitionSpecFieldName());
-		projection_types.push_back(expr->return_type);
+		projection_names.push_back(Identifier(field.GetPartitionSpecFieldName()));
+		projection_types.push_back(expr->GetReturnType());
 		projection_expressions.push_back(std::move(expr));
 	}
 
@@ -831,7 +840,6 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 		result.filename_pattern.SetFilenamePattern("{uuidv7}");
 		result.partition_output = true;
 		result.write_empty_file = true;
-		result.rotate = false;
 	} else {
 		result.filename_pattern.SetFilenamePattern("{uuidv7}");
 		result.partition_output = false;
@@ -843,7 +851,6 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 		} else {
 			result.file_size_bytes = IcebergCatalog::DEFAULT_TARGET_FILE_SIZE;
 		}
-		result.rotate = true;
 	}
 
 	result.file_path = copy_input.data_path;
@@ -866,10 +873,11 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 
 	// copy_to_bind receives physical + virtual only (partition routing columns are stripped
 	// by PhysicalCopyToFile before writing, so including them causes a type mismatch).
-	auto function_data = copy_fun.function.copy_to_bind(context, bind_input, names_to_write, types_to_write);
+	auto function_data =
+	    copy_fun.function.copy_to_bind(context, bind_input, StringsToIdentifiers(names_to_write), types_to_write);
 	result.bind_data = std::move(function_data);
 
-	result.names = names_to_write;
+	result.names = StringsToIdentifiers(names_to_write);
 	result.expected_types = types_to_write;
 
 	if (copy_input.partition_spec) {
@@ -886,11 +894,13 @@ static void GenerateProjection(ClientContext &context, PhysicalPlanGenerator &pl
 	// push the projection
 	vector<LogicalType> types;
 	for (auto &expr : expressions) {
-		auto &type = expr->return_type;
+		auto &type = expr->GetReturnType();
 		if (type.id() == LogicalTypeId::HUGEINT) {
-			type = LogicalType::DECIMAL(38, 0);
+			expr->SetReturnType(LogicalType::DECIMAL(38, 0));
+			types.push_back(expr->GetReturnType());
+		} else {
+			types.push_back(type);
 		}
-		types.push_back(type);
 	}
 	auto &proj =
 	    planner.Make<PhysicalProjection>(std::move(types), std::move(expressions), plan->estimated_cardinality);
@@ -922,7 +932,6 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 	physical_copy.overwrite_mode = copy_options.overwrite_mode;
 	physical_copy.per_thread_output = copy_options.per_thread_output;
 	physical_copy.file_size_bytes = copy_options.file_size_bytes;
-	physical_copy.rotate = copy_options.rotate;
 	physical_copy.return_type = copy_options.return_type;
 
 	physical_copy.partition_output = copy_options.partition_output;
@@ -938,17 +947,6 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 	}
 
 	return physical_copy;
-}
-
-void VerifyDirectInsertionOrder(LogicalInsert &op) {
-	idx_t column_index = 0;
-	for (auto &mapping : op.column_index_map) {
-		if (mapping == DConstants::INVALID_INDEX || mapping != column_index) {
-			//! See issue#444
-			throw NotImplementedException("Iceberg inserts don't support targeted inserts yet (i.e tbl(col1,col2))");
-		}
-		column_index++;
-	}
 }
 
 PhysicalOperator &IcebergInsert::PlanInsert(ClientContext &context, PhysicalPlanGenerator &planner,
@@ -1018,7 +1016,7 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(BoundCreateTabl
 	for (auto &col : create_info.columns.Logical()) {
 		auto col_def = make_uniq<IcebergColumnDefinition>();
 		col_def->id = next_field_id++;
-		col_def->name = col.Name();
+		col_def->name = col.Name().GetIdentifierName();
 		col_def->type = col.Type();
 		col_def->required = false;
 		schema->columns.push_back(std::move(col_def));

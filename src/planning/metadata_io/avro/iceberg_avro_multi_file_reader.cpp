@@ -1,22 +1,38 @@
 #include "planning/metadata_io/avro/iceberg_avro_multi_file_reader.hpp"
 
+#include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_cast_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/function/cast/bound_cast_data.hpp"
+#include "duckdb/common/vector/map_vector.hpp"
+#include "duckdb/common/vector/struct_vector.hpp"
+#include "duckdb/main/database.hpp"
+#include "duckdb/parser/tableref/table_function_ref.hpp"
 
 #include "planning/metadata_io/avro/iceberg_avro_multi_file_list.hpp"
 #include "core/metadata/manifest/iceberg_manifest_list.hpp"
 #include "core/metadata/manifest/iceberg_manifest.hpp"
+#include "core/metadata/schema/iceberg_table_schema.hpp"
 #include "common/iceberg_utils.hpp"
 #include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
 #include "planning/metadata_io/manifest_list/iceberg_manifest_list_reader.hpp"
+#include "rest_catalog/objects/schema.hpp"
+#include "yyjson.hpp"
 
 namespace duckdb {
 
 unique_ptr<MultiFileReader> IcebergAvroMultiFileReader::CreateInstance(const TableFunction &table) {
 	return make_uniq<IcebergAvroMultiFileReader>(table.function_info);
+}
+
+static unordered_map<string, string> GetAvroMetadata(InsertionOrderPreservingMap<Value> &&metadata) {
+	unordered_map<string, string> result;
+	for (auto &[key, value] : metadata) {
+		result.emplace(key, value.GetValue<string>());
+	}
+	return result;
 }
 
 namespace manifest_list {
@@ -392,7 +408,7 @@ BuildManifestSchema(const IcebergSnapshot &snapshot, const IcebergTableMetadata 
 } // namespace manifest_file
 
 bool IcebergAvroMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &files,
-                                      vector<LogicalType> &return_types, vector<string> &names,
+                                      vector<LogicalType> &return_types, vector<Identifier> &names,
                                       MultiFileReaderBindData &bind_data) {
 	auto &iceberg_avro_list = dynamic_cast<IcebergAvroMultiFileList &>(files);
 
@@ -415,7 +431,7 @@ bool IcebergAvroMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &
 	// Populate return_types and names from schema
 	for (auto &col : schema) {
 		return_types.push_back(col.type);
-		names.push_back(col.name);
+		names.push_back(Identifier(col.name));
 	}
 
 	// Set the schema in bind_data - framework will use this for mapping
@@ -433,16 +449,17 @@ bool IcebergAvroMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &
 static void FixSamePhysicalTypeCasts(BoundCastInfo &cast_info, const LogicalType &source_type,
                                      const LogicalType &target_type) {
 	if (source_type.id() == LogicalTypeId::DATE && target_type.id() == LogicalTypeId::INTEGER) {
-		cast_info.function = DefaultCasts::ReinterpretCast;
+		cast_info.SetFunction(DefaultCasts::ReinterpretCast);
 		return;
 	}
-	if (!cast_info.cast_data) {
+	auto cast_data = cast_info.GetCastData();
+	if (!cast_data) {
 		return;
 	}
 	if (source_type.id() != LogicalTypeId::STRUCT || target_type.id() != LogicalTypeId::STRUCT) {
 		return;
 	}
-	auto &struct_data = cast_info.cast_data->Cast<StructBoundCastData>();
+	auto &struct_data = cast_data->Cast<StructBoundCastData>();
 	auto &src_children = StructType::GetChildTypes(source_type);
 	auto &tgt_children = StructType::GetChildTypes(target_type);
 	for (idx_t i = 0; i < struct_data.child_cast_info.size(); i++) {
@@ -457,11 +474,12 @@ static void FixSamePhysicalTypeCasts(BoundCastInfo &cast_info, const LogicalType
 }
 
 static void FixSamePhysicalTypeCastsInExpr(Expression &expr) {
-	if (expr.type == ExpressionType::OPERATOR_CAST) {
+	auto expression_type = expr.GetExpressionType();
+	if (expression_type == ExpressionType::OPERATOR_CAST) {
 		auto &cast_expr = expr.Cast<BoundCastExpression>();
-		FixSamePhysicalTypeCasts(cast_expr.bound_cast, cast_expr.source_type(), cast_expr.return_type);
-	} else if (expr.type == ExpressionType::BOUND_FUNCTION) {
-		for (auto &child : expr.Cast<BoundFunctionExpression>().children) {
+		FixSamePhysicalTypeCasts(cast_expr.GetBoundCastMutable(), cast_expr.source_type(), cast_expr.GetReturnType());
+	} else if (expression_type == ExpressionType::BOUND_FUNCTION) {
+		for (auto &child : expr.Cast<BoundFunctionExpression>().GetChildrenMutable()) {
 			if (child) {
 				FixSamePhysicalTypeCastsInExpr(*child);
 			}
@@ -479,6 +497,12 @@ ReaderInitializeType IcebergAvroMultiFileReader::InitializeReader(
 	auto get_function_info = function_info.get();
 	if (get_function_info) {
 		auto &avro_scan_info = get_function_info->Cast<IcebergAvroScanInfo>();
+		if (avro_scan_info.type == AvroScanInfoType::MANIFEST_FILE) {
+			auto &manifest_scan_info = avro_scan_info.Cast<IcebergManifestFileScanInfo>();
+			auto file_idx = reader_data.reader->file_list_idx.GetIndex();
+			auto &manifest_list_entry = manifest_scan_info.manifest_files[file_idx];
+			manifest_list_entry.metadata = GetAvroMetadata(reader_data.reader->GetMetadata());
+		}
 		for (auto &partition_spec : avro_scan_info.metadata.partition_specs) {
 			for (auto &spec_field : partition_spec.second.fields) {
 				if (StringUtil::CIEquals(spec_field.transform.RawType(), "day")) {

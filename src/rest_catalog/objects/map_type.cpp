@@ -24,6 +24,17 @@ MapType MapType::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+MapType MapType::Copy() const {
+	MapType res;
+	res.type = type;
+	res.key_id = key_id;
+	res.key = key ? make_uniq<Type>(key->Copy()) : nullptr;
+	res.value_id = value_id;
+	res.value = value ? make_uniq<Type>(value->Copy()) : nullptr;
+	res.value_required = value_required;
+	return res;
+}
+
 string MapType::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -90,7 +101,39 @@ string MapType::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(value_required_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void MapType::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: type
+	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
+
+	// Serialize: key-id
+	yyjson_mut_obj_add_int(doc, obj, "key-id", key_id);
+
+	// Serialize: key
+	yyjson_mut_val *key_val = key->ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "key", key_val);
+
+	// Serialize: value-id
+	yyjson_mut_obj_add_int(doc, obj, "value-id", value_id);
+
+	// Serialize: value
+	yyjson_mut_val *value_val = value->ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "value", value_val);
+
+	// Serialize: value-required
+	yyjson_mut_obj_add_bool(doc, obj, "value-required", value_required);
+}
+
+yyjson_mut_val *MapType::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

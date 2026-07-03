@@ -1,1 +1,0 @@
-ALTER TABLE default.test_table_properties UNSET TBLPROPERTIES ('foo');

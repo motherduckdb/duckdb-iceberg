@@ -141,7 +141,7 @@ static unique_ptr<FunctionData> GetIcebergSchemaPropertiesBind(ClientContext &co
 }
 
 static void AddString(Vector &vec, idx_t index, string_t &&str) {
-	FlatVector::GetData<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
+	FlatVector::GetDataMutable<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
 }
 
 static void SetIcebergSchemaPropertiesFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
@@ -187,8 +187,8 @@ static void SetIcebergSchemaPropertiesFunction(ClientContext &context, TableFunc
 
 	global_state.properties_set = true;
 	// set success output, failure happens during transaction commit.
-	FlatVector::GetData<int64_t>(output.data[0])[0] = iceberg_schema->schema_info.properties.size();
-	output.SetCardinality(1);
+	FlatVector::GetDataMutable<int64_t>(output.data[0])[0] = iceberg_schema->schema_info.properties.size();
+	output.SetChildCardinality(1);
 }
 
 static void RemoveIcebergSchemaPropertiesFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
@@ -237,8 +237,8 @@ static void RemoveIcebergSchemaPropertiesFunction(ClientContext &context, TableF
 
 	global_state.properties_removed = true;
 	// set success output, failure happens during transaction commit.
-	FlatVector::GetData<int64_t>(output.data[0])[0] = iceberg_schema->schema_info.properties.size();
-	output.SetCardinality(1);
+	FlatVector::GetDataMutable<int64_t>(output.data[0])[0] = iceberg_schema->schema_info.properties.size();
+	output.SetChildCardinality(1);
 }
 
 static void GetIcebergSchemaPropertiesFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
@@ -284,7 +284,7 @@ static void GetIcebergSchemaPropertiesFunction(ClientContext &context, TableFunc
 		}
 	}
 	global_state.property_count += row_number;
-	output.SetCardinality(row_number);
+	output.SetChildCardinality(row_number);
 }
 
 TableFunctionSet IcebergFunctions::SetIcebergSchemaPropertiesFunctions() {

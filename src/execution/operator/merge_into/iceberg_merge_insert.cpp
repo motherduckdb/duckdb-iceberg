@@ -32,14 +32,7 @@ SinkCombineResultType IcebergMergeInsert::Combine(ExecutionContext &context, Ope
 
 SinkFinalizeType IcebergMergeInsert::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
                                               OperatorSinkFinalizeInput &input) const {
-	OperatorSinkFinalizeInput copy_finalize {*copy.sink_state, input.interrupt_state};
-	auto finalize_result = copy.Finalize(pipeline, event, context, copy_finalize);
-	if (finalize_result == SinkFinalizeType::BLOCKED) {
-		return SinkFinalizeType::BLOCKED;
-	}
-
-	IcebergMergeInto::FinalizeCopyToInsert(pipeline, event, context, copy, insert, input.interrupt_state);
-	return SinkFinalizeType::READY;
+	return IcebergMergeInto::FinalizeCopyToInsert(pipeline, event, context, copy, insert, input.interrupt_state);
 }
 
 unique_ptr<GlobalSinkState> IcebergMergeInsert::GetGlobalSinkState(ClientContext &context) const {
@@ -54,7 +47,7 @@ unique_ptr<LocalSinkState> IcebergMergeInsert::GetLocalSinkState(ExecutionContex
 		result->expression_executor = make_uniq<ExpressionExecutor>(context.client, extra_projections);
 		vector<LogicalType> insert_types;
 		for (auto &expr : result->expression_executor->expressions) {
-			insert_types.push_back(expr->return_type);
+			insert_types.push_back(expr->GetReturnType());
 		}
 		result->chunk.Initialize(context.client, insert_types);
 	}

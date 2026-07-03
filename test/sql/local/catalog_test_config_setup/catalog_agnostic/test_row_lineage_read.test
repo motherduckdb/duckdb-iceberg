@@ -24,14 +24,14 @@ set logging_level='debug'
 loop i 0 7
 
 statement ok
-set variable snapshot${i} = (
+set variable snapshot{i} = (
 	select {
 		'snapshot_id': snapshot_id,
 		'timestamp_ms': timestamp_ms
 	} from iceberg_snapshots(
 		my_datalake.default.row_lineage_test
 	) order by timestamp_ms
-	offset ${i} limit 1
+	offset {i} limit 1
 );
 
 endloop

@@ -14,23 +14,32 @@ concurrency:
 jobs:
   duckdb-stable-build:
     name: Build extension binaries
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.5-variegata
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
     with:
       extension_name: iceberg
-      duckdb_version: c285de922ab954d7bd5f0269e41d8d52eb5560c0
-      ci_tools_version: v1.5-variegata
+      duckdb_version: a81547b43c56c671a7ad1a636f83886713efdd8a
+      ci_tools_version: main
       exclude_archs: 'windows_amd64_mingw'
       extra_toolchains: 'python3'
 
   duckdb-stable-deploy:
     name: Deploy extension binaries
     needs: duckdb-stable-build
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_deploy.yml@v1.5-variegata
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_deploy.yml@main
     secrets: inherit
     with:
       extension_name: iceberg
-      duckdb_version: c285de922ab954d7bd5f0269e41d8d52eb5560c0
-      ci_tools_version: v1.5-variegata
+      duckdb_version: a81547b43c56c671a7ad1a636f83886713efdd8a
+      ci_tools_version: main
       exclude_archs: 'windows_amd64_mingw'
       deploy_latest: ${{ startsWith(github.ref, 'refs/heads/v') || github.ref == 'refs/heads/main' }}
       deploy_versioned: ${{ startsWith(github.ref, 'refs/heads/v') || github.ref == 'refs/heads/main' }}
+
+  code-quality-check:
+    name: Code Quality Check
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_code_quality.yml@main
+    with:
+      extension_name: iceberg
+      duckdb_version: a81547b43c56c671a7ad1a636f83886713efdd8a
+      ci_tools_version: main
+      format_checks: 'format'

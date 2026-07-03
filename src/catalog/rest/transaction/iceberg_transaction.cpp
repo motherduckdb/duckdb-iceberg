@@ -9,8 +9,13 @@
 #include "duckdb/main/client_data.hpp"
 #include "yyjson.hpp"
 
+#include <chrono>
+#include <random>
+#include <thread>
+
 #include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
+#include "catalog/rest/api/iceberg_retry.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/storage/iceberg_authorization.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
@@ -25,6 +30,7 @@
 #include "iceberg_logging.hpp"
 #include "catalog/rest/api/table_update.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
+#include "rest_catalog/objects/list.hpp"
 
 namespace duckdb {
 
@@ -45,189 +51,38 @@ IcebergCatalog &IcebergTransaction::GetCatalog() {
 	return catalog;
 }
 
-void CommitTableToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
-                       const rest_api_objects::CommitTableRequest &table) {
-	//! requirements
-	auto requirements_array = yyjson_mut_obj_add_arr(doc, root_object, "requirements");
-	for (auto &requirement : table.requirements) {
-		if (requirement.has_assert_ref_snapshot_id) {
-			auto &assert_ref_snapshot_id = requirement.assert_ref_snapshot_id;
-			auto requirement_json = yyjson_mut_arr_add_obj(doc, requirements_array);
-			yyjson_mut_obj_add_strcpy(doc, requirement_json, "type", assert_ref_snapshot_id.type.value.c_str());
-			yyjson_mut_obj_add_strcpy(doc, requirement_json, "ref", assert_ref_snapshot_id.ref.c_str());
-			if (assert_ref_snapshot_id.has_snapshot_id) {
-				yyjson_mut_obj_add_uint(doc, requirement_json, "snapshot-id", assert_ref_snapshot_id.snapshot_id);
-			} else {
-				yyjson_mut_obj_add_null(doc, requirement_json, "snapshot-id");
-			}
-		} else if (requirement.has_assert_create) {
-			auto &assert_create = requirement.assert_create;
-			auto requirement_json = yyjson_mut_arr_add_obj(doc, requirements_array);
-			yyjson_mut_obj_add_strcpy(doc, requirement_json, "type", assert_create.type.value.c_str());
-		} else if (requirement.has_assert_current_schema_id) {
-			auto &assert_current_schema_id = requirement.assert_current_schema_id;
-			auto requirement_json = yyjson_mut_arr_add_obj(doc, requirements_array);
-			yyjson_mut_obj_add_strcpy(doc, requirement_json, "type", assert_current_schema_id.type.value.c_str());
-			yyjson_mut_obj_add_int(doc, requirement_json, "current-schema-id",
-			                       assert_current_schema_id.current_schema_id);
-		} else if (requirement.has_assert_last_assigned_field_id) {
-			auto &assert_last_assigned_field_id = requirement.assert_last_assigned_field_id;
-			auto requirement_json = yyjson_mut_arr_add_obj(doc, requirements_array);
-			yyjson_mut_obj_add_strcpy(doc, requirement_json, "type", assert_last_assigned_field_id.type.value.c_str());
-			yyjson_mut_obj_add_int(doc, requirement_json, "last-assigned-field-id",
-			                       assert_last_assigned_field_id.last_assigned_field_id);
-		} else if (requirement.has_assert_last_assigned_partition_id) {
-			auto &assert_last_assigned_partition_id = requirement.assert_last_assigned_partition_id;
-			auto requirement_json = yyjson_mut_arr_add_obj(doc, requirements_array);
-			yyjson_mut_obj_add_strcpy(doc, requirement_json, "type",
-			                          assert_last_assigned_partition_id.type.value.c_str());
-			yyjson_mut_obj_add_int(doc, requirement_json, "last-assigned-partition-id",
-			                       assert_last_assigned_partition_id.last_assigned_partition_id);
-		} else if (requirement.has_assert_default_spec_id) {
-			auto &assert_default_spec_id = requirement.assert_default_spec_id;
-			auto requirement_json = yyjson_mut_arr_add_obj(doc, requirements_array);
-			yyjson_mut_obj_add_strcpy(doc, requirement_json, "type", assert_default_spec_id.type.value.c_str());
-			yyjson_mut_obj_add_int(doc, requirement_json, "default-spec-id", assert_default_spec_id.default_spec_id);
-		} else if (requirement.has_assert_table_uuid) {
-			auto &assert_table_uuid = requirement.assert_table_uuid;
-			auto requirement_json = yyjson_mut_arr_add_obj(doc, requirements_array);
-			yyjson_mut_obj_add_strcpy(doc, requirement_json, "type", assert_table_uuid.type.value.c_str());
-			yyjson_mut_obj_add_strcpy(doc, requirement_json, "uuid", assert_table_uuid.uuid.c_str());
-		} else {
-			throw NotImplementedException("Can't serialize this TableRequirement type to JSON");
+static void AddExplicitNullSnapshotIds(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
+                                       const rest_api_objects::CommitTableRequest &table) {
+	auto requirements_array = yyjson_mut_obj_get(root_object, "requirements");
+	D_ASSERT(requirements_array);
+	for (idx_t i = 0; i < table.requirements.size(); i++) {
+		auto &requirement = table.requirements[i];
+		if (!requirement.assert_ref_snapshot_id || requirement.assert_ref_snapshot_id->snapshot_id) {
+			continue;
 		}
-	}
-
-	//! updates
-	auto updates_array = yyjson_mut_obj_add_arr(doc, root_object, "updates");
-	for (auto &update : table.updates) {
-		if (update.has_add_snapshot_update) {
-			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
-			//! updates[...].action
-			yyjson_mut_obj_add_strcpy(doc, update_json, "action", "add-snapshot");
-			//! updates[...].snapshot
-			auto &snapshot = update.add_snapshot_update.snapshot;
-			auto snapshot_obj = IcebergSnapshot::ToJSON(snapshot, doc);
-			yyjson_mut_obj_add_val(doc, update_json, "snapshot", snapshot_obj);
-		} else if (update.has_set_snapshot_ref_update) {
-			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
-			auto &ref_update = update.set_snapshot_ref_update;
-
-			//! updates[...].action
-			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
-			//! updates[...].ref-name
-			yyjson_mut_obj_add_strcpy(doc, update_json, "ref-name", ref_update.ref_name.c_str());
-			//! updates[...].type
-			yyjson_mut_obj_add_strcpy(doc, update_json, "type", ref_update.snapshot_reference.type.c_str());
-			//! updates[...].snapshot-id
-			yyjson_mut_obj_add_uint(doc, update_json, "snapshot-id", ref_update.snapshot_reference.snapshot_id);
-		} else if (update.has_assign_uuidupdate) {
-			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
-			auto &ref_update = update.assign_uuidupdate;
-			//! updates[...].action
-			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
-			//! updates[...].ref-name
-			yyjson_mut_obj_add_strcpy(doc, update_json, "uuid", ref_update.uuid.c_str());
-		} else if (update.has_upgrade_format_version_update) {
-			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
-			auto &ref_update = update.upgrade_format_version_update;
-			//! updates[...].action
-			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
-			//! updates[...].ref-name
-			yyjson_mut_obj_add_uint(doc, update_json, "format-version", ref_update.format_version);
-		} else if (update.has_set_properties_update) {
-			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
-			auto &ref_update = update.set_properties_update;
-			//! updates[...].action
-			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
-			auto properties_json = yyjson_mut_obj_add_obj(doc, update_json, "updates");
-			for (auto &prop : ref_update.updates) {
-				yyjson_mut_obj_add_strcpy(doc, properties_json, prop.first.c_str(), prop.second.c_str());
-			}
-		} else if (update.has_remove_properties_update) {
-			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
-			auto &ref_update = update.remove_properties_update;
-			//! updates[...].action
-			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
-			auto properties_json = yyjson_mut_obj_add_arr(doc, update_json, "removals");
-			for (auto &prop : ref_update.removals) {
-				yyjson_mut_arr_add_strcpy(doc, properties_json, prop.c_str());
-			}
-		} else if (update.has_add_schema_update) {
-			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
-			auto &ref_update = update.add_schema_update;
-			//! updates[...].action
-			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
-			yyjson_mut_obj_add_uint(doc, update_json, "last-column-id", update.add_schema_update.last_column_id);
-			auto schema_json = yyjson_mut_obj_add_obj(doc, update_json, "schema");
-			IcebergTableSchema::SchemaToJson(doc, schema_json, update.add_schema_update.schema);
-		} else if (update.has_set_current_schema_update) {
-			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
-			auto &ref_update = update.set_current_schema_update;
-			//! updates[...].action
-			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
-			yyjson_mut_obj_add_int(doc, update_json, "schema-id", ref_update.schema_id);
-		} else if (update.has_set_default_spec_update) {
-			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
-			auto &ref_update = update.set_default_spec_update;
-			//! updates[...].action
-			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
-			yyjson_mut_obj_add_int(doc, update_json, "spec-id", ref_update.spec_id);
-		} else if (update.has_add_partition_spec_update) {
-			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
-			auto &ref_update = update.add_partition_spec_update;
-			//! updates[...].action
-			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
-			yyjson_mut_obj_add_val(doc, update_json, "spec", IcebergPartitionSpec::ToJSON(doc, ref_update.spec));
-		} else if (update.has_set_default_sort_order_update) {
-			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
-			auto &ref_update = update.set_default_sort_order_update;
-			//! updates[...].action
-			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
-			yyjson_mut_obj_add_int(doc, update_json, "sort-order-id", ref_update.sort_order_id);
-		} else if (update.has_add_sort_order_update) {
-			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
-			auto &ref_update = update.add_sort_order_update;
-			//! updates[...].action
-			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
-			auto sort_order_json = yyjson_mut_obj_add_obj(doc, update_json, "sort-order");
-			yyjson_mut_obj_add_int(doc, sort_order_json, "order-id", ref_update.sort_order.order_id);
-			// Add fields array, later we can add the fields
-			auto fields_arr = yyjson_mut_obj_add_arr(doc, sort_order_json, "fields");
-			(void)fields_arr;
-		} else if (update.has_set_location_update) {
-			auto update_json = yyjson_mut_arr_add_obj(doc, updates_array);
-			auto &ref_update = update.set_location_update;
-			//! updates[...].action
-			yyjson_mut_obj_add_strcpy(doc, update_json, "action", ref_update.action.c_str());
-			yyjson_mut_obj_add_strcpy(doc, update_json, "location", ref_update.location.c_str());
-		} else {
-			throw NotImplementedException("Can't serialize this TableUpdate type to JSON");
-		}
-	}
-
-	//! identifier
-	D_ASSERT(table.has_identifier);
-	auto &_namespace = table.identifier._namespace.value;
-	auto identifier_json = yyjson_mut_obj_add_obj(doc, root_object, "identifier");
-
-	//! identifier.name
-	yyjson_mut_obj_add_strcpy(doc, identifier_json, "name", table.identifier.name.c_str());
-	//! identifier.namespace
-	auto namespace_arr = yyjson_mut_obj_add_arr(doc, identifier_json, "namespace");
-	D_ASSERT(_namespace.size() >= 1);
-	for (auto &identifier : _namespace) {
-		yyjson_mut_arr_add_strcpy(doc, namespace_arr, identifier.c_str());
+		auto requirement_json = yyjson_mut_arr_get(requirements_array, i);
+		D_ASSERT(requirement_json);
+		yyjson_mut_obj_add_null(doc, requirement_json, "snapshot-id");
 	}
 }
 
-void CommitTransactionToJSON(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
-                             const rest_api_objects::CommitTransactionRequest &req) {
-	auto table_changes_array = yyjson_mut_obj_add_arr(doc, root_object, "table-changes");
-	for (auto &table : req.table_changes) {
-		auto table_obj = yyjson_mut_arr_add_obj(doc, table_changes_array);
-		CommitTableToJSON(doc, table_obj, table);
+static yyjson_mut_val *CommitTableToJSON(yyjson_mut_doc *doc, const rest_api_objects::CommitTableRequest &table) {
+	auto root_object = table.ToJSON(doc);
+	AddExplicitNullSnapshotIds(doc, root_object, table);
+	return root_object;
+}
+
+static yyjson_mut_val *CommitTransactionToJSON(yyjson_mut_doc *doc,
+                                               const rest_api_objects::CommitTransactionRequest &req) {
+	auto root_object = req.ToJSON(doc);
+	auto table_changes_array = yyjson_mut_obj_get(root_object, "table-changes");
+	D_ASSERT(table_changes_array);
+	for (idx_t i = 0; i < req.table_changes.size(); i++) {
+		auto table_object = yyjson_mut_arr_get(table_changes_array, i);
+		D_ASSERT(table_object);
+		AddExplicitNullSnapshotIds(doc, table_object, req.table_changes[i]);
 	}
+	return root_object;
 }
 
 string JsonDocToString(std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc) {
@@ -243,34 +98,39 @@ string JsonDocToString(std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc) {
 	return res;
 }
 
+template <class RESTObject>
+static string RESTObjectToJSONString(const RESTObject &object) {
+	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
+	auto doc = doc_p.get();
+	yyjson_mut_doc_set_root(doc, object.ToJSON(doc));
+	return JsonDocToString(std::move(doc_p));
+}
+
 static string ConstructTableUpdateJSON(rest_api_objects::CommitTableRequest &table_change) {
 	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
 	auto doc = doc_p.get();
-	auto root_object = yyjson_mut_obj(doc);
+	auto root_object = CommitTableToJSON(doc, table_change);
 	yyjson_mut_doc_set_root(doc, root_object);
-	CommitTableToJSON(doc, root_object, table_change);
 	return JsonDocToString(std::move(doc_p));
 }
 
 static rest_api_objects::TableRequirement CreateAssertRefSnapshotIdRequirement(const IcebergSnapshot &old_snapshot) {
 	rest_api_objects::TableRequirement req;
-	req.has_assert_ref_snapshot_id = true;
+	req.assert_ref_snapshot_id = rest_api_objects::AssertRefSnapshotId();
 
-	auto &res = req.assert_ref_snapshot_id;
+	auto &res = *req.assert_ref_snapshot_id;
 	res.ref = "main";
 	res.snapshot_id = old_snapshot.snapshot_id;
-	res.has_snapshot_id = true;
 	res.type.value = "assert-ref-snapshot-id";
 	return req;
 }
 
 static rest_api_objects::TableRequirement CreateAssertNoSnapshotRequirement() {
 	rest_api_objects::TableRequirement req;
-	req.has_assert_ref_snapshot_id = true;
+	req.assert_ref_snapshot_id = rest_api_objects::AssertRefSnapshotId();
 
-	auto &res = req.assert_ref_snapshot_id;
+	auto &res = *req.assert_ref_snapshot_id;
 	res.ref = "main";
-	res.has_snapshot_id = false;
 	res.type.value = "assert-ref-snapshot-id";
 	return req;
 }
@@ -278,18 +138,16 @@ static rest_api_objects::TableRequirement CreateAssertNoSnapshotRequirement() {
 void IcebergTransaction::DropSecrets(ClientContext &context) {
 	auto &secret_manager = SecretManager::Get(context);
 	for (auto &secret_name : created_secrets) {
-		(void)secret_manager.DropSecretByName(context, secret_name, OnEntryNotFound::RETURN_NULL);
+		(void)secret_manager.DropSecretByName(context, Identifier(secret_name), OnEntryNotFound::RETURN_NULL);
 	}
 }
 
 static rest_api_objects::TableUpdate CreateSetSnapshotRefUpdate(int64_t snapshot_id) {
 	rest_api_objects::TableUpdate table_update;
 
-	table_update.has_set_snapshot_ref_update = true;
-	auto &update = table_update.set_snapshot_ref_update;
+	table_update.set_snapshot_ref_update = rest_api_objects::SetSnapshotRefUpdate();
+	auto &update = *table_update.set_snapshot_ref_update;
 	update.base_update.action = "set-snapshot-ref";
-	update.has_action = true;
-	update.action = "set-snapshot-ref";
 
 	update.ref_name = "main";
 	update.snapshot_reference.type = "branch";
@@ -299,92 +157,266 @@ static rest_api_objects::TableUpdate CreateSetSnapshotRefUpdate(int64_t snapshot
 
 static bool NeedsAssertSchemaId(const IcebergTransactionData &transaction_data,
                                 const IcebergTableInformation &table_info) {
-	if (!transaction_data.assert_schema_id) {
-		return false;
-	}
-	auto &initial_schema_id = transaction_data.initial_schema_id;
-	return initial_schema_id != table_info.table_metadata.GetCurrentSchemaId();
+	(void)table_info;
+	return transaction_data.assert_schema_id;
 }
+
+namespace {
+
+struct SingleTableStagedCommit {
+	rest_api_objects::CommitTableRequest request;
+	vector<string> created_metadata_files;
+	bool retryable = false;
+	IcebergRetryConfig retry_config;
+};
+
+//! Per-retry-loop backoff state: decorrelated jitter (de-synchronizes a thundering herd of
+//! concurrent writers) plus a cumulative total-timeout budget. Independent RNG per loop so
+//! concurrent committers do not wake in lockstep.
+struct IcebergRetryBackoff {
+	explicit IcebergRetryBackoff(const IcebergRetryConfig &config_p)
+	    : config(config_p), prev_sleep_ms(config_p.min_wait_ms), start(std::chrono::steady_clock::now()),
+	      rng(std::random_device {}() ^
+	          static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count())),
+	      dist(0.0, 1.0) {
+	}
+
+	//! Sleep before the next attempt (attempt is the just-failed 0-based attempt index). Returns
+	//! false if the wait would exceed commit.retry.total-timeout-ms (only after >=1 retry, mirroring
+	//! Java's Tasks.runTaskWithRetry), signalling the caller to stop retrying.
+	bool WaitBeforeRetry(idx_t attempt) {
+		auto wait_ms = config.DecorrelatedBackoffMs(prev_sleep_ms, dist(rng));
+		prev_sleep_ms = wait_ms;
+		auto elapsed_ms =
+		    std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
+		if (attempt > 0 && (wait_ms > config.total_wait_ms || elapsed_ms > config.total_wait_ms - wait_ms)) {
+			return false;
+		}
+		if (wait_ms > 0) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(wait_ms));
+		}
+		return true;
+	}
+
+	IcebergRetryConfig config;
+	int64_t prev_sleep_ms;
+	std::chrono::steady_clock::time_point start;
+	std::mt19937_64 rng;
+	std::uniform_real_distribution<double> dist;
+};
+
+static void CreateTableRequirements(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state,
+                                    const IcebergTransactionData &transaction_data,
+                                    const optional_ptr<const IcebergSnapshot> &current_snapshot) {
+	const bool has_assert_create = transaction_data.has_assert_create;
+	for (auto &requirement : transaction_data.requirements) {
+		requirement->CreateRequirement(db, context, commit_state);
+	}
+	if (!has_assert_create && NeedsAssertSchemaId(transaction_data, commit_state.table_info)) {
+		AssertCurrentSchemaIdRequirement requirement(commit_state.table_info);
+		requirement.current_schema_id = transaction_data.initial_schema_id;
+		requirement.CreateRequirement(db, context, commit_state);
+	}
+	if (!has_assert_create && commit_state.table_info.HasTransactionUpdates()) {
+		auto uuid_requirement = AssertTableUUIDRequirement(commit_state.table_info);
+		uuid_requirement.CreateRequirement(db, context, commit_state);
+	}
+	if (current_snapshot && !transaction_data.alters.empty()) {
+		commit_state.table_change.requirements.push_back(CreateAssertRefSnapshotIdRequirement(*current_snapshot));
+	} else if (!current_snapshot && !transaction_data.alters.empty() && !has_assert_create) {
+		commit_state.table_change.requirements.push_back(CreateAssertNoSnapshotRequirement());
+	}
+}
+
+static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, IcebergTableInformation &table_info,
+                                                      ClientContext &context) {
+	SingleTableStagedCommit info;
+	IcebergCommitState commit_state(table_info, context);
+	auto &table_change = commit_state.table_change;
+	auto &schema = table_info.schema.Cast<IcebergSchemaEntry>();
+	table_change.identifier = rest_api_objects::TableIdentifier();
+	table_change.identifier->_namespace.value = schema.namespace_items;
+	table_change.identifier->name = table_info.name;
+
+	auto &metadata = commit_state.table_info.table_metadata;
+	auto current_snapshot = metadata.GetLatestSnapshot();
+	auto &transaction_data = *commit_state.table_info.transaction_data;
+	info.retryable = transaction_data.SupportsAppendRetry();
+	info.retry_config = IcebergRetryConfig::FromTableMetadata(metadata);
+	if (!transaction_data.alters.empty()) {
+		commit_state.LoadExistingManifests(std::move(transaction_data.existing_manifest_list));
+	}
+	commit_state.latest_snapshot = current_snapshot;
+
+	for (auto &update : transaction_data.updates) {
+		if (update->type == IcebergTableUpdateType::ADD_SNAPSHOT) {
+			auto &ic_table_entry = table_info.GetLatestSchema(context)->Cast<IcebergTableEntry>();
+			ic_table_entry.PrepareIcebergScanFromEntry(context);
+		}
+		update->CreateUpdate(db, context, commit_state);
+	}
+
+	CreateTableRequirements(db, context, commit_state, transaction_data, current_snapshot);
+
+	if (!transaction_data.alters.empty()) {
+		auto &snapshot = *commit_state.latest_snapshot;
+		auto set_snapshot_ref_update = CreateSetSnapshotRefUpdate(snapshot.snapshot_id);
+		commit_state.table_change.updates.push_back(std::move(set_snapshot_ref_update));
+	}
+
+	if (transaction_data.set_schema_id) {
+		SetCurrentSchema update(table_info);
+		update.CreateUpdate(db, context, commit_state);
+	}
+
+	info.created_metadata_files = std::move(commit_state.created_metadata_files);
+	info.request = std::move(table_change);
+	return info;
+}
+
+} // namespace
 
 TableTransactionInfo IcebergTransaction::GetTransactionRequest(IcebergTransactionAlterUpdate &alter_update,
                                                                ClientContext &context) {
 	TableTransactionInfo info;
 	auto &transaction = info.request;
+	bool all_retryable = true;
+	bool saw_table = false;
 	for (auto &updated_table : alter_update.updated_tables) {
-		if (alter_update.committed_tables.count(updated_table.first)) {
-			//! Table is already committed
+		auto &table_key = updated_table.first;
+		if (alter_update.committed_tables.count(table_key)) {
+			//! Already committed
 			continue;
 		}
 		auto &table_info = updated_table.second;
 		if (!table_info.HasTransactionUpdates()) {
+			//! No changes to commit
 			continue;
 		}
-		IcebergCommitState commit_state(table_info, context);
-		auto &table_change = commit_state.table_change;
-		auto &schema = table_info.schema.Cast<IcebergSchemaEntry>();
-		table_change.identifier._namespace.value = schema.namespace_items;
-		table_change.identifier.name = table_info.name;
-		table_change.has_identifier = true;
 
-		auto &metadata = commit_state.table_info.table_metadata;
-		auto current_snapshot = metadata.GetLatestSnapshot();
-		auto &transaction_data = *commit_state.table_info.transaction_data;
-		if (!transaction_data.alters.empty()) {
-			commit_state.manifests = transaction_data.existing_manifest_list;
-		}
-		commit_state.latest_snapshot = current_snapshot;
-
-		for (auto &update : transaction_data.updates) {
-			if (update->type == IcebergTableUpdateType::ADD_SNAPSHOT) {
-				// we need to recreate the keys in the current context.
-				auto &ic_table_entry = table_info.GetLatestSchema(context)->Cast<IcebergTableEntry>();
-				ic_table_entry.PrepareIcebergScanFromEntry(context);
-			}
-			update->CreateUpdate(db, context, commit_state);
-		}
-		for (auto &requirement : transaction_data.requirements) {
-			requirement->CreateRequirement(db, context, commit_state);
-			info.has_assert_create = requirement->type == IcebergTableRequirementType::ASSERT_CREATE;
-		}
-		if (!info.has_assert_create && NeedsAssertSchemaId(transaction_data, table_info)) {
-			// Ensure schema is the same as current
-			AssertCurrentSchemaIdRequirement requirement(table_info);
-			requirement.current_schema_id = transaction_data.initial_schema_id;
-			requirement.CreateRequirement(db, context, commit_state);
-		}
-
-		if (!transaction_data.alters.empty()) {
-			auto &snapshot = *commit_state.latest_snapshot;
-			auto snapshot_id = snapshot.snapshot_id;
-			auto set_snapshot_ref_update = CreateSetSnapshotRefUpdate(snapshot_id);
-			commit_state.table_change.updates.push_back(std::move(set_snapshot_ref_update));
-		}
-
-		if (!info.has_assert_create && commit_state.table_info.HasTransactionUpdates()) {
-			// ensure table hasn't been swapped by another one with the same name
-			auto uuid_requirement = AssertTableUUIDRequirement(table_info);
-			uuid_requirement.CreateRequirement(db, context, commit_state);
-		}
-
-		if (current_snapshot && !transaction_data.alters.empty()) {
-			//! If any changes were made to the state of the table, we should assert that our parent snapshot has
-			//! not changed. We don't want to change the table location if someone has added a snapshot
-			commit_state.table_change.requirements.push_back(CreateAssertRefSnapshotIdRequirement(*current_snapshot));
-		} else if (!current_snapshot && !transaction_data.alters.empty() && !info.has_assert_create) {
-			//! If the table had no snapshots, is not created in this transaction, and has some kind of update
-			//! we should ensure no snapshots have been added in the meantime
-			commit_state.table_change.requirements.push_back(CreateAssertNoSnapshotRequirement());
-		}
-
-		if (transaction_data.set_schema_id) {
-			SetCurrentSchema update(table_info);
-			update.CreateUpdate(db, context, commit_state);
-		}
-
-		info.table_requests.emplace(updated_table.first, transaction.table_changes.size());
-		transaction.table_changes.push_back(std::move(table_change));
+		auto table_transaction_info = StageSingleTableCommit(db, table_info, context);
+		info.created_metadata_files.emplace(table_key, std::move(table_transaction_info.created_metadata_files));
+		info.table_requests.emplace(table_key, transaction.table_changes.size());
+		transaction.table_changes.push_back(std::move(table_transaction_info.request));
+		//! Tables in one atomic transaction share a single retry loop, so fold their retry policies
+		//! into the most lenient one (first table seeds it, the rest are merged in).
+		info.retry_config = saw_table ? info.retry_config.MostLenient(table_transaction_info.retry_config)
+		                              : table_transaction_info.retry_config;
+		saw_table = true;
+		all_retryable = all_retryable && table_transaction_info.retryable;
 	}
+	info.retryable = saw_table && all_retryable;
 	return info;
+}
+
+bool IcebergTransaction::CanUseMultiTableCommit(const IcebergTransactionAlterUpdate &alter_update) const {
+	if (catalog.attach_options.disable_multi_table_commit ||
+	    !catalog.supported_urls.count("POST /v1/{prefix}/transactions/commit")) {
+		return false;
+	}
+	for (const auto &entry : alter_update.updated_tables) {
+		const auto &table_info = entry.second;
+		if (!table_info.transaction_data) {
+			continue;
+		}
+		if (table_info.transaction_data->has_assert_create) {
+			return false;
+		}
+	}
+	return true;
+}
+
+void IcebergTransaction::CleanupMetadataFiles(ClientContext &context, const vector<string> &paths) {
+	if (!catalog.attach_options.remove_files_on_delete || paths.empty()) {
+		return;
+	}
+	auto &fs = FileSystem::GetFileSystem(context);
+	unordered_set<string> deleted;
+	for (const auto &path : paths) {
+		if (!deleted.insert(path).second) {
+			continue;
+		}
+		if (fs.TryRemoveFile(path)) {
+			DUCKDB_LOG(context, IcebergLogType, "Iceberg Transaction Cleanup, deleted retry metadata file: '%s'", path);
+		} else {
+			DUCKDB_LOG(context, IcebergLogType,
+			           "Iceberg Transaction Cleanup, failed to delete retry metadata file: '%s'", path);
+		}
+	}
+}
+
+void IcebergTransaction::RefreshRetryTables(IcebergTransactionAlterUpdate &alter_update,
+                                            const case_insensitive_set_t &table_keys, ClientContext &context) {
+	for (const auto &table_key : table_keys) {
+		auto it = alter_update.updated_tables.find(table_key);
+		if (it == alter_update.updated_tables.end()) {
+			continue;
+		}
+		auto &table_info = it->second;
+		if (!table_info.transaction_data) {
+			continue;
+		}
+		if (!table_info.transaction_data->RetryStateMatches(table_info)) {
+			throw TransactionException("Table %s changed incompatibly while retrying commit", table_key);
+		}
+		table_info.RefreshFromCatalog(context);
+		if (!table_info.transaction_data->RetryStateMatches(table_info)) {
+			throw TransactionException("Table %s changed incompatibly while retrying commit", table_key);
+		}
+		SetLatestTableState(table_info, IcebergTableStatus::ALIVE);
+	}
+}
+
+static bool CommitIsRetryable(bool retryable, idx_t max_retries, const CommitResult &result, idx_t attempt) {
+	if (attempt >= max_retries) {
+		//! We've reached the max amount of retries
+		return false;
+	}
+	if (!retryable) {
+		//! The operation isn't retryable in general
+		return false;
+	}
+	if (!result.IsConflict()) {
+		//! Only conflicts (409) are retryable
+		return false;
+	}
+	return true;
+}
+
+static vector<string> GetCreatedMetadataFiles(const TableTransactionInfo &transaction_info) {
+	vector<string> created_metadata_files;
+	for (const auto &entry : transaction_info.created_metadata_files) {
+		created_metadata_files.insert(created_metadata_files.end(), entry.second.begin(), entry.second.end());
+	}
+	return created_metadata_files;
+}
+
+static case_insensitive_set_t GetRetryTableKeys(const TableTransactionInfo &transaction_info) {
+	case_insensitive_set_t table_keys;
+	for (const auto &entry : transaction_info.table_requests) {
+		table_keys.insert(entry.first);
+	}
+	return table_keys;
+}
+
+// 4xx = definitive rejection (commit did not land) -> delete the orphan. 5xx / no HTTP status
+// (connection error/timeout) = outcome unknown (may have landed) -> keep files. Status is in
+// extra_info (HTTPException) or the message "status code (<status>)" (fallback).
+static bool CommitStateUnknown(const ErrorData &error) {
+	auto &extra = error.ExtraInfo();
+	auto it = extra.find("status_code");
+	if (it != extra.end()) {
+		return it->second.empty() || it->second[0] != '4';
+	}
+	auto &msg = error.RawMessage();
+	auto pos = msg.find("status code (");
+	if (pos != string::npos) {
+		auto digit = msg.find_first_of("0123456789", pos);
+		if (digit != string::npos) {
+			return msg[digit] != '4';
+		}
+	}
+	return true;
 }
 
 void IcebergTransaction::Commit() {
@@ -431,6 +463,7 @@ void IcebergTransaction::Commit() {
 		DoSchemaDeletes(*temp_con_context);
 	} catch (std::exception &ex) {
 		ErrorData error(ex);
+		commit_state_unknown = CommitStateUnknown(error);
 		CleanupFiles();
 		DropSecrets(*temp_con_context);
 		temp_con.Rollback();
@@ -444,45 +477,12 @@ void IcebergTransaction::DoTableUpdates(IcebergTransactionAlterUpdate &alter_upd
 	if (!alter_update.HasUpdates()) {
 		return;
 	}
-	auto transaction_info = GetTransactionRequest(alter_update, context);
-	auto &transaction = transaction_info.request;
-
-	// if there are no new tables, we can post to the transactions/commit endpoint
-	// otherwise we fall back to posting a commit for each table.
-	if (transaction.table_changes.empty()) {
-		alter_update.updated_tables.clear();
-		DropSecrets(context);
-		return;
-	}
-
-	const bool can_use_multi_table_commit = !transaction_info.has_assert_create &&
-	                                        !catalog.attach_options.disable_multi_table_commit &&
-	                                        catalog.supported_urls.count("POST /v1/{prefix}/transactions/commit");
-	if (can_use_multi_table_commit) {
-		// commit all transactions at once
-		std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-		auto doc = doc_p.get();
-		auto root_object = yyjson_mut_obj(doc);
-		yyjson_mut_doc_set_root(doc, root_object);
-
-		CommitTransactionToJSON(doc, root_object, transaction);
-		auto transaction_json = JsonDocToString(std::move(doc_p));
-		IRCAPI::CommitMultiTableUpdate(context, catalog, transaction_json);
-		for (auto &it : alter_update.updated_tables) {
-			alter_update.committed_tables.insert(it.first);
-		}
+	if (CanUseMultiTableCommit(alter_update)) {
+		DoMultiTableCommitUpdates(alter_update, context);
 	} else {
-		D_ASSERT(catalog.supported_urls.count("POST /v1/{prefix}/namespaces/{namespace}/tables/{table}"));
-		// each table change will make a separate request
-		for (auto &it : transaction_info.table_requests) {
-			auto &table_change = transaction.table_changes[it.second];
-			D_ASSERT(table_change.has_identifier);
-			auto transaction_json = ConstructTableUpdateJSON(table_change);
-			IRCAPI::CommitTableUpdate(context, catalog, table_change.identifier._namespace.value,
-			                          table_change.identifier.name, transaction_json);
-			alter_update.committed_tables.insert(it.first);
-		}
+		DoSingleTableCommitUpdates(alter_update, context);
 	}
+
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	if (ic_catalog.attach_options.max_table_staleness_micros.IsValid()) {
 		for (auto &it : alter_update.committed_tables) {
@@ -492,33 +492,6 @@ void IcebergTransaction::DoTableUpdates(IcebergTransactionAlterUpdate &alter_upd
 	DropSecrets(context);
 }
 
-static yyjson_mut_val *CreateRenameComponentJSON(yyjson_mut_doc *doc, const IcebergSchemaEntry &schema,
-                                                 const string &table_name) {
-	auto res = yyjson_mut_obj(doc);
-	auto namespace_arr = yyjson_mut_arr(doc);
-	for (auto &item : schema.namespace_items) {
-		yyjson_mut_arr_add_strcpy(doc, namespace_arr, item.c_str());
-	}
-	yyjson_mut_obj_add_val(doc, res, "namespace", namespace_arr);
-	yyjson_mut_obj_add_strcpy(doc, res, "name", table_name.c_str());
-	return res;
-}
-
-static yyjson_mut_val *CreateRenameRequestJSON(yyjson_mut_doc *doc, const IcebergSchemaEntry &schema,
-                                               const string &source, const string &destination) {
-	//  value: {
-	//    "source": { "namespace": ["accounting", "tax"], "name": "paid" },
-	//    "destination": { "namespace": ["accounting", "tax"], "name": "owed" }
-	//  }
-	auto res = yyjson_mut_obj(doc);
-
-	auto source_obj = CreateRenameComponentJSON(doc, schema, source);
-	auto destination_obj = CreateRenameComponentJSON(doc, schema, destination);
-	yyjson_mut_obj_add_val(doc, res, "source", source_obj);
-	yyjson_mut_obj_add_val(doc, res, "destination", destination_obj);
-	return res;
-}
-
 void IcebergTransaction::DoTableRename(IcebergTransactionRenameUpdate &rename_update, ClientContext &context) {
 	auto &original_table = rename_update.table;
 	auto &schema = original_table.schema;
@@ -526,15 +499,16 @@ void IcebergTransaction::DoTableRename(IcebergTransactionRenameUpdate &rename_up
 	auto &table_name = original_table.name;
 	auto new_name = rename_update.new_name;
 
-	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-	auto doc = doc_p.get();
-	auto root_object = CreateRenameRequestJSON(doc, schema, table_name, new_name);
-	yyjson_mut_doc_set_root(doc, root_object);
-	auto transaction_json = JsonDocToString(std::move(doc_p));
+	rest_api_objects::RenameTableRequest request;
+	request.source._namespace.value = schema.namespace_items;
+	request.source.name = table_name;
+	request.destination._namespace.value = schema.namespace_items;
+	request.destination.name = new_name;
+	auto transaction_json = RESTObjectToJSONString(request);
 	IRCAPI::CommitTableRename(context, catalog, transaction_json);
 
 	DropInfo drop_info;
-	drop_info.name = table_name;
+	drop_info.GetQualifiedNameMutable() = Identifier(table_name);
 	drop_info.if_not_found = OnEntryNotFound::THROW_EXCEPTION;
 	schema.DropEntry(context, drop_info, true);
 
@@ -543,6 +517,99 @@ void IcebergTransaction::DoTableRename(IcebergTransactionRenameUpdate &rename_up
 	schema.tables.CreateEntryInternal(guard, new_name, std::move(rename_update.new_table), old_version);
 	if (old_version) {
 		throw TransactionException("Table %s was already created by a different transaction!", new_name);
+	}
+}
+
+void IcebergTransaction::DoMultiTableCommitUpdates(IcebergTransactionAlterUpdate &alter_update,
+                                                   ClientContext &context) {
+	//! The retry policy is the tables' folded (most-lenient) config, produced by GetTransactionRequest.
+	//! It is stable across attempts (same tables), so the backoff state is created once, lazily, from
+	//! the first staged request and reused for every retry.
+	unique_ptr<IcebergRetryBackoff> backoff;
+	for (idx_t attempt = 0;; attempt++) {
+		auto transaction_info = GetTransactionRequest(alter_update, context);
+		if (transaction_info.request.table_changes.empty()) {
+			alter_update.updated_tables.clear();
+			return;
+		}
+		if (!backoff) {
+			backoff = make_uniq<IcebergRetryBackoff>(transaction_info.retry_config);
+		}
+
+		std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
+		auto doc = doc_p.get();
+		auto root_object = CommitTransactionToJSON(doc, transaction_info.request);
+		yyjson_mut_doc_set_root(doc, root_object);
+
+		auto transaction_json = JsonDocToString(std::move(doc_p));
+		auto result = IRCAPI::CommitMultiTableUpdate(context, catalog, transaction_json);
+		if (result.Success()) {
+			for (auto &it : alter_update.updated_tables) {
+				alter_update.committed_tables.insert(it.first);
+			}
+			return;
+		}
+		auto created_metadata_files = GetCreatedMetadataFiles(transaction_info);
+		if (!CommitIsRetryable(transaction_info.retryable, transaction_info.retry_config.num_retries, result,
+		                       attempt)) {
+			result.Throw(catalog.GetBaseUrl().GetURLEncoded());
+		}
+		CleanupMetadataFiles(context, created_metadata_files);
+		auto table_keys = GetRetryTableKeys(transaction_info);
+		RefreshRetryTables(alter_update, table_keys, context);
+		//! Back off before the next attempt to de-synchronize concurrent writers; stop if the
+		//! cumulative retry budget (commit.retry.total-timeout-ms) would be exceeded.
+		if (!backoff->WaitBeforeRetry(attempt)) {
+			result.Throw(catalog.GetBaseUrl().GetURLEncoded());
+		}
+	}
+}
+
+void IcebergTransaction::DoSingleTableCommitUpdates(IcebergTransactionAlterUpdate &alter_update,
+                                                    ClientContext &context) {
+	D_ASSERT(catalog.supported_urls.count("POST /v1/{prefix}/namespaces/{namespace}/tables/{table}"));
+	for (auto &entry : alter_update.updated_tables) {
+		auto &table_key = entry.first;
+		//! Backoff state is created once per table (lazily, from the first staged commit's config)
+		//! and reused across this table's retries.
+		unique_ptr<IcebergRetryBackoff> backoff;
+		for (idx_t attempt = 0;; attempt++) {
+			if (alter_update.committed_tables.count(table_key)) {
+				break;
+			}
+			auto &table_info = entry.second;
+			if (!table_info.HasTransactionUpdates()) {
+				break;
+			}
+
+			auto table_transaction_info = StageSingleTableCommit(db, table_info, context);
+			if (!backoff) {
+				backoff = make_uniq<IcebergRetryBackoff>(table_transaction_info.retry_config);
+			}
+			auto &table_change = table_transaction_info.request;
+			D_ASSERT(table_change.identifier);
+			auto &identifier = *table_change.identifier;
+			auto transaction_json = ConstructTableUpdateJSON(table_change);
+			auto result = IRCAPI::CommitTableUpdate(context, catalog, identifier._namespace.value, identifier.name,
+			                                        transaction_json);
+			if (result.Success()) {
+				alter_update.committed_tables.insert(table_key);
+				break;
+			}
+
+			if (!CommitIsRetryable(table_transaction_info.retryable, table_transaction_info.retry_config.num_retries,
+			                       result, attempt)) {
+				result.Throw(catalog.GetBaseUrl().GetURLEncoded());
+			}
+			CleanupMetadataFiles(context, table_transaction_info.created_metadata_files);
+			case_insensitive_set_t retry_tables;
+			retry_tables.insert(table_key);
+			RefreshRetryTables(alter_update, retry_tables, context);
+			//! Back off before the next attempt; stop if the retry budget would be exceeded.
+			if (!backoff->WaitBeforeRetry(attempt)) {
+				result.Throw(catalog.GetBaseUrl().GetURLEncoded());
+			}
+		}
 	}
 }
 
@@ -556,9 +623,9 @@ void IcebergTransaction::DoTableDeletes(IcebergTransactionDeleteUpdate &delete_u
 	// remove the load table result
 	ic_catalog.table_request_cache.Expire(context, table_key);
 	// remove the table entry from the catalog
-	auto &schema_entry = ic_catalog.schemas.GetEntry(schema_key).Cast<IcebergSchemaEntry>();
+	auto &schema_entry = ic_catalog.schemas.GetEntry(schema_key.GetIdentifierName()).Cast<IcebergSchemaEntry>();
 	DropInfo drop_info;
-	drop_info.name = table_name;
+	drop_info.GetQualifiedNameMutable() = Identifier(table_name);
 	drop_info.if_not_found = OnEntryNotFound::RETURN_NULL;
 	schema_entry.DropEntry(context, drop_info, true);
 }
@@ -568,16 +635,10 @@ void IcebergTransaction::DoSchemaCreates(ClientContext &context) {
 	for (auto &schema_name : created_schemas) {
 		auto namespace_identifiers = IRCAPI::ParseSchemaName(schema_name);
 
-		std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-		auto doc = doc_p.get();
-		auto root_object = yyjson_mut_obj(doc);
-		yyjson_mut_doc_set_root(doc, root_object);
-		auto namespace_arr = yyjson_mut_obj_add_arr(doc, root_object, "namespace");
-		for (auto &name : namespace_identifiers) {
-			yyjson_mut_arr_add_strcpy(doc, namespace_arr, name.c_str());
-		}
-		yyjson_mut_obj_add_obj(doc, root_object, "properties");
-		auto create_body = JsonDocToString(std::move(doc_p));
+		rest_api_objects::CreateNamespaceRequest request;
+		request._namespace.value = namespace_identifiers;
+		request.properties = case_insensitive_map_t<string>();
+		auto create_body = RESTObjectToJSONString(request);
 
 		IRCAPI::CommitNamespaceCreate(context, ic_catalog, create_body);
 	}
@@ -605,20 +666,11 @@ void IcebergTransaction::DoSchemaPropertyUpdates(ClientContext &context) {
 		auto schema_property_updates = properties_update.second;
 		auto namespace_identifiers = IRCAPI::ParseSchemaName(schema_name_no_catalog);
 
-		std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-		auto doc = doc_p.get();
-		auto root_object = yyjson_mut_obj(doc);
-		yyjson_mut_doc_set_root(doc, root_object);
-
-		auto removal_arr = yyjson_mut_obj_add_arr(doc, root_object, "removals");
-		for (auto &removal : schema_property_updates.removals) {
-			yyjson_mut_arr_add_strcpy(doc, removal_arr, removal.c_str());
-		}
-		auto updates_arr = yyjson_mut_obj_add_obj(doc, root_object, "updates");
-		for (auto &update : schema_property_updates.updates) {
-			yyjson_mut_obj_add_strcpy(doc, updates_arr, update.first.c_str(), update.second.c_str());
-		}
-		auto create_body = JsonDocToString(std::move(doc_p));
+		rest_api_objects::UpdateNamespacePropertiesRequest request;
+		request.removals = vector<string>();
+		request.removals->assign(schema_property_updates.removals.begin(), schema_property_updates.removals.end());
+		request.updates = schema_property_updates.updates;
+		auto create_body = RESTObjectToJSONString(request);
 
 		IRCAPI::CommitNamespacePropertiesUpdate(context, ic_catalog, create_body, namespace_identifiers);
 	}
@@ -657,6 +709,10 @@ void IcebergTransaction::CleanupFiles() {
 		// on the aws side will result in an error.
 		return;
 	}
+	if (commit_state_unknown) {
+		// Commit may have landed (CommitStateUnknownException); keep the files.
+		return;
+	}
 	ScopedTransaction temp_con(db);
 	auto &temp_context = temp_con.GetContext();
 	auto &fs = FileSystem::GetFileSystem(temp_context);
@@ -668,7 +724,7 @@ void IcebergTransaction::CleanupFiles() {
 		auto &alter_update = transaction_update->Cast<IcebergTransactionAlterUpdate>();
 		for (auto &up_table : alter_update.updated_tables) {
 			if (alter_update.committed_tables.count(up_table.first)) {
-				//! Successively committed, no need to roll back
+				//! Successfully committed, no need to roll back
 				continue;
 			}
 			auto &table = up_table.second;

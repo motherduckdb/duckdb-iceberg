@@ -363,7 +363,7 @@ bool IcebergVariantBoundsReader::RekeyBoundsVariant(const Value &bounds_variant,
 	try {
 		// Convert the VARIANT into a regular nested Value: objects become STRUCTs keyed by the variant's object
 		// keys (the flat JSON paths "$['person']['address']['zip']", ...), with the leaf bounds as typed scalars.
-		Vector tmp(bounds_variant);
+		Vector tmp(bounds_variant, count_t(1));
 		RecursiveUnifiedVectorFormat format;
 		Vector::RecursiveToUnifiedFormat(tmp, 1, format);
 		UnifiedVariantVectorData variant_data(format);
@@ -383,7 +383,7 @@ bool IcebergVariantBoundsReader::RekeyBoundsVariant(const Value &bounds_variant,
 	auto &child_values = StructValue::GetChildren(struct_value);
 	BoundNode root;
 	for (idx_t i = 0; i < child_types.size(); i++) {
-		InsertPath(root, ParseJsonPathSegments(child_types[i].first), child_values[i]);
+		InsertPath(root, ParseJsonPathSegments(child_types[i].first.GetIdentifierName()), child_values[i]);
 	}
 	if (root.children.empty()) {
 		return false;

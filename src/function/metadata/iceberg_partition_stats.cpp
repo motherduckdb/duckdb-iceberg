@@ -67,7 +67,7 @@ static unique_ptr<FunctionData> IcebergPartitionStatsBind(ClientContext &context
 	auto &snapshot_lookup = options.snapshot_lookup;
 
 	for (auto &kv : input.named_parameters) {
-		auto loption = StringUtil::Lower(kv.first);
+		auto loption = StringUtil::Lower(kv.first.GetIdentifierName());
 		auto &val = kv.second;
 		if (loption == "allow_moved_paths") {
 			options.allow_moved_paths = BooleanValue::Get(val);
@@ -157,7 +157,7 @@ static unique_ptr<FunctionData> IcebergPartitionStatsBind(ClientContext &context
 }
 
 static void AddString(Vector &vec, idx_t index, string_t &&str) {
-	FlatVector::GetData<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
+	FlatVector::GetDataMutable<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
 }
 
 static void IcebergPartitionStatsFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
@@ -188,7 +188,7 @@ static void IcebergPartitionStatsFunction(ClientContext &context, TableFunctionI
 		for (; global_state.current_manifest_entry_idx < field_summaries.size();
 		     global_state.current_manifest_entry_idx++) {
 			if (out >= STANDARD_VECTOR_SIZE) {
-				output.SetCardinality(out);
+				output.SetChildCardinality(out);
 				return;
 			}
 			auto &field_summary = field_summaries[global_state.current_manifest_entry_idx];
@@ -202,11 +202,11 @@ static void IcebergPartitionStatsFunction(ClientContext &context, TableFunctionI
 			//! manifest_path
 			AddString(output.data[col++], out, string_t(manifest.manifest_path));
 			//! added_snapshot_id
-			FlatVector::GetData<int64_t>(output.data[col++])[out] = manifest.added_snapshot_id;
+			FlatVector::GetDataMutable<int64_t>(output.data[col++])[out] = manifest.added_snapshot_id;
 			//! partition_spec_id
-			FlatVector::GetData<int32_t>(output.data[col++])[out] = manifest.partition_spec_id;
+			FlatVector::GetDataMutable<int32_t>(output.data[col++])[out] = manifest.partition_spec_id;
 			//! partition_field_id
-			FlatVector::GetData<uint64_t>(output.data[col++])[out] = field.partition_field_id;
+			FlatVector::GetDataMutable<uint64_t>(output.data[col++])[out] = field.partition_field_id;
 			//! partition_field_name
 			AddString(output.data[col++], out, string_t(field.GetPartitionSpecFieldName()));
 			//! partition_source_columns
@@ -225,15 +225,15 @@ static void IcebergPartitionStatsFunction(ClientContext &context, TableFunctionI
 			AddString(output.data[col++], out, string_t(stats.upper_bound.ToString()));
 
 			//! contains_null
-			FlatVector::GetData<bool>(output.data[col++])[out] = field_summary.contains_null;
+			FlatVector::GetDataMutable<bool>(output.data[col++])[out] = field_summary.contains_null;
 			//! contains_nan
-			FlatVector::GetData<bool>(output.data[col++])[out] = field_summary.contains_nan;
+			FlatVector::GetDataMutable<bool>(output.data[col++])[out] = field_summary.contains_nan;
 
 			out++;
 		}
 		global_state.current_manifest_entry_idx = 0;
 	}
-	output.SetCardinality(out);
+	output.SetChildCardinality(out);
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergPartitionStatsFunction() {

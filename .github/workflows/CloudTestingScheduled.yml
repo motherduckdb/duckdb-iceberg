@@ -16,5 +16,3 @@ jobs:
       httpfs_fork: 'https://github.com/duckdb/duckdb-httpfs'
       httpfs_ref: ''
     secrets: inherit
-
-

@@ -34,6 +34,20 @@ static bool PlanContainsPhysicalFilter(PhysicalOperator &plan) {
 	return false;
 }
 
+namespace {
+
+static bool IsDirectReference(const Expression &expr) {
+	switch (expr.GetExpressionClass()) {
+	case ExpressionClass::BOUND_REF:
+	case ExpressionClass::BOUND_COLUMN_REF:
+		return true;
+	default:
+		return false;
+	}
+}
+
+} // namespace
+
 bool IcebergDelete::TryGetEqualityDeletePredicates(ClientContext &context, IcebergTableEntry &table,
                                                    PhysicalOperator &child_plan,
                                                    vector<IcebergEqualityDeletePredicate> &equality_predicates) {
@@ -63,23 +77,38 @@ bool IcebergDelete::TryGetEqualityDeletePredicates(ClientContext &context, Icebe
 		return false;
 	}
 	auto &scan = *table_scan;
-	if (!scan.table_filters || scan.table_filters->filters.empty()) {
+	if (!scan.table_filters || !scan.table_filters->HasFilters()) {
 		return false;
 	}
 
 	auto &schema = table_metadata.GetLatestSchema();
 	auto &columns = schema.columns;
-	for (auto &filter_entry : scan.table_filters->filters) {
-		auto column_key = filter_entry.first;
-		auto &table_filter = *filter_entry.second;
+	for (auto &filter_entry : *scan.table_filters) {
+		auto column_key = filter_entry.GetIndex().GetIndex();
+		auto &table_filter = filter_entry.Filter().Cast<ExpressionFilter>();
+		auto &expr = *table_filter.expr;
+
 		//! Only a plain `column = constant` qualifies (rejects IN, OR/AND conjunctions, IS NULL, ...).
-		if (table_filter.filter_type != TableFilterType::CONSTANT_COMPARISON) {
+
+		if (expr.GetExpressionClass() != ExpressionClass::BOUND_FUNCTION) {
 			return false;
 		}
-		auto &constant_filter = table_filter.Cast<ConstantFilter>();
-		if (constant_filter.comparison_type != ExpressionType::COMPARE_EQUAL) {
+		if (expr.GetExpressionType() != ExpressionType::COMPARE_EQUAL) {
 			return false;
 		}
+		auto &compare_expr = expr.Cast<BoundFunctionExpression>();
+		auto &left = BoundComparisonExpression::Left(compare_expr);
+		auto &right = BoundComparisonExpression::Right(compare_expr);
+
+		optional_ptr<const Value> constant_value;
+		if (IsDirectReference(left) && right.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT) {
+			constant_value = right.Cast<BoundConstantExpression>().GetValue();
+		} else if (left.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT && IsDirectReference(right)) {
+			constant_value = left.Cast<BoundConstantExpression>().GetValue();
+		} else {
+			return false;
+		}
+
 		if (column_key >= scan.column_ids.size()) {
 			return false;
 		}
@@ -100,7 +129,7 @@ bool IcebergDelete::TryGetEqualityDeletePredicates(ClientContext &context, Icebe
 		}
 		Value delete_value;
 		string error_message;
-		if (!constant_filter.constant.DefaultTryCastAs(column_definition.type, delete_value, &error_message, true)) {
+		if (!constant_value->DefaultTryCastAs(column_definition.type, delete_value, &error_message, true)) {
 			return false;
 		}
 		IcebergEqualityDeletePredicate predicate;
@@ -145,7 +174,8 @@ void IcebergDelete::WriteEqualityDeleteFile(ClientContext &context, IcebergDelet
 	auto &copy_fun = IcebergUtils::GetCopyFunction(context, "parquet");
 	CopyFunctionBindInput bind_input(*info);
 
-	auto function_data = copy_fun.function.copy_to_bind(context, bind_input, names_to_write, types_to_write);
+	auto function_data =
+	    copy_fun.function.copy_to_bind(context, bind_input, StringsToIdentifiers(names_to_write), types_to_write);
 	auto copy_global_state = copy_fun.function.copy_to_initialize_global(context, *function_data, delete_file_path);
 
 	ThreadContext thread_context(context);
@@ -161,7 +191,7 @@ void IcebergDelete::WriteEqualityDeleteFile(ClientContext &context, IcebergDelet
 	for (idx_t col_idx = 0; col_idx < equality_predicates.size(); col_idx++) {
 		write_chunk.data[col_idx].SetValue(0, equality_predicates[col_idx].value);
 	}
-	write_chunk.SetCardinality(1);
+	write_chunk.SetChildCardinality(1);
 	copy_fun.function.copy_to_sink(execution_context, *function_data, *copy_global_state, *copy_local_state,
 	                               write_chunk);
 

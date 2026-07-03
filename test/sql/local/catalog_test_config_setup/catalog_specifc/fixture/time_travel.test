@@ -20,14 +20,14 @@ set ignore_error_messages
 loop i 0 4
 
 statement ok
-set variable snapshot${i} = (
+set variable snapshot{i} = (
 	select {
 		'snapshot_id': snapshot_id,
 		'timestamp_ms': timestamp_ms
 	} from iceberg_snapshots(
 		my_datalake.default.filtering_on_bounds
 	) order by timestamp_ms
-	offset ${i} limit 1
+	offset {i} limit 1
 );
 
 endloop
@@ -64,9 +64,9 @@ foreach component snapshot_id timestamp_ms
 
 query I
 select * from query(
-	getvariable('time_travel_${component}').replace(
+	getvariable('time_travel_{component}').replace(
 		'COMPONENT'::VARCHAR,
-		getvariable('snapshot0').${component}::VARCHAR
+		getvariable('snapshot0').{component}::VARCHAR
 	)
 )
 ----
@@ -74,9 +74,9 @@ select * from query(
 
 query I
 select * from query(
-	getvariable('time_travel_${component}').replace(
+	getvariable('time_travel_{component}').replace(
 		'COMPONENT'::VARCHAR,
-		getvariable('snapshot1').${component}::VARCHAR
+		getvariable('snapshot1').{component}::VARCHAR
 	)
 )
 ----
@@ -84,9 +84,9 @@ select * from query(
 
 query I
 select * from query(
-	getvariable('time_travel_${component}').replace(
+	getvariable('time_travel_{component}').replace(
 		'COMPONENT'::VARCHAR,
-		getvariable('snapshot2').${component}::VARCHAR
+		getvariable('snapshot2').{component}::VARCHAR
 	)
 )
 ----
@@ -94,9 +94,9 @@ select * from query(
 
 query I
 select * from query(
-	getvariable('time_travel_${component}').replace(
+	getvariable('time_travel_{component}').replace(
 		'COMPONENT'::VARCHAR,
-		getvariable('snapshot3').${component}::VARCHAR
+		getvariable('snapshot3').{component}::VARCHAR
 	)
 )
 ----
