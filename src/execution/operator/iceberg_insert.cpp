@@ -7,6 +7,7 @@
 #include "duckdb/planner/operator/logical_insert.hpp"
 #include "duckdb/planner/operator/logical_create_table.hpp"
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
+#include "duckdb/execution/operator/order/physical_order.hpp"
 #include "duckdb/execution/operator/projection/physical_projection.hpp"
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 #include "duckdb/function/function_binder.hpp"
@@ -866,7 +867,7 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 		result.write_empty_file = true;
 	} else {
 		result.filename_pattern.SetFilenamePattern("{uuidv7}");
-		result.partition_output = !result.order_columns.empty();
+		result.partition_output = false;
 		result.write_empty_file = false;
 		auto write_target_file_size = table_properties.find("write.target-file-size-bytes");
 		if (write_target_file_size != table_properties.end()) {
@@ -931,6 +932,20 @@ static void GenerateProjection(ClientContext &context, PhysicalPlanGenerator &pl
 	plan = proj;
 }
 
+static void GeneratePhysicalOrder(PhysicalPlanGenerator &planner, vector<BoundOrderByNode> &orders,
+                                  optional_ptr<PhysicalOperator> &plan) {
+	D_ASSERT(plan);
+	vector<idx_t> projections;
+	projections.reserve(plan->GetTypes().size());
+	for (idx_t i = 0; i < plan->GetTypes().size(); i++) {
+		projections.push_back(i);
+	}
+	auto &order = planner.Make<PhysicalOrder>(plan->GetTypes(), std::move(orders), std::move(projections),
+	                                          plan->estimated_cardinality);
+	order.children.push_back(*plan);
+	plan = order;
+}
+
 PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, PhysicalPlanGenerator &planner,
                                                    const IcebergCopyInput &copy_input,
                                                    optional_ptr<PhysicalOperator> plan) {
@@ -940,6 +955,10 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 	// that computes them on top of the child plan.
 	if (!copy_options.projection_list.empty() && plan) {
 		GenerateProjection(context, planner, copy_options.projection_list, plan);
+	}
+
+	if (!copy_input.partition_spec && !copy_options.order_columns.empty() && plan) {
+		GeneratePhysicalOrder(planner, copy_options.order_columns, plan);
 	}
 
 	auto copy_return_types = GetCopyFunctionReturnLogicalTypes(CopyFunctionReturnType::WRITTEN_FILE_STATISTICS);
