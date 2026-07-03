@@ -103,6 +103,8 @@ set variable manifest_path = (
 	limit 1
 );
 
+# Read the newly written parquet file directly and use file_row_number to compare
+# each row against the previous one in physical write order.
 query I
 with ordered_rows as (
 	select

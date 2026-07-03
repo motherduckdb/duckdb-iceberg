@@ -98,6 +98,8 @@ set variable manifest_path = (
 	limit 1
 );
 
+# Read the newly added parquet files directly and use file_row_number so the test
+# checks the physical row order DuckDB wrote within each partition file.
 query I
 with latest_files as (
 	select file_path
