@@ -52,26 +52,16 @@ struct DataFileVectorWriters {
 	      upper_bounds(data_file_entries[UPPER_BOUNDS_INDEX], row_count, 0),
 	      split_offsets(data_file_entries[SPLIT_OFFSETS_INDEX], row_count, 0),
 	      equality_ids(data_file_entries[EQUALITY_IDS_INDEX], row_count, 0),
-	      sort_order_id(data_file_entries[SORT_ORDER_ID_INDEX], row_count, 0),
-	      content(HasV2Fields(table_metadata)
-	                  ? optional<VectorWriter<int32_t>>(std::in_place, data_file_entries[CONTENT_INDEX], row_count, 0)
-	                  : std::nullopt),
-	      referenced_data_file(HasV2Fields(table_metadata)
-	                               ? optional<VectorWriter<string_t>>(
-	                                     std::in_place, data_file_entries[REFERENCED_DATA_FILE_INDEX], row_count, 0)
-	                               : std::nullopt),
-	      first_row_id(
-	          HasV3Fields(table_metadata)
-	              ? optional<VectorWriter<int64_t>>(std::in_place, data_file_entries[FIRST_ROW_ID_INDEX], row_count, 0)
-	              : std::nullopt),
-	      content_offset(HasV3Fields(table_metadata)
-	                         ? optional<VectorWriter<int64_t>>(std::in_place, data_file_entries[CONTENT_OFFSET_INDEX],
-	                                                           row_count, 0)
-	                         : std::nullopt),
-	      content_size_in_bytes(HasV3Fields(table_metadata)
-	                                ? optional<VectorWriter<int64_t>>(
-	                                      std::in_place, data_file_entries[CONTENT_SIZE_IN_BYTES_INDEX], row_count, 0)
-	                                : std::nullopt) {
+	      sort_order_id(data_file_entries[SORT_ORDER_ID_INDEX], row_count, 0) {
+		if (table_metadata.iceberg_version >= 2) {
+			content.emplace(data_file_entries[CONTENT_INDEX], row_count, 0);
+			referenced_data_file.emplace(data_file_entries[REFERENCED_DATA_FILE_INDEX], row_count, 0);
+		}
+		if (table_metadata.iceberg_version >= 3) {
+			first_row_id.emplace(data_file_entries[FIRST_ROW_ID_INDEX], row_count, 0);
+			content_offset.emplace(data_file_entries[CONTENT_OFFSET_INDEX], row_count, 0);
+			content_size_in_bytes.emplace(data_file_entries[CONTENT_SIZE_IN_BYTES_INDEX], row_count, 0);
+		}
 	}
 
 	void WriteRow(idx_t row_idx, const IcebergDataFile &data_file,
@@ -167,12 +157,6 @@ private:
 	static constexpr idx_t FIRST_ROW_ID_INDEX = 16;
 	static constexpr idx_t CONTENT_OFFSET_INDEX = 17;
 	static constexpr idx_t CONTENT_SIZE_IN_BYTES_INDEX = 18;
-	static bool HasV2Fields(const IcebergTableMetadata &table_metadata) {
-		return table_metadata.iceberg_version >= 2;
-	}
-	static bool HasV3Fields(const IcebergTableMetadata &table_metadata) {
-		return table_metadata.iceberg_version >= 3;
-	}
 
 public:
 	const IcebergTableMetadata &table_metadata;
