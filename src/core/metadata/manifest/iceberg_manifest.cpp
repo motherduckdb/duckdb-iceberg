@@ -26,71 +26,59 @@ using IntStringMapWriter = VectorWriter<VectorListType<VectorStructType<int32_t,
 using Int32ListWriter = VectorWriter<VectorListType<int32_t>>;
 using Int64ListWriter = VectorWriter<VectorListType<int64_t>>;
 
+template <class WRITER>
+static optional<WRITER> MakeOptionalWriterAt(bool enabled, vector<Vector> &vectors, idx_t vector_idx, idx_t row_count,
+                                             idx_t row_idx) {
+	if (!enabled) {
+		return std::nullopt;
+	}
+	return optional<WRITER>(std::in_place, vectors[vector_idx], row_count, row_idx);
+}
+
 template <class MAP>
 static void WriteIntIntMap(IntIntMapWriter &writer, const MAP &map);
-static void WriteBoundsMap(IntStringMapWriter &writer, const duckdb::unordered_map<int32_t, Value> &bounds);
-static void WriteInt32List(Int32ListWriter &writer, const duckdb::vector<int32_t> &values);
-static void WriteInt64List(Int64ListWriter &writer, const duckdb::vector<int64_t> &values);
+static void WriteBoundsMap(IntStringMapWriter &writer, const unordered_map<int32_t, Value> &bounds);
+static void WriteInt32List(Int32ListWriter &writer, const vector<int32_t> &values);
+static void WriteInt64List(Int64ListWriter &writer, const vector<int64_t> &values);
 static void WritePartitionStructRow(Vector &partition_vector, idx_t row_idx, const IcebergDataFile &data_file,
                                     const IcebergTableMetadata &table_metadata,
-                                    const duckdb::vector<IcebergExtendedPartitionInfo> &schema_partition_info);
+                                    const vector<IcebergExtendedPartitionInfo> &schema_partition_info);
 
 struct DataFileVectorWriters {
 	explicit DataFileVectorWriters(Vector &data_file_vector, idx_t row_count,
 	                               const IcebergTableMetadata &table_metadata)
 	    : table_metadata(table_metadata), data_file_entries(StructVector::GetEntries(data_file_vector)),
-	      content(table_metadata.iceberg_version >= 2
-	                  ? optional<VectorWriter<int32_t>>(std::in_place, data_file_entries[entry_index], row_count, 0)
-	                  : std::nullopt),
-	      file_path(data_file_entries[entry_index + static_cast<idx_t>(content.has_value())], row_count, 0),
-	      file_format(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 1], row_count, 0),
-	      partition(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 2]),
-	      record_count(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 3], row_count, 0),
-	      file_size_in_bytes(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 4], row_count,
-	                         0),
-	      column_sizes(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 5], row_count, 0),
-	      value_counts(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 6], row_count, 0),
-	      null_value_counts(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 7], row_count, 0),
-	      nan_value_counts(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 8], row_count, 0),
-	      lower_bounds(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 9], row_count, 0),
-	      upper_bounds(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 10], row_count, 0),
-	      split_offsets(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 11], row_count, 0),
-	      equality_ids(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 12], row_count, 0),
-	      sort_order_id(data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 13], row_count, 0),
-	      first_row_id(table_metadata.iceberg_version >= 3
-	                       ? optional<VectorWriter<int64_t>>(
-	                             std::in_place,
-	                             data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 14],
-	                             row_count, 0)
-	                       : std::nullopt),
-	      referenced_data_file(table_metadata.iceberg_version >= 2
-	                               ? optional<VectorWriter<string_t>>(
-	                                     std::in_place,
-	                                     data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 14 +
-	                                                       static_cast<idx_t>(first_row_id.has_value())],
-	                                     row_count, 0)
-	                               : std::nullopt),
-	      content_offset(table_metadata.iceberg_version >= 3
-	                         ? optional<VectorWriter<int64_t>>(
-	                               std::in_place,
-	                               data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 14 +
-	                                                 static_cast<idx_t>(first_row_id.has_value()) +
-	                                                 static_cast<idx_t>(referenced_data_file.has_value())],
-	                               row_count, 0)
-	                         : std::nullopt),
-	      content_size_in_bytes(table_metadata.iceberg_version >= 3
-	                                ? optional<VectorWriter<int64_t>>(
-	                                      std::in_place,
-	                                      data_file_entries[entry_index + static_cast<idx_t>(content.has_value()) + 14 +
-	                                                        static_cast<idx_t>(first_row_id.has_value()) +
-	                                                        static_cast<idx_t>(referenced_data_file.has_value()) +
-	                                                        static_cast<idx_t>(content_offset.has_value())],
-	                                      row_count, 0)
-	                                : std::nullopt) {
+	      content(MakeOptionalWriterAt<VectorWriter<int32_t>>(HasV2Fields(table_metadata), data_file_entries,
+	                                                          entry_index, row_count, 0)),
+	      file_path(data_file_entries[BaseFieldOffset(table_metadata)], row_count, 0),
+	      file_format(data_file_entries[BaseFieldOffset(table_metadata) + 1], row_count, 0),
+	      partition(data_file_entries[BaseFieldOffset(table_metadata) + 2]),
+	      record_count(data_file_entries[BaseFieldOffset(table_metadata) + 3], row_count, 0),
+	      file_size_in_bytes(data_file_entries[BaseFieldOffset(table_metadata) + 4], row_count, 0),
+	      column_sizes(data_file_entries[BaseFieldOffset(table_metadata) + 5], row_count, 0),
+	      value_counts(data_file_entries[BaseFieldOffset(table_metadata) + 6], row_count, 0),
+	      null_value_counts(data_file_entries[BaseFieldOffset(table_metadata) + 7], row_count, 0),
+	      nan_value_counts(data_file_entries[BaseFieldOffset(table_metadata) + 8], row_count, 0),
+	      lower_bounds(data_file_entries[BaseFieldOffset(table_metadata) + 9], row_count, 0),
+	      upper_bounds(data_file_entries[BaseFieldOffset(table_metadata) + 10], row_count, 0),
+	      split_offsets(data_file_entries[BaseFieldOffset(table_metadata) + 11], row_count, 0),
+	      equality_ids(data_file_entries[BaseFieldOffset(table_metadata) + 12], row_count, 0),
+	      sort_order_id(data_file_entries[BaseFieldOffset(table_metadata) + 13], row_count, 0),
+	      first_row_id(MakeOptionalWriterAt<VectorWriter<int64_t>>(HasV3Fields(table_metadata), data_file_entries,
+	                                                               BaseFieldOffset(table_metadata) + 14, row_count, 0)),
+	      referenced_data_file(MakeOptionalWriterAt<VectorWriter<string_t>>(
+	          HasV2Fields(table_metadata), data_file_entries,
+	          BaseFieldOffset(table_metadata) + 14 + V3FieldCount(table_metadata), row_count, 0)),
+	      content_offset(MakeOptionalWriterAt<VectorWriter<int64_t>>(
+	          HasV3Fields(table_metadata), data_file_entries,
+	          BaseFieldOffset(table_metadata) + 14 + 1 + V3FieldCount(table_metadata), row_count, 0)),
+	      content_size_in_bytes(MakeOptionalWriterAt<VectorWriter<int64_t>>(
+	          HasV3Fields(table_metadata), data_file_entries,
+	          BaseFieldOffset(table_metadata) + 14 + 2 + V3FieldCount(table_metadata), row_count, 0)) {
 	}
 
 	void WriteRow(idx_t row_idx, const IcebergDataFile &data_file,
-	              const duckdb::vector<IcebergExtendedPartitionInfo> &schema_partition_info) {
+	              const vector<IcebergExtendedPartitionInfo> &schema_partition_info) {
 		if (content) {
 			content->WriteValue(static_cast<int32_t>(data_file.content));
 		}
@@ -164,10 +152,22 @@ struct DataFileVectorWriters {
 
 private:
 	static constexpr idx_t entry_index = 0;
+	static bool HasV2Fields(const IcebergTableMetadata &table_metadata) {
+		return table_metadata.iceberg_version >= 2;
+	}
+	static bool HasV3Fields(const IcebergTableMetadata &table_metadata) {
+		return table_metadata.iceberg_version >= 3;
+	}
+	static idx_t BaseFieldOffset(const IcebergTableMetadata &table_metadata) {
+		return entry_index + static_cast<idx_t>(HasV2Fields(table_metadata));
+	}
+	static idx_t V3FieldCount(const IcebergTableMetadata &table_metadata) {
+		return static_cast<idx_t>(HasV3Fields(table_metadata));
+	}
 
 public:
 	const IcebergTableMetadata &table_metadata;
-	duckdb::vector<Vector> &data_file_entries;
+	vector<Vector> &data_file_entries;
 	optional<VectorWriter<int32_t>> content;
 	VectorWriter<string_t> file_path;
 	VectorWriter<string_t> file_format;
@@ -520,8 +520,9 @@ static void WritePartitionStructRow(Vector &partition_vector, idx_t row_idx, con
 		return;
 	}
 
+	auto extended_partition_info = data_file.GetExtendedPartitionInfo(table_metadata);
 	unordered_map<uint64_t, const Value *> value_by_field_id;
-	for (auto &entry : data_file.GetExtendedPartitionInfo(table_metadata)) {
+	for (auto &entry : extended_partition_info) {
 		value_by_field_id.emplace(entry.field_id, &entry.value);
 	}
 	for (idx_t child_idx = 0; child_idx < schema_partition_info.size(); child_idx++) {
