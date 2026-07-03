@@ -6,6 +6,8 @@
 #include "rest_catalog/objects/schema.hpp"
 #include "rest_catalog/objects/add_schema_update.hpp"
 
+#include <optional>
+
 namespace duckdb {
 
 class IcebergTableSchema {
@@ -18,6 +20,8 @@ public:
 	                                optional_ptr<ColumnIndex> parent);
 	static const IcebergColumnDefinition &GetFromColumnIndex(const vector<unique_ptr<IcebergColumnDefinition>> &columns,
 	                                                         const ColumnIndex &column_index, idx_t depth);
+	optional<ColumnIndex> TryGetColumnIndexByFieldId(idx_t field_id) const;
+	const IcebergColumnDefinition &GetColumnByFieldId(idx_t field_id) const;
 	optional_ptr<const IcebergColumnDefinition> GetFromPath(const vector<Identifier> &path,
 	                                                        optional_ptr<optional_idx> names_offset) const;
 	optional_ptr<IcebergColumnDefinition> GetMutableFromPath(const vector<Identifier> &path,

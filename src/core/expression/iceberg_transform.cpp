@@ -30,9 +30,9 @@ IcebergTransform IcebergTransform::FromExpression(const ParsedExpression &expr, 
 	switch (expr_type) {
 	case ExpressionType::COLUMN_REF: {
 		auto &colref = expr.Cast<ColumnRefExpression>();
-		auto column_name = colref.ColumnNames().back();
-		auto column_lookup = schema.GetFromPath({column_name}, nullptr);
+		auto column_lookup = schema.GetFromPath(colref.ColumnNames(), nullptr);
 		if (!column_lookup) {
+			auto column_name = colref.ColumnNames().back();
 			throw InvalidInputException("No column by the name '%s' exists in the current schema (id: %d)",
 			                            column_name.GetIdentifierName(), schema.schema_id);
 		}
@@ -80,9 +80,9 @@ IcebergTransform IcebergTransform::FromExpression(const ParsedExpression &expr, 
 				                              EnumUtil::ToChars(argument_expr_type));
 			}
 			auto &colref = argument_expression.Cast<ColumnRefExpression>();
-			auto column_name = colref.ColumnNames().back();
-			auto column_lookup = schema.GetFromPath({column_name}, nullptr);
+			auto column_lookup = schema.GetFromPath(colref.ColumnNames(), nullptr);
 			if (!column_lookup) {
+				auto column_name = colref.ColumnNames().back();
 				throw InvalidInputException("No column by the name '%s' exists in the current schema (id: %d)",
 				                            column_name.GetIdentifierName(), schema.schema_id);
 			}
