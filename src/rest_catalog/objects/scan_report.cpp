@@ -24,6 +24,30 @@ ScanReport ScanReport::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+ScanReport ScanReport::Copy() const {
+	ScanReport res;
+	res.table_name = table_name;
+	res.snapshot_id = snapshot_id;
+	res.filter = filter ? make_uniq<Expression>(filter->Copy()) : nullptr;
+	res.schema_id = schema_id;
+	res.projected_field_ids.reserve(projected_field_ids.size());
+	for (auto &item : projected_field_ids) {
+		res.projected_field_ids.emplace_back(item);
+	}
+	res.projected_field_names.reserve(projected_field_names.size());
+	for (auto &item : projected_field_names) {
+		res.projected_field_names.emplace_back(item);
+	}
+	res.metrics = metrics.Copy();
+	if (metadata.has_value()) {
+		res.metadata.emplace();
+		for (auto &entry : (*metadata)) {
+			(*res.metadata).emplace(entry.first, entry.second);
+		}
+	}
+	return res;
+}
+
 string ScanReport::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto table_name_val = yyjson_obj_get(obj, "table-name");
@@ -128,7 +152,7 @@ string ScanReport::TryFromJSON(yyjson_val *obj) {
 	}
 	auto metadata_val = yyjson_obj_get(obj, "metadata");
 	if (metadata_val) {
-		has_metadata = true;
+		case_insensitive_map_t<string> metadata_tmp;
 		if (yyjson_is_obj(metadata_val)) {
 			size_t idx, max;
 			yyjson_val *key, *val;
@@ -141,13 +165,72 @@ string ScanReport::TryFromJSON(yyjson_val *obj) {
 					return StringUtil::Format("ScanReport property 'tmp' is not of type 'string', found '%s' instead",
 					                          yyjson_get_type_desc(val));
 				}
-				metadata.emplace(key_str, std::move(tmp));
+				metadata_tmp.emplace(key_str, std::move(tmp));
 			}
 		} else {
-			return "ScanReport property 'metadata' is not of type 'object'";
+			return "ScanReport property 'metadata_tmp' is not of type 'object'";
 		}
+		metadata = std::move(metadata_tmp);
 	}
-	return string();
+	return "";
+}
+
+void ScanReport::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: table-name
+	yyjson_mut_obj_add_strcpy(doc, obj, "table-name", table_name.c_str());
+
+	// Serialize: snapshot-id
+	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+
+	// Serialize: filter
+	yyjson_mut_val *filter_val = filter->ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "filter", filter_val);
+
+	// Serialize: schema-id
+	yyjson_mut_obj_add_int(doc, obj, "schema-id", schema_id);
+
+	// Serialize: projected-field-ids
+	yyjson_mut_val *projected_field_ids_arr = yyjson_mut_arr(doc);
+	for (const auto &item : projected_field_ids) {
+		yyjson_mut_val *item_val = yyjson_mut_int(doc, item);
+		yyjson_mut_arr_append(projected_field_ids_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "projected-field-ids", projected_field_ids_arr);
+
+	// Serialize: projected-field-names
+	yyjson_mut_val *projected_field_names_arr = yyjson_mut_arr(doc);
+	for (const auto &item : projected_field_names) {
+		yyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());
+		yyjson_mut_arr_append(projected_field_names_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "projected-field-names", projected_field_names_arr);
+
+	// Serialize: metrics
+	yyjson_mut_val *metrics_val = metrics.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "metrics", metrics_val);
+
+	// Serialize: metadata
+	if (metadata.has_value()) {
+		auto &metadata_value = *metadata;
+		yyjson_mut_val *metadata_value_obj = yyjson_mut_obj(doc);
+		for (const auto &it : metadata_value) {
+			auto &key = it.first;
+			auto &value = it.second;
+			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+			yyjson_mut_obj_add_strcpy(doc, metadata_value_obj, key_ptr, value.c_str());
+		}
+		yyjson_mut_obj_add_val(doc, obj, "metadata", metadata_value_obj);
+	}
+}
+
+yyjson_mut_val *ScanReport::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

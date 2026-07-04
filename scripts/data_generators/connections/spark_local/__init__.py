@@ -1,46 +1,38 @@
-from pyspark.sql import SparkSession
-import pyspark
-import pyspark.sql
-from pyspark import SparkContext
-
-from ..base import IcebergConnection
-from ..spark_settings import iceberg_runtime_configuration
-
-RUNTIME_CONFIG = iceberg_runtime_configuration()
-SPARK_VERSION = RUNTIME_CONFIG['spark_version']
-SCALA_BINARY_VERSION = RUNTIME_CONFIG['scala_binary_version']
-ICEBERG_LIBRARY_VERSION = RUNTIME_CONFIG['iceberg_library_version']
-
-import sys
 import os
 
-CONNECTION_KEY = 'local'
+import pyspark
+import pyspark.sql
+
+from ..base import IcebergConnection
+from scripts.data_generators.integration_config import get_spark_runtime
+
+
+CONNECTION_KEY = "local"
 
 SCRIPT_DIR = os.path.dirname(__file__)
-DATA_GENERATION_DIR = os.path.join(SCRIPT_DIR, '..', '..', '..', '..', 'data', 'generated', 'iceberg', 'spark-local')
-SPARK_RUNTIME_PATH = os.path.join(SCRIPT_DIR, '..', '..', f'iceberg-spark-runtime-{SPARK_VERSION}_{SCALA_BINARY_VERSION}-{ICEBERG_LIBRARY_VERSION}.jar')
+DATA_GENERATION_DIR = os.path.join(SCRIPT_DIR, "..", "..", "..", "..", "data", "generated", "iceberg", "spark-local")
 
 
 @IcebergConnection.register(CONNECTION_KEY)
 class IcebergSparkLocal(IcebergConnection):
-    def __init__(self):
-        super().__init__('spark-local', 'iceberg_catalog')
+    def __init__(self, runtime=None):
+        super().__init__("spark-local", "iceberg_catalog")
+        self.runtime = get_spark_runtime(runtime)
         self.con = self.get_connection()
 
     def get_connection(self):
         conf = pyspark.SparkConf()
-        conf.setMaster('local[*]')
-        conf.set('spark.sql.catalog.iceberg_catalog', 'org.apache.iceberg.spark.SparkCatalog')
-        conf.set('spark.sql.catalog.iceberg_catalog.type', 'hadoop')
-        conf.set('spark.sql.catalog.iceberg_catalog.warehouse', DATA_GENERATION_DIR)
-        conf.set('spark.sql.parquet.outputTimestampType', 'TIMESTAMP_MICROS')
-        conf.set('spark.driver.memory', '10g')
-        conf.set('spark.jars', SPARK_RUNTIME_PATH)
-        conf.set('spark.sql.extensions', 'org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions')
-        conf.set('spark.sql.session.timeZone', 'UTC')
+        conf.setMaster("local[*]")
+        conf.set("spark.sql.catalog.iceberg_catalog", "org.apache.iceberg.spark.SparkCatalog")
+        conf.set("spark.sql.catalog.iceberg_catalog.type", "hadoop")
+        conf.set("spark.sql.catalog.iceberg_catalog.warehouse", DATA_GENERATION_DIR)
+        conf.set("spark.sql.parquet.outputTimestampType", "TIMESTAMP_MICROS")
+        conf.set("spark.driver.memory", "10g")
+        conf.set("spark.jars", self.runtime.jar_path.as_posix())
+        conf.set("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
+        conf.set("spark.sql.session.timeZone", "UTC")
         spark = pyspark.sql.SparkSession.builder.config(conf=conf).getOrCreate()
-        sc = spark.sparkContext
-        sc.setLogLevel("ERROR")
+        spark.sparkContext.setLogLevel("ERROR")
         spark.sql("USE iceberg_catalog")
         spark.sql("CREATE NAMESPACE IF NOT EXISTS default")
         spark.sql("USE NAMESPACE default")

@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -23,28 +24,26 @@ public:
 	DataFile &operator=(DataFile &&) = default;
 
 public:
+	// Deserialization
 	static DataFile FromJSON(yyjson_val *obj);
-
-public:
 	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	DataFile Copy() const;
+
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	ContentFile content_file;
-	string content;
-	int64_t first_row_id;
-	bool has_first_row_id = false;
-	CountMap column_sizes;
-	bool has_column_sizes = false;
-	CountMap value_counts;
-	bool has_value_counts = false;
-	CountMap null_value_counts;
-	bool has_null_value_counts = false;
-	CountMap nan_value_counts;
-	bool has_nan_value_counts = false;
-	ValueMap lower_bounds;
-	bool has_lower_bounds = false;
-	ValueMap upper_bounds;
-	bool has_upper_bounds = false;
+	optional<int64_t> first_row_id;
+	optional<CountMap> column_sizes;
+	optional<CountMap> value_counts;
+	optional<CountMap> null_value_counts;
+	optional<CountMap> nan_value_counts;
+	optional<ValueMap> lower_bounds;
+	optional<ValueMap> upper_bounds;
 };
 
 } // namespace rest_api_objects

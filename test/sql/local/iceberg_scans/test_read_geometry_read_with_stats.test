@@ -1,0 +1,36 @@
+# name: test/sql/local/iceberg_scans/test_read_geometry_read_with_stats.test
+# group: [iceberg_scans]
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# require catalog test config setup so this doesn't run on cloud tests
+# on cloud tests the AWS credentials are used, which causes an error
+# when requesting from google
+require-env CATALOG_TEST_CONFIG_SETUP 1
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+set logging_level='debug';
+
+statement ok
+CALL enable_logging('Iceberg');
+
+query I
+SELECT count(*) FROM iceberg_scan(
+           'https://storage.googleapis.com/cartobq-iceberg-geo-testbed/v3_geometry/metadata/v1.metadata.json'
+) where geom && 'LINESTRING(152 -35, 147 34)';
+----
+1000
+
+query I
+select count(*) from duckdb_logs() where type = 'Iceberg' and message like '%skipped %data_file%';
+----
+9

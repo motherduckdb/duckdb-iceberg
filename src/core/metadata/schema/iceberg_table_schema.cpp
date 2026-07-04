@@ -1,0 +1,193 @@
+#include "core/metadata/schema/iceberg_table_schema.hpp"
+
+#include "duckdb/common/exception.hpp"
+#include "common/iceberg_utils.hpp"
+#include "rest_catalog/objects/list.hpp"
+#include "catalog/rest/api/iceberg_type.hpp"
+
+namespace duckdb {
+
+shared_ptr<IcebergTableSchema> IcebergTableSchema::ParseSchema(const rest_api_objects::Schema &schema) {
+	auto res = make_shared_ptr<IcebergTableSchema>();
+	D_ASSERT(schema.object_1.schema_id);
+	res->schema_id = *schema.object_1.schema_id;
+	for (auto &field : schema.struct_type.fields) {
+		res->columns.push_back(IcebergColumnDefinition::ParseStructField(*field));
+	}
+	if (auto &identifier_field_ids = schema.object_1.identifier_field_ids) {
+		res->identifier_field_ids = *identifier_field_ids;
+	}
+	return res;
+}
+
+void IcebergTableSchema::PopulateSourceIdMap(unordered_map<uint64_t, ColumnIndex> &source_to_column_id,
+                                             const vector<unique_ptr<IcebergColumnDefinition>> &columns,
+                                             optional_ptr<ColumnIndex> parent) {
+	for (idx_t i = 0; i < columns.size(); i++) {
+		auto &column = columns[i];
+
+		ColumnIndex new_index;
+		if (parent) {
+			auto primary = parent->GetPrimaryIndex();
+			auto child_indexes = parent->GetChildIndexes();
+			child_indexes.push_back(ColumnIndex(i));
+			new_index = ColumnIndex(primary, child_indexes);
+		} else {
+			new_index = ColumnIndex(i);
+		}
+
+		PopulateSourceIdMap(source_to_column_id, column->GetChildren(), new_index);
+		source_to_column_id.emplace(static_cast<uint64_t>(column->id), std::move(new_index));
+	}
+}
+
+const IcebergColumnDefinition &
+IcebergTableSchema::GetFromColumnIndex(const vector<unique_ptr<IcebergColumnDefinition>> &columns,
+                                       const ColumnIndex &column_index, idx_t depth) {
+	auto &child_indexes = column_index.GetChildIndexes();
+	auto &selected_index = depth ? child_indexes[depth - 1] : column_index;
+
+	auto index = selected_index.GetPrimaryIndex();
+	if (index >= columns.size()) {
+		throw InvalidConfigurationException("ColumnIndex out of bounds for columns (index %d, 'columns' size: %d)",
+		                                    index, columns.size());
+	}
+	auto &column = columns[index];
+	if (depth == child_indexes.size()) {
+		return *column;
+	}
+	if (!column->GetChildCount()) {
+		throw InvalidConfigurationException(
+		    "Expected column to have children, ColumnIndex has a depth of %d, we reached only %d",
+		    column_index.ChildIndexCount(), depth);
+	}
+	return GetFromColumnIndex(column->GetChildren(), column_index, depth + 1);
+}
+
+optional<ColumnIndex> IcebergTableSchema::TryGetColumnIndexByFieldId(idx_t field_id) const {
+	unordered_map<uint64_t, ColumnIndex> source_to_column_id;
+	PopulateSourceIdMap(source_to_column_id, columns, nullptr);
+	auto it = source_to_column_id.find(field_id);
+	if (it == source_to_column_id.end()) {
+		return std::nullopt;
+	}
+	return it->second;
+}
+
+const IcebergColumnDefinition &IcebergTableSchema::GetColumnByFieldId(idx_t field_id) const {
+	auto column_index = TryGetColumnIndexByFieldId(field_id);
+	if (!column_index) {
+		throw InvalidInputException("Field id %d does not exist in schema with id %d", field_id, schema_id);
+	}
+	return GetFromColumnIndex(columns, *column_index, 0);
+}
+
+optional_ptr<const IcebergColumnDefinition>
+IcebergTableSchema::GetFromPath(const vector<Identifier> &path, optional_ptr<optional_idx> name_offset) const {
+	D_ASSERT(!path.empty());
+
+	optional_ptr<const IcebergColumnDefinition> result;
+	for (idx_t i = 0; i < columns.size(); i++) {
+		auto &column = *columns[i];
+		if (column.name != path[0]) {
+			continue;
+		}
+		result = column;
+	}
+	if (!result) {
+		return nullptr;
+	}
+	reference<const IcebergColumnDefinition> res(*result);
+	for (idx_t i = 1; i < path.size(); i++) {
+		auto &column = res.get();
+		if (column.type.id() == LogicalTypeId::VARIANT) {
+			if (name_offset) {
+				*name_offset = i;
+				return column;
+			}
+			throw InvalidInputException(
+			    "Column path %s points to child of variant column %s - but no name_offset is provided",
+			    StringUtil::Join(IdentifiersToStrings(path), "."), res.get().name);
+		}
+		auto next_child = column.GetChild(path[i].GetIdentifierName());
+		if (!next_child) {
+			return nullptr;
+		}
+		res = *next_child;
+	}
+	return res.get();
+}
+
+optional_ptr<IcebergColumnDefinition> IcebergTableSchema::GetMutableFromPath(const vector<Identifier> &path,
+                                                                             optional_ptr<optional_idx> names_offset) {
+	auto res = GetFromPath(path, names_offset);
+	if (!res) {
+		return nullptr;
+	}
+	auto &col = *res;
+	return const_cast<IcebergColumnDefinition &>(col);
+}
+
+shared_ptr<IcebergTableSchema> IcebergTableSchema::Copy() const {
+	auto res = make_shared_ptr<IcebergTableSchema>();
+	res->schema_id = schema_id;
+	res->last_column_id = last_column_id;
+	for (auto &column : columns) {
+		res->columns.push_back(column->Copy());
+	}
+	return res;
+}
+
+shared_ptr<IcebergTableSchema> IcebergTableSchema::RemoveColumn(const string &name, optional_idx &column_id) const {
+	auto res = make_shared_ptr<IcebergTableSchema>();
+	res->schema_id = schema_id + 1;
+	res->last_column_id = last_column_id;
+	for (auto &column : columns) {
+		if (column->name == name) {
+			column_id = column->id;
+			continue;
+		}
+		res->columns.push_back(column->Copy());
+	}
+	return res;
+}
+
+const LogicalType &IcebergTableSchema::GetColumnTypeFromFieldId(idx_t field_id) const {
+	return GetColumnByFieldId(field_id).type;
+}
+
+void IcebergTableSchema::GetColumnNamesAndTypes(vector<string> &names, vector<LogicalType> &types) const {
+	names.reserve(columns.size());
+	types.reserve(columns.size());
+	for (auto &column_p : columns) {
+		auto &column = *column_p;
+		names.push_back(column.name);
+		types.push_back(column.type);
+	}
+}
+
+bool IcebergTableSchema::Equals(const IcebergTableSchema &other) const {
+	if (columns.size() != other.columns.size()) {
+		return false;
+	}
+	for (idx_t i = 0; i < columns.size(); i++) {
+		auto &a = *columns[i];
+		auto &b = *other.columns[i];
+
+		if (!a.Equals(b)) {
+			return false;
+		}
+	}
+	if (identifier_field_ids.size() != other.identifier_field_ids.size()) {
+		return false;
+	}
+	for (idx_t i = 0; i < identifier_field_ids.size(); i++) {
+		if (identifier_field_ids[i] != other.identifier_field_ids[i]) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+} // namespace duckdb

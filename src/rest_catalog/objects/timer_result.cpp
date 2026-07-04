@@ -24,6 +24,14 @@ TimerResult TimerResult::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+TimerResult TimerResult::Copy() const {
+	TimerResult res;
+	res.time_unit = time_unit;
+	res.count = count;
+	res.total_duration = total_duration;
+	return res;
+}
+
 string TimerResult::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto time_unit_val = yyjson_obj_get(obj, "time-unit");
@@ -64,7 +72,28 @@ string TimerResult::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(total_duration_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void TimerResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: time-unit
+	yyjson_mut_obj_add_strcpy(doc, obj, "time-unit", time_unit.c_str());
+
+	// Serialize: count
+	yyjson_mut_obj_add_sint(doc, obj, "count", count);
+
+	// Serialize: total-duration
+	yyjson_mut_obj_add_sint(doc, obj, "total-duration", total_duration);
+}
+
+yyjson_mut_val *TimerResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

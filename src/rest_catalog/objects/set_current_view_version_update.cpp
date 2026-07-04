@@ -24,6 +24,13 @@ SetCurrentViewVersionUpdate SetCurrentViewVersionUpdate::FromJSON(yyjson_val *ob
 	return res;
 }
 
+SetCurrentViewVersionUpdate SetCurrentViewVersionUpdate::Copy() const {
+	SetCurrentViewVersionUpdate res;
+	res.base_update = base_update.Copy();
+	res.view_version_id = view_version_id;
+	return res;
+}
+
 string SetCurrentViewVersionUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
 	error = base_update.TryFromJSON(obj);
@@ -42,18 +49,25 @@ string SetCurrentViewVersionUpdate::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(view_version_id_val));
 		}
 	}
-	auto action_val = yyjson_obj_get(obj, "action");
-	if (action_val) {
-		has_action = true;
-		if (yyjson_is_str(action_val)) {
-			action = yyjson_get_str(action_val);
-		} else {
-			return StringUtil::Format(
-			    "SetCurrentViewVersionUpdate property 'action' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_val));
-		}
+	return "";
+}
+
+void SetCurrentViewVersionUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
-	return string();
+
+	// Serialize base class: BaseUpdate
+	base_update.PopulateJSON(doc, obj);
+
+	// Serialize: view-version-id
+	yyjson_mut_obj_add_int(doc, obj, "view-version-id", view_version_id);
+}
+
+yyjson_mut_val *SetCurrentViewVersionUpdate::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

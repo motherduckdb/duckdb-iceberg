@@ -24,6 +24,13 @@ AssertDefaultSpecId AssertDefaultSpecId::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+AssertDefaultSpecId AssertDefaultSpecId::Copy() const {
+	AssertDefaultSpecId res;
+	res.type = type.Copy();
+	res.default_spec_id = default_spec_id;
+	return res;
+}
+
 string AssertDefaultSpecId::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -47,7 +54,26 @@ string AssertDefaultSpecId::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(default_spec_id_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void AssertDefaultSpecId::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: type
+	yyjson_mut_val *type_val = type.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+
+	// Serialize: default-spec-id
+	yyjson_mut_obj_add_int(doc, obj, "default-spec-id", default_spec_id);
+}
+
+yyjson_mut_val *AssertDefaultSpecId::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

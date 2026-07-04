@@ -24,6 +24,13 @@ AssertLastAssignedFieldId AssertLastAssignedFieldId::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+AssertLastAssignedFieldId AssertLastAssignedFieldId::Copy() const {
+	AssertLastAssignedFieldId res;
+	res.type = type.Copy();
+	res.last_assigned_field_id = last_assigned_field_id;
+	return res;
+}
+
 string AssertLastAssignedFieldId::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -47,7 +54,26 @@ string AssertLastAssignedFieldId::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(last_assigned_field_id_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void AssertLastAssignedFieldId::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: type
+	yyjson_mut_val *type_val = type.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+
+	// Serialize: last-assigned-field-id
+	yyjson_mut_obj_add_int(doc, obj, "last-assigned-field-id", last_assigned_field_id);
+}
+
+yyjson_mut_val *AssertLastAssignedFieldId::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

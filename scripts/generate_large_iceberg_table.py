@@ -10,7 +10,7 @@ import sys
 import os
 
 
-CONNECTION_KEY = 'spark-rest'
+CONNECTION_KEY = 'fixture'
 SPARK_RUNTIME_PATH = 'scripts/data_generators/iceberg-spark-runtime-3.5_2.12-1.9.0.jar'
 os.environ["PYSPARK_SUBMIT_ARGS"] = (
     "--packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.9.0,org.apache.iceberg:iceberg-aws-bundle:1.9.0 pyspark-shell"

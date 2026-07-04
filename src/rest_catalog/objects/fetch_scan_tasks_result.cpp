@@ -24,13 +24,34 @@ FetchScanTasksResult FetchScanTasksResult::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+FetchScanTasksResult FetchScanTasksResult::Copy() const {
+	FetchScanTasksResult res;
+	res.scan_tasks = scan_tasks.Copy();
+	return res;
+}
+
 string FetchScanTasksResult::TryFromJSON(yyjson_val *obj) {
 	string error;
 	error = scan_tasks.TryFromJSON(obj);
 	if (!error.empty()) {
 		return error;
 	}
-	return string();
+	return "";
+}
+
+void FetchScanTasksResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize base class: ScanTasks
+	scan_tasks.PopulateJSON(doc, obj);
+}
+
+yyjson_mut_val *FetchScanTasksResult::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

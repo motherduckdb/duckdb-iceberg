@@ -24,6 +24,26 @@ CommitViewRequest CommitViewRequest::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+CommitViewRequest CommitViewRequest::Copy() const {
+	CommitViewRequest res;
+	res.updates.reserve(updates.size());
+	for (auto &item : updates) {
+		res.updates.emplace_back(item.Copy());
+	}
+	if (identifier.has_value()) {
+		res.identifier.emplace();
+		(*res.identifier) = (*identifier).Copy();
+	}
+	if (requirements.has_value()) {
+		res.requirements.emplace();
+		(*res.requirements).reserve((*requirements).size());
+		for (auto &item : (*requirements)) {
+			(*res.requirements).emplace_back(item.Copy());
+		}
+	}
+	return res;
+}
+
 string CommitViewRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto updates_val = yyjson_obj_get(obj, "updates");
@@ -48,15 +68,16 @@ string CommitViewRequest::TryFromJSON(yyjson_val *obj) {
 	}
 	auto identifier_val = yyjson_obj_get(obj, "identifier");
 	if (identifier_val) {
-		has_identifier = true;
-		error = identifier.TryFromJSON(identifier_val);
+		TableIdentifier identifier_tmp;
+		error = identifier_tmp.TryFromJSON(identifier_val);
 		if (!error.empty()) {
 			return error;
 		}
+		identifier = std::move(identifier_tmp);
 	}
 	auto requirements_val = yyjson_obj_get(obj, "requirements");
 	if (requirements_val) {
-		has_requirements = true;
+		vector<ViewRequirement> requirements_tmp;
 		if (yyjson_is_arr(requirements_val)) {
 			size_t idx, max;
 			yyjson_val *val;
@@ -66,15 +87,54 @@ string CommitViewRequest::TryFromJSON(yyjson_val *obj) {
 				if (!error.empty()) {
 					return error;
 				}
-				requirements.emplace_back(std::move(tmp));
+				requirements_tmp.emplace_back(std::move(tmp));
 			}
 		} else {
 			return StringUtil::Format(
-			    "CommitViewRequest property 'requirements' is not of type 'array', found '%s' instead",
+			    "CommitViewRequest property 'requirements_tmp' is not of type 'array', found '%s' instead",
 			    yyjson_get_type_desc(requirements_val));
 		}
+		requirements = std::move(requirements_tmp);
 	}
-	return string();
+	return "";
+}
+
+void CommitViewRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: updates
+	yyjson_mut_val *updates_arr = yyjson_mut_arr(doc);
+	for (const auto &item : updates) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(updates_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "updates", updates_arr);
+
+	// Serialize: identifier
+	if (identifier.has_value()) {
+		auto &identifier_value = *identifier;
+		yyjson_mut_val *identifier_value_val = identifier_value.ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "identifier", identifier_value_val);
+	}
+
+	// Serialize: requirements
+	if (requirements.has_value()) {
+		auto &requirements_value = *requirements;
+		yyjson_mut_val *requirements_value_arr = yyjson_mut_arr(doc);
+		for (const auto &item : requirements_value) {
+			yyjson_mut_val *item_val = item.ToJSON(doc);
+			yyjson_mut_arr_append(requirements_value_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "requirements", requirements_value_arr);
+	}
+}
+
+yyjson_mut_val *CommitViewRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

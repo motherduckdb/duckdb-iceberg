@@ -6,78 +6,8 @@ from math import inf
 
 pyice = pytest.importorskip("pyiceberg")
 pa = pytest.importorskip("pyarrow")
-pyice_rest = pytest.importorskip("pyiceberg.catalog.rest")
 
 
-@pytest.fixture()
-def bearer_token():
-    if hasattr(bearer_token, "cached_token"):
-        return bearer_token.cached_token
-
-    import requests
-
-    CATALOG_HOST = "http://127.0.0.1:8181"
-
-    CLIENT_ID = "admin"
-    CLIENT_SECRET = "password"
-
-    token_url = f"{CATALOG_HOST}/v1/oauth/tokens"
-    payload = {
-        "grant_type": "client_credentials",
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
-        "scope": "PRINCIPAL_ROLE:ALL",
-    }
-
-    response = requests.post(token_url, data=payload)
-
-    assert response.status_code == 200
-    access_token = response.json().get("access_token")
-    print("Token:", access_token)
-    bearer_token.cached_token = access_token
-    return access_token
-
-
-@pytest.fixture()
-def rest_catalog(bearer_token):
-    catalog = pyice_rest.RestCatalog(
-        "rest",
-        **{
-            "uri": "http://127.0.0.1:8181",
-            "token": bearer_token,
-            "warehouse": '',
-            "s3.endpoint": "http://127.0.0.1:9000",
-            "s3.access-key-id": "admin",
-            "s3.secret-access-key": "password",
-            "s3.path-style-access": "true",
-            "s3.ssl.enabled": "false",
-        },
-    )
-    return catalog
-
-
-@pytest.mark.skipif(
-    os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None, reason="Test data wasn't generated, run 'make data' first"
-)
-class TestPyIcebergRead:
-    def test_pyiceberg_read(self, rest_catalog):
-        table = rest_catalog.load_table("default.insert_test")
-        arrow_table: pa.Table = table.scan().to_arrow()
-        res = arrow_table.to_pylist()
-        assert len(res) == 6
-        assert res == [
-            {'col1': datetime.date(2010, 6, 11), 'col2': 42, 'col3': 'test'},
-            {'col1': datetime.date(2020, 8, 12), 'col2': 45345, 'col3': 'inserted by con1'},
-            {'col1': datetime.date(2020, 8, 13), 'col2': 1, 'col3': 'insert 1'},
-            {'col1': datetime.date(2020, 8, 14), 'col2': 2, 'col3': 'insert 2'},
-            {'col1': datetime.date(2020, 8, 15), 'col2': 3, 'col3': 'insert 3'},
-            {'col1': datetime.date(2020, 8, 16), 'col2': 4, 'col3': 'insert 4'},
-        ]
-
-
-@pytest.mark.skipif(
-    os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None, reason="Test data wasn't generated, run 'make data' first"
-)
 class TestPyIcebergRead:
     def test_pyiceberg_read(self, rest_catalog):
         table = rest_catalog.load_table("default.duckdb_deletes_for_other_engines")
@@ -98,9 +28,6 @@ class TestPyIcebergRead:
         ]
 
 
-@pytest.mark.skipif(
-    os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None, reason="Test data wasn't generated, run 'make data' first"
-)
 class TestPyIcebergRead:
     def test_pyiceberg_read(self, rest_catalog):
         table = rest_catalog.load_table("default.duckdb_updates_for_other_engines")
@@ -131,9 +58,6 @@ class TestPyIcebergRead:
         ]
 
 
-@pytest.mark.skipif(
-    os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None, reason="Test data wasn't generated, run 'make data' first"
-)
 class TestPyIcebergRead:
     def test_pyiceberg_read(self, rest_catalog):
         tbl = rest_catalog.load_table("default.test_metadata_for_pyiceberg")
@@ -144,9 +68,6 @@ class TestPyIcebergRead:
         assert len(matched_files) == 1
 
 
-@pytest.mark.skipif(
-    os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None, reason="Test data wasn't generated, run 'make data' first"
-)
 class TestPyIcebergRead:
     def test_pyiceberg_read_duckdb_upper_lower_bounds(self, rest_catalog):
         tbl = rest_catalog.load_table("default.lower_upper_bounds_test")
@@ -193,9 +114,6 @@ class TestPyIcebergRead:
         ]
 
 
-@pytest.mark.skipif(
-    os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None, reason="Test data wasn't generated, run 'make data' first"
-)
 class TestPyIcebergRead:
     def test_pyiceberg_read_duckdb_infinities(self, rest_catalog):
         tbl = rest_catalog.load_table("default.test_infinities")
@@ -205,9 +123,6 @@ class TestPyIcebergRead:
         assert res == [{'float_type': inf, 'double_type': inf}, {'float_type': -inf, 'double_type': -inf}]
 
 
-@pytest.mark.skipif(
-    os.getenv('ICEBERG_SERVER_AVAILABLE', None) == None, reason="Test data wasn't generated, run 'make data' first"
-)
 class TestPyIcebergReadDuckDBNestedTypes:
     def test_pyiceberg_read_duckdb_nested_types(self, rest_catalog):
         tbl = rest_catalog.load_table("default.duckdb_nested_types")
@@ -222,4 +137,67 @@ class TestPyIcebergReadDuckDBNestedTypes:
                 'phone_numbers': ['123-456-7890', '987-654-3210'],
                 'metadata': [('age', '30'), ('membership', 'gold')],
             }
+        ]
+
+
+@pytest.mark.skipif(
+    os.getenv('EQUALITY_DELETE_WRITES_ENABLED', None) == None, reason="Equality deletes must be turned on for DuckDB"
+)
+class TestPyIcebergReadEqualityDeletes:
+    @pytest.mark.skip(reason="PyIceberg does not support equality deletes")
+    def test_pyiceberg_read_duckdb_equality_delete_with_deleted_column(self, rest_catalog):
+        tbl = rest_catalog.load_table("default.equality_delete_table_1")
+        arrow_table: pa.Table = tbl.scan().to_arrow()
+        res = sorted(arrow_table.to_pylist(), key=lambda r: (r["a"], r["c"]))
+        assert len(res) == 23
+        assert res == [
+            {"a": 0, "c": 0},
+            {"a": 2, "c": 2},
+            {"a": 3, "c": 3},
+            {"a": 4, "c": 4},
+            {"a": 5, "c": 5},
+            {"a": 7, "c": 7},
+            {"a": 8, "c": 8},
+            {"a": 9, "c": 9},
+            {"a": 10, "c": 0},
+            {"a": 12, "c": 2},
+            {"a": 13, "c": 3},
+            {"a": 14, "c": 4},
+            {"a": 15, "c": 5},
+            {"a": 17, "c": 7},
+            {"a": 18, "c": 8},
+            {"a": 19, "c": 9},
+            {"a": 20, "c": 0},
+            {"a": 100, "c": 100},
+            {"a": 101, "c": 101},
+            {"a": 102, "c": 102},
+            {"a": 103, "c": 103},
+            {"a": 104, "c": 104},
+            {"a": 105, "c": 105},
+        ]
+
+    @pytest.mark.skip(reason="PyIceberg does not support equality deletes")
+    def test_pyiceberg_read_duckdb_equality_delete(self, rest_catalog):
+        tbl = rest_catalog.load_table("default.equality_delete_table_test_multiple_equality_deletes")
+        arrow_table: pa.Table = tbl.scan().to_arrow()
+        res = sorted(arrow_table.to_pylist(), key=lambda r: (r["a"], r["c"]))
+        assert len(res) == 23
+        assert res == [
+            {"a": 0, "b": 0, "c": 0},
+            {"a": 2, "b": 1, "c": 1},
+            {"a": 3, "b": 2, "c": 2},
+            {"a": 4, "b": 3, "c": 3},
+            {"a": 5, "b": 4, "c": 4},
+            {"a": 7, "b": 0, "c": 5},
+            {"a": 8, "b": 2, "c": 7},
+            {"a": 9, "b": 3, "c": 8},
+            {"a": 10, "b": 4, "c": 9},
+            {"a": 12, "b": 0, "c": 0},
+            {"a": 13, "b": 1, "c": 1},
+            {"a": 14, "b": 2, "c": 2},
+            {"a": 15, "b": 3, "c": 3},
+            {"a": 17, "b": 4, "c": 4},
+            {"a": 18, "b": 0, "c": 5},
+            {"a": 19, "b": 2, "c": 7},
+            {"a": 20, "b": 3, "c": 8},
         ]

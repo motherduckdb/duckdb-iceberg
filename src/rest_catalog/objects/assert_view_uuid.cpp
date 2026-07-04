@@ -24,6 +24,13 @@ AssertViewUUID AssertViewUUID::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+AssertViewUUID AssertViewUUID::Copy() const {
+	AssertViewUUID res;
+	res.type = type;
+	res.uuid = uuid;
+	return res;
+}
+
 string AssertViewUUID::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto type_val = yyjson_obj_get(obj, "type");
@@ -48,7 +55,25 @@ string AssertViewUUID::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(uuid_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void AssertViewUUID::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: type
+	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
+
+	// Serialize: uuid
+	yyjson_mut_obj_add_strcpy(doc, obj, "uuid", uuid.c_str());
+}
+
+yyjson_mut_val *AssertViewUUID::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

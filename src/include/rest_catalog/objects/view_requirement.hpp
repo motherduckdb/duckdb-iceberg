@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -21,14 +22,19 @@ public:
 	ViewRequirement &operator=(ViewRequirement &&) = default;
 
 public:
+	// Deserialization
 	static ViewRequirement FromJSON(yyjson_val *obj);
-
-public:
 	string TryFromJSON(yyjson_val *obj);
 
+	// Copy
+	ViewRequirement Copy() const;
+
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+
 public:
-	AssertViewUUID assert_view_uuid;
-	bool has_assert_view_uuid = false;
+	optional<AssertViewUUID> assert_view_uuid;
 };
 
 } // namespace rest_api_objects

@@ -24,6 +24,16 @@ RemovePartitionSpecsUpdate RemovePartitionSpecsUpdate::FromJSON(yyjson_val *obj)
 	return res;
 }
 
+RemovePartitionSpecsUpdate RemovePartitionSpecsUpdate::Copy() const {
+	RemovePartitionSpecsUpdate res;
+	res.base_update = base_update.Copy();
+	res.spec_ids.reserve(spec_ids.size());
+	for (auto &item : spec_ids) {
+		res.spec_ids.emplace_back(item);
+	}
+	return res;
+}
+
 string RemovePartitionSpecsUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
 	error = base_update.TryFromJSON(obj);
@@ -54,18 +64,30 @@ string RemovePartitionSpecsUpdate::TryFromJSON(yyjson_val *obj) {
 			    yyjson_get_type_desc(spec_ids_val));
 		}
 	}
-	auto action_val = yyjson_obj_get(obj, "action");
-	if (action_val) {
-		has_action = true;
-		if (yyjson_is_str(action_val)) {
-			action = yyjson_get_str(action_val);
-		} else {
-			return StringUtil::Format(
-			    "RemovePartitionSpecsUpdate property 'action' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_val));
-		}
+	return "";
+}
+
+void RemovePartitionSpecsUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
-	return string();
+
+	// Serialize base class: BaseUpdate
+	base_update.PopulateJSON(doc, obj);
+
+	// Serialize: spec-ids
+	yyjson_mut_val *spec_ids_arr = yyjson_mut_arr(doc);
+	for (const auto &item : spec_ids) {
+		yyjson_mut_val *item_val = yyjson_mut_int(doc, item);
+		yyjson_mut_arr_append(spec_ids_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "spec-ids", spec_ids_arr);
+}
+
+yyjson_mut_val *RemovePartitionSpecsUpdate::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

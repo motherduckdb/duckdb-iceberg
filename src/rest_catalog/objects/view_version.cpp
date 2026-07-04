@@ -24,6 +24,26 @@ ViewVersion ViewVersion::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+ViewVersion ViewVersion::Copy() const {
+	ViewVersion res;
+	res.version_id = version_id;
+	res.timestamp_ms = timestamp_ms;
+	res.schema_id = schema_id;
+	for (auto &entry : summary) {
+		res.summary.emplace(entry.first, entry.second);
+	}
+	res.representations.reserve(representations.size());
+	for (auto &item : representations) {
+		res.representations.emplace_back(item.Copy());
+	}
+	res.default_namespace = default_namespace.Copy();
+	if (default_catalog.has_value()) {
+		res.default_catalog.emplace();
+		(*res.default_catalog) = (*default_catalog);
+	}
+	return res;
+}
+
 string ViewVersion::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto version_id_val = yyjson_obj_get(obj, "version-id");
@@ -116,16 +136,66 @@ string ViewVersion::TryFromJSON(yyjson_val *obj) {
 	}
 	auto default_catalog_val = yyjson_obj_get(obj, "default-catalog");
 	if (default_catalog_val) {
-		has_default_catalog = true;
+		string default_catalog_tmp;
 		if (yyjson_is_str(default_catalog_val)) {
-			default_catalog = yyjson_get_str(default_catalog_val);
+			default_catalog_tmp = yyjson_get_str(default_catalog_val);
 		} else {
 			return StringUtil::Format(
-			    "ViewVersion property 'default_catalog' is not of type 'string', found '%s' instead",
+			    "ViewVersion property 'default_catalog_tmp' is not of type 'string', found '%s' instead",
 			    yyjson_get_type_desc(default_catalog_val));
 		}
+		default_catalog = std::move(default_catalog_tmp);
 	}
-	return string();
+	return "";
+}
+
+void ViewVersion::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: version-id
+	yyjson_mut_obj_add_int(doc, obj, "version-id", version_id);
+
+	// Serialize: timestamp-ms
+	yyjson_mut_obj_add_sint(doc, obj, "timestamp-ms", timestamp_ms);
+
+	// Serialize: schema-id
+	yyjson_mut_obj_add_int(doc, obj, "schema-id", schema_id);
+
+	// Serialize: summary
+	yyjson_mut_val *summary_obj = yyjson_mut_obj(doc);
+	for (const auto &it : summary) {
+		auto &key = it.first;
+		auto &value = it.second;
+		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
+		yyjson_mut_obj_add_strcpy(doc, summary_obj, key_ptr, value.c_str());
+	}
+	yyjson_mut_obj_add_val(doc, obj, "summary", summary_obj);
+
+	// Serialize: representations
+	yyjson_mut_val *representations_arr = yyjson_mut_arr(doc);
+	for (const auto &item : representations) {
+		yyjson_mut_val *item_val = item.ToJSON(doc);
+		yyjson_mut_arr_append(representations_arr, item_val);
+	}
+	yyjson_mut_obj_add_val(doc, obj, "representations", representations_arr);
+
+	// Serialize: default-namespace
+	yyjson_mut_val *default_namespace_val = default_namespace.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "default-namespace", default_namespace_val);
+
+	// Serialize: default-catalog
+	if (default_catalog.has_value()) {
+		auto &default_catalog_value = *default_catalog;
+		yyjson_mut_obj_add_strcpy(doc, obj, "default-catalog", default_catalog_value.c_str());
+	}
+}
+
+yyjson_mut_val *ViewVersion::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

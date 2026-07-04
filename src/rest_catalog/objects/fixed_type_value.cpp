@@ -24,6 +24,12 @@ FixedTypeValue FixedTypeValue::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+FixedTypeValue FixedTypeValue::Copy() const {
+	FixedTypeValue res;
+	res.value = value;
+	return res;
+}
+
 string FixedTypeValue::TryFromJSON(yyjson_val *obj) {
 	string error;
 	if (yyjson_is_str(obj)) {
@@ -32,7 +38,11 @@ string FixedTypeValue::TryFromJSON(yyjson_val *obj) {
 		return StringUtil::Format("FixedTypeValue property 'value' is not of type 'string', found '%s' instead",
 		                          yyjson_get_type_desc(obj));
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *FixedTypeValue::ToJSON(yyjson_mut_doc *doc) const {
+	return yyjson_mut_strcpy(doc, value.c_str());
 }
 
 } // namespace rest_api_objects

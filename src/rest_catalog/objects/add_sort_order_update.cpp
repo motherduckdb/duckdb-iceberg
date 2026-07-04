@@ -24,6 +24,13 @@ AddSortOrderUpdate AddSortOrderUpdate::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+AddSortOrderUpdate AddSortOrderUpdate::Copy() const {
+	AddSortOrderUpdate res;
+	res.base_update = base_update.Copy();
+	res.sort_order = sort_order.Copy();
+	return res;
+}
+
 string AddSortOrderUpdate::TryFromJSON(yyjson_val *obj) {
 	string error;
 	error = base_update.TryFromJSON(obj);
@@ -39,18 +46,26 @@ string AddSortOrderUpdate::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto action_val = yyjson_obj_get(obj, "action");
-	if (action_val) {
-		has_action = true;
-		if (yyjson_is_str(action_val)) {
-			action = yyjson_get_str(action_val);
-		} else {
-			return StringUtil::Format(
-			    "AddSortOrderUpdate property 'action' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_val));
-		}
+	return "";
+}
+
+void AddSortOrderUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
-	return string();
+
+	// Serialize base class: BaseUpdate
+	base_update.PopulateJSON(doc, obj);
+
+	// Serialize: sort-order
+	yyjson_mut_val *sort_order_val = sort_order.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "sort-order", sort_order_val);
+}
+
+yyjson_mut_val *AddSortOrderUpdate::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

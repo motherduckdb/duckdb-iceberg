@@ -26,6 +26,13 @@ SnapshotLog::Object3 SnapshotLog::Object3::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+SnapshotLog::Object3 SnapshotLog::Object3::Copy() const {
+	Object3 res;
+	res.snapshot_id = snapshot_id;
+	res.timestamp_ms = timestamp_ms;
+	return res;
+}
+
 string SnapshotLog::Object3::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
@@ -54,7 +61,25 @@ string SnapshotLog::Object3::TryFromJSON(yyjson_val *obj) {
 			                          yyjson_get_type_desc(timestamp_ms_val));
 		}
 	}
-	return string();
+	return "";
+}
+
+void SnapshotLog::Object3::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: snapshot-id
+	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+
+	// Serialize: timestamp-ms
+	yyjson_mut_obj_add_sint(doc, obj, "timestamp-ms", timestamp_ms);
+}
+
+yyjson_mut_val *SnapshotLog::Object3::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 SnapshotLog SnapshotLog::FromJSON(yyjson_val *obj) {
@@ -62,6 +87,15 @@ SnapshotLog SnapshotLog::FromJSON(yyjson_val *obj) {
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
+	}
+	return res;
+}
+
+SnapshotLog SnapshotLog::Copy() const {
+	SnapshotLog res;
+	res.value.reserve(value.size());
+	for (auto &item : value) {
+		res.value.emplace_back(item.Copy());
 	}
 	return res;
 }
@@ -83,7 +117,15 @@ string SnapshotLog::TryFromJSON(yyjson_val *obj) {
 		return StringUtil::Format("SnapshotLog property 'value' is not of type 'array', found '%s' instead",
 		                          yyjson_get_type_desc(obj));
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *SnapshotLog::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *arr = yyjson_mut_arr(doc);
+	for (const auto &item : value) {
+		yyjson_mut_arr_append(arr, item.ToJSON(doc));
+	}
+	return arr;
 }
 
 } // namespace rest_api_objects

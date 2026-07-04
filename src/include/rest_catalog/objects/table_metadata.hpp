@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -30,56 +31,41 @@ public:
 	TableMetadata &operator=(TableMetadata &&) = default;
 
 public:
+	// Deserialization
 	static TableMetadata FromJSON(yyjson_val *obj);
-
-public:
 	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	TableMetadata Copy() const;
+
+	// Serialization
+	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	int32_t format_version;
 	string table_uuid;
-	string location;
-	bool has_location = false;
-	int64_t last_updated_ms;
-	bool has_last_updated_ms = false;
-	int64_t next_row_id;
-	bool has_next_row_id = false;
-	case_insensitive_map_t<string> properties;
-	bool has_properties = false;
-	vector<Schema> schemas;
-	bool has_schemas = false;
-	int32_t current_schema_id;
-	bool has_current_schema_id = false;
-	int32_t last_column_id;
-	bool has_last_column_id = false;
-	vector<PartitionSpec> partition_specs;
-	bool has_partition_specs = false;
-	int32_t default_spec_id;
-	bool has_default_spec_id = false;
-	int32_t last_partition_id;
-	bool has_last_partition_id = false;
-	vector<SortOrder> sort_orders;
-	bool has_sort_orders = false;
-	int32_t default_sort_order_id;
-	bool has_default_sort_order_id = false;
-	vector<EncryptedKey> encryption_keys;
-	bool has_encryption_keys = false;
-	vector<Snapshot> snapshots;
-	bool has_snapshots = false;
-	SnapshotReferences refs;
-	bool has_refs = false;
-	int64_t current_snapshot_id;
-	bool has_current_snapshot_id = false;
-	int64_t last_sequence_number;
-	bool has_last_sequence_number = false;
-	SnapshotLog snapshot_log;
-	bool has_snapshot_log = false;
-	MetadataLog metadata_log;
-	bool has_metadata_log = false;
-	vector<StatisticsFile> statistics;
-	bool has_statistics = false;
-	vector<PartitionStatisticsFile> partition_statistics;
-	bool has_partition_statistics = false;
+	optional<string> location;
+	optional<int64_t> last_updated_ms;
+	optional<int64_t> next_row_id;
+	optional<case_insensitive_map_t<string>> properties;
+	optional<vector<Schema>> schemas;
+	optional<int32_t> current_schema_id;
+	optional<int32_t> last_column_id;
+	optional<vector<PartitionSpec>> partition_specs;
+	optional<int32_t> default_spec_id;
+	optional<int32_t> last_partition_id;
+	optional<vector<SortOrder>> sort_orders;
+	optional<int32_t> default_sort_order_id;
+	optional<vector<EncryptedKey>> encryption_keys;
+	optional<vector<Snapshot>> snapshots;
+	optional<SnapshotReferences> refs;
+	optional<int64_t> current_snapshot_id;
+	optional<int64_t> last_sequence_number;
+	optional<SnapshotLog> snapshot_log;
+	optional<MetadataLog> metadata_log;
+	optional<vector<StatisticsFile>> statistics;
+	optional<vector<PartitionStatisticsFile>> partition_statistics;
 };
 
 } // namespace rest_api_objects

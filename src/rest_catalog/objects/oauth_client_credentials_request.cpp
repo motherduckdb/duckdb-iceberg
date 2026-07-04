@@ -24,6 +24,18 @@ OAuthClientCredentialsRequest OAuthClientCredentialsRequest::FromJSON(yyjson_val
 	return res;
 }
 
+OAuthClientCredentialsRequest OAuthClientCredentialsRequest::Copy() const {
+	OAuthClientCredentialsRequest res;
+	res.grant_type = grant_type;
+	res.client_id = client_id;
+	res.client_secret = client_secret;
+	if (scope.has_value()) {
+		res.scope.emplace();
+		(*res.scope) = (*scope);
+	}
+	return res;
+}
+
 string OAuthClientCredentialsRequest::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto grant_type_val = yyjson_obj_get(obj, "grant_type");
@@ -64,16 +76,44 @@ string OAuthClientCredentialsRequest::TryFromJSON(yyjson_val *obj) {
 	}
 	auto scope_val = yyjson_obj_get(obj, "scope");
 	if (scope_val) {
-		has_scope = true;
+		string scope_tmp;
 		if (yyjson_is_str(scope_val)) {
-			scope = yyjson_get_str(scope_val);
+			scope_tmp = yyjson_get_str(scope_val);
 		} else {
 			return StringUtil::Format(
-			    "OAuthClientCredentialsRequest property 'scope' is not of type 'string', found '%s' instead",
+			    "OAuthClientCredentialsRequest property 'scope_tmp' is not of type 'string', found '%s' instead",
 			    yyjson_get_type_desc(scope_val));
 		}
+		scope = std::move(scope_tmp);
 	}
-	return string();
+	return "";
+}
+
+void OAuthClientCredentialsRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: grant_type
+	yyjson_mut_obj_add_strcpy(doc, obj, "grant_type", grant_type.c_str());
+
+	// Serialize: client_id
+	yyjson_mut_obj_add_strcpy(doc, obj, "client_id", client_id.c_str());
+
+	// Serialize: client_secret
+	yyjson_mut_obj_add_strcpy(doc, obj, "client_secret", client_secret.c_str());
+
+	// Serialize: scope
+	if (scope.has_value()) {
+		auto &scope_value = *scope;
+		yyjson_mut_obj_add_strcpy(doc, obj, "scope", scope_value.c_str());
+	}
+}
+
+yyjson_mut_val *OAuthClientCredentialsRequest::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

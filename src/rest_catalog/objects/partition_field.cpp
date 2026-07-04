@@ -24,6 +24,18 @@ PartitionField PartitionField::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+PartitionField PartitionField::Copy() const {
+	PartitionField res;
+	res.source_id = source_id;
+	res.transform = transform.Copy();
+	res.name = name;
+	if (field_id.has_value()) {
+		res.field_id.emplace();
+		(*res.field_id) = (*field_id);
+	}
+	return res;
+}
+
 string PartitionField::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto source_id_val = yyjson_obj_get(obj, "source-id");
@@ -60,15 +72,45 @@ string PartitionField::TryFromJSON(yyjson_val *obj) {
 	}
 	auto field_id_val = yyjson_obj_get(obj, "field-id");
 	if (field_id_val) {
-		has_field_id = true;
+		int32_t field_id_tmp;
 		if (yyjson_is_int(field_id_val)) {
-			field_id = yyjson_get_int(field_id_val);
+			field_id_tmp = yyjson_get_int(field_id_val);
 		} else {
-			return StringUtil::Format("PartitionField property 'field_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(field_id_val));
+			return StringUtil::Format(
+			    "PartitionField property 'field_id_tmp' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(field_id_val));
 		}
+		field_id = std::move(field_id_tmp);
 	}
-	return string();
+	return "";
+}
+
+void PartitionField::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: source-id
+	yyjson_mut_obj_add_int(doc, obj, "source-id", source_id);
+
+	// Serialize: transform
+	yyjson_mut_val *transform_val = transform.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "transform", transform_val);
+
+	// Serialize: name
+	yyjson_mut_obj_add_strcpy(doc, obj, "name", name.c_str());
+
+	// Serialize: field-id
+	if (field_id.has_value()) {
+		auto &field_id_value = *field_id;
+		yyjson_mut_obj_add_int(doc, obj, "field-id", field_id_value);
+	}
+}
+
+yyjson_mut_val *PartitionField::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

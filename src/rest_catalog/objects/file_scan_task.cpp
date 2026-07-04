@@ -24,6 +24,22 @@ FileScanTask FileScanTask::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+FileScanTask FileScanTask::Copy() const {
+	FileScanTask res;
+	res.data_file = data_file.Copy();
+	if (delete_file_references.has_value()) {
+		res.delete_file_references.emplace();
+		(*res.delete_file_references).reserve((*delete_file_references).size());
+		for (auto &item : (*delete_file_references)) {
+			(*res.delete_file_references).emplace_back(item);
+		}
+	}
+	if (residual_filter != nullptr) {
+		res.residual_filter = residual_filter ? make_uniq<Expression>(residual_filter->Copy()) : nullptr;
+	}
+	return res;
+}
+
 string FileScanTask::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto data_file_val = yyjson_obj_get(obj, "data-file");
@@ -37,7 +53,7 @@ string FileScanTask::TryFromJSON(yyjson_val *obj) {
 	}
 	auto delete_file_references_val = yyjson_obj_get(obj, "delete-file-references");
 	if (delete_file_references_val) {
-		has_delete_file_references = true;
+		vector<int32_t> delete_file_references_tmp;
 		if (yyjson_is_arr(delete_file_references_val)) {
 			size_t idx, max;
 			yyjson_val *val;
@@ -50,24 +66,57 @@ string FileScanTask::TryFromJSON(yyjson_val *obj) {
 					    "FileScanTask property 'tmp' is not of type 'integer', found '%s' instead",
 					    yyjson_get_type_desc(val));
 				}
-				delete_file_references.emplace_back(std::move(tmp));
+				delete_file_references_tmp.emplace_back(std::move(tmp));
 			}
 		} else {
 			return StringUtil::Format(
-			    "FileScanTask property 'delete_file_references' is not of type 'array', found '%s' instead",
+			    "FileScanTask property 'delete_file_references_tmp' is not of type 'array', found '%s' instead",
 			    yyjson_get_type_desc(delete_file_references_val));
 		}
+		delete_file_references = std::move(delete_file_references_tmp);
 	}
 	auto residual_filter_val = yyjson_obj_get(obj, "residual-filter");
 	if (residual_filter_val) {
-		has_residual_filter = true;
 		residual_filter = make_uniq<Expression>();
 		error = residual_filter->TryFromJSON(residual_filter_val);
 		if (!error.empty()) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+void FileScanTask::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
+	if (!yyjson_mut_is_obj(obj)) {
+		throw InternalException("PopulateJSON requires obj to be a JSON object");
+	}
+
+	// Serialize: data-file
+	yyjson_mut_val *data_file_val = data_file.ToJSON(doc);
+	yyjson_mut_obj_add_val(doc, obj, "data-file", data_file_val);
+
+	// Serialize: delete-file-references
+	if (delete_file_references.has_value()) {
+		auto &delete_file_references_value = *delete_file_references;
+		yyjson_mut_val *delete_file_references_value_arr = yyjson_mut_arr(doc);
+		for (const auto &item : delete_file_references_value) {
+			yyjson_mut_val *item_val = yyjson_mut_int(doc, item);
+			yyjson_mut_arr_append(delete_file_references_value_arr, item_val);
+		}
+		yyjson_mut_obj_add_val(doc, obj, "delete-file-references", delete_file_references_value_arr);
+	}
+
+	// Serialize: residual-filter
+	if (residual_filter != nullptr) {
+		yyjson_mut_val *residual_filter_val = residual_filter->ToJSON(doc);
+		yyjson_mut_obj_add_val(doc, obj, "residual-filter", residual_filter_val);
+	}
+}
+
+yyjson_mut_val *FileScanTask::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *obj = yyjson_mut_obj(doc);
+	PopulateJSON(doc, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

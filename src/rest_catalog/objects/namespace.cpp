@@ -24,6 +24,15 @@ Namespace Namespace::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
+Namespace Namespace::Copy() const {
+	Namespace res;
+	res.value.reserve(value.size());
+	for (auto &item : value) {
+		res.value.emplace_back(item);
+	}
+	return res;
+}
+
 string Namespace::TryFromJSON(yyjson_val *obj) {
 	string error;
 	if (yyjson_is_arr(obj)) {
@@ -43,7 +52,15 @@ string Namespace::TryFromJSON(yyjson_val *obj) {
 		return StringUtil::Format("Namespace property 'value' is not of type 'array', found '%s' instead",
 		                          yyjson_get_type_desc(obj));
 	}
-	return string();
+	return "";
+}
+
+yyjson_mut_val *Namespace::ToJSON(yyjson_mut_doc *doc) const {
+	yyjson_mut_val *arr = yyjson_mut_arr(doc);
+	for (const auto &item : value) {
+		yyjson_mut_arr_append(arr, yyjson_mut_str(doc, item.c_str()));
+	}
+	return arr;
 }
 
 } // namespace rest_api_objects

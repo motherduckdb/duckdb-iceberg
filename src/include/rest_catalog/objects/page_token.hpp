@@ -2,6 +2,7 @@
 #pragma once
 
 #include "yyjson.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -20,10 +21,15 @@ public:
 	PageToken &operator=(PageToken &&) = default;
 
 public:
+	// Deserialization
 	static PageToken FromJSON(yyjson_val *obj);
-
-public:
 	string TryFromJSON(yyjson_val *obj);
+
+	// Copy
+	PageToken Copy() const;
+
+	// Serialization
+	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
 	string value;

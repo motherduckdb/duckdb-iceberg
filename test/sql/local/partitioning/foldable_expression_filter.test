@@ -1,7 +1,7 @@
 # name: test/sql/local/partitioning/foldable_expression_filter.test
 # group: [partitioning]
 
-require-env ICEBERG_SERVER_AVAILABLE
+require-env CATALOG_TEST_CONFIG_SETUP fixture
 
 require httpfs
 
@@ -56,7 +56,7 @@ where
 query I
 select count(*) FROM duckdb_logs() where type = 'Iceberg' and message.contains('data_file')
 ----
-5
+0
 
 statement ok
 CALL truncate_duckdb_logs();
@@ -75,4 +75,4 @@ where
 query I
 select count(*) FROM duckdb_logs() where type = 'Iceberg' and message.contains('data_file')
 ----
-5
+0

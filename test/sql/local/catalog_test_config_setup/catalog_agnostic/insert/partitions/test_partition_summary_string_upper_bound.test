@@ -1,0 +1,45 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/partitions/test_partition_summary_string_upper_bound.test
+# description: The manifest-list partition field summary upper_bound for a string partition must be rounded up (>= the partition value), not a plain 16-byte truncation. A truncated-down upper bound wrongly prunes the partition from its own manifest (see duckdb-iceberg#1047).
+# group: [partitions]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+drop table if exists my_datalake.default.partition_summary_upper_bound;
+
+statement ok
+create table my_datalake.default.partition_summary_upper_bound (id integer, p varchar);
+
+# truncate(20) produces a 20-byte partition value, longer than the 16-byte bound truncation.
+statement ok
+alter table my_datalake.default.partition_summary_upper_bound set partitioned by (truncate(20, p));
+
+statement ok
+insert into my_datalake.default.partition_summary_upper_bound values (1, '0123456789abcdef0123456789abcdef');
+
+# The partition value is truncate(20, key) = '0123456789abcdef0123'. The field-summary
+# upper_bound must be >= that value. Previously it was the plain 16-byte truncation
+# '0123456789abcdef', which is < the value and excludes the partition from its own manifest.
+query I
+select upper_bound >= '0123456789abcdef0123'
+from iceberg_partition_stats('my_datalake.default.partition_summary_upper_bound');
+----
+true
+
+# The lower bound is a valid lower bound (plain truncation is fine here).
+query I
+select lower_bound <= '0123456789abcdef0123'
+from iceberg_partition_stats('my_datalake.default.partition_summary_upper_bound');
+----
+true

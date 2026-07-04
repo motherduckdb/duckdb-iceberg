@@ -1,0 +1,128 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/update/test_update_default_struct.test
+# description: Regression for default struct values during UPDATE
+# group: [update]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+drop table if exists my_datalake.default.tbl;
+
+# NOTE: Since no engine/catalog supports the {} default for STRUCT, we write NULL (omit the initial-default) for STRUCT instead
+# This changes the behavior matrix, and will need to be updated when support for {} is added
+statement ok
+create table my_datalake.default.tbl(
+	id INTEGER,
+	col STRUCT(
+		a VARCHAR,
+		b INTEGER,
+		c BLOB
+	) DEFAULT {'a': 'test', 'b': NULL},
+	col2 BLOB
+) WITH (
+	'format-version'= 3
+);
+
+statement ok
+insert into my_datalake.default.tbl values
+	(1, {'a': 'seed', 'b': 0, 'c': '\x01'}, NULL),
+	(2, {'a': 'seed', 'b': 0, 'c': '\x02'}, NULL),
+	(3, {'a': 'seed', 'b': 0, 'c': '\x03'}, NULL);
+
+# in: - (col not provided)
+# col.default: {}
+# col.a.default: 'test'
+# col.b.default: NULL
+# col.c.default: -
+# result: {'a': test, 'b': NULL, 'c': NULL}
+statement ok
+UPDATE my_datalake.default.tbl
+	SET col = {'a': 'test'},
+	col2 = '\xaa\xff\xaa'
+WHERE id = 1;
+
+query III
+select * from my_datalake.default.tbl where id = 1;
+----
+1	{'a': test, 'b': NULL, 'c': NULL}	\xAA\xFF\xAA
+
+# in: {'b': 42}
+# col.default: {}
+# col.a.default: 'test'
+# col.b.default: NULL
+# col.c.default: -
+# result: {'a': test, 'b': 42, 'c': NULL}
+statement ok
+UPDATE my_datalake.default.tbl 
+	SET col = {'b': 42},
+	col2 = NULL
+WHERE id = 2;
+
+query III
+select * from my_datalake.default.tbl where id = 2;
+----
+2	{'a': test, 'b': 42, 'c': NULL}	NULL
+
+# in: {'c': '\xaa\xff\xaa'}
+# col.default: {}
+# col.a.default: 'test'
+# col.b.default: NULL
+# col.c.default: -
+# result: {'a': test, 'b': NULL, 'c': '\xaa\xff\xaa'}
+statement ok
+UPDATE my_datalake.default.tbl 
+	SET col = {'c': '\xaa\xff\xaa'},
+	col2 = NULL
+WHERE id = 3;
+
+query III
+select * from my_datalake.default.tbl where id = 3
+----
+3	{'a': test, 'b': NULL, 'c': \xAA\xFF\xAA}	NULL
+
+# DEFAULT NULL on a STRUCT currently materializes a struct whose fields are all NULL.
+
+statement ok
+drop table if exists my_datalake.default.tbl_default_null_struct;
+
+statement ok
+create table my_datalake.default.tbl_default_null_struct(
+	id INTEGER,
+	col STRUCT(
+		a VARCHAR,
+		b INTEGER,
+		c STRUCT(
+			x BIGINT
+		)
+	) DEFAULT NULL,
+	col2 INTEGER
+) WITH (
+	'format-version' = 3
+);
+
+statement ok
+insert into my_datalake.default.tbl_default_null_struct values
+	(1, {'a': 'seed', 'b': 1, 'c': {'x': 11}}, 10),
+	(2, {'a': 'seed', 'b': 2, 'c': {'x': 22}}, 20);
+
+statement ok
+update my_datalake.default.tbl_default_null_struct
+	set col = DEFAULT,
+	col2 = col2 + 100
+where id = 1;
+
+# FIXME: 'c' should be NULL, but this needs support for {} first
+query III
+select * from my_datalake.default.tbl_default_null_struct where id = 1;
+----
+1	{'a': NULL, 'b': NULL, 'c': {'x': NULL}}	110

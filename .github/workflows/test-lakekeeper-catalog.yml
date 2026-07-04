@@ -11,6 +11,11 @@ jobs:
   test-lakekeeper:
     name: Test against Lakekeeper Catalog
     runs-on: ubuntu-latest
+    env:
+      ASAN_SYMBOLIZER_PATH: "/usr/bin/llvm-symbolizer"
+      ASAN_OPTIONS: "detect_leaks=1:halt_on_error=1:abort_on_error=0:external_symbolizer_path=/usr/bin/llvm-symbolizer"
+      LSAN_OPTIONS: "suppressions=${{ github.workspace }}/.combined-sanitizer-leak-suppressions.txt"
+      UBSAN_OPTIONS: "halt_on_error=1:print_stacktrace=1"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -22,63 +27,54 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.artifact-name }}
-          path: build/release
+          path: build
 
-      - name: Restore permissions
+      - name: Extract relassert build artifact
         run: |
-          find ./build/release -type f -name 'duckdb*' -exec chmod +x {} \;
-          find ./build/release -type f -name 'unittest*' -exec chmod +x {} \;
+          rm -rf build/relassert
+          tar -xzf build/relassert-artifact.tar.gz -C build
+          ls -lh build/relassert/test/unittest
 
-      - name: Add minio host entry
-        run: |
-          echo "127.0.0.1 minio" | sudo tee -a /etc/hosts
-
-      - name: Clone Lakekeeper
-        uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
         with:
-          repository: lakekeeper/lakekeeper
-          ref: f6aaa4570cf62d54943581e7a00b9f882d9c992d
-          path: lakekeeper
+          distribution: temurin
+          java-version: '21'
 
-      - name: Apply lakekeeper patch
-        run: |
-          cd lakekeeper
-          git apply ../.github/patches/lakekeeper_docker_compose.patch
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
 
-      - name: Start Lakekeeper
+      - name: Prepare leak suppressions
         run: |
-          cd lakekeeper/examples/access-control-simple
-          docker compose up -d
+          cp duckdb/.sanitizer-leak-suppressions.txt .combined-sanitizer-leak-suppressions.txt
+          printf '\n' >> .combined-sanitizer-leak-suppressions.txt
+          cat .sanitizer-leak-suppressions.txt >> .combined-sanitizer-leak-suppressions.txt
 
-      - name: Bootstrap, Create Warehouse and Populate Lakekeeper
+      - name: Install Lakekeeper dependencies
         run: |
-          cd lakekeeper/examples/access-control-simple
-          docker compose exec jupyter start.sh bash -lc "\
-            jupyter nbconvert --to notebook --execute --output-dir=/tmp /home/jovyan/examples/01-Bootstrap.ipynb && \
-            jupyter nbconvert --to notebook --execute --output-dir=/tmp /home/jovyan/examples/02-Create-Warehouse.ipynb && \
-            jupyter nbconvert --to notebook --execute --output-dir=/tmp /home/jovyan/examples/03-01-Spark.ipynb"
+          sudo apt update -y -qq
+          sudo apt install -y -qq python3-venv llvm
 
-      - name: Generate Data
+      - name: Setup Lakekeeper
         run: |
-          sudo apt-get install -y -qq python3-venv
-          python3 -m venv .
-          source ./bin/activate
-          python3 -m pip install poetry
-          python3 -m pip install pyspark==4.0.1
-          python3 -m pip install duckdb
-          python3 -m scripts.data_generators.generate_data lakekeeper
+          make lakekeeper-data
 
       - name: Run Lakekeeper Specific Tests
         env:
           LAKEKEEPER_SERVER_AVAILABLE: 1
         run: |
-          ./build/release/test/unittest "$PWD/test/*" --list-test-names-only || true
-          ./build/release/test/unittest "$PWD/test/*"
+          ./build/relassert/test/unittest --order lex "$PWD/test/*" --list-test-names-only || true
+          ./build/relassert/test/unittest --order lex "$PWD/test/*"
 
       - name: Run Generic IRC Tests
         env:
-          ICEBERG_SERVER_AVAILABLE: 1
-          SECRETS_CREATED_AND_CATALOG_ATTACHED: 1
+          LAKEKEEPER_SERVER_AVAILABLE: 1
         run: |
-          ./build/release/test/unittest "$PWD/test/sql/local/irc_any_catalog/*" --list-test-names-only || true
-          ./build/release/test/unittest "$PWD/test/sql/local/irc_any_catalog/*" --test-config test/configs/lakekeeper.json  --autoloading available
+          ./build/relassert/test/unittest --order lex "$PWD/test/sql/local/catalog_test_config_setup/*" --list-test-names-only || true
+          ./build/relassert/test/unittest --order lex "$PWD/test/sql/local/catalog_test_config_setup/*" --test-config test/configs/lakekeeper.json
+
+      - name: Test reads with PyIceberg and Spark
+        run: |
+          source .venv-spark4/bin/activate
+          python3 -m pytest -vv test/python --unittest-binary ./build/relassert/test/unittest --test-python-verbosity verbose

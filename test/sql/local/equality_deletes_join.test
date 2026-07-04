@@ -1,0 +1,30 @@
+# name: test/sql/local/equality_deletes_join.test
+# description: Equality deletes must be applied even when the iceberg scan is not the first child of a join
+# group: [local]
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Keep the iceberg scan on the right side of the join so that the
+# GuaranteeEqualityDeleteColumnsOptimizer first visits the non-iceberg left
+# child. If that traversal stops at the left child instead of continuing to the
+# remaining children, the equality-delete columns of the right scan get pruned
+# and the deletes are silently not applied.
+statement ok
+set disabled_optimizers='join_order';
+
+# Only the `bir` column is selected, which is not an equality-delete column.
+# Without the guarantee filter on the iceberg scan the id/name columns are
+# pruned and the equality deletes can no longer be applied.
+query I
+SELECT t.bir
+FROM (VALUES (1)) v(x), ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable') t
+ORDER BY ALL;
+----
+2025-01-04
+2025-01-05
