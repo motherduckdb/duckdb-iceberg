@@ -90,8 +90,6 @@ jobs:
           build-type: release
           build: python3 duckdb/scripts/ci/retry.py -- make release
           vcpkg-commit: 84bab45d415d22042bd0b9081aea57f362da3f35
-          bundle: bash duckdb/scripts/prepare_build_artifact.sh release
-          upload-name: duckdb-iceberg-benchmark-release
 
       - name: Set up Docker Compose
         uses: docker/setup-compose-action@v1
