@@ -30,6 +30,7 @@
 #include "planning/iceberg_multi_file_list.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 #include "core/expression/iceberg_value.hpp"
+#include "core/expression/iceberg_metrics.hpp"
 #include "core/expression/iceberg_transform.hpp"
 #include "storage/statistics/iceberg_variant_statistics.hpp"
 #include "catalog/rest/api/iceberg_type.hpp"
@@ -48,64 +49,6 @@ static bool WriteRowId(IcebergInsertVirtualColumns virtual_columns) {
 static bool WriteSequenceNumber(IcebergInsertVirtualColumns virtual_columns) {
 	return virtual_columns == IcebergInsertVirtualColumns::WRITE_SEQUENCE_NUMBER ||
 	       virtual_columns == IcebergInsertVirtualColumns::WRITE_ROW_ID_AND_SEQUENCE_NUMBER;
-}
-
-// Per-column metrics collection level, from the `write.metadata.metrics.*` table
-// properties (https://iceberg.apache.org/docs/latest/configuration/#write-properties).
-enum class IcebergMetricsMode : uint8_t { NONE, COUNTS, TRUNCATE, FULL };
-
-struct IcebergMetricsConfig {
-	IcebergMetricsMode mode = IcebergMetricsMode::TRUNCATE;
-	// Byte length for TRUNCATE; DConstants::INVALID_INDEX for FULL (no truncation).
-	idx_t truncate_length = IcebergValue::MAX_STRING_UPPERBOUND_LENGTH;
-};
-
-// Parse a metrics mode value: `none`, `counts`, `truncate(<n>)`, or `full`.
-static IcebergMetricsConfig ParseMetricsMode(const string &raw) {
-	auto value = StringUtil::Lower(raw);
-	if (value == "none") {
-		return {IcebergMetricsMode::NONE, 0};
-	}
-	if (value == "counts") {
-		return {IcebergMetricsMode::COUNTS, 0};
-	}
-	if (value == "full") {
-		return {IcebergMetricsMode::FULL, DConstants::INVALID_INDEX};
-	}
-	if (StringUtil::StartsWith(value, "truncate(") && StringUtil::EndsWith(value, ")")) {
-		auto inner = value.substr(9, value.size() - 10);
-		try {
-			auto length = std::stoull(inner);
-			if (length > 0) {
-				return {IcebergMetricsMode::TRUNCATE, static_cast<idx_t>(length)};
-			}
-		} catch (...) {
-			// fall through to the error below
-		}
-		throw InvalidConfigurationException("Invalid metrics mode '%s': truncate length must be a positive integer",
-		                                    raw);
-	}
-	throw InvalidConfigurationException(
-	    "Invalid write.metadata.metrics mode '%s': expected 'none', 'counts', 'truncate(<n>)', or 'full'", raw);
-}
-
-static IcebergMetricsConfig GetDefaultMetricsConfig(const IcebergTableMetadata &table_metadata) {
-	auto prop = table_metadata.GetTableProperty("write.metadata.metrics.default");
-	if (prop.empty()) {
-		// Iceberg's default when unset is truncate(16).
-		return IcebergMetricsConfig();
-	}
-	return ParseMetricsMode(prop);
-}
-
-static IcebergMetricsConfig GetColumnMetricsConfig(const IcebergTableMetadata &table_metadata,
-                                                   const IcebergMetricsConfig &default_config,
-                                                   const string &column_name) {
-	auto prop = table_metadata.GetTableProperty("write.metadata.metrics.column." + column_name);
-	if (prop.empty()) {
-		return default_config;
-	}
-	return ParseMetricsMode(prop);
 }
 
 IcebergInsert::IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op, TableCatalogEntry &table,
@@ -375,12 +318,8 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 			// go through stats and add upper and lower bounds
 			// Do serialization of values here in case we read transaction updates
 			if (write_bounds && stats.has_min) {
-				// String bounds honor the configured truncation length; other types have no length knob.
 				auto serialized_value =
-				    column_info.type.id() == LogicalTypeId::VARCHAR
-				        ? IcebergValue::SerializeStringBound(stats.min.GetValue<string>(), SerializeBound::LOWER_BOUND,
-				                                             metrics.truncate_length)
-				        : IcebergValue::SerializeValue(stats.min, column_info.type, SerializeBound::LOWER_BOUND);
+				    IcebergValue::SerializeValue(stats.min, column_info.type, SerializeBound::LOWER_BOUND, metrics);
 				if (serialized_value.HasError()) {
 					throw InvalidConfigurationException(serialized_value.GetError());
 				} else if (serialized_value.HasValue()) {
@@ -389,10 +328,7 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 			}
 			if (write_bounds && stats.has_max) {
 				auto serialized_value =
-				    column_info.type.id() == LogicalTypeId::VARCHAR
-				        ? IcebergValue::SerializeStringBound(stats.max.GetValue<string>(), SerializeBound::UPPER_BOUND,
-				                                             metrics.truncate_length)
-				        : IcebergValue::SerializeValue(stats.max, column_info.type, SerializeBound::UPPER_BOUND);
+				    IcebergValue::SerializeValue(stats.max, column_info.type, SerializeBound::UPPER_BOUND, metrics);
 				if (serialized_value.HasError()) {
 					throw InvalidConfigurationException(serialized_value.GetError());
 				} else if (serialized_value.HasValue()) {

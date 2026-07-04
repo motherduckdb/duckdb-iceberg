@@ -5,6 +5,7 @@
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/common/types.hpp"
 
+#include "core/expression/iceberg_metrics.hpp"
 #include "storage/statistics/iceberg_statistics.hpp"
 
 namespace duckdb {
@@ -77,20 +78,19 @@ public:
 
 struct IcebergValue {
 public:
-	static constexpr idx_t MAX_STRING_UPPERBOUND_LENGTH = 16;
+	static constexpr idx_t MAX_STRING_UPPERBOUND_LENGTH = DEFAULT_METRICS_TRUNCATE_LENGTH;
 	IcebergValue() = delete;
 
 public:
 	static DeserializeResult DeserializeValue(const string_t &blob, const LogicalType &target);
 	static SerializeResult SerializeValue(IcebergColumnStats &stats, const LogicalType &column_type,
 	                                      SerializeBound bound_type);
-	static SerializeResult SerializeValue(Value input_value, const LogicalType &column_type, SerializeBound bound_type);
-	// Serialize a string min/max bound, truncated to max_length on a code-point boundary.
-	static SerializeResult SerializeStringBound(const string &input, SerializeBound bound_type,
-	                                            idx_t max_length = MAX_STRING_UPPERBOUND_LENGTH);
-	// Truncate a string to a code-point boundary <= max_length (INVALID_INDEX = no truncation).
+	static SerializeResult SerializeValue(Value input_value, const LogicalType &column_type, SerializeBound bound_type,
+	                                      const IcebergMetricsConfig &metrics_config = IcebergMetricsConfig());
 	static string TruncateString(const string &input, idx_t max_length = MAX_STRING_UPPERBOUND_LENGTH);
-	// Truncated, rounded-up upper bound; returns false when none is representable (bound is optional).
+	// Computes a truncated, incremented upper bound for a string. Returns false
+	// (and leaves `result` untouched) when no valid bound can be produced, so the
+	// caller can omit the optional upper bound instead of failing.
 	static bool TruncateAndIncrementString(const string &input, string &result,
 	                                       idx_t max_length = MAX_STRING_UPPERBOUND_LENGTH);
 };

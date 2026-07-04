@@ -314,24 +314,8 @@ std::vector<uint8_t> HexStringToBytes(const std::string &hex) {
 	return bytes;
 }
 
-SerializeResult IcebergValue::SerializeStringBound(const string &input, SerializeBound bound_type, idx_t max_length) {
-	string val;
-	if (bound_type == SerializeBound::UPPER_BOUND) {
-		// an upper bound must be truncated and rounded up to stay >= every value
-		if (!TruncateAndIncrementString(input, val, max_length)) {
-			// No representable upper bound could be produced; omit it (optional per spec).
-			return SerializeResult();
-		}
-	} else {
-		// a truncated prefix is already a valid lower bound (<= every value)
-		val = TruncateString(input, max_length);
-	}
-	auto serialized_val = Value::BLOB(reinterpret_cast<const_data_ptr_t>(val.data()), val.size());
-	return SerializeResult(LogicalType::VARCHAR, serialized_val);
-}
-
 SerializeResult IcebergValue::SerializeValue(Value input_value, const LogicalType &column_type,
-                                             SerializeBound bound_type) {
+                                             SerializeBound bound_type, const IcebergMetricsConfig &metrics_config) {
 	switch (column_type.id()) {
 	case LogicalTypeId::INTEGER: {
 		int32_t val = input_value.GetValue<int32_t>();
@@ -349,8 +333,22 @@ SerializeResult IcebergValue::SerializeValue(Value input_value, const LogicalTyp
 		auto ret = SerializeResult(column_type, serialized_val);
 		return ret;
 	}
-	case LogicalTypeId::VARCHAR:
-		return SerializeStringBound(input_value.GetValue<string>(), bound_type);
+	case LogicalTypeId::VARCHAR: {
+		auto input = input_value.GetValue<string>();
+		string val;
+		if (bound_type == SerializeBound::UPPER_BOUND) {
+			// an upper bound must be truncated and rounded up to stay >= every value
+			if (!TruncateAndIncrementString(input, val, metrics_config.truncate_length)) {
+				// No representable upper bound could be produced; omit it (optional per spec).
+				return SerializeResult();
+			}
+		} else {
+			// a truncated prefix is already a valid lower bound (<= every value)
+			val = TruncateString(input, metrics_config.truncate_length);
+		}
+		auto serialized_val = Value::BLOB(reinterpret_cast<const_data_ptr_t>(val.data()), val.size());
+		return SerializeResult(column_type, serialized_val);
+	}
 	case LogicalTypeId::FLOAT: {
 		float val = input_value.GetValue<float>();
 		auto serialized_const_data_ptr = const_data_ptr_cast<float>(&val);
