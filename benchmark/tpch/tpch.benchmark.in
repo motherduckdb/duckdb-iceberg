@@ -2,11 +2,9 @@
 # description: ${DESCRIPTION}
 # group: [sf1]
 
-argument sf 1
-
 name Iceberg Q${QUERY_NUMBER_PADDED}
 group tpch
-subgroup sf${sf}
+subgroup sf1
 
 require avro
 
@@ -18,12 +16,9 @@ require httpfs
 
 require tpch
 
-cache_file tpch_sf${sf}_iceberg.db
+cache_file tpch_sf1_iceberg.db
 
 load
-ATTACH ':memory:' AS mem;
-USE mem;
-CALL dbgen(sf=${sf});
 CREATE SECRET (
     TYPE S3,
     KEY_ID 'admin',
@@ -39,19 +34,7 @@ ATTACH '' AS my_datalake (
     ENDPOINT 'http://127.0.0.1:8181',
     DEFAULT_SCHEMA 'default'
 );
-DROP TABLE IF EXISTS my_datalake."default".customer;
-DROP TABLE IF EXISTS my_datalake."default".lineitem;
-DROP TABLE IF EXISTS my_datalake."default".nation;
-DROP TABLE IF EXISTS my_datalake."default".orders;
-DROP TABLE IF EXISTS my_datalake."default".part;
-DROP TABLE IF EXISTS my_datalake."default".partsupp;
-DROP TABLE IF EXISTS my_datalake."default".region;
-DROP TABLE IF EXISTS my_datalake."default".supplier;
-DROP SCHEMA IF EXISTS my_datalake."default";
-CREATE SCHEMA IF NOT EXISTS my_datalake."default";
-COPY FROM DATABASE mem TO my_datalake;
 USE my_datalake;
-DETACH mem;
 
 reload
 ATTACH '' AS my_datalake (
@@ -66,5 +49,3 @@ USE my_datalake;
 run duckdb/extension/tpch/dbgen/queries/q${QUERY_NUMBER_PADDED}.sql
 
 result duckdb/extension/tpch/dbgen/answers/sf1/q${QUERY_NUMBER_PADDED}.csv sf=1
-
-result duckdb/extension/tpch/dbgen/answers/sf100/q${QUERY_NUMBER_PADDED}.csv sf=100
