@@ -85,11 +85,14 @@ public:
 	static SerializeResult SerializeValue(IcebergColumnStats &stats, const LogicalType &column_type,
 	                                      SerializeBound bound_type);
 	static SerializeResult SerializeValue(Value input_value, const LogicalType &column_type, SerializeBound bound_type);
-	static string TruncateString(const string &input);
-	// Computes a truncated, incremented upper bound for a string. Returns false
-	// (and leaves `result` untouched) when no valid bound can be produced, so the
-	// caller can omit the optional upper bound instead of failing.
-	static bool TruncateAndIncrementString(const string &input, string &result);
+	// Serialize a string min/max bound, truncated to max_length on a code-point boundary.
+	static SerializeResult SerializeStringBound(const string &input, SerializeBound bound_type,
+	                                            idx_t max_length = MAX_STRING_UPPERBOUND_LENGTH);
+	// Truncate a string to a code-point boundary <= max_length (INVALID_INDEX = no truncation).
+	static string TruncateString(const string &input, idx_t max_length = MAX_STRING_UPPERBOUND_LENGTH);
+	// Truncated, rounded-up upper bound; returns false when none is representable (bound is optional).
+	static bool TruncateAndIncrementString(const string &input, string &result,
+	                                       idx_t max_length = MAX_STRING_UPPERBOUND_LENGTH);
 };
 
 } // namespace duckdb
