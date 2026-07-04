@@ -5,7 +5,7 @@
 
 namespace duckdb {
 
-class IcebergTableMetadata;
+struct IcebergTableMetadata;
 
 // Default string bound truncation length — Iceberg's truncate(16) default.
 static constexpr idx_t DEFAULT_METRICS_TRUNCATE_LENGTH = 16;
