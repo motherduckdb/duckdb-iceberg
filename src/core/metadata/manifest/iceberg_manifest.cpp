@@ -568,6 +568,29 @@ static LogicalType PartitionStructType(vector<IcebergExtendedPartitionInfo> exte
 	return LogicalType::STRUCT(children);
 }
 
+static Value FieldIdsForMap(int32_t map_field_id, int32_t map_key_field_id, int32_t map_value_field_id) {
+	child_list_t<Value> members;
+	members.emplace_back("__duckdb_field_id", Value::INTEGER(map_field_id));
+
+	child_list_t<Value> map_key_members;
+	map_key_members.emplace_back("__duckdb_field_id", Value::INTEGER(map_key_field_id));
+	map_key_members.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
+	members.emplace_back("key", Value::STRUCT(map_key_members));
+
+	child_list_t<Value> map_value_members;
+	map_value_members.emplace_back("__duckdb_field_id", Value::INTEGER(map_value_field_id));
+	map_value_members.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
+	members.emplace_back("value", Value::STRUCT(map_value_members));
+	return Value::STRUCT(members);
+}
+
+static Value FieldIdsForList(int32_t list_field_id, int32_t element_field_id) {
+	child_list_t<Value> members;
+	members.emplace_back("list", CreateFieldID(element_field_id, false));
+	members.emplace_back("__duckdb_field_id", Value::INTEGER(list_field_id));
+	return Value::STRUCT(members);
+}
+
 idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManifestFile &manifest_file,
                   const vector<IcebergManifestEntry> &manifest_entries, CopyFunction &copy, DatabaseInstance &db,
                   ClientContext &context) {
@@ -638,126 +661,51 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	children.emplace_back("file_size_in_bytes", LogicalType::BIGINT);
 	data_file_field_ids.emplace_back("file_size_in_bytes", CreateFieldID(FILE_SIZE_IN_BYTES, false));
 
-	child_list_t<LogicalType> null_value_counts_fields;
-	null_value_counts_fields.emplace_back("key", LogicalType::INTEGER);
-	null_value_counts_fields.emplace_back("value", LogicalType::BIGINT);
+	child_list_t<LogicalType> map_int_long_fields;
+	map_int_long_fields.emplace_back("key", LogicalType::INTEGER);
+	map_int_long_fields.emplace_back("value", LogicalType::BIGINT);
 
 	// column_sizes: map<int, long>
-	children.emplace_back("column_sizes", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
-
-	child_list_t<Value> column_sizes_record_field_ids;
-	column_sizes_record_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(COLUMN_SIZES));
-	child_list_t<Value> column_sizes_key_field;
-	column_sizes_key_field.emplace_back("__duckdb_field_id", Value::INTEGER(COLUMN_SIZES_KEY));
-	column_sizes_key_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	column_sizes_record_field_ids.emplace_back("key", Value::STRUCT(column_sizes_key_field));
-	child_list_t<Value> column_sizes_value_field;
-	column_sizes_value_field.emplace_back("__duckdb_field_id", Value::INTEGER(COLUMN_SIZES_VALUE));
-	column_sizes_value_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	column_sizes_record_field_ids.emplace_back("value", Value::STRUCT(column_sizes_value_field));
-
-	data_file_field_ids.emplace_back("column_sizes", Value::STRUCT(column_sizes_record_field_ids));
+	children.emplace_back("column_sizes", LogicalType::MAP(LogicalType::STRUCT(map_int_long_fields)));
+	data_file_field_ids.emplace_back("column_sizes",
+	                                 FieldIdsForMap(COLUMN_SIZES, COLUMN_SIZES_KEY, COLUMN_SIZES_VALUE));
 
 	// value_counts: map<int, long>
-	children.emplace_back("value_counts", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
-
-	child_list_t<Value> value_counts_record_field_ids;
-	value_counts_record_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(VALUE_COUNTS));
-	child_list_t<Value> value_counts_key_field;
-	value_counts_key_field.emplace_back("__duckdb_field_id", Value::INTEGER(VALUE_COUNTS_KEY));
-	value_counts_key_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	value_counts_record_field_ids.emplace_back("key", Value::STRUCT(value_counts_key_field));
-	child_list_t<Value> value_counts_value_field;
-	value_counts_value_field.emplace_back("__duckdb_field_id", Value::INTEGER(VALUE_COUNTS_VALUE));
-	value_counts_value_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	value_counts_record_field_ids.emplace_back("value", Value::STRUCT(value_counts_value_field));
-
-	data_file_field_ids.emplace_back("value_counts", Value::STRUCT(value_counts_record_field_ids));
+	children.emplace_back("value_counts", LogicalType::MAP(LogicalType::STRUCT(map_int_long_fields)));
+	data_file_field_ids.emplace_back("value_counts",
+	                                 FieldIdsForMap(VALUE_COUNTS, VALUE_COUNTS_KEY, VALUE_COUNTS_VALUE));
 
 	// null_value_counts: map<int, long>
-	children.emplace_back("null_value_counts", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
-
-	child_list_t<Value> null_values_counts_record_field_ids;
-	null_values_counts_record_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(NULL_VALUE_COUNTS));
-	child_list_t<Value> null_value_counts_key_field;
-	null_value_counts_key_field.emplace_back("__duckdb_field_id", Value::INTEGER(NULL_VALUE_COUNTS_KEY));
-	null_value_counts_key_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	null_values_counts_record_field_ids.emplace_back("key", Value::STRUCT(null_value_counts_key_field));
-	child_list_t<Value> null_value_counts_value_field;
-	null_value_counts_value_field.emplace_back("__duckdb_field_id", Value::INTEGER(NULL_VALUE_COUNTS_VALUE));
-	null_value_counts_value_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	null_values_counts_record_field_ids.emplace_back("value", Value::STRUCT(null_value_counts_value_field));
-
-	data_file_field_ids.emplace_back("null_value_counts", Value::STRUCT(null_values_counts_record_field_ids));
+	children.emplace_back("null_value_counts", LogicalType::MAP(LogicalType::STRUCT(map_int_long_fields)));
+	data_file_field_ids.emplace_back("null_value_counts",
+	                                 FieldIdsForMap(NULL_VALUE_COUNTS, NULL_VALUE_COUNTS_KEY, NULL_VALUE_COUNTS_VALUE));
 
 	// nan_value_counts: map<int, long>
-	children.emplace_back("nan_value_counts", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
+	children.emplace_back("nan_value_counts", LogicalType::MAP(LogicalType::STRUCT(map_int_long_fields)));
+	data_file_field_ids.emplace_back("nan_value_counts",
+	                                 FieldIdsForMap(NAN_VALUE_COUNTS, NAN_VALUE_COUNTS_KEY, NAN_VALUE_COUNTS_VALUE));
 
-	child_list_t<Value> nan_value_counts_record_field_ids;
-	nan_value_counts_record_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(NAN_VALUE_COUNTS));
-	child_list_t<Value> nan_value_counts_key_field;
-	nan_value_counts_key_field.emplace_back("__duckdb_field_id", Value::INTEGER(NAN_VALUE_COUNTS_KEY));
-	nan_value_counts_key_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	nan_value_counts_record_field_ids.emplace_back("key", Value::STRUCT(nan_value_counts_key_field));
-	child_list_t<Value> nan_value_counts_value_field;
-	nan_value_counts_value_field.emplace_back("__duckdb_field_id", Value::INTEGER(NAN_VALUE_COUNTS_VALUE));
-	nan_value_counts_value_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	nan_value_counts_record_field_ids.emplace_back("value", Value::STRUCT(nan_value_counts_value_field));
-
-	data_file_field_ids.emplace_back("nan_value_counts", Value::STRUCT(nan_value_counts_record_field_ids));
-
-	// lower bounds struct
 	child_list_t<LogicalType> bounds_fields;
 	bounds_fields.emplace_back("key", LogicalType::INTEGER);
 	bounds_fields.emplace_back("value", LogicalType::BLOB);
+
 	// lower bounds: map<int, binary>
 	children.emplace_back("lower_bounds", LogicalType::MAP(LogicalType::STRUCT(bounds_fields)));
+	data_file_field_ids.emplace_back("lower_bounds",
+	                                 FieldIdsForMap(LOWER_BOUNDS, LOWER_BOUNDS_KEY, LOWER_BOUNDS_VALUE));
 
-	child_list_t<Value> lower_bound_record_field_ids;
-	lower_bound_record_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(LOWER_BOUNDS));
-	child_list_t<Value> lower_bounds_key_field;
-	lower_bounds_key_field.emplace_back("__duckdb_field_id", Value::INTEGER(LOWER_BOUNDS_KEY));
-	lower_bounds_key_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	lower_bound_record_field_ids.emplace_back("key", Value::STRUCT(lower_bounds_key_field));
-	child_list_t<Value> lower_bounds_value_field;
-	lower_bounds_value_field.emplace_back("__duckdb_field_id", Value::INTEGER(LOWER_BOUNDS_VALUE));
-	lower_bounds_value_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	lower_bound_record_field_ids.emplace_back("value", Value::STRUCT(lower_bounds_value_field));
-
-	data_file_field_ids.emplace_back("lower_bounds", Value::STRUCT(lower_bound_record_field_ids));
-
-	// upper bounds struct
-	// child_list_t<Value> upper_bounds_field_ids;
 	// upper bounds: map<int, binary>
 	children.emplace_back("upper_bounds", LogicalType::MAP(LogicalType::STRUCT(bounds_fields)));
+	data_file_field_ids.emplace_back("upper_bounds",
+	                                 FieldIdsForMap(UPPER_BOUNDS, UPPER_BOUNDS_KEY, UPPER_BOUNDS_VALUE));
 
-	child_list_t<Value> upper_bound_record_field_ids;
-	upper_bound_record_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(UPPER_BOUNDS));
-	child_list_t<Value> upper_bounds_key_field;
-	upper_bounds_key_field.emplace_back("__duckdb_field_id", Value::INTEGER(UPPER_BOUNDS_KEY));
-	upper_bounds_key_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	upper_bound_record_field_ids.emplace_back("key", Value::STRUCT(upper_bounds_key_field));
-	child_list_t<Value> upper_bounds_value_field;
-	upper_bounds_value_field.emplace_back("__duckdb_field_id", Value::INTEGER(UPPER_BOUNDS_VALUE));
-	upper_bounds_value_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	upper_bound_record_field_ids.emplace_back("value", Value::STRUCT(upper_bounds_value_field));
-
-	data_file_field_ids.emplace_back("upper_bounds", Value::STRUCT(upper_bound_record_field_ids));
 	// split_offsets: list<long>
 	children.emplace_back("split_offsets", LogicalType::LIST(LogicalType::BIGINT));
-
-	child_list_t<Value> split_offsets_list_field;
-	split_offsets_list_field.emplace_back("list", CreateFieldID(SPLIT_OFFSETS_ELEMENT, false));
-	split_offsets_list_field.emplace_back("__duckdb_field_id", Value::INTEGER(SPLIT_OFFSETS));
-	data_file_field_ids.emplace_back("split_offsets", Value::STRUCT(split_offsets_list_field));
+	data_file_field_ids.emplace_back("split_offsets", FieldIdsForList(SPLIT_OFFSETS, SPLIT_OFFSETS_ELEMENT));
 
 	// equality_ids: list<int> - the field-ids an equality-delete file applies to
 	children.emplace_back("equality_ids", LogicalType::LIST(LogicalType::INTEGER));
-
-	child_list_t<Value> equality_ids_list_field;
-	equality_ids_list_field.emplace_back("list", CreateFieldID(EQUALITY_IDS_ELEMENT, false));
-	equality_ids_list_field.emplace_back("__duckdb_field_id", Value::INTEGER(EQUALITY_IDS));
-	data_file_field_ids.emplace_back("equality_ids", Value::STRUCT(equality_ids_list_field));
+	data_file_field_ids.emplace_back("equality_ids", FieldIdsForList(EQUALITY_IDS, EQUALITY_IDS_ELEMENT));
 
 	// sort_order_id: optional int
 	children.emplace_back("sort_order_id", LogicalType::INTEGER);
