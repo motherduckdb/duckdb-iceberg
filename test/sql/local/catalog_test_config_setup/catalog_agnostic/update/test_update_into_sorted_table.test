@@ -103,8 +103,8 @@ set variable manifest_path = (
 	limit 1
 );
 
-# Read the newly written parquet file directly and use file_row_number to compare
-# each row against the previous one in physical write order.
+# Use the Iceberg scan handle and file_row_number to compare each row against
+# the previous one in physical write order.
 query I
 with ordered_rows as (
 	select
@@ -114,7 +114,8 @@ with ordered_rows as (
 		b,
 		lag(a) over(partition by filename order by file_row_number) prev_a,
 		lag(b) over(partition by filename order by file_row_number) prev_b
-	from read_parquet(getvariable('file_path'), filename=true, file_row_number=true)
+	from my_datalake.default.sorted_update_write_test
+	where filename = getvariable('file_path')
 )
 select count(*)
 from ordered_rows

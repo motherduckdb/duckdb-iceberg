@@ -51,7 +51,10 @@ set variable file_path = (
 );
 
 query IT
-select id, sort_col from read_parquet(getvariable('file_path'), file_row_number=true) order by file_row_number;
+select id, sort_col
+from my_datalake.default.sort_identity_timestamptz
+where filename = getvariable('file_path')
+order by file_row_number;
 ----
 1	2020-01-01 10:00:00+01
 2	2020-01-01 10:00:00+01
