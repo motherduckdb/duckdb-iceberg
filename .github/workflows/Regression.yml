@@ -25,6 +25,10 @@ concurrency:
   group: regression-${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref || '' }}-${{ github.base_ref || '' }}-${{ github.ref != 'refs/heads/main' || github.sha }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    shell: bash
+
 env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   GIT_REF: ${{ inputs.git_ref != '' && inputs.git_ref || github.sha }}
@@ -42,18 +46,12 @@ jobs:
   regression-test-benchmark-runner:
     name: Regression Tests
     needs: check-draft
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'duckdb' && 'namespace-profile-linux-x64' || 'ubuntu-latest' }}
     env:
-      CC: gcc-10
-      CXX: g++-10
       GEN: ninja
-      BUILD_BENCHMARK: 1
-      CORE_EXTENSIONS: "tpch;avro;parquet;httpfs"
+      CC: clang-20
+      CXX: clang++-20
       HTTP_PROXY_PUBLIC: http://localhost:8878
-      VCPKG_TARGET_TRIPLET: 'x64-linux-release'
-      VCPKG_FEATURE_FLAGS: "-binarycaching"
-      VCPKG_TOOLCHAIN_PATH: ${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
-      PIP_BREAK_SYSTEM_PACKAGES: 1
 
     steps:
       - uses: actions/checkout@v4
@@ -66,20 +64,14 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Install tools
+        run: python3 duckdb/scripts/ci/retry.py -- make -C duckdb toolsci
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
-
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11.1
-        with:
-          vcpkgGitCommitId: 84bab45d415d22042bd0b9081aea57f362da3f35
-
-      - name: Install Ninja
-        shell: bash
-        run: sudo apt-get update -y -qq && sudo apt-get install -y -qq ninja-build
 
       - name: Setup Ccache
         uses: hendrikmuhs/ccache-action@main
@@ -87,14 +79,19 @@ jobs:
           key: ${{ github.job }}
           save: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}
 
-      - name: Build extension
+      - name: Build Benchmark (release)
+        uses: duckdb/duckdb-ci/build-duckdb@main
         env:
-          GEN: ninja
           STATIC_LIBCPP: 1
           ENABLE_EXTENSION_AUTOLOADING: 1
           ENABLE_EXTENSION_AUTOINSTALL: 1
-        run: |
-          make release
+          BUILD_BENCHMARK: 1
+        with:
+          build-type: release
+          build: python3 duckdb/scripts/ci/retry.py -- make release
+          vcpkg-commit: 84bab45d415d22042bd0b9081aea57f362da3f35
+          bundle: bash duckdb/scripts/prepare_build_artifact.sh release
+          upload-name: duckdb-iceberg-benchmark-release
 
       - name: Set up Docker Compose
         uses: docker/setup-compose-action@v1
@@ -103,11 +100,6 @@ jobs:
         run: |
           sudo apt update -y -qq
           sudo apt install -y -qq python3-venv tar pkg-config
-
-      - name: Install CMake 3.x
-        run: |
-          sudo apt-get remove -y cmake cmake-data
-          sudo apt-get install --allow-downgrades -y -qq 'cmake=3.*' 'cmake-data=3.*'
 
       - name: Select base ref
         run: |
@@ -136,22 +128,26 @@ jobs:
           source .venv-spark4/bin/activate
           mitmdump --mode regular@8878 --flow-detail 2 > mitmproxy.log 2>&1 &
 
-      - name: Build Base Branch
-        shell: bash
-        env:
-          GEN: ninja
-          STATIC_LIBCPP: 1
-          ENABLE_EXTENSION_AUTOLOADING: 1
-          ENABLE_EXTENSION_AUTOINSTALL: 1
+      - name: Checkout Base Branch
         run: |
+          rm -rf base
           git clone . base
           cd base
           git checkout "${BASE_REF}"
           git submodule update --init --recursive
-          make release
-          cd ..
+
+      - name: Build Base Benchmark (release)
+        uses: duckdb/duckdb-ci/build-duckdb@main
+        env:
+          STATIC_LIBCPP: 1
+          ENABLE_EXTENSION_AUTOLOADING: 1
+          ENABLE_EXTENSION_AUTOINSTALL: 1
+          BUILD_BENCHMARK: 1
+        with:
+          build-type: release
+          build: python3 duckdb/scripts/ci/retry.py -- make -C base release
+          vcpkg-commit: 84bab45d415d22042bd0b9081aea57f362da3f35
 
       - name: Regression Test TPCH
-        shell: bash
         run: |
           python duckdb/scripts/regression/test_runner.py --old base/build/release/benchmark/benchmark_runner --new build/release/benchmark/benchmark_runner --benchmarks .github/regression/tpch.csv --root-dir "$GITHUB_WORKSPACE" --verbose --threads 2 --clear-benchmark-cache
