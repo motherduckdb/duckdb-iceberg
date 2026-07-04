@@ -397,7 +397,7 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 		for (auto &entry : variant_bounds) {
 			// Respect the column's metrics mode; skip bounds under none/counts.
 			auto variant_metrics = GetColumnMetricsConfig(table_metadata, default_metrics,
-			                                              GetColumnNameBySourceId(ic_schema->columns, entry.first));
+			                                              GetColumnNameBySourceId(*ic_schema, entry.first));
 			if (variant_metrics.mode != IcebergMetricsMode::TRUNCATE &&
 			    variant_metrics.mode != IcebergMetricsMode::FULL) {
 				continue;
