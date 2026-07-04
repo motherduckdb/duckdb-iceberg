@@ -107,10 +107,11 @@ IcebergTransform IcebergTransform::FromExpression(const ParsedExpression &expr, 
 
 		//! Figure out the source id(s) of the transforms
 		for (idx_t i = source_columns_offset; i < arguments.size(); i++) {
-			auto tmp = FromExpression(*arguments[i], schema, source_columns);
+			auto &func_expr = arguments[i].GetExpression();
+			auto tmp = FromExpression(func_expr, schema, source_columns);
 			if (tmp.Type() != IcebergTransformType::IDENTITY) {
 				throw InvalidInputException("Encountered a non-column source for the transform (%s)",
-				                            arguments[i]->ToString());
+				                            func_expr.ToString());
 			}
 		}
 
