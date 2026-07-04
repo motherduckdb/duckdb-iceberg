@@ -72,11 +72,12 @@ set variable file_path = (
 	limit 1
 );
 
-# Read the newly written parquet file directly and assert the exact physical row
-# order by sorting on file_row_number.
+# Use the Iceberg scan handle and assert the exact physical row order by sorting
+# on file_row_number.
 query II
 select id, sort_col
-from read_parquet(getvariable('file_path'), file_row_number=true)
+from my_datalake.default.sort_identity_integer
+where filename = getvariable('file_path')
 order by file_row_number;
 ----
 1	10
