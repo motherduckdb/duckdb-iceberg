@@ -87,30 +87,6 @@ static vector<MultiFileColumnDefinition> BuildManifestListSchema(const IcebergTa
 	partition_spec_id.identifier = Value::INTEGER(PARTITION_SPEC_ID);
 	schema.push_back(partition_spec_id);
 
-	// content (v2+, default 0)
-	if (iceberg_version >= 2) {
-		MultiFileColumnDefinition content("content", LogicalType::INTEGER);
-		content.identifier = Value::INTEGER(CONTENT);
-		content.default_expression = make_uniq<ConstantExpression>(Value::INTEGER(0));
-		schema.push_back(content);
-	}
-
-	// sequence_number (v2+)
-	if (iceberg_version >= 2) {
-		MultiFileColumnDefinition sequence_number("sequence_number", LogicalType::BIGINT);
-		sequence_number.identifier = Value::INTEGER(SEQUENCE_NUMBER);
-		sequence_number.default_expression = make_uniq<ConstantExpression>(Value(sequence_number.type));
-		schema.push_back(sequence_number);
-	}
-
-	// min_sequence_number (v2+, default 0)
-	if (iceberg_version >= 2) {
-		MultiFileColumnDefinition min_sequence_number("min_sequence_number", LogicalType::BIGINT);
-		min_sequence_number.identifier = Value::INTEGER(MIN_SEQUENCE_NUMBER);
-		min_sequence_number.default_expression = make_uniq<ConstantExpression>(Value::BIGINT(0));
-		schema.push_back(min_sequence_number);
-	}
-
 	// added_snapshot_id
 	MultiFileColumnDefinition added_snapshot_id("added_snapshot_id", LogicalType::BIGINT);
 	added_snapshot_id.identifier = Value::INTEGER(ADDED_SNAPSHOT_ID);
@@ -148,6 +124,30 @@ static vector<MultiFileColumnDefinition> BuildManifestListSchema(const IcebergTa
 
 	// partitions (v2+)
 	schema.push_back(CreateManifestFilePartitionsColumn());
+
+	// content (v2+, default 0)
+	if (iceberg_version >= 2) {
+		MultiFileColumnDefinition content("content", LogicalType::INTEGER);
+		content.identifier = Value::INTEGER(CONTENT);
+		content.default_expression = make_uniq<ConstantExpression>(Value::INTEGER(0));
+		schema.push_back(content);
+	}
+
+	// sequence_number (v2+)
+	if (iceberg_version >= 2) {
+		MultiFileColumnDefinition sequence_number("sequence_number", LogicalType::BIGINT);
+		sequence_number.identifier = Value::INTEGER(SEQUENCE_NUMBER);
+		sequence_number.default_expression = make_uniq<ConstantExpression>(Value(sequence_number.type));
+		schema.push_back(sequence_number);
+	}
+
+	// min_sequence_number (v2+, default 0)
+	if (iceberg_version >= 2) {
+		MultiFileColumnDefinition min_sequence_number("min_sequence_number", LogicalType::BIGINT);
+		min_sequence_number.identifier = Value::INTEGER(MIN_SEQUENCE_NUMBER);
+		min_sequence_number.default_expression = make_uniq<ConstantExpression>(Value::BIGINT(0));
+		schema.push_back(min_sequence_number);
+	}
 
 	// first_row_id (v3+, default 0)
 	if (iceberg_version >= 3) {

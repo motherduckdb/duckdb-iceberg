@@ -3,6 +3,7 @@
 #include "core/metadata/manifest/iceberg_avro_codec.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/exception/conversion_exception.hpp"
+#include "duckdb/common/vector/struct_vector.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/common/types/uuid.hpp"
@@ -19,6 +20,8 @@
 #include "planning/metadata_io/manifest_list/iceberg_manifest_list_reader.hpp"
 #include "catalog/rest/api/catalog_utils.hpp"
 #include "re2/re2.h"
+
+#include <optional>
 
 namespace duckdb {
 
@@ -270,11 +273,15 @@ namespace manifest_list {
 
 namespace {
 
+using std::optional;
+
 struct AvroBindSchemaMetadata {
 	child_list_t<Value> field_ids;
 	vector<Identifier> names;
 	vector<LogicalType> types;
 };
+
+using FieldSummaryListWriter = VectorWriter<VectorListType<VectorStructType<bool, bool, string_t, string_t>>>;
 
 static Value CreateFieldID(int32_t field_id, bool nullable) {
 	child_list_t<Value> fields;
@@ -289,6 +296,133 @@ static void AddSimpleColumn(AvroBindSchemaMetadata &metadata, const string &name
 	metadata.types.push_back(type);
 	metadata.field_ids.emplace_back(name, CreateFieldID(field_id, nullable));
 }
+
+template <class WRITER>
+static void WriteBlobField(WRITER &writer, const Value &value) {
+	if (value.IsNull()) {
+		writer.WriteNull();
+		return;
+	}
+	writer.WriteValue(value.GetValueUnsafe<string_t>());
+}
+
+static void WritePartitions(FieldSummaryListWriter &writer, const ManifestPartitions &partitions) {
+	if (!partitions.has_partitions) {
+		writer.WriteNull();
+		return;
+	}
+	auto summaries = writer.WriteList(partitions.field_summary.size());
+	auto it = partitions.field_summary.begin();
+	for (auto &summary_writer : summaries) {
+		auto &summary = *it++;
+		summary_writer.WriteValue([&](auto &contains_null_writer, auto &contains_nan_writer, auto &lower_bound_writer,
+		                              auto &upper_bound_writer) {
+			contains_null_writer.WriteValue(summary.contains_null);
+			contains_nan_writer.WriteValue(summary.contains_nan);
+			WriteBlobField(lower_bound_writer, summary.lower_bound);
+			WriteBlobField(upper_bound_writer, summary.upper_bound);
+		});
+	}
+}
+
+struct ManifestListVectorWriters {
+	explicit ManifestListVectorWriters(DataChunk &data, idx_t row_count)
+	    : manifest_path(data.data[MANIFEST_PATH_INDEX], row_count, 0),
+	      manifest_length(data.data[MANIFEST_LENGTH_INDEX], row_count, 0),
+	      partition_spec_id(data.data[PARTITION_SPEC_ID_INDEX], row_count, 0),
+	      added_snapshot_id(data.data[ADDED_SNAPSHOT_ID_INDEX], row_count, 0),
+	      added_files_count(data.data[ADDED_FILES_COUNT_INDEX], row_count, 0),
+	      existing_files_count(data.data[EXISTING_FILES_COUNT_INDEX], row_count, 0),
+	      deleted_files_count(data.data[DELETED_FILES_COUNT_INDEX], row_count, 0),
+	      added_rows_count(data.data[ADDED_ROWS_COUNT_INDEX], row_count, 0),
+	      existing_rows_count(data.data[EXISTING_ROWS_COUNT_INDEX], row_count, 0),
+	      deleted_rows_count(data.data[DELETED_ROWS_COUNT_INDEX], row_count, 0),
+	      partitions(data.data[PARTITIONS_INDEX], row_count, 0) {
+		if (data.ColumnCount() > CONTENT_INDEX) {
+			content.emplace(data.data[CONTENT_INDEX], row_count, 0);
+			sequence_number.emplace(data.data[SEQUENCE_NUMBER_INDEX], row_count, 0);
+			min_sequence_number.emplace(data.data[MIN_SEQUENCE_NUMBER_INDEX], row_count, 0);
+		}
+		if (data.ColumnCount() > FIRST_ROW_ID_INDEX) {
+			first_row_id.emplace(data.data[FIRST_ROW_ID_INDEX], row_count, 0);
+		}
+	}
+
+	void WriteRow(const IcebergManifestFile &manifest, idx_t *next_row_id = nullptr) {
+		manifest_path.WriteValue(string_t(manifest.manifest_path));
+		manifest_length.WriteValue(manifest.manifest_length);
+		partition_spec_id.WriteValue(manifest.partition_spec_id);
+		added_snapshot_id.WriteValue(manifest.added_snapshot_id);
+		added_files_count.WriteValue(static_cast<int32_t>(manifest.added_files_count));
+		existing_files_count.WriteValue(static_cast<int32_t>(manifest.existing_files_count));
+		deleted_files_count.WriteValue(static_cast<int32_t>(manifest.deleted_files_count));
+		added_rows_count.WriteValue(static_cast<int64_t>(manifest.added_rows_count));
+		existing_rows_count.WriteValue(static_cast<int64_t>(manifest.existing_rows_count));
+		deleted_rows_count.WriteValue(static_cast<int64_t>(manifest.deleted_rows_count));
+		WritePartitions(partitions, manifest.partitions);
+
+		if (content) {
+			content->WriteValue(static_cast<int32_t>(manifest.content));
+			sequence_number->WriteValue(manifest.sequence_number);
+			if (!manifest.has_min_sequence_number) {
+				min_sequence_number->WriteValue(int64_t(-1));
+			} else {
+				min_sequence_number->WriteValue(manifest.min_sequence_number);
+			}
+		}
+
+		if (!first_row_id) {
+			return;
+		}
+		bool has_first_row_id = manifest.has_first_row_id;
+		int64_t row_id = manifest.first_row_id;
+		if (!has_first_row_id && manifest.content == IcebergManifestContentType::DATA) {
+			D_ASSERT(next_row_id);
+			row_id = static_cast<int64_t>(*next_row_id);
+			has_first_row_id = true;
+			*next_row_id += manifest.added_rows_count;
+			*next_row_id += manifest.existing_rows_count;
+		}
+		if (has_first_row_id) {
+			first_row_id->WriteValue(row_id);
+		} else {
+			first_row_id->WriteNull();
+		}
+	}
+
+private:
+	static constexpr idx_t MANIFEST_PATH_INDEX = 0;
+	static constexpr idx_t MANIFEST_LENGTH_INDEX = 1;
+	static constexpr idx_t PARTITION_SPEC_ID_INDEX = 2;
+	static constexpr idx_t ADDED_SNAPSHOT_ID_INDEX = 3;
+	static constexpr idx_t ADDED_FILES_COUNT_INDEX = 4;
+	static constexpr idx_t EXISTING_FILES_COUNT_INDEX = 5;
+	static constexpr idx_t DELETED_FILES_COUNT_INDEX = 6;
+	static constexpr idx_t ADDED_ROWS_COUNT_INDEX = 7;
+	static constexpr idx_t EXISTING_ROWS_COUNT_INDEX = 8;
+	static constexpr idx_t DELETED_ROWS_COUNT_INDEX = 9;
+	static constexpr idx_t PARTITIONS_INDEX = 10;
+	static constexpr idx_t CONTENT_INDEX = 11;
+	static constexpr idx_t SEQUENCE_NUMBER_INDEX = 12;
+	static constexpr idx_t MIN_SEQUENCE_NUMBER_INDEX = 13;
+	static constexpr idx_t FIRST_ROW_ID_INDEX = 14;
+
+	VectorWriter<string_t> manifest_path;
+	VectorWriter<int64_t> manifest_length;
+	VectorWriter<int32_t> partition_spec_id;
+	VectorWriter<int64_t> added_snapshot_id;
+	VectorWriter<int32_t> added_files_count;
+	VectorWriter<int32_t> existing_files_count;
+	VectorWriter<int32_t> deleted_files_count;
+	VectorWriter<int64_t> added_rows_count;
+	VectorWriter<int64_t> existing_rows_count;
+	VectorWriter<int64_t> deleted_rows_count;
+	FieldSummaryListWriter partitions;
+	optional<VectorWriter<int32_t>> content;
+	optional<VectorWriter<int64_t>> sequence_number;
+	optional<VectorWriter<int64_t>> min_sequence_number;
+	optional<VectorWriter<int64_t>> first_row_id;
+};
 
 } // namespace
 
@@ -325,15 +459,6 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
 	// partition_spec_id: long - 502
 	AddSimpleColumn(metadata, "partition_spec_id", LogicalType::INTEGER, PARTITION_SPEC_ID, false);
 
-	// content: int - 517
-	AddSimpleColumn(metadata, "content", LogicalType::INTEGER, CONTENT, false);
-
-	// sequence_number: long - 515
-	AddSimpleColumn(metadata, "sequence_number", LogicalType::BIGINT, SEQUENCE_NUMBER, false);
-
-	// min_sequence_number: long - 516
-	AddSimpleColumn(metadata, "min_sequence_number", LogicalType::BIGINT, MIN_SEQUENCE_NUMBER, false);
-
 	// added_snapshot_id: long - 503
 	AddSimpleColumn(metadata, "added_snapshot_id", LogicalType::BIGINT, ADDED_SNAPSHOT_ID, false);
 
@@ -360,17 +485,27 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
 	metadata.types.push_back(IcebergManifestList::FieldSummaryType());
 	metadata.field_ids.emplace_back("partitions", FieldSummaryFieldIds());
 
+	if (table_metadata.iceberg_version >= 2) {
+		// content: int - 517
+		AddSimpleColumn(metadata, "content", LogicalType::INTEGER, CONTENT, false);
+
+		// sequence_number: long - 515
+		AddSimpleColumn(metadata, "sequence_number", LogicalType::BIGINT, SEQUENCE_NUMBER, false);
+
+		// min_sequence_number: long - 516
+		AddSimpleColumn(metadata, "min_sequence_number", LogicalType::BIGINT, MIN_SEQUENCE_NUMBER, false);
+	}
+
 	if (table_metadata.iceberg_version >= 3) {
 		//! first_row_id: long - 520
-		metadata.names.push_back("first_row_id");
-		metadata.types.push_back(LogicalType::BIGINT);
-		metadata.field_ids.emplace_back("first_row_id", Value::INTEGER(FIRST_ROW_ID));
+		AddSimpleColumn(metadata, "first_row_id", LogicalType::BIGINT, FIRST_ROW_ID, true);
 	}
 
 	//! Populate the DataChunk with the manifests
 	auto &manifest_files = manifest_list.GetManifestFilesConst();
 	DataChunk data;
 	data.Initialize(allocator, metadata.types, manifest_files.size());
+	ManifestListVectorWriters writers(data, manifest_files.size());
 
 	idx_t next_row_id;
 	if (table_metadata.has_next_row_id) {
@@ -382,74 +517,7 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
 	for (idx_t i = 0; i < manifest_files.size(); i++) {
 		const auto &manifest_entry = manifest_files[i];
 		const auto &manifest = manifest_entry.file;
-		idx_t col_idx = 0;
-
-		// manifest_path: string - 500
-		data.data[col_idx++].Append(Value(manifest.manifest_path));
-
-		// manifest_length: long - 501
-		data.data[col_idx++].Append(Value::BIGINT(manifest.manifest_length));
-
-		// partition_spec_id: long - 502
-		data.data[col_idx++].Append(Value::BIGINT(manifest.partition_spec_id));
-
-		// content: int - 517
-		data.data[col_idx++].Append(Value::INTEGER(static_cast<int32_t>(manifest.content)));
-
-		// sequence_number: long - 515
-		data.data[col_idx++].Append(Value::BIGINT(manifest.sequence_number));
-
-		// min_sequence_number: long - 516
-		if (!manifest.has_min_sequence_number) {
-			//! Behavior copied from pyiceberg
-			data.data[col_idx++].Append(Value::BIGINT(-1));
-		} else {
-			data.data[col_idx++].Append(Value::BIGINT(manifest.min_sequence_number));
-		}
-
-		// added_snapshot_id: long - 503
-		data.data[col_idx++].Append(Value::BIGINT(manifest.added_snapshot_id));
-
-		// added_files_count: int - 504
-		data.data[col_idx++].Append(Value::INTEGER(manifest.added_files_count));
-
-		// existing_files_count: int - 505
-		data.data[col_idx++].Append(Value::INTEGER(manifest.existing_files_count));
-
-		// deleted_files_count: int - 506
-		data.data[col_idx++].Append(Value::INTEGER(manifest.deleted_files_count));
-
-		// added_rows_count: long - 512
-		data.data[col_idx++].Append(Value::BIGINT(static_cast<int64_t>(manifest.added_rows_count)));
-
-		// existing_rows_count: long - 513
-		data.data[col_idx++].Append(Value::BIGINT(static_cast<int64_t>(manifest.existing_rows_count)));
-
-		// deleted_rows_count: long - 514
-		data.data[col_idx++].Append(Value::BIGINT(static_cast<int64_t>(manifest.deleted_rows_count)));
-
-		// partitions: list<508: field_summary> - 507
-		data.data[col_idx++].Append(manifest.partitions.ToValue());
-
-		if (table_metadata.iceberg_version < 3) {
-			continue;
-		}
-
-		bool has_first_row_id = manifest.has_first_row_id;
-		int64_t first_row_id = manifest.first_row_id;
-		if (!has_first_row_id && manifest.content == IcebergManifestContentType::DATA) {
-			//! Assign first_row_id to old manifest_file entries
-			first_row_id = next_row_id;
-			has_first_row_id = true;
-			next_row_id += manifest.added_rows_count;
-			next_row_id += manifest.existing_rows_count;
-		}
-
-		if (has_first_row_id) {
-			data.data[col_idx++].Append(first_row_id);
-		} else {
-			data.data[col_idx++].Append(Value(LogicalType::BIGINT));
-		}
+		writers.WriteRow(manifest, table_metadata.iceberg_version >= 3 ? &next_row_id : nullptr);
 	}
 	data.SetChildCardinality(manifest_files.size());
 
