@@ -4,7 +4,6 @@
 
 #include "duckdb/common/vector/flat_vector.hpp"
 #include "duckdb/common/vector/struct_vector.hpp"
-#include "duckdb/storage/external_file_cache/caching_file_system.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 
 #include "catalog/rest/iceberg_table_set.hpp"
@@ -34,6 +33,13 @@ static void WriteInt64List(Int64ListWriter &writer, const vector<int64_t> &value
 static void WritePartitionStructRow(Vector &partition_vector, idx_t row_idx, const IcebergDataFile &data_file,
                                     const IcebergTableMetadata &table_metadata,
                                     const vector<IcebergExtendedPartitionInfo> &schema_partition_info);
+static void PopulateSourceIdToTypeMap(const vector<unique_ptr<IcebergColumnDefinition>> &columns,
+                                      unordered_map<uint64_t, const LogicalType *> &source_id_to_type) {
+	for (auto &col : columns) {
+		source_id_to_type.emplace(static_cast<uint64_t>(col->id), &col->type);
+		PopulateSourceIdToTypeMap(col->GetChildren(), source_id_to_type);
+	}
+}
 
 struct DataFileVectorWriters {
 	explicit DataFileVectorWriters(Vector &data_file_vector, idx_t row_count,
@@ -261,9 +267,7 @@ IcebergDataFile::GetExtendedPartitionInfo(const IcebergTableMetadata &metadata) 
 	// Build source_id -> LogicalType map from all schemas (schema evolution may spread columns).
 	unordered_map<uint64_t, const LogicalType *> source_id_to_type;
 	for (auto &schema_pair : metadata.GetSchemas()) {
-		for (auto &col : schema_pair.second->columns) {
-			source_id_to_type.emplace(static_cast<uint64_t>(col->id), &col->type);
-		}
+		PopulateSourceIdToTypeMap(schema_pair.second->columns, source_id_to_type);
 	}
 
 	// Build field_id -> (spec field, source_type) map from all partition specs.
@@ -563,6 +567,29 @@ static LogicalType PartitionStructType(vector<IcebergExtendedPartitionInfo> exte
 	return LogicalType::STRUCT(children);
 }
 
+static Value FieldIdsForMap(int32_t map_field_id, int32_t map_key_field_id, int32_t map_value_field_id) {
+	child_list_t<Value> members;
+	members.emplace_back("__duckdb_field_id", Value::INTEGER(map_field_id));
+
+	child_list_t<Value> map_key_members;
+	map_key_members.emplace_back("__duckdb_field_id", Value::INTEGER(map_key_field_id));
+	map_key_members.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
+	members.emplace_back("key", Value::STRUCT(map_key_members));
+
+	child_list_t<Value> map_value_members;
+	map_value_members.emplace_back("__duckdb_field_id", Value::INTEGER(map_value_field_id));
+	map_value_members.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
+	members.emplace_back("value", Value::STRUCT(map_value_members));
+	return Value::STRUCT(members);
+}
+
+static Value FieldIdsForList(int32_t list_field_id, int32_t element_field_id) {
+	child_list_t<Value> members;
+	members.emplace_back("list", CreateFieldID(element_field_id, false));
+	members.emplace_back("__duckdb_field_id", Value::INTEGER(list_field_id));
+	return Value::STRUCT(members);
+}
+
 idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManifestFile &manifest_file,
                   const vector<IcebergManifestEntry> &manifest_entries, CopyFunction &copy, DatabaseInstance &db,
                   ClientContext &context) {
@@ -633,126 +660,51 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	children.emplace_back("file_size_in_bytes", LogicalType::BIGINT);
 	data_file_field_ids.emplace_back("file_size_in_bytes", CreateFieldID(FILE_SIZE_IN_BYTES, false));
 
-	child_list_t<LogicalType> null_value_counts_fields;
-	null_value_counts_fields.emplace_back("key", LogicalType::INTEGER);
-	null_value_counts_fields.emplace_back("value", LogicalType::BIGINT);
+	child_list_t<LogicalType> map_int_long_fields;
+	map_int_long_fields.emplace_back("key", LogicalType::INTEGER);
+	map_int_long_fields.emplace_back("value", LogicalType::BIGINT);
 
 	// column_sizes: map<int, long>
-	children.emplace_back("column_sizes", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
-
-	child_list_t<Value> column_sizes_record_field_ids;
-	column_sizes_record_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(COLUMN_SIZES));
-	child_list_t<Value> column_sizes_key_field;
-	column_sizes_key_field.emplace_back("__duckdb_field_id", Value::INTEGER(COLUMN_SIZES_KEY));
-	column_sizes_key_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	column_sizes_record_field_ids.emplace_back("key", Value::STRUCT(column_sizes_key_field));
-	child_list_t<Value> column_sizes_value_field;
-	column_sizes_value_field.emplace_back("__duckdb_field_id", Value::INTEGER(COLUMN_SIZES_VALUE));
-	column_sizes_value_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	column_sizes_record_field_ids.emplace_back("value", Value::STRUCT(column_sizes_value_field));
-
-	data_file_field_ids.emplace_back("column_sizes", Value::STRUCT(column_sizes_record_field_ids));
+	children.emplace_back("column_sizes", LogicalType::MAP(LogicalType::STRUCT(map_int_long_fields)));
+	data_file_field_ids.emplace_back("column_sizes",
+	                                 FieldIdsForMap(COLUMN_SIZES, COLUMN_SIZES_KEY, COLUMN_SIZES_VALUE));
 
 	// value_counts: map<int, long>
-	children.emplace_back("value_counts", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
-
-	child_list_t<Value> value_counts_record_field_ids;
-	value_counts_record_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(VALUE_COUNTS));
-	child_list_t<Value> value_counts_key_field;
-	value_counts_key_field.emplace_back("__duckdb_field_id", Value::INTEGER(VALUE_COUNTS_KEY));
-	value_counts_key_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	value_counts_record_field_ids.emplace_back("key", Value::STRUCT(value_counts_key_field));
-	child_list_t<Value> value_counts_value_field;
-	value_counts_value_field.emplace_back("__duckdb_field_id", Value::INTEGER(VALUE_COUNTS_VALUE));
-	value_counts_value_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	value_counts_record_field_ids.emplace_back("value", Value::STRUCT(value_counts_value_field));
-
-	data_file_field_ids.emplace_back("value_counts", Value::STRUCT(value_counts_record_field_ids));
+	children.emplace_back("value_counts", LogicalType::MAP(LogicalType::STRUCT(map_int_long_fields)));
+	data_file_field_ids.emplace_back("value_counts",
+	                                 FieldIdsForMap(VALUE_COUNTS, VALUE_COUNTS_KEY, VALUE_COUNTS_VALUE));
 
 	// null_value_counts: map<int, long>
-	children.emplace_back("null_value_counts", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
-
-	child_list_t<Value> null_values_counts_record_field_ids;
-	null_values_counts_record_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(NULL_VALUE_COUNTS));
-	child_list_t<Value> null_value_counts_key_field;
-	null_value_counts_key_field.emplace_back("__duckdb_field_id", Value::INTEGER(NULL_VALUE_COUNTS_KEY));
-	null_value_counts_key_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	null_values_counts_record_field_ids.emplace_back("key", Value::STRUCT(null_value_counts_key_field));
-	child_list_t<Value> null_value_counts_value_field;
-	null_value_counts_value_field.emplace_back("__duckdb_field_id", Value::INTEGER(NULL_VALUE_COUNTS_VALUE));
-	null_value_counts_value_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	null_values_counts_record_field_ids.emplace_back("value", Value::STRUCT(null_value_counts_value_field));
-
-	data_file_field_ids.emplace_back("null_value_counts", Value::STRUCT(null_values_counts_record_field_ids));
+	children.emplace_back("null_value_counts", LogicalType::MAP(LogicalType::STRUCT(map_int_long_fields)));
+	data_file_field_ids.emplace_back("null_value_counts",
+	                                 FieldIdsForMap(NULL_VALUE_COUNTS, NULL_VALUE_COUNTS_KEY, NULL_VALUE_COUNTS_VALUE));
 
 	// nan_value_counts: map<int, long>
-	children.emplace_back("nan_value_counts", LogicalType::MAP(LogicalType::STRUCT(null_value_counts_fields)));
+	children.emplace_back("nan_value_counts", LogicalType::MAP(LogicalType::STRUCT(map_int_long_fields)));
+	data_file_field_ids.emplace_back("nan_value_counts",
+	                                 FieldIdsForMap(NAN_VALUE_COUNTS, NAN_VALUE_COUNTS_KEY, NAN_VALUE_COUNTS_VALUE));
 
-	child_list_t<Value> nan_value_counts_record_field_ids;
-	nan_value_counts_record_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(NAN_VALUE_COUNTS));
-	child_list_t<Value> nan_value_counts_key_field;
-	nan_value_counts_key_field.emplace_back("__duckdb_field_id", Value::INTEGER(NAN_VALUE_COUNTS_KEY));
-	nan_value_counts_key_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	nan_value_counts_record_field_ids.emplace_back("key", Value::STRUCT(nan_value_counts_key_field));
-	child_list_t<Value> nan_value_counts_value_field;
-	nan_value_counts_value_field.emplace_back("__duckdb_field_id", Value::INTEGER(NAN_VALUE_COUNTS_VALUE));
-	nan_value_counts_value_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	nan_value_counts_record_field_ids.emplace_back("value", Value::STRUCT(nan_value_counts_value_field));
-
-	data_file_field_ids.emplace_back("nan_value_counts", Value::STRUCT(nan_value_counts_record_field_ids));
-
-	// lower bounds struct
 	child_list_t<LogicalType> bounds_fields;
 	bounds_fields.emplace_back("key", LogicalType::INTEGER);
 	bounds_fields.emplace_back("value", LogicalType::BLOB);
+
 	// lower bounds: map<int, binary>
 	children.emplace_back("lower_bounds", LogicalType::MAP(LogicalType::STRUCT(bounds_fields)));
+	data_file_field_ids.emplace_back("lower_bounds",
+	                                 FieldIdsForMap(LOWER_BOUNDS, LOWER_BOUNDS_KEY, LOWER_BOUNDS_VALUE));
 
-	child_list_t<Value> lower_bound_record_field_ids;
-	lower_bound_record_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(LOWER_BOUNDS));
-	child_list_t<Value> lower_bounds_key_field;
-	lower_bounds_key_field.emplace_back("__duckdb_field_id", Value::INTEGER(LOWER_BOUNDS_KEY));
-	lower_bounds_key_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	lower_bound_record_field_ids.emplace_back("key", Value::STRUCT(lower_bounds_key_field));
-	child_list_t<Value> lower_bounds_value_field;
-	lower_bounds_value_field.emplace_back("__duckdb_field_id", Value::INTEGER(LOWER_BOUNDS_VALUE));
-	lower_bounds_value_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	lower_bound_record_field_ids.emplace_back("value", Value::STRUCT(lower_bounds_value_field));
-
-	data_file_field_ids.emplace_back("lower_bounds", Value::STRUCT(lower_bound_record_field_ids));
-
-	// upper bounds struct
-	// child_list_t<Value> upper_bounds_field_ids;
 	// upper bounds: map<int, binary>
 	children.emplace_back("upper_bounds", LogicalType::MAP(LogicalType::STRUCT(bounds_fields)));
+	data_file_field_ids.emplace_back("upper_bounds",
+	                                 FieldIdsForMap(UPPER_BOUNDS, UPPER_BOUNDS_KEY, UPPER_BOUNDS_VALUE));
 
-	child_list_t<Value> upper_bound_record_field_ids;
-	upper_bound_record_field_ids.emplace_back("__duckdb_field_id", Value::INTEGER(UPPER_BOUNDS));
-	child_list_t<Value> upper_bounds_key_field;
-	upper_bounds_key_field.emplace_back("__duckdb_field_id", Value::INTEGER(UPPER_BOUNDS_KEY));
-	upper_bounds_key_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	upper_bound_record_field_ids.emplace_back("key", Value::STRUCT(upper_bounds_key_field));
-	child_list_t<Value> upper_bounds_value_field;
-	upper_bounds_value_field.emplace_back("__duckdb_field_id", Value::INTEGER(UPPER_BOUNDS_VALUE));
-	upper_bounds_value_field.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
-	upper_bound_record_field_ids.emplace_back("value", Value::STRUCT(upper_bounds_value_field));
-
-	data_file_field_ids.emplace_back("upper_bounds", Value::STRUCT(upper_bound_record_field_ids));
 	// split_offsets: list<long>
 	children.emplace_back("split_offsets", LogicalType::LIST(LogicalType::BIGINT));
-
-	child_list_t<Value> split_offsets_list_field;
-	split_offsets_list_field.emplace_back("list", CreateFieldID(SPLIT_OFFSETS_ELEMENT, false));
-	split_offsets_list_field.emplace_back("__duckdb_field_id", Value::INTEGER(SPLIT_OFFSETS));
-	data_file_field_ids.emplace_back("split_offsets", Value::STRUCT(split_offsets_list_field));
+	data_file_field_ids.emplace_back("split_offsets", FieldIdsForList(SPLIT_OFFSETS, SPLIT_OFFSETS_ELEMENT));
 
 	// equality_ids: list<int> - the field-ids an equality-delete file applies to
 	children.emplace_back("equality_ids", LogicalType::LIST(LogicalType::INTEGER));
-
-	child_list_t<Value> equality_ids_list_field;
-	equality_ids_list_field.emplace_back("list", CreateFieldID(EQUALITY_IDS_ELEMENT, false));
-	equality_ids_list_field.emplace_back("__duckdb_field_id", Value::INTEGER(EQUALITY_IDS));
-	data_file_field_ids.emplace_back("equality_ids", Value::STRUCT(equality_ids_list_field));
+	data_file_field_ids.emplace_back("equality_ids", FieldIdsForList(EQUALITY_IDS, EQUALITY_IDS_ELEMENT));
 
 	// sort_order_id: optional int
 	children.emplace_back("sort_order_id", LogicalType::INTEGER);
@@ -794,38 +746,7 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	//! Populate the DataChunk with the data files
 
 	DataChunk chunk;
-	chunk.Initialize(allocator, types, manifest_entries.size());
-
-	auto status_writer = FlatVector::Writer<int32_t>(chunk.data[0], manifest_entries.size());
-	auto snapshot_id_writer = FlatVector::Writer<int64_t>(chunk.data[1], manifest_entries.size());
-	auto sequence_number_writer = FlatVector::Writer<int64_t>(chunk.data[2], manifest_entries.size());
-	auto file_sequence_number_writer = FlatVector::Writer<int64_t>(chunk.data[3], manifest_entries.size());
-	DataFileVectorWriters data_file_writers(chunk.data[4], manifest_entries.size(), table_metadata);
-
-	for (idx_t i = 0; i < manifest_entries.size(); i++) {
-		auto &manifest_entry = manifest_entries[i];
-		status_writer.WriteValue(static_cast<int32_t>(manifest_entry.status));
-		//! FIXME: this is missing logic, needs to be looked into
-		//! SPEC: Snapshot id where the file was added, or deleted if status is 2. Inherited when null.
-		// snapshot_id: long
-		if (manifest_entry.HasSnapshotId()) {
-			snapshot_id_writer.WriteValue(manifest_entry.GetSnapshotId());
-		} else {
-			snapshot_id_writer.WriteNull();
-		}
-		// sequence_number: long
-		// file_sequence_number: long
-		if (manifest_entry.status == IcebergManifestEntryStatusType::ADDED) {
-			sequence_number_writer.WriteNull();
-			file_sequence_number_writer.WriteNull();
-		} else {
-			sequence_number_writer.WriteValue(manifest_entry.GetSequenceNumber(manifest_file));
-			file_sequence_number_writer.WriteValue(manifest_entry.GetFileSequenceNumber(manifest_file));
-		}
-
-		data_file_writers.WriteRow(i, manifest_entry.data_file, extended_partition_info);
-	}
-	chunk.SetChildCardinality(manifest_entries.size());
+	chunk.Initialize(allocator, types, STANDARD_VECTOR_SIZE);
 
 	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> schema_doc_p(yyjson_mut_doc_new(nullptr));
 	auto schema_doc = schema_doc_p.get();
@@ -862,23 +783,61 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	CopyFunctionBindInput input(copy_info);
 	input.file_extension = "avro";
 
-	{
-		ThreadContext thread_context(context);
-		ExecutionContext execution_context(context, thread_context, nullptr);
-		auto bind_data = copy.copy_to_bind(context, input, names, types);
+	ThreadContext thread_context(context);
+	ExecutionContext execution_context(context, thread_context, nullptr);
+	auto bind_data = copy.copy_to_bind(context, input, names, types);
 
-		auto global_state = copy.copy_to_initialize_global(context, *bind_data, path);
-		auto local_state = copy.copy_to_initialize_local(execution_context, *bind_data);
+	auto global_state = copy.copy_to_initialize_global(context, *bind_data, path);
+	auto local_state = copy.copy_to_initialize_local(execution_context, *bind_data);
+	CopyFunctionFileStatistics stats;
+	copy.copy_to_get_written_statistics(context, *bind_data, *global_state, stats);
 
+	for (idx_t offset = 0; offset < manifest_entries.size(); offset += STANDARD_VECTOR_SIZE) {
+		const auto chunk_count = MinValue<idx_t>(STANDARD_VECTOR_SIZE, manifest_entries.size() - offset);
+		if (offset > 0) {
+			chunk.Reset();
+		}
+
+		auto status_writer = FlatVector::Writer<int32_t>(chunk.data[0], chunk_count);
+		auto snapshot_id_writer = FlatVector::Writer<int64_t>(chunk.data[1], chunk_count);
+		auto sequence_number_writer = FlatVector::Writer<int64_t>(chunk.data[2], chunk_count);
+		auto file_sequence_number_writer = FlatVector::Writer<int64_t>(chunk.data[3], chunk_count);
+		DataFileVectorWriters data_file_writers(chunk.data[4], chunk_count, table_metadata);
+
+		for (idx_t i = 0; i < chunk_count; i++) {
+			auto &manifest_entry = manifest_entries[offset + i];
+			status_writer.WriteValue(static_cast<int32_t>(manifest_entry.status));
+			//! FIXME: this is missing logic, needs to be looked into
+			//! SPEC: Snapshot id where the file was added, or deleted if status is 2. Inherited when null.
+			// snapshot_id: long
+			if (manifest_entry.HasSnapshotId()) {
+				snapshot_id_writer.WriteValue(manifest_entry.GetSnapshotId());
+			} else {
+				snapshot_id_writer.WriteNull();
+			}
+			// sequence_number: long
+			// file_sequence_number: long
+			if (manifest_entry.status == IcebergManifestEntryStatusType::ADDED) {
+				sequence_number_writer.WriteNull();
+				file_sequence_number_writer.WriteNull();
+			} else {
+				sequence_number_writer.WriteValue(manifest_entry.GetSequenceNumber(manifest_file));
+				file_sequence_number_writer.WriteValue(manifest_entry.GetFileSequenceNumber(manifest_file));
+			}
+
+			data_file_writers.WriteRow(i, manifest_entry.data_file, extended_partition_info);
+		}
+
+		chunk.SetChildCardinality(chunk_count);
 		copy.copy_to_sink(execution_context, *bind_data, *global_state, *local_state, chunk);
-		copy.copy_to_combine(execution_context, *bind_data, *global_state, *local_state);
-		copy.copy_to_finalize(context, *bind_data, *global_state);
 	}
-
-	auto file_system = CachingFileSystem::Get(context);
-	auto file_handle = file_system.OpenFile(path, FileOpenFlags::FILE_FLAGS_READ);
-	auto manifest_length = file_handle->GetFileSize();
-	return manifest_length;
+	copy.copy_to_combine(execution_context, *bind_data, *global_state, *local_state);
+	copy.copy_to_finalize(context, *bind_data, *global_state);
+	if (stats.row_count != manifest_entries.size()) {
+		throw InternalException("Avro copy for manifest failed, expected %d written, found only %d",
+		                        manifest_entries.size(), stats.row_count);
+	}
+	return stats.file_size_bytes;
 }
 
 } // namespace manifest_file

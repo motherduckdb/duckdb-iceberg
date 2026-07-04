@@ -58,23 +58,6 @@ void ManifestListReader::ReadChunk(DataChunk &chunk, idx_t iceberg_version, vect
 	auto &partition_spec_id = chunk.data[vector_index++];
 	auto partition_spec_id_entries = partition_spec_id.Values<int32_t>();
 
-	optional_ptr<Vector> content;
-	optional<VectorIterator<int32_t>> content_entries;
-
-	optional_ptr<Vector> sequence_number;
-	optional<VectorIterator<int64_t>> sequence_number_entries;
-
-	optional_ptr<Vector> min_sequence_number;
-	optional<VectorIterator<int64_t>> min_sequence_number_entries;
-	if (iceberg_version >= 2) {
-		content = chunk.data[vector_index++];
-		sequence_number = chunk.data[vector_index++];
-		min_sequence_number = chunk.data[vector_index++];
-		content_entries.emplace(content->Values<int32_t>());
-		sequence_number_entries.emplace(sequence_number->Values<int64_t>());
-		min_sequence_number_entries.emplace(min_sequence_number->Values<int64_t>());
-	}
-
 	auto &added_snapshot_id = chunk.data[vector_index++];
 	auto added_snapshot_id_entries = added_snapshot_id.Values<int64_t>();
 
@@ -100,6 +83,23 @@ void ManifestListReader::ReadChunk(DataChunk &chunk, idx_t iceberg_version, vect
 	auto &partitions = chunk.data[vector_index++];
 	auto partitions_entries = partitions.Values<VectorListType<VectorStructType<bool, bool, string_t, string_t>>>();
 
+	optional_ptr<Vector> content;
+	optional<VectorIterator<int32_t>> content_entries;
+
+	optional_ptr<Vector> sequence_number;
+	optional<VectorIterator<int64_t>> sequence_number_entries;
+
+	optional_ptr<Vector> min_sequence_number;
+	optional<VectorIterator<int64_t>> min_sequence_number_entries;
+	if (iceberg_version >= 2) {
+		content = chunk.data[vector_index++];
+		sequence_number = chunk.data[vector_index++];
+		min_sequence_number = chunk.data[vector_index++];
+		content_entries.emplace(content->Values<int32_t>());
+		sequence_number_entries.emplace(sequence_number->Values<int64_t>());
+		min_sequence_number_entries.emplace(min_sequence_number->Values<int64_t>());
+	}
+
 	optional_ptr<Vector> first_row_id;
 	optional<VectorIterator<int64_t>> first_row_id_entries;
 	if (iceberg_version >= 3) {
@@ -114,6 +114,15 @@ void ManifestListReader::ReadChunk(DataChunk &chunk, idx_t iceberg_version, vect
 		manifest.manifest_length = ReadRequiredField<int64_t>("manifest_length", manifest_length_entries[i]);
 		manifest.added_snapshot_id = ReadRequiredField<int64_t>("added_snapshot_id", added_snapshot_id_entries[i]);
 		manifest.partition_spec_id = ReadRequiredField<int32_t>("partition_spec_id", partition_spec_id_entries[i]);
+		manifest.added_files_count = ReadRequiredField<int32_t>("added_files_count", added_files_count_entries[i]);
+		manifest.existing_files_count =
+		    ReadRequiredField<int32_t>("existing_files_count", existing_files_count_entries[i]);
+		manifest.deleted_files_count =
+		    ReadRequiredField<int32_t>("deleted_files_count", deleted_files_count_entries[i]);
+		manifest.added_rows_count = ReadRequiredField<int64_t>("added_rows_count", added_rows_count_entries[i]);
+		manifest.existing_rows_count =
+		    ReadRequiredField<int64_t>("existing_rows_count", existing_rows_count_entries[i]);
+		manifest.deleted_rows_count = ReadRequiredField<int64_t>("deleted_rows_count", deleted_rows_count_entries[i]);
 		//! This flag is only used for writing, not for reading
 		manifest.has_min_sequence_number = true;
 
@@ -122,17 +131,6 @@ void ManifestListReader::ReadChunk(DataChunk &chunk, idx_t iceberg_version, vect
 			manifest.sequence_number = ReadRequiredField<int64_t>("sequence_number", (*sequence_number_entries)[i]);
 			manifest.min_sequence_number =
 			    ReadRequiredField<int64_t>("min_sequence_number", (*min_sequence_number_entries)[i]);
-			manifest.added_files_count = ReadRequiredField<int32_t>("added_files_count", added_files_count_entries[i]);
-			manifest.existing_files_count =
-			    ReadRequiredField<int32_t>("existing_files_count", existing_files_count_entries[i]);
-			manifest.deleted_files_count =
-			    ReadRequiredField<int32_t>("deleted_files_count", deleted_files_count_entries[i]);
-
-			manifest.added_rows_count = ReadRequiredField<int64_t>("added_rows_count", added_rows_count_entries[i]);
-			manifest.existing_rows_count =
-			    ReadRequiredField<int64_t>("existing_rows_count", existing_rows_count_entries[i]);
-			manifest.deleted_rows_count =
-			    ReadRequiredField<int64_t>("deleted_rows_count", deleted_rows_count_entries[i]);
 		} else {
 			//! SPEC: Manifest list field sequence-number must default to 0
 			manifest.sequence_number = 0;

@@ -43,7 +43,10 @@ set variable file_path = (
 );
 
 query II
-select id, sort_col from read_parquet(getvariable('file_path'), file_row_number=true) order by file_row_number;
+select id, sort_col
+from my_datalake.default.sort_identity_decimal_smallint
+where filename = getvariable('file_path')
+order by file_row_number;
 ----
 1	1.0
 2	1.0
