@@ -113,29 +113,41 @@ static bool IsMapType(string col_name, IcebergTableSchema &table_schema) {
 	return false;
 }
 
-static idx_t GetColumnIndexBySourceId(const vector<unique_ptr<IcebergColumnDefinition>> &columns, idx_t source_id) {
-	for (idx_t col_idx = 0; col_idx < columns.size(); col_idx++) {
-		if (columns[col_idx]->id == source_id) {
-			return col_idx;
-		}
+static vector<idx_t> GetColumnPath(const ColumnIndex &column_index) {
+	vector<idx_t> path;
+	path.reserve(column_index.ChildIndexCount());
+	for (auto &child_index : column_index.GetChildIndexes()) {
+		path.push_back(child_index.GetPrimaryIndex());
 	}
-	throw InvalidInputException("Partition source column with id %d not found in schema", source_id);
+	return path;
 }
 
-static string GetColumnNameBySourceId(const vector<unique_ptr<IcebergColumnDefinition>> &columns, idx_t source_id) {
-	for (idx_t col_idx = 0; col_idx < columns.size(); col_idx++) {
-		if (columns[col_idx]->id == source_id) {
-			return columns[col_idx]->name;
-		}
+static ColumnIndex GetColumnIndexBySourceId(const IcebergTableSchema &schema, idx_t source_id) {
+	auto column_index = schema.TryGetColumnIndexByFieldId(source_id);
+	if (!column_index) {
+		throw InvalidInputException("Partition source column with id %d not found in schema", source_id);
 	}
-	throw InvalidInputException("Partition source column with id %d not found in schema", source_id);
+	return *column_index;
+}
+
+static bool IsTopLevelColumnSourceId(const IcebergTableSchema &schema, idx_t source_id) {
+	auto column_index = GetColumnIndexBySourceId(schema, source_id);
+	return column_index.ChildIndexCount() == 0;
+}
+
+static string GetColumnNameBySourceId(const IcebergTableSchema &schema, idx_t source_id) {
+	return schema.GetColumnByFieldId(source_id).name;
 }
 
 //! Check if all partition fields use identity transforms
-static bool AllIdentityTransforms(const IcebergPartitionSpec &spec) {
+static bool CanWriteIdentityPartitionsDirectly(const IcebergPartitionSpec &spec, const IcebergTableSchema &schema) {
 	for (auto &field : spec.fields) {
 		if (field.transform.Type() != IcebergTransformType::IDENTITY &&
 		    field.transform.Type() != IcebergTransformType::VOID) {
+			return false;
+		}
+		if (field.transform.Type() == IcebergTransformType::IDENTITY &&
+		    !IsTopLevelColumnSourceId(schema, field.source_id)) {
 			return false;
 		}
 	}
@@ -222,13 +234,13 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 		// But if there are only identity transforms, we don't add a projection to the insert, so we can just use
 		// regular column names. So here when we populate our map, if there are transforms present, we need to use our
 		// transform partition column names. If not, we should use the identify names.
-		if (!AllIdentityTransforms(ic_partition_info)) {
+		if (!CanWriteIdentityPartitionsDirectly(ic_partition_info, *ic_schema)) {
 			for (auto &partition_field : ic_partition_info.fields) {
 				partition_colname_to_field.emplace(partition_field.GetPartitionSpecFieldName(), partition_field);
 			}
 		} else {
 			for (auto &partition_field : ic_partition_info.fields) {
-				auto actual_col_name = GetColumnNameBySourceId(ic_schema->columns, partition_field.source_id);
+				auto actual_col_name = GetColumnNameBySourceId(*ic_schema, partition_field.source_id);
 				partition_colname_to_field.emplace(actual_col_name, partition_field);
 			}
 		}
@@ -545,17 +557,6 @@ static Value WrittenFieldIds(const IcebergCopyInput &copy_input) {
 // Partition Expression Generation
 //===--------------------------------------------------------------------===//
 
-//! Get the logical type for a source column by source_id
-static LogicalType GetSourceColumnType(const IcebergCopyInput &copy_input, uint64_t source_id) {
-	auto &columns = copy_input.schema.columns;
-	for (auto &col : columns) {
-		if (col->id == static_cast<int32_t>(source_id)) {
-			return col->type;
-		}
-	}
-	throw InvalidInputException("Partition source column with id %d not found in schema", source_id);
-}
-
 //! Create a column reference expression for the given column index
 static unique_ptr<Expression> CreateColumnReference(const IcebergCopyInput &copy_input, const LogicalType &type,
                                                     idx_t column_index) {
@@ -566,6 +567,28 @@ static unique_ptr<Expression> CreateColumnReference(const IcebergCopyInput &copy
 	}
 	// physical plan generation: generate a reference directly
 	return make_uniq<BoundReferenceExpression>(type, column_index);
+}
+
+static unique_ptr<Expression> CreateSourceColumnReference(ClientContext &context, const IcebergCopyInput &copy_input,
+                                                          uint64_t source_id) {
+	auto column_index = GetColumnIndexBySourceId(copy_input.schema, source_id);
+	auto primary_index = column_index.GetPrimaryIndex();
+	auto &root_column = *copy_input.schema.columns[primary_index];
+	auto result = CreateColumnReference(copy_input, root_column.type, primary_index);
+	for (auto &child_index : GetColumnPath(column_index)) {
+		vector<unique_ptr<Expression>> children;
+		children.push_back(std::move(result));
+		children.push_back(make_uniq<BoundConstantExpression>(Value::BIGINT(NumericCast<int64_t>(child_index + 1))));
+
+		ErrorData error;
+		FunctionBinder binder(context);
+		result = binder.BindScalarFunction(Identifier::DefaultSchema(), Identifier("struct_extract_at"),
+		                                   std::move(children), error, false);
+		if (!result) {
+			error.Throw();
+		}
+	}
+	return result;
 }
 
 static unique_ptr<Expression> BindTransformFunction(ClientContext &context, const string &name,
@@ -587,8 +610,6 @@ static unique_ptr<Expression> BindTransformFunction(ClientContext &context, cons
 //! - hours: date_diff('hour', TIMESTAMP '1970-01-01', source_column)
 static unique_ptr<Expression> GetDateDiffFunction(ClientContext &context, const IcebergCopyInput &copy_input,
                                                   const string &date_part, uint64_t source_id) {
-	auto col_idx = GetColumnIndexBySourceId(copy_input.schema.columns, source_id);
-	auto col_type = GetSourceColumnType(copy_input, source_id);
 	vector<unique_ptr<Expression>> children;
 	children.push_back(make_uniq<BoundConstantExpression>(Value(date_part)));
 	if (date_part == "hour") {
@@ -596,29 +617,25 @@ static unique_ptr<Expression> GetDateDiffFunction(ClientContext &context, const 
 	} else {
 		children.push_back(make_uniq<BoundConstantExpression>(Value::DATE(Date::FromDate(1970, 1, 1))));
 	}
-	children.push_back(CreateColumnReference(copy_input, col_type, col_idx));
+	children.push_back(CreateSourceColumnReference(context, copy_input, source_id));
 	return BindTransformFunction(context, "date_diff", std::move(children));
 }
 
 static unique_ptr<Expression> GetBucketExpression(ClientContext &context, const IcebergCopyInput &copy_input,
                                                   uint64_t source_id, const IcebergTransform &transform) {
-	auto col_idx = GetColumnIndexBySourceId(copy_input.schema.columns, source_id);
-	auto col_type = GetSourceColumnType(copy_input, source_id);
 	vector<unique_ptr<Expression>> children;
 	children.push_back(
 	    make_uniq<BoundConstantExpression>(Value::INTEGER(static_cast<int32_t>(transform.GetBucketModulo()))));
-	children.push_back(CreateColumnReference(copy_input, col_type, col_idx));
+	children.push_back(CreateSourceColumnReference(context, copy_input, source_id));
 	return BindTransformFunction(context, "iceberg_bucket", std::move(children));
 }
 
 static unique_ptr<Expression> GetTruncateExpression(ClientContext &context, const IcebergCopyInput &copy_input,
                                                     uint64_t source_id, const IcebergTransform &transform) {
-	auto col_idx = GetColumnIndexBySourceId(copy_input.schema.columns, source_id);
-	auto col_type = GetSourceColumnType(copy_input, source_id);
 	vector<unique_ptr<Expression>> children;
 	children.push_back(
 	    make_uniq<BoundConstantExpression>(Value::INTEGER(static_cast<int32_t>(transform.GetTruncateWidth()))));
-	children.push_back(CreateColumnReference(copy_input, col_type, col_idx));
+	children.push_back(CreateSourceColumnReference(context, copy_input, source_id));
 	return BindTransformFunction(context, "iceberg_truncate", std::move(children));
 }
 
@@ -627,9 +644,7 @@ static unique_ptr<Expression> GetTransformExpression(ClientContext &context, con
                                                      const char *usage) {
 	switch (transform.Type()) {
 	case IcebergTransformType::IDENTITY: {
-		auto col_idx = GetColumnIndexBySourceId(copy_input.schema.columns, source_id);
-		auto col_type = GetSourceColumnType(copy_input, source_id);
-		return CreateColumnReference(copy_input, col_type, col_idx);
+		return CreateSourceColumnReference(context, copy_input, source_id);
 	}
 	case IcebergTransformType::YEAR:
 		return GetDateDiffFunction(context, copy_input, "year", source_id);
@@ -698,14 +713,14 @@ static void GeneratePartitionExpressions(ClientContext &context, const IcebergCo
 	auto &projection_types = result.expected_types;
 	auto &write_partition_columns = result.write_partition_columns;
 
-	if (AllIdentityTransforms(spec)) {
+	if (CanWriteIdentityPartitionsDirectly(spec, copy_input.schema)) {
 		// All transforms are identity - we can partition on the columns directly
 		// Just set up the correct references to the partition columns
 		for (auto &field : spec.fields) {
 			if (field.transform.Type() == IcebergTransformType::VOID) {
 				continue;
 			}
-			auto col_idx = GetColumnIndexBySourceId(copy_input.schema.columns, field.source_id);
+			auto col_idx = GetColumnIndexBySourceId(copy_input.schema, field.source_id).GetPrimaryIndex();
 			partition_columns.push_back(col_idx);
 		}
 		write_partition_columns = true;

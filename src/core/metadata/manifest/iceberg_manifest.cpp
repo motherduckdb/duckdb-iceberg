@@ -34,6 +34,13 @@ static void WriteInt64List(Int64ListWriter &writer, const vector<int64_t> &value
 static void WritePartitionStructRow(Vector &partition_vector, idx_t row_idx, const IcebergDataFile &data_file,
                                     const IcebergTableMetadata &table_metadata,
                                     const vector<IcebergExtendedPartitionInfo> &schema_partition_info);
+static void PopulateSourceIdToTypeMap(const vector<unique_ptr<IcebergColumnDefinition>> &columns,
+                                      unordered_map<uint64_t, const LogicalType *> &source_id_to_type) {
+	for (auto &col : columns) {
+		source_id_to_type.emplace(static_cast<uint64_t>(col->id), &col->type);
+		PopulateSourceIdToTypeMap(col->GetChildren(), source_id_to_type);
+	}
+}
 
 struct DataFileVectorWriters {
 	explicit DataFileVectorWriters(Vector &data_file_vector, idx_t row_count,
@@ -261,9 +268,7 @@ IcebergDataFile::GetExtendedPartitionInfo(const IcebergTableMetadata &metadata) 
 	// Build source_id -> LogicalType map from all schemas (schema evolution may spread columns).
 	unordered_map<uint64_t, const LogicalType *> source_id_to_type;
 	for (auto &schema_pair : metadata.GetSchemas()) {
-		for (auto &col : schema_pair.second->columns) {
-			source_id_to_type.emplace(static_cast<uint64_t>(col->id), &col->type);
-		}
+		PopulateSourceIdToTypeMap(schema_pair.second->columns, source_id_to_type);
 	}
 
 	// Build field_id -> (spec field, source_type) map from all partition specs.

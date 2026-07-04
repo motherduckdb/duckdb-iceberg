@@ -182,3 +182,47 @@ SELECT
 FROM iceberg_load_table_response(my_datalake.default.test_set_sorted_by_reuse);
 ----
 2	3
+
+statement ok
+drop table if exists my_datalake.default.test_set_sorted_by_struct_fields;
+
+statement ok
+CREATE TABLE my_datalake.default.test_set_sorted_by_struct_fields (
+	id INTEGER,
+	payload STRUCT(
+		category VARCHAR,
+		nested STRUCT(ts TIMESTAMP)
+	)
+);
+
+statement ok
+ALTER TABLE my_datalake.default.test_set_sorted_by_struct_fields SET SORTED BY (
+	payload.category ASC NULLS LAST
+);
+
+query TTT
+SELECT
+	sort_order.fields[1].transform,
+	sort_order.fields[1].direction,
+	sort_order.fields[1]."null-order"
+FROM iceberg_load_table_response(my_datalake.default.test_set_sorted_by_struct_fields),
+unnest(metadata."sort-orders"::VARIANT[]) AS t(sort_order)
+WHERE try_cast(sort_order."order-id" AS INTEGER) = metadata."default-sort-order-id";
+----
+identity	asc	nulls-last
+
+statement ok
+ALTER TABLE my_datalake.default.test_set_sorted_by_struct_fields SET SORTED BY (
+	year(payload.nested.ts) DESC NULLS FIRST
+);
+
+query TTT
+SELECT
+	sort_order.fields[1].transform,
+	sort_order.fields[1].direction,
+	sort_order.fields[1]."null-order"
+FROM iceberg_load_table_response(my_datalake.default.test_set_sorted_by_struct_fields),
+unnest(metadata."sort-orders"::VARIANT[]) AS t(sort_order)
+WHERE try_cast(sort_order."order-id" AS INTEGER) = metadata."default-sort-order-id";
+----
+year	desc	nulls-first
