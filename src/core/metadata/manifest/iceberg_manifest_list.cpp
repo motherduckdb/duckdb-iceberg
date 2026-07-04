@@ -504,8 +504,7 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
 	//! Populate the DataChunk with the manifests
 	auto &manifest_files = manifest_list.GetManifestFilesConst();
 	DataChunk data;
-	data.Initialize(allocator, metadata.types, manifest_files.size());
-	ManifestListVectorWriters writers(data, manifest_files.size());
+	data.Initialize(allocator, metadata.types, STANDARD_VECTOR_SIZE);
 
 	idx_t next_row_id;
 	if (table_metadata.has_next_row_id) {
@@ -513,13 +512,6 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
 	} else {
 		next_row_id = 0;
 	}
-
-	for (idx_t i = 0; i < manifest_files.size(); i++) {
-		const auto &manifest_entry = manifest_files[i];
-		const auto &manifest = manifest_entry.file;
-		writers.WriteRow(manifest, table_metadata.iceberg_version >= 3 ? &next_row_id : nullptr);
-	}
-	data.SetChildCardinality(manifest_files.size());
 
 	CopyInfo copy_info;
 	copy_info.is_from = false;
@@ -544,7 +536,22 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
 	auto global_state = copy.copy_to_initialize_global(context, *bind_data, manifest_list.GetPath());
 	auto local_state = copy.copy_to_initialize_local(execution_context, *bind_data);
 
-	copy.copy_to_sink(execution_context, *bind_data, *global_state, *local_state, data);
+	for (idx_t offset = 0; offset < manifest_files.size(); offset += STANDARD_VECTOR_SIZE) {
+		const auto chunk_count = MinValue<idx_t>(STANDARD_VECTOR_SIZE, manifest_files.size() - offset);
+		if (offset > 0) {
+			data.Reset();
+		}
+
+		ManifestListVectorWriters writers(data, chunk_count);
+		for (idx_t i = 0; i < chunk_count; i++) {
+			const auto &manifest_entry = manifest_files[offset + i];
+			const auto &manifest = manifest_entry.file;
+			writers.WriteRow(manifest, table_metadata.iceberg_version >= 3 ? &next_row_id : nullptr);
+		}
+
+		data.SetChildCardinality(chunk_count);
+		copy.copy_to_sink(execution_context, *bind_data, *global_state, *local_state, data);
+	}
 	copy.copy_to_combine(execution_context, *bind_data, *global_state, *local_state);
 	copy.copy_to_finalize(context, *bind_data, *global_state);
 }
