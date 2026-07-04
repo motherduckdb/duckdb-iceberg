@@ -4,7 +4,6 @@
 
 #include "duckdb/common/vector/flat_vector.hpp"
 #include "duckdb/common/vector/struct_vector.hpp"
-#include "duckdb/storage/external_file_cache/caching_file_system.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 
 #include "catalog/rest/iceberg_table_set.hpp"
@@ -747,38 +746,7 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	//! Populate the DataChunk with the data files
 
 	DataChunk chunk;
-	chunk.Initialize(allocator, types, manifest_entries.size());
-
-	auto status_writer = FlatVector::Writer<int32_t>(chunk.data[0], manifest_entries.size());
-	auto snapshot_id_writer = FlatVector::Writer<int64_t>(chunk.data[1], manifest_entries.size());
-	auto sequence_number_writer = FlatVector::Writer<int64_t>(chunk.data[2], manifest_entries.size());
-	auto file_sequence_number_writer = FlatVector::Writer<int64_t>(chunk.data[3], manifest_entries.size());
-	DataFileVectorWriters data_file_writers(chunk.data[4], manifest_entries.size(), table_metadata);
-
-	for (idx_t i = 0; i < manifest_entries.size(); i++) {
-		auto &manifest_entry = manifest_entries[i];
-		status_writer.WriteValue(static_cast<int32_t>(manifest_entry.status));
-		//! FIXME: this is missing logic, needs to be looked into
-		//! SPEC: Snapshot id where the file was added, or deleted if status is 2. Inherited when null.
-		// snapshot_id: long
-		if (manifest_entry.HasSnapshotId()) {
-			snapshot_id_writer.WriteValue(manifest_entry.GetSnapshotId());
-		} else {
-			snapshot_id_writer.WriteNull();
-		}
-		// sequence_number: long
-		// file_sequence_number: long
-		if (manifest_entry.status == IcebergManifestEntryStatusType::ADDED) {
-			sequence_number_writer.WriteNull();
-			file_sequence_number_writer.WriteNull();
-		} else {
-			sequence_number_writer.WriteValue(manifest_entry.GetSequenceNumber(manifest_file));
-			file_sequence_number_writer.WriteValue(manifest_entry.GetFileSequenceNumber(manifest_file));
-		}
-
-		data_file_writers.WriteRow(i, manifest_entry.data_file, extended_partition_info);
-	}
-	chunk.SetChildCardinality(manifest_entries.size());
+	chunk.Initialize(allocator, types, STANDARD_VECTOR_SIZE);
 
 	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> schema_doc_p(yyjson_mut_doc_new(nullptr));
 	auto schema_doc = schema_doc_p.get();
@@ -815,23 +783,61 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	CopyFunctionBindInput input(copy_info);
 	input.file_extension = "avro";
 
-	{
-		ThreadContext thread_context(context);
-		ExecutionContext execution_context(context, thread_context, nullptr);
-		auto bind_data = copy.copy_to_bind(context, input, names, types);
+	ThreadContext thread_context(context);
+	ExecutionContext execution_context(context, thread_context, nullptr);
+	auto bind_data = copy.copy_to_bind(context, input, names, types);
 
-		auto global_state = copy.copy_to_initialize_global(context, *bind_data, path);
-		auto local_state = copy.copy_to_initialize_local(execution_context, *bind_data);
+	auto global_state = copy.copy_to_initialize_global(context, *bind_data, path);
+	auto local_state = copy.copy_to_initialize_local(execution_context, *bind_data);
+	CopyFunctionFileStatistics stats;
+	copy.copy_to_get_written_statistics(context, *bind_data, *global_state, stats);
 
+	for (idx_t offset = 0; offset < manifest_entries.size(); offset += STANDARD_VECTOR_SIZE) {
+		const auto chunk_count = MinValue<idx_t>(STANDARD_VECTOR_SIZE, manifest_entries.size() - offset);
+		if (offset > 0) {
+			chunk.Reset();
+		}
+
+		auto status_writer = FlatVector::Writer<int32_t>(chunk.data[0], chunk_count);
+		auto snapshot_id_writer = FlatVector::Writer<int64_t>(chunk.data[1], chunk_count);
+		auto sequence_number_writer = FlatVector::Writer<int64_t>(chunk.data[2], chunk_count);
+		auto file_sequence_number_writer = FlatVector::Writer<int64_t>(chunk.data[3], chunk_count);
+		DataFileVectorWriters data_file_writers(chunk.data[4], chunk_count, table_metadata);
+
+		for (idx_t i = 0; i < chunk_count; i++) {
+			auto &manifest_entry = manifest_entries[offset + i];
+			status_writer.WriteValue(static_cast<int32_t>(manifest_entry.status));
+			//! FIXME: this is missing logic, needs to be looked into
+			//! SPEC: Snapshot id where the file was added, or deleted if status is 2. Inherited when null.
+			// snapshot_id: long
+			if (manifest_entry.HasSnapshotId()) {
+				snapshot_id_writer.WriteValue(manifest_entry.GetSnapshotId());
+			} else {
+				snapshot_id_writer.WriteNull();
+			}
+			// sequence_number: long
+			// file_sequence_number: long
+			if (manifest_entry.status == IcebergManifestEntryStatusType::ADDED) {
+				sequence_number_writer.WriteNull();
+				file_sequence_number_writer.WriteNull();
+			} else {
+				sequence_number_writer.WriteValue(manifest_entry.GetSequenceNumber(manifest_file));
+				file_sequence_number_writer.WriteValue(manifest_entry.GetFileSequenceNumber(manifest_file));
+			}
+
+			data_file_writers.WriteRow(i, manifest_entry.data_file, extended_partition_info);
+		}
+
+		chunk.SetChildCardinality(chunk_count);
 		copy.copy_to_sink(execution_context, *bind_data, *global_state, *local_state, chunk);
-		copy.copy_to_combine(execution_context, *bind_data, *global_state, *local_state);
-		copy.copy_to_finalize(context, *bind_data, *global_state);
 	}
-
-	auto file_system = CachingFileSystem::Get(context);
-	auto file_handle = file_system.OpenFile(path, FileOpenFlags::FILE_FLAGS_READ);
-	auto manifest_length = file_handle->GetFileSize();
-	return manifest_length;
+	copy.copy_to_combine(execution_context, *bind_data, *global_state, *local_state);
+	copy.copy_to_finalize(context, *bind_data, *global_state);
+	if (stats.row_count != manifest_entries.size()) {
+		throw InternalException("Avro copy for manifest failed, expected %d written, found only %d",
+		                        manifest_entries.size(), stats.row_count);
+	}
+	return stats.file_size_bytes;
 }
 
 } // namespace manifest_file
