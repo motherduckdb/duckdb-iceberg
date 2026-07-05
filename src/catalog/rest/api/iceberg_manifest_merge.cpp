@@ -6,9 +6,12 @@
 
 #include "catalog/rest/api/iceberg_table_update.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/api/catalog_utils.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
 #include "planning/metadata_io/avro/avro_scan.hpp"
 #include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
+
+#include "yyjson.hpp"
 
 #include <algorithm>
 #include <string>
@@ -55,6 +58,46 @@ T ParseIntProperty(const string &value, T fallback) {
 	} catch (...) {
 		return fallback;
 	}
+}
+
+//! Resolve the schema id a manifest was written under, so that only manifests sharing a schema are
+//! ever merged. The schema id drives the data_file.partition layout and column stats, so mixing
+//! schemas can drop or misalign stats. Resolution order (per the Iceberg spec's manifest key-value
+//! metadata):
+//!  1. the "schema-id" key, if present;
+//!  2. otherwise parse the "schema" key (a full schema JSON) and read its "schema-id" -- the
+//!     reference implementations (Java/PyIceberg) populate only "schema", not "schema-id";
+//!  3. otherwise (no metadata at all -- e.g. manifests we create for this transaction do not yet
+//!     carry key-value metadata) assume the table's current schema id.
+int32_t ResolveManifestSchemaId(const IcebergManifestListEntry &entry, int32_t current_schema_id) {
+	using namespace duckdb_yyjson;
+
+	auto id_it = entry.metadata.find("schema-id");
+	if (id_it != entry.metadata.end() && !id_it->second.empty()) {
+		try {
+			return static_cast<int32_t>(std::stoi(id_it->second));
+		} catch (...) {
+			//! Malformed; fall through to the schema JSON / current-schema fallbacks.
+		}
+	}
+
+	auto schema_it = entry.metadata.find("schema");
+	if (schema_it != entry.metadata.end() && !schema_it->second.empty()) {
+		const string &schema_json = schema_it->second;
+		auto doc =
+		    std::unique_ptr<yyjson_doc, YyjsonDocDeleter>(yyjson_read(schema_json.c_str(), schema_json.size(), 0));
+		if (doc) {
+			auto root = yyjson_doc_get_root(doc.get());
+			if (root) {
+				auto schema_id_val = yyjson_obj_get(root, "schema-id");
+				if (schema_id_val && yyjson_is_int(schema_id_val)) {
+					return static_cast<int32_t>(yyjson_get_int(schema_id_val));
+				}
+			}
+		}
+	}
+
+	return current_schema_id;
 }
 
 } // namespace
@@ -293,7 +336,7 @@ IcebergManifestListEntry MergeBin(const vector<MergeInputManifest> &input, const
 vector<IcebergManifestListEntry> MergeManifests(vector<MergeInputManifest> &&input, IcebergManifestContentType content,
                                                 const ManifestMergeConfig &config, CopyFunction &avro_copy,
                                                 DatabaseInstance &db, IcebergCommitState &commit_state,
-                                                int32_t schema_id, int64_t snapshot_id) {
+                                                int32_t current_schema_id, int64_t snapshot_id) {
 	vector<IcebergManifestListEntry> result;
 	if (!config.enabled || input.size() <= 1) {
 		for (auto &member : input) {
@@ -302,18 +345,38 @@ vector<IcebergManifestListEntry> MergeManifests(vector<MergeInputManifest> &&inp
 		return result;
 	}
 
-	//! Group by partition spec id: only manifests with the same spec may be merged together.
-	map<int32_t, vector<idx_t>> by_spec;
-	for (idx_t i = 0; i < input.size(); i++) {
-		by_spec[input[i].entry.file.partition_spec_id].push_back(i);
+	//! Group by (schema id, partition spec id): only manifests sharing BOTH may be merged together.
+	//! The schema id governs the data_file.partition layout and column statistics, so merging across
+	//! schemas could drop or misalign stats; the partition spec id governs the partition tuple
+	//! itself. Grouping is ordered (map) so the output manifest order is deterministic regardless of
+	//! input order.
+	//!
+	//! A manifest's schema id lives in its Avro header key-value metadata, which is only materialized
+	//! once the manifest file is opened. Carried-over manifests reach this point via the manifest
+	//! LIST read only (their `metadata` is empty), so we open each one here -- reading its entries at
+	//! the same time -- and resolve the schema id from the now-populated metadata (falling back to
+	//! the current schema id when the reference implementation omitted it). Reading entries now is
+	//! not wasted work: MergeBin reuses the already-loaded entries instead of opening the file again.
+	for (auto &member : input) {
+		if (member.entry.manifest_entries.empty()) {
+			member.entry = ScanManifestEntries(member.entry, commit_state, current_schema_id);
+		}
 	}
 
-	for (auto &spec_group : by_spec) {
-		auto spec_id = spec_group.first;
-		auto &group_indices = spec_group.second;
+	map<std::pair<int32_t, int32_t>, vector<idx_t>> groups;
+	for (idx_t i = 0; i < input.size(); i++) {
+		auto schema_id = ResolveManifestSchemaId(input[i].entry, current_schema_id);
+		auto spec_id = input[i].entry.file.partition_spec_id;
+		groups[std::make_pair(schema_id, spec_id)].push_back(i);
+	}
 
-		//! Bin-pack using manifest-file-level lengths only (no entries read yet -- decide first, read
-		//! later). Indices in `bins` are into `group_indices`.
+	for (auto &group : groups) {
+		auto schema_id = group.first.first;
+		auto spec_id = group.first.second;
+		auto &group_indices = group.second;
+
+		//! Bin-pack using manifest-file-level lengths only. Indices in `bins` are into
+		//! `group_indices`.
 		vector<int64_t> weights;
 		weights.reserve(group_indices.size());
 		for (auto idx : group_indices) {

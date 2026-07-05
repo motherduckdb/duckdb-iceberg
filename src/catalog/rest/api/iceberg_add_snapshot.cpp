@@ -163,14 +163,11 @@ void IcebergAddSnapshot::MergeManifestList(IcebergManifestList &new_manifest_lis
 	}
 
 	//! Merging manifests written under different schema ids is unsafe: the schema id determines the
-	//! data_file.partition layout and column stats, so mixing them can drop or misalign stats. A
-	//! manifest_file does not currently expose its schema id (that needs #1129), so until then we
-	//! only merge when the table has a single schema -- then every manifest is unambiguously that
-	//! schema. Tables that have gone through schema evolution skip merging for now.
-	if (commit_state.table_info.table_metadata.GetSchemas().size() > 1) {
-		return;
-	}
-
+	//! data_file.partition layout and column stats, so mixing them can drop or misalign stats.
+	//! MergeManifests therefore groups manifests by their resolved (schema id, partition spec id)
+	//! and only merges within a group; the schema id is read from each manifest's key-value metadata
+	//! (see ResolveManifestSchemaId), so tables that have gone through schema evolution still merge
+	//! correctly, per schema.
 	auto &entries = new_manifest_list.GetManifestFilesMutable();
 	if (entries.size() <= 1) {
 		return;

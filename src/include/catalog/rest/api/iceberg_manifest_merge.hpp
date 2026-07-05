@@ -43,16 +43,19 @@ vector<vector<idx_t>> BinPackManifests(const vector<int64_t> &weights, int64_t t
 IcebergManifestListEntry ScanManifestEntries(const IcebergManifestListEntry &list_entry,
                                              IcebergCommitState &commit_state, int32_t schema_id);
 
-//! Decide whether a bin should be physically merged into a single manifest.
-//!  - a single-manifest bin is never merged
-//!  - a bin that contains a new-this-transaction manifest is merged only once it reaches
-//!    `min_count_to_merge` (avoids repeatedly rewriting small new manifests)
-//!  - any other multi-manifest bin is merged
-bool ShouldMergeBin(const vector<MergeInputManifest> &input, const vector<idx_t> &bin, idx_t min_count_to_merge);
+//! Decide whether a bin should be physically merged into a single manifest:
+//!  - a single-manifest bin is never merged;
+//!  - a bin is merged only once it holds at least `min_count_to_merge` manifests (Apache Iceberg's
+//!    ManifestMergeManager semantics), so under-filled bins are left alone until enough small
+//!    manifests accumulate.
+bool ShouldMergeBin(const vector<idx_t> &bin, idx_t min_count_to_merge);
 
 //! Merge a set of manifests of a single content type (DATA or DELETE; the two are never mixed).
-//! Bins selected for merge have their entries read and rewritten into a single new manifest;
-//! everything else is passed through unchanged. Returns the resulting manifest-list entries.
+//! Manifests are grouped by (schema id, partition spec id) -- each manifest's schema id is resolved
+//! from its key-value metadata, falling back to `current_schema_id` when absent -- and only
+//! manifests sharing both are candidates to merge. Bins selected for merge have their entries read
+//! and rewritten into a single new manifest; everything else is passed through unchanged. Returns
+//! the resulting manifest-list entries.
 //!
 //! Sequence-number rules: entries pulled from already-committed manifests keep
 //! their original (historical) sequence numbers and are written EXISTING; entries that are new in
@@ -62,6 +65,6 @@ bool ShouldMergeBin(const vector<MergeInputManifest> &input, const vector<idx_t>
 vector<IcebergManifestListEntry> MergeManifests(vector<MergeInputManifest> &&input, IcebergManifestContentType content,
                                                 const ManifestMergeConfig &config, CopyFunction &avro_copy,
                                                 DatabaseInstance &db, IcebergCommitState &commit_state,
-                                                int32_t schema_id, int64_t snapshot_id);
+                                                int32_t current_schema_id, int64_t snapshot_id);
 
 } // namespace duckdb
