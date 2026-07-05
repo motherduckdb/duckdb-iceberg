@@ -100,14 +100,16 @@ insert into my_datalake.default.mm_nested_none VALUES (
     MAP(['abcdefghijklmnop'], ['abcdefghijklmnop'])
 );
 
-query III
-select column_name, lower_bound IS NULL, value_count IS NULL from iceberg_column_stats(my_datalake.default.mm_nested_none)
-where column_name in ('sf', 'element', 'key', 'value') order by column_name;
+statement ok
+set variable nested_none_mp = (select manifest_path from iceberg_metadata(my_datalake.default.mm_nested_none) order by manifest_sequence_number desc limit 1);
+
+# none writes no metrics at all: no bounds and no value_counts for any column.
+query II
+select
+    (select count(*) from (select unnest(map_keys(lower_bounds)) k from (select unnest(data_file) from read_avro(getvariable('nested_none_mp'))))),
+    (select count(*) from (select unnest(map_keys(value_counts)) k from (select unnest(data_file) from read_avro(getvariable('nested_none_mp')))));
 ----
-element	true	true
-key	true	true
-sf	true	true
-value	true	true
+0	0
 
 # ============================================================================
 # Geometry — bbox bounds gated by the metrics mode
