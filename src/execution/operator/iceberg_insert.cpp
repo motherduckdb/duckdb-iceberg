@@ -785,12 +785,11 @@ struct IcebergParquetOptionMapping {
 // to
 // https://github.com/duckdb/duckdb/blob/9cbb0656cd34fa3eb890963b9f961bbc8a221fa9/extension/parquet/parquet_extension.cpp#L121
 static const IcebergParquetOptionMapping ICEBERG_TABLE_PROPERTY_MAPPING[] = {
-    {"write.parquet.row-group-size-bytes", "row_group_size_bytes"},
     {"write.parquet.compression-codec", "codec"},
     {"write.parquet.compression-level", "compression_level"},
     {"write.parquet.dict-size-bytes", "string_dictionary_page_size_limit"},
+    {"write.parquet.row-group-size-bytes", "row_group_size_bytes"},
     {"write.parquet.row-group-size", "row_group_size"},
-    {"write.parquet.page-size-bytes", "chunk_size"},
     {"write.parquet.row-groups-per-file", "row_groups_per_file"}};
 
 static const idx_t ICEBERG_TABLE_PROPERTY_MAPPING_SIZE =
@@ -821,14 +820,16 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 	for (idx_t i = 0; i < ICEBERG_TABLE_PROPERTY_MAPPING_SIZE; i++) {
 		auto &mapping = ICEBERG_TABLE_PROPERTY_MAPPING[i];
 		auto it = table_properties.find(mapping.iceberg_option);
-		if (it != table_properties.end()) {
-			if (StringUtil::CIEquals(mapping.parquet_option, "row_group_size_bytes") &&
-			    StringUtil::CharacterIsDigit(it->second.back())) {
+		if (it == table_properties.end()) {
+			continue;
+		}
+		if (StringUtil::CIEquals(mapping.parquet_option, "row_group_size_bytes")) {
+			if (StringUtil::CharacterIsDigit(it->second.back())) {
 				info->options[mapping.parquet_option].emplace_back(Value::UBIGINT(StringUtil::ToUnsigned(it->second)));
-			} else {
-				info->options[mapping.parquet_option].emplace_back(it->second);
+				continue;
 			}
 		}
+		info->options[mapping.parquet_option].emplace_back(it->second);
 	}
 
 	// Always use native parquet geometry for writing
@@ -855,41 +856,17 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 	IcebergCopyOptions result(std::move(info), copy_fun.function);
 	GenerateSortOrderExpressions(context, copy_input, result);
 
-	result.use_tmp_file = false;
+	result.filename_pattern.SetFilenamePattern("{uuidv7}");
+	auto write_target_file_size = table_properties.find("write.target-file-size-bytes");
+	if (write_target_file_size != table_properties.end()) {
+		result.file_size_bytes = IcebergUtils::ParseByteSizeOptionallyFormatted(write_target_file_size->second);
+	}
 	if (copy_input.partition_spec) {
-		if (table_properties.find("write.target-file-size-bytes") != table_properties.end()) {
-			Value ignore_target_file_size_bytes_for_partitioned_tables;
-			if (!context.TryGetCurrentSetting("ignore_target_file_size_for_partitioned_tables",
-			                                  ignore_target_file_size_bytes_for_partitioned_tables) ||
-			    !ignore_target_file_size_bytes_for_partitioned_tables.GetValue<bool>()) {
-				throw InvalidInputException("Table property target-file-size-bytes is currently not supported for "
-				                            "partitioned tables.\nTo ignore this error "
-				                            "run \"SET ignore_target_file_size_for_partitioned_tables=true\"");
-			}
-		}
-		if (table_properties.find("write.parquet.row-group-size-bytes") != table_properties.end()) {
-			Value ignore_row_group_size_bytes_for_partitioned_tables;
-			if (!context.TryGetCurrentSetting("ignore_row_group_size_for_partitioned_tables",
-			                                  ignore_row_group_size_bytes_for_partitioned_tables) ||
-			    !ignore_row_group_size_bytes_for_partitioned_tables.GetValue<bool>()) {
-				throw InvalidInputException("Table property row-group-size-bytes is currently not supported for "
-				                            "partitioned tables.\nTo ignore this error "
-				                            "run \"SET ignore_row_group_size_for_partitioned_tables=true\"");
-			}
-		}
-		result.filename_pattern.SetFilenamePattern("{uuidv7}");
 		result.partition_output = true;
 		result.write_empty_file = true;
 	} else {
-		result.filename_pattern.SetFilenamePattern("{uuidv7}");
 		result.partition_output = false;
 		result.write_empty_file = false;
-		auto write_target_file_size = table_properties.find("write.target-file-size-bytes");
-		if (write_target_file_size != table_properties.end()) {
-			result.file_size_bytes = std::stoull(write_target_file_size->second);
-		} else {
-			result.file_size_bytes = IcebergCatalog::DEFAULT_TARGET_FILE_SIZE;
-		}
 	}
 
 	result.file_path = copy_input.data_path;
@@ -908,6 +885,12 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 	if (WriteSequenceNumber(copy_input.virtual_columns)) {
 		names_to_write.push_back("_last_updated_sequence_number");
 		types_to_write.push_back(LogicalType::BIGINT);
+	}
+
+	auto partitioned_paths = table_properties.find("write.object-storage.partitioned-paths");
+	if (partitioned_paths != table_properties.end()) {
+		result.partitioned_paths =
+		    Value(partitioned_paths->second).DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
 	}
 
 	// copy_to_bind receives physical + virtual only (partition routing columns are stripped
@@ -983,7 +966,7 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 	                          .Cast<PhysicalCopyToFile>();
 
 	physical_copy.file_path = std::move(copy_options.file_path);
-	physical_copy.use_tmp_file = copy_options.use_tmp_file;
+	physical_copy.use_tmp_file = false;
 	physical_copy.filename_pattern = std::move(copy_options.filename_pattern);
 	physical_copy.file_extension = std::move(copy_options.file_extension);
 	physical_copy.overwrite_mode = copy_options.overwrite_mode;
@@ -999,7 +982,7 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 	physical_copy.names = std::move(copy_options.names);
 	physical_copy.expected_types = std::move(copy_options.expected_types);
 	physical_copy.parallel = true;
-	physical_copy.hive_file_pattern = true;
+	physical_copy.hive_file_pattern = copy_options.partitioned_paths;
 	if (plan) {
 		physical_copy.children.push_back(*plan);
 	}
