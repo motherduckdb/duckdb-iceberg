@@ -29,6 +29,7 @@ S3_PORT = 9000
 
 TABLE_SOURCE = "table_unpartitioned"
 SCAN_TABLE = "empty_table"
+TABLE_SCAN_TABLE = "vended_table_scan_refresh"
 INIT_TABLE = "vended_init_refresh"
 RANGE_TABLE = "vended_range_refresh"
 HEAD_TABLE = "vended_head_refresh"
@@ -45,6 +46,8 @@ RANGE_FAIL_TABLE = "vended_range_fail_refresh"
 
 OLD_SCAN_KEY = "OLD_SCAN_KEY"
 NEW_SCAN_KEY = "NEW_SCAN_KEY"
+OLD_TABLE_SCAN_KEY = "OLD_TABLE_SCAN_KEY"
+NEW_TABLE_SCAN_KEY = "NEW_TABLE_SCAN_KEY"
 OLD_INIT_KEY = "OLD_INIT_KEY"
 NEW_INIT_KEY = "NEW_INIT_KEY"
 OLD_RANGE_KEY = "OLD_RANGE_KEY"
@@ -100,6 +103,7 @@ class VendedCredentialRefreshAddon:
     def __init__(self):
         self.refresh_unlocked = {
             SCAN_TABLE: False,
+            TABLE_SCAN_TABLE: False,
             INIT_TABLE: False,
             RANGE_TABLE: False,
             HEAD_TABLE: False,
@@ -206,6 +210,10 @@ class VendedCredentialRefreshAddon:
             self.refresh_unlocked[SCAN_TABLE] = True
             self._forbidden(flow, "stale scan credentials")
             return
+        if key_id == OLD_TABLE_SCAN_KEY and self._is_data_file_request(flow):
+            self.refresh_unlocked[TABLE_SCAN_TABLE] = True
+            self._forbidden(flow, "stale table scan credentials")
+            return
         if key_id == OLD_INIT_KEY:
             self.refresh_unlocked[INIT_TABLE] = True
             self._forbidden(flow, "stale init credentials")
@@ -273,6 +281,8 @@ class VendedCredentialRefreshAddon:
                 return
         if key_id not in {
             NEW_SCAN_KEY,
+            OLD_TABLE_SCAN_KEY,
+            NEW_TABLE_SCAN_KEY,
             NEW_INIT_KEY,
             OLD_RANGE_KEY,
             NEW_RANGE_KEY,
@@ -326,6 +336,10 @@ class VendedCredentialRefreshAddon:
     @staticmethod
     def _is_list_request(flow: http.HTTPFlow):
         return flow.request.method == "GET" and VendedCredentialRefreshAddon._has_query_key(flow, "list-type")
+
+    @staticmethod
+    def _is_data_file_request(flow: http.HTTPFlow):
+        return "/data/" in urllib.parse.urlparse(flow.request.path).path
 
     @staticmethod
     def _is_mixed_delete_request(flow: http.HTTPFlow):
@@ -396,6 +410,8 @@ class VendedCredentialRefreshAddon:
     def _key_for_table(self, table):
         if table == SCAN_TABLE:
             return NEW_SCAN_KEY if self.refresh_unlocked[table] else OLD_SCAN_KEY
+        if table == TABLE_SCAN_TABLE:
+            return NEW_TABLE_SCAN_KEY if self.refresh_unlocked[table] else OLD_TABLE_SCAN_KEY
         if table == INIT_TABLE:
             return NEW_INIT_KEY if self.refresh_unlocked[table] else OLD_INIT_KEY
         if table == RANGE_TABLE:
@@ -427,6 +443,8 @@ class VendedCredentialRefreshAddon:
     @staticmethod
     def _credentials_prefix(table):
         if table == SCAN_TABLE:
+            return "s3://warehouse/"
+        if table == TABLE_SCAN_TABLE:
             return "s3://warehouse/"
         if table == INIT_TABLE:
             return "s3://warehouse/vended_credentials_refresh/init"
