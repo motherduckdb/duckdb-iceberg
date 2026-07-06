@@ -18,6 +18,7 @@
     {
       "reason": "V3 tests, not yet supported with Nessie",
       "paths": [
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_manifest_vector_writer_chunking.test_slow",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/test_delete_from_v3_table.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/test_deletion_vector_is_valid_puffin.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_insert_to_v3_tables.test",
@@ -112,6 +113,8 @@
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/add_column/alter_add_column_time_travel.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/alter_rename_column.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_snapshot_operation_type.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/update/test_update_into_sorted_table.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/update/partitions/test_update_into_partitioned_sorted_table.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_snapshot_operation_in_transaction.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/test_snapshot_summary_delete_metrics.test"
       ]

@@ -213,7 +213,7 @@ DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const Log
 		}
 		//! bound stores microseconds since midnight
 		dtime_t val;
-		std::memcpy(&val.micros, blob.GetData(), sizeof(int64_t));
+		std::memcpy(&val.value, blob.GetData(), sizeof(int64_t));
 		return Value::TIME(val);
 	}
 	case LogicalTypeId::TIMESTAMP_NS:
@@ -240,11 +240,19 @@ DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const Log
 
 const idx_t IcebergValue::MAX_STRING_UPPERBOUND_LENGTH;
 
+// Largest length <= MAX_STRING_UPPERBOUND_LENGTH that does not split a multi-byte
+// UTF-8 character, so a truncated bound stays valid UTF-8.
+static idx_t TruncateToCodePointBoundary(const string &input) {
+	idx_t len = std::min<idx_t>(IcebergValue::MAX_STRING_UPPERBOUND_LENGTH, input.size());
+	while (len < input.size() && (static_cast<unsigned char>(input[len]) & 0xC0) == 0x80) {
+		len--;
+	}
+	return len;
+}
+
 string IcebergValue::TruncateString(const string &input) {
-	std::vector<unsigned char> bytes(input.begin(), input.end());
-	idx_t truncated_length = std::min<idx_t>(IcebergValue::MAX_STRING_UPPERBOUND_LENGTH, bytes.size());
-	bytes.resize(truncated_length);
-	return std::string(bytes.begin(), bytes.end());
+	// A prefix truncated on a code-point boundary is a valid lower bound (<= input).
+	return input.substr(0, TruncateToCodePointBoundary(input));
 }
 
 bool IcebergValue::TruncateAndIncrementString(const string &input, string &result) {
@@ -255,12 +263,9 @@ bool IcebergValue::TruncateAndIncrementString(const string &input, string &resul
 		return true;
 	}
 
-	// Truncate to at most MAX_STRING_UPPERBOUND_LENGTH bytes, backing off so we
-	// never split a multi-byte UTF-8 character.
-	idx_t len = IcebergValue::MAX_STRING_UPPERBOUND_LENGTH;
-	while (len > 0 && (static_cast<unsigned char>(input[len]) & 0xC0) == 0x80) {
-		len--;
-	}
+	// Truncate to a code-point boundary, then round up to a valid upper bound by
+	// incrementing the last code point below.
+	idx_t len = TruncateToCodePointBoundary(input);
 
 	// Round the truncated prefix up to a valid upper bound by incrementing the
 	// last code point to the next scalar value (skipping the UTF-16 surrogate
@@ -276,7 +281,7 @@ bool IcebergValue::TruncateAndIncrementString(const string &input, string &resul
 			last_start--;
 		}
 		int cp_size;
-		int32_t codepoint = Utf8Proc::UTF8ToCodepoint(input.c_str() + last_start, cp_size) + 1;
+		int32_t codepoint = Utf8Proc::UTF8ToCodepoint(input.c_str() + last_start, cp_size, input.size()) + 1;
 		if (codepoint >= 0xD800 && codepoint <= 0xDFFF) {
 			// skip the surrogate range to the next valid scalar value
 			codepoint = 0xE000;

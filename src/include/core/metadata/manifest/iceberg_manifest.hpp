@@ -67,9 +67,6 @@ struct IcebergPartitionInfo {
 
 struct IcebergDataFile {
 public:
-	Value ToValue(const IcebergTableMetadata &table_metadata, const LogicalType &type) const;
-
-public:
 	static map<idx_t, LogicalType> GetFieldIdToTypeMapping(const IcebergSnapshotScanInfo &snapshot_info,
 	                                                       const IcebergTableMetadata &metadata,
 	                                                       const unordered_set<int32_t> &partition_spec_ids);
