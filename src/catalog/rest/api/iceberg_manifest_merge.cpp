@@ -62,27 +62,35 @@ T ParseIntProperty(const string &value, T fallback) {
 
 //! Resolve the schema id a manifest was written under, so that only manifests sharing a schema are
 //! ever merged. The schema id drives the data_file.partition layout and column stats, so mixing
-//! schemas can drop or misalign stats. Resolution order (per the Iceberg spec's manifest key-value
-//! metadata):
-//!  1. the "schema-id" key, if present;
-//!  2. otherwise parse the "schema" key (a full schema JSON) and read its "schema-id" -- the
-//!     reference implementations (Java/PyIceberg) populate only "schema", not "schema-id";
-//!  3. otherwise (no metadata at all -- e.g. manifests we create for this transaction do not yet
-//!     carry key-value metadata) assume the table's current schema id.
-int32_t ResolveManifestSchemaId(const IcebergManifestListEntry &entry, int32_t current_schema_id) {
+//! schemas can drop or misalign stats.
+//!
+//! A manifest added by THIS transaction was written under the table's current schema, so we use
+//! that directly (its Avro key-value metadata is not materialized here anyway). A carried-over
+//! manifest carries its schema id in its Avro header key-value metadata (populated once the file is
+//! opened -- see the pre-load in MergeManifests): prefer the "schema-id" key, else parse the
+//! "schema" JSON's "schema-id" (the reference implementations populate only "schema", not
+//! "schema-id"). A carried-over manifest must always have this metadata; its absence is a bug, so
+//! we throw rather than silently guessing.
+int32_t ResolveManifestSchemaId(const MergeInputManifest &input, int32_t current_schema_id) {
 	using namespace duckdb_yyjson;
 
-	auto id_it = entry.metadata.find("schema-id");
-	if (id_it != entry.metadata.end() && !id_it->second.empty()) {
+	if (input.source == ManifestSource::NEW_THIS_TRANSACTION) {
+		return current_schema_id;
+	}
+
+	auto &metadata = input.entry.metadata;
+
+	auto id_it = metadata.find("schema-id");
+	if (id_it != metadata.end() && !id_it->second.empty()) {
 		try {
 			return static_cast<int32_t>(std::stoi(id_it->second));
 		} catch (...) {
-			//! Malformed; fall through to the schema JSON / current-schema fallbacks.
+			//! Malformed; fall through to the schema JSON.
 		}
 	}
 
-	auto schema_it = entry.metadata.find("schema");
-	if (schema_it != entry.metadata.end() && !schema_it->second.empty()) {
+	auto schema_it = metadata.find("schema");
+	if (schema_it != metadata.end() && !schema_it->second.empty()) {
 		const string &schema_json = schema_it->second;
 		auto doc =
 		    std::unique_ptr<yyjson_doc, YyjsonDocDeleter>(yyjson_read(schema_json.c_str(), schema_json.size(), 0));
@@ -97,7 +105,9 @@ int32_t ResolveManifestSchemaId(const IcebergManifestListEntry &entry, int32_t c
 		}
 	}
 
-	return current_schema_id;
+	throw InternalException(
+	    "MergeManifests: carried-over manifest '%s' is missing its schema id in the Avro key-value metadata",
+	    input.entry.file.manifest_path);
 }
 
 } // namespace
@@ -351,12 +361,12 @@ vector<IcebergManifestListEntry> MergeManifests(vector<MergeInputManifest> &&inp
 	//! itself. Grouping is ordered (map) so the output manifest order is deterministic regardless of
 	//! input order.
 	//!
-	//! A manifest's schema id lives in its Avro header key-value metadata, which is only materialized
-	//! once the manifest file is opened. Carried-over manifests reach this point via the manifest
-	//! LIST read only (their `metadata` is empty), so we open each one here -- reading its entries at
-	//! the same time -- and resolve the schema id from the now-populated metadata (falling back to
-	//! the current schema id when the reference implementation omitted it). Reading entries now is
-	//! not wasted work: MergeBin reuses the already-loaded entries instead of opening the file again.
+	//! Carried-over manifests reach this point via the manifest LIST read only, so their Avro header
+	//! metadata (which holds the schema id) is not materialized yet. Open each one here -- reading
+	//! its entries at the same time -- so grouping can read the real schema id and MergeBin can reuse
+	//! the already-loaded entries instead of opening the file again. Manifests added by this
+	//! transaction never carry this metadata, but they also do not need it: their schema id is the
+	//! current schema id (resolved via ManifestSource in ResolveManifestSchemaId).
 	for (auto &member : input) {
 		if (member.entry.manifest_entries.empty()) {
 			member.entry = ScanManifestEntries(member.entry, commit_state, current_schema_id);
@@ -365,7 +375,7 @@ vector<IcebergManifestListEntry> MergeManifests(vector<MergeInputManifest> &&inp
 
 	map<std::pair<int32_t, int32_t>, vector<idx_t>> groups;
 	for (idx_t i = 0; i < input.size(); i++) {
-		auto schema_id = ResolveManifestSchemaId(input[i].entry, current_schema_id);
+		auto schema_id = ResolveManifestSchemaId(input[i], current_schema_id);
 		auto spec_id = input[i].entry.file.partition_spec_id;
 		groups[std::make_pair(schema_id, spec_id)].push_back(i);
 	}
