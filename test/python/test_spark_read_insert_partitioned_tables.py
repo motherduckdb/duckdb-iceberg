@@ -68,15 +68,9 @@ def _get_spark(spark_con):
     return spark
 
 
-@pytest.fixture(params=ICEBERG_RUNTIMES, scope="session")
-def spark_con(request):
-    runtime_config = request.param
-    if runtime_config.spark_version.major != PYSPARK_VERSION.major:
-        pytest.skip(
-            f"Skipping Iceberg runtime "
-            f"Iceberg {runtime_config.iceberg_library_version}) "
-            f"because current PySpark version is {PYSPARK_VERSION}"
-        )
+@pytest.fixture(scope="session")
+def spark_con():
+    runtime_config = select_iceberg_runtime(ICEBERG_RUNTIMES)
 
     runtime_jar = generate_jar_location(runtime_config)
     runtime_pkg = generate_package(runtime_config)
@@ -88,10 +82,6 @@ def spark_con(request):
     os.environ["AWS_REGION"] = "us-east-1"
     os.environ["AWS_ACCESS_KEY_ID"] = "admin"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "password"
-
-    active = SparkSession.getActiveSession()
-    if active is not None:
-        active.stop()
 
     spark = (
         SparkSession.builder.appName("DuckDB Insert Partitioned Tables Read Test")
@@ -115,8 +105,9 @@ def spark_con(request):
     spark.sql("USE demo")
     spark.sql("CREATE NAMESPACE IF NOT EXISTS default")
     spark.sql("USE NAMESPACE default")
-    yield spark, runtime_config
-    spark.stop()
+    # Do not stop: the single JVM-wide SparkContext is shared across every Spark
+    # test module in this process and is torn down when the process exits.
+    return spark, runtime_config
 
 
 requires_iceberg_server = pytest.mark.skipif(

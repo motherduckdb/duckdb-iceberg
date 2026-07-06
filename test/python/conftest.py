@@ -2,7 +2,7 @@ import importlib
 import importlib.util
 import sys
 from pathlib import Path
-
+import os
 import pytest
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
@@ -99,6 +99,39 @@ def capability_param(value, *requirements: str, id: str | None = None):
     if requirements:
         marks = (pytest.mark.requires_capabilities(*requirements),)
     return pytest.param(value, marks=marks, id=id)
+
+
+# A JVM can host exactly one SparkContext (SPARK-2243), and PySpark from PyPI is
+# built against a fixed Scala version (2.12 for Spark 3.x, 2.13 for Spark 4.x).
+# The whole `test/python` suite runs in a single process, so every Spark module
+# shares one session-scoped context and we can only exercise ONE Iceberg runtime
+# per process. To genuinely test multiple runtimes, CI runs the suite once per
+# runtime, selecting it via the ICEBERG_RUNTIME env var (the Iceberg library
+# version, e.g. "1.9.0"). When unset (local runs) the newest compatible runtime
+# is used. A runtime whose Scala ABI or Spark major doesn't match the active
+# PySpark install is skipped rather than run (it would fail to load).
+def select_iceberg_runtime(runtimes):
+    scala = "2.13" if PYSPARK_VERSION.major >= 4 else "2.12"
+    candidates = [
+        r
+        for r in runtimes
+        if r.spark_version.major == PYSPARK_VERSION.major and r.scala_binary_version == scala
+    ]
+    if not candidates:
+        pytest.skip(f"No Iceberg runtime configured for PySpark {PYSPARK_VERSION} (Scala {scala})")
+
+    requested = os.environ.get("ICEBERG_RUNTIME")
+    if requested:
+        for r in candidates:
+            if r.iceberg_library_version == requested:
+                return r
+        pytest.skip(
+            f"Iceberg runtime {requested} is not compatible with PySpark {PYSPARK_VERSION} "
+            f"(Scala {scala}); compatible runtimes: "
+            f"{', '.join(r.iceberg_library_version for r in candidates)}"
+        )
+
+    return max(candidates, key=lambda r: Version(r.iceberg_library_version))
 
 
 def pytest_configure(config):
