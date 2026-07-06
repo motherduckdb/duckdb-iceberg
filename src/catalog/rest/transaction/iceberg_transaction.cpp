@@ -10,6 +10,7 @@
 #include "yyjson.hpp"
 
 #include <chrono>
+#include <optional>
 #include <random>
 #include <thread>
 
@@ -525,7 +526,7 @@ void IcebergTransaction::DoMultiTableCommitUpdates(IcebergTransactionAlterUpdate
 	//! The retry policy is the tables' folded (most-lenient) config, produced by GetTransactionRequest.
 	//! It is stable across attempts (same tables), so the backoff state is created once, lazily, from
 	//! the first staged request and reused for every retry.
-	unique_ptr<IcebergRetryBackoff> backoff;
+	std::optional<IcebergRetryBackoff> backoff;
 	for (idx_t attempt = 0;; attempt++) {
 		auto transaction_info = GetTransactionRequest(alter_update, context);
 		if (transaction_info.request.table_changes.empty()) {
@@ -533,7 +534,7 @@ void IcebergTransaction::DoMultiTableCommitUpdates(IcebergTransactionAlterUpdate
 			return;
 		}
 		if (!backoff) {
-			backoff = make_uniq<IcebergRetryBackoff>(transaction_info.retry_config);
+			backoff.emplace(transaction_info.retry_config);
 		}
 
 		std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
@@ -572,7 +573,7 @@ void IcebergTransaction::DoSingleTableCommitUpdates(IcebergTransactionAlterUpdat
 		auto &table_key = entry.first;
 		//! Backoff state is created once per table (lazily, from the first staged commit's config)
 		//! and reused across this table's retries.
-		unique_ptr<IcebergRetryBackoff> backoff;
+		std::optional<IcebergRetryBackoff> backoff;
 		for (idx_t attempt = 0;; attempt++) {
 			if (alter_update.committed_tables.count(table_key)) {
 				break;
@@ -584,7 +585,7 @@ void IcebergTransaction::DoSingleTableCommitUpdates(IcebergTransactionAlterUpdat
 
 			auto table_transaction_info = StageSingleTableCommit(db, table_info, context);
 			if (!backoff) {
-				backoff = make_uniq<IcebergRetryBackoff>(table_transaction_info.retry_config);
+				backoff.emplace(table_transaction_info.retry_config);
 			}
 			auto &table_change = table_transaction_info.request;
 			D_ASSERT(table_change.identifier);
