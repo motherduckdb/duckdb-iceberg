@@ -118,6 +118,7 @@ class VendedCredentialRefreshAddon:
             SAME_BAD_TABLE: False,
             RANGE_FAIL_TABLE: False,
         }
+        self.table_scan_refresh_path = None
         # Force a rollback if this branch reaches the catalog commit after writing the
         # direct-delete data file. Some fixture versions fail earlier while building metadata.
         self.direct_delete_data_written = False
@@ -211,9 +212,15 @@ class VendedCredentialRefreshAddon:
             self._forbidden(flow, "stale scan credentials")
             return
         if key_id == OLD_TABLE_SCAN_KEY and self._is_data_file_request(flow):
-            self.refresh_unlocked[TABLE_SCAN_TABLE] = True
-            self._forbidden(flow, "stale table scan credentials")
-            return
+            data_path = urllib.parse.urlparse(flow.request.path).path
+            if self.table_scan_refresh_path is None:
+                self.table_scan_refresh_path = data_path
+                self.refresh_unlocked[TABLE_SCAN_TABLE] = True
+                self._forbidden(flow, "stale table scan credentials")
+                return
+            if data_path == self.table_scan_refresh_path:
+                self._forbidden(flow, "stale table scan credentials")
+                return
         if key_id == OLD_INIT_KEY:
             self.refresh_unlocked[INIT_TABLE] = True
             self._forbidden(flow, "stale init credentials")
