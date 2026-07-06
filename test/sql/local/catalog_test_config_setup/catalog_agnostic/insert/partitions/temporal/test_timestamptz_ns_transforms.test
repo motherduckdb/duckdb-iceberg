@@ -1,0 +1,61 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/partitions/temporal/test_timestamptz_ns_transforms.test
+# description: Insert into a v3 TIMESTAMPTZ_NS table partitioned by year, month, day, and hour transforms
+# group: [temporal]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+require icu
+
+statement ok
+SET TimeZone='UTC';
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+create schema if not exists my_datalake.default;
+
+statement ok
+drop table if exists my_datalake.default.test_timestamptz_ns_transforms;
+
+statement ok
+CREATE TABLE my_datalake.default.test_timestamptz_ns_transforms (id INT, val TIMESTAMPTZ_NS)
+PARTITIONED BY (year(val), month(val), day(val), hour(val))
+WITH ('format-version' = 3);
+
+statement ok
+INSERT INTO my_datalake.default.test_timestamptz_ns_transforms VALUES
+    (1, '2020-01-15 08:30:00.123456789+00'::TIMESTAMPTZ_NS),
+    (2, '2021-06-20 14:45:00.987654321+00'::TIMESTAMPTZ_NS),
+    (3, '2022-03-10 22:15:00.000000001+00'::TIMESTAMPTZ_NS);
+
+query II
+SELECT id, val FROM my_datalake.default.test_timestamptz_ns_transforms ORDER BY id;
+----
+1	2020-01-15 08:30:00.123456789+00
+2	2021-06-20 14:45:00.987654321+00
+3	2022-03-10 22:15:00.000000001+00
+
+query IIII
+SELECT partition_field_name, partition_field_transform, lower_bound, upper_bound
+FROM iceberg_partition_stats(my_datalake.default.test_timestamptz_ns_transforms)
+ORDER BY partition_field_name;
+----
+day_val_2	day	18276	19061
+hour_val_2	hour	438632	457486
+month_val_2	month	600	626
+year_val_2	year	50	52
+
+query II
+SELECT id, val FROM my_datalake.default.test_timestamptz_ns_transforms
+WHERE val = '2021-06-20 14:45:00.987654321+00'::TIMESTAMPTZ_NS;
+----
+2	2021-06-20 14:45:00.987654321+00

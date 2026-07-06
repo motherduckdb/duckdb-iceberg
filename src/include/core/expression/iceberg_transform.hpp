@@ -119,6 +119,12 @@ struct YearTransform {
 			auto components = Timestamp::GetComponents(timestamp_t(micros));
 			return Value::INTEGER(components.year - 1970);
 		}
+		case LogicalTypeId::TIMESTAMP_TZ_NS: {
+			auto val = constant.GetValue<timestamp_tz_ns_t>();
+			auto micros = IcebergNanosToMicrosFloor(val.value);
+			auto components = Timestamp::GetComponents(timestamp_t(micros));
+			return Value::INTEGER(components.year - 1970);
+		}
 		case LogicalTypeId::DATE: {
 			int32_t year;
 			int32_t month;
@@ -163,6 +169,12 @@ struct MonthTransform {
 		}
 		case LogicalTypeId::TIMESTAMP_NS: {
 			auto val = constant.GetValue<timestamp_ns_t>();
+			auto ts = timestamp_t(IcebergNanosToMicrosFloor(val.value));
+			auto diff = Interval::GetAge(ts, timestamp_t::epoch());
+			return Value::INTEGER(diff.months);
+		}
+		case LogicalTypeId::TIMESTAMP_TZ_NS: {
+			auto val = constant.GetValue<timestamp_tz_ns_t>();
 			auto ts = timestamp_t(IcebergNanosToMicrosFloor(val.value));
 			auto diff = Interval::GetAge(ts, timestamp_t::epoch());
 			return Value::INTEGER(diff.months);
@@ -213,6 +225,12 @@ struct DayTransform {
 			auto diff = Interval::GetDifference(ts, timestamp_t::epoch());
 			return Value::INTEGER(diff.days);
 		}
+		case LogicalTypeId::TIMESTAMP_TZ_NS: {
+			auto val = constant.GetValue<timestamp_tz_ns_t>();
+			auto ts = timestamp_t(IcebergNanosToMicrosFloor(val.value));
+			auto diff = Interval::GetDifference(ts, timestamp_t::epoch());
+			return Value::INTEGER(diff.days);
+		}
 		case LogicalTypeId::DATE: {
 			auto val = constant.GetValue<date_t>();
 			return Value::INTEGER(val.days);
@@ -255,6 +273,10 @@ struct HourTransform {
 		}
 		case LogicalTypeId::TIMESTAMP_NS: {
 			auto val = constant.GetValue<timestamp_ns_t>();
+			return Value::INTEGER(static_cast<int32_t>(IcebergFloorDiv(val.value, Interval::NANOS_PER_HOUR)));
+		}
+		case LogicalTypeId::TIMESTAMP_TZ_NS: {
+			auto val = constant.GetValue<timestamp_tz_ns_t>();
 			return Value::INTEGER(static_cast<int32_t>(IcebergFloorDiv(val.value, Interval::NANOS_PER_HOUR)));
 		}
 		default:

@@ -230,6 +230,14 @@ DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const Log
 		} else {
 			return DeserializeError(blob, type);
 		}
+	case LogicalTypeId::TIMESTAMP_TZ_NS: {
+		if (blob.GetSize() != sizeof(int64_t)) {
+			return DeserializeError(blob, type);
+		}
+		int64_t nanos_since_epoch;
+		std::memcpy(&nanos_since_epoch, blob.GetData(), sizeof(int64_t));
+		return Value::TIMESTAMPTZNS(timestamp_tz_ns_t(nanos_since_epoch));
+	}
 	case LogicalTypeId::UUID:
 		return DeserializeUUID(blob, type);
 	default:
@@ -403,6 +411,16 @@ SerializeResult IcebergValue::SerializeValue(Value input_value, const LogicalTyp
 		timestamp_ns_t val = input_value.GetValue<timestamp_ns_t>();
 		if (!Value::IsFinite(val)) {
 			throw ConversionException("Cannot write infinity/-infinity for timestamp_ns type");
+		}
+		int64_t nanos_since_epoch = val.value;
+		auto serialized_const_data_ptr = const_data_ptr_cast<int64_t>(&nanos_since_epoch);
+		auto serialized_val = Value::BLOB(serialized_const_data_ptr, sizeof(int64_t));
+		return SerializeResult(column_type, serialized_val);
+	}
+	case LogicalTypeId::TIMESTAMP_TZ_NS: {
+		timestamp_tz_ns_t val = input_value.GetValue<timestamp_tz_ns_t>();
+		if (!Value::IsFinite(val)) {
+			throw ConversionException("Cannot write infinity/-infinity for timestamptz_ns type");
 		}
 		int64_t nanos_since_epoch = val.value;
 		auto serialized_const_data_ptr = const_data_ptr_cast<int64_t>(&nanos_since_epoch);
