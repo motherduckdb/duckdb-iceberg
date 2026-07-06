@@ -123,8 +123,9 @@ static void RewriteManifestFile(IcebergManifestListEntry &list_entry, CopyFuncti
 	auto &table_metadata = commit_state.table_info.table_metadata;
 
 	//! Finally overwrite the input 'manifest_file' with our edited copy
+	list_entry.metadata.clear();
 	auto manifest_length = manifest_file::WriteToFile(table_metadata, manifest_file, manifest_entries, avro_copy, db,
-	                                                  commit_state.context);
+	                                                  commit_state.context, &list_entry.metadata);
 	manifest_file.manifest_length = manifest_length;
 }
 
@@ -233,9 +234,10 @@ static IcebergManifestListEntry WriteManifestListEntry(const IcebergTableInforma
                                                        const IcebergManifestListEntry &list_entry,
                                                        CopyFunction &avro_copy, DatabaseInstance &db,
                                                        ClientContext &context) {
-	auto manifest_length = manifest_file::WriteToFile(table_info.table_metadata, list_entry.file,
-	                                                  list_entry.manifest_entries, avro_copy, db, context);
 	IcebergManifestListEntry new_entry(list_entry.file);
+	auto manifest_length =
+	    manifest_file::WriteToFile(table_info.table_metadata, list_entry.file, list_entry.manifest_entries, avro_copy,
+	                               db, context, &new_entry.metadata);
 	new_entry.manifest_entries = list_entry.manifest_entries;
 	new_entry.file.manifest_length = manifest_length;
 	return new_entry;

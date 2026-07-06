@@ -183,9 +183,12 @@ static constexpr const int32_t REFERENCED_DATA_FILE = 143;
 static constexpr const int32_t CONTENT_OFFSET = 144;
 static constexpr const int32_t CONTENT_SIZE_IN_BYTES = 145;
 
+//! Writes the manifest file. If `out_metadata` is provided, the Avro header key-value metadata that
+//! was written (schema, schema-id, partition-spec-id, content, ...) is also copied into it, so the
+//! caller can populate the in-memory IcebergManifestListEntry.metadata to match the file on disk.
 idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManifestFile &manifest_file,
                   const vector<IcebergManifestEntry> &entries, CopyFunction &copy_function, DatabaseInstance &db,
-                  ClientContext &context);
+                  ClientContext &context, optional_ptr<unordered_map<string, string>> out_metadata = nullptr);
 
 } // namespace manifest_file
 

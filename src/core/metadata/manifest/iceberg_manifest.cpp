@@ -594,7 +594,7 @@ static Value FieldIdsForList(int32_t list_field_id, int32_t element_field_id) {
 
 idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManifestFile &manifest_file,
                   const vector<IcebergManifestEntry> &manifest_entries, CopyFunction &copy, DatabaseInstance &db,
-                  ClientContext &context) {
+                  ClientContext &context, optional_ptr<unordered_map<string, string>> out_metadata) {
 	D_ASSERT(!manifest_entries.empty());
 	auto &allocator = db.GetBufferManager().GetBufferAllocator();
 	auto &path = manifest_file.manifest_path;
@@ -767,6 +767,18 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	metadata_values.emplace_back("content",
 	                             manifest_file.content == IcebergManifestContentType::DATA ? "data" : "deletes");
 	auto metadata_map = Value::STRUCT(std::move(metadata_values));
+
+	//! Mirror the header metadata into the caller's map (if requested) so the in-memory list entry
+	//! matches the file on disk. This is what lets a later commit read this manifest's schema id
+	//! without reopening the file (see MergeManifests).
+	if (out_metadata) {
+		auto &meta = *out_metadata;
+		auto &struct_type = metadata_map.type();
+		auto &children = StructValue::GetChildren(metadata_map);
+		for (idx_t i = 0; i < children.size(); i++) {
+			meta.emplace(StructType::GetChildName(struct_type, i), children[i].GetValue<string>());
+		}
+	}
 
 	CopyInfo copy_info;
 	copy_info.is_from = false;

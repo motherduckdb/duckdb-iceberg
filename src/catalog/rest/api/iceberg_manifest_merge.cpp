@@ -104,10 +104,11 @@ int32_t ResolveManifestSchemaId(const MergeInputManifest &input, int32_t current
 		}
 	}
 
-	//! Not every writer emits this metadata on a carried-over manifest, so when it is absent we fall
-	//! back to the current schema id. That is conservative (it may over-group manifests written under
-	//! different schemas), never unsafe: grouping only decides how manifests are packed, not the data
-	//! they describe.
+	//! A carried-over manifest written by DuckDB carries this metadata (see the backfill in
+	//! manifest_file::WriteToFile), so this is reached only for manifests written by another engine
+	//! that omitted it. Fall back to the current schema id: conservative (it may over-group manifests
+	//! written under different schemas), but never unsafe -- grouping only decides how manifests are
+	//! packed, not the data they describe.
 	return current_schema_id;
 }
 
@@ -337,7 +338,7 @@ IcebergManifestListEntry MergeBin(const vector<MergeInputManifest> &input, const
 	}
 
 	auto manifest_length = manifest_file::WriteToFile(table_metadata, result.file, result.manifest_entries, avro_copy,
-	                                                  db, commit_state.context);
+	                                                  db, commit_state.context, &result.metadata);
 	result.file.manifest_length = manifest_length;
 	return result;
 }
