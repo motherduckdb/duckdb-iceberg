@@ -66,11 +66,10 @@ T ParseIntProperty(const string &value, T fallback) {
 //!
 //! A manifest added by THIS transaction was written under the table's current schema, so we use
 //! that directly (its Avro key-value metadata is not materialized here anyway). A carried-over
-//! manifest carries its schema id in its Avro header key-value metadata (populated once the file is
-//! opened -- see the pre-load in MergeManifests): prefer the "schema-id" key, else parse the
-//! "schema" JSON's "schema-id" (the reference implementations populate only "schema", not
-//! "schema-id"). A carried-over manifest must always have this metadata; its absence is a bug, so
-//! we throw rather than silently guessing.
+//! manifest usually carries its schema id in its Avro header key-value metadata (populated once the
+//! file is opened -- see the pre-load in MergeManifests): prefer the "schema-id" key, else parse
+//! the "schema" JSON's "schema-id" (the reference implementations populate only "schema", not
+//! "schema-id"). When that metadata is absent we fall back to the current schema id (see below).
 int32_t ResolveManifestSchemaId(const MergeInputManifest &input, int32_t current_schema_id) {
 	using namespace duckdb_yyjson;
 
@@ -105,9 +104,11 @@ int32_t ResolveManifestSchemaId(const MergeInputManifest &input, int32_t current
 		}
 	}
 
-	throw InternalException(
-	    "MergeManifests: carried-over manifest '%s' is missing its schema id in the Avro key-value metadata",
-	    input.entry.file.manifest_path);
+	//! Not every writer emits this metadata on a carried-over manifest, so when it is absent we fall
+	//! back to the current schema id. That is conservative (it may over-group manifests written under
+	//! different schemas), never unsafe: grouping only decides how manifests are packed, not the data
+	//! they describe.
+	return current_schema_id;
 }
 
 } // namespace
