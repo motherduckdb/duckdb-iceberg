@@ -893,15 +893,19 @@ IcebergTableInformation &IcebergTransaction::RenameTable(IcebergTableInformation
 
 	auto locked_context = context.lock();
 	auto &client_context = *locked_context;
-	//! FIXME: just like the other place, this can easily go wrong
-	//! Migrate the MetadataCache
+	//! Migrate the MetadataCache from the old table key to the new one. The entry is only present if
+	//! the table was loaded into the cache before the rename; when it is absent there is nothing to
+	//! migrate (the next access under the new name will repopulate it), so skip rather than
+	//! dereference a null cache entry.
 	auto new_table_key = new_table.GetTableKey();
 	auto &table_request_cache = catalog.table_request_cache;
 	lock_guard<mutex> cache_guard(table_request_cache.Lock());
 	auto cache = table_request_cache.Get(client_context, table_key, cache_guard, false);
-	table_request_cache.SetOrOverwriteInternal(cache_guard, client_context, new_table_key, cache->expire_timestamp,
-	                                           std::move(cache->load_table_result));
-	table_request_cache.ExpireInternal(cache_guard, client_context, table_key);
+	if (cache) {
+		table_request_cache.SetOrOverwriteInternal(cache_guard, client_context, new_table_key, cache->expire_timestamp,
+		                                           std::move(cache->load_table_result));
+		table_request_cache.ExpireInternal(cache_guard, client_context, table_key);
+	}
 	return state->GetInfo();
 }
 

@@ -600,7 +600,12 @@ IcebergTableInformation IcebergTableInformation::Copy(ClientContext &context) co
 	{
 		lock_guard<std::mutex> cache_lock(catalog.table_request_cache.Lock());
 		auto cached_result = catalog.table_request_cache.Get(context, table_key, cache_lock, false);
-		D_ASSERT(cached_result);
+		if (!cached_result) {
+			throw InvalidConfigurationException(
+			    "Cannot copy table '%s': its metadata is not present in the cache. It must be loaded before it is "
+			    "copied (e.g. renamed).",
+			    table_key);
+		}
 		auto &cached_table_result = *cached_result->load_table_result;
 		ret.InitializeFromLoadTableResult(cached_table_result, false);
 	}
