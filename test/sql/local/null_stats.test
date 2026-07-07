@@ -7,6 +7,8 @@ require parquet
 
 require iceberg
 
+require icu;
+
 statement ok
 set timezone='UTC';
 
