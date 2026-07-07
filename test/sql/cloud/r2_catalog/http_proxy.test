@@ -18,8 +18,6 @@ require httpfs
 
 require aws
 
-mode skip
-
 # override the default behaviour of skipping HTTP errors and connection failures: this test fails on connection issues
 set ignore_error_messages
 
