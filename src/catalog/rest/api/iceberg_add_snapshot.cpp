@@ -17,7 +17,7 @@ namespace duckdb {
 
 IcebergAddSnapshot::IcebergAddSnapshot(const IcebergTableInformation &table_info,
                                        IcebergSnapshotOperationType operation)
-    : IcebergTableUpdate(IcebergTableUpdateType::ADD_SNAPSHOT, table_info), operation(operation) {
+    : IcebergTableUpdate(IcebergTableUpdateType::ADD_SNAPSHOT), operation(operation) {
 	//! FIXME: Do we also need to capture the current partition spec and sort order?
 	//! This is a bit of a code smell, the `IcebergTableInformation` should instead be const
 	//! and all transactional changes should live in the IcebergTransactionData
@@ -27,6 +27,10 @@ IcebergAddSnapshot::IcebergAddSnapshot(const IcebergTableInformation &table_info
 bool IcebergAddSnapshot::IsRetryable() const {
 	//! Only retry INSERT for now
 	return operation == IcebergSnapshotOperationType::APPEND;
+}
+
+void IcebergAddSnapshot::ApplyUpdate(IcebergTableMetadata &metadata) const {
+	(void)metadata;
 }
 
 static rest_api_objects::TableUpdate CreateAddSnapshotUpdate(const IcebergTableInformation &table_info,
@@ -195,7 +199,7 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 	const auto snapshot_id = IcebergSnapshot::NewSnapshotId();
 	const auto sequence_number = commit_state.next_sequence_number++;
 	auto uncommitted_manifest_files =
-	    CreateCommitManifestFiles(manifest_files, table_info, commit_state, snapshot_id, sequence_number);
+	    CreateCommitManifestFiles(manifest_files, commit_state.table_info, commit_state, snapshot_id, sequence_number);
 	D_ASSERT(!uncommitted_manifest_files.empty());
 
 	auto &fs = FileSystem::GetFileSystem(context);
@@ -230,7 +234,8 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 		auto &manifest_file = manifest_list_entry.file;
 		new_snapshot.metrics.AddManifestFile(manifest_file);
 
-		auto new_manifest_list_entry = WriteManifestListEntry(table_info, manifest_list_entry, avro_copy, db, context);
+		auto new_manifest_list_entry =
+		    WriteManifestListEntry(commit_state.table_info, manifest_list_entry, avro_copy, db, context);
 		commit_state.created_metadata_files.push_back(new_manifest_list_entry.file.manifest_path);
 		new_manifest_list.AddNewManifestFile(std::move(new_manifest_list_entry));
 
@@ -251,7 +256,8 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 	commit_state.latest_snapshot = commit_state.created_snapshots.back();
 
 	//! Finally add a Iceberg REST Catalog 'TableUpdate' to commit
-	commit_state.table_change.updates.push_back(CreateAddSnapshotUpdate(table_info, *commit_state.latest_snapshot));
+	commit_state.table_change.updates.push_back(
+	    CreateAddSnapshotUpdate(commit_state.table_info, *commit_state.latest_snapshot));
 }
 
 void IcebergAddSnapshot::AddManifestFile(IcebergManifestListEntry &&manifest_file) {

@@ -1,5 +1,6 @@
 #include "core/metadata/schema/iceberg_table_schema.hpp"
 
+#include "catalog/rest/api/iceberg_create_table_request.hpp"
 #include "duckdb/common/exception.hpp"
 #include "common/iceberg_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
@@ -18,6 +19,21 @@ shared_ptr<IcebergTableSchema> IcebergTableSchema::ParseSchema(const rest_api_ob
 		res->identifier_field_ids = *identifier_field_ids;
 	}
 	return res;
+}
+
+rest_api_objects::Schema IcebergTableSchema::ToRESTObject() const {
+	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
+	yyjson_mut_doc *doc = doc_p.get();
+	auto root_object = yyjson_mut_obj(doc);
+	yyjson_mut_doc_set_root(doc, root_object);
+	IcebergCreateTableRequest::PopulateSchema(doc, root_object, *this);
+	auto schema_json = ICUtils::JsonToString(std::move(doc_p));
+
+	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> parsed_doc(yyjson_read(schema_json.c_str(), schema_json.size(), 0));
+	if (!parsed_doc) {
+		throw InternalException("Failed to parse generated schema JSON");
+	}
+	return rest_api_objects::Schema::FromJSON(yyjson_doc_get_root(parsed_doc.get()));
 }
 
 void IcebergTableSchema::PopulateSourceIdMap(unordered_map<uint64_t, ColumnIndex> &source_to_column_id,
@@ -132,6 +148,7 @@ shared_ptr<IcebergTableSchema> IcebergTableSchema::Copy() const {
 	auto res = make_shared_ptr<IcebergTableSchema>();
 	res->schema_id = schema_id;
 	res->last_column_id = last_column_id;
+	res->identifier_field_ids = identifier_field_ids;
 	for (auto &column : columns) {
 		res->columns.push_back(column->Copy());
 	}
@@ -142,6 +159,7 @@ shared_ptr<IcebergTableSchema> IcebergTableSchema::RemoveColumn(const string &na
 	auto res = make_shared_ptr<IcebergTableSchema>();
 	res->schema_id = schema_id + 1;
 	res->last_column_id = last_column_id;
+	res->identifier_field_ids = identifier_field_ids;
 	for (auto &column : columns) {
 		if (column->name == name) {
 			column_id = column->id;

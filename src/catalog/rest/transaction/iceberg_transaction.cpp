@@ -214,12 +214,11 @@ static void CreateTableRequirements(DatabaseInstance &db, ClientContext &context
 		requirement->CreateRequirement(db, context, commit_state);
 	}
 	if (!has_assert_create && NeedsAssertSchemaId(transaction_data, commit_state.table_info)) {
-		AssertCurrentSchemaIdRequirement requirement(commit_state.table_info);
-		requirement.current_schema_id = transaction_data.initial_schema_id;
+		AssertCurrentSchemaIdRequirement requirement(transaction_data.initial_schema_id);
 		requirement.CreateRequirement(db, context, commit_state);
 	}
 	if (!has_assert_create && commit_state.table_info.HasTransactionUpdates()) {
-		auto uuid_requirement = AssertTableUUIDRequirement(commit_state.table_info);
+		auto uuid_requirement = AssertTableUUIDRequirement(transaction_data.initial_table_uuid);
 		uuid_requirement.CreateRequirement(db, context, commit_state);
 	}
 	if (current_snapshot && !transaction_data.alters.empty()) {
@@ -268,8 +267,8 @@ static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, Iceb
 		commit_state.table_change.updates.push_back(std::move(set_snapshot_ref_update));
 	}
 
-	if (transaction_data.set_schema_id) {
-		SetCurrentSchema update(table_info);
+	if (transaction_data.pending_current_schema_id.has_value()) {
+		SetCurrentSchema update(*transaction_data.pending_current_schema_id);
 		update.CreateUpdate(db, context, commit_state);
 	}
 
