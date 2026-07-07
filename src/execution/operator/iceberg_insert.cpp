@@ -402,18 +402,16 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 			    variant_metrics.mode != IcebergMetricsMode::FULL) {
 				continue;
 			}
-			bool has_lower = false;
-			bool has_upper = false;
-			string lower_blob;
-			string upper_blob;
-			if (!entry.second.Finalize(context, has_lower, lower_blob, has_upper, upper_blob)) {
+			optional<string> lower_blob;
+			optional<string> upper_blob;
+			if (!entry.second.Finalize(context, lower_blob, upper_blob)) {
 				continue;
 			}
-			if (has_lower) {
-				data_file.lower_bounds[entry.first] = Value::BLOB_RAW(lower_blob);
+			if (lower_blob) {
+				data_file.lower_bounds[entry.first] = Value::BLOB_RAW(*lower_blob);
 			}
-			if (has_upper) {
-				data_file.upper_bounds[entry.first] = Value::BLOB_RAW(upper_blob);
+			if (upper_blob) {
+				data_file.upper_bounds[entry.first] = Value::BLOB_RAW(*upper_blob);
 			}
 		}
 
@@ -460,7 +458,7 @@ SourceResultType IcebergInsert::GetDataInternal(ExecutionContext &context, DataC
                                                 OperatorSourceInput &input) const {
 	auto &global_state = sink_state->Cast<IcebergInsertGlobalState>();
 	auto value = Value::BIGINT(global_state.insert_count);
-	chunk.SetCardinality(1);
+	chunk.SetChildCardinality(1);
 	chunk.data[0].Append(value);
 	return SourceResultType::FINISHED;
 }
