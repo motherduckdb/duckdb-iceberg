@@ -147,6 +147,7 @@ jobs:
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           ICEBERG_CATALOG_NAME: 's3-catalog'
           ICEBERG_CATALOG_REGION: 'eu-west-2'
           SNOWFLAKE_PAT: ${{ secrets.SNOWFLAKE_PAT }}
