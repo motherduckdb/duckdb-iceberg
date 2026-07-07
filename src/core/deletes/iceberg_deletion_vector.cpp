@@ -203,24 +203,30 @@ void IcebergMultiFileList::ScanPuffinFile(const BoundIcebergManifestEntry &bound
 		throw InvalidConfigurationException("DeletionVector not supported in Iceberg V%d", iceberg_version);
 	}
 	auto file_path = data_file.file_path;
-	D_ASSERT(!data_file.referenced_data_file.empty());
+	if (!data_file.referenced_data_file) {
+		throw InvalidConfigurationException("Puffin delete file is missing 'referenced_data_file'");
+	}
 
 	FileOpenFlags flags = FileFlags::FILE_FLAGS_READ;
 	flags.SetCachingMode(CachingMode::CACHE_REMOTE_ONLY);
 	auto file_handle = fs.OpenFile(file_path, flags);
 
-	D_ASSERT(!data_file.content_offset.IsNull());
-	D_ASSERT(!data_file.content_size_in_bytes.IsNull());
+	if (!data_file.content_offset) {
+		throw InvalidConfigurationException("Puffin delete file is missing 'content_offset");
+	}
+	if (!data_file.content_size_in_bytes) {
+		throw InvalidConfigurationException("Puffin delete file is missing 'content_size_in_bytes");
+	}
 
-	auto offset = data_file.content_offset.GetValue<int64_t>();
-	auto length = data_file.content_size_in_bytes.GetValue<int64_t>();
+	auto offset = *data_file.content_offset;
+	auto length = *data_file.content_size_in_bytes;
 
 	VerifyPuffinDeletionVector(fs, *file_handle, offset, length);
 
 	auto local_buffer = Allocator::DefaultAllocator().Allocate(length);
 	fs.Read(*file_handle, local_buffer.get(), length, offset);
 
-	auto it = shared_state->positional_delete_data.find(data_file.referenced_data_file);
+	auto it = shared_state->positional_delete_data.find(*data_file.referenced_data_file);
 	if (it != shared_state->positional_delete_data.end()) {
 		//! Another delete already exists for this table
 		auto &existing_delete = *it->second;
@@ -230,7 +236,7 @@ void IcebergMultiFileList::ScanPuffinFile(const BoundIcebergManifestEntry &bound
 		}
 	}
 	//! NOTE: assign, don't emplace, deletion vectors take priority over any remaining positional delete files
-	shared_state->positional_delete_data[data_file.referenced_data_file] =
+	shared_state->positional_delete_data[*data_file.referenced_data_file] =
 	    IcebergDeletionVectorData::FromBlob(bound_entry, local_buffer.get(), length);
 }
 

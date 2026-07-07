@@ -22,7 +22,7 @@ static void AssignManifestFirstRowIds(const IcebergTableMetadata &metadata,
 			                                                 manifest_file.existing_rows_count);
 			continue;
 		}
-		if (current_snapshot && current_snapshot->has_first_row_id) {
+		if (current_snapshot && current_snapshot->first_row_id) {
 			throw InternalException("Table is corrupted, snapshot has 'first-row-id' but not all 'manifest_file' "
 			                        "entries have a 'first_row_id'");
 		}
@@ -40,8 +40,8 @@ IcebergCommitState::IcebergCommitState(const IcebergTableInformation &table_info
 void IcebergCommitState::RefreshFromTable() {
 	next_sequence_number = table_info.table_metadata.last_sequence_number + 1;
 	next_row_id = 0;
-	if (table_info.table_metadata.has_next_row_id) {
-		next_row_id = table_info.table_metadata.next_row_id;
+	if (table_info.table_metadata.next_row_id) {
+		next_row_id = *table_info.table_metadata.next_row_id;
 	}
 }
 
@@ -62,8 +62,8 @@ void IcebergCommitState::LoadExistingManifests(vector<IcebergManifestListEntry> 
 	}
 
 	next_row_id = 0;
-	if (table_info.table_metadata.has_next_row_id) {
-		next_row_id = table_info.table_metadata.next_row_id;
+	if (table_info.table_metadata.next_row_id) {
+		next_row_id = *table_info.table_metadata.next_row_id;
 	}
 	AssignManifestFirstRowIds(table_info.table_metadata, current_snapshot, manifests, next_row_id);
 }

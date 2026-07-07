@@ -272,7 +272,6 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 		if (table_metadata.HasSortOrder()) {
 			auto &sort_order = table_metadata.GetLatestSortOrder();
 			if (sort_order.IsSorted()) {
-				data_file.has_sort_order_id = true;
 				data_file.sort_order_id = sort_order.sort_order_id;
 			}
 		}

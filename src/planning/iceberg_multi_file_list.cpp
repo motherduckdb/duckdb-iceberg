@@ -1434,8 +1434,8 @@ void IcebergMultiFileList::EnumerateDeleteManifestEntriesInternal() const {
 			}
 			auto &data_file = manifest_entry.data_file;
 			auto &referenced_data_file = data_file.referenced_data_file;
-			if (!referenced_data_file.empty() && transactional_delete_files &&
-			    transactional_delete_files->count(referenced_data_file)) {
+			if (referenced_data_file && transactional_delete_files &&
+			    transactional_delete_files->count(*referenced_data_file)) {
 				//! Skip this delete file, there's a transaction-local delete that makes it obsolete
 				continue;
 			}
@@ -1452,8 +1452,8 @@ void IcebergMultiFileList::EnumerateDeleteManifestEntriesInternal() const {
 		for (auto &manifest_entry : manifest_list_entry.manifest_entries) {
 			auto &data_file = manifest_entry.data_file;
 			auto &referenced_data_file = data_file.referenced_data_file;
-			if (!referenced_data_file.empty() && transactional_delete_files) {
-				auto it = transactional_delete_files->find(referenced_data_file);
+			if (referenced_data_file && transactional_delete_files) {
+				auto it = transactional_delete_files->find(*referenced_data_file);
 				//! Check if this is the currently active (last) delete file for this referenced_data_file
 				if (it != transactional_delete_files->end() && it->second != data_file.file_path) {
 					continue;

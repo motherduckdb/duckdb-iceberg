@@ -506,8 +506,8 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
 	data.Initialize(allocator, metadata.types, STANDARD_VECTOR_SIZE);
 
 	idx_t next_row_id;
-	if (table_metadata.has_next_row_id) {
-		next_row_id = table_metadata.next_row_id;
+	if (table_metadata.next_row_id) {
+		next_row_id = *table_metadata.next_row_id;
 	} else {
 		next_row_id = 0;
 	}
@@ -566,7 +566,13 @@ unique_ptr<IcebergManifestList> IcebergManifestList::Load(const string &iceberg_
                                                           const IcebergSnapshotScanInfo &snapshot_info,
                                                           ClientContext &context, const IcebergOptions &options) {
 	auto &snapshot = *snapshot_info.snapshot;
-	auto ret = make_uniq<IcebergManifestList>(snapshot.snapshot_id, snapshot.sequence_number, snapshot.manifest_list);
+	if (!snapshot.snapshot_id) {
+		throw InvalidConfigurationException("snapshot.snapshot_id is not set");
+	}
+	if (!snapshot.sequence_number) {
+		throw InvalidConfigurationException("snapshot.sequence_number is not set");
+	}
+	auto ret = make_uniq<IcebergManifestList>(*snapshot.snapshot_id, *snapshot.sequence_number, snapshot.manifest_list);
 
 	auto &fs = FileSystem::GetFileSystem(context);
 	auto manifest_list_full_path = options.allow_moved_paths
