@@ -261,7 +261,10 @@ static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, Iceb
 
 	if (!transaction_data.alters.empty()) {
 		auto &snapshot = *commit_state.latest_snapshot;
-		auto set_snapshot_ref_update = CreateSetSnapshotRefUpdate(snapshot.snapshot_id);
+		if (!snapshot.snapshot_id) {
+			throw InvalidConfigurationException("snapshot.snapshot_id is not set");
+		}
+		auto set_snapshot_ref_update = CreateSetSnapshotRefUpdate(*snapshot.snapshot_id);
 		commit_state.table_change.updates.push_back(std::move(set_snapshot_ref_update));
 	}
 

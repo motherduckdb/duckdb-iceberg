@@ -272,7 +272,6 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 		if (table_metadata.HasSortOrder()) {
 			auto &sort_order = table_metadata.GetLatestSortOrder();
 			if (sort_order.IsSorted()) {
-				data_file.has_sort_order_id = true;
 				data_file.sort_order_id = sort_order.sort_order_id;
 			}
 		}
@@ -313,7 +312,7 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 			// a map type cannot violate not null constraints.
 			// Null value counts can be off since an empty map is the same as a null map.
 			bool is_map = IsMapType(column_names[0], *ic_schema);
-			if (!is_map && column_info.required && stats.has_null_count && stats.null_count > 0) {
+			if (!is_map && column_info.required && stats.null_count && *stats.null_count > 0) {
 				auto normalized_col_name = StringUtil::Join(column_names, ".");
 				throw ConstraintException("NOT NULL constraint failed: %s.%s", table_name, normalized_col_name);
 			}
@@ -329,18 +328,18 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 
 			// go through stats and add upper and lower bounds
 			// Do serialization of values here in case we read transaction updates
-			if (write_bounds && stats.has_min) {
+			if (write_bounds && stats.min) {
 				auto serialized_value =
-				    IcebergValue::SerializeValue(stats.min, column_info.type, SerializeBound::LOWER_BOUND, metrics);
+				    IcebergValue::SerializeValue(*stats.min, column_info.type, SerializeBound::LOWER_BOUND, metrics);
 				if (serialized_value.HasError()) {
 					throw InvalidConfigurationException(serialized_value.GetError());
 				} else if (serialized_value.HasValue()) {
 					data_file.lower_bounds[column_info.id] = serialized_value.GetValue();
 				}
 			}
-			if (write_bounds && stats.has_max) {
+			if (write_bounds && stats.max) {
 				auto serialized_value =
-				    IcebergValue::SerializeValue(stats.max, column_info.type, SerializeBound::UPPER_BOUND, metrics);
+				    IcebergValue::SerializeValue(*stats.max, column_info.type, SerializeBound::UPPER_BOUND, metrics);
 				if (serialized_value.HasError()) {
 					throw InvalidConfigurationException(serialized_value.GetError());
 				} else if (serialized_value.HasValue()) {
@@ -374,16 +373,16 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 				data_file.upper_bounds[column_info.id] =
 				    Value::BLOB(const_data_ptr_cast<double>(upper.data()), byte_count);
 			}
-			if (stats.has_column_size_bytes) {
-				data_file.column_sizes[column_info.id] = stats.column_size_bytes;
+			if (stats.column_size_bytes) {
+				data_file.column_sizes[column_info.id] = *stats.column_size_bytes;
 			}
-			if (stats.has_null_count) {
-				data_file.null_value_counts[column_info.id] = stats.null_count;
+			if (stats.null_count) {
+				data_file.null_value_counts[column_info.id] = *stats.null_count;
 			}
-			if (stats.has_num_values) {
+			if (stats.num_values) {
 				//! Iceberg 'value_counts' is the total number of values (including nulls). The Parquet writer's
 				//! 'num_values' has the same semantics.
-				data_file.value_counts[column_info.id] = stats.num_values;
+				data_file.value_counts[column_info.id] = *stats.num_values;
 			}
 
 			//! nan_value_counts won't work, we can only indicate if they exist.
@@ -402,18 +401,16 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 			    variant_metrics.mode != IcebergMetricsMode::FULL) {
 				continue;
 			}
-			bool has_lower = false;
-			bool has_upper = false;
-			string lower_blob;
-			string upper_blob;
-			if (!entry.second.Finalize(context, has_lower, lower_blob, has_upper, upper_blob)) {
+			optional<string> lower_blob;
+			optional<string> upper_blob;
+			if (!entry.second.Finalize(context, lower_blob, upper_blob)) {
 				continue;
 			}
-			if (has_lower) {
-				data_file.lower_bounds[entry.first] = Value::BLOB_RAW(lower_blob);
+			if (lower_blob) {
+				data_file.lower_bounds[entry.first] = Value::BLOB_RAW(*lower_blob);
 			}
-			if (has_upper) {
-				data_file.upper_bounds[entry.first] = Value::BLOB_RAW(upper_blob);
+			if (upper_blob) {
+				data_file.upper_bounds[entry.first] = Value::BLOB_RAW(*upper_blob);
 			}
 		}
 

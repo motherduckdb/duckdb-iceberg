@@ -236,8 +236,8 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 				//! column_type
 				AddString(output.data[col++], out, string_t(column.type.ToString()));
 
-				string lower_bound_str;
-				string upper_bound_str;
+				optional<string> lower_bound_str;
+				optional<string> upper_bound_str;
 				if (column.type.id() == LogicalTypeId::VARIANT) {
 					//! VARIANT lower/upper bounds are stored as a binary Variant value (an object keyed by JSON
 					//! path); decode them into a readable VARIANT instead of attempting a scalar deserialization.
@@ -265,15 +265,28 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 						lower_bound_str = GeometryBoundJson(extent, true);
 						upper_bound_str = GeometryBoundJson(extent, false);
 					} else {
-						lower_bound_str = stats.lower_bound.ToString();
-						upper_bound_str = stats.upper_bound.ToString();
+						if (stats.lower_bound) {
+							lower_bound_str = stats.lower_bound->ToString();
+						}
+						if (stats.upper_bound) {
+							upper_bound_str = stats.upper_bound->ToString();
+						}
 					}
 				}
 
 				//! lower_bound
-				AddString(output.data[col++], out, string_t(lower_bound_str));
+				if (lower_bound_str) {
+					AddString(output.data[col++], out, string_t(*lower_bound_str));
+				} else {
+					output.data[col++].SetValue(out, Value(LogicalType::VARCHAR));
+				}
+
 				//! upper_bound
-				AddString(output.data[col++], out, string_t(upper_bound_str));
+				if (upper_bound_str) {
+					AddString(output.data[col++], out, string_t(*upper_bound_str));
+				} else {
+					output.data[col++].SetValue(out, Value(LogicalType::VARCHAR));
+				}
 				// column_size
 				output.data[col++].SetValue(out, column_size);
 				// value_count

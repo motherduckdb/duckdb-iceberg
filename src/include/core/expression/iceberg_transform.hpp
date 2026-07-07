@@ -285,13 +285,19 @@ struct BucketTransform {
 	static bool CompareEqual(const Value &constant, const IcebergPredicateStats &stats) {
 		// ApplyTransform returns null for null inputs (Iceberg spec) and for
 		// unsupported types; in both cases skip filtering (conservative).
-		if (constant.IsNull() || stats.lower_bound.IsNull() || stats.upper_bound.IsNull()) {
+		if (constant.IsNull()) {
+			return true;
+		}
+		if (!stats.lower_bound || stats.lower_bound->IsNull()) {
+			return true;
+		}
+		if (!stats.upper_bound || stats.upper_bound->IsNull()) {
 			return true;
 		}
 
 		int32_t bucket_id = constant.GetValue<int32_t>();
-		int32_t lower_bucket = stats.lower_bound.GetValue<int32_t>();
-		int32_t upper_bucket = stats.upper_bound.GetValue<int32_t>();
+		int32_t lower_bucket = stats.lower_bound->GetValue<int32_t>();
+		int32_t upper_bucket = stats.upper_bound->GetValue<int32_t>();
 		return (bucket_id >= lower_bucket && bucket_id <= upper_bucket);
 	}
 	static bool CompareLessThan(const Value &constant, const IcebergPredicateStats &stats) {

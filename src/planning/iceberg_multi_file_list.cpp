@@ -572,17 +572,15 @@ void IcebergMultiFileList::GetStatistics(vector<PartitionStatistics> &result) co
 }
 
 void IcebergPredicateStats::SetLowerBound(const Value &new_lower_bound) {
-	has_lower_bounds = true;
 	lower_bound = new_lower_bound;
 }
 
 void IcebergPredicateStats::SetUpperBound(const Value &new_upper_bound) {
-	has_upper_bounds = true;
 	upper_bound = new_upper_bound;
 }
 
 bool IcebergPredicateStats::BoundsAreNull() const {
-	return has_lower_bounds && has_upper_bounds && lower_bound.IsNull() && upper_bound.IsNull();
+	return lower_bound && upper_bound && lower_bound->IsNull() && upper_bound->IsNull();
 }
 
 // Iceberg v3 (Appendix D): geometry lower/upper bounds are a packed little-endian
@@ -635,8 +633,10 @@ IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(const Value &lowe
 		// Geometry bounds need both corners together to build a bounding-box extent,
 		// so they don't go through the per-bound Value deserialization below.
 		res.geometry_stats = BuildGeometryStats(lower_bound, upper_bound, type);
-		res.has_lower_bounds = res.geometry_stats != nullptr;
-		res.has_upper_bounds = res.geometry_stats != nullptr;
+		if (res.geometry_stats == nullptr) {
+			res.lower_bound.reset();
+			res.upper_bound.reset();
+		}
 		return res;
 	}
 
@@ -715,8 +715,6 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 						found_partition_field = true;
 						stats.lower_bound = partition_val.value;
 						stats.upper_bound = partition_val.value;
-						stats.has_upper_bounds = true;
-						stats.has_lower_bounds = true;
 						// set null stats for partitioned column.
 						if (partition_val.value.IsNull()) {
 							// partition values can be null
@@ -742,9 +740,9 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 				// if the filter doesn't match the partition value, we don't need to scan the data file
 				if (!IcebergPredicate::MatchBounds(context, *table_filter, stats, field.transform)) {
 					auto &source_column = IcebergTableSchema::GetFromColumnIndex(schema, column_id, 0);
-					auto partition_value_raw_str = stats.has_lower_bounds ? stats.lower_bound.ToString() : "NULL";
+					auto partition_value_raw_str = stats.lower_bound ? stats.lower_bound->ToString() : "NULL";
 					auto partition_value_transformed_str =
-					    stats.has_lower_bounds ? field.transform.PartitionValueToString(stats.lower_bound) : "NULL";
+					    stats.lower_bound ? field.transform.PartitionValueToString(*stats.lower_bound) : "NULL";
 					DUCKDB_LOG(
 					    context, IcebergLogType,
 					    "Iceberg Filter Pushdown, skipped 'data_file': '%s', partition column '%s' has raw value %s "
@@ -810,30 +808,36 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 			stats = IcebergPredicateStats::DeserializeBounds(lower_bound, upper_bound, column.name, column.type);
 		}
 
-		int64_t value_count = 0;
-		bool has_value_counts = false;
+		optional<int64_t> value_count;
+		optional<int64_t> null_count;
 		auto value_counts_it = data_file.value_counts.find(column_id);
 		if (value_counts_it != data_file.value_counts.end()) {
 			value_count = value_counts_it->second;
-			has_value_counts = true;
 		}
 
 		auto null_counts_it = data_file.null_value_counts.find(column_id);
 		if (null_counts_it != data_file.null_value_counts.end()) {
-			auto &null_counts = null_counts_it->second;
-			stats.has_null = null_counts != 0;
-			if (has_value_counts) {
-				stats.has_not_null = (value_count - null_counts) > 0;
+			null_count = null_counts_it->second;
+		}
+
+		if (null_count) {
+			stats.has_null = *null_count > 0;
+			if (value_count) {
+				//! If both are present, we can have an accurate picture of the non-null-value count
+				auto non_null_values = *value_count - *null_count;
+				stats.has_not_null = non_null_values > 0;
 			} else {
-				// if no value counts are active, assume there are values
+				// If no 'value_counts', assume there are null values
 				stats.has_not_null = true;
 			}
 		} else {
+			//! No 'null_counts' are present, conservatively assume there are nulls
 			stats.has_null = true;
-			if (has_value_counts) {
-				stats.has_not_null = value_count > 0;
+			if (value_count) {
+				//! If there are 'value_counts' and its over 0, assume these contain non-null values
+				stats.has_not_null = *value_count > 0;
 			} else {
-				// if no value counts are active, assume there are values
+				//! If no 'value_counts', assume there are non-null values
 				stats.has_not_null = true;
 			}
 		}
@@ -841,7 +845,10 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 		auto nan_counts_it = data_file.nan_value_counts.find(column_id);
 		if (nan_counts_it != data_file.nan_value_counts.end()) {
 			auto &nan_counts = nan_counts_it->second;
-			stats.has_nan = nan_counts != 0;
+			stats.has_nan = nan_counts > 0;
+		} else {
+			//! Assume there are nan values
+			stats.has_nan = true;
 		}
 
 		auto &filter = *entry.second;
@@ -850,8 +857,8 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 			DUCKDB_LOG(context, IcebergLogType,
 			           "Iceberg Filter Pushdown, skipped 'data_file': '%s', column '%s' with "
 			           "bounds [%s, %s] did not match filter: %s",
-			           data_file.file_path, column.name, stats.has_lower_bounds ? stats.lower_bound.ToString() : "N/A",
-			           stats.has_upper_bounds ? stats.upper_bound.ToString() : "N/A", filter.ToString(column.name));
+			           data_file.file_path, column.name, stats.lower_bound ? stats.lower_bound->ToString() : "N/A",
+			           stats.upper_bound ? stats.upper_bound->ToString() : "N/A", filter.ToString(column.name));
 			return false;
 		}
 	}
@@ -1034,8 +1041,7 @@ void IcebergMultiFileList::EnsureScanOrderApplied(lock_guard<mutex> &guard) cons
 		//! lower/upper bounds are stored as raw Iceberg-encoded blobs; decode to typed Values before comparing.
 		auto stats = IcebergPredicateStats::DeserializeBounds(lower_it->second, upper_it->second, order_column.name,
 		                                                      order_column.type);
-		if (!stats.has_lower_bounds || !stats.has_upper_bounds || stats.lower_bound.IsNull() ||
-		    stats.upper_bound.IsNull()) {
+		if (!stats.lower_bound || !stats.upper_bound || stats.lower_bound->IsNull() || stats.upper_bound->IsNull()) {
 			return;
 		}
 		auto null_it = data_file.null_value_counts.find(field_id);
@@ -1044,7 +1050,8 @@ void IcebergMultiFileList::EnsureScanOrderApplied(lock_guard<mutex> &guard) cons
 			//! reordering stays safe, limit pruning does not.
 			can_prune = false;
 		}
-		order_entries.push_back({i, stats.lower_bound, stats.upper_bound, NumericCast<idx_t>(data_file.record_count)});
+		order_entries.push_back(
+		    {i, *stats.lower_bound, *stats.upper_bound, NumericCast<idx_t>(data_file.record_count)});
 	}
 
 	if (can_prune) {
@@ -1215,9 +1222,8 @@ bool IcebergMultiFileList::ManifestMatchesFilter(const IcebergManifestFile &mani
 			           "Iceberg Filter Pushdown, skipped 'manifest_file': '%s', column '%s' with "
 			           "transform '%s', bounds [%s, %s] did not match filter: %s",
 			           manifest.manifest_path, column.name, field.transform.RawType(),
-			           stats.has_lower_bounds ? stats.lower_bound.ToString() : "N/A",
-			           stats.has_upper_bounds ? stats.upper_bound.ToString() : "N/A",
-			           table_filter->ToString(column.name));
+			           stats.lower_bound ? stats.lower_bound->ToString() : "N/A",
+			           stats.upper_bound ? stats.upper_bound->ToString() : "N/A", table_filter->ToString(column.name));
 			return false;
 		}
 	}
@@ -1434,8 +1440,8 @@ void IcebergMultiFileList::EnumerateDeleteManifestEntriesInternal() const {
 			}
 			auto &data_file = manifest_entry.data_file;
 			auto &referenced_data_file = data_file.referenced_data_file;
-			if (!referenced_data_file.empty() && transactional_delete_files &&
-			    transactional_delete_files->count(referenced_data_file)) {
+			if (referenced_data_file && transactional_delete_files &&
+			    transactional_delete_files->count(*referenced_data_file)) {
 				//! Skip this delete file, there's a transaction-local delete that makes it obsolete
 				continue;
 			}
@@ -1452,8 +1458,8 @@ void IcebergMultiFileList::EnumerateDeleteManifestEntriesInternal() const {
 		for (auto &manifest_entry : manifest_list_entry.manifest_entries) {
 			auto &data_file = manifest_entry.data_file;
 			auto &referenced_data_file = data_file.referenced_data_file;
-			if (!referenced_data_file.empty() && transactional_delete_files) {
-				auto it = transactional_delete_files->find(referenced_data_file);
+			if (referenced_data_file && transactional_delete_files) {
+				auto it = transactional_delete_files->find(*referenced_data_file);
 				//! Check if this is the currently active (last) delete file for this referenced_data_file
 				if (it != transactional_delete_files->end() && it->second != data_file.file_path) {
 					continue;
