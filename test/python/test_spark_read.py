@@ -23,19 +23,6 @@ requires_equality_deletes_available = pytest.mark.skipif(
 )
 
 
-def is_active_catalog(catalog: str):
-    try:
-        return (
-            resolve_active_catalog(
-                allowed_catalogs=REST_CATALOG_NAMES,
-                purpose="catalog-backed test/python runs",
-            )
-            == catalog
-        )
-    except:
-        return False
-
-
 class TestSparkRead:
     def test_spark_read_duckdb_table(self, spark_con):
         df = spark_con.sql(

@@ -4,8 +4,17 @@ import datetime
 from decimal import Decimal
 from math import inf
 
+from conftest import is_active_catalog
+
 pyice = pytest.importorskip("pyiceberg")
 pa = pytest.importorskip("pyarrow")
+
+
+def arrow_column_values(table: pa.Table, name: str):
+    column = table.column(name).combine_chunks()
+    if pa.types.is_timestamp(column.type) and column.type.unit == "ns":
+        return [column[idx].value if column[idx].is_valid else None for idx in range(len(column))]
+    return column.to_pylist()
 
 
 class TestPyIcebergRead:
@@ -59,13 +68,11 @@ class TestPyIcebergRead:
     def test_pyiceberg_read_duckdb_timestamptz_ns(self, rest_catalog):
         table = rest_catalog.load_table("default.duckdb_timestamptz_ns_for_other_engines")
         arrow_table: pa.Table = table.scan().to_arrow()
-        res = arrow_table.to_pylist()
+        rows = sorted(zip(arrow_column_values(arrow_table, "id"), arrow_column_values(arrow_table, "val")))
 
-        assert len(res) == 2
-        assert [row["id"] for row in res] == [1, 2]
-        assert [row["val"].value for row in res] == [
-            1579077000123456789,
-            1624200300987654321,
+        assert rows == [
+            (1, 1579077000123456789),
+            (2, 1624200300987654321),
         ]
 
     def test_pyiceberg_read(self, rest_catalog):
@@ -76,6 +83,14 @@ class TestPyIcebergRead:
         # only 1 data file should match the filter
         assert len(matched_files) == 1
 
+    @pytest.mark.skipif(
+        is_active_catalog('polaris'),
+        reason="Polaris skips the bounds setup table in this suite",
+    )
+    @pytest.mark.skipif(
+        is_active_catalog('lakekeeper'),
+        reason="Lakekeeper skips the bounds setup table in this suite",
+    )
     def test_pyiceberg_read_duckdb_upper_lower_bounds(self, rest_catalog):
         tbl = rest_catalog.load_table("default.lower_upper_bounds_test")
         arrow_table: pa.Table = tbl.scan().to_arrow()
