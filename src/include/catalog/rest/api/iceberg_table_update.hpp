@@ -7,7 +7,6 @@
 
 namespace duckdb {
 
-struct IcebergTableMetadata;
 struct IcebergTableInformation;
 struct IcebergTransactionData;
 
@@ -64,7 +63,6 @@ public:
 
 public:
 	virtual void CreateUpdate(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state) const = 0;
-	virtual void ApplyUpdate(IcebergTableMetadata &metadata) const = 0;
 	virtual bool IsRetryable() const {
 		return false;
 	}

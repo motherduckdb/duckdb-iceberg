@@ -1,7 +1,6 @@
 #include "catalog/rest/api/table_update.hpp"
 #include "duckdb/common/exception.hpp"
 #include "catalog/rest/iceberg_table_set.hpp"
-#include "core/metadata/iceberg_table_metadata.hpp"
 
 namespace duckdb {
 
@@ -28,14 +27,6 @@ void AddSchemaUpdate::CreateUpdate(DatabaseInstance &db, ClientContext &context,
 	}
 }
 
-void AddSchemaUpdate::ApplyUpdate(IcebergTableMetadata &metadata) const {
-	D_ASSERT(schema);
-	metadata.AddSchemaOrGetExisting(schema->Copy());
-	if (last_column_id.IsValid()) {
-		metadata.last_column_id = last_column_id;
-	}
-}
-
 AssignUUIDUpdate::AssignUUIDUpdate(string uuid)
     : IcebergTableUpdate(IcebergTableUpdateType::ASSIGN_UUID), uuid(std::move(uuid)) {
 }
@@ -48,10 +39,6 @@ void AssignUUIDUpdate::CreateUpdate(DatabaseInstance &db, ClientContext &context
 	update.assign_uuidupdate->base_update.action = "assign-uuid";
 	// uuid most likely created by the rest catalog?
 	update.assign_uuidupdate->uuid = uuid;
-}
-
-void AssignUUIDUpdate::ApplyUpdate(IcebergTableMetadata &metadata) const {
-	metadata.table_uuid = uuid;
 }
 
 AssertCreateRequirement::AssertCreateRequirement()
@@ -147,10 +134,6 @@ void UpgradeFormatVersion::CreateUpdate(DatabaseInstance &db, ClientContext &con
 	req.upgrade_format_version_update->format_version = format_version;
 }
 
-void UpgradeFormatVersion::ApplyUpdate(IcebergTableMetadata &metadata) const {
-	metadata.iceberg_version = format_version;
-}
-
 SetCurrentSchema::SetCurrentSchema(int32_t schema_id)
     : IcebergTableUpdate(IcebergTableUpdateType::SET_CURRENT_SCHEMA), schema_id(schema_id) {
 }
@@ -163,10 +146,6 @@ void SetCurrentSchema::CreateUpdate(DatabaseInstance &db, ClientContext &context
 	req.set_current_schema_update->base_update.action = "set-current-schema";
 	// TODO: should this be a different value? or is the rest catalog setting this again?
 	req.set_current_schema_update->schema_id = schema_id;
-}
-
-void SetCurrentSchema::ApplyUpdate(IcebergTableMetadata &metadata) const {
-	metadata.SetCurrentSchemaId(schema_id);
 }
 
 AddPartitionSpec::AddPartitionSpec(const IcebergPartitionSpec &partition_spec)
@@ -191,14 +170,6 @@ void AddPartitionSpec::CreateUpdate(DatabaseInstance &db, ClientContext &context
 	}
 }
 
-void AddPartitionSpec::ApplyUpdate(IcebergTableMetadata &metadata) const {
-	metadata.partition_specs.erase(partition_spec.spec_id);
-	metadata.partition_specs.emplace(partition_spec.spec_id, partition_spec);
-	if (!partition_spec.fields.empty()) {
-		metadata.last_partition_field_id = partition_spec.fields.back().partition_field_id;
-	}
-}
-
 AddSortOrder::AddSortOrder(const IcebergSortOrder &sort_order)
     : IcebergTableUpdate(IcebergTableUpdateType::ADD_SORT_ORDER), sort_order(sort_order) {
 }
@@ -219,11 +190,6 @@ void AddSortOrder::CreateUpdate(DatabaseInstance &db, ClientContext &context, Ic
 	}
 }
 
-void AddSortOrder::ApplyUpdate(IcebergTableMetadata &metadata) const {
-	metadata.sort_specs.erase(sort_order.sort_order_id);
-	metadata.sort_specs.emplace(sort_order.sort_order_id, sort_order);
-}
-
 SetDefaultSortOrder::SetDefaultSortOrder(int32_t sort_order_id)
     : IcebergTableUpdate(IcebergTableUpdateType::SET_DEFAULT_SORT_ORDER), sort_order_id(sort_order_id) {
 }
@@ -235,10 +201,6 @@ void SetDefaultSortOrder::CreateUpdate(DatabaseInstance &db, ClientContext &cont
 	req.set_default_sort_order_update = rest_api_objects::SetDefaultSortOrderUpdate();
 	req.set_default_sort_order_update->base_update.action = "set-default-sort-order";
 	req.set_default_sort_order_update->sort_order_id = sort_order_id;
-}
-
-void SetDefaultSortOrder::ApplyUpdate(IcebergTableMetadata &metadata) const {
-	metadata.default_sort_order_id = sort_order_id;
 }
 
 SetDefaultSpec::SetDefaultSpec(int32_t spec_id)
@@ -254,10 +216,6 @@ void SetDefaultSpec::CreateUpdate(DatabaseInstance &db, ClientContext &context,
 	req.set_default_spec_update->spec_id = spec_id;
 }
 
-void SetDefaultSpec::ApplyUpdate(IcebergTableMetadata &metadata) const {
-	metadata.default_spec_id = spec_id;
-}
-
 SetProperties::SetProperties(const case_insensitive_map_t<string> &properties)
     : IcebergTableUpdate(IcebergTableUpdateType::SET_PROPERTIES), properties(properties) {
 }
@@ -268,12 +226,6 @@ void SetProperties::CreateUpdate(DatabaseInstance &db, ClientContext &context, I
 	req.set_properties_update = rest_api_objects::SetPropertiesUpdate();
 	req.set_properties_update->base_update.action = "set-properties";
 	req.set_properties_update->updates = properties;
-}
-
-void SetProperties::ApplyUpdate(IcebergTableMetadata &metadata) const {
-	for (auto &entry : properties) {
-		metadata.table_properties[entry.first] = entry.second;
-	}
 }
 
 RemoveProperties::RemoveProperties(const vector<string> &properties)
@@ -289,12 +241,6 @@ void RemoveProperties::CreateUpdate(DatabaseInstance &db, ClientContext &context
 	req.remove_properties_update->removals = properties;
 }
 
-void RemoveProperties::ApplyUpdate(IcebergTableMetadata &metadata) const {
-	for (auto &entry : properties) {
-		metadata.table_properties.erase(entry);
-	}
-}
-
 SetLocation::SetLocation(string location)
     : IcebergTableUpdate(IcebergTableUpdateType::SET_LOCATION), location(std::move(location)) {
 }
@@ -305,10 +251,6 @@ void SetLocation::CreateUpdate(DatabaseInstance &db, ClientContext &context, Ice
 	req.set_location_update = rest_api_objects::SetLocationUpdate();
 	req.set_location_update->base_update.action = "set-location";
 	req.set_location_update->location = location;
-}
-
-void SetLocation::ApplyUpdate(IcebergTableMetadata &metadata) const {
-	metadata.location = location;
 }
 
 } // namespace duckdb

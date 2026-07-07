@@ -29,10 +29,6 @@ bool IcebergAddSnapshot::IsRetryable() const {
 	return operation == IcebergSnapshotOperationType::APPEND;
 }
 
-void IcebergAddSnapshot::ApplyUpdate(IcebergTableMetadata &metadata) const {
-	(void)metadata;
-}
-
 static rest_api_objects::TableUpdate CreateAddSnapshotUpdate(const IcebergTableInformation &table_info,
                                                              const IcebergSnapshot &snapshot) {
 	rest_api_objects::TableUpdate table_update;

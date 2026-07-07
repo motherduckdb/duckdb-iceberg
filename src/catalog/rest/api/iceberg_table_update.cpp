@@ -72,7 +72,4 @@ void IcebergCommitState::LoadExistingManifests(vector<IcebergManifestListEntry> 
 IcebergTableUpdate::IcebergTableUpdate(IcebergTableUpdateType type) : type(type) {
 }
 
-void IcebergTableUpdate::ApplyUpdate(IcebergTableMetadata &metadata) const {
-}
-
 } // namespace duckdb
