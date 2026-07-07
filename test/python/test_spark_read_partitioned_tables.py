@@ -28,6 +28,7 @@ Row = pyspark_sql.Row
 def _table_param(table_name, *requirements):
     return capability_param(table_name, *requirements, id=table_name)
 
+
 # ---------------------------------------------------------------------------
 # Expected rows — defined once, shared across same-type tables regardless of
 # which partition transform was applied (the stored data is identical).

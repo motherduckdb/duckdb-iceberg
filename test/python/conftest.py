@@ -99,6 +99,7 @@ def capability_param(value, *requirements: str, id: str | None = None):
         marks = (pytest.mark.requires_capabilities(*requirements),)
     return pytest.param(value, marks=marks, id=id)
 
+
 def pytest_configure(config):
     config.addinivalue_line(
         "markers",
