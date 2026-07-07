@@ -2,7 +2,6 @@ import importlib
 import importlib.util
 import sys
 from pathlib import Path
-
 import pytest
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
