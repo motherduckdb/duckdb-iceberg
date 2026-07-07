@@ -808,8 +808,8 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 			stats = IcebergPredicateStats::DeserializeBounds(lower_bound, upper_bound, column.name, column.type);
 		}
 
-		optional<int64_t> value_count = 0;
-		optional<int64_t> null_count = 0;
+		optional<int64_t> value_count;
+		optional<int64_t> null_count;
 		auto value_counts_it = data_file.value_counts.find(column_id);
 		if (value_counts_it != data_file.value_counts.end()) {
 			value_count = value_counts_it->second;
