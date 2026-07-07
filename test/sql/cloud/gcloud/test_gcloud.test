@@ -5,7 +5,6 @@ require avro
 
 require parquet
 
-
 require httpfs
 
 require aws

@@ -140,21 +140,13 @@ jobs:
           # in its own process via the ICEBERG_RUNTIME selector.
           # test with spark v4 (Scala 2.13 runtimes)
           source .venv-spark4/bin/activate
-          for runtime in 1.10.0; do
-            echo "::group::pytest test/python (Iceberg $runtime, Spark 4)"
-            ICEBERG_RUNTIME=$runtime python3 -m pytest -vv test/python --unittest-binary ${{ inputs.build-path }}/test/unittest --test-python-verbosity verbose
-            echo "::endgroup::"
-          done
+          python3 -m pytest -vv test/python --unittest-binary ${{ inputs.build-path }}/test/unittest --test-python-verbosity verbose
           deactivate
           # test with spark v3 (Scala 2.12 runtimes)
           python3 -m venv .venv-spark3
           source .venv-spark3/bin/activate
           python3 -m pip install pyspark==3.5.2 pytest pyiceberg==0.9.1 pyarrow pydantic==2.9.0
-          for runtime in 1.4.1 1.9.0; do
-            echo "::group::pytest test/python (Iceberg $runtime, Spark 3)"
-            ICEBERG_RUNTIME=$runtime python3 -m pytest -vv test/python --unittest-binary ${{ inputs.build-path }}/test/unittest --test-python-verbosity verbose
-            echo "::endgroup::"
-          done
+          python3 -m pytest -vv test/python --unittest-binary ${{ inputs.build-path }}/test/unittest --test-python-verbosity verbose
 
       #- name: Run all duckdb/duckdb tests
       #  if: inputs.local-extension-repo == ''
