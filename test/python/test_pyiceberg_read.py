@@ -63,9 +63,9 @@ class TestPyIcebergRead:
 
         assert len(res) == 2
         assert [row["id"] for row in res] == [1, 2]
-        assert [row["val"].isoformat() for row in res] == [
-            "2020-01-15T08:30:00.123456789+00:00",
-            "2021-06-20T14:45:00.987654321+00:00",
+        assert [row["val"].value for row in res] == [
+            1579077000123456789,
+            1624200300987654321,
         ]
 
     def test_pyiceberg_read(self, rest_catalog):
