@@ -664,11 +664,92 @@ IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(const Value &lowe
 	return res;
 }
 
+bool IcebergMultiFileList::FilePartitionMatchesFilter(const IcebergDataFile &data_file,
+                                                      const IcebergManifestFile &manifest_file,
+                                                      const IcebergTableMetadata &metadata,
+                                                      const IcebergTableSchema &schema) const {
+	if (data_file.partition_info.empty()) {
+		//! No bounds to check
+		return true;
+	}
+
+	// check if the index is in the partition info.
+	auto partition_spec_it = metadata.partition_specs.find(manifest_file.partition_spec_id);
+	if (partition_spec_it == metadata.partition_specs.end()) {
+		throw InvalidConfigurationException(
+		    "Data file %s has partition spec %d while the metadata does not have this partition spec",
+		    data_file.file_path, manifest_file.partition_spec_id);
+	}
+	auto &partition_spec = partition_spec_it->second;
+	unordered_map<uint64_t, ColumnIndex> source_to_column_id;
+	IcebergTableSchema::PopulateSourceIdMap(source_to_column_id, schema.columns, nullptr);
+
+	//! Map from partition_field_id -> data_file.partition_info[i]
+	unordered_map<uint64_t, idx_t> partition_info_map;
+	for (idx_t i = 0; i < data_file.partition_info.size(); i++) {
+		const auto partition_field_id = data_file.partition_info[i].field_id;
+		partition_info_map.emplace(partition_field_id, i);
+	}
+
+	auto &field_summaries = partition_spec.fields;
+	for (idx_t i = 0; i < field_summaries.size(); i++) {
+		auto &field = partition_spec.fields[i];
+
+		const auto &column_id = source_to_column_id.at(field.source_id);
+		// Find if we have a filter for this source column
+		auto table_filter = GetFilterForColumnIndex(table_filters, column_id);
+		if (!table_filter) {
+			continue;
+		}
+
+		// initialize dummy stats
+		IcebergPredicateStats stats;
+		auto it = partition_info_map.find(field.partition_field_id);
+		if (it == partition_info_map.end()) {
+			//! FIXME: this is an error, no??
+			// continue to next partition spec field summary
+			continue;
+		}
+		auto &partition_val = data_file.partition_info[it->second];
+		stats.lower_bound = partition_val.value;
+		stats.upper_bound = partition_val.value;
+		// set null stats for partitioned column.
+		if (partition_val.value.IsNull()) {
+			// partition values can be null
+			stats.has_null = true;
+		} else {
+			stats.has_not_null = true;
+		}
+
+		auto nan_counts_it = data_file.nan_value_counts.find(column_id.GetPrimaryIndex());
+		if (nan_counts_it != data_file.nan_value_counts.end()) {
+			auto &nan_counts = nan_counts_it->second;
+			stats.has_nan = nan_counts != 0;
+		}
+
+		// if the filter doesn't match the partition value, we don't need to scan the data file
+		if (!IcebergPredicate::MatchBounds(context, *table_filter, stats, field.transform)) {
+			auto &source_column = IcebergTableSchema::GetFromColumnIndex(schema.columns, column_id, 0);
+			auto partition_value_raw_str = stats.lower_bound ? stats.lower_bound->ToString() : "NULL";
+			auto partition_value_transformed_str =
+			    stats.lower_bound ? field.transform.PartitionValueToString(*stats.lower_bound) : "NULL";
+			DUCKDB_LOG(context, IcebergLogType,
+			           "Iceberg Filter Pushdown, skipped 'data_file': '%s', partition column '%s' has raw value %s "
+			           "with transform '%s'. '%s(%s)=%s' does not match filter: %s",
+			           data_file.file_path, source_column.name, partition_value_raw_str, field.transform.RawType(),
+			           field.transform.RawType(), partition_value_raw_str, partition_value_transformed_str,
+			           table_filter->ToString(source_column.name));
+			return false;
+		}
+	}
+	return true;
+}
+
 bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest_file,
                                              const IcebergManifestEntry &manifest_entry,
                                              IcebergManifestContentType file_type) const {
 	D_ASSERT(table_filters.HasFilters());
-	auto &schema = GetSchema().columns;
+	auto &schema = GetSchema();
 
 	auto &metadata = GetMetadata();
 	unordered_set<int32_t> mapping_field_ids;
@@ -680,79 +761,12 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 
 	for (auto &entry : table_filters) {
 		auto index = entry.first;
-		auto &column = *schema[index];
+		auto &column = *schema.columns[index];
 
 		auto &data_file = manifest_entry.data_file;
 		// First check if there are partitions
-		if (!data_file.partition_info.empty()) {
-			// check if the index is in the partition info.
-			auto partition_spec_it = metadata.partition_specs.find(manifest_file.partition_spec_id);
-			if (partition_spec_it == metadata.partition_specs.end()) {
-				throw InvalidConfigurationException(
-				    "Data file %s has partition spec %d while the metadata does not have this partition spec",
-				    data_file.file_path, manifest_file.partition_spec_id);
-			}
-			auto &partition_spec = partition_spec_it->second;
-			unordered_map<uint64_t, ColumnIndex> source_to_column_id;
-			IcebergTableSchema::PopulateSourceIdMap(source_to_column_id, schema, nullptr);
-
-			auto &field_summaries = partition_spec.fields;
-			for (idx_t i = 0; i < field_summaries.size(); i++) {
-				auto &field = partition_spec.fields[i];
-
-				const auto &column_id = source_to_column_id.at(field.source_id);
-				// Find if we have a filter for this source column
-				auto table_filter = GetFilterForColumnIndex(table_filters, column_id);
-				if (!table_filter) {
-					continue;
-				}
-
-				// initialize dummy stats
-				auto stats = IcebergPredicateStats();
-				bool found_partition_field = false;
-				for (auto &partition_val : data_file.partition_info) {
-					if (field.partition_field_id == partition_val.field_id) {
-						found_partition_field = true;
-						stats.lower_bound = partition_val.value;
-						stats.upper_bound = partition_val.value;
-						// set null stats for partitioned column.
-						if (partition_val.value.IsNull()) {
-							// partition values can be null
-							stats.has_null = true;
-						} else {
-							stats.has_not_null = true;
-						}
-						break;
-					}
-				}
-
-				if (!found_partition_field) {
-					// continue to next partition spec field summary
-					continue;
-				}
-
-				auto nan_counts_it = data_file.nan_value_counts.find(column_id.GetPrimaryIndex());
-				if (nan_counts_it != data_file.nan_value_counts.end()) {
-					auto &nan_counts = nan_counts_it->second;
-					stats.has_nan = nan_counts != 0;
-				}
-
-				// if the filter doesn't match the partition value, we don't need to scan the data file
-				if (!IcebergPredicate::MatchBounds(context, *table_filter, stats, field.transform)) {
-					auto &source_column = IcebergTableSchema::GetFromColumnIndex(schema, column_id, 0);
-					auto partition_value_raw_str = stats.lower_bound ? stats.lower_bound->ToString() : "NULL";
-					auto partition_value_transformed_str =
-					    stats.lower_bound ? field.transform.PartitionValueToString(*stats.lower_bound) : "NULL";
-					DUCKDB_LOG(
-					    context, IcebergLogType,
-					    "Iceberg Filter Pushdown, skipped 'data_file': '%s', partition column '%s' has raw value %s "
-					    "with transform '%s'. '%s(%s)=%s' does not match filter: %s",
-					    data_file.file_path, source_column.name, partition_value_raw_str, field.transform.RawType(),
-					    field.transform.RawType(), partition_value_raw_str, partition_value_transformed_str,
-					    table_filter->ToString(source_column.name));
-					return false;
-				}
-			}
+		if (!FilePartitionMatchesFilter(data_file, manifest_file, metadata, schema)) {
+			return false;
 		}
 		if (data_file.lower_bounds.empty() || data_file.upper_bounds.empty() ||
 		    file_type == IcebergManifestContentType::DELETE) {

@@ -129,6 +129,9 @@ static unique_ptr<FunctionData> IcebergColumnStatsBind(ClientContext &context, T
 	names.emplace_back("file_path");
 	return_types.emplace_back(LogicalType::VARCHAR);
 
+	names.emplace_back("partition");
+	return_types.emplace_back(LogicalType::VARCHAR);
+
 	names.emplace_back("column_name");
 	return_types.emplace_back(LogicalType::VARCHAR);
 
@@ -178,6 +181,12 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 		for (; global_state.current_manifest_entry_idx < entries.size(); global_state.current_manifest_entry_idx++) {
 			auto &manifest_entry = entries[global_state.current_manifest_entry_idx];
 			auto &data_file = manifest_entry.data_file;
+			child_list_t<Value> partition_fields;
+			for (idx_t partition_idx = 0; partition_idx < data_file.partition_info.size(); partition_idx++) {
+				auto &entry = data_file.partition_info[partition_idx];
+				partition_fields.emplace_back(StringUtil::Format("r%d", partition_idx), entry.value);
+			}
+			auto partition_value = Value::STRUCT(std::move(partition_fields));
 
 			for (; global_state.column_it != bind_data.source_to_column_id.end(); global_state.column_it++) {
 				if (out >= STANDARD_VECTOR_SIZE) {
@@ -193,6 +202,8 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 				          string_t(IcebergManifestEntryContentTypeToString(data_file.content)));
 				//! file_path
 				AddString(output.data[col++], out, string_t(data_file.file_path));
+				//! partition
+				output.data[col++].SetValue(out, partition_value);
 
 				auto &entry = global_state.column_it;
 				auto &source_id = entry->first;

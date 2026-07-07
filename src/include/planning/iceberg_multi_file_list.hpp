@@ -196,6 +196,8 @@ protected:
 
 protected:
 	bool ManifestMatchesFilter(const IcebergManifestFile &manifest) const;
+	bool FilePartitionMatchesFilter(const IcebergDataFile &data_file, const IcebergManifestFile &manifest_file,
+	                                const IcebergTableMetadata &metadata, const IcebergTableSchema &schema) const;
 	bool FileMatchesFilter(const IcebergManifestFile &manifest_file, const IcebergManifestEntry &manifest_entry,
 	                       IcebergManifestContentType file_type) const;
 	// TODO: How to guarantee we only call this after the filter pushdown?
