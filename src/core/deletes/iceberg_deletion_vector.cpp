@@ -259,7 +259,7 @@ idx_t IcebergDeletionVector::Filter(row_t start_row_index, idx_t count, Selectio
 
 		lock_guard<mutex> guard(lock);
 		//! Update the state
-		if (!has_current_high || current_high != high) {
+		if (!current_high || *current_high != high) {
 			auto it = bitmaps.find(high);
 			if (it == bitmaps.end()) {
 				current_bitmap = nullptr;
@@ -268,7 +268,6 @@ idx_t IcebergDeletionVector::Filter(row_t start_row_index, idx_t count, Selectio
 				bulk_context = roaring::BulkContext();
 			}
 			current_high = high;
-			has_current_high = true;
 		}
 
 		if (!current_bitmap) {

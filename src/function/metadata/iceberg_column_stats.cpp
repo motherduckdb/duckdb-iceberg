@@ -265,8 +265,8 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 						lower_bound_str = GeometryBoundJson(extent, true);
 						upper_bound_str = GeometryBoundJson(extent, false);
 					} else {
-						lower_bound_str = stats.lower_bound.ToString();
-						upper_bound_str = stats.upper_bound.ToString();
+						lower_bound_str = stats.lower_bound->ToString();
+						upper_bound_str = stats.upper_bound->ToString();
 					}
 				}
 
