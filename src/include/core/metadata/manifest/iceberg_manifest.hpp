@@ -131,14 +131,9 @@ public:
 	sequence_number_t GetFileSequenceNumber(const IcebergManifestFile &manifest_file) const;
 
 private:
-	bool has_snapshot_id = false;
-	int64_t snapshot_id;
-
-	bool has_sequence_number = false;
-	sequence_number_t sequence_number;
-
-	bool has_file_sequence_number = false;
-	sequence_number_t file_sequence_number;
+	optional<int64_t> snapshot_id;
+	optional<sequence_number_t> sequence_number;
+	optional<sequence_number_t> file_sequence_number;
 };
 
 struct IcebergManifestListEntry;

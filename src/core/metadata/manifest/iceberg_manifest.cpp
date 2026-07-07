@@ -392,49 +392,52 @@ LogicalType IcebergDataFile::GetType(const IcebergTableMetadata &metadata, const
 }
 
 void IcebergManifestEntry::SetSequenceNumber(sequence_number_t value) {
-	has_sequence_number = true;
 	sequence_number = value;
 }
 
 void IcebergManifestEntry::SetFileSequenceNumber(sequence_number_t value) {
-	has_file_sequence_number = true;
 	file_sequence_number = value;
 }
 
 sequence_number_t IcebergManifestEntry::GetSequenceNumber(const IcebergManifestFile &manifest_file) const {
-	if (!has_sequence_number) {
+	if (!sequence_number) {
 		if (status != IcebergManifestEntryStatusType::ADDED) {
 			throw InvalidConfigurationException(
 			    "'manifest_entry.sequence_number' is only allowed to be NULL for ADDED entries");
 		}
-		return manifest_file.sequence_number;
+		if (!manifest_file.sequence_number) {
+			throw InvalidConfigurationException("'manifest_file.sequence_number' is not set");
+		}
+		return *manifest_file.sequence_number;
 	}
-	return sequence_number;
+	return *sequence_number;
 }
 
 sequence_number_t IcebergManifestEntry::GetFileSequenceNumber(const IcebergManifestFile &manifest_file) const {
-	if (!has_file_sequence_number) {
+	if (!file_sequence_number) {
 		if (status != IcebergManifestEntryStatusType::ADDED) {
 			throw InvalidConfigurationException(
 			    "'manifest_entry.file_sequence_number' is only allowed to be NULL for ADDED entries");
 		}
-		return manifest_file.sequence_number;
+		if (!manifest_file.sequence_number) {
+			throw InvalidConfigurationException("'manifest_file.sequence_number' is not set");
+		}
+		return *manifest_file.sequence_number;
 	}
-	return file_sequence_number;
+	return *file_sequence_number;
 }
 
 void IcebergManifestEntry::SetSnapshotId(int64_t value) {
-	has_snapshot_id = true;
 	snapshot_id = value;
 }
 
 bool IcebergManifestEntry::HasSnapshotId() const {
-	return has_snapshot_id;
+	return !!snapshot_id;
 }
 
 int64_t IcebergManifestEntry::GetSnapshotId() const {
 	D_ASSERT(HasSnapshotId());
-	return snapshot_id;
+	return *snapshot_id;
 }
 
 static Value CreateFieldID(int32_t field_id, bool nullable) {

@@ -17,8 +17,8 @@ static void AssignManifestFirstRowIds(const IcebergTableMetadata &metadata,
 		if (manifest_file.content != IcebergManifestContentType::DATA) {
 			continue;
 		}
-		if (manifest_file.has_first_row_id) {
-			next_row_id = MaxValue<int64_t>(next_row_id, manifest_file.first_row_id + manifest_file.added_rows_count +
+		if (manifest_file.first_row_id) {
+			next_row_id = MaxValue<int64_t>(next_row_id, *manifest_file.first_row_id + manifest_file.added_rows_count +
 			                                                 manifest_file.existing_rows_count);
 			continue;
 		}
@@ -26,7 +26,6 @@ static void AssignManifestFirstRowIds(const IcebergTableMetadata &metadata,
 			throw InternalException("Table is corrupted, snapshot has 'first-row-id' but not all 'manifest_file' "
 			                        "entries have a 'first_row_id'");
 		}
-		manifest_file.has_first_row_id = true;
 		manifest_file.first_row_id = next_row_id;
 		next_row_id += manifest_file.added_rows_count;
 		next_row_id += manifest_file.existing_rows_count;

@@ -46,14 +46,14 @@ static void LoadExistingManifestList(ClientContext &context, const IcebergTableM
 		if (manifest_file.content != IcebergManifestContentType::DATA) {
 			continue;
 		}
-		if (manifest_file.has_first_row_id) {
+		if (manifest_file.first_row_id) {
 			continue;
 		}
 		if (current_snapshot->has_first_row_id) {
-			throw InternalException("Table is corrupted, snapshot has 'first-row-id' but not all 'manifest_file' "
-			                        "entries have a 'first_row_id'");
+			throw InvalidConfigurationException(
+			    "Table is corrupted, snapshot has 'first-row-id' but not all 'manifest_file' "
+			    "entries have a 'first_row_id'");
 		}
-		manifest_file.has_first_row_id = true;
 		manifest_file.first_row_id = next_row_id;
 		next_row_id += manifest_file.added_rows_count;
 		next_row_id += manifest_file.existing_rows_count;

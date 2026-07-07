@@ -52,7 +52,6 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 	manifest_file.manifest_path = manifest_file_path;
 	if (table_metadata.iceberg_version >= 3 && manifest_content_type == IcebergManifestContentType::DATA) {
 		//! 'first_row_id' is only assigned to data manifests (row lineage), deletes manifests leave it null
-		manifest_file.has_first_row_id = true;
 		manifest_file.first_row_id = next_row_id;
 	}
 
@@ -93,11 +92,9 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 		}
 
 		//! NOTE: this gets overwritten on commit
-		if (!manifest_file.has_min_sequence_number ||
-		    manifest_file.sequence_number < manifest_file.min_sequence_number) {
+		if (!manifest_file.min_sequence_number || manifest_file.sequence_number < *manifest_file.min_sequence_number) {
 			manifest_file.min_sequence_number = manifest_file.sequence_number;
 		}
-		manifest_file.has_min_sequence_number = true;
 	}
 	//! NOTE: this gets overwritten on commit
 	manifest_file.added_snapshot_id = snapshot_id;
@@ -364,28 +361,29 @@ struct ManifestListVectorWriters {
 
 		if (content) {
 			content->WriteValue(static_cast<int32_t>(manifest.content));
-			sequence_number->WriteValue(manifest.sequence_number);
-			if (!manifest.has_min_sequence_number) {
+			if (!manifest.sequence_number) {
+				throw InvalidConfigurationException("manifest_file.sequence_number is not set");
+			}
+			sequence_number->WriteValue(*manifest.sequence_number);
+			if (!manifest.min_sequence_number) {
 				min_sequence_number->WriteValue(int64_t(-1));
 			} else {
-				min_sequence_number->WriteValue(manifest.min_sequence_number);
+				min_sequence_number->WriteValue(*manifest.min_sequence_number);
 			}
 		}
 
 		if (!first_row_id) {
 			return;
 		}
-		bool has_first_row_id = manifest.has_first_row_id;
-		int64_t row_id = manifest.first_row_id;
-		if (!has_first_row_id && manifest.content == IcebergManifestContentType::DATA) {
+		auto row_id = manifest.first_row_id;
+		if (!row_id && manifest.content == IcebergManifestContentType::DATA) {
 			D_ASSERT(next_row_id);
 			row_id = static_cast<int64_t>(*next_row_id);
-			has_first_row_id = true;
 			*next_row_id += manifest.added_rows_count;
 			*next_row_id += manifest.existing_rows_count;
 		}
-		if (has_first_row_id) {
-			first_row_id->WriteValue(row_id);
+		if (row_id) {
+			first_row_id->WriteValue(*row_id);
 		} else {
 			first_row_id->WriteNull();
 		}
