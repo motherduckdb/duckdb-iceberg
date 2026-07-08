@@ -4,9 +4,9 @@ Run with:
 
     mitmdump --mode regular@19133 -s scripts/vended_credentials_refresh_proxy.py
 
-The addon rewrites selected fixture catalog table responses to vend controlled
-S3 credentials, then intercepts MinIO requests to reject stale credentials and
-serve deterministic local Parquet objects.
+The addon rewrites selected real fixture catalog table responses to vend
+controlled S3 credentials, then intercepts MinIO requests to reject stale
+credentials and serve deterministic local Parquet objects.
 
 For refresh tests, the proxy returns initial credentials on the first table load,
 rejects an S3 request signed with those credentials, and then returns refreshed
@@ -31,7 +31,6 @@ CATALOG_PORT = 8181
 S3_HOST = "127.0.0.1"
 S3_PORT = 9000
 
-TABLE_SOURCE = "table_unpartitioned"
 SCAN_TABLE = "empty_table"
 TABLE_SCAN_TABLE = "vended_refresh_table"
 INIT_TABLE = "vended_init_refresh"
@@ -154,7 +153,6 @@ class VendedCredentialRefreshAddon:
     def _handle_catalog_request(self, flow: http.HTTPFlow):
         parsed_path = urllib.parse.urlparse(flow.request.path)
         path = parsed_path.path
-        query = f"?{parsed_path.query}" if parsed_path.query else ""
 
         table_match = re.fullmatch(r"/v1/namespaces/default/tables/([^/]+)", path)
         credentials_match = re.fullmatch(r"/v1/namespaces/default/tables/([^/]+)/credentials", path)
@@ -166,8 +164,6 @@ class VendedCredentialRefreshAddon:
         if flow.request.method == "GET" and table_match and table_match.group(1) in self.refresh_unlocked:
             table = table_match.group(1)
             flow.metadata["vended_table"] = table
-            source_table = table if table in {SCAN_TABLE, DIRECT_DELETE_TABLE} else TABLE_SOURCE
-            flow.request.path = f"/v1/namespaces/default/tables/{source_table}{query}"
             return
 
         if credentials_match and credentials_match.group(1) in self.refresh_unlocked:
