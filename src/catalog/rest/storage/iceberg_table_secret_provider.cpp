@@ -71,8 +71,13 @@ static unique_ptr<BaseSecret> BuildVendedSecret(CreateSecretInput &input) {
 	if (input.type == "r2") {
 		auto account_id_entry = input.options.find("account_id");
 		if (account_id_entry != input.options.end()) {
-			secret->secret_map["endpoint"] = account_id_entry->second.ToString() + ".r2.cloudflarestorage.com";
-			secret->secret_map["url_style"] = "path";
+			// Match httpfs' R2 defaults, but let explicitly vended options override them.
+			if (input.options.find("endpoint") == input.options.end()) {
+				secret->secret_map["endpoint"] = account_id_entry->second.ToString() + ".r2.cloudflarestorage.com";
+			}
+			if (input.options.find("url_style") == input.options.end()) {
+				secret->secret_map["url_style"] = "path";
+			}
 		}
 	}
 

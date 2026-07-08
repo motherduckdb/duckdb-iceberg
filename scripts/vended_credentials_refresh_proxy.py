@@ -6,9 +6,13 @@ Run with:
 
 The addon rewrites selected fixture catalog table responses to vend controlled
 S3 credentials, then intercepts MinIO requests to reject stale credentials and
-serve deterministic local Parquet objects. All state is kept in this process so
-the sqllogictest can exercise HTTPFS refresh paths without waiting for a real
-STS expiry.
+serve deterministic local Parquet objects.
+
+For refresh tests, the proxy returns initial credentials on the first table load,
+rejects an S3 request signed with those credentials, and then returns refreshed
+credentials on the refresh-triggered table load. This models the production
+contract that fresh vended credentials come from reloading the table through the
+Iceberg REST catalog, without waiting for a real STS expiry in CI.
 """
 
 import datetime
@@ -29,7 +33,7 @@ S3_PORT = 9000
 
 TABLE_SOURCE = "table_unpartitioned"
 SCAN_TABLE = "empty_table"
-TABLE_SCAN_TABLE = "vended_table_scan_refresh"
+TABLE_SCAN_TABLE = "vended_refresh_table"
 INIT_TABLE = "vended_init_refresh"
 RANGE_TABLE = "vended_range_refresh"
 HEAD_TABLE = "vended_head_refresh"
@@ -46,8 +50,8 @@ RANGE_FAIL_TABLE = "vended_range_fail_refresh"
 
 OLD_SCAN_KEY = "OLD_SCAN_KEY"
 NEW_SCAN_KEY = "NEW_SCAN_KEY"
-OLD_TABLE_SCAN_KEY = "OLD_TABLE_SCAN_KEY"
-NEW_TABLE_SCAN_KEY = "NEW_TABLE_SCAN_KEY"
+INITIAL_TABLE_SCAN_KEY = "INITIAL_TABLE_SCAN_KEY"
+REFRESHED_TABLE_SCAN_KEY = "REFRESHED_TABLE_SCAN_KEY"
 OLD_INIT_KEY = "OLD_INIT_KEY"
 NEW_INIT_KEY = "NEW_INIT_KEY"
 OLD_RANGE_KEY = "OLD_RANGE_KEY"
@@ -211,7 +215,7 @@ class VendedCredentialRefreshAddon:
             self.refresh_unlocked[SCAN_TABLE] = True
             self._forbidden(flow, "stale scan credentials")
             return
-        if key_id == OLD_TABLE_SCAN_KEY and self._is_data_file_request(flow):
+        if key_id == INITIAL_TABLE_SCAN_KEY and self._is_data_file_request(flow):
             data_path = urllib.parse.urlparse(flow.request.path).path
             if self.table_scan_refresh_path is None:
                 self.table_scan_refresh_path = data_path
@@ -288,8 +292,8 @@ class VendedCredentialRefreshAddon:
                 return
         if key_id not in {
             NEW_SCAN_KEY,
-            OLD_TABLE_SCAN_KEY,
-            NEW_TABLE_SCAN_KEY,
+            INITIAL_TABLE_SCAN_KEY,
+            REFRESHED_TABLE_SCAN_KEY,
             NEW_INIT_KEY,
             OLD_RANGE_KEY,
             NEW_RANGE_KEY,
@@ -418,7 +422,7 @@ class VendedCredentialRefreshAddon:
         if table == SCAN_TABLE:
             return NEW_SCAN_KEY if self.refresh_unlocked[table] else OLD_SCAN_KEY
         if table == TABLE_SCAN_TABLE:
-            return NEW_TABLE_SCAN_KEY if self.refresh_unlocked[table] else OLD_TABLE_SCAN_KEY
+            return REFRESHED_TABLE_SCAN_KEY if self.refresh_unlocked[table] else INITIAL_TABLE_SCAN_KEY
         if table == INIT_TABLE:
             return NEW_INIT_KEY if self.refresh_unlocked[table] else OLD_INIT_KEY
         if table == RANGE_TABLE:
@@ -590,9 +594,14 @@ class VendedCredentialRefreshAddon:
         canonical_query = VendedCredentialRefreshAddon._canonical_query_string(parsed_path.query)
         signed_headers = "host;x-amz-content-sha256;x-amz-date"
         canonical_headers = (
-            f"host:{host_header}\n"
-            f"x-amz-content-sha256:{payload_hash}\n"
-            f"x-amz-date:{amz_date}\n"
+            "\n".join(
+                [
+                    f"host:{host_header}",
+                    f"x-amz-content-sha256:{payload_hash}",
+                    f"x-amz-date:{amz_date}",
+                ]
+            )
+            + "\n"
         )
         canonical_request = "\n".join(
             [

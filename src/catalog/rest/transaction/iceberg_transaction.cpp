@@ -292,6 +292,14 @@ void IcebergTransaction::DropSecrets(ClientContext &context) {
 		if (started_transaction) {
 			context.transaction.Commit();
 		}
+	} catch (std::exception &ex) {
+		if (started_transaction && context.transaction.HasActiveTransaction()) {
+			context.transaction.Rollback(nullptr);
+		}
+		if (!started_transaction) {
+			throw;
+		}
+		DUCKDB_LOG_DEBUG(context, "Failed to drop temporary Iceberg vended credential secrets: %s", ex.what());
 	} catch (...) {
 		if (started_transaction && context.transaction.HasActiveTransaction()) {
 			context.transaction.Rollback(nullptr);
@@ -299,6 +307,7 @@ void IcebergTransaction::DropSecrets(ClientContext &context) {
 		if (!started_transaction) {
 			throw;
 		}
+		DUCKDB_LOG_DEBUG(context, "Failed to drop temporary Iceberg vended credential secrets: unknown exception");
 	}
 	created_secrets.clear();
 }
@@ -411,8 +420,8 @@ TableTransactionInfo IcebergTransaction::GetTransactionRequest(IcebergTransactio
 void IcebergTransaction::Commit() {
 	if (transaction_updates.empty() && created_schemas.empty() && deleted_schemas.empty() &&
 	    schema_property_updates.empty()) {
-		// Read-only scans can create temporary vended storage secrets that later statements use
-		// for manifest/data paths derived from the scan.
+		// Read-only transactions have no catalog commit work; temporary vended storage secrets
+		// are left to transaction/session cleanup.
 		return;
 	}
 
