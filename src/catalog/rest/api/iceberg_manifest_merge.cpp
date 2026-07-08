@@ -66,10 +66,10 @@ T ParseIntProperty(const string &value, T fallback) {
 //!
 //! A manifest added by THIS transaction was written under the table's current schema, so we use
 //! that directly (its Avro key-value metadata is not materialized here anyway). A carried-over
-//! manifest usually carries its schema id in its Avro header key-value metadata (populated once the
-//! file is opened -- see the pre-load in MergeManifests): prefer the "schema-id" key, else parse
-//! the "schema" JSON's "schema-id" (the reference implementations populate only "schema", not
-//! "schema-id"). When that metadata is absent we fall back to the current schema id (see below).
+//! manifest carries its schema id in its Avro header key-value metadata (populated once the file is
+//! opened -- see the pre-load in MergeManifests): prefer the "schema-id" key, else parse the
+//! "schema" JSON's "schema-id" (the reference implementations populate only "schema", not
+//! "schema-id"). The metadata is required by the spec, so its absence is an error (see below).
 int32_t ResolveManifestSchemaId(const MergeInputManifest &input, int32_t current_schema_id) {
 	using namespace duckdb_yyjson;
 
@@ -104,12 +104,14 @@ int32_t ResolveManifestSchemaId(const MergeInputManifest &input, int32_t current
 		}
 	}
 
-	//! A carried-over manifest written by DuckDB carries this metadata (see the backfill in
-	//! manifest_file::WriteToFile), so this is reached only for manifests written by another engine
-	//! that omitted it. Fall back to the current schema id: conservative (it may over-group manifests
-	//! written under different schemas), but never unsafe -- grouping only decides how manifests are
-	//! packed, not the data they describe.
-	return current_schema_id;
+	//! The Iceberg spec requires manifests to carry their schema in the Avro key-value metadata (all
+	//! format versions), and DuckDB always writes it (see the backfill in manifest_file::WriteToFile).
+	//! Reaching here means a carried-over manifest is missing it, which we cannot merge safely, so we
+	//! surface it as a configuration error rather than guessing a schema id. InvalidConfiguration (not
+	//! Internal) so it does not invalidate the database/session.
+	throw InvalidConfigurationException(
+	    "Cannot merge manifest '%s': it is missing the required schema id in its Avro key-value metadata",
+	    input.entry.file.manifest_path);
 }
 
 } // namespace
