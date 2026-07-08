@@ -17,7 +17,6 @@ require iceberg
 query IIIIIIIIIIII
 SELECT * FROM ICEBERG_COLUMN_STATS('{WORKING_DIRECTORY}/data/persistent/hive_partitioned_table', ALLOW_MOVED_PATHS=TRUE) order by all;
 ----
-
 ADDED	DATA	data/persistent/hive_partitioned_table/data/event_date=2024-01-01/00000-3-249d8105-f013-47e6-8600-a855387633e5-00001.parquet	{'r0': 2024-01-01, 'r1': 2024-01-01, 'r2': NULL}	event_date	DATE	2024-01-01	2024-01-01	36	1	0	NULL
 ADDED	DATA	data/persistent/hive_partitioned_table/data/event_date=2024-01-01/00000-3-249d8105-f013-47e6-8600-a855387633e5-00001.parquet	{'r0': 2024-01-01, 'r1': 2024-01-01, 'r2': NULL}	event_type	VARCHAR	click	click	41	1	0	NULL
 ADDED	DATA	data/persistent/hive_partitioned_table/data/event_date=2024-01-01/00000-3-249d8105-f013-47e6-8600-a855387633e5-00001.parquet	{'r0': 2024-01-01, 'r1': 2024-01-01, 'r2': NULL}	user_id	BIGINT	12345	12345	40	1	0	NULL
@@ -45,7 +44,6 @@ SELECT * FROM ICEBERG_COLUMN_STATS('{WORKING_DIRECTORY}/data/persistent/hive_par
 query IIIIIIIIIIII
 SELECT * FROM ICEBERG_COLUMN_STATS('{WORKING_DIRECTORY}/data/persistent/hive_partitioned_table', ALLOW_MOVED_PATHS=TRUE, version_name_format='v%s%s.metadata.json') order by all;
 ----
-
 ADDED	DATA	data/persistent/hive_partitioned_table/data/event_date=2024-01-01/00000-3-249d8105-f013-47e6-8600-a855387633e5-00001.parquet	{'r0': 2024-01-01, 'r1': 2024-01-01, 'r2': NULL}	event_date	DATE	2024-01-01	2024-01-01	36	1	0	NULL
 ADDED	DATA	data/persistent/hive_partitioned_table/data/event_date=2024-01-01/00000-3-249d8105-f013-47e6-8600-a855387633e5-00001.parquet	{'r0': 2024-01-01, 'r1': 2024-01-01, 'r2': NULL}	event_type	VARCHAR	click	click	41	1	0	NULL
 ADDED	DATA	data/persistent/hive_partitioned_table/data/event_date=2024-01-01/00000-3-249d8105-f013-47e6-8600-a855387633e5-00001.parquet	{'r0': 2024-01-01, 'r1': 2024-01-01, 'r2': NULL}	user_id	BIGINT	12345	12345	40	1	0	NULL
@@ -69,7 +67,6 @@ ADDED	DATA	data/persistent/hive_partitioned_table/data/event_date=2024-01-04/eve
 query IIIIIIIIIIII
 SELECT * FROM ICEBERG_COLUMN_STATS('{WORKING_DIRECTORY}/data/persistent/hive_partitioned_table', ALLOW_MOVED_PATHS=TRUE, version='2', version_name_format='v%s%s.metadata.json') order by all;
 ----
-
 ADDED	DATA	data/persistent/hive_partitioned_table/data/event_date=2024-01-01/00000-3-249d8105-f013-47e6-8600-a855387633e5-00001.parquet	{'r0': 2024-01-01}	event_date	DATE	2024-01-01	2024-01-01	36	1	0	NULL
 ADDED	DATA	data/persistent/hive_partitioned_table/data/event_date=2024-01-01/00000-3-249d8105-f013-47e6-8600-a855387633e5-00001.parquet	{'r0': 2024-01-01}	event_type	VARCHAR	click	click	41	1	0	NULL
 ADDED	DATA	data/persistent/hive_partitioned_table/data/event_date=2024-01-01/00000-3-249d8105-f013-47e6-8600-a855387633e5-00001.parquet	{'r0': 2024-01-01}	user_id	BIGINT	12345	12345	40	1	0	NULL
