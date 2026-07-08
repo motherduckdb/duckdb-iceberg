@@ -321,7 +321,7 @@ void IntroduceNewSchema(IcebergTableInformation &updated_table, IcebergTransacti
 		updated_table.CreateSchemaVersion(result_schema);
 		transaction_data.TableAddSchema(new_schema_id);
 	} else {
-		transaction_data.TableSetCurrentSchema();
+		transaction_data.TableSetCurrentSchema(result_schema.schema_id);
 	}
 	updated_table.table_metadata.SetCurrentSchemaId(result_schema.schema_id);
 }
@@ -546,7 +546,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			updated_table.CreateSchemaVersion(result_schema);
 			transaction_data.TableAddSchema(new_schema_id);
 		} else {
-			transaction_data.TableSetCurrentSchema();
+			transaction_data.TableSetCurrentSchema(result_schema.schema_id);
 		}
 		updated_table.table_metadata.SetCurrentSchemaId(result_schema.schema_id);
 		return;
@@ -647,7 +647,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			updated_table.CreateSchemaVersion(result_schema);
 			transaction_data.TableAddSchema(new_schema_id);
 		} else {
-			transaction_data.TableSetCurrentSchema();
+			transaction_data.TableSetCurrentSchema(result_schema.schema_id);
 		}
 		updated_table.table_metadata.SetCurrentSchemaId(result_schema.schema_id);
 		return;

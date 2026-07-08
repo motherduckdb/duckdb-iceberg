@@ -1,6 +1,7 @@
 #include "catalog/rest/api/iceberg_table_update.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_data.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "core/metadata/iceberg_table_metadata.hpp"
 #include "planning/metadata_io/avro/avro_scan.hpp"
 #include "planning/metadata_io/manifest_list/iceberg_manifest_list_reader.hpp"
 
@@ -68,8 +69,7 @@ void IcebergCommitState::LoadExistingManifests(vector<IcebergManifestListEntry> 
 	AssignManifestFirstRowIds(table_info.table_metadata, current_snapshot, manifests, next_row_id);
 }
 
-IcebergTableUpdate::IcebergTableUpdate(IcebergTableUpdateType type, const IcebergTableInformation &table_info)
-    : type(type), table_info(table_info) {
+IcebergTableUpdate::IcebergTableUpdate(IcebergTableUpdateType type) : type(type) {
 }
 
 } // namespace duckdb

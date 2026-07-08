@@ -100,7 +100,7 @@ int64_t IcebergTransactionData::GetCommitRetryCount() const {
 }
 
 bool IcebergTransactionData::SupportsAppendRetry() const {
-	if (!requirements.empty() || set_schema_id) {
+	if (!requirements.empty() || pending_current_schema_id.has_value()) {
 		return false;
 	}
 	if (updates.empty()) {
@@ -225,27 +225,31 @@ void IcebergTransactionData::AddUpdateSnapshot(vector<IcebergManifestEntry> &&de
 }
 
 void IcebergTransactionData::TableAddSchema(int32_t schema_id) {
-	auto add_schema_update = make_uniq<AddSchemaUpdate>(table_info, schema_id);
+	auto schema = table_info.table_metadata.GetSchemaFromId(schema_id);
+	if (!schema) {
+		throw InternalException("(TableAddSchema) Couldn't find schema with id: %d", schema_id);
+	}
+	auto add_schema_update = make_uniq<AddSchemaUpdate>(schema->Copy(), table_info.table_metadata.last_column_id);
 	updates.push_back(std::move(add_schema_update));
 	assert_schema_id = true;
-	set_schema_id = true;
+	pending_current_schema_id = schema_id;
 }
 
-void IcebergTransactionData::TableSetCurrentSchema() {
-	set_schema_id = true;
+void IcebergTransactionData::TableSetCurrentSchema(int32_t schema_id) {
+	pending_current_schema_id = schema_id;
 }
 
 void IcebergTransactionData::TableAssignUUID() {
-	updates.push_back(make_uniq<AssignUUIDUpdate>(table_info));
+	updates.push_back(make_uniq<AssignUUIDUpdate>(table_info.table_metadata.table_uuid));
 }
 
 void IcebergTransactionData::TableAddAssertCreate() {
 	has_assert_create = true;
-	requirements.push_back(make_uniq<AssertCreateRequirement>(table_info));
+	requirements.push_back(make_uniq<AssertCreateRequirement>());
 }
 
 void IcebergTransactionData::TableAddAssertUUID() {
-	requirements.push_back(make_uniq<AssertTableUUIDRequirement>(table_info));
+	requirements.push_back(make_uniq<AssertTableUUIDRequirement>(table_info.table_metadata.table_uuid));
 }
 
 void IcebergTransactionData::TableAddAssertCurrentSchemaId() {
@@ -253,47 +257,54 @@ void IcebergTransactionData::TableAddAssertCurrentSchemaId() {
 }
 
 void IcebergTransactionData::TableAddAssertLastAssignedFieldId() {
-	requirements.push_back(make_uniq<AssertLastAssignedFieldIdRequirement>(table_info));
+	D_ASSERT(table_info.table_metadata.HasLastColumnId());
+	requirements.push_back(make_uniq<AssertLastAssignedFieldIdRequirement>(
+	    static_cast<int32_t>(table_info.table_metadata.GetLastColumnId())));
 }
 
 void IcebergTransactionData::TableAddAssertLastAssignedPartitionId() {
-	requirements.push_back(make_uniq<AssertLastAssignedPartitionIdRequirement>(table_info));
+	int32_t last_assigned_partition_id = 999;
+	if (table_info.table_metadata.HasLastPartitionId()) {
+		last_assigned_partition_id = table_info.table_metadata.GetLastPartitionFieldId();
+	}
+	requirements.push_back(make_uniq<AssertLastAssignedPartitionIdRequirement>(last_assigned_partition_id));
 }
 
 void IcebergTransactionData::TableAddAssertDefaultSpecId() {
-	requirements.push_back(make_uniq<AssertDefaultSpecIdRequirement>(table_info));
+	requirements.push_back(make_uniq<AssertDefaultSpecIdRequirement>(table_info.table_metadata.default_spec_id));
 }
 
 void IcebergTransactionData::TableAddUpradeFormatVersion() {
-	updates.push_back(make_uniq<UpgradeFormatVersion>(table_info));
+	updates.push_back(make_uniq<UpgradeFormatVersion>(table_info.table_metadata.iceberg_version));
 }
 
 void IcebergTransactionData::TableAddPartitionSpec() {
-	updates.push_back(make_uniq<AddPartitionSpec>(table_info));
+	updates.push_back(make_uniq<AddPartitionSpec>(table_info.table_metadata.GetLatestPartitionSpec()));
 }
 
 void IcebergTransactionData::TableAddSortOrder() {
-	updates.push_back(make_uniq<AddSortOrder>(table_info));
+	updates.push_back(make_uniq<AddSortOrder>(table_info.table_metadata.GetLatestSortOrder()));
 }
 
 void IcebergTransactionData::TableSetDefaultSortOrder() {
-	updates.push_back(make_uniq<SetDefaultSortOrder>(table_info));
+	D_ASSERT(table_info.table_metadata.HasSortOrder());
+	updates.push_back(make_uniq<SetDefaultSortOrder>(table_info.table_metadata.GetLatestSortOrder().sort_order_id));
 }
 
 void IcebergTransactionData::TableSetDefaultSpec() {
-	updates.push_back(make_uniq<SetDefaultSpec>(table_info));
+	updates.push_back(make_uniq<SetDefaultSpec>(table_info.table_metadata.default_spec_id));
 }
 
 void IcebergTransactionData::TableSetProperties(const case_insensitive_map_t<string> &properties) {
-	updates.push_back(make_uniq<SetProperties>(table_info, properties));
+	updates.push_back(make_uniq<SetProperties>(properties));
 }
 
 void IcebergTransactionData::TableRemoveProperties(const vector<string> &properties) {
-	updates.push_back(make_uniq<RemoveProperties>(table_info, properties));
+	updates.push_back(make_uniq<RemoveProperties>(properties));
 }
 
 void IcebergTransactionData::TableSetLocation() {
-	updates.push_back(make_uniq<SetLocation>(table_info));
+	updates.push_back(make_uniq<SetLocation>(table_info.table_metadata.location));
 }
 
 } // namespace duckdb

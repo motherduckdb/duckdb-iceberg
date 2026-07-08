@@ -196,6 +196,12 @@ void IcebergCreateTableRequest::PopulateSchema(yyjson_mut_doc *doc, yyjson_mut_v
 	}
 
 	yyjson_mut_obj_add_uint(doc, schema_json, "schema-id", schema.schema_id);
+	if (!schema.identifier_field_ids.empty()) {
+		auto identifier_field_ids = yyjson_mut_obj_add_arr(doc, schema_json, "identifier-field-ids");
+		for (const auto field_id : schema.identifier_field_ids) {
+			yyjson_mut_arr_add_int(doc, identifier_field_ids, field_id);
+		}
+	}
 }
 
 string IcebergCreateTableRequest::CreateTableToJSON(std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p) {
