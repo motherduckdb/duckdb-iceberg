@@ -19,9 +19,6 @@ struct RewriteCandidate {
 	int64_t file_size_in_bytes = 0;
 	int64_t record_count = 0;
 	vector<IcebergPartitionInfo> partition_info;
-	//! Position of the original manifest entry, used when marking rewritten files as deleted.
-	idx_t manifest_idx = 0;
-	idx_t entry_idx = 0;
 };
 
 struct RewritePlan {

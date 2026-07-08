@@ -149,8 +149,7 @@ RewritePlan PlanRewrite(ClientContext &context, const RewriteDataFilesPlanInput 
 
 	auto default_spec_id = table_metadata.default_spec_id;
 
-	for (idx_t mi = 0; mi < manifest_files.size(); ++mi) {
-		const auto &list_entry = manifest_files[mi];
+	for (const auto &list_entry : manifest_files) {
 		if (list_entry.file.content != IcebergManifestContentType::DATA) {
 			continue;
 		}
@@ -166,9 +165,7 @@ RewritePlan PlanRewrite(ClientContext &context, const RewriteDataFilesPlanInput 
 			    list_entry.file.partition_spec_id, default_spec_id);
 		}
 
-		const auto &entries = list_entry.manifest_entries;
-		for (idx_t ei = 0; ei < entries.size(); ++ei) {
-			const auto &entry = entries[ei];
+		for (const auto &entry : list_entry.manifest_entries) {
 			if (entry.status == IcebergManifestEntryStatusType::DELETED) {
 				continue;
 			}
@@ -181,8 +178,6 @@ RewritePlan PlanRewrite(ClientContext &context, const RewriteDataFilesPlanInput 
 			cand.file_size_in_bytes = entry.data_file.file_size_in_bytes;
 			cand.record_count = entry.data_file.record_count;
 			cand.partition_info = entry.data_file.partition_info;
-			cand.manifest_idx = mi;
-			cand.entry_idx = ei;
 			plan.candidates.push_back(std::move(cand));
 		}
 	}
