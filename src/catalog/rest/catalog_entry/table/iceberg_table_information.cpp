@@ -405,7 +405,6 @@ void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
 	if (!first_partition_spec) {
 		new_spec_id = GetNextPartitionSpecId();
 	}
-	auto &transaction_data = GetOrCreateTransactionData(transaction);
 
 	auto new_spec =
 	    BuildPartitionSpec(partition_keys, schema, static_cast<int32_t>(new_spec_id), base_partition_field_id);
@@ -415,13 +414,17 @@ void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
 	auto existing_spec_id = GetExistingSpecId(new_spec);
 	if (existing_spec_id) {
 		table_metadata.default_spec_id = *existing_spec_id;
-		transaction_data.TableSetDefaultSpec();
+		if (!first_partition_spec) {
+			auto &transaction_data = GetOrCreateTransactionData(transaction);
+			transaction_data.TableSetDefaultSpec();
+		}
 		return;
 	}
 
 	table_metadata.partition_specs.emplace(new_spec_id, std::move(new_spec));
 	table_metadata.default_spec_id = new_spec_id;
 	if (!first_partition_spec) {
+		auto &transaction_data = GetOrCreateTransactionData(transaction);
 		transaction_data.TableAddPartitionSpec();
 		transaction_data.TableSetDefaultSpec();
 	}
@@ -433,7 +436,6 @@ void IcebergTableInformation::SetSortedBy(IcebergTransaction &transaction, const
 	if (!first_sort_spec) {
 		new_sort_order_id = GetNextSortOrderId();
 	}
-	auto &transaction_data = GetOrCreateTransactionData(transaction);
 
 	auto new_sort_order = BuildSortOrder(orders, schema, static_cast<int32_t>(new_sort_order_id));
 
@@ -442,13 +444,17 @@ void IcebergTableInformation::SetSortedBy(IcebergTransaction &transaction, const
 	auto existing_sort_order_id = GetExistingSortOrderId(new_sort_order);
 	if (existing_sort_order_id) {
 		table_metadata.default_sort_order_id = *existing_sort_order_id;
-		transaction_data.TableSetDefaultSortOrder();
+		if (!first_sort_spec) {
+			auto &transaction_data = GetOrCreateTransactionData(transaction);
+			transaction_data.TableSetDefaultSortOrder();
+		}
 		return;
 	}
 
 	table_metadata.sort_specs.emplace(new_sort_order_id, std::move(new_sort_order));
 	table_metadata.default_sort_order_id = new_sort_order_id;
 	if (!first_sort_spec) {
+		auto &transaction_data = GetOrCreateTransactionData(transaction);
 		transaction_data.TableAddSortOrder();
 		transaction_data.TableSetDefaultSortOrder();
 	}
