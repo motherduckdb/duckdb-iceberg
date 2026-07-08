@@ -183,7 +183,7 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 				// Ignore refresh info.
 				// if the credentials are the same as for the catalog, then refreshing the catalog secret is enough
 				// otherwise the vended credentials contain their own information for refreshing.
-				if (option.first != "refresh_info" && option.first != "refresh") {
+				if (option.first != "refresh_info" && option.first != "refresh" && option.first != "expiration_epoch") {
 					user_defaults.emplace(option);
 				}
 			}
