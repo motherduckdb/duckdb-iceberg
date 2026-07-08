@@ -394,21 +394,6 @@ IcebergSortOrder IcebergTableInformation::BuildSortOrder(const vector<OrderByNod
 	return new_sort_order;
 }
 
-void IcebergTableInformation::SetInitialPartitionSpec(const vector<unique_ptr<ParsedExpression>> &partition_keys,
-                                                      const IcebergTableSchema &schema) {
-	auto new_spec = BuildPartitionSpec(partition_keys, schema, 0, 1000);
-
-	// New tables should not already have a matching partition spec, but preserve the same behavior
-	// as the transactional path in case metadata was pre-populated before bootstrap.
-	if (auto existing_spec_id = GetExistingSpecId(new_spec)) {
-		table_metadata.default_spec_id = *existing_spec_id;
-		return;
-	}
-
-	table_metadata.partition_specs.emplace(0, std::move(new_spec));
-	table_metadata.default_spec_id = 0;
-}
-
 void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
                                                const vector<unique_ptr<ParsedExpression>> &partition_keys,
                                                const IcebergTableSchema &schema) {
