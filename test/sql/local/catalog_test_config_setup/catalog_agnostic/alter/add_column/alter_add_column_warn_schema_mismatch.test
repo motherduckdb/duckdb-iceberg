@@ -119,5 +119,8 @@ FROM my_datalake.default.alter_add_column_explicit_txn ORDER BY a;
 42
 43
 
-statement ok con2
+# COMMIT failed because the schema id is different from when the transaction started
+statement error con2
 commit;
+----
+<REGEX>:TransactionContext Error.*changed incompatibly while retrying commit.*

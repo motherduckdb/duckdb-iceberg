@@ -18,18 +18,6 @@ using sequence_number_t = int64_t;
 
 struct FieldSummary {
 public:
-	Value ToValue() const {
-		child_list_t<Value> children;
-		children.emplace_back("contains_null", Value::BOOLEAN(contains_null));
-		children.emplace_back("contains_nan", Value::BOOLEAN(contains_nan));
-		D_ASSERT(lower_bound.type().id() == LogicalType::BLOB);
-		D_ASSERT(upper_bound.type().id() == LogicalType::BLOB);
-		children.emplace_back("lower_bound", lower_bound);
-		children.emplace_back("upper_bound", upper_bound);
-		return Value::STRUCT(children);
-	}
-
-public:
 	bool contains_null = false;
 	//! Optional
 	bool contains_nan = false;
@@ -40,25 +28,6 @@ public:
 };
 
 struct ManifestPartitions {
-public:
-	Value ToValue() const {
-		child_list_t<LogicalType> children;
-		children.emplace_back("contains_null", LogicalType::BOOLEAN);
-		children.emplace_back("contains_nan", LogicalType::BOOLEAN);
-		children.emplace_back("lower_bound", LogicalType::BLOB);
-		children.emplace_back("upper_bound", LogicalType::BLOB);
-		auto field_summary_struct = LogicalType::STRUCT(children);
-
-		if (!has_partitions) {
-			return Value(LogicalType::LIST(field_summary_struct));
-		}
-		vector<Value> fields;
-		for (auto &field : field_summary) {
-			fields.push_back(field.ToValue());
-		}
-		return Value::LIST(field_summary_struct, fields);
-	}
-
 public:
 	void Create(const IcebergTableMetadata &metadata, const IcebergPartitionSpec &partition_spec,
 	            const vector<IcebergManifestEntry> &entries);
@@ -83,14 +52,12 @@ public:
 	int64_t manifest_length;
 	//! The id of the partition spec referenced by this manifest (and the data files that are part of it)
 	int32_t partition_spec_id;
-	bool has_first_row_id = false;
-	sequence_number_t first_row_id = 0xDEADBEEF;
+	optional<sequence_number_t> first_row_id;
 	//! either data or deletes
 	IcebergManifestContentType content;
 	//! sequence_number when manifest was added to table (0 for Iceberg v1)
-	sequence_number_t sequence_number = 0xDEADBEEF;
-	bool has_min_sequence_number = false;
-	sequence_number_t min_sequence_number = 0;
+	optional<sequence_number_t> sequence_number;
+	optional<sequence_number_t> min_sequence_number;
 	int64_t added_snapshot_id = -1;
 	//! added files count
 	idx_t added_files_count = 0;
@@ -125,6 +92,8 @@ public:
 
 public:
 	IcebergManifestFile file;
+	//! The key-value metadata of the manifest file this entry describes
+	unordered_map<string, string> metadata;
 	vector<IcebergManifestEntry> manifest_entries;
 };
 
@@ -146,9 +115,8 @@ public:
 		manifest_file.sequence_number = sequence_number;
 		manifest_file.added_snapshot_id = snapshot_id;
 
-		if (!manifest_file.has_min_sequence_number || manifest_file.min_sequence_number > sequence_number) {
+		if (!manifest_file.min_sequence_number || *manifest_file.min_sequence_number > sequence_number) {
 			manifest_file.min_sequence_number = sequence_number;
-			manifest_file.has_min_sequence_number = true;
 		}
 		manifest_entries.push_back(std::move(manifest_list_entry));
 	}

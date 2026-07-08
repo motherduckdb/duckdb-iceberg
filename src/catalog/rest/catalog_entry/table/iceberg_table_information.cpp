@@ -3,6 +3,7 @@
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/common/exception/http_exception.hpp"
 #include "duckdb/parser/expression/columnref_expression.hpp"
 #include "duckdb/parser/expression/function_expression.hpp"
 #include "duckdb/common/exception/transaction_exception.hpp"
@@ -270,7 +271,7 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 
 optional_ptr<CatalogEntry> IcebergTableInformation::CreateSchemaVersion(const IcebergTableSchema &table_schema) {
 	CreateTableInfo info;
-	info.table = Identifier(name);
+	info.SetTableName(Identifier(name));
 	for (auto &col : table_schema.columns) {
 		info.columns.AddColumn(col->GetColumnDefinition());
 	}
@@ -303,45 +304,45 @@ idx_t IcebergTableInformation::GetMaxSchemaId() {
 
 idx_t IcebergTableInformation::GetNextPartitionSpecId() {
 	idx_t max_partition_spec_id = table_metadata.default_spec_id;
-	for (auto &schema : table_metadata.GetPartitionSpecs()) {
-		if (schema.first > max_partition_spec_id) {
-			max_partition_spec_id = schema.first;
+	for (auto &partition_spec : table_metadata.GetPartitionSpecs()) {
+		auto &partition_spec_id = partition_spec.first;
+		if (partition_spec_id > max_partition_spec_id) {
+			max_partition_spec_id = partition_spec_id;
 		}
 	}
 	return max_partition_spec_id + 1;
 }
 
-int64_t IcebergTableInformation::GetExistingSpecId(IcebergPartitionSpec &spec) {
-	int64_t existing_spec_id = -1;
-	for (auto &existing_spec : table_metadata.GetPartitionSpecs()) {
-		bool fields_match = true;
-		if (existing_spec.second.fields.size() != spec.fields.size()) {
-			continue;
-		}
-		for (idx_t field_index = 0; field_index < existing_spec.second.fields.size(); field_index++) {
-			auto existing_partition_col_source_id = existing_spec.second.fields[field_index].source_id;
-			// if the number of partition columns don't match, the specs are not the same
-			auto new_spec_col_source_id = spec.fields[field_index].source_id;
-			if (existing_partition_col_source_id != new_spec_col_source_id) {
-				fields_match = false;
-				break;
-			}
-			auto existing_partition_col_transform = existing_spec.second.fields[field_index].transform.RawType();
-			auto new_spec_col_transform = spec.fields[field_index].transform.RawType();
-			if (existing_partition_col_transform != new_spec_col_transform) {
-				fields_match = false;
-				break;
-			}
-		}
-		if (!fields_match) {
-			continue;
-		}
-		// source ids are the same, transforms are the same, and partition amount is the same
-		// so we just use the existing spec.
-		existing_spec_id = existing_spec.second.spec_id;
-		break;
+idx_t IcebergTableInformation::GetNextSortOrderId() {
+	idx_t max_sort_order_id = 0;
+	if (table_metadata.default_sort_order_id.IsValid()) {
+		max_sort_order_id = table_metadata.default_sort_order_id.GetIndex();
 	}
-	return existing_spec_id;
+	for (auto &sort_order : table_metadata.GetSortOrderSpecs()) {
+		auto &sort_order_id = sort_order.first;
+		if (sort_order_id > max_sort_order_id) {
+			max_sort_order_id = sort_order_id;
+		}
+	}
+	return max_sort_order_id + 1;
+}
+
+optional<int64_t> IcebergTableInformation::GetExistingSpecId(IcebergPartitionSpec &spec) {
+	for (auto &existing_spec : table_metadata.GetPartitionSpecs()) {
+		if (spec.Equals(existing_spec.second)) {
+			return existing_spec.first;
+		}
+	}
+	return std::nullopt;
+}
+
+optional<int64_t> IcebergTableInformation::GetExistingSortOrderId(IcebergSortOrder &spec) {
+	for (auto &existing_sort_order : table_metadata.GetSortOrderSpecs()) {
+		if (spec.Equals(existing_sort_order.second)) {
+			return existing_sort_order.first;
+		}
+	}
+	return std::nullopt;
 }
 
 IcebergPartitionSpec
@@ -351,82 +352,16 @@ IcebergTableInformation::BuildPartitionSpec(const vector<unique_ptr<ParsedExpres
 	IcebergPartitionSpec new_spec(spec_id);
 
 	for (auto &key : partition_keys) {
-		string column_name;
-		string transform = "identity";
-		idx_t bucket_modulo_val;
-
-		auto key_type = key->GetExpressionType();
-		if (key_type == ExpressionType::COLUMN_REF) {
-			auto &colref = key->Cast<ColumnRefExpression>();
-			column_name = colref.ColumnNames().back().GetIdentifierName();
-		} else if (key_type == ExpressionType::FUNCTION) {
-			auto &funcexpr = key->Cast<FunctionExpression>();
-			transform = funcexpr.FunctionName().GetIdentifierName();
-			if (funcexpr.GetArguments().empty()) {
-				throw NotImplementedException("Unrecognized transform ('%s')", transform);
-			} else if (!IcebergTransform::TransformFunctionSupported(transform)) {
-				throw NotImplementedException("Unrecognized transform ('%s')", transform);
-			}
-			if (transform == "bucket" || transform == "truncate") {
-				// Spark-compatible syntax: bucket(N, col) / truncate(W, col)
-				if (funcexpr.GetArguments().size() < 2) {
-					throw InvalidInputException("%s requires two arguments, e.g. %s(16, col)", transform, transform);
-				}
-				auto &param_expr = funcexpr.GetArguments()[0].GetExpression();
-				if (param_expr.GetExpressionType() != ExpressionType::VALUE_CONSTANT) {
-					throw InvalidInputException("%s first argument must be a constant integer", transform);
-				}
-				auto &const_expr = param_expr.Cast<ConstantExpression>();
-				auto raw_val = const_expr.GetValue().GetValue<int32_t>();
-				if (raw_val <= 0) {
-					throw InvalidInputException("%s requires a positive integer argument, got %d", transform, raw_val);
-				}
-				bucket_modulo_val = const_expr.GetValue().GetValue<idx_t>();
-				transform = StringUtil::Format("%s[%d]", transform, bucket_modulo_val);
-				if (funcexpr.GetArguments()[1].GetExpression().GetExpressionType() != ExpressionType::COLUMN_REF) {
-					throw NotImplementedException(
-					    "Transforms are only supported on column references, not %s",
-					    EnumUtil::ToChars(funcexpr.GetArguments()[1].GetExpression().GetExpressionType()));
-				}
-				auto &colref = funcexpr.GetArguments()[1].GetExpression().Cast<ColumnRefExpression>();
-				column_name = colref.ColumnNames().back().GetIdentifierName();
-			} else {
-				if (funcexpr.GetArguments()[0].GetExpression().GetExpressionType() != ExpressionType::COLUMN_REF) {
-					throw NotImplementedException(
-					    "Transforms are only supported on column references, not %s",
-					    EnumUtil::ToChars(funcexpr.GetArguments()[0].GetExpression().GetExpressionType()));
-				}
-				auto &colref = funcexpr.GetArguments()[0].GetExpression().Cast<ColumnRefExpression>();
-				column_name = colref.ColumnNames().back().GetIdentifierName();
-			}
-		} else {
-			throw NotImplementedException("Unsupported partition key type: %s", key->ToString());
+		vector<reference<const IcebergColumnDefinition>> source_columns;
+		auto transform = IcebergTransform::FromExpression(*key, schema, source_columns);
+		if (source_columns.size() != 1) {
+			throw InvalidInputException("Multi-argument transforms are not supported yet!");
 		}
-
-		// Find source_id
-		int32_t source_id = -1;
-		for (auto &col : schema.columns) {
-			if (StringUtil::CIEquals(col->name, column_name)) {
-				source_id = col->id;
-				break;
-			}
-		}
-		if (source_id == -1) {
-			throw CatalogException("Column \"%s\" not found in schema", column_name);
-		}
+		auto source_id = source_columns[0].get().id;
+		auto column_name = source_columns[0].get().name;
 
 		IcebergPartitionSpecField field;
-		// Create the Iceberg transform
-		auto iceberg_transform = IcebergTransform(transform);
-		switch (iceberg_transform.Type()) {
-		case IcebergTransformType::BUCKET:
-		case IcebergTransformType::TRUNCATE:
-			iceberg_transform.SetBucketOrTruncateValue(bucket_modulo_val);
-			break;
-		default:
-			break;
-		}
-		field.transform = iceberg_transform;
+		field.transform = transform;
 		field.source_id = source_id;
 		field.partition_field_id = base_partition_field_id + new_spec.fields.size();
 		// transform field names cannot be the column name. Otherwise Lakekeeper complains
@@ -437,6 +372,28 @@ IcebergTableInformation::BuildPartitionSpec(const vector<unique_ptr<ParsedExpres
 	return new_spec;
 }
 
+IcebergSortOrder IcebergTableInformation::BuildSortOrder(const vector<OrderByNode> &orders,
+                                                         const IcebergTableSchema &schema, int32_t sort_order_id) {
+	IcebergSortOrder new_sort_order(sort_order_id);
+
+	for (auto &order : orders) {
+		vector<reference<const IcebergColumnDefinition>> source_columns;
+		auto transform = IcebergTransform::FromExpression(*order.expression, schema, source_columns);
+		if (source_columns.size() != 1) {
+			throw InvalidInputException("Multi-argument transforms are not supported yet!");
+		}
+		auto source_id = source_columns[0].get().id;
+
+		IcebergSortOrderField field;
+		field.source_id = source_id;
+		field.transform = transform;
+		field.direction = order.type == OrderType::ASCENDING ? "asc" : "desc";
+		field.null_order = order.null_order == OrderByNullType::NULLS_FIRST ? "nulls-first" : "nulls-last";
+		new_sort_order.fields.push_back(std::move(field));
+	}
+	return new_sort_order;
+}
+
 void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
                                                const vector<unique_ptr<ParsedExpression>> &partition_keys,
                                                const IcebergTableSchema &schema, bool first_partition_spec) {
@@ -444,7 +401,6 @@ void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
 	if (!first_partition_spec && table_metadata.HasLastPartitionId()) {
 		base_partition_field_id = table_metadata.GetLastPartitionFieldId() + 1;
 	}
-
 	idx_t new_spec_id = 0;
 	if (!first_partition_spec) {
 		new_spec_id = GetNextPartitionSpecId();
@@ -456,9 +412,9 @@ void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
 
 	// if spec definition already exists in a previous spec definition, set it to that spec id
 	// (some catalog may allow duplicate definitions, others not)
-	int64_t existing_spec_id = GetExistingSpecId(new_spec);
-	if (existing_spec_id >= 0) {
-		table_metadata.default_spec_id = existing_spec_id;
+	auto existing_spec_id = GetExistingSpecId(new_spec);
+	if (existing_spec_id) {
+		table_metadata.default_spec_id = *existing_spec_id;
 		transaction_data.TableSetDefaultSpec();
 		return;
 	}
@@ -468,6 +424,33 @@ void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
 	if (!first_partition_spec) {
 		transaction_data.TableAddPartitionSpec();
 		transaction_data.TableSetDefaultSpec();
+	}
+}
+
+void IcebergTableInformation::SetSortedBy(IcebergTransaction &transaction, const vector<OrderByNode> &orders,
+                                          const IcebergTableSchema &schema, bool first_sort_spec) {
+	idx_t new_sort_order_id = 0;
+	if (!first_sort_spec) {
+		new_sort_order_id = GetNextSortOrderId();
+	}
+	auto &transaction_data = GetOrCreateTransactionData(transaction);
+
+	auto new_sort_order = BuildSortOrder(orders, schema, static_cast<int32_t>(new_sort_order_id));
+
+	// if spec definition already exists in a previous spec definition, set it to that spec id
+	// (some catalog may allow duplicate definitions, others not)
+	auto existing_sort_order_id = GetExistingSortOrderId(new_sort_order);
+	if (existing_sort_order_id) {
+		table_metadata.default_sort_order_id = *existing_sort_order_id;
+		transaction_data.TableSetDefaultSortOrder();
+		return;
+	}
+
+	table_metadata.sort_specs.emplace(new_sort_order_id, std::move(new_sort_order));
+	table_metadata.default_sort_order_id = new_sort_order_id;
+	if (!first_sort_spec) {
+		transaction_data.TableAddSortOrder();
+		transaction_data.TableSetDefaultSortOrder();
 	}
 }
 
@@ -590,6 +573,27 @@ bool IcebergTableInformation::HasTransactionUpdates() const {
 	return false;
 }
 
+void IcebergTableInformation::RefreshFromCatalog(ClientContext &context) {
+	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
+	auto table_key = GetTableKey();
+	auto get_table_result = IRCAPI::GetTable(context, ic_catalog, schema, name);
+	if (get_table_result.error_) {
+		throw HTTPException(
+		    StringUtil::Format("GetTableInformation endpoint returned response code %s with message \"%s\"",
+		                       EnumUtil::ToString(get_table_result.status_), get_table_result.error_->_error.message));
+	}
+	ic_catalog.table_request_cache.SetOrOverwrite(context, table_key, std::move(get_table_result.result_));
+	schema_versions.clear();
+	dummy_entry.reset();
+	{
+		lock_guard<std::mutex> cache_lock(ic_catalog.table_request_cache.Lock());
+		auto cached_table_result = ic_catalog.table_request_cache.Get(context, table_key, cache_lock, false);
+		D_ASSERT(cached_table_result);
+		auto &load_table_result = *cached_table_result->load_table_result;
+		InitializeFromLoadTableResult(load_table_result);
+	}
+}
+
 IcebergTableInformation IcebergTableInformation::Copy(ClientContext &context) const {
 	auto ret = IcebergTableInformation(catalog, schema, name);
 	auto table_key = ret.GetTableKey();
@@ -664,8 +668,14 @@ IcebergTableInformation IcebergTableInformation::Copy(IcebergTransaction &iceber
 			auto &snapshot = snapshot_info.snapshot;
 			D_ASSERT(snapshot);
 			ret.table_metadata.SetCurrentSchemaId(table_metadata.GetCurrentSchemaId());
-			ret.table_metadata.last_sequence_number = snapshot->sequence_number;
-			ret.table_metadata.current_snapshot_id = snapshot->snapshot_id;
+			if (!snapshot->sequence_number) {
+				throw InvalidConfigurationException("snapshot.sequence_number is not set");
+			}
+			ret.table_metadata.last_sequence_number = *snapshot->sequence_number;
+			if (!snapshot->snapshot_id) {
+				throw InvalidConfigurationException("snapshot.snapshot_id is not set");
+			}
+			ret.table_metadata.current_snapshot_id = *snapshot->snapshot_id;
 			return ret;
 		}
 		ret.table_metadata = ret.CreateMetadataFromLog(context, transaction_start_millis, ret.latest_metadata_json);

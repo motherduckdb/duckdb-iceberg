@@ -82,6 +82,24 @@ IcebergTableSchema::GetFromColumnIndex(const vector<unique_ptr<IcebergColumnDefi
 	return GetFromColumnIndex(column->GetChildren(), column_index, depth + 1);
 }
 
+optional<ColumnIndex> IcebergTableSchema::TryGetColumnIndexByFieldId(idx_t field_id) const {
+	unordered_map<uint64_t, ColumnIndex> source_to_column_id;
+	PopulateSourceIdMap(source_to_column_id, columns, nullptr);
+	auto it = source_to_column_id.find(field_id);
+	if (it == source_to_column_id.end()) {
+		return std::nullopt;
+	}
+	return it->second;
+}
+
+const IcebergColumnDefinition &IcebergTableSchema::GetColumnByFieldId(idx_t field_id) const {
+	auto column_index = TryGetColumnIndexByFieldId(field_id);
+	if (!column_index) {
+		throw InvalidInputException("Field id %d does not exist in schema with id %d", field_id, schema_id);
+	}
+	return GetFromColumnIndex(columns, *column_index, 0);
+}
+
 optional_ptr<const IcebergColumnDefinition>
 IcebergTableSchema::GetFromPath(const vector<Identifier> &path, optional_ptr<optional_idx> name_offset) const {
 	D_ASSERT(!path.empty());
@@ -153,13 +171,7 @@ shared_ptr<IcebergTableSchema> IcebergTableSchema::RemoveColumn(const string &na
 }
 
 const LogicalType &IcebergTableSchema::GetColumnTypeFromFieldId(idx_t field_id) const {
-	for (auto &column : columns) {
-		if (column->id == field_id) {
-			return column->type;
-		}
-	}
-	throw InvalidInputException("GetColumnTypeFromFieldId:: field id %d does not exist in schema with id %d", field_id,
-	                            schema_id);
+	return GetColumnByFieldId(field_id).type;
 }
 
 void IcebergTableSchema::GetColumnNamesAndTypes(vector<string> &names, vector<LogicalType> &types) const {

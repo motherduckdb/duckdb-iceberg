@@ -9,8 +9,14 @@
 #include "duckdb/main/client_data.hpp"
 #include "yyjson.hpp"
 
+#include <chrono>
+#include <optional>
+#include <random>
+#include <thread>
+
 #include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
+#include "catalog/rest/api/iceberg_retry.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/storage/iceberg_authorization.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
@@ -152,92 +158,269 @@ static rest_api_objects::TableUpdate CreateSetSnapshotRefUpdate(int64_t snapshot
 
 static bool NeedsAssertSchemaId(const IcebergTransactionData &transaction_data,
                                 const IcebergTableInformation &table_info) {
-	if (!transaction_data.assert_schema_id) {
-		return false;
-	}
-	auto &initial_schema_id = transaction_data.initial_schema_id;
-	return initial_schema_id != table_info.table_metadata.GetCurrentSchemaId();
+	(void)table_info;
+	return transaction_data.assert_schema_id;
 }
+
+namespace {
+
+struct SingleTableStagedCommit {
+	rest_api_objects::CommitTableRequest request;
+	vector<string> created_metadata_files;
+	bool retryable = false;
+	IcebergRetryConfig retry_config;
+};
+
+//! Per-retry-loop backoff state: decorrelated jitter (de-synchronizes a thundering herd of
+//! concurrent writers) plus a cumulative total-timeout budget. Independent RNG per loop so
+//! concurrent committers do not wake in lockstep.
+struct IcebergRetryBackoff {
+	explicit IcebergRetryBackoff(const IcebergRetryConfig &config_p)
+	    : config(config_p), prev_sleep_ms(config_p.min_wait_ms), start(std::chrono::steady_clock::now()),
+	      rng(std::random_device {}() ^
+	          static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count())),
+	      dist(0.0, 1.0) {
+	}
+
+	//! Sleep before the next attempt (attempt is the just-failed 0-based attempt index). Returns
+	//! false if the wait would exceed commit.retry.total-timeout-ms (only after >=1 retry, mirroring
+	//! Java's Tasks.runTaskWithRetry), signalling the caller to stop retrying.
+	bool WaitBeforeRetry(idx_t attempt) {
+		auto wait_ms = config.DecorrelatedBackoffMs(prev_sleep_ms, dist(rng));
+		prev_sleep_ms = wait_ms;
+		auto elapsed_ms =
+		    std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
+		if (attempt > 0 && (wait_ms > config.total_wait_ms || elapsed_ms > config.total_wait_ms - wait_ms)) {
+			return false;
+		}
+		if (wait_ms > 0) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(wait_ms));
+		}
+		return true;
+	}
+
+	IcebergRetryConfig config;
+	int64_t prev_sleep_ms;
+	std::chrono::steady_clock::time_point start;
+	std::mt19937_64 rng;
+	std::uniform_real_distribution<double> dist;
+};
+
+static void CreateTableRequirements(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state,
+                                    const IcebergTransactionData &transaction_data,
+                                    const optional_ptr<const IcebergSnapshot> &current_snapshot) {
+	const bool has_assert_create = transaction_data.has_assert_create;
+	for (auto &requirement : transaction_data.requirements) {
+		requirement->CreateRequirement(db, context, commit_state);
+	}
+	if (!has_assert_create && NeedsAssertSchemaId(transaction_data, commit_state.table_info)) {
+		AssertCurrentSchemaIdRequirement requirement(commit_state.table_info);
+		requirement.current_schema_id = transaction_data.initial_schema_id;
+		requirement.CreateRequirement(db, context, commit_state);
+	}
+	if (!has_assert_create && commit_state.table_info.HasTransactionUpdates()) {
+		auto uuid_requirement = AssertTableUUIDRequirement(commit_state.table_info);
+		uuid_requirement.CreateRequirement(db, context, commit_state);
+	}
+	if (current_snapshot && !transaction_data.alters.empty()) {
+		commit_state.table_change.requirements.push_back(CreateAssertRefSnapshotIdRequirement(*current_snapshot));
+	} else if (!current_snapshot && !transaction_data.alters.empty() && !has_assert_create) {
+		commit_state.table_change.requirements.push_back(CreateAssertNoSnapshotRequirement());
+	}
+}
+
+static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, IcebergTableInformation &table_info,
+                                                      ClientContext &context) {
+	SingleTableStagedCommit info;
+	IcebergCommitState commit_state(table_info, context);
+	auto &table_change = commit_state.table_change;
+	auto &schema = table_info.schema.Cast<IcebergSchemaEntry>();
+	table_change.identifier = rest_api_objects::TableIdentifier();
+	table_change.identifier->_namespace.value = schema.namespace_items;
+	table_change.identifier->name = table_info.name;
+
+	auto &metadata = commit_state.table_info.table_metadata;
+	auto current_snapshot = metadata.GetLatestSnapshot();
+	auto &transaction_data = *commit_state.table_info.transaction_data;
+	info.retryable = transaction_data.SupportsAppendRetry();
+	info.retry_config = IcebergRetryConfig::FromTableMetadata(metadata);
+	if (!transaction_data.alters.empty()) {
+		commit_state.LoadExistingManifests(std::move(transaction_data.existing_manifest_list));
+	}
+	commit_state.latest_snapshot = current_snapshot;
+
+	for (auto &update : transaction_data.updates) {
+		if (update->type == IcebergTableUpdateType::ADD_SNAPSHOT) {
+			auto &ic_table_entry = table_info.GetLatestSchema(context)->Cast<IcebergTableEntry>();
+			ic_table_entry.PrepareIcebergScanFromEntry(context);
+		}
+		update->CreateUpdate(db, context, commit_state);
+	}
+
+	CreateTableRequirements(db, context, commit_state, transaction_data, current_snapshot);
+
+	if (!transaction_data.alters.empty()) {
+		auto &snapshot = *commit_state.latest_snapshot;
+		if (!snapshot.snapshot_id) {
+			throw InvalidConfigurationException("snapshot.snapshot_id is not set");
+		}
+		auto set_snapshot_ref_update = CreateSetSnapshotRefUpdate(*snapshot.snapshot_id);
+		commit_state.table_change.updates.push_back(std::move(set_snapshot_ref_update));
+	}
+
+	if (transaction_data.set_schema_id) {
+		SetCurrentSchema update(table_info);
+		update.CreateUpdate(db, context, commit_state);
+	}
+
+	info.created_metadata_files = std::move(commit_state.created_metadata_files);
+	info.request = std::move(table_change);
+	return info;
+}
+
+} // namespace
 
 TableTransactionInfo IcebergTransaction::GetTransactionRequest(IcebergTransactionAlterUpdate &alter_update,
                                                                ClientContext &context) {
 	TableTransactionInfo info;
 	auto &transaction = info.request;
+	bool all_retryable = true;
+	bool saw_table = false;
 	for (auto &updated_table : alter_update.updated_tables) {
-		if (alter_update.committed_tables.count(updated_table.first)) {
-			//! Table is already committed
+		auto &table_key = updated_table.first;
+		if (alter_update.committed_tables.count(table_key)) {
+			//! Already committed
 			continue;
 		}
 		auto &table_info = updated_table.second;
 		if (!table_info.HasTransactionUpdates()) {
+			//! No changes to commit
 			continue;
 		}
-		IcebergCommitState commit_state(table_info, context);
-		auto &table_change = commit_state.table_change;
-		auto &schema = table_info.schema.Cast<IcebergSchemaEntry>();
-		table_change.identifier = rest_api_objects::TableIdentifier();
-		table_change.identifier->_namespace.value = schema.namespace_items;
-		table_change.identifier->name = table_info.name;
 
-		auto &metadata = commit_state.table_info.table_metadata;
-		auto current_snapshot = metadata.GetLatestSnapshot();
-		auto &transaction_data = *commit_state.table_info.transaction_data;
-		if (!transaction_data.alters.empty()) {
-			commit_state.manifests = transaction_data.existing_manifest_list;
-		}
-		commit_state.latest_snapshot = current_snapshot;
-
-		for (auto &update : transaction_data.updates) {
-			if (update->type == IcebergTableUpdateType::ADD_SNAPSHOT) {
-				// we need to recreate the keys in the current context.
-				auto &ic_table_entry = table_info.GetLatestSchema(context)->Cast<IcebergTableEntry>();
-				ic_table_entry.PrepareIcebergScanFromEntry(context);
-			}
-			update->CreateUpdate(db, context, commit_state);
-		}
-		for (auto &requirement : transaction_data.requirements) {
-			requirement->CreateRequirement(db, context, commit_state);
-			info.has_assert_create = requirement->type == IcebergTableRequirementType::ASSERT_CREATE;
-		}
-		if (!info.has_assert_create && NeedsAssertSchemaId(transaction_data, table_info)) {
-			// Ensure schema is the same as current
-			AssertCurrentSchemaIdRequirement requirement(table_info);
-			requirement.current_schema_id = transaction_data.initial_schema_id;
-			requirement.CreateRequirement(db, context, commit_state);
-		}
-
-		if (!transaction_data.alters.empty()) {
-			auto &snapshot = *commit_state.latest_snapshot;
-			auto snapshot_id = snapshot.snapshot_id;
-			auto set_snapshot_ref_update = CreateSetSnapshotRefUpdate(snapshot_id);
-			commit_state.table_change.updates.push_back(std::move(set_snapshot_ref_update));
-		}
-
-		if (!info.has_assert_create && commit_state.table_info.HasTransactionUpdates()) {
-			// ensure table hasn't been swapped by another one with the same name
-			auto uuid_requirement = AssertTableUUIDRequirement(table_info);
-			uuid_requirement.CreateRequirement(db, context, commit_state);
-		}
-
-		if (current_snapshot && !transaction_data.alters.empty()) {
-			//! If any changes were made to the state of the table, we should assert that our parent snapshot has
-			//! not changed. We don't want to change the table location if someone has added a snapshot
-			commit_state.table_change.requirements.push_back(CreateAssertRefSnapshotIdRequirement(*current_snapshot));
-		} else if (!current_snapshot && !transaction_data.alters.empty() && !info.has_assert_create) {
-			//! If the table had no snapshots, is not created in this transaction, and has some kind of update
-			//! we should ensure no snapshots have been added in the meantime
-			commit_state.table_change.requirements.push_back(CreateAssertNoSnapshotRequirement());
-		}
-
-		if (transaction_data.set_schema_id) {
-			SetCurrentSchema update(table_info);
-			update.CreateUpdate(db, context, commit_state);
-		}
-
-		info.table_requests.emplace(updated_table.first, transaction.table_changes.size());
-		transaction.table_changes.push_back(std::move(table_change));
+		auto table_transaction_info = StageSingleTableCommit(db, table_info, context);
+		info.created_metadata_files.emplace(table_key, std::move(table_transaction_info.created_metadata_files));
+		info.table_requests.emplace(table_key, transaction.table_changes.size());
+		transaction.table_changes.push_back(std::move(table_transaction_info.request));
+		//! Tables in one atomic transaction share a single retry loop, so fold their retry policies
+		//! into the most lenient one (first table seeds it, the rest are merged in).
+		info.retry_config = saw_table ? info.retry_config.MostLenient(table_transaction_info.retry_config)
+		                              : table_transaction_info.retry_config;
+		saw_table = true;
+		all_retryable = all_retryable && table_transaction_info.retryable;
 	}
+	info.retryable = saw_table && all_retryable;
 	return info;
+}
+
+bool IcebergTransaction::CanUseMultiTableCommit(const IcebergTransactionAlterUpdate &alter_update) const {
+	if (catalog.attach_options.disable_multi_table_commit ||
+	    !catalog.supported_urls.count("POST /v1/{prefix}/transactions/commit")) {
+		return false;
+	}
+	for (const auto &entry : alter_update.updated_tables) {
+		const auto &table_info = entry.second;
+		if (!table_info.transaction_data) {
+			continue;
+		}
+		if (table_info.transaction_data->has_assert_create) {
+			return false;
+		}
+	}
+	return true;
+}
+
+void IcebergTransaction::CleanupMetadataFiles(ClientContext &context, const vector<string> &paths) {
+	if (!catalog.attach_options.remove_files_on_delete || paths.empty()) {
+		return;
+	}
+	auto &fs = FileSystem::GetFileSystem(context);
+	unordered_set<string> deleted;
+	for (const auto &path : paths) {
+		if (!deleted.insert(path).second) {
+			continue;
+		}
+		if (fs.TryRemoveFile(path)) {
+			DUCKDB_LOG(context, IcebergLogType, "Iceberg Transaction Cleanup, deleted retry metadata file: '%s'", path);
+		} else {
+			DUCKDB_LOG(context, IcebergLogType,
+			           "Iceberg Transaction Cleanup, failed to delete retry metadata file: '%s'", path);
+		}
+	}
+}
+
+void IcebergTransaction::RefreshRetryTables(IcebergTransactionAlterUpdate &alter_update,
+                                            const case_insensitive_set_t &table_keys, ClientContext &context) {
+	for (const auto &table_key : table_keys) {
+		auto it = alter_update.updated_tables.find(table_key);
+		if (it == alter_update.updated_tables.end()) {
+			continue;
+		}
+		auto &table_info = it->second;
+		if (!table_info.transaction_data) {
+			continue;
+		}
+		if (!table_info.transaction_data->RetryStateMatches(table_info)) {
+			throw TransactionException("Table %s changed incompatibly while retrying commit", table_key);
+		}
+		table_info.RefreshFromCatalog(context);
+		if (!table_info.transaction_data->RetryStateMatches(table_info)) {
+			throw TransactionException("Table %s changed incompatibly while retrying commit", table_key);
+		}
+		SetLatestTableState(table_info, IcebergTableStatus::ALIVE);
+	}
+}
+
+static bool CommitIsRetryable(bool retryable, idx_t max_retries, const CommitResult &result, idx_t attempt) {
+	if (attempt >= max_retries) {
+		//! We've reached the max amount of retries
+		return false;
+	}
+	if (!retryable) {
+		//! The operation isn't retryable in general
+		return false;
+	}
+	if (!result.IsConflict()) {
+		//! Only conflicts (409) are retryable
+		return false;
+	}
+	return true;
+}
+
+static vector<string> GetCreatedMetadataFiles(const TableTransactionInfo &transaction_info) {
+	vector<string> created_metadata_files;
+	for (const auto &entry : transaction_info.created_metadata_files) {
+		created_metadata_files.insert(created_metadata_files.end(), entry.second.begin(), entry.second.end());
+	}
+	return created_metadata_files;
+}
+
+static case_insensitive_set_t GetRetryTableKeys(const TableTransactionInfo &transaction_info) {
+	case_insensitive_set_t table_keys;
+	for (const auto &entry : transaction_info.table_requests) {
+		table_keys.insert(entry.first);
+	}
+	return table_keys;
+}
+
+// 4xx = definitive rejection (commit did not land) -> delete the orphan. 5xx / no HTTP status
+// (connection error/timeout) = outcome unknown (may have landed) -> keep files. Status is in
+// extra_info (HTTPException) or the message "status code (<status>)" (fallback).
+static bool CommitStateUnknown(const ErrorData &error) {
+	auto &extra = error.ExtraInfo();
+	auto it = extra.find("status_code");
+	if (it != extra.end()) {
+		return it->second.empty() || it->second[0] != '4';
+	}
+	auto &msg = error.RawMessage();
+	auto pos = msg.find("status code (");
+	if (pos != string::npos) {
+		auto digit = msg.find_first_of("0123456789", pos);
+		if (digit != string::npos) {
+			return msg[digit] != '4';
+		}
+	}
+	return true;
 }
 
 void IcebergTransaction::Commit() {
@@ -284,9 +467,11 @@ void IcebergTransaction::Commit() {
 		DoSchemaDeletes(*temp_con_context);
 	} catch (std::exception &ex) {
 		ErrorData error(ex);
+		commit_state_unknown = CommitStateUnknown(error);
 		CleanupFiles();
 		DropSecrets(*temp_con_context);
 		temp_con.Rollback();
+		EvictCachedTables();
 		error.Throw("Failed to commit Iceberg transaction: ");
 	}
 
@@ -297,44 +482,12 @@ void IcebergTransaction::DoTableUpdates(IcebergTransactionAlterUpdate &alter_upd
 	if (!alter_update.HasUpdates()) {
 		return;
 	}
-	auto transaction_info = GetTransactionRequest(alter_update, context);
-	auto &transaction = transaction_info.request;
-
-	// if there are no new tables, we can post to the transactions/commit endpoint
-	// otherwise we fall back to posting a commit for each table.
-	if (transaction.table_changes.empty()) {
-		alter_update.updated_tables.clear();
-		DropSecrets(context);
-		return;
-	}
-
-	const bool can_use_multi_table_commit = !transaction_info.has_assert_create &&
-	                                        !catalog.attach_options.disable_multi_table_commit &&
-	                                        catalog.supported_urls.count("POST /v1/{prefix}/transactions/commit");
-	if (can_use_multi_table_commit) {
-		// commit all transactions at once
-		std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-		auto doc = doc_p.get();
-		auto root_object = CommitTransactionToJSON(doc, transaction);
-		yyjson_mut_doc_set_root(doc, root_object);
-
-		auto transaction_json = JsonDocToString(std::move(doc_p));
-		IRCAPI::CommitMultiTableUpdate(context, catalog, transaction_json);
-		for (auto &it : alter_update.updated_tables) {
-			alter_update.committed_tables.insert(it.first);
-		}
+	if (CanUseMultiTableCommit(alter_update)) {
+		DoMultiTableCommitUpdates(alter_update, context);
 	} else {
-		D_ASSERT(catalog.supported_urls.count("POST /v1/{prefix}/namespaces/{namespace}/tables/{table}"));
-		// each table change will make a separate request
-		for (auto &it : transaction_info.table_requests) {
-			auto &table_change = transaction.table_changes[it.second];
-			D_ASSERT(table_change.identifier);
-			auto &identifier = *table_change.identifier;
-			auto transaction_json = ConstructTableUpdateJSON(table_change);
-			IRCAPI::CommitTableUpdate(context, catalog, identifier._namespace.value, identifier.name, transaction_json);
-			alter_update.committed_tables.insert(it.first);
-		}
+		DoSingleTableCommitUpdates(alter_update, context);
 	}
+
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	if (ic_catalog.attach_options.max_table_staleness_micros.IsValid()) {
 		for (auto &it : alter_update.committed_tables) {
@@ -360,7 +513,7 @@ void IcebergTransaction::DoTableRename(IcebergTransactionRenameUpdate &rename_up
 	IRCAPI::CommitTableRename(context, catalog, transaction_json);
 
 	DropInfo drop_info;
-	drop_info.name = Identifier(table_name);
+	drop_info.GetQualifiedNameMutable() = Identifier(table_name);
 	drop_info.if_not_found = OnEntryNotFound::THROW_EXCEPTION;
 	schema.DropEntry(context, drop_info, true);
 
@@ -369,6 +522,99 @@ void IcebergTransaction::DoTableRename(IcebergTransactionRenameUpdate &rename_up
 	schema.tables.CreateEntryInternal(guard, new_name, std::move(rename_update.new_table), old_version);
 	if (old_version) {
 		throw TransactionException("Table %s was already created by a different transaction!", new_name);
+	}
+}
+
+void IcebergTransaction::DoMultiTableCommitUpdates(IcebergTransactionAlterUpdate &alter_update,
+                                                   ClientContext &context) {
+	//! The retry policy is the tables' folded (most-lenient) config, produced by GetTransactionRequest.
+	//! It is stable across attempts (same tables), so the backoff state is created once, lazily, from
+	//! the first staged request and reused for every retry.
+	std::optional<IcebergRetryBackoff> backoff;
+	for (idx_t attempt = 0;; attempt++) {
+		auto transaction_info = GetTransactionRequest(alter_update, context);
+		if (transaction_info.request.table_changes.empty()) {
+			alter_update.updated_tables.clear();
+			return;
+		}
+		if (!backoff) {
+			backoff.emplace(transaction_info.retry_config);
+		}
+
+		std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
+		auto doc = doc_p.get();
+		auto root_object = CommitTransactionToJSON(doc, transaction_info.request);
+		yyjson_mut_doc_set_root(doc, root_object);
+
+		auto transaction_json = JsonDocToString(std::move(doc_p));
+		auto result = IRCAPI::CommitMultiTableUpdate(context, catalog, transaction_json);
+		if (result.Success()) {
+			for (auto &it : alter_update.updated_tables) {
+				alter_update.committed_tables.insert(it.first);
+			}
+			return;
+		}
+		auto created_metadata_files = GetCreatedMetadataFiles(transaction_info);
+		if (!CommitIsRetryable(transaction_info.retryable, transaction_info.retry_config.num_retries, result,
+		                       attempt)) {
+			result.Throw(catalog.GetBaseUrl().GetURLEncoded());
+		}
+		CleanupMetadataFiles(context, created_metadata_files);
+		auto table_keys = GetRetryTableKeys(transaction_info);
+		RefreshRetryTables(alter_update, table_keys, context);
+		//! Back off before the next attempt to de-synchronize concurrent writers; stop if the
+		//! cumulative retry budget (commit.retry.total-timeout-ms) would be exceeded.
+		if (!backoff->WaitBeforeRetry(attempt)) {
+			result.Throw(catalog.GetBaseUrl().GetURLEncoded());
+		}
+	}
+}
+
+void IcebergTransaction::DoSingleTableCommitUpdates(IcebergTransactionAlterUpdate &alter_update,
+                                                    ClientContext &context) {
+	D_ASSERT(catalog.supported_urls.count("POST /v1/{prefix}/namespaces/{namespace}/tables/{table}"));
+	for (auto &entry : alter_update.updated_tables) {
+		auto &table_key = entry.first;
+		//! Backoff state is created once per table (lazily, from the first staged commit's config)
+		//! and reused across this table's retries.
+		std::optional<IcebergRetryBackoff> backoff;
+		for (idx_t attempt = 0;; attempt++) {
+			if (alter_update.committed_tables.count(table_key)) {
+				break;
+			}
+			auto &table_info = entry.second;
+			if (!table_info.HasTransactionUpdates()) {
+				break;
+			}
+
+			auto table_transaction_info = StageSingleTableCommit(db, table_info, context);
+			if (!backoff) {
+				backoff.emplace(table_transaction_info.retry_config);
+			}
+			auto &table_change = table_transaction_info.request;
+			D_ASSERT(table_change.identifier);
+			auto &identifier = *table_change.identifier;
+			auto transaction_json = ConstructTableUpdateJSON(table_change);
+			auto result = IRCAPI::CommitTableUpdate(context, catalog, identifier._namespace.value, identifier.name,
+			                                        transaction_json);
+			if (result.Success()) {
+				alter_update.committed_tables.insert(table_key);
+				break;
+			}
+
+			if (!CommitIsRetryable(table_transaction_info.retryable, table_transaction_info.retry_config.num_retries,
+			                       result, attempt)) {
+				result.Throw(catalog.GetBaseUrl().GetURLEncoded());
+			}
+			CleanupMetadataFiles(context, table_transaction_info.created_metadata_files);
+			case_insensitive_set_t retry_tables;
+			retry_tables.insert(table_key);
+			RefreshRetryTables(alter_update, retry_tables, context);
+			//! Back off before the next attempt; stop if the retry budget would be exceeded.
+			if (!backoff->WaitBeforeRetry(attempt)) {
+				result.Throw(catalog.GetBaseUrl().GetURLEncoded());
+			}
+		}
 	}
 }
 
@@ -384,7 +630,7 @@ void IcebergTransaction::DoTableDeletes(IcebergTransactionDeleteUpdate &delete_u
 	// remove the table entry from the catalog
 	auto &schema_entry = ic_catalog.schemas.GetEntry(schema_key.GetIdentifierName()).Cast<IcebergSchemaEntry>();
 	DropInfo drop_info;
-	drop_info.name = Identifier(table_name);
+	drop_info.GetQualifiedNameMutable() = Identifier(table_name);
 	drop_info.if_not_found = OnEntryNotFound::RETURN_NULL;
 	schema_entry.DropEntry(context, drop_info, true);
 }
@@ -446,7 +692,10 @@ public:
 	~ScopedTransaction() {
 		//! Prevent the connection from destructing with an active transaction
 		//! As that causes it to ROLLBACK and enter CleanupFiles - resulting in a stack overflow due to recursion
-		connection.Commit();
+		auto result = connection.Query("COMMIT");
+		if (result->HasError()) {
+			connection.Query("ROLLBACK");
+		}
 	}
 
 public:
@@ -468,6 +717,10 @@ void IcebergTransaction::CleanupFiles() {
 		// on the aws side will result in an error.
 		return;
 	}
+	if (commit_state_unknown) {
+		// Commit may have landed (CommitStateUnknownException); keep the files.
+		return;
+	}
 	ScopedTransaction temp_con(db);
 	auto &temp_context = temp_con.GetContext();
 	auto &fs = FileSystem::GetFileSystem(temp_context);
@@ -479,7 +732,7 @@ void IcebergTransaction::CleanupFiles() {
 		auto &alter_update = transaction_update->Cast<IcebergTransactionAlterUpdate>();
 		for (auto &up_table : alter_update.updated_tables) {
 			if (alter_update.committed_tables.count(up_table.first)) {
-				//! Successively committed, no need to roll back
+				//! Successfully committed, no need to roll back
 				continue;
 			}
 			auto &table = up_table.second;
@@ -510,6 +763,41 @@ void IcebergTransaction::CleanupFiles() {
 					}
 				}
 			}
+		}
+	}
+}
+
+void IcebergTransaction::EvictCachedTables() {
+	if (!catalog.attach_options.max_table_staleness_micros.IsValid()) {
+		return;
+	}
+	ScopedTransaction temp_con(db);
+	auto &temp_context = temp_con.GetContext();
+	for (auto &transaction_update : transaction_updates) {
+		switch (transaction_update->type) {
+		case IcebergTransactionUpdateType::ALTER: {
+			auto &alter_update = transaction_update->Cast<IcebergTransactionAlterUpdate>();
+			for (auto &up_table : alter_update.updated_tables) {
+				if (alter_update.committed_tables.count(up_table.first)) {
+					//! Already committed (and its cache entry already evicted on that success)
+					continue;
+				}
+				catalog.table_request_cache.Expire(temp_context, up_table.first);
+			}
+			break;
+		}
+		case IcebergTransactionUpdateType::DELETE: {
+			auto &delete_update = transaction_update->Cast<IcebergTransactionDeleteUpdate>();
+			catalog.table_request_cache.Expire(temp_context, delete_update.deleted_table.GetTableKey());
+			break;
+		}
+		case IcebergTransactionUpdateType::RENAME: {
+			auto &rename_update = transaction_update->Cast<IcebergTransactionRenameUpdate>();
+			catalog.table_request_cache.Expire(temp_context, rename_update.table.GetTableKey());
+			break;
+		}
+		default:
+			break;
 		}
 	}
 }

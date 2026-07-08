@@ -26,10 +26,16 @@ statement ok
 drop table if exists my_datalake.default.cleanup_tbl_{i};
 
 statement ok
-create table my_datalake.default.cleanup_tbl_{i} (id int, val varchar);
+create table my_datalake.default.cleanup_tbl_{i} (
+	id int,
+	val varchar
+) WITH (
+	'commit.retry.num-retries' = '0'
+);
 
 statement ok
-insert into my_datalake.default.cleanup_tbl_{i} values (0, 'seed');
+insert into my_datalake.default.cleanup_tbl_{i} values
+	(0, 'seed');
 
 endloop
 
@@ -47,22 +53,28 @@ begin
 loop i 0 20
 
 statement ok con1
-insert into my_datalake.default.cleanup_tbl_{i} values (1, 'from_con1');
+insert into my_datalake.default.cleanup_tbl_{i} values
+	(1, 'from_con1');
 
 endloop
 
 statement ok con1
-create table my_datalake.default.cleanup_new_tbl (id int, val varchar);
+create table my_datalake.default.cleanup_new_tbl (
+	id int,
+	val varchar
+);
 
 statement ok con1
-insert into my_datalake.default.cleanup_new_tbl values (1, 'from_con1');
+insert into my_datalake.default.cleanup_new_tbl values
+	(1, 'from_con1');
 
 # ---------------------------------------------------------------------------
 # con2: INSERT into tbl_10 to create a 409 conflict for con1
 # ---------------------------------------------------------------------------
 
 statement ok con2
-insert into my_datalake.default.cleanup_tbl_10 values (2, 'from_con2');
+insert into my_datalake.default.cleanup_tbl_10 values
+	(2, 'from_con2');
 
 # ---------------------------------------------------------------------------
 # con1: commit — per-table fallback loop.

@@ -7,7 +7,6 @@
 #include "core/metadata/manifest/iceberg_manifest.hpp"
 #include "core/metadata/snapshot/iceberg_snapshot.hpp"
 #include "catalog/rest/iceberg_table_set.hpp"
-#include "catalog/rest/api/iceberg_add_snapshot.hpp"
 #include "catalog/rest/api/table_update.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "planning/metadata_io/avro/avro_scan.hpp"
@@ -16,18 +15,9 @@
 
 namespace duckdb {
 
-IcebergTransactionData::IcebergTransactionData(ClientContext &context, const IcebergTableInformation &table_info)
-    : context(context), table_info(table_info) {
-	if (table_info.table_metadata.has_next_row_id) {
-		next_row_id = table_info.table_metadata.next_row_id;
-	}
-	initial_schema_id = table_info.table_metadata.GetCurrentSchemaId();
-}
-
-void IcebergTransactionData::CacheExistingManifestList(lock_guard<mutex> &guard, const IcebergTableMetadata &metadata) {
-	if (!alters.empty()) {
-		return;
-	}
+static void LoadExistingManifestList(ClientContext &context, const IcebergTableMetadata &metadata,
+                                     vector<IcebergManifestListEntry> &existing_manifest_list, int64_t &next_row_id) {
+	existing_manifest_list.clear();
 
 	auto current_snapshot = metadata.GetLatestSnapshot();
 	if (!current_snapshot) {
@@ -39,7 +29,6 @@ void IcebergTransactionData::CacheExistingManifestList(lock_guard<mutex> &guard,
 	snapshot_info.schema_id = metadata.GetCurrentSchemaId();
 
 	auto &manifest_list_path = current_snapshot->manifest_list;
-	//! Read the manifest list
 	auto scan =
 	    AvroScan::ScanManifestList(snapshot_info, metadata, context, manifest_list_path, existing_manifest_list);
 	auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
@@ -57,18 +46,104 @@ void IcebergTransactionData::CacheExistingManifestList(lock_guard<mutex> &guard,
 		if (manifest_file.content != IcebergManifestContentType::DATA) {
 			continue;
 		}
-		if (manifest_file.has_first_row_id) {
+		if (manifest_file.first_row_id) {
 			continue;
 		}
-		if (current_snapshot->has_first_row_id) {
-			throw InternalException("Table is corrupted, snapshot has 'first-row-id' but not all 'manifest_file' "
-			                        "entries have a 'first_row_id'");
+		if (current_snapshot->first_row_id) {
+			throw InvalidConfigurationException(
+			    "Table is corrupted, snapshot has 'first-row-id' but not all 'manifest_file' "
+			    "entries have a 'first_row_id'");
 		}
-		manifest_file.has_first_row_id = true;
 		manifest_file.first_row_id = next_row_id;
 		next_row_id += manifest_file.added_rows_count;
 		next_row_id += manifest_file.existing_rows_count;
 	}
+}
+
+IcebergTransactionData::IcebergTransactionData(ClientContext &context, const IcebergTableInformation &table_info)
+    : context(context), table_info(table_info) {
+	initial_table_uuid = table_info.table_metadata.table_uuid;
+	if (table_info.table_metadata.next_row_id) {
+		next_row_id = *table_info.table_metadata.next_row_id;
+	}
+	initial_schema_id = table_info.table_metadata.GetCurrentSchemaId();
+	initial_default_spec_id = table_info.table_metadata.default_spec_id;
+	if (table_info.table_metadata.HasSortOrder()) {
+		initial_default_sort_order_id = table_info.table_metadata.default_sort_order_id;
+	}
+}
+
+int64_t IcebergTransactionData::GetCommitRetryCount() const {
+	static constexpr const int64_t DEFAULT_RETRY_COUNT = 4;
+	auto it = table_info.table_metadata.table_properties.find("commit.retry.num-retries");
+	if (it == table_info.table_metadata.table_properties.end()) {
+		return DEFAULT_RETRY_COUNT;
+	}
+	int64_t result;
+	try {
+		size_t processed = 0;
+		result = std::stoll(it->second, &processed);
+		if (processed != it->second.size()) {
+			throw InvalidInputException(
+			    "Invalid value '%s' for table property 'commit.retry.num-retries': expected an integer", it->second);
+		}
+	} catch (std::exception &) {
+		throw InvalidInputException(
+		    "Invalid value '%s' for table property 'commit.retry.num-retries': expected an integer", it->second);
+	}
+	if (result < 0) {
+		throw InvalidInputException(
+		    "Invalid value '%s' for table property 'commit.retry.num-retries': expected a non-negative integer",
+		    it->second);
+	}
+	return result;
+}
+
+bool IcebergTransactionData::SupportsAppendRetry() const {
+	if (!requirements.empty() || set_schema_id) {
+		return false;
+	}
+	if (updates.empty()) {
+		return false;
+	}
+	for (auto &update : updates) {
+		if (!update->IsRetryable()) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool IcebergTransactionData::RetryStateMatches(const IcebergTableInformation &table) const {
+	if (table.table_metadata.table_uuid != initial_table_uuid) {
+		return false;
+	}
+	if (table.table_metadata.GetCurrentSchemaId() != initial_schema_id) {
+		return false;
+	}
+	if (table.table_metadata.default_spec_id != initial_default_spec_id) {
+		return false;
+	}
+	if (table.table_metadata.HasSortOrder() != initial_default_sort_order_id.IsValid()) {
+		return false;
+	}
+	if (table.table_metadata.HasSortOrder() &&
+	    table.table_metadata.default_sort_order_id.GetIndex() != initial_default_sort_order_id.GetIndex()) {
+		return false;
+	}
+	return true;
+}
+
+void IcebergTransactionData::CacheExistingManifestList(lock_guard<mutex> &guard, const IcebergTableMetadata &metadata) {
+	if (!alters.empty()) {
+		return;
+	}
+	int64_t loaded_next_row_id = 0;
+	if (metadata.next_row_id) {
+		loaded_next_row_id = *metadata.next_row_id;
+	}
+	LoadExistingManifestList(context, metadata, existing_manifest_list, loaded_next_row_id);
+	next_row_id = loaded_next_row_id;
 }
 
 void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
@@ -106,7 +181,7 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info, operation);
 	add_snapshot->AddManifestFile(std::move(manifest_file));
 	// make sure we are still inserting into the current schema
-	if (table_metadata.has_current_snapshot) {
+	if (table_metadata.current_snapshot_id) {
 		TableAddAssertCurrentSchemaId();
 	}
 	add_snapshot->altered_manifests = std::move(altered_manifests);
@@ -165,6 +240,7 @@ void IcebergTransactionData::TableAssignUUID() {
 }
 
 void IcebergTransactionData::TableAddAssertCreate() {
+	has_assert_create = true;
 	requirements.push_back(make_uniq<AssertCreateRequirement>(table_info));
 }
 
