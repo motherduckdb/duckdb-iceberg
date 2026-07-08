@@ -32,6 +32,19 @@ else:
 TEST_PYTHON_VERBOSITY_LEVELS = ("normal", "verbose")
 
 
+def is_active_catalog(catalog: str) -> bool:
+    try:
+        return (
+            resolve_active_catalog(
+                allowed_catalogs=REST_CATALOG_NAMES,
+                purpose="catalog-backed test/python runs",
+            )
+            == catalog
+        )
+    except RuntimeError:
+        return False
+
+
 def _requires_catalog_options(path: str) -> bool:
     return "cloud" not in Path(path).parts
 
