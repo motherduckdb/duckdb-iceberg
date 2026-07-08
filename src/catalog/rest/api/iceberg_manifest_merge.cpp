@@ -268,9 +268,9 @@ IcebergManifestListEntry MergeBin(const vector<MergeInputManifest> &input, const
 	for (auto idx : bin) {
 		auto &member = input[idx].entry;
 		const bool carried_over = input[idx].source == ManifestSource::CARRIED_OVER;
-		if (is_v3 && member.file.has_first_row_id) {
-			if (!has_first_row_id || member.file.first_row_id < min_first_row_id) {
-				min_first_row_id = member.file.first_row_id;
+		if (is_v3 && member.file.first_row_id.has_value()) {
+			if (!has_first_row_id || *member.file.first_row_id < min_first_row_id) {
+				min_first_row_id = *member.file.first_row_id;
 				has_first_row_id = true;
 			}
 		}
@@ -326,16 +326,14 @@ IcebergManifestListEntry MergeBin(const vector<MergeInputManifest> &input, const
 	                                                /*snapshot_id*/ -1, /*sequence_number*/ 0, table_metadata, content,
 	                                                std::move(merged_entries), scratch_row_id, partition_spec_id);
 	//! first_row_id applies to DATA manifests only; a DELETE manifest's first_row_id is always null.
-	if (is_v3 && content == IcebergManifestContentType::DATA) {
-		result.file.has_first_row_id = has_first_row_id;
-		result.file.first_row_id = has_first_row_id ? min_first_row_id : 0;
+	if (is_v3 && content == IcebergManifestContentType::DATA && has_first_row_id) {
+		result.file.first_row_id = min_first_row_id;
 	} else {
-		result.file.has_first_row_id = false;
+		result.file.first_row_id.reset();
 	}
 	//! Set the true minimum data sequence number from the absorbed entries (see above). Done before
 	//! WriteToFile / AddNewManifestFile so scan-planning pruning sees the correct lower bound.
 	if (has_min_seq) {
-		result.file.has_min_sequence_number = true;
 		result.file.min_sequence_number = min_seq;
 	}
 
