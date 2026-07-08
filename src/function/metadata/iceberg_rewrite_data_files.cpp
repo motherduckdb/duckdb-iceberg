@@ -96,9 +96,7 @@ static unique_ptr<QueryNode> BuildGroupSelect(const QualifiedName &table_name, c
 	select->select_list.push_back(make_uniq<StarExpression>());
 
 	auto table = make_uniq<BaseTableRef>();
-	table->catalog_name = table_name.catalog;
-	table->schema_name = table_name.schema;
-	table->table_name = table_name.name;
+	table->SetQualifiedName(table_name);
 	table->alias = "rewrite_source";
 	select->from_table = std::move(table);
 

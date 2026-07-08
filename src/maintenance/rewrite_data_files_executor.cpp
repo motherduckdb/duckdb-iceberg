@@ -43,10 +43,10 @@ void ValidateRewriteSnapshot(const RewritePlan &plan, const IcebergTableInformat
 		}
 		return;
 	}
-	if (!snapshot || snapshot->snapshot_id != plan.starting_snapshot_id) {
+	if (!snapshot || !snapshot->snapshot_id || *snapshot->snapshot_id != plan.starting_snapshot_id) {
 		throw CatalogException("iceberg_rewrite_data_files: table snapshot changed between planning (%lld) and %s (%s)",
 		                       plan.starting_snapshot_id, phase,
-		                       snapshot ? std::to_string(snapshot->snapshot_id) : "none");
+		                       snapshot && snapshot->snapshot_id ? std::to_string(*snapshot->snapshot_id) : "none");
 	}
 }
 
