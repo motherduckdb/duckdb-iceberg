@@ -221,32 +221,19 @@ IcebergTableInformation &IcebergTableSet::CreateNewEntry(ClientContext &context,
 		               .GetValue<string>();
 	}
 
-	auto key = IcebergTableInformation::GetTableKey(schema.namespace_items, info.GetTableName().GetIdentifierName());
-	auto &alter_update = iceberg_transaction.GetOrCreateAlter();
-	auto &table_info = alter_update.CreateTable(
-	    key, IcebergTableInformation(catalog, schema, info.GetTableName().GetIdentifierName()));
-	// auto &table_info = emplace_res.first->second;
-	auto &table_metadata = table_info.table_metadata;
-	auto table_entry = make_uniq<IcebergTableEntry>(table_info, catalog, schema, info, 0);
-	auto table_ptr = table_entry.get();
-	table_info.schema_versions[0] = std::move(table_entry);
-	table_metadata.iceberg_version = iceberg_version.GetIndex();
+	IcebergTableMetadata bootstrap_metadata;
+	bootstrap_metadata.iceberg_version = iceberg_version.GetIndex();
 	int32_t last_column_id;
 
-	auto new_schema = IcebergCreateTableRequest::CreateIcebergSchema(context, table_metadata, table_ptr->GetColumns(),
-	                                                                 table_ptr->GetConstraints(), last_column_id);
+	auto new_schema = IcebergCreateTableRequest::CreateIcebergSchema(context, bootstrap_metadata, info.columns,
+	                                                                 &info.constraints, last_column_id);
 	new_schema->schema_id = 0;
-	auto &result_schema = table_metadata.AddSchemaOrGetExisting(std::move(new_schema));
-	if (result_schema.schema_id != 0) {
-		throw InternalException("Adding initial schema didn't result in schema id 0? (actual: %d)",
-		                        result_schema.schema_id);
-	}
-	table_metadata.SetCurrentSchemaId(0);
-	table_metadata.last_column_id = last_column_id;
+	bootstrap_metadata.last_column_id = last_column_id;
+	bootstrap_metadata.SetCurrentSchemaId(0);
 
 	// Get Location
 	if (!location.empty()) {
-		table_metadata.location = location;
+		bootstrap_metadata.location = location;
 	}
 	for (auto &option : info.options) {
 		if (option.first == "format-version" || option.first == "location") {
@@ -255,25 +242,31 @@ IcebergTableInformation &IcebergTableSet::CreateNewEntry(ClientContext &context,
 		auto option_val =
 		    ParseTableProperty(property_binder, context, *option.second, option.first, LogicalType::VARCHAR)
 		        .GetValue<string>();
-		table_metadata.table_properties.emplace(option.first, option_val);
+		bootstrap_metadata.table_properties.emplace(option.first, option_val);
 	}
 
-	auto &current_schema = table_info.table_metadata.GetLatestSchema();
-	table_ptr->table_info.table_metadata.default_spec_id = 0;
-	table_ptr->table_info.SetInitialPartitionSpec(info.partition_keys, current_schema);
+	auto initial_partition_spec =
+	    IcebergTableInformation::BuildPartitionSpec(info.partition_keys, *new_schema, 0, 1000);
+	IcebergCreateTableRequest create_table_request(info.GetTableName().GetIdentifierName(), new_schema,
+	                                               std::move(initial_partition_spec), iceberg_version.GetIndex(),
+	                                               bootstrap_metadata.table_properties, bootstrap_metadata.location);
 
 	// Immediately create the table with stage_create = true to get metadata & data location(s)
 	// transaction commit will either commit with data (OR) create the table with stage_create = false
-	auto load_table_result =
-	    make_uniq<const rest_api_objects::LoadTableResult>(IRCAPI::CommitNewTable(context, catalog, *table_ptr));
+	auto load_table_result = make_uniq<const rest_api_objects::LoadTableResult>(
+	    IRCAPI::CommitNewTable(context, catalog, schema.namespace_items, create_table_request));
 
+	auto key = IcebergTableInformation::GetTableKey(schema.namespace_items, info.GetTableName().GetIdentifierName());
 	catalog.table_request_cache.SetOrOverwrite(context, key, std::move(load_table_result));
+	auto &alter_update = iceberg_transaction.GetOrCreateAlter();
+	auto &table_info = alter_update.CreateTable(
+	    key, IcebergTableInformation(catalog, schema, info.GetTableName().GetIdentifierName()));
 	{
 		lock_guard<mutex> cache_lock(catalog.table_request_cache.Lock());
 		auto cached_table_result = catalog.table_request_cache.Get(context, key, cache_lock, false);
 		D_ASSERT(cached_table_result);
 		auto &load_table_result = cached_table_result->load_table_result;
-		table_info.InitializeFromLoadTableResult(*load_table_result, false);
+		table_info.InitializeFromLoadTableResult(*load_table_result, true);
 	}
 
 	// if we stage created the table, we add an assert create
@@ -293,7 +286,7 @@ IcebergTableInformation &IcebergTableSet::CreateNewEntry(ClientContext &context,
 	transaction_data.TableAddSortOrder();
 	transaction_data.TableSetDefaultSortOrder();
 	transaction_data.TableSetLocation();
-	transaction_data.TableSetProperties(table_metadata.table_properties);
+	transaction_data.TableSetProperties(table_info.table_metadata.table_properties);
 
 	iceberg_transaction.SetLatestTableState(table_info, IcebergTableStatus::ALIVE);
 	return table_info;
