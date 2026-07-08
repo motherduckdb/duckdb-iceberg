@@ -394,40 +394,46 @@ IcebergSortOrder IcebergTableInformation::BuildSortOrder(const vector<OrderByNod
 	return new_sort_order;
 }
 
-void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
-                                               const vector<unique_ptr<ParsedExpression>> &partition_keys,
-                                               const IcebergTableSchema &schema, bool first_partition_spec) {
-	idx_t base_partition_field_id = 1000;
-	if (!first_partition_spec && table_metadata.HasLastPartitionId()) {
-		base_partition_field_id = table_metadata.GetLastPartitionFieldId() + 1;
-	}
-	idx_t new_spec_id = 0;
-	if (!first_partition_spec) {
-		new_spec_id = GetNextPartitionSpecId();
+void IcebergTableInformation::SetInitialPartitionSpec(const vector<unique_ptr<ParsedExpression>> &partition_keys,
+                                                      const IcebergTableSchema &schema) {
+	auto new_spec = BuildPartitionSpec(partition_keys, schema, 0, 1000);
+
+	// New tables should not already have a matching partition spec, but preserve the same behavior
+	// as the transactional path in case metadata was pre-populated before bootstrap.
+	if (auto existing_spec_id = GetExistingSpecId(new_spec)) {
+		table_metadata.default_spec_id = *existing_spec_id;
+		return;
 	}
 
-	auto new_spec =
-	    BuildPartitionSpec(partition_keys, schema, static_cast<int32_t>(new_spec_id), base_partition_field_id);
+	table_metadata.partition_specs.emplace(0, std::move(new_spec));
+	table_metadata.default_spec_id = 0;
+}
+
+void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
+                                               const vector<unique_ptr<ParsedExpression>> &partition_keys,
+                                               const IcebergTableSchema &schema) {
+	idx_t base_partition_field_id = 1000;
+	if (table_metadata.HasLastPartitionId()) {
+		base_partition_field_id = table_metadata.GetLastPartitionFieldId() + 1;
+	}
+	auto new_spec_id = static_cast<int32_t>(GetNextPartitionSpecId());
+
+	auto new_spec = BuildPartitionSpec(partition_keys, schema, new_spec_id, base_partition_field_id);
 
 	// if spec definition already exists in a previous spec definition, set it to that spec id
 	// (some catalog may allow duplicate definitions, others not)
 	auto existing_spec_id = GetExistingSpecId(new_spec);
+	auto &transaction_data = GetOrCreateTransactionData(transaction);
 	if (existing_spec_id) {
 		table_metadata.default_spec_id = *existing_spec_id;
-		if (!first_partition_spec) {
-			auto &transaction_data = GetOrCreateTransactionData(transaction);
-			transaction_data.TableSetDefaultSpec();
-		}
+		transaction_data.TableSetDefaultSpec();
 		return;
 	}
 
 	table_metadata.partition_specs.emplace(new_spec_id, std::move(new_spec));
 	table_metadata.default_spec_id = new_spec_id;
-	if (!first_partition_spec) {
-		auto &transaction_data = GetOrCreateTransactionData(transaction);
-		transaction_data.TableAddPartitionSpec();
-		transaction_data.TableSetDefaultSpec();
-	}
+	transaction_data.TableAddPartitionSpec();
+	transaction_data.TableSetDefaultSpec();
 }
 
 void IcebergTableInformation::SetSortedBy(IcebergTransaction &transaction, const vector<OrderByNode> &orders,

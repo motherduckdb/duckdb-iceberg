@@ -47,8 +47,10 @@ public:
 	idx_t GetNextSortOrderId();
 	optional<int64_t> GetExistingSpecId(IcebergPartitionSpec &spec);
 	optional<int64_t> GetExistingSortOrderId(IcebergSortOrder &sort_order);
+	void SetInitialPartitionSpec(const vector<unique_ptr<ParsedExpression>> &partition_keys,
+	                             const IcebergTableSchema &schema);
 	void SetPartitionedBy(IcebergTransaction &transaction, const vector<unique_ptr<ParsedExpression>> &partition_keys,
-	                      const IcebergTableSchema &schema, bool first_partition_spec = false);
+	                      const IcebergTableSchema &schema);
 	void SetSortedBy(IcebergTransaction &transaction, const vector<OrderByNode> &orders,
 	                 const IcebergTableSchema &schema, bool first_sort_spec = false);
 	//! Build an IcebergPartitionSpec from parsed PARTITIONED BY expressions and a schema.
