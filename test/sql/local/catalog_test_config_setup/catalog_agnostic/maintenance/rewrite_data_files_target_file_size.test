@@ -2,8 +2,6 @@
 # description: rewrite_data_files resolves target file size from argument and table properties
 # group: [maintenance]
 
-require-env ICEBERG_SERVER_AVAILABLE
-
 require-env CATALOG_TEST_CONFIG_SETUP
 
 require avro

@@ -2,8 +2,6 @@
 # description: end-to-end V2 merge-on-read rewrite with position deletes
 # group: [maintenance]
 
-require-env ICEBERG_SERVER_AVAILABLE
-
 require-env CATALOG_TEST_CONFIG_SETUP
 
 require avro

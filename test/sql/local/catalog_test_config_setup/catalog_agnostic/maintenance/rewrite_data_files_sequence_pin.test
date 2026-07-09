@@ -2,8 +2,6 @@
 # description: rewritten data files keep the starting data sequence number
 # group: [maintenance]
 
-require-env ICEBERG_SERVER_AVAILABLE
-
 require-env CATALOG_TEST_CONFIG_SETUP
 
 require avro
