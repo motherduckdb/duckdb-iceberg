@@ -44,45 +44,11 @@ namespace duckdb {
 
 namespace {
 
-static optional_ptr<IcebergMultiFileList> FindIcebergScan(PhysicalOperator &plan) {
-	if (plan.type == PhysicalOperatorType::TABLE_SCAN) {
-		// does this emit the virtual columns?
-		auto &scan = plan.Cast<PhysicalTableScan>();
-
-		if (scan.function.GetName() == "iceberg_scan") {
-			bool found = false;
-			for (auto &col : scan.column_ids) {
-				if (col.GetPrimaryIndex() == MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER) {
-					found = true;
-					break;
-				}
-			}
-			if (found) {
-				auto &bind_data = scan.bind_data->Cast<MultiFileBindData>();
-				return bind_data.file_list->Cast<IcebergMultiFileList>();
-			}
-		}
-		return nullptr;
-	}
-
-	for (auto &children : plan.children) {
-		auto result = FindIcebergScan(children.get());
-		if (result) {
-			return result;
-		}
-	}
-	return nullptr;
-}
-
-static void VerifyStaleSnapshot(IcebergCatalog &catalog, IcebergMultiFileList &multi_file_list,
-                                ClientContext &context) {
-	auto transaction_start = IcebergUtils::GetTransactionStartTimeMS(context);
-	auto &metadata = multi_file_list.GetMetadata();
-	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
-
-	auto table = multi_file_list.GetTable();
-	auto &table_info = table->table_info;
+static void VerifyStaleSnapshot(ClientContext &context, IcebergTransaction &iceberg_transaction,
+                                IcebergTableInformation &table_info) {
 	auto table_key = table_info.GetTableKey();
+	auto transaction_start = IcebergUtils::GetTransactionStartTimeMS(context);
+	auto &metadata = table_info.table_metadata;
 
 	auto table_state = iceberg_transaction.GetLatestTableState(table_key);
 	if (table_state->GetInfo().HasTransactionUpdates()) {
@@ -1057,9 +1023,6 @@ PhysicalOperator &IcebergInsert::PlanInsert(ClientContext &context, PhysicalPlan
 
 PhysicalOperator &IcebergCatalog::PlanInsert(ClientContext &context, PhysicalPlanGenerator &planner, LogicalInsert &op,
                                              optional_ptr<PhysicalOperator> plan) {
-	auto iceberg_scan = FindIcebergScan(child_plan);
-	VerifyStaleSnapshot(*this, *iceberg_scan, context);
-
 	if (op.return_chunk) {
 		throw BinderException("RETURNING clause not yet supported for insertion into Iceberg table");
 	}
@@ -1075,6 +1038,8 @@ PhysicalOperator &IcebergCatalog::PlanInsert(ClientContext &context, PhysicalPla
 	table_entry.PrepareIcebergScanFromEntry(context);
 
 	auto &irc_transaction = IcebergTransaction::Get(context, *this);
+	VerifyStaleSnapshot(context, irc_transaction, table_entry.table_info);
+
 	auto &alter = irc_transaction.GetOrCreateAlter();
 	auto &updated_table = alter.GetOrInitializeTable(table_entry.table_info);
 	auto &table_metadata = updated_table.table_metadata;

@@ -516,25 +516,26 @@ InsertionOrderPreservingMap<string> IcebergDelete::ParamsToString() const {
 PhysicalOperator &IcebergDelete::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner,
                                             IcebergTableEntry &table, PhysicalOperator &child_plan,
                                             vector<idx_t> row_id_indexes) {
+	auto &catalog = table.ParentCatalog();
+	auto multi_file_list = FindIcebergScan(child_plan);
+	if (multi_file_list) {
+		VerifyStaleSnapshot(catalog.Cast<IcebergCatalog>(), *multi_file_list, context);
+	} else {
+		DUCKDB_LOG_DEBUG(context, "Could not find IcebergDelete source. Iceberg Multi File list is empty");
+	}
+
 #ifdef ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
 	vector<IcebergEqualityDeletePredicate> equality_predicates;
 	bool is_equality_delete = TryGetEqualityDeletePredicates(context, table, child_plan, equality_predicates);
-	return planner.Make<IcebergDelete>(table, file_list, child_plan, std::move(row_id_indexes), is_equality_delete,
-	                                   std::move(equality_predicates));
+	return planner.Make<IcebergDelete>(table, multi_file_list, child_plan, std::move(row_id_indexes),
+	                                   is_equality_delete, std::move(equality_predicates));
 #else
-	return planner.Make<IcebergDelete>(table, file_list, child_plan, std::move(row_id_indexes));
+	return planner.Make<IcebergDelete>(table, multi_file_list, child_plan, std::move(row_id_indexes));
 #endif
 }
 
 PhysicalOperator &IcebergCatalog::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,
                                              PhysicalOperator &plan) {
-	auto multi_file_list = FindIcebergScan(child_plan);
-	if (multi_file_list) {
-		VerifyStaleSnapshot(*this, *multi_file_list, context);
-	} else {
-		DUCKDB_LOG_DEBUG(context, "Could not find IcebergDelete source. Iceberg Multi File list is empty");
-	}
-
 	if (op.return_chunk) {
 		throw BinderException("RETURNING clause not yet supported for deletion from Iceberg table");
 	}
