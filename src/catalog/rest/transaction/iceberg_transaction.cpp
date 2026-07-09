@@ -277,6 +277,11 @@ static rest_api_objects::TableRequirement CreateAssertNoSnapshotRequirement() {
 
 void IcebergTransaction::DropSecrets(ClientContext &context) {
 	bool started_transaction = false;
+	auto rollback_started_transaction = [&]() {
+		if (started_transaction && context.transaction.HasActiveTransaction()) {
+			context.transaction.Rollback(nullptr);
+		}
+	};
 	try {
 		if (!context.transaction.HasActiveTransaction()) {
 			context.transaction.BeginTransaction();
@@ -293,17 +298,14 @@ void IcebergTransaction::DropSecrets(ClientContext &context) {
 			context.transaction.Commit();
 		}
 	} catch (std::exception &ex) {
-		if (started_transaction && context.transaction.HasActiveTransaction()) {
-			context.transaction.Rollback(nullptr);
-		}
+		rollback_started_transaction();
 		if (!started_transaction) {
 			throw;
 		}
-		DUCKDB_LOG_DEBUG(context, "Failed to drop temporary Iceberg vended credential secrets: %s", ex.what());
+		ErrorData error(ex);
+		DUCKDB_LOG_DEBUG(context, "Failed to drop temporary Iceberg vended credential secrets: %s", error.Message());
 	} catch (...) {
-		if (started_transaction && context.transaction.HasActiveTransaction()) {
-			context.transaction.Rollback(nullptr);
-		}
+		rollback_started_transaction();
 		if (!started_transaction) {
 			throw;
 		}
