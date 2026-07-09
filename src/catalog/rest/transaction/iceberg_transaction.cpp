@@ -902,6 +902,8 @@ IcebergTableInformation &IcebergTransaction::RenameTable(IcebergTableInformation
 	lock_guard<mutex> cache_guard(table_request_cache.Lock());
 	auto cache = table_request_cache.Get(client_context, table_key, cache_guard, false);
 	if (cache) {
+		//! FIXME: Because the cache is global, this could be overwriting an existing entry, this should be fixed in the
+		//! future
 		table_request_cache.SetOrOverwriteInternal(cache_guard, client_context, new_table_key, cache->expire_timestamp,
 		                                           std::move(cache->load_table_result));
 		table_request_cache.ExpireInternal(cache_guard, client_context, table_key);
