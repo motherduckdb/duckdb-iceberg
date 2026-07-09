@@ -19,6 +19,7 @@
 #include "catalog/rest/storage/authorization/sigv4.hpp"
 #include "catalog/rest/storage/authorization/none.hpp"
 #include "catalog/rest/storage/authorization/sigv4_utils.hpp"
+#include "catalog/rest/storage/iceberg_table_secret_provider.hpp"
 #include "core/expression/iceberg_transform.hpp"
 #include "duckdb/parser/column_definition.hpp"
 
@@ -68,6 +69,7 @@ static void ParseS3ConfigOptions(const case_insensitive_map_t<string> &config, c
 	static const case_insensitive_map_t<string> config_to_option = {{"s3.access-key-id", "key_id"},
 	                                                                {"s3.secret-access-key", "secret"},
 	                                                                {"s3.session-token", "session_token"},
+	                                                                {"s3.session-token-expires-at-ms", "expires_at"},
 	                                                                {"s3.region", "region"},
 	                                                                {"region", "region"},
 	                                                                {"client.region", "region"},
@@ -164,11 +166,9 @@ static void ParseConfigOptions(const case_insensitive_map_t<string> &config, cas
 IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientContext &context) {
 	IRCAPITableCredentials result;
 	auto transaction_id = MetaTransaction::Get(context).global_transaction_id;
-	auto &transaction = IcebergTransaction::Get(context, catalog);
 
 	auto secret_base_name =
 	    StringUtil::Format("__internal_ic_%s__%s__%s__%s", table_id, schema.name, name, to_string(transaction_id));
-	transaction.created_secrets.insert(secret_base_name);
 	case_insensitive_map_t<Value> user_defaults;
 	if (catalog.auth_handler->type == IcebergAuthorizationType::SIGV4) {
 		auto &sigv4_auth = catalog.auth_handler->Cast<SIGV4Authorization>();
@@ -239,9 +239,16 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 		create_secret_input.name = StringUtil::Format("%s_%d_%s", secret_base_name, index, credential.prefix);
 
 		create_secret_input.type = storage_type;
-		create_secret_input.provider = "config";
 		create_secret_input.storage_type = "memory";
 		create_secret_input.options = config_options;
+
+		if (IcebergTableSecretProvider::SupportsStorageType(storage_type)) {
+			create_secret_input.provider = IcebergTableSecretProvider::Provider();
+			create_secret_input.options["refresh_info"] =
+			    IcebergTableSecretProvider::MakeRefreshInfo(catalog.GetName(), schema.name, name);
+		} else {
+			create_secret_input.provider = "config";
+		}
 
 		ParseConfigOptions(credential.config, create_secret_input.options, context, storage_type);
 		//! TODO: apply the 'overrides' retrieved from the /v1/config endpoint
@@ -259,7 +266,13 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 		config.options = config_options;
 		config.name = secret_base_name;
 		config.type = storage_type;
-		config.provider = "config";
+		if (IcebergTableSecretProvider::SupportsStorageType(storage_type)) {
+			config.provider = IcebergTableSecretProvider::Provider();
+			config.options["refresh_info"] =
+			    IcebergTableSecretProvider::MakeRefreshInfo(catalog.GetName(), schema.name, name);
+		} else {
+			config.provider = "config";
+		}
 		config.storage_type = "memory";
 	}
 
