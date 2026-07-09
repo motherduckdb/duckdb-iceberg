@@ -1,6 +1,7 @@
 #include "catalog/rest/iceberg_table_set.hpp"
 
 #include "duckdb/parser/expression/constant_expression.hpp"
+#include "duckdb/logging/logger.hpp"
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
 #include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/common/enums/http_status_code.hpp"
