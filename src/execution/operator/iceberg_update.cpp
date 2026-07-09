@@ -14,6 +14,7 @@
 #include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
+#include "planning/iceberg_multi_file_list.hpp"
 
 namespace duckdb {
 
@@ -249,6 +250,30 @@ static optional_ptr<IcebergMultiFileList> FindIcebergScan(PhysicalOperator &plan
 	return nullptr;
 }
 
+static void VerifyStaleSnapshot(IcebergCatalog &catalog, IcebergMultiFileList &multi_file_list,
+                                ClientContext &context) {
+	auto transaction_start = IcebergUtils::GetTransactionStartTimeMS(context);
+	auto &metadata = multi_file_list.GetMetadata();
+	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
+
+	auto table = multi_file_list.GetTable();
+	auto &table_info = table->table_info;
+	auto table_key = table_info.GetTableKey();
+
+	auto table_state = iceberg_transaction.GetLatestTableState(table_key);
+	if (table_state->GetInfo().HasTransactionUpdates()) {
+		//! Already has transaction changes, no need to verify further
+		return;
+	}
+
+	auto latest_snapshot = metadata.GetSnapshotByTimestampMS(transaction_start);
+	auto committed_snapshot = metadata.GetLatestCommittedSnapshot();
+	if (latest_snapshot != committed_snapshot) {
+		throw TransactionException(
+		    "Write-write conflict detected on '%s', changes were made since the start of the transaction", table_key);
+	}
+}
+
 } // namespace
 
 PhysicalOperator &IcebergCatalog::PlanUpdate(ClientContext &context, PhysicalPlanGenerator &planner, LogicalUpdate &op,
@@ -268,6 +293,7 @@ PhysicalOperator &IcebergCatalog::PlanUpdate(ClientContext &context, PhysicalPla
 	auto &updated_table_entry = *updated_table.schema_versions[schema.schema_id];
 
 	auto iceberg_scan = FindIcebergScan(child_plan);
+	VerifyStaleSnapshot(*this, *iceberg_scan, context);
 
 	// Plan the copy operator with update_op as child.
 	// PlanCopyForInsert will add a partition projection on top if needed.

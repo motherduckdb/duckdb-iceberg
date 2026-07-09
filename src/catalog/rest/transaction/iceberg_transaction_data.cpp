@@ -71,12 +71,6 @@ IcebergTransactionData::IcebergTransactionData(ClientContext &context, const Ice
 	if (table_info.table_metadata.HasSortOrder()) {
 		initial_default_sort_order_id = table_info.table_metadata.default_sort_order_id;
 	}
-
-	IcebergSnapshotLookup lookup;
-	auto latest_snapshot = table_info.table_metadata.GetSnapshot(context, lookup);
-	if (latest_snapshot.snapshot) {
-		requirements.push_back(make_uniq<AssertRefSnapshotId>(*latest_snapshot.snapshot->snapshot_id));
-	}
 }
 
 int64_t IcebergTransactionData::GetCommitRetryCount() const {

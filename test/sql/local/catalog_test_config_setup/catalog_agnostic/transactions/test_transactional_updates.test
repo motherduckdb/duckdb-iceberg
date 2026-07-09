@@ -62,18 +62,13 @@ select * from my_datalake.default.multi_transaction_update;
 0	0
 
 # con1 updates 0 to 50 for column a (doesn't affect row inserted by con2)
-statement ok con1
-update my_datalake.default.multi_transaction_update set a = 50;
-
-query II con1
-select * from my_datalake.default.multi_transaction_update;
-----
-50	0
-
 statement error con1
-commit;
+update my_datalake.default.multi_transaction_update set a = 50;
 ----
-<REGEX>:.*TransactionContext Error: Failed to commit:.*
+TransactionContext Error: Write-write conflict detected on 'default.multi_transaction_update', changes were made since the start of the transaction
+
+statement ok con1
+commit;
 
 # con1 UPDATE didn't go through
 query II

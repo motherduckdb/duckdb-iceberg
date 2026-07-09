@@ -31,6 +31,64 @@ class IcebergDeleteLocalState;
 class IcebergDeleteGlobalState;
 class IcebergTableEntry;
 
+namespace {
+
+static optional_ptr<IcebergMultiFileList> FindIcebergScan(PhysicalOperator &plan) {
+	if (plan.type == PhysicalOperatorType::TABLE_SCAN) {
+		// does this emit the virtual columns?
+		auto &scan = plan.Cast<PhysicalTableScan>();
+
+		if (scan.function.GetName() == "iceberg_scan") {
+			bool found = false;
+			for (auto &col : scan.column_ids) {
+				if (col.GetPrimaryIndex() == MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER) {
+					found = true;
+					break;
+				}
+			}
+			if (found) {
+				auto &bind_data = scan.bind_data->Cast<MultiFileBindData>();
+				return bind_data.file_list->Cast<IcebergMultiFileList>();
+			}
+		}
+		return nullptr;
+	}
+
+	for (auto &children : plan.children) {
+		auto result = FindIcebergScan(children.get());
+		if (result) {
+			return result;
+		}
+	}
+	return nullptr;
+}
+
+static void VerifyStaleSnapshot(IcebergCatalog &catalog, IcebergMultiFileList &multi_file_list,
+                                ClientContext &context) {
+	auto transaction_start = IcebergUtils::GetTransactionStartTimeMS(context);
+	auto &metadata = multi_file_list.GetMetadata();
+	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
+
+	auto table = multi_file_list.GetTable();
+	auto &table_info = table->table_info;
+	auto table_key = table_info.GetTableKey();
+
+	auto table_state = iceberg_transaction.GetLatestTableState(table_key);
+	if (table_state->GetInfo().HasTransactionUpdates()) {
+		//! Already has transaction changes, no need to verify further
+		return;
+	}
+
+	auto latest_snapshot = metadata.GetSnapshotByTimestampMS(transaction_start);
+	auto committed_snapshot = metadata.GetLatestCommittedSnapshot();
+	if (latest_snapshot != committed_snapshot) {
+		throw TransactionException(
+		    "Write-write conflict detected on '%s', changes were made since the start of the transaction", table_key);
+	}
+}
+
+} // namespace
+
 IcebergDelete::IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table,
                              optional_ptr<IcebergMultiFileList> multi_file_list, PhysicalOperator &child,
                              vector<idx_t> row_id_indexes)
@@ -455,43 +513,9 @@ InsertionOrderPreservingMap<string> IcebergDelete::ParamsToString() const {
 	return result;
 }
 
-optional_ptr<PhysicalTableScan> IcebergDelete::FindDeleteSource(PhysicalOperator &plan) {
-	if (plan.type == PhysicalOperatorType::TABLE_SCAN) {
-		// does this emit the virtual columns?
-		auto &scan = plan.Cast<PhysicalTableScan>();
-		bool found = false;
-		for (auto &col : scan.column_ids) {
-			if (col.GetPrimaryIndex() == MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER) {
-				found = true;
-				break;
-			}
-		}
-		if (!found) {
-			return nullptr;
-		}
-		return scan;
-	}
-	for (auto &children : plan.children) {
-		auto result = FindDeleteSource(children.get());
-		if (result) {
-			return result;
-		}
-	}
-	return nullptr;
-}
-
 PhysicalOperator &IcebergDelete::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner,
                                             IcebergTableEntry &table, PhysicalOperator &child_plan,
                                             vector<idx_t> row_id_indexes) {
-	auto table_scan = FindDeleteSource(child_plan);
-	optional_ptr<IcebergMultiFileList> file_list;
-	if (table_scan) {
-		auto &bind_data = table_scan->bind_data->Cast<MultiFileBindData>();
-		file_list = &bind_data.file_list->Cast<IcebergMultiFileList>();
-	} else {
-		DUCKDB_LOG_DEBUG(context, "Could not find IcebergDelete source. Iceberg Multi File list is empty");
-	}
-
 #ifdef ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
 	vector<IcebergEqualityDeletePredicate> equality_predicates;
 	bool is_equality_delete = TryGetEqualityDeletePredicates(context, table, child_plan, equality_predicates);
@@ -504,6 +528,13 @@ PhysicalOperator &IcebergDelete::PlanDelete(ClientContext &context, PhysicalPlan
 
 PhysicalOperator &IcebergCatalog::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,
                                              PhysicalOperator &plan) {
+	auto multi_file_list = FindIcebergScan(child_plan);
+	if (multi_file_list) {
+		VerifyStaleSnapshot(*this, *multi_file_list, context);
+	} else {
+		DUCKDB_LOG_DEBUG(context, "Could not find IcebergDelete source. Iceberg Multi File list is empty");
+	}
+
 	if (op.return_chunk) {
 		throw BinderException("RETURNING clause not yet supported for deletion from Iceberg table");
 	}
