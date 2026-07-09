@@ -1,6 +1,7 @@
 #include "catalog/rest/api/catalog_api.hpp"
 
 #include "duckdb/main/secret/secret.hpp"
+#include "duckdb/logging/logger.hpp"
 #include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/common/error_data.hpp"
 #include "duckdb/common/http_util.hpp"

@@ -2,6 +2,7 @@
 
 #include "duckdb.hpp"
 #include "duckdb/common/gzip_file_system.hpp"
+#include "duckdb/main/database_manager.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"

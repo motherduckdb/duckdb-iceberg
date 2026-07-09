@@ -1,6 +1,7 @@
 #include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
 
 #include "duckdb/storage/statistics/base_statistics.hpp"
+#include "duckdb/logging/logger.hpp"
 #include "duckdb/storage/table_storage_info.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
 #include "duckdb/main/database.hpp"

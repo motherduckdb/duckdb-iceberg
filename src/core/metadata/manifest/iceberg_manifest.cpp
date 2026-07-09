@@ -193,7 +193,7 @@ public:
 string IcebergManifestEntryContentTypeToString(IcebergManifestEntryContentType type) {
 	switch (type) {
 	case IcebergManifestEntryContentType::DATA:
-		return "EXISTING";
+		return "DATA";
 	case IcebergManifestEntryContentType::POSITION_DELETES:
 		return "POSITION_DELETES";
 	case IcebergManifestEntryContentType::EQUALITY_DELETES:
@@ -396,6 +396,14 @@ void IcebergManifestEntry::SetSequenceNumber(optional<sequence_number_t> value) 
 
 void IcebergManifestEntry::SetFileSequenceNumber(optional<sequence_number_t> value) {
 	file_sequence_number = value;
+}
+
+optional<sequence_number_t> IcebergManifestEntry::ExplicitSequenceNumber() const {
+	return sequence_number;
+}
+
+optional<sequence_number_t> IcebergManifestEntry::ExplicitFileSequenceNumber() const {
+	return file_sequence_number;
 }
 
 sequence_number_t IcebergManifestEntry::GetSequenceNumber(const IcebergManifestFile &manifest_file) const {
@@ -832,8 +840,18 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 			// sequence_number: long
 			// file_sequence_number: long
 			if (manifest_entry.status == IcebergManifestEntryStatusType::ADDED) {
-				sequence_number_writer.WriteNull();
-				file_sequence_number_writer.WriteNull();
+				auto sequence_number = manifest_entry.ExplicitSequenceNumber();
+				if (sequence_number) {
+					sequence_number_writer.WriteValue(*sequence_number);
+				} else {
+					sequence_number_writer.WriteNull();
+				}
+				auto file_sequence_number = manifest_entry.ExplicitFileSequenceNumber();
+				if (file_sequence_number) {
+					file_sequence_number_writer.WriteValue(*file_sequence_number);
+				} else {
+					file_sequence_number_writer.WriteNull();
+				}
 			} else {
 				sequence_number_writer.WriteValue(manifest_entry.GetSequenceNumber(manifest_file));
 				file_sequence_number_writer.WriteValue(manifest_entry.GetFileSequenceNumber(manifest_file));
