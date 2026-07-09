@@ -21,12 +21,13 @@ const string WRITE_DELETE_MODE = "write.delete.mode";
 
 struct IcebergMetadataLogItem {
 public:
-	IcebergMetadataLogItem(const string &path, int64_t timestamp_ms) : metadata_file(path), timestamp_ms(timestamp_ms) {
+	IcebergMetadataLogItem(const string &path, timestamp_ms_t timestamp_ms)
+	    : metadata_file(path), timestamp_ms(timestamp_ms) {
 	}
 
 public:
 	string metadata_file;
-	int64_t timestamp_ms;
+	timestamp_ms_t timestamp_ms;
 };
 
 //! A structure to store "LoadTableResult" information that changes as a transaction goes on
@@ -46,7 +47,9 @@ public:
 	IcebergTableMetadata Copy() const;
 	static string GetMetaDataPath(ClientContext &context, const string &path, FileSystem &fs,
 	                              const IcebergOptions &options);
-	optional_ptr<const IcebergSnapshot> GetLatestSnapshot() const;
+	optional_ptr<const IcebergSnapshot> GetLatestSnapshot(ClientContext &context) const;
+	//! NOTE: this should only be used when transactionality is of no concern (i.e during commit)
+	optional_ptr<const IcebergSnapshot> GetLatestCommittedSnapshot() const;
 	const IcebergTableSchema &GetLatestSchema() const;
 	bool HasPartitionSpec() const;
 	const IcebergPartitionSpec &GetLatestPartitionSpec() const;
@@ -57,7 +60,7 @@ public:
 	const unordered_map<int32_t, IcebergSortOrder> &GetSortOrderSpecs() const;
 
 	optional_ptr<const IcebergSnapshot> GetSnapshotById(int64_t snapshot_id) const;
-	optional_ptr<const IcebergSnapshot> GetSnapshotByTimestamp(timestamp_t timestamp) const;
+	optional_ptr<const IcebergSnapshot> GetSnapshotByTimestampMS(timestamp_ms_t timestamp) const;
 
 	//! Version extraction and identification
 	static bool UnsafeVersionGuessingEnabled(ClientContext &context);
@@ -73,7 +76,7 @@ public:
 	optional_ptr<const IcebergColumnDefinition> FindColumnByFieldId(int32_t field_id) const;
 	optional_ptr<const IcebergPartitionSpec> FindPartitionSpecById(int32_t spec_id) const;
 	optional_ptr<const IcebergSortOrder> FindSortOrderById(int32_t sort_id) const;
-	IcebergSnapshotScanInfo GetSnapshot(const IcebergSnapshotLookup &lookup) const;
+	IcebergSnapshotScanInfo GetSnapshot(ClientContext &context, const IcebergSnapshotLookup &lookup) const;
 
 	const string &GetLocation() const;
 	const string GetDataPath(FileSystem &fs) const;
@@ -118,7 +121,7 @@ public:
 
 	optional<int64_t> current_snapshot_id;
 	int64_t last_sequence_number;
-	timestamp_t last_updated_ms;
+	timestamp_ms_t last_updated_ms;
 
 	optional_idx last_column_id;
 	optional_idx last_partition_field_id;
@@ -134,7 +137,7 @@ public:
 	//! Used for spec-compliant point-in-time resolution; side-branch commits are absent.
 	//! Stored as raw millis (matching the REST API representation and last_updated_ms)
 	//! to keep all timestamp comparisons in a single unit.
-	vector<pair<int64_t /*snapshot_id*/, int64_t /*timestamp_ms*/>> snapshot_log;
+	vector<pair<int64_t /*snapshot_id*/, timestamp_ms_t>> snapshot_log;
 	vector<IcebergFieldMapping> mappings;
 
 	//! Custom write paths from table properties

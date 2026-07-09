@@ -97,7 +97,8 @@ static unique_ptr<FunctionData> IcebergPartitionStatsBind(ClientContext &context
 				    "Can't use 'snapshot_from_id' in combination with 'snapshot_from_timestamp'");
 			}
 			snapshot_lookup.SetSource(SnapshotSource::FROM_TIMESTAMP);
-			snapshot_lookup.snapshot_timestamp = val.GetValue<timestamp_t>();
+			snapshot_lookup.snapshot_timestamp =
+			    val.DefaultCastAs(LogicalType::TIMESTAMP_MS).GetValue<timestamp_ms_t>();
 		}
 	}
 
@@ -106,7 +107,7 @@ static unique_ptr<FunctionData> IcebergPartitionStatsBind(ClientContext &context
 	    IcebergTableMetadata::Parse(iceberg_meta_path, *caching_fs, options.metadata_compression_codec);
 	ret->metadata = IcebergTableMetadata::FromTableMetadata(table_metadata);
 
-	ret->snapshot_to_scan = ret->metadata.GetSnapshot(options.snapshot_lookup);
+	ret->snapshot_to_scan = ret->metadata.GetSnapshot(context, options.snapshot_lookup);
 
 	if (ret->snapshot_to_scan.snapshot) {
 		ret->iceberg_table =

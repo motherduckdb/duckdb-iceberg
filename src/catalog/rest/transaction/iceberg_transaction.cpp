@@ -239,7 +239,7 @@ static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, Iceb
 	table_change.identifier->name = table_info.name;
 
 	auto &metadata = commit_state.table_info.table_metadata;
-	auto current_snapshot = metadata.GetLatestSnapshot();
+	auto current_snapshot = metadata.GetLatestCommittedSnapshot();
 	auto &transaction_data = *commit_state.table_info.transaction_data;
 	info.retryable = transaction_data.SupportsAppendRetry();
 	info.retry_config = IcebergRetryConfig::FromTableMetadata(metadata);

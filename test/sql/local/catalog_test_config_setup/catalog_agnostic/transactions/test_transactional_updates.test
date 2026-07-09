@@ -31,11 +31,15 @@ statement ok
 drop table if exists my_datalake.default.multi_transaction_update;
 
 statement ok
-create table my_datalake.default.multi_transaction_update (a int, b int);
+create table my_datalake.default.multi_transaction_update (
+	a int,
+	b int
+);
 
 # Insert 0,0
 statement ok
-insert into my_datalake.default.multi_transaction_update select 0, 0;
+insert into my_datalake.default.multi_transaction_update VALUES
+	(0, 0);
 
 statement ok con1
 begin
@@ -45,7 +49,8 @@ begin
 
 # Insert 2,2
 statement ok con2
-insert into my_datalake.default.multi_transaction_update select 2, 2;
+insert into my_datalake.default.multi_transaction_update VALUES
+	(2, 2);
 
 statement ok con2
 commit

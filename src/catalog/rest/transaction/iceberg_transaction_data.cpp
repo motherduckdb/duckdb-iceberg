@@ -19,7 +19,7 @@ static void LoadExistingManifestList(ClientContext &context, const IcebergTableM
                                      vector<IcebergManifestListEntry> &existing_manifest_list, int64_t &next_row_id) {
 	existing_manifest_list.clear();
 
-	auto current_snapshot = metadata.GetLatestSnapshot();
+	auto current_snapshot = metadata.GetLatestSnapshot(context);
 	if (!current_snapshot) {
 		return;
 	}
@@ -70,6 +70,12 @@ IcebergTransactionData::IcebergTransactionData(ClientContext &context, const Ice
 	initial_default_spec_id = table_info.table_metadata.default_spec_id;
 	if (table_info.table_metadata.HasSortOrder()) {
 		initial_default_sort_order_id = table_info.table_metadata.default_sort_order_id;
+	}
+
+	IcebergSnapshotLookup lookup;
+	auto latest_snapshot = table_info.table_metadata.GetSnapshot(context, lookup);
+	if (latest_snapshot.snapshot) {
+		requirements.push_back(make_uniq<AssertRefSnapshotId>(*latest_snapshot.snapshot->snapshot_id));
 	}
 }
 

@@ -350,7 +350,7 @@ void IcebergMultiFileList::Bind(vector<LogicalType> &return_types, vector<Identi
 		auto &metadata = temp_data->metadata;
 
 		IcebergSnapshotScanInfo snapshot_info;
-		snapshot_info = metadata.GetSnapshot(options.snapshot_lookup);
+		snapshot_info = metadata.GetSnapshot(context, options.snapshot_lookup);
 		auto schema = metadata.GetSchemaFromId(snapshot_info.schema_id);
 		shared_state->scan_info =
 		    make_shared_ptr<IcebergScanInfo>(iceberg_path, std::move(temp_data), snapshot_info, *schema);

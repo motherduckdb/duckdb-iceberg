@@ -5,6 +5,7 @@
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
+#include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 
 #include "execution/operator/iceberg_delete.hpp"
 #include "execution/operator/iceberg_insert.hpp"
@@ -216,6 +217,40 @@ InsertionOrderPreservingMap<string> IcebergUpdate::ParamsToString() const {
 	return result;
 }
 
+namespace {
+
+static optional_ptr<IcebergMultiFileList> FindIcebergScan(PhysicalOperator &plan) {
+	if (plan.type == PhysicalOperatorType::TABLE_SCAN) {
+		// does this emit the virtual columns?
+		auto &scan = plan.Cast<PhysicalTableScan>();
+
+		if (scan.function.GetName() == "iceberg_scan") {
+			bool found = false;
+			for (auto &col : scan.column_ids) {
+				if (col.GetPrimaryIndex() == MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER) {
+					found = true;
+					break;
+				}
+			}
+			if (found) {
+				auto &bind_data = scan.bind_data->Cast<MultiFileBindData>();
+				return bind_data.file_list->Cast<IcebergMultiFileList>();
+			}
+		}
+		return nullptr;
+	}
+
+	for (auto &children : plan.children) {
+		auto result = FindIcebergScan(children.get());
+		if (result) {
+			return result;
+		}
+	}
+	return nullptr;
+}
+
+} // namespace
+
 PhysicalOperator &IcebergCatalog::PlanUpdate(ClientContext &context, PhysicalPlanGenerator &planner, LogicalUpdate &op,
                                              PhysicalOperator &child_plan) {
 	if (op.return_chunk) {
@@ -231,6 +266,8 @@ PhysicalOperator &IcebergCatalog::PlanUpdate(ClientContext &context, PhysicalPla
 	auto &table_metadata = updated_table.table_metadata;
 	auto &schema = table_metadata.GetLatestSchema();
 	auto &updated_table_entry = *updated_table.schema_versions[schema.schema_id];
+
+	auto iceberg_scan = FindIcebergScan(child_plan);
 
 	// Plan the copy operator with update_op as child.
 	// PlanCopyForInsert will add a partition projection on top if needed.

@@ -20,20 +20,19 @@ optional_ptr<const IcebergSnapshot> IcebergTableMetadata::FindSnapshotByIdIntern
 	return it->second;
 }
 
-optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetSnapshotByTimestamp(timestamp_t timestamp) const {
+optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetSnapshotByTimestampMS(timestamp_ms_t timestamp) const {
 	// Per Iceberg spec, point-in-time resolution should use snapshot-log (the
 	// history of refs.main). Searching the global snapshots map would incorrectly
 	// pick side-branch tips - see duckdb-iceberg#969.
 	//
 	// All comparisons below are in raw epoch-millis: snapshot_log stores ms, and
 	// we convert the incoming lookup timestamp to ms once here.
-	auto target_ms = Timestamp::GetEpochMs(timestamp);
 	if (!snapshot_log.empty()) {
 		// snapshot_log is sorted ascending by timestamp_ms; walk newest-first and
 		// return the first entry whose snapshot still exists in the snapshots map
 		// (spec allows expired snapshots to leave dangling log entries).
 		for (auto it = snapshot_log.rbegin(); it != snapshot_log.rend(); ++it) {
-			if (it->second <= target_ms) {
+			if (it->second <= timestamp) {
 				if (auto snap = FindSnapshotByIdInternal(it->first)) {
 					return snap;
 				}
@@ -41,16 +40,17 @@ optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetSnapshotByTimestamp
 		}
 		return nullptr;
 	}
-	// snapshot-log is optional per spec. Fall back to the pre-#969 behavior:
+
 	// scan all snapshots for the largest timestamp_ms <= target.
-	uint64_t max_millis = NumericLimits<uint64_t>::Minimum();
 	optional_ptr<const IcebergSnapshot> max_snapshot = nullptr;
 	for (auto &it : snapshots) {
 		auto &snapshot = it.second;
-		auto curr_millis = Timestamp::GetEpochMs(snapshot.timestamp_ms);
-		if (curr_millis <= target_ms && static_cast<uint64_t>(curr_millis) >= max_millis) {
+		const bool can_be_seen_by_transaction = snapshot.timestamp_ms <= timestamp;
+		if (!can_be_seen_by_transaction) {
+			continue;
+		}
+		if (!max_snapshot || snapshot.timestamp_ms >= max_snapshot->timestamp_ms) {
 			max_snapshot = snapshot;
-			max_millis = curr_millis;
 		}
 	}
 	return max_snapshot;
@@ -82,7 +82,11 @@ const unordered_map<int32_t, IcebergPartitionSpec> &IcebergTableMetadata::GetPar
 	return partition_specs;
 }
 
-optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetLatestSnapshot() const {
+optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetLatestSnapshot(ClientContext &context) const {
+	return GetSnapshotByTimestampMS(IcebergUtils::GetTransactionStartTimeMS(context));
+}
+
+optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetLatestCommittedSnapshot() const {
 	if (!current_snapshot_id) {
 		return nullptr;
 	}
@@ -126,11 +130,12 @@ optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetSnapshotById(int64_
 	return snapshot;
 }
 
-IcebergSnapshotScanInfo IcebergTableMetadata::GetSnapshot(const IcebergSnapshotLookup &lookup) const {
+IcebergSnapshotScanInfo IcebergTableMetadata::GetSnapshot(ClientContext &context,
+                                                          const IcebergSnapshotLookup &lookup) const {
 	IcebergSnapshotScanInfo snapshot_info;
 	switch (lookup.GetSource()) {
 	case SnapshotSource::LATEST:
-		snapshot_info.snapshot = GetLatestSnapshot();
+		snapshot_info.snapshot = GetLatestSnapshot(context);
 		snapshot_info.schema_id = GetCurrentSchemaId();
 		return snapshot_info;
 	case SnapshotSource::FROM_ID:
@@ -138,7 +143,7 @@ IcebergSnapshotScanInfo IcebergTableMetadata::GetSnapshot(const IcebergSnapshotL
 		snapshot_info.schema_id = snapshot_info.snapshot->GetSchemaId();
 		return snapshot_info;
 	case SnapshotSource::FROM_TIMESTAMP:
-		snapshot_info.snapshot = GetSnapshotByTimestamp(lookup.snapshot_timestamp);
+		snapshot_info.snapshot = GetSnapshotByTimestampMS(lookup.snapshot_timestamp);
 		if (snapshot_info.snapshot) {
 			snapshot_info.schema_id = snapshot_info.snapshot->GetSchemaId();
 		} else {
@@ -371,7 +376,7 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_obje
 	res.location = *table_metadata.location;
 	res.iceberg_version = table_metadata.format_version;
 	D_ASSERT(table_metadata.last_updated_ms);
-	res.last_updated_ms = timestamp_t(*table_metadata.last_updated_ms);
+	res.last_updated_ms = timestamp_ms_t(*table_metadata.last_updated_ms);
 	if (table_metadata.schemas) {
 		for (auto &schema : *table_metadata.schemas) {
 			D_ASSERT(schema.object_1.schema_id);
@@ -389,7 +394,9 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_obje
 			res.snapshot_log.emplace_back(entry.snapshot_id, entry.timestamp_ms);
 		}
 		std::sort(res.snapshot_log.begin(), res.snapshot_log.end(),
-		          [](const pair<int64_t, int64_t> &a, const pair<int64_t, int64_t> &b) { return a.second < b.second; });
+		          [](const pair<int64_t, timestamp_ms_t> &a, const pair<int64_t, timestamp_ms_t> &b) {
+			          return a.second < b.second;
+		          });
 	}
 	if (table_metadata.partition_specs) {
 		for (auto &spec : *table_metadata.partition_specs) {
@@ -462,7 +469,7 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_obje
 
 	if (table_metadata.metadata_log) {
 		for (auto &item : table_metadata.metadata_log->value) {
-			res.metadata_log.emplace_back(item.metadata_file, item.timestamp_ms);
+			res.metadata_log.emplace_back(item.metadata_file, timestamp_ms_t(item.timestamp_ms));
 		}
 	}
 	return res;

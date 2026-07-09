@@ -338,7 +338,7 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetEntry(ClientContext &context, con
 
 	// get the latest information and save it to the transaction cache
 	auto &ic_ret = ret->Cast<IcebergTableEntry>();
-	auto latest_snapshot = ic_ret.table_info.table_metadata.GetLatestSnapshot();
+	auto latest_snapshot = ic_ret.table_info.table_metadata.GetLatestSnapshot(context);
 
 	// Log warning on schema_id mismatch
 	auto &meta_transaction = MetaTransaction::Get(context);
