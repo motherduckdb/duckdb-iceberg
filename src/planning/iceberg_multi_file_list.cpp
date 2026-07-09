@@ -1,6 +1,8 @@
 #include "planning/iceberg_multi_file_list.hpp"
 
 #include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
+#include "duckdb/function/partition_stats.hpp"
+#include "duckdb/logging/logger.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/numeric_utils.hpp"

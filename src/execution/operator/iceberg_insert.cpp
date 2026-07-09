@@ -1,6 +1,7 @@
 #include "execution/operator/iceberg_insert.hpp"
 
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
+#include "duckdb/logging/logger.hpp"
 #include "duckdb/main/client_data.hpp"
 #include "duckdb/execution/physical_operator_states.hpp"
 #include "duckdb/planner/operator/logical_copy_to_file.hpp"
