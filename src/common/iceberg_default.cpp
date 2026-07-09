@@ -1,6 +1,9 @@
 #include "common/iceberg_default.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/function/scalar/struct_functions.hpp"
+#include "duckdb/planner/expression/bound_constant_expression.hpp"
+#include "duckdb/planner/expression/bound_columnref_expression.hpp"
+#include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "catalog/rest/api/iceberg_type.hpp"
 
 namespace duckdb {

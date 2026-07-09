@@ -1,6 +1,7 @@
 #include "iceberg_extension.hpp"
 
 #include "duckdb/main/secret/secret_manager.hpp"
+#include "duckdb/logging/log_manager.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
 #include "duckdb/common/string_util.hpp"
