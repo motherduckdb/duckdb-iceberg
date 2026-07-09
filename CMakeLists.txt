@@ -92,6 +92,7 @@ set(EXTENSION_SOURCES
 	src/function/metadata/iceberg_load_table_response.cpp
 	src/function/metadata/iceberg_metadata.cpp
 	src/function/metadata/iceberg_partition_stats.cpp
+	src/function/metadata/iceberg_rewrite_data_files.cpp
 	src/function/metadata/iceberg_snapshots.cpp
 	src/function/metadata/iceberg_table_properties_functions.cpp
 	src/function/metadata/iceberg_verify_equality_deletes.cpp
@@ -99,6 +100,10 @@ set(EXTENSION_SOURCES
 	src/function/scan/iceberg_scan.cpp
 	src/iceberg_extension.cpp
 	src/iceberg_logging.cpp
+	src/maintenance/maintenance_table_loader.cpp
+	src/maintenance/rewrite_data_files_executor.cpp
+	src/maintenance/rewrite_data_files_operator.cpp
+	src/maintenance/rewrite_data_files_planner.cpp
 	src/planning/iceberg_multi_file_list.cpp
 	src/planning/iceberg_multi_file_reader.cpp
 	src/planning/iceberg_optimizer.cpp
