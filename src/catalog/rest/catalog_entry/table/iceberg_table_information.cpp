@@ -396,23 +396,19 @@ IcebergSortOrder IcebergTableInformation::BuildSortOrder(const vector<OrderByNod
 
 void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
                                                const vector<unique_ptr<ParsedExpression>> &partition_keys,
-                                               const IcebergTableSchema &schema, bool first_partition_spec) {
+                                               const IcebergTableSchema &schema) {
 	idx_t base_partition_field_id = 1000;
-	if (!first_partition_spec && table_metadata.HasLastPartitionId()) {
+	if (table_metadata.HasLastPartitionId()) {
 		base_partition_field_id = table_metadata.GetLastPartitionFieldId() + 1;
 	}
-	idx_t new_spec_id = 0;
-	if (!first_partition_spec) {
-		new_spec_id = GetNextPartitionSpecId();
-	}
-	auto &transaction_data = GetOrCreateTransactionData(transaction);
+	auto new_spec_id = static_cast<int32_t>(GetNextPartitionSpecId());
 
-	auto new_spec =
-	    BuildPartitionSpec(partition_keys, schema, static_cast<int32_t>(new_spec_id), base_partition_field_id);
+	auto new_spec = BuildPartitionSpec(partition_keys, schema, new_spec_id, base_partition_field_id);
 
 	// if spec definition already exists in a previous spec definition, set it to that spec id
 	// (some catalog may allow duplicate definitions, others not)
 	auto existing_spec_id = GetExistingSpecId(new_spec);
+	auto &transaction_data = GetOrCreateTransactionData(transaction);
 	if (existing_spec_id) {
 		table_metadata.default_spec_id = *existing_spec_id;
 		transaction_data.TableSetDefaultSpec();
@@ -421,10 +417,8 @@ void IcebergTableInformation::SetPartitionedBy(IcebergTransaction &transaction,
 
 	table_metadata.partition_specs.emplace(new_spec_id, std::move(new_spec));
 	table_metadata.default_spec_id = new_spec_id;
-	if (!first_partition_spec) {
-		transaction_data.TableAddPartitionSpec();
-		transaction_data.TableSetDefaultSpec();
-	}
+	transaction_data.TableAddPartitionSpec();
+	transaction_data.TableSetDefaultSpec();
 }
 
 void IcebergTableInformation::SetSortedBy(IcebergTransaction &transaction, const vector<OrderByNode> &orders,
@@ -433,7 +427,6 @@ void IcebergTableInformation::SetSortedBy(IcebergTransaction &transaction, const
 	if (!first_sort_spec) {
 		new_sort_order_id = GetNextSortOrderId();
 	}
-	auto &transaction_data = GetOrCreateTransactionData(transaction);
 
 	auto new_sort_order = BuildSortOrder(orders, schema, static_cast<int32_t>(new_sort_order_id));
 
@@ -442,13 +435,17 @@ void IcebergTableInformation::SetSortedBy(IcebergTransaction &transaction, const
 	auto existing_sort_order_id = GetExistingSortOrderId(new_sort_order);
 	if (existing_sort_order_id) {
 		table_metadata.default_sort_order_id = *existing_sort_order_id;
-		transaction_data.TableSetDefaultSortOrder();
+		if (!first_sort_spec) {
+			auto &transaction_data = GetOrCreateTransactionData(transaction);
+			transaction_data.TableSetDefaultSortOrder();
+		}
 		return;
 	}
 
 	table_metadata.sort_specs.emplace(new_sort_order_id, std::move(new_sort_order));
 	table_metadata.default_sort_order_id = new_sort_order_id;
 	if (!first_sort_spec) {
+		auto &transaction_data = GetOrCreateTransactionData(transaction);
 		transaction_data.TableAddSortOrder();
 		transaction_data.TableSetDefaultSortOrder();
 	}
@@ -564,7 +561,7 @@ bool IcebergTableInformation::HasTransactionUpdates() const {
 	if (!data.requirements.empty()) {
 		return true;
 	}
-	if (data.set_schema_id) {
+	if (data.pending_current_schema_id.has_value()) {
 		return true;
 	}
 	if (data.assert_schema_id) {
