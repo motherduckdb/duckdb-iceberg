@@ -468,6 +468,33 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_obje
 	return res;
 }
 
+IcebergTableMetadata IcebergTableMetadata::Copy() const {
+	IcebergTableMetadata res;
+	res.table_uuid = table_uuid;
+	res.location = location;
+	res.iceberg_version = iceberg_version;
+	res.default_spec_id = default_spec_id;
+	res.next_row_id = next_row_id;
+	res.default_sort_order_id = default_sort_order_id;
+	res.current_snapshot_id = current_snapshot_id;
+	res.last_sequence_number = last_sequence_number;
+	res.last_updated_ms = last_updated_ms;
+	res.last_column_id = last_column_id;
+	res.last_partition_field_id = last_partition_field_id;
+	res.partition_specs = partition_specs;
+	res.sort_specs = sort_specs;
+	res.snapshots = snapshots;
+	res.snapshot_log = snapshot_log;
+	res.mappings = mappings;
+	res.write_data_path = write_data_path;
+	res.write_metadata_path = write_metadata_path;
+	res.table_properties = table_properties;
+	res.metadata_log = metadata_log;
+	res.current_schema_id = current_schema_id;
+	res.schemas = schemas;
+	return res;
+}
+
 const case_insensitive_map_t<string> &IcebergTableMetadata::GetTableProperties() const {
 	return table_properties;
 }

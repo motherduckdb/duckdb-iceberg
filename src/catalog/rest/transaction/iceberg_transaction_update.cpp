@@ -3,6 +3,19 @@
 
 namespace duckdb {
 
+namespace {
+
+static IcebergTableInformation CopyLatestState(IcebergTransaction &transaction, const IcebergTableInformation &table) {
+	auto key = table.GetTableKey();
+	auto state = transaction.GetLatestTableState(key);
+	if (!state) {
+		throw InternalException("No transaction state exists for table with key '%s'", key);
+	}
+	return state->GetInfo().Copy();
+}
+
+} // namespace
+
 IcebergTransactionUpdate::IcebergTransactionUpdate(IcebergTransaction &transaction, IcebergTransactionUpdateType type)
     : transaction(transaction), type(type) {
 }
@@ -19,7 +32,7 @@ IcebergTableInformation &IcebergTransactionAlterUpdate::GetOrInitializeTable(con
 	auto table_key = table.GetTableKey();
 	auto it = updated_tables.find(table_key);
 	if (it == updated_tables.end()) {
-		it = updated_tables.emplace(table_key, table.Copy(transaction)).first;
+		it = updated_tables.emplace(table_key, CopyLatestState(transaction, table)).first;
 		// Preserve the table_uuid from the original table info (resolved at transaction start).
 		// Copy() reads from the global request cache, which can be contaminated by another
 		// transaction's RENAME overwriting the entry with a different table's metadata.
@@ -64,9 +77,12 @@ IcebergTransactionDeleteUpdate::~IcebergTransactionDeleteUpdate() {
 IcebergTransactionRenameUpdate::IcebergTransactionRenameUpdate(IcebergTransaction &transaction,
                                                                const IcebergTableInformation &table,
                                                                const string &new_name)
-    : IcebergTransactionUpdate(transaction, TYPE), table(table), new_table(table.Copy(transaction)),
+    : IcebergTransactionUpdate(transaction, TYPE), table(table), new_table(CopyLatestState(transaction, table)),
       new_name(new_name) {
 	new_table.name = new_name;
+	if (!table.schema_versions.empty()) {
+		new_table.InitSchemaVersions();
+	}
 }
 IcebergTransactionRenameUpdate::~IcebergTransactionRenameUpdate() {
 }

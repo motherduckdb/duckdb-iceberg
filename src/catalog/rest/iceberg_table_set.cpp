@@ -308,6 +308,9 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetEntry(ClientContext &context, con
 			return nullptr;
 		}
 		auto &table_info = latest_state->GetInfo();
+		if (table_info.schema_versions.empty()) {
+			table_info.InitSchemaVersions();
+		}
 		return table_info.GetSchemaVersion(context, at);
 	}
 

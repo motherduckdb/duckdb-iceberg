@@ -591,22 +591,26 @@ void IcebergTableInformation::RefreshFromCatalog(ClientContext &context) {
 	}
 }
 
-IcebergTableInformation IcebergTableInformation::Copy(ClientContext &context) const {
-	auto ret = IcebergTableInformation(catalog, schema, name);
-	auto table_key = ret.GetTableKey();
-	{
-		lock_guard<std::mutex> cache_lock(catalog.table_request_cache.Lock());
-		auto cached_result = catalog.table_request_cache.Get(context, table_key, cache_lock, false);
-		if (!cached_result) {
-			throw InvalidConfigurationException(
-			    "Cannot copy table '%s': its metadata is not present in the cache. It must be loaded before it is "
-			    "copied (e.g. renamed).",
-			    table_key);
-		}
-		auto &cached_table_result = *cached_result->load_table_result;
-		ret.InitializeFromLoadTableResult(cached_table_result, false);
-	}
-	return ret;
+//{
+//	lock_guard<std::mutex> cache_lock(catalog.table_request_cache.Lock());
+//	auto cached_result = catalog.table_request_cache.Get(context, table_key, cache_lock, false);
+//	if (!cached_result) {
+//		throw InvalidConfigurationException(
+//		    "Cannot copy table '%s': its metadata is not present in the cache. It must be loaded before it is "
+//		    "copied (e.g. renamed).",
+//		    table_key);
+//	}
+//	auto &cached_table_result = *cached_result->load_table_result;
+//	ret.InitializeFromLoadTableResult(cached_table_result, false);
+//}
+IcebergTableInformation IcebergTableInformation::Copy() const {
+	auto clone = IcebergTableInformation(catalog, schema, name);
+	clone.table_id = table_id;
+	clone.table_metadata = table_metadata.Copy();
+	clone.config = config;
+	clone.storage_credentials = storage_credentials;
+	clone.latest_metadata_json = latest_metadata_json;
+	return clone;
 }
 
 IcebergTableMetadata IcebergTableInformation::CreateMetadataFromLog(ClientContext &context,
@@ -640,7 +644,7 @@ IcebergTableInformation IcebergTableInformation::Copy(IcebergTransaction &iceber
 	auto locked_context = iceberg_transaction.context.lock();
 	auto &context = *locked_context;
 
-	auto ret = Copy(context);
+	auto ret = Copy();
 	auto &meta_transaction = MetaTransaction::Get(context);
 	auto transaction_start = meta_transaction.GetCurrentTransactionStartTimestamp();
 	auto transaction_start_millis = Timestamp::GetEpochMs(transaction_start);

@@ -70,7 +70,7 @@ public:
 	// from before our transaction start time.
 	IcebergTableInformation Copy(IcebergTransaction &iceberg_transaction) const;
 	// This copy is used for deletes, where we don't care about valid table state
-	IcebergTableInformation Copy(ClientContext &context) const;
+	IcebergTableInformation Copy() const;
 	void InitSchemaVersions();
 
 	IcebergSnapshotLookup GetSnapshotLookup(IcebergTransaction &iceberg_transaction) const;

@@ -43,6 +43,7 @@ public:
 	static rest_api_objects::TableMetadata Parse(const string &path, FileSystem &fs,
 	                                             const string &metadata_compression_codec);
 	static IcebergTableMetadata FromTableMetadata(const rest_api_objects::TableMetadata &table_metadata);
+	IcebergTableMetadata Copy() const;
 	static string GetMetaDataPath(ClientContext &context, const string &path, FileSystem &fs,
 	                              const IcebergOptions &options);
 	optional_ptr<const IcebergSnapshot> GetLatestSnapshot() const;

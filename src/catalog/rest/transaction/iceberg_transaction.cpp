@@ -499,9 +499,10 @@ void IcebergTransaction::DoTableUpdates(IcebergTransactionAlterUpdate &alter_upd
 void IcebergTransaction::DoTableRename(IcebergTransactionRenameUpdate &rename_update, ClientContext &context) {
 	auto &original_table = rename_update.table;
 	auto &schema = original_table.schema;
-	auto table_key = original_table.GetTableKey();
+	auto source_table_key = original_table.GetTableKey();
 	auto &table_name = original_table.name;
 	auto new_name = rename_update.new_name;
+	auto destination_table_key = rename_update.new_table.GetTableKey();
 
 	rest_api_objects::RenameTableRequest request;
 	request.source._namespace.value = schema.namespace_items;
@@ -510,6 +511,12 @@ void IcebergTransaction::DoTableRename(IcebergTransactionRenameUpdate &rename_up
 	request.destination.name = new_name;
 	auto transaction_json = RESTObjectToJSONString(request);
 	IRCAPI::CommitTableRename(context, catalog, transaction_json);
+
+	if (catalog.attach_options.max_table_staleness_micros.IsValid()) {
+		//! The shared cache must only change once the catalog rename is durable.
+		catalog.table_request_cache.Expire(context, source_table_key);
+		catalog.table_request_cache.Expire(context, destination_table_key);
+	}
 
 	DropInfo drop_info;
 	drop_info.GetQualifiedNameMutable() = Identifier(table_name);
@@ -791,8 +798,6 @@ void IcebergTransaction::EvictCachedTables() {
 			break;
 		}
 		case IcebergTransactionUpdateType::RENAME: {
-			auto &rename_update = transaction_update->Cast<IcebergTransactionRenameUpdate>();
-			catalog.table_request_cache.Expire(temp_context, rename_update.table.GetTableKey());
 			break;
 		}
 		default:
@@ -891,25 +896,6 @@ IcebergTableInformation &IcebergTransaction::RenameTable(IcebergTableInformation
 	//! Update the state of the renamed table
 	auto &new_table = rename_update.new_table;
 	SetLatestTableState(new_table, IcebergTableStatus::ALIVE);
-	new_table.InitSchemaVersions();
-
-	auto locked_context = context.lock();
-	auto &client_context = *locked_context;
-	//! Migrate the MetadataCache from the old table key to the new one. The entry is only present if
-	//! the table was loaded into the cache before the rename; when it is absent there is nothing to
-	//! migrate (the next access under the new name will repopulate it), so skip rather than
-	//! dereference a null cache entry.
-	auto new_table_key = new_table.GetTableKey();
-	auto &table_request_cache = catalog.table_request_cache;
-	lock_guard<mutex> cache_guard(table_request_cache.Lock());
-	auto cache = table_request_cache.Get(client_context, table_key, cache_guard, false);
-	if (cache) {
-		//! FIXME: Because the cache is global, this could be overwriting an existing entry, this should be fixed in the
-		//! future
-		table_request_cache.SetOrOverwriteInternal(cache_guard, client_context, new_table_key, cache->expire_timestamp,
-		                                           std::move(cache->load_table_result));
-		table_request_cache.ExpireInternal(cache_guard, client_context, table_key);
-	}
 	return state->GetInfo();
 }
 
