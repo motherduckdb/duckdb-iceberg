@@ -591,18 +591,6 @@ void IcebergTableInformation::RefreshFromCatalog(ClientContext &context) {
 	}
 }
 
-//{
-//	lock_guard<std::mutex> cache_lock(catalog.table_request_cache.Lock());
-//	auto cached_result = catalog.table_request_cache.Get(context, table_key, cache_lock, false);
-//	if (!cached_result) {
-//		throw InvalidConfigurationException(
-//		    "Cannot copy table '%s': its metadata is not present in the cache. It must be loaded before it is "
-//		    "copied (e.g. renamed).",
-//		    table_key);
-//	}
-//	auto &cached_table_result = *cached_result->load_table_result;
-//	ret.InitializeFromLoadTableResult(cached_table_result, false);
-//}
 IcebergTableInformation IcebergTableInformation::Copy() const {
 	auto clone = IcebergTableInformation(catalog, schema, name);
 	clone.table_id = table_id;
