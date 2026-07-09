@@ -93,7 +93,7 @@ public:
 	optional_ptr<IcebergTransactionTableState> GetLatestTableState(const string &table_key);
 	IcebergTransactionTableState &SetLatestTableState(IcebergTableInformation &table, IcebergTableStatus status);
 	IcebergTransactionTableState &SetLatestTableState(const string &table_key, IcebergTableStatus status);
-	bool StartedBefore(timestamp_t timestamp_ms) const;
+	bool StartedBefore(timestamp_ms_t timestamp_ms) const;
 	IcebergTransactionAlterUpdate &GetOrCreateAlter();
 	IcebergTableInformation &DeleteTable(IcebergTableInformation &table);
 	IcebergTableInformation &RenameTable(IcebergTableInformation &table, const string &new_name);

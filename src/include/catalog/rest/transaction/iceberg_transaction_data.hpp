@@ -59,7 +59,6 @@ public:
 	string initial_table_uuid;
 	int32_t initial_schema_id;
 	int32_t initial_default_spec_id = 0;
-	optional<int64_t> initial_snapshot_id;
 	optional_idx initial_default_sort_order_id;
 
 	ClientContext &context;

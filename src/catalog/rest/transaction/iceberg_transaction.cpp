@@ -816,12 +816,10 @@ IcebergTransaction &IcebergTransaction::Get(ClientContext &context, Catalog &cat
 	return Transaction::Get(context, catalog).Cast<IcebergTransaction>();
 }
 
-bool IcebergTransaction::StartedBefore(timestamp_t timestamp_ms) const {
+bool IcebergTransaction::StartedBefore(timestamp_ms_t timestamp_ms) const {
 	auto ctx = context.lock();
-	auto &meta_transaction = MetaTransaction::Get(*ctx);
-	auto meta_transaction_start = meta_transaction.GetCurrentTransactionStartTimestamp();
-	auto start = Timestamp::GetEpochMs(meta_transaction_start);
-	return start < timestamp_ms.value;
+	auto transaction_start_ms = IcebergUtils::GetTransactionStartTimeMS(*ctx);
+	return transaction_start_ms < timestamp_ms;
 }
 
 optional_ptr<IcebergTransactionTableState> IcebergTransaction::GetLatestTableState(const string &table_key) {
