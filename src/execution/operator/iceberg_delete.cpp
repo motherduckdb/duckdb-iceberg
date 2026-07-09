@@ -31,24 +31,16 @@ class IcebergDeleteLocalState;
 class IcebergDeleteGlobalState;
 class IcebergTableEntry;
 
-namespace {
-
-static optional_ptr<IcebergMultiFileList> FindIcebergScan(PhysicalOperator &plan) {
+optional_ptr<PhysicalTableScan> IcebergDelete::FindIcebergScan(PhysicalOperator &plan) {
 	if (plan.type == PhysicalOperatorType::TABLE_SCAN) {
 		// does this emit the virtual columns?
 		auto &scan = plan.Cast<PhysicalTableScan>();
 
 		if (scan.function.GetName() == "iceberg_scan") {
-			bool found = false;
 			for (auto &col : scan.column_ids) {
 				if (col.GetPrimaryIndex() == MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER) {
-					found = true;
-					break;
+					return scan;
 				}
-			}
-			if (found) {
-				auto &bind_data = scan.bind_data->Cast<MultiFileBindData>();
-				return bind_data.file_list->Cast<IcebergMultiFileList>();
 			}
 		}
 		return nullptr;
@@ -62,6 +54,8 @@ static optional_ptr<IcebergMultiFileList> FindIcebergScan(PhysicalOperator &plan
 	}
 	return nullptr;
 }
+
+namespace {
 
 static void VerifyStaleSnapshot(IcebergCatalog &catalog, IcebergMultiFileList &multi_file_list,
                                 ClientContext &context) {
@@ -517,8 +511,12 @@ PhysicalOperator &IcebergDelete::PlanDelete(ClientContext &context, PhysicalPlan
                                             IcebergTableEntry &table, PhysicalOperator &child_plan,
                                             vector<idx_t> row_id_indexes) {
 	auto &catalog = table.ParentCatalog();
-	auto multi_file_list = FindIcebergScan(child_plan);
-	if (multi_file_list) {
+	auto scan = FindIcebergScan(child_plan);
+
+	optional_ptr<IcebergMultiFileList> multi_file_list;
+	if (scan) {
+		auto &bind_data = scan->bind_data->Cast<MultiFileBindData>();
+		multi_file_list = bind_data.file_list->Cast<IcebergMultiFileList>();
 		VerifyStaleSnapshot(catalog.Cast<IcebergCatalog>(), *multi_file_list, context);
 	} else {
 		DUCKDB_LOG_DEBUG(context, "Could not find IcebergDelete source. Iceberg Multi File list is empty");
