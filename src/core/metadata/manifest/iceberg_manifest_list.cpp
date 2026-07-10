@@ -73,7 +73,7 @@ unordered_map<string, string> GetManifestMetadataMap(const IcebergTableMetadata 
 	return result;
 }
 
-IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem &fs, int64_t snapshot_id,
+IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem &fs, optional<int64_t> snapshot_id,
                                                                      sequence_number_t sequence_number,
                                                                      const IcebergTableMetadata &table_metadata,
                                                                      const IcebergManifestMetadata &manifest_metadata,
@@ -389,7 +389,10 @@ struct ManifestListVectorWriters {
 		manifest_path.WriteValue(string_t(manifest.manifest_path));
 		manifest_length.WriteValue(manifest.manifest_length);
 		partition_spec_id.WriteValue(manifest.partition_spec_id);
-		added_snapshot_id.WriteValue(manifest.added_snapshot_id);
+		if (!manifest.added_snapshot_id) {
+			throw InvalidConfigurationException("manifest_file.added_snapshot_id is not set");
+		}
+		added_snapshot_id.WriteValue(*manifest.added_snapshot_id);
 		added_files_count.WriteValue(static_cast<int32_t>(manifest.added_files_count));
 		existing_files_count.WriteValue(static_cast<int32_t>(manifest.existing_files_count));
 		deleted_files_count.WriteValue(static_cast<int32_t>(manifest.deleted_files_count));

@@ -74,7 +74,7 @@ static optional<IcebergManifestListEntry> RewriteManifestFile(const IcebergManif
 }
 
 static void AddManifestListEntry(IcebergManifestList &new_manifest_list, IcebergManifestListEntry &&manifest_entry) {
-	if (manifest_entry.file.added_snapshot_id == IcebergManifestFile::UNCOMMITTED_ADDED_SNAPSHOT_ID) {
+	if (!manifest_entry.file.added_snapshot_id) {
 		new_manifest_list.AddNewManifestFile(std::move(manifest_entry));
 		return;
 	}
@@ -130,8 +130,8 @@ CreateCommitManifestFiles(const vector<IcebergManifestListEntry> &manifest_files
 		D_ASSERT(manifest_entry.manifest_metadata);
 		auto copied_entries = manifest_entry.manifest_entries;
 		auto copied_manifest = IcebergManifestListEntry::CreateFromEntries(
-		    fs, IcebergManifestFile::UNCOMMITTED_ADDED_SNAPSHOT_ID, sequence_number, table_info.table_metadata,
-		    *manifest_entry.manifest_metadata, std::move(copied_entries), next_row_id);
+		    fs, nullopt, sequence_number, table_info.table_metadata, *manifest_entry.manifest_metadata,
+		    std::move(copied_entries), next_row_id);
 		result.push_back(std::move(copied_manifest));
 	}
 	return result;

@@ -196,7 +196,7 @@ public:
 				auto &manifest = entry.file;
 				auto &entries = entry.manifest_entries;
 
-				if (manifest.added_snapshot_id != snapshot.snapshot_id) {
+				if (!manifest.added_snapshot_id || *manifest.added_snapshot_id != snapshot.snapshot_id) {
 					//! This is essentially an "EXISTING" manifest
 					//! there just isn't a 'status' field to indicate that
 					continue;

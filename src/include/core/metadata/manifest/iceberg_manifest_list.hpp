@@ -68,8 +68,6 @@ unordered_map<string, string> GetManifestMetadataMap(const IcebergTableMetadata 
 
 struct IcebergManifestFile {
 public:
-	static constexpr int64_t UNCOMMITTED_ADDED_SNAPSHOT_ID = -1;
-
 	//! Path to the manifest AVRO file
 	string manifest_path;
 	//! Length of the manifest file in bytes
@@ -82,7 +80,7 @@ public:
 	//! sequence_number when manifest was added to table (0 for Iceberg v1)
 	optional<sequence_number_t> sequence_number;
 	optional<sequence_number_t> min_sequence_number;
-	int64_t added_snapshot_id = UNCOMMITTED_ADDED_SNAPSHOT_ID;
+	optional<int64_t> added_snapshot_id;
 	//! added files count
 	idx_t added_files_count = 0;
 	//! existing files count
@@ -141,7 +139,7 @@ public:
 
 public:
 	static IcebergManifestListEntry
-	CreateFromEntries(FileSystem &fs, int64_t snapshot_id, sequence_number_t sequence_number,
+	CreateFromEntries(FileSystem &fs, optional<int64_t> snapshot_id, sequence_number_t sequence_number,
 	                  const IcebergTableMetadata &table_metadata, const IcebergManifestMetadata &manifest_metadata,
 	                  vector<IcebergManifestEntry> &&manifest_entries, int64_t &next_row_id);
 
