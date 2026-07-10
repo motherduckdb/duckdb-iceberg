@@ -2,6 +2,7 @@
 
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/string.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/function/copy_function.hpp"
@@ -48,13 +49,13 @@ struct IcebergManifestMetadata {
 public:
 	static IcebergManifestMetadata FromTableMetadata(const IcebergTableMetadata &table_metadata,
 	                                                 IcebergManifestContentType content,
-	                                                 int32_t partition_spec_id = -1);
+	                                                 optional<int32_t> partition_spec_id = nullopt);
 
 public:
-	int32_t schema_id = 0;
-	int32_t partition_spec_id = 0;
-	int32_t format_version = 0;
-	IcebergManifestContentType content = IcebergManifestContentType::DATA;
+	optional<int32_t> schema_id;
+	optional<int32_t> partition_spec_id;
+	optional<int32_t> format_version;
+	optional<IcebergManifestContentType> content;
 };
 
 struct IcebergManifestFile {
