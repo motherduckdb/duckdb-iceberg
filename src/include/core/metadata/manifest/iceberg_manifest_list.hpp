@@ -58,6 +58,9 @@ public:
 	optional<IcebergManifestContentType> content;
 };
 
+unordered_map<string, string> GetManifestMetadataMap(const IcebergTableMetadata &table_metadata,
+                                                     const IcebergManifestMetadata &manifest_metadata);
+
 struct IcebergManifestFile {
 public:
 	//! Path to the manifest AVRO file
@@ -107,8 +110,6 @@ public:
 public:
 	IcebergManifestFile file;
 	IcebergManifestMetadata manifest_metadata;
-	//! The key-value metadata of the manifest file this entry describes
-	unordered_map<string, string> metadata;
 	vector<IcebergManifestEntry> manifest_entries;
 };
 

@@ -604,7 +604,7 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
                   CopyFunction &copy, DatabaseInstance &db, ClientContext &context) {
 	auto &manifest_file = manifest_entry.file;
 	auto &manifest_entries = manifest_entry.manifest_entries;
-	auto &manifest_metadata = manifest_entry.metadata;
+	auto manifest_metadata = GetManifestMetadataMap(table_metadata, manifest_entry.manifest_metadata);
 	D_ASSERT(!manifest_entries.empty());
 	auto &allocator = db.GetBufferManager().GetBufferAllocator();
 	auto &path = manifest_file.manifest_path;

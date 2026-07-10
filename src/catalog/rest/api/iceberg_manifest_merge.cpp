@@ -69,33 +69,9 @@ T ParseIntProperty(const string &value, T fallback) {
 //! That lets merge grouping preserve the manifest's own schema even if the table's current schema
 //! changes later in the same transaction.
 int32_t ResolveManifestSchemaId(const MergeInputManifest &input) {
-	using namespace duckdb_yyjson;
-
-	auto &metadata = input.entry.metadata;
-
-	auto id_it = metadata.find("schema-id");
-	if (id_it != metadata.end() && !id_it->second.empty()) {
-		try {
-			return static_cast<int32_t>(std::stoi(id_it->second));
-		} catch (...) {
-			//! Malformed; fall through to the schema JSON.
-		}
-	}
-
-	auto schema_it = metadata.find("schema");
-	if (schema_it != metadata.end() && !schema_it->second.empty()) {
-		const string &schema_json = schema_it->second;
-		auto doc =
-		    std::unique_ptr<yyjson_doc, YyjsonDocDeleter>(yyjson_read(schema_json.c_str(), schema_json.size(), 0));
-		if (doc) {
-			auto root = yyjson_doc_get_root(doc.get());
-			if (root) {
-				auto schema_id_val = yyjson_obj_get(root, "schema-id");
-				if (schema_id_val && yyjson_is_int(schema_id_val)) {
-					return static_cast<int32_t>(yyjson_get_int(schema_id_val));
-				}
-			}
-		}
+	auto &manifest_metadata = input.entry.manifest_metadata;
+	if (manifest_metadata.schema_id) {
+		return *manifest_metadata.schema_id;
 	}
 
 	//! The Iceberg spec requires manifests to carry their schema in the Avro key-value metadata (all

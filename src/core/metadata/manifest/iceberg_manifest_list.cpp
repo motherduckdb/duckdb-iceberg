@@ -62,8 +62,8 @@ static IcebergManifestContentType RequireManifestMetadataContent(const IcebergMa
 	return *manifest_metadata.content;
 }
 
-static unordered_map<string, string> BuildManifestMetadataMap(const IcebergTableMetadata &table_metadata,
-                                                              const IcebergManifestMetadata &manifest_metadata) {
+unordered_map<string, string> GetManifestMetadataMap(const IcebergTableMetadata &table_metadata,
+                                                     const IcebergManifestMetadata &manifest_metadata) {
 	unordered_map<string, string> result;
 	result.reserve(6);
 	auto schema_id = RequireManifestMetadataInt(manifest_metadata.schema_id, "schema_id");
@@ -103,7 +103,6 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 	// Add a manifest list entry for the entries
 	IcebergManifestListEntry manifest_list_entry(manifest_file_path);
 	manifest_list_entry.manifest_metadata = manifest_metadata;
-	manifest_list_entry.metadata = BuildManifestMetadataMap(table_metadata, manifest_metadata);
 	auto manifest_content = RequireManifestMetadataContent(manifest_metadata);
 	auto manifest_partition_spec_id =
 	    RequireManifestMetadataInt(manifest_metadata.partition_spec_id, "partition_spec_id");

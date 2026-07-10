@@ -233,7 +233,6 @@ static IcebergManifestListEntry WriteManifestListEntry(const IcebergTableInforma
                                                        ClientContext &context) {
 	IcebergManifestListEntry new_entry(list_entry.file);
 	new_entry.manifest_metadata = list_entry.manifest_metadata;
-	new_entry.metadata = list_entry.metadata;
 	new_entry.manifest_entries = list_entry.manifest_entries;
 	auto manifest_length = manifest_file::WriteToFile(table_info.table_metadata, new_entry, avro_copy, db, context);
 	new_entry.file.manifest_length = manifest_length;

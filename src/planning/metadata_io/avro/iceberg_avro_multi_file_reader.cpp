@@ -27,10 +27,64 @@ unique_ptr<MultiFileReader> IcebergAvroMultiFileReader::CreateInstance(const Tab
 	return make_uniq<IcebergAvroMultiFileReader>(table.function_info);
 }
 
-static unordered_map<string, string> GetAvroMetadata(InsertionOrderPreservingMap<Value> &&metadata) {
-	unordered_map<string, string> result;
-	for (auto &[key, value] : metadata) {
-		result.emplace(key, value.GetValue<string>());
+static optional<int32_t> TryGetMetadataInt(const InsertionOrderPreservingMap<Value> &metadata, const string &key) {
+	auto entry = metadata.find(key);
+	if (entry == metadata.end()) {
+		return nullopt;
+	}
+	try {
+		return std::stoi(entry->second.GetValue<string>());
+	} catch (...) {
+		return nullopt;
+	}
+}
+
+static optional<string> TryGetMetadataString(const InsertionOrderPreservingMap<Value> &metadata, const string &key) {
+	auto entry = metadata.find(key);
+	if (entry == metadata.end()) {
+		return nullopt;
+	}
+	return entry->second.GetValue<string>();
+}
+
+static optional<int32_t> TryParseSchemaIdFromSchemaJson(const string &schema_json) {
+	using namespace duckdb_yyjson;
+
+	auto doc = std::unique_ptr<yyjson_doc, void (*)(yyjson_doc *)>(
+	    yyjson_read(schema_json.c_str(), schema_json.size(), 0), yyjson_doc_free);
+	if (!doc) {
+		return nullopt;
+	}
+	auto root = yyjson_doc_get_root(doc.get());
+	if (!root) {
+		return nullopt;
+	}
+	auto schema_id_val = yyjson_obj_get(root, "schema-id");
+	if (!schema_id_val || !yyjson_is_int(schema_id_val)) {
+		return nullopt;
+	}
+	return static_cast<int32_t>(yyjson_get_int(schema_id_val));
+}
+
+static IcebergManifestMetadata ParseManifestMetadata(const InsertionOrderPreservingMap<Value> &metadata) {
+	IcebergManifestMetadata result;
+	result.schema_id = TryGetMetadataInt(metadata, "schema-id");
+	if (!result.schema_id) {
+		auto schema_json = TryGetMetadataString(metadata, "schema");
+		if (schema_json) {
+			result.schema_id = TryParseSchemaIdFromSchemaJson(*schema_json);
+		}
+	}
+	result.partition_spec_id = TryGetMetadataInt(metadata, "partition-spec-id");
+	result.format_version = TryGetMetadataInt(metadata, "format-version");
+
+	auto content = TryGetMetadataString(metadata, "content");
+	if (content) {
+		if (*content == "data") {
+			result.content = IcebergManifestContentType::DATA;
+		} else if (*content == "deletes") {
+			result.content = IcebergManifestContentType::DELETE;
+		}
 	}
 	return result;
 }
@@ -501,7 +555,7 @@ ReaderInitializeType IcebergAvroMultiFileReader::InitializeReader(
 			auto &manifest_scan_info = avro_scan_info.Cast<IcebergManifestFileScanInfo>();
 			auto file_idx = reader_data.reader->file_list_idx.GetIndex();
 			auto &manifest_list_entry = manifest_scan_info.manifest_files[file_idx];
-			manifest_list_entry.metadata = GetAvroMetadata(reader_data.reader->GetMetadata());
+			manifest_list_entry.manifest_metadata = ParseManifestMetadata(reader_data.reader->GetMetadata());
 		}
 		for (auto &partition_spec : avro_scan_info.metadata.partition_specs) {
 			for (auto &spec_field : partition_spec.second.fields) {
