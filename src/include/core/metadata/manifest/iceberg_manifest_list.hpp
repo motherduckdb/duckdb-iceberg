@@ -54,7 +54,7 @@ public:
 
 	static IcebergManifestMetadata FromTableMetadata(const IcebergTableMetadata &table_metadata,
 	                                                 IcebergManifestContentType content,
-	                                                 int32_t partition_spec_id = -1);
+	                                                 optional<int32_t> partition_spec_id = nullopt);
 
 public:
 	const int32_t schema_id;

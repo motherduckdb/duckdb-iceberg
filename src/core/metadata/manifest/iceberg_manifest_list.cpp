@@ -38,10 +38,10 @@ string IcebergManifestContentTypeToString(IcebergManifestContentType type) {
 
 IcebergManifestMetadata IcebergManifestMetadata::FromTableMetadata(const IcebergTableMetadata &table_metadata,
                                                                    IcebergManifestContentType content,
-                                                                   int32_t partition_spec_id) {
+                                                                   optional<int32_t> partition_spec_id) {
 	return IcebergManifestMetadata(table_metadata.GetCurrentSchemaId(),
-	                               partition_spec_id >= 0 ? partition_spec_id
-	                                                      : NumericCast<int32_t>(table_metadata.default_spec_id),
+	                               partition_spec_id ? *partition_spec_id
+	                                                 : NumericCast<int32_t>(table_metadata.default_spec_id),
 	                               NumericCast<int32_t>(table_metadata.iceberg_version), content);
 }
 
