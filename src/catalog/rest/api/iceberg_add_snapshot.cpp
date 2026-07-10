@@ -73,13 +73,23 @@ static optional<IcebergManifestListEntry> RewriteManifestFile(const IcebergManif
 	                                                      scanned_manifest.file.first_row_id);
 }
 
+static void AddManifestListEntry(IcebergManifestList &new_manifest_list, IcebergManifestListEntry &&manifest_entry) {
+	if (manifest_entry.file.added_snapshot_id == IcebergManifestFile::UNCOMMITTED_ADDED_SNAPSHOT_ID) {
+		new_manifest_list.AddNewManifestFile(std::move(manifest_entry));
+		return;
+	}
+	new_manifest_list.AddExistingManifestFile(std::move(manifest_entry));
+}
+
 void IcebergAddSnapshot::ConstructManifestList(IcebergManifestList &new_manifest_list, CopyFunction &avro_copy,
                                                DatabaseInstance &db, IcebergCommitState &commit_state) const {
 	//! Construct the manifest list
 	//! FIXME: RETRY_BLOCKER: no guarantee that no new deletes are introduced
 	if (altered_manifests.IsEmpty()) {
-		//! Copy the existing manifest_file entries without any modification
-		new_manifest_list.AddToManifestEntries(commit_state.manifests);
+		for (auto &manifest_list_entry : commit_state.manifests) {
+			AddManifestListEntry(new_manifest_list, std::move(manifest_list_entry));
+		}
+		commit_state.manifests.clear();
 		return;
 	}
 
@@ -87,7 +97,7 @@ void IcebergAddSnapshot::ConstructManifestList(IcebergManifestList &new_manifest
 		auto rewritten_manifest =
 		    RewriteManifestFile(manifest_list_entry, avro_copy, db, commit_state, schema_id, altered_manifests);
 		if (!rewritten_manifest) {
-			new_manifest_list.AddExistingManifestFile(std::move(manifest_list_entry));
+			AddManifestListEntry(new_manifest_list, std::move(manifest_list_entry));
 			continue;
 		}
 
@@ -111,7 +121,7 @@ static IcebergManifestListEntry WriteManifestListEntry(const IcebergTableInforma
 static vector<IcebergManifestListEntry>
 CreateCommitManifestFiles(const vector<IcebergManifestListEntry> &manifest_files,
                           const IcebergTableInformation &table_info, IcebergCommitState &commit_state,
-                          int64_t snapshot_id, int64_t sequence_number) {
+                          int64_t sequence_number) {
 	vector<IcebergManifestListEntry> result;
 	result.reserve(manifest_files.size());
 	auto &fs = FileSystem::GetFileSystem(commit_state.context);
@@ -120,8 +130,8 @@ CreateCommitManifestFiles(const vector<IcebergManifestListEntry> &manifest_files
 		D_ASSERT(manifest_entry.manifest_metadata);
 		auto copied_entries = manifest_entry.manifest_entries;
 		auto copied_manifest = IcebergManifestListEntry::CreateFromEntries(
-		    fs, snapshot_id, sequence_number, table_info.table_metadata, *manifest_entry.manifest_metadata,
-		    std::move(copied_entries), next_row_id);
+		    fs, IcebergManifestFile::UNCOMMITTED_ADDED_SNAPSHOT_ID, sequence_number, table_info.table_metadata,
+		    *manifest_entry.manifest_metadata, std::move(copied_entries), next_row_id);
 		result.push_back(std::move(copied_manifest));
 	}
 	return result;
@@ -140,7 +150,7 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 	const auto snapshot_id = IcebergSnapshot::NewSnapshotId();
 	const auto sequence_number = commit_state.next_sequence_number++;
 	auto uncommitted_manifest_files =
-	    CreateCommitManifestFiles(manifest_files, commit_state.table_info, commit_state, snapshot_id, sequence_number);
+	    CreateCommitManifestFiles(manifest_files, commit_state.table_info, commit_state, sequence_number);
 	D_ASSERT(!uncommitted_manifest_files.empty());
 
 	auto &fs = FileSystem::GetFileSystem(context);

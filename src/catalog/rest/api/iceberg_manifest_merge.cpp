@@ -201,10 +201,10 @@ IcebergManifestListEntry IcebergManifestMerge::WriteReplacementManifest(
     optional<sequence_number_t> first_row_id, optional<sequence_number_t> min_sequence_number) {
 	auto &table_metadata = commit_state.table_info.table_metadata;
 	int64_t scratch_row_id = 0;
-	auto result =
-	    IcebergManifestListEntry::CreateFromEntries(FileSystem::GetFileSystem(commit_state.context),
-	                                                /*snapshot_id*/ -1, /*sequence_number*/ 0, table_metadata,
-	                                                manifest_metadata, std::move(manifest_entries), scratch_row_id);
+	auto result = IcebergManifestListEntry::CreateFromEntries(
+	    FileSystem::GetFileSystem(commit_state.context),
+	    /*snapshot_id*/ IcebergManifestFile::UNCOMMITTED_ADDED_SNAPSHOT_ID,
+	    /*sequence_number*/ 0, table_metadata, manifest_metadata, std::move(manifest_entries), scratch_row_id);
 	result.file.first_row_id = first_row_id;
 	result.file.min_sequence_number = min_sequence_number;
 

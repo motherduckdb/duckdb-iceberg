@@ -67,6 +67,33 @@ select count(*) from (
 ----
 2
 
+statement ok
+set variable latest_merge_snapshot_id = (
+	select snapshot_id::BIGINT
+	from iceberg_snapshots(my_datalake.default.merge_tbl)
+	order by sequence_number desc
+	limit 1
+);
+
+statement ok
+set variable latest_merge_manifest_list = (
+	select manifest_list
+	from iceberg_snapshots(my_datalake.default.merge_tbl)
+	order by sequence_number desc
+	limit 1
+);
+
+# The merged replacement manifest is written before the new snapshot id exists, so it must be stamped
+# when the final manifest list is assembled. Verify the published manifest list contains no placeholder
+# snapshot ids and that every manifest in the latest list is attributed to the latest snapshot.
+query II
+select
+	count(*) filter (where added_snapshot_id = getvariable('latest_merge_snapshot_id')),
+	count(*) filter (where added_snapshot_id < 0)
+from read_avro(getvariable('latest_merge_manifest_list'));
+----
+2	0
+
 # Merge correctness: entries pulled in from already-committed manifests are written with status
 # EXISTING (Java's ManifestWriter.existing), while genuinely-new entries stay ADDED. After the merge
 # above, the merged manifest must contain EXISTING entries (proof the status demotion happened) and
