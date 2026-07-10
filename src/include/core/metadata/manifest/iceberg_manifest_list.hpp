@@ -47,15 +47,20 @@ string IcebergManifestContentTypeToString(IcebergManifestContentType type);
 
 struct IcebergManifestMetadata {
 public:
+	IcebergManifestMetadata(int32_t schema_id, int32_t partition_spec_id, int32_t format_version,
+	                        IcebergManifestContentType content)
+	    : schema_id(schema_id), partition_spec_id(partition_spec_id), format_version(format_version), content(content) {
+	}
+
 	static IcebergManifestMetadata FromTableMetadata(const IcebergTableMetadata &table_metadata,
 	                                                 IcebergManifestContentType content,
-	                                                 optional<int32_t> partition_spec_id = nullopt);
+	                                                 int32_t partition_spec_id = -1);
 
 public:
-	optional<int32_t> schema_id;
-	optional<int32_t> partition_spec_id;
-	optional<int32_t> format_version;
-	optional<IcebergManifestContentType> content;
+	const int32_t schema_id;
+	const int32_t partition_spec_id;
+	const int32_t format_version;
+	const IcebergManifestContentType content;
 };
 
 unordered_map<string, string> GetManifestMetadataMap(const IcebergTableMetadata &table_metadata,
@@ -100,6 +105,37 @@ struct IcebergManifestListEntry {
 public:
 	IcebergManifestListEntry(IcebergManifestFile file) : file(std::move(file)) {
 	}
+	IcebergManifestListEntry(IcebergManifestFile file, IcebergManifestMetadata manifest_metadata)
+	    : file(std::move(file)), manifest_metadata(std::move(manifest_metadata)) {
+	}
+	IcebergManifestListEntry(const IcebergManifestListEntry &) = default;
+	IcebergManifestListEntry(IcebergManifestListEntry &&) = default;
+	IcebergManifestListEntry &operator=(const IcebergManifestListEntry &other) {
+		if (this != &other) {
+			file = other.file;
+			manifest_entries = other.manifest_entries;
+			if (other.manifest_metadata) {
+				manifest_metadata.reset();
+				manifest_metadata.emplace(*other.manifest_metadata);
+			} else {
+				manifest_metadata.reset();
+			}
+		}
+		return *this;
+	}
+	IcebergManifestListEntry &operator=(IcebergManifestListEntry &&other) {
+		if (this != &other) {
+			file = std::move(other.file);
+			manifest_entries = std::move(other.manifest_entries);
+			if (other.manifest_metadata) {
+				manifest_metadata.reset();
+				manifest_metadata.emplace(*other.manifest_metadata);
+			} else {
+				manifest_metadata.reset();
+			}
+		}
+		return *this;
+	}
 
 public:
 	static IcebergManifestListEntry
@@ -109,7 +145,7 @@ public:
 
 public:
 	IcebergManifestFile file;
-	IcebergManifestMetadata manifest_metadata;
+	optional<IcebergManifestMetadata> manifest_metadata;
 	vector<IcebergManifestEntry> manifest_entries;
 };
 

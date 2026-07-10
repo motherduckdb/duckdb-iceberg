@@ -38,38 +38,21 @@ string IcebergManifestContentTypeToString(IcebergManifestContentType type) {
 
 IcebergManifestMetadata IcebergManifestMetadata::FromTableMetadata(const IcebergTableMetadata &table_metadata,
                                                                    IcebergManifestContentType content,
-                                                                   optional<int32_t> partition_spec_id) {
-	IcebergManifestMetadata manifest_metadata;
-	manifest_metadata.schema_id = table_metadata.GetCurrentSchemaId();
-	manifest_metadata.partition_spec_id =
-	    partition_spec_id ? *partition_spec_id : NumericCast<int32_t>(table_metadata.default_spec_id);
-	manifest_metadata.format_version = NumericCast<int32_t>(table_metadata.iceberg_version);
-	manifest_metadata.content = content;
-	return manifest_metadata;
-}
-
-static int32_t RequireManifestMetadataInt(optional<int32_t> value, const char *field_name) {
-	if (!value) {
-		throw InternalException("Manifest metadata field '%s' is not set", field_name);
-	}
-	return *value;
-}
-
-static IcebergManifestContentType RequireManifestMetadataContent(const IcebergManifestMetadata &manifest_metadata) {
-	if (!manifest_metadata.content) {
-		throw InternalException("Manifest metadata field 'content' is not set");
-	}
-	return *manifest_metadata.content;
+                                                                   int32_t partition_spec_id) {
+	return IcebergManifestMetadata(table_metadata.GetCurrentSchemaId(),
+	                               partition_spec_id >= 0 ? partition_spec_id
+	                                                      : NumericCast<int32_t>(table_metadata.default_spec_id),
+	                               NumericCast<int32_t>(table_metadata.iceberg_version), content);
 }
 
 unordered_map<string, string> GetManifestMetadataMap(const IcebergTableMetadata &table_metadata,
                                                      const IcebergManifestMetadata &manifest_metadata) {
 	unordered_map<string, string> result;
 	result.reserve(6);
-	auto schema_id = RequireManifestMetadataInt(manifest_metadata.schema_id, "schema_id");
-	auto partition_spec_id = RequireManifestMetadataInt(manifest_metadata.partition_spec_id, "partition_spec_id");
-	auto format_version = RequireManifestMetadataInt(manifest_metadata.format_version, "format_version");
-	auto content = RequireManifestMetadataContent(manifest_metadata);
+	auto schema_id = manifest_metadata.schema_id;
+	auto partition_spec_id = manifest_metadata.partition_spec_id;
+	auto format_version = manifest_metadata.format_version;
+	auto content = manifest_metadata.content;
 
 	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> schema_doc_p(yyjson_mut_doc_new(nullptr));
 	auto schema_doc = schema_doc_p.get();
@@ -101,11 +84,9 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 	auto manifest_file_path = fs.JoinPath(table_metadata.GetMetadataPath(fs), manifest_file_uuid + "-m0.avro");
 
 	// Add a manifest list entry for the entries
-	IcebergManifestListEntry manifest_list_entry(manifest_file_path);
-	manifest_list_entry.manifest_metadata = manifest_metadata;
-	auto manifest_content = RequireManifestMetadataContent(manifest_metadata);
-	auto manifest_partition_spec_id =
-	    RequireManifestMetadataInt(manifest_metadata.partition_spec_id, "partition_spec_id");
+	IcebergManifestListEntry manifest_list_entry(IcebergManifestFile {manifest_file_path}, manifest_metadata);
+	auto manifest_content = manifest_metadata.content;
+	auto manifest_partition_spec_id = manifest_metadata.partition_spec_id;
 	auto &manifest_file = manifest_list_entry.file;
 	manifest_file.manifest_path = manifest_file_path;
 	if (table_metadata.iceberg_version >= 3 && manifest_content == IcebergManifestContentType::DATA) {

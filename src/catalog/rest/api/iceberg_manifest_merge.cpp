@@ -70,17 +70,11 @@ T ParseIntProperty(const string &value, T fallback) {
 //! changes later in the same transaction.
 int32_t ResolveManifestSchemaId(const MergeInputManifest &input) {
 	auto &manifest_metadata = input.entry.manifest_metadata;
-	if (manifest_metadata.schema_id) {
-		return *manifest_metadata.schema_id;
+	if (!manifest_metadata) {
+		throw InvalidConfigurationException("Cannot merge manifest '%s': it is missing typed manifest metadata",
+		                                    input.entry.file.manifest_path);
 	}
-
-	//! The Iceberg spec requires manifests to carry their schema in the Avro key-value metadata (all
-	//! format versions), and DuckDB writes it for both on-disk and transaction-local manifests.
-	//! Reaching here means the manifest metadata is missing or malformed, which we cannot merge
-	//! safely, so surface it as a configuration error rather than guessing a schema id.
-	throw InvalidConfigurationException(
-	    "Cannot merge manifest '%s': it is missing the required schema id in its Avro key-value metadata",
-	    input.entry.file.manifest_path);
+	return manifest_metadata->schema_id;
 }
 
 } // namespace
@@ -304,7 +298,9 @@ IcebergManifestListEntry MergeBin(const vector<MergeInputManifest> &input, const
 	//! (and an empty Avro manifest is meaningless). Return an entry with no manifest_entries so the
 	//! caller drops it; do this BEFORE CreateFromEntries/WriteToFile.
 	if (merged_entries.empty()) {
-		IcebergManifestListEntry empty {IcebergManifestFile {""}};
+		auto empty_metadata = IcebergManifestMetadata(schema_id, partition_spec_id,
+		                                              NumericCast<int32_t>(table_metadata.iceberg_version), content);
+		IcebergManifestListEntry empty {IcebergManifestFile {""}, empty_metadata};
 		return empty;
 	}
 
@@ -313,10 +309,8 @@ IcebergManifestListEntry MergeBin(const vector<MergeInputManifest> &input, const
 	//! (possibly historical) spec, not the table default. We pass a throwaway row-id
 	//! counter so the global one is not advanced, then restore the lineage-preserving value below.
 	int64_t scratch_row_id = 0;
-	auto manifest_metadata = IcebergManifestMetadata::FromTableMetadata(table_metadata, content, partition_spec_id);
-	manifest_metadata.schema_id = schema_id;
-	manifest_metadata.partition_spec_id = partition_spec_id;
-	manifest_metadata.format_version = NumericCast<int32_t>(table_metadata.iceberg_version);
+	auto manifest_metadata = IcebergManifestMetadata(schema_id, partition_spec_id,
+	                                                 NumericCast<int32_t>(table_metadata.iceberg_version), content);
 	auto result =
 	    IcebergManifestListEntry::CreateFromEntries(FileSystem::GetFileSystem(commit_state.context),
 	                                                /*snapshot_id*/ -1, /*sequence_number*/ 0, table_metadata,
@@ -361,12 +355,13 @@ vector<IcebergManifestListEntry> MergeManifests(vector<MergeInputManifest> &&inp
 	//! Carried-over manifests reach this point via the manifest LIST read only, so their Avro header
 	//! metadata (which holds the schema id) is not materialized yet. Open each one here -- reading
 	//! its entries at the same time -- so grouping can read the real schema id and MergeBin can reuse
-	//! the already-loaded entries instead of opening the file again. Manifests added by this
-	//! transaction never carry this metadata, but they also do not need it: their schema id is the
-	//! current schema id (resolved via ManifestSource in ResolveManifestSchemaId).
+	//! the already-loaded entries instead of opening the file again.
 	for (auto &member : input) {
 		if (member.entry.manifest_entries.empty()) {
-			member.entry = ScanManifestEntries(member.entry, commit_state, current_schema_id);
+			auto loaded = ScanManifestEntries(member.entry, commit_state, current_schema_id);
+			member.entry.file = std::move(loaded.file);
+			member.entry.manifest_entries = std::move(loaded.manifest_entries);
+			member.entry.manifest_metadata.emplace(*loaded.manifest_metadata);
 		}
 	}
 

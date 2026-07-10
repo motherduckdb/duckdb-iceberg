@@ -231,8 +231,8 @@ static IcebergManifestListEntry WriteManifestListEntry(const IcebergTableInforma
                                                        const IcebergManifestListEntry &list_entry,
                                                        CopyFunction &avro_copy, DatabaseInstance &db,
                                                        ClientContext &context) {
-	IcebergManifestListEntry new_entry(list_entry.file);
-	new_entry.manifest_metadata = list_entry.manifest_metadata;
+	D_ASSERT(list_entry.manifest_metadata);
+	IcebergManifestListEntry new_entry(list_entry.file, *list_entry.manifest_metadata);
 	new_entry.manifest_entries = list_entry.manifest_entries;
 	auto manifest_length = manifest_file::WriteToFile(table_info.table_metadata, new_entry, avro_copy, db, context);
 	new_entry.file.manifest_length = manifest_length;
@@ -248,9 +248,10 @@ CreateCommitManifestFiles(const vector<IcebergManifestListEntry> &manifest_files
 	auto &fs = FileSystem::GetFileSystem(commit_state.context);
 	auto next_row_id = commit_state.next_row_id;
 	for (const auto &manifest_entry : manifest_files) {
+		D_ASSERT(manifest_entry.manifest_metadata);
 		auto copied_entries = manifest_entry.manifest_entries;
 		auto copied_manifest = IcebergManifestListEntry::CreateFromEntries(
-		    fs, snapshot_id, sequence_number, table_info.table_metadata, manifest_entry.manifest_metadata,
+		    fs, snapshot_id, sequence_number, table_info.table_metadata, *manifest_entry.manifest_metadata,
 		    std::move(copied_entries), next_row_id);
 		result.push_back(std::move(copied_manifest));
 	}

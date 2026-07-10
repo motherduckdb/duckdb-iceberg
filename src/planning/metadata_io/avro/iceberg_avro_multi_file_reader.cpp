@@ -47,6 +47,22 @@ static optional<string> TryGetMetadataString(const InsertionOrderPreservingMap<V
 	return entry->second.GetValue<string>();
 }
 
+static int32_t GetRequiredMetadataInt(const InsertionOrderPreservingMap<Value> &metadata, const string &key) {
+	auto value = TryGetMetadataInt(metadata, key);
+	if (!value) {
+		throw InvalidConfigurationException("Manifest is missing required Avro key-value metadata field '%s'", key);
+	}
+	return *value;
+}
+
+static string GetRequiredMetadataString(const InsertionOrderPreservingMap<Value> &metadata, const string &key) {
+	auto value = TryGetMetadataString(metadata, key);
+	if (!value) {
+		throw InvalidConfigurationException("Manifest is missing required Avro key-value metadata field '%s'", key);
+	}
+	return *value;
+}
+
 static optional<int32_t> TryParseSchemaIdFromSchemaJson(const string &schema_json) {
 	using namespace duckdb_yyjson;
 
@@ -67,26 +83,27 @@ static optional<int32_t> TryParseSchemaIdFromSchemaJson(const string &schema_jso
 }
 
 static IcebergManifestMetadata ParseManifestMetadata(const InsertionOrderPreservingMap<Value> &metadata) {
-	IcebergManifestMetadata result;
-	result.schema_id = TryGetMetadataInt(metadata, "schema-id");
-	if (!result.schema_id) {
-		auto schema_json = TryGetMetadataString(metadata, "schema");
-		if (schema_json) {
-			result.schema_id = TryParseSchemaIdFromSchemaJson(*schema_json);
+	auto schema_id = TryGetMetadataInt(metadata, "schema-id");
+	if (!schema_id) {
+		auto schema_json = GetRequiredMetadataString(metadata, "schema");
+		schema_id = TryParseSchemaIdFromSchemaJson(schema_json);
+		if (!schema_id) {
+			throw InvalidConfigurationException("Manifest is missing required Avro key-value metadata field "
+			                                    "'schema-id' and its 'schema' JSON does not contain one");
 		}
 	}
-	result.partition_spec_id = TryGetMetadataInt(metadata, "partition-spec-id");
-	result.format_version = TryGetMetadataInt(metadata, "format-version");
 
-	auto content = TryGetMetadataString(metadata, "content");
-	if (content) {
-		if (*content == "data") {
-			result.content = IcebergManifestContentType::DATA;
-		} else if (*content == "deletes") {
-			result.content = IcebergManifestContentType::DELETE;
-		}
+	auto partition_spec_id = GetRequiredMetadataInt(metadata, "partition-spec-id");
+	auto format_version = GetRequiredMetadataInt(metadata, "format-version");
+	auto content = GetRequiredMetadataString(metadata, "content");
+	if (content == "data") {
+		return IcebergManifestMetadata(*schema_id, partition_spec_id, format_version, IcebergManifestContentType::DATA);
 	}
-	return result;
+	if (content == "deletes") {
+		return IcebergManifestMetadata(*schema_id, partition_spec_id, format_version,
+		                               IcebergManifestContentType::DELETE);
+	}
+	throw InvalidConfigurationException("Manifest has invalid Avro key-value metadata content '%s'", content);
 }
 
 namespace manifest_list {
@@ -555,7 +572,7 @@ ReaderInitializeType IcebergAvroMultiFileReader::InitializeReader(
 			auto &manifest_scan_info = avro_scan_info.Cast<IcebergManifestFileScanInfo>();
 			auto file_idx = reader_data.reader->file_list_idx.GetIndex();
 			auto &manifest_list_entry = manifest_scan_info.manifest_files[file_idx];
-			manifest_list_entry.manifest_metadata = ParseManifestMetadata(reader_data.reader->GetMetadata());
+			manifest_list_entry.manifest_metadata.emplace(ParseManifestMetadata(reader_data.reader->GetMetadata()));
 		}
 		for (auto &partition_spec : avro_scan_info.metadata.partition_specs) {
 			for (auto &spec_field : partition_spec.second.fields) {
