@@ -1,6 +1,7 @@
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 
 #include "duckdb/common/assert.hpp"
+#include "duckdb/logging/logger.hpp"
 #include "duckdb/parser/parsed_data/create_view_info.hpp"
 #include "duckdb/catalog/catalog_entry/index_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
@@ -214,12 +215,11 @@ static void CreateTableRequirements(DatabaseInstance &db, ClientContext &context
 		requirement->CreateRequirement(db, context, commit_state);
 	}
 	if (!has_assert_create && NeedsAssertSchemaId(transaction_data, commit_state.table_info)) {
-		AssertCurrentSchemaIdRequirement requirement(commit_state.table_info);
-		requirement.current_schema_id = transaction_data.initial_schema_id;
+		AssertCurrentSchemaIdRequirement requirement(transaction_data.initial_schema_id);
 		requirement.CreateRequirement(db, context, commit_state);
 	}
 	if (!has_assert_create && commit_state.table_info.HasTransactionUpdates()) {
-		auto uuid_requirement = AssertTableUUIDRequirement(commit_state.table_info);
+		auto uuid_requirement = AssertTableUUIDRequirement(transaction_data.initial_table_uuid);
 		uuid_requirement.CreateRequirement(db, context, commit_state);
 	}
 	if (current_snapshot && !transaction_data.alters.empty()) {
@@ -268,8 +268,8 @@ static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, Iceb
 		commit_state.table_change.updates.push_back(std::move(set_snapshot_ref_update));
 	}
 
-	if (transaction_data.set_schema_id) {
-		SetCurrentSchema update(table_info);
+	if (transaction_data.pending_current_schema_id.has_value()) {
+		SetCurrentSchema update(*transaction_data.pending_current_schema_id);
 		update.CreateUpdate(db, context, commit_state);
 	}
 
@@ -896,15 +896,21 @@ IcebergTableInformation &IcebergTransaction::RenameTable(IcebergTableInformation
 
 	auto locked_context = context.lock();
 	auto &client_context = *locked_context;
-	//! FIXME: just like the other place, this can easily go wrong
-	//! Migrate the MetadataCache
+	//! Migrate the MetadataCache from the old table key to the new one. The entry is only present if
+	//! the table was loaded into the cache before the rename; when it is absent there is nothing to
+	//! migrate (the next access under the new name will repopulate it), so skip rather than
+	//! dereference a null cache entry.
 	auto new_table_key = new_table.GetTableKey();
 	auto &table_request_cache = catalog.table_request_cache;
 	lock_guard<mutex> cache_guard(table_request_cache.Lock());
 	auto cache = table_request_cache.Get(client_context, table_key, cache_guard, false);
-	table_request_cache.SetOrOverwriteInternal(cache_guard, client_context, new_table_key, cache->expire_timestamp,
-	                                           std::move(cache->load_table_result));
-	table_request_cache.ExpireInternal(cache_guard, client_context, table_key);
+	if (cache) {
+		//! FIXME: Because the cache is global, this could be overwriting an existing entry, this should be fixed in the
+		//! future
+		table_request_cache.SetOrOverwriteInternal(cache_guard, client_context, new_table_key, cache->expire_timestamp,
+		                                           std::move(cache->load_table_result));
+		table_request_cache.ExpireInternal(cache_guard, client_context, table_key);
+	}
 	return state->GetInfo();
 }
 
