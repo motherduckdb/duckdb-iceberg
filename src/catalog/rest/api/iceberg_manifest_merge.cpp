@@ -182,6 +182,25 @@ IcebergManifestListEntry IcebergManifestMerge::ScanManifestEntries(const Iceberg
 	return std::move(manifest_files[0]);
 }
 
+IcebergManifestListEntry IcebergManifestMerge::WriteReplacementManifest(
+    const IcebergManifestMetadata &manifest_metadata, vector<IcebergManifestEntry> &&manifest_entries,
+    CopyFunction &avro_copy, DatabaseInstance &db, IcebergCommitState &commit_state,
+    optional<sequence_number_t> first_row_id, optional<sequence_number_t> min_sequence_number) {
+	auto &table_metadata = commit_state.table_info.table_metadata;
+	int64_t scratch_row_id = 0;
+	auto result =
+	    IcebergManifestListEntry::CreateFromEntries(FileSystem::GetFileSystem(commit_state.context),
+	                                                /*snapshot_id*/ -1, /*sequence_number*/ 0, table_metadata,
+	                                                manifest_metadata, std::move(manifest_entries), scratch_row_id);
+	result.file.first_row_id = first_row_id;
+	result.file.min_sequence_number = min_sequence_number;
+
+	auto manifest_length = manifest_file::WriteToFile(table_metadata, result, avro_copy, db, commit_state.context);
+	result.file.manifest_length = manifest_length;
+	commit_state.created_metadata_files.push_back(result.file.manifest_path);
+	return result;
+}
+
 namespace {
 
 //! Merge one spec-homogeneous bin into a single new manifest. Returns the new list entry.
@@ -203,22 +222,19 @@ IcebergManifestListEntry MergeBin(const vector<IcebergMergeInputManifest> &input
 	//! have a first_row_id by this point: a V2->V3 upgraded snapshot assigns one to every existing
 	//! DATA manifest earlier in the commit (see IcebergTransactionData's upgrade handling), and new
 	//! V3 data manifests are excluded from merging (they inherit their id only at write time).
-	bool has_first_row_id = false;
-	int64_t min_first_row_id = 0;
+	optional<int64_t> min_first_row_id;
 	//! The merged manifest's min_sequence_number must be the smallest data_sequence_number among its
 	//! entries. CreateFromEntries cannot compute this (it derives it from the manifest-file sequence
 	//! number, which is a placeholder here), so we track the true minimum and set it ourselves before
 	//! the manifest is written / handed to AddNewManifestFile. If left as the placeholder, scan
 	//! planning's `seq > X` pruning would mis-judge which historical data the manifest can contain.
-	bool has_min_seq = false;
-	int64_t min_seq = 0;
+	optional<int64_t> min_seq;
 	for (auto idx : bin) {
 		auto &member = input[idx].entry;
 		const bool carried_over = input[idx].source == IcebergManifestSource::CARRIED_OVER;
 		if (is_v3 && member.file.first_row_id.has_value()) {
-			if (!has_first_row_id || *member.file.first_row_id < min_first_row_id) {
+			if (!min_first_row_id || *member.file.first_row_id < *min_first_row_id) {
 				min_first_row_id = *member.file.first_row_id;
-				has_first_row_id = true;
 			}
 		}
 		auto loaded = member.manifest_entries.empty()
@@ -271,9 +287,8 @@ IcebergManifestListEntry MergeBin(const vector<IcebergMergeInputManifest> &input
 			}
 			//! Live entries determine the manifest's minimum data sequence number.
 			auto entry_seq = entry.GetSequenceNumber(member.file);
-			if (!has_min_seq || entry_seq < min_seq) {
+			if (!min_seq || entry_seq < *min_seq) {
 				min_seq = entry_seq;
-				has_min_seq = true;
 			}
 			merged_entries.push_back(std::move(entry));
 		}
@@ -294,29 +309,14 @@ IcebergManifestListEntry MergeBin(const vector<IcebergMergeInputManifest> &input
 	//! from the entries; pass the bin's own spec id so the summary is computed against the correct
 	//! (possibly historical) spec, not the table default. We pass a throwaway row-id
 	//! counter so the global one is not advanced, then restore the lineage-preserving value below.
-	int64_t scratch_row_id = 0;
 	auto manifest_metadata = IcebergManifestMetadata(schema_id, partition_spec_id,
 	                                                 NumericCast<int32_t>(table_metadata.iceberg_version), content);
-	auto result =
-	    IcebergManifestListEntry::CreateFromEntries(FileSystem::GetFileSystem(commit_state.context),
-	                                                /*snapshot_id*/ -1, /*sequence_number*/ 0, table_metadata,
-	                                                manifest_metadata, std::move(merged_entries), scratch_row_id);
-	//! first_row_id applies to DATA manifests only; a DELETE manifest's first_row_id is always null.
-	if (is_v3 && content == IcebergManifestContentType::DATA && has_first_row_id) {
-		result.file.first_row_id = min_first_row_id;
-	} else {
-		result.file.first_row_id.reset();
-	}
+	auto first_row_id =
+	    is_v3 && content == IcebergManifestContentType::DATA && min_first_row_id ? min_first_row_id : nullopt;
 	//! Set the true minimum data sequence number from the absorbed entries (see above). Done before
 	//! WriteToFile / AddNewManifestFile so scan-planning pruning sees the correct lower bound.
-	if (has_min_seq) {
-		result.file.min_sequence_number = min_seq;
-	}
-
-	auto manifest_length = manifest_file::WriteToFile(table_metadata, result, avro_copy, db, commit_state.context);
-	result.file.manifest_length = manifest_length;
-	commit_state.created_metadata_files.push_back(result.file.manifest_path);
-	return result;
+	return IcebergManifestMerge::WriteReplacementManifest(manifest_metadata, std::move(merged_entries), avro_copy, db,
+	                                                      commit_state, first_row_id, min_seq);
 }
 
 } // namespace

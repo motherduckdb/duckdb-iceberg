@@ -44,6 +44,16 @@ struct IcebergManifestMerge {
 	static IcebergManifestListEntry ScanManifestEntries(const IcebergManifestListEntry &list_entry,
 	                                                    IcebergCommitState &commit_state, int32_t schema_id);
 
+	//! Build and persist a replacement manifest from already-materialized entries. The metadata-driven
+	//! manifest creation is shared by merge-append and delete-driven rewrites; callers can override
+	//! file-level lineage/sequence metadata when the physical rewrite must preserve historical values.
+	static IcebergManifestListEntry WriteReplacementManifest(const IcebergManifestMetadata &manifest_metadata,
+	                                                         vector<IcebergManifestEntry> &&manifest_entries,
+	                                                         CopyFunction &avro_copy, DatabaseInstance &db,
+	                                                         IcebergCommitState &commit_state,
+	                                                         optional<sequence_number_t> first_row_id = nullopt,
+	                                                         optional<sequence_number_t> min_sequence_number = nullopt);
+
 	//! Decide whether a bin should be physically merged into a single manifest:
 	//!  - a single-manifest bin is never merged;
 	//!  - a bin is merged only once it holds at least `min_count_to_merge` manifests (Apache Iceberg's
