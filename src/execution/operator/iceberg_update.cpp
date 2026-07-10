@@ -218,71 +218,6 @@ InsertionOrderPreservingMap<string> IcebergUpdate::ParamsToString() const {
 	return result;
 }
 
-namespace {
-
-static optional_ptr<IcebergMultiFileList> FindIcebergScan(PhysicalOperator &plan) {
-	if (plan.type == PhysicalOperatorType::TABLE_SCAN) {
-		// does this emit the virtual columns?
-		auto &scan = plan.Cast<PhysicalTableScan>();
-
-		if (scan.function.GetName() == "iceberg_scan") {
-			bool found = false;
-			for (auto &col : scan.column_ids) {
-				if (col.GetPrimaryIndex() == MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER) {
-					found = true;
-					break;
-				}
-			}
-			if (found) {
-				auto &bind_data = scan.bind_data->Cast<MultiFileBindData>();
-				return bind_data.file_list->Cast<IcebergMultiFileList>();
-			}
-		}
-		return nullptr;
-	}
-
-	for (auto &children : plan.children) {
-		auto result = FindIcebergScan(children.get());
-		if (result) {
-			return result;
-		}
-	}
-	return nullptr;
-}
-
-static void VerifyStaleSnapshot(IcebergCatalog &catalog, IcebergMultiFileList &multi_file_list,
-                                ClientContext &context) {
-	auto transaction_start = IcebergUtils::GetTransactionStartTimeMS(context);
-	auto &metadata = multi_file_list.GetMetadata();
-	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
-
-	auto table = multi_file_list.GetTable();
-	auto &table_info = table->table_info;
-	auto table_key = table_info.GetTableKey();
-
-	auto table_state = iceberg_transaction.GetLatestTableState(table_key);
-	if (table_state->GetInfo().HasTransactionUpdates()) {
-		//! Already has transaction changes, no need to verify further
-		return;
-	}
-
-	auto latest_snapshot = metadata.GetSnapshotByTimestampMS(transaction_start);
-
-	if (transaction_start < metadata.last_updated_ms &&
-	    (!latest_snapshot || latest_snapshot->GetSchemaId() != metadata.GetCurrentSchemaId())) {
-		throw TransactionException(
-		    "Write-write conflict detected on '%s', changes were made since the start of the transaction", table_key);
-	}
-
-	auto committed_snapshot = metadata.GetLatestCommittedSnapshot();
-	if (latest_snapshot != committed_snapshot) {
-		throw TransactionException(
-		    "Write-write conflict detected on '%s', changes were made since the start of the transaction", table_key);
-	}
-}
-
-} // namespace
-
 PhysicalOperator &IcebergCatalog::PlanUpdate(ClientContext &context, PhysicalPlanGenerator &planner, LogicalUpdate &op,
                                              PhysicalOperator &child_plan) {
 	if (op.return_chunk) {
@@ -298,9 +233,6 @@ PhysicalOperator &IcebergCatalog::PlanUpdate(ClientContext &context, PhysicalPla
 	auto &table_metadata = updated_table.table_metadata;
 	auto &schema = table_metadata.GetLatestSchema();
 	auto &updated_table_entry = *updated_table.schema_versions[schema.schema_id];
-
-	auto iceberg_scan = FindIcebergScan(child_plan);
-	VerifyStaleSnapshot(*this, *iceberg_scan, context);
 
 	// Plan the copy operator with update_op as child.
 	// PlanCopyForInsert will add a partition projection on top if needed.

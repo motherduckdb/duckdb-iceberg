@@ -55,41 +55,6 @@ optional_ptr<PhysicalTableScan> IcebergDelete::FindIcebergScan(PhysicalOperator 
 	return nullptr;
 }
 
-namespace {
-
-static void VerifyStaleSnapshot(IcebergCatalog &catalog, IcebergMultiFileList &multi_file_list,
-                                ClientContext &context) {
-	auto transaction_start = IcebergUtils::GetTransactionStartTimeMS(context);
-	auto &metadata = multi_file_list.GetMetadata();
-	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
-
-	auto table = multi_file_list.GetTable();
-	auto &table_info = table->table_info;
-	auto table_key = table_info.GetTableKey();
-
-	auto table_state = iceberg_transaction.GetLatestTableState(table_key);
-	if (table_state->GetInfo().HasTransactionUpdates()) {
-		//! Already has transaction changes, no need to verify further
-		return;
-	}
-
-	auto latest_snapshot = metadata.GetSnapshotByTimestampMS(transaction_start);
-
-	if (transaction_start < metadata.last_updated_ms &&
-	    (!latest_snapshot || latest_snapshot->GetSchemaId() != metadata.GetCurrentSchemaId())) {
-		throw TransactionException(
-		    "Write-write conflict detected on '%s', changes were made since the start of the transaction", table_key);
-	}
-
-	auto committed_snapshot = metadata.GetLatestCommittedSnapshot();
-	if (latest_snapshot != committed_snapshot) {
-		throw TransactionException(
-		    "Write-write conflict detected on '%s', changes were made since the start of the transaction", table_key);
-	}
-}
-
-} // namespace
-
 IcebergDelete::IcebergDelete(PhysicalPlan &physical_plan, IcebergTableEntry &table,
                              optional_ptr<IcebergMultiFileList> multi_file_list, PhysicalOperator &child,
                              vector<idx_t> row_id_indexes)
@@ -524,7 +489,6 @@ PhysicalOperator &IcebergDelete::PlanDelete(ClientContext &context, PhysicalPlan
 	if (scan) {
 		auto &bind_data = scan->bind_data->Cast<MultiFileBindData>();
 		multi_file_list = bind_data.file_list->Cast<IcebergMultiFileList>();
-		VerifyStaleSnapshot(catalog.Cast<IcebergCatalog>(), *multi_file_list, context);
 	} else {
 		DUCKDB_LOG_DEBUG(context, "Could not find IcebergDelete source. Iceberg Multi File list is empty");
 	}

@@ -42,37 +42,6 @@
 
 namespace duckdb {
 
-namespace {
-
-static void VerifyStaleSnapshot(ClientContext &context, IcebergTransaction &iceberg_transaction,
-                                IcebergTableInformation &table_info) {
-	auto table_key = table_info.GetTableKey();
-	auto transaction_start = IcebergUtils::GetTransactionStartTimeMS(context);
-	auto &metadata = table_info.table_metadata;
-
-	auto table_state = iceberg_transaction.GetLatestTableState(table_key);
-	if (table_state->GetInfo().HasTransactionUpdates()) {
-		//! Already has transaction changes, no need to verify further
-		return;
-	}
-
-	auto latest_snapshot = metadata.GetSnapshotByTimestampMS(transaction_start);
-
-	if (transaction_start < metadata.last_updated_ms &&
-	    (!latest_snapshot || latest_snapshot->GetSchemaId() != metadata.GetCurrentSchemaId())) {
-		throw TransactionException(
-		    "Write-write conflict detected on '%s', changes were made since the start of the transaction", table_key);
-	}
-
-	auto committed_snapshot = metadata.GetLatestCommittedSnapshot();
-	if (latest_snapshot != committed_snapshot) {
-		throw TransactionException(
-		    "Write-write conflict detected on '%s', changes were made since the start of the transaction", table_key);
-	}
-}
-
-} // namespace
-
 static bool WriteRowId(IcebergInsertVirtualColumns virtual_columns) {
 	return virtual_columns == IcebergInsertVirtualColumns::WRITE_ROW_ID ||
 	       virtual_columns == IcebergInsertVirtualColumns::WRITE_ROW_ID_AND_SEQUENCE_NUMBER;
@@ -1045,7 +1014,6 @@ PhysicalOperator &IcebergCatalog::PlanInsert(ClientContext &context, PhysicalPla
 	table_entry.PrepareIcebergScanFromEntry(context);
 
 	auto &irc_transaction = IcebergTransaction::Get(context, *this);
-	VerifyStaleSnapshot(context, irc_transaction, table_entry.table_info);
 
 	auto &alter = irc_transaction.GetOrCreateAlter();
 	auto &updated_table = alter.GetOrInitializeTable(table_entry.table_info);
