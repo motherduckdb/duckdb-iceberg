@@ -1,5 +1,6 @@
 #pragma once
 
+#include "duckdb/main/client_context.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/function/copy_function.hpp"
@@ -17,7 +18,7 @@ struct IcebergManifestMergeConfig {
 	idx_t min_count_to_merge;
 	int64_t target_size_bytes;
 
-	static IcebergManifestMergeConfig FromTableMetadata(const IcebergTableMetadata &metadata);
+	static IcebergManifestMergeConfig FromTableMetadata(const IcebergTableMetadata &metadata, ClientContext &context);
 };
 
 struct IcebergManifestMerge {

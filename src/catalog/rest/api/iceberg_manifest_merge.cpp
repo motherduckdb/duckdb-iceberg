@@ -3,6 +3,7 @@
 #include "duckdb/common/types/uuid.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/map.hpp"
+#include "duckdb/logging/logger.hpp"
 
 #include "catalog/rest/api/iceberg_table_update.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
@@ -32,7 +33,7 @@ constexpr bool MERGE_ENABLED_DEFAULT = true;
 constexpr idx_t MIN_COUNT_TO_MERGE_DEFAULT = 100;
 constexpr int64_t TARGET_SIZE_BYTES_DEFAULT = 8 * 1024 * 1024;
 
-bool ParseBoolProperty(const string &value, bool fallback) {
+bool ParseBoolProperty(ClientContext &context, const char *property_name, const string &value, bool fallback) {
 	if (value.empty()) {
 		return fallback;
 	}
@@ -43,32 +44,44 @@ bool ParseBoolProperty(const string &value, bool fallback) {
 	if (lowered == "false") {
 		return false;
 	}
+	DUCKDB_LOG_WARNING(context,
+	                   "Invalid value '%s' for Iceberg table property '%s'; expected true or false, using default "
+	                   "value '%s'.",
+	                   value, property_name, fallback ? "true" : "false");
 	return fallback;
 }
 
 template <class T>
-T ParseIntProperty(const string &value, T fallback) {
+T ParseIntProperty(ClientContext &context, const char *property_name, const string &value, T fallback) {
 	if (value.empty()) {
 		return fallback;
 	}
 	try {
 		auto parsed = std::stoll(value);
 		//! A non-positive threshold is meaningless; fall back rather than disable merging silently.
-		return parsed > 0 ? static_cast<T>(parsed) : fallback;
+		if (parsed > 0) {
+			return static_cast<T>(parsed);
+		}
 	} catch (...) {
-		return fallback;
 	}
+	DUCKDB_LOG_WARNING(context,
+	                   "Invalid value '%s' for Iceberg table property '%s'; expected a positive integer, using "
+	                   "default value '%s'.",
+	                   value, property_name, std::to_string(fallback));
+	return fallback;
 }
 
 } // namespace
 
-IcebergManifestMergeConfig IcebergManifestMergeConfig::FromTableMetadata(const IcebergTableMetadata &metadata) {
+IcebergManifestMergeConfig IcebergManifestMergeConfig::FromTableMetadata(const IcebergTableMetadata &metadata,
+                                                                         ClientContext &context) {
 	IcebergManifestMergeConfig config;
-	config.enabled = ParseBoolProperty(metadata.GetTableProperty(MERGE_ENABLED), MERGE_ENABLED_DEFAULT);
-	config.min_count_to_merge =
-	    ParseIntProperty<idx_t>(metadata.GetTableProperty(MIN_COUNT_TO_MERGE), MIN_COUNT_TO_MERGE_DEFAULT);
-	config.target_size_bytes =
-	    ParseIntProperty<int64_t>(metadata.GetTableProperty(TARGET_SIZE_BYTES), TARGET_SIZE_BYTES_DEFAULT);
+	config.enabled =
+	    ParseBoolProperty(context, MERGE_ENABLED, metadata.GetTableProperty(MERGE_ENABLED), MERGE_ENABLED_DEFAULT);
+	config.min_count_to_merge = ParseIntProperty<idx_t>(
+	    context, MIN_COUNT_TO_MERGE, metadata.GetTableProperty(MIN_COUNT_TO_MERGE), MIN_COUNT_TO_MERGE_DEFAULT);
+	config.target_size_bytes = ParseIntProperty<int64_t>(
+	    context, TARGET_SIZE_BYTES, metadata.GetTableProperty(TARGET_SIZE_BYTES), TARGET_SIZE_BYTES_DEFAULT);
 	return config;
 }
 
@@ -380,7 +393,8 @@ vector<IcebergManifestListEntry> IcebergManifestMerge::MergeManifests(vector<Ice
 void IcebergManifestMerge::MergeManifestList(vector<IcebergManifestListEntry> &manifests, int32_t current_schema_id,
                                              CopyFunction &avro_copy, DatabaseInstance &db,
                                              IcebergCommitState &commit_state) {
-	auto config = IcebergManifestMergeConfig::FromTableMetadata(commit_state.table_info.table_metadata);
+	auto config =
+	    IcebergManifestMergeConfig::FromTableMetadata(commit_state.table_info.table_metadata, commit_state.context);
 	if (!config.enabled) {
 		return;
 	}
