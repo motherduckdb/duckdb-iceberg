@@ -164,8 +164,7 @@ void IcebergAddSnapshot::MergeManifestList(IcebergManifestList &new_manifest_lis
 	//! data_file.partition layout and column stats, so mixing them can drop or misalign stats.
 	//! MergeManifests therefore groups manifests by their resolved (schema id, partition spec id)
 	//! and only merges within a group; the schema id is read from each manifest's key-value metadata
-	//! (see ResolveManifestSchemaId), so tables that have gone through schema evolution still merge
-	//! correctly, per schema.
+	//! so tables that have gone through schema evolution still merge correctly, per schema.
 	auto &entries = new_manifest_list.GetManifestFilesMutable();
 	if (entries.size() <= 1) {
 		return;
@@ -320,7 +319,7 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 		}
 	}
 
-	//! MergeAppend (#790): repack the assembled manifest list into fewer manifests before writing.
+	//! MergeAppend: repack the assembled manifest list into fewer manifests before writing.
 	MergeManifestList(new_manifest_list, snapshot_id, avro_copy, db, commit_state);
 
 	manifest_list::WriteToFile(table_metadata, new_manifest_list, avro_copy, db, context);

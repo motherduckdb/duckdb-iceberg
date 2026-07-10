@@ -60,23 +60,6 @@ T ParseIntProperty(const string &value, T fallback) {
 	}
 }
 
-//! Resolve the schema id a manifest was written under, so that only manifests sharing a schema are
-//! ever merged. The schema id drives the data_file.partition layout and column stats, so mixing
-//! schemas can drop or misalign stats.
-//!
-//! Every manifest we merge should already carry its schema in Avro key-value metadata: carried-over
-//! manifests read it from disk, and transaction-local manifests get it from CreateFromEntries.
-//! That lets merge grouping preserve the manifest's own schema even if the table's current schema
-//! changes later in the same transaction.
-int32_t ResolveManifestSchemaId(const MergeInputManifest &input) {
-	auto &manifest_metadata = input.entry.manifest_metadata;
-	if (!manifest_metadata) {
-		throw InvalidConfigurationException("Cannot merge manifest '%s': it is missing typed manifest metadata",
-		                                    input.entry.file.manifest_path);
-	}
-	return manifest_metadata->schema_id;
-}
-
 } // namespace
 
 ManifestMergeConfig ManifestMergeConfig::FromTableMetadata(const IcebergTableMetadata &metadata) {
@@ -346,28 +329,22 @@ vector<IcebergManifestListEntry> MergeManifests(vector<MergeInputManifest> &&inp
 		return result;
 	}
 
-	//! Group by (schema id, partition spec id): only manifests sharing BOTH may be merged together.
-	//! The schema id governs the data_file.partition layout and column statistics, so merging across
-	//! schemas could drop or misalign stats; the partition spec id governs the partition tuple
-	//! itself. Grouping is ordered (map) so the output manifest order is deterministic regardless of
-	//! input order.
-	//!
-	//! Carried-over manifests reach this point via the manifest LIST read only, so their Avro header
-	//! metadata (which holds the schema id) is not materialized yet. Open each one here -- reading
-	//! its entries at the same time -- so grouping can read the real schema id and MergeBin can reuse
-	//! the already-loaded entries instead of opening the file again.
+	//! Load the entries of the manifests if they're not already loaded
 	for (auto &member : input) {
-		if (member.entry.manifest_entries.empty()) {
-			auto loaded = ScanManifestEntries(member.entry, commit_state, current_schema_id);
-			member.entry.file = std::move(loaded.file);
-			member.entry.manifest_entries = std::move(loaded.manifest_entries);
-			member.entry.manifest_metadata.emplace(*loaded.manifest_metadata);
+		if (!member.entry.manifest_entries.empty()) {
+			//! Already loaded, no need to scan
+			continue;
 		}
+		auto loaded = ScanManifestEntries(member.entry, commit_state, current_schema_id);
+		member.entry.file = std::move(loaded.file);
+		member.entry.manifest_entries = std::move(loaded.manifest_entries);
+		member.entry.manifest_metadata.emplace(*loaded.manifest_metadata);
 	}
 
+	//! Group by spec_id+schema_id, so we only merge manifests that are compatible
 	map<std::pair<int32_t, int32_t>, vector<idx_t>> groups;
 	for (idx_t i = 0; i < input.size(); i++) {
-		auto schema_id = ResolveManifestSchemaId(input[i]);
+		auto schema_id = input[i].entry.manifest_metadata->schema_id;
 		auto spec_id = input[i].entry.file.partition_spec_id;
 		groups[std::make_pair(schema_id, spec_id)].push_back(i);
 	}
