@@ -119,13 +119,10 @@ static bool ManifestFileNeedsToBeRewritten(IcebergCommitState &commit_state, Ice
 static void RewriteManifestFile(IcebergManifestListEntry &list_entry, CopyFunction &avro_copy, DatabaseInstance &db,
                                 IcebergCommitState &commit_state) {
 	auto &manifest_file = list_entry.file;
-	auto &manifest_entries = list_entry.manifest_entries;
 	auto &table_metadata = commit_state.table_info.table_metadata;
 
 	//! Finally overwrite the input 'manifest_file' with our edited copy
-	list_entry.metadata.clear();
-	auto manifest_length = manifest_file::WriteToFile(table_metadata, manifest_file, manifest_entries, avro_copy, db,
-	                                                  commit_state.context, &list_entry.metadata);
+	auto manifest_length = manifest_file::WriteToFile(table_metadata, list_entry, avro_copy, db, commit_state.context);
 	manifest_file.manifest_length = manifest_length;
 }
 
@@ -235,10 +232,10 @@ static IcebergManifestListEntry WriteManifestListEntry(const IcebergTableInforma
                                                        CopyFunction &avro_copy, DatabaseInstance &db,
                                                        ClientContext &context) {
 	IcebergManifestListEntry new_entry(list_entry.file);
-	auto manifest_length =
-	    manifest_file::WriteToFile(table_info.table_metadata, list_entry.file, list_entry.manifest_entries, avro_copy,
-	                               db, context, &new_entry.metadata);
+	new_entry.manifest_metadata = list_entry.manifest_metadata;
+	new_entry.metadata = list_entry.metadata;
 	new_entry.manifest_entries = list_entry.manifest_entries;
+	auto manifest_length = manifest_file::WriteToFile(table_info.table_metadata, new_entry, avro_copy, db, context);
 	new_entry.file.manifest_length = manifest_length;
 	return new_entry;
 }
@@ -254,7 +251,7 @@ CreateCommitManifestFiles(const vector<IcebergManifestListEntry> &manifest_files
 	for (const auto &manifest_entry : manifest_files) {
 		auto copied_entries = manifest_entry.manifest_entries;
 		auto copied_manifest = IcebergManifestListEntry::CreateFromEntries(
-		    fs, snapshot_id, sequence_number, table_info.table_metadata, manifest_entry.file.content,
+		    fs, snapshot_id, sequence_number, table_info.table_metadata, manifest_entry.manifest_metadata,
 		    std::move(copied_entries), next_row_id);
 		result.push_back(std::move(copied_manifest));
 	}

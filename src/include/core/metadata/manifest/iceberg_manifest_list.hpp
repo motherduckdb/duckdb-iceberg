@@ -44,6 +44,19 @@ enum class IcebergManifestContentType : uint8_t {
 
 string IcebergManifestContentTypeToString(IcebergManifestContentType type);
 
+struct IcebergManifestMetadata {
+public:
+	static IcebergManifestMetadata FromTableMetadata(const IcebergTableMetadata &table_metadata,
+	                                                 IcebergManifestContentType content,
+	                                                 int32_t partition_spec_id = -1);
+
+public:
+	int32_t schema_id = 0;
+	int32_t partition_spec_id = 0;
+	int32_t format_version = 0;
+	IcebergManifestContentType content = IcebergManifestContentType::DATA;
+};
+
 struct IcebergManifestFile {
 public:
 	//! Path to the manifest AVRO file
@@ -85,15 +98,14 @@ public:
 	}
 
 public:
-	static IcebergManifestListEntry CreateFromEntries(FileSystem &fs, int64_t snapshot_id,
-	                                                  sequence_number_t sequence_number,
-	                                                  const IcebergTableMetadata &table_metadata,
-	                                                  IcebergManifestContentType manifest_content_type,
-	                                                  vector<IcebergManifestEntry> &&manifest_entries,
-	                                                  int64_t &next_row_id, int32_t partition_spec_id = -1);
+	static IcebergManifestListEntry
+	CreateFromEntries(FileSystem &fs, int64_t snapshot_id, sequence_number_t sequence_number,
+	                  const IcebergTableMetadata &table_metadata, const IcebergManifestMetadata &manifest_metadata,
+	                  vector<IcebergManifestEntry> &&manifest_entries, int64_t &next_row_id);
 
 public:
 	IcebergManifestFile file;
+	IcebergManifestMetadata manifest_metadata;
 	//! The key-value metadata of the manifest file this entry describes
 	unordered_map<string, string> metadata;
 	vector<IcebergManifestEntry> manifest_entries;

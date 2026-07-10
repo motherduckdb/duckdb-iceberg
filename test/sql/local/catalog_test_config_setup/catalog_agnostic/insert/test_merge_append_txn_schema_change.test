@@ -68,6 +68,39 @@ select count(*) from my_datalake.default.merge_txn_schema;
 ----
 8
 
+# The mixed-schema commit should leave one schema-0 manifest and one schema-1 manifest. Inspect the
+# Avro key-value metadata directly so we catch any commit-time restamping to the latest table schema.
+statement ok
+set variable txn_manifest_1 = (
+	select distinct manifest_path
+	from iceberg_metadata(my_datalake.default.merge_txn_schema)
+	order by manifest_path
+	limit 1
+);
+
+statement ok
+set variable txn_manifest_2 = (
+	select distinct manifest_path
+	from iceberg_metadata(my_datalake.default.merge_txn_schema)
+	order by manifest_path
+	limit 1 offset 1
+);
+
+query II
+select
+	(select count(*) from (
+		select value from avro_metadata(getvariable('txn_manifest_1')) where key = 'schema-id'
+		union all
+		select value from avro_metadata(getvariable('txn_manifest_2')) where key = 'schema-id'
+	) t where value = '0'),
+	(select count(*) from (
+		select value from avro_metadata(getvariable('txn_manifest_1')) where key = 'schema-id'
+		union all
+		select value from avro_metadata(getvariable('txn_manifest_2')) where key = 'schema-id'
+	) t where value = '1');
+----
+1	1
+
 # A further insert + read still returns everything intact after the mixed-schema transaction.
 statement ok
 insert into my_datalake.default.merge_txn_schema values (9, 'i', 90), (10, 'j', 100);

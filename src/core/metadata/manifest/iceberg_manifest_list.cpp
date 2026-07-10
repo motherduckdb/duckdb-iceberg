@@ -36,31 +36,67 @@ string IcebergManifestContentTypeToString(IcebergManifestContentType type) {
 	}
 }
 
+IcebergManifestMetadata IcebergManifestMetadata::FromTableMetadata(const IcebergTableMetadata &table_metadata,
+                                                                   IcebergManifestContentType content,
+                                                                   int32_t partition_spec_id) {
+	IcebergManifestMetadata manifest_metadata;
+	manifest_metadata.schema_id = table_metadata.GetCurrentSchemaId();
+	manifest_metadata.partition_spec_id =
+	    partition_spec_id >= 0 ? partition_spec_id : NumericCast<int32_t>(table_metadata.default_spec_id);
+	manifest_metadata.format_version = NumericCast<int32_t>(table_metadata.iceberg_version);
+	manifest_metadata.content = content;
+	return manifest_metadata;
+}
+
+static unordered_map<string, string> BuildManifestMetadataMap(const IcebergTableMetadata &table_metadata,
+                                                              const IcebergManifestMetadata &manifest_metadata) {
+	unordered_map<string, string> result;
+	result.reserve(6);
+
+	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> schema_doc_p(yyjson_mut_doc_new(nullptr));
+	auto schema_doc = schema_doc_p.get();
+	auto schema_root_obj = yyjson_mut_obj(schema_doc);
+	yyjson_mut_doc_set_root(schema_doc, schema_root_obj);
+	IcebergCreateTableRequest::PopulateSchema(schema_doc, schema_root_obj,
+	                                          *table_metadata.GetSchemaFromId(manifest_metadata.schema_id));
+	result.emplace("schema", ICUtils::JsonToString(std::move(schema_doc_p)));
+	result.emplace("schema-id", std::to_string(manifest_metadata.schema_id));
+
+	auto partition_spec = table_metadata.FindPartitionSpecById(manifest_metadata.partition_spec_id);
+	if (!partition_spec) {
+		throw InternalException("Cannot find partition spec with id " +
+		                        std::to_string(manifest_metadata.partition_spec_id));
+	}
+	result.emplace("partition-spec", partition_spec->FieldsToJSONString());
+	result.emplace("partition-spec-id", std::to_string(manifest_metadata.partition_spec_id));
+	result.emplace("format-version", std::to_string(manifest_metadata.format_version));
+	result.emplace("content", manifest_metadata.content == IcebergManifestContentType::DATA ? "data" : "deletes");
+	return result;
+}
+
 IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem &fs, int64_t snapshot_id,
                                                                      sequence_number_t sequence_number,
                                                                      const IcebergTableMetadata &table_metadata,
-                                                                     IcebergManifestContentType manifest_content_type,
+                                                                     const IcebergManifestMetadata &manifest_metadata,
                                                                      vector<IcebergManifestEntry> &&manifest_entries,
-                                                                     int64_t &next_row_id, int32_t partition_spec_id) {
-	//! Caller may pin the spec id (e.g. when merging a manifest that belongs to a historical spec);
-	//! otherwise default to the table's current default spec.
-	const int32_t effective_spec_id =
-	    partition_spec_id >= 0 ? partition_spec_id : NumericCast<int32_t>(table_metadata.default_spec_id);
+                                                                     int64_t &next_row_id) {
 	//! create manifest file path
 	auto manifest_file_uuid = UUID::ToString(UUID::GenerateRandomUUID());
 	auto manifest_file_path = fs.JoinPath(table_metadata.GetMetadataPath(fs), manifest_file_uuid + "-m0.avro");
 
 	// Add a manifest list entry for the entries
 	IcebergManifestListEntry manifest_list_entry(manifest_file_path);
+	manifest_list_entry.manifest_metadata = manifest_metadata;
+	manifest_list_entry.metadata = BuildManifestMetadataMap(table_metadata, manifest_metadata);
 	auto &manifest_file = manifest_list_entry.file;
 	manifest_file.manifest_path = manifest_file_path;
-	if (table_metadata.iceberg_version >= 3 && manifest_content_type == IcebergManifestContentType::DATA) {
+	if (table_metadata.iceberg_version >= 3 && manifest_metadata.content == IcebergManifestContentType::DATA) {
 		//! 'first_row_id' is only assigned to data manifests (row lineage), deletes manifests leave it null
 		manifest_file.first_row_id = next_row_id;
 	}
 
 	manifest_file.manifest_path = manifest_file_path;
-	manifest_file.content = manifest_content_type;
+	manifest_file.content = manifest_metadata.content;
 	//! NOTE: this gets overwritten on commit
 	manifest_file.sequence_number = sequence_number;
 	manifest_file.added_files_count = 0;
@@ -69,7 +105,7 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 	manifest_file.added_rows_count = 0;
 	manifest_file.existing_rows_count = 0;
 	manifest_file.deleted_rows_count = 0;
-	manifest_file.partition_spec_id = effective_spec_id;
+	manifest_file.partition_spec_id = manifest_metadata.partition_spec_id;
 
 	//! Add the files to the manifest
 	for (auto &manifest_entry : manifest_entries) {
@@ -106,9 +142,10 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 
 	// Compute partition field summaries (upper/lower bounds) for the manifest list entry
 	if (table_metadata.HasPartitionSpec() && table_metadata.GetLatestPartitionSpec().IsPartitioned()) {
-		auto partition_spec_it = table_metadata.partition_specs.find(effective_spec_id);
+		auto partition_spec_it = table_metadata.partition_specs.find(manifest_metadata.partition_spec_id);
 		if (partition_spec_it == table_metadata.partition_specs.end()) {
-			throw InternalException("Cannot find partition spec with id " + std::to_string(effective_spec_id));
+			throw InternalException("Cannot find partition spec with id " +
+			                        std::to_string(manifest_metadata.partition_spec_id));
 		}
 		auto &partition_spec = partition_spec_it->second;
 		manifest_file.partitions.Create(table_metadata, partition_spec, manifest_entries);

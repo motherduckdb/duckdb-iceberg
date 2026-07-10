@@ -64,18 +64,12 @@ T ParseIntProperty(const string &value, T fallback) {
 //! ever merged. The schema id drives the data_file.partition layout and column stats, so mixing
 //! schemas can drop or misalign stats.
 //!
-//! A manifest added by THIS transaction was written under the table's current schema, so we use
-//! that directly (its Avro key-value metadata is not materialized here anyway). A carried-over
-//! manifest carries its schema id in its Avro header key-value metadata (populated once the file is
-//! opened -- see the pre-load in MergeManifests): prefer the "schema-id" key, else parse the
-//! "schema" JSON's "schema-id" (the reference implementations populate only "schema", not
-//! "schema-id"). The metadata is required by the spec, so its absence is an error (see below).
-int32_t ResolveManifestSchemaId(const MergeInputManifest &input, int32_t current_schema_id) {
+//! Every manifest we merge should already carry its schema in Avro key-value metadata: carried-over
+//! manifests read it from disk, and transaction-local manifests get it from CreateFromEntries.
+//! That lets merge grouping preserve the manifest's own schema even if the table's current schema
+//! changes later in the same transaction.
+int32_t ResolveManifestSchemaId(const MergeInputManifest &input) {
 	using namespace duckdb_yyjson;
-
-	if (input.source == ManifestSource::NEW_THIS_TRANSACTION) {
-		return current_schema_id;
-	}
 
 	auto &metadata = input.entry.metadata;
 
@@ -105,10 +99,9 @@ int32_t ResolveManifestSchemaId(const MergeInputManifest &input, int32_t current
 	}
 
 	//! The Iceberg spec requires manifests to carry their schema in the Avro key-value metadata (all
-	//! format versions), and DuckDB always writes it (see the backfill in manifest_file::WriteToFile).
-	//! Reaching here means a carried-over manifest is missing it, which we cannot merge safely, so we
-	//! surface it as a configuration error rather than guessing a schema id. InvalidConfiguration (not
-	//! Internal) so it does not invalidate the database/session.
+	//! format versions), and DuckDB writes it for both on-disk and transaction-local manifests.
+	//! Reaching here means the manifest metadata is missing or malformed, which we cannot merge
+	//! safely, so surface it as a configuration error rather than guessing a schema id.
 	throw InvalidConfigurationException(
 	    "Cannot merge manifest '%s': it is missing the required schema id in its Avro key-value metadata",
 	    input.entry.file.manifest_path);
@@ -344,10 +337,14 @@ IcebergManifestListEntry MergeBin(const vector<MergeInputManifest> &input, const
 	//! (possibly historical) spec, not the table default. We pass a throwaway row-id
 	//! counter so the global one is not advanced, then restore the lineage-preserving value below.
 	int64_t scratch_row_id = 0;
+	auto manifest_metadata = IcebergManifestMetadata::FromTableMetadata(table_metadata, content, partition_spec_id);
+	manifest_metadata.schema_id = schema_id;
+	manifest_metadata.partition_spec_id = partition_spec_id;
+	manifest_metadata.format_version = NumericCast<int32_t>(table_metadata.iceberg_version);
 	auto result =
 	    IcebergManifestListEntry::CreateFromEntries(FileSystem::GetFileSystem(commit_state.context),
-	                                                /*snapshot_id*/ -1, /*sequence_number*/ 0, table_metadata, content,
-	                                                std::move(merged_entries), scratch_row_id, partition_spec_id);
+	                                                /*snapshot_id*/ -1, /*sequence_number*/ 0, table_metadata,
+	                                                manifest_metadata, std::move(merged_entries), scratch_row_id);
 	//! first_row_id applies to DATA manifests only; a DELETE manifest's first_row_id is always null.
 	if (is_v3 && content == IcebergManifestContentType::DATA && has_first_row_id) {
 		result.file.first_row_id = min_first_row_id;
@@ -360,8 +357,7 @@ IcebergManifestListEntry MergeBin(const vector<MergeInputManifest> &input, const
 		result.file.min_sequence_number = min_seq;
 	}
 
-	auto manifest_length = manifest_file::WriteToFile(table_metadata, result.file, result.manifest_entries, avro_copy,
-	                                                  db, commit_state.context, &result.metadata);
+	auto manifest_length = manifest_file::WriteToFile(table_metadata, result, avro_copy, db, commit_state.context);
 	result.file.manifest_length = manifest_length;
 	return result;
 }
@@ -400,7 +396,7 @@ vector<IcebergManifestListEntry> MergeManifests(vector<MergeInputManifest> &&inp
 
 	map<std::pair<int32_t, int32_t>, vector<idx_t>> groups;
 	for (idx_t i = 0; i < input.size(); i++) {
-		auto schema_id = ResolveManifestSchemaId(input[i], current_schema_id);
+		auto schema_id = ResolveManifestSchemaId(input[i]);
 		auto spec_id = input[i].entry.file.partition_spec_id;
 		groups[std::make_pair(schema_id, spec_id)].push_back(i);
 	}

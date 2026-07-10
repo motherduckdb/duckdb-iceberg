@@ -600,9 +600,11 @@ static Value FieldIdsForList(int32_t list_field_id, int32_t element_field_id) {
 	return Value::STRUCT(members);
 }
 
-idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManifestFile &manifest_file,
-                  const vector<IcebergManifestEntry> &manifest_entries, CopyFunction &copy, DatabaseInstance &db,
-                  ClientContext &context, optional_ptr<unordered_map<string, string>> out_metadata) {
+idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManifestListEntry &manifest_entry,
+                  CopyFunction &copy, DatabaseInstance &db, ClientContext &context) {
+	auto &manifest_file = manifest_entry.file;
+	auto &manifest_entries = manifest_entry.manifest_entries;
+	auto &manifest_metadata = manifest_entry.metadata;
 	D_ASSERT(!manifest_entries.empty());
 	auto &allocator = db.GetBufferManager().GetBufferAllocator();
 	auto &path = manifest_file.manifest_path;
@@ -612,8 +614,6 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	child_list_t<Value> field_ids;
 	vector<Identifier> names;
 	vector<LogicalType> types;
-
-	auto &current_partition_spec = table_metadata.GetLatestPartitionSpec();
 
 	// status: int
 	names.push_back("status");
@@ -758,35 +758,17 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	DataChunk chunk;
 	chunk.Initialize(allocator, types, STANDARD_VECTOR_SIZE);
 
-	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> schema_doc_p(yyjson_mut_doc_new(nullptr));
-	auto schema_doc = schema_doc_p.get();
-	auto schema_root_obj = yyjson_mut_obj(schema_doc);
-	yyjson_mut_doc_set_root(schema_doc, schema_root_obj);
-	IcebergCreateTableRequest::PopulateSchema(schema_doc, schema_root_obj,
-	                                          *table_metadata.GetSchemaFromId(table_metadata.GetCurrentSchemaId()));
-	auto iceberg_table_schema_string = ICUtils::JsonToString(std::move(schema_doc_p));
-
 	child_list_t<Value> metadata_values;
-	metadata_values.emplace_back("schema", iceberg_table_schema_string);
-	metadata_values.emplace_back("schema-id", std::to_string(table_metadata.GetCurrentSchemaId()));
-	metadata_values.emplace_back("partition-spec", current_partition_spec.FieldsToJSONString());
-	metadata_values.emplace_back("partition-spec-id", std::to_string(current_partition_spec.spec_id));
-	metadata_values.emplace_back("format-version", std::to_string(table_metadata.iceberg_version));
-	metadata_values.emplace_back("content",
-	                             manifest_file.content == IcebergManifestContentType::DATA ? "data" : "deletes");
-	auto metadata_map = Value::STRUCT(std::move(metadata_values));
-
-	//! Mirror the header metadata into the caller's map (if requested) so the in-memory list entry
-	//! matches the file on disk. This is what lets a later commit read this manifest's schema id
-	//! without reopening the file (see MergeManifests).
-	if (out_metadata) {
-		auto &meta = *out_metadata;
-		auto &struct_type = metadata_map.type();
-		auto &children = StructValue::GetChildren(metadata_map);
-		for (idx_t i = 0; i < children.size(); i++) {
-			meta.emplace(StructType::GetChildName(struct_type, i), children[i].GetValue<string>());
+	constexpr const char *required_keys[] = {"schema",         "schema-id", "partition-spec", "partition-spec-id",
+	                                         "format-version", "content"};
+	for (auto key : required_keys) {
+		auto entry = manifest_metadata.find(key);
+		if (entry == manifest_metadata.end()) {
+			throw InvalidInputException("Manifest metadata missing required key '%s'", key);
 		}
+		metadata_values.emplace_back(key, entry->second);
 	}
+	auto metadata_map = Value::STRUCT(std::move(metadata_values));
 
 	CopyInfo copy_info;
 	copy_info.is_from = false;
