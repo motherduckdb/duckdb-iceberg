@@ -46,7 +46,7 @@ SELECT log_level, message FROM duckdb_logs
 statement error con2
 INSERT INTO my_datalake.default.my_table VALUES (NULL);
 ----
-Constraint Error: NOT NULL constraint failed: my_table.a
+TransactionContext Error: Write-write conflict detected on 'default.my_table', changes were made since the start of the transaction
 
 query II
 SELECT log_level, message FROM duckdb_logs

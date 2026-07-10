@@ -74,6 +74,13 @@ static void VerifyStaleSnapshot(IcebergCatalog &catalog, IcebergMultiFileList &m
 	}
 
 	auto latest_snapshot = metadata.GetSnapshotByTimestampMS(transaction_start);
+
+	if (transaction_start < metadata.last_updated_ms &&
+	    (!latest_snapshot || latest_snapshot->GetSchemaId() != metadata.GetCurrentSchemaId())) {
+		throw TransactionException(
+		    "Write-write conflict detected on '%s', changes were made since the start of the transaction", table_key);
+	}
+
 	auto committed_snapshot = metadata.GetLatestCommittedSnapshot();
 	if (latest_snapshot != committed_snapshot) {
 		throw TransactionException(
