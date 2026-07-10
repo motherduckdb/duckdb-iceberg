@@ -671,6 +671,7 @@ IcebergTableInformation IcebergTableInformation::Copy(IcebergTransaction &iceber
 }
 
 void IcebergTableInformation::InitSchemaVersions() {
+	schema_versions.clear();
 	for (auto &table_schema : table_metadata.GetSchemas()) {
 		CreateSchemaVersion(*table_schema.second);
 	}
