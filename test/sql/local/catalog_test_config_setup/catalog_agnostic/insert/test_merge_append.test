@@ -58,13 +58,14 @@ select count(*) from my_datalake.default.merge_tbl;
 # After commits with a low min-count (=2), the three per-commit data manifests are bin-packed into a
 # single merged manifest. Assert the EXACT distinct manifest count (not just a <= bound, which would
 # also pass for degenerate 0/1-manifest states), so a regression that under- or over-merges is caught.
+# This does not account for the added manifests by the last transaction (simple INSERT without transaction means 1 added manifest is left unmerged)
 query I
 select count(*) from (
 	select distinct manifest_path
 	from iceberg_metadata(my_datalake.default.merge_tbl)
 );
 ----
-1
+2
 
 # Merge correctness: entries pulled in from already-committed manifests are written with status
 # EXISTING (Java's ManifestWriter.existing), while genuinely-new entries stay ADDED. After the merge

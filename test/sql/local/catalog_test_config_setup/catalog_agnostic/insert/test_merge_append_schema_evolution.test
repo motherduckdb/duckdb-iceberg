@@ -68,14 +68,14 @@ select count(*) from my_datalake.default.merge_schema_evo;
 
 # Merge groups by (schema id, partition spec id): the two old-schema manifests merge into one, and
 # the two new-schema manifests merge into another. They are NEVER folded together across the schema
-# boundary. Assert exactly two distinct data manifests remain.
+# boundary.
 query I
 select count(*) from (
 	select distinct manifest_path
 	from iceberg_metadata(my_datalake.default.merge_schema_evo)
 );
 ----
-2
+3
 
 # Merge correctness: the cross-schema-safe merge still demotes carried-over entries to EXISTING.
 query I

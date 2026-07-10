@@ -189,9 +189,6 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 		}
 	}
 
-	//! MergeAppend: repack the assembled manifest list into fewer manifests before writing.
-	IcebergManifestMerge::MergeManifestList(new_manifest_list, schema_id, snapshot_id, avro_copy, db, commit_state);
-
 	manifest_list::WriteToFile(table_metadata, new_manifest_list, avro_copy, db, context);
 	commit_state.created_metadata_files.push_back(manifest_list_path);
 	commit_state.manifests = new_manifest_list.GetManifestListEntries();

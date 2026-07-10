@@ -11,18 +11,6 @@ namespace duckdb {
 struct IcebergTableMetadata;
 struct IcebergCommitState;
 
-//! Origin of a manifest fed into the merge step. The min-count guard only applies to bins that
-//! contain at least one NEW_THIS_TRANSACTION manifest, so we must track this explicitly rather
-//! than rely on positional assumptions.
-enum class IcebergManifestSource : uint8_t { NEW_THIS_TRANSACTION, CARRIED_OVER };
-
-//! A manifest handed to the merge step, tagged with its origin. The entry's `manifest_entries`
-//! may be empty (unloaded): the merge decision uses only manifest-file-level metadata.
-struct IcebergMergeInputManifest {
-	IcebergManifestListEntry entry;
-	IcebergManifestSource source;
-};
-
 //! Resolved `commit.manifest.*` / `commit.manifest-merge.enabled` table properties.
 struct IcebergManifestMergeConfig {
 	bool enabled;
@@ -61,27 +49,20 @@ struct IcebergManifestMerge {
 	//!    manifests accumulate.
 	static bool ShouldMergeBin(const vector<idx_t> &bin, idx_t min_count_to_merge);
 
-	//! Merge a set of manifests of a single content type (DATA or DELETE; the two are never mixed).
-	//! Manifests are grouped by (schema id, partition spec id) -- each manifest's schema id is resolved
-	//! from its key-value metadata, falling back to `current_schema_id` when absent -- and only
-	//! manifests sharing both are candidates to merge. Bins selected for merge have their entries read
-	//! and rewritten into a single new manifest; everything else is passed through unchanged. Returns
-	//! the resulting manifest-list entries.
-	//!
-	//! Sequence-number rules: entries pulled from already-committed manifests keep
-	//! their original (historical) sequence numbers and are written EXISTING; entries that are new in
-	//! this transaction keep status ADDED with inherited (NULL) sequence numbers and are never demoted.
-	//! `snapshot_id` is the id of the snapshot being created; it is used to decide which DELETED entries
-	//! to retain (only deletes made by this snapshot) -- mirroring Java's ManifestMergeManager.
-	static vector<IcebergManifestListEntry>
-	MergeManifests(vector<IcebergMergeInputManifest> &&input, IcebergManifestContentType content,
-	               const IcebergManifestMergeConfig &config, CopyFunction &avro_copy, DatabaseInstance &db,
-	               IcebergCommitState &commit_state, int32_t current_schema_id, int64_t snapshot_id);
+	//! Merge a set of already-committed manifests of a single content type (DATA or DELETE; the two
+	//! are never mixed). Manifests are grouped by (schema id, partition spec id) -- each manifest's
+	//! schema id is resolved by opening the file -- and only manifests sharing both are candidates to
+	//! merge. Bins selected for merge are rewritten into a single new manifest; everything else is
+	//! passed through unchanged.
+	static vector<IcebergManifestListEntry> MergeManifests(vector<IcebergManifestListEntry> &&input,
+	                                                       IcebergManifestContentType content,
+	                                                       const IcebergManifestMergeConfig &config,
+	                                                       CopyFunction &avro_copy, DatabaseInstance &db,
+	                                                       IcebergCommitState &commit_state, int32_t current_schema_id);
 
-	//! Repack the assembled manifest list into fewer manifests, in place.
-	static void MergeManifestList(IcebergManifestList &new_manifest_list, int32_t current_schema_id,
-	                              int64_t snapshot_id, CopyFunction &avro_copy, DatabaseInstance &db,
-	                              IcebergCommitState &commit_state);
+	//! Repack the loaded committed manifest set into fewer manifests, in place.
+	static void MergeManifestList(vector<IcebergManifestListEntry> &manifests, int32_t current_schema_id,
+	                              CopyFunction &avro_copy, DatabaseInstance &db, IcebergCommitState &commit_state);
 };
 
 } // namespace duckdb

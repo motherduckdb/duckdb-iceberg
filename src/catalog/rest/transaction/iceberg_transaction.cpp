@@ -245,7 +245,7 @@ static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, Iceb
 	info.retryable = transaction_data.SupportsAppendRetry();
 	info.retry_config = IcebergRetryConfig::FromTableMetadata(metadata);
 	if (!transaction_data.alters.empty()) {
-		commit_state.LoadExistingManifests(std::move(transaction_data.existing_manifest_list));
+		commit_state.LoadExistingManifests(db, std::move(transaction_data.existing_manifest_list));
 	}
 	commit_state.latest_snapshot = current_snapshot;
 

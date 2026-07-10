@@ -37,7 +37,7 @@ struct IcebergCommitState {
 public:
 	IcebergCommitState(const IcebergTableInformation &table_info, ClientContext &context);
 	void RefreshFromTable();
-	void LoadExistingManifests(vector<IcebergManifestListEntry> &&existing_manifests);
+	void LoadExistingManifests(DatabaseInstance &db, vector<IcebergManifestListEntry> &&existing_manifests);
 
 public:
 	const IcebergTableInformation &table_info;

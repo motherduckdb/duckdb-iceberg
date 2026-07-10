@@ -204,16 +204,14 @@ IcebergManifestListEntry IcebergManifestMerge::WriteReplacementManifest(
 namespace {
 
 //! Merge one spec-homogeneous bin into a single new manifest. Returns the new list entry.
-IcebergManifestListEntry MergeBin(const vector<IcebergMergeInputManifest> &input, const vector<idx_t> &bin,
-                                  IcebergManifestContentType content, CopyFunction &avro_copy, DatabaseInstance &db,
-                                  IcebergCommitState &commit_state, int32_t schema_id, int32_t partition_spec_id,
-                                  int64_t snapshot_id) {
+optional<IcebergManifestListEntry> MergeBin(const vector<IcebergManifestListEntry> &input, const vector<idx_t> &bin,
+                                            IcebergManifestContentType content, CopyFunction &avro_copy,
+                                            DatabaseInstance &db, IcebergCommitState &commit_state, int32_t schema_id,
+                                            int32_t partition_spec_id) {
 	auto &table_metadata = commit_state.table_info.table_metadata;
 	const bool is_v3 = table_metadata.iceberg_version >= 3;
 
-	//! Gather every entry from the bin's manifests, preserving status and historical sequence
-	//! numbers. New (ADDED) entries keep inherited sequence numbers; everything else keeps its
-	//! materialized historical value.
+	//! Gather every entry from the bin's manifests, preserving status and historical sequence numbers.
 	vector<IcebergManifestEntry> merged_entries;
 	//! Merging is a pure physical repack: it creates no new rows, so V3 row lineage must be
 	//! preserved, not reassigned. The first_row_id is a manifest-file-level value, so the merged
@@ -230,8 +228,7 @@ IcebergManifestListEntry MergeBin(const vector<IcebergMergeInputManifest> &input
 	//! planning's `seq > X` pruning would mis-judge which historical data the manifest can contain.
 	optional<int64_t> min_seq;
 	for (auto idx : bin) {
-		auto &member = input[idx].entry;
-		const bool carried_over = input[idx].source == IcebergManifestSource::CARRIED_OVER;
+		auto &member = input[idx];
 		if (is_v3 && member.file.first_row_id.has_value()) {
 			if (!min_first_row_id || *member.file.first_row_id < *min_first_row_id) {
 				min_first_row_id = *member.file.first_row_id;
@@ -264,21 +261,9 @@ IcebergManifestListEntry MergeBin(const vector<IcebergMergeInputManifest> &input
 			}
 		}
 		for (auto &entry : loaded.manifest_entries) {
-			//! DELETED entries: only a drop made by THIS snapshot is carried into the new manifest; a
-			//! dropped entry from an earlier snapshot is discarded (it already took effect and would
-			//! only bloat the merged manifest forever). Mirrors Java ManifestMergeManager.createManifest.
-			if (entry.status == IcebergManifestEntryStatusType::DELETED) {
-				if (entry.HasSnapshotId() && entry.GetSnapshotId() == snapshot_id) {
-					merged_entries.push_back(std::move(entry));
-				}
-				continue;
-			}
-			//! Entries absorbed from an already-committed manifest are EXISTING in the new snapshot:
-			//! demote their ADDED status (the file was added by an earlier snapshot, not this one) so
-			//! the merged manifest's added/existing counts and the snapshot summary stay correct.
-			//! Their historical sequence numbers are preserved by GetSequenceNumber.
-			//! Entries from this transaction's own new manifest keep ADDED (genuinely new this commit).
-			if (carried_over && entry.status == IcebergManifestEntryStatusType::ADDED) {
+			//! These are already-committed manifests. Any ADDED entry describes a file added by an
+			//! earlier snapshot and must be materialized as EXISTING in the replacement manifest.
+			if (entry.status == IcebergManifestEntryStatusType::ADDED) {
 				auto seq = entry.GetSequenceNumber(member.file);
 				auto file_seq = entry.GetFileSequenceNumber(member.file);
 				entry.SetSequenceNumber(seq);
@@ -299,16 +284,12 @@ IcebergManifestListEntry MergeBin(const vector<IcebergMergeInputManifest> &input
 	//! (and an empty Avro manifest is meaningless). Return an entry with no manifest_entries so the
 	//! caller drops it; do this BEFORE CreateFromEntries/WriteToFile.
 	if (merged_entries.empty()) {
-		auto empty_metadata = IcebergManifestMetadata(schema_id, partition_spec_id,
-		                                              NumericCast<int32_t>(table_metadata.iceberg_version), content);
-		IcebergManifestListEntry empty {IcebergManifestFile {""}, empty_metadata};
-		return empty;
+		return std::nullopt;
 	}
 
 	//! CreateFromEntries computes all counts, min_sequence_number and the partition field summary
 	//! from the entries; pass the bin's own spec id so the summary is computed against the correct
-	//! (possibly historical) spec, not the table default. We pass a throwaway row-id
-	//! counter so the global one is not advanced, then restore the lineage-preserving value below.
+	//! (possibly historical) spec, not the table default.
 	auto manifest_metadata = IcebergManifestMetadata(schema_id, partition_spec_id,
 	                                                 NumericCast<int32_t>(table_metadata.iceberg_version), content);
 	auto first_row_id =
@@ -321,37 +302,37 @@ IcebergManifestListEntry MergeBin(const vector<IcebergMergeInputManifest> &input
 
 } // namespace
 
-vector<IcebergManifestListEntry> IcebergManifestMerge::MergeManifests(vector<IcebergMergeInputManifest> &&input,
+vector<IcebergManifestListEntry> IcebergManifestMerge::MergeManifests(vector<IcebergManifestListEntry> &&input,
                                                                       IcebergManifestContentType content,
                                                                       const IcebergManifestMergeConfig &config,
                                                                       CopyFunction &avro_copy, DatabaseInstance &db,
                                                                       IcebergCommitState &commit_state,
-                                                                      int32_t current_schema_id, int64_t snapshot_id) {
+                                                                      int32_t current_schema_id) {
 	vector<IcebergManifestListEntry> result;
 	if (!config.enabled || input.size() <= 1) {
 		for (auto &member : input) {
-			result.push_back(std::move(member.entry));
+			result.push_back(std::move(member));
 		}
 		return result;
 	}
 
 	//! Load the entries of the manifests if they're not already loaded
 	for (auto &member : input) {
-		if (!member.entry.manifest_entries.empty()) {
+		if (!member.manifest_entries.empty()) {
 			//! Already loaded, no need to scan
 			continue;
 		}
-		auto loaded = IcebergManifestMerge::ScanManifestEntries(member.entry, commit_state, current_schema_id);
-		member.entry.file = std::move(loaded.file);
-		member.entry.manifest_entries = std::move(loaded.manifest_entries);
-		member.entry.manifest_metadata.emplace(*loaded.manifest_metadata);
+		auto loaded = IcebergManifestMerge::ScanManifestEntries(member, commit_state, current_schema_id);
+		member.file = std::move(loaded.file);
+		member.manifest_entries = std::move(loaded.manifest_entries);
+		member.manifest_metadata.emplace(*loaded.manifest_metadata);
 	}
 
 	//! Group by spec_id+schema_id, so we only merge manifests that are compatible
 	map<std::pair<int32_t, int32_t>, vector<idx_t>> groups;
 	for (idx_t i = 0; i < input.size(); i++) {
-		auto schema_id = input[i].entry.manifest_metadata->schema_id;
-		auto spec_id = input[i].entry.file.partition_spec_id;
+		auto schema_id = input[i].manifest_metadata->schema_id;
+		auto spec_id = input[i].file.partition_spec_id;
 		groups[std::make_pair(schema_id, spec_id)].push_back(i);
 	}
 
@@ -365,7 +346,7 @@ vector<IcebergManifestListEntry> IcebergManifestMerge::MergeManifests(vector<Ice
 		vector<int64_t> weights;
 		weights.reserve(group_indices.size());
 		for (auto idx : group_indices) {
-			weights.push_back(input[idx].entry.file.manifest_length);
+			weights.push_back(input[idx].file.manifest_length);
 		}
 		auto bins = IcebergManifestMerge::BinPackManifests(weights, config.target_size_bytes);
 
@@ -379,74 +360,54 @@ vector<IcebergManifestListEntry> IcebergManifestMerge::MergeManifests(vector<Ice
 
 			if (!IcebergManifestMerge::ShouldMergeBin(bin, config.min_count_to_merge)) {
 				for (auto idx : bin) {
-					result.push_back(std::move(input[idx].entry));
+					result.push_back(std::move(input[idx]));
 				}
 				continue;
 			}
 
-			auto merged = MergeBin(input, bin, content, avro_copy, db, commit_state, schema_id, spec_id, snapshot_id);
+			auto merged = MergeBin(input, bin, content, avro_copy, db, commit_state, schema_id, spec_id);
 			//! A bin can collapse to nothing (e.g. all entries were deleted and filtered out); never
 			//! write or reference an empty manifest.
-			if (merged.manifest_entries.empty()) {
+			if (!merged) {
 				continue;
 			}
-			result.push_back(std::move(merged));
+			result.push_back(std::move(*merged));
 		}
 	}
 	return result;
 }
 
-void IcebergManifestMerge::MergeManifestList(IcebergManifestList &new_manifest_list, int32_t current_schema_id,
-                                             int64_t snapshot_id, CopyFunction &avro_copy, DatabaseInstance &db,
+void IcebergManifestMerge::MergeManifestList(vector<IcebergManifestListEntry> &manifests, int32_t current_schema_id,
+                                             CopyFunction &avro_copy, DatabaseInstance &db,
                                              IcebergCommitState &commit_state) {
 	auto config = IcebergManifestMergeConfig::FromTableMetadata(commit_state.table_info.table_metadata);
 	if (!config.enabled) {
 		return;
 	}
 
-	auto &entries = new_manifest_list.GetManifestFilesMutable();
-	if (entries.size() <= 1) {
+	if (manifests.size() <= 1) {
 		return;
 	}
 
-	const bool is_v3 = commit_state.table_info.table_metadata.iceberg_version >= 3;
-
-	vector<IcebergMergeInputManifest> data_input;
-	vector<IcebergMergeInputManifest> delete_input;
-	vector<IcebergManifestListEntry> kept;
-	for (auto &entry : entries) {
-		auto source = entry.file.added_snapshot_id == snapshot_id ? IcebergManifestSource::NEW_THIS_TRANSACTION
-		                                                          : IcebergManifestSource::CARRIED_OVER;
-		if (is_v3 && source == IcebergManifestSource::NEW_THIS_TRANSACTION &&
-		    entry.file.content == IcebergManifestContentType::DATA) {
-			kept.push_back(std::move(entry));
-			continue;
-		}
+	vector<IcebergManifestListEntry> data_input;
+	vector<IcebergManifestListEntry> delete_input;
+	for (auto &entry : manifests) {
 		auto &target = entry.file.content == IcebergManifestContentType::DELETE ? delete_input : data_input;
-		target.push_back(IcebergMergeInputManifest {std::move(entry), source});
+		target.push_back(std::move(entry));
 	}
 
-	auto merged_data =
-	    IcebergManifestMerge::MergeManifests(std::move(data_input), IcebergManifestContentType::DATA, config, avro_copy,
-	                                         db, commit_state, current_schema_id, snapshot_id);
+	auto merged_data = IcebergManifestMerge::MergeManifests(std::move(data_input), IcebergManifestContentType::DATA,
+	                                                        config, avro_copy, db, commit_state, current_schema_id);
 	auto merged_delete =
 	    IcebergManifestMerge::MergeManifests(std::move(delete_input), IcebergManifestContentType::DELETE, config,
-	                                         avro_copy, db, commit_state, current_schema_id, snapshot_id);
+	                                         avro_copy, db, commit_state, current_schema_id);
 
-	entries.clear();
-	auto reassemble = [&](vector<IcebergManifestListEntry> &merged) {
-		for (auto &entry : merged) {
-			if (entry.file.added_snapshot_id < 0) {
-				entry.file.added_snapshot_id = snapshot_id;
-				entry.file.sequence_number = new_manifest_list.GetSequenceNumber();
-			}
-			entries.push_back(std::move(entry));
-		}
-	};
-	reassemble(merged_data);
-	reassemble(merged_delete);
-	for (auto &entry : kept) {
-		entries.push_back(std::move(entry));
+	manifests.clear();
+	for (auto &entry : merged_data) {
+		manifests.push_back(std::move(entry));
+	}
+	for (auto &entry : merged_delete) {
+		manifests.push_back(std::move(entry));
 	}
 }
 
