@@ -62,8 +62,8 @@ T ParseIntProperty(const string &value, T fallback) {
 
 } // namespace
 
-ManifestMergeConfig ManifestMergeConfig::FromTableMetadata(const IcebergTableMetadata &metadata) {
-	ManifestMergeConfig config;
+IcebergManifestMergeConfig IcebergManifestMergeConfig::FromTableMetadata(const IcebergTableMetadata &metadata) {
+	IcebergManifestMergeConfig config;
 	config.enabled = ParseBoolProperty(metadata.GetTableProperty(MERGE_ENABLED), MERGE_ENABLED_DEFAULT);
 	config.min_count_to_merge =
 	    ParseIntProperty<idx_t>(metadata.GetTableProperty(MIN_COUNT_TO_MERGE), MIN_COUNT_TO_MERGE_DEFAULT);
@@ -75,7 +75,7 @@ ManifestMergeConfig ManifestMergeConfig::FromTableMetadata(const IcebergTableMet
 //===--------------------------------------------------------------------===//
 // Bin-packing (pure logic)
 //===--------------------------------------------------------------------===//
-vector<vector<idx_t>> BinPackManifests(const vector<int64_t> &weights, int64_t target_weight) {
+vector<vector<idx_t>> IcebergManifestMerge::BinPackManifests(const vector<int64_t> &weights, int64_t target_weight) {
 	//! Mirror Java `ManifestMergeManager`/PyIceberg `ListPacker.pack_end` exactly: first-fit
 	//! bin-packing with lookback=1 over the reversed input, then reverse the result. lookback=1 keeps
 	//! at most one open bin, so manifests are not reordered across distant positions -- this is what
@@ -137,7 +137,7 @@ vector<vector<idx_t>> BinPackManifests(const vector<int64_t> &weights, int64_t t
 //===--------------------------------------------------------------------===//
 // Merge decision
 //===--------------------------------------------------------------------===//
-bool ShouldMergeBin(const vector<idx_t> &bin, idx_t min_count_to_merge) {
+bool IcebergManifestMerge::ShouldMergeBin(const vector<idx_t> &bin, idx_t min_count_to_merge) {
 	if (bin.size() <= 1) {
 		return false;
 	}
@@ -159,8 +159,9 @@ bool ShouldMergeBin(const vector<idx_t> &bin, idx_t min_count_to_merge) {
 //! Read the manifest_entries of a manifest from its Avro file, reusing the vectorized manifest
 //! reader. Returns the list entry with `manifest_entries` populated. Shared by the delete-rewrite
 //! path and the merge path so both load entries identically.
-IcebergManifestListEntry ScanManifestEntries(const IcebergManifestListEntry &list_entry,
-                                             IcebergCommitState &commit_state, int32_t schema_id) {
+IcebergManifestListEntry IcebergManifestMerge::ScanManifestEntries(const IcebergManifestListEntry &list_entry,
+                                                                   IcebergCommitState &commit_state,
+                                                                   int32_t schema_id) {
 	vector<IcebergManifestListEntry> manifest_files;
 	manifest_files.push_back(list_entry);
 
@@ -184,7 +185,7 @@ IcebergManifestListEntry ScanManifestEntries(const IcebergManifestListEntry &lis
 namespace {
 
 //! Merge one spec-homogeneous bin into a single new manifest. Returns the new list entry.
-IcebergManifestListEntry MergeBin(const vector<MergeInputManifest> &input, const vector<idx_t> &bin,
+IcebergManifestListEntry MergeBin(const vector<IcebergMergeInputManifest> &input, const vector<idx_t> &bin,
                                   IcebergManifestContentType content, CopyFunction &avro_copy, DatabaseInstance &db,
                                   IcebergCommitState &commit_state, int32_t schema_id, int32_t partition_spec_id,
                                   int64_t snapshot_id) {
@@ -213,14 +214,16 @@ IcebergManifestListEntry MergeBin(const vector<MergeInputManifest> &input, const
 	int64_t min_seq = 0;
 	for (auto idx : bin) {
 		auto &member = input[idx].entry;
-		const bool carried_over = input[idx].source == ManifestSource::CARRIED_OVER;
+		const bool carried_over = input[idx].source == IcebergManifestSource::CARRIED_OVER;
 		if (is_v3 && member.file.first_row_id.has_value()) {
 			if (!has_first_row_id || *member.file.first_row_id < min_first_row_id) {
 				min_first_row_id = *member.file.first_row_id;
 				has_first_row_id = true;
 			}
 		}
-		auto loaded = member.manifest_entries.empty() ? ScanManifestEntries(member, commit_state, schema_id) : member;
+		auto loaded = member.manifest_entries.empty()
+		                  ? IcebergManifestMerge::ScanManifestEntries(member, commit_state, schema_id)
+		                  : member;
 		//! V3 row lineage: a data file's _row_id is derived from its data_file.first_row_id (+ row
 		//! position). That id is normally left null on disk and inherited at read time from the
 		//! manifest's first_row_id plus the record_count of preceding files that also lack one. Merging
@@ -317,10 +320,12 @@ IcebergManifestListEntry MergeBin(const vector<MergeInputManifest> &input, const
 
 } // namespace
 
-vector<IcebergManifestListEntry> MergeManifests(vector<MergeInputManifest> &&input, IcebergManifestContentType content,
-                                                const ManifestMergeConfig &config, CopyFunction &avro_copy,
-                                                DatabaseInstance &db, IcebergCommitState &commit_state,
-                                                int32_t current_schema_id, int64_t snapshot_id) {
+vector<IcebergManifestListEntry> IcebergManifestMerge::MergeManifests(vector<IcebergMergeInputManifest> &&input,
+                                                                      IcebergManifestContentType content,
+                                                                      const IcebergManifestMergeConfig &config,
+                                                                      CopyFunction &avro_copy, DatabaseInstance &db,
+                                                                      IcebergCommitState &commit_state,
+                                                                      int32_t current_schema_id, int64_t snapshot_id) {
 	vector<IcebergManifestListEntry> result;
 	if (!config.enabled || input.size() <= 1) {
 		for (auto &member : input) {
@@ -335,7 +340,7 @@ vector<IcebergManifestListEntry> MergeManifests(vector<MergeInputManifest> &&inp
 			//! Already loaded, no need to scan
 			continue;
 		}
-		auto loaded = ScanManifestEntries(member.entry, commit_state, current_schema_id);
+		auto loaded = IcebergManifestMerge::ScanManifestEntries(member.entry, commit_state, current_schema_id);
 		member.entry.file = std::move(loaded.file);
 		member.entry.manifest_entries = std::move(loaded.manifest_entries);
 		member.entry.manifest_metadata.emplace(*loaded.manifest_metadata);
@@ -361,7 +366,7 @@ vector<IcebergManifestListEntry> MergeManifests(vector<MergeInputManifest> &&inp
 		for (auto idx : group_indices) {
 			weights.push_back(input[idx].entry.file.manifest_length);
 		}
-		auto bins = BinPackManifests(weights, config.target_size_bytes);
+		auto bins = IcebergManifestMerge::BinPackManifests(weights, config.target_size_bytes);
 
 		for (auto &local_bin : bins) {
 			//! Translate local (group) indices back to global input indices.
@@ -371,7 +376,7 @@ vector<IcebergManifestListEntry> MergeManifests(vector<MergeInputManifest> &&inp
 				bin.push_back(group_indices[local]);
 			}
 
-			if (!ShouldMergeBin(bin, config.min_count_to_merge)) {
+			if (!IcebergManifestMerge::ShouldMergeBin(bin, config.min_count_to_merge)) {
 				for (auto idx : bin) {
 					result.push_back(std::move(input[idx].entry));
 				}
@@ -388,6 +393,60 @@ vector<IcebergManifestListEntry> MergeManifests(vector<MergeInputManifest> &&inp
 		}
 	}
 	return result;
+}
+
+void IcebergManifestMerge::MergeManifestList(IcebergManifestList &new_manifest_list, int32_t current_schema_id,
+                                             int64_t snapshot_id, CopyFunction &avro_copy, DatabaseInstance &db,
+                                             IcebergCommitState &commit_state) {
+	auto config = IcebergManifestMergeConfig::FromTableMetadata(commit_state.table_info.table_metadata);
+	if (!config.enabled) {
+		return;
+	}
+
+	auto &entries = new_manifest_list.GetManifestFilesMutable();
+	if (entries.size() <= 1) {
+		return;
+	}
+
+	const bool is_v3 = commit_state.table_info.table_metadata.iceberg_version >= 3;
+
+	vector<IcebergMergeInputManifest> data_input;
+	vector<IcebergMergeInputManifest> delete_input;
+	vector<IcebergManifestListEntry> kept;
+	for (auto &entry : entries) {
+		auto source = entry.file.added_snapshot_id == snapshot_id ? IcebergManifestSource::NEW_THIS_TRANSACTION
+		                                                          : IcebergManifestSource::CARRIED_OVER;
+		if (is_v3 && source == IcebergManifestSource::NEW_THIS_TRANSACTION &&
+		    entry.file.content == IcebergManifestContentType::DATA) {
+			kept.push_back(std::move(entry));
+			continue;
+		}
+		auto &target = entry.file.content == IcebergManifestContentType::DELETE ? delete_input : data_input;
+		target.push_back(IcebergMergeInputManifest {std::move(entry), source});
+	}
+
+	auto merged_data =
+	    IcebergManifestMerge::MergeManifests(std::move(data_input), IcebergManifestContentType::DATA, config, avro_copy,
+	                                         db, commit_state, current_schema_id, snapshot_id);
+	auto merged_delete =
+	    IcebergManifestMerge::MergeManifests(std::move(delete_input), IcebergManifestContentType::DELETE, config,
+	                                         avro_copy, db, commit_state, current_schema_id, snapshot_id);
+
+	entries.clear();
+	auto reassemble = [&](vector<IcebergManifestListEntry> &merged) {
+		for (auto &entry : merged) {
+			if (entry.file.added_snapshot_id < 0) {
+				entry.file.added_snapshot_id = snapshot_id;
+				entry.file.sequence_number = new_manifest_list.GetSequenceNumber();
+			}
+			entries.push_back(std::move(entry));
+		}
+	};
+	reassemble(merged_data);
+	reassemble(merged_delete);
+	for (auto &entry : kept) {
+		entries.push_back(std::move(entry));
+	}
 }
 
 } // namespace duckdb
