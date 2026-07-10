@@ -130,7 +130,7 @@ CreateCommitManifestFiles(const vector<IcebergManifestListEntry> &manifest_files
 		D_ASSERT(manifest_entry.manifest_metadata);
 		auto copied_entries = manifest_entry.manifest_entries;
 		auto copied_manifest = IcebergManifestListEntry::CreateFromEntries(
-		    fs, nullopt, sequence_number, table_info.table_metadata, *manifest_entry.manifest_metadata,
+		    fs, sequence_number, table_info.table_metadata, *manifest_entry.manifest_metadata,
 		    std::move(copied_entries), next_row_id);
 		result.push_back(std::move(copied_manifest));
 	}

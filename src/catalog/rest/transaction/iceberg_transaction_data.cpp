@@ -170,14 +170,12 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 		throw NotImplementedException("Cannot have use snapshot operation type OVERWRITE here");
 	};
 
-	auto bogus_snapshot_id = IcebergSnapshot::NewSnapshotId();
 	auto temp_sequence_number = table_metadata.last_sequence_number + alters.size() + 1;
 
 	auto &fs = FileSystem::GetFileSystem(context);
 	auto manifest_metadata = IcebergManifestMetadata::FromTableMetadata(table_metadata, manifest_content_type);
-	auto manifest_file =
-	    IcebergManifestListEntry::CreateFromEntries(fs, bogus_snapshot_id, temp_sequence_number, table_metadata,
-	                                                manifest_metadata, std::move(data_files), next_row_id);
+	auto manifest_file = IcebergManifestListEntry::CreateFromEntries(
+	    fs, temp_sequence_number, table_metadata, manifest_metadata, std::move(data_files), next_row_id);
 
 	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info, operation);
 	add_snapshot->AddManifestFile(std::move(manifest_file));
@@ -203,7 +201,6 @@ void IcebergTransactionData::AddUpdateSnapshot(vector<IcebergManifestEntry> &&de
 
 	CacheExistingManifestList(guard, table_metadata);
 
-	auto snapshot_id = IcebergSnapshot::NewSnapshotId();
 	const auto sequence_number = last_sequence_number + alters.size() + 1;
 
 	auto &fs = FileSystem::GetFileSystem(context);
@@ -212,12 +209,11 @@ void IcebergTransactionData::AddUpdateSnapshot(vector<IcebergManifestEntry> &&de
 	auto data_manifest_metadata =
 	    IcebergManifestMetadata::FromTableMetadata(table_metadata, IcebergManifestContentType::DATA);
 
-	auto delete_manifest_file =
-	    IcebergManifestListEntry::CreateFromEntries(fs, snapshot_id, sequence_number, table_metadata,
-	                                                delete_manifest_metadata, std::move(delete_files), next_row_id);
+	auto delete_manifest_file = IcebergManifestListEntry::CreateFromEntries(
+	    fs, sequence_number, table_metadata, delete_manifest_metadata, std::move(delete_files), next_row_id);
 	// Add a manifest_file for the new insert data
 	auto data_manifest_file = IcebergManifestListEntry::CreateFromEntries(
-	    fs, snapshot_id, sequence_number, table_metadata, data_manifest_metadata, std::move(data_files), next_row_id);
+	    fs, sequence_number, table_metadata, data_manifest_metadata, std::move(data_files), next_row_id);
 
 	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info);
 	add_snapshot->AddManifestFile(std::move(delete_manifest_file));

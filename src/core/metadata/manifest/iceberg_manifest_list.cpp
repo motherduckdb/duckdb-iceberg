@@ -73,8 +73,7 @@ unordered_map<string, string> GetManifestMetadataMap(const IcebergTableMetadata 
 	return result;
 }
 
-IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem &fs, optional<int64_t> snapshot_id,
-                                                                     sequence_number_t sequence_number,
+IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem &fs, sequence_number_t sequence_number,
                                                                      const IcebergTableMetadata &table_metadata,
                                                                      const IcebergManifestMetadata &manifest_metadata,
                                                                      vector<IcebergManifestEntry> &&manifest_entries,
@@ -136,8 +135,8 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 			manifest_file.min_sequence_number = entry_data_seq;
 		}
 	}
-	//! NOTE: this gets overwritten on commit
-	manifest_file.added_snapshot_id = snapshot_id;
+	//! NOTE: this gets assigned when the manifest is added to a manifest list
+	manifest_file.added_snapshot_id = nullopt;
 
 	// Compute partition field summaries (upper/lower bounds) for the manifest list entry
 	if (table_metadata.HasPartitionSpec() && table_metadata.GetLatestPartitionSpec().IsPartitioned()) {

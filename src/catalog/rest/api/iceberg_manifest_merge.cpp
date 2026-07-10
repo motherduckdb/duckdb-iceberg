@@ -202,7 +202,6 @@ IcebergManifestListEntry IcebergManifestMerge::WriteReplacementManifest(
 	auto &table_metadata = commit_state.table_info.table_metadata;
 	int64_t scratch_row_id = 0;
 	auto result = IcebergManifestListEntry::CreateFromEntries(FileSystem::GetFileSystem(commit_state.context),
-	                                                          /*snapshot_id*/ nullopt,
 	                                                          /*sequence_number*/ 0, table_metadata, manifest_metadata,
 	                                                          std::move(manifest_entries), scratch_row_id);
 	result.file.first_row_id = first_row_id;

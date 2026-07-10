@@ -98,7 +98,7 @@ static void WriteIcebergMetadata(ClientContext &context, CopyIcebergBindData &bi
 		    fs.JoinPath(metadata_path, "snap-" + std::to_string(snapshot_id) + "-" + manifest_list_uuid + ".avro");
 
 		auto manifest_file = IcebergManifestListEntry::CreateFromEntries(
-		    fs, snapshot_id, sequence_number, table_metadata,
+		    fs, sequence_number, table_metadata,
 		    IcebergManifestMetadata::FromTableMetadata(table_metadata, IcebergManifestContentType::DATA),
 		    std::move(written_files), next_row_id);
 

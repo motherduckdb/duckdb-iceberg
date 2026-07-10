@@ -138,10 +138,11 @@ public:
 	}
 
 public:
-	static IcebergManifestListEntry
-	CreateFromEntries(FileSystem &fs, optional<int64_t> snapshot_id, sequence_number_t sequence_number,
-	                  const IcebergTableMetadata &table_metadata, const IcebergManifestMetadata &manifest_metadata,
-	                  vector<IcebergManifestEntry> &&manifest_entries, int64_t &next_row_id);
+	static IcebergManifestListEntry CreateFromEntries(FileSystem &fs, sequence_number_t sequence_number,
+	                                                  const IcebergTableMetadata &table_metadata,
+	                                                  const IcebergManifestMetadata &manifest_metadata,
+	                                                  vector<IcebergManifestEntry> &&manifest_entries,
+	                                                  int64_t &next_row_id);
 
 public:
 	IcebergManifestFile file;
