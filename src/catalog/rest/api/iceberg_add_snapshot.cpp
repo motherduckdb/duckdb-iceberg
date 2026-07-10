@@ -124,6 +124,7 @@ static void RewriteManifestFile(IcebergManifestListEntry &list_entry, CopyFuncti
 	//! Finally overwrite the input 'manifest_file' with our edited copy
 	auto manifest_length = manifest_file::WriteToFile(table_metadata, list_entry, avro_copy, db, commit_state.context);
 	manifest_file.manifest_length = manifest_length;
+	commit_state.created_metadata_files.push_back(manifest_file.manifest_path);
 }
 
 void IcebergAddSnapshot::ConstructManifestList(IcebergManifestList &new_manifest_list, CopyFunction &avro_copy,

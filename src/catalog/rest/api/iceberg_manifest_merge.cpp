@@ -315,6 +315,7 @@ IcebergManifestListEntry MergeBin(const vector<IcebergMergeInputManifest> &input
 
 	auto manifest_length = manifest_file::WriteToFile(table_metadata, result, avro_copy, db, commit_state.context);
 	result.file.manifest_length = manifest_length;
+	commit_state.created_metadata_files.push_back(result.file.manifest_path);
 	return result;
 }
 
