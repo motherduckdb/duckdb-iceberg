@@ -43,7 +43,7 @@ static void PopulateSourceIdToTypeMap(const vector<unique_ptr<IcebergColumnDefin
 
 struct DataFileVectorWriters {
 	explicit DataFileVectorWriters(Vector &data_file_vector, idx_t row_count,
-	                               const IcebergTableMetadata &table_metadata)
+	                               const IcebergTableMetadata &table_metadata, int32_t manifest_format_version)
 	    : table_metadata(table_metadata), data_file_entries(StructVector::GetEntries(data_file_vector)),
 	      file_path(data_file_entries[FILE_PATH_INDEX], row_count, 0),
 	      file_format(data_file_entries[FILE_FORMAT_INDEX], row_count, 0),
@@ -59,11 +59,11 @@ struct DataFileVectorWriters {
 	      split_offsets(data_file_entries[SPLIT_OFFSETS_INDEX], row_count, 0),
 	      equality_ids(data_file_entries[EQUALITY_IDS_INDEX], row_count, 0),
 	      sort_order_id(data_file_entries[SORT_ORDER_ID_INDEX], row_count, 0) {
-		if (table_metadata.iceberg_version >= 2) {
+		if (manifest_format_version >= 2) {
 			content.emplace(data_file_entries[CONTENT_INDEX], row_count, 0);
 			referenced_data_file.emplace(data_file_entries[REFERENCED_DATA_FILE_INDEX], row_count, 0);
 		}
-		if (table_metadata.iceberg_version >= 3) {
+		if (manifest_format_version >= 3) {
 			first_row_id.emplace(data_file_entries[FIRST_ROW_ID_INDEX], row_count, 0);
 			content_offset.emplace(data_file_entries[CONTENT_OFFSET_INDEX], row_count, 0);
 			content_size_in_bytes.emplace(data_file_entries[CONTENT_SIZE_IN_BYTES_INDEX], row_count, 0);
@@ -608,7 +608,9 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 		throw InternalException("Manifest entry for '%s' is missing typed manifest metadata",
 		                        manifest_file.manifest_path);
 	}
-	auto manifest_metadata = GetManifestMetadataMap(table_metadata, *manifest_entry.manifest_metadata);
+	auto &entry_metadata = *manifest_entry.manifest_metadata;
+	auto manifest_metadata = GetManifestMetadataMap(table_metadata, entry_metadata);
+	auto manifest_format_version = entry_metadata.format_version;
 	D_ASSERT(!manifest_entries.empty());
 	auto &allocator = db.GetBufferManager().GetBufferAllocator();
 	auto &path = manifest_file.manifest_path;
@@ -725,7 +727,7 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	data_file_field_ids.emplace_back("sort_order_id", CreateFieldID(SORT_ORDER_ID, true));
 
 	// v2-only suffix
-	if (table_metadata.iceberg_version >= 2) {
+	if (manifest_format_version >= 2) {
 		// content: int
 		children.emplace_back("content", LogicalType::INTEGER);
 		data_file_field_ids.emplace_back("content", CreateFieldID(CONTENT, false));
@@ -736,7 +738,7 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	}
 
 	// v3-only suffix
-	if (table_metadata.iceberg_version >= 3) {
+	if (manifest_format_version >= 3) {
 		// first_row_id: optional long
 		children.emplace_back("first_row_id", LogicalType::BIGINT);
 		data_file_field_ids.emplace_back("first_row_id", CreateFieldID(FIRST_ROW_ID, true));
@@ -810,7 +812,7 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 		auto snapshot_id_writer = FlatVector::Writer<int64_t>(chunk.data[1], chunk_count);
 		auto sequence_number_writer = FlatVector::Writer<int64_t>(chunk.data[2], chunk_count);
 		auto file_sequence_number_writer = FlatVector::Writer<int64_t>(chunk.data[3], chunk_count);
-		DataFileVectorWriters data_file_writers(chunk.data[4], chunk_count, table_metadata);
+		DataFileVectorWriters data_file_writers(chunk.data[4], chunk_count, table_metadata, manifest_format_version);
 
 		for (idx_t i = 0; i < chunk_count; i++) {
 			auto &manifest_entry = manifest_entries[offset + i];
