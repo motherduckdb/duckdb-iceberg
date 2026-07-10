@@ -36,6 +36,11 @@ static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, cons
 static void AddNamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, const IcebergColumnDefinition &column) {
 	yyjson_mut_obj_add_strcpy(doc, field_obj, "name", column.name.c_str());
 	yyjson_mut_obj_add_uint(doc, field_obj, "id", column.id);
+	yyjson_mut_obj_add_bool(doc, field_obj, "required", column.required);
+	if (column.doc) {
+		yyjson_mut_obj_add_strcpy(doc, field_obj, "doc", column.doc->c_str());
+	}
+
 	if (column.type.id() != LogicalTypeId::VARIANT && column.type.IsNested()) {
 		auto type_obj = yyjson_mut_obj_add_obj(doc, field_obj, "type");
 		AddUnnamedField(doc, type_obj, column);
@@ -46,12 +51,11 @@ static void AddNamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, const 
 		if (column.write_default && !column.write_default->IsNull()) {
 			(void)yyjson_mut_obj_add_obj(doc, field_obj, "write-default");
 		}
-		yyjson_mut_obj_add_bool(doc, field_obj, "required", column.required);
 		return;
 	}
-	yyjson_mut_obj_add_strcpy(doc, field_obj, "type", IcebergTypeHelper::LogicalTypeToIcebergType(column.type).c_str());
 
-	yyjson_mut_obj_add_bool(doc, field_obj, "required", column.required);
+	//! Write of non-struct type
+	yyjson_mut_obj_add_strcpy(doc, field_obj, "type", IcebergTypeHelper::LogicalTypeToIcebergType(column.type).c_str());
 	if (column.initial_default && !column.initial_default->IsNull()) {
 		auto primitive_type_value = IcebergTypeHelper::PrimitiveTypeFromValue(*column.initial_default);
 		yyjson_mut_obj_add_val(doc, field_obj, "initial-default",
