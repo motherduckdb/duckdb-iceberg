@@ -158,7 +158,6 @@ void SetCurrentSchema::CreateUpdate(DatabaseInstance &db, ClientContext &context
 	auto &req = commit_state.table_change.updates.back();
 	req.set_current_schema_update = rest_api_objects::SetCurrentSchemaUpdate();
 	req.set_current_schema_update->base_update.action = "set-current-schema";
-	// TODO: should this be a different value? or is the rest catalog setting this again?
 	req.set_current_schema_update->schema_id = schema_id;
 }
 

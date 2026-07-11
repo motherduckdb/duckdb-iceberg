@@ -4,6 +4,7 @@
 #include "duckdb/parser/constraints/list.hpp"
 #include "duckdb/parser/parsed_data/alter_info.hpp"
 #include "duckdb/parser/parsed_data/alter_table_info.hpp"
+#include "duckdb/parser/parsed_data/comment_on_column_info.hpp"
 #include "duckdb/parser/parsed_data/create_index_info.hpp"
 #include "duckdb/parser/parsed_data/create_schema_info.hpp"
 #include "duckdb/parser/parsed_data/drop_info.hpp"
@@ -340,17 +341,13 @@ IcebergColumnDefinition &ResolveColumn(T &alter_table_info, const shared_ptr<Ice
 }
 
 void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) {
-	if (info.type != AlterType::ALTER_TABLE) {
-		throw NotImplementedException("Only ALTER TABLE is supported for Iceberg");
-	}
-	auto &alter_table_info = info.Cast<AlterTableInfo>();
 	auto &irc_transaction = GetICTransaction(transaction);
 	auto &context = transaction.GetContext();
 
-	EntryLookupInfo lookup(CatalogType::TABLE_ENTRY, alter_table_info.GetQualifiedName().Name());
+	EntryLookupInfo lookup(CatalogType::TABLE_ENTRY, QualifiedName(info.GetQualifiedName().Name()));
 	auto catalog_entry = tables.GetEntry(context, lookup);
 	if (!catalog_entry) {
-		throw CatalogException("Table with name \"%s\" does not exist!", alter_table_info.GetQualifiedName().Name());
+		throw CatalogException("Table with name \"%s\" does not exist!", info.GetQualifiedName().Name());
 	}
 	auto &table_entry = catalog_entry->Cast<IcebergTableEntry>();
 	auto &catalog_table_info = table_entry.table_info;
@@ -380,6 +377,33 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 	auto &updated_table = alter.GetOrInitializeTable(catalog_table_info);
 	auto &transaction_data = updated_table.GetOrCreateTransactionData(irc_transaction);
 	auto &current_schema = updated_table.table_metadata.GetLatestSchema();
+
+	if (info.type == AlterType::SET_COLUMN_COMMENT) {
+		auto &comment_info = info.Cast<SetColumnCommentInfo>();
+
+		auto new_schema = current_schema.Copy();
+		new_schema->schema_id++;
+
+		auto column_p = new_schema->GetMutableFromPath({comment_info.column_name}, nullptr);
+		if (!column_p) {
+			throw CatalogException("Column with name '%s' does not exist on the table '%s', COMMENT ON COLUMN failed",
+			                       comment_info.column_name, table_entry.name);
+		}
+
+		auto &column = *column_p;
+		column.doc = std::nullopt;
+		if (!comment_info.comment_value.IsNull()) {
+			column.doc = comment_info.comment_value.GetValue<string>();
+		}
+
+		IntroduceNewSchema(updated_table, transaction_data, new_schema);
+		return;
+	}
+
+	if (info.type != AlterType::ALTER_TABLE) {
+		throw NotImplementedException("Only ALTER TABLE is supported for Iceberg");
+	}
+	auto &alter_table_info = info.Cast<AlterTableInfo>();
 
 	switch (alter_table_info.alter_table_type) {
 	case AlterTableType::SET_PARTITIONED_BY: {
