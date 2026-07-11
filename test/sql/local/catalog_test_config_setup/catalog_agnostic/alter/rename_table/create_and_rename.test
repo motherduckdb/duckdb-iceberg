@@ -87,7 +87,7 @@ ALTER TABLE my_datalake.default.renamed_table RENAME TO rename_table
 statement error con2
 insert into my_datalake.default.rename_table VALUES (false)
 ----
-TransactionContext Error: Cannot start an Iceberg alter transaction update after a transaction update is already active
+TransactionContext Error: Iceberg REST Catalog cannot commit this transaction atomically because it mixes table updates with rename/drop requests
 
 statement error con2
 select * from my_datalake.default.rename_table;

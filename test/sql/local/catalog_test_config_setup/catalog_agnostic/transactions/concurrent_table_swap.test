@@ -73,7 +73,7 @@ DROP TABLE my_datalake.default.accounts;
 statement error con1
 ALTER TABLE my_datalake.default.external_accounts RENAME TO accounts;
 ----
-TransactionContext Error: Cannot start an Iceberg rename transaction update after a transaction update is already active
+TransactionContext Error: Iceberg REST Catalog cannot commit this transaction atomically because it mixes table updates with rename/drop requests
 
 statement ok con1
 ABORT;
