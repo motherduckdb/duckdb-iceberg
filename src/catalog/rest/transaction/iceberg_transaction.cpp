@@ -334,46 +334,58 @@ bool IcebergTransaction::MultiTableCommitAvailable() const {
 	       catalog.supported_urls.count("POST /v1/{prefix}/transactions/commit");
 }
 
+bool IcebergTransaction::HasTableUpdate() const {
+	return !std::holds_alternative<std::monostate>(transaction_update);
+}
+
+void IcebergTransaction::ThrowIfCannotStartUpdate(const char *requested_type) const {
+	if (!HasTableUpdate()) {
+		return;
+	}
+	throw TransactionException("Cannot start an Iceberg %s transaction update after a transaction update is already "
+	                           "active",
+	                           requested_type);
+}
+
+IcebergTransactionAlterUpdate *IcebergTransaction::GetAlterUpdate() {
+	return std::get_if<IcebergTransactionAlterUpdate>(&transaction_update);
+}
+
+const IcebergTransactionAlterUpdate *IcebergTransaction::GetAlterUpdate() const {
+	return std::get_if<IcebergTransactionAlterUpdate>(&transaction_update);
+}
+
 idx_t IcebergTransaction::CountAlterTableRequests() const {
+	auto alter_update = GetAlterUpdate();
+	if (!alter_update) {
+		return 0;
+	}
 	idx_t request_count = 0;
-	for (const auto &transaction_update : transaction_updates) {
-		if (transaction_update->type != IcebergTransactionUpdateType::ALTER) {
-			continue;
-		}
-		auto &alter_update = transaction_update->Cast<IcebergTransactionAlterUpdate>();
-		for (const auto &entry : alter_update.updated_tables) {
-			if (entry.second.HasTransactionUpdates()) {
-				request_count++;
-			}
+	for (const auto &entry : alter_update->updated_tables) {
+		if (entry.second.HasTransactionUpdates()) {
+			request_count++;
 		}
 	}
 	return request_count;
 }
 
 idx_t IcebergTransaction::CountAlterTableRequestsExcluding(const string &table_key) const {
+	auto alter_update = GetAlterUpdate();
+	if (!alter_update) {
+		return 0;
+	}
 	idx_t request_count = 0;
-	for (const auto &transaction_update : transaction_updates) {
-		if (transaction_update->type != IcebergTransactionUpdateType::ALTER) {
-			continue;
-		}
-		auto &alter_update = transaction_update->Cast<IcebergTransactionAlterUpdate>();
-		for (const auto &entry : alter_update.updated_tables) {
-			if (entry.first != table_key && entry.second.HasTransactionUpdates()) {
-				request_count++;
-			}
+	for (const auto &entry : alter_update->updated_tables) {
+		if (entry.first != table_key && entry.second.HasTransactionUpdates()) {
+			request_count++;
 		}
 	}
 	return request_count;
 }
 
 bool IcebergTransaction::HasStandaloneTableRequests() const {
-	for (const auto &transaction_update : transaction_updates) {
-		if (transaction_update->type == IcebergTransactionUpdateType::DELETE ||
-		    transaction_update->type == IcebergTransactionUpdateType::RENAME) {
-			return true;
-		}
-	}
-	return false;
+	return std::holds_alternative<IcebergTransactionDeleteUpdate>(transaction_update) ||
+	       std::holds_alternative<IcebergTransactionRenameUpdate>(transaction_update);
 }
 
 void IcebergTransaction::ThrowIfNonAtomicAlterRequest(const string &table_key) const {
@@ -497,8 +509,7 @@ static bool CommitStateUnknown(const ErrorData &error) {
 }
 
 void IcebergTransaction::Commit() {
-	if (transaction_updates.empty() && created_schemas.empty() && deleted_schemas.empty() &&
-	    schema_property_updates.empty()) {
+	if (!HasTableUpdate() && created_schemas.empty() && deleted_schemas.empty() && schema_property_updates.empty()) {
 		return;
 	}
 
@@ -514,29 +525,20 @@ void IcebergTransaction::Commit() {
 	try {
 		DoSchemaCreates(*temp_con_context);
 		DoSchemaPropertyUpdates(*temp_con_context);
-		for (auto &transaction_update : transaction_updates) {
-			auto &type = transaction_update->type;
-			switch (type) {
-			case IcebergTransactionUpdateType::ALTER: {
-				auto &alter_update = transaction_update->Cast<IcebergTransactionAlterUpdate>();
-				DoTableUpdates(alter_update, *temp_con_context);
-				break;
-			}
-			case IcebergTransactionUpdateType::DELETE: {
-				auto &delete_update = transaction_update->Cast<IcebergTransactionDeleteUpdate>();
-				DoTableDeletes(delete_update, *temp_con_context);
-				break;
-			}
-			case IcebergTransactionUpdateType::RENAME: {
-				auto &rename_update = transaction_update->Cast<IcebergTransactionRenameUpdate>();
-				DoTableRename(rename_update, *temp_con_context);
-				break;
-			}
-			default:
-				throw InternalException("IcebergTransactionUpdateType (%d) not implemented",
-				                        static_cast<uint8_t>(type));
-			};
-		}
+		std::visit(
+		    [&](auto &update) {
+			    using T = std::decay_t<decltype(update)>;
+			    if constexpr (std::is_same_v<T, std::monostate>) {
+				    return;
+			    } else if constexpr (std::is_same_v<T, IcebergTransactionAlterUpdate>) {
+				    DoTableUpdates(update, *temp_con_context);
+			    } else if constexpr (std::is_same_v<T, IcebergTransactionDeleteUpdate>) {
+				    DoTableDeletes(update, *temp_con_context);
+			    } else if constexpr (std::is_same_v<T, IcebergTransactionRenameUpdate>) {
+				    DoTableRename(update, *temp_con_context);
+			    }
+		    },
+		    transaction_update);
 		DoSchemaDeletes(*temp_con_context);
 	} catch (std::exception &ex) {
 		ErrorData error(ex);
@@ -805,13 +807,9 @@ void IcebergTransaction::CleanupFiles() {
 	auto &temp_context = temp_con.GetContext();
 	auto &fs = FileSystem::GetFileSystem(temp_context);
 
-	for (auto &transaction_update : transaction_updates) {
-		if (transaction_update->type != IcebergTransactionUpdateType::ALTER) {
-			continue;
-		}
-		auto &alter_update = transaction_update->Cast<IcebergTransactionAlterUpdate>();
-		for (auto &up_table : alter_update.updated_tables) {
-			if (alter_update.committed_tables.count(up_table.first)) {
+	if (auto alter_update = GetAlterUpdate()) {
+		for (auto &up_table : alter_update->updated_tables) {
+			if (alter_update->committed_tables.count(up_table.first)) {
 				//! Successfully committed, no need to roll back
 				continue;
 			}
@@ -853,31 +851,21 @@ void IcebergTransaction::EvictCachedTables() {
 	}
 	ScopedTransaction temp_con(db);
 	auto &temp_context = temp_con.GetContext();
-	for (auto &transaction_update : transaction_updates) {
-		switch (transaction_update->type) {
-		case IcebergTransactionUpdateType::ALTER: {
-			auto &alter_update = transaction_update->Cast<IcebergTransactionAlterUpdate>();
-			for (auto &up_table : alter_update.updated_tables) {
-				if (alter_update.committed_tables.count(up_table.first)) {
-					//! Already committed (and its cache entry already evicted on that success)
-					continue;
-				}
-				catalog.table_request_cache.Expire(temp_context, up_table.first);
-			}
-			break;
-		}
-		case IcebergTransactionUpdateType::DELETE: {
-			auto &delete_update = transaction_update->Cast<IcebergTransactionDeleteUpdate>();
-			catalog.table_request_cache.Expire(temp_context, delete_update.deleted_table.GetTableKey());
-			break;
-		}
-		case IcebergTransactionUpdateType::RENAME: {
-			break;
-		}
-		default:
-			break;
-		}
-	}
+	std::visit(
+	    [&](auto &update) {
+		    using T = std::decay_t<decltype(update)>;
+		    if constexpr (std::is_same_v<T, IcebergTransactionAlterUpdate>) {
+			    for (auto &up_table : update.updated_tables) {
+				    if (update.committed_tables.count(up_table.first)) {
+					    continue;
+				    }
+				    catalog.table_request_cache.Expire(temp_context, up_table.first);
+			    }
+		    } else if constexpr (std::is_same_v<T, IcebergTransactionDeleteUpdate>) {
+			    catalog.table_request_cache.Expire(temp_context, update.deleted_table.GetTableKey());
+		    }
+	    },
+	    transaction_update);
 }
 
 void IcebergTransaction::Rollback() {
@@ -922,30 +910,30 @@ IcebergTransactionTableState &IcebergTransaction::SetLatestTableState(IcebergTab
 }
 
 IcebergTransactionAlterUpdate &IcebergTransaction::GetOrCreateAlter() {
-	if (transaction_updates.empty() || transaction_updates.back()->type != IcebergTransactionUpdateType::ALTER) {
-		auto alter_p = make_uniq<IcebergTransactionAlterUpdate>(*this);
-		auto &alter = *alter_p;
-		transaction_updates.push_back(std::move(alter_p));
-		return alter;
+	if (!HasTableUpdate()) {
+		transaction_update.emplace<IcebergTransactionAlterUpdate>(*this);
 	}
-	return transaction_updates.back()->Cast<IcebergTransactionAlterUpdate>();
+	auto alter_update = GetAlterUpdate();
+	if (!alter_update) {
+		ThrowIfCannotStartUpdate("alter");
+		throw InternalException("Expected active Iceberg alter transaction update");
+	}
+	return *alter_update;
 }
 
 IcebergTableInformation &IcebergTransaction::DeleteTable(IcebergTableInformation &table) {
 	auto table_key = table.GetTableKey();
 	auto state = GetLatestTableState(table_key);
 	ThrowIfNonAtomicStandaloneRequest();
+	ThrowIfCannotStartUpdate("delete");
 
-	unique_ptr<IcebergTransactionDeleteUpdate> delete_update;
+	const IcebergTableInformation *delete_source = &table;
 	if (state) {
-		auto &table_info = state->GetInfo();
-		delete_update = make_uniq<IcebergTransactionDeleteUpdate>(*this, table_info);
-	} else {
-		delete_update = make_uniq<IcebergTransactionDeleteUpdate>(*this, table);
+		delete_source = &state->GetInfo();
 	}
-	auto &deleted_table = delete_update->deleted_table;
+	transaction_update.emplace<IcebergTransactionDeleteUpdate>(*this, *delete_source);
+	auto &deleted_table = std::get<IcebergTransactionDeleteUpdate>(transaction_update).deleted_table;
 	state = SetLatestTableState(deleted_table, IcebergTableStatus::DROPPED);
-	transaction_updates.push_back(std::move(delete_update));
 	return state->GetInfo();
 }
 
@@ -962,13 +950,13 @@ IcebergTableInformation &IcebergTransaction::RenameTable(IcebergTableInformation
 		}
 	}
 	ThrowIfNonAtomicStandaloneRequest();
+	ThrowIfCannotStartUpdate("rename");
 
 	state = SetLatestTableState(table, IcebergTableStatus::RENAMED);
 
 	//! Create the rename update, creating the new IcebergTableInformation in the process
-	auto rename = make_uniq<IcebergTransactionRenameUpdate>(*this, state->GetInfo(), new_name);
-	auto &rename_update = *rename;
-	transaction_updates.push_back(std::move(rename));
+	transaction_update.emplace<IcebergTransactionRenameUpdate>(*this, state->GetInfo(), new_name);
+	auto &rename_update = std::get<IcebergTransactionRenameUpdate>(transaction_update);
 
 	//! Update the state of the renamed table
 	auto &new_table = rename_update.new_table;

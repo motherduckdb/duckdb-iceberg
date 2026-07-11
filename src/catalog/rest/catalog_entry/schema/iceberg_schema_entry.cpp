@@ -355,6 +355,27 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 	auto &table_entry = catalog_entry->Cast<IcebergTableEntry>();
 	auto &catalog_table_info = table_entry.table_info;
 
+	if (alter_table_info.alter_table_type == AlterTableType::RENAME_TABLE) {
+		auto &rename_table_info = alter_table_info.Cast<RenameTableInfo>();
+		auto &new_name = rename_table_info.new_table_name;
+
+		EntryLookupInfo lookup(CatalogType::TABLE_ENTRY, new_name);
+		auto other_catalog_entry = tables.GetEntry(context, lookup);
+		if (other_catalog_entry) {
+			//! The table exists at this point, check if it was deleted/renamed in the transaction
+			auto &other_table_entry = other_catalog_entry->Cast<IcebergTableEntry>();
+			auto &other_table_info = other_table_entry.table_info;
+			auto other_table_key = other_table_info.GetTableKey();
+			auto state = irc_transaction.GetLatestTableState(other_table_key);
+			if (!state || state->IsAlive()) {
+				throw CatalogException("Table with name \"%s\" already exists!", new_name);
+			}
+			D_ASSERT(state && state->IsDroppedOrRenamed());
+		}
+		irc_transaction.RenameTable(catalog_table_info, new_name.GetIdentifierName());
+		return;
+	}
+
 	auto &alter = irc_transaction.GetOrCreateAlter();
 	auto &updated_table = alter.GetOrInitializeTable(catalog_table_info);
 	auto &transaction_data = updated_table.GetOrCreateTransactionData(irc_transaction);
@@ -494,27 +515,6 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 
 		IntroduceNewSchema(updated_table, transaction_data, new_schema);
 		return;
-	}
-	case AlterTableType::RENAME_TABLE: {
-		auto &rename_table_info = alter_table_info.Cast<RenameTableInfo>();
-		auto &new_name = rename_table_info.new_table_name;
-
-		EntryLookupInfo lookup(CatalogType::TABLE_ENTRY, new_name);
-		auto other_catalog_entry = tables.GetEntry(context, lookup);
-		if (other_catalog_entry) {
-			//! The table exists at this point, check if it was deleted/renamed in the transaction
-			auto &other_table_entry = other_catalog_entry->Cast<IcebergTableEntry>();
-			auto &other_table_info = other_table_entry.table_info;
-			auto other_table_key = other_table_info.GetTableKey();
-			auto state = irc_transaction.GetLatestTableState(other_table_key);
-			if (!state || state->IsAlive()) {
-				throw CatalogException("Table with name \"%s\" already exists!", new_name);
-			}
-			//! The table is dropped or renamed by this transaction, so it's not a conflict anymore
-			D_ASSERT(state && state->IsDroppedOrRenamed());
-		}
-		irc_transaction.RenameTable(updated_table, new_name.GetIdentifierName());
-		break;
 	}
 	case AlterTableType::RENAME_COLUMN: {
 		auto &rename_info = alter_table_info.Cast<RenameColumnInfo>();

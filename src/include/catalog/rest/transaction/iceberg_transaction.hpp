@@ -4,15 +4,12 @@
 #include "duckdb/transaction/transaction.hpp"
 #include "catalog/rest/iceberg_schema_set.hpp"
 #include "catalog/rest/api/iceberg_retry.hpp"
+#include "catalog/rest/transaction/iceberg_transaction_update.hpp"
 
 namespace duckdb {
 class IcebergCatalog;
 class IcebergSchemaEntry;
 class IcebergTableEntry;
-struct IcebergTransactionUpdate;
-struct IcebergTransactionAlterUpdate;
-struct IcebergTransactionDeleteUpdate;
-struct IcebergTransactionRenameUpdate;
 
 struct TableTransactionInfo {
 	TableTransactionInfo() {};
@@ -101,6 +98,10 @@ public:
 	IcebergTableInformation &RenameTable(IcebergTableInformation &table, const string &new_name);
 
 private:
+	bool HasTableUpdate() const;
+	void ThrowIfCannotStartUpdate(const char *requested_type) const;
+	IcebergTransactionAlterUpdate *GetAlterUpdate();
+	const IcebergTransactionAlterUpdate *GetAlterUpdate() const;
 	bool MultiTableCommitAvailable() const;
 	bool CanUseMultiTableCommit(const IcebergTransactionAlterUpdate &alter_update) const;
 	idx_t CountAlterTableRequests() const;
@@ -126,8 +127,8 @@ private:
 public:
 	//! Tables referenced by this transaction that have to stay alive for the duration of the transaction.
 	case_insensitive_map_t<shared_ptr<IcebergTableInformation>> tables;
-	vector<unique_ptr<IcebergTransactionUpdate>> transaction_updates;
-	//! The latest state of a table (either points into 'transaction_updates' or 'tables')
+	IcebergTransactionUpdate transaction_update;
+	//! The latest state of a table (either points into the active table update or 'tables')
 	case_insensitive_map_t<IcebergTransactionTableState> current_table_data;
 
 	unordered_set<string> created_schemas;

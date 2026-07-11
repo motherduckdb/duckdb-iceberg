@@ -222,7 +222,7 @@ alter table my_datalake.default.test_horizon_guard_a rename to test_horizon_guar
 statement error
 insert into my_datalake.default.test_horizon_guard_d values (44, 'tx');
 ----
-<REGEX>:.*TransactionContext Error: Iceberg REST Catalog cannot commit this transaction atomically.*
+<REGEX>:.*TransactionContext Error: Cannot start an Iceberg alter transaction update after a transaction update is already active.*
 
 statement ok
 rollback;
@@ -239,7 +239,7 @@ drop table my_datalake.default.test_horizon_guard_c;
 statement error
 insert into my_datalake.default.test_horizon_guard_b values (33, 'tx');
 ----
-<REGEX>:.*TransactionContext Error: Iceberg REST Catalog cannot commit this transaction atomically.*
+<REGEX>:.*TransactionContext Error: Cannot start an Iceberg alter transaction update after a transaction update is already active.*
 
 statement ok
 rollback;
