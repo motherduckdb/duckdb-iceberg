@@ -1359,9 +1359,12 @@ void IcebergMultiFileList::InitializeSharedState(lock_guard<mutex> &guard) const
 		}
 
 		for (auto &manifest : shared_state->committed_data_manifests) {
+			if (!manifest.HasManifestEntries()) {
+				continue;
+			}
 			auto &file = manifest.file;
 			idx_t reserve_size = file.existing_files_count + file.added_files_count + file.deleted_files_count;
-			manifest.GetOrCreateManifestEntries().reserve(reserve_size);
+			manifest.GetManifestEntries().reserve(reserve_size);
 		}
 		if (!shared_state->committed_delete_manifests.empty()) {
 			shared_state->delete_manifest_scan = AvroScan::ScanManifest(
