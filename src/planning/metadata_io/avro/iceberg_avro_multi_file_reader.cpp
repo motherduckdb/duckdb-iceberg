@@ -95,15 +95,21 @@ static IcebergManifestMetadata ParseManifestMetadata(const InsertionOrderPreserv
 
 	auto partition_spec_id = GetRequiredMetadataInt(metadata, "partition-spec-id");
 	auto format_version = GetRequiredMetadataInt(metadata, "format-version");
-	auto content = GetRequiredMetadataString(metadata, "content");
-	if (content == "data") {
-		return IcebergManifestMetadata(*schema_id, partition_spec_id, format_version, IcebergManifestContentType::DATA);
+
+	IcebergManifestContentType content = IcebergManifestContentType::DATA;
+	auto content_str = TryGetMetadataString(metadata, "content");
+	if (content_str) {
+		if (*content_str == "data") {
+			content = IcebergManifestContentType::DATA;
+		} else if (*content_str == "deletes") {
+			content = IcebergManifestContentType::DELETE;
+		} else {
+			throw InvalidConfigurationException("Manifest has invalid Avro key-value metadata content '%s'", content);
+		}
+	} else if (format_version > 1) {
+		throw InvalidConfigurationException("Manifest has invalid Avro key-value metadata, content is missing");
 	}
-	if (content == "deletes") {
-		return IcebergManifestMetadata(*schema_id, partition_spec_id, format_version,
-		                               IcebergManifestContentType::DELETE);
-	}
-	throw InvalidConfigurationException("Manifest has invalid Avro key-value metadata content '%s'", content);
+	return IcebergManifestMetadata(*schema_id, partition_spec_id, format_version, content);
 }
 
 namespace manifest_list {
