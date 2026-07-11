@@ -71,9 +71,10 @@ static vector<string> ParseQuotedList(const string &input, char list_separator) 
 
 } // namespace
 
-void PopulateDataFileColumnStatsFromReturnStats(ClientContext &context, IcebergDataFile &data_file,
-                                                const Value &column_stats, const IcebergTableMetadata &table_metadata,
-                                                const string &table_name) {
+void IcebergDataFileStats::PopulateFromReturnStats(ClientContext &context, IcebergDataFile &data_file,
+                                                   const Value &column_stats,
+                                                   const IcebergTableMetadata &table_metadata,
+                                                   const string &table_name) {
 	if (column_stats.IsNull()) {
 		return;
 	}

@@ -226,7 +226,7 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 
 		insert_count += data_file.record_count;
 
-		PopulateDataFileColumnStatsFromReturnStats(context, data_file, column_stats, table_metadata, table_name);
+		IcebergDataFileStats::PopulateFromReturnStats(context, data_file, column_stats, table_metadata, table_name);
 		DUCKDB_LOG(context, IcebergLogType,
 		           "Iceberg INSERT, wrote data_file '%s', record_count=%lld, file_size=%lld bytes", data_file.file_path,
 		           data_file.record_count, data_file.file_size_in_bytes);

@@ -41,7 +41,7 @@ IcebergManifestEntry BuildRewriteManifestEntry(ClientContext &context, const vec
 			entry.data_file.sort_order_id = sort_order.sort_order_id;
 		}
 	}
-	PopulateDataFileColumnStatsFromReturnStats(context, entry.data_file, column_stats, table_metadata, table_name);
+	IcebergDataFileStats::PopulateFromReturnStats(context, entry.data_file, column_stats, table_metadata, table_name);
 	return entry;
 }
 

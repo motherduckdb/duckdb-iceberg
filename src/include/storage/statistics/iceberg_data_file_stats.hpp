@@ -13,11 +13,12 @@
 
 namespace duckdb {
 
-//! Populate lower/upper bounds, value/null counts, and column sizes on
-//! `data_file` from one COPY RETURN_STATS `column_statistics` map value.
-//! Respects write.metadata.metrics.* and enforces NOT NULL constraints.
-void PopulateDataFileColumnStatsFromReturnStats(ClientContext &context, IcebergDataFile &data_file,
-                                                const Value &column_stats, const IcebergTableMetadata &table_metadata,
-                                                const string &table_name);
+struct IcebergDataFileStats {
+	//! Populate lower/upper bounds, value/null counts, and column sizes on
+	//! `data_file` from one COPY RETURN_STATS `column_statistics` map value.
+	//! Respects write.metadata.metrics.* and enforces NOT NULL constraints.
+	static void PopulateFromReturnStats(ClientContext &context, IcebergDataFile &data_file, const Value &column_stats,
+	                                    const IcebergTableMetadata &table_metadata, const string &table_name);
+};
 
 } // namespace duckdb
