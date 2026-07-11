@@ -109,7 +109,7 @@ alter table my_datalake.default.renamed_table2 rename to renamed_table3
 statement error
 alter table my_datalake.default.renamed_table3 rename to renamed_table1
 ----
-<REGEX>:.*TransactionContext Error: Cannot start an Iceberg rename transaction update after a transaction update is already active.*
+TransactionContext Error: Iceberg REST Catalog cannot commit this transaction atomically because it mixes table updates with rename/drop requests
 
 statement ok
 rollback
@@ -232,7 +232,7 @@ select * from my_datalake.default.renamed_table1 order by i
 statement error
 alter table my_datalake.default.renamed_table1 rename to renamed_table2
 ----
-Catalog Error: This table (renamed_table1) was modified already, can't be renamed!
+TransactionContext Error: Iceberg REST Catalog cannot commit this transaction atomically because it mixes table updates with rename/drop requests
 
 statement ok
 commit
@@ -247,12 +247,11 @@ query I
 select * from my_datalake.default.renamed_table2 order by i
 ----
 10
-20
 
 statement error
 insert into my_datalake.default.renamed_table2 values (30);
 ----
-<REGEX>:.*TransactionContext Error: Cannot start an Iceberg alter transaction update after a transaction update is already active.*
+TransactionContext Error: Iceberg REST Catalog cannot commit this transaction atomically because it mixes table updates with rename/drop requests
 
 statement ok
 rollback
@@ -261,7 +260,6 @@ query I
 select * from my_datalake.default.renamed_table1 order by i
 ----
 10
-20
 
 # Test 7: Two concurrent transactions - isolation
 statement ok
@@ -344,7 +342,7 @@ drop table my_datalake.default.renamed_table2;
 statement error
 alter table my_datalake.default.renamed_table1 rename to renamed_table2;
 ----
-<REGEX>:.*TransactionContext Error: Cannot start an Iceberg rename transaction update after a transaction update is already active.*
+TransactionContext Error: Iceberg REST Catalog cannot commit this transaction atomically because it mixes table updates with rename/drop requests
 
 statement ok
 rollback

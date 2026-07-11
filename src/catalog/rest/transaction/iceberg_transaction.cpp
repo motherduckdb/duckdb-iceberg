@@ -338,81 +338,12 @@ bool IcebergTransaction::HasTableUpdate() const {
 	return !std::holds_alternative<std::monostate>(transaction_update);
 }
 
-void IcebergTransaction::ThrowIfCannotStartUpdate(const char *requested_type) const {
-	if (!HasTableUpdate()) {
-		return;
-	}
-	throw TransactionException("Cannot start an Iceberg %s transaction update after a transaction update is already "
-	                           "active",
-	                           requested_type);
-}
-
 IcebergTransactionAlterUpdate *IcebergTransaction::GetAlterUpdate() {
 	return std::get_if<IcebergTransactionAlterUpdate>(&transaction_update);
 }
 
 const IcebergTransactionAlterUpdate *IcebergTransaction::GetAlterUpdate() const {
 	return std::get_if<IcebergTransactionAlterUpdate>(&transaction_update);
-}
-
-idx_t IcebergTransaction::CountAlterTableRequests() const {
-	auto alter_update = GetAlterUpdate();
-	if (!alter_update) {
-		return 0;
-	}
-	idx_t request_count = 0;
-	for (const auto &entry : alter_update->updated_tables) {
-		if (entry.second.HasTransactionUpdates()) {
-			request_count++;
-		}
-	}
-	return request_count;
-}
-
-idx_t IcebergTransaction::CountAlterTableRequestsExcluding(const string &table_key) const {
-	auto alter_update = GetAlterUpdate();
-	if (!alter_update) {
-		return 0;
-	}
-	idx_t request_count = 0;
-	for (const auto &entry : alter_update->updated_tables) {
-		if (entry.first != table_key && entry.second.HasTransactionUpdates()) {
-			request_count++;
-		}
-	}
-	return request_count;
-}
-
-bool IcebergTransaction::HasStandaloneTableRequests() const {
-	return std::holds_alternative<IcebergTransactionDeleteUpdate>(transaction_update) ||
-	       std::holds_alternative<IcebergTransactionRenameUpdate>(transaction_update);
-}
-
-void IcebergTransaction::ThrowIfNonAtomicAlterRequest(const string &table_key) const {
-	if (MultiTableCommitAvailable()) {
-		return;
-	}
-	if (HasStandaloneTableRequests()) {
-		throw TransactionException(
-		    "Iceberg REST Catalog cannot commit this transaction atomically because it mixes table updates with "
-		    "rename/drop requests without POST /transactions/commit support");
-	}
-	if (CountAlterTableRequestsExcluding(table_key) > 0) {
-		throw TransactionException(
-		    "Iceberg REST Catalog cannot commit this transaction atomically because it would update multiple tables "
-		    "without POST /transactions/commit support");
-	}
-}
-
-void IcebergTransaction::ThrowIfNonAtomicStandaloneRequest() const {
-	if (MultiTableCommitAvailable()) {
-		return;
-	}
-	if (CountAlterTableRequests() > 0) {
-		throw TransactionException(
-		    "Iceberg REST Catalog cannot commit this transaction atomically because it mixes table updates with "
-		    "rename/drop requests without POST /transactions/commit support");
-	}
 }
 
 void IcebergTransaction::CleanupMetadataFiles(ClientContext &context, const vector<string> &paths) {
@@ -915,8 +846,8 @@ IcebergTransactionAlterUpdate &IcebergTransaction::GetOrCreateAlter() {
 	}
 	auto alter_update = GetAlterUpdate();
 	if (!alter_update) {
-		ThrowIfCannotStartUpdate("alter");
-		throw InternalException("Expected active Iceberg alter transaction update");
+		throw TransactionException("Iceberg REST Catalog cannot commit this transaction atomically because it mixes "
+		                           "table updates with rename/drop requests");
 	}
 	return *alter_update;
 }
@@ -924,8 +855,10 @@ IcebergTransactionAlterUpdate &IcebergTransaction::GetOrCreateAlter() {
 IcebergTableInformation &IcebergTransaction::DeleteTable(IcebergTableInformation &table) {
 	auto table_key = table.GetTableKey();
 	auto state = GetLatestTableState(table_key);
-	ThrowIfNonAtomicStandaloneRequest();
-	ThrowIfCannotStartUpdate("delete");
+	if (HasTableUpdate()) {
+		throw TransactionException("Iceberg REST Catalog cannot commit this transaction atomically because it mixes "
+		                           "table updates with rename/drop requests");
+	}
 
 	const IcebergTableInformation *delete_source = &table;
 	if (state) {
@@ -940,17 +873,10 @@ IcebergTableInformation &IcebergTransaction::DeleteTable(IcebergTableInformation
 IcebergTableInformation &IcebergTransaction::RenameTable(IcebergTableInformation &table, const string &new_name) {
 	auto table_key = table.GetTableKey();
 	auto state = GetLatestTableState(table_key);
-	if (state) {
-		auto &original_table = state->GetInfo();
-		if (original_table.HasTransactionUpdates()) {
-			if (!MultiTableCommitAvailable()) {
-				ThrowIfNonAtomicStandaloneRequest();
-			}
-			throw CatalogException("This table (%s) was modified already, can't be renamed!", table.name);
-		}
+	if (HasTableUpdate()) {
+		throw TransactionException("Iceberg REST Catalog cannot commit this transaction atomically because it mixes "
+		                           "table updates with rename/drop requests");
 	}
-	ThrowIfNonAtomicStandaloneRequest();
-	ThrowIfCannotStartUpdate("rename");
 
 	state = SetLatestTableState(table, IcebergTableStatus::RENAMED);
 

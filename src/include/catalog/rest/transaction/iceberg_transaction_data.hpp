@@ -55,7 +55,6 @@ public:
 
 private:
 	void CacheExistingManifestList(lock_guard<mutex> &guard, const IcebergTableMetadata &metadata);
-	void ValidateAtomicRequestShape();
 
 public:
 	string initial_table_uuid;

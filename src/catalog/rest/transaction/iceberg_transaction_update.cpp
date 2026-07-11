@@ -58,6 +58,15 @@ IcebergTableInformation &IcebergTransactionAlterUpdate::GetOrInitializeTable(con
 	auto it = updated_tables.find(table_key);
 	if (it == updated_tables.end()) {
 		CheckWriteWriteConflict(table);
+
+		if (!transaction.MultiTableCommitAvailable()) {
+			if (!updated_tables.empty()) {
+				throw TransactionException("Iceberg REST Catalog cannot commit this transaction atomically because it "
+				                           "would update multiple tables "
+				                           "without POST /transactions/commit support");
+			}
+		}
+
 		it = updated_tables.emplace(table_key, CopyLatestState(transaction, table)).first;
 		// Preserve the table_uuid from the original table info (resolved at transaction start).
 		// Copy() reads from the global request cache, which can be contaminated by another

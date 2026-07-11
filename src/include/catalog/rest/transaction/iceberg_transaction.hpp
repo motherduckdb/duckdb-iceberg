@@ -96,19 +96,13 @@ public:
 	IcebergTransactionAlterUpdate &GetOrCreateAlter();
 	IcebergTableInformation &DeleteTable(IcebergTableInformation &table);
 	IcebergTableInformation &RenameTable(IcebergTableInformation &table, const string &new_name);
+	bool MultiTableCommitAvailable() const;
 
 private:
 	bool HasTableUpdate() const;
-	void ThrowIfCannotStartUpdate(const char *requested_type) const;
 	IcebergTransactionAlterUpdate *GetAlterUpdate();
 	const IcebergTransactionAlterUpdate *GetAlterUpdate() const;
-	bool MultiTableCommitAvailable() const;
 	bool CanUseMultiTableCommit(const IcebergTransactionAlterUpdate &alter_update) const;
-	idx_t CountAlterTableRequests() const;
-	idx_t CountAlterTableRequestsExcluding(const string &table_key) const;
-	bool HasStandaloneTableRequests() const;
-	void ThrowIfNonAtomicAlterRequest(const string &table_key) const;
-	void ThrowIfNonAtomicStandaloneRequest() const;
 	void CleanupMetadataFiles(ClientContext &context, const vector<string> &paths);
 	void RefreshRetryTables(IcebergTransactionAlterUpdate &alter_update, const case_insensitive_set_t &table_keys,
 	                        ClientContext &context);
