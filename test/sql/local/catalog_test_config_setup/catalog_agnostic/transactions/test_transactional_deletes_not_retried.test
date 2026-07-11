@@ -51,20 +51,19 @@ select * from my_datalake.default.multi_transaction_delete;
 ----
 0	0
 
-# con1 deletes 0,0 from the old snapshot
-statement ok con1
+# con1 can't delete because its transactional doesn't see the latest state
+statement error con1
 delete from my_datalake.default.multi_transaction_delete where a = 0;
+----
+TransactionContext Error: Write-write conflict detected on 'default.multi_transaction_delete', changes were made since the start of the transaction
 
-query I con1
+statement error con1
 select count(*) from my_datalake.default.multi_transaction_delete;
 ----
-0
+TransactionContext Error: Current transaction is aborted (please ROLLBACK)
 
-# NOTE: Delete isn't retried yet
-statement error con1
+statement ok con1
 commit;
-----
-<REGEX>:.*TransactionContext Error: Failed to commit:.*
 
 # con1 DELETE didn't go through
 query II

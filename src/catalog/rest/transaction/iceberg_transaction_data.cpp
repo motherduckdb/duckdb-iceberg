@@ -19,7 +19,7 @@ static void LoadExistingManifestList(ClientContext &context, const IcebergTableM
                                      vector<IcebergManifestListEntry> &existing_manifest_list, int64_t &next_row_id) {
 	existing_manifest_list.clear();
 
-	auto current_snapshot = metadata.GetLatestSnapshot();
+	auto current_snapshot = metadata.GetLatestSnapshot(context);
 	if (!current_snapshot) {
 		return;
 	}

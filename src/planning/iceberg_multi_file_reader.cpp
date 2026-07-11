@@ -482,7 +482,7 @@ bool IcebergMultiFileReader::ParseOption(const string &key, const Value &val, Mu
 			throw InvalidInputException("Can't use 'snapshot_from_id' in combination with 'snapshot_from_timestamp'");
 		}
 		snapshot_lookup.SetSource(SnapshotSource::FROM_TIMESTAMP);
-		snapshot_lookup.snapshot_timestamp = val.GetValue<timestamp_t>();
+		snapshot_lookup.snapshot_timestamp = val.DefaultCastAs(LogicalType::TIMESTAMP_MS).GetValue<timestamp_ms_t>();
 		return true;
 	}
 	return MultiFileReader::ParseOption(key, val, options, context);

@@ -137,7 +137,8 @@ static unique_ptr<FunctionData> IcebergMetaDataBind(ClientContext &context, Tabl
 				    "Can't use 'snapshot_from_id' in combination with 'snapshot_from_timestamp'");
 			}
 			snapshot_lookup.SetSource(SnapshotSource::FROM_TIMESTAMP);
-			snapshot_lookup.snapshot_timestamp = val.GetValue<timestamp_t>();
+			snapshot_lookup.snapshot_timestamp =
+			    val.DefaultCastAs(LogicalType::TIMESTAMP_MS).GetValue<timestamp_ms_t>();
 		}
 	}
 
@@ -146,7 +147,7 @@ static unique_ptr<FunctionData> IcebergMetaDataBind(ClientContext &context, Tabl
 	    IcebergTableMetadata::Parse(iceberg_meta_path, *caching_fs, options.metadata_compression_codec);
 	auto metadata = IcebergTableMetadata::FromTableMetadata(table_metadata);
 
-	auto snapshot_to_scan = metadata.GetSnapshot(options.snapshot_lookup);
+	auto snapshot_to_scan = metadata.GetSnapshot(context, options.snapshot_lookup);
 
 	if (snapshot_to_scan.snapshot) {
 		ret->iceberg_table = IcebergManifestList::Load(filename, metadata, snapshot_to_scan, context, options);
@@ -232,7 +233,7 @@ TableFunctionSet IcebergFunctions::GetIcebergMetadataFunction() {
 	fun.named_parameters["metadata_compression_codec"] = LogicalType::VARCHAR;
 	fun.named_parameters["version"] = LogicalType::VARCHAR;
 	fun.named_parameters["version_name_format"] = LogicalType::VARCHAR;
-	fun.named_parameters["snapshot_from_timestamp"] = LogicalType::TIMESTAMP;
+	fun.named_parameters["snapshot_from_timestamp"] = LogicalType::TIMESTAMP_MS;
 	fun.named_parameters["snapshot_from_id"] = LogicalType::UBIGINT;
 	function_set.AddFunction(fun);
 

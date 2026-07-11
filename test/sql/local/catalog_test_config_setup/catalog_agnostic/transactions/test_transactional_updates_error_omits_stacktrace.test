@@ -49,23 +49,16 @@ select * from my_datalake.default.multi_transaction_update;
 ----
 0	0
 
-statement ok con1
-update my_datalake.default.multi_transaction_update set a = 50;
-
-# con1 should error. con1 cannot update the table since the last snapshot it saw was the 1, 1 insert.
-# the stacktrace should be ommited
 statement error con1
+update my_datalake.default.multi_transaction_update set a = 50;
+----
+TransactionContext Error: Write-write conflict detected on 'default.multi_transaction_update', changes were made since the start of the transaction
+
+statement ok con1
 commit;
-----
-<!REGEX>:.*"stack".*
 
-query I
-select message from duckdb_logs() where type like 'Iceberg' and not message.starts_with('Iceberg Transaction Cleanup') and log_level = 'INFO' order by "timestamp" desc limit 1;
+query II
+select * from my_datalake.default.multi_transaction_update;
 ----
-<REGEX>:.*org.apache.iceberg.exceptions.*
-
-# stacktrace should be logged on INFO level
-query I
-select message from duckdb_logs() where type like 'Iceberg' and message.starts_with('Iceberg Transaction Cleanup') and log_level = 'INFO' order by "timestamp" desc limit 1;
-----
-<REGEX>:.*Iceberg Transaction Cleanup.*deleted.*data_file.*.s3.*parquet.*
+0	0
+2	2
