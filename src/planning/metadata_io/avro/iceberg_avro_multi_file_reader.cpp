@@ -47,18 +47,29 @@ static optional<string> TryGetMetadataString(const InsertionOrderPreservingMap<V
 	return entry->second.GetValue<string>();
 }
 
-static int32_t GetRequiredMetadataInt(const InsertionOrderPreservingMap<Value> &metadata, const string &key) {
+static string ManifestMetadataErrorPrefix(const string &path) {
+	if (path.empty()) {
+		return "Manifest";
+	}
+	return StringUtil::Format("Manifest '%s'", path);
+}
+
+static int32_t GetRequiredMetadataInt(const InsertionOrderPreservingMap<Value> &metadata, const string &key,
+                                      const string &path) {
 	auto value = TryGetMetadataInt(metadata, key);
 	if (!value) {
-		throw InvalidConfigurationException("Manifest is missing required Avro key-value metadata field '%s'", key);
+		throw InvalidConfigurationException("%s is missing required Avro key-value metadata field '%s'",
+		                                    ManifestMetadataErrorPrefix(path), key);
 	}
 	return *value;
 }
 
-static string GetRequiredMetadataString(const InsertionOrderPreservingMap<Value> &metadata, const string &key) {
+static string GetRequiredMetadataString(const InsertionOrderPreservingMap<Value> &metadata, const string &key,
+                                        const string &path) {
 	auto value = TryGetMetadataString(metadata, key);
 	if (!value) {
-		throw InvalidConfigurationException("Manifest is missing required Avro key-value metadata field '%s'", key);
+		throw InvalidConfigurationException("%s is missing required Avro key-value metadata field '%s'",
+		                                    ManifestMetadataErrorPrefix(path), key);
 	}
 	return *value;
 }
@@ -82,19 +93,22 @@ static optional<int32_t> TryParseSchemaIdFromSchemaJson(const string &schema_jso
 	return static_cast<int32_t>(yyjson_get_int(schema_id_val));
 }
 
-static IcebergManifestMetadata ParseManifestMetadata(const InsertionOrderPreservingMap<Value> &metadata) {
+static IcebergManifestMetadata ParseManifestMetadata(const InsertionOrderPreservingMap<Value> &metadata,
+                                                     const string &path) {
 	auto schema_id = TryGetMetadataInt(metadata, "schema-id");
 	if (!schema_id) {
-		auto schema_json = GetRequiredMetadataString(metadata, "schema");
+		auto schema_json = GetRequiredMetadataString(metadata, "schema", path);
 		schema_id = TryParseSchemaIdFromSchemaJson(schema_json);
 		if (!schema_id) {
-			throw InvalidConfigurationException("Manifest is missing required Avro key-value metadata field "
-			                                    "'schema-id' and its 'schema' JSON does not contain one");
+			throw InvalidConfigurationException(
+			    "%s is missing required Avro key-value metadata field 'schema-id' and its 'schema' JSON does not "
+			    "contain one",
+			    ManifestMetadataErrorPrefix(path));
 		}
 	}
 
-	auto partition_spec_id = GetRequiredMetadataInt(metadata, "partition-spec-id");
-	auto format_version = GetRequiredMetadataInt(metadata, "format-version");
+	auto partition_spec_id = GetRequiredMetadataInt(metadata, "partition-spec-id", path);
+	auto format_version = GetRequiredMetadataInt(metadata, "format-version", path);
 
 	IcebergManifestContentType content = IcebergManifestContentType::DATA;
 	auto content_str = TryGetMetadataString(metadata, "content");
@@ -104,10 +118,12 @@ static IcebergManifestMetadata ParseManifestMetadata(const InsertionOrderPreserv
 		} else if (*content_str == "deletes") {
 			content = IcebergManifestContentType::DELETE;
 		} else {
-			throw InvalidConfigurationException("Manifest has invalid Avro key-value metadata content '%s'", content);
+			throw InvalidConfigurationException("%s has invalid Avro key-value metadata content '%s'",
+			                                    ManifestMetadataErrorPrefix(path), content);
 		}
 	} else if (format_version > 1) {
-		throw InvalidConfigurationException("Manifest has invalid Avro key-value metadata, content is missing");
+		throw InvalidConfigurationException("%s has invalid Avro key-value metadata, content is missing",
+		                                    ManifestMetadataErrorPrefix(path));
 	}
 	return IcebergManifestMetadata(*schema_id, partition_spec_id, format_version, content);
 }
@@ -578,7 +594,11 @@ ReaderInitializeType IcebergAvroMultiFileReader::InitializeReader(
 			auto &manifest_scan_info = avro_scan_info.Cast<IcebergManifestFileScanInfo>();
 			auto file_idx = reader_data.reader->file_list_idx.GetIndex();
 			auto &manifest_list_entry = manifest_scan_info.manifest_files[file_idx];
-			manifest_list_entry.manifest_metadata.emplace(ParseManifestMetadata(reader_data.reader->GetMetadata()));
+			auto manifest_path = manifest_list_entry.file.manifest_path.empty()
+			                         ? reader_data.reader->GetFileName()
+			                         : manifest_list_entry.file.manifest_path;
+			manifest_list_entry.manifest_metadata.emplace(
+			    ParseManifestMetadata(reader_data.reader->GetMetadata(), manifest_path));
 		}
 		for (auto &partition_spec : avro_scan_info.metadata.partition_specs) {
 			for (auto &spec_field : partition_spec.second.fields) {
