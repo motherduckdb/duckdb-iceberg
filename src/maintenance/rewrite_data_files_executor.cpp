@@ -10,12 +10,15 @@
 #include "catalog/rest/transaction/iceberg_transaction_metadata.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
 #include "core/metadata/schema/iceberg_table_schema.hpp"
+#include "storage/statistics/iceberg_data_file_stats.hpp"
 
 namespace duckdb {
 
-IcebergManifestEntry BuildRewriteManifestEntry(const vector<RewriteCandidate> &group, int64_t starting_sequence_number,
-                                               int64_t record_count, const string &produced_file,
-                                               int64_t file_size_in_bytes) {
+IcebergManifestEntry BuildRewriteManifestEntry(ClientContext &context, const vector<RewriteCandidate> &group,
+                                               int64_t starting_sequence_number, int64_t record_count,
+                                               const string &produced_file, int64_t file_size_in_bytes,
+                                               const Value &column_stats, const IcebergTableMetadata &table_metadata,
+                                               const string &table_name) {
 	if (group.empty()) {
 		throw InternalException("iceberg_rewrite_data_files: cannot build a manifest entry for an empty group");
 	}
@@ -32,6 +35,13 @@ IcebergManifestEntry BuildRewriteManifestEntry(const vector<RewriteCandidate> &g
 	//! The planner buckets candidates so every file in one group shares the same
 	//! partition tuple. Reuse candidate 0 instead of re-deriving it.
 	entry.data_file.partition_info = group.front().partition_info;
+	if (table_metadata.HasSortOrder()) {
+		auto &sort_order = table_metadata.GetLatestSortOrder();
+		if (sort_order.IsSorted()) {
+			entry.data_file.sort_order_id = sort_order.sort_order_id;
+		}
+	}
+	PopulateDataFileColumnStatsFromReturnStats(context, entry.data_file, column_stats, table_metadata, table_name);
 	return entry;
 }
 

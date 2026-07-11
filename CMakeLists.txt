@@ -120,6 +120,7 @@ set(EXTENSION_SOURCES
 	src/planning/snapshot/iceberg_snapshot_lookup.cpp
 	src/storage/statistics/iceberg_variant_statistics.cpp
 	src/storage/statistics/iceberg_statistics.cpp
+	src/storage/statistics/iceberg_data_file_stats.cpp
 )
 
 add_subdirectory(src/rest_catalog/objects)

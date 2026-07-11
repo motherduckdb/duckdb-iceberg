@@ -147,19 +147,22 @@ SinkResultType PhysicalRewriteDataFiles::Sink(ExecutionContext &context, DataChu
                                               OperatorSinkInput &input) const {
 	auto &gstate = input.global_state.Cast<RewriteDataFilesGlobalState>();
 	for (idx_t row = 0; row < chunk.size(); row++) {
-		if (chunk.ColumnCount() < 4) {
+		//! COPY RETURN_STATS emits one row per produced file (prefixed with group_idx):
+		//!   0 group_idx
+		//!   1 filename
+		//!   2 count
+		//!   3 file_size_bytes
+		//!   4 footer_size_bytes
+		//!   5 column_statistics
+		//!   6 partition_keys
+		if (chunk.ColumnCount() < 6) {
 			throw InternalException(
-			    "iceberg_rewrite_data_files: expected COPY RETURN_STATS result with at least four columns");
+			    "iceberg_rewrite_data_files: expected COPY RETURN_STATS result with at least five columns");
 		}
 		auto group_idx = chunk.GetValue(0, row).GetValue<uint64_t>();
 		if (static_cast<idx_t>(group_idx) >= gstate.plan.file_groups.size()) {
 			throw InternalException("iceberg_rewrite_data_files: COPY returned unknown group index %lld", group_idx);
 		}
-		//! COPY RETURN_STATS emits one row per produced file:
-		//!   0 group_idx
-		//!   1 filename
-		//!   2 count
-		//! followed by file size, footer size, column stats, and partition keys.
 		auto produced_file = chunk.GetValue(1, row).GetValue<string>();
 		if (produced_file.empty()) {
 			throw InternalException("iceberg_rewrite_data_files: COPY for group %lld returned an empty file path",
@@ -167,9 +170,12 @@ SinkResultType PhysicalRewriteDataFiles::Sink(ExecutionContext &context, DataChu
 		}
 		auto count = NumericCast<int64_t>(chunk.GetValue(2, row).GetValue<uint64_t>());
 		auto file_size_in_bytes = NumericCast<int64_t>(chunk.GetValue(3, row).GetValue<uint64_t>());
+		auto column_stats = chunk.GetValue(5, row);
 		auto &group = gstate.plan.file_groups[group_idx];
-		auto entry = BuildRewriteManifestEntry(group, gstate.plan.starting_sequence_number, count, produced_file,
-		                                       file_size_in_bytes);
+		auto &table_info = *gstate.plan.table_info;
+		auto entry = BuildRewriteManifestEntry(
+		    gstate.context, group, gstate.plan.starting_sequence_number, count, produced_file, file_size_in_bytes,
+		    column_stats, table_info.table_metadata, gstate.plan.table_name.Name().GetIdentifierName());
 
 		{
 			lock_guard<mutex> guard(gstate.lock);

@@ -22,9 +22,12 @@ struct RewriteExecutionResult {
 
 //! Convert one COPY RETURN_STATS row into an ADDED manifest entry. Partition
 //! values and sequence-number semantics come from the frozen rewrite plan.
-IcebergManifestEntry BuildRewriteManifestEntry(const vector<RewriteCandidate> &group, int64_t starting_sequence_number,
-                                               int64_t record_count, const string &produced_file,
-                                               int64_t file_size_in_bytes);
+//! Column stats / bounds are populated from the RETURN_STATS map.
+IcebergManifestEntry BuildRewriteManifestEntry(ClientContext &context, const vector<RewriteCandidate> &group,
+                                               int64_t starting_sequence_number, int64_t record_count,
+                                               const string &produced_file, int64_t file_size_in_bytes,
+                                               const Value &column_stats, const IcebergTableMetadata &table_metadata,
+                                               const string &table_name);
 
 //! Commit all completed rewrite groups as one Iceberg REPLACE snapshot.
 void CommitRewrite(ClientContext &context, const RewritePlan &plan, RewriteExecutionResult &result);
