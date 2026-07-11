@@ -57,6 +57,15 @@ struct AssertCurrentSchemaIdRequirement : public IcebergTableRequirement {
 	int32_t current_schema_id;
 };
 
+struct AssertRefSnapshotId : public IcebergTableRequirement {
+	static constexpr const IcebergTableRequirementType TYPE = IcebergTableRequirementType::ASSERT_REF_SNAPSHOT_ID;
+
+	explicit AssertRefSnapshotId(int64_t snapshot_id);
+	void CreateRequirement(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state);
+
+	int64_t snapshot_id;
+};
+
 //! The table's last assigned column id (a.k.a last_column_id) must match the requirement's `last-assigned-field-id`
 struct AssertLastAssignedFieldIdRequirement : public IcebergTableRequirement {
 	static constexpr const IcebergTableRequirementType TYPE =

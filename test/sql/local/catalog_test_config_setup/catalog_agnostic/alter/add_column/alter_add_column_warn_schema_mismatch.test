@@ -77,50 +77,46 @@ SELECT log_level, message FROM duckdb_logs
 ----
 WARNING	Detected schema change during transaction (schema_id mismatch); ACID guarantees may not hold.
 
-statement ok con2
+statement error con2
 INSERT INTO my_datalake.default.alter_add_column_explicit_txn VALUES (42);
+----
+TransactionContext Error: Write-write conflict detected on 'default.alter_add_column_explicit_txn', changes were made since the start of the transaction
 
-query I con2
+statement error con2
 FROM my_datalake.default.alter_add_column_explicit_txn ORDER BY a;
 ----
-0
-1
-2
-3
-4
-5
-6
-7
-8
-9
-42
+TransactionContext Error: Current transaction is aborted (please ROLLBACK)
 
 statement error con3
 INSERT INTO my_datalake.default.alter_add_column_explicit_txn VALUES (43, 43);
 ----
 Binder Error: table alter_add_column_explicit_txn has 1 columns but 2 values were supplied
 
-statement ok con2
+statement error con2
 INSERT INTO my_datalake.default.alter_add_column_explicit_txn VALUES (43);
+----
+TransactionContext Error: Write-write conflict detected on 'default.alter_add_column_explicit_txn', changes were made since the start of the transaction
 
-query I con2
+statement error con2
 FROM my_datalake.default.alter_add_column_explicit_txn ORDER BY a;
 ----
-0
-1
-2
-3
-4
-5
-6
-7
-8
-9
-42
-43
+TransactionContext Error: Current transaction is aborted (please ROLLBACK)
 
-# COMMIT failed because the schema id is different from when the transaction started
-statement error con2
+# COMMIT succeeds, the changes never landed because the statement(s) failed
+statement ok con2
 commit;
+
+# Only con1 changed the table
+query II
+select * from my_datalake.default.alter_add_column_explicit_txn
 ----
-<REGEX>:TransactionContext Error.*changed incompatibly while retrying commit.*
+0	NULL
+1	NULL
+2	NULL
+3	NULL
+4	NULL
+5	NULL
+6	NULL
+7	NULL
+8	NULL
+9	NULL

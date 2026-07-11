@@ -7,6 +7,7 @@
 #include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
 #include "duckdb/main/extension_helper.hpp"
+#include "duckdb/transaction/meta_transaction.hpp"
 
 #include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
@@ -14,6 +15,12 @@
 #include "duckdb/catalog/catalog_entry_retriever.hpp"
 
 namespace duckdb {
+
+timestamp_ms_t IcebergUtils::GetTransactionStartTimeMS(ClientContext &context) {
+	auto &meta_transaction = MetaTransaction::Get(context);
+	auto transaction_start = meta_transaction.GetCurrentTransactionStartTimestamp();
+	return timestamp_ms_t(Timestamp::GetEpochMs(transaction_start));
+}
 
 idx_t IcebergUtils::ParseByteSizeOptionallyFormatted(const string &input) {
 	idx_t result;

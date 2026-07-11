@@ -74,7 +74,7 @@ bool IcebergDelete::TryGetEqualityDeletePredicates(ClientContext &context, Icebe
 		return false;
 	}
 
-	auto table_scan = FindDeleteSource(child_plan);
+	auto table_scan = FindIcebergScan(child_plan);
 	if (!table_scan) {
 		return false;
 	}

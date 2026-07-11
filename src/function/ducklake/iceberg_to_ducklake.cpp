@@ -23,6 +23,7 @@
 #include "duckdb/common/numeric_utils.hpp"
 #include "duckdb/common/printer.hpp"
 #include "duckdb/common/sql_identifier.hpp"
+#include "duckdb/common/operator/cast_operators.hpp"
 
 #include "function/iceberg_functions.hpp"
 #include "common/iceberg_utils.hpp"
@@ -110,7 +111,8 @@ public:
 
 		map<timestamp_t, reference<IcebergSnapshot>> snapshots;
 		for (auto &it : metadata.snapshots) {
-			snapshots.emplace(it.second.timestamp_ms, it.second);
+			auto timestamp = duckdb::Cast::Operation<timestamp_ms_t, timestamp_t>(it.second.timestamp_ms);
+			snapshots.emplace(timestamp, it.second);
 		}
 
 		auto &schema_entry = table_info.schema;

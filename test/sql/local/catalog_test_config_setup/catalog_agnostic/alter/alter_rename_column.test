@@ -132,18 +132,18 @@ select alias(COLUMNS(*)) from my_datalake.default.tbl limit 1
 ----
 a	b
 
-statement ok con2
+statement error con2
 ALTER TABLE my_datalake.default.tbl RENAME b TO c;
-
-query II con2
-select alias(COLUMNS(*)) from my_datalake.default.tbl limit 1
 ----
-a	c
+TransactionContext Error: Write-write conflict detected on 'default.tbl', changes were made since the start of the transaction
 
 statement error con2
-commit
+select alias(COLUMNS(*)) from my_datalake.default.tbl limit 1
 ----
-<REGEX>:.*TransactionContext Error: Failed to commit.*
+TransactionContext Error: Current transaction is aborted (please ROLLBACK)
+
+statement ok con2
+commit
 
 # Rename to previously existing name
 

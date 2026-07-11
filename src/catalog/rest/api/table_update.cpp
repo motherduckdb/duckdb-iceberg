@@ -80,6 +80,20 @@ void AssertCurrentSchemaIdRequirement::CreateRequirement(DatabaseInstance &db, C
 	req.assert_current_schema_id->current_schema_id = current_schema_id;
 }
 
+AssertRefSnapshotId::AssertRefSnapshotId(int64_t snapshot_id)
+    : IcebergTableRequirement(IcebergTableRequirementType::ASSERT_REF_SNAPSHOT_ID), snapshot_id(snapshot_id) {
+}
+
+void AssertRefSnapshotId::CreateRequirement(DatabaseInstance &db, ClientContext &context,
+                                            IcebergCommitState &commit_state) {
+	commit_state.table_change.requirements.push_back(rest_api_objects::TableRequirement());
+	auto &req = commit_state.table_change.requirements.back();
+	req.assert_ref_snapshot_id = rest_api_objects::AssertRefSnapshotId();
+	req.assert_ref_snapshot_id->type.value = "assert-ref-snapshot-id";
+	req.assert_ref_snapshot_id->ref = "main";
+	req.assert_ref_snapshot_id->snapshot_id = snapshot_id;
+}
+
 AssertLastAssignedFieldIdRequirement::AssertLastAssignedFieldIdRequirement(int32_t last_assigned_field_id)
     : IcebergTableRequirement(IcebergTableRequirementType::ASSERT_LAST_ASSIGNED_FIELD_ID),
       last_assigned_field_id(last_assigned_field_id) {
@@ -144,7 +158,6 @@ void SetCurrentSchema::CreateUpdate(DatabaseInstance &db, ClientContext &context
 	auto &req = commit_state.table_change.updates.back();
 	req.set_current_schema_update = rest_api_objects::SetCurrentSchemaUpdate();
 	req.set_current_schema_update->base_update.action = "set-current-schema";
-	// TODO: should this be a different value? or is the rest catalog setting this again?
 	req.set_current_schema_update->schema_id = schema_id;
 }
 

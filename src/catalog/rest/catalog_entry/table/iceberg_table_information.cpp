@@ -10,6 +10,7 @@
 #include "duckdb/common/types/string.hpp"
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/common/operator/cast_operators.hpp"
+#include "duckdb/parser/column_definition.hpp"
 
 #include "catalog/rest/api/catalog_api.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
@@ -22,7 +23,7 @@
 #include "catalog/rest/storage/authorization/none.hpp"
 #include "catalog/rest/storage/authorization/sigv4_utils.hpp"
 #include "core/expression/iceberg_transform.hpp"
-#include "duckdb/parser/column_definition.hpp"
+#include "common/iceberg_utils.hpp"
 
 #include <climits>
 
@@ -458,18 +459,16 @@ optional_ptr<CatalogEntry> IcebergTableInformation::GetSchemaVersion(ClientConte
 	}
 
 	D_ASSERT(!schema_versions.empty());
-	auto &meta_transaction = MetaTransaction::Get(context);
-	auto transaction_start = meta_transaction.GetCurrentTransactionStartTimestamp();
-	auto transaction_start_millis = Timestamp::GetEpochMs(transaction_start);
+	auto transaction_start_ms = IcebergUtils::GetTransactionStartTimeMS(context);
 
 	auto snapshot_lookup = IcebergSnapshotLookup::FromAtClause(at);
-	auto snapshot_info = table_metadata.GetSnapshot(snapshot_lookup);
+	auto snapshot_info = table_metadata.GetSnapshot(context, snapshot_lookup);
 
 	int32_t schema_id;
 	if (!snapshot_lookup.IsLatest() && snapshot_info.snapshot) {
 		//! Time travel query, verify this is reachable
 		auto &snapshot = *snapshot_info.snapshot;
-		if (snapshot.timestamp_ms.value > transaction_start.value) {
+		if (snapshot.timestamp_ms > transaction_start_ms) {
 			//! Not reachable by the current transaction
 			return nullptr;
 		}
@@ -483,11 +482,11 @@ optional_ptr<CatalogEntry> IcebergTableInformation::GetSchemaVersion(ClientConte
 			}
 		}
 
-		const bool latest_metadata_is_too_fresh = table_metadata.last_updated_ms.value > transaction_start_millis;
+		const bool latest_metadata_is_too_fresh = table_metadata.last_updated_ms > transaction_start_ms;
 		const bool can_use_metadata_log = use_metadata_log && !table_metadata.metadata_log.empty();
 		if (latest_metadata_is_too_fresh && can_use_metadata_log) {
 			string metadata_path;
-			auto relevant_metadata = CreateMetadataFromLog(context, transaction_start_millis, metadata_path);
+			auto relevant_metadata = CreateMetadataFromLog(context, transaction_start_ms, metadata_path);
 			schema_id = relevant_metadata.GetCurrentSchemaId();
 		} else {
 			schema_id = table_metadata.GetCurrentSchemaId();
@@ -533,8 +532,7 @@ IcebergSnapshotLookup IcebergTableInformation::GetSnapshotLookup(ClientContext &
 }
 
 IcebergSnapshotLookup IcebergTableInformation::GetSnapshotLookup(ClientContext &context) const {
-	auto &meta_transaction = MetaTransaction::Get(context);
-	auto transaction_start = meta_transaction.GetCurrentTransactionStartTimestamp();
+	auto transaction_start = IcebergUtils::GetTransactionStartTimeMS(context);
 
 	IcebergSnapshotLookup res;
 	res.snapshot_timestamp = transaction_start;
@@ -542,12 +540,8 @@ IcebergSnapshotLookup IcebergTableInformation::GetSnapshotLookup(ClientContext &
 	return res;
 }
 
-bool IcebergTableInformation::TableIsEmpty(const IcebergSnapshotLookup &snapshot_lookup) const {
-	(void)snapshot_lookup;
-	if (!table_metadata.GetLatestSnapshot()) {
-		return true;
-	}
-	return false;
+bool IcebergTableInformation::TableIsEmpty(ClientContext &context) const {
+	return !table_metadata.GetLatestSnapshot(context);
 }
 
 bool IcebergTableInformation::HasTransactionUpdates() const {
@@ -591,38 +585,30 @@ void IcebergTableInformation::RefreshFromCatalog(ClientContext &context) {
 	}
 }
 
-IcebergTableInformation IcebergTableInformation::Copy(ClientContext &context) const {
-	auto ret = IcebergTableInformation(catalog, schema, name);
-	auto table_key = ret.GetTableKey();
-	{
-		lock_guard<std::mutex> cache_lock(catalog.table_request_cache.Lock());
-		auto cached_result = catalog.table_request_cache.Get(context, table_key, cache_lock, false);
-		if (!cached_result) {
-			throw InvalidConfigurationException(
-			    "Cannot copy table '%s': its metadata is not present in the cache. It must be loaded before it is "
-			    "copied (e.g. renamed).",
-			    table_key);
-		}
-		auto &cached_table_result = *cached_result->load_table_result;
-		ret.InitializeFromLoadTableResult(cached_table_result, false);
-	}
-	return ret;
+IcebergTableInformation IcebergTableInformation::Copy() const {
+	auto clone = IcebergTableInformation(catalog, schema, name);
+	clone.table_id = table_id;
+	clone.table_metadata = table_metadata.Copy();
+	clone.config = config;
+	clone.storage_credentials = storage_credentials;
+	clone.latest_metadata_json = latest_metadata_json;
+	return clone;
 }
 
 IcebergTableMetadata IcebergTableInformation::CreateMetadataFromLog(ClientContext &context,
-                                                                    int64_t transaction_start_millis,
+                                                                    timestamp_ms_t transaction_start_ms,
                                                                     string &metadata_path) const {
 	auto &log = table_metadata.metadata_log;
 
 	optional_idx log_item_index;
 	for (idx_t i = log.size(); i-- > 0;) {
-		if (log[i].timestamp_ms <= transaction_start_millis) {
+		if (log[i].timestamp_ms <= transaction_start_ms) {
 			log_item_index = i;
 			break;
 		}
 	}
 	if (!log_item_index.IsValid()) {
-		auto timestamp = duckdb::Cast::Operation<timestamp_ms_t, timestamp_t>(timestamp_ms_t(transaction_start_millis));
+		auto timestamp = duckdb::Cast::Operation<timestamp_ms_t, timestamp_t>(transaction_start_ms);
 		throw InternalException(
 		    "Metadata-log exists but none of the entries were valid for the current transaction start time (%s)",
 		    Timestamp::ToString(timestamp));
@@ -640,12 +626,10 @@ IcebergTableInformation IcebergTableInformation::Copy(IcebergTransaction &iceber
 	auto locked_context = iceberg_transaction.context.lock();
 	auto &context = *locked_context;
 
-	auto ret = Copy(context);
-	auto &meta_transaction = MetaTransaction::Get(context);
-	auto transaction_start = meta_transaction.GetCurrentTransactionStartTimestamp();
-	auto transaction_start_millis = Timestamp::GetEpochMs(transaction_start);
+	auto ret = Copy();
+	auto transaction_start_ms = IcebergUtils::GetTransactionStartTimeMS(context);
 
-	if (table_metadata.last_updated_ms.value > transaction_start_millis) {
+	if (table_metadata.last_updated_ms > transaction_start_ms) {
 		bool use_metadata_log = true;
 		Value val;
 		if (context.TryGetCurrentSetting("iceberg_use_metadata_log", val)) {
@@ -657,11 +641,11 @@ IcebergTableInformation IcebergTableInformation::Copy(IcebergTransaction &iceber
 		const bool can_use_metadata_log = use_metadata_log && !table_metadata.metadata_log.empty();
 		if (!can_use_metadata_log) {
 			auto snapshot_lookup = GetSnapshotLookup(iceberg_transaction);
-			if (ret.TableIsEmpty(snapshot_lookup)) {
+			if (ret.TableIsEmpty(context)) {
 				return ret;
 			}
 			IcebergSnapshotScanInfo snapshot_info;
-			snapshot_info = ret.table_metadata.GetSnapshot(snapshot_lookup);
+			snapshot_info = ret.table_metadata.GetSnapshot(context, snapshot_lookup);
 			if (!snapshot_info.snapshot) {
 				throw TransactionException("Table %s is already outdated. Please restart your transaction",
 				                           GetTableKey());
@@ -680,13 +664,14 @@ IcebergTableInformation IcebergTableInformation::Copy(IcebergTransaction &iceber
 			ret.table_metadata.current_snapshot_id = *snapshot->snapshot_id;
 			return ret;
 		}
-		ret.table_metadata = ret.CreateMetadataFromLog(context, transaction_start_millis, ret.latest_metadata_json);
+		ret.table_metadata = ret.CreateMetadataFromLog(context, transaction_start_ms, ret.latest_metadata_json);
 		return ret;
 	}
 	return ret;
 }
 
 void IcebergTableInformation::InitSchemaVersions() {
+	schema_versions.clear();
 	for (auto &table_schema : table_metadata.GetSchemas()) {
 		CreateSchemaVersion(*table_schema.second);
 	}
