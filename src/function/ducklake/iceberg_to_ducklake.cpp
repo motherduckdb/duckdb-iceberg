@@ -196,7 +196,7 @@ public:
 			vector<string> deleted_delete_files;
 			for (auto &entry : iceberg_manifest_list->GetManifestFilesConst()) {
 				auto &manifest = entry.file;
-				auto &entries = entry.manifest_entries;
+				auto &entries = entry.GetManifestEntries();
 
 				if (!manifest.added_snapshot_id || *manifest.added_snapshot_id != snapshot.snapshot_id) {
 					//! This is essentially an "EXISTING" manifest

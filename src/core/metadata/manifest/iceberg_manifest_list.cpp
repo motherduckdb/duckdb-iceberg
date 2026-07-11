@@ -148,9 +148,9 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 		manifest_file.partitions.Create(table_metadata, partition_spec, manifest_entries);
 	}
 
-	manifest_list_entry.manifest_entries.insert(manifest_list_entry.manifest_entries.end(),
-	                                            std::make_move_iterator(manifest_entries.begin()),
-	                                            std::make_move_iterator(manifest_entries.end()));
+	auto &stored_entries = manifest_list_entry.GetOrCreateManifestEntries();
+	stored_entries.insert(stored_entries.end(), std::make_move_iterator(manifest_entries.begin()),
+	                      std::make_move_iterator(manifest_entries.end()));
 	return manifest_list_entry;
 }
 

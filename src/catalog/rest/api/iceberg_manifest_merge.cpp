@@ -177,6 +177,7 @@ IcebergManifestListEntry IcebergManifestMerge::ScanManifestEntries(const Iceberg
                                                                    int32_t schema_id) {
 	vector<IcebergManifestListEntry> manifest_files;
 	manifest_files.push_back(list_entry);
+	manifest_files[0].manifest_entries.reset();
 
 	IcebergOptions options;
 	auto &fs = FileSystem::GetFileSystem(commit_state.context);
@@ -246,9 +247,10 @@ optional<IcebergManifestListEntry> MergeBin(const vector<IcebergManifestListEntr
 				min_first_row_id = *member.file.first_row_id;
 			}
 		}
-		auto loaded = member.manifest_entries.empty()
-		                  ? IcebergManifestMerge::ScanManifestEntries(member, commit_state, schema_id)
-		                  : member;
+		auto loaded = member.HasManifestEntries()
+		                  ? member
+		                  : IcebergManifestMerge::ScanManifestEntries(member, commit_state, schema_id);
+		auto &loaded_entries = loaded.GetManifestEntries();
 		//! V3 row lineage: a data file's _row_id is derived from its data_file.first_row_id (+ row
 		//! position). That id is normally left null on disk and inherited at read time from the
 		//! manifest's first_row_id plus the record_count of preceding files that also lack one. Merging
@@ -265,14 +267,14 @@ optional<IcebergManifestListEntry> MergeBin(const vector<IcebergManifestListEntr
 		//! materializing is spec-compliant and keeps correctness independent of those invariants.
 		if (is_v3 && content == IcebergManifestContentType::DATA && member.file.first_row_id.has_value()) {
 			int64_t inherited_row_id = *member.file.first_row_id;
-			for (auto &entry : loaded.manifest_entries) {
+			for (auto &entry : loaded_entries) {
 				if (!entry.data_file.HasFirstRowId()) {
 					entry.data_file.SetFirstRowId(inherited_row_id);
 					inherited_row_id += entry.data_file.record_count;
 				}
 			}
 		}
-		for (auto &entry : loaded.manifest_entries) {
+		for (auto &entry : loaded_entries) {
 			//! These are already-committed manifests. Any ADDED entry describes a file added by an
 			//! earlier snapshot and must be materialized as EXISTING in the replacement manifest.
 			if (entry.status == IcebergManifestEntryStatusType::ADDED) {
@@ -330,7 +332,7 @@ vector<IcebergManifestListEntry> IcebergManifestMerge::MergeManifests(vector<Ice
 
 	//! Load the entries of the manifests if they're not already loaded
 	for (auto &member : input) {
-		if (!member.manifest_entries.empty()) {
+		if (member.HasManifestEntries()) {
 			//! Already loaded, no need to scan
 			continue;
 		}

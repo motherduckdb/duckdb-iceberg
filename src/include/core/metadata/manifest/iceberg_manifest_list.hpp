@@ -143,11 +143,28 @@ public:
 	                                                  const IcebergManifestMetadata &manifest_metadata,
 	                                                  vector<IcebergManifestEntry> &&manifest_entries,
 	                                                  int64_t &next_row_id);
+	bool HasManifestEntries() const {
+		return manifest_entries.has_value();
+	}
+	vector<IcebergManifestEntry> &GetManifestEntries() {
+		D_ASSERT(manifest_entries);
+		return *manifest_entries;
+	}
+	const vector<IcebergManifestEntry> &GetManifestEntries() const {
+		D_ASSERT(manifest_entries);
+		return *manifest_entries;
+	}
+	vector<IcebergManifestEntry> &GetOrCreateManifestEntries() {
+		if (!manifest_entries) {
+			manifest_entries.emplace();
+		}
+		return *manifest_entries;
+	}
 
 public:
 	IcebergManifestFile file;
 	optional<IcebergManifestMetadata> manifest_metadata;
-	vector<IcebergManifestEntry> manifest_entries;
+	optional<vector<IcebergManifestEntry>> manifest_entries;
 };
 
 struct IcebergManifestList {

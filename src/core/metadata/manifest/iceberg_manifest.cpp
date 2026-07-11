@@ -603,11 +603,11 @@ static Value FieldIdsForList(int32_t list_field_id, int32_t element_field_id) {
 idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManifestListEntry &manifest_entry,
                   CopyFunction &copy, DatabaseInstance &db, ClientContext &context) {
 	auto &manifest_file = manifest_entry.file;
-	auto &manifest_entries = manifest_entry.manifest_entries;
 	if (!manifest_entry.manifest_metadata) {
 		throw InternalException("Manifest entry for '%s' is missing typed manifest metadata",
 		                        manifest_file.manifest_path);
 	}
+	auto &manifest_entries = manifest_entry.GetManifestEntries();
 	auto &entry_metadata = *manifest_entry.manifest_metadata;
 	auto manifest_metadata = GetManifestMetadataMap(table_metadata, entry_metadata);
 	auto manifest_format_version = entry_metadata.format_version;

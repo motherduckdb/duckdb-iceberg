@@ -44,15 +44,18 @@ static optional<IcebergManifestListEntry> RewriteManifestFile(const IcebergManif
                                                               CopyFunction &avro_copy, DatabaseInstance &db,
                                                               IcebergCommitState &commit_state, int32_t schema_id,
                                                               const IcebergManifestDeletes &deletes) {
-	auto scanned_manifest = IcebergManifestMerge::ScanManifestEntries(list_entry, commit_state, schema_id);
-	D_ASSERT(scanned_manifest.manifest_metadata);
+	auto loaded_manifest = list_entry.HasManifestEntries()
+	                           ? list_entry
+	                           : IcebergManifestMerge::ScanManifestEntries(list_entry, commit_state, schema_id);
+	D_ASSERT(loaded_manifest.manifest_metadata);
+	auto &scanned_entries = loaded_manifest.GetManifestEntries();
 
 	vector<IcebergManifestEntry> rewritten_entries;
-	rewritten_entries.reserve(scanned_manifest.manifest_entries.size());
+	rewritten_entries.reserve(scanned_entries.size());
 	bool removed_any_entries = false;
-	for (auto &manifest_entry : scanned_manifest.manifest_entries) {
-		auto sequence_number = manifest_entry.GetSequenceNumber(scanned_manifest.file);
-		auto file_sequence_number = manifest_entry.GetFileSequenceNumber(scanned_manifest.file);
+	for (auto &manifest_entry : scanned_entries) {
+		auto sequence_number = manifest_entry.GetSequenceNumber(loaded_manifest.file);
+		auto file_sequence_number = manifest_entry.GetFileSequenceNumber(loaded_manifest.file);
 		manifest_entry.SetSequenceNumber(sequence_number);
 		manifest_entry.SetFileSequenceNumber(file_sequence_number);
 		if (manifest_entry.status == IcebergManifestEntryStatusType::ADDED) {
@@ -68,9 +71,9 @@ static optional<IcebergManifestListEntry> RewriteManifestFile(const IcebergManif
 	if (!removed_any_entries) {
 		return nullopt;
 	}
-	return IcebergManifestMerge::WriteReplacementManifest(*scanned_manifest.manifest_metadata,
+	return IcebergManifestMerge::WriteReplacementManifest(*loaded_manifest.manifest_metadata,
 	                                                      std::move(rewritten_entries), avro_copy, db, commit_state,
-	                                                      scanned_manifest.file.first_row_id);
+	                                                      loaded_manifest.file.first_row_id);
 }
 
 static void AddManifestListEntry(IcebergManifestList &new_manifest_list, IcebergManifestListEntry &&manifest_entry) {
@@ -128,7 +131,7 @@ CreateCommitManifestFiles(const vector<IcebergManifestListEntry> &manifest_files
 	auto next_row_id = commit_state.next_row_id;
 	for (const auto &manifest_entry : manifest_files) {
 		D_ASSERT(manifest_entry.manifest_metadata);
-		auto copied_entries = manifest_entry.manifest_entries;
+		auto copied_entries = manifest_entry.GetManifestEntries();
 		auto copied_manifest = IcebergManifestListEntry::CreateFromEntries(
 		    fs, sequence_number, table_info.table_metadata, *manifest_entry.manifest_metadata,
 		    std::move(copied_entries), next_row_id);

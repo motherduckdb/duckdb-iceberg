@@ -112,6 +112,18 @@ where content = 'DATA' and status <> 'DELETED'
 true
 
 query I
+select count(*) = 0
+from (
+    select file_path
+    from iceberg_metadata('my_datalake.default.spark_rewrite_mor_residual_deletes')
+    where content = 'DATA' and status <> 'DELETED'
+    group by file_path
+    having count(*) > 1
+);
+----
+true
+
+query I
 select count(*) > 0
 from iceberg_metadata('my_datalake.default.spark_rewrite_mor_residual_deletes')
 where content = 'POSITION_DELETES' and status <> 'DELETED';

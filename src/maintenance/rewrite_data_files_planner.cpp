@@ -171,7 +171,7 @@ RewritePlan PlanRewrite(ClientContext &context, const RewriteDataFilesPlanInput 
 			    list_entry.file.partition_spec_id, default_spec_id);
 		}
 
-		for (const auto &entry : list_entry.manifest_entries) {
+		for (const auto &entry : list_entry.GetManifestEntries()) {
 			if (entry.status == IcebergManifestEntryStatusType::DELETED) {
 				continue;
 			}
