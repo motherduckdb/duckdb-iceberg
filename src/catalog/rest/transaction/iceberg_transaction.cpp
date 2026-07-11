@@ -314,8 +314,7 @@ TableTransactionInfo IcebergTransaction::GetTransactionRequest(IcebergTransactio
 }
 
 bool IcebergTransaction::CanUseMultiTableCommit(const IcebergTransactionAlterUpdate &alter_update) const {
-	if (catalog.attach_options.disable_multi_table_commit ||
-	    !catalog.supported_urls.count("POST /v1/{prefix}/transactions/commit")) {
+	if (!MultiTableCommitAvailable()) {
 		return false;
 	}
 	for (const auto &entry : alter_update.updated_tables) {
@@ -328,6 +327,80 @@ bool IcebergTransaction::CanUseMultiTableCommit(const IcebergTransactionAlterUpd
 		}
 	}
 	return true;
+}
+
+bool IcebergTransaction::MultiTableCommitAvailable() const {
+	return !catalog.attach_options.disable_multi_table_commit &&
+	       catalog.supported_urls.count("POST /v1/{prefix}/transactions/commit");
+}
+
+idx_t IcebergTransaction::CountAlterTableRequests() const {
+	idx_t request_count = 0;
+	for (const auto &transaction_update : transaction_updates) {
+		if (transaction_update->type != IcebergTransactionUpdateType::ALTER) {
+			continue;
+		}
+		auto &alter_update = transaction_update->Cast<IcebergTransactionAlterUpdate>();
+		for (const auto &entry : alter_update.updated_tables) {
+			if (entry.second.HasTransactionUpdates()) {
+				request_count++;
+			}
+		}
+	}
+	return request_count;
+}
+
+idx_t IcebergTransaction::CountAlterTableRequestsExcluding(const string &table_key) const {
+	idx_t request_count = 0;
+	for (const auto &transaction_update : transaction_updates) {
+		if (transaction_update->type != IcebergTransactionUpdateType::ALTER) {
+			continue;
+		}
+		auto &alter_update = transaction_update->Cast<IcebergTransactionAlterUpdate>();
+		for (const auto &entry : alter_update.updated_tables) {
+			if (entry.first != table_key && entry.second.HasTransactionUpdates()) {
+				request_count++;
+			}
+		}
+	}
+	return request_count;
+}
+
+bool IcebergTransaction::HasStandaloneTableRequests() const {
+	for (const auto &transaction_update : transaction_updates) {
+		if (transaction_update->type == IcebergTransactionUpdateType::DELETE ||
+		    transaction_update->type == IcebergTransactionUpdateType::RENAME) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void IcebergTransaction::ThrowIfNonAtomicAlterRequest(const string &table_key) const {
+	if (MultiTableCommitAvailable()) {
+		return;
+	}
+	if (HasStandaloneTableRequests()) {
+		throw TransactionException(
+		    "Iceberg REST Catalog cannot commit this transaction atomically because it mixes table updates with "
+		    "rename/drop requests without POST /transactions/commit support");
+	}
+	if (CountAlterTableRequestsExcluding(table_key) > 0) {
+		throw TransactionException(
+		    "Iceberg REST Catalog cannot commit this transaction atomically because it would update multiple tables "
+		    "without POST /transactions/commit support");
+	}
+}
+
+void IcebergTransaction::ThrowIfNonAtomicStandaloneRequest() const {
+	if (MultiTableCommitAvailable()) {
+		return;
+	}
+	if (CountAlterTableRequests() > 0) {
+		throw TransactionException(
+		    "Iceberg REST Catalog cannot commit this transaction atomically because it mixes table updates with "
+		    "rename/drop requests without POST /transactions/commit support");
+	}
 }
 
 void IcebergTransaction::CleanupMetadataFiles(ClientContext &context, const vector<string> &paths) {
@@ -861,6 +934,7 @@ IcebergTransactionAlterUpdate &IcebergTransaction::GetOrCreateAlter() {
 IcebergTableInformation &IcebergTransaction::DeleteTable(IcebergTableInformation &table) {
 	auto table_key = table.GetTableKey();
 	auto state = GetLatestTableState(table_key);
+	ThrowIfNonAtomicStandaloneRequest();
 
 	unique_ptr<IcebergTransactionDeleteUpdate> delete_update;
 	if (state) {
@@ -881,9 +955,13 @@ IcebergTableInformation &IcebergTransaction::RenameTable(IcebergTableInformation
 	if (state) {
 		auto &original_table = state->GetInfo();
 		if (original_table.HasTransactionUpdates()) {
+			if (!MultiTableCommitAvailable()) {
+				ThrowIfNonAtomicStandaloneRequest();
+			}
 			throw CatalogException("This table (%s) was modified already, can't be renamed!", table.name);
 		}
 	}
+	ThrowIfNonAtomicStandaloneRequest();
 
 	state = SetLatestTableState(table, IcebergTableStatus::RENAMED);
 

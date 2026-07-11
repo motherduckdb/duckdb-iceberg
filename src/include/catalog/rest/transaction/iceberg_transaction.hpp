@@ -68,6 +68,8 @@ struct SchemaPropertyUpdates {
 
 class IcebergTransaction : public Transaction {
 public:
+	friend struct IcebergTransactionData;
+
 	IcebergTransaction(IcebergCatalog &ic_catalog, TransactionManager &manager, ClientContext &context);
 	~IcebergTransaction() override;
 
@@ -99,7 +101,13 @@ public:
 	IcebergTableInformation &RenameTable(IcebergTableInformation &table, const string &new_name);
 
 private:
+	bool MultiTableCommitAvailable() const;
 	bool CanUseMultiTableCommit(const IcebergTransactionAlterUpdate &alter_update) const;
+	idx_t CountAlterTableRequests() const;
+	idx_t CountAlterTableRequestsExcluding(const string &table_key) const;
+	bool HasStandaloneTableRequests() const;
+	void ThrowIfNonAtomicAlterRequest(const string &table_key) const;
+	void ThrowIfNonAtomicStandaloneRequest() const;
 	void CleanupMetadataFiles(ClientContext &context, const vector<string> &paths);
 	void RefreshRetryTables(IcebergTransactionAlterUpdate &alter_update, const case_insensitive_set_t &table_keys,
 	                        ClientContext &context);
