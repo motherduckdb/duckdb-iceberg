@@ -61,6 +61,12 @@ static bool MatchBoundsConstant(const Value &constant, ExpressionType comparison
 		return false;
 	}
 
+	if (!stats.has_not_null && comparison_type != ExpressionType::COMPARE_DISTINCT_FROM &&
+	    comparison_type != ExpressionType::COMPARE_NOT_DISTINCT_FROM) {
+		// An all-null column (Iceberg omits its bounds) only matches a null-safe comparison.
+		return false;
+	}
+
 	if (!stats.upper_bound || !stats.lower_bound) {
 		// we do not have upper or lower bounds, assume the file matches.
 		return true;
