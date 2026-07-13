@@ -11,16 +11,6 @@ class IcebergCatalog;
 class IcebergSchemaEntry;
 class IcebergTableEntry;
 
-struct TableTransactionInfo {
-	TableTransactionInfo() {};
-
-	rest_api_objects::CommitTransactionRequest request;
-	case_insensitive_map_t<idx_t> table_requests;
-	case_insensitive_map_t<vector<string>> created_metadata_files;
-	bool retryable = false;
-	IcebergRetryConfig retry_config;
-};
-
 enum class IcebergTableStatus : uint8_t { ALIVE, DROPPED, RENAMED, MISSING };
 
 struct IcebergTransactionTableState {
@@ -86,7 +76,6 @@ public:
 	void DoSchemaPropertyUpdates(ClientContext &context);
 	IcebergCatalog &GetCatalog();
 	void DropSecrets(ClientContext &context);
-	TableTransactionInfo GetTransactionRequest(IcebergTransactionAlterUpdate &alter_update, ClientContext &context);
 	void DoMultiTableCommitUpdates(IcebergTransactionAlterUpdate &alter_update, ClientContext &context);
 	void DoSingleTableCommitUpdates(IcebergTransactionAlterUpdate &alter_update, ClientContext &context);
 	optional_ptr<IcebergTransactionTableState> GetLatestTableState(const string &table_key);
