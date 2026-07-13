@@ -245,7 +245,7 @@ static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, Iceb
 	info.retryable = transaction_data.SupportsAppendRetry();
 	info.retry_config = IcebergRetryConfig::FromTableMetadata(metadata);
 	if (!transaction_data.alters.empty()) {
-		commit_state.LoadExistingManifests(std::move(transaction_data.existing_manifest_list));
+		commit_state.LoadExistingManifests(db, std::move(transaction_data.existing_manifest_list));
 	}
 	commit_state.latest_snapshot = current_snapshot;
 
@@ -761,7 +761,7 @@ void IcebergTransaction::CleanupFiles() {
 				auto &add_snapshot = update->Cast<IcebergAddSnapshot>();
 				const auto manifest_list_entries = add_snapshot.GetManifestFiles();
 				for (const auto &manifest : manifest_list_entries) {
-					for (auto &manifest_entry : manifest.manifest_entries) {
+					for (auto &manifest_entry : manifest.GetManifestEntries()) {
 						auto &data_file = manifest_entry.data_file;
 						if (fs.TryRemoveFile(data_file.file_path)) {
 							DUCKDB_LOG(temp_context, IcebergLogType,
