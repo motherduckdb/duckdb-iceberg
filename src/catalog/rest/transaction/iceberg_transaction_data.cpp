@@ -249,6 +249,9 @@ void IcebergTransactionData::TableAssignUUID() {
 void IcebergTransactionData::TableAddAssertCreate() {
 	has_assert_create = true;
 	requirements.push_back(make_uniq<AssertCreateRequirement>());
+	auto alter_update = transaction.GetAlterUpdate();
+	D_ASSERT(alter_update);
+	transaction.VerifyAlterUpdateAtomicity(*alter_update);
 }
 
 void IcebergTransactionData::TableAddAssertUUID() {

@@ -58,16 +58,8 @@ IcebergTableInformation &IcebergTransactionAlterUpdate::GetOrInitializeTable(con
 	auto it = updated_tables.find(table_key);
 	if (it == updated_tables.end()) {
 		CheckWriteWriteConflict(table);
-
-		if (!transaction.MultiTableCommitAvailable()) {
-			if (!updated_tables.empty()) {
-				throw TransactionException("Iceberg REST Catalog cannot commit this transaction atomically because it "
-				                           "would update multiple tables "
-				                           "without POST /transactions/commit support");
-			}
-		}
-
 		it = updated_tables.emplace(table_key, CopyLatestState(transaction, table)).first;
+		transaction.VerifyAlterUpdateAtomicity(*this);
 		// Preserve the table_uuid from the original table info (resolved at transaction start).
 		// Copy() reads from the global request cache, which can be contaminated by another
 		// transaction's RENAME overwriting the entry with a different table's metadata.
@@ -97,6 +89,7 @@ IcebergTableInformation &IcebergTransactionAlterUpdate::CreateTable(const string
 	if (!emplace_res.second) {
 		throw InternalException("Table %s was already created somehow?", table_key);
 	}
+	transaction.VerifyAlterUpdateAtomicity(*this);
 
 	transaction.current_table_data.emplace(table_key, IcebergTransactionTableState(emplace_res.first->second));
 	return emplace_res.first->second;

@@ -56,6 +56,7 @@ struct SchemaPropertyUpdates {
 class IcebergTransaction : public Transaction {
 public:
 	friend struct IcebergTransactionData;
+	friend struct IcebergTransactionAlterUpdate;
 
 	IcebergTransaction(IcebergCatalog &ic_catalog, TransactionManager &manager, ClientContext &context);
 	~IcebergTransaction() override;
@@ -92,6 +93,7 @@ private:
 	IcebergTransactionAlterUpdate *GetAlterUpdate();
 	const IcebergTransactionAlterUpdate *GetAlterUpdate() const;
 	bool CanUseMultiTableCommit(const IcebergTransactionAlterUpdate &alter_update) const;
+	void VerifyAlterUpdateAtomicity(const IcebergTransactionAlterUpdate &alter_update) const;
 	void CleanupMetadataFiles(ClientContext &context, const vector<string> &paths);
 	void RefreshRetryTables(IcebergTransactionAlterUpdate &alter_update, const case_insensitive_set_t &table_keys,
 	                        ClientContext &context);
