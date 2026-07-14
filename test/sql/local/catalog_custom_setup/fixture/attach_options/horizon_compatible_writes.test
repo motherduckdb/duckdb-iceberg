@@ -114,7 +114,7 @@ create table my_datalake.default.test_horizon_mixed_empty_create (id int, label 
 statement error
 insert into my_datalake.default.test_horizon_mixed_existing values (3, 'mixed');
 ----
-TransactionContext Error: Iceberg REST Catalog cannot commit this transaction atomically because it would update multiple tables without POST /transactions/commit support
+TransactionContext Error: Iceberg REST Catalog cannot commit this transaction atomically because it would require multiple table commit requests without atomic multi-table commit support
 
 statement ok
 commit;
