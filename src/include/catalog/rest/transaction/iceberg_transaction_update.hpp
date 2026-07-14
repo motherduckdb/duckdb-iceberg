@@ -1,5 +1,7 @@
 #pragma once
 
+#include <variant>
+
 #include "duckdb/common/constants.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -9,84 +11,50 @@ namespace duckdb {
 
 class IcebergTransaction;
 
-enum class IcebergTransactionUpdateType : uint8_t { ALTER, DELETE, RENAME };
-
-struct IcebergTransactionUpdate {
-public:
-	IcebergTransactionUpdate(IcebergTransaction &transaction, IcebergTransactionUpdateType type);
-	virtual ~IcebergTransactionUpdate();
-
-public:
-	template <class TARGET>
-	TARGET &Cast() {
-		if (type != TARGET::TYPE) {
-			throw InternalException(
-			    "Failed to cast IcebergTransactionUpdate to type - IcebergTransactionUpdate type mismatch");
-		}
-		return reinterpret_cast<TARGET &>(*this);
-	}
-
-	template <class TARGET>
-	const TARGET &Cast() const {
-		if (type != TARGET::TYPE) {
-			throw InternalException(
-			    "Failed to cast IcebergTransactionUpdate to type - IcebergTransactionUpdate type mismatch");
-		}
-		return reinterpret_cast<const TARGET &>(*this);
-	}
-
-public:
-	IcebergTransaction &transaction;
-	IcebergTransactionUpdateType type;
-};
-
 //! Update a table with a regular alter
-struct IcebergTransactionAlterUpdate : public IcebergTransactionUpdate {
-public:
-	static constexpr const IcebergTransactionUpdateType TYPE = IcebergTransactionUpdateType::ALTER;
-
+struct IcebergTransactionAlterUpdate {
 public:
 	IcebergTransactionAlterUpdate(IcebergTransaction &transaction);
-	virtual ~IcebergTransactionAlterUpdate() override;
+	~IcebergTransactionAlterUpdate();
 
 public:
 	IcebergTableInformation &CreateTable(const string &table_key, IcebergTableInformation &&table);
 	IcebergTableInformation &GetOrInitializeTable(const IcebergTableInformation &table);
 	void CheckWriteWriteConflict(const IcebergTableInformation &table_info) const;
 	bool HasUpdates() const;
+
+public:
+	IcebergTransaction &transaction;
 	//! All the tables touched in this atomic block
 	case_insensitive_map_t<IcebergTableInformation> updated_tables;
-	//! The tables successively committed (used if multi-table commit isn't available)
-	case_insensitive_set_t committed_tables;
 };
 
 //! Drop a table
-struct IcebergTransactionDeleteUpdate : public IcebergTransactionUpdate {
-public:
-	static constexpr const IcebergTransactionUpdateType TYPE = IcebergTransactionUpdateType::DELETE;
-
+struct IcebergTransactionDeleteUpdate {
 public:
 	IcebergTransactionDeleteUpdate(IcebergTransaction &transaction, const IcebergTableInformation &table);
-	virtual ~IcebergTransactionDeleteUpdate() override;
+	~IcebergTransactionDeleteUpdate();
 
 public:
+	IcebergTransaction &transaction;
 	IcebergTableInformation deleted_table;
 };
 
 //! Rename a table
-struct IcebergTransactionRenameUpdate : public IcebergTransactionUpdate {
-public:
-	static constexpr const IcebergTransactionUpdateType TYPE = IcebergTransactionUpdateType::RENAME;
-
+struct IcebergTransactionRenameUpdate {
 public:
 	IcebergTransactionRenameUpdate(IcebergTransaction &transaction, const IcebergTableInformation &table,
 	                               const string &new_name);
-	virtual ~IcebergTransactionRenameUpdate() override;
+	~IcebergTransactionRenameUpdate();
 
 public:
+	IcebergTransaction &transaction;
 	const IcebergTableInformation &table;
 	IcebergTableInformation new_table;
 	string new_name;
 };
+
+using IcebergTransactionUpdate = std::variant<std::monostate, IcebergTransactionAlterUpdate,
+                                              IcebergTransactionDeleteUpdate, IcebergTransactionRenameUpdate>;
 
 } // namespace duckdb

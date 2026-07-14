@@ -22,7 +22,8 @@ struct IcebergCreateTableRequest;
 
 struct IcebergTransactionData {
 public:
-	IcebergTransactionData(ClientContext &context, const IcebergTableInformation &table_info);
+	IcebergTransactionData(ClientContext &context, IcebergTransaction &transaction,
+	                       const IcebergTableInformation &table_info);
 
 public:
 	int64_t GetCommitRetryCount() const;
@@ -62,6 +63,7 @@ public:
 	optional_idx initial_default_sort_order_id;
 
 	ClientContext &context;
+	IcebergTransaction &transaction;
 	const IcebergTableInformation &table_info;
 	//! schema updates etc.
 	vector<unique_ptr<IcebergTableUpdate>> updates;

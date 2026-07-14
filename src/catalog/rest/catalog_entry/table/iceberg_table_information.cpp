@@ -687,7 +687,7 @@ IcebergTransactionData &IcebergTableInformation::GetOrCreateTransactionData(Iceb
 	lock_guard<mutex> guard(transaction.lock);
 	if (!transaction_data) {
 		auto context = transaction.context.lock();
-		transaction_data = make_uniq<IcebergTransactionData>(*context, *this);
+		transaction_data = make_uniq<IcebergTransactionData>(*context, transaction, *this);
 	}
 	return *transaction_data;
 }

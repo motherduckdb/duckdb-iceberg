@@ -1,5 +1,7 @@
 #include "catalog/rest/transaction/iceberg_transaction_data.hpp"
 
+#include "catalog/rest/transaction/iceberg_transaction.hpp"
+
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
 #include "duckdb/common/types/uuid.hpp"
 
@@ -60,8 +62,9 @@ static void LoadExistingManifestList(ClientContext &context, const IcebergTableM
 	}
 }
 
-IcebergTransactionData::IcebergTransactionData(ClientContext &context, const IcebergTableInformation &table_info)
-    : context(context), table_info(table_info) {
+IcebergTransactionData::IcebergTransactionData(ClientContext &context, IcebergTransaction &transaction,
+                                               const IcebergTableInformation &table_info)
+    : context(context), transaction(transaction), table_info(table_info) {
 	initial_table_uuid = table_info.table_metadata.table_uuid;
 	if (table_info.table_metadata.next_row_id) {
 		next_row_id = *table_info.table_metadata.next_row_id;
@@ -246,6 +249,9 @@ void IcebergTransactionData::TableAssignUUID() {
 void IcebergTransactionData::TableAddAssertCreate() {
 	has_assert_create = true;
 	requirements.push_back(make_uniq<AssertCreateRequirement>());
+	auto alter_update = transaction.GetAlterUpdate();
+	D_ASSERT(alter_update);
+	transaction.VerifyAlterUpdateAtomicity(*alter_update);
 }
 
 void IcebergTransactionData::TableAddAssertUUID() {

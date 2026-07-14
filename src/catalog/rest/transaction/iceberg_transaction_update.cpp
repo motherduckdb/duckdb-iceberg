@@ -17,14 +17,8 @@ static IcebergTableInformation CopyLatestState(IcebergTransaction &transaction, 
 
 } // namespace
 
-IcebergTransactionUpdate::IcebergTransactionUpdate(IcebergTransaction &transaction, IcebergTransactionUpdateType type)
-    : transaction(transaction), type(type) {
-}
-IcebergTransactionUpdate::~IcebergTransactionUpdate() {
-}
-
 IcebergTransactionAlterUpdate::IcebergTransactionAlterUpdate(IcebergTransaction &transaction)
-    : IcebergTransactionUpdate(transaction, TYPE) {
+    : transaction(transaction) {
 }
 IcebergTransactionAlterUpdate::~IcebergTransactionAlterUpdate() {
 }
@@ -65,6 +59,7 @@ IcebergTableInformation &IcebergTransactionAlterUpdate::GetOrInitializeTable(con
 	if (it == updated_tables.end()) {
 		CheckWriteWriteConflict(table);
 		it = updated_tables.emplace(table_key, CopyLatestState(transaction, table)).first;
+		transaction.VerifyAlterUpdateAtomicity(*this);
 		// Preserve the table_uuid from the original table info (resolved at transaction start).
 		// Copy() reads from the global request cache, which can be contaminated by another
 		// transaction's RENAME overwriting the entry with a different table's metadata.
@@ -94,6 +89,7 @@ IcebergTableInformation &IcebergTransactionAlterUpdate::CreateTable(const string
 	if (!emplace_res.second) {
 		throw InternalException("Table %s was already created somehow?", table_key);
 	}
+	transaction.VerifyAlterUpdateAtomicity(*this);
 
 	transaction.current_table_data.emplace(table_key, IcebergTransactionTableState(emplace_res.first->second));
 	return emplace_res.first->second;
@@ -101,7 +97,7 @@ IcebergTableInformation &IcebergTransactionAlterUpdate::CreateTable(const string
 
 IcebergTransactionDeleteUpdate::IcebergTransactionDeleteUpdate(IcebergTransaction &transaction,
                                                                const IcebergTableInformation &table)
-    : IcebergTransactionUpdate(transaction, TYPE), deleted_table(table.Copy(transaction)) {
+    : transaction(transaction), deleted_table(table.Copy(transaction)) {
 }
 IcebergTransactionDeleteUpdate::~IcebergTransactionDeleteUpdate() {
 }
@@ -109,8 +105,7 @@ IcebergTransactionDeleteUpdate::~IcebergTransactionDeleteUpdate() {
 IcebergTransactionRenameUpdate::IcebergTransactionRenameUpdate(IcebergTransaction &transaction,
                                                                const IcebergTableInformation &table,
                                                                const string &new_name)
-    : IcebergTransactionUpdate(transaction, TYPE), table(table), new_table(CopyLatestState(transaction, table)),
-      new_name(new_name) {
+    : transaction(transaction), table(table), new_table(CopyLatestState(transaction, table)), new_name(new_name) {
 	new_table.name = new_name;
 	if (!table.schema_versions.empty()) {
 		new_table.InitSchemaVersions();
