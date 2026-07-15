@@ -49,6 +49,12 @@ select * from my_datalake.default.multi_transaction_update;
 ----
 0	0
 
+# The historical table information is now pinned in transaction state and remains stable on repeated lookup.
+query II con1
+select * from my_datalake.default.multi_transaction_update;
+----
+0	0
+
 statement error con1
 update my_datalake.default.multi_transaction_update set a = 50;
 ----

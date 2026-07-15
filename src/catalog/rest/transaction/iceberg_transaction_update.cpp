@@ -4,19 +4,6 @@
 
 namespace duckdb {
 
-namespace {
-
-static IcebergTableInformation CopyLatestState(IcebergTransaction &transaction, const IcebergTableInformation &table) {
-	auto key = table.GetTableKey();
-	auto state = transaction.GetLatestTableState(key);
-	if (!state) {
-		throw InternalException("No transaction state exists for table with key '%s'", key);
-	}
-	return state->GetInfo().Copy();
-}
-
-} // namespace
-
 IcebergTransactionAlterUpdate::IcebergTransactionAlterUpdate(IcebergTransaction &transaction)
     : transaction(transaction) {
 }
@@ -33,7 +20,7 @@ void IcebergTransactionAlterUpdate::CheckWriteWriteConflict(const IcebergTableIn
 	auto &metadata = table_info.table_metadata;
 
 	auto table_state = iceberg_transaction.GetLatestTableState(table_key);
-	if (table_state->GetInfo().HasTransactionUpdates()) {
+	if (table_state && table_state->GetInfo().HasTransactionUpdates()) {
 		//! Already has transaction changes, no need to verify further
 		return;
 	}
@@ -57,25 +44,21 @@ IcebergTableInformation &IcebergTransactionAlterUpdate::GetOrInitializeTable(con
 	auto table_key = table.GetTableKey();
 	auto it = updated_tables.find(table_key);
 	if (it == updated_tables.end()) {
-		CheckWriteWriteConflict(table);
-		it = updated_tables.emplace(table_key, CopyLatestState(transaction, table)).first;
+		auto state = transaction.GetLatestTableState(table_key);
+		CheckWriteWriteConflict(state ? state->GetCatalogInfo() : table);
+		auto &transaction_state = state ? *state : transaction.GetOrCreateTransactionTableState(table);
+		auto &updated_table = transaction_state.GetOrCreateTransactionInfo(transaction);
+		it = updated_tables.emplace(table_key, updated_table).first;
 		transaction.VerifyAlterUpdateAtomicity(*this);
-		// Preserve the table_uuid from the original table info (resolved at transaction start).
-		// Copy() reads from the global request cache, which can be contaminated by another
-		// transaction's RENAME overwriting the entry with a different table's metadata.
-		// Only override when the original has a known UUID (skip for newly created tables).
-		if (!table.table_metadata.table_uuid.empty()) {
-			it->second.table_metadata.table_uuid = table.table_metadata.table_uuid;
-		}
-		it->second.InitSchemaVersions();
 	}
-	transaction.SetLatestTableState(it->second, IcebergTableStatus::ALIVE);
-	return it->second;
+	auto &result = it->second.get();
+	transaction.SetLatestTableState(table_key, IcebergTableStatus::ALIVE);
+	return result;
 }
 
 bool IcebergTransactionAlterUpdate::HasUpdates() const {
 	for (auto &it : updated_tables) {
-		auto &table = it.second;
+		auto &table = it.second.get();
 		if (table.HasTransactionUpdates()) {
 			return true;
 		}
@@ -85,31 +68,28 @@ bool IcebergTransactionAlterUpdate::HasUpdates() const {
 
 IcebergTableInformation &IcebergTransactionAlterUpdate::CreateTable(const string &table_key,
                                                                     IcebergTableInformation &&table) {
-	auto emplace_res = updated_tables.emplace(table_key, std::move(table));
+	auto &state = transaction.SetTransactionTableState(table_key, std::move(table), IcebergTableStatus::ALIVE);
+	auto &created_table = state.GetInfo();
+	auto emplace_res = updated_tables.emplace(table_key, created_table);
 	if (!emplace_res.second) {
 		throw InternalException("Table %s was already created somehow?", table_key);
 	}
 	transaction.VerifyAlterUpdateAtomicity(*this);
-
-	transaction.current_table_data.emplace(table_key, IcebergTransactionTableState(emplace_res.first->second));
-	return emplace_res.first->second;
+	return created_table;
 }
 
 IcebergTransactionDeleteUpdate::IcebergTransactionDeleteUpdate(IcebergTransaction &transaction,
-                                                               const IcebergTableInformation &table)
-    : transaction(transaction), deleted_table(table.Copy(transaction)) {
+                                                               IcebergTableInformation &table)
+    : transaction(transaction), deleted_table(table) {
 }
 IcebergTransactionDeleteUpdate::~IcebergTransactionDeleteUpdate() {
 }
 
 IcebergTransactionRenameUpdate::IcebergTransactionRenameUpdate(IcebergTransaction &transaction,
-                                                               const IcebergTableInformation &table,
+                                                               IcebergTableInformation &table,
+                                                               IcebergTableInformation &new_table,
                                                                const string &new_name)
-    : transaction(transaction), table(table), new_table(CopyLatestState(transaction, table)), new_name(new_name) {
-	new_table.name = new_name;
-	if (!table.schema_versions.empty()) {
-		new_table.InitSchemaVersions();
-	}
+    : transaction(transaction), table(table), new_table(new_table), new_name(new_name) {
 }
 IcebergTransactionRenameUpdate::~IcebergTransactionRenameUpdate() {
 }

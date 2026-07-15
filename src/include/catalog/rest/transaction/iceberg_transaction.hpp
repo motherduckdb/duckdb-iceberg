@@ -15,16 +15,24 @@ enum class IcebergTableStatus : uint8_t { ALIVE, DROPPED, RENAMED, MISSING };
 
 struct IcebergTransactionTableState {
 public:
-	IcebergTransactionTableState(optional_ptr<IcebergTableInformation> table);
+	IcebergTransactionTableState();
+	explicit IcebergTransactionTableState(shared_ptr<IcebergTableInformation> catalog_table);
+	explicit IcebergTransactionTableState(IcebergTableInformation &&transaction_table);
 
 public:
 	IcebergTableInformation &GetInfo() {
-		if (!table) {
+		if (transaction_table) {
+			return *transaction_table;
+		}
+		if (!catalog_table) {
 			throw InternalException("GetInfo called on IcebergTransactionTableState without a table, status: %d",
 			                        static_cast<uint8_t>(status));
 		}
-		return *table;
+		return *catalog_table;
 	}
+	const IcebergTableInformation &GetInfo() const;
+	const IcebergTableInformation &GetCatalogInfo() const;
+	IcebergTableInformation &GetOrCreateTransactionInfo(IcebergTransaction &transaction);
 
 public:
 	bool IsDroppedOrRenamed() const {
@@ -39,12 +47,14 @@ public:
 	void SetStatus(IcebergTableStatus value) {
 		status = value;
 	}
-	void SetTable(IcebergTableInformation &value) {
-		table = value;
-	}
 
 private:
-	optional_ptr<IcebergTableInformation> table;
+	//! The catalog state remains available for conflict checks after the visible state is rolled back to the
+	//! transaction start time.
+	shared_ptr<IcebergTableInformation> catalog_table;
+	//! Lazily materialized transaction-local state. Its stable address is referenced by table updates and schema
+	//! entries.
+	unique_ptr<IcebergTableInformation> transaction_table;
 	IcebergTableStatus status;
 };
 
@@ -80,7 +90,10 @@ public:
 	void DoMultiTableCommitUpdates(IcebergTransactionAlterUpdate &alter_update, ClientContext &context);
 	void DoSingleTableCommitUpdates(IcebergTransactionAlterUpdate &alter_update, ClientContext &context);
 	optional_ptr<IcebergTransactionTableState> GetLatestTableState(const string &table_key);
-	IcebergTransactionTableState &SetLatestTableState(IcebergTableInformation &table, IcebergTableStatus status);
+	IcebergTransactionTableState &SetCatalogTableState(shared_ptr<IcebergTableInformation> table);
+	IcebergTransactionTableState &SetTransactionTableState(const string &table_key, IcebergTableInformation &&table,
+	                                                       IcebergTableStatus status);
+	IcebergTransactionTableState &GetOrCreateTransactionTableState(const IcebergTableInformation &table);
 	IcebergTransactionTableState &SetLatestTableState(const string &table_key, IcebergTableStatus status);
 	bool StartedBefore(timestamp_ms_t timestamp_ms) const;
 	IcebergTransactionAlterUpdate &GetOrCreateAlter();
@@ -112,9 +125,10 @@ private:
 public:
 	//! Tables referenced by this transaction that have to stay alive for the duration of the transaction.
 	case_insensitive_map_t<shared_ptr<IcebergTableInformation>> tables;
-	IcebergTransactionUpdate transaction_update;
-	//! The latest state of a table (either points into the active table update or 'tables')
+	//! The visible state of every resolved table in this transaction.
 	case_insensitive_map_t<IcebergTransactionTableState> current_table_data;
+	//! Declared after current_table_data so update references are destroyed before the referenced table states.
+	IcebergTransactionUpdate transaction_update;
 
 	unordered_set<string> created_schemas;
 	unordered_set<string> deleted_schemas;

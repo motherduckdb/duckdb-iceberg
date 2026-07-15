@@ -71,11 +71,10 @@ FROM my_datalake.default.alter_add_column_explicit_txn ORDER BY a;
 8
 9
 
-# schema changed, ACID is violated for con2
+# con2 owns the table state as it existed at transaction start, including its schema
 query II
 SELECT log_level, message FROM duckdb_logs
 ----
-WARNING	Detected schema change during transaction (schema_id mismatch); ACID guarantees may not hold.
 
 statement error con2
 INSERT INTO my_datalake.default.alter_add_column_explicit_txn VALUES (42);

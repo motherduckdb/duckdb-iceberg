@@ -1,7 +1,6 @@
 #include "catalog/rest/iceberg_table_set.hpp"
 
 #include "duckdb/parser/expression/constant_expression.hpp"
-#include "duckdb/logging/logger.hpp"
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
 #include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/common/enums/http_status_code.hpp"
@@ -14,7 +13,6 @@
 
 #include "catalog/rest/api/catalog_api.hpp"
 #include "catalog/rest/api/catalog_utils.hpp"
-#include "iceberg_logging.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
@@ -289,7 +287,7 @@ IcebergTableInformation &IcebergTableSet::CreateNewEntry(ClientContext &context,
 	transaction_data.TableSetLocation();
 	transaction_data.TableSetProperties(table_info.table_metadata.table_properties);
 
-	iceberg_transaction.SetLatestTableState(table_info, IcebergTableStatus::ALIVE);
+	iceberg_transaction.SetLatestTableState(key, IcebergTableStatus::ALIVE);
 	return table_info;
 }
 
@@ -332,27 +330,11 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetEntry(ClientContext &context, con
 	}
 
 	iceberg_transaction.tables[table_key] = new_version;
-	auto ret = table_info.GetSchemaVersion(context, at);
-	if (!ret) {
-		return nullptr;
+	auto &state = iceberg_transaction.SetCatalogTableState(new_version);
+	if (iceberg_transaction.StartedBefore(table_info.table_metadata.last_updated_ms)) {
+		state.GetOrCreateTransactionInfo(iceberg_transaction);
 	}
-
-	// get the latest information and save it to the transaction cache
-	auto &ic_ret = ret->Cast<IcebergTableEntry>();
-	auto latest_snapshot = ic_ret.table_info.table_metadata.GetLatestSnapshot(context);
-
-	// Log warning on schema_id mismatch
-	auto transaction_start_ms = IcebergUtils::GetTransactionStartTimeMS(context);
-	auto &table_metadata_last_updated_at = ic_ret.table_info.table_metadata.last_updated_ms;
-
-	if (transaction_start_ms < table_metadata_last_updated_at &&
-	    (!latest_snapshot || latest_snapshot->GetSchemaId() != ic_ret.table_info.table_metadata.GetCurrentSchemaId())) {
-		DUCKDB_LOG_WARNING(
-		    context, "Detected schema change during transaction (schema_id mismatch); ACID guarantees may not hold.");
-	}
-
-	iceberg_transaction.SetLatestTableState(table_info, IcebergTableStatus::ALIVE);
-	return ret;
+	return state.GetInfo().GetSchemaVersion(context, at);
 }
 
 } // namespace duckdb
