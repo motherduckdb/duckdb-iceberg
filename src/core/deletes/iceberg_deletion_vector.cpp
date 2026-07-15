@@ -224,6 +224,8 @@ void IcebergMultiFileList::ScanPuffinFile(const BoundIcebergManifestEntry &bound
 		VerifyPuffinDeletionVector(*caching_file_handle, offset, length);
 	}
 
+	//! NOTE: the requested blob is at the out-parameter `data` of Read, NOT at buf_handle.Ptr(): when the
+	//! read is served from a larger cached range, Ptr() points at the start of that range, not at `offset`.
 	auto buf_handle = caching_file_handle->Read(data, length, offset);
 
 	auto it = shared_state->positional_delete_data.find(data_file.referenced_data_file);
