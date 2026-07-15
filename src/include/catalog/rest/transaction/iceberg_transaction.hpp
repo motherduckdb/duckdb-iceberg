@@ -31,7 +31,6 @@ public:
 		return *catalog_table;
 	}
 	const IcebergTableInformation &GetInfo() const;
-	const IcebergTableInformation &GetCatalogInfo() const;
 	IcebergTableInformation &GetOrCreateTransactionInfo(IcebergTransaction &transaction);
 
 public:
@@ -49,8 +48,7 @@ public:
 	}
 
 private:
-	//! The catalog state remains available for conflict checks after the visible state is rolled back to the
-	//! transaction start time.
+	//! The catalog state is retained as the source for lazily materializing transaction-local state.
 	shared_ptr<IcebergTableInformation> catalog_table;
 	//! Lazily materialized transaction-local state. Its stable address is referenced by table updates and schema
 	//! entries.

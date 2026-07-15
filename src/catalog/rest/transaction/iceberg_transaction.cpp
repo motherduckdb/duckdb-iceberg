@@ -55,10 +55,6 @@ const IcebergTableInformation &IcebergTransactionTableState::GetInfo() const {
 	return const_cast<IcebergTransactionTableState &>(*this).GetInfo();
 }
 
-const IcebergTableInformation &IcebergTransactionTableState::GetCatalogInfo() const {
-	return catalog_table ? *catalog_table : GetInfo();
-}
-
 IcebergTableInformation &IcebergTransactionTableState::GetOrCreateTransactionInfo(IcebergTransaction &transaction) {
 	if (transaction_table) {
 		return *transaction_table;
@@ -66,13 +62,7 @@ IcebergTableInformation &IcebergTransactionTableState::GetOrCreateTransactionInf
 	if (!catalog_table) {
 		throw InternalException("Cannot materialize transaction table state without table information");
 	}
-	auto table_uuid = catalog_table->table_metadata.table_uuid;
 	transaction_table = make_uniq<IcebergTableInformation>(catalog_table->Copy(transaction));
-	// Metadata-log reconstruction can source metadata through a cache entry changed by another transaction.
-	// Keep the UUID from the catalog object pinned when this state was first resolved.
-	if (!table_uuid.empty()) {
-		transaction_table->table_metadata.table_uuid = std::move(table_uuid);
-	}
 	transaction_table->InitSchemaVersions();
 	return *transaction_table;
 }
@@ -894,11 +884,7 @@ IcebergTransaction::GetOrCreateTransactionTableState(const IcebergTableInformati
 	if (state) {
 		return *state;
 	}
-	auto table_uuid = table.table_metadata.table_uuid;
 	auto copy = table.Copy(*this);
-	if (!table_uuid.empty()) {
-		copy.table_metadata.table_uuid = std::move(table_uuid);
-	}
 	return SetTransactionTableState(table_key, std::move(copy), IcebergTableStatus::ALIVE);
 }
 

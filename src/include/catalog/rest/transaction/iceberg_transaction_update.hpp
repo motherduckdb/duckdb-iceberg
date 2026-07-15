@@ -20,7 +20,6 @@ public:
 public:
 	IcebergTableInformation &CreateTable(const string &table_key, IcebergTableInformation &&table);
 	IcebergTableInformation &GetOrInitializeTable(const IcebergTableInformation &table);
-	void CheckWriteWriteConflict(const IcebergTableInformation &table_info) const;
 	bool HasUpdates() const;
 
 public:
