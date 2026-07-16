@@ -20,6 +20,9 @@ set iceberg_use_metadata_log = true;
 # --- Partition specs, default-spec-id, and last-partition-id ---
 
 statement ok
+create schema if not exists my_datalake.default;
+
+statement ok
 drop table if exists my_datalake.default.metadata_log_partition_spec;
 
 statement ok
