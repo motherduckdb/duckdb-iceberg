@@ -311,8 +311,7 @@ def duckdb_created_d2s_table(duckdb_con):
     populated by DuckDB and read by Snowflake.
     """
     duckdb_con.query(f"DROP TABLE IF EXISTS my_datalake.{NAMESPACE}.{D2S_TABLE};")
-    blah = f"CREATE TABLE my_datalake.{NAMESPACE}.{D2S_TABLE} (v VARIANT) WITH ('format-version'=3);"
-    duckdb_con.query(blah)
+    duckdb_con.query(f"CREATE TABLE my_datalake.{NAMESPACE}.{D2S_TABLE} (v VARIANT) WITH ('format-version'=3);")
     yield D2S_TABLE
     duckdb_con.query(f"DROP TABLE IF EXISTS my_datalake.{NAMESPACE}.{D2S_TABLE};")
 
