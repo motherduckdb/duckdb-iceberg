@@ -47,9 +47,7 @@ public:
 	IcebergTableMetadata Copy() const;
 	static string GetMetaDataPath(ClientContext &context, const string &path, FileSystem &fs,
 	                              const IcebergOptions &options);
-	optional_ptr<const IcebergSnapshot> GetLatestSnapshot(ClientContext &context) const;
-	//! NOTE: this should only be used when transactionality is of no concern (i.e during commit)
-	optional_ptr<const IcebergSnapshot> GetLatestCommittedSnapshot() const;
+	optional_ptr<const IcebergSnapshot> GetLatestSnapshot() const;
 	const IcebergTableSchema &GetLatestSchema() const;
 	bool HasPartitionSpec() const;
 	const IcebergPartitionSpec &GetLatestPartitionSpec() const;
@@ -76,7 +74,7 @@ public:
 	optional_ptr<const IcebergColumnDefinition> FindColumnByFieldId(int32_t field_id) const;
 	optional_ptr<const IcebergPartitionSpec> FindPartitionSpecById(int32_t spec_id) const;
 	optional_ptr<const IcebergSortOrder> FindSortOrderById(int32_t sort_id) const;
-	IcebergSnapshotScanInfo GetSnapshot(ClientContext &context, const IcebergSnapshotLookup &lookup) const;
+	IcebergSnapshotScanInfo GetSnapshot(const IcebergSnapshotLookup &lookup) const;
 
 	const string &GetLocation() const;
 	const string GetDataPath(FileSystem &fs) const;

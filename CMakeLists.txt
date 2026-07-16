@@ -101,6 +101,7 @@ set(EXTENSION_SOURCES
 	src/function/scan/iceberg_scan.cpp
 	src/iceberg_extension.cpp
 	src/iceberg_logging.cpp
+	src/iceberg_options.cpp
 	src/maintenance/maintenance_table_loader.cpp
 	src/maintenance/rewrite_data_files_executor.cpp
 	src/maintenance/rewrite_data_files_operator.cpp

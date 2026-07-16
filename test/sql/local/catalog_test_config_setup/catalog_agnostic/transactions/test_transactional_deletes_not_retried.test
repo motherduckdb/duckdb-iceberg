@@ -15,6 +15,9 @@ require httpfs
 set ignore_error_messages
 
 statement ok
+set iceberg_use_metadata_log = true;
+
+statement ok
 create schema if not exists my_datalake.default;
 
 statement ok
@@ -51,19 +54,20 @@ select * from my_datalake.default.multi_transaction_delete;
 ----
 0	0
 
-# con1 can't delete because its transactional doesn't see the latest state
-statement error con1
+# con1 constructs the delete against its reconstructed historical state.
+statement ok con1
 delete from my_datalake.default.multi_transaction_delete where a = 0;
-----
-TransactionContext Error: Write-write conflict detected on 'default.multi_transaction_delete', changes were made since the start of the transaction
 
-statement error con1
+# The delete is visible locally and con2's row remains outside con1's view.
+query I con1
 select count(*) from my_datalake.default.multi_transaction_delete;
 ----
-TransactionContext Error: Current transaction is aborted (please ROLLBACK)
+0
 
-statement ok con1
+statement error con1
 commit;
+----
+<REGEX>:.*Failed to commit.*
 
 # con1 DELETE didn't go through
 query II

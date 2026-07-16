@@ -20,37 +20,36 @@ public:
 public:
 	IcebergTableInformation &CreateTable(const string &table_key, IcebergTableInformation &&table);
 	IcebergTableInformation &GetOrInitializeTable(const IcebergTableInformation &table);
-	void CheckWriteWriteConflict(const IcebergTableInformation &table_info) const;
 	bool HasUpdates() const;
 
 public:
 	IcebergTransaction &transaction;
 	//! All the tables touched in this atomic block
-	case_insensitive_map_t<IcebergTableInformation> updated_tables;
+	case_insensitive_map_t<reference<IcebergTableInformation>> updated_tables;
 };
 
 //! Drop a table
 struct IcebergTransactionDeleteUpdate {
 public:
-	IcebergTransactionDeleteUpdate(IcebergTransaction &transaction, const IcebergTableInformation &table);
+	IcebergTransactionDeleteUpdate(IcebergTransaction &transaction, IcebergTableInformation &table);
 	~IcebergTransactionDeleteUpdate();
 
 public:
 	IcebergTransaction &transaction;
-	IcebergTableInformation deleted_table;
+	reference<IcebergTableInformation> deleted_table;
 };
 
 //! Rename a table
 struct IcebergTransactionRenameUpdate {
 public:
-	IcebergTransactionRenameUpdate(IcebergTransaction &transaction, const IcebergTableInformation &table,
-	                               const string &new_name);
+	IcebergTransactionRenameUpdate(IcebergTransaction &transaction, IcebergTableInformation &table,
+	                               IcebergTableInformation &new_table, const string &new_name);
 	~IcebergTransactionRenameUpdate();
 
 public:
 	IcebergTransaction &transaction;
-	const IcebergTableInformation &table;
-	IcebergTableInformation new_table;
+	reference<IcebergTableInformation> table;
+	reference<IcebergTableInformation> new_table;
 	string new_name;
 };
 

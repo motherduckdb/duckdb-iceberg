@@ -21,6 +21,9 @@ SET warnings_as_errors = True;
 set ignore_error_messages
 
 statement ok
+set iceberg_use_metadata_log = true;
+
+statement ok
 set enable_logging=true
 
 statement ok
@@ -62,13 +65,19 @@ select * from my_datalake.default.multi_transaction_update;
 0	0
 
 # con1 updates 0 to 50 for column a (doesn't affect row inserted by con2)
-statement error con1
-update my_datalake.default.multi_transaction_update set a = 50;
-----
-TransactionContext Error: Write-write conflict detected on 'default.multi_transaction_update', changes were made since the start of the transaction
-
 statement ok con1
+update my_datalake.default.multi_transaction_update set a = 50;
+
+# con1 doesn't see 2,2 yet
+query II con1
+select * from my_datalake.default.multi_transaction_update;
+----
+50	0
+
+statement error con1
 commit;
+----
+<REGEX>:.*Failed to commit.*
 
 # con1 UPDATE didn't go through
 query II

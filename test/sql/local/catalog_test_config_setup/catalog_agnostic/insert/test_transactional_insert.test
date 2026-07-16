@@ -21,20 +21,25 @@ SET warnings_as_errors = True;
 set ignore_error_messages
 
 statement ok
+set iceberg_use_metadata_log = true;
+
+statement ok
 set enable_logging=true
 
 statement ok
 set logging_level='debug'
 
-# Perform an INSERT and COMMIT it so table has a snapshot id other transactions can find
 statement ok
 drop table if exists my_datalake.default.multi_transaction_insert;
 
+# Retries disabled, the commit should fail because of stale data
 statement ok
 create table my_datalake.default.multi_transaction_insert (
 	a int,
 	b int
-);
+) WITH (
+	'commit.retry.num-retries' = 0
+)
 
 # Insert 0,0
 statement ok
@@ -62,11 +67,64 @@ select * from my_datalake.default.multi_transaction_insert;
 0	0
 
 # con1 updates 0 to 50 for column a (doesn't affect row inserted by con2)
-statement error con1
+statement ok con1
 INSERT into my_datalake.default.multi_transaction_insert VALUES
 	(3, 3)
+
+statement error con1
+commit;
 ----
-TransactionContext Error: Write-write conflict detected on 'default.multi_transaction_insert', changes were made since the start of the transaction
+<REGEX>:.*Failed to commit.*
+
+query II
+select * from my_datalake.default.multi_transaction_insert order by all
+----
+0	0
+2	2
+
+# ---- INSERT into "stale" table state, with retries enabled ----
+
+statement ok
+drop table if exists my_datalake.default.multi_transaction_insert;
+
+# Now retries are enabled, and the INSERT can go through
+statement ok
+create table my_datalake.default.multi_transaction_insert (
+	a int,
+	b int
+) WITH (
+	'commit.retry.num-retries' = 1
+)
+
+# Insert 0,0
+statement ok
+insert into my_datalake.default.multi_transaction_insert VALUES
+	(0, 0);
+
+statement ok con1
+begin
+
+statement ok con2
+begin
+
+# Insert 2,2
+statement ok con2
+insert into my_datalake.default.multi_transaction_insert VALUES
+	(2, 2);
+
+statement ok con2
+commit
+
+# con1 doesn't see 2,2 yet
+query II con1
+select * from my_datalake.default.multi_transaction_insert;
+----
+0	0
+
+# con1 updates 0 to 50 for column a (doesn't affect row inserted by con2)
+statement ok con1
+INSERT into my_datalake.default.multi_transaction_insert VALUES
+	(3, 3)
 
 statement ok con1
 commit;
@@ -77,3 +135,4 @@ select * from my_datalake.default.multi_transaction_insert order by all
 ----
 0	0
 2	2
+3	3

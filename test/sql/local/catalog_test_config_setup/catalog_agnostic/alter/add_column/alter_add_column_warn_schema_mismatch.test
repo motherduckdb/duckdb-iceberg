@@ -16,6 +16,9 @@ require httpfs
 set ignore_error_messages
 
 statement ok
+set iceberg_use_metadata_log = true;
+
+statement ok
 CALL enable_logging(level='warning');
 
 statement ok
@@ -71,40 +74,37 @@ FROM my_datalake.default.alter_add_column_explicit_txn ORDER BY a;
 8
 9
 
-# schema changed, ACID is violated for con2
+# con2 owns the table state as it existed at transaction start, including its schema
 query II
 SELECT log_level, message FROM duckdb_logs
 ----
-WARNING	Detected schema change during transaction (schema_id mismatch); ACID guarantees may not hold.
 
-statement error con2
+statement ok con2
 INSERT INTO my_datalake.default.alter_add_column_explicit_txn VALUES (42);
-----
-TransactionContext Error: Write-write conflict detected on 'default.alter_add_column_explicit_txn', changes were made since the start of the transaction
 
-statement error con2
-FROM my_datalake.default.alter_add_column_explicit_txn ORDER BY a;
+query II con2
+SELECT count(*), max(a) FROM my_datalake.default.alter_add_column_explicit_txn;
 ----
-TransactionContext Error: Current transaction is aborted (please ROLLBACK)
+11	42
 
 statement error con3
 INSERT INTO my_datalake.default.alter_add_column_explicit_txn VALUES (43, 43);
 ----
 Binder Error: table alter_add_column_explicit_txn has 1 columns but 2 values were supplied
 
-statement error con2
-INSERT INTO my_datalake.default.alter_add_column_explicit_txn VALUES (43);
-----
-TransactionContext Error: Write-write conflict detected on 'default.alter_add_column_explicit_txn', changes were made since the start of the transaction
-
-statement error con2
-FROM my_datalake.default.alter_add_column_explicit_txn ORDER BY a;
-----
-TransactionContext Error: Current transaction is aborted (please ROLLBACK)
-
-# COMMIT succeeds, the changes never landed because the statement(s) failed
 statement ok con2
+INSERT INTO my_datalake.default.alter_add_column_explicit_txn VALUES (43);
+
+query II con2
+SELECT count(*), max(a) FROM my_datalake.default.alter_add_column_explicit_txn;
+----
+12	43
+
+# The append was constructed successfully, but retry cannot rebase it across the schema change.
+statement error con2
 commit;
+----
+<REGEX>:.*changed incompatibly while retrying commit.*
 
 # Only con1 changed the table
 query II

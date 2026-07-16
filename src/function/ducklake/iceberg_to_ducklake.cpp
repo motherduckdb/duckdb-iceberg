@@ -809,26 +809,11 @@ static unique_ptr<FunctionData> IcebergToDuckLakeBind(ClientContext &context, Ta
 	auto &iceberg_catalog = catalog.Cast<IcebergCatalog>();
 	auto &schema_set = iceberg_catalog.GetSchemas();
 
-	IcebergOptions options;
+	IcebergOptions options(input.named_parameters);
 	for (auto &kv : input.named_parameters) {
 		auto loption = StringUtil::Lower(kv.first.GetIdentifierName());
 		auto &val = kv.second;
-		if (loption == "allow_moved_paths") {
-			options.allow_moved_paths = BooleanValue::Get(val);
-		} else if (loption == "metadata_compression_codec") {
-			options.metadata_compression_codec = StringValue::Get(val);
-		} else if (loption == "version") {
-			options.table_version = StringValue::Get(val);
-		} else if (loption == "version_name_format") {
-			auto value = StringValue::Get(kv.second);
-			int string_substitutions = IcebergUtils::CountOccurrences(value, "%s");
-			if (string_substitutions != 2) {
-				throw InvalidInputException(
-				    "'version_name_format' has to contain two occurrences of '%%s' in it, found %d",
-				    string_substitutions);
-			}
-			options.version_name_format = value;
-		} else if (loption == "skip_tables") {
+		if (loption == "skip_tables") {
 			auto &type = kv.second.type();
 			if (kv.second.IsNull() || type.id() != LogicalTypeId::LIST) {
 				throw InvalidInputException("'skip_tables' has to be provided as a list of strings");
