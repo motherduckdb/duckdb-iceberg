@@ -195,7 +195,7 @@ TableFunction IcebergTableEntry::GetScanFunction(ClientContext &context, unique_
 	auto snapshot_lookup = IcebergSnapshotLookup::FromAtClause(lookup.GetAtClause());
 
 	IcebergSnapshotScanInfo snapshot_info;
-	snapshot_info = metadata.GetSnapshot(context, snapshot_lookup);
+	snapshot_info = metadata.GetSnapshot(snapshot_lookup);
 	//! Override whatever schema id the lookup resulted in
 	//! The schema is preset by the IcebergCatalogEntry and we can not deviate from that
 	snapshot_info.schema_id = schema_id;

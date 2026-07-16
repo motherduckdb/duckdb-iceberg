@@ -286,7 +286,7 @@ static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, Iceb
 
 	for (auto &update : transaction_data.updates) {
 		if (update->type == IcebergTableUpdateType::ADD_SNAPSHOT) {
-			auto &ic_table_entry = table_info.GetLatestSchema(context)->Cast<IcebergTableEntry>();
+			auto &ic_table_entry = table_info.GetLatestSchema()->Cast<IcebergTableEntry>();
 			ic_table_entry.PrepareIcebergScanFromEntry(context);
 		}
 		update->CreateUpdate(db, context, commit_state);
@@ -783,7 +783,7 @@ void IcebergTransaction::CleanupFiles() {
 					continue;
 				}
 				// we need to recreate the keys in the current context.
-				auto &ic_table_entry = table.GetLatestSchema(temp_context)->Cast<IcebergTableEntry>();
+				auto &ic_table_entry = table.GetLatestSchema()->Cast<IcebergTableEntry>();
 				ic_table_entry.PrepareIcebergScanFromEntry(temp_context);
 
 				auto &add_snapshot = update->Cast<IcebergAddSnapshot>();

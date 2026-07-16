@@ -93,7 +93,7 @@ void IcebergTableSet::Scan(ClientContext &context, const std::function<void(Cata
 			// The table has already been resolved (e.g. via DESCRIBE or a scan), so its full schema -
 			// including column comments mapped from the Iceberg field 'doc' - is available. Surface the
 			// resolved entry instead of the placeholder so listings reflect the real columns.
-			auto resolved = table_info.GetLatestSchema(context);
+			auto resolved = table_info.GetLatestSchema();
 			if (resolved) {
 				callback(*resolved);
 				continue;
@@ -310,7 +310,7 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetEntry(ClientContext &context, con
 		if (table_info.schema_versions.empty()) {
 			table_info.InitSchemaVersions();
 		}
-		return table_info.GetSchemaVersion(context, at);
+		return table_info.GetSchemaVersion(at);
 	}
 
 	//! Preserve the old version in case our replacement fails
@@ -334,7 +334,7 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetEntry(ClientContext &context, con
 	if (iceberg_transaction.StartedBefore(table_info.table_metadata.last_updated_ms)) {
 		state.GetOrCreateTransactionInfo(iceberg_transaction);
 	}
-	return state.GetInfo().GetSchemaVersion(context, at);
+	return state.GetInfo().GetSchemaVersion(at);
 }
 
 } // namespace duckdb

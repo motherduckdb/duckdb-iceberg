@@ -452,15 +452,14 @@ void IcebergTableInformation::SetSortedBy(IcebergTransaction &transaction, const
 	}
 }
 
-optional_ptr<CatalogEntry> IcebergTableInformation::GetSchemaVersion(ClientContext &context,
-                                                                     optional_ptr<BoundAtClause> at) {
+optional_ptr<CatalogEntry> IcebergTableInformation::GetSchemaVersion(optional_ptr<BoundAtClause> at) {
 	if (table_metadata.snapshots.empty()) {
 		return schema_versions[table_metadata.GetCurrentSchemaId()].get();
 	}
 
 	D_ASSERT(!schema_versions.empty());
 	auto snapshot_lookup = IcebergSnapshotLookup::FromAtClause(at);
-	auto snapshot_info = table_metadata.GetSnapshot(context, snapshot_lookup);
+	auto snapshot_info = table_metadata.GetSnapshot(snapshot_lookup);
 
 	int32_t schema_id;
 	if (!snapshot_lookup.IsLatest() && snapshot_info.snapshot) {
@@ -475,8 +474,8 @@ idx_t IcebergTableInformation::GetIcebergVersion() const {
 	return table_metadata.iceberg_version;
 }
 
-optional_ptr<CatalogEntry> IcebergTableInformation::GetLatestSchema(ClientContext &context) {
-	return GetSchemaVersion(context, nullptr);
+optional_ptr<CatalogEntry> IcebergTableInformation::GetLatestSchema() {
+	return GetSchemaVersion(nullptr);
 }
 
 string IcebergTableInformation::GetTableKey(const vector<string> &namespace_items, const string &table_name) {

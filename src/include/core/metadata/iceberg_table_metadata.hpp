@@ -74,7 +74,7 @@ public:
 	optional_ptr<const IcebergColumnDefinition> FindColumnByFieldId(int32_t field_id) const;
 	optional_ptr<const IcebergPartitionSpec> FindPartitionSpecById(int32_t spec_id) const;
 	optional_ptr<const IcebergSortOrder> FindSortOrderById(int32_t sort_id) const;
-	IcebergSnapshotScanInfo GetSnapshot(ClientContext &context, const IcebergSnapshotLookup &lookup) const;
+	IcebergSnapshotScanInfo GetSnapshot(const IcebergSnapshotLookup &lookup) const;
 
 	const string &GetLocation() const;
 	const string GetDataPath(FileSystem &fs) const;

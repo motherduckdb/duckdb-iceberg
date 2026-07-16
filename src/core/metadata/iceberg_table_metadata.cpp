@@ -126,8 +126,7 @@ optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetSnapshotById(int64_
 	return snapshot;
 }
 
-IcebergSnapshotScanInfo IcebergTableMetadata::GetSnapshot(ClientContext &context,
-                                                          const IcebergSnapshotLookup &lookup) const {
+IcebergSnapshotScanInfo IcebergTableMetadata::GetSnapshot(const IcebergSnapshotLookup &lookup) const {
 	IcebergSnapshotScanInfo snapshot_info;
 	switch (lookup.GetSource()) {
 	case SnapshotSource::LATEST:
@@ -135,11 +134,11 @@ IcebergSnapshotScanInfo IcebergTableMetadata::GetSnapshot(ClientContext &context
 		snapshot_info.schema_id = GetCurrentSchemaId();
 		return snapshot_info;
 	case SnapshotSource::FROM_ID:
-		snapshot_info.snapshot = GetSnapshotById(lookup.snapshot_id);
+		snapshot_info.snapshot = GetSnapshotById(lookup.GetSnapshotId());
 		snapshot_info.schema_id = snapshot_info.snapshot->GetSchemaId();
 		return snapshot_info;
 	case SnapshotSource::FROM_TIMESTAMP:
-		snapshot_info.snapshot = GetSnapshotByTimestampMS(lookup.snapshot_timestamp);
+		snapshot_info.snapshot = GetSnapshotByTimestampMS(lookup.GetSnapshotTimestamp());
 		if (snapshot_info.snapshot) {
 			snapshot_info.schema_id = snapshot_info.snapshot->GetSchemaId();
 		} else {

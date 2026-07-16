@@ -38,9 +38,9 @@ public:
 	IcebergTableInformation(IcebergCatalog &catalog, IcebergSchemaEntry &schema, const string &name);
 
 public:
-	optional_ptr<CatalogEntry> GetLatestSchema(ClientContext &context);
+	optional_ptr<CatalogEntry> GetLatestSchema();
 	idx_t GetIcebergVersion() const;
-	optional_ptr<CatalogEntry> GetSchemaVersion(ClientContext &context, optional_ptr<BoundAtClause> at);
+	optional_ptr<CatalogEntry> GetSchemaVersion(optional_ptr<BoundAtClause> at);
 	optional_ptr<CatalogEntry> CreateSchemaVersion(const IcebergTableSchema &table_schema);
 	idx_t GetMaxSchemaId();
 	idx_t GetNextPartitionSpecId();
