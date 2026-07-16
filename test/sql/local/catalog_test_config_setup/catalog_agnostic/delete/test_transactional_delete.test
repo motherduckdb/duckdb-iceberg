@@ -21,6 +21,9 @@ SET warnings_as_errors = True;
 set ignore_error_messages
 
 statement ok
+set iceberg_use_metadata_log = true;
+
+statement ok
 set enable_logging=true
 
 statement ok

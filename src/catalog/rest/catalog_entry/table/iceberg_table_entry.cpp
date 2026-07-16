@@ -190,32 +190,15 @@ TableFunction IcebergTableEntry::GetScanFunction(ClientContext &context, unique_
 	const auto &metadata = table_info.table_metadata;
 	const auto &iceberg_schema = *metadata.GetSchemaFromId(schema_id);
 
-	// lookup should be asof start of the transaction if the lookup info is empty and there are no transaction updates
-	bool using_transaction_timestamp = false;
-	IcebergSnapshotLookup snapshot_lookup;
-	if (!lookup.GetAtClause() && !table_info.HasTransactionUpdates()) {
-		// if there is no user supplied AT () clause, and the table does not have transaction updates
-		// use transaction start time
-		snapshot_lookup = table_info.GetSnapshotLookup(context);
-		using_transaction_timestamp = true;
-	} else {
-		auto at = lookup.GetAtClause();
-		snapshot_lookup = IcebergSnapshotLookup::FromAtClause(at);
-	}
+	// The pinned metadata object's current snapshot is the transaction-visible head. Only an explicit AT clause
+	// selects a different snapshot.
+	auto snapshot_lookup = IcebergSnapshotLookup::FromAtClause(lookup.GetAtClause());
 
 	IcebergSnapshotScanInfo snapshot_info;
 	snapshot_info = metadata.GetSnapshot(context, snapshot_lookup);
 	//! Override whatever schema id the lookup resulted in
 	//! The schema is preset by the IcebergCatalogEntry and we can not deviate from that
 	snapshot_info.schema_id = schema_id;
-
-	if (!metadata.snapshots.empty() && !snapshot_info.snapshot && using_transaction_timestamp) {
-		// We are using the transaction start time.
-		// The table is not empty, but GetSnapshot is asking for table state before the first snapshot
-		// table creation has no snapshot, so we return this error message
-		throw InvalidConfigurationException("Table %s does not have a reachable state in this transaction",
-		                                    table_info.GetTableKey());
-	}
 
 	auto &fs = FileSystem::GetFileSystem(context);
 	auto scan_info =

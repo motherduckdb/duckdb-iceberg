@@ -15,6 +15,9 @@ require httpfs
 set ignore_error_messages
 
 statement ok
+set iceberg_use_metadata_log = true;
+
+statement ok
 CALL enable_logging(level='warning');
 
 statement ok

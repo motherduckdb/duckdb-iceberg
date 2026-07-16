@@ -82,10 +82,6 @@ const unordered_map<int32_t, IcebergPartitionSpec> &IcebergTableMetadata::GetPar
 	return partition_specs;
 }
 
-optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetLatestSnapshot(ClientContext &context) const {
-	return GetSnapshotByTimestampMS(IcebergUtils::GetTransactionStartTimeMS(context));
-}
-
 optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetLatestCommittedSnapshot() const {
 	if (!current_snapshot_id) {
 		return nullptr;
@@ -135,7 +131,7 @@ IcebergSnapshotScanInfo IcebergTableMetadata::GetSnapshot(ClientContext &context
 	IcebergSnapshotScanInfo snapshot_info;
 	switch (lookup.GetSource()) {
 	case SnapshotSource::LATEST:
-		snapshot_info.snapshot = GetLatestSnapshot(context);
+		snapshot_info.snapshot = GetLatestCommittedSnapshot();
 		snapshot_info.schema_id = GetCurrentSchemaId();
 		return snapshot_info;
 	case SnapshotSource::FROM_ID:

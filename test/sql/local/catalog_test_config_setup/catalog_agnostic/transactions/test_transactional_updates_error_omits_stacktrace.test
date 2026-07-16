@@ -15,6 +15,9 @@ require httpfs
 set ignore_error_messages
 
 statement ok
+set iceberg_use_metadata_log = true;
+
+statement ok
 set enable_logging=true
 
 statement ok
@@ -55,13 +58,18 @@ select * from my_datalake.default.multi_transaction_update;
 ----
 0	0
 
-statement error con1
-update my_datalake.default.multi_transaction_update set a = 50;
-----
-TransactionContext Error: Write-write conflict detected on 'default.multi_transaction_update', changes were made since the start of the transaction
-
 statement ok con1
+update my_datalake.default.multi_transaction_update set a = 50;
+
+query II con1
+select * from my_datalake.default.multi_transaction_update;
+----
+50	0
+
+statement error con1
 commit;
+----
+<REGEX>:.*branch main has changed: expected id.*
 
 query II
 select * from my_datalake.default.multi_transaction_update;

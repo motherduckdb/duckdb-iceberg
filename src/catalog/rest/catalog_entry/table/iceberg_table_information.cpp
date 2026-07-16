@@ -459,38 +459,14 @@ optional_ptr<CatalogEntry> IcebergTableInformation::GetSchemaVersion(ClientConte
 	}
 
 	D_ASSERT(!schema_versions.empty());
-	auto transaction_start_ms = IcebergUtils::GetTransactionStartTimeMS(context);
-
 	auto snapshot_lookup = IcebergSnapshotLookup::FromAtClause(at);
 	auto snapshot_info = table_metadata.GetSnapshot(context, snapshot_lookup);
 
 	int32_t schema_id;
 	if (!snapshot_lookup.IsLatest() && snapshot_info.snapshot) {
-		//! Time travel query, verify this is reachable
-		auto &snapshot = *snapshot_info.snapshot;
-		if (snapshot.timestamp_ms > transaction_start_ms) {
-			//! Not reachable by the current transaction
-			return nullptr;
-		}
-		schema_id = snapshot.GetSchemaId();
+		schema_id = snapshot_info.snapshot->GetSchemaId();
 	} else {
-		bool use_metadata_log = true;
-		Value val;
-		if (context.TryGetCurrentSetting("iceberg_use_metadata_log", val)) {
-			if (!val.IsNull() && val.type().id() == LogicalTypeId::BOOLEAN) {
-				use_metadata_log = val.GetValue<bool>();
-			}
-		}
-
-		const bool latest_metadata_is_too_fresh = table_metadata.last_updated_ms > transaction_start_ms;
-		const bool can_use_metadata_log = use_metadata_log && !table_metadata.metadata_log.empty();
-		if (latest_metadata_is_too_fresh && can_use_metadata_log) {
-			string metadata_path;
-			auto relevant_metadata = CreateMetadataFromLog(context, transaction_start_ms, metadata_path);
-			schema_id = relevant_metadata.GetCurrentSchemaId();
-		} else {
-			schema_id = table_metadata.GetCurrentSchemaId();
-		}
+		schema_id = table_metadata.GetCurrentSchemaId();
 	}
 	return schema_versions[schema_id].get();
 }
@@ -513,35 +489,6 @@ string IcebergTableInformation::GetTableKey(const vector<string> &namespace_item
 
 string IcebergTableInformation::GetTableKey() const {
 	return GetTableKey(schema.namespace_items, name);
-}
-
-IcebergSnapshotLookup IcebergTableInformation::GetSnapshotLookup(IcebergTransaction &iceberg_transaction) const {
-	auto locked_context = iceberg_transaction.context.lock();
-	auto &context = *locked_context;
-	return GetSnapshotLookup(context);
-}
-
-IcebergSnapshotLookup IcebergTableInformation::GetSnapshotLookup(ClientContext &context,
-                                                                 optional_ptr<BoundAtClause> at) const {
-	if (!at && !HasTransactionUpdates()) {
-		// if there is no user supplied AT () clause, and the table does not have transaction updates
-		// use transaction start time
-		return GetSnapshotLookup(context);
-	}
-	return IcebergSnapshotLookup::FromAtClause(at);
-}
-
-IcebergSnapshotLookup IcebergTableInformation::GetSnapshotLookup(ClientContext &context) const {
-	auto transaction_start = IcebergUtils::GetTransactionStartTimeMS(context);
-
-	IcebergSnapshotLookup res;
-	res.snapshot_timestamp = transaction_start;
-	res.SetSource(SnapshotSource::FROM_TIMESTAMP);
-	return res;
-}
-
-bool IcebergTableInformation::TableIsEmpty(ClientContext &context) const {
-	return !table_metadata.GetLatestSnapshot(context);
 }
 
 bool IcebergTableInformation::HasTransactionUpdates() const {
@@ -609,9 +556,11 @@ IcebergTableMetadata IcebergTableInformation::CreateMetadataFromLog(ClientContex
 	}
 	if (!log_item_index.IsValid()) {
 		auto timestamp = duckdb::Cast::Operation<timestamp_ms_t, timestamp_t>(transaction_start_ms);
-		throw InternalException(
-		    "Metadata-log exists but none of the entries were valid for the current transaction start time (%s)",
-		    Timestamp::ToString(timestamp));
+		throw InvalidConfigurationException(
+		    "Cannot reconstruct table '%s' at the transaction start (%s) because its metadata-log has no entry from "
+		    "that time or earlier. Set iceberg_use_metadata_log = false to accept the latest table state resolved by "
+		    "this transaction instead",
+		    GetTableKey(), Timestamp::ToString(timestamp));
 	}
 
 	auto fs = make_shared_ptr<CachingFileSystemWrapper>(FileSystem::GetFileSystem(context), *context.db);
@@ -630,7 +579,7 @@ IcebergTableInformation IcebergTableInformation::Copy(IcebergTransaction &iceber
 	auto transaction_start_ms = IcebergUtils::GetTransactionStartTimeMS(context);
 
 	if (table_metadata.last_updated_ms > transaction_start_ms) {
-		bool use_metadata_log = true;
+		bool use_metadata_log = false;
 		Value val;
 		if (context.TryGetCurrentSetting("iceberg_use_metadata_log", val)) {
 			if (!val.IsNull() && val.type().id() == LogicalTypeId::BOOLEAN) {
@@ -638,31 +587,15 @@ IcebergTableInformation IcebergTableInformation::Copy(IcebergTransaction &iceber
 			}
 		}
 
-		const bool can_use_metadata_log = use_metadata_log && !table_metadata.metadata_log.empty();
-		if (!can_use_metadata_log) {
-			auto snapshot_lookup = GetSnapshotLookup(iceberg_transaction);
-			if (ret.TableIsEmpty(context)) {
-				return ret;
-			}
-			IcebergSnapshotScanInfo snapshot_info;
-			snapshot_info = ret.table_metadata.GetSnapshot(context, snapshot_lookup);
-			if (!snapshot_info.snapshot) {
-				throw TransactionException("Table %s is already outdated. Please restart your transaction",
-				                           GetTableKey());
-			}
-
-			auto &snapshot = snapshot_info.snapshot;
-			D_ASSERT(snapshot);
-			ret.table_metadata.SetCurrentSchemaId(table_metadata.GetCurrentSchemaId());
-			if (!snapshot->sequence_number) {
-				throw InvalidConfigurationException("snapshot.sequence_number is not set");
-			}
-			ret.table_metadata.last_sequence_number = *snapshot->sequence_number;
-			if (!snapshot->snapshot_id) {
-				throw InvalidConfigurationException("snapshot.snapshot_id is not set");
-			}
-			ret.table_metadata.current_snapshot_id = *snapshot->snapshot_id;
+		if (!use_metadata_log) {
 			return ret;
+		}
+		if (table_metadata.metadata_log.empty()) {
+			throw InvalidConfigurationException(
+			    "Cannot reconstruct table '%s' at the transaction start because iceberg_use_metadata_log is enabled, "
+			    "but the table metadata does not contain a metadata-log. Set iceberg_use_metadata_log = false to "
+			    "accept the latest table state resolved by this transaction instead",
+			    GetTableKey());
 		}
 		ret.table_metadata = ret.CreateMetadataFromLog(context, transaction_start_ms, ret.latest_metadata_json);
 		return ret;

@@ -66,17 +66,13 @@ public:
 	string GetTableKey() const;
 	IcebergTableMetadata CreateMetadataFromLog(ClientContext &context, timestamp_ms_t transaction_start_ms,
 	                                           string &metadata_path) const;
-	// we pass the transaction, because we are only allowed to copy table information state provded by the catalog
-	// from before our transaction start time.
+	// With metadata-log enabled, reconstruct the complete table state at transaction start. Otherwise pin and copy
+	// the complete catalog state that was resolved for this transaction.
 	IcebergTableInformation Copy(IcebergTransaction &iceberg_transaction) const;
 	// This copy is used for deletes, where we don't care about valid table state
 	IcebergTableInformation Copy() const;
 	void InitSchemaVersions();
 
-	IcebergSnapshotLookup GetSnapshotLookup(IcebergTransaction &iceberg_transaction) const;
-	IcebergSnapshotLookup GetSnapshotLookup(ClientContext &context, optional_ptr<BoundAtClause> at) const;
-	IcebergSnapshotLookup GetSnapshotLookup(ClientContext &context) const;
-	bool TableIsEmpty(ClientContext &context) const;
 	bool HasTransactionUpdates() const;
 	void InitializeFromLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result,
 	                                   bool initialize_schemas = true);

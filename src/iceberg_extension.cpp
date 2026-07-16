@@ -71,7 +71,7 @@ static void LoadInternal(ExtensionLoader &loader) {
 	    "iceberg_use_metadata_log",
 	    "Whether or not to make use of the (optional) 'metadata-log' of a table to ensure atomicity guarantees hold, "
 	    "at the cost of making another GET for json metadata in rare circumstances",
-	    LogicalType::BOOLEAN, Value::BOOLEAN(true));
+	    LogicalType::BOOLEAN, Value::BOOLEAN(false), nullptr, SetScope::GLOBAL);
 	config.AddExtensionOption(
 	    "iceberg_logging_post_body_truncate_limit",
 	    "Maximum number of characters of a REST catalog POST body to include in Iceberg log messages. "
