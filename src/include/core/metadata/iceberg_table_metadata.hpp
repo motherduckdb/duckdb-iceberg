@@ -47,7 +47,7 @@ public:
 	IcebergTableMetadata Copy() const;
 	static string GetMetaDataPath(ClientContext &context, const string &path, FileSystem &fs,
 	                              const IcebergOptions &options);
-	optional_ptr<const IcebergSnapshot> GetLatestCommittedSnapshot() const;
+	optional_ptr<const IcebergSnapshot> GetLatestSnapshot() const;
 	const IcebergTableSchema &GetLatestSchema() const;
 	bool HasPartitionSpec() const;
 	const IcebergPartitionSpec &GetLatestPartitionSpec() const;

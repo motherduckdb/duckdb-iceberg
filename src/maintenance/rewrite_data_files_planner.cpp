@@ -123,7 +123,7 @@ RewritePlan PlanRewrite(ClientContext &context, const RewriteDataFilesPlanInput 
 		throw NotImplementedException("iceberg_rewrite_data_files does not yet support V3 tables");
 	}
 
-	auto latest_snapshot = table_metadata.GetLatestCommittedSnapshot();
+	auto latest_snapshot = table_metadata.GetLatestSnapshot();
 	if (!latest_snapshot) {
 		//! Brand-new table — no snapshot to rewrite against. Caller treats this
 		//! as a no-op success; executor and commit step must not run on this plan.

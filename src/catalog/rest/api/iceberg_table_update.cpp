@@ -52,7 +52,7 @@ void IcebergCommitState::RefreshFromTable() {
 void IcebergCommitState::LoadExistingManifests(DatabaseInstance &db,
                                                vector<IcebergManifestListEntry> &&existing_manifests) {
 	manifests = std::move(existing_manifests);
-	auto current_snapshot = table_info.table_metadata.GetLatestCommittedSnapshot();
+	auto current_snapshot = table_info.table_metadata.GetLatestSnapshot();
 	latest_snapshot = current_snapshot;
 	if (manifests.empty() && current_snapshot) {
 		IcebergSnapshotScanInfo snapshot_info;

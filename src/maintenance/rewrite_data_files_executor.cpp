@@ -46,7 +46,7 @@ IcebergManifestEntry BuildRewriteManifestEntry(ClientContext &context, const vec
 }
 
 void ValidateRewriteSnapshot(const RewritePlan &plan, const IcebergTableInformation &table_info, const string &phase) {
-	auto snapshot = table_info.table_metadata.GetLatestCommittedSnapshot();
+	auto snapshot = table_info.table_metadata.GetLatestSnapshot();
 	if (plan.starting_snapshot_id < 0) {
 		if (snapshot) {
 			throw CatalogException(
