@@ -3,6 +3,8 @@
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/planner/tableref/bound_at_clause.hpp"
 
+#include <variant>
+
 namespace duckdb {
 
 enum class SnapshotSource : uint8_t { LATEST, FROM_TIMESTAMP, FROM_ID };
