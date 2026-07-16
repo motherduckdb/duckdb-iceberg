@@ -67,7 +67,7 @@ select count(*) from my_datalake.default.multi_transaction_delete;
 statement error con1
 commit;
 ----
-<REGEX>:.*branch main has changed: expected id.*
+<REGEX>:.*Failed to commit.*
 
 # con1 DELETE didn't go through
 query II

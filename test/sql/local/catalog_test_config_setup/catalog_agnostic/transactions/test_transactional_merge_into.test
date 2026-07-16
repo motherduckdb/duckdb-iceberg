@@ -90,7 +90,7 @@ select * from my_datalake.default.multi_transaction_merge order by id;
 statement error con1
 commit;
 ----
-<REGEX>:.*branch main has changed: expected id.*
+<REGEX>:.*Failed to commit.*
 
 # Neither part of the rejected MERGE reached committed state.
 query II

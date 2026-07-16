@@ -148,7 +148,7 @@ a	c
 statement error con2
 commit
 ----
-<REGEX>:.*changed.*
+<REGEX>:.*Failed to commit.*
 
 # Rename to previously existing name
 

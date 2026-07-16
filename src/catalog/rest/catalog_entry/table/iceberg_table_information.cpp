@@ -11,6 +11,7 @@
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/common/operator/cast_operators.hpp"
 #include "duckdb/parser/column_definition.hpp"
+#include "duckdb/logging/logger.hpp"
 
 #include "catalog/rest/api/catalog_api.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
@@ -164,7 +165,7 @@ static void ParseConfigOptions(const case_insensitive_map_t<string> &config, cas
 	endpoint_it->second = endpoint;
 }
 
-IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientContext &context) {
+IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientContext &context) const {
 	IRCAPITableCredentials result;
 	auto transaction_id = MetaTransaction::Get(context).global_transaction_id;
 	auto &transaction = IcebergTransaction::Get(context, catalog);
@@ -474,6 +475,134 @@ idx_t IcebergTableInformation::GetIcebergVersion() const {
 	return table_metadata.iceberg_version;
 }
 
+static void AddHTTPSecretsToOptions(SecretEntry &http_secret_entry, case_insensitive_map_t<Value> &options) {
+	auto http_kv_secret = dynamic_cast<const KeyValueSecret &>(*http_secret_entry.secret);
+
+	options["http_proxy"] =
+	    http_kv_secret.TryGetValue("http_proxy").IsNull() ? "" : http_kv_secret.TryGetValue("http_proxy").ToString();
+	options["verify_ssl"] = http_kv_secret.TryGetValue("verify_ssl").IsNull()
+	                            ? Value::BOOLEAN(true)
+	                            : http_kv_secret.TryGetValue("verify_ssl").DefaultCastAs(LogicalType::BOOLEAN);
+}
+
+void IcebergTableInformation::LoadCredentials(ClientContext &context) const {
+	auto &secret_manager = SecretManager::Get(context);
+
+	if (catalog.attach_options.access_mode != IRCAccessDelegationMode::VENDED_CREDENTIALS) {
+		// assume secret already exists
+		return;
+	}
+	// Get Credentials from IRC API
+	auto &fs = FileSystem::GetFileSystem(context);
+	auto table_credentials = GetVendedCredentials(context);
+	auto metadata_path = table_metadata.GetMetadataPath(fs);
+
+	unique_ptr<SecretEntry> http_secret_entry;
+
+	switch (catalog.auth_handler->type) {
+	case IcebergAuthorizationType::SIGV4: {
+		auto &sigv4 = catalog.auth_handler->Cast<SIGV4Authorization>();
+		http_secret_entry = IcebergCatalog::GetHTTPSecret(context, sigv4.secret);
+		break;
+	}
+	case IcebergAuthorizationType::OAUTH2: {
+		http_secret_entry = IcebergCatalog::GetHTTPSecret(context, "");
+
+		if (!http_secret_entry || http_secret_entry->secret->GetScope().size() == 0) {
+			break;
+		}
+		for (auto scope : http_secret_entry->secret->GetScope()) {
+			if (scope.find(catalog.GetBaseUrl().GetHost()) != string::npos) {
+				break;
+			}
+		}
+	}
+	default:
+		break;
+	}
+
+	if (!table_credentials.config) {
+		for (auto &info : table_credentials.storage_credentials) {
+			if (http_secret_entry) {
+				AddHTTPSecretsToOptions(*http_secret_entry, info.options);
+			}
+			(void)secret_manager.CreateSecret(context, info);
+		}
+		return;
+	}
+
+	auto &info = *table_credentials.config;
+	D_ASSERT(info.scope.empty());
+	string storage_scope;
+	auto data_path = table_metadata.table_properties.find("write.data.path");
+	if (data_path != table_metadata.table_properties.end()) {
+		storage_scope = data_path->second;
+	} else {
+		storage_scope = table_metadata.GetLocation();
+	}
+	if (!storage_scope.empty()) {
+		if (!StringUtil::EndsWith(storage_scope, "/")) {
+			storage_scope += "/";
+		}
+		info.scope = {storage_scope};
+	} else {
+		string lc_storage_location = StringUtil::Lower(metadata_path);
+		size_t metadata_pos = lc_storage_location.find("metadata");
+		if (metadata_pos != string::npos) {
+			info.scope = {metadata_path.substr(0, metadata_pos)};
+		} else {
+			DUCKDB_LOG_INFO(context, "Creating Iceberg Table secret with no scope. Returned metadata location is %s",
+			                lc_storage_location);
+		}
+	}
+
+	if (StringUtil::StartsWith(catalog.uri, "glue")) {
+		auto &sigv4 = catalog.auth_handler->Cast<SIGV4Authorization>();
+		auto secret_entry = IcebergCatalog::GetStorageSecret(context, sigv4.secret);
+		auto kv_secret = dynamic_cast<const KeyValueSecret &>(*secret_entry->secret);
+
+		//! Override the endpoint if 'glue' is the host of the catalog
+		auto region = kv_secret.TryGetValue("region").ToString();
+		auto endpoint = "s3." + region + ".amazonaws.com";
+		info.options["endpoint"] = endpoint;
+	} else if (StringUtil::StartsWith(catalog.uri, "s3tables")) {
+		auto &sigv4 = catalog.auth_handler->Cast<SIGV4Authorization>();
+		auto secret_entry = IcebergCatalog::GetStorageSecret(context, sigv4.secret);
+		auto kv_secret = dynamic_cast<const KeyValueSecret &>(*secret_entry->secret);
+
+		//! Override all the options if 's3tables' is the host of the catalog
+		auto substrings = StringUtil::Split(catalog.GetWarehouse(), ":");
+		D_ASSERT(substrings.size() == 6);
+		auto region = substrings[3];
+		auto endpoint = "s3." + region + ".amazonaws.com";
+
+		info.options = {{"key_id", kv_secret.TryGetValue("key_id").ToString()},
+		                {"secret", kv_secret.TryGetValue("secret").ToString()},
+		                {"session_token", kv_secret.TryGetValue("session_token").IsNull()
+		                                      ? ""
+		                                      : kv_secret.TryGetValue("session_token").ToString()},
+		                {"region", region},
+		                {"endpoint", endpoint}};
+	}
+
+	if (http_secret_entry) {
+		AddHTTPSecretsToOptions(*http_secret_entry, info.options);
+	}
+
+	(void)secret_manager.CreateSecret(context, info);
+	// if there is no key_id, secret, token (S3/GCS) or account_name, connection_string (Azure) in the info,
+	// log that vended credentials has not worked
+	bool has_s3_creds = info.options.find("key_id") != info.options.end() ||
+	                    info.options.find("secret") != info.options.end() ||
+	                    info.options.find("token") != info.options.end();
+	bool has_azure_creds = info.options.find("account_name") != info.options.end() ||
+	                       info.options.find("connection_string") != info.options.end();
+	bool has_gcs_creds = info.options.find("bearer_token") != info.options.end();
+	if (!has_s3_creds && !has_azure_creds && !has_gcs_creds) {
+		DUCKDB_LOG_INFO(context, "Failed to create valid secret from Vended Credentials for table '%s'", name);
+	}
+}
+
 optional_ptr<CatalogEntry> IcebergTableInformation::GetLatestSchema() {
 	return GetSchemaVersion(nullptr);
 }
@@ -598,6 +727,8 @@ IcebergTableInformation IcebergTableInformation::Copy(IcebergTransaction &iceber
 		    "accept the latest table state resolved by this transaction instead",
 		    GetTableKey());
 	}
+
+	LoadCredentials(context);
 	ret.table_metadata = ret.CreateMetadataFromLog(context, transaction_start_ms, ret.latest_metadata_json);
 	return ret;
 }

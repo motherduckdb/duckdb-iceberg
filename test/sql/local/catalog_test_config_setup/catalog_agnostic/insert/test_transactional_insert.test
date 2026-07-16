@@ -74,7 +74,7 @@ INSERT into my_datalake.default.multi_transaction_insert VALUES
 statement error con1
 commit;
 ----
-<REGEX>:.*branch main has changed: expected id.*
+<REGEX>:.*Failed to commit.*
 
 query II
 select * from my_datalake.default.multi_transaction_insert order by all

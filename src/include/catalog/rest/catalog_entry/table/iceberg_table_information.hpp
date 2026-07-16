@@ -38,6 +38,7 @@ public:
 	IcebergTableInformation(IcebergCatalog &catalog, IcebergSchemaEntry &schema, const string &name);
 
 public:
+	void LoadCredentials(ClientContext &context) const;
 	optional_ptr<CatalogEntry> GetLatestSchema();
 	idx_t GetIcebergVersion() const;
 	optional_ptr<CatalogEntry> GetSchemaVersion(optional_ptr<BoundAtClause> at);
@@ -57,7 +58,7 @@ public:
 	                                               idx_t base_partition_field_id);
 	static IcebergSortOrder BuildSortOrder(const vector<OrderByNode> &orders, const IcebergTableSchema &schema,
 	                                       int32_t sort_order_id);
-	IRCAPITableCredentials GetVendedCredentials(ClientContext &context);
+	IRCAPITableCredentials GetVendedCredentials(ClientContext &context) const;
 	const string &BaseFilePath() const;
 
 	IcebergTransactionData &GetOrCreateTransactionData(IcebergTransaction &transaction);

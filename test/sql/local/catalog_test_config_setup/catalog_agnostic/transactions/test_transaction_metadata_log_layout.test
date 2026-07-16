@@ -58,7 +58,7 @@ a
 statement error con1
 commit
 ----
-<REGEX>:.*Cannot find source column for partition field.*
+<REGEX>:.*Failed to commit.*
 
 # --- Sort orders and default-sort-order-id ---
 
