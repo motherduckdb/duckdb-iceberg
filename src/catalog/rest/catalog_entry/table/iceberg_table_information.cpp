@@ -577,28 +577,28 @@ IcebergTableInformation IcebergTableInformation::Copy(IcebergTransaction &iceber
 	auto ret = Copy();
 	auto transaction_start_ms = IcebergUtils::GetTransactionStartTimeMS(context);
 
-	if (table_metadata.last_updated_ms > transaction_start_ms) {
-		bool use_metadata_log = false;
-		Value val;
-		if (context.TryGetCurrentSetting("iceberg_use_metadata_log", val)) {
-			if (!val.IsNull() && val.type().id() == LogicalTypeId::BOOLEAN) {
-				use_metadata_log = val.GetValue<bool>();
-			}
-		}
-
-		if (!use_metadata_log) {
-			return ret;
-		}
-		if (table_metadata.metadata_log.empty()) {
-			throw InvalidConfigurationException(
-			    "Cannot reconstruct table '%s' at the transaction start because iceberg_use_metadata_log is enabled, "
-			    "but the table metadata does not contain a metadata-log. Set iceberg_use_metadata_log = false to "
-			    "accept the latest table state resolved by this transaction instead",
-			    GetTableKey());
-		}
-		ret.table_metadata = ret.CreateMetadataFromLog(context, transaction_start_ms, ret.latest_metadata_json);
+	if (table_metadata.last_updated_ms <= transaction_start_ms) {
 		return ret;
 	}
+	bool use_metadata_log = false;
+	Value val;
+	if (context.TryGetCurrentSetting("iceberg_use_metadata_log", val)) {
+		if (!val.IsNull() && val.type().id() == LogicalTypeId::BOOLEAN) {
+			use_metadata_log = val.GetValue<bool>();
+		}
+	}
+
+	if (!use_metadata_log) {
+		return ret;
+	}
+	if (table_metadata.metadata_log.empty()) {
+		throw InvalidConfigurationException(
+		    "Cannot reconstruct table '%s' at the transaction start because iceberg_use_metadata_log is enabled, "
+		    "but the table metadata does not contain a metadata-log. Set iceberg_use_metadata_log = false to "
+		    "accept the latest table state resolved by this transaction instead",
+		    GetTableKey());
+	}
+	ret.table_metadata = ret.CreateMetadataFromLog(context, transaction_start_ms, ret.latest_metadata_json);
 	return ret;
 }
 
