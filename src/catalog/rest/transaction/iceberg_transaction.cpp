@@ -310,8 +310,11 @@ static void VerifyDeleteRetryability(const IcebergTableInformation &table_info,
 	if (!transaction_data.delete_scan_snapshot_id) {
 		return;
 	}
-	if (!current_snapshot || !current_snapshot->snapshot_id) {
+	if (!current_snapshot) {
 		return;
+	}
+	if (!current_snapshot->snapshot_id) {
+		throw InvalidConfigurationException("Committed snapshot is missing a snapshot_id");
 	}
 	auto scan_snapshot_id = *transaction_data.delete_scan_snapshot_id;
 	auto tip_snapshot_id = *current_snapshot->snapshot_id;
