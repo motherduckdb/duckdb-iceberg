@@ -73,6 +73,8 @@ public:
 
 	//! Every insert/update/delete creates an alter of the table data
 	vector<reference<IcebergAddSnapshot>> alters;
+	//! Snapshot the DELETE scanned; drives the commit-retry safety check. Empty if no delete.
+	optional<int64_t> delete_scan_snapshot_id;
 	//! The 'referenced_data_file' -> 'data_file.file_path' of the currently active transaction-local deletes
 	case_insensitive_map_t<string> transactional_delete_files;
 	//! Track the current row id for this transaction

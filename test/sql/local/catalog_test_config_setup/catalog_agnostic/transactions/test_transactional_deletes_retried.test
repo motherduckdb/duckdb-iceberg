@@ -1,4 +1,4 @@
-# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transactional_deletes_not_retried.test
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transactional_deletes_retried.test
 # group: [transactions]
 
 require-env CATALOG_TEST_CONFIG_SETUP
@@ -64,14 +64,15 @@ select count(*) from my_datalake.default.multi_transaction_delete;
 ----
 0
 
-statement error con1
+# con2's concurrent commit was an append that did not touch the data con1's
+# delete targets, so con1's commit is retried against the refreshed tip and
+# succeeds (previously deletes were never retried and this commit failed).
+statement ok con1
 commit;
-----
-<REGEX>:.*Failed to commit.*
 
-# con1 DELETE didn't go through
+# The delete landed (a=0 removed) and con2's append is preserved — the
+# serially-correct outcome.
 query II
 select * from my_datalake.default.multi_transaction_delete order by all
 ----
-0	0
 2	2

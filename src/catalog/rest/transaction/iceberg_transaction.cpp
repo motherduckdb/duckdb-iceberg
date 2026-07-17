@@ -264,6 +264,47 @@ static void CreateTableRequirements(DatabaseInstance &db, ClientContext &context
 	}
 }
 
+//! True if a concurrent commit between the DELETE's scan snapshot and the tip
+//! removed or rewrote data, making it unsafe to re-apply the delete on retry.
+//! Pure appends are safe. Ranges over sequence numbers (parent links aren't
+//! populated on read snapshots); an unreachable base is treated as unsafe.
+static bool DeleteReapplyUnsafe(const IcebergTableMetadata &metadata, int64_t base_snapshot_id,
+                                int64_t tip_snapshot_id) {
+	if (base_snapshot_id == tip_snapshot_id) {
+		return false;
+	}
+	auto base = metadata.GetSnapshotById(base_snapshot_id);
+	auto tip = metadata.GetSnapshotById(tip_snapshot_id);
+	if (!base || !tip || !base->sequence_number || !tip->sequence_number) {
+		return true;
+	}
+	int64_t base_sequence = *base->sequence_number;
+	int64_t tip_sequence = *tip->sequence_number;
+	for (auto &entry : metadata.snapshots) {
+		auto &snapshot = entry.second;
+		if (!snapshot.sequence_number) {
+			continue;
+		}
+		int64_t sequence = *snapshot.sequence_number;
+		if (sequence <= base_sequence || sequence > tip_sequence) {
+			continue;
+		}
+		if (snapshot.operation != IcebergSnapshotOperationType::APPEND) {
+			return true;
+		}
+		auto &metrics = snapshot.metrics.metrics;
+		auto removed = metrics.find(IcebergSnapshotMetricType::DELETED_DATA_FILES);
+		if (removed != metrics.end() && removed->second > 0) {
+			return true;
+		}
+		auto added_deletes = metrics.find(IcebergSnapshotMetricType::ADDED_DELETE_FILES);
+		if (added_deletes != metrics.end() && added_deletes->second > 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
 static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, IcebergTableInformation &table_info,
                                                       ClientContext &context) {
 	SingleTableStagedCommit info;
@@ -283,6 +324,18 @@ static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, Iceb
 		commit_state.LoadExistingManifests(db, std::move(transaction_data.existing_manifest_list));
 	}
 	commit_state.latest_snapshot = current_snapshot;
+
+	//! DELETE commit-retry guard: reject a re-apply over a concurrent commit that
+	//! removed/rewrote the targeted data (no-op on first attempt / non-deletes).
+	if (current_snapshot && current_snapshot->snapshot_id && transaction_data.delete_scan_snapshot_id &&
+	    *current_snapshot->snapshot_id != *transaction_data.delete_scan_snapshot_id &&
+	    DeleteReapplyUnsafe(metadata, *transaction_data.delete_scan_snapshot_id, *current_snapshot->snapshot_id)) {
+		throw TransactionException(
+		    "DELETE on \"%s\" conflicts with a concurrent commit that removed or rewrote data (scanned snapshot "
+		    "%s, now at %s); re-run the DELETE.",
+		    table_info.name, std::to_string(*transaction_data.delete_scan_snapshot_id),
+		    std::to_string(*current_snapshot->snapshot_id));
+	}
 
 	for (auto &update : transaction_data.updates) {
 		if (update->type == IcebergTableUpdateType::ADD_SNAPSHOT) {

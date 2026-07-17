@@ -436,11 +436,21 @@ SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, Clien
 	auto &table_info = irc_table.table_info;
 	auto iceberg_delete_files = GenerateDeleteManifestEntries(global_state);
 
+	//! Snapshot this delete scanned; drives the commit-retry safety check.
+	optional<int64_t> delete_scan_snapshot_id;
+	if (multi_file_list) {
+		auto &scan_info = multi_file_list->GetSnapshot();
+		if (scan_info.snapshot && scan_info.snapshot->snapshot_id) {
+			delete_scan_snapshot_id = *scan_info.snapshot->snapshot_id;
+		}
+	}
+
 	if (!global_state.written_files.empty()) {
 		ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTableInformation &tbl) {
 			auto &transaction_data = tbl.GetOrCreateTransactionData(iceberg_transaction);
 			transaction_data.AddSnapshot(IcebergSnapshotOperationType::DELETE, std::move(iceberg_delete_files),
 			                             std::move(global_state.altered_manifests));
+			transaction_data.delete_scan_snapshot_id = delete_scan_snapshot_id;
 
 			//! Add or overwrite the currently active transaction-local delete files
 			for (auto &entry : global_state.written_files) {
