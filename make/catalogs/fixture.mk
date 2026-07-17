@@ -1,11 +1,11 @@
 FIXTURE_ENV_FILE ?= scripts/envs/fixture.env
 
 fixture-stop:
+	$(call stop_active_catalog)
 	@echo "Stopping apache/iceberg-rest-fixture catalog..."
 	(cd scripts && docker compose down -v)
 
 fixture: fixture-stop
-	$(call stop_active_catalog)
 	@echo "Starting apache/iceberg-rest-fixture catalog..."
 	mkdir -p data/generated/iceberg/fixture
 	mkdir -p data/generated/intermediates
