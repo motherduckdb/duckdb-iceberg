@@ -126,9 +126,6 @@ set variable txn_manifest_3 = (
 	limit 1 offset 2
 );
 
-statement ok
-commit
-
 query II
 select
 	count(*) filter (where schema_id = '0'),
@@ -142,6 +139,9 @@ from (
 ) t;
 ----
 2	1
+
+statement ok
+commit
 
 # A further insert + read still returns everything intact after the mixed-schema transaction.
 statement ok
@@ -164,6 +164,10 @@ select count(*) from (
 );
 ----
 3
+
+# Start transaction to keep necessary credentials in scope
+statement ok
+begin
 
 statement ok
 set variable latest_txn_manifest_list = (
@@ -213,3 +217,6 @@ from (
 
 statement ok
 drop table my_datalake.default.merge_txn_schema;
+
+statement ok
+commit

@@ -104,6 +104,10 @@ select count(*) from my_datalake.default.compress_none;
 ----
 300
 
+# Start transaction to keep necessary credentials in scope
+statement ok
+begin
+
 # With 'none', the manifest is written uncompressed: the Avro header records avro.codec -> null and
 # there is no 'deflate' marker.
 statement ok
@@ -117,6 +121,9 @@ SELECT position('deflate' IN (content[1:60]::VARCHAR)) = 0, position('null' IN (
 FROM read_blob(getvariable('manifest_none'));
 ----
 true	true
+
+statement ok
+commit
 
 statement ok
 drop table my_datalake.default.compress_none;
