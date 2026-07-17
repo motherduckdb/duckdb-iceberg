@@ -181,9 +181,6 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 	auto manifest_list_path = fs.JoinPath(table_metadata.GetMetadataPath(fs),
 	                                      "snap-" + std::to_string(snapshot_id) + "-" + manifest_list_uuid + ".avro");
 
-	//! Create a new manifest list, populate it with the content of the old manifest list (altered if necessary)
-	IcebergManifestList new_manifest_list(snapshot_id, sequence_number, manifest_list_path);
-
 	//! Construct the snapshot
 	IcebergSnapshot new_snapshot(schema_id);
 	new_snapshot.operation = operation;
@@ -201,6 +198,8 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 		}
 	}
 
+	//! Create a new manifest list, populate it with the content of the old manifest list (altered if necessary)
+	IcebergManifestList new_manifest_list(snapshot_id, sequence_number, manifest_list_path);
 	ConstructManifestList(new_manifest_list, avro_copy, db, commit_state, new_snapshot.metrics);
 
 	if (table_metadata.iceberg_version >= 3) {
