@@ -50,7 +50,7 @@ FROM read_avro(getvariable('large_manifest_path'));
 ----
 2050
 
-statement
+statement ok
 commit
 
 statement ok

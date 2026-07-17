@@ -457,6 +457,7 @@ SELECT list_sort(list(value_count::BIGINT)) = [19]::BIGINT[] FROM (
 true
 
 statement ok
+commit
 
 # --- list_of_fixed_int_array from test_all_types (list of fixed arrays, cast to LIST) ---
 statement ok
