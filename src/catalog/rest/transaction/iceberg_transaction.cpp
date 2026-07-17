@@ -264,45 +264,64 @@ static void CreateTableRequirements(DatabaseInstance &db, ClientContext &context
 	}
 }
 
-//! True if a concurrent commit between the DELETE's scan snapshot and the tip
-//! removed or rewrote data, making it unsafe to re-apply the delete on retry.
-//! Pure appends are safe. Ranges over sequence numbers (parent links aren't
-//! populated on read snapshots); an unreachable base is treated as unsafe.
-static bool DeleteReapplyUnsafe(const IcebergTableMetadata &metadata, int64_t base_snapshot_id,
-                                int64_t tip_snapshot_id) {
+//! Safe to re-apply a DELETE on retry only if every commit in (base, tip] was a
+//! pure append; anything else may have removed/rewritten the target data. Ranges
+//! over sequence numbers (parent links aren't populated on read snapshots). A
+//! scan/tip snapshot the catalog doesn't expose (e.g. no history) can't be
+//! proven safe, so it counts as not reappliable.
+static bool DeleteCanReapply(const IcebergTableMetadata &metadata, int64_t base_snapshot_id, int64_t tip_snapshot_id) {
 	if (base_snapshot_id == tip_snapshot_id) {
+		return true;
+	}
+	auto base = metadata.FindSnapshotByIdInternal(base_snapshot_id);
+	auto tip = metadata.FindSnapshotByIdInternal(tip_snapshot_id);
+	if (!base || !tip) {
 		return false;
 	}
-	auto base = metadata.GetSnapshotById(base_snapshot_id);
-	auto tip = metadata.GetSnapshotById(tip_snapshot_id);
-	if (!base || !tip || !base->sequence_number || !tip->sequence_number) {
-		return true;
+	if (!base->sequence_number || !tip->sequence_number) {
+		throw InvalidConfigurationException("Committed snapshot is missing a sequence number");
 	}
 	int64_t base_sequence = *base->sequence_number;
 	int64_t tip_sequence = *tip->sequence_number;
 	for (auto &entry : metadata.snapshots) {
 		auto &snapshot = entry.second;
 		if (!snapshot.sequence_number) {
-			continue;
+			throw InvalidConfigurationException("Committed snapshot is missing a sequence number");
 		}
 		int64_t sequence = *snapshot.sequence_number;
 		if (sequence <= base_sequence || sequence > tip_sequence) {
 			continue;
 		}
 		if (snapshot.operation != IcebergSnapshotOperationType::APPEND) {
-			return true;
-		}
-		auto &metrics = snapshot.metrics.metrics;
-		auto removed = metrics.find(IcebergSnapshotMetricType::DELETED_DATA_FILES);
-		if (removed != metrics.end() && removed->second > 0) {
-			return true;
-		}
-		auto added_deletes = metrics.find(IcebergSnapshotMetricType::ADDED_DELETE_FILES);
-		if (added_deletes != metrics.end() && added_deletes->second > 0) {
-			return true;
+			return false;
 		}
 	}
-	return false;
+	return true;
+}
+
+//! Throw if a retried DELETE can't be safely re-applied. No-op on the first
+//! attempt (tip == scan) and for non-delete transactions.
+static void VerifyDeleteRetryability(const IcebergTableInformation &table_info,
+                                     optional_ptr<const IcebergSnapshot> current_snapshot) {
+	if (!table_info.transaction_data) {
+		return;
+	}
+	auto &transaction_data = *table_info.transaction_data;
+	if (!transaction_data.delete_scan_snapshot_id) {
+		return;
+	}
+	if (!current_snapshot || !current_snapshot->snapshot_id) {
+		return;
+	}
+	auto scan_snapshot_id = *transaction_data.delete_scan_snapshot_id;
+	auto tip_snapshot_id = *current_snapshot->snapshot_id;
+	if (DeleteCanReapply(table_info.table_metadata, scan_snapshot_id, tip_snapshot_id)) {
+		return;
+	}
+	throw TransactionException(
+	    "DELETE on \"%s\" conflicts with a concurrent commit that removed or rewrote data (scanned snapshot "
+	    "%s, now at %s); re-run the DELETE.",
+	    table_info.name, std::to_string(scan_snapshot_id), std::to_string(tip_snapshot_id));
 }
 
 static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, IcebergTableInformation &table_info,
@@ -325,17 +344,7 @@ static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, Iceb
 	}
 	commit_state.latest_snapshot = current_snapshot;
 
-	//! DELETE commit-retry guard: reject a re-apply over a concurrent commit that
-	//! removed/rewrote the targeted data (no-op on first attempt / non-deletes).
-	if (current_snapshot && current_snapshot->snapshot_id && transaction_data.delete_scan_snapshot_id &&
-	    *current_snapshot->snapshot_id != *transaction_data.delete_scan_snapshot_id &&
-	    DeleteReapplyUnsafe(metadata, *transaction_data.delete_scan_snapshot_id, *current_snapshot->snapshot_id)) {
-		throw TransactionException(
-		    "DELETE on \"%s\" conflicts with a concurrent commit that removed or rewrote data (scanned snapshot "
-		    "%s, now at %s); re-run the DELETE.",
-		    table_info.name, std::to_string(*transaction_data.delete_scan_snapshot_id),
-		    std::to_string(*current_snapshot->snapshot_id));
-	}
+	VerifyDeleteRetryability(commit_state.table_info, current_snapshot);
 
 	for (auto &update : transaction_data.updates) {
 		if (update->type == IcebergTableUpdateType::ADD_SNAPSHOT) {
