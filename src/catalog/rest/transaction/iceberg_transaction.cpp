@@ -164,13 +164,6 @@ static rest_api_objects::TableRequirement CreateAssertNoSnapshotRequirement() {
 	return req;
 }
 
-void IcebergTransaction::DropSecrets(ClientContext &context) {
-	auto &secret_manager = SecretManager::Get(context);
-	for (auto &secret_name : created_secrets) {
-		(void)secret_manager.DropSecretByName(context, Identifier(secret_name), OnEntryNotFound::RETURN_NULL);
-	}
-}
-
 static rest_api_objects::TableUpdate CreateSetSnapshotRefUpdate(int64_t snapshot_id) {
 	rest_api_objects::TableUpdate table_update;
 
@@ -516,7 +509,6 @@ void IcebergTransaction::Commit() {
 		ErrorData error(ex);
 		commit_state_unknown = CommitStateUnknown(error);
 		CleanupFiles();
-		DropSecrets(*temp_con_context);
 		temp_con.Rollback();
 		EvictCachedTables();
 		error.Throw("Failed to commit Iceberg transaction: ");
@@ -541,7 +533,6 @@ void IcebergTransaction::DoTableUpdates(IcebergTransactionAlterUpdate &alter_upd
 			ic_catalog.table_request_cache.Expire(context, entry.first);
 		}
 	}
-	DropSecrets(context);
 }
 
 void IcebergTransaction::DoTableRename(IcebergTransactionRenameUpdate &rename_update, ClientContext &context) {
