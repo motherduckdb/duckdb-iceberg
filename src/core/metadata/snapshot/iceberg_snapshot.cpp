@@ -1,6 +1,8 @@
 #include "core/metadata/snapshot/iceberg_snapshot.hpp"
 
 #include "duckdb/common/types/uuid.hpp"
+#include "duckdb/common/operator/add.hpp"
+#include "duckdb/common/operator/subtract.hpp"
 
 #include "core/metadata/iceberg_table_metadata.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
@@ -20,7 +22,8 @@ static map<IcebergSnapshotMetricType, int64_t> EmptyMetrics() {
 	return map<IcebergSnapshotMetricType, int64_t>({{IcebergSnapshotMetricType::TOTAL_DATA_FILES, 0},
 	                                                {IcebergSnapshotMetricType::TOTAL_RECORDS, 0},
 	                                                {IcebergSnapshotMetricType::TOTAL_DELETE_FILES, 0},
-	                                                {IcebergSnapshotMetricType::TOTAL_POSITION_DELETES, 0}});
+	                                                {IcebergSnapshotMetricType::TOTAL_POSITION_DELETES, 0},
+	                                                {IcebergSnapshotMetricType::TOTAL_FILES_SIZE, 0}});
 }
 
 IcebergSnapshotMetrics::IcebergSnapshotMetrics() : metrics(EmptyMetrics()) {
@@ -44,9 +47,49 @@ IcebergSnapshotMetrics::IcebergSnapshotMetrics(const IcebergSnapshot &snapshot) 
 	if (total_position_deletes != other_metrics.end()) {
 		metrics[IcebergSnapshotMetricType::TOTAL_POSITION_DELETES] = total_position_deletes->second;
 	}
+	auto total_files_size = other_metrics.find(IcebergSnapshotMetricType::TOTAL_FILES_SIZE);
+	if (total_files_size != other_metrics.end()) {
+		metrics[IcebergSnapshotMetricType::TOTAL_FILES_SIZE] = total_files_size->second;
+	}
+}
+
+static void AddSizeMetric(map<IcebergSnapshotMetricType, int64_t> &metrics, IcebergSnapshotMetricType type,
+                          int64_t value) {
+	if (value < 0) {
+		throw InvalidConfigurationException("Iceberg snapshot file-size metric cannot be negative: %lld", value);
+	}
+	auto &metric = metrics.emplace(type, 0).first->second;
+	if (!TryAddOperator::Operation(metric, value, metric)) {
+		throw InvalidConfigurationException("Iceberg snapshot file-size metrics exceed the supported BIGINT range");
+	}
+}
+
+static void UpdateTotalFilesSize(map<IcebergSnapshotMetricType, int64_t> &metrics, int64_t added, int64_t removed) {
+	auto total_it = metrics.find(IcebergSnapshotMetricType::TOTAL_FILES_SIZE);
+	if (total_it == metrics.end()) {
+		return;
+	}
+	int64_t with_added;
+	int64_t updated;
+	if (!TryAddOperator::Operation(total_it->second, added, with_added) ||
+	    !TrySubtractOperator::Operation(with_added, removed, updated)) {
+		throw InvalidConfigurationException("Iceberg snapshot 'total-files-size' exceeds the supported BIGINT range");
+	}
+	if (updated < 0) {
+		throw InvalidConfigurationException("Iceberg snapshot 'total-files-size' cannot be negative");
+	}
+	total_it->second = updated;
 }
 
 void IcebergSnapshotMetrics::AddManifestFile(const IcebergManifestFile &manifest_file) {
+	if (manifest_file.added_files_size > 0) {
+		AddSizeMetric(metrics, IcebergSnapshotMetricType::ADDED_FILES_SIZE, manifest_file.added_files_size);
+	}
+	if (manifest_file.deleted_files_size > 0) {
+		AddSizeMetric(metrics, IcebergSnapshotMetricType::REMOVED_FILES_SIZE, manifest_file.deleted_files_size);
+	}
+	UpdateTotalFilesSize(metrics, manifest_file.added_files_size, manifest_file.deleted_files_size);
+
 	if (manifest_file.content == IcebergManifestContentType::DELETE) {
 		//! Delete manifest (V2 position/equality delete files, V3 Puffin deletion vectors).
 		//! Account for it under the Iceberg snapshot-summary delete metrics, mirroring the
@@ -115,6 +158,22 @@ void IcebergSnapshotMetrics::AddManifestFile(const IcebergManifestFile &manifest
 	}
 }
 
+void IcebergSnapshotMetrics::RemoveFileSize(int64_t file_size_in_bytes) {
+	AddSizeMetric(metrics, IcebergSnapshotMetricType::REMOVED_FILES_SIZE, file_size_in_bytes);
+	UpdateTotalFilesSize(metrics, 0, file_size_in_bytes);
+}
+
+bool IcebergSnapshotMetrics::HasTotalFilesSize() const {
+	return metrics.count(IcebergSnapshotMetricType::TOTAL_FILES_SIZE) != 0;
+}
+
+void IcebergSnapshotMetrics::SetTotalFilesSize(int64_t total_files_size) {
+	if (total_files_size < 0) {
+		throw InvalidConfigurationException("Iceberg snapshot 'total-files-size' cannot be negative");
+	}
+	metrics[IcebergSnapshotMetricType::TOTAL_FILES_SIZE] = total_files_size;
+}
+
 static string OperationTypeToString(IcebergSnapshotOperationType type) {
 	switch (type) {
 	case IcebergSnapshotOperationType::APPEND:
@@ -146,10 +205,13 @@ static const IcebergSnapshotMetricItem SNAPSHOT_METRIC_KEYS[] = {
     {IcebergSnapshotMetricType::ADDED_POSITION_DELETES, "added-position-deletes"},
     {IcebergSnapshotMetricType::REMOVED_DELETE_FILES, "removed-delete-files"},
     {IcebergSnapshotMetricType::REMOVED_POSITION_DELETE_FILES, "removed-position-delete-files"},
+    {IcebergSnapshotMetricType::ADDED_FILES_SIZE, "added-files-size"},
+    {IcebergSnapshotMetricType::REMOVED_FILES_SIZE, "removed-files-size"},
     {IcebergSnapshotMetricType::TOTAL_DATA_FILES, "total-data-files"},
     {IcebergSnapshotMetricType::TOTAL_RECORDS, "total-records"},
     {IcebergSnapshotMetricType::TOTAL_DELETE_FILES, "total-delete-files"},
-    {IcebergSnapshotMetricType::TOTAL_POSITION_DELETES, "total-position-deletes"}};
+    {IcebergSnapshotMetricType::TOTAL_POSITION_DELETES, "total-position-deletes"},
+    {IcebergSnapshotMetricType::TOTAL_FILES_SIZE, "total-files-size"}};
 
 static const idx_t SNAPSHOT_METRIC_KEYS_SIZE = sizeof(SNAPSHOT_METRIC_KEYS) / sizeof(IcebergSnapshotMetricItem);
 
@@ -168,6 +230,9 @@ static string MetricsTypeToString(IcebergSnapshotMetricType type) {
 static IcebergSnapshotMetrics MetricsFromSummary(const case_insensitive_map_t<string> &snapshot_summary) {
 	IcebergSnapshotMetrics ret;
 	auto &metrics = ret.metrics;
+	//! Unlike the long-standing count totals, total-files-size is new to this extension.
+	//! Preserve its absence so a later write can reconstruct a legacy table's baseline.
+	metrics.erase(IcebergSnapshotMetricType::TOTAL_FILES_SIZE);
 	for (idx_t i = 0; i < SNAPSHOT_METRIC_KEYS_SIZE; i++) {
 		auto &item = SNAPSHOT_METRIC_KEYS[i];
 		auto it = snapshot_summary.find(item.name);
@@ -177,6 +242,12 @@ static IcebergSnapshotMetrics MetricsFromSummary(const case_insensitive_map_t<st
 				value = std::stoll(it->second);
 			} catch (...) {
 				// Skip invalid metrics
+				continue;
+			}
+			if ((item.type == IcebergSnapshotMetricType::ADDED_FILES_SIZE ||
+			     item.type == IcebergSnapshotMetricType::REMOVED_FILES_SIZE ||
+			     item.type == IcebergSnapshotMetricType::TOTAL_FILES_SIZE) &&
+			    value < 0) {
 				continue;
 			}
 			metrics[item.type] = value;

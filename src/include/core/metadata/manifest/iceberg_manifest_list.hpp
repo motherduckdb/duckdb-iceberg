@@ -93,6 +93,12 @@ public:
 	idx_t existing_rows_count = 0;
 	//! deleted rows in the manifest
 	idx_t deleted_rows_count = 0;
+	//! Size in bytes of content files added by this manifest. This is derived from
+	//! manifest entries and is not serialized in the manifest list.
+	int64_t added_files_size = 0;
+	//! Size in bytes of content files deleted by this manifest. This is derived from
+	//! manifest entries and is not serialized in the manifest list.
+	int64_t deleted_files_size = 0;
 	//! The field summaries of the partition (if present)
 	ManifestPartitions partitions;
 

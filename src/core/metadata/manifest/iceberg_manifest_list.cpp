@@ -7,6 +7,7 @@
 #include "duckdb/main/database.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/common/types/uuid.hpp"
+#include "duckdb/common/operator/add.hpp"
 
 #include "core/metadata/partition/iceberg_partition_spec.hpp"
 #include "core/expression/iceberg_value.hpp"
@@ -24,6 +25,16 @@
 #include <optional>
 
 namespace duckdb {
+
+static void AddFileSizeChecked(int64_t &total, int64_t file_size_in_bytes) {
+	if (file_size_in_bytes < 0) {
+		throw InvalidConfigurationException("Iceberg content file has negative 'file_size_in_bytes': %lld",
+		                                    file_size_in_bytes);
+	}
+	if (!TryAddOperator::Operation(total, file_size_in_bytes, total)) {
+		throw InvalidConfigurationException("Iceberg content file sizes exceed the supported BIGINT range");
+	}
+}
 
 string IcebergManifestContentTypeToString(IcebergManifestContentType type) {
 	switch (type) {
@@ -103,6 +114,8 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 	manifest_file.added_rows_count = 0;
 	manifest_file.existing_rows_count = 0;
 	manifest_file.deleted_rows_count = 0;
+	manifest_file.added_files_size = 0;
+	manifest_file.deleted_files_size = 0;
 	manifest_file.partition_spec_id = manifest_partition_spec_id;
 
 	//! Add the files to the manifest
@@ -115,11 +128,13 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 		case IcebergManifestEntryStatusType::ADDED: {
 			manifest_file.added_files_count++;
 			manifest_file.added_rows_count += data_file.record_count;
+			AddFileSizeChecked(manifest_file.added_files_size, data_file.file_size_in_bytes);
 			break;
 		}
 		case IcebergManifestEntryStatusType::DELETED: {
 			manifest_file.deleted_files_count++;
 			manifest_file.deleted_rows_count += data_file.record_count;
+			AddFileSizeChecked(manifest_file.deleted_files_size, data_file.file_size_in_bytes);
 			break;
 		}
 		case IcebergManifestEntryStatusType::EXISTING: {
