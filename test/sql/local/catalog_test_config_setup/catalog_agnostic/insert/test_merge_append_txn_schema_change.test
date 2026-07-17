@@ -90,6 +90,10 @@ select count(*) from (
 ----
 3
 
+# Start transaction to keep necessary credentials in scope
+statement ok
+begin
+
 statement ok
 set variable latest_txn_manifest_list = (
 	select manifest_list
@@ -121,6 +125,9 @@ set variable txn_manifest_3 = (
 	order by manifest_path
 	limit 1 offset 2
 );
+
+statement ok
+commit
 
 query II
 select

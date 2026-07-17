@@ -273,15 +273,12 @@ static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, Iceb
 	info.retryable = transaction_data.SupportsAppendRetry();
 	info.retry_config = IcebergRetryConfig::FromTableMetadata(metadata);
 	if (!transaction_data.alters.empty()) {
+		table_info.LoadCredentials(context);
 		commit_state.LoadExistingManifests(db, std::move(transaction_data.existing_manifest_list));
 	}
 	commit_state.latest_snapshot = current_snapshot;
 
 	for (auto &update : transaction_data.updates) {
-		if (update->type == IcebergTableUpdateType::ADD_SNAPSHOT) {
-			auto &ic_table_entry = table_info.GetLatestSchema()->Cast<IcebergTableEntry>();
-			ic_table_entry.PrepareIcebergScanFromEntry(context);
-		}
 		update->CreateUpdate(db, context, commit_state);
 	}
 
