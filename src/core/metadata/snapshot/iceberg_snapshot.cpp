@@ -5,7 +5,9 @@
 #include "duckdb/common/operator/subtract.hpp"
 
 #include "core/metadata/iceberg_table_metadata.hpp"
+#include "core/metadata/manifest/iceberg_manifest_list.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "common/iceberg_utils.hpp"
 
 namespace duckdb {
 
@@ -55,13 +57,8 @@ IcebergSnapshotMetrics::IcebergSnapshotMetrics(const IcebergSnapshot &snapshot) 
 
 static void AddSizeMetric(map<IcebergSnapshotMetricType, int64_t> &metrics, IcebergSnapshotMetricType type,
                           int64_t value) {
-	if (value < 0) {
-		throw InvalidConfigurationException("Iceberg snapshot file-size metric cannot be negative: %lld", value);
-	}
 	auto &metric = metrics.emplace(type, 0).first->second;
-	if (!TryAddOperator::Operation(metric, value, metric)) {
-		throw InvalidConfigurationException("Iceberg snapshot file-size metrics exceed the supported BIGINT range");
-	}
+	metric = IcebergUtils::AddFileSizeChecked(metric, value);
 }
 
 static void UpdateTotalFilesSize(map<IcebergSnapshotMetricType, int64_t> &metrics, int64_t added, int64_t removed) {
@@ -81,15 +78,33 @@ static void UpdateTotalFilesSize(map<IcebergSnapshotMetricType, int64_t> &metric
 	total_it->second = updated;
 }
 
-void IcebergSnapshotMetrics::AddManifestFile(const IcebergManifestFile &manifest_file) {
-	if (manifest_file.added_files_size > 0) {
-		AddSizeMetric(metrics, IcebergSnapshotMetricType::ADDED_FILES_SIZE, manifest_file.added_files_size);
+void IcebergSnapshotMetrics::AddManifestListEntry(const IcebergManifestListEntry &manifest_list_entry) {
+	int64_t added_files_size = 0;
+	int64_t deleted_files_size = 0;
+	for (const auto &manifest_entry : manifest_list_entry.GetManifestEntries()) {
+		switch (manifest_entry.status) {
+		case IcebergManifestEntryStatusType::ADDED:
+			added_files_size =
+			    IcebergUtils::AddFileSizeChecked(added_files_size, manifest_entry.data_file.file_size_in_bytes);
+			break;
+		case IcebergManifestEntryStatusType::DELETED:
+			deleted_files_size =
+			    IcebergUtils::AddFileSizeChecked(deleted_files_size, manifest_entry.data_file.file_size_in_bytes);
+			break;
+		case IcebergManifestEntryStatusType::EXISTING:
+			break;
+		}
 	}
-	if (manifest_file.deleted_files_size > 0) {
-		AddSizeMetric(metrics, IcebergSnapshotMetricType::REMOVED_FILES_SIZE, manifest_file.deleted_files_size);
-	}
-	UpdateTotalFilesSize(metrics, manifest_file.added_files_size, manifest_file.deleted_files_size);
 
+	if (added_files_size > 0) {
+		AddSizeMetric(metrics, IcebergSnapshotMetricType::ADDED_FILES_SIZE, added_files_size);
+	}
+	if (deleted_files_size > 0) {
+		AddSizeMetric(metrics, IcebergSnapshotMetricType::REMOVED_FILES_SIZE, deleted_files_size);
+	}
+	UpdateTotalFilesSize(metrics, added_files_size, deleted_files_size);
+
+	auto &manifest_file = manifest_list_entry.file;
 	if (manifest_file.content == IcebergManifestContentType::DELETE) {
 		//! Delete manifest (V2 position/equality delete files, V3 Puffin deletion vectors).
 		//! Account for it under the Iceberg snapshot-summary delete metrics, mirroring the

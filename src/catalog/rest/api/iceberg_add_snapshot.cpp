@@ -9,10 +9,10 @@
 #include "duckdb/main/extension/extension_loader.hpp"
 #include "duckdb/storage/external_file_cache/caching_file_system.hpp"
 #include "duckdb/common/types/uuid.hpp"
-#include "duckdb/common/operator/add.hpp"
 
 #include "core/metadata/manifest/iceberg_manifest_list.hpp"
 #include "catalog/rest/iceberg_table_set.hpp"
+#include "common/iceberg_utils.hpp"
 
 namespace duckdb {
 
@@ -113,16 +113,6 @@ void IcebergAddSnapshot::ConstructManifestList(IcebergManifestList &new_manifest
 	commit_state.manifests.clear();
 }
 
-static void AddLiveFileSize(int64_t &total_files_size, const IcebergDataFile &data_file) {
-	if (data_file.file_size_in_bytes < 0) {
-		throw InvalidConfigurationException("Iceberg content file has negative 'file_size_in_bytes': %lld",
-		                                    data_file.file_size_in_bytes);
-	}
-	if (!TryAddOperator::Operation(total_files_size, data_file.file_size_in_bytes, total_files_size)) {
-		throw InvalidConfigurationException("Iceberg live content file sizes exceed the supported BIGINT range");
-	}
-}
-
 static int64_t ReconstructTotalFilesSize(IcebergCommitState &commit_state, int32_t schema_id) {
 	int64_t total_files_size = 0;
 	for (const auto &manifest : commit_state.manifests) {
@@ -133,7 +123,7 @@ static int64_t ReconstructTotalFilesSize(IcebergCommitState &commit_state, int32
 			if (entry.status == IcebergManifestEntryStatusType::DELETED) {
 				continue;
 			}
-			AddLiveFileSize(total_files_size, entry.data_file);
+			total_files_size = IcebergUtils::AddFileSizeChecked(total_files_size, entry.data_file.file_size_in_bytes);
 		}
 	}
 	return total_files_size;
@@ -220,7 +210,7 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 
 	for (auto &manifest_list_entry : uncommitted_manifest_files) {
 		auto &manifest_file = manifest_list_entry.file;
-		new_snapshot.metrics.AddManifestFile(manifest_file);
+		new_snapshot.metrics.AddManifestListEntry(manifest_list_entry);
 
 		auto new_manifest_list_entry =
 		    WriteManifestListEntry(commit_state.table_info, manifest_list_entry, avro_copy, db, context);
