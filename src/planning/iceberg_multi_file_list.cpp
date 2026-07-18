@@ -337,25 +337,20 @@ void IcebergMultiFileList::Bind(vector<LogicalType> &return_types, vector<Identi
 		return_types = this->types;
 		return;
 	}
-	auto &fs = FileSystem::GetFileSystem(context);
-	auto caching_fs = make_shared_ptr<CachingFileSystemWrapper>(FileSystem::GetFileSystem(context), *context.db);
 	if (!shared_state->scan_info) {
 		D_ASSERT(!shared_state->path.empty());
 		auto input_string = shared_state->path;
-		auto iceberg_path = IcebergUtils::GetStorageLocation(context, input_string);
-		auto iceberg_meta_path = IcebergTableMetadata::GetMetaDataPath(context, iceberg_path, fs, options);
-		auto table_metadata =
-		    IcebergTableMetadata::Parse(iceberg_meta_path, *caching_fs, options.metadata_compression_codec);
+		auto resolved_metadata = IcebergUtils::ResolveTableMetadata(context, input_string, options);
 
 		auto temp_data = make_uniq<IcebergScanTemporaryData>();
-		temp_data->metadata = IcebergTableMetadata::FromTableMetadata(table_metadata);
+		temp_data->metadata = std::move(resolved_metadata.metadata);
 		auto &metadata = temp_data->metadata;
 
 		IcebergSnapshotScanInfo snapshot_info;
 		snapshot_info = metadata.GetSnapshot(*options.snapshot_lookup);
 		auto schema = metadata.GetSchemaFromId(snapshot_info.schema_id);
-		shared_state->scan_info =
-		    make_shared_ptr<IcebergScanInfo>(iceberg_path, std::move(temp_data), snapshot_info, *schema);
+		shared_state->scan_info = make_shared_ptr<IcebergScanInfo>(resolved_metadata.table_location,
+		                                                           std::move(temp_data), snapshot_info, *schema);
 	}
 
 	if (!view_initialized) {
