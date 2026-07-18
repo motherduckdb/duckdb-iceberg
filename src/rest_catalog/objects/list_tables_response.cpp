@@ -44,12 +44,16 @@ string ListTablesResponse::TryFromJSON(yyjson_val *obj) {
 	string error;
 	auto next_page_token_val = yyjson_obj_get(obj, "next-page-token");
 	if (next_page_token_val) {
-		PageToken next_page_token_tmp;
-		error = next_page_token_tmp.TryFromJSON(next_page_token_val);
-		if (!error.empty()) {
-			return error;
+		if (yyjson_is_null(next_page_token_val)) {
+			//! do nothing, property is explicitly nullable
+		} else {
+			PageToken next_page_token_tmp;
+			error = next_page_token_tmp.TryFromJSON(next_page_token_val);
+			if (!error.empty()) {
+				return error;
+			}
+			next_page_token = std::move(next_page_token_tmp);
 		}
-		next_page_token = std::move(next_page_token_tmp);
 	}
 	auto identifiers_val = yyjson_obj_get(obj, "identifiers");
 	if (identifiers_val) {

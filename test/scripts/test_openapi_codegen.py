@@ -114,3 +114,62 @@ def test_table_metadata_accepts_null_current_snapshot_without_patching_spec():
     _, _, source = render_class(parser, parse_info, "TableMetadata")
     assert "if (yyjson_is_null(current_snapshot_id_val))" in source
     assert "property is explicitly nullable" in source
+
+
+def test_openapi_31_null_syntax_and_nullable_references(tmp_path):
+    spec_path = tmp_path / "nullable.yaml"
+    spec_path.write_text(
+        """
+openapi: 3.1.1
+components:
+  schemas:
+    NullableInteger:
+      type: [integer, "null"]
+      format: int64
+    Container:
+      type: object
+      required:
+        - required-value
+      properties:
+        required-value:
+          oneOf:
+            - type: string
+            - type: "null"
+        optional-value:
+          type: [string, "null"]
+        strict-value:
+          type: string
+        referenced-value:
+          $ref: '#/components/schemas/NullableInteger'
+  responses: {}
+"""
+    )
+
+    parser, parse_info = parse_spec(spec_path)
+    container = parser.parsed_schemas["Container"]
+    assert parser.parsed_schemas["NullableInteger"].nullable is True
+    assert container.properties["required-value"].nullable is True
+    assert container.properties["optional-value"].nullable is True
+    assert container.properties["strict-value"].nullable is None
+    assert container.properties["referenced-value"].nullable is True
+
+    _, header, source = render_class(parser, parse_info, "Container")
+    assert "optional<string> required_value" in header
+    assert "optional<NullableInteger> referenced_value" in header
+    assert "if (yyjson_is_null(required_value_val))" in source
+    assert "if (yyjson_is_null(optional_value_val))" in source
+    assert "if (yyjson_is_null(referenced_value_val))" in source
+    assert "if (yyjson_is_null(strict_value_val))" not in source
+
+
+def test_nullable_page_token_reference_collapses_null_to_missing():
+    parser, parse_info = parse_spec()
+    schema = parser.parsed_schemas["ListTablesResponse"]
+
+    assert parser.parsed_schemas["PageToken"].nullable is True
+    assert schema.properties["next-page-token"].nullable is True
+
+    _, _, source = render_class(parser, parse_info, "ListTablesResponse")
+    null_branch = source.index("if (yyjson_is_null(next_page_token_val))")
+    parse_branch = source.index("next_page_token_tmp.TryFromJSON(next_page_token_val)")
+    assert null_branch < parse_branch

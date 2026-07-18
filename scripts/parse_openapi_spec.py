@@ -106,9 +106,50 @@ class ResponseObjectsGenerator:
         with open(path) as f:
             spec = yaml.safe_load(f)
 
+        self.openapi_version = spec.get('openapi', '3.0.0')
+        version_parts = self.openapi_version.split('.')
+        self.supports_json_schema_null = tuple(int(part) for part in version_parts[:2]) >= (3, 1)
         self.schemas = spec['components']['schemas']
         self.responses = spec['components']['responses']
         self.normalize_discriminator_unions()
+
+    @staticmethod
+    def is_null_schema(spec: dict) -> bool:
+        property_type = spec.get('type')
+        return (
+            property_type == 'null'
+            or (isinstance(property_type, list) and property_type == ['null'])
+            or ('const' in spec and spec['const'] is None)
+            or spec.get('enum') == [None]
+        )
+
+    def schema_nullability(self, spec: dict) -> Optional[bool]:
+        """Return whether a schema explicitly allows or rejects JSON null.
+
+        OpenAPI 3.1 uses JSON Schema null types. We also honor the legacy
+        nullable keyword because the Iceberg 3.1 document still uses it.
+        """
+
+        if self.supports_json_schema_null:
+            property_type = spec.get('type')
+            if property_type == 'null':
+                return True
+            if isinstance(property_type, list) and 'null' in property_type:
+                return True
+            if 'const' in spec and spec['const'] is None:
+                return True
+            if None in spec.get('enum', []):
+                return True
+            for composition_name in ('oneOf', 'anyOf'):
+                if any(self.is_null_schema(item) for item in spec.get(composition_name, [])):
+                    return True
+        return spec.get('nullable')
+
+    def referenced_schema_nullability(self, name: str) -> Optional[bool]:
+        parsed_schema = self.parsed_schemas.get(name)
+        if parsed_schema is not None:
+            return parsed_schema.nullable
+        return self.schema_nullability(self.schemas[name])
 
     def schema_is_referenced_outside_all_of(self, reference: str) -> bool:
         expected_ref = f'#/components/schemas/{reference}'
@@ -198,8 +239,11 @@ class ResponseObjectsGenerator:
             property_spec = properties[name]
             object_result.properties[name] = self.parse_property(property_spec)
 
-    def parse_primitive_property(self, spec: dict, result: Property) -> None:
-        primitive_type = spec['type']
+    def parse_primitive_property(
+        self, spec: dict, result: Property, primitive_type: Optional[str] = None
+    ) -> None:
+        if primitive_type is None:
+            primitive_type = spec['type']
         format = spec.get('format')
         assert primitive_type in PRIMITIVE_TYPES
         assert result.type == Property.Type.PRIMITIVE
@@ -233,7 +277,9 @@ class ResponseObjectsGenerator:
 
         result.reference = generated_name
         self.parsed_schemas[generated_name] = result
-        return SchemaReferenceProperty(generated_name)
+        reference_result = SchemaReferenceProperty(generated_name)
+        reference_result.nullable = result.nullable
+        return reference_result
 
     def parse_property(self, spec: dict, reference: Optional[str] = None) -> Property:
         ref = spec.get('$ref')
@@ -243,19 +289,54 @@ class ResponseObjectsGenerator:
                 assert parts[-2] == 'schemas'
                 reference = parts[-1]
                 self.parse_schema(reference)
-                return SchemaReferenceProperty(reference)
+                result = SchemaReferenceProperty(reference)
+                result.nullable = self.schema_nullability(spec)
+                if result.nullable is None:
+                    result.nullable = self.referenced_schema_nullability(reference)
+                result.default = spec.get('default')
+                return result
         elif ref:
             print(f"Schema {reference} spec contains '$ref' ???")
             exit(1)
 
         # default to 'object' (see 'AssertViewUUID')
         property_type = spec.get('type', 'object')
-        nullable = spec.get('nullable', None)
+        nullable = self.schema_nullability(spec)
         default = spec.get('default', None)
 
         one_of = spec.get('oneOf')
         all_of = spec.get('allOf')
         any_of = spec.get('anyOf')
+
+        if isinstance(property_type, list):
+            if not self.supports_json_schema_null:
+                print(f"OpenAPI {self.openapi_version} does not support type arrays")
+                exit(1)
+            non_null_types = [item for item in property_type if item != 'null']
+            if len(non_null_types) != 1:
+                print(f"Property has unsupported type union: {property_type}")
+                exit(1)
+            property_type = non_null_types[0]
+
+        # Collapse the common JSON Schema spelling `oneOf/anyOf: [T, null]`
+        # to T plus a nullable marker. This keeps null out of the C++ variant.
+        for composition_name, composition in (('oneOf', one_of), ('anyOf', any_of)):
+            if (
+                self.supports_json_schema_null
+                and composition
+                and any(self.is_null_schema(item) for item in composition)
+            ):
+                non_null_items = [item for item in composition if not self.is_null_schema(item)]
+                if len(non_null_items) == 1 and not all_of:
+                    result = self.parse_property(non_null_items[0], reference)
+                    result.nullable = True
+                    if default is not None:
+                        result.default = default
+                    return result
+                if composition_name == 'oneOf':
+                    one_of = non_null_items
+                else:
+                    any_of = non_null_items
 
         if property_type == 'object':
             result = ObjectProperty()
@@ -273,7 +354,7 @@ class ResponseObjectsGenerator:
             self.parse_array_property(spec, result)
         elif property_type in PRIMITIVE_TYPES:
             result = PrimitiveProperty()
-            self.parse_primitive_property(spec, result)
+            self.parse_primitive_property(spec, result, property_type)
         else:
             print(f"Property has unrecognized type: '{property_type}'!")
             exit(1)
@@ -322,12 +403,16 @@ class ResponseObjectsGenerator:
                 and result.all_of[0].type == Property.Type.SCHEMA_REFERENCE
             ):
                 # Optimizer: object that consists of a single 'allOf' can be simplified to just that single reference
-                return SchemaReferenceProperty(result.all_of[0].ref)
+                reference_result = SchemaReferenceProperty(result.all_of[0].ref)
+                reference_result.nullable = result.nullable
+                return reference_result
             self.object_schema_count += 1
             new_name = f'Object{self.object_schema_count}'
             self.parsed_schemas[new_name] = result
             # print("CUSTOM SCHEMA", new_name, spec)
-            return SchemaReferenceProperty(new_name)
+            reference_result = SchemaReferenceProperty(new_name)
+            reference_result.nullable = result.nullable
+            return reference_result
         return result
 
     def parse_schema(self, name: str) -> None:
