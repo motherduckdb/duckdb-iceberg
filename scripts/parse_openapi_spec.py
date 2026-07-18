@@ -9,7 +9,6 @@ API_SPEC_PATH = os.path.join(SCRIPT_PATH, 'api.yaml')
 
 PRIMITIVE_TYPES = ['string', 'number', 'integer', 'boolean']
 
-
 class Property:
     class Type(Enum):
         PRIMITIVE = auto()
@@ -264,6 +263,11 @@ class ResponseObjectsGenerator:
             # this can be removed when https://github.com/apache/iceberg/pull/13624 is resolved
             if reference == 'LoadTableResult':
                 result.properties['metadata-location'].nullable = True
+            # A table without snapshots has a null current-snapshot-id in the
+            # Iceberg metadata model and in REST catalog responses. The vendored
+            # OpenAPI schema currently omits the nullable marker.
+            if reference == 'TableMetadata':
+                result.properties['current-snapshot-id'].nullable = True
         elif property_type == 'array' or property_type == 'list':
             result = ArrayProperty()
             self.parse_array_property(spec, result)
