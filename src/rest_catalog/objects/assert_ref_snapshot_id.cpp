@@ -26,25 +26,17 @@ AssertRefSnapshotId AssertRefSnapshotId::FromJSON(yyjson_val *obj) {
 
 AssertRefSnapshotId AssertRefSnapshotId::Copy() const {
 	AssertRefSnapshotId res;
-	res.type = type.Copy();
+	res.table_requirement = table_requirement.Copy();
 	res.ref = ref;
-	if (snapshot_id.has_value()) {
-		res.snapshot_id.emplace();
-		(*res.snapshot_id) = (*snapshot_id);
-	}
+	res.snapshot_id = snapshot_id;
 	return res;
 }
 
 string AssertRefSnapshotId::TryFromJSON(yyjson_val *obj) {
 	string error;
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
-		return "AssertRefSnapshotId required property 'type' is missing";
-	} else {
-		error = type.TryFromJSON(type_val);
-		if (!error.empty()) {
-			return error;
-		}
+	error = table_requirement.TryFromJSON(obj);
+	if (!error.empty()) {
+		return error;
 	}
 	auto ref_val = yyjson_obj_get(obj, "ref");
 	if (!ref_val) {
@@ -58,21 +50,19 @@ string AssertRefSnapshotId::TryFromJSON(yyjson_val *obj) {
 		}
 	}
 	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
-	if (snapshot_id_val) {
+	if (!snapshot_id_val) {
+		return "AssertRefSnapshotId required property 'snapshot-id' is missing";
+	} else {
 		if (yyjson_is_null(snapshot_id_val)) {
 			//! do nothing, property is explicitly nullable
+		} else if (yyjson_is_sint(snapshot_id_val)) {
+			snapshot_id = yyjson_get_sint(snapshot_id_val);
+		} else if (yyjson_is_uint(snapshot_id_val)) {
+			snapshot_id = yyjson_get_uint(snapshot_id_val);
 		} else {
-			int64_t snapshot_id_tmp;
-			if (yyjson_is_sint(snapshot_id_val)) {
-				snapshot_id_tmp = yyjson_get_sint(snapshot_id_val);
-			} else if (yyjson_is_uint(snapshot_id_val)) {
-				snapshot_id_tmp = yyjson_get_uint(snapshot_id_val);
-			} else {
-				return StringUtil::Format(
-				    "AssertRefSnapshotId property 'snapshot_id_tmp' is not of type 'integer', found '%s' instead",
-				    yyjson_get_type_desc(snapshot_id_val));
-			}
-			snapshot_id = std::move(snapshot_id_tmp);
+			return StringUtil::Format(
+			    "AssertRefSnapshotId property 'snapshot_id' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(snapshot_id_val));
 		}
 	}
 	return "";
@@ -83,18 +73,14 @@ void AssertRefSnapshotId::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj)
 		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
 
-	// Serialize: type
-	yyjson_mut_val *type_val = type.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+	// Serialize base class: TableRequirement
+	table_requirement.PopulateJSON(doc, obj);
 
 	// Serialize: ref
 	yyjson_mut_obj_add_strcpy(doc, obj, "ref", ref.c_str());
 
 	// Serialize: snapshot-id
-	if (snapshot_id.has_value()) {
-		auto &snapshot_id_value = *snapshot_id;
-		yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id_value);
-	}
+	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
 }
 
 yyjson_mut_val *AssertRefSnapshotId::ToJSON(yyjson_mut_doc *doc) const {

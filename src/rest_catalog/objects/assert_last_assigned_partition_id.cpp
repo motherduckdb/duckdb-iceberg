@@ -26,21 +26,16 @@ AssertLastAssignedPartitionId AssertLastAssignedPartitionId::FromJSON(yyjson_val
 
 AssertLastAssignedPartitionId AssertLastAssignedPartitionId::Copy() const {
 	AssertLastAssignedPartitionId res;
-	res.type = type.Copy();
+	res.table_requirement = table_requirement.Copy();
 	res.last_assigned_partition_id = last_assigned_partition_id;
 	return res;
 }
 
 string AssertLastAssignedPartitionId::TryFromJSON(yyjson_val *obj) {
 	string error;
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
-		return "AssertLastAssignedPartitionId required property 'type' is missing";
-	} else {
-		error = type.TryFromJSON(type_val);
-		if (!error.empty()) {
-			return error;
-		}
+	error = table_requirement.TryFromJSON(obj);
+	if (!error.empty()) {
+		return error;
 	}
 	auto last_assigned_partition_id_val = yyjson_obj_get(obj, "last-assigned-partition-id");
 	if (!last_assigned_partition_id_val) {
@@ -62,9 +57,8 @@ void AssertLastAssignedPartitionId::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut
 		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
 
-	// Serialize: type
-	yyjson_mut_val *type_val = type.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+	// Serialize base class: TableRequirement
+	table_requirement.PopulateJSON(doc, obj);
 
 	// Serialize: last-assigned-partition-id
 	yyjson_mut_obj_add_int(doc, obj, "last-assigned-partition-id", last_assigned_partition_id);

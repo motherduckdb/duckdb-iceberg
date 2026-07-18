@@ -401,21 +401,17 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 	}
 	auto current_snapshot_id_val = yyjson_obj_get(obj, "current-snapshot-id");
 	if (current_snapshot_id_val) {
-		if (yyjson_is_null(current_snapshot_id_val)) {
-			//! do nothing, property is explicitly nullable
+		int64_t current_snapshot_id_tmp;
+		if (yyjson_is_sint(current_snapshot_id_val)) {
+			current_snapshot_id_tmp = yyjson_get_sint(current_snapshot_id_val);
+		} else if (yyjson_is_uint(current_snapshot_id_val)) {
+			current_snapshot_id_tmp = yyjson_get_uint(current_snapshot_id_val);
 		} else {
-			int64_t current_snapshot_id_tmp;
-			if (yyjson_is_sint(current_snapshot_id_val)) {
-				current_snapshot_id_tmp = yyjson_get_sint(current_snapshot_id_val);
-			} else if (yyjson_is_uint(current_snapshot_id_val)) {
-				current_snapshot_id_tmp = yyjson_get_uint(current_snapshot_id_val);
-			} else {
-				return StringUtil::Format(
-				    "TableMetadata property 'current_snapshot_id_tmp' is not of type 'integer', found '%s' instead",
-				    yyjson_get_type_desc(current_snapshot_id_val));
-			}
-			current_snapshot_id = std::move(current_snapshot_id_tmp);
+			return StringUtil::Format(
+			    "TableMetadata property 'current_snapshot_id_tmp' is not of type 'integer', found '%s' instead",
+			    yyjson_get_type_desc(current_snapshot_id_val));
 		}
+		current_snapshot_id = std::move(current_snapshot_id_tmp);
 	}
 	auto last_sequence_number_val = yyjson_obj_get(obj, "last-sequence-number");
 	if (last_sequence_number_val) {

@@ -26,20 +26,15 @@ AssertCreate AssertCreate::FromJSON(yyjson_val *obj) {
 
 AssertCreate AssertCreate::Copy() const {
 	AssertCreate res;
-	res.type = type.Copy();
+	res.table_requirement = table_requirement.Copy();
 	return res;
 }
 
 string AssertCreate::TryFromJSON(yyjson_val *obj) {
 	string error;
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
-		return "AssertCreate required property 'type' is missing";
-	} else {
-		error = type.TryFromJSON(type_val);
-		if (!error.empty()) {
-			return error;
-		}
+	error = table_requirement.TryFromJSON(obj);
+	if (!error.empty()) {
+		return error;
 	}
 	return "";
 }
@@ -49,9 +44,8 @@ void AssertCreate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const 
 		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
 
-	// Serialize: type
-	yyjson_mut_val *type_val = type.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+	// Serialize base class: TableRequirement
+	table_requirement.PopulateJSON(doc, obj);
 }
 
 yyjson_mut_val *AssertCreate::ToJSON(yyjson_mut_doc *doc) const {

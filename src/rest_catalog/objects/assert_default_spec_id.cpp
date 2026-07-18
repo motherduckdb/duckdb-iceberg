@@ -26,21 +26,16 @@ AssertDefaultSpecId AssertDefaultSpecId::FromJSON(yyjson_val *obj) {
 
 AssertDefaultSpecId AssertDefaultSpecId::Copy() const {
 	AssertDefaultSpecId res;
-	res.type = type.Copy();
+	res.table_requirement = table_requirement.Copy();
 	res.default_spec_id = default_spec_id;
 	return res;
 }
 
 string AssertDefaultSpecId::TryFromJSON(yyjson_val *obj) {
 	string error;
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
-		return "AssertDefaultSpecId required property 'type' is missing";
-	} else {
-		error = type.TryFromJSON(type_val);
-		if (!error.empty()) {
-			return error;
-		}
+	error = table_requirement.TryFromJSON(obj);
+	if (!error.empty()) {
+		return error;
 	}
 	auto default_spec_id_val = yyjson_obj_get(obj, "default-spec-id");
 	if (!default_spec_id_val) {
@@ -62,9 +57,8 @@ void AssertDefaultSpecId::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj)
 		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
 
-	// Serialize: type
-	yyjson_mut_val *type_val = type.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+	// Serialize base class: TableRequirement
+	table_requirement.PopulateJSON(doc, obj);
 
 	// Serialize: default-spec-id
 	yyjson_mut_obj_add_int(doc, obj, "default-spec-id", default_spec_id);

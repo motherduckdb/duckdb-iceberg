@@ -26,21 +26,16 @@ AssertCurrentSchemaId AssertCurrentSchemaId::FromJSON(yyjson_val *obj) {
 
 AssertCurrentSchemaId AssertCurrentSchemaId::Copy() const {
 	AssertCurrentSchemaId res;
-	res.type = type.Copy();
+	res.table_requirement = table_requirement.Copy();
 	res.current_schema_id = current_schema_id;
 	return res;
 }
 
 string AssertCurrentSchemaId::TryFromJSON(yyjson_val *obj) {
 	string error;
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
-		return "AssertCurrentSchemaId required property 'type' is missing";
-	} else {
-		error = type.TryFromJSON(type_val);
-		if (!error.empty()) {
-			return error;
-		}
+	error = table_requirement.TryFromJSON(obj);
+	if (!error.empty()) {
+		return error;
 	}
 	auto current_schema_id_val = yyjson_obj_get(obj, "current-schema-id");
 	if (!current_schema_id_val) {
@@ -62,9 +57,8 @@ void AssertCurrentSchemaId::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *ob
 		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
 
-	// Serialize: type
-	yyjson_mut_val *type_val = type.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+	// Serialize base class: TableRequirement
+	table_requirement.PopulateJSON(doc, obj);
 
 	// Serialize: current-schema-id
 	yyjson_mut_obj_add_int(doc, obj, "current-schema-id", current_schema_id);

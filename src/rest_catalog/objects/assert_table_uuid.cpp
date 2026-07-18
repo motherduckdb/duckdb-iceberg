@@ -26,21 +26,16 @@ AssertTableUUID AssertTableUUID::FromJSON(yyjson_val *obj) {
 
 AssertTableUUID AssertTableUUID::Copy() const {
 	AssertTableUUID res;
-	res.type = type.Copy();
+	res.table_requirement = table_requirement.Copy();
 	res.uuid = uuid;
 	return res;
 }
 
 string AssertTableUUID::TryFromJSON(yyjson_val *obj) {
 	string error;
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
-		return "AssertTableUUID required property 'type' is missing";
-	} else {
-		error = type.TryFromJSON(type_val);
-		if (!error.empty()) {
-			return error;
-		}
+	error = table_requirement.TryFromJSON(obj);
+	if (!error.empty()) {
+		return error;
 	}
 	auto uuid_val = yyjson_obj_get(obj, "uuid");
 	if (!uuid_val) {
@@ -61,9 +56,8 @@ void AssertTableUUID::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) con
 		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
 
-	// Serialize: type
-	yyjson_mut_val *type_val = type.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+	// Serialize base class: TableRequirement
+	table_requirement.PopulateJSON(doc, obj);
 
 	// Serialize: uuid
 	yyjson_mut_obj_add_strcpy(doc, obj, "uuid", uuid.c_str());

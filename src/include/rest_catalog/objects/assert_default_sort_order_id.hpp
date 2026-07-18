@@ -6,7 +6,7 @@
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
-#include "rest_catalog/objects/table_requirement_type.hpp"
+#include "rest_catalog/objects/table_requirement.hpp"
 
 using namespace duckdb_yyjson;
 
@@ -34,7 +34,7 @@ public:
 	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
 
 public:
-	TableRequirementType type;
+	TableRequirement table_requirement;
 	int32_t default_sort_order_id;
 };
 
