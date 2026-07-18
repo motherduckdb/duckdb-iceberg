@@ -103,6 +103,10 @@ def test_inherited_const_and_array_valued_map_are_generated():
     _, nullable_header, nullable_source = render_class(parser, parse_info, "AssertRefSnapshotId")
     assert "optional<int64_t> snapshot_id" in nullable_header
     assert "yyjson_mut_obj_add_null(doc, obj, \"snapshot-id\")" in nullable_source
+    assert nullable_source.count('yyjson_mut_obj_add_null(doc, obj, "snapshot-id")') == 1
+
+    transaction_source = (REPO_ROOT / "src/catalog/rest/transaction/iceberg_transaction.cpp").read_text()
+    assert "AddExplicitNullSnapshotIds" not in transaction_source
 
 
 def test_table_metadata_accepts_null_current_snapshot_without_patching_spec():
