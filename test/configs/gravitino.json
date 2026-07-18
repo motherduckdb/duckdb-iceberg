@@ -34,6 +34,26 @@
 				"test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transactional_updates.test",
 				"test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transactions_reading_empty_tables.test"
 			]
+		},
+		{
+			"reason": "Test is hardcoded for 'fixture' intermediates",
+			"paths": [
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/irc_catalog_read_deletes.test"
+			]
+		},
+		{
+			"reason": "Gravitino doesn't support multi-table requests ('.../transactions/commit' endpoint)",
+			"paths": [
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_multi_table_commit_integrity.test"
+			]
+		},
+		{
+			"reason": "Gravitino schemas don't carry a 'namespace_id'",
+			"paths": [
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/schema_properties/schema_properties_update.test",
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/schema_properties/schema_properties_update_transaction.test",
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/schema_properties/schema_properties_update_concurrent_transactions.test"
+			]
 		}
 	]
 }
