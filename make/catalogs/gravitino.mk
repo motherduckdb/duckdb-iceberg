@@ -9,6 +9,7 @@ gravitino-stop:
 gravitino: gravitino-stop
 	$(call stop_active_catalog)
 	@echo "Starting Gravitino catalog..."
+	@grep -q '127.0.0.1 minio' /etc/hosts || (echo "Adding minio host entry..." && echo "127.0.0.1 minio" | sudo tee -a /etc/hosts)
 	@mkdir -p data/generated/iceberg/gravitino
 	@$(GRAVITINO_COMPOSE) up -d
 	@attempt=1; max_attempts=60; \
