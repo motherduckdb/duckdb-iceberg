@@ -9,7 +9,6 @@ nessie-clone:
 	fi
 
 nessie-stop:
-	$(call stop_active_catalog)
 	@echo "Stopping Nessie catalog..."
 	(cd .catalogs/nessie/docker/catalog-auth-s3 && docker compose down -v)
 
@@ -25,6 +24,7 @@ nessie-configure-auth:
 		-s sslRequired=NONE)
 
 nessie: nessie-clone nessie-stop
+	$(call stop_active_catalog)
 	@echo "Starting Nessie catalog..."
 	(cd .catalogs/nessie/docker/catalog-auth-s3 && docker compose up -d)
 	$(MAKE) nessie-configure-auth
