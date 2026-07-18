@@ -7,6 +7,7 @@ services:
       GRAVITINO_CATALOG_BACKEND: memory
       GRAVITINO_IO_IMPL: org.apache.iceberg.aws.s3.S3FileIO
       GRAVITINO_WAREHOUSE: s3://warehouse/
+      GRAVITINO_CREDENTIAL_PROVIDERS: s3-secret-key
       GRAVITINO_S3_ACCESS_KEY: admin
       GRAVITINO_S3_SECRET_KEY: password
       GRAVITINO_S3_ENDPOINT: http://minio:9000
