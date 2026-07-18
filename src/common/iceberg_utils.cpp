@@ -207,6 +207,35 @@ string IcebergUtils::GetStorageLocation(ClientContext &context, const string &in
 	return storage_location;
 }
 
+IcebergResolvedMetadata IcebergUtils::ResolveTableMetadata(ClientContext &context, const string &input,
+                                                           const IcebergOptions &options) {
+	auto qualified_name = QualifiedName::ParseComponents(input);
+	if (qualified_name.size() == 3) {
+		auto table_name =
+		    QualifiedName(Identifier(qualified_name[0]), Identifier(qualified_name[1]), Identifier(qualified_name[2]));
+		EntryLookupInfo table_info(CatalogType::TABLE_ENTRY, std::move(table_name));
+		auto catalog_entry = Catalog::GetEntry(context, table_info, OnEntryNotFound::RETURN_NULL);
+		if (catalog_entry && catalog_entry->type == CatalogType::TABLE_ENTRY) {
+			auto &table = catalog_entry->Cast<TableCatalogEntry>();
+			if (table.catalog.GetCatalogType() != "iceberg") {
+				throw InvalidInputException("Table %s is not an Iceberg table", input);
+			}
+
+			auto &iceberg_table = catalog_entry->Cast<IcebergTableEntry>();
+			iceberg_table.PrepareIcebergScanFromEntry(context);
+			auto &metadata = iceberg_table.table_info.table_metadata;
+			return IcebergResolvedMetadata(metadata.GetLocation(), metadata.Copy());
+		}
+	}
+
+	auto table_location = GetStorageLocation(context, input);
+	auto &fs = FileSystem::GetFileSystem(context);
+	auto caching_fs = make_shared_ptr<CachingFileSystemWrapper>(fs, *context.db);
+	auto metadata_path = IcebergTableMetadata::GetMetaDataPath(context, table_location, fs, options);
+	auto table_metadata = IcebergTableMetadata::Parse(metadata_path, *caching_fs, options.metadata_compression_codec);
+	return IcebergResolvedMetadata(std::move(table_location), IcebergTableMetadata::FromTableMetadata(table_metadata));
+}
+
 // Function to decompress a gz file content string
 string IcebergUtils::GzFileToString(const string &path, FileSystem &fs) {
 	// Initialize zlib variables
