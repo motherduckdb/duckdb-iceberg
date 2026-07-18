@@ -10,6 +10,7 @@ polaris-clone:
 	fi
 
 polaris-stop:
+	$(call stop_active_catalog)
 	@echo "Stopping Polaris catalog..."
 	@if [ -d ".catalogs/polaris/site/content/guides/minio" ]; then \
 		(cd .catalogs/polaris/site/content/guides/minio && docker compose down -v); \
@@ -18,7 +19,6 @@ polaris-stop:
 	fi
 
 polaris: polaris-clone polaris-stop
-	$(call stop_active_catalog)
 	@echo "Starting Polaris catalog..."
 	(cd .catalogs/polaris/site/content/guides/minio && docker compose up -d)
 	$(call set_active_catalog,polaris)
