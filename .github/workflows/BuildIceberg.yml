@@ -146,6 +146,13 @@ jobs:
     with:
       artifact-name: duckdb-iceberg
 
+  test-gravitino:
+    name: Test against Gravitino Catalog
+    needs: build_iceberg
+    uses: ./.github/workflows/test-gravitino-catalog.yml
+    with:
+      artifact-name: duckdb-iceberg
+
   test-local:
     name: Test against local Catalog
     needs: build_iceberg
