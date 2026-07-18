@@ -4,6 +4,7 @@ services:
     ports:
       - "9001:9001"
     environment:
+      GRAVITINO_MEM: -Xms1g -Xmx4g -XX:MaxMetaspaceSize=1g
       GRAVITINO_CATALOG_BACKEND: memory
       GRAVITINO_IO_IMPL: org.apache.iceberg.aws.s3.S3FileIO
       GRAVITINO_WAREHOUSE: s3://warehouse/
