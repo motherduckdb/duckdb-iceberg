@@ -55,15 +55,15 @@ string ListTablesResponse::TryFromJSON(yyjson_val *obj) {
 	if (identifiers_val) {
 		vector<TableIdentifier> identifiers_tmp;
 		if (yyjson_is_arr(identifiers_val)) {
-			size_t idx, max;
-			yyjson_val *val;
-			yyjson_arr_foreach(identifiers_val, idx, max, val) {
-				TableIdentifier tmp;
-				error = tmp.TryFromJSON(val);
+			size_t identifiers_tmp_idx, identifiers_tmp_max;
+			yyjson_val *identifiers_tmp_item_val;
+			yyjson_arr_foreach(identifiers_val, identifiers_tmp_idx, identifiers_tmp_max, identifiers_tmp_item_val) {
+				TableIdentifier identifiers_tmp_item;
+				error = identifiers_tmp_item.TryFromJSON(identifiers_tmp_item_val);
 				if (!error.empty()) {
 					return error;
 				}
-				identifiers_tmp.emplace_back(std::move(tmp));
+				identifiers_tmp.emplace_back(std::move(identifiers_tmp_item));
 			}
 		} else {
 			return StringUtil::Format(

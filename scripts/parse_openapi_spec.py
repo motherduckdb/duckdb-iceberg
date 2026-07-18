@@ -1,5 +1,6 @@
 import yaml
 import os
+import copy
 from typing import Dict, List, Set, Optional, cast
 from enum import Enum, auto
 
@@ -51,7 +52,7 @@ class PrimitiveProperty(Property):
         # TODO: if 'enum' is present, we should verify that the value of the property is one of the accepted values
         self.enum: Optional[List[str]] = None
         # TODO: same for this, this property *has* to have this value
-        self.const: Optional[str] = None
+        self.const = None
 
 
 class ObjectProperty(Property):
@@ -100,13 +101,81 @@ class ResponseObjectsGenerator:
         # or it won't compile (hopefully this)
         self.recursive_schemas: Set[str] = set()
         self.object_schema_count = 0
+        self.inline_schema_count = 0
 
         # Load OpenAPI spec
-        with open(API_SPEC_PATH) as f:
+        with open(path) as f:
             spec = yaml.safe_load(f)
 
         self.schemas = spec['components']['schemas']
         self.responses = spec['components']['responses']
+        self.normalize_discriminator_unions()
+
+    def schema_is_referenced_outside_all_of(self, reference: str) -> bool:
+        expected_ref = f'#/components/schemas/{reference}'
+
+        def visit(value, inside_all_of: bool = False) -> bool:
+            if isinstance(value, dict):
+                if value.get('$ref') == expected_ref and not inside_all_of:
+                    return True
+                for key, child in value.items():
+                    if visit(child, inside_all_of or key == 'allOf'):
+                        return True
+            elif isinstance(value, list):
+                for child in value:
+                    if visit(child, inside_all_of):
+                        return True
+            return False
+
+        return any(visit(schema) for schema in self.schemas.values())
+
+    def normalize_discriminator_unions(self) -> None:
+        """Normalize discriminator-only inheritance roots that are used as value types.
+
+        OpenAPI permits a schema such as TableRequirement to be both the base of its
+        mapped implementations and the type used by request properties.  The generated
+        C++ representation needs the latter use to be a tagged union.  Inheritance-only
+        roots such as BaseUpdate stay as normal base objects.
+        """
+
+        for name, schema in list(self.schemas.items()):
+            discriminator = schema.get('discriminator')
+            if not discriminator or schema.get('oneOf') or schema.get('anyOf'):
+                continue
+            mapping = discriminator.get('mapping', {})
+            if not mapping or not self.schema_is_referenced_outside_all_of(name):
+                continue
+
+            base_properties = schema.get('properties', {})
+            base_required = schema.get('required', [])
+            variants = []
+            base_ref = f'#/components/schemas/{name}'
+            for mapped_ref in mapping.values():
+                parts = mapped_ref.split('/')
+                assert parts[-2] == 'schemas'
+                child_name = parts[-1]
+                child = self.schemas[child_name]
+
+                all_of = [item for item in child.get('allOf', []) if item.get('$ref') != base_ref]
+                if all_of:
+                    child['allOf'] = all_of
+                else:
+                    child.pop('allOf', None)
+
+                child_properties = child.setdefault('properties', {})
+                for property_name, property_spec in base_properties.items():
+                    child_properties.setdefault(property_name, copy.deepcopy(property_spec))
+                if base_required:
+                    child_required = child.setdefault('required', [])
+                    for property_name in base_required:
+                        if property_name not in child_required:
+                            child_required.append(property_name)
+                variants.append({'$ref': mapped_ref})
+
+            schema.pop('properties', None)
+            schema.pop('required', None)
+            schema['type'] = 'object'
+            schema['oneOf'] = variants
 
     def parse_object_property(self, spec: dict, result: Property) -> None:
         # For polymorphic types, this defines a mapping based on the content of a property
@@ -120,6 +189,7 @@ class ResponseObjectsGenerator:
 
         assert result.type == Property.Type.OBJECT
         object_result = cast(ObjectProperty, result)
+        object_result.discriminator = discriminator
 
         if additional_properties:
             object_result.additional_properties = self.parse_property(additional_properties)
@@ -137,12 +207,34 @@ class ResponseObjectsGenerator:
         primitive_result = cast(PrimitiveProperty, result)
         primitive_result.format = format
         primitive_result.primitive_type = primitive_type
+        primitive_result.enum = spec.get('enum')
+        primitive_result.const = spec.get('const')
 
     def parse_array_property(self, spec: dict, result: Property) -> None:
         item_type = spec['items']
         assert result.type == Property.Type.ARRAY
         array_result = cast(ArrayProperty, result)
         array_result.item_type = self.parse_property(item_type)
+
+    def parse_composition_item(
+        self, item: dict, owner: Optional[str], composition_name: str, index: int
+    ) -> Property:
+        result = self.parse_property(item)
+        if result.type == Property.Type.SCHEMA_REFERENCE:
+            return result
+
+        self.inline_schema_count += 1
+        if owner:
+            generated_name = f'{owner}{composition_name}{index + 1}'
+        else:
+            generated_name = f'InlineSchema{self.inline_schema_count}'
+        while generated_name in self.schemas or generated_name in self.parsed_schemas:
+            self.inline_schema_count += 1
+            generated_name = f'{generated_name}{self.inline_schema_count}'
+
+        result.reference = generated_name
+        self.parsed_schemas[generated_name] = result
+        return SchemaReferenceProperty(generated_name)
 
     def parse_property(self, spec: dict, reference: Optional[str] = None) -> Property:
         ref = spec.get('$ref')
@@ -191,8 +283,8 @@ class ResponseObjectsGenerator:
                 exit(1)
             assert 'allOf' not in spec
             assert 'anyOf' not in spec
-            for item in one_of:
-                res = self.parse_property(item)
+            for index, item in enumerate(one_of):
+                res = self.parse_composition_item(item, reference, 'OneOf', index)
                 result.one_of.append(res)
         if all_of:
             if property_type != 'object':
@@ -200,8 +292,8 @@ class ResponseObjectsGenerator:
                 exit(1)
             assert 'oneOf' not in spec
             assert 'anyOf' not in spec
-            for item in all_of:
-                res = self.parse_property(item)
+            for index, item in enumerate(all_of):
+                res = self.parse_composition_item(item, reference, 'AllOf', index)
                 result.all_of.append(res)
         if any_of:
             if property_type != 'object':
@@ -209,8 +301,8 @@ class ResponseObjectsGenerator:
                 exit(1)
             assert 'allOf' not in spec
             assert 'oneOf' not in spec
-            for item in any_of:
-                res = self.parse_property(item)
+            for index, item in enumerate(any_of):
+                res = self.parse_composition_item(item, reference, 'AnyOf', index)
                 result.any_of.append(res)
 
         if (

@@ -150,7 +150,7 @@ static rest_api_objects::TableRequirement CreateAssertRefSnapshotIdRequirement(c
 	auto &res = *req.assert_ref_snapshot_id;
 	res.ref = "main";
 	res.snapshot_id = old_snapshot.snapshot_id;
-	res.type.value = "assert-ref-snapshot-id";
+	res.type = "assert-ref-snapshot-id";
 	return req;
 }
 
@@ -160,7 +160,7 @@ static rest_api_objects::TableRequirement CreateAssertNoSnapshotRequirement() {
 
 	auto &res = *req.assert_ref_snapshot_id;
 	res.ref = "main";
-	res.type.value = "assert-ref-snapshot-id";
+	res.type = "assert-ref-snapshot-id";
 	return req;
 }
 

@@ -26,16 +26,27 @@ AssertDefaultSortOrderId AssertDefaultSortOrderId::FromJSON(yyjson_val *obj) {
 
 AssertDefaultSortOrderId AssertDefaultSortOrderId::Copy() const {
 	AssertDefaultSortOrderId res;
-	res.table_requirement = table_requirement.Copy();
+	res.type = type;
 	res.default_sort_order_id = default_sort_order_id;
 	return res;
 }
 
 string AssertDefaultSortOrderId::TryFromJSON(yyjson_val *obj) {
 	string error;
-	error = table_requirement.TryFromJSON(obj);
-	if (!error.empty()) {
-		return error;
+	auto type_val = yyjson_obj_get(obj, "type");
+	if (!type_val) {
+		return "AssertDefaultSortOrderId required property 'type' is missing";
+	} else {
+		if (yyjson_is_str(type_val)) {
+			type = yyjson_get_str(type_val);
+		} else {
+			return StringUtil::Format(
+			    "AssertDefaultSortOrderId property 'type' is not of type 'string', found '%s' instead",
+			    yyjson_get_type_desc(type_val));
+		}
+		if (!yyjson_is_null(type_val) && type != "assert-default-sort-order-id") {
+			return "AssertDefaultSortOrderId property 'type' does not match its required const value";
+		}
 	}
 	auto default_sort_order_id_val = yyjson_obj_get(obj, "default-sort-order-id");
 	if (!default_sort_order_id_val) {
@@ -57,8 +68,8 @@ void AssertDefaultSortOrderId::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val 
 		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
 
-	// Serialize base class: TableRequirement
-	table_requirement.PopulateJSON(doc, obj);
+	// Serialize: type
+	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
 
 	// Serialize: default-sort-order-id
 	yyjson_mut_obj_add_int(doc, obj, "default-sort-order-id", default_sort_order_id);

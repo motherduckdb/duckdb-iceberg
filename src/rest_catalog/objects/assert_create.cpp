@@ -26,15 +26,25 @@ AssertCreate AssertCreate::FromJSON(yyjson_val *obj) {
 
 AssertCreate AssertCreate::Copy() const {
 	AssertCreate res;
-	res.table_requirement = table_requirement.Copy();
+	res.type = type;
 	return res;
 }
 
 string AssertCreate::TryFromJSON(yyjson_val *obj) {
 	string error;
-	error = table_requirement.TryFromJSON(obj);
-	if (!error.empty()) {
-		return error;
+	auto type_val = yyjson_obj_get(obj, "type");
+	if (!type_val) {
+		return "AssertCreate required property 'type' is missing";
+	} else {
+		if (yyjson_is_str(type_val)) {
+			type = yyjson_get_str(type_val);
+		} else {
+			return StringUtil::Format("AssertCreate property 'type' is not of type 'string', found '%s' instead",
+			                          yyjson_get_type_desc(type_val));
+		}
+		if (!yyjson_is_null(type_val) && type != "assert-create") {
+			return "AssertCreate property 'type' does not match its required const value";
+		}
 	}
 	return "";
 }
@@ -44,8 +54,8 @@ void AssertCreate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const 
 		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
 
-	// Serialize base class: TableRequirement
-	table_requirement.PopulateJSON(doc, obj);
+	// Serialize: type
+	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
 }
 
 yyjson_mut_val *AssertCreate::ToJSON(yyjson_mut_doc *doc) const {

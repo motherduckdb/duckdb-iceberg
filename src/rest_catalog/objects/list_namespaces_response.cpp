@@ -55,15 +55,15 @@ string ListNamespacesResponse::TryFromJSON(yyjson_val *obj) {
 	if (namespaces_val) {
 		vector<Namespace> namespaces_tmp;
 		if (yyjson_is_arr(namespaces_val)) {
-			size_t idx, max;
-			yyjson_val *val;
-			yyjson_arr_foreach(namespaces_val, idx, max, val) {
-				Namespace tmp;
-				error = tmp.TryFromJSON(val);
+			size_t namespaces_tmp_idx, namespaces_tmp_max;
+			yyjson_val *namespaces_tmp_item_val;
+			yyjson_arr_foreach(namespaces_val, namespaces_tmp_idx, namespaces_tmp_max, namespaces_tmp_item_val) {
+				Namespace namespaces_tmp_item;
+				error = namespaces_tmp_item.TryFromJSON(namespaces_tmp_item_val);
 				if (!error.empty()) {
 					return error;
 				}
-				namespaces_tmp.emplace_back(std::move(tmp));
+				namespaces_tmp.emplace_back(std::move(namespaces_tmp_item));
 			}
 		} else {
 			return StringUtil::Format(

@@ -26,16 +26,26 @@ AssertDefaultSpecId AssertDefaultSpecId::FromJSON(yyjson_val *obj) {
 
 AssertDefaultSpecId AssertDefaultSpecId::Copy() const {
 	AssertDefaultSpecId res;
-	res.table_requirement = table_requirement.Copy();
+	res.type = type;
 	res.default_spec_id = default_spec_id;
 	return res;
 }
 
 string AssertDefaultSpecId::TryFromJSON(yyjson_val *obj) {
 	string error;
-	error = table_requirement.TryFromJSON(obj);
-	if (!error.empty()) {
-		return error;
+	auto type_val = yyjson_obj_get(obj, "type");
+	if (!type_val) {
+		return "AssertDefaultSpecId required property 'type' is missing";
+	} else {
+		if (yyjson_is_str(type_val)) {
+			type = yyjson_get_str(type_val);
+		} else {
+			return StringUtil::Format("AssertDefaultSpecId property 'type' is not of type 'string', found '%s' instead",
+			                          yyjson_get_type_desc(type_val));
+		}
+		if (!yyjson_is_null(type_val) && type != "assert-default-spec-id") {
+			return "AssertDefaultSpecId property 'type' does not match its required const value";
+		}
 	}
 	auto default_spec_id_val = yyjson_obj_get(obj, "default-spec-id");
 	if (!default_spec_id_val) {
@@ -57,8 +67,8 @@ void AssertDefaultSpecId::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj)
 		throw InternalException("PopulateJSON requires obj to be a JSON object");
 	}
 
-	// Serialize base class: TableRequirement
-	table_requirement.PopulateJSON(doc, obj);
+	// Serialize: type
+	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
 
 	// Serialize: default-spec-id
 	yyjson_mut_obj_add_int(doc, obj, "default-spec-id", default_spec_id);
