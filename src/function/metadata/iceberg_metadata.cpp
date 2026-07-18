@@ -26,6 +26,8 @@
 #include "core/metadata/iceberg_table_metadata.hpp"
 #include "core/metadata/manifest/iceberg_manifest.hpp"
 #include "core/metadata/manifest/iceberg_manifest_list.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 
 #include <numeric>
 
@@ -93,26 +95,55 @@ public:
 	idx_t current_manifest_entry_idx = 0;
 };
 
+static optional<IcebergTableMetadata> GetCatalogTableMetadata(ClientContext &context, const string &input,
+                                                              string &table_location) {
+	auto qualified_name = QualifiedName::ParseComponents(input);
+	if (qualified_name.size() != 3) {
+		return nullopt;
+	}
+
+	auto table_name =
+	    QualifiedName(Identifier(qualified_name[0]), Identifier(qualified_name[1]), Identifier(qualified_name[2]));
+	EntryLookupInfo table_info(CatalogType::TABLE_ENTRY, std::move(table_name));
+	auto catalog_entry = Catalog::GetEntry(context, table_info, OnEntryNotFound::RETURN_NULL);
+	if (!catalog_entry || catalog_entry->type != CatalogType::TABLE_ENTRY) {
+		return nullopt;
+	}
+
+	auto &table = catalog_entry->Cast<TableCatalogEntry>();
+	if (table.catalog.GetCatalogType() != "iceberg") {
+		throw InvalidInputException("Table %s is not an Iceberg table", input);
+	}
+
+	auto &iceberg_table = catalog_entry->Cast<IcebergTableEntry>();
+	iceberg_table.PrepareIcebergScanFromEntry(context);
+	table_location = iceberg_table.table_info.table_metadata.GetLocation();
+	return iceberg_table.table_info.table_metadata.Copy();
+}
+
 static unique_ptr<FunctionData> IcebergMetaDataBind(ClientContext &context, TableFunctionBindInput &input,
                                                     vector<LogicalType> &return_types, vector<string> &names) {
 	// return a TableRef that contains the scans for the
 	auto ret = make_uniq<IcebergMetaDataBindData>();
 
-	auto &fs = FileSystem::GetFileSystem(context);
-	auto caching_fs = make_shared_ptr<CachingFileSystemWrapper>(fs, *context.db);
-	auto input_string = input.inputs[0].ToString();
-	auto filename = IcebergUtils::GetStorageLocation(context, input_string);
-
 	IcebergOptions options(input.named_parameters);
-	auto iceberg_meta_path = IcebergTableMetadata::GetMetaDataPath(context, filename, fs, options);
-	auto table_metadata =
-	    IcebergTableMetadata::Parse(iceberg_meta_path, *caching_fs, options.metadata_compression_codec);
-	auto metadata = IcebergTableMetadata::FromTableMetadata(table_metadata);
+	auto input_string = input.inputs[0].ToString();
+	string table_location;
+	auto metadata = GetCatalogTableMetadata(context, input_string, table_location);
+	if (!metadata) {
+		table_location = IcebergUtils::GetStorageLocation(context, input_string);
+		auto &fs = FileSystem::GetFileSystem(context);
+		auto caching_fs = make_shared_ptr<CachingFileSystemWrapper>(fs, *context.db);
+		auto iceberg_meta_path = IcebergTableMetadata::GetMetaDataPath(context, table_location, fs, options);
+		auto table_metadata =
+		    IcebergTableMetadata::Parse(iceberg_meta_path, *caching_fs, options.metadata_compression_codec);
+		metadata = IcebergTableMetadata::FromTableMetadata(table_metadata);
+	}
 
-	auto snapshot_to_scan = metadata.GetSnapshot(*options.snapshot_lookup);
+	auto snapshot_to_scan = metadata->GetSnapshot(*options.snapshot_lookup);
 
 	if (snapshot_to_scan.snapshot) {
-		ret->iceberg_table = IcebergManifestList::Load(filename, metadata, snapshot_to_scan, context, options);
+		ret->iceberg_table = IcebergManifestList::Load(table_location, *metadata, snapshot_to_scan, context, options);
 	}
 
 	auto manifest_types = IcebergManifestTypes();
