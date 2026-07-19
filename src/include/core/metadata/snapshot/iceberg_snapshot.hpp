@@ -42,6 +42,10 @@ public:
 	bool HasTotalFilesSize() const;
 	void SetTotalFilesSize(int64_t total_files_size);
 
+private:
+	void AddSizeMetric(IcebergSnapshotMetricType type, int64_t value);
+	void UpdateTotalFilesSize(int64_t added, int64_t removed);
+
 public:
 	map<IcebergSnapshotMetricType, int64_t> metrics;
 };

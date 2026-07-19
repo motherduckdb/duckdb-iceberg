@@ -55,13 +55,12 @@ IcebergSnapshotMetrics::IcebergSnapshotMetrics(const IcebergSnapshot &snapshot) 
 	}
 }
 
-static void AddSizeMetric(map<IcebergSnapshotMetricType, int64_t> &metrics, IcebergSnapshotMetricType type,
-                          int64_t value) {
+void IcebergSnapshotMetrics::AddSizeMetric(IcebergSnapshotMetricType type, int64_t value) {
 	auto &metric = metrics.emplace(type, 0).first->second;
 	metric = IcebergUtils::AddFileSizeChecked(metric, value);
 }
 
-static void UpdateTotalFilesSize(map<IcebergSnapshotMetricType, int64_t> &metrics, int64_t added, int64_t removed) {
+void IcebergSnapshotMetrics::UpdateTotalFilesSize(int64_t added, int64_t removed) {
 	auto total_it = metrics.find(IcebergSnapshotMetricType::TOTAL_FILES_SIZE);
 	if (total_it == metrics.end()) {
 		return;
@@ -97,12 +96,12 @@ void IcebergSnapshotMetrics::AddManifestListEntry(const IcebergManifestListEntry
 	}
 
 	if (added_files_size > 0) {
-		AddSizeMetric(metrics, IcebergSnapshotMetricType::ADDED_FILES_SIZE, added_files_size);
+		AddSizeMetric(IcebergSnapshotMetricType::ADDED_FILES_SIZE, added_files_size);
 	}
 	if (deleted_files_size > 0) {
-		AddSizeMetric(metrics, IcebergSnapshotMetricType::REMOVED_FILES_SIZE, deleted_files_size);
+		AddSizeMetric(IcebergSnapshotMetricType::REMOVED_FILES_SIZE, deleted_files_size);
 	}
-	UpdateTotalFilesSize(metrics, added_files_size, deleted_files_size);
+	UpdateTotalFilesSize(added_files_size, deleted_files_size);
 
 	auto &manifest_file = manifest_list_entry.file;
 	if (manifest_file.content == IcebergManifestContentType::DELETE) {
@@ -174,8 +173,8 @@ void IcebergSnapshotMetrics::AddManifestListEntry(const IcebergManifestListEntry
 }
 
 void IcebergSnapshotMetrics::RemoveFileSize(int64_t file_size_in_bytes) {
-	AddSizeMetric(metrics, IcebergSnapshotMetricType::REMOVED_FILES_SIZE, file_size_in_bytes);
-	UpdateTotalFilesSize(metrics, 0, file_size_in_bytes);
+	AddSizeMetric(IcebergSnapshotMetricType::REMOVED_FILES_SIZE, file_size_in_bytes);
+	UpdateTotalFilesSize(0, file_size_in_bytes);
 }
 
 bool IcebergSnapshotMetrics::HasTotalFilesSize() const {
@@ -245,28 +244,38 @@ static string MetricsTypeToString(IcebergSnapshotMetricType type) {
 static IcebergSnapshotMetrics MetricsFromSummary(const case_insensitive_map_t<string> &snapshot_summary) {
 	IcebergSnapshotMetrics ret;
 	auto &metrics = ret.metrics;
-	//! Unlike the long-standing count totals, total-files-size is new to this extension.
-	//! Preserve its absence so a later write can reconstruct a legacy table's baseline.
+	//! Remove the default for `TOTAL_FILES_SIZE`, leaving it uninitialized if not present in the summary, rather than
+	//! setting it to 0.
 	metrics.erase(IcebergSnapshotMetricType::TOTAL_FILES_SIZE);
+	bool file_size_metrics_are_valid = true;
 	for (idx_t i = 0; i < SNAPSHOT_METRIC_KEYS_SIZE; i++) {
 		auto &item = SNAPSHOT_METRIC_KEYS[i];
+		const bool is_file_size_metric = item.type == IcebergSnapshotMetricType::ADDED_FILES_SIZE ||
+		                                 item.type == IcebergSnapshotMetricType::REMOVED_FILES_SIZE ||
+		                                 item.type == IcebergSnapshotMetricType::TOTAL_FILES_SIZE;
 		auto it = snapshot_summary.find(item.name);
 		if (it != snapshot_summary.end()) {
 			int64_t value;
 			try {
 				value = std::stoll(it->second);
 			} catch (...) {
+				if (is_file_size_metric) {
+					file_size_metrics_are_valid = false;
+				}
 				// Skip invalid metrics
 				continue;
 			}
-			if ((item.type == IcebergSnapshotMetricType::ADDED_FILES_SIZE ||
-			     item.type == IcebergSnapshotMetricType::REMOVED_FILES_SIZE ||
-			     item.type == IcebergSnapshotMetricType::TOTAL_FILES_SIZE) &&
-			    value < 0) {
+			if (is_file_size_metric && value < 0) {
+				file_size_metrics_are_valid = false;
 				continue;
 			}
 			metrics[item.type] = value;
 		}
+	}
+	if (!file_size_metrics_are_valid) {
+		metrics.erase(IcebergSnapshotMetricType::ADDED_FILES_SIZE);
+		metrics.erase(IcebergSnapshotMetricType::REMOVED_FILES_SIZE);
+		metrics.erase(IcebergSnapshotMetricType::TOTAL_FILES_SIZE);
 	}
 	return ret;
 }
