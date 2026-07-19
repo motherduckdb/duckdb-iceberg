@@ -8,6 +8,7 @@
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
 #include "duckdb/main/extension_helper.hpp"
 #include "duckdb/transaction/meta_transaction.hpp"
+#include "duckdb/common/operator/add.hpp"
 
 #include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
@@ -15,6 +16,18 @@
 #include "duckdb/catalog/catalog_entry_retriever.hpp"
 
 namespace duckdb {
+
+int64_t IcebergUtils::AddFileSizeChecked(int64_t total, int64_t file_size_in_bytes) {
+	if (file_size_in_bytes < 0) {
+		throw InvalidConfigurationException("Iceberg content file has negative 'file_size_in_bytes': %lld",
+		                                    file_size_in_bytes);
+	}
+	int64_t updated;
+	if (!TryAddOperator::Operation(total, file_size_in_bytes, updated)) {
+		throw InvalidConfigurationException("Iceberg content file sizes exceed the supported BIGINT range");
+	}
+	return updated;
+}
 
 timestamp_ms_t IcebergUtils::GetTransactionStartTimeMS(ClientContext &context) {
 	auto &meta_transaction = MetaTransaction::Get(context);
