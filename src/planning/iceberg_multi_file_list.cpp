@@ -1123,9 +1123,7 @@ void IcebergMultiFileList::EnsureScanOrderApplied(lock_guard<mutex> &guard) cons
 }
 
 OpenFileInfo IcebergMultiFileList::GetFileInternal(idx_t file_id, lock_guard<mutex> &guard) const {
-	if (!view_initialized) {
-		InitializeView(guard);
-	}
+	InitializeView(guard);
 	StartDataManifestScan(guard);
 	EnsureScanOrderApplied(guard);
 
