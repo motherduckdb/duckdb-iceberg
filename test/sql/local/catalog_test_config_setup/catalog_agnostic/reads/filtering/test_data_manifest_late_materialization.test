@@ -106,6 +106,32 @@ select count(distinct request.url) from duckdb_logs_parsed('HTTP') where request
 ----
 2
 
+# A runtime filter on the same column contains the existing static predicate. The filtered
+# list must copy that complete effective filter instead of adding it to the static predicate.
+statement ok
+call truncate_duckdb_logs();
+
+statement ok
+set disabled_optimizers='join_order,build_side_probe_side';
+
+query I
+select sum(data.payload)
+from my_datalake.default.data_manifest_late_materialization data
+join (values (1), (2)) runtime_parts(part) using (part)
+where data.part >= 2;
+----
+86
+
+query I
+select count(*) from duckdb_logs()
+where type = 'Iceberg'
+  and message.contains('phase=data_manifest_scan_started selected_data_manifests=1 total_data_manifests=3 filters=1');
+----
+1
+
+statement ok
+set disabled_optimizers='';
+
 # An impossible partition predicate does not open any data manifest.
 statement ok
 call truncate_duckdb_logs();

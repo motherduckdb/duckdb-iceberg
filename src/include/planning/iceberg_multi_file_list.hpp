@@ -44,16 +44,8 @@ public:
 		return table_filters.size();
 	}
 	void PushFilter(column_t column_idx, unique_ptr<ExpressionFilter> table_filter) {
-		auto existing_filter = table_filters.find(column_idx);
-		if (existing_filter == table_filters.end()) {
-			table_filters[column_idx] = std::move(table_filter);
-			return;
-		}
-
-		auto conjunction = make_uniq<BoundConjunctionExpression>(ExpressionType::CONJUNCTION_AND);
-		conjunction->GetChildrenMutable().push_back(std::move(existing_filter->second->expr));
-		conjunction->GetChildrenMutable().push_back(std::move(table_filter->expr));
-		existing_filter->second = make_uniq<ExpressionFilter>(std::move(conjunction));
+		D_ASSERT(table_filters.find(column_idx) == table_filters.end());
+		table_filters[column_idx] = std::move(table_filter);
 	}
 	optional_ptr<const ExpressionFilter> TryGetFilterByColumnIndex(column_t column_idx) const {
 		auto entry = table_filters.find(column_idx);

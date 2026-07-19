@@ -376,12 +376,7 @@ unique_ptr<IcebergMultiFileList> IcebergMultiFileList::PushdownInternal(ClientCo
 
 	IcebergTableFilters result_filter_set;
 
-	// Add pre-existing filters
-	for (auto &entry : table_filters) {
-		result_filter_set.PushFilter(entry.first, entry.second->Copy());
-	}
-
-	// Add new filters
+	// The supplied filter set is the complete set of filters for the new view.
 	for (auto &entry : new_filters) {
 		auto column_idx = column_indexes[entry.GetIndex().GetIndex()];
 		if (column_idx < names.size()) {
@@ -409,21 +404,23 @@ IcebergMultiFileList::DynamicFilterPushdown(ClientContext &context, const MultiF
 		return nullptr;
 	}
 
-	TableFilterSet filters_copy;
+	auto filters_copy = filters.Copy();
+	D_ASSERT(filters_copy->FilterCount() >= table_filters.FilterCount());
+	bool filters_changed = false;
 	for (auto &entry : filters) {
 		auto &filter =
 		    ExpressionFilter::GetExpressionFilter(entry.Filter(), "IcebergMultiFileList::DynamicFilterPushdown");
 		auto column_id = column_ids[entry.GetIndex().GetIndex()];
 		auto previously_pushed_down_filter = table_filters.TryGetFilterByColumnIndex(column_id);
-		if (previously_pushed_down_filter && filter.Equals(*previously_pushed_down_filter)) {
-			// Skip filters that we already have pushed down
-			continue;
+		if (!previously_pushed_down_filter || !filter.Equals(*previously_pushed_down_filter)) {
+			filters_changed = true;
 		}
-		filters_copy.PushFilter(entry.GetIndex(), filter.Copy());
 	}
 
-	if (filters_copy.HasFilters()) {
-		auto new_snap = PushdownInternal(context, filters_copy, column_ids);
+	if (filters_changed) {
+		// Dynamic filter pushdown supplies the complete effective filter for every column. This includes filters
+		// already pushed down by ComplexFilterPushdown, potentially combined with a new runtime filter.
+		auto new_snap = PushdownInternal(context, *filters_copy, column_ids);
 		return std::move(new_snap);
 	}
 	return nullptr;
