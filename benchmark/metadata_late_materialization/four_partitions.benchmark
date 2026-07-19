@@ -1,5 +1,5 @@
 # name: benchmark/metadata_late_materialization/four_partitions.benchmark
-# description: Select four of 256 Iceberg manifests through an identity partition range
+# description: Select four manifests from a DuckDB-written, shape-verified 256-manifest Iceberg table
 # group: [metadata_late_materialization]
 
 name Iceberg metadata late materialization - four manifests

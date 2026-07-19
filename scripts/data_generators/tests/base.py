@@ -32,7 +32,6 @@ class IcebergTest:
     skips: dict[str, str] = {}
     supported_catalogs: set[str] | None = None
     expected_failures: dict[str, str] = {}
-    benchmark_only = False
 
     @classmethod
     def register(cls):

@@ -119,8 +119,13 @@ jobs:
       - name: Setup fixture
         run: |
           make fixture-data TEST=tpch
-          .venv-spark4/bin/python -m pytest scripts/data_generators/test_generate_data.py \
-            -k metadata_late_materialization --include-benchmark-data -vv
+
+      - name: Setup metadata late materialization benchmark
+        run: |
+          .venv-spark4/bin/python -m pytest -vv \
+            test/python/benchmark/test_metadata_late_materialization.py \
+            --unittest-binary build/release/test/unittest \
+            --test-python-verbosity verbose
 
       - name: Checkout Base Branch
         run: |

@@ -42,12 +42,6 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         metavar="KEY=VALUE",
         help="Extra keyword arguments passed to the resolved connection constructor",
     )
-    parser.addoption(
-        "--include-benchmark-data",
-        action="store_true",
-        default=False,
-        help="Generate opt-in benchmark-only Iceberg tables",
-    )
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -83,19 +77,7 @@ def catalog_mapping(generator_case) -> dict[str, str]:
 
 
 @pytest.fixture
-def _generator_status(
-    request: pytest.FixtureRequest,
-    pytestconfig: pytest.Config,
-    active_catalog: str,
-    generator_case,
-) -> None:
-    if generator_case.benchmark_only and not pytestconfig.getoption(
-        "include_benchmark_data"
-    ):
-        pytest.skip(
-            f"{generator_case.table} is benchmark-only; pass --include-benchmark-data to generate it"
-        )
-
+def _generator_status(request: pytest.FixtureRequest, active_catalog: str, generator_case) -> None:
     skip_reason = generator_case.skips.get(active_catalog)
     if skip_reason is not None:
         pytest.skip(skip_reason)

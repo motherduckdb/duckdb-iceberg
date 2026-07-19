@@ -40,10 +40,31 @@ insert into my_datalake.default.data_manifest_late_materialization select 2, ran
 statement ok
 insert into my_datalake.default.data_manifest_late_materialization select 3, range from range(30, 34);
 
-query I
-select count(distinct manifest_path) from iceberg_metadata(my_datalake.default.data_manifest_late_materialization);
+query IIIIIII
+select
+	count(*),
+	count(distinct manifest_path),
+	count(distinct manifest_sequence_number),
+	count(distinct file_path),
+	min(record_count),
+	max(record_count),
+	sum(record_count)
+from iceberg_metadata(my_datalake.default.data_manifest_late_materialization)
+where manifest_content = 'DATA' and content = 'DATA' and status <> 'DELETED';
 ----
-3
+3	3	3	3	4	4	12
+
+query I
+select count(*)
+from (
+	select manifest_path
+	from iceberg_metadata(my_datalake.default.data_manifest_late_materialization)
+	where manifest_content = 'DATA' and content = 'DATA' and status <> 'DELETED'
+	group by manifest_path
+	having count(*) <> 1 or min(record_count) <> 4 or max(record_count) <> 4
+);
+----
+0
 
 statement ok
 call enable_logging(['Iceberg', 'HTTP'], storage='memory');
