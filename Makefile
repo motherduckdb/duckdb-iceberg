@@ -1,4 +1,4 @@
-.PHONY: fixture gravitino lakekeeper polaris nessie
+.PHONY: fixture fixture-latest gravitino lakekeeper polaris nessie
 
 PROJ_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
