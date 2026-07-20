@@ -63,6 +63,9 @@ WITH (
 	'commit.manifest-merge.enabled' = 'false'
 );
 
+statement ok
+begin
+
 loop i 0 2050
 
 statement ok
@@ -73,6 +76,9 @@ endloop
 # Start transaction to keep necessary credentials in scope
 statement ok
 begin
+
+statement ok
+commit
 
 statement ok
 SET VARIABLE large_manifest_list_path = (
