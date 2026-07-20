@@ -18,6 +18,8 @@ require httpfs
 
 require tpch
 
+cache_file tpch_sf${sf}_iceberg.db
+
 load
 ATTACH ':memory:' AS mem;
 USE mem;
@@ -35,8 +37,18 @@ ATTACH '' AS my_datalake (
     CLIENT_ID 'admin',
     CLIENT_SECRET 'password',
     ENDPOINT 'http://127.0.0.1:8181',
+    DEFAULT_SCHEMA 'default'
 );
-create schema if not exists my_datalake.default;
+USE my_datalake;
+
+reload
+ATTACH '' AS my_datalake (
+    TYPE ICEBERG,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    ENDPOINT 'http://127.0.0.1:8181',
+    DEFAULT_SCHEMA 'default'
+);
 DROP TABLE IF EXISTS my_datalake."default".customer;
 DROP TABLE IF EXISTS my_datalake."default".lineitem;
 DROP TABLE IF EXISTS my_datalake."default".nation;
@@ -45,23 +57,14 @@ DROP TABLE IF EXISTS my_datalake."default".part;
 DROP TABLE IF EXISTS my_datalake."default".partsupp;
 DROP TABLE IF EXISTS my_datalake."default".region;
 DROP TABLE IF EXISTS my_datalake."default".supplier;
+DROP SCHEMA IF EXISTS my_datalake."default";
 CREATE SCHEMA IF NOT EXISTS my_datalake."default";
-create table my_datalake."default".customer as select * from customer;
-create table my_datalake."default".lineitem as select * from lineitem;
-create table my_datalake."default".nation as select * from nation;
-create table my_datalake."default".orders as select * from orders;
-create table my_datalake."default".part as select * from part;
-create table my_datalake."default".partsupp as select * from partsupp;
-create table my_datalake."default".region as select * from region;
-create table my_datalake."default".supplier as select * from supplier;
-USE my_datalake.default;
+COPY FROM DATABASE mem TO my_datalake;
+USE my_datalake;
 DETACH mem;
-copy (select 'yes') to 'reload_run.csv';
 
-run
+run 
 set enable_external_file_cache=false;
-USE my_datalake.default;
-copy (show all tables) to 'show_tables.csv';
 pragma tpch(${QUERY_NUMBER_PADDED});
 
 result duckdb/extension/tpch/dbgen/answers/sf${sf}/q${QUERY_NUMBER_PADDED}.csv sf=${sf}

@@ -1,6 +1,6 @@
-# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/test_parquet_copy_options.test
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/file_properties/test_parquet_copy_options.test
 # description: test integration with iceberg catalog read
-# group: [catalog_agnostic]
+# group: [file_properties]
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
