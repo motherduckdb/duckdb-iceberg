@@ -76,3 +76,47 @@ query II
 select * from my_datalake.default.multi_transaction_delete order by all
 ----
 2	2
+
+# A delete whose target data was created in the same transaction has no base snapshot, even
+# when a concurrent transaction commits the table's first snapshot in the meantime.
+statement ok
+drop table if exists my_datalake.default.delete_no_base;
+
+# Empty table: no committed snapshot yet, so a transaction's delete has no base snapshot.
+statement ok
+create table my_datalake.default.delete_no_base (a int, b int);
+
+statement ok con1
+begin
+
+statement ok con2
+begin
+
+# con1's own (uncommitted) rows
+statement ok con1
+insert into my_datalake.default.delete_no_base VALUES (1, 1), (2, 2);
+
+# con2 concurrently inserts and commits first, producing the table's first snapshot
+statement ok con2
+insert into my_datalake.default.delete_no_base VALUES (3, 3);
+
+statement ok con2
+commit
+
+# con1 deletes its own transactional row. con1 started against an empty table so it has no
+# base snapshot, while con2's concurrent commit set the current tip.
+statement ok con1
+delete from my_datalake.default.delete_no_base where a = 1;
+
+# Retried against con2's tip: the delete targets con1's own transactional data (no committed
+# base), so the retry-safety check is skipped and the commit succeeds rather than erroring on
+# a missing base snapshot.
+statement ok con1
+commit;
+
+# con1's (2,2) survives, (1,1) was deleted, con2's (3,3) is preserved.
+query II
+select * from my_datalake.default.delete_no_base order by all
+----
+2	2
+3	3
