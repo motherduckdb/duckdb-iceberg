@@ -307,8 +307,11 @@ static void VerifyDeleteRetryability(const IcebergTableInformation &table_info,
 		return;
 	}
 	auto &transaction_data = *table_info.transaction_data;
-	if (!transaction_data.delete_scan_snapshot_id) {
+	if (!transaction_data.ContainsDelete()) {
 		return;
+	}
+	if (!transaction_data.base_snapshot_id) {
+		throw InternalException("Delete is present but base snapshot id was never registered");
 	}
 	if (!current_snapshot) {
 		return;
@@ -316,7 +319,7 @@ static void VerifyDeleteRetryability(const IcebergTableInformation &table_info,
 	if (!current_snapshot->snapshot_id) {
 		throw InvalidConfigurationException("Committed snapshot is missing a snapshot_id");
 	}
-	auto scan_snapshot_id = *transaction_data.delete_scan_snapshot_id;
+	auto scan_snapshot_id = *transaction_data.base_snapshot_id;
 	auto tip_snapshot_id = *current_snapshot->snapshot_id;
 	if (DeleteCanReapply(table_info.table_metadata, scan_snapshot_id, tip_snapshot_id)) {
 		return;
