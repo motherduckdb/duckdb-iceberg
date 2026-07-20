@@ -45,6 +45,7 @@ fixture-latest-data: fixture-latest
 	python3 -m venv .venv-spark4 && \
 	. .venv-spark4/bin/activate && \
 	python3 -m pip install -r scripts/requirements.txt && \
+	python3 -m pip install pyspark==4.1.0 && \
 	if [ -f "$(FIXTURE_ENV_FILE)" ]; then echo "Loading env from $(FIXTURE_ENV_FILE)"; set -a; . ./$(FIXTURE_ENV_FILE); set +a; fi && \
 	python3 -m pytest scripts/data_generators/test_generate_data.py $(if $(TEST),-k $(TEST)) -vv
 

@@ -122,8 +122,14 @@ SPARK_RUNTIMES = {
         iceberg_library_version="1.10.0",
         supports_v3=True,
     ),
+    "4.1": SparkRuntime(
+        name="4.1",
+        spark_version=Version("4.1"),
+        scala_binary_version="2.13",
+        iceberg_library_version="1.11.0",
+        supports_v3=True,
+    ),
 }
-
 
 REST_CATALOG_PROFILES = {
     "fixture": CatalogProfile(
