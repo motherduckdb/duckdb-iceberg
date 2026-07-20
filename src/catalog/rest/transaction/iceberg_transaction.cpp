@@ -310,14 +310,18 @@ static void VerifyDeleteRetryability(const IcebergTableInformation &table_info,
 	if (!transaction_data.ContainsDelete()) {
 		return;
 	}
-	if (!transaction_data.base_snapshot_id) {
-		throw InternalException("Delete is present but base snapshot id was never registered");
-	}
+	//! No committed tip to rebase onto: the delete targets data created in the same
+	//! transaction.
 	if (!current_snapshot) {
 		return;
 	}
 	if (!current_snapshot->snapshot_id) {
 		throw InvalidConfigurationException("Committed snapshot is missing a snapshot_id");
+	}
+	//! A committed tip exists, so the base snapshot the delete scanned must have been
+	//! registered when the manifest list was cached. If it wasn't, our bookkeeping is broken.
+	if (!transaction_data.base_snapshot_id) {
+		throw InternalException("Delete is present but base snapshot id was never registered");
 	}
 	auto scan_snapshot_id = *transaction_data.base_snapshot_id;
 	auto tip_snapshot_id = *current_snapshot->snapshot_id;
