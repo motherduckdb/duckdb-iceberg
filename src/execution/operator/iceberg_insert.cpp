@@ -1027,6 +1027,13 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(BoundCreateTabl
 	metadata->AddSchemaOrGetExisting(schema);
 	metadata->SetCurrentSchemaId(0);
 
+	// The copy sink (PhysicalCopyToFile) initializes before the operator that patches in the real table
+	// location, so it sees this placeholder. An empty location yields the relative path "data", making the
+	// sink's directory pre-check hit the local FS; a remote sentinel makes that pre-check a no-op. The
+	// value is never dereferenced - real data goes to the location patched on before any data flows.
+	// See https://github.com/duckdblabs/motherduck/issues/579
+	metadata->location = "s3://placeholder-write-path";
+
 	// Build a placeholder partition spec from the parsed PARTITIONED BY clause so that
 	// PlanCopyForInsert appends the partition projection at plan time. The real spec is
 	// applied during PhysicalIcebergCreateTable::MakeCreateTableRequest, but the projection
