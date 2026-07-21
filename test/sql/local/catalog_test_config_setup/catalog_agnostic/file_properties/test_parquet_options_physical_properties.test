@@ -19,13 +19,13 @@ drop table if exists my_datalake.default.my_table;
 
 statement ok
 CREATE TABLE my_datalake.default.my_table (
-                    user_id INT,
-                    data VARCHAR,
-                    partition_id INT
-                  ) WITH (
-                    'write.target-file-size-bytes' = '250000000',
-                    'write.parquet.row-group-size-bytes' = '134217728'
-                  );
+	user_id INT,
+	data VARCHAR,
+	partition_id INT
+) WITH (
+	'write.target-file-size-bytes' = '250000000',
+	'write.parquet.row-group-size-bytes' = '134217728'
+);
 
 statement ok
 INSERT INTO my_datalake.default.my_table
