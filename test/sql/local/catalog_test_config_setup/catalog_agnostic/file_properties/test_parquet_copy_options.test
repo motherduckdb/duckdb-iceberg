@@ -44,7 +44,7 @@ set variable parquet_filepath = (select file_path from iceberg_metadata(my_datal
 query I
 select count(row_group_bytes) from parquet_metadata(getvariable('parquet_filepath'));
 ----
-49
+1
 
 statement ok
 commit

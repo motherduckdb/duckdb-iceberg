@@ -16,6 +16,7 @@
 #include "duckdb/planner/filter/expression_filter.hpp"
 #include "duckdb/planner/filter/null_filter.hpp"
 #include "duckdb/planner/table_filter.hpp"
+#include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 #include "duckdb/parallel/task_executor.hpp"
 
 #include "common/iceberg_utils.hpp"
@@ -44,8 +45,17 @@ public:
 		return table_filters.size();
 	}
 	void PushFilter(column_t column_idx, unique_ptr<ExpressionFilter> table_filter) {
-		D_ASSERT(table_filters.find(column_idx) == table_filters.end());
-		table_filters[column_idx] = std::move(table_filter);
+		auto entry = table_filters.find(column_idx);
+		if (entry == table_filters.end()) {
+			table_filters[column_idx] = std::move(table_filter);
+			return;
+		}
+		// Multiple filters can target the same base column - e.g. predicates on different sub-fields of a
+		// VARIANT/STRUCT column. Combine them into a single AND conjunction; ExtractFilterExpressionForPath
+		// already knows how to pull the per-path predicate back out.
+		auto conjunction = make_uniq<BoundConjunctionExpression>(
+		    ExpressionType::CONJUNCTION_AND, std::move(entry->second->expr), std::move(table_filter->expr));
+		entry->second = make_uniq<ExpressionFilter>(std::move(conjunction));
 	}
 	optional_ptr<const ExpressionFilter> TryGetFilterByColumnIndex(column_t column_idx) const {
 		auto entry = table_filters.find(column_idx);
