@@ -13,7 +13,10 @@ def test_setup_metadata_late_materialization_benchmark(
     unittest_test_config,
     print_unittest_stdin,
 ):
-    assert catalog_profile.name == "fixture", "The regression benchmarks read from the fixture catalog"
+    assert catalog_profile.name in (
+        "fixture",
+        "fixture-latest",
+    ), "The regression benchmarks read from a fixture catalog"
 
     with DuckDBUnittestRunner(
         unittest_binary,

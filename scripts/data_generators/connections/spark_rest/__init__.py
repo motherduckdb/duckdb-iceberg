@@ -32,6 +32,7 @@ CONNECTION_KEY = "fixture"
 
 
 @IcebergConnection.register(CONNECTION_KEY)
+@IcebergConnection.register(CONNECTION_KEY + '-latest')
 class IcebergSparkRest(IcebergConnection):
     connection_key = CONNECTION_KEY
     default_endpoint = "http://127.0.0.1:8181"

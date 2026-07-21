@@ -16,8 +16,8 @@ TEST_CONFIG_DIR = REPO_ROOT / "test" / "configs"
 DATA_GENERATORS_DIR = REPO_ROOT / "scripts" / "data_generators"
 ACTIVE_CATALOG_FILE = REPO_ROOT / ".catalogs" / ".active_catalog"
 
-REST_CATALOG_NAMES = ("fixture", "gravitino", "lakekeeper", "polaris", "nessie")
-GENERATOR_CATALOG_NAMES = ("fixture", "gravitino", "lakekeeper", "local", "polaris", "nessie")
+REST_CATALOG_NAMES = ("fixture", "fixture-latest", "gravitino", "lakekeeper", "polaris", "nessie")
+GENERATOR_CATALOG_NAMES = ("fixture", "fixture-latest", "gravitino", "lakekeeper", "local", "polaris", "nessie")
 
 
 @dataclass(frozen=True)
@@ -122,14 +122,41 @@ SPARK_RUNTIMES = {
         iceberg_library_version="1.10.0",
         supports_v3=True,
     ),
+    "4.1": SparkRuntime(
+        name="4.1",
+        spark_version=Version("4.1"),
+        scala_binary_version="2.13",
+        iceberg_library_version="1.11.0",
+        supports_v3=True,
+    ),
 }
-
 
 REST_CATALOG_PROFILES = {
     "fixture": CatalogProfile(
         name="fixture",
         connection_key="fixture",
         unittest_config=TEST_CONFIG_DIR / "fixture.json",
+        pyiceberg_uri=os.getenv("ICEBERG_ENDPOINT", "http://127.0.0.1:8181"),
+        pyiceberg_warehouse=os.getenv("WAREHOUSE", ""),
+        pyiceberg_oauth_token_url=f"{os.getenv('ICEBERG_ENDPOINT', 'http://127.0.0.1:8181')}/v1/oauth/tokens",
+        pyiceberg_oauth_payload={
+            "grant_type": "client_credentials",
+            "client_id": os.getenv("ICEBERG_CLIENT_ID", "admin"),
+            "client_secret": os.getenv("ICEBERG_CLIENT_SECRET", "password"),
+            "scope": "PRINCIPAL_ROLE:ALL",
+        },
+        pyiceberg_options={
+            "s3.endpoint": os.getenv("S3_ENDPOINT", "http://127.0.0.1:9000"),
+            "s3.access-key-id": os.getenv("S3_KEY_ID", "admin"),
+            "s3.secret-access-key": os.getenv("S3_SECRET", "password"),
+            "s3.path-style-access": "true",
+            "s3.ssl.enabled": "false",
+        },
+    ),
+    "fixture-latest": CatalogProfile(
+        name="fixture-latest",
+        connection_key="fixture",
+        unittest_config=TEST_CONFIG_DIR / "fixture-latest.json",
         pyiceberg_uri=os.getenv("ICEBERG_ENDPOINT", "http://127.0.0.1:8181"),
         pyiceberg_warehouse=os.getenv("WAREHOUSE", ""),
         pyiceberg_oauth_token_url=f"{os.getenv('ICEBERG_ENDPOINT', 'http://127.0.0.1:8181')}/v1/oauth/tokens",
