@@ -67,10 +67,11 @@ insert into my_datalake.default.properties_table SELECT * FROM range(100000) my_
 statement ok
 set variable parquet_filepath = (select file_path from iceberg_metadata(my_datalake.default.properties_table) limit 1);
 
+# only 1 row group for 100000 rows
 query I
 select count(row_group_bytes) from parquet_metadata(getvariable('parquet_filepath'));
 ----
-49
+1
 
 statement ok
 drop table properties_table;
@@ -93,7 +94,8 @@ insert into my_datalake.default.properties_table SELECT * FROM range(100000) my_
 statement ok
 set variable parquet_filepath = (select file_path from iceberg_metadata(my_datalake.default.properties_table) limit 1);
 
+# 1 row group for 100000 rows of 1 column
 query I
 select count(row_group_bytes) from parquet_metadata(getvariable('parquet_filepath'));
 ----
-49
+1

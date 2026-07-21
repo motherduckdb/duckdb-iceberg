@@ -731,6 +731,13 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 		result.batch_size = copy_fun.function.desired_batch_size(context, *result.bind_data);
 	}
 
+	// A file can never be smaller than a single row group, and rotation to honor
+	// write.target-file-size-bytes only happens at row-group boundaries. If the row-group size exceeds the
+	// target file size, rotation can never split the output, so cap it to the target file size.
+	if (result.batch_size_bytes.IsValid() && result.batch_size_bytes.GetIndex() > result.file_size_bytes) {
+		result.batch_size_bytes = result.file_size_bytes;
+	}
+
 	result.names = StringsToIdentifiers(names_to_write);
 	result.expected_types = types_to_write;
 
