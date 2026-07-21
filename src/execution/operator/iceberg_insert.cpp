@@ -1,40 +1,39 @@
 #include "execution/operator/iceberg_insert.hpp"
 
-#include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
-#include "duckdb/main/client_data.hpp"
-#include "duckdb/execution/physical_operator_states.hpp"
-#include "duckdb/planner/expression_binder/table_function_binder.hpp"
-#include "duckdb/planner/operator/logical_copy_to_file.hpp"
-#include "duckdb/planner/operator/logical_insert.hpp"
-#include "duckdb/planner/operator/logical_create_table.hpp"
-#include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
-#include "duckdb/execution/operator/projection/physical_projection.hpp"
-#include "duckdb/execution/operator/scan/physical_table_scan.hpp"
-#include "duckdb/function/function_binder.hpp"
-#include "duckdb/planner/expression/bound_reference_expression.hpp"
-#include "duckdb/planner/expression/bound_constant_expression.hpp"
-#include "duckdb/planner/expression/bound_cast_expression.hpp"
-#include "duckdb/common/multi_file/multi_file_reader.hpp"
-
-#include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/api/iceberg_create_table_request.hpp"
+#include "catalog/rest/api/iceberg_type.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
-#include "execution/operator/iceberg_delete.hpp"
-#include "execution/operator/physical_iceberg_create_table.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
-#include "core/metadata/schema/iceberg_column_definition.hpp"
-#include "core/metadata/schema/iceberg_table_schema.hpp"
+#include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/transaction/iceberg_transaction.hpp"
+#include "catalog/rest/transaction/iceberg_transaction_update.hpp"
+#include "common/iceberg_utils.hpp"
+#include "core/expression/iceberg_transform.hpp"
+#include "core/expression/iceberg_value.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
 #include "core/metadata/partition/iceberg_partition_spec.hpp"
-#include "planning/iceberg_multi_file_list.hpp"
-#include "catalog/rest/transaction/iceberg_transaction.hpp"
-#include "core/expression/iceberg_value.hpp"
-#include "core/expression/iceberg_transform.hpp"
-#include "storage/statistics/iceberg_variant_statistics.hpp"
-#include "catalog/rest/api/iceberg_type.hpp"
-#include "catalog/rest/api/iceberg_create_table_request.hpp"
-#include "common/iceberg_utils.hpp"
-#include "catalog/rest/transaction/iceberg_transaction_update.hpp"
+#include "core/metadata/schema/iceberg_column_definition.hpp"
+#include "core/metadata/schema/iceberg_table_schema.hpp"
+#include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
+#include "duckdb/common/multi_file/multi_file_reader.hpp"
+#include "duckdb/execution/operator/projection/physical_projection.hpp"
+#include "duckdb/execution/operator/scan/physical_table_scan.hpp"
+#include "duckdb/execution/physical_operator_states.hpp"
+#include "duckdb/function/function_binder.hpp"
+#include "duckdb/main/client_data.hpp"
+#include "duckdb/planner/expression/bound_cast_expression.hpp"
+#include "duckdb/planner/expression/bound_constant_expression.hpp"
+#include "duckdb/planner/expression/bound_reference_expression.hpp"
+#include "duckdb/planner/expression_binder/table_function_binder.hpp"
+#include "duckdb/planner/operator/logical_copy_to_file.hpp"
+#include "duckdb/planner/operator/logical_create_table.hpp"
+#include "duckdb/planner/operator/logical_insert.hpp"
+#include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
+#include "execution/operator/iceberg_delete.hpp"
+#include "execution/operator/physical_iceberg_create_table.hpp"
 #include "iceberg_logging.hpp"
+#include "planning/iceberg_multi_file_list.hpp"
+#include "storage/statistics/iceberg_variant_statistics.hpp"
 
 namespace duckdb {
 
@@ -1051,6 +1050,13 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(ClientContext &
 	schema->last_column_id = static_cast<idx_t>(next_field_id - 1);
 	metadata->AddSchemaOrGetExisting(schema);
 	metadata->SetCurrentSchemaId(0);
+
+	// The copy sink (PhysicalCopyToFile) initializes before the operator that patches in the real table
+	// location, so it sees this placeholder. An empty location yields the relative path "data", making the
+	// sink's directory pre-check hit the local FS; a remote sentinel makes that pre-check a no-op. The
+	// value is never dereferenced - real data goes to the location patched on before any data flows.
+	// See https://github.com/duckdblabs/motherduck/issues/579
+	metadata->location = "s3://placeholder-write-path";
 
 	auto binder = Binder::CreateBinder(context);
 	TableFunctionBinder property_binder(*binder, context, "format-version");
