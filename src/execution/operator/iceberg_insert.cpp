@@ -889,6 +889,13 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(ClientContext &
 	metadata->AddSchemaOrGetExisting(schema);
 	metadata->SetCurrentSchemaId(0);
 
+	// The copy sink (PhysicalCopyToFile) initializes before the operator that patches in the real table
+	// location, so it sees this placeholder. An empty location yields the relative path "data", making the
+	// sink's directory pre-check hit the local FS; a remote sentinel makes that pre-check a no-op. The
+	// value is never dereferenced - real data goes to the location patched on before any data flows.
+	// See https://github.com/duckdblabs/motherduck/issues/579
+	metadata->location = "s3://placeholder-write-path";
+
 	auto binder = Binder::CreateBinder(context);
 	TableFunctionBinder property_binder(*binder, context, "format-version");
 	for (auto &option : create_info.options) {
