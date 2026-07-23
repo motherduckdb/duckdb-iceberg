@@ -377,13 +377,35 @@ unique_ptr<IcebergMultiFileList> IcebergMultiFileList::PushdownInternal(ClientCo
 	IcebergTableFilters result_filter_set;
 
 	// The supplied filter set is the complete set of filters for the new view.
+	//
+	// Multiple filter entries can resolve to the same iceberg column. This happens for VARIANT columns, where
+	// filters on different subfields (e.g. `variant_col.a > 5` and `variant_col.b < 150`) are separate entries in
+	// the filter set that all reference the same underlying column. IcebergTableFilters holds at most one filter
+	// per column, so combine those into a single CONJUNCTION_AND ExpressionFilter (the pruning logic recurses into
+	// conjunctions, see MatchBoundsExpression).
+	map<column_t, vector<unique_ptr<Expression>>> grouped_expressions;
 	for (auto &entry : new_filters) {
 		auto column_idx = column_indexes[entry.GetIndex().GetIndex()];
-		if (column_idx < names.size()) {
-			auto &filter =
-			    ExpressionFilter::GetExpressionFilter(entry.Filter(), "IcebergMultiFileList::PushdownInternal");
-			result_filter_set.PushFilter(column_idx, filter.Copy());
+		if (column_idx >= names.size()) {
+			continue;
 		}
+		auto &filter = ExpressionFilter::GetExpressionFilter(entry.Filter(), "IcebergMultiFileList::PushdownInternal");
+		grouped_expressions[column_idx].push_back(filter.expr->Copy());
+	}
+
+	for (auto &entry : grouped_expressions) {
+		auto &expressions = entry.second;
+		unique_ptr<Expression> combined;
+		if (expressions.size() == 1) {
+			combined = std::move(expressions[0]);
+		} else {
+			auto conjunction = make_uniq<BoundConjunctionExpression>(ExpressionType::CONJUNCTION_AND);
+			for (auto &expression : expressions) {
+				conjunction->GetChildrenMutable().push_back(std::move(expression));
+			}
+			combined = std::move(conjunction);
+		}
+		result_filter_set.PushFilter(entry.first, make_uniq<ExpressionFilter>(std::move(combined)));
 	}
 
 	filtered_list->table_filters = std::move(result_filter_set);
