@@ -23,11 +23,30 @@
 
 namespace duckdb {
 
+struct IcebergEqualityDeleteColumn {
+	int32_t field_id;
+	idx_t expression_index;
+	LogicalType type;
+};
+
 struct IcebergMultiFileReaderGlobalState : public MultiFileReaderGlobalState {
 public:
-	IcebergMultiFileReaderGlobalState(vector<LogicalType> extra_columns_p, const MultiFileList &file_list_p)
-	    : MultiFileReaderGlobalState(std::move(extra_columns_p), file_list_p) {
+	IcebergMultiFileReaderGlobalState(vector<LogicalType> extra_columns_p, const MultiFileList &file_list_p,
+	                                  vector<MultiFileColumnDefinition> scan_columns_p,
+	                                  vector<ColumnIndex> scan_column_ids_p,
+	                                  vector<IcebergEqualityDeleteColumn> equality_delete_columns_p)
+	    : MultiFileReaderGlobalState(std::move(extra_columns_p), file_list_p), scan_columns(std::move(scan_columns_p)),
+	      scan_column_ids(std::move(scan_column_ids_p)), equality_delete_columns(std::move(equality_delete_columns_p)) {
+		for (idx_t i = 0; i < equality_delete_columns.size(); i++) {
+			equality_delete_field_indexes.emplace(equality_delete_columns[i].field_id, i);
+		}
 	}
+
+public:
+	vector<MultiFileColumnDefinition> scan_columns;
+	vector<ColumnIndex> scan_column_ids;
+	vector<IcebergEqualityDeleteColumn> equality_delete_columns;
+	unordered_map<int32_t, idx_t> equality_delete_field_indexes;
 };
 
 struct IcebergMultiFileReader : public MultiFileReader {
@@ -69,10 +88,11 @@ public:
 	void FinalizeChunk(ClientContext &context, const MultiFileBindData &bind_data, BaseFileReader &reader,
 	                   const MultiFileReaderData &reader_data, DataChunk &input_chunk, DataChunk &output_chunk,
 	                   ExpressionExecutor &executor, optional_ptr<MultiFileReaderGlobalState> global_state) override;
-	void ApplyEqualityDeletes(ClientContext &context, DataChunk &output_chunk,
+	void ApplyEqualityDeletes(ClientContext &context, DataChunk &output_chunk, DataChunk &equality_delete_chunk,
 	                          const IcebergMultiFileList &multi_file_list,
 	                          const BoundIcebergManifestEntry &manifest_entry,
-	                          const vector<MultiFileColumnDefinition> &local_columns);
+	                          const vector<MultiFileColumnDefinition> &local_columns,
+	                          const IcebergMultiFileReaderGlobalState &global_state);
 	bool ParseOption(const string &key, const Value &val, MultiFileOptions &options, ClientContext &context) override;
 
 	MultiFileReaderVirtualColumnBinding

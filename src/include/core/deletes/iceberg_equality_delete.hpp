@@ -4,30 +4,11 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/common/typedefs.hpp"
-#include "duckdb/planner/expression.hpp"
-
 #include "core/metadata/manifest/iceberg_manifest.hpp"
 
 namespace duckdb {
 
 using sequence_number_t = int64_t;
-
-struct IcebergEqualityDeleteRow {
-public:
-	IcebergEqualityDeleteRow() {
-	}
-	IcebergEqualityDeleteRow(const IcebergEqualityDeleteRow &) = delete;
-	IcebergEqualityDeleteRow &operator=(const IcebergEqualityDeleteRow &) = delete;
-	IcebergEqualityDeleteRow(IcebergEqualityDeleteRow &&) = default;
-	IcebergEqualityDeleteRow &operator=(IcebergEqualityDeleteRow &&) = default;
-
-public:
-	//! Map of field-id to equality delete for the field
-	//! NOTE: these are either OPERATOR_IS_NULL or COMPARE_EQUAL
-	//! Also note: it's probably easiest to apply these to the 'output_chunk' of FinalizeChunk, so we can re-use
-	//! expressions. Otherwise the idx of the BoundReferenceExpression would have to change for every file.
-	unordered_map<int32_t, unique_ptr<Expression>> filters;
-};
 
 struct IcebergEqualityDeleteFile {
 public:
@@ -43,10 +24,8 @@ public:
 	//! The partition info if the equality delete has partition information
 	vector<IcebergPartitionInfo> partition_info;
 	int32_t partition_spec_id;
-	//! Raw equality delete values, keyed by Iceberg field-id. These are converted to bound expressions once the
-	//! scan output projection is known.
+	//! Raw equality delete values, keyed by Iceberg field-id.
 	unordered_map<int32_t, vector<Value>> equality_values;
-	vector<IcebergEqualityDeleteRow> rows;
 };
 
 struct IcebergEqualityDeleteData {

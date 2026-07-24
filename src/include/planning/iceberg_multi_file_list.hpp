@@ -171,8 +171,7 @@ public:
 	unique_ptr<IcebergMultiFileList> PushdownInternal(ClientContext &context, TableFilterSet &new_filters,
 	                                                  const vector<column_t> &column_indexes) const;
 	unique_ptr<DeleteFilter> GetPositionalDeletesForFile(const string &file_path) const;
-	void ProcessDeletes(const vector<MultiFileColumnDefinition> &global_columns,
-	                    const vector<ColumnIndex> &global_column_ids, const vector<idx_t> &projection_ids) const;
+	void ProcessDeletes() const;
 	vector<reference<const IcebergEqualityDeleteFile>>
 	GetEqualityDeletesForFile(const BoundIcebergManifestEntry &manifest_entry) const;
 	void GetStatistics(vector<PartitionStatistics> &result) const;
@@ -232,19 +231,12 @@ private:
 	void InitializeScanPlanProvider() const;
 	void StartDataManifestScan(lock_guard<mutex> &guard) const;
 	void EnumerateDeleteManifestEntriesInternal() const;
-	void ProcessDeletesInternal(const vector<MultiFileColumnDefinition> &global_columns,
-	                            const vector<ColumnIndex> &global_column_ids,
-	                            const vector<idx_t> &projection_ids) const;
-	void ScanDeleteFiles(const vector<MultiFileColumnDefinition> &global_columns,
-	                     const vector<ColumnIndex> &global_column_ids, const vector<idx_t> &projection_ids) const;
-	void ScanDeleteFile(const BoundIcebergManifestEntry &entry, const vector<MultiFileColumnDefinition> &global_columns,
-	                    const vector<ColumnIndex> &global_column_ids, const vector<idx_t> &projection_ids) const;
+	void ProcessDeletesInternal() const;
+	void ScanDeleteFiles() const;
+	void ScanDeleteFile(const BoundIcebergManifestEntry &entry) const;
 	void ScanPositionalDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result) const;
 	void ScanEqualityDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result,
-	                            vector<MultiFileColumnDefinition> &columns,
-	                            const vector<MultiFileColumnDefinition> &global_columns,
-	                            const vector<ColumnIndex> &global_column_ids,
-	                            const vector<idx_t> &projection_ids) const;
+	                            vector<MultiFileColumnDefinition> &columns) const;
 	void ScanPuffinFile(const BoundIcebergManifestEntry &entry) const;
 	case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &GetPositionalDeleteData() const;
 	map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> &GetEqualityDeleteData() const;
