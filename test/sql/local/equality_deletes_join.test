@@ -12,8 +12,16 @@ require httpfs
 
 # Keep the iceberg scan on the right side of the join and disable all optimizers.
 # Equality-delete columns are private scan inputs and must remain available.
+
+foreach optimizer_state disabled enabled
+
+onlyif optimizer_state=disabled
 statement ok
 PRAGMA disable_optimizer;
+
+onlyif optimizer_state=enabled
+statement ok
+PRAGMA enable_optimizer;
 
 # Only the `bir` column is selected, which is not an equality-delete column.
 query I
@@ -24,5 +32,5 @@ ORDER BY ALL;
 2025-01-04
 2025-01-05
 
-statement ok
-PRAGMA enable_optimizer;
+# optimizer_state
+endloop
