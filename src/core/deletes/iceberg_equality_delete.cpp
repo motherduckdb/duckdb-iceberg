@@ -64,7 +64,7 @@ void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntr
 	}
 	auto &deletes = *it->second;
 
-	deletes.delete_files.emplace_back(data_file.partition_info, manifest_file.partition_spec_id);
+	deletes.delete_files.emplace_back(data_file.partition_info, manifest_file.partition_spec_id, data_file.file_path);
 	auto &equality_values = deletes.delete_files.back().equality_values;
 	D_ASSERT(result.ColumnCount() == data_file.equality_ids.size());
 
