@@ -112,6 +112,7 @@ set(EXTENSION_SOURCES
 	src/planning/iceberg_multi_file_list.cpp
 	src/planning/iceberg_scan_plan_provider.cpp
 	src/planning/iceberg_multi_file_reader.cpp
+	src/planning/iceberg_optimizer.cpp
 	src/planning/metadata_io/avro/avro_scan.cpp
 	src/planning/metadata_io/avro/iceberg_avro_multi_file_list.cpp
 	src/planning/metadata_io/avro/iceberg_avro_multi_file_reader.cpp

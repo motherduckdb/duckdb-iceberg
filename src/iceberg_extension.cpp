@@ -26,6 +26,8 @@
 #include "iceberg_options.hpp"
 #include "common/iceberg_default.hpp"
 #include "function/copy/iceberg_copy_function.hpp"
+#include "duckdb/optimizer/optimizer_extension.hpp"
+#include "planning/iceberg_optimizer.hpp"
 
 namespace duckdb {
 
@@ -150,6 +152,7 @@ static void LoadInternal(ExtensionLoader &loader) {
 	auto &log_manager = instance.GetLogManager();
 	log_manager.RegisterLogType(make_uniq<IcebergLogType>());
 	StorageExtension::Register(config, "iceberg", make_shared_ptr<IRCStorageExtension>());
+	OptimizerExtension::Register(config, IcebergOptimizer::Create());
 }
 
 void IcebergExtension::Load(ExtensionLoader &loader) {

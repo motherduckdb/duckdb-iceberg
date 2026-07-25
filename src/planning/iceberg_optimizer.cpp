@@ -17,15 +17,14 @@
 
 namespace duckdb {
 
-GuaranteeEqualityDeleteColumnsOptimizer::GuaranteeEqualityDeleteColumnsOptimizer(ClientContext &context)
-    : context(context) {
+IcebergOptimizerRoutine::IcebergOptimizerRoutine(ClientContext &context) : context(context) {
 }
 
-void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOperator> &op) {
+void IcebergOptimizerRoutine::VisitOperator(unique_ptr<LogicalOperator> &op) {
 	VisitOperator(op, false);
 }
 
-void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOperator> &op, bool below_write) {
+void IcebergOptimizerRoutine::VisitOperator(unique_ptr<LogicalOperator> &op, bool below_write) {
 	below_write = below_write || op->type == LogicalOperatorType::LOGICAL_INSERT ||
 	              op->type == LogicalOperatorType::LOGICAL_DELETE || op->type == LogicalOperatorType::LOGICAL_UPDATE ||
 	              op->type == LogicalOperatorType::LOGICAL_MERGE_INTO;
@@ -68,11 +67,11 @@ void GuaranteeEqualityDeleteColumnsOptimizer::VisitOperator(unique_ptr<LogicalOp
 }
 
 void IcebergOptimizer::PreOptimize(OptimizerExtensionInput &input, unique_ptr<LogicalOperator> &plan) {
-	GuaranteeEqualityDeleteColumnsOptimizer guarantee_equality_delete_columns_optimizer(input.context);
+	IcebergOptimizerRoutine iceberg_optimizer_routine(input.context);
 	if (plan->children.size() == 0) {
 		return;
 	}
-	guarantee_equality_delete_columns_optimizer.VisitOperator(plan);
+	iceberg_optimizer_routine.VisitOperator(plan);
 }
 
 OptimizerExtension IcebergOptimizer::Create() {
