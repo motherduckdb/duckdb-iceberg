@@ -24,7 +24,6 @@ public:
 private:
 	static ScalarFunctionSet GetIcebergBucketFunction();
 	static ScalarFunctionSet GetIcebergTruncateFunction();
-	static ScalarFunctionSet GetVerifyEqualityDeletesFunction();
 
 	static TableFunctionSet GetIcebergSnapshotsFunction();
 	static TableFunctionSet GetIcebergScanFunction(ExtensionLoader &loader);

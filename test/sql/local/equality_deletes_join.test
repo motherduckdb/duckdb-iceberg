@@ -10,21 +10,27 @@ require iceberg
 
 require httpfs
 
-# Keep the iceberg scan on the right side of the join so that the
-# GuaranteeEqualityDeleteColumnsOptimizer first visits the non-iceberg left
-# child. If that traversal stops at the left child instead of continuing to the
-# remaining children, the equality-delete columns of the right scan get pruned
-# and the deletes are silently not applied.
+# Keep the iceberg scan on the right side of the join and disable all optimizers.
+# Equality-delete columns are private scan inputs and must remain available.
+
+foreach optimizer_state disabled enabled
+
+onlyif optimizer_state=disabled
 statement ok
-set disabled_optimizers='join_order';
+PRAGMA disable_optimizer;
+
+onlyif optimizer_state=enabled
+statement ok
+PRAGMA enable_optimizer;
 
 # Only the `bir` column is selected, which is not an equality-delete column.
-# Without the guarantee filter on the iceberg scan the id/name columns are
-# pruned and the equality deletes can no longer be applied.
 query I
 SELECT t.bir
-FROM (VALUES (1)) v(x), ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_deletes/warehouse/mydb/mytable') t
+FROM (VALUES (1)) v(x), ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_deletes/warehouse/mydb/mytable') t
 ORDER BY ALL;
 ----
 2025-01-04
 2025-01-05
+
+# optimizer_state
+endloop
