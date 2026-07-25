@@ -521,7 +521,7 @@ void IcebergMultiFileReader::FinalizeChunk(ClientContext &context, const MultiFi
 			equality_delete_executor.AddExpression(*reader_data.expressions[column.expression_index]);
 		}
 		DataChunk equality_delete_chunk;
-		equality_delete_chunk.InitializeEmpty(iceberg_state.equality_delete_types);
+		equality_delete_chunk.Initialize(context, iceberg_state.equality_delete_types);
 		equality_delete_executor.Execute(input_chunk, equality_delete_chunk);
 
 		ExpressionExecutor filter_executor(context, *equality_delete_expression);
