@@ -9,6 +9,10 @@ EXT_CONFIG=${PROJ_DIR}extension_config.cmake
 # We need this for testing
 CORE_EXTENSIONS='httpfs;parquet;tpch'
 
+ifeq (${EQUALITY_DELETE_WRITES_ENABLED}, 1)
+	EXT_FLAGS:=${EXT_FLAGS} -DICEBERG_ENABLE_EQUALITY_DELETE_WRITES=1
+endif
+
 # Include the Makefile from extension-ci-tools
 include extension-ci-tools/makefiles/duckdb_extension.Makefile
 
