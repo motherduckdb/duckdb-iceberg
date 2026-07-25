@@ -26,14 +26,51 @@
 
 namespace duckdb {
 
-static idx_t FindEqualityDeleteColumn(const vector<MultiFileColumnDefinition> &columns, int32_t field_id) {
+using MultiFileColumnPath = vector<idx_t>;
+
+static void PopulateFieldIdMap(const vector<MultiFileColumnDefinition> &columns,
+                               unordered_map<int32_t, MultiFileColumnPath> &field_id_map,
+                               MultiFileColumnPath &column_path) {
 	for (idx_t i = 0; i < columns.size(); i++) {
 		auto &column = columns[i];
-		if (!column.identifier.IsNull() && column.GetIdentifierFieldId() == field_id) {
-			return i;
+		column_path.push_back(i);
+		if (!column.identifier.IsNull()) {
+			field_id_map[column.GetIdentifierFieldId()] = column_path;
 		}
+		PopulateFieldIdMap(column.children, field_id_map, column_path);
+		column_path.pop_back();
 	}
-	return DConstants::INVALID_INDEX;
+}
+
+static unordered_map<int32_t, MultiFileColumnPath> CreateFieldIdMap(const vector<MultiFileColumnDefinition> &columns) {
+	unordered_map<int32_t, MultiFileColumnPath> result;
+	MultiFileColumnPath column_path;
+	PopulateFieldIdMap(columns, result, column_path);
+	return result;
+}
+
+static const MultiFileColumnDefinition &GetColumnFromPath(const vector<MultiFileColumnDefinition> &columns,
+                                                          const MultiFileColumnPath &column_path) {
+	D_ASSERT(!column_path.empty());
+	reference<const vector<MultiFileColumnDefinition>> current_columns(columns);
+	optional_ptr<const MultiFileColumnDefinition> result;
+	for (auto column_index : column_path) {
+		D_ASSERT(column_index < current_columns.get().size());
+		result = current_columns.get()[column_index];
+		current_columns = result->children;
+	}
+	return *result;
+}
+
+static ColumnIndex CreateColumnIndex(const MultiFileColumnPath &column_path) {
+	D_ASSERT(!column_path.empty());
+	ColumnIndex result(column_path.back());
+	for (idx_t depth = column_path.size() - 1; depth > 0; depth--) {
+		vector<ColumnIndex> children;
+		children.push_back(std::move(result));
+		result = ColumnIndex(column_path[depth - 1], std::move(children));
+	}
+	return result;
 }
 
 static unique_ptr<Expression> CreateEqualityDeleteExpression(const IcebergMultiFileList &multi_file_list,
@@ -117,9 +154,11 @@ IcebergMultiFileReader::InitializeGlobalState(ClientContext &context, const Mult
 	auto scan_column_ids = global_column_ids;
 	vector<LogicalType> extra_columns;
 	vector<IcebergEqualityDeleteColumn> equality_delete_columns;
+	auto field_id_to_scan_column = CreateFieldIdMap(scan_columns);
 	for (auto field_id : required_field_ids) {
-		auto global_column_index = FindEqualityDeleteColumn(scan_columns, field_id);
-		if (global_column_index == DConstants::INVALID_INDEX) {
+		MultiFileColumnPath column_path;
+		auto field_entry = field_id_to_scan_column.find(field_id);
+		if (field_entry == field_id_to_scan_column.end()) {
 			auto column = iceberg_multi_file_list.GetMetadata().FindColumnByFieldId(field_id);
 			if (!column) {
 				throw InvalidConfigurationException(
@@ -130,27 +169,33 @@ IcebergMultiFileReader::InitializeGlobalState(ClientContext &context, const Mult
 			// independently of any historical initial default.
 			new_column.default_expression = make_uniq<ConstantExpression>(Value(new_column.type));
 			scan_columns.push_back(std::move(new_column));
-			global_column_index = scan_columns.size() - 1;
+			column_path.push_back(scan_columns.size() - 1);
 			DUCKDB_LOG(context, IcebergLogType, "Reading dropped column '%s' privately for equality deletes",
 			           column->name);
+		} else {
+			column_path = field_entry->second;
 		}
 
+		auto equality_column_id = CreateColumnIndex(column_path);
+		auto root_column_index = equality_column_id.GetPrimaryIndex();
+		auto &column = GetColumnFromPath(scan_columns, column_path);
+		if (equality_column_id.HasChildren()) {
+			equality_column_id.SetPushdownExtractType(scan_columns[root_column_index].type);
+		}
 		idx_t expression_index = DConstants::INVALID_INDEX;
-		for (idx_t i = 0; i < scan_column_ids.size(); i++) {
-			auto &column_id = scan_column_ids[i];
-			if (column_id.IsVirtualColumn()) {
-				continue;
-			}
-			auto column_index = column_id.GetPrimaryIndex();
-			if (column_index < scan_columns.size() && scan_columns[column_index].GetIdentifierFieldId() == field_id) {
-				expression_index = i;
-				break;
+		if (column_path.size() == 1) {
+			//! A nested query projection can contain additional struct-extract expressions outside the scan.
+			//! Always scan nested equality fields privately so their expression is independent of that projection.
+			for (idx_t i = 0; i < scan_column_ids.size(); i++) {
+				if (scan_column_ids[i] == equality_column_id) {
+					expression_index = i;
+					break;
+				}
 			}
 		}
-		auto &column = scan_columns[global_column_index];
 		if (expression_index == DConstants::INVALID_INDEX) {
 			expression_index = scan_column_ids.size();
-			scan_column_ids.emplace_back(global_column_index);
+			scan_column_ids.push_back(std::move(equality_column_id));
 			// This also makes the multi-file scan retain an explicit projection for the query-visible columns.
 			// The appended expression itself is materialized into a private chunk in FinalizeChunk.
 			extra_columns.push_back(column.type);
@@ -409,17 +454,8 @@ static unique_ptr<Expression> CreateEqualityDeleteExpression(const IcebergMultiF
 		return nullptr;
 	}
 
-	//! Map from column_id to 'local_columns' index
-	unordered_map<int32_t, column_t> id_to_local_column;
-	for (column_t i = 0; i < local_columns.size(); i++) {
-		auto &col = local_columns[i];
-		if (col.identifier.IsNull()) {
-			// column could be a virtual column
-			continue;
-		}
-		D_ASSERT(!col.identifier.IsNull());
-		id_to_local_column[col.identifier.GetValue<int32_t>()] = i;
-	}
+	//! Map every field id, including nested fields, to its path in 'local_columns'.
+	auto id_to_local_column = CreateFieldIdMap(local_columns);
 
 	//! Create a big CONJUNCTION_AND of all the rows, illustrative example:
 	//! WHERE
@@ -462,7 +498,7 @@ static unique_ptr<Expression> CreateEqualityDeleteExpression(const IcebergMultiF
 				auto bound_ref = make_uniq<BoundReferenceExpression>(column.type, equality_column_index);
 				if (!constant.IsNull()) {
 					equalities.push_back(
-					    BoundComparisonExpression::Create(ExpressionType::COMPARE_NOTEQUAL, std::move(bound_ref),
+					    BoundComparisonExpression::Create(ExpressionType::COMPARE_DISTINCT_FROM, std::move(bound_ref),
 					                                      make_uniq<BoundConstantExpression>(constant)));
 				} else {
 					auto is_not_null =

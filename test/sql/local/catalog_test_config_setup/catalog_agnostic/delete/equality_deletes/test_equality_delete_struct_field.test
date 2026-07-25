@@ -1,0 +1,129 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/equality_deletes/test_equality_delete_struct_field.test
+# description: Equality deletes targeting a nested struct field are applied during reads
+# group: [equality_deletes]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require-env EQUALITY_DELETE_WRITES_ENABLED 1
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+use my_datalake.default;
+
+statement ok
+set unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=true;
+
+statement ok
+drop table if exists my_datalake.default.equality_delete_struct_field;
+
+statement ok
+create table my_datalake.default.equality_delete_struct_field (
+	id integer,
+	payload struct(
+		nested struct(
+			deeper struct(
+				even_deeper struct(
+					deepest struct(
+						key integer,
+						label varchar
+					)
+				)
+			)
+		)
+	),
+	marker varchar
+);
+
+statement ok
+insert into my_datalake.default.equality_delete_struct_field values
+	(1, {'nested': {'deeper': {'even_deeper': {'deepest': {'key': 1, 'label': 'one'}}}}}, 'keep-1'),
+	(2, {'nested': {'deeper': {'even_deeper': {'deepest': {'key': 2, 'label': 'two-a'}}}}}, 'delete-2a'),
+	(3, {'nested': {'deeper': {'even_deeper': {'deepest': {'key': 2, 'label': 'two-b'}}}}}, 'delete-2b'),
+	(4, {'nested': {'deeper': {'even_deeper': {'deepest': {'key': 3, 'label': 'three'}}}}}, 'keep-3'),
+	(5, null, 'keep-null-struct'),
+	(6, {'nested': {'deeper': {'even_deeper': {'deepest': {'key': null, 'label': 'null-key'}}}}}, 'keep-null-key');
+
+statement ok
+delete from my_datalake.default.equality_delete_struct_field
+where payload.nested.deeper.even_deeper.deepest.key = 2;
+
+# Verify that this exercised an equality delete on the nested child field,
+# rather than falling back to positional deletes.
+statement ok
+begin;
+
+statement ok
+set variable delete_manifest = (
+	select manifest_path
+	from iceberg_metadata(my_datalake.default.equality_delete_struct_field)
+	where manifest_content = 'DELETE'
+	limit 1
+);
+
+statement ok
+set variable data_file = (
+	select file_path
+	from iceberg_metadata(my_datalake.default.equality_delete_struct_field)
+	where manifest_content = 'DATA'
+	limit 1
+);
+
+query I
+select unnest(equality_ids)
+from (select unnest(data_file) from read_avro(getvariable('delete_manifest')));
+----
+8
+
+# Verify the equality id belongs to the deepest field, rather than one of its parent structs.
+query I
+select field_id
+from parquet_schema(getvariable('data_file'))
+where name = 'key';
+----
+8
+
+statement ok
+commit;
+
+# The nested equality key is projected.
+query III
+select id, payload.nested.deeper.even_deeper.deepest.key, marker
+from my_datalake.default.equality_delete_struct_field
+order by id;
+----
+1	1	keep-1
+4	3	keep-3
+5	NULL	keep-null-struct
+6	NULL	keep-null-key
+
+# The nested equality key is not projected.
+query II
+select id, marker
+from my_datalake.default.equality_delete_struct_field
+order by id;
+----
+1	keep-1
+4	keep-3
+5	keep-null-struct
+6	keep-null-key
+
+# The nested equality key is used only by a pushed filter.
+query I
+select marker
+from my_datalake.default.equality_delete_struct_field
+where payload.nested.deeper.even_deeper.deepest.key = 3;
+----
+keep-3
+
+statement ok
+drop table my_datalake.default.equality_delete_struct_field;
