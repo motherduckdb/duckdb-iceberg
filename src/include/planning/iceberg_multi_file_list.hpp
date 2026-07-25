@@ -239,7 +239,8 @@ private:
 	void ScanDeleteFile(const BoundIcebergManifestEntry &entry) const;
 	void ScanPositionalDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result) const;
 	void ScanEqualityDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result,
-	                            vector<MultiFileColumnDefinition> &columns) const;
+	                            const vector<MultiFileColumnDefinition> &columns,
+	                            const vector<string> &source_names) const;
 	void ScanPuffinFile(const BoundIcebergManifestEntry &entry) const;
 	case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &GetPositionalDeleteData() const;
 	map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> &GetEqualityDeleteData() const;
