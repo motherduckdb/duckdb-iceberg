@@ -8,8 +8,11 @@
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 #include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/function/copy_function.hpp"
+#include "duckdb/function/scalar/struct_utils.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/parser/parsed_data/copy_info.hpp"
+#include "duckdb/parser/qualified_name.hpp"
+#include "duckdb/planner/expression/bound_operator_expression.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 
 #include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
@@ -38,11 +41,57 @@ static bool PlanContainsPhysicalFilter(PhysicalOperator &plan) {
 
 namespace {
 
-static bool IsDirectReference(const Expression &expr) {
-	switch (expr.GetExpressionClass()) {
-	case ExpressionClass::BOUND_REF:
-	case ExpressionClass::BOUND_COLUMN_REF:
+static bool TryGetColumnPath(const Expression &expr, vector<Identifier> &column_path);
+
+static bool TryGetFunctionColumnPath(const BoundFunctionExpression &function, vector<Identifier> &column_path) {
+	idx_t child_index;
+	if (!TryGetStructExtractChildIndex(function, child_index) || function.GetChildren().empty()) {
+		return false;
+	}
+	auto &base = *function.GetChildren()[0];
+	if (!TryGetColumnPath(base, column_path) || base.GetReturnType().id() != LogicalTypeId::STRUCT ||
+	    child_index >= StructType::GetChildCount(base.GetReturnType())) {
+		return false;
+	}
+	//! Recurse into the base first so nested extracts produce a root-to-leaf field path.
+	column_path.push_back(StructType::GetChildName(base.GetReturnType(), child_index));
+	return true;
+}
+
+static bool TryGetOperatorColumnPath(const BoundOperatorExpression &struct_extract, vector<Identifier> &column_path) {
+	auto &children = struct_extract.GetChildren();
+	if (children.size() != 2 || children[1]->GetExpressionClass() != ExpressionClass::BOUND_CONSTANT) {
+		return false;
+	}
+	auto &field_value = children[1]->Cast<BoundConstantExpression>().GetValue();
+	if (field_value.IsNull() || field_value.type().id() != LogicalTypeId::VARCHAR ||
+	    !TryGetColumnPath(*children[0], column_path)) {
+		return false;
+	}
+
+	auto remaining_fields = QualifiedName::ParseComponents(field_value.GetValue<string>());
+	//! A STRUCT_EXTRACT operator can encode more than one remaining field in its constant.
+	for (auto &field : remaining_fields) {
+		column_path.push_back(std::move(field));
+	}
+	return !remaining_fields.empty();
+}
+
+static bool TryGetColumnPath(const Expression &expr, vector<Identifier> &column_path) {
+	switch (expr.GetExpressionType()) {
+	case ExpressionType::BOUND_REF:
+	case ExpressionType::BOUND_COLUMN_REF:
 		return true;
+	case ExpressionType::STRUCT_EXTRACT:
+		if (expr.GetExpressionClass() == ExpressionClass::BOUND_OPERATOR) {
+			return TryGetOperatorColumnPath(expr.Cast<BoundOperatorExpression>(), column_path);
+		}
+		if (expr.GetExpressionClass() == ExpressionClass::BOUND_FUNCTION) {
+			return TryGetFunctionColumnPath(expr.Cast<BoundFunctionExpression>(), column_path);
+		}
+		return false;
+	case ExpressionType::BOUND_FUNCTION:
+		return TryGetFunctionColumnPath(expr.Cast<BoundFunctionExpression>(), column_path);
 	default:
 		return false;
 	}
@@ -103,11 +152,18 @@ bool IcebergDelete::TryGetEqualityDeletePredicates(ClientContext &context, Icebe
 		auto &right = BoundComparisonExpression::Right(compare_expr);
 
 		optional_ptr<const Value> constant_value;
-		if (IsDirectReference(left) && right.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT) {
+		optional_ptr<const Expression> column_expression;
+		if (right.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT) {
+			column_expression = left;
 			constant_value = right.Cast<BoundConstantExpression>().GetValue();
-		} else if (left.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT && IsDirectReference(right)) {
+		} else if (left.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT) {
+			column_expression = right;
 			constant_value = left.Cast<BoundConstantExpression>().GetValue();
 		} else {
+			return false;
+		}
+		vector<Identifier> column_path;
+		if (!TryGetColumnPath(*column_expression, column_path)) {
 			return false;
 		}
 
@@ -122,22 +178,28 @@ bool IcebergDelete::TryGetEqualityDeletePredicates(ClientContext &context, Icebe
 		if (primary_index >= columns.size()) {
 			return false;
 		}
-		auto &column_definition = *columns[primary_index];
+		optional_ptr<const IcebergColumnDefinition> column_definition = columns[primary_index].get();
+		for (auto &child_name : column_path) {
+			column_definition = column_definition->GetChild(child_name.GetIdentifierName());
+			if (!column_definition) {
+				return false;
+			}
+		}
 		//! The same column referenced more than once is not a clean equality delete.
 		for (auto &existing : equality_predicates) {
-			if (existing.field_id == column_definition.id) {
+			if (existing.field_id == column_definition->id) {
 				return false;
 			}
 		}
 		Value delete_value;
 		string error_message;
-		if (!constant_value->DefaultTryCastAs(column_definition.type, delete_value, &error_message, true)) {
+		if (!constant_value->DefaultTryCastAs(column_definition->type, delete_value, &error_message, true)) {
 			return false;
 		}
 		IcebergEqualityDeletePredicate predicate;
-		predicate.field_id = column_definition.id;
-		predicate.column_name = column_definition.name;
-		predicate.type = column_definition.type;
+		predicate.field_id = column_definition->id;
+		predicate.column_name = column_definition->name;
+		predicate.type = column_definition->type;
 		predicate.value = std::move(delete_value);
 		equality_predicates.push_back(std::move(predicate));
 	}

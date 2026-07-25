@@ -52,6 +52,12 @@
 				"test/sql/local/catalog_test_config_setup/catalog_agnostic/test_row_lineage_read_from_upgraded.test",
 				"test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/drop_column/alter_drop_column_partition.test"
 			]
+		},
+		{
+			"reason": "Expression can't translate to iceberg-rest-fixture catalog scan planning",
+			"paths": [
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/equality_deletes/test_equality_delete_struct_field.test"
+			]
 		}
 	]
 }
