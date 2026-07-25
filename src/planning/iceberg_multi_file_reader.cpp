@@ -36,6 +36,11 @@ static idx_t FindEqualityDeleteColumn(const vector<MultiFileColumnDefinition> &c
 	return DConstants::INVALID_INDEX;
 }
 
+static unique_ptr<Expression> CreateEqualityDeleteExpression(const IcebergMultiFileList &multi_file_list,
+                                                             const BoundIcebergManifestEntry &bound_manifest_entry,
+                                                             const vector<MultiFileColumnDefinition> &local_columns,
+                                                             const IcebergMultiFileReaderGlobalState &global_state);
+
 IcebergMultiFileReader::IcebergMultiFileReader(shared_ptr<TableFunctionInfo> function_info)
     : function_info(function_info) {
 	row_id_column = make_uniq<MultiFileColumnDefinition>("_row_id", LogicalType::BIGINT);
@@ -381,6 +386,11 @@ void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, cons
 		}
 	}
 	ApplyPartitionConstants(multi_file_list, reader_data, global_columns, global_column_ids, context);
+
+	auto equality_delete_expression = CreateEqualityDeleteExpression(
+	    multi_file_list, bound_manifest_entry, local_columns, global_state->Cast<IcebergMultiFileReaderGlobalState>());
+	global_state->Cast<IcebergMultiFileReaderGlobalState>().CacheEqualityDeleteExpression(
+	    file_id, std::move(equality_delete_expression));
 }
 
 void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, const MultiFileOptions &file_options,
@@ -392,15 +402,13 @@ void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, cons
 	                              global_state);
 }
 
-void IcebergMultiFileReader::ApplyEqualityDeletes(ClientContext &context, DataChunk &output_chunk,
-                                                  DataChunk &equality_delete_chunk,
-                                                  const IcebergMultiFileList &multi_file_list,
-                                                  const BoundIcebergManifestEntry &bound_manifest_entry,
-                                                  const vector<MultiFileColumnDefinition> &local_columns,
-                                                  const IcebergMultiFileReaderGlobalState &global_state) {
+static unique_ptr<Expression> CreateEqualityDeleteExpression(const IcebergMultiFileList &multi_file_list,
+                                                             const BoundIcebergManifestEntry &bound_manifest_entry,
+                                                             const vector<MultiFileColumnDefinition> &local_columns,
+                                                             const IcebergMultiFileReaderGlobalState &global_state) {
 	auto delete_files = multi_file_list.GetEqualityDeletesForFile(bound_manifest_entry);
 	if (delete_files.empty()) {
-		return;
+		return nullptr;
 	}
 
 	//! Map from column_id to 'local_columns' index
@@ -479,7 +487,7 @@ void IcebergMultiFileReader::ApplyEqualityDeletes(ClientContext &context, DataCh
 		}
 	}
 	if (rows.empty()) {
-		return;
+		return nullptr;
 	}
 
 	unique_ptr<Expression> equality_delete_filter;
@@ -491,13 +499,7 @@ void IcebergMultiFileReader::ApplyEqualityDeletes(ClientContext &context, DataCh
 		conjunction_and->GetChildrenMutable() = std::move(rows);
 		equality_delete_filter = std::move(conjunction_and);
 	}
-
-	//! Apply equality deletes
-	ExpressionExecutor expression_executor(context);
-	expression_executor.AddExpression(*equality_delete_filter);
-	SelectionVector sel_vec(STANDARD_VECTOR_SIZE);
-	idx_t count = expression_executor.SelectExpression(equality_delete_chunk, sel_vec);
-	output_chunk.Slice(sel_vec, count);
+	return equality_delete_filter;
 }
 
 void IcebergMultiFileReader::FinalizeChunk(ClientContext &context, const MultiFileBindData &bind_data,
@@ -506,33 +508,28 @@ void IcebergMultiFileReader::FinalizeChunk(ClientContext &context, const MultiFi
                                            ExpressionExecutor &executor,
                                            optional_ptr<MultiFileReaderGlobalState> global_state) {
 	D_ASSERT(global_state);
-	// Get the metadata for this file
-	const auto &multi_file_list = global_state->file_list->Cast<IcebergMultiFileList>();
 	auto &iceberg_state = global_state->Cast<IcebergMultiFileReaderGlobalState>();
 
 	//! Base class finalization first
 	MultiFileReader::FinalizeChunk(context, bind_data, reader, reader_data, input_chunk, output_chunk, executor,
 	                               global_state);
 
-	D_ASSERT(global_state);
-	// Get the metadata for this file
 	auto file_id = reader.file_list_idx.GetIndex();
-	auto bound_manifest_entry = multi_file_list.GetManifestEntry(file_id);
-
-	auto &local_columns = reader.columns;
-	if (!iceberg_state.equality_delete_columns.empty()) {
-		vector<LogicalType> equality_delete_types;
+	auto equality_delete_expression = iceberg_state.GetEqualityDeleteExpression(file_id);
+	if (equality_delete_expression) {
 		ExpressionExecutor equality_delete_executor(context);
 		for (auto &column : iceberg_state.equality_delete_columns) {
 			D_ASSERT(column.expression_index < reader_data.expressions.size());
-			equality_delete_types.push_back(column.type);
 			equality_delete_executor.AddExpression(*reader_data.expressions[column.expression_index]);
 		}
 		DataChunk equality_delete_chunk;
-		equality_delete_chunk.InitializeEmpty(equality_delete_types);
+		equality_delete_chunk.InitializeEmpty(iceberg_state.equality_delete_types);
 		equality_delete_executor.Execute(input_chunk, equality_delete_chunk);
-		ApplyEqualityDeletes(context, output_chunk, equality_delete_chunk, multi_file_list, bound_manifest_entry,
-		                     local_columns, iceberg_state);
+
+		ExpressionExecutor filter_executor(context, *equality_delete_expression);
+		SelectionVector sel_vec(STANDARD_VECTOR_SIZE);
+		idx_t count = filter_executor.SelectExpression(equality_delete_chunk, sel_vec);
+		output_chunk.Slice(sel_vec, count);
 	}
 	//! FIXME: dictionary vectors cause problems in 'GroupedAggregateHashTable::TryAddDictionaryGroups'
 	//! side-step the issue by flattening for now

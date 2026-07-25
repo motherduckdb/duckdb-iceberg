@@ -12,6 +12,7 @@
 #include "duckdb/common/types/batched_data_collection.hpp"
 #include "duckdb/common/multi_file/multi_file_data.hpp"
 #include "duckdb/common/list.hpp"
+#include "duckdb/common/mutex.hpp"
 #include "duckdb/common/unordered_map.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/filter/null_filter.hpp"
@@ -39,14 +40,36 @@ public:
 	      scan_column_ids(std::move(scan_column_ids_p)), equality_delete_columns(std::move(equality_delete_columns_p)) {
 		for (idx_t i = 0; i < equality_delete_columns.size(); i++) {
 			equality_delete_field_indexes.emplace(equality_delete_columns[i].field_id, i);
+			equality_delete_types.push_back(equality_delete_columns[i].type);
 		}
+	}
+
+	void CacheEqualityDeleteExpression(idx_t file_list_idx, unique_ptr<Expression> expression) {
+		lock_guard<mutex> guard(equality_delete_expression_lock);
+		equality_delete_expressions.emplace(file_list_idx, shared_ptr<const Expression>(std::move(expression)));
+	}
+
+	shared_ptr<const Expression> GetEqualityDeleteExpression(idx_t file_list_idx) const {
+		lock_guard<mutex> guard(equality_delete_expression_lock);
+		auto entry = equality_delete_expressions.find(file_list_idx);
+		if (entry == equality_delete_expressions.end()) {
+			throw InternalException("Equality-delete expression was not initialized for file-list index %llu",
+			                        file_list_idx);
+		}
+		return entry->second;
 	}
 
 public:
 	vector<MultiFileColumnDefinition> scan_columns;
 	vector<ColumnIndex> scan_column_ids;
 	vector<IcebergEqualityDeleteColumn> equality_delete_columns;
+	vector<LogicalType> equality_delete_types;
+	//! field_id -> equality_delete_columns index
 	unordered_map<int32_t, idx_t> equality_delete_field_indexes;
+
+private:
+	mutable mutex equality_delete_expression_lock;
+	unordered_map<idx_t, shared_ptr<const Expression>> equality_delete_expressions;
 };
 
 struct IcebergMultiFileReader : public MultiFileReader {
@@ -88,11 +111,6 @@ public:
 	void FinalizeChunk(ClientContext &context, const MultiFileBindData &bind_data, BaseFileReader &reader,
 	                   const MultiFileReaderData &reader_data, DataChunk &input_chunk, DataChunk &output_chunk,
 	                   ExpressionExecutor &executor, optional_ptr<MultiFileReaderGlobalState> global_state) override;
-	void ApplyEqualityDeletes(ClientContext &context, DataChunk &output_chunk, DataChunk &equality_delete_chunk,
-	                          const IcebergMultiFileList &multi_file_list,
-	                          const BoundIcebergManifestEntry &manifest_entry,
-	                          const vector<MultiFileColumnDefinition> &local_columns,
-	                          const IcebergMultiFileReaderGlobalState &global_state);
 	bool ParseOption(const string &key, const Value &val, MultiFileOptions &options, ClientContext &context) override;
 
 	MultiFileReaderVirtualColumnBinding
