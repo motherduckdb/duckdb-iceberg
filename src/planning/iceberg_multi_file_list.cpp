@@ -1516,7 +1516,7 @@ void IcebergMultiFileList::ScanDeleteFile(const BoundIcebergManifestEntry &bound
 			delete_scan_function.function(context, function_input, result);
 			result.Flatten();
 			ScanEqualityDeleteFile(bound_manifest_entry, result, multi_file_local_state.job.reader->columns,
-			                       global_columns, global_column_ids, projection_ids);
+			                       return_names, global_columns, global_column_ids, projection_ids);
 		} while (result.size() != 0);
 	}
 }
