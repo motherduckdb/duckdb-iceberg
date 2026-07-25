@@ -29,20 +29,23 @@ class ClientSideScanPlanProvider final : public IcebergScanPlanProvider {
 public:
 	explicit ClientSideScanPlanProvider(IcebergMultiFileListSharedState &shared_state);
 
-	void LoadManifestList(const IcebergMultiFileList &file_list) override;
-	void StartDeleteManifestScan(const IcebergMultiFileList &file_list) override;
-	void StartDataManifestScan(const IcebergMultiFileList &file_list) override;
-	void EnumerateDeleteManifestEntries(const IcebergMultiFileList &file_list) override;
-	bool TryGetNextBatch(IcebergDataViewCursor &cursor) override;
-	void FinishScanTasks() override;
-	bool FinishedScanningDeletes() const override;
+	void LoadManifestList(const IcebergMultiFileList &file_list) override DUCKDB_REQUIRES(shared_state.lock);
+	void StartDeleteManifestScan(const IcebergMultiFileList &file_list) override
+	    DUCKDB_REQUIRES(shared_state.lock, shared_state.delete_lock);
+	void StartDataManifestScan(const IcebergMultiFileList &file_list) override
+	    DUCKDB_REQUIRES(shared_state.lock, file_list.shared_state->lock);
+	void EnumerateDeleteManifestEntries(const IcebergMultiFileList &file_list) override
+	    DUCKDB_REQUIRES(shared_state.lock, shared_state.delete_lock);
+	bool TryGetNextBatch(IcebergDataViewCursor &cursor) override DUCKDB_REQUIRES(shared_state.lock);
+	void FinishScanTasks() override DUCKDB_REQUIRES(shared_state.lock);
+	bool FinishedScanningDeletes() const override DUCKDB_REQUIRES(shared_state.delete_lock);
 	bool DeleteFileAppliesToDataFile(const string &data_file_path, const string &delete_file_path) const override;
-	vector<IcebergManifestListEntry> &DataManifests() override;
-	vector<IcebergManifestListEntry> &DeleteManifests() override;
-	idx_t &NextDeleteEntryToProcess() override;
-	vector<BoundIcebergManifestEntry> &DeleteManifestEntries() override;
-	position_delete_map_t &PositionalDeleteData() override;
-	equality_delete_map_t &EqualityDeleteData() override;
+	vector<IcebergManifestListEntry> &DataManifests() override DUCKDB_REQUIRES(shared_state.lock);
+	vector<IcebergManifestListEntry> &DeleteManifests() override DUCKDB_REQUIRES(shared_state.lock);
+	idx_t &NextDeleteEntryToProcess() override DUCKDB_REQUIRES(shared_state.delete_lock);
+	vector<BoundIcebergManifestEntry> &DeleteManifestEntries() override DUCKDB_REQUIRES(shared_state.delete_lock);
+	position_delete_map_t &PositionalDeleteData() override DUCKDB_REQUIRES(shared_state.delete_lock);
+	equality_delete_map_t &EqualityDeleteData() override DUCKDB_REQUIRES(shared_state.delete_lock);
 
 private:
 	IcebergMultiFileListSharedState &shared_state;
