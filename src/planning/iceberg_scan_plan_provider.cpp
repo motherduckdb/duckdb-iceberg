@@ -323,7 +323,7 @@ vector<BoundIcebergManifestEntry> &ClientSideScanPlanProvider::DeleteManifestEnt
 	return shared_state.delete_manifest_entries;
 }
 
-case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &ClientSideScanPlanProvider::PositionalDeleteData() {
+position_delete_map_t &ClientSideScanPlanProvider::PositionalDeleteData() {
 	return shared_state.positional_delete_data;
 }
 
@@ -399,7 +399,7 @@ vector<BoundIcebergManifestEntry> &ServerSideScanPlanProvider::DeleteManifestEnt
 	return delete_manifest_entries;
 }
 
-case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &ServerSideScanPlanProvider::PositionalDeleteData() {
+position_delete_map_t &ServerSideScanPlanProvider::PositionalDeleteData() {
 	return positional_delete_data;
 }
 

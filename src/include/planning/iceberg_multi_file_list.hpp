@@ -9,6 +9,7 @@
 #pragma once
 
 #include "duckdb/common/multi_file/multi_file_list.hpp"
+#include "duckdb/common/mutex.hpp"
 #include "duckdb/common/types/batched_data_collection.hpp"
 #include "duckdb/common/multi_file/multi_file_data.hpp"
 #include "duckdb/common/list.hpp"
@@ -33,6 +34,7 @@
 namespace duckdb {
 
 using equality_delete_map_t = map<sequence_number_t, vector<IcebergEqualityDeleteFile>>;
+using position_delete_map_t = unordered_map<string, shared_ptr<IcebergDeleteData>>;
 
 struct IcebergTableFilters {
 	using filter_set_t = unordered_map<idx_t, unique_ptr<ExpressionFilter>>;
@@ -114,35 +116,35 @@ private:
 	optional_ptr<IcebergTableEntry> table;
 	IcebergOptions options;
 
-	mutable mutex lock;
-	mutable mutex delete_lock;
+	mutable annotated_mutex lock;
+	mutable annotated_mutex delete_lock DUCKDB_ACQUIRED_AFTER(lock);
 	mutable ManifestEntryReadState read_state;
 
-	mutable bool server_side_planning_enabled = true;
+	mutable bool server_side_planning_enabled DUCKDB_GUARDED_BY(lock) = true;
 
-	mutable bool manifest_list_loaded = false;
-	mutable bool data_manifest_scan_started = false;
+	mutable bool manifest_list_loaded DUCKDB_GUARDED_BY(lock) = false;
+	mutable bool data_manifest_scan_started DUCKDB_GUARDED_BY(lock) = false;
 
 	//! Scanned delete manifests and their owners.
-	mutable vector<IcebergManifestListEntry> committed_delete_manifests;
-	mutable vector<reference<const IcebergManifestListEntry>> transaction_delete_manifests;
-	mutable unique_ptr<AvroScan> delete_manifest_scan;
-	mutable unique_ptr<manifest_file::ManifestReader> delete_manifest_reader;
-	mutable bool delete_entries_enumerated = false;
-	mutable idx_t next_delete_entry_to_process = 0;
-	mutable vector<BoundIcebergManifestEntry> delete_manifest_entries;
+	mutable vector<IcebergManifestListEntry> committed_delete_manifests DUCKDB_GUARDED_BY(lock);
+	mutable vector<reference<const IcebergManifestListEntry>> transaction_delete_manifests DUCKDB_GUARDED_BY(lock);
+	mutable unique_ptr<AvroScan> delete_manifest_scan DUCKDB_GUARDED_BY(delete_lock);
+	mutable unique_ptr<manifest_file::ManifestReader> delete_manifest_reader DUCKDB_GUARDED_BY(delete_lock);
+	mutable bool delete_entries_enumerated DUCKDB_GUARDED_BY(delete_lock) = false;
+	mutable idx_t next_delete_entry_to_process DUCKDB_GUARDED_BY(delete_lock) = 0;
+	mutable vector<BoundIcebergManifestEntry> delete_manifest_entries DUCKDB_GUARDED_BY(delete_lock);
 
 	//! Scanned data manifests and their owners.
-	mutable vector<IcebergManifestListEntry> committed_data_manifests;
-	mutable vector<reference<const IcebergManifestListEntry>> transaction_data_manifests;
-	mutable unique_ptr<IcebergManifestScanningState> data_manifest_read_state;
+	mutable vector<IcebergManifestListEntry> committed_data_manifests DUCKDB_GUARDED_BY(lock);
+	mutable vector<reference<const IcebergManifestListEntry>> transaction_data_manifests DUCKDB_GUARDED_BY(lock);
+	mutable unique_ptr<IcebergManifestScanningState> data_manifest_read_state DUCKDB_GUARDED_BY(lock);
 
 	//! Declared after the manifest owners so references in parsed delete data are destroyed first.
-	mutable case_insensitive_map_t<shared_ptr<IcebergDeleteData>> positional_delete_data;
-	mutable equality_delete_map_t equality_delete_data;
+	mutable position_delete_map_t positional_delete_data DUCKDB_GUARDED_BY(delete_lock);
+	mutable equality_delete_map_t equality_delete_data DUCKDB_GUARDED_BY(delete_lock);
 
 	//! Populated as parsed data-file entries become visible to any filtered view.
-	mutable case_insensitive_map_t<vector<IcebergPartitionInfo>> data_file_partition_info;
+	mutable unordered_map<string, vector<IcebergPartitionInfo>> data_file_partition_info DUCKDB_GUARDED_BY(lock);
 };
 
 struct IcebergDataViewCursor {
@@ -199,16 +201,19 @@ private:
 	IcebergMultiFileList(shared_ptr<IcebergMultiFileListSharedState> shared_state);
 	void GetStatistics(vector<PartitionStatistics> &result) const;
 
-	void InitializeView(lock_guard<mutex> &guard) const;
+	void InitializeView(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
 
 	bool HasTransactionData() const;
 	//! Reorder (and prune, when a LIMIT is present) the materialized data files by the
 	//! ORDER BY column's per-file min/max bounds, mirroring the native RowGroupReorderer.
-	void EnsureScanOrderApplied(lock_guard<mutex> &guard) const;
-	OpenFileInfo GetFileInternal(idx_t i, lock_guard<mutex> &guard) const;
+	void EnsureScanOrderApplied(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
+	OpenFileInfo GetFileInternal(idx_t i, annotated_lock_guard<annotated_mutex> &guard) const
+	    DUCKDB_REQUIRES(shared_state->lock);
 	BoundIcebergManifestEntry GetManifestEntry(idx_t file_id) const;
+	IcebergManifestFile GetManifestFileForDataFile(idx_t file_id) const;
 	const IcebergManifestFile &GetManifestFileForEntry(const BoundIcebergManifestEntry &entry,
-	                                                   IcebergManifestContentType type) const;
+	                                                   IcebergManifestContentType type) const
+	    DUCKDB_REQUIRES(shared_state->lock);
 
 	void ProcessDeletes() const;
 	unique_ptr<DeleteFilter> GetPositionalDeletesForFile(const string &file_path) const;
@@ -224,30 +229,38 @@ private:
 	//! Whether a delete file's manifest entry can apply to any file selected by the current scan filter.
 	//! Delete files are pruned on partition only: one whose partition is excluded by the filter cannot
 	//! delete a row from any surviving data file, so it does not need to be read.
-	bool DeleteEntryMatchesFilters(const BoundIcebergManifestEntry &bound_manifest_entry) const;
+	bool DeleteEntryMatchesFilters(const BoundIcebergManifestEntry &bound_manifest_entry) const
+	    DUCKDB_REQUIRES(shared_state->lock);
 
 	//! NOTE: this requires the lock because it modifies the 'data_files' vector, potentially invalidating references
-	optional_ptr<const BoundIcebergManifestEntry> GetDataFile(idx_t file_id, lock_guard<mutex> &guard) const;
+	optional_ptr<const BoundIcebergManifestEntry> GetDataFile(idx_t file_id,
+	                                                          annotated_lock_guard<annotated_mutex> &guard) const
+	    DUCKDB_REQUIRES(shared_state->lock);
 
 	unique_ptr<ExpressionFilter> GetFilterForColumnIndex(const ColumnIndex &column_index) const;
 
-	bool TryGetNextBatch(lock_guard<mutex> &guard) const;
-	void FinishScanTasks(lock_guard<mutex> &guard) const;
-	void LoadManifestList(lock_guard<mutex> &guard) const;
-	void InitializeScanPlanProvider() const;
-	void StartDataManifestScan(lock_guard<mutex> &guard) const;
-	void EnumerateDeleteManifestEntriesInternal() const;
-	void ProcessDeletesInternal() const;
-	void ScanDeleteFiles() const;
-	void ScanDeleteFile(const BoundIcebergManifestEntry &entry) const;
-	void ScanPositionalDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result) const;
+	bool TryGetNextBatch(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
+	void FinishScanTasks(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
+	void LoadManifestList(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
+	void InitializeScanPlanProvider() const DUCKDB_REQUIRES(shared_state->lock);
+	void StartDataManifestScan(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
+	void EnumerateDeleteManifestEntriesInternal() const DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
+	void ProcessDeletesInternal() const DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
+	void ScanDeleteFiles() const DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
+	void ScanDeleteFile(const BoundIcebergManifestEntry &entry) const
+	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
+	void ScanPositionalDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result) const
+	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
 	void ScanEqualityDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result,
 	                            const vector<MultiFileColumnDefinition> &columns,
-	                            const vector<string> &source_names) const;
-	void ScanPuffinFile(const BoundIcebergManifestEntry &entry) const;
-	case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &GetPositionalDeleteData() const;
-	equality_delete_map_t &GetEqualityDeleteData() const;
-	IcebergScanPlanProvider &GetScanPlanProvider() const;
+	                            const vector<string> &source_names) const
+	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
+	void ScanPuffinFile(const BoundIcebergManifestEntry &entry) const
+	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
+	position_delete_map_t &GetPositionalDeleteData() const
+	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
+	equality_delete_map_t &GetEqualityDeleteData() const DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
+	IcebergScanPlanProvider &GetScanPlanProvider() const DUCKDB_REQUIRES(shared_state->lock);
 
 private:
 	friend class ClientSideScanPlanProvider;
@@ -265,22 +278,22 @@ private:
 
 	//! The provider is per-view. The server-side implementation owns its filter-derived plan, while the client-side
 	//! implementation delegates to the shared manifest state above.
-	mutable unique_ptr<IcebergScanPlanProvider> scan_plan_provider;
+	mutable unique_ptr<IcebergScanPlanProvider> scan_plan_provider DUCKDB_GUARDED_BY(shared_state->lock);
 
 	//! Combination of committed + transaction delete manifests
-	mutable vector<BoundIcebergManifestListEntry> delete_manifests;
-	mutable vector<bool> delete_manifest_matches;
+	mutable vector<BoundIcebergManifestListEntry> delete_manifests DUCKDB_GUARDED_BY(shared_state->lock);
+	mutable vector<bool> delete_manifest_matches DUCKDB_GUARDED_BY(shared_state->lock);
 
-	mutable IcebergDataViewCursor data_view_cursor;
+	mutable IcebergDataViewCursor data_view_cursor DUCKDB_GUARDED_BY(shared_state->lock);
 	//! References to items inside the 'manifest_entries' of the list entries in the 'data_manifests'
-	mutable vector<BoundIcebergManifestEntry> data_manifest_entries;
+	mutable vector<BoundIcebergManifestEntry> data_manifest_entries DUCKDB_GUARDED_BY(shared_state->lock);
 	//! Combination of committed + transaction data manifests
-	mutable vector<BoundIcebergManifestListEntry> data_manifests;
-	mutable vector<bool> data_manifest_matches;
+	mutable vector<BoundIcebergManifestListEntry> data_manifests DUCKDB_GUARDED_BY(shared_state->lock);
+	mutable vector<bool> data_manifest_matches DUCKDB_GUARDED_BY(shared_state->lock);
 
 	//! Set by the table function's set_scan_order callback when an ORDER BY ... LIMIT can drive scan order.
-	mutable unique_ptr<RowGroupOrderOptions> scan_order_options;
-	mutable bool scan_order_applied = false;
+	mutable unique_ptr<RowGroupOrderOptions> scan_order_options DUCKDB_GUARDED_BY(shared_state->lock);
+	mutable bool scan_order_applied DUCKDB_GUARDED_BY(shared_state->lock) = false;
 };
 
 } // namespace duckdb

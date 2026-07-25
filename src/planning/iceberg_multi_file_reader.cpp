@@ -302,8 +302,7 @@ void IcebergMultiFileReader::ApplyPartitionConstants(const IcebergMultiFileList 
 	auto &reader = *reader_data.reader;
 	auto file_id = reader.file_list_idx.GetIndex();
 	auto bound_manifest_entry = multi_file_list.GetManifestEntry(file_id);
-	auto &manifest_file =
-	    multi_file_list.GetManifestFileForEntry(bound_manifest_entry, IcebergManifestContentType::DATA);
+	auto manifest_file = multi_file_list.GetManifestFileForDataFile(file_id);
 	auto &manifest_entry = bound_manifest_entry.entry;
 	auto &data_file = manifest_entry.data_file;
 
