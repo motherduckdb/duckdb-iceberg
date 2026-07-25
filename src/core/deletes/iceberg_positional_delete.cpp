@@ -14,8 +14,7 @@ void IcebergPositionalDeleteData::ToSet(set<idx_t> &out) const {
 }
 
 static optional_ptr<IcebergPositionalDeleteData>
-TryGetOrCreate(case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &deletes, const BoundIcebergManifestEntry &entry,
-               const string &file_path) {
+TryGetOrCreate(position_delete_map_t &deletes, const BoundIcebergManifestEntry &entry, const string &file_path) {
 	auto it = deletes.find(file_path);
 	if (it == deletes.end()) {
 		it = deletes.emplace(file_path, make_shared_ptr<IcebergPositionalDeleteData>(entry)).first;

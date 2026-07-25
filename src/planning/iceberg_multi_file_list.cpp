@@ -126,7 +126,7 @@ IcebergScanPlanProvider &IcebergMultiFileList::GetScanPlanProvider() const {
 	return *scan_plan_provider;
 }
 
-case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &IcebergMultiFileList::GetPositionalDeleteData() const {
+position_delete_map_t &IcebergMultiFileList::GetPositionalDeleteData() const {
 	return GetScanPlanProvider().PositionalDeleteData();
 }
 

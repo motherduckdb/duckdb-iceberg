@@ -33,6 +33,7 @@
 namespace duckdb {
 
 using equality_delete_map_t = map<sequence_number_t, vector<IcebergEqualityDeleteFile>>;
+using position_delete_map_t = unordered_map<string, shared_ptr<IcebergDeleteData>>;
 
 struct IcebergTableFilters {
 	using filter_set_t = unordered_map<idx_t, unique_ptr<ExpressionFilter>>;
@@ -138,11 +139,11 @@ private:
 	mutable unique_ptr<IcebergManifestScanningState> data_manifest_read_state;
 
 	//! Declared after the manifest owners so references in parsed delete data are destroyed first.
-	mutable case_insensitive_map_t<shared_ptr<IcebergDeleteData>> positional_delete_data;
+	mutable position_delete_map_t positional_delete_data;
 	mutable equality_delete_map_t equality_delete_data;
 
 	//! Populated as parsed data-file entries become visible to any filtered view.
-	mutable case_insensitive_map_t<vector<IcebergPartitionInfo>> data_file_partition_info;
+	mutable unordered_map<string, vector<IcebergPartitionInfo>> data_file_partition_info;
 };
 
 struct IcebergDataViewCursor {
@@ -245,7 +246,7 @@ private:
 	                            const vector<MultiFileColumnDefinition> &columns,
 	                            const vector<string> &source_names) const;
 	void ScanPuffinFile(const BoundIcebergManifestEntry &entry) const;
-	case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &GetPositionalDeleteData() const;
+	position_delete_map_t &GetPositionalDeleteData() const;
 	equality_delete_map_t &GetEqualityDeleteData() const;
 	IcebergScanPlanProvider &GetScanPlanProvider() const;
 
