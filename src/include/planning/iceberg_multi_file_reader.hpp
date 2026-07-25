@@ -46,17 +46,17 @@ public:
 
 	void CacheEqualityDeleteExpression(idx_t file_list_idx, unique_ptr<Expression> expression) {
 		lock_guard<mutex> guard(equality_delete_expression_lock);
-		equality_delete_expressions.emplace(file_list_idx, shared_ptr<const Expression>(std::move(expression)));
+		equality_delete_expressions.emplace(file_list_idx, std::move(expression));
 	}
 
-	shared_ptr<const Expression> GetEqualityDeleteExpression(idx_t file_list_idx) const {
+	optional_ptr<const Expression> GetEqualityDeleteExpression(idx_t file_list_idx) const {
 		lock_guard<mutex> guard(equality_delete_expression_lock);
 		auto entry = equality_delete_expressions.find(file_list_idx);
 		if (entry == equality_delete_expressions.end()) {
 			throw InternalException("Equality-delete expression was not initialized for file-list index %llu",
 			                        file_list_idx);
 		}
-		return entry->second;
+		return entry->second.get();
 	}
 
 public:
@@ -69,7 +69,7 @@ public:
 
 private:
 	mutable mutex equality_delete_expression_lock;
-	unordered_map<idx_t, shared_ptr<const Expression>> equality_delete_expressions;
+	unordered_map<idx_t, unique_ptr<Expression>> equality_delete_expressions;
 };
 
 struct IcebergMultiFileReader : public MultiFileReader {
