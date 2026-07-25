@@ -34,7 +34,7 @@ static void ColumnsReferencedByEqualityIds(DataChunk &source, DataChunk &result,
 	unordered_map<int32_t, column_t> id_to_column;
 	for (auto &col : local_columns) {
 		D_ASSERT(!col.identifier.IsNull());
-		auto entry = name_to_source_index.find(col.name);
+		auto entry = name_to_source_index.find(col.name.GetIdentifierName());
 		if (entry == name_to_source_index.end()) {
 			continue;
 		}
