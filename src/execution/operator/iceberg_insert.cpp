@@ -274,8 +274,8 @@ SourceResultType IcebergInsert::GetDataInternal(ExecutionContext &context, DataC
                                                 OperatorSourceInput &input) const {
 	auto &global_state = sink_state->Cast<IcebergInsertGlobalState>();
 	auto value = Value::BIGINT(global_state.insert_count);
-	chunk.SetCardinality(1);
 	chunk.data[0].Append(value);
+	chunk.SetChildCardinality(1);
 	return SourceResultType::FINISHED;
 }
 

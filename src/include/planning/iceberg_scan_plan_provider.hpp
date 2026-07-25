@@ -22,7 +22,7 @@ public:
 	virtual idx_t &NextDeleteEntryToProcess() = 0;
 	virtual vector<BoundIcebergManifestEntry> &DeleteManifestEntries() = 0;
 	virtual case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &PositionalDeleteData() = 0;
-	virtual map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> &EqualityDeleteData() = 0;
+	virtual equality_delete_map_t &EqualityDeleteData() = 0;
 };
 
 class ClientSideScanPlanProvider final : public IcebergScanPlanProvider {
@@ -42,7 +42,7 @@ public:
 	idx_t &NextDeleteEntryToProcess() override;
 	vector<BoundIcebergManifestEntry> &DeleteManifestEntries() override;
 	case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &PositionalDeleteData() override;
-	map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> &EqualityDeleteData() override;
+	equality_delete_map_t &EqualityDeleteData() override;
 
 private:
 	IcebergMultiFileListSharedState &shared_state;
@@ -65,7 +65,7 @@ public:
 	idx_t &NextDeleteEntryToProcess() override;
 	vector<BoundIcebergManifestEntry> &DeleteManifestEntries() override;
 	case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &PositionalDeleteData() override;
-	map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> &EqualityDeleteData() override;
+	equality_delete_map_t &EqualityDeleteData() override;
 
 private:
 	//! Declared before bound entries and parsed delete data so their references are destroyed first.
@@ -76,7 +76,7 @@ private:
 	idx_t next_delete_entry_to_process = 0;
 	vector<BoundIcebergManifestEntry> delete_manifest_entries;
 	case_insensitive_map_t<shared_ptr<IcebergDeleteData>> positional_delete_data;
-	map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> equality_delete_data;
+	equality_delete_map_t equality_delete_data;
 };
 
 } // namespace duckdb

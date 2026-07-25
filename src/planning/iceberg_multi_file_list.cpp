@@ -130,7 +130,7 @@ case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &IcebergMultiFileList::Get
 	return GetScanPlanProvider().PositionalDeleteData();
 }
 
-map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> &IcebergMultiFileList::GetEqualityDeleteData() const {
+equality_delete_map_t &IcebergMultiFileList::GetEqualityDeleteData() const {
 	return GetScanPlanProvider().EqualityDeleteData();
 }
 
@@ -1168,7 +1168,7 @@ IcebergMultiFileList::GetEqualityDeletesForFile(const BoundIcebergManifestEntry 
 	auto &equality_delete_data = GetEqualityDeleteData();
 	auto it = equality_delete_data.upper_bound(manifest_entry.GetSequenceNumber(manifest_file));
 	for (; it != equality_delete_data.end(); it++) {
-		auto &delete_files = it->second->delete_files;
+		auto &delete_files = it->second;
 		for (auto &delete_file : delete_files) {
 			if (!GetScanPlanProvider().DeleteFileAppliesToDataFile(data_file.file_path, delete_file.source_file_path)) {
 				continue;

@@ -33,14 +33,4 @@ public:
 	unordered_map<int32_t, vector<Value>> equality_values;
 };
 
-struct IcebergEqualityDeleteData {
-public:
-	IcebergEqualityDeleteData(sequence_number_t sequence_number) : sequence_number(sequence_number) {
-	}
-
-public:
-	sequence_number_t sequence_number;
-	vector<IcebergEqualityDeleteFile> delete_files;
-};
-
 } // namespace duckdb

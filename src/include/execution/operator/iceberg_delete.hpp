@@ -146,7 +146,7 @@ public:
 
 	static PhysicalOperator &PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner,
 	                                    IcebergTableEntry &table, PhysicalOperator &child_plan,
-	                                    vector<idx_t> row_id_indexes);
+	                                    vector<idx_t> &&row_id_indexes);
 
 	//! Detects whether `child_plan`'s pushed-down filters describe a pure conjunction of equality
 	//! predicates, and if so extracts them into `equality_predicates`. Returns false otherwise.

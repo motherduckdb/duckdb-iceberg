@@ -32,6 +32,8 @@
 
 namespace duckdb {
 
+using equality_delete_map_t = map<sequence_number_t, vector<IcebergEqualityDeleteFile>>;
+
 struct IcebergTableFilters {
 	using filter_set_t = unordered_map<idx_t, unique_ptr<ExpressionFilter>>;
 	using iterator = filter_set_t::iterator;
@@ -137,7 +139,7 @@ private:
 
 	//! Declared after the manifest owners so references in parsed delete data are destroyed first.
 	mutable case_insensitive_map_t<shared_ptr<IcebergDeleteData>> positional_delete_data;
-	mutable map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> equality_delete_data;
+	mutable equality_delete_map_t equality_delete_data;
 
 	//! Populated as parsed data-file entries become visible to any filtered view.
 	mutable case_insensitive_map_t<vector<IcebergPartitionInfo>> data_file_partition_info;
@@ -244,7 +246,7 @@ private:
 	                            const vector<string> &source_names) const;
 	void ScanPuffinFile(const BoundIcebergManifestEntry &entry) const;
 	case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &GetPositionalDeleteData() const;
-	map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> &GetEqualityDeleteData() const;
+	equality_delete_map_t &GetEqualityDeleteData() const;
 	IcebergScanPlanProvider &GetScanPlanProvider() const;
 
 private:
