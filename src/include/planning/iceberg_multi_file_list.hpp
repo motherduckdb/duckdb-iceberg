@@ -160,37 +160,6 @@ public:
 	                     const IcebergOptions &options);
 	virtual ~IcebergMultiFileList() override;
 
-private:
-	static string ToDuckDBPath(const string &raw_path);
-	string GetPath() const;
-	const IcebergTableMetadata &GetMetadata() const;
-	bool HasTransactionData() const;
-	const IcebergTransactionData &GetTransactionData() const;
-	const IcebergSnapshotScanInfo &GetSnapshot() const;
-	const IcebergTableSchema &GetSchema() const;
-	void SetOptions(const IcebergOptions &options);
-
-	void Bind(vector<LogicalType> &return_types, vector<Identifier> &names);
-	unique_ptr<IcebergMultiFileList> PushdownInternal(ClientContext &context, TableFilterSet &new_filters,
-	                                                  const vector<column_t> &column_indexes) const;
-	unique_ptr<DeleteFilter> GetPositionalDeletesForFile(const string &file_path) const;
-	void ProcessDeletes() const;
-	vector<reference<const IcebergEqualityDeleteFile>>
-	GetEqualityDeletesForFile(const BoundIcebergManifestEntry &manifest_entry) const;
-	void GetStatistics(vector<PartitionStatistics> &result) const;
-	BoundIcebergManifestEntry GetManifestEntry(idx_t file_id) const;
-	const IcebergManifestFile &GetManifestFileForEntry(const BoundIcebergManifestEntry &entry,
-	                                                   IcebergManifestContentType type) const;
-	vector<BoundIcebergManifestEntry> GetDeleteManifestEntries() const;
-
-public:
-	void SetTable(IcebergTableEntry &table);
-	shared_ptr<IcebergDeleteData> GetExistingPositionalDeleteData(const string &file_path) const;
-	vector<IcebergPartitionInfo> GetPartitionInfoForDataFile(const string &file_path) const;
-	void SetScanOrder(unique_ptr<RowGroupOrderOptions> options);
-	optional_ptr<IcebergTableEntry> GetTable() const;
-	void DisableServerSidePlanning();
-
 public:
 	//! MultiFileList API
 	unique_ptr<MultiFileList> DynamicFilterPushdown(ClientContext &context, const MultiFileOptions &options,
@@ -204,13 +173,47 @@ public:
 	FileExpandResult GetExpandResult() const override;
 	idx_t GetTotalFileCount() const override;
 	unique_ptr<NodeStatistics> GetCardinality(ClientContext &context) const override;
-
-protected:
-	//! Get the i-th expanded file
 	OpenFileInfo GetFile(idx_t i) const override;
-	OpenFileInfo GetFileInternal(idx_t i, lock_guard<mutex> &guard) const;
 
-protected:
+public:
+	void SetTable(IcebergTableEntry &table);
+	shared_ptr<IcebergDeleteData> GetExistingPositionalDeleteData(const string &file_path) const;
+	vector<IcebergPartitionInfo> GetPartitionInfoForDataFile(const string &file_path) const;
+	void SetScanOrder(unique_ptr<RowGroupOrderOptions> options);
+	optional_ptr<IcebergTableEntry> GetTable() const;
+	void DisableServerSidePlanning();
+
+private:
+	string GetPath() const;
+	const IcebergTableMetadata &GetMetadata() const;
+	const IcebergTransactionData &GetTransactionData() const;
+	const IcebergSnapshotScanInfo &GetSnapshot() const;
+	const IcebergTableSchema &GetSchema() const;
+
+	void SetOptions(const IcebergOptions &options);
+	void Bind(vector<LogicalType> &return_types, vector<Identifier> &names);
+	unique_ptr<IcebergMultiFileList> PushdownInternal(ClientContext &context, TableFilterSet &new_filters,
+	                                                  const vector<column_t> &column_indexes) const;
+	IcebergMultiFileList(shared_ptr<IcebergMultiFileListSharedState> shared_state);
+	void GetStatistics(vector<PartitionStatistics> &result) const;
+
+	void InitializeView(lock_guard<mutex> &guard) const;
+
+	bool HasTransactionData() const;
+	//! Reorder (and prune, when a LIMIT is present) the materialized data files by the
+	//! ORDER BY column's per-file min/max bounds, mirroring the native RowGroupReorderer.
+	void EnsureScanOrderApplied(lock_guard<mutex> &guard) const;
+	OpenFileInfo GetFileInternal(idx_t i, lock_guard<mutex> &guard) const;
+	BoundIcebergManifestEntry GetManifestEntry(idx_t file_id) const;
+	const IcebergManifestFile &GetManifestFileForEntry(const BoundIcebergManifestEntry &entry,
+	                                                   IcebergManifestContentType type) const;
+
+	void ProcessDeletes() const;
+	unique_ptr<DeleteFilter> GetPositionalDeletesForFile(const string &file_path) const;
+	vector<reference<const IcebergEqualityDeleteFile>>
+	GetEqualityDeletesForFile(const BoundIcebergManifestEntry &manifest_entry) const;
+	vector<BoundIcebergManifestEntry> GetDeleteManifestEntries() const;
+
 	bool ManifestMatchesFilter(const IcebergManifestFile &manifest) const;
 	bool FilePartitionMatchesFilter(const IcebergDataFile &data_file, const IcebergManifestFile &manifest_file,
 	                                const IcebergTableMetadata &metadata, const IcebergTableSchema &schema) const;
@@ -220,20 +223,12 @@ protected:
 	//! Delete files are pruned on partition only: one whose partition is excluded by the filter cannot
 	//! delete a row from any surviving data file, so it does not need to be read.
 	bool DeleteEntryMatchesFilters(const BoundIcebergManifestEntry &bound_manifest_entry) const;
-	void InitializeView(lock_guard<mutex> &guard) const;
-
-	//! Reorder (and prune, when a LIMIT is present) the materialized data files by the
-	//! ORDER BY column's per-file min/max bounds, mirroring the native RowGroupReorderer.
-	void EnsureScanOrderApplied(lock_guard<mutex> &guard) const;
 
 	//! NOTE: this requires the lock because it modifies the 'data_files' vector, potentially invalidating references
 	optional_ptr<const BoundIcebergManifestEntry> GetDataFile(idx_t file_id, lock_guard<mutex> &guard) const;
 
-	unique_ptr<ExpressionFilter> GetFilterForColumnIndex(const IcebergTableFilters &filter_set,
-	                                                     const ColumnIndex &column_index) const;
+	unique_ptr<ExpressionFilter> GetFilterForColumnIndex(const ColumnIndex &column_index) const;
 
-private:
-	IcebergMultiFileList(shared_ptr<IcebergMultiFileListSharedState> shared_state);
 	bool TryGetNextBatch(lock_guard<mutex> &guard) const;
 	void FinishScanTasks(lock_guard<mutex> &guard) const;
 	void LoadManifestList(lock_guard<mutex> &guard) const;
@@ -270,21 +265,20 @@ private:
 	//! implementation delegates to the shared manifest state above.
 	mutable unique_ptr<IcebergScanPlanProvider> scan_plan_provider;
 
-	mutable IcebergDataViewCursor data_view_cursor;
 	//! Combination of committed + transaction delete manifests
 	mutable vector<BoundIcebergManifestListEntry> delete_manifests;
 	mutable vector<bool> delete_manifest_matches;
 
-private:
-	//! Set by the table function's set_scan_order callback when an ORDER BY ... LIMIT can drive scan order.
-	mutable unique_ptr<RowGroupOrderOptions> scan_order_options;
-	mutable bool scan_order_applied = false;
-
+	mutable IcebergDataViewCursor data_view_cursor;
 	//! References to items inside the 'manifest_entries' of the list entries in the 'data_manifests'
 	mutable vector<BoundIcebergManifestEntry> data_manifest_entries;
 	//! Combination of committed + transaction data manifests
 	mutable vector<BoundIcebergManifestListEntry> data_manifests;
 	mutable vector<bool> data_manifest_matches;
+
+	//! Set by the table function's set_scan_order callback when an ORDER BY ... LIMIT can drive scan order.
+	mutable unique_ptr<RowGroupOrderOptions> scan_order_options;
+	mutable bool scan_order_applied = false;
 };
 
 } // namespace duckdb

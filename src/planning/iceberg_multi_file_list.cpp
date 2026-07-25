@@ -96,10 +96,6 @@ IcebergMultiFileListSharedState::~IcebergMultiFileListSharedState() {
 	}
 }
 
-string IcebergMultiFileList::ToDuckDBPath(const string &raw_path) {
-	return raw_path;
-}
-
 string IcebergMultiFileList::GetPath() const {
 	return shared_state->path;
 }
@@ -152,6 +148,7 @@ void IcebergMultiFileList::SetOptions(const IcebergOptions &options) {
 
 void IcebergMultiFileList::SetScanOrder(unique_ptr<RowGroupOrderOptions> options) {
 	scan_order_options = std::move(options);
+	//! Indicate that 'EnsureScanOrderApplied' needs to run now
 	scan_order_applied = false;
 }
 
@@ -280,11 +277,10 @@ static unique_ptr<Expression> ExtractFilterExpressionForPath(const Expression &e
 
 } // namespace
 
-unique_ptr<ExpressionFilter> IcebergMultiFileList::GetFilterForColumnIndex(const IcebergTableFilters &filter_set,
-                                                                           const ColumnIndex &column_index) const {
+unique_ptr<ExpressionFilter> IcebergMultiFileList::GetFilterForColumnIndex(const ColumnIndex &column_index) const {
 	auto primary_index = column_index.GetPrimaryIndex();
 
-	auto filter = filter_set.TryGetFilterByColumnIndex(primary_index);
+	auto filter = table_filters.TryGetFilterByColumnIndex(primary_index);
 	if (!filter) {
 		return nullptr;
 	}
@@ -352,11 +348,11 @@ unique_ptr<IcebergMultiFileList> IcebergMultiFileList::PushdownInternal(ClientCo
 	// The supplied filter set is the complete set of filters for the new view.
 	for (auto &entry : new_filters) {
 		auto column_idx = column_indexes[entry.GetIndex().GetIndex()];
-		if (column_idx < names.size()) {
-			auto &filter =
-			    ExpressionFilter::GetExpressionFilter(entry.Filter(), "IcebergMultiFileList::PushdownInternal");
-			result_filter_set.PushFilter(column_idx, filter.Copy());
+		if (column_idx >= names.size()) {
+			continue;
 		}
+		auto &filter = ExpressionFilter::GetExpressionFilter(entry.Filter(), "IcebergMultiFileList::PushdownInternal");
+		result_filter_set.PushFilter(column_idx, filter.Copy());
 	}
 
 	filtered_list->table_filters = std::move(result_filter_set);
@@ -371,7 +367,7 @@ unique_ptr<IcebergMultiFileList> IcebergMultiFileList::PushdownInternal(ClientCo
 
 unique_ptr<MultiFileList>
 IcebergMultiFileList::DynamicFilterPushdown(ClientContext &context, const MultiFileOptions &options,
-                                            const vector<Identifier> &names, const vector<LogicalType> &types,
+                                            const vector<Identifier> &, const vector<LogicalType> &,
                                             const vector<column_t> &column_ids, TableFilterSet &filters) const {
 	if (!filters.HasFilters()) {
 		return nullptr;
@@ -399,8 +395,7 @@ IcebergMultiFileList::DynamicFilterPushdown(ClientContext &context, const MultiF
 	return nullptr;
 }
 
-unique_ptr<MultiFileList> IcebergMultiFileList::ComplexFilterPushdown(ClientContext &context,
-                                                                      const MultiFileOptions &options,
+unique_ptr<MultiFileList> IcebergMultiFileList::ComplexFilterPushdown(ClientContext &context, const MultiFileOptions &,
                                                                       MultiFilePushdownInfo &info,
                                                                       vector<unique_ptr<Expression>> &filters) const {
 	if (filters.empty()) {
@@ -664,7 +659,7 @@ bool IcebergMultiFileList::FilePartitionMatchesFilter(const IcebergDataFile &dat
 
 		const auto &column_id = source_to_column_id.at(field.source_id);
 		// Find if we have a filter for this source column
-		auto table_filter = GetFilterForColumnIndex(table_filters, column_id);
+		auto table_filter = GetFilterForColumnIndex(column_id);
 		if (!table_filter) {
 			continue;
 		}
@@ -1134,7 +1129,7 @@ bool IcebergMultiFileList::ManifestMatchesFilter(const IcebergManifestFile &mani
 		const auto &column_id = source_to_column_id.at(field.source_id);
 
 		// Find if we have a filter for this source column
-		auto table_filter = GetFilterForColumnIndex(table_filters, column_id);
+		auto table_filter = GetFilterForColumnIndex(column_id);
 		if (!table_filter) {
 			continue;
 		}
