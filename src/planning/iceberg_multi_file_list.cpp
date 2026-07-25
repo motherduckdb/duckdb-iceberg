@@ -138,11 +138,11 @@ map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> &IcebergMultiFileL
 	return GetScanPlanProvider().EqualityDeleteData();
 }
 
-IcebergTableEntry *IcebergMultiFileList::GetTable() const {
+optional_ptr<IcebergTableEntry> IcebergMultiFileList::GetTable() const {
 	return shared_state->table;
 }
 
-void IcebergMultiFileList::SetTable(IcebergTableEntry *table) {
+void IcebergMultiFileList::SetTable(IcebergTableEntry &table) {
 	shared_state->table = table;
 }
 
@@ -159,9 +159,6 @@ void IcebergMultiFileList::DisableServerSidePlanning() {
 	lock_guard<mutex> guard(shared_state->lock);
 	if (!shared_state->manifest_list_loaded) {
 		shared_state->server_side_planning_enabled = false;
-	}
-	if (!view_initialized) {
-		scan_plan_provider = make_uniq<ClientSideScanPlanProvider>(*shared_state);
 	}
 }
 
@@ -859,7 +856,7 @@ void IcebergMultiFileList::FinishScanTasks(lock_guard<mutex> &guard) const {
 
 optional_ptr<const BoundIcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t file_id,
                                                                                 lock_guard<mutex> &guard) const {
-	D_ASSERT(view_initialized);
+	D_ASSERT(scan_plan_provider);
 	if (file_id < data_manifest_entries.size()) {
 		//! Have we already scanned this data file and returned it? If so, return it
 		return data_manifest_entries[file_id];
@@ -1204,7 +1201,7 @@ IcebergMultiFileList::GetEqualityDeletesForFile(const BoundIcebergManifestEntry 
 }
 
 void IcebergMultiFileList::InitializeView(lock_guard<mutex> &guard) const {
-	if (view_initialized) {
+	if (scan_plan_provider) {
 		return;
 	}
 	LoadManifestList(guard);
@@ -1234,14 +1231,13 @@ void IcebergMultiFileList::InitializeView(lock_guard<mutex> &guard) const {
 		delete_manifests.emplace_back(delete_manifests.size(), manifest);
 		delete_manifest_matches.push_back(ManifestMatchesFilter(manifest.get().file));
 	}
-	view_initialized = true;
 }
 
 namespace {
 
 enum class ScanPlanningMode : uint8_t { UNSPECIFIED, SERVER_SIDE_ONLY, CLIENT_SIDE_ONLY };
 
-static ScanPlanningMode GetScanPlanningMode(IcebergTableEntry *table) {
+static ScanPlanningMode GetScanPlanningMode(optional_ptr<IcebergTableEntry> table) {
 	if (!table) {
 		return ScanPlanningMode::CLIENT_SIDE_ONLY;
 	}
@@ -1350,7 +1346,7 @@ void IcebergMultiFileList::LoadManifestList(lock_guard<mutex> &guard) const {
 }
 
 void IcebergMultiFileList::StartDataManifestScan(lock_guard<mutex> &guard) const {
-	D_ASSERT(view_initialized);
+	D_ASSERT(scan_plan_provider);
 	GetScanPlanProvider().StartDataManifestScan(*this);
 }
 

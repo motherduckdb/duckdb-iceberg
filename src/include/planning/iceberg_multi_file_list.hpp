@@ -77,6 +77,7 @@ class IcebergTableEntry;
 class IcebergScanPlanProvider;
 class ClientSideScanPlanProvider;
 struct IcebergMultiFileList;
+struct IcebergMultiFileReader;
 struct RowGroupOrderOptions;
 
 struct IcebergManifestScanningState {
@@ -108,7 +109,7 @@ private:
 	FileSystem &fs;
 	shared_ptr<IcebergScanInfo> scan_info;
 	string path;
-	IcebergTableEntry *table = nullptr;
+	optional_ptr<IcebergTableEntry> table;
 	IcebergOptions options;
 
 	mutable mutex lock;
@@ -151,12 +152,15 @@ public:
 };
 
 struct IcebergMultiFileList : public MultiFileList {
+private:
+	friend struct IcebergMultiFileReader;
+
 public:
 	IcebergMultiFileList(ClientContext &context, shared_ptr<IcebergScanInfo> scan_info, const string &path,
 	                     const IcebergOptions &options);
 	virtual ~IcebergMultiFileList() override;
 
-public:
+private:
 	static string ToDuckDBPath(const string &raw_path);
 	string GetPath() const;
 	const IcebergTableMetadata &GetMetadata() const;
@@ -164,11 +168,7 @@ public:
 	const IcebergTransactionData &GetTransactionData() const;
 	const IcebergSnapshotScanInfo &GetSnapshot() const;
 	const IcebergTableSchema &GetSchema() const;
-	IcebergTableEntry *GetTable() const;
-	void SetTable(IcebergTableEntry *table);
 	void SetOptions(const IcebergOptions &options);
-	void SetScanOrder(unique_ptr<RowGroupOrderOptions> options);
-	void DisableServerSidePlanning();
 
 	void Bind(vector<LogicalType> &return_types, vector<Identifier> &names);
 	unique_ptr<IcebergMultiFileList> PushdownInternal(ClientContext &context, TableFilterSet &new_filters,
@@ -179,11 +179,17 @@ public:
 	GetEqualityDeletesForFile(const BoundIcebergManifestEntry &manifest_entry) const;
 	void GetStatistics(vector<PartitionStatistics> &result) const;
 	BoundIcebergManifestEntry GetManifestEntry(idx_t file_id) const;
-	vector<IcebergPartitionInfo> GetPartitionInfoForDataFile(const string &file_path) const;
 	const IcebergManifestFile &GetManifestFileForEntry(const BoundIcebergManifestEntry &entry,
 	                                                   IcebergManifestContentType type) const;
 	vector<BoundIcebergManifestEntry> GetDeleteManifestEntries() const;
+
+public:
+	void SetTable(IcebergTableEntry &table);
 	shared_ptr<IcebergDeleteData> GetExistingPositionalDeleteData(const string &file_path) const;
+	vector<IcebergPartitionInfo> GetPartitionInfoForDataFile(const string &file_path) const;
+	void SetScanOrder(unique_ptr<RowGroupOrderOptions> options);
+	optional_ptr<IcebergTableEntry> GetTable() const;
+	void DisableServerSidePlanning();
 
 public:
 	//! MultiFileList API
@@ -264,7 +270,6 @@ private:
 	//! implementation delegates to the shared manifest state above.
 	mutable unique_ptr<IcebergScanPlanProvider> scan_plan_provider;
 
-	mutable bool view_initialized = false;
 	mutable IcebergDataViewCursor data_view_cursor;
 	//! Combination of committed + transaction delete manifests
 	mutable vector<BoundIcebergManifestListEntry> delete_manifests;

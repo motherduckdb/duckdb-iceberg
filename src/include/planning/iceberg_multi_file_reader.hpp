@@ -118,6 +118,15 @@ public:
 	                           const vector<MultiFileColumnDefinition> &local_columns, const idx_t column_id,
 	                           const LogicalType &type, MultiFileLocalIndex local_idx) override;
 
+private:
+	static unique_ptr<Expression> CreateEqualityDeleteExpression(const IcebergMultiFileList &multi_file_list,
+	                                                             const BoundIcebergManifestEntry &bound_manifest_entry,
+	                                                             const vector<MultiFileColumnDefinition> &local_columns,
+	                                                             const IcebergMultiFileReaderGlobalState &global_state);
+	static void ApplyPartitionConstants(const IcebergMultiFileList &multi_file_list, MultiFileReaderData &reader_data,
+	                                    const vector<MultiFileColumnDefinition> &global_columns,
+	                                    const vector<ColumnIndex> &global_column_ids, ClientContext &context);
+
 public:
 	shared_ptr<TableFunctionInfo> function_info;
 	IcebergOptions options;
