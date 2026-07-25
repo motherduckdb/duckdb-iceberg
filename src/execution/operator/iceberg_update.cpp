@@ -140,9 +140,11 @@ OperatorResultType IcebergUpdate::Execute(ExecutionContext &context, DataChunk &
 	// evaluate update expressions
 	auto &update_expression_chunk = lstate.update_expression_chunk;
 	auto &insert_chunk = lstate.insert_chunk;
+	auto &delete_chunk = lstate.delete_chunk;
 
-	update_expression_chunk.SetChildCardinality(input.size());
-	insert_chunk.SetChildCardinality(input.size());
+	update_expression_chunk.Reset();
+	insert_chunk.Reset();
+	delete_chunk.Reset();
 	lstate.expression_executor->Execute(input, update_expression_chunk);
 
 	// build output, physical columns + row_id
@@ -160,7 +162,6 @@ OperatorResultType IcebergUpdate::Execute(ExecutionContext &context, DataChunk &
 	chunk.Reference(insert_chunk);
 
 	// Sink the delete tracking columns (last 2 columns: file_path, row_id)
-	auto &delete_chunk = lstate.delete_chunk;
 	idx_t delete_idx_start = input.ColumnCount() - 2;
 	for (idx_t i = 0; i < 2; i++) {
 		delete_chunk.data[i].Reference(input.data[delete_idx_start + i]);
