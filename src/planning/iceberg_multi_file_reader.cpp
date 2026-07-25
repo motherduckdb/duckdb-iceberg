@@ -101,19 +101,17 @@ IcebergMultiFileReader::InitializeGlobalState(ClientContext &context, const Mult
 	auto &iceberg_multi_file_list = file_list.Cast<IcebergMultiFileList>();
 	auto delete_manifest_entries = iceberg_multi_file_list.GetDeleteManifestEntries();
 
-	vector<int32_t> required_field_ids;
+	//! Collect all the field ids referenced by equality deletes
+	set<int32_t> required_field_ids;
 	for (auto &entry : delete_manifest_entries) {
 		auto &data_file = entry.entry.data_file;
 		if (data_file.content != IcebergManifestEntryContentType::EQUALITY_DELETES) {
 			continue;
 		}
 		for (auto field_id : data_file.equality_ids) {
-			required_field_ids.push_back(field_id);
+			required_field_ids.insert(field_id);
 		}
 	}
-	std::sort(required_field_ids.begin(), required_field_ids.end());
-	required_field_ids.erase(std::unique(required_field_ids.begin(), required_field_ids.end()),
-	                         required_field_ids.end());
 
 	auto scan_columns = global_columns;
 	auto scan_column_ids = global_column_ids;
