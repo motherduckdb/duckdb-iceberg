@@ -85,9 +85,41 @@ SELECT count(*) FROM ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_
 ----
 2
 
-# Equality-delete planning enumerates delete metadata before complex and dynamic filter pushdown.
-# The static and runtime predicates deliberately target the same column so the dynamic filter
-# snapshot must carry forward the complete effective filter without inserting that column twice.
+# Equality deletes are a scan correctness requirement and must not depend on an optimizer extension.
+statement ok
+PRAGMA disable_optimizer;
+
+query I
+SELECT bir FROM ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_deletes/warehouse/mydb/mytable') ORDER BY ALL;
+----
+2025-01-04
+2025-01-05
+
+query I
+SELECT count(*) FROM ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_deletes/warehouse/mydb/mytable');
+----
+2
+
+query I
+SELECT count(*)
+FROM ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_deletes/warehouse/mydb/mytable')
+WHERE bir >= DATE '2025-01-01';
+----
+2
+
+# `id` is used only by the pushed filter and is not part of the output projection.
+query I
+SELECT bir
+FROM ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/equality_deletes/warehouse/mydb/mytable')
+WHERE id = 4;
+----
+2025-01-04
+
+statement ok
+PRAGMA enable_optimizer;
+
+# Equality-delete key discovery must remain correct after complex and dynamic filter pushdown.
+# The static and runtime predicates deliberately target the same column.
 statement ok
 SET disabled_optimizers = 'join_order,build_side_probe_side';
 
