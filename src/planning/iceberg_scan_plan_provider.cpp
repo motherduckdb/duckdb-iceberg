@@ -327,7 +327,7 @@ case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &ClientSideScanPlanProvide
 	return shared_state.positional_delete_data;
 }
 
-map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> &ClientSideScanPlanProvider::EqualityDeleteData() {
+equality_delete_map_t &ClientSideScanPlanProvider::EqualityDeleteData() {
 	return shared_state.equality_delete_data;
 }
 
@@ -403,7 +403,7 @@ case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &ServerSideScanPlanProvide
 	return positional_delete_data;
 }
 
-map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> &ServerSideScanPlanProvider::EqualityDeleteData() {
+equality_delete_map_t &ServerSideScanPlanProvider::EqualityDeleteData() {
 	return equality_delete_data;
 }
 

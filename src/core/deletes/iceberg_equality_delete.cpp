@@ -69,14 +69,10 @@ void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntr
 	const auto sequence_number = manifest_entry.GetSequenceNumber(manifest_file);
 	//! Get or create the equality delete data for this sequence number
 	auto &equality_delete_data = GetEqualityDeleteData();
-	auto it = equality_delete_data.find(sequence_number);
-	if (it == equality_delete_data.end()) {
-		it = equality_delete_data.emplace(sequence_number, make_uniq<IcebergEqualityDeleteData>(sequence_number)).first;
-	}
-	auto &deletes = *it->second;
+	auto &deletes = equality_delete_data[sequence_number];
 
-	deletes.delete_files.emplace_back(data_file.partition_info, manifest_file.partition_spec_id, data_file.file_path);
-	auto &equality_values = deletes.delete_files.back().equality_values;
+	deletes.emplace_back(data_file.partition_info, manifest_file.partition_spec_id, data_file.file_path);
+	auto &equality_values = deletes.back().equality_values;
 	D_ASSERT(result.ColumnCount() == data_file.equality_ids.size());
 
 	for (idx_t col_idx = 0; col_idx < result.ColumnCount(); col_idx++) {

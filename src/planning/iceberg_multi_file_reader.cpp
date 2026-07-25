@@ -73,11 +73,6 @@ static ColumnIndex CreateColumnIndex(const MultiFileColumnPath &column_path) {
 	return result;
 }
 
-static unique_ptr<Expression> CreateEqualityDeleteExpression(const IcebergMultiFileList &multi_file_list,
-                                                             const BoundIcebergManifestEntry &bound_manifest_entry,
-                                                             const vector<MultiFileColumnDefinition> &local_columns,
-                                                             const IcebergMultiFileReaderGlobalState &global_state);
-
 IcebergMultiFileReader::IcebergMultiFileReader(shared_ptr<TableFunctionInfo> function_info)
     : function_info(function_info) {
 	row_id_column = make_uniq<MultiFileColumnDefinition>("_row_id", LogicalType::BIGINT);
@@ -298,9 +293,11 @@ static Value TransformPartitionValue(const Value &value, const LogicalType &type
 	}
 }
 
-static void ApplyPartitionConstants(const IcebergMultiFileList &multi_file_list, MultiFileReaderData &reader_data,
-                                    const vector<MultiFileColumnDefinition> &global_columns,
-                                    const vector<ColumnIndex> &global_column_ids, ClientContext &context) {
+void IcebergMultiFileReader::ApplyPartitionConstants(const IcebergMultiFileList &multi_file_list,
+                                                     MultiFileReaderData &reader_data,
+                                                     const vector<MultiFileColumnDefinition> &global_columns,
+                                                     const vector<ColumnIndex> &global_column_ids,
+                                                     ClientContext &context) {
 	// Get the metadata for this file
 	auto &reader = *reader_data.reader;
 	auto file_id = reader.file_list_idx.GetIndex();
@@ -445,10 +442,9 @@ void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, cons
 	                              global_state);
 }
 
-static unique_ptr<Expression> CreateEqualityDeleteExpression(const IcebergMultiFileList &multi_file_list,
-                                                             const BoundIcebergManifestEntry &bound_manifest_entry,
-                                                             const vector<MultiFileColumnDefinition> &local_columns,
-                                                             const IcebergMultiFileReaderGlobalState &global_state) {
+unique_ptr<Expression> IcebergMultiFileReader::CreateEqualityDeleteExpression(
+    const IcebergMultiFileList &multi_file_list, const BoundIcebergManifestEntry &bound_manifest_entry,
+    const vector<MultiFileColumnDefinition> &local_columns, const IcebergMultiFileReaderGlobalState &global_state) {
 	auto delete_files = multi_file_list.GetEqualityDeletesForFile(bound_manifest_entry);
 	if (delete_files.empty()) {
 		return nullptr;
