@@ -656,16 +656,17 @@ void IcebergTableInformation::RefreshFromCatalog(ClientContext &context) {
 		                       EnumUtil::ToString(get_table_result.status_), get_table_result.error_->_error.message));
 	}
 	auto &load_table_result = *get_table_result.result_;
-	ic_catalog.table_request_cache.SetOrOverwrite(context, table_key, std::move(get_table_result.result_));
 	schema_versions.clear();
 	dummy_entry.reset();
 	InitializeFromLoadTableResult(load_table_result);
+	ic_catalog.table_request_cache.SetOrOverwrite(table_key, std::move(get_table_result.result_));
 }
 
 IcebergTableInformation IcebergTableInformation::Copy() const {
 	auto clone = IcebergTableInformation(catalog, schema, name);
 	clone.table_metadata = table_metadata.Copy();
 	clone.config = config;
+	clone.initialization_source = initialization_source;
 	for (auto &credential : storage_credentials) {
 		clone.storage_credentials.push_back(credential.Copy());
 	}
@@ -756,6 +757,7 @@ IcebergTransactionData &IcebergTableInformation::GetOrCreateTransactionData(Iceb
 
 void IcebergTableInformation::InitializeFromLoadTableResult(
     const rest_api_objects::LoadTableResult &load_table_result) {
+	initialization_source = load_table_result;
 	table_metadata = IcebergTableMetadata::FromTableMetadata(load_table_result.metadata);
 	if (auto &val = load_table_result.config) {
 		config = *val;

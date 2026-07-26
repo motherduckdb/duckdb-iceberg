@@ -72,7 +72,7 @@ struct PlanningAccumulator {
 static IRCEndpointBuilder TableEndpoint(IcebergTableInformation &table_info) {
 	auto &catalog = table_info.catalog;
 	auto result = catalog.GetBaseUrl();
-	result.AddPrefixComponent(catalog.prefix, catalog.prefix_is_one_component);
+	result.AddPrefixComponents(catalog.prefix);
 	result.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
 	result.AddPathComponent(IRCPathComponent::NamespaceComponent(table_info.schema.namespace_items));
 	result.AddPathComponent(IRCPathComponent::RegularComponent("tables"));

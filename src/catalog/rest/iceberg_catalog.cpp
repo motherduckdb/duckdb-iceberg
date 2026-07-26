@@ -11,6 +11,7 @@
 
 #include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 #include "catalog/rest/api/catalog_api.hpp"
 #include "catalog/rest/api/catalog_utils.hpp"
@@ -22,6 +23,18 @@
 using namespace duckdb_yyjson;
 
 namespace duckdb {
+
+void LoadTableResultCache::EvictIfCurrent(const IcebergTableInformation &table) {
+	lock_guard<mutex> guard(lock);
+	auto it = tables.find(table.GetTableKey());
+	if (it == tables.end()) {
+		return;
+	}
+	if (it->second.load_table_result.get() != table.initialization_source.get()) {
+		return;
+	}
+	tables.erase(it);
+}
 
 IcebergCatalog::IcebergCatalog(AttachedDatabase &db_p, AccessMode access_mode,
                                unique_ptr<IcebergAuthorization> auth_handler, IcebergAttachOptions &attach_options_p,
@@ -338,32 +351,23 @@ void IcebergCatalog::ParsePrefix() {
 	auto default_prefix_it = defaults.find("prefix");
 	auto override_prefix_it = overrides.find("prefix");
 
-	string decoded_prefix = "";
+	const string *prefix_property = nullptr;
 	if (default_prefix_it != defaults.end()) {
-		decoded_prefix = StringUtil::URLDecode(default_prefix_it->second);
-		prefix = decoded_prefix;
-		if (!StringUtil::Equals(decoded_prefix, default_prefix_it->second)) {
-			// decoded prefix contains a slash AND is not equal to the original
-			// means prefix was encoded, and is one URL component
-			prefix_is_one_component = true;
-		} else {
-			prefix_is_one_component = false;
-		}
+		prefix_property = &default_prefix_it->second;
+	}
+	// Sometimes the prefix is in the overrides. Prefer the override prefix.
+	if (override_prefix_it != overrides.end()) {
+		prefix_property = &override_prefix_it->second;
+	}
+	if (!prefix_property) {
+		return;
 	}
 
-	// sometimes the prefix in the overrides. Prefer the override prefix
-	if (override_prefix_it != overrides.end()) {
-		decoded_prefix = StringUtil::URLDecode(override_prefix_it->second);
-		prefix = decoded_prefix;
-
-		if (!StringUtil::Equals(decoded_prefix, override_prefix_it->second)) {
-			// decoded prefix is not equal to the original
-			// means prefix was encoded, and is one URL component
-			prefix_is_one_component = true;
-		} else {
-			// decoded prefix contains a '/' or is equal
-			prefix_is_one_component = false;
-		}
+	auto decoded_prefix = StringUtil::URLDecode(*prefix_property);
+	if (attach_options.encode_entire_prefix || !StringUtil::Equals(decoded_prefix, *prefix_property)) {
+		prefix.push_back(std::move(decoded_prefix));
+	} else {
+		prefix = StringUtil::Split(decoded_prefix, '/');
 	}
 }
 
@@ -386,10 +390,6 @@ void IcebergCatalog::GetConfig(ClientContext &context, IcebergEndpointType &endp
 		StringUtil::RTrim(uri, "/");
 	}
 	ParsePrefix();
-
-	if (attach_options.encode_entire_prefix) {
-		prefix_is_one_component = true;
-	}
 
 	if (auto &endpoints = catalog_config.endpoints) {
 		for (auto &endpoint : *endpoints) {
