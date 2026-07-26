@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/catalog_config.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 CatalogConfig::CatalogConfig() {
 }
 
-CatalogConfig CatalogConfig::FromJSON(yyjson_val *obj) {
+CatalogConfig CatalogConfig::FromJSON(JSONValue obj) {
 	CatalogConfig res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -46,139 +44,142 @@ CatalogConfig CatalogConfig::Copy() const {
 	return res;
 }
 
-string CatalogConfig::TryFromJSON(yyjson_val *obj) {
+string CatalogConfig::TryFromJSON(JSONValue obj) {
 	string error;
-	auto defaults_val = yyjson_obj_get(obj, "defaults");
-	if (!defaults_val) {
+	auto defaults_val = obj.GetMember("defaults");
+	if (!defaults_val.IsValid()) {
 		return "CatalogConfig required property 'defaults' is missing";
 	} else {
-		if (yyjson_is_obj(defaults_val)) {
-			size_t idx, max;
-			yyjson_val *key, *val;
-			yyjson_obj_foreach(defaults_val, idx, max, key, val) {
-				auto key_str = yyjson_get_str(key);
+		if (defaults_val.IsObject()) {
+			defaults_val.IterateObject([&](const string &key_str, JSONValue val) {
+				if (!error.empty()) {
+					return;
+				}
 				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
+				if (json_utils::IsString(val)) {
+					tmp = json_utils::GetString(val);
 				} else {
-					return StringUtil::Format(
-					    "CatalogConfig property 'tmp' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(val));
+					error = StringUtil::Format("CatalogConfig property 'tmp' is not of type 'string', found %s instead",
+					                           json_utils::GetTypeDescription(val).c_str());
+					return;
 				}
 				defaults.emplace(key_str, std::move(tmp));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return "CatalogConfig property 'defaults' is not of type 'object'";
 		}
 	}
-	auto overrides_val = yyjson_obj_get(obj, "overrides");
-	if (!overrides_val) {
+	auto overrides_val = obj.GetMember("overrides");
+	if (!overrides_val.IsValid()) {
 		return "CatalogConfig required property 'overrides' is missing";
 	} else {
-		if (yyjson_is_obj(overrides_val)) {
-			size_t idx, max;
-			yyjson_val *key, *val;
-			yyjson_obj_foreach(overrides_val, idx, max, key, val) {
-				auto key_str = yyjson_get_str(key);
+		if (overrides_val.IsObject()) {
+			overrides_val.IterateObject([&](const string &key_str, JSONValue val) {
+				if (!error.empty()) {
+					return;
+				}
 				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
+				if (json_utils::IsString(val)) {
+					tmp = json_utils::GetString(val);
 				} else {
-					return StringUtil::Format(
-					    "CatalogConfig property 'tmp' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(val));
+					error = StringUtil::Format("CatalogConfig property 'tmp' is not of type 'string', found %s instead",
+					                           json_utils::GetTypeDescription(val).c_str());
+					return;
 				}
 				overrides.emplace(key_str, std::move(tmp));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return "CatalogConfig property 'overrides' is not of type 'object'";
 		}
 	}
-	auto endpoints_val = yyjson_obj_get(obj, "endpoints");
-	if (endpoints_val) {
+	auto endpoints_val = obj.GetMember("endpoints");
+	if (endpoints_val.IsValid()) {
 		vector<string> endpoints_tmp;
-		if (yyjson_is_arr(endpoints_val)) {
-			size_t endpoints_tmp_idx, endpoints_tmp_max;
-			yyjson_val *endpoints_tmp_item_val;
-			yyjson_arr_foreach(endpoints_val, endpoints_tmp_idx, endpoints_tmp_max, endpoints_tmp_item_val) {
+		if (endpoints_val.IsArray()) {
+			endpoints_val.IterateArray([&](JSONValue endpoints_tmp_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				string endpoints_tmp_item;
-				if (yyjson_is_str(endpoints_tmp_item_val)) {
-					endpoints_tmp_item = yyjson_get_str(endpoints_tmp_item_val);
+				if (json_utils::IsString(endpoints_tmp_item_val)) {
+					endpoints_tmp_item = json_utils::GetString(endpoints_tmp_item_val);
 				} else {
-					return StringUtil::Format(
-					    "CatalogConfig property 'endpoints_tmp_item' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(endpoints_tmp_item_val));
+					error = StringUtil::Format(
+					    "CatalogConfig property 'endpoints_tmp_item' is not of type 'string', found %s instead",
+					    json_utils::GetTypeDescription(endpoints_tmp_item_val).c_str());
+					return;
 				}
 				endpoints_tmp.emplace_back(std::move(endpoints_tmp_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
-			return StringUtil::Format(
-			    "CatalogConfig property 'endpoints_tmp' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(endpoints_val));
+			return StringUtil::Format("CatalogConfig property 'endpoints_tmp' is not of type 'array', found %s instead",
+			                          json_utils::GetTypeDescription(endpoints_val).c_str());
 		}
 		endpoints = std::move(endpoints_tmp);
 	}
-	auto idempotency_key_lifetime_val = yyjson_obj_get(obj, "idempotency-key-lifetime");
-	if (idempotency_key_lifetime_val) {
+	auto idempotency_key_lifetime_val = obj.GetMember("idempotency-key-lifetime");
+	if (idempotency_key_lifetime_val.IsValid()) {
 		string idempotency_key_lifetime_tmp;
-		if (yyjson_is_str(idempotency_key_lifetime_val)) {
-			idempotency_key_lifetime_tmp = yyjson_get_str(idempotency_key_lifetime_val);
+		if (json_utils::IsString(idempotency_key_lifetime_val)) {
+			idempotency_key_lifetime_tmp = json_utils::GetString(idempotency_key_lifetime_val);
 		} else {
 			return StringUtil::Format(
-			    "CatalogConfig property 'idempotency_key_lifetime_tmp' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(idempotency_key_lifetime_val));
+			    "CatalogConfig property 'idempotency_key_lifetime_tmp' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(idempotency_key_lifetime_val).c_str());
 		}
 		idempotency_key_lifetime = std::move(idempotency_key_lifetime_tmp);
 	}
 	return "";
 }
 
-void CatalogConfig::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void CatalogConfig::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: defaults
-	yyjson_mut_val *defaults_obj = yyjson_mut_obj(doc);
-	for (const auto &it : defaults) {
-		auto &key = it.first;
-		auto &value = it.second;
-		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
-		yyjson_mut_obj_add_strcpy(doc, defaults_obj, key_ptr, value.c_str());
+	auto defaults_json = writer.CreateObject();
+	for (const auto &[defaults_json_key, defaults_json_value] : defaults) {
+		auto defaults_json_value_json = writer.CreateString(defaults_json_value);
+		defaults_json.Add(defaults_json_key, defaults_json_value_json);
 	}
-	yyjson_mut_obj_add_val(doc, obj, "defaults", defaults_obj);
+	obj.Add("defaults", defaults_json);
 
 	// Serialize: overrides
-	yyjson_mut_val *overrides_obj = yyjson_mut_obj(doc);
-	for (const auto &it : overrides) {
-		auto &key = it.first;
-		auto &value = it.second;
-		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
-		yyjson_mut_obj_add_strcpy(doc, overrides_obj, key_ptr, value.c_str());
+	auto overrides_json = writer.CreateObject();
+	for (const auto &[overrides_json_key, overrides_json_value] : overrides) {
+		auto overrides_json_value_json = writer.CreateString(overrides_json_value);
+		overrides_json.Add(overrides_json_key, overrides_json_value_json);
 	}
-	yyjson_mut_obj_add_val(doc, obj, "overrides", overrides_obj);
+	obj.Add("overrides", overrides_json);
 
 	// Serialize: endpoints
 	if (endpoints.has_value()) {
 		auto &endpoints_value = *endpoints;
-		yyjson_mut_val *endpoints_value_arr = yyjson_mut_arr(doc);
-		for (const auto &item : endpoints_value) {
-			yyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());
-			yyjson_mut_arr_append(endpoints_value_arr, item_val);
+		auto endpoints_json = writer.CreateArray();
+		for (const auto &endpoints_json_item : endpoints_value) {
+			auto endpoints_json_item_json = writer.CreateString(endpoints_json_item);
+			endpoints_json.Append(endpoints_json_item_json);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "endpoints", endpoints_value_arr);
+		obj.Add("endpoints", endpoints_json);
 	}
 
 	// Serialize: idempotency-key-lifetime
 	if (idempotency_key_lifetime.has_value()) {
 		auto &idempotency_key_lifetime_value = *idempotency_key_lifetime;
-		yyjson_mut_obj_add_strcpy(doc, obj, "idempotency-key-lifetime", idempotency_key_lifetime_value.c_str());
+		auto idempotency_key_lifetime_json = writer.CreateString(idempotency_key_lifetime_value);
+		obj.Add("idempotency-key-lifetime", idempotency_key_lifetime_json);
 	}
 }
 
-yyjson_mut_val *CatalogConfig::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue CatalogConfig::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

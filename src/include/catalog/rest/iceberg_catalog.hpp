@@ -7,7 +7,6 @@
 #include "duckdb/parser/parsed_data/attach_info.hpp"
 #include "duckdb/storage/storage_extension.hpp"
 #include "duckdb/common/http_util.hpp"
-#include "duckdb/transaction/meta_transaction.hpp"
 
 #include "catalog/rest/api/url_utils.hpp"
 #include "catalog/rest/iceberg_schema_set.hpp"
@@ -18,17 +17,16 @@
 namespace duckdb {
 
 class IcebergSchemaEntry;
+struct IcebergTableInformation;
 
 class MetadataCacheValue {
 public:
-	MetadataCacheValue(transaction_t creator, timestamp_ms_t expire_timestamp_ms,
+	MetadataCacheValue(timestamp_ms_t expire_timestamp_ms,
 	                   unique_ptr<const rest_api_objects::LoadTableResult> load_table_result)
-	    : creator(creator), expire_timestamp_ms(expire_timestamp_ms), load_table_result(std::move(load_table_result)) {
+	    : expire_timestamp_ms(expire_timestamp_ms), load_table_result(std::move(load_table_result)) {
 	}
 
 public:
-	//! Store the id of the transaction that added the entry
-	transaction_t creator;
 	//! The timestamp until when this entry is valid
 	timestamp_ms_t expire_timestamp_ms;
 	//! The payload of the cache entry
@@ -63,7 +61,7 @@ public:
 		}
 		return entry;
 	}
-	void SetOrOverwrite(ClientContext &context, const string &table_key,
+	void SetOrOverwrite(const string &table_key,
 	                    unique_ptr<const rest_api_objects::LoadTableResult> load_table_result) {
 		lock_guard<mutex> guard(lock);
 		// If max_table_staleness_minutes is not set, use a time in the past so cache is always expired
@@ -79,27 +77,11 @@ public:
 
 		// erase load table result if it exists.
 		tables.erase(table_key);
-		auto &meta_transaction = MetaTransaction::Get(context);
-
-		tables.emplace(table_key, MetadataCacheValue(meta_transaction.global_transaction_id, expire_timestamp_ms,
-		                                             std::move(load_table_result)));
+		tables.emplace(table_key, MetadataCacheValue(expire_timestamp_ms, std::move(load_table_result)));
 	}
 
-	void Expire(ClientContext &context, const string &table_key) {
-		lock_guard<mutex> guard(lock);
-		auto &meta_transaction = MetaTransaction::Get(context);
-		tables.erase(table_key);
-		auto it = tables.find(table_key);
-		if (it == tables.end()) {
-			//! Entry doesn't exist anymore
-			return;
-		}
-		auto &entry = it->second;
-		if (entry.creator != meta_transaction.global_transaction_id) {
-			//! The entry we made is no longer the latest version, can't expire
-			return;
-		}
-	}
+	//! Evict only if the table was initialized from the result that is still cached for its key.
+	void EvictIfCurrent(const IcebergTableInformation &table);
 
 private:
 	IcebergAttachOptions &attach_options;
@@ -189,9 +171,8 @@ public:
 	string uri;
 	//! version
 	const string version;
-	//! optional prefix
-	string prefix;
-	bool prefix_is_one_component = true;
+	//! optional prefix path components
+	vector<string> prefix;
 	//! attach options
 	IcebergAttachOptions attach_options;
 	string default_schema;

@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/snapshot.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -17,7 +15,7 @@ Snapshot::Snapshot() {
 Snapshot::Object2::Object2() {
 }
 
-Snapshot::Object2 Snapshot::Object2::FromJSON(yyjson_val *obj) {
+Snapshot::Object2 Snapshot::Object2::FromJSON(JSONValue obj) {
 	Object2 res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -35,63 +33,62 @@ Snapshot::Object2 Snapshot::Object2::Copy() const {
 	return res;
 }
 
-string Snapshot::Object2::TryFromJSON(yyjson_val *obj) {
+string Snapshot::Object2::TryFromJSON(JSONValue obj) {
 	string error;
-	auto operation_val = yyjson_obj_get(obj, "operation");
-	if (!operation_val) {
+	auto operation_val = obj.GetMember("operation");
+	if (!operation_val.IsValid()) {
 		return "Object2 required property 'operation' is missing";
 	} else {
-		if (yyjson_is_str(operation_val)) {
-			operation = yyjson_get_str(operation_val);
+		if (json_utils::IsString(operation_val)) {
+			operation = json_utils::GetString(operation_val);
 		} else {
-			return StringUtil::Format("Object2 property 'operation' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(operation_val));
+			return StringUtil::Format("Object2 property 'operation' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(operation_val).c_str());
 		}
 	}
 	case_insensitive_set_t handled_properties {"operation"};
-	size_t idx, max;
-	yyjson_val *key, *val;
-	yyjson_obj_foreach(obj, idx, max, key, val) {
-		auto key_str = yyjson_get_str(key);
+	obj.IterateObject([&](const string &key_str, JSONValue val) {
+		if (!error.empty()) {
+			return;
+		}
 		if (handled_properties.count(key_str)) {
-			continue;
+			return;
 		}
 		string tmp;
-		if (yyjson_is_str(val)) {
-			tmp = yyjson_get_str(val);
+		if (json_utils::IsString(val)) {
+			tmp = json_utils::GetString(val);
 		} else {
-			return StringUtil::Format("Object2 property 'tmp' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(val));
+			error = StringUtil::Format("Object2 property 'tmp' is not of type 'string', found %s instead",
+			                           json_utils::GetTypeDescription(val).c_str());
+			return;
 		}
 		additional_properties.emplace(key_str, std::move(tmp));
+	});
+	if (!error.empty()) {
+		return error;
 	}
 	return "";
 }
 
-void Snapshot::Object2::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void Snapshot::Object2::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: operation
-	yyjson_mut_obj_add_strcpy(doc, obj, "operation", operation.c_str());
+	auto operation_json = writer.CreateString(operation);
+	obj.Add("operation", operation_json);
 
 	// Serialize additional properties
-	for (const auto &it : additional_properties) {
-		auto &key = it.first;
-		auto &value = it.second;
-		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
-		yyjson_mut_obj_add_strcpy(doc, obj, key_ptr, value.c_str());
+	for (const auto &[key, value] : additional_properties) {
+		auto value_json = writer.CreateString(value);
+		obj.Add(key, value_json);
 	}
 }
 
-yyjson_mut_val *Snapshot::Object2::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue Snapshot::Object2::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 
-Snapshot Snapshot::FromJSON(yyjson_val *obj) {
+Snapshot Snapshot::FromJSON(JSONValue obj) {
 	Snapshot res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -129,47 +126,47 @@ Snapshot Snapshot::Copy() const {
 	return res;
 }
 
-string Snapshot::TryFromJSON(yyjson_val *obj) {
+string Snapshot::TryFromJSON(JSONValue obj) {
 	string error;
-	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
-	if (!snapshot_id_val) {
+	auto snapshot_id_val = obj.GetMember("snapshot-id");
+	if (!snapshot_id_val.IsValid()) {
 		return "Snapshot required property 'snapshot-id' is missing";
 	} else {
-		if (yyjson_is_sint(snapshot_id_val)) {
-			snapshot_id = yyjson_get_sint(snapshot_id_val);
-		} else if (yyjson_is_uint(snapshot_id_val)) {
-			snapshot_id = yyjson_get_uint(snapshot_id_val);
+		if (json_utils::IsInteger(snapshot_id_val)) {
+			snapshot_id = json_utils::GetSignedInteger(snapshot_id_val);
+		} else if (json_utils::IsUnsignedInteger(snapshot_id_val)) {
+			snapshot_id = json_utils::GetUnsignedInteger(snapshot_id_val);
 		} else {
-			return StringUtil::Format("Snapshot property 'snapshot_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(snapshot_id_val));
+			return StringUtil::Format("Snapshot property 'snapshot_id' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(snapshot_id_val).c_str());
 		}
 	}
-	auto timestamp_ms_val = yyjson_obj_get(obj, "timestamp-ms");
-	if (!timestamp_ms_val) {
+	auto timestamp_ms_val = obj.GetMember("timestamp-ms");
+	if (!timestamp_ms_val.IsValid()) {
 		return "Snapshot required property 'timestamp-ms' is missing";
 	} else {
-		if (yyjson_is_sint(timestamp_ms_val)) {
-			timestamp_ms = yyjson_get_sint(timestamp_ms_val);
-		} else if (yyjson_is_uint(timestamp_ms_val)) {
-			timestamp_ms = yyjson_get_uint(timestamp_ms_val);
+		if (json_utils::IsInteger(timestamp_ms_val)) {
+			timestamp_ms = json_utils::GetSignedInteger(timestamp_ms_val);
+		} else if (json_utils::IsUnsignedInteger(timestamp_ms_val)) {
+			timestamp_ms = json_utils::GetUnsignedInteger(timestamp_ms_val);
 		} else {
-			return StringUtil::Format("Snapshot property 'timestamp_ms' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(timestamp_ms_val));
+			return StringUtil::Format("Snapshot property 'timestamp_ms' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(timestamp_ms_val).c_str());
 		}
 	}
-	auto manifest_list_val = yyjson_obj_get(obj, "manifest-list");
-	if (!manifest_list_val) {
+	auto manifest_list_val = obj.GetMember("manifest-list");
+	if (!manifest_list_val.IsValid()) {
 		return "Snapshot required property 'manifest-list' is missing";
 	} else {
-		if (yyjson_is_str(manifest_list_val)) {
-			manifest_list = yyjson_get_str(manifest_list_val);
+		if (json_utils::IsString(manifest_list_val)) {
+			manifest_list = json_utils::GetString(manifest_list_val);
 		} else {
-			return StringUtil::Format("Snapshot property 'manifest_list' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(manifest_list_val));
+			return StringUtil::Format("Snapshot property 'manifest_list' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(manifest_list_val).c_str());
 		}
 	}
-	auto summary_val = yyjson_obj_get(obj, "summary");
-	if (!summary_val) {
+	auto summary_val = obj.GetMember("summary");
+	if (!summary_val.IsValid()) {
 		return "Snapshot required property 'summary' is missing";
 	} else {
 		error = summary.TryFromJSON(summary_val);
@@ -177,127 +174,130 @@ string Snapshot::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto parent_snapshot_id_val = yyjson_obj_get(obj, "parent-snapshot-id");
-	if (parent_snapshot_id_val) {
+	auto parent_snapshot_id_val = obj.GetMember("parent-snapshot-id");
+	if (parent_snapshot_id_val.IsValid()) {
 		int64_t parent_snapshot_id_tmp;
-		if (yyjson_is_sint(parent_snapshot_id_val)) {
-			parent_snapshot_id_tmp = yyjson_get_sint(parent_snapshot_id_val);
-		} else if (yyjson_is_uint(parent_snapshot_id_val)) {
-			parent_snapshot_id_tmp = yyjson_get_uint(parent_snapshot_id_val);
+		if (json_utils::IsInteger(parent_snapshot_id_val)) {
+			parent_snapshot_id_tmp = json_utils::GetSignedInteger(parent_snapshot_id_val);
+		} else if (json_utils::IsUnsignedInteger(parent_snapshot_id_val)) {
+			parent_snapshot_id_tmp = json_utils::GetUnsignedInteger(parent_snapshot_id_val);
 		} else {
 			return StringUtil::Format(
-			    "Snapshot property 'parent_snapshot_id_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(parent_snapshot_id_val));
+			    "Snapshot property 'parent_snapshot_id_tmp' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(parent_snapshot_id_val).c_str());
 		}
 		parent_snapshot_id = std::move(parent_snapshot_id_tmp);
 	}
-	auto sequence_number_val = yyjson_obj_get(obj, "sequence-number");
-	if (sequence_number_val) {
+	auto sequence_number_val = obj.GetMember("sequence-number");
+	if (sequence_number_val.IsValid()) {
 		int64_t sequence_number_tmp;
-		if (yyjson_is_sint(sequence_number_val)) {
-			sequence_number_tmp = yyjson_get_sint(sequence_number_val);
-		} else if (yyjson_is_uint(sequence_number_val)) {
-			sequence_number_tmp = yyjson_get_uint(sequence_number_val);
+		if (json_utils::IsInteger(sequence_number_val)) {
+			sequence_number_tmp = json_utils::GetSignedInteger(sequence_number_val);
+		} else if (json_utils::IsUnsignedInteger(sequence_number_val)) {
+			sequence_number_tmp = json_utils::GetUnsignedInteger(sequence_number_val);
 		} else {
 			return StringUtil::Format(
-			    "Snapshot property 'sequence_number_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(sequence_number_val));
+			    "Snapshot property 'sequence_number_tmp' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(sequence_number_val).c_str());
 		}
 		sequence_number = std::move(sequence_number_tmp);
 	}
-	auto first_row_id_val = yyjson_obj_get(obj, "first-row-id");
-	if (first_row_id_val) {
+	auto first_row_id_val = obj.GetMember("first-row-id");
+	if (first_row_id_val.IsValid()) {
 		int64_t first_row_id_tmp;
-		if (yyjson_is_sint(first_row_id_val)) {
-			first_row_id_tmp = yyjson_get_sint(first_row_id_val);
-		} else if (yyjson_is_uint(first_row_id_val)) {
-			first_row_id_tmp = yyjson_get_uint(first_row_id_val);
+		if (json_utils::IsInteger(first_row_id_val)) {
+			first_row_id_tmp = json_utils::GetSignedInteger(first_row_id_val);
+		} else if (json_utils::IsUnsignedInteger(first_row_id_val)) {
+			first_row_id_tmp = json_utils::GetUnsignedInteger(first_row_id_val);
 		} else {
-			return StringUtil::Format(
-			    "Snapshot property 'first_row_id_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(first_row_id_val));
+			return StringUtil::Format("Snapshot property 'first_row_id_tmp' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(first_row_id_val).c_str());
 		}
 		first_row_id = std::move(first_row_id_tmp);
 	}
-	auto added_rows_val = yyjson_obj_get(obj, "added-rows");
-	if (added_rows_val) {
+	auto added_rows_val = obj.GetMember("added-rows");
+	if (added_rows_val.IsValid()) {
 		int64_t added_rows_tmp;
-		if (yyjson_is_sint(added_rows_val)) {
-			added_rows_tmp = yyjson_get_sint(added_rows_val);
-		} else if (yyjson_is_uint(added_rows_val)) {
-			added_rows_tmp = yyjson_get_uint(added_rows_val);
+		if (json_utils::IsInteger(added_rows_val)) {
+			added_rows_tmp = json_utils::GetSignedInteger(added_rows_val);
+		} else if (json_utils::IsUnsignedInteger(added_rows_val)) {
+			added_rows_tmp = json_utils::GetUnsignedInteger(added_rows_val);
 		} else {
-			return StringUtil::Format("Snapshot property 'added_rows_tmp' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(added_rows_val));
+			return StringUtil::Format("Snapshot property 'added_rows_tmp' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(added_rows_val).c_str());
 		}
 		added_rows = std::move(added_rows_tmp);
 	}
-	auto schema_id_val = yyjson_obj_get(obj, "schema-id");
-	if (schema_id_val) {
+	auto schema_id_val = obj.GetMember("schema-id");
+	if (schema_id_val.IsValid()) {
 		int32_t schema_id_tmp;
-		if (yyjson_is_int(schema_id_val)) {
-			schema_id_tmp = yyjson_get_int(schema_id_val);
+		if (json_utils::IsInteger(schema_id_val)) {
+			schema_id_tmp = json_utils::GetSignedInteger(schema_id_val);
 		} else {
-			return StringUtil::Format("Snapshot property 'schema_id_tmp' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(schema_id_val));
+			return StringUtil::Format("Snapshot property 'schema_id_tmp' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(schema_id_val).c_str());
 		}
 		schema_id = std::move(schema_id_tmp);
 	}
 	return "";
 }
 
-void Snapshot::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void Snapshot::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: snapshot-id
-	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+	auto snapshot_id_json = writer.CreateSignedInteger(snapshot_id);
+	obj.Add("snapshot-id", snapshot_id_json);
 
 	// Serialize: timestamp-ms
-	yyjson_mut_obj_add_sint(doc, obj, "timestamp-ms", timestamp_ms);
+	auto timestamp_ms_json = writer.CreateSignedInteger(timestamp_ms);
+	obj.Add("timestamp-ms", timestamp_ms_json);
 
 	// Serialize: manifest-list
-	yyjson_mut_obj_add_strcpy(doc, obj, "manifest-list", manifest_list.c_str());
+	auto manifest_list_json = writer.CreateString(manifest_list);
+	obj.Add("manifest-list", manifest_list_json);
 
 	// Serialize: summary
-	yyjson_mut_val *summary_val = summary.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "summary", summary_val);
+	auto summary_json = summary.ToJSON(writer);
+	obj.Add("summary", summary_json);
 
 	// Serialize: parent-snapshot-id
 	if (parent_snapshot_id.has_value()) {
 		auto &parent_snapshot_id_value = *parent_snapshot_id;
-		yyjson_mut_obj_add_sint(doc, obj, "parent-snapshot-id", parent_snapshot_id_value);
+		auto parent_snapshot_id_json = writer.CreateSignedInteger(parent_snapshot_id_value);
+		obj.Add("parent-snapshot-id", parent_snapshot_id_json);
 	}
 
 	// Serialize: sequence-number
 	if (sequence_number.has_value()) {
 		auto &sequence_number_value = *sequence_number;
-		yyjson_mut_obj_add_sint(doc, obj, "sequence-number", sequence_number_value);
+		auto sequence_number_json = writer.CreateSignedInteger(sequence_number_value);
+		obj.Add("sequence-number", sequence_number_json);
 	}
 
 	// Serialize: first-row-id
 	if (first_row_id.has_value()) {
 		auto &first_row_id_value = *first_row_id;
-		yyjson_mut_obj_add_sint(doc, obj, "first-row-id", first_row_id_value);
+		auto first_row_id_json = writer.CreateSignedInteger(first_row_id_value);
+		obj.Add("first-row-id", first_row_id_json);
 	}
 
 	// Serialize: added-rows
 	if (added_rows.has_value()) {
 		auto &added_rows_value = *added_rows;
-		yyjson_mut_obj_add_sint(doc, obj, "added-rows", added_rows_value);
+		auto added_rows_json = writer.CreateSignedInteger(added_rows_value);
+		obj.Add("added-rows", added_rows_json);
 	}
 
 	// Serialize: schema-id
 	if (schema_id.has_value()) {
 		auto &schema_id_value = *schema_id;
-		yyjson_mut_obj_add_int(doc, obj, "schema-id", schema_id_value);
+		auto schema_id_json = writer.CreateSignedInteger(schema_id_value);
+		obj.Add("schema-id", schema_id_json);
 	}
 }
 
-yyjson_mut_val *Snapshot::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue Snapshot::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

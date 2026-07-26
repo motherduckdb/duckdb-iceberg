@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/count_map.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 CountMap::CountMap() {
 }
 
-CountMap CountMap::FromJSON(yyjson_val *obj) {
+CountMap CountMap::FromJSON(JSONValue obj) {
 	CountMap res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -43,82 +41,86 @@ CountMap CountMap::Copy() const {
 	return res;
 }
 
-string CountMap::TryFromJSON(yyjson_val *obj) {
+string CountMap::TryFromJSON(JSONValue obj) {
 	string error;
-	auto keys_val = yyjson_obj_get(obj, "keys");
-	if (keys_val) {
+	auto keys_val = obj.GetMember("keys");
+	if (keys_val.IsValid()) {
 		vector<IntegerTypeValue> keys_tmp;
-		if (yyjson_is_arr(keys_val)) {
-			size_t keys_tmp_idx, keys_tmp_max;
-			yyjson_val *keys_tmp_item_val;
-			yyjson_arr_foreach(keys_val, keys_tmp_idx, keys_tmp_max, keys_tmp_item_val) {
+		if (keys_val.IsArray()) {
+			keys_val.IterateArray([&](JSONValue keys_tmp_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				IntegerTypeValue keys_tmp_item;
 				error = keys_tmp_item.TryFromJSON(keys_tmp_item_val);
 				if (!error.empty()) {
-					return error;
+					return;
 				}
 				keys_tmp.emplace_back(std::move(keys_tmp_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
-			return StringUtil::Format("CountMap property 'keys_tmp' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(keys_val));
+			return StringUtil::Format("CountMap property 'keys_tmp' is not of type 'array', found %s instead",
+			                          json_utils::GetTypeDescription(keys_val).c_str());
 		}
 		keys = std::move(keys_tmp);
 	}
-	auto values_val = yyjson_obj_get(obj, "values");
-	if (values_val) {
+	auto values_val = obj.GetMember("values");
+	if (values_val.IsValid()) {
 		vector<LongTypeValue> values_tmp;
-		if (yyjson_is_arr(values_val)) {
-			size_t values_tmp_idx, values_tmp_max;
-			yyjson_val *values_tmp_item_val;
-			yyjson_arr_foreach(values_val, values_tmp_idx, values_tmp_max, values_tmp_item_val) {
+		if (values_val.IsArray()) {
+			values_val.IterateArray([&](JSONValue values_tmp_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				LongTypeValue values_tmp_item;
 				error = values_tmp_item.TryFromJSON(values_tmp_item_val);
 				if (!error.empty()) {
-					return error;
+					return;
 				}
 				values_tmp.emplace_back(std::move(values_tmp_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
-			return StringUtil::Format("CountMap property 'values_tmp' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(values_val));
+			return StringUtil::Format("CountMap property 'values_tmp' is not of type 'array', found %s instead",
+			                          json_utils::GetTypeDescription(values_val).c_str());
 		}
 		values = std::move(values_tmp);
 	}
 	return "";
 }
 
-void CountMap::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void CountMap::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: keys
 	if (keys.has_value()) {
 		auto &keys_value = *keys;
-		yyjson_mut_val *keys_value_arr = yyjson_mut_arr(doc);
-		for (const auto &item : keys_value) {
-			yyjson_mut_val *item_val = item.ToJSON(doc);
-			yyjson_mut_arr_append(keys_value_arr, item_val);
+		auto keys_json = writer.CreateArray();
+		for (const auto &keys_json_item : keys_value) {
+			auto keys_json_item_json = keys_json_item.ToJSON(writer);
+			keys_json.Append(keys_json_item_json);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "keys", keys_value_arr);
+		obj.Add("keys", keys_json);
 	}
 
 	// Serialize: values
 	if (values.has_value()) {
 		auto &values_value = *values;
-		yyjson_mut_val *values_value_arr = yyjson_mut_arr(doc);
-		for (const auto &item : values_value) {
-			yyjson_mut_val *item_val = item.ToJSON(doc);
-			yyjson_mut_arr_append(values_value_arr, item_val);
+		auto values_json = writer.CreateArray();
+		for (const auto &values_json_item : values_value) {
+			auto values_json_item_json = values_json_item.ToJSON(writer);
+			values_json.Append(values_json_item_json);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "values", values_value_arr);
+		obj.Add("values", values_json);
 	}
 }
 
-yyjson_mut_val *CountMap::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue CountMap::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

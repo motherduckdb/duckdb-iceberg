@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/counter_result.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 CounterResult::CounterResult() {
 }
 
-CounterResult CounterResult::FromJSON(yyjson_val *obj) {
+CounterResult CounterResult::FromJSON(JSONValue obj) {
 	CounterResult res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -31,50 +29,48 @@ CounterResult CounterResult::Copy() const {
 	return res;
 }
 
-string CounterResult::TryFromJSON(yyjson_val *obj) {
+string CounterResult::TryFromJSON(JSONValue obj) {
 	string error;
-	auto unit_val = yyjson_obj_get(obj, "unit");
-	if (!unit_val) {
+	auto unit_val = obj.GetMember("unit");
+	if (!unit_val.IsValid()) {
 		return "CounterResult required property 'unit' is missing";
 	} else {
-		if (yyjson_is_str(unit_val)) {
-			unit = yyjson_get_str(unit_val);
+		if (json_utils::IsString(unit_val)) {
+			unit = json_utils::GetString(unit_val);
 		} else {
-			return StringUtil::Format("CounterResult property 'unit' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(unit_val));
+			return StringUtil::Format("CounterResult property 'unit' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(unit_val).c_str());
 		}
 	}
-	auto value_val = yyjson_obj_get(obj, "value");
-	if (!value_val) {
+	auto value_val = obj.GetMember("value");
+	if (!value_val.IsValid()) {
 		return "CounterResult required property 'value' is missing";
 	} else {
-		if (yyjson_is_sint(value_val)) {
-			value = yyjson_get_sint(value_val);
-		} else if (yyjson_is_uint(value_val)) {
-			value = yyjson_get_uint(value_val);
+		if (json_utils::IsInteger(value_val)) {
+			value = json_utils::GetSignedInteger(value_val);
+		} else if (json_utils::IsUnsignedInteger(value_val)) {
+			value = json_utils::GetUnsignedInteger(value_val);
 		} else {
-			return StringUtil::Format("CounterResult property 'value' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(value_val));
+			return StringUtil::Format("CounterResult property 'value' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(value_val).c_str());
 		}
 	}
 	return "";
 }
 
-void CounterResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void CounterResult::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: unit
-	yyjson_mut_obj_add_strcpy(doc, obj, "unit", unit.c_str());
+	auto unit_json = writer.CreateString(unit);
+	obj.Add("unit", unit_json);
 
 	// Serialize: value
-	yyjson_mut_obj_add_sint(doc, obj, "value", value);
+	auto value_json = writer.CreateSignedInteger(value);
+	obj.Add("value", value_json);
 }
 
-yyjson_mut_val *CounterResult::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue CounterResult::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

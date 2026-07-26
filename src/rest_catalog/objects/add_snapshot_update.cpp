@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/add_snapshot_update.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 AddSnapshotUpdate::AddSnapshotUpdate() {
 }
 
-AddSnapshotUpdate AddSnapshotUpdate::FromJSON(yyjson_val *obj) {
+AddSnapshotUpdate AddSnapshotUpdate::FromJSON(JSONValue obj) {
 	AddSnapshotUpdate res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -31,30 +29,30 @@ AddSnapshotUpdate AddSnapshotUpdate::Copy() const {
 	return res;
 }
 
-string AddSnapshotUpdate::TryFromJSON(yyjson_val *obj) {
+string AddSnapshotUpdate::TryFromJSON(JSONValue obj) {
 	string error;
 	error = base_update.TryFromJSON(obj);
 	if (!error.empty()) {
 		return error;
 	}
-	auto action_refinement_val = yyjson_obj_get(obj, "action");
-	if (action_refinement_val) {
+	auto action_refinement_val = obj.GetMember("action");
+	if (action_refinement_val.IsValid()) {
 		string action_refinement;
-		if (yyjson_is_str(action_refinement_val)) {
-			action_refinement = yyjson_get_str(action_refinement_val);
+		if (json_utils::IsString(action_refinement_val)) {
+			action_refinement = json_utils::GetString(action_refinement_val);
 		} else {
 			return StringUtil::Format(
-			    "AddSnapshotUpdate property 'action_refinement' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_refinement_val));
+			    "AddSnapshotUpdate property 'action_refinement' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(action_refinement_val).c_str());
 		}
-		if (!yyjson_is_null(action_refinement_val) && action_refinement != "add-snapshot") {
+		if (!action_refinement_val.IsNull() && action_refinement != "add-snapshot") {
 			return "AddSnapshotUpdate property 'action_refinement' does not match its required const value";
 		}
 	} else {
 		return "AddSnapshotUpdate required property 'action' is missing";
 	}
-	auto snapshot_val = yyjson_obj_get(obj, "snapshot");
-	if (!snapshot_val) {
+	auto snapshot_val = obj.GetMember("snapshot");
+	if (!snapshot_val.IsValid()) {
 		return "AddSnapshotUpdate required property 'snapshot' is missing";
 	} else {
 		error = snapshot.TryFromJSON(snapshot_val);
@@ -65,22 +63,18 @@ string AddSnapshotUpdate::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void AddSnapshotUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void AddSnapshotUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize base class: BaseUpdate
-	base_update.PopulateJSON(doc, obj);
+	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: snapshot
-	yyjson_mut_val *snapshot_val = snapshot.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "snapshot", snapshot_val);
+	auto snapshot_json = snapshot.ToJSON(writer);
+	obj.Add("snapshot", snapshot_json);
 }
 
-yyjson_mut_val *AddSnapshotUpdate::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue AddSnapshotUpdate::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

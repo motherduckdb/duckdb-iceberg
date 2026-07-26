@@ -31,17 +31,40 @@ class IcebergDeleteLocalState;
 class IcebergDeleteGlobalState;
 class IcebergTableEntry;
 
+static bool IsScanCreatedByDelete(const PhysicalTableScan &scan) {
+	if (scan.function.GetName() != "iceberg_scan") {
+		return false;
+	}
+	if (scan.column_ids.size() < 2) {
+		return false;
+	}
+
+	bool has_file_name = false;
+	bool has_file_row_number = false;
+	for (auto &column : scan.column_ids) {
+		if (!column.HasPrimaryIndex()) {
+			continue;
+		}
+		auto index = column.GetPrimaryIndex();
+		if (index == MultiFileReader::COLUMN_IDENTIFIER_FILENAME) {
+			has_file_name = true;
+		} else if (index == MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER) {
+			has_file_row_number = true;
+		}
+		if (has_file_name && has_file_row_number) {
+			return true;
+		}
+	}
+	return false;
+}
+
 optional_ptr<PhysicalTableScan> IcebergDelete::FindIcebergScan(PhysicalOperator &plan) {
 	if (plan.type == PhysicalOperatorType::TABLE_SCAN) {
 		// does this emit the virtual columns?
 		auto &scan = plan.Cast<PhysicalTableScan>();
 
-		if (scan.function.GetName() == "iceberg_scan") {
-			for (auto &col : scan.column_ids) {
-				if (col.GetPrimaryIndex() == MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER) {
-					return scan;
-				}
-			}
+		if (IsScanCreatedByDelete(scan)) {
+			return scan;
 		}
 		return nullptr;
 	}

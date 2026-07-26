@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/set_current_view_version_update.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 SetCurrentViewVersionUpdate::SetCurrentViewVersionUpdate() {
 }
 
-SetCurrentViewVersionUpdate SetCurrentViewVersionUpdate::FromJSON(yyjson_val *obj) {
+SetCurrentViewVersionUpdate SetCurrentViewVersionUpdate::FromJSON(JSONValue obj) {
 	SetCurrentViewVersionUpdate res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -31,58 +29,55 @@ SetCurrentViewVersionUpdate SetCurrentViewVersionUpdate::Copy() const {
 	return res;
 }
 
-string SetCurrentViewVersionUpdate::TryFromJSON(yyjson_val *obj) {
+string SetCurrentViewVersionUpdate::TryFromJSON(JSONValue obj) {
 	string error;
 	error = base_update.TryFromJSON(obj);
 	if (!error.empty()) {
 		return error;
 	}
-	auto action_refinement_val = yyjson_obj_get(obj, "action");
-	if (action_refinement_val) {
+	auto action_refinement_val = obj.GetMember("action");
+	if (action_refinement_val.IsValid()) {
 		string action_refinement;
-		if (yyjson_is_str(action_refinement_val)) {
-			action_refinement = yyjson_get_str(action_refinement_val);
+		if (json_utils::IsString(action_refinement_val)) {
+			action_refinement = json_utils::GetString(action_refinement_val);
 		} else {
 			return StringUtil::Format(
-			    "SetCurrentViewVersionUpdate property 'action_refinement' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_refinement_val));
+			    "SetCurrentViewVersionUpdate property 'action_refinement' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(action_refinement_val).c_str());
 		}
-		if (!yyjson_is_null(action_refinement_val) && action_refinement != "set-current-view-version") {
+		if (!action_refinement_val.IsNull() && action_refinement != "set-current-view-version") {
 			return "SetCurrentViewVersionUpdate property 'action_refinement' does not match its required const value";
 		}
 	} else {
 		return "SetCurrentViewVersionUpdate required property 'action' is missing";
 	}
-	auto view_version_id_val = yyjson_obj_get(obj, "view-version-id");
-	if (!view_version_id_val) {
+	auto view_version_id_val = obj.GetMember("view-version-id");
+	if (!view_version_id_val.IsValid()) {
 		return "SetCurrentViewVersionUpdate required property 'view-version-id' is missing";
 	} else {
-		if (yyjson_is_int(view_version_id_val)) {
-			view_version_id = yyjson_get_int(view_version_id_val);
+		if (json_utils::IsInteger(view_version_id_val)) {
+			view_version_id = json_utils::GetSignedInteger(view_version_id_val);
 		} else {
 			return StringUtil::Format(
-			    "SetCurrentViewVersionUpdate property 'view_version_id' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(view_version_id_val));
+			    "SetCurrentViewVersionUpdate property 'view_version_id' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(view_version_id_val).c_str());
 		}
 	}
 	return "";
 }
 
-void SetCurrentViewVersionUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void SetCurrentViewVersionUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize base class: BaseUpdate
-	base_update.PopulateJSON(doc, obj);
+	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: view-version-id
-	yyjson_mut_obj_add_int(doc, obj, "view-version-id", view_version_id);
+	auto view_version_id_json = writer.CreateSignedInteger(view_version_id);
+	obj.Add("view-version-id", view_version_id_json);
 }
 
-yyjson_mut_val *SetCurrentViewVersionUpdate::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue SetCurrentViewVersionUpdate::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

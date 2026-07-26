@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/remove_encryption_key_update.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 RemoveEncryptionKeyUpdate::RemoveEncryptionKeyUpdate() {
 }
 
-RemoveEncryptionKeyUpdate RemoveEncryptionKeyUpdate::FromJSON(yyjson_val *obj) {
+RemoveEncryptionKeyUpdate RemoveEncryptionKeyUpdate::FromJSON(JSONValue obj) {
 	RemoveEncryptionKeyUpdate res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -31,58 +29,55 @@ RemoveEncryptionKeyUpdate RemoveEncryptionKeyUpdate::Copy() const {
 	return res;
 }
 
-string RemoveEncryptionKeyUpdate::TryFromJSON(yyjson_val *obj) {
+string RemoveEncryptionKeyUpdate::TryFromJSON(JSONValue obj) {
 	string error;
 	error = base_update.TryFromJSON(obj);
 	if (!error.empty()) {
 		return error;
 	}
-	auto action_refinement_val = yyjson_obj_get(obj, "action");
-	if (action_refinement_val) {
+	auto action_refinement_val = obj.GetMember("action");
+	if (action_refinement_val.IsValid()) {
 		string action_refinement;
-		if (yyjson_is_str(action_refinement_val)) {
-			action_refinement = yyjson_get_str(action_refinement_val);
+		if (json_utils::IsString(action_refinement_val)) {
+			action_refinement = json_utils::GetString(action_refinement_val);
 		} else {
 			return StringUtil::Format(
-			    "RemoveEncryptionKeyUpdate property 'action_refinement' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_refinement_val));
+			    "RemoveEncryptionKeyUpdate property 'action_refinement' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(action_refinement_val).c_str());
 		}
-		if (!yyjson_is_null(action_refinement_val) && action_refinement != "remove-encryption-key") {
+		if (!action_refinement_val.IsNull() && action_refinement != "remove-encryption-key") {
 			return "RemoveEncryptionKeyUpdate property 'action_refinement' does not match its required const value";
 		}
 	} else {
 		return "RemoveEncryptionKeyUpdate required property 'action' is missing";
 	}
-	auto key_id_val = yyjson_obj_get(obj, "key-id");
-	if (!key_id_val) {
+	auto key_id_val = obj.GetMember("key-id");
+	if (!key_id_val.IsValid()) {
 		return "RemoveEncryptionKeyUpdate required property 'key-id' is missing";
 	} else {
-		if (yyjson_is_str(key_id_val)) {
-			key_id = yyjson_get_str(key_id_val);
+		if (json_utils::IsString(key_id_val)) {
+			key_id = json_utils::GetString(key_id_val);
 		} else {
 			return StringUtil::Format(
-			    "RemoveEncryptionKeyUpdate property 'key_id' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(key_id_val));
+			    "RemoveEncryptionKeyUpdate property 'key_id' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(key_id_val).c_str());
 		}
 	}
 	return "";
 }
 
-void RemoveEncryptionKeyUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void RemoveEncryptionKeyUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize base class: BaseUpdate
-	base_update.PopulateJSON(doc, obj);
+	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: key-id
-	yyjson_mut_obj_add_strcpy(doc, obj, "key-id", key_id.c_str());
+	auto key_id_json = writer.CreateString(key_id);
+	obj.Add("key-id", key_id_json);
 }
 
-yyjson_mut_val *RemoveEncryptionKeyUpdate::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue RemoveEncryptionKeyUpdate::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

@@ -6,7 +6,7 @@
 #include "duckdb/common/error_data.hpp"
 #include "duckdb/common/http_util.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
 
 #include "catalog/rest/api/catalog_utils.hpp"
 #include "iceberg_logging.hpp"
@@ -22,7 +22,6 @@
 #include "rest_catalog/objects/list.hpp"
 #include "rest_catalog/objects/iceberg_error_response.hpp"
 
-using namespace duckdb_yyjson;
 namespace duckdb {
 
 void CommitResult::Throw(const string &url) const {
@@ -165,7 +164,7 @@ bool IRCAPI::VerifySchemaExistence(ClientContext &context, IcebergCatalog &catal
 	auto namespace_items = ParseSchemaName(schema);
 
 	auto url_builder = catalog.GetBaseUrl();
-	url_builder.AddPrefixComponent(catalog.prefix, catalog.prefix_is_one_component);
+	url_builder.AddPrefixComponents(catalog.prefix);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
 	url_builder.AddPathComponent(IRCPathComponent::NamespaceComponent(namespace_items));
 	bool execute_head =
@@ -176,7 +175,7 @@ bool IRCAPI::VerifySchemaExistence(ClientContext &context, IcebergCatalog &catal
 bool IRCAPI::VerifyTableExistence(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema,
                                   const string &table) {
 	auto url_builder = catalog.GetBaseUrl();
-	url_builder.AddPrefixComponent(catalog.prefix, catalog.prefix_is_one_component);
+	url_builder.AddPrefixComponents(catalog.prefix);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
 	url_builder.AddPathComponent(IRCPathComponent::NamespaceComponent(schema.namespace_items));
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("tables"));
@@ -189,7 +188,7 @@ bool IRCAPI::VerifyTableExistence(ClientContext &context, IcebergCatalog &catalo
 static unique_ptr<HTTPResponse> GetTableMetadata(ClientContext &context, IcebergCatalog &catalog,
                                                  const IcebergSchemaEntry &schema, const string &table) {
 	auto url_builder = catalog.GetBaseUrl();
-	url_builder.AddPrefixComponent(catalog.prefix, catalog.prefix_is_one_component);
+	url_builder.AddPrefixComponents(catalog.prefix);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
 	url_builder.AddPathComponent(IRCPathComponent::NamespaceComponent(schema.namespace_items));
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("tables"));
@@ -209,9 +208,9 @@ APIResult<unique_ptr<const rest_api_objects::LoadTableResult>> IRCAPI::GetTable(
 	auto ret = APIResult<unique_ptr<const rest_api_objects::LoadTableResult>>();
 	auto result = GetTableMetadata(context, catalog, schema, table_name);
 	if (result->status != HTTPStatusCode::OK_200) {
-		std::unique_ptr<yyjson_doc, YyjsonDocDeleter> out_doc;
-		yyjson_val *error_obj = ICUtils::GetErrorMessage(result->body, out_doc);
-		if (error_obj == nullptr) {
+		unique_ptr<JSONDocument> out_doc;
+		auto error_obj = ICUtils::GetErrorMessage(result->body, out_doc);
+		if (!error_obj.IsValid()) {
 			throw InvalidConfigurationException(result->body);
 		}
 		ret.status_ = result->status;
@@ -219,7 +218,7 @@ APIResult<unique_ptr<const rest_api_objects::LoadTableResult>> IRCAPI::GetTable(
 		return ret;
 	}
 	auto doc = ICUtils::APIResultToDoc(result->body);
-	auto *metadata_root = yyjson_doc_get_root(doc.get());
+	auto metadata_root = doc->GetRoot();
 	ret.result_ =
 	    make_uniq<const rest_api_objects::LoadTableResult>(rest_api_objects::LoadTableResult::FromJSON(metadata_root));
 	return ret;
@@ -234,7 +233,7 @@ IRCAPI::GetNamespace(ClientContext &context, IcebergCatalog &catalog, const Iceb
 	auto ret = APIResult<unique_ptr<const rest_api_objects::GetNamespaceResponse>>();
 
 	auto url_builder = catalog.GetBaseUrl();
-	url_builder.AddPrefixComponent(catalog.prefix, catalog.prefix_is_one_component);
+	url_builder.AddPrefixComponents(catalog.prefix);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
 	url_builder.AddPathComponent(IRCPathComponent::NamespaceComponent(schema.namespace_items));
 
@@ -245,9 +244,9 @@ IRCAPI::GetNamespace(ClientContext &context, IcebergCatalog &catalog, const Iceb
 	auto result = catalog.auth_handler->Request(RequestType::GET_REQUEST, context, url_builder, headers);
 
 	if (result->status != HTTPStatusCode::OK_200) {
-		std::unique_ptr<yyjson_doc, YyjsonDocDeleter> out_doc;
-		yyjson_val *error_obj = ICUtils::GetErrorMessage(result->body, out_doc);
-		if (error_obj == nullptr) {
+		unique_ptr<JSONDocument> out_doc;
+		auto error_obj = ICUtils::GetErrorMessage(result->body, out_doc);
+		if (!error_obj.IsValid()) {
 			throw InvalidConfigurationException(result->body);
 		}
 		ret.status_ = result->status;
@@ -255,7 +254,7 @@ IRCAPI::GetNamespace(ClientContext &context, IcebergCatalog &catalog, const Iceb
 		return ret;
 	}
 	auto doc = ICUtils::APIResultToDoc(result->body);
-	auto *metadata_root = yyjson_doc_get_root(doc.get());
+	auto metadata_root = doc->GetRoot();
 	ret.result_ = make_uniq<const rest_api_objects::GetNamespaceResponse>(
 	    rest_api_objects::GetNamespaceResponse::FromJSON(metadata_root));
 	return ret;
@@ -268,7 +267,7 @@ vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &conte
 
 	do {
 		auto url_builder = catalog.GetBaseUrl();
-		url_builder.AddPrefixComponent(catalog.prefix, catalog.prefix_is_one_component);
+		url_builder.AddPrefixComponents(catalog.prefix);
 		url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
 		url_builder.AddPathComponent(IRCPathComponent::NamespaceComponent(schema.namespace_items));
 		url_builder.AddPathComponent(IRCPathComponent::RegularComponent("tables"));
@@ -299,7 +298,7 @@ vector<rest_api_objects::TableIdentifier> IRCAPI::GetTables(ClientContext &conte
 		}
 
 		auto doc = ICUtils::APIResultToDoc(response->body);
-		auto *root = yyjson_doc_get_root(doc.get());
+		auto root = doc->GetRoot();
 		auto list_tables_response = rest_api_objects::ListTablesResponse::FromJSON(root);
 
 		if (!list_tables_response.identifiers) {
@@ -325,7 +324,7 @@ vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IcebergCatalog &
 	string page_token = "";
 	do {
 		auto url_builder = catalog.GetBaseUrl();
-		url_builder.AddPrefixComponent(catalog.prefix, catalog.prefix_is_one_component);
+		url_builder.AddPrefixComponents(catalog.prefix);
 		url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
 		if (!parent.empty()) {
 			url_builder.SetParam("parent", IRCPathComponent::NamespaceComponent(parent));
@@ -352,7 +351,7 @@ vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IcebergCatalog &
 		}
 
 		auto doc = ICUtils::APIResultToDoc(response->body);
-		auto *root = yyjson_doc_get_root(doc.get());
+		auto root = doc->GetRoot();
 		auto list_namespaces_response = rest_api_objects::ListNamespacesResponse::FromJSON(root);
 		if (!list_namespaces_response.namespaces) {
 			//! FIXME: old code expected 'namespaces' to always be present, but it's not a required property
@@ -395,9 +394,9 @@ static CommitResult BuildCommitResult(ClientContext &context, const unique_ptr<H
 		return result;
 	}
 
-	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> out_doc;
-	yyjson_val *error_obj = ICUtils::GetErrorMessage(response->body, out_doc);
-	if (error_obj != nullptr) {
+	unique_ptr<JSONDocument> out_doc;
+	auto error_obj = ICUtils::GetErrorMessage(response->body, out_doc);
+	if (error_obj.IsValid()) {
 		result.error_ = rest_api_objects::IcebergErrorResponse::FromJSON(error_obj);
 		if (result.error_->_error.stack) {
 			string stack_trace;
@@ -412,7 +411,7 @@ static CommitResult BuildCommitResult(ClientContext &context, const unique_ptr<H
 
 CommitResult IRCAPI::CommitMultiTableUpdate(ClientContext &context, IcebergCatalog &catalog, const string &body) {
 	auto url_builder = catalog.GetBaseUrl();
-	url_builder.AddPrefixComponent(catalog.prefix, catalog.prefix_is_one_component);
+	url_builder.AddPrefixComponents(catalog.prefix);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("transactions"));
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("commit"));
 	HTTPHeaders headers(*context.db);
@@ -425,7 +424,7 @@ CommitResult IRCAPI::CommitMultiTableUpdate(ClientContext &context, IcebergCatal
 CommitResult IRCAPI::CommitTableUpdate(ClientContext &context, IcebergCatalog &catalog, const vector<string> &schema,
                                        const string &table, const string &body) {
 	auto url_builder = catalog.GetBaseUrl();
-	url_builder.AddPrefixComponent(catalog.prefix, catalog.prefix_is_one_component);
+	url_builder.AddPrefixComponents(catalog.prefix);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
 	url_builder.AddPathComponent(IRCPathComponent::NamespaceComponent(schema));
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("tables"));
@@ -440,7 +439,7 @@ CommitResult IRCAPI::CommitTableUpdate(ClientContext &context, IcebergCatalog &c
 void IRCAPI::CommitTableDelete(ClientContext &context, IcebergCatalog &catalog, const vector<string> &schema,
                                const string &table) {
 	auto url_builder = catalog.GetBaseUrl();
-	url_builder.AddPrefixComponent(catalog.prefix, catalog.prefix_is_one_component);
+	url_builder.AddPrefixComponents(catalog.prefix);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
 	url_builder.AddPathComponent(IRCPathComponent::NamespaceComponent(schema));
 
@@ -461,7 +460,7 @@ void IRCAPI::CommitTableDelete(ClientContext &context, IcebergCatalog &catalog, 
 
 void IRCAPI::CommitTableRename(ClientContext &context, IcebergCatalog &catalog, const string &body) {
 	auto url_builder = catalog.GetBaseUrl();
-	url_builder.AddPrefixComponent(catalog.prefix, catalog.prefix_is_one_component);
+	url_builder.AddPrefixComponents(catalog.prefix);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("tables"));
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("rename"));
 
@@ -479,7 +478,7 @@ void IRCAPI::CommitTableRename(ClientContext &context, IcebergCatalog &catalog, 
 
 void IRCAPI::CommitNamespaceCreate(ClientContext &context, IcebergCatalog &catalog, string body) {
 	auto url_builder = catalog.GetBaseUrl();
-	url_builder.AddPrefixComponent(catalog.prefix, catalog.prefix_is_one_component);
+	url_builder.AddPrefixComponents(catalog.prefix);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
 	HTTPHeaders headers(*context.db);
 	headers.Insert("Content-Type", "application/json");
@@ -495,7 +494,7 @@ void IRCAPI::CommitNamespaceCreate(ClientContext &context, IcebergCatalog &catal
 void IRCAPI::CommitNamespaceDrop(ClientContext &context, IcebergCatalog &catalog,
                                  const vector<string> &namespace_items) {
 	auto url_builder = catalog.GetBaseUrl();
-	url_builder.AddPrefixComponent(catalog.prefix, catalog.prefix_is_one_component);
+	url_builder.AddPrefixComponents(catalog.prefix);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
 	url_builder.AddPathComponent(IRCPathComponent::NamespaceComponent(namespace_items));
 
@@ -517,7 +516,7 @@ void IRCAPI::CommitNamespacePropertiesUpdate(ClientContext &context, IcebergCata
 		throw NotImplementedException("This Iceberg REST catalog server does not support this operation");
 	}
 	auto url_builder = catalog.GetBaseUrl();
-	url_builder.AddPrefixComponent(catalog.prefix, catalog.prefix_is_one_component);
+	url_builder.AddPrefixComponents(catalog.prefix);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
 	url_builder.AddPathComponent(IRCPathComponent::NamespaceComponent(namespace_items));
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("properties"));
@@ -536,7 +535,7 @@ rest_api_objects::LoadTableResult IRCAPI::CommitNewTable(ClientContext &context,
                                                          const vector<string> &namespace_items,
                                                          const IcebergCreateTableRequest &request) {
 	auto url_builder = catalog.GetBaseUrl();
-	url_builder.AddPrefixComponent(catalog.prefix, catalog.prefix_is_one_component);
+	url_builder.AddPrefixComponents(catalog.prefix);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
 	url_builder.AddPathComponent(IRCPathComponent::NamespaceComponent(namespace_items));
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("tables"));
@@ -560,7 +559,7 @@ rest_api_objects::LoadTableResult IRCAPI::CommitNewTable(ClientContext &context,
 			    url_builder.GetURLEncoded(), EnumUtil::ToString(response->status), response->reason, response->body);
 		}
 		auto doc = ICUtils::APIResultToDoc(response->body);
-		auto *root = yyjson_doc_get_root(doc.get());
+		auto root = doc->GetRoot();
 		auto load_table_result = rest_api_objects::LoadTableResult::FromJSON(root);
 		return load_table_result;
 	} catch (const HTTPException &) {
@@ -588,7 +587,7 @@ rest_api_objects::CatalogConfig IRCAPI::GetCatalogConfig(ClientContext &context,
 		                                    response->reason);
 	}
 	auto doc = ICUtils::APIResultToDoc(response->body);
-	auto *root = yyjson_doc_get_root(doc.get());
+	auto root = doc->GetRoot();
 	return rest_api_objects::CatalogConfig::FromJSON(root);
 }
 

@@ -5,6 +5,7 @@
 #include "duckdb/logging/logger.hpp"
 #include "duckdb/common/types/blob.hpp"
 #include "duckdb/common/types/value.hpp"
+#include "duckdb/common/json_document.hpp"
 #include "duckdb/main/config.hpp"
 
 #include "iceberg_extension.hpp"
@@ -183,12 +184,12 @@ static rest_api_objects::OAuthTokenResponse FetchOAuth2TokenResponse(ClientConte
 	// Check HTTP status code
 	if (response->status >= HTTPStatusCode::OK_200 && response->status < HTTPStatusCode::MultipleChoices_300) {
 		// Success: Parse OAuthTokenResponse
-		std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(
-		    yyjson_read(response->body.c_str(), response->body.size(), 0));
+		JSONParseError parse_error;
+		auto doc = JSONDocument::TryParse(response->body.c_str(), response->body.size(), parse_error);
 		if (!doc) {
 			throw InvalidConfigurationException("Could not get token from %s: server returned invalid JSON", uri);
 		}
-		auto *root = yyjson_doc_get_root(doc.get());
+		auto root = doc->GetRoot();
 		auto token_response = rest_api_objects::OAuthTokenResponse::FromJSON(root);
 
 		// Validate token_type is bearer
@@ -202,10 +203,10 @@ static rest_api_objects::OAuthTokenResponse FetchOAuth2TokenResponse(ClientConte
 	} else if (response->status >= HTTPStatusCode::BadRequest_400 &&
 	           response->status < HTTPStatusCode::InternalServerError_500) {
 		// Client error: Try to parse OAuth2 error response (RFC 6749 Section 5.2)
-		std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc(
-		    yyjson_read(response->body.c_str(), response->body.size(), 0));
+		JSONParseError parse_error;
+		auto doc = JSONDocument::TryParse(response->body.c_str(), response->body.size(), parse_error);
 		if (doc) {
-			auto *root = yyjson_doc_get_root(doc.get());
+			auto root = doc->GetRoot();
 			try {
 				auto oauth_error = rest_api_objects::OAuthError::FromJSON(root);
 				string error_msg = StringUtil::Format("OAuth2 token request failed (%s): %s",

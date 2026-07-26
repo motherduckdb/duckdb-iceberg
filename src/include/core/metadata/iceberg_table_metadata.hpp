@@ -101,12 +101,12 @@ public:
 	const unordered_map<int32_t, shared_ptr<IcebergTableSchema>> &GetSchemas() const;
 
 private:
-	yyjson_mut_val *SchemasToJSON(yyjson_mut_doc *doc) const;
-	yyjson_mut_val *PartitionsToJSON(yyjson_mut_doc *doc) const;
-	yyjson_mut_val *TablePropertiesToJSON(yyjson_mut_doc *doc) const;
-	yyjson_mut_val *SnapshotsToJSON(yyjson_mut_doc *doc) const;
-	yyjson_mut_val *SnapshotLogToJSON(yyjson_mut_doc *doc) const;
-	yyjson_mut_val *SortOrdersToJSON(yyjson_mut_doc *doc) const;
+	JSONMutableValue SchemasToJSON(JSONWriter &writer) const;
+	JSONMutableValue PartitionsToJSON(JSONWriter &writer) const;
+	JSONMutableValue TablePropertiesToJSON(JSONWriter &writer) const;
+	JSONMutableValue SnapshotsToJSON(JSONWriter &writer) const;
+	JSONMutableValue SnapshotLogToJSON(JSONWriter &writer) const;
+	JSONMutableValue SortOrdersToJSON(JSONWriter &writer) const;
 
 public:
 	string table_uuid;

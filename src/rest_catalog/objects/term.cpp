@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/term.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 Term::Term() {
 }
 
-Term Term::FromJSON(yyjson_val *obj) {
+Term Term::FromJSON(JSONValue obj) {
 	Term res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -37,7 +35,7 @@ Term Term::Copy() const {
 	return res;
 }
 
-string Term::TryFromJSON(yyjson_val *obj) {
+string Term::TryFromJSON(JSONValue obj) {
 	string error;
 	do {
 		reference.emplace();
@@ -59,14 +57,14 @@ string Term::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *Term::ToJSON(yyjson_mut_doc *doc) const {
+JSONMutableValue Term::ToJSON(JSONWriter &writer) const {
 	if (reference.has_value()) {
-		return reference->ToJSON(doc);
+		return reference->ToJSON(writer);
 	} else if (transform_term.has_value()) {
-		return transform_term->ToJSON(doc);
+		return transform_term->ToJSON(writer);
 	}
 	// No variant is active - return empty object
-	return yyjson_mut_obj(doc);
+	return writer.CreateObject();
 }
 
 } // namespace rest_api_objects

@@ -81,6 +81,8 @@ public:
 	// dummy entry to hold existence of a table, but no schema versions
 	unique_ptr<IcebergTableEntry> dummy_entry;
 	unique_ptr<IcebergTransactionData> transaction_data;
+	//! The cached response this table was initialized from, used as an identity and never dereferenced.
+	optional_ptr<const rest_api_objects::LoadTableResult> initialization_source;
 
 private:
 	//! Unchanged by rename, used to check for a rename

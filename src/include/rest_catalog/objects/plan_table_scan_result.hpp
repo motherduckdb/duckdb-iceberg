@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
 #include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
@@ -10,8 +10,6 @@
 #include "rest_catalog/objects/completed_planning_with_idresult.hpp"
 #include "rest_catalog/objects/empty_planning_result.hpp"
 #include "rest_catalog/objects/failed_planning_result.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -26,15 +24,15 @@ public:
 
 public:
 	// Deserialization
-	static PlanTableScanResult FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *obj);
+	static PlanTableScanResult FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
 	// Copy
 	PlanTableScanResult Copy() const;
 
 	// Serialization
-	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
-	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	optional<CompletedPlanningWithIDResult> completed_planning_with_idresult;

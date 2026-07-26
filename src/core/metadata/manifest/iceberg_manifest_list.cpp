@@ -54,12 +54,11 @@ unordered_map<string, string> GetManifestMetadataMap(const IcebergTableMetadata 
 	auto format_version = manifest_metadata.format_version;
 	auto content = manifest_metadata.content;
 
-	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> schema_doc_p(yyjson_mut_doc_new(nullptr));
-	auto schema_doc = schema_doc_p.get();
-	auto schema_root_obj = yyjson_mut_obj(schema_doc);
-	yyjson_mut_doc_set_root(schema_doc, schema_root_obj);
-	IcebergCreateTableRequest::PopulateSchema(schema_doc, schema_root_obj, *table_metadata.GetSchemaFromId(schema_id));
-	result.emplace("schema", ICUtils::JsonToString(std::move(schema_doc_p)));
+	JSONWriter writer;
+	auto schema_root_obj = writer.CreateObject();
+	writer.SetRoot(schema_root_obj);
+	IcebergCreateTableRequest::PopulateSchema(writer, schema_root_obj, *table_metadata.GetSchemaFromId(schema_id));
+	result.emplace("schema", writer.ToString(JSONWriteFlags::ALLOW_INF_AND_NAN));
 	result.emplace("schema-id", std::to_string(schema_id));
 
 	auto partition_spec = table_metadata.FindPartitionSpecById(partition_spec_id);
