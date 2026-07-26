@@ -71,7 +71,8 @@ void SetDefaultSpecUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: spec-id
-	obj.Add("spec-id", writer.CreateSignedInteger(spec_id));
+	auto spec_id_json = writer.CreateSignedInteger(spec_id);
+	obj.Add("spec-id", spec_id_json);
 }
 
 JSONMutableValue SetDefaultSpecUpdate::ToJSON(JSONWriter &writer) const {

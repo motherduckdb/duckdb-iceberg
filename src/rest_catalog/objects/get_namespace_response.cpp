@@ -81,19 +81,18 @@ string GetNamespaceResponse::TryFromJSON(JSONValue obj) {
 
 void GetNamespaceResponse::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: namespace
-	auto _namespace_val = _namespace.ToJSON(writer);
-	obj.Add("namespace", _namespace_val);
+	auto _namespace_json = _namespace.ToJSON(writer);
+	obj.Add("namespace", _namespace_json);
 
 	// Serialize: properties
 	if (properties.has_value()) {
 		auto &properties_value = *properties;
-		auto properties_value_obj = writer.CreateObject();
-		for (const auto &it : properties_value) {
-			auto &key = it.first;
-			auto &value = it.second;
-			properties_value_obj.AddString(key, value);
+		auto properties_json = writer.CreateObject();
+		for (const auto &[properties_json_key, properties_json_value] : properties_value) {
+			auto properties_json_value_json = writer.CreateString(properties_json_value);
+			properties_json.Add(properties_json_key, properties_json_value_json);
 		}
-		obj.Add("properties", properties_value_obj);
+		obj.Add("properties", properties_json);
 	}
 }
 

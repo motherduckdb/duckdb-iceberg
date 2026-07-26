@@ -42,7 +42,8 @@ string FunctionDataType::FunctionDataTypeOneOf1::TryFromJSON(JSONValue obj) {
 }
 
 JSONMutableValue FunctionDataType::FunctionDataTypeOneOf1::ToJSON(JSONWriter &writer) const {
-	return writer.CreateString(value);
+	auto result = writer.CreateString(value);
+	return result;
 }
 
 FunctionDataType FunctionDataType::FromJSON(JSONValue obj) {

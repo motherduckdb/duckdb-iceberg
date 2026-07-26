@@ -62,10 +62,12 @@ string AssertDefaultSpecId::TryFromJSON(JSONValue obj) {
 
 void AssertDefaultSpecId::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	obj.AddString("type", type);
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: default-spec-id
-	obj.Add("default-spec-id", writer.CreateSignedInteger(default_spec_id));
+	auto default_spec_id_json = writer.CreateSignedInteger(default_spec_id);
+	obj.Add("default-spec-id", default_spec_id_json);
 }
 
 JSONMutableValue AssertDefaultSpecId::ToJSON(JSONWriter &writer) const {

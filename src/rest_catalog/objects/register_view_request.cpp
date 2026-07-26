@@ -59,10 +59,12 @@ string RegisterViewRequest::TryFromJSON(JSONValue obj) {
 
 void RegisterViewRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: name
-	obj.AddString("name", name);
+	auto name_json = writer.CreateString(name);
+	obj.Add("name", name_json);
 
 	// Serialize: metadata-location
-	obj.AddString("metadata-location", metadata_location);
+	auto metadata_location_json = writer.CreateString(metadata_location);
+	obj.Add("metadata-location", metadata_location_json);
 }
 
 JSONMutableValue RegisterViewRequest::ToJSON(JSONWriter &writer) const {

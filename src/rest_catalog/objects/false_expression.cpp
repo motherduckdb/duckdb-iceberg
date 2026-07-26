@@ -44,8 +44,8 @@ string FalseExpression::TryFromJSON(JSONValue obj) {
 
 void FalseExpression::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	auto type_val = type.ToJSON(writer);
-	obj.Add("type", type_val);
+	auto type_json = type.ToJSON(writer);
+	obj.Add("type", type_json);
 }
 
 JSONMutableValue FalseExpression::ToJSON(JSONWriter &writer) const {

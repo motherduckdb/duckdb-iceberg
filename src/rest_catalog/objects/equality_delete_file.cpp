@@ -96,12 +96,12 @@ void EqualityDeleteFile::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) 
 	// Serialize: equality-ids
 	if (equality_ids.has_value()) {
 		auto &equality_ids_value = *equality_ids;
-		auto equality_ids_value_arr = writer.CreateArray();
-		for (const auto &item : equality_ids_value) {
-			auto item_val = writer.CreateSignedInteger(item);
-			equality_ids_value_arr.Append(item_val);
+		auto equality_ids_json = writer.CreateArray();
+		for (const auto &equality_ids_json_item : equality_ids_value) {
+			auto equality_ids_json_item_json = writer.CreateSignedInteger(equality_ids_json_item);
+			equality_ids_json.Append(equality_ids_json_item_json);
 		}
-		obj.Add("equality-ids", equality_ids_value_arr);
+		obj.Add("equality-ids", equality_ids_json);
 	}
 }
 

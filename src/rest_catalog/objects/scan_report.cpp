@@ -191,48 +191,50 @@ string ScanReport::TryFromJSON(JSONValue obj) {
 
 void ScanReport::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: table-name
-	obj.AddString("table-name", table_name);
+	auto table_name_json = writer.CreateString(table_name);
+	obj.Add("table-name", table_name_json);
 
 	// Serialize: snapshot-id
-	obj.Add("snapshot-id", writer.CreateSignedInteger(snapshot_id));
+	auto snapshot_id_json = writer.CreateSignedInteger(snapshot_id);
+	obj.Add("snapshot-id", snapshot_id_json);
 
 	// Serialize: filter
-	auto filter_val = filter->ToJSON(writer);
-	obj.Add("filter", filter_val);
+	auto filter_json = filter->ToJSON(writer);
+	obj.Add("filter", filter_json);
 
 	// Serialize: schema-id
-	obj.Add("schema-id", writer.CreateSignedInteger(schema_id));
+	auto schema_id_json = writer.CreateSignedInteger(schema_id);
+	obj.Add("schema-id", schema_id_json);
 
 	// Serialize: projected-field-ids
-	auto projected_field_ids_arr = writer.CreateArray();
-	for (const auto &item : projected_field_ids) {
-		auto item_val = writer.CreateSignedInteger(item);
-		projected_field_ids_arr.Append(item_val);
+	auto projected_field_ids_json = writer.CreateArray();
+	for (const auto &projected_field_ids_json_item : projected_field_ids) {
+		auto projected_field_ids_json_item_json = writer.CreateSignedInteger(projected_field_ids_json_item);
+		projected_field_ids_json.Append(projected_field_ids_json_item_json);
 	}
-	obj.Add("projected-field-ids", projected_field_ids_arr);
+	obj.Add("projected-field-ids", projected_field_ids_json);
 
 	// Serialize: projected-field-names
-	auto projected_field_names_arr = writer.CreateArray();
-	for (const auto &item : projected_field_names) {
-		auto item_val = writer.CreateString(item);
-		projected_field_names_arr.Append(item_val);
+	auto projected_field_names_json = writer.CreateArray();
+	for (const auto &projected_field_names_json_item : projected_field_names) {
+		auto projected_field_names_json_item_json = writer.CreateString(projected_field_names_json_item);
+		projected_field_names_json.Append(projected_field_names_json_item_json);
 	}
-	obj.Add("projected-field-names", projected_field_names_arr);
+	obj.Add("projected-field-names", projected_field_names_json);
 
 	// Serialize: metrics
-	auto metrics_val = metrics.ToJSON(writer);
-	obj.Add("metrics", metrics_val);
+	auto metrics_json = metrics.ToJSON(writer);
+	obj.Add("metrics", metrics_json);
 
 	// Serialize: metadata
 	if (metadata.has_value()) {
 		auto &metadata_value = *metadata;
-		auto metadata_value_obj = writer.CreateObject();
-		for (const auto &it : metadata_value) {
-			auto &key = it.first;
-			auto &value = it.second;
-			metadata_value_obj.AddString(key, value);
+		auto metadata_json = writer.CreateObject();
+		for (const auto &[metadata_json_key, metadata_json_value] : metadata_value) {
+			auto metadata_json_value_json = writer.CreateString(metadata_json_value);
+			metadata_json.Add(metadata_json_key, metadata_json_value_json);
 		}
-		obj.Add("metadata", metadata_value_obj);
+		obj.Add("metadata", metadata_json);
 	}
 }
 

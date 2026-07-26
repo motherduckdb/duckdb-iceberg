@@ -75,15 +75,18 @@ string RegisterTableRequest::TryFromJSON(JSONValue obj) {
 
 void RegisterTableRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: name
-	obj.AddString("name", name);
+	auto name_json = writer.CreateString(name);
+	obj.Add("name", name_json);
 
 	// Serialize: metadata-location
-	obj.AddString("metadata-location", metadata_location);
+	auto metadata_location_json = writer.CreateString(metadata_location);
+	obj.Add("metadata-location", metadata_location_json);
 
 	// Serialize: overwrite
 	if (overwrite.has_value()) {
 		auto &overwrite_value = *overwrite;
-		obj.Add("overwrite", writer.CreateBoolean(overwrite_value));
+		auto overwrite_json = writer.CreateBoolean(overwrite_value);
+		obj.Add("overwrite", overwrite_json);
 	}
 }
 

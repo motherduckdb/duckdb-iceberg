@@ -73,7 +73,8 @@ void RemoveStatisticsUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue o
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: snapshot-id
-	obj.Add("snapshot-id", writer.CreateSignedInteger(snapshot_id));
+	auto snapshot_id_json = writer.CreateSignedInteger(snapshot_id);
+	obj.Add("snapshot-id", snapshot_id_json);
 }
 
 JSONMutableValue RemoveStatisticsUpdate::ToJSON(JSONWriter &writer) const {

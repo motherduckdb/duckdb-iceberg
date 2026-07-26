@@ -42,7 +42,8 @@ string LongTypeValue::TryFromJSON(JSONValue obj) {
 }
 
 JSONMutableValue LongTypeValue::ToJSON(JSONWriter &writer) const {
-	return writer.CreateSignedInteger(value);
+	auto result = writer.CreateSignedInteger(value);
+	return result;
 }
 
 } // namespace rest_api_objects

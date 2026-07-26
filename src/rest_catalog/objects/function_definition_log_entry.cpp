@@ -78,15 +78,16 @@ string FunctionDefinitionLogEntry::TryFromJSON(JSONValue obj) {
 
 void FunctionDefinitionLogEntry::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: timestamp-ms
-	obj.Add("timestamp-ms", writer.CreateSignedInteger(timestamp_ms));
+	auto timestamp_ms_json = writer.CreateSignedInteger(timestamp_ms);
+	obj.Add("timestamp-ms", timestamp_ms_json);
 
 	// Serialize: definition-versions
-	auto definition_versions_arr = writer.CreateArray();
-	for (const auto &item : definition_versions) {
-		auto item_val = item.ToJSON(writer);
-		definition_versions_arr.Append(item_val);
+	auto definition_versions_json = writer.CreateArray();
+	for (const auto &definition_versions_json_item : definition_versions) {
+		auto definition_versions_json_item_json = definition_versions_json_item.ToJSON(writer);
+		definition_versions_json.Append(definition_versions_json_item_json);
 	}
-	obj.Add("definition-versions", definition_versions_arr);
+	obj.Add("definition-versions", definition_versions_json);
 }
 
 JSONMutableValue FunctionDefinitionLogEntry::ToJSON(JSONWriter &writer) const {

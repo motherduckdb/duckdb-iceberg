@@ -59,11 +59,12 @@ string Namespace::TryFromJSON(JSONValue obj) {
 }
 
 JSONMutableValue Namespace::ToJSON(JSONWriter &writer) const {
-	auto arr = writer.CreateArray();
-	for (const auto &item : value) {
-		arr.AppendString(item);
+	auto result = writer.CreateArray();
+	for (const auto &result_item : value) {
+		auto result_item_json = writer.CreateString(result_item);
+		result.Append(result_item_json);
 	}
-	return arr;
+	return result;
 }
 
 } // namespace rest_api_objects

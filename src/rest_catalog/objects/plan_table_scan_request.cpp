@@ -215,65 +215,71 @@ void PlanTableScanRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj
 	// Serialize: snapshot-id
 	if (snapshot_id.has_value()) {
 		auto &snapshot_id_value = *snapshot_id;
-		obj.Add("snapshot-id", writer.CreateSignedInteger(snapshot_id_value));
+		auto snapshot_id_json = writer.CreateSignedInteger(snapshot_id_value);
+		obj.Add("snapshot-id", snapshot_id_json);
 	}
 
 	// Serialize: select
 	if (select.has_value()) {
 		auto &select_value = *select;
-		auto select_value_arr = writer.CreateArray();
-		for (const auto &item : select_value) {
-			auto item_val = item.ToJSON(writer);
-			select_value_arr.Append(item_val);
+		auto select_json = writer.CreateArray();
+		for (const auto &select_json_item : select_value) {
+			auto select_json_item_json = select_json_item.ToJSON(writer);
+			select_json.Append(select_json_item_json);
 		}
-		obj.Add("select", select_value_arr);
+		obj.Add("select", select_json);
 	}
 
 	// Serialize: filter
 	if (filter != nullptr) {
-		auto filter_val = filter->ToJSON(writer);
-		obj.Add("filter", filter_val);
+		auto filter_json = filter->ToJSON(writer);
+		obj.Add("filter", filter_json);
 	}
 
 	// Serialize: min-rows-requested
 	if (min_rows_requested.has_value()) {
 		auto &min_rows_requested_value = *min_rows_requested;
-		obj.Add("min-rows-requested", writer.CreateSignedInteger(min_rows_requested_value));
+		auto min_rows_requested_json = writer.CreateSignedInteger(min_rows_requested_value);
+		obj.Add("min-rows-requested", min_rows_requested_json);
 	}
 
 	// Serialize: case-sensitive
 	if (case_sensitive.has_value()) {
 		auto &case_sensitive_value = *case_sensitive;
-		obj.Add("case-sensitive", writer.CreateBoolean(case_sensitive_value));
+		auto case_sensitive_json = writer.CreateBoolean(case_sensitive_value);
+		obj.Add("case-sensitive", case_sensitive_json);
 	}
 
 	// Serialize: use-snapshot-schema
 	if (use_snapshot_schema.has_value()) {
 		auto &use_snapshot_schema_value = *use_snapshot_schema;
-		obj.Add("use-snapshot-schema", writer.CreateBoolean(use_snapshot_schema_value));
+		auto use_snapshot_schema_json = writer.CreateBoolean(use_snapshot_schema_value);
+		obj.Add("use-snapshot-schema", use_snapshot_schema_json);
 	}
 
 	// Serialize: start-snapshot-id
 	if (start_snapshot_id.has_value()) {
 		auto &start_snapshot_id_value = *start_snapshot_id;
-		obj.Add("start-snapshot-id", writer.CreateSignedInteger(start_snapshot_id_value));
+		auto start_snapshot_id_json = writer.CreateSignedInteger(start_snapshot_id_value);
+		obj.Add("start-snapshot-id", start_snapshot_id_json);
 	}
 
 	// Serialize: end-snapshot-id
 	if (end_snapshot_id.has_value()) {
 		auto &end_snapshot_id_value = *end_snapshot_id;
-		obj.Add("end-snapshot-id", writer.CreateSignedInteger(end_snapshot_id_value));
+		auto end_snapshot_id_json = writer.CreateSignedInteger(end_snapshot_id_value);
+		obj.Add("end-snapshot-id", end_snapshot_id_json);
 	}
 
 	// Serialize: stats-fields
 	if (stats_fields.has_value()) {
 		auto &stats_fields_value = *stats_fields;
-		auto stats_fields_value_arr = writer.CreateArray();
-		for (const auto &item : stats_fields_value) {
-			auto item_val = item.ToJSON(writer);
-			stats_fields_value_arr.Append(item_val);
+		auto stats_fields_json = writer.CreateArray();
+		for (const auto &stats_fields_json_item : stats_fields_value) {
+			auto stats_fields_json_item_json = stats_fields_json_item.ToJSON(writer);
+			stats_fields_json.Append(stats_fields_json_item_json);
 		}
-		obj.Add("stats-fields", stats_fields_value_arr);
+		obj.Add("stats-fields", stats_fields_json);
 	}
 }
 

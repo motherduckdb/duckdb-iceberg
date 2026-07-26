@@ -91,12 +91,12 @@ void RemoveSchemasUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj)
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: schema-ids
-	auto schema_ids_arr = writer.CreateArray();
-	for (const auto &item : schema_ids) {
-		auto item_val = writer.CreateSignedInteger(item);
-		schema_ids_arr.Append(item_val);
+	auto schema_ids_json = writer.CreateArray();
+	for (const auto &schema_ids_json_item : schema_ids) {
+		auto schema_ids_json_item_json = writer.CreateSignedInteger(schema_ids_json_item);
+		schema_ids_json.Append(schema_ids_json_item_json);
 	}
-	obj.Add("schema-ids", schema_ids_arr);
+	obj.Add("schema-ids", schema_ids_json);
 }
 
 JSONMutableValue RemoveSchemasUpdate::ToJSON(JSONWriter &writer) const {

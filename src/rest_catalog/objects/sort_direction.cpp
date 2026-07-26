@@ -40,7 +40,8 @@ string SortDirection::TryFromJSON(JSONValue obj) {
 }
 
 JSONMutableValue SortDirection::ToJSON(JSONWriter &writer) const {
-	return writer.CreateString(value);
+	auto result = writer.CreateString(value);
+	return result;
 }
 
 } // namespace rest_api_objects

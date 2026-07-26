@@ -69,15 +69,16 @@ string TransformTerm::TryFromJSON(JSONValue obj) {
 
 void TransformTerm::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	obj.AddString("type", type);
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: transform
-	auto transform_val = transform.ToJSON(writer);
-	obj.Add("transform", transform_val);
+	auto transform_json = transform.ToJSON(writer);
+	obj.Add("transform", transform_json);
 
 	// Serialize: term
-	auto term_val = term.ToJSON(writer);
-	obj.Add("term", term_val);
+	auto term_json = term.ToJSON(writer);
+	obj.Add("term", term_json);
 }
 
 JSONMutableValue TransformTerm::ToJSON(JSONWriter &writer) const {

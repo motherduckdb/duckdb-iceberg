@@ -60,13 +60,14 @@ string LoadFunctionResult::TryFromJSON(JSONValue obj) {
 
 void LoadFunctionResult::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: metadata
-	auto metadata_val = metadata.ToJSON(writer);
-	obj.Add("metadata", metadata_val);
+	auto metadata_json = metadata.ToJSON(writer);
+	obj.Add("metadata", metadata_json);
 
 	// Serialize: metadata-location
 	if (metadata_location.has_value()) {
 		auto &metadata_location_value = *metadata_location;
-		obj.AddString("metadata-location", metadata_location_value);
+		auto metadata_location_json = writer.CreateString(metadata_location_value);
+		obj.Add("metadata-location", metadata_location_json);
 	}
 }
 

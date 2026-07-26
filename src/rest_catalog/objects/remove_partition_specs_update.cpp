@@ -91,12 +91,12 @@ void RemovePartitionSpecsUpdate::PopulateJSON(JSONWriter &writer, JSONMutableVal
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: spec-ids
-	auto spec_ids_arr = writer.CreateArray();
-	for (const auto &item : spec_ids) {
-		auto item_val = writer.CreateSignedInteger(item);
-		spec_ids_arr.Append(item_val);
+	auto spec_ids_json = writer.CreateArray();
+	for (const auto &spec_ids_json_item : spec_ids) {
+		auto spec_ids_json_item_json = writer.CreateSignedInteger(spec_ids_json_item);
+		spec_ids_json.Append(spec_ids_json_item_json);
 	}
-	obj.Add("spec-ids", spec_ids_arr);
+	obj.Add("spec-ids", spec_ids_json);
 }
 
 JSONMutableValue RemovePartitionSpecsUpdate::ToJSON(JSONWriter &writer) const {

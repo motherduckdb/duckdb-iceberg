@@ -107,27 +107,29 @@ string EncryptedKey::TryFromJSON(JSONValue obj) {
 
 void EncryptedKey::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: key-id
-	obj.AddString("key-id", key_id);
+	auto key_id_json = writer.CreateString(key_id);
+	obj.Add("key-id", key_id_json);
 
 	// Serialize: encrypted-key-metadata
-	obj.AddString("encrypted-key-metadata", encrypted_key_metadata);
+	auto encrypted_key_metadata_json = writer.CreateString(encrypted_key_metadata);
+	obj.Add("encrypted-key-metadata", encrypted_key_metadata_json);
 
 	// Serialize: encrypted-by-id
 	if (encrypted_by_id.has_value()) {
 		auto &encrypted_by_id_value = *encrypted_by_id;
-		obj.AddString("encrypted-by-id", encrypted_by_id_value);
+		auto encrypted_by_id_json = writer.CreateString(encrypted_by_id_value);
+		obj.Add("encrypted-by-id", encrypted_by_id_json);
 	}
 
 	// Serialize: properties
 	if (properties.has_value()) {
 		auto &properties_value = *properties;
-		auto properties_value_obj = writer.CreateObject();
-		for (const auto &it : properties_value) {
-			auto &key = it.first;
-			auto &value = it.second;
-			properties_value_obj.AddString(key, value);
+		auto properties_json = writer.CreateObject();
+		for (const auto &[properties_json_key, properties_json_value] : properties_value) {
+			auto properties_json_value_json = writer.CreateString(properties_json_value);
+			properties_json.Add(properties_json_key, properties_json_value_json);
 		}
-		obj.Add("properties", properties_value_obj);
+		obj.Add("properties", properties_json);
 	}
 }
 

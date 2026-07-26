@@ -84,13 +84,14 @@ void AddSchemaUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) con
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: schema
-	auto schema_val = schema.ToJSON(writer);
-	obj.Add("schema", schema_val);
+	auto schema_json = schema.ToJSON(writer);
+	obj.Add("schema", schema_json);
 
 	// Serialize: last-column-id
 	if (last_column_id.has_value()) {
 		auto &last_column_id_value = *last_column_id;
-		obj.Add("last-column-id", writer.CreateSignedInteger(last_column_id_value));
+		auto last_column_id_json = writer.CreateSignedInteger(last_column_id_value);
+		obj.Add("last-column-id", last_column_id_json);
 	}
 }
 

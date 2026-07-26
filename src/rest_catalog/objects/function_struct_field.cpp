@@ -57,11 +57,12 @@ string FunctionStructField::TryFromJSON(JSONValue obj) {
 
 void FunctionStructField::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: name
-	obj.AddString("name", name);
+	auto name_json = writer.CreateString(name);
+	obj.Add("name", name_json);
 
 	// Serialize: type
-	auto type_val = type->ToJSON(writer);
-	obj.Add("type", type_val);
+	auto type_json = type->ToJSON(writer);
+	obj.Add("type", type_json);
 }
 
 JSONMutableValue FunctionStructField::ToJSON(JSONWriter &writer) const {

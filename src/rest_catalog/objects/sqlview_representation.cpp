@@ -71,13 +71,16 @@ string SQLViewRepresentation::TryFromJSON(JSONValue obj) {
 
 void SQLViewRepresentation::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	obj.AddString("type", type);
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: sql
-	obj.AddString("sql", sql);
+	auto sql_json = writer.CreateString(sql);
+	obj.Add("sql", sql_json);
 
 	// Serialize: dialect
-	obj.AddString("dialect", dialect);
+	auto dialect_json = writer.CreateString(dialect);
+	obj.Add("dialect", dialect_json);
 }
 
 JSONMutableValue SQLViewRepresentation::ToJSON(JSONWriter &writer) const {

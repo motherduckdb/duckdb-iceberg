@@ -76,16 +76,16 @@ string StorageCredential::TryFromJSON(JSONValue obj) {
 
 void StorageCredential::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: prefix
-	obj.AddString("prefix", prefix);
+	auto prefix_json = writer.CreateString(prefix);
+	obj.Add("prefix", prefix_json);
 
 	// Serialize: config
-	auto config_obj = writer.CreateObject();
-	for (const auto &it : config) {
-		auto &key = it.first;
-		auto &value = it.second;
-		config_obj.AddString(key, value);
+	auto config_json = writer.CreateObject();
+	for (const auto &[config_json_key, config_json_value] : config) {
+		auto config_json_value_json = writer.CreateString(config_json_value);
+		config_json.Add(config_json_key, config_json_value_json);
 	}
-	obj.Add("config", config_obj);
+	obj.Add("config", config_json);
 }
 
 JSONMutableValue StorageCredential::ToJSON(JSONWriter &writer) const {

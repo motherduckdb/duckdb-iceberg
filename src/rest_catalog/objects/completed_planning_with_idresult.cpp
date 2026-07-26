@@ -48,7 +48,8 @@ string CompletedPlanningWithIDResult::Object6::TryFromJSON(JSONValue obj) {
 
 void CompletedPlanningWithIDResult::Object6::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: plan-id
-	obj.AddString("plan-id", plan_id);
+	auto plan_id_json = writer.CreateString(plan_id);
+	obj.Add("plan-id", plan_id_json);
 }
 
 JSONMutableValue CompletedPlanningWithIDResult::Object6::ToJSON(JSONWriter &writer) const {

@@ -85,19 +85,19 @@ void ListFunctionsResponse::PopulateJSON(JSONWriter &writer, JSONMutableValue ob
 	// Serialize: next-page-token
 	if (next_page_token.has_value()) {
 		auto &next_page_token_value = *next_page_token;
-		auto next_page_token_value_val = next_page_token_value.ToJSON(writer);
-		obj.Add("next-page-token", next_page_token_value_val);
+		auto next_page_token_json = next_page_token_value.ToJSON(writer);
+		obj.Add("next-page-token", next_page_token_json);
 	}
 
 	// Serialize: identifiers
 	if (identifiers.has_value()) {
 		auto &identifiers_value = *identifiers;
-		auto identifiers_value_arr = writer.CreateArray();
-		for (const auto &item : identifiers_value) {
-			auto item_val = item.ToJSON(writer);
-			identifiers_value_arr.Append(item_val);
+		auto identifiers_json = writer.CreateArray();
+		for (const auto &identifiers_json_item : identifiers_value) {
+			auto identifiers_json_item_json = identifiers_json_item.ToJSON(writer);
+			identifiers_json.Append(identifiers_json_item_json);
 		}
-		obj.Add("identifiers", identifiers_value_arr);
+		obj.Add("identifiers", identifiers_json);
 	}
 }
 

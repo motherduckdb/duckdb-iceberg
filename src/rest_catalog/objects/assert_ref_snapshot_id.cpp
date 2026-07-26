@@ -85,15 +85,18 @@ string AssertRefSnapshotId::TryFromJSON(JSONValue obj) {
 
 void AssertRefSnapshotId::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	obj.AddString("type", type);
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: ref
-	obj.AddString("ref", ref);
+	auto ref_json = writer.CreateString(ref);
+	obj.Add("ref", ref_json);
 
 	// Serialize: snapshot-id
 	if (snapshot_id.has_value()) {
 		auto &snapshot_id_value = *snapshot_id;
-		obj.Add("snapshot-id", writer.CreateSignedInteger(snapshot_id_value));
+		auto snapshot_id_json = writer.CreateSignedInteger(snapshot_id_value);
+		obj.Add("snapshot-id", snapshot_id_json);
 	} else {
 		obj.Add("snapshot-id", writer.CreateNull());
 	}

@@ -40,7 +40,8 @@ string BinaryTypeValue::TryFromJSON(JSONValue obj) {
 }
 
 JSONMutableValue BinaryTypeValue::ToJSON(JSONWriter &writer) const {
-	return writer.CreateString(value);
+	auto result = writer.CreateString(value);
+	return result;
 }
 
 } // namespace rest_api_objects

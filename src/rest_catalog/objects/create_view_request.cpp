@@ -112,29 +112,30 @@ string CreateViewRequest::TryFromJSON(JSONValue obj) {
 
 void CreateViewRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: name
-	obj.AddString("name", name);
+	auto name_json = writer.CreateString(name);
+	obj.Add("name", name_json);
 
 	// Serialize: schema
-	auto schema_val = schema.ToJSON(writer);
-	obj.Add("schema", schema_val);
+	auto schema_json = schema.ToJSON(writer);
+	obj.Add("schema", schema_json);
 
 	// Serialize: view-version
-	auto view_version_val = view_version.ToJSON(writer);
-	obj.Add("view-version", view_version_val);
+	auto view_version_json = view_version.ToJSON(writer);
+	obj.Add("view-version", view_version_json);
 
 	// Serialize: properties
-	auto properties_obj = writer.CreateObject();
-	for (const auto &it : properties) {
-		auto &key = it.first;
-		auto &value = it.second;
-		properties_obj.AddString(key, value);
+	auto properties_json = writer.CreateObject();
+	for (const auto &[properties_json_key, properties_json_value] : properties) {
+		auto properties_json_value_json = writer.CreateString(properties_json_value);
+		properties_json.Add(properties_json_key, properties_json_value_json);
 	}
-	obj.Add("properties", properties_obj);
+	obj.Add("properties", properties_json);
 
 	// Serialize: location
 	if (location.has_value()) {
 		auto &location_value = *location;
-		obj.AddString("location", location_value);
+		auto location_json = writer.CreateString(location_value);
+		obj.Add("location", location_json);
 	}
 }
 

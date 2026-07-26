@@ -63,10 +63,12 @@ string AssertLastAssignedPartitionId::TryFromJSON(JSONValue obj) {
 
 void AssertLastAssignedPartitionId::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	obj.AddString("type", type);
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: last-assigned-partition-id
-	obj.Add("last-assigned-partition-id", writer.CreateSignedInteger(last_assigned_partition_id));
+	auto last_assigned_partition_id_json = writer.CreateSignedInteger(last_assigned_partition_id);
+	obj.Add("last-assigned-partition-id", last_assigned_partition_id_json);
 }
 
 JSONMutableValue AssertLastAssignedPartitionId::ToJSON(JSONWriter &writer) const {

@@ -60,11 +60,12 @@ string FunctionListType::TryFromJSON(JSONValue obj) {
 
 void FunctionListType::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	obj.AddString("type", type);
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: element
-	auto element_val = element->ToJSON(writer);
-	obj.Add("element", element_val);
+	auto element_json = element->ToJSON(writer);
+	obj.Add("element", element_json);
 }
 
 JSONMutableValue FunctionListType::ToJSON(JSONWriter &writer) const {

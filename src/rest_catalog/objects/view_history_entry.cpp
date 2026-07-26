@@ -62,10 +62,12 @@ string ViewHistoryEntry::TryFromJSON(JSONValue obj) {
 
 void ViewHistoryEntry::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: version-id
-	obj.Add("version-id", writer.CreateSignedInteger(version_id));
+	auto version_id_json = writer.CreateSignedInteger(version_id);
+	obj.Add("version-id", version_id_json);
 
 	// Serialize: timestamp-ms
-	obj.Add("timestamp-ms", writer.CreateSignedInteger(timestamp_ms));
+	auto timestamp_ms_json = writer.CreateSignedInteger(timestamp_ms);
+	obj.Add("timestamp-ms", timestamp_ms_json);
 }
 
 JSONMutableValue ViewHistoryEntry::ToJSON(JSONWriter &writer) const {

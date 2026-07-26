@@ -105,23 +105,26 @@ string ErrorModel::TryFromJSON(JSONValue obj) {
 
 void ErrorModel::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: message
-	obj.AddString("message", message);
+	auto message_json = writer.CreateString(message);
+	obj.Add("message", message_json);
 
 	// Serialize: type
-	obj.AddString("type", type);
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: code
-	obj.Add("code", writer.CreateSignedInteger(code));
+	auto code_json = writer.CreateSignedInteger(code);
+	obj.Add("code", code_json);
 
 	// Serialize: stack
 	if (stack.has_value()) {
 		auto &stack_value = *stack;
-		auto stack_value_arr = writer.CreateArray();
-		for (const auto &item : stack_value) {
-			auto item_val = writer.CreateString(item);
-			stack_value_arr.Append(item_val);
+		auto stack_json = writer.CreateArray();
+		for (const auto &stack_json_item : stack_value) {
+			auto stack_json_item_json = writer.CreateString(stack_json_item);
+			stack_json.Append(stack_json_item_json);
 		}
-		obj.Add("stack", stack_value_arr);
+		obj.Add("stack", stack_json);
 	}
 }
 

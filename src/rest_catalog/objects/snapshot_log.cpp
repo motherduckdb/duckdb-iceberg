@@ -64,10 +64,12 @@ string SnapshotLog::Object3::TryFromJSON(JSONValue obj) {
 
 void SnapshotLog::Object3::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: snapshot-id
-	obj.Add("snapshot-id", writer.CreateSignedInteger(snapshot_id));
+	auto snapshot_id_json = writer.CreateSignedInteger(snapshot_id);
+	obj.Add("snapshot-id", snapshot_id_json);
 
 	// Serialize: timestamp-ms
-	obj.Add("timestamp-ms", writer.CreateSignedInteger(timestamp_ms));
+	auto timestamp_ms_json = writer.CreateSignedInteger(timestamp_ms);
+	obj.Add("timestamp-ms", timestamp_ms_json);
 }
 
 JSONMutableValue SnapshotLog::Object3::ToJSON(JSONWriter &writer) const {
@@ -119,11 +121,12 @@ string SnapshotLog::TryFromJSON(JSONValue obj) {
 }
 
 JSONMutableValue SnapshotLog::ToJSON(JSONWriter &writer) const {
-	auto arr = writer.CreateArray();
-	for (const auto &item : value) {
-		arr.Append(item.ToJSON(writer));
+	auto result = writer.CreateArray();
+	for (const auto &result_item : value) {
+		auto result_item_json = result_item.ToJSON(writer);
+		result.Append(result_item_json);
 	}
-	return arr;
+	return result;
 }
 
 } // namespace rest_api_objects

@@ -76,19 +76,20 @@ string SortField::TryFromJSON(JSONValue obj) {
 
 void SortField::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: source-id
-	obj.Add("source-id", writer.CreateSignedInteger(source_id));
+	auto source_id_json = writer.CreateSignedInteger(source_id);
+	obj.Add("source-id", source_id_json);
 
 	// Serialize: transform
-	auto transform_val = transform.ToJSON(writer);
-	obj.Add("transform", transform_val);
+	auto transform_json = transform.ToJSON(writer);
+	obj.Add("transform", transform_json);
 
 	// Serialize: direction
-	auto direction_val = direction.ToJSON(writer);
-	obj.Add("direction", direction_val);
+	auto direction_json = direction.ToJSON(writer);
+	obj.Add("direction", direction_json);
 
 	// Serialize: null-order
-	auto null_order_val = null_order.ToJSON(writer);
-	obj.Add("null-order", null_order_val);
+	auto null_order_json = null_order.ToJSON(writer);
+	obj.Add("null-order", null_order_json);
 }
 
 JSONMutableValue SortField::ToJSON(JSONWriter &writer) const {

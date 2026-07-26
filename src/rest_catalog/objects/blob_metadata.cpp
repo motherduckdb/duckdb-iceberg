@@ -139,32 +139,34 @@ string BlobMetadata::TryFromJSON(JSONValue obj) {
 
 void BlobMetadata::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	obj.AddString("type", type);
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: snapshot-id
-	obj.Add("snapshot-id", writer.CreateSignedInteger(snapshot_id));
+	auto snapshot_id_json = writer.CreateSignedInteger(snapshot_id);
+	obj.Add("snapshot-id", snapshot_id_json);
 
 	// Serialize: sequence-number
-	obj.Add("sequence-number", writer.CreateSignedInteger(sequence_number));
+	auto sequence_number_json = writer.CreateSignedInteger(sequence_number);
+	obj.Add("sequence-number", sequence_number_json);
 
 	// Serialize: fields
-	auto fields_arr = writer.CreateArray();
-	for (const auto &item : fields) {
-		auto item_val = writer.CreateSignedInteger(item);
-		fields_arr.Append(item_val);
+	auto fields_json = writer.CreateArray();
+	for (const auto &fields_json_item : fields) {
+		auto fields_json_item_json = writer.CreateSignedInteger(fields_json_item);
+		fields_json.Append(fields_json_item_json);
 	}
-	obj.Add("fields", fields_arr);
+	obj.Add("fields", fields_json);
 
 	// Serialize: properties
 	if (properties.has_value()) {
 		auto &properties_value = *properties;
-		auto properties_value_obj = writer.CreateObject();
-		for (const auto &it : properties_value) {
-			auto &key = it.first;
-			auto &value = it.second;
-			properties_value_obj.AddString(key, value);
+		auto properties_json = writer.CreateObject();
+		for (const auto &[properties_json_key, properties_json_value] : properties_value) {
+			auto properties_json_value_json = writer.CreateString(properties_json_value);
+			properties_json.Add(properties_json_key, properties_json_value_json);
 		}
-		obj.Add("properties", properties_value_obj);
+		obj.Add("properties", properties_json);
 	}
 }
 

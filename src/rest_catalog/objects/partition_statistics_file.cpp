@@ -77,13 +77,16 @@ string PartitionStatisticsFile::TryFromJSON(JSONValue obj) {
 
 void PartitionStatisticsFile::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: snapshot-id
-	obj.Add("snapshot-id", writer.CreateSignedInteger(snapshot_id));
+	auto snapshot_id_json = writer.CreateSignedInteger(snapshot_id);
+	obj.Add("snapshot-id", snapshot_id_json);
 
 	// Serialize: statistics-path
-	obj.AddString("statistics-path", statistics_path);
+	auto statistics_path_json = writer.CreateString(statistics_path);
+	obj.Add("statistics-path", statistics_path_json);
 
 	// Serialize: file-size-in-bytes
-	obj.Add("file-size-in-bytes", writer.CreateSignedInteger(file_size_in_bytes));
+	auto file_size_in_bytes_json = writer.CreateSignedInteger(file_size_in_bytes);
+	obj.Add("file-size-in-bytes", file_size_in_bytes_json);
 }
 
 JSONMutableValue PartitionStatisticsFile::ToJSON(JSONWriter &writer) const {

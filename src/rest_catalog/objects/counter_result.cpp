@@ -60,10 +60,12 @@ string CounterResult::TryFromJSON(JSONValue obj) {
 
 void CounterResult::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: unit
-	obj.AddString("unit", unit);
+	auto unit_json = writer.CreateString(unit);
+	obj.Add("unit", unit_json);
 
 	// Serialize: value
-	obj.Add("value", writer.CreateSignedInteger(value));
+	auto value_json = writer.CreateSignedInteger(value);
+	obj.Add("value", value_json);
 }
 
 JSONMutableValue CounterResult::ToJSON(JSONWriter &writer) const {

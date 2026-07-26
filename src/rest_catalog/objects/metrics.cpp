@@ -51,11 +51,9 @@ string Metrics::TryFromJSON(JSONValue obj) {
 
 void Metrics::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize additional properties
-	for (const auto &it : additional_properties) {
-		auto &key = it.first;
-		auto &value = it.second;
-		auto value_obj = value.ToJSON(writer);
-		obj.Add(key, value_obj);
+	for (const auto &[key, value] : additional_properties) {
+		auto value_json = value.ToJSON(writer);
+		obj.Add(key, value_json);
 	}
 }
 

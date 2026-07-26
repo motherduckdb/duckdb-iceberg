@@ -71,14 +71,13 @@ string MultiValuedMap::TryFromJSON(JSONValue obj) {
 
 void MultiValuedMap::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize additional properties
-	for (const auto &it : additional_properties) {
-		auto &key = it.first;
-		auto &value = it.second;
-		auto value_obj = writer.CreateArray();
-		for (const auto &array_item : value) {
-			value_obj.AppendString(array_item);
+	for (const auto &[key, value] : additional_properties) {
+		auto value_json = writer.CreateArray();
+		for (const auto &value_json_item : value) {
+			auto value_json_item_json = writer.CreateString(value_json_item);
+			value_json.Append(value_json_item_json);
 		}
-		obj.Add(key, value_obj);
+		obj.Add(key, value_json);
 	}
 }
 

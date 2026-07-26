@@ -42,7 +42,8 @@ string NullTypeValue::TryFromJSON(JSONValue obj) {
 }
 
 JSONMutableValue NullTypeValue::ToJSON(JSONWriter &writer) const {
-	return writer.CreateNull();
+	auto result = writer.CreateNull();
+	return result;
 }
 
 } // namespace rest_api_objects

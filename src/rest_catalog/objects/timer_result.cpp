@@ -75,13 +75,16 @@ string TimerResult::TryFromJSON(JSONValue obj) {
 
 void TimerResult::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: time-unit
-	obj.AddString("time-unit", time_unit);
+	auto time_unit_json = writer.CreateString(time_unit);
+	obj.Add("time-unit", time_unit_json);
 
 	// Serialize: count
-	obj.Add("count", writer.CreateSignedInteger(count));
+	auto count_json = writer.CreateSignedInteger(count);
+	obj.Add("count", count_json);
 
 	// Serialize: total-duration
-	obj.Add("total-duration", writer.CreateSignedInteger(total_duration));
+	auto total_duration_json = writer.CreateSignedInteger(total_duration);
+	obj.Add("total-duration", total_duration_json);
 }
 
 JSONMutableValue TimerResult::ToJSON(JSONWriter &writer) const {

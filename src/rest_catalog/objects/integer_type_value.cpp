@@ -40,7 +40,8 @@ string IntegerTypeValue::TryFromJSON(JSONValue obj) {
 }
 
 JSONMutableValue IntegerTypeValue::ToJSON(JSONWriter &writer) const {
-	return writer.CreateSignedInteger(value);
+	auto result = writer.CreateSignedInteger(value);
+	return result;
 }
 
 } // namespace rest_api_objects

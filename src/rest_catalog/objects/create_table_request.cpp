@@ -147,48 +147,50 @@ string CreateTableRequest::TryFromJSON(JSONValue obj) {
 
 void CreateTableRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: name
-	obj.AddString("name", name);
+	auto name_json = writer.CreateString(name);
+	obj.Add("name", name_json);
 
 	// Serialize: schema
-	auto schema_val = schema.ToJSON(writer);
-	obj.Add("schema", schema_val);
+	auto schema_json = schema.ToJSON(writer);
+	obj.Add("schema", schema_json);
 
 	// Serialize: location
 	if (location.has_value()) {
 		auto &location_value = *location;
-		obj.AddString("location", location_value);
+		auto location_json = writer.CreateString(location_value);
+		obj.Add("location", location_json);
 	}
 
 	// Serialize: partition-spec
 	if (partition_spec.has_value()) {
 		auto &partition_spec_value = *partition_spec;
-		auto partition_spec_value_val = partition_spec_value.ToJSON(writer);
-		obj.Add("partition-spec", partition_spec_value_val);
+		auto partition_spec_json = partition_spec_value.ToJSON(writer);
+		obj.Add("partition-spec", partition_spec_json);
 	}
 
 	// Serialize: write-order
 	if (write_order.has_value()) {
 		auto &write_order_value = *write_order;
-		auto write_order_value_val = write_order_value.ToJSON(writer);
-		obj.Add("write-order", write_order_value_val);
+		auto write_order_json = write_order_value.ToJSON(writer);
+		obj.Add("write-order", write_order_json);
 	}
 
 	// Serialize: stage-create
 	if (stage_create.has_value()) {
 		auto &stage_create_value = *stage_create;
-		obj.Add("stage-create", writer.CreateBoolean(stage_create_value));
+		auto stage_create_json = writer.CreateBoolean(stage_create_value);
+		obj.Add("stage-create", stage_create_json);
 	}
 
 	// Serialize: properties
 	if (properties.has_value()) {
 		auto &properties_value = *properties;
-		auto properties_value_obj = writer.CreateObject();
-		for (const auto &it : properties_value) {
-			auto &key = it.first;
-			auto &value = it.second;
-			properties_value_obj.AddString(key, value);
+		auto properties_json = writer.CreateObject();
+		for (const auto &[properties_json_key, properties_json_value] : properties_value) {
+			auto properties_json_value_json = writer.CreateString(properties_json_value);
+			properties_json.Add(properties_json_key, properties_json_value_json);
 		}
-		obj.Add("properties", properties_value_obj);
+		obj.Add("properties", properties_json);
 	}
 }
 

@@ -71,7 +71,8 @@ void SetDefaultSortOrderUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValu
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: sort-order-id
-	obj.Add("sort-order-id", writer.CreateSignedInteger(sort_order_id));
+	auto sort_order_id_json = writer.CreateSignedInteger(sort_order_id);
+	obj.Add("sort-order-id", sort_order_id_json);
 }
 
 JSONMutableValue SetDefaultSortOrderUpdate::ToJSON(JSONWriter &writer) const {

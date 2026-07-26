@@ -88,13 +88,12 @@ void SetPropertiesUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj)
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: updates
-	auto updates_obj = writer.CreateObject();
-	for (const auto &it : updates) {
-		auto &key = it.first;
-		auto &value = it.second;
-		updates_obj.AddString(key, value);
+	auto updates_json = writer.CreateObject();
+	for (const auto &[updates_json_key, updates_json_value] : updates) {
+		auto updates_json_value_json = writer.CreateString(updates_json_value);
+		updates_json.Add(updates_json_key, updates_json_value_json);
 	}
-	obj.Add("updates", updates_obj);
+	obj.Add("updates", updates_json);
 }
 
 JSONMutableValue SetPropertiesUpdate::ToJSON(JSONWriter &writer) const {

@@ -523,179 +523,190 @@ string TableMetadata::TryFromJSON(JSONValue obj) {
 
 void TableMetadata::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: format-version
-	obj.Add("format-version", writer.CreateSignedInteger(format_version));
+	auto format_version_json = writer.CreateSignedInteger(format_version);
+	obj.Add("format-version", format_version_json);
 
 	// Serialize: table-uuid
-	obj.AddString("table-uuid", table_uuid);
+	auto table_uuid_json = writer.CreateString(table_uuid);
+	obj.Add("table-uuid", table_uuid_json);
 
 	// Serialize: location
 	if (location.has_value()) {
 		auto &location_value = *location;
-		obj.AddString("location", location_value);
+		auto location_json = writer.CreateString(location_value);
+		obj.Add("location", location_json);
 	}
 
 	// Serialize: last-updated-ms
 	if (last_updated_ms.has_value()) {
 		auto &last_updated_ms_value = *last_updated_ms;
-		obj.Add("last-updated-ms", writer.CreateSignedInteger(last_updated_ms_value));
+		auto last_updated_ms_json = writer.CreateSignedInteger(last_updated_ms_value);
+		obj.Add("last-updated-ms", last_updated_ms_json);
 	}
 
 	// Serialize: next-row-id
 	if (next_row_id.has_value()) {
 		auto &next_row_id_value = *next_row_id;
-		obj.Add("next-row-id", writer.CreateSignedInteger(next_row_id_value));
+		auto next_row_id_json = writer.CreateSignedInteger(next_row_id_value);
+		obj.Add("next-row-id", next_row_id_json);
 	}
 
 	// Serialize: properties
 	if (properties.has_value()) {
 		auto &properties_value = *properties;
-		auto properties_value_obj = writer.CreateObject();
-		for (const auto &it : properties_value) {
-			auto &key = it.first;
-			auto &value = it.second;
-			properties_value_obj.AddString(key, value);
+		auto properties_json = writer.CreateObject();
+		for (const auto &[properties_json_key, properties_json_value] : properties_value) {
+			auto properties_json_value_json = writer.CreateString(properties_json_value);
+			properties_json.Add(properties_json_key, properties_json_value_json);
 		}
-		obj.Add("properties", properties_value_obj);
+		obj.Add("properties", properties_json);
 	}
 
 	// Serialize: schemas
 	if (schemas.has_value()) {
 		auto &schemas_value = *schemas;
-		auto schemas_value_arr = writer.CreateArray();
-		for (const auto &item : schemas_value) {
-			auto item_val = item.ToJSON(writer);
-			schemas_value_arr.Append(item_val);
+		auto schemas_json = writer.CreateArray();
+		for (const auto &schemas_json_item : schemas_value) {
+			auto schemas_json_item_json = schemas_json_item.ToJSON(writer);
+			schemas_json.Append(schemas_json_item_json);
 		}
-		obj.Add("schemas", schemas_value_arr);
+		obj.Add("schemas", schemas_json);
 	}
 
 	// Serialize: current-schema-id
 	if (current_schema_id.has_value()) {
 		auto &current_schema_id_value = *current_schema_id;
-		obj.Add("current-schema-id", writer.CreateSignedInteger(current_schema_id_value));
+		auto current_schema_id_json = writer.CreateSignedInteger(current_schema_id_value);
+		obj.Add("current-schema-id", current_schema_id_json);
 	}
 
 	// Serialize: last-column-id
 	if (last_column_id.has_value()) {
 		auto &last_column_id_value = *last_column_id;
-		obj.Add("last-column-id", writer.CreateSignedInteger(last_column_id_value));
+		auto last_column_id_json = writer.CreateSignedInteger(last_column_id_value);
+		obj.Add("last-column-id", last_column_id_json);
 	}
 
 	// Serialize: partition-specs
 	if (partition_specs.has_value()) {
 		auto &partition_specs_value = *partition_specs;
-		auto partition_specs_value_arr = writer.CreateArray();
-		for (const auto &item : partition_specs_value) {
-			auto item_val = item.ToJSON(writer);
-			partition_specs_value_arr.Append(item_val);
+		auto partition_specs_json = writer.CreateArray();
+		for (const auto &partition_specs_json_item : partition_specs_value) {
+			auto partition_specs_json_item_json = partition_specs_json_item.ToJSON(writer);
+			partition_specs_json.Append(partition_specs_json_item_json);
 		}
-		obj.Add("partition-specs", partition_specs_value_arr);
+		obj.Add("partition-specs", partition_specs_json);
 	}
 
 	// Serialize: default-spec-id
 	if (default_spec_id.has_value()) {
 		auto &default_spec_id_value = *default_spec_id;
-		obj.Add("default-spec-id", writer.CreateSignedInteger(default_spec_id_value));
+		auto default_spec_id_json = writer.CreateSignedInteger(default_spec_id_value);
+		obj.Add("default-spec-id", default_spec_id_json);
 	}
 
 	// Serialize: last-partition-id
 	if (last_partition_id.has_value()) {
 		auto &last_partition_id_value = *last_partition_id;
-		obj.Add("last-partition-id", writer.CreateSignedInteger(last_partition_id_value));
+		auto last_partition_id_json = writer.CreateSignedInteger(last_partition_id_value);
+		obj.Add("last-partition-id", last_partition_id_json);
 	}
 
 	// Serialize: sort-orders
 	if (sort_orders.has_value()) {
 		auto &sort_orders_value = *sort_orders;
-		auto sort_orders_value_arr = writer.CreateArray();
-		for (const auto &item : sort_orders_value) {
-			auto item_val = item.ToJSON(writer);
-			sort_orders_value_arr.Append(item_val);
+		auto sort_orders_json = writer.CreateArray();
+		for (const auto &sort_orders_json_item : sort_orders_value) {
+			auto sort_orders_json_item_json = sort_orders_json_item.ToJSON(writer);
+			sort_orders_json.Append(sort_orders_json_item_json);
 		}
-		obj.Add("sort-orders", sort_orders_value_arr);
+		obj.Add("sort-orders", sort_orders_json);
 	}
 
 	// Serialize: default-sort-order-id
 	if (default_sort_order_id.has_value()) {
 		auto &default_sort_order_id_value = *default_sort_order_id;
-		obj.Add("default-sort-order-id", writer.CreateSignedInteger(default_sort_order_id_value));
+		auto default_sort_order_id_json = writer.CreateSignedInteger(default_sort_order_id_value);
+		obj.Add("default-sort-order-id", default_sort_order_id_json);
 	}
 
 	// Serialize: encryption-keys
 	if (encryption_keys.has_value()) {
 		auto &encryption_keys_value = *encryption_keys;
-		auto encryption_keys_value_arr = writer.CreateArray();
-		for (const auto &item : encryption_keys_value) {
-			auto item_val = item.ToJSON(writer);
-			encryption_keys_value_arr.Append(item_val);
+		auto encryption_keys_json = writer.CreateArray();
+		for (const auto &encryption_keys_json_item : encryption_keys_value) {
+			auto encryption_keys_json_item_json = encryption_keys_json_item.ToJSON(writer);
+			encryption_keys_json.Append(encryption_keys_json_item_json);
 		}
-		obj.Add("encryption-keys", encryption_keys_value_arr);
+		obj.Add("encryption-keys", encryption_keys_json);
 	}
 
 	// Serialize: snapshots
 	if (snapshots.has_value()) {
 		auto &snapshots_value = *snapshots;
-		auto snapshots_value_arr = writer.CreateArray();
-		for (const auto &item : snapshots_value) {
-			auto item_val = item.ToJSON(writer);
-			snapshots_value_arr.Append(item_val);
+		auto snapshots_json = writer.CreateArray();
+		for (const auto &snapshots_json_item : snapshots_value) {
+			auto snapshots_json_item_json = snapshots_json_item.ToJSON(writer);
+			snapshots_json.Append(snapshots_json_item_json);
 		}
-		obj.Add("snapshots", snapshots_value_arr);
+		obj.Add("snapshots", snapshots_json);
 	}
 
 	// Serialize: refs
 	if (refs.has_value()) {
 		auto &refs_value = *refs;
-		auto refs_value_val = refs_value.ToJSON(writer);
-		obj.Add("refs", refs_value_val);
+		auto refs_json = refs_value.ToJSON(writer);
+		obj.Add("refs", refs_json);
 	}
 
 	// Serialize: current-snapshot-id
 	if (current_snapshot_id.has_value()) {
 		auto &current_snapshot_id_value = *current_snapshot_id;
-		obj.Add("current-snapshot-id", writer.CreateSignedInteger(current_snapshot_id_value));
+		auto current_snapshot_id_json = writer.CreateSignedInteger(current_snapshot_id_value);
+		obj.Add("current-snapshot-id", current_snapshot_id_json);
 	}
 
 	// Serialize: last-sequence-number
 	if (last_sequence_number.has_value()) {
 		auto &last_sequence_number_value = *last_sequence_number;
-		obj.Add("last-sequence-number", writer.CreateSignedInteger(last_sequence_number_value));
+		auto last_sequence_number_json = writer.CreateSignedInteger(last_sequence_number_value);
+		obj.Add("last-sequence-number", last_sequence_number_json);
 	}
 
 	// Serialize: snapshot-log
 	if (snapshot_log.has_value()) {
 		auto &snapshot_log_value = *snapshot_log;
-		auto snapshot_log_value_val = snapshot_log_value.ToJSON(writer);
-		obj.Add("snapshot-log", snapshot_log_value_val);
+		auto snapshot_log_json = snapshot_log_value.ToJSON(writer);
+		obj.Add("snapshot-log", snapshot_log_json);
 	}
 
 	// Serialize: metadata-log
 	if (metadata_log.has_value()) {
 		auto &metadata_log_value = *metadata_log;
-		auto metadata_log_value_val = metadata_log_value.ToJSON(writer);
-		obj.Add("metadata-log", metadata_log_value_val);
+		auto metadata_log_json = metadata_log_value.ToJSON(writer);
+		obj.Add("metadata-log", metadata_log_json);
 	}
 
 	// Serialize: statistics
 	if (statistics.has_value()) {
 		auto &statistics_value = *statistics;
-		auto statistics_value_arr = writer.CreateArray();
-		for (const auto &item : statistics_value) {
-			auto item_val = item.ToJSON(writer);
-			statistics_value_arr.Append(item_val);
+		auto statistics_json = writer.CreateArray();
+		for (const auto &statistics_json_item : statistics_value) {
+			auto statistics_json_item_json = statistics_json_item.ToJSON(writer);
+			statistics_json.Append(statistics_json_item_json);
 		}
-		obj.Add("statistics", statistics_value_arr);
+		obj.Add("statistics", statistics_json);
 	}
 
 	// Serialize: partition-statistics
 	if (partition_statistics.has_value()) {
 		auto &partition_statistics_value = *partition_statistics;
-		auto partition_statistics_value_arr = writer.CreateArray();
-		for (const auto &item : partition_statistics_value) {
-			auto item_val = item.ToJSON(writer);
-			partition_statistics_value_arr.Append(item_val);
+		auto partition_statistics_json = writer.CreateArray();
+		for (const auto &partition_statistics_json_item : partition_statistics_value) {
+			auto partition_statistics_json_item_json = partition_statistics_json_item.ToJSON(writer);
+			partition_statistics_json.Append(partition_statistics_json_item_json);
 		}
-		obj.Add("partition-statistics", partition_statistics_value_arr);
+		obj.Add("partition-statistics", partition_statistics_json);
 	}
 }
 

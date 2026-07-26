@@ -40,7 +40,8 @@ string PlanTask::TryFromJSON(JSONValue obj) {
 }
 
 JSONMutableValue PlanTask::ToJSON(JSONWriter &writer) const {
-	return writer.CreateString(value);
+	auto result = writer.CreateString(value);
+	return result;
 }
 
 } // namespace rest_api_objects

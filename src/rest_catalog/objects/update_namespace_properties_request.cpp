@@ -105,24 +105,23 @@ void UpdateNamespacePropertiesRequest::PopulateJSON(JSONWriter &writer, JSONMuta
 	// Serialize: removals
 	if (removals.has_value()) {
 		auto &removals_value = *removals;
-		auto removals_value_arr = writer.CreateArray();
-		for (const auto &item : removals_value) {
-			auto item_val = writer.CreateString(item);
-			removals_value_arr.Append(item_val);
+		auto removals_json = writer.CreateArray();
+		for (const auto &removals_json_item : removals_value) {
+			auto removals_json_item_json = writer.CreateString(removals_json_item);
+			removals_json.Append(removals_json_item_json);
 		}
-		obj.Add("removals", removals_value_arr);
+		obj.Add("removals", removals_json);
 	}
 
 	// Serialize: updates
 	if (updates.has_value()) {
 		auto &updates_value = *updates;
-		auto updates_value_obj = writer.CreateObject();
-		for (const auto &it : updates_value) {
-			auto &key = it.first;
-			auto &value = it.second;
-			updates_value_obj.AddString(key, value);
+		auto updates_json = writer.CreateObject();
+		for (const auto &[updates_json_key, updates_json_value] : updates_value) {
+			auto updates_json_value_json = writer.CreateString(updates_json_value);
+			updates_json.Add(updates_json_key, updates_json_value_json);
 		}
-		obj.Add("updates", updates_value_obj);
+		obj.Add("updates", updates_json);
 	}
 }
 

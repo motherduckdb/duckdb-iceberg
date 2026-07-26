@@ -71,7 +71,8 @@ void RemoveEncryptionKeyUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValu
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: key-id
-	obj.AddString("key-id", key_id);
+	auto key_id_json = writer.CreateString(key_id);
+	obj.Add("key-id", key_id_json);
 }
 
 JSONMutableValue RemoveEncryptionKeyUpdate::ToJSON(JSONWriter &writer) const {

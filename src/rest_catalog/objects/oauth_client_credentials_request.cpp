@@ -89,18 +89,22 @@ string OAuthClientCredentialsRequest::TryFromJSON(JSONValue obj) {
 
 void OAuthClientCredentialsRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: grant_type
-	obj.AddString("grant_type", grant_type);
+	auto grant_type_json = writer.CreateString(grant_type);
+	obj.Add("grant_type", grant_type_json);
 
 	// Serialize: client_id
-	obj.AddString("client_id", client_id);
+	auto client_id_json = writer.CreateString(client_id);
+	obj.Add("client_id", client_id_json);
 
 	// Serialize: client_secret
-	obj.AddString("client_secret", client_secret);
+	auto client_secret_json = writer.CreateString(client_secret);
+	obj.Add("client_secret", client_secret_json);
 
 	// Serialize: scope
 	if (scope.has_value()) {
 		auto &scope_value = *scope;
-		obj.AddString("scope", scope_value);
+		auto scope_json = writer.CreateString(scope_value);
+		obj.Add("scope", scope_json);
 	}
 }
 

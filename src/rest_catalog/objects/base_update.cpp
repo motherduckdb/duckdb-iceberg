@@ -46,7 +46,8 @@ string BaseUpdate::TryFromJSON(JSONValue obj) {
 
 void BaseUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: action
-	obj.AddString("action", action);
+	auto action_json = writer.CreateString(action);
+	obj.Add("action", action_json);
 }
 
 JSONMutableValue BaseUpdate::ToJSON(JSONWriter &writer) const {

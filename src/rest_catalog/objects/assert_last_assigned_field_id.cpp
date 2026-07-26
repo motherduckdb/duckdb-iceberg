@@ -63,10 +63,12 @@ string AssertLastAssignedFieldId::TryFromJSON(JSONValue obj) {
 
 void AssertLastAssignedFieldId::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	obj.AddString("type", type);
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: last-assigned-field-id
-	obj.Add("last-assigned-field-id", writer.CreateSignedInteger(last_assigned_field_id));
+	auto last_assigned_field_id_json = writer.CreateSignedInteger(last_assigned_field_id);
+	obj.Add("last-assigned-field-id", last_assigned_field_id_json);
 }
 
 JSONMutableValue AssertLastAssignedFieldId::ToJSON(JSONWriter &writer) const {

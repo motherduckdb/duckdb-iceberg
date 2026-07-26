@@ -68,8 +68,8 @@ void AddSnapshotUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) c
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: snapshot
-	auto snapshot_val = snapshot.ToJSON(writer);
-	obj.Add("snapshot", snapshot_val);
+	auto snapshot_json = snapshot.ToJSON(writer);
+	obj.Add("snapshot", snapshot_json);
 }
 
 JSONMutableValue AddSnapshotUpdate::ToJSON(JSONWriter &writer) const {

@@ -63,12 +63,12 @@ string LoadCredentialsResponse::TryFromJSON(JSONValue obj) {
 
 void LoadCredentialsResponse::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: storage-credentials
-	auto storage_credentials_arr = writer.CreateArray();
-	for (const auto &item : storage_credentials) {
-		auto item_val = item.ToJSON(writer);
-		storage_credentials_arr.Append(item_val);
+	auto storage_credentials_json = writer.CreateArray();
+	for (const auto &storage_credentials_json_item : storage_credentials) {
+		auto storage_credentials_json_item_json = storage_credentials_json_item.ToJSON(writer);
+		storage_credentials_json.Append(storage_credentials_json_item_json);
 	}
-	obj.Add("storage-credentials", storage_credentials_arr);
+	obj.Add("storage-credentials", storage_credentials_json);
 }
 
 JSONMutableValue LoadCredentialsResponse::ToJSON(JSONWriter &writer) const {

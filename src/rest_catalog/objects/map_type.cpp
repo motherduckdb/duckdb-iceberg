@@ -107,24 +107,28 @@ string MapType::TryFromJSON(JSONValue obj) {
 
 void MapType::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	obj.AddString("type", type);
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: key-id
-	obj.Add("key-id", writer.CreateSignedInteger(key_id));
+	auto key_id_json = writer.CreateSignedInteger(key_id);
+	obj.Add("key-id", key_id_json);
 
 	// Serialize: key
-	auto key_val = key->ToJSON(writer);
-	obj.Add("key", key_val);
+	auto key_json = key->ToJSON(writer);
+	obj.Add("key", key_json);
 
 	// Serialize: value-id
-	obj.Add("value-id", writer.CreateSignedInteger(value_id));
+	auto value_id_json = writer.CreateSignedInteger(value_id);
+	obj.Add("value-id", value_id_json);
 
 	// Serialize: value
-	auto value_val = value->ToJSON(writer);
-	obj.Add("value", value_val);
+	auto value_json = value->ToJSON(writer);
+	obj.Add("value", value_json);
 
 	// Serialize: value-required
-	obj.Add("value-required", writer.CreateBoolean(value_required));
+	auto value_required_json = writer.CreateBoolean(value_required);
+	obj.Add("value-required", value_required_json);
 }
 
 JSONMutableValue MapType::ToJSON(JSONWriter &writer) const {

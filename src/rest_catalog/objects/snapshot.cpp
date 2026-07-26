@@ -72,13 +72,13 @@ string Snapshot::Object2::TryFromJSON(JSONValue obj) {
 
 void Snapshot::Object2::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: operation
-	obj.AddString("operation", operation);
+	auto operation_json = writer.CreateString(operation);
+	obj.Add("operation", operation_json);
 
 	// Serialize additional properties
-	for (const auto &it : additional_properties) {
-		auto &key = it.first;
-		auto &value = it.second;
-		obj.AddString(key, value);
+	for (const auto &[key, value] : additional_properties) {
+		auto value_json = writer.CreateString(value);
+		obj.Add(key, value_json);
 	}
 }
 
@@ -244,46 +244,54 @@ string Snapshot::TryFromJSON(JSONValue obj) {
 
 void Snapshot::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: snapshot-id
-	obj.Add("snapshot-id", writer.CreateSignedInteger(snapshot_id));
+	auto snapshot_id_json = writer.CreateSignedInteger(snapshot_id);
+	obj.Add("snapshot-id", snapshot_id_json);
 
 	// Serialize: timestamp-ms
-	obj.Add("timestamp-ms", writer.CreateSignedInteger(timestamp_ms));
+	auto timestamp_ms_json = writer.CreateSignedInteger(timestamp_ms);
+	obj.Add("timestamp-ms", timestamp_ms_json);
 
 	// Serialize: manifest-list
-	obj.AddString("manifest-list", manifest_list);
+	auto manifest_list_json = writer.CreateString(manifest_list);
+	obj.Add("manifest-list", manifest_list_json);
 
 	// Serialize: summary
-	auto summary_val = summary.ToJSON(writer);
-	obj.Add("summary", summary_val);
+	auto summary_json = summary.ToJSON(writer);
+	obj.Add("summary", summary_json);
 
 	// Serialize: parent-snapshot-id
 	if (parent_snapshot_id.has_value()) {
 		auto &parent_snapshot_id_value = *parent_snapshot_id;
-		obj.Add("parent-snapshot-id", writer.CreateSignedInteger(parent_snapshot_id_value));
+		auto parent_snapshot_id_json = writer.CreateSignedInteger(parent_snapshot_id_value);
+		obj.Add("parent-snapshot-id", parent_snapshot_id_json);
 	}
 
 	// Serialize: sequence-number
 	if (sequence_number.has_value()) {
 		auto &sequence_number_value = *sequence_number;
-		obj.Add("sequence-number", writer.CreateSignedInteger(sequence_number_value));
+		auto sequence_number_json = writer.CreateSignedInteger(sequence_number_value);
+		obj.Add("sequence-number", sequence_number_json);
 	}
 
 	// Serialize: first-row-id
 	if (first_row_id.has_value()) {
 		auto &first_row_id_value = *first_row_id;
-		obj.Add("first-row-id", writer.CreateSignedInteger(first_row_id_value));
+		auto first_row_id_json = writer.CreateSignedInteger(first_row_id_value);
+		obj.Add("first-row-id", first_row_id_json);
 	}
 
 	// Serialize: added-rows
 	if (added_rows.has_value()) {
 		auto &added_rows_value = *added_rows;
-		obj.Add("added-rows", writer.CreateSignedInteger(added_rows_value));
+		auto added_rows_json = writer.CreateSignedInteger(added_rows_value);
+		obj.Add("added-rows", added_rows_json);
 	}
 
 	// Serialize: schema-id
 	if (schema_id.has_value()) {
 		auto &schema_id_value = *schema_id;
-		obj.Add("schema-id", writer.CreateSignedInteger(schema_id_value));
+		auto schema_id_json = writer.CreateSignedInteger(schema_id_value);
+		obj.Add("schema-id", schema_id_json);
 	}
 }
 

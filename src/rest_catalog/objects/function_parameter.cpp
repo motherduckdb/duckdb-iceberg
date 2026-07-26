@@ -72,16 +72,18 @@ string FunctionParameter::TryFromJSON(JSONValue obj) {
 
 void FunctionParameter::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	auto type_val = type->ToJSON(writer);
-	obj.Add("type", type_val);
+	auto type_json = type->ToJSON(writer);
+	obj.Add("type", type_json);
 
 	// Serialize: name
-	obj.AddString("name", name);
+	auto name_json = writer.CreateString(name);
+	obj.Add("name", name_json);
 
 	// Serialize: doc
 	if (_doc.has_value()) {
 		auto &_doc_value = *_doc;
-		obj.AddString("doc", _doc_value);
+		auto _doc_json = writer.CreateString(_doc_value);
+		obj.Add("doc", _doc_json);
 	}
 }
 

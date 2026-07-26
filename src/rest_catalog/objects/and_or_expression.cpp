@@ -66,16 +66,16 @@ string AndOrExpression::TryFromJSON(JSONValue obj) {
 
 void AndOrExpression::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	auto type_val = type.ToJSON(writer);
-	obj.Add("type", type_val);
+	auto type_json = type.ToJSON(writer);
+	obj.Add("type", type_json);
 
 	// Serialize: left
-	auto left_val = left->ToJSON(writer);
-	obj.Add("left", left_val);
+	auto left_json = left->ToJSON(writer);
+	obj.Add("left", left_json);
 
 	// Serialize: right
-	auto right_val = right->ToJSON(writer);
-	obj.Add("right", right_val);
+	auto right_json = right->ToJSON(writer);
+	obj.Add("right", right_json);
 }
 
 JSONMutableValue AndOrExpression::ToJSON(JSONWriter &writer) const {

@@ -121,24 +121,28 @@ string StatisticsFile::TryFromJSON(JSONValue obj) {
 
 void StatisticsFile::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: snapshot-id
-	obj.Add("snapshot-id", writer.CreateSignedInteger(snapshot_id));
+	auto snapshot_id_json = writer.CreateSignedInteger(snapshot_id);
+	obj.Add("snapshot-id", snapshot_id_json);
 
 	// Serialize: statistics-path
-	obj.AddString("statistics-path", statistics_path);
+	auto statistics_path_json = writer.CreateString(statistics_path);
+	obj.Add("statistics-path", statistics_path_json);
 
 	// Serialize: file-size-in-bytes
-	obj.Add("file-size-in-bytes", writer.CreateSignedInteger(file_size_in_bytes));
+	auto file_size_in_bytes_json = writer.CreateSignedInteger(file_size_in_bytes);
+	obj.Add("file-size-in-bytes", file_size_in_bytes_json);
 
 	// Serialize: file-footer-size-in-bytes
-	obj.Add("file-footer-size-in-bytes", writer.CreateSignedInteger(file_footer_size_in_bytes));
+	auto file_footer_size_in_bytes_json = writer.CreateSignedInteger(file_footer_size_in_bytes);
+	obj.Add("file-footer-size-in-bytes", file_footer_size_in_bytes_json);
 
 	// Serialize: blob-metadata
-	auto blob_metadata_arr = writer.CreateArray();
-	for (const auto &item : blob_metadata) {
-		auto item_val = item.ToJSON(writer);
-		blob_metadata_arr.Append(item_val);
+	auto blob_metadata_json = writer.CreateArray();
+	for (const auto &blob_metadata_json_item : blob_metadata) {
+		auto blob_metadata_json_item_json = blob_metadata_json_item.ToJSON(writer);
+		blob_metadata_json.Append(blob_metadata_json_item_json);
 	}
-	obj.Add("blob-metadata", blob_metadata_arr);
+	obj.Add("blob-metadata", blob_metadata_json);
 }
 
 JSONMutableValue StatisticsFile::ToJSON(JSONWriter &writer) const {

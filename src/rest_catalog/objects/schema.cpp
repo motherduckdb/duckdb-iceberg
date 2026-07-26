@@ -89,18 +89,19 @@ void Schema::Object1::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) con
 	// Serialize: schema-id
 	if (schema_id.has_value()) {
 		auto &schema_id_value = *schema_id;
-		obj.Add("schema-id", writer.CreateSignedInteger(schema_id_value));
+		auto schema_id_json = writer.CreateSignedInteger(schema_id_value);
+		obj.Add("schema-id", schema_id_json);
 	}
 
 	// Serialize: identifier-field-ids
 	if (identifier_field_ids.has_value()) {
 		auto &identifier_field_ids_value = *identifier_field_ids;
-		auto identifier_field_ids_value_arr = writer.CreateArray();
-		for (const auto &item : identifier_field_ids_value) {
-			auto item_val = writer.CreateSignedInteger(item);
-			identifier_field_ids_value_arr.Append(item_val);
+		auto identifier_field_ids_json = writer.CreateArray();
+		for (const auto &identifier_field_ids_json_item : identifier_field_ids_value) {
+			auto identifier_field_ids_json_item_json = writer.CreateSignedInteger(identifier_field_ids_json_item);
+			identifier_field_ids_json.Append(identifier_field_ids_json_item_json);
 		}
-		obj.Add("identifier-field-ids", identifier_field_ids_value_arr);
+		obj.Add("identifier-field-ids", identifier_field_ids_json);
 	}
 }
 

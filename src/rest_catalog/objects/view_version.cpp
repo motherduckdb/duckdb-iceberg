@@ -155,39 +155,42 @@ string ViewVersion::TryFromJSON(JSONValue obj) {
 
 void ViewVersion::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: version-id
-	obj.Add("version-id", writer.CreateSignedInteger(version_id));
+	auto version_id_json = writer.CreateSignedInteger(version_id);
+	obj.Add("version-id", version_id_json);
 
 	// Serialize: timestamp-ms
-	obj.Add("timestamp-ms", writer.CreateSignedInteger(timestamp_ms));
+	auto timestamp_ms_json = writer.CreateSignedInteger(timestamp_ms);
+	obj.Add("timestamp-ms", timestamp_ms_json);
 
 	// Serialize: schema-id
-	obj.Add("schema-id", writer.CreateSignedInteger(schema_id));
+	auto schema_id_json = writer.CreateSignedInteger(schema_id);
+	obj.Add("schema-id", schema_id_json);
 
 	// Serialize: summary
-	auto summary_obj = writer.CreateObject();
-	for (const auto &it : summary) {
-		auto &key = it.first;
-		auto &value = it.second;
-		summary_obj.AddString(key, value);
+	auto summary_json = writer.CreateObject();
+	for (const auto &[summary_json_key, summary_json_value] : summary) {
+		auto summary_json_value_json = writer.CreateString(summary_json_value);
+		summary_json.Add(summary_json_key, summary_json_value_json);
 	}
-	obj.Add("summary", summary_obj);
+	obj.Add("summary", summary_json);
 
 	// Serialize: representations
-	auto representations_arr = writer.CreateArray();
-	for (const auto &item : representations) {
-		auto item_val = item.ToJSON(writer);
-		representations_arr.Append(item_val);
+	auto representations_json = writer.CreateArray();
+	for (const auto &representations_json_item : representations) {
+		auto representations_json_item_json = representations_json_item.ToJSON(writer);
+		representations_json.Append(representations_json_item_json);
 	}
-	obj.Add("representations", representations_arr);
+	obj.Add("representations", representations_json);
 
 	// Serialize: default-namespace
-	auto default_namespace_val = default_namespace.ToJSON(writer);
-	obj.Add("default-namespace", default_namespace_val);
+	auto default_namespace_json = default_namespace.ToJSON(writer);
+	obj.Add("default-namespace", default_namespace_json);
 
 	// Serialize: default-catalog
 	if (default_catalog.has_value()) {
 		auto &default_catalog_value = *default_catalog;
-		obj.AddString("default-catalog", default_catalog_value);
+		auto default_catalog_json = writer.CreateString(default_catalog_value);
+		obj.Add("default-catalog", default_catalog_json);
 	}
 }
 

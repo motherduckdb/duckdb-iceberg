@@ -70,7 +70,8 @@ void SetLocationUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) c
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: location
-	obj.AddString("location", location);
+	auto location_json = writer.CreateString(location);
+	obj.Add("location", location_json);
 }
 
 JSONMutableValue SetLocationUpdate::ToJSON(JSONWriter &writer) const {

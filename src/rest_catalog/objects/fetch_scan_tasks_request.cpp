@@ -44,8 +44,8 @@ string FetchScanTasksRequest::TryFromJSON(JSONValue obj) {
 
 void FetchScanTasksRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: plan-task
-	auto plan_task_val = plan_task.ToJSON(writer);
-	obj.Add("plan-task", plan_task_val);
+	auto plan_task_json = plan_task.ToJSON(writer);
+	obj.Add("plan-task", plan_task_json);
 }
 
 JSONMutableValue FetchScanTasksRequest::ToJSON(JSONWriter &writer) const {

@@ -44,8 +44,8 @@ string EmptyPlanningResult::TryFromJSON(JSONValue obj) {
 
 void EmptyPlanningResult::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: status
-	auto status_val = status.ToJSON(writer);
-	obj.Add("status", status_val);
+	auto status_json = status.ToJSON(writer);
+	obj.Add("status", status_json);
 }
 
 JSONMutableValue EmptyPlanningResult::ToJSON(JSONWriter &writer) const {

@@ -40,7 +40,8 @@ string TimestampTzNanoTypeValue::TryFromJSON(JSONValue obj) {
 }
 
 JSONMutableValue TimestampTzNanoTypeValue::ToJSON(JSONWriter &writer) const {
-	return writer.CreateString(value);
+	auto result = writer.CreateString(value);
+	return result;
 }
 
 } // namespace rest_api_objects

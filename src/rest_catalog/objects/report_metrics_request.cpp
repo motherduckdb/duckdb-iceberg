@@ -76,7 +76,8 @@ void ReportMetricsRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj
 	}
 
 	// Serialize: report-type
-	obj.AddString("report-type", report_type);
+	auto report_type_json = writer.CreateString(report_type);
+	obj.Add("report-type", report_type_json);
 }
 
 JSONMutableValue ReportMetricsRequest::ToJSON(JSONWriter &writer) const {

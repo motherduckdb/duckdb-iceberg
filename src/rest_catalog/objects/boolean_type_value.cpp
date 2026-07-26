@@ -40,7 +40,8 @@ string BooleanTypeValue::TryFromJSON(JSONValue obj) {
 }
 
 JSONMutableValue BooleanTypeValue::ToJSON(JSONWriter &writer) const {
-	return writer.CreateBoolean(value);
+	auto result = writer.CreateBoolean(value);
+	return result;
 }
 
 } // namespace rest_api_objects

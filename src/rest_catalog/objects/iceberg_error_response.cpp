@@ -44,8 +44,8 @@ string IcebergErrorResponse::TryFromJSON(JSONValue obj) {
 
 void IcebergErrorResponse::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: error
-	auto _error_val = _error.ToJSON(writer);
-	obj.Add("error", _error_val);
+	auto _error_json = _error.ToJSON(writer);
+	obj.Add("error", _error_json);
 }
 
 JSONMutableValue IcebergErrorResponse::ToJSON(JSONWriter &writer) const {

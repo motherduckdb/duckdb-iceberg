@@ -68,8 +68,8 @@ void AddSortOrderUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) 
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: sort-order
-	auto sort_order_val = sort_order.ToJSON(writer);
-	obj.Add("sort-order", sort_order_val);
+	auto sort_order_json = sort_order.ToJSON(writer);
+	obj.Add("sort-order", sort_order_json);
 }
 
 JSONMutableValue AddSortOrderUpdate::ToJSON(JSONWriter &writer) const {

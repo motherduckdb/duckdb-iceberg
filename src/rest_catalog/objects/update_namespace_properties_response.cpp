@@ -140,30 +140,30 @@ string UpdateNamespacePropertiesResponse::TryFromJSON(JSONValue obj) {
 
 void UpdateNamespacePropertiesResponse::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: updated
-	auto updated_arr = writer.CreateArray();
-	for (const auto &item : updated) {
-		auto item_val = writer.CreateString(item);
-		updated_arr.Append(item_val);
+	auto updated_json = writer.CreateArray();
+	for (const auto &updated_json_item : updated) {
+		auto updated_json_item_json = writer.CreateString(updated_json_item);
+		updated_json.Append(updated_json_item_json);
 	}
-	obj.Add("updated", updated_arr);
+	obj.Add("updated", updated_json);
 
 	// Serialize: removed
-	auto removed_arr = writer.CreateArray();
-	for (const auto &item : removed) {
-		auto item_val = writer.CreateString(item);
-		removed_arr.Append(item_val);
+	auto removed_json = writer.CreateArray();
+	for (const auto &removed_json_item : removed) {
+		auto removed_json_item_json = writer.CreateString(removed_json_item);
+		removed_json.Append(removed_json_item_json);
 	}
-	obj.Add("removed", removed_arr);
+	obj.Add("removed", removed_json);
 
 	// Serialize: missing
 	if (missing.has_value()) {
 		auto &missing_value = *missing;
-		auto missing_value_arr = writer.CreateArray();
-		for (const auto &item : missing_value) {
-			auto item_val = writer.CreateString(item);
-			missing_value_arr.Append(item_val);
+		auto missing_json = writer.CreateArray();
+		for (const auto &missing_json_item : missing_value) {
+			auto missing_json_item_json = writer.CreateString(missing_json_item);
+			missing_json.Append(missing_json_item_json);
 		}
-		obj.Add("missing", missing_value_arr);
+		obj.Add("missing", missing_json);
 	}
 }
 

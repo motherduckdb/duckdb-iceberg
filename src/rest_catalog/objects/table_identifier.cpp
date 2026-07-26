@@ -58,11 +58,12 @@ string TableIdentifier::TryFromJSON(JSONValue obj) {
 
 void TableIdentifier::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: namespace
-	auto _namespace_val = _namespace.ToJSON(writer);
-	obj.Add("namespace", _namespace_val);
+	auto _namespace_json = _namespace.ToJSON(writer);
+	obj.Add("namespace", _namespace_json);
 
 	// Serialize: name
-	obj.AddString("name", name);
+	auto name_json = writer.CreateString(name);
+	obj.Add("name", name_json);
 }
 
 JSONMutableValue TableIdentifier::ToJSON(JSONWriter &writer) const {

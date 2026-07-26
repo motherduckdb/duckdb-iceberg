@@ -57,11 +57,12 @@ string AsyncPlanningResult::TryFromJSON(JSONValue obj) {
 
 void AsyncPlanningResult::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: status
-	auto status_val = status.ToJSON(writer);
-	obj.Add("status", status_val);
+	auto status_json = status.ToJSON(writer);
+	obj.Add("status", status_json);
 
 	// Serialize: plan-id
-	obj.AddString("plan-id", plan_id);
+	auto plan_id_json = writer.CreateString(plan_id);
+	obj.Add("plan-id", plan_id_json);
 }
 
 JSONMutableValue AsyncPlanningResult::ToJSON(JSONWriter &writer) const {

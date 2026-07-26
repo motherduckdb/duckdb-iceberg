@@ -78,18 +78,18 @@ string CompletedPlanningResult::Object5::TryFromJSON(JSONValue obj) {
 
 void CompletedPlanningResult::Object5::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: status
-	auto status_val = status.ToJSON(writer);
-	obj.Add("status", status_val);
+	auto status_json = status.ToJSON(writer);
+	obj.Add("status", status_json);
 
 	// Serialize: storage-credentials
 	if (storage_credentials.has_value()) {
 		auto &storage_credentials_value = *storage_credentials;
-		auto storage_credentials_value_arr = writer.CreateArray();
-		for (const auto &item : storage_credentials_value) {
-			auto item_val = item.ToJSON(writer);
-			storage_credentials_value_arr.Append(item_val);
+		auto storage_credentials_json = writer.CreateArray();
+		for (const auto &storage_credentials_json_item : storage_credentials_value) {
+			auto storage_credentials_json_item_json = storage_credentials_json_item.ToJSON(writer);
+			storage_credentials_json.Append(storage_credentials_json_item_json);
 		}
-		obj.Add("storage-credentials", storage_credentials_value_arr);
+		obj.Add("storage-credentials", storage_credentials_json);
 	}
 }
 

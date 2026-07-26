@@ -144,40 +144,44 @@ string RemoteSignRequest::TryFromJSON(JSONValue obj) {
 
 void RemoteSignRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: region
-	obj.AddString("region", region);
+	auto region_json = writer.CreateString(region);
+	obj.Add("region", region_json);
 
 	// Serialize: uri
-	obj.AddString("uri", uri);
+	auto uri_json = writer.CreateString(uri);
+	obj.Add("uri", uri_json);
 
 	// Serialize: method
-	obj.AddString("method", method);
+	auto method_json = writer.CreateString(method);
+	obj.Add("method", method_json);
 
 	// Serialize: headers
-	auto headers_val = headers.ToJSON(writer);
-	obj.Add("headers", headers_val);
+	auto headers_json = headers.ToJSON(writer);
+	obj.Add("headers", headers_json);
 
 	// Serialize: properties
 	if (properties.has_value()) {
 		auto &properties_value = *properties;
-		auto properties_value_obj = writer.CreateObject();
-		for (const auto &it : properties_value) {
-			auto &key = it.first;
-			auto &value = it.second;
-			properties_value_obj.AddString(key, value);
+		auto properties_json = writer.CreateObject();
+		for (const auto &[properties_json_key, properties_json_value] : properties_value) {
+			auto properties_json_value_json = writer.CreateString(properties_json_value);
+			properties_json.Add(properties_json_key, properties_json_value_json);
 		}
-		obj.Add("properties", properties_value_obj);
+		obj.Add("properties", properties_json);
 	}
 
 	// Serialize: body
 	if (body.has_value()) {
 		auto &body_value = *body;
-		obj.AddString("body", body_value);
+		auto body_json = writer.CreateString(body_value);
+		obj.Add("body", body_json);
 	}
 
 	// Serialize: provider
 	if (provider.has_value()) {
 		auto &provider_value = *provider;
-		obj.AddString("provider", provider_value);
+		auto provider_json = writer.CreateString(provider_value);
+		obj.Add("provider", provider_json);
 	}
 }
 

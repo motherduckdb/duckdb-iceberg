@@ -92,24 +92,24 @@ string FileScanTask::TryFromJSON(JSONValue obj) {
 
 void FileScanTask::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: data-file
-	auto data_file_val = data_file.ToJSON(writer);
-	obj.Add("data-file", data_file_val);
+	auto data_file_json = data_file.ToJSON(writer);
+	obj.Add("data-file", data_file_json);
 
 	// Serialize: delete-file-references
 	if (delete_file_references.has_value()) {
 		auto &delete_file_references_value = *delete_file_references;
-		auto delete_file_references_value_arr = writer.CreateArray();
-		for (const auto &item : delete_file_references_value) {
-			auto item_val = writer.CreateSignedInteger(item);
-			delete_file_references_value_arr.Append(item_val);
+		auto delete_file_references_json = writer.CreateArray();
+		for (const auto &delete_file_references_json_item : delete_file_references_value) {
+			auto delete_file_references_json_item_json = writer.CreateSignedInteger(delete_file_references_json_item);
+			delete_file_references_json.Append(delete_file_references_json_item_json);
 		}
-		obj.Add("delete-file-references", delete_file_references_value_arr);
+		obj.Add("delete-file-references", delete_file_references_json);
 	}
 
 	// Serialize: residual-filter
 	if (residual_filter != nullptr) {
-		auto residual_filter_val = residual_filter->ToJSON(writer);
-		obj.Add("residual-filter", residual_filter_val);
+		auto residual_filter_json = residual_filter->ToJSON(writer);
+		obj.Add("residual-filter", residual_filter_json);
 	}
 }
 

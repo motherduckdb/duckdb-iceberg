@@ -54,12 +54,12 @@ string RenameTableRequest::TryFromJSON(JSONValue obj) {
 
 void RenameTableRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: source
-	auto source_val = source.ToJSON(writer);
-	obj.Add("source", source_val);
+	auto source_json = source.ToJSON(writer);
+	obj.Add("source", source_json);
 
 	// Serialize: destination
-	auto destination_val = destination.ToJSON(writer);
-	obj.Add("destination", destination_val);
+	auto destination_json = destination.ToJSON(writer);
+	obj.Add("destination", destination_json);
 }
 
 JSONMutableValue RenameTableRequest::ToJSON(JSONWriter &writer) const {

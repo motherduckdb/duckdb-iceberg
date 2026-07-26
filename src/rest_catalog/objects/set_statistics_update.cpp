@@ -86,13 +86,14 @@ void SetStatisticsUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj)
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: statistics
-	auto statistics_val = statistics.ToJSON(writer);
-	obj.Add("statistics", statistics_val);
+	auto statistics_json = statistics.ToJSON(writer);
+	obj.Add("statistics", statistics_json);
 
 	// Serialize: snapshot-id
 	if (snapshot_id.has_value()) {
 		auto &snapshot_id_value = *snapshot_id;
-		obj.Add("snapshot-id", writer.CreateSignedInteger(snapshot_id_value));
+		auto snapshot_id_json = writer.CreateSignedInteger(snapshot_id_value);
+		obj.Add("snapshot-id", snapshot_id_json);
 	}
 }
 

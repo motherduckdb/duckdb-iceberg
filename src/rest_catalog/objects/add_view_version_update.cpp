@@ -68,8 +68,8 @@ void AddViewVersionUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: view-version
-	auto view_version_val = view_version.ToJSON(writer);
-	obj.Add("view-version", view_version_val);
+	auto view_version_json = view_version.ToJSON(writer);
+	obj.Add("view-version", view_version_json);
 }
 
 JSONMutableValue AddViewVersionUpdate::ToJSON(JSONWriter &writer) const {

@@ -121,34 +121,39 @@ string OAuthTokenResponse::TryFromJSON(JSONValue obj) {
 
 void OAuthTokenResponse::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: access_token
-	obj.AddString("access_token", access_token);
+	auto access_token_json = writer.CreateString(access_token);
+	obj.Add("access_token", access_token_json);
 
 	// Serialize: token_type
-	obj.AddString("token_type", token_type);
+	auto token_type_json = writer.CreateString(token_type);
+	obj.Add("token_type", token_type_json);
 
 	// Serialize: expires_in
 	if (expires_in.has_value()) {
 		auto &expires_in_value = *expires_in;
-		obj.Add("expires_in", writer.CreateSignedInteger(expires_in_value));
+		auto expires_in_json = writer.CreateSignedInteger(expires_in_value);
+		obj.Add("expires_in", expires_in_json);
 	}
 
 	// Serialize: issued_token_type
 	if (issued_token_type.has_value()) {
 		auto &issued_token_type_value = *issued_token_type;
-		auto issued_token_type_value_val = issued_token_type_value.ToJSON(writer);
-		obj.Add("issued_token_type", issued_token_type_value_val);
+		auto issued_token_type_json = issued_token_type_value.ToJSON(writer);
+		obj.Add("issued_token_type", issued_token_type_json);
 	}
 
 	// Serialize: refresh_token
 	if (refresh_token.has_value()) {
 		auto &refresh_token_value = *refresh_token;
-		obj.AddString("refresh_token", refresh_token_value);
+		auto refresh_token_json = writer.CreateString(refresh_token_value);
+		obj.Add("refresh_token", refresh_token_json);
 	}
 
 	// Serialize: scope
 	if (scope.has_value()) {
 		auto &scope_value = *scope;
-		obj.AddString("scope", scope_value);
+		auto scope_json = writer.CreateString(scope_value);
+		obj.Add("scope", scope_json);
 	}
 }
 

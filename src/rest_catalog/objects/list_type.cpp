@@ -84,17 +84,20 @@ string ListType::TryFromJSON(JSONValue obj) {
 
 void ListType::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	obj.AddString("type", type);
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: element-id
-	obj.Add("element-id", writer.CreateSignedInteger(element_id));
+	auto element_id_json = writer.CreateSignedInteger(element_id);
+	obj.Add("element-id", element_id_json);
 
 	// Serialize: element
-	auto element_val = element->ToJSON(writer);
-	obj.Add("element", element_val);
+	auto element_json = element->ToJSON(writer);
+	obj.Add("element", element_json);
 
 	// Serialize: element-required
-	obj.Add("element-required", writer.CreateBoolean(element_required));
+	auto element_required_json = writer.CreateBoolean(element_required);
+	obj.Add("element-required", element_required_json);
 }
 
 JSONMutableValue ListType::ToJSON(JSONWriter &writer) const {

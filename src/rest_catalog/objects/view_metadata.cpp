@@ -200,51 +200,54 @@ string ViewMetadata::TryFromJSON(JSONValue obj) {
 
 void ViewMetadata::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: view-uuid
-	obj.AddString("view-uuid", view_uuid);
+	auto view_uuid_json = writer.CreateString(view_uuid);
+	obj.Add("view-uuid", view_uuid_json);
 
 	// Serialize: format-version
-	obj.Add("format-version", writer.CreateSignedInteger(format_version));
+	auto format_version_json = writer.CreateSignedInteger(format_version);
+	obj.Add("format-version", format_version_json);
 
 	// Serialize: location
-	obj.AddString("location", location);
+	auto location_json = writer.CreateString(location);
+	obj.Add("location", location_json);
 
 	// Serialize: current-version-id
-	obj.Add("current-version-id", writer.CreateSignedInteger(current_version_id));
+	auto current_version_id_json = writer.CreateSignedInteger(current_version_id);
+	obj.Add("current-version-id", current_version_id_json);
 
 	// Serialize: versions
-	auto versions_arr = writer.CreateArray();
-	for (const auto &item : versions) {
-		auto item_val = item.ToJSON(writer);
-		versions_arr.Append(item_val);
+	auto versions_json = writer.CreateArray();
+	for (const auto &versions_json_item : versions) {
+		auto versions_json_item_json = versions_json_item.ToJSON(writer);
+		versions_json.Append(versions_json_item_json);
 	}
-	obj.Add("versions", versions_arr);
+	obj.Add("versions", versions_json);
 
 	// Serialize: version-log
-	auto version_log_arr = writer.CreateArray();
-	for (const auto &item : version_log) {
-		auto item_val = item.ToJSON(writer);
-		version_log_arr.Append(item_val);
+	auto version_log_json = writer.CreateArray();
+	for (const auto &version_log_json_item : version_log) {
+		auto version_log_json_item_json = version_log_json_item.ToJSON(writer);
+		version_log_json.Append(version_log_json_item_json);
 	}
-	obj.Add("version-log", version_log_arr);
+	obj.Add("version-log", version_log_json);
 
 	// Serialize: schemas
-	auto schemas_arr = writer.CreateArray();
-	for (const auto &item : schemas) {
-		auto item_val = item.ToJSON(writer);
-		schemas_arr.Append(item_val);
+	auto schemas_json = writer.CreateArray();
+	for (const auto &schemas_json_item : schemas) {
+		auto schemas_json_item_json = schemas_json_item.ToJSON(writer);
+		schemas_json.Append(schemas_json_item_json);
 	}
-	obj.Add("schemas", schemas_arr);
+	obj.Add("schemas", schemas_json);
 
 	// Serialize: properties
 	if (properties.has_value()) {
 		auto &properties_value = *properties;
-		auto properties_value_obj = writer.CreateObject();
-		for (const auto &it : properties_value) {
-			auto &key = it.first;
-			auto &value = it.second;
-			properties_value_obj.AddString(key, value);
+		auto properties_json = writer.CreateObject();
+		for (const auto &[properties_json_key, properties_json_value] : properties_value) {
+			auto properties_json_value_json = writer.CreateString(properties_json_value);
+			properties_json.Add(properties_json_key, properties_json_value_json);
 		}
-		obj.Add("properties", properties_value_obj);
+		obj.Add("properties", properties_json);
 	}
 }
 

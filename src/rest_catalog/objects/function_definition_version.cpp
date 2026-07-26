@@ -123,29 +123,33 @@ string FunctionDefinitionVersion::TryFromJSON(JSONValue obj) {
 
 void FunctionDefinitionVersion::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: version-id
-	obj.Add("version-id", writer.CreateSignedInteger(version_id));
+	auto version_id_json = writer.CreateSignedInteger(version_id);
+	obj.Add("version-id", version_id_json);
 
 	// Serialize: representations
-	auto representations_arr = writer.CreateArray();
-	for (const auto &item : representations) {
-		auto item_val = item.ToJSON(writer);
-		representations_arr.Append(item_val);
+	auto representations_json = writer.CreateArray();
+	for (const auto &representations_json_item : representations) {
+		auto representations_json_item_json = representations_json_item.ToJSON(writer);
+		representations_json.Append(representations_json_item_json);
 	}
-	obj.Add("representations", representations_arr);
+	obj.Add("representations", representations_json);
 
 	// Serialize: timestamp-ms
-	obj.Add("timestamp-ms", writer.CreateSignedInteger(timestamp_ms));
+	auto timestamp_ms_json = writer.CreateSignedInteger(timestamp_ms);
+	obj.Add("timestamp-ms", timestamp_ms_json);
 
 	// Serialize: deterministic
 	if (deterministic.has_value()) {
 		auto &deterministic_value = *deterministic;
-		obj.Add("deterministic", writer.CreateBoolean(deterministic_value));
+		auto deterministic_json = writer.CreateBoolean(deterministic_value);
+		obj.Add("deterministic", deterministic_json);
 	}
 
 	// Serialize: on-null-input
 	if (on_null_input.has_value()) {
 		auto &on_null_input_value = *on_null_input;
-		obj.AddString("on-null-input", on_null_input_value);
+		auto on_null_input_json = writer.CreateString(on_null_input_value);
+		obj.Add("on-null-input", on_null_input_json);
 	}
 }
 

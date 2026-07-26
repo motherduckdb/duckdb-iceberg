@@ -57,11 +57,12 @@ string UnregisterTableResult::TryFromJSON(JSONValue obj) {
 
 void UnregisterTableResult::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: metadata-location
-	obj.AddString("metadata-location", metadata_location);
+	auto metadata_location_json = writer.CreateString(metadata_location);
+	obj.Add("metadata-location", metadata_location_json);
 
 	// Serialize: metadata
-	auto metadata_val = metadata.ToJSON(writer);
-	obj.Add("metadata", metadata_val);
+	auto metadata_json = metadata.ToJSON(writer);
+	obj.Add("metadata", metadata_json);
 }
 
 JSONMutableValue UnregisterTableResult::ToJSON(JSONWriter &writer) const {

@@ -71,7 +71,8 @@ void UpgradeFormatVersionUpdate::PopulateJSON(JSONWriter &writer, JSONMutableVal
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: format-version
-	obj.Add("format-version", writer.CreateSignedInteger(format_version));
+	auto format_version_json = writer.CreateSignedInteger(format_version);
+	obj.Add("format-version", format_version_json);
 }
 
 JSONMutableValue UpgradeFormatVersionUpdate::ToJSON(JSONWriter &writer) const {

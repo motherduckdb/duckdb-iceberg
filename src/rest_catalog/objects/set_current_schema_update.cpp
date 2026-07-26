@@ -71,7 +71,8 @@ void SetCurrentSchemaUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue o
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: schema-id
-	obj.Add("schema-id", writer.CreateSignedInteger(schema_id));
+	auto schema_id_json = writer.CreateSignedInteger(schema_id);
+	obj.Add("schema-id", schema_id_json);
 }
 
 JSONMutableValue SetCurrentSchemaUpdate::ToJSON(JSONWriter &writer) const {

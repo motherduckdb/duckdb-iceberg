@@ -76,13 +76,16 @@ string FunctionSQLRepresentation::TryFromJSON(JSONValue obj) {
 
 void FunctionSQLRepresentation::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	obj.AddString("type", type);
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: dialect
-	obj.AddString("dialect", dialect);
+	auto dialect_json = writer.CreateString(dialect);
+	obj.Add("dialect", dialect_json);
 
 	// Serialize: sql
-	obj.AddString("sql", sql);
+	auto sql_json = writer.CreateString(sql);
+	obj.Add("sql", sql_json);
 }
 
 JSONMutableValue FunctionSQLRepresentation::ToJSON(JSONWriter &writer) const {

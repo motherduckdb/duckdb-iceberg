@@ -77,17 +77,18 @@ string PartitionSpec::TryFromJSON(JSONValue obj) {
 
 void PartitionSpec::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: fields
-	auto fields_arr = writer.CreateArray();
-	for (const auto &item : fields) {
-		auto item_val = item.ToJSON(writer);
-		fields_arr.Append(item_val);
+	auto fields_json = writer.CreateArray();
+	for (const auto &fields_json_item : fields) {
+		auto fields_json_item_json = fields_json_item.ToJSON(writer);
+		fields_json.Append(fields_json_item_json);
 	}
-	obj.Add("fields", fields_arr);
+	obj.Add("fields", fields_json);
 
 	// Serialize: spec-id
 	if (spec_id.has_value()) {
 		auto &spec_id_value = *spec_id;
-		obj.Add("spec-id", writer.CreateSignedInteger(spec_id_value));
+		auto spec_id_json = writer.CreateSignedInteger(spec_id_value);
+		obj.Add("spec-id", spec_id_json);
 	}
 }
 

@@ -53,7 +53,6 @@ After refreshing and correcting `api.yaml`, regenerate and format the REST
 objects, then run the generator tests:
 
 ```shell
-python3 scripts/generate_cpp_code.py
-make format-fix
+make generate-rest-catalog-code
 python3 -m pytest -q test/scripts/test_openapi_codegen.py
 ```

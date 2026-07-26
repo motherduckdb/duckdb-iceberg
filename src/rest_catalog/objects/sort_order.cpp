@@ -74,15 +74,16 @@ string SortOrder::TryFromJSON(JSONValue obj) {
 
 void SortOrder::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: order-id
-	obj.Add("order-id", writer.CreateSignedInteger(order_id));
+	auto order_id_json = writer.CreateSignedInteger(order_id);
+	obj.Add("order-id", order_id_json);
 
 	// Serialize: fields
-	auto fields_arr = writer.CreateArray();
-	for (const auto &item : fields) {
-		auto item_val = item.ToJSON(writer);
-		fields_arr.Append(item_val);
+	auto fields_json = writer.CreateArray();
+	for (const auto &fields_json_item : fields) {
+		auto fields_json_item_json = fields_json_item.ToJSON(writer);
+		fields_json.Append(fields_json_item_json);
 	}
-	obj.Add("fields", fields_arr);
+	obj.Add("fields", fields_json);
 }
 
 JSONMutableValue SortOrder::ToJSON(JSONWriter &writer) const {

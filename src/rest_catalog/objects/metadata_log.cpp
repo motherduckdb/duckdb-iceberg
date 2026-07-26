@@ -62,10 +62,12 @@ string MetadataLog::Object4::TryFromJSON(JSONValue obj) {
 
 void MetadataLog::Object4::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: metadata-file
-	obj.AddString("metadata-file", metadata_file);
+	auto metadata_file_json = writer.CreateString(metadata_file);
+	obj.Add("metadata-file", metadata_file_json);
 
 	// Serialize: timestamp-ms
-	obj.Add("timestamp-ms", writer.CreateSignedInteger(timestamp_ms));
+	auto timestamp_ms_json = writer.CreateSignedInteger(timestamp_ms);
+	obj.Add("timestamp-ms", timestamp_ms_json);
 }
 
 JSONMutableValue MetadataLog::Object4::ToJSON(JSONWriter &writer) const {
@@ -117,11 +119,12 @@ string MetadataLog::TryFromJSON(JSONValue obj) {
 }
 
 JSONMutableValue MetadataLog::ToJSON(JSONWriter &writer) const {
-	auto arr = writer.CreateArray();
-	for (const auto &item : value) {
-		arr.Append(item.ToJSON(writer));
+	auto result = writer.CreateArray();
+	for (const auto &result_item : value) {
+		auto result_item_json = result_item.ToJSON(writer);
+		result.Append(result_item_json);
 	}
-	return arr;
+	return result;
 }
 
 } // namespace rest_api_objects

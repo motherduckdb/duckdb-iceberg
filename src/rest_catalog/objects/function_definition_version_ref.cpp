@@ -60,10 +60,12 @@ string FunctionDefinitionVersionRef::TryFromJSON(JSONValue obj) {
 
 void FunctionDefinitionVersionRef::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: definition-id
-	obj.AddString("definition-id", definition_id);
+	auto definition_id_json = writer.CreateString(definition_id);
+	obj.Add("definition-id", definition_id_json);
 
 	// Serialize: version-id
-	obj.Add("version-id", writer.CreateSignedInteger(version_id));
+	auto version_id_json = writer.CreateSignedInteger(version_id);
+	obj.Add("version-id", version_id_json);
 }
 
 JSONMutableValue FunctionDefinitionVersionRef::ToJSON(JSONWriter &writer) const {

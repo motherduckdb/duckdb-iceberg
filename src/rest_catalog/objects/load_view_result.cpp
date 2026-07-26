@@ -90,22 +90,22 @@ string LoadViewResult::TryFromJSON(JSONValue obj) {
 
 void LoadViewResult::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: metadata-location
-	obj.AddString("metadata-location", metadata_location);
+	auto metadata_location_json = writer.CreateString(metadata_location);
+	obj.Add("metadata-location", metadata_location_json);
 
 	// Serialize: metadata
-	auto metadata_val = metadata.ToJSON(writer);
-	obj.Add("metadata", metadata_val);
+	auto metadata_json = metadata.ToJSON(writer);
+	obj.Add("metadata", metadata_json);
 
 	// Serialize: config
 	if (config.has_value()) {
 		auto &config_value = *config;
-		auto config_value_obj = writer.CreateObject();
-		for (const auto &it : config_value) {
-			auto &key = it.first;
-			auto &value = it.second;
-			config_value_obj.AddString(key, value);
+		auto config_json = writer.CreateObject();
+		for (const auto &[config_json_key, config_json_value] : config_value) {
+			auto config_json_value_json = writer.CreateString(config_json_value);
+			config_json.Add(config_json_key, config_json_value_json);
 		}
-		obj.Add("config", config_value_obj);
+		obj.Add("config", config_json);
 	}
 }
 

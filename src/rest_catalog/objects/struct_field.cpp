@@ -122,36 +122,40 @@ string StructField::TryFromJSON(JSONValue obj) {
 
 void StructField::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: id
-	obj.Add("id", writer.CreateSignedInteger(id));
+	auto id_json = writer.CreateSignedInteger(id);
+	obj.Add("id", id_json);
 
 	// Serialize: name
-	obj.AddString("name", name);
+	auto name_json = writer.CreateString(name);
+	obj.Add("name", name_json);
 
 	// Serialize: type
-	auto type_val = type->ToJSON(writer);
-	obj.Add("type", type_val);
+	auto type_json = type->ToJSON(writer);
+	obj.Add("type", type_json);
 
 	// Serialize: required
-	obj.Add("required", writer.CreateBoolean(required));
+	auto required_json = writer.CreateBoolean(required);
+	obj.Add("required", required_json);
 
 	// Serialize: doc
 	if (_doc.has_value()) {
 		auto &_doc_value = *_doc;
-		obj.AddString("doc", _doc_value);
+		auto _doc_json = writer.CreateString(_doc_value);
+		obj.Add("doc", _doc_json);
 	}
 
 	// Serialize: initial-default
 	if (initial_default.has_value()) {
 		auto &initial_default_value = *initial_default;
-		auto initial_default_value_val = initial_default_value.ToJSON(writer);
-		obj.Add("initial-default", initial_default_value_val);
+		auto initial_default_json = initial_default_value.ToJSON(writer);
+		obj.Add("initial-default", initial_default_json);
 	}
 
 	// Serialize: write-default
 	if (write_default.has_value()) {
 		auto &write_default_value = *write_default;
-		auto write_default_value_val = write_default_value.ToJSON(writer);
-		obj.Add("write-default", write_default_value_val);
+		auto write_default_json = write_default_value.ToJSON(writer);
+		obj.Add("write-default", write_default_json);
 	}
 }
 

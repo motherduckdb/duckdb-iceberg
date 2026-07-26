@@ -173,44 +173,49 @@ string FunctionDefinition::TryFromJSON(JSONValue obj) {
 
 void FunctionDefinition::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: definition-id
-	obj.AddString("definition-id", definition_id);
+	auto definition_id_json = writer.CreateString(definition_id);
+	obj.Add("definition-id", definition_id_json);
 
 	// Serialize: parameters
-	auto parameters_arr = writer.CreateArray();
-	for (const auto &item : parameters) {
-		auto item_val = item.ToJSON(writer);
-		parameters_arr.Append(item_val);
+	auto parameters_json = writer.CreateArray();
+	for (const auto &parameters_json_item : parameters) {
+		auto parameters_json_item_json = parameters_json_item.ToJSON(writer);
+		parameters_json.Append(parameters_json_item_json);
 	}
-	obj.Add("parameters", parameters_arr);
+	obj.Add("parameters", parameters_json);
 
 	// Serialize: return-type
-	auto return_type_val = return_type->ToJSON(writer);
-	obj.Add("return-type", return_type_val);
+	auto return_type_json = return_type->ToJSON(writer);
+	obj.Add("return-type", return_type_json);
 
 	// Serialize: versions
-	auto versions_arr = writer.CreateArray();
-	for (const auto &item : versions) {
-		auto item_val = item.ToJSON(writer);
-		versions_arr.Append(item_val);
+	auto versions_json = writer.CreateArray();
+	for (const auto &versions_json_item : versions) {
+		auto versions_json_item_json = versions_json_item.ToJSON(writer);
+		versions_json.Append(versions_json_item_json);
 	}
-	obj.Add("versions", versions_arr);
+	obj.Add("versions", versions_json);
 
 	// Serialize: current-version-id
-	obj.Add("current-version-id", writer.CreateSignedInteger(current_version_id));
+	auto current_version_id_json = writer.CreateSignedInteger(current_version_id);
+	obj.Add("current-version-id", current_version_id_json);
 
 	// Serialize: function-type
-	obj.AddString("function-type", function_type);
+	auto function_type_json = writer.CreateString(function_type);
+	obj.Add("function-type", function_type_json);
 
 	// Serialize: return-nullable
 	if (return_nullable.has_value()) {
 		auto &return_nullable_value = *return_nullable;
-		obj.Add("return-nullable", writer.CreateBoolean(return_nullable_value));
+		auto return_nullable_json = writer.CreateBoolean(return_nullable_value);
+		obj.Add("return-nullable", return_nullable_json);
 	}
 
 	// Serialize: doc
 	if (_doc.has_value()) {
 		auto &_doc_value = *_doc;
-		obj.AddString("doc", _doc_value);
+		auto _doc_json = writer.CreateString(_doc_value);
+		obj.Add("doc", _doc_json);
 	}
 }
 

@@ -71,15 +71,16 @@ string FunctionMapType::TryFromJSON(JSONValue obj) {
 
 void FunctionMapType::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	obj.AddString("type", type);
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: key
-	auto key_val = key->ToJSON(writer);
-	obj.Add("key", key_val);
+	auto key_json = key->ToJSON(writer);
+	obj.Add("key", key_json);
 
 	// Serialize: value
-	auto value_val = value->ToJSON(writer);
-	obj.Add("value", value_val);
+	auto value_json = value->ToJSON(writer);
+	obj.Add("value", value_json);
 }
 
 JSONMutableValue FunctionMapType::ToJSON(JSONWriter &writer) const {

@@ -49,7 +49,8 @@ string AssertCreate::TryFromJSON(JSONValue obj) {
 
 void AssertCreate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	obj.AddString("type", type);
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 }
 
 JSONMutableValue AssertCreate::ToJSON(JSONWriter &writer) const {

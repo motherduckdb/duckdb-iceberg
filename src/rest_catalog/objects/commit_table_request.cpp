@@ -104,26 +104,26 @@ string CommitTableRequest::TryFromJSON(JSONValue obj) {
 
 void CommitTableRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: requirements
-	auto requirements_arr = writer.CreateArray();
-	for (const auto &item : requirements) {
-		auto item_val = item.ToJSON(writer);
-		requirements_arr.Append(item_val);
+	auto requirements_json = writer.CreateArray();
+	for (const auto &requirements_json_item : requirements) {
+		auto requirements_json_item_json = requirements_json_item.ToJSON(writer);
+		requirements_json.Append(requirements_json_item_json);
 	}
-	obj.Add("requirements", requirements_arr);
+	obj.Add("requirements", requirements_json);
 
 	// Serialize: updates
-	auto updates_arr = writer.CreateArray();
-	for (const auto &item : updates) {
-		auto item_val = item.ToJSON(writer);
-		updates_arr.Append(item_val);
+	auto updates_json = writer.CreateArray();
+	for (const auto &updates_json_item : updates) {
+		auto updates_json_item_json = updates_json_item.ToJSON(writer);
+		updates_json.Append(updates_json_item_json);
 	}
-	obj.Add("updates", updates_arr);
+	obj.Add("updates", updates_json);
 
 	// Serialize: identifier
 	if (identifier.has_value()) {
 		auto &identifier_value = *identifier;
-		auto identifier_value_val = identifier_value.ToJSON(writer);
-		obj.Add("identifier", identifier_value_val);
+		auto identifier_json = identifier_value.ToJSON(writer);
+		obj.Add("identifier", identifier_json);
 	}
 }
 

@@ -63,12 +63,12 @@ string CommitTransactionRequest::TryFromJSON(JSONValue obj) {
 
 void CommitTransactionRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: table-changes
-	auto table_changes_arr = writer.CreateArray();
-	for (const auto &item : table_changes) {
-		auto item_val = item.ToJSON(writer);
-		table_changes_arr.Append(item_val);
+	auto table_changes_json = writer.CreateArray();
+	for (const auto &table_changes_json_item : table_changes) {
+		auto table_changes_json_item_json = table_changes_json_item.ToJSON(writer);
+		table_changes_json.Append(table_changes_json_item_json);
 	}
-	obj.Add("table-changes", table_changes_arr);
+	obj.Add("table-changes", table_changes_json);
 }
 
 JSONMutableValue CommitTransactionRequest::ToJSON(JSONWriter &writer) const {

@@ -85,19 +85,19 @@ void ListNamespacesResponse::PopulateJSON(JSONWriter &writer, JSONMutableValue o
 	// Serialize: next-page-token
 	if (next_page_token.has_value()) {
 		auto &next_page_token_value = *next_page_token;
-		auto next_page_token_value_val = next_page_token_value.ToJSON(writer);
-		obj.Add("next-page-token", next_page_token_value_val);
+		auto next_page_token_json = next_page_token_value.ToJSON(writer);
+		obj.Add("next-page-token", next_page_token_json);
 	}
 
 	// Serialize: namespaces
 	if (namespaces.has_value()) {
 		auto &namespaces_value = *namespaces;
-		auto namespaces_value_arr = writer.CreateArray();
-		for (const auto &item : namespaces_value) {
-			auto item_val = item.ToJSON(writer);
-			namespaces_value_arr.Append(item_val);
+		auto namespaces_json = writer.CreateArray();
+		for (const auto &namespaces_json_item : namespaces_value) {
+			auto namespaces_json_item_json = namespaces_json_item.ToJSON(writer);
+			namespaces_json.Append(namespaces_json_item_json);
 		}
-		obj.Add("namespaces", namespaces_value_arr);
+		obj.Add("namespaces", namespaces_json);
 	}
 }
 

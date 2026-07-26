@@ -46,8 +46,8 @@ string FailedPlanningResult::Object7::TryFromJSON(JSONValue obj) {
 
 void FailedPlanningResult::Object7::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: status
-	auto status_val = status.ToJSON(writer);
-	obj.Add("status", status_val);
+	auto status_json = status.ToJSON(writer);
+	obj.Add("status", status_json);
 }
 
 JSONMutableValue FailedPlanningResult::Object7::ToJSON(JSONWriter &writer) const {

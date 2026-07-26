@@ -40,7 +40,8 @@ string DoubleTypeValue::TryFromJSON(JSONValue obj) {
 }
 
 JSONMutableValue DoubleTypeValue::ToJSON(JSONWriter &writer) const {
-	return writer.CreateDouble(value);
+	auto result = writer.CreateDouble(value);
+	return result;
 }
 
 } // namespace rest_api_objects

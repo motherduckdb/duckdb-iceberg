@@ -40,7 +40,8 @@ string FieldName::TryFromJSON(JSONValue obj) {
 }
 
 JSONMutableValue FieldName::ToJSON(JSONWriter &writer) const {
-	return writer.CreateString(value);
+	auto result = writer.CreateString(value);
+	return result;
 }
 
 } // namespace rest_api_objects

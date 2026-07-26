@@ -68,8 +68,8 @@ void AddPartitionSpecUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue o
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: spec
-	auto spec_val = spec.ToJSON(writer);
-	obj.Add("spec", spec_val);
+	auto spec_json = spec.ToJSON(writer);
+	obj.Add("spec", spec_json);
 }
 
 JSONMutableValue AddPartitionSpecUpdate::ToJSON(JSONWriter &writer) const {

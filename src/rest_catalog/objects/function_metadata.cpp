@@ -198,55 +198,59 @@ string FunctionMetadata::TryFromJSON(JSONValue obj) {
 
 void FunctionMetadata::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: function-uuid
-	obj.AddString("function-uuid", function_uuid);
+	auto function_uuid_json = writer.CreateString(function_uuid);
+	obj.Add("function-uuid", function_uuid_json);
 
 	// Serialize: format-version
-	obj.Add("format-version", writer.CreateSignedInteger(format_version));
+	auto format_version_json = writer.CreateSignedInteger(format_version);
+	obj.Add("format-version", format_version_json);
 
 	// Serialize: definitions
-	auto definitions_arr = writer.CreateArray();
-	for (const auto &item : definitions) {
-		auto item_val = item.ToJSON(writer);
-		definitions_arr.Append(item_val);
+	auto definitions_json = writer.CreateArray();
+	for (const auto &definitions_json_item : definitions) {
+		auto definitions_json_item_json = definitions_json_item.ToJSON(writer);
+		definitions_json.Append(definitions_json_item_json);
 	}
-	obj.Add("definitions", definitions_arr);
+	obj.Add("definitions", definitions_json);
 
 	// Serialize: definition-log
-	auto definition_log_arr = writer.CreateArray();
-	for (const auto &item : definition_log) {
-		auto item_val = item.ToJSON(writer);
-		definition_log_arr.Append(item_val);
+	auto definition_log_json = writer.CreateArray();
+	for (const auto &definition_log_json_item : definition_log) {
+		auto definition_log_json_item_json = definition_log_json_item.ToJSON(writer);
+		definition_log_json.Append(definition_log_json_item_json);
 	}
-	obj.Add("definition-log", definition_log_arr);
+	obj.Add("definition-log", definition_log_json);
 
 	// Serialize: location
 	if (location.has_value()) {
 		auto &location_value = *location;
-		obj.AddString("location", location_value);
+		auto location_json = writer.CreateString(location_value);
+		obj.Add("location", location_json);
 	}
 
 	// Serialize: properties
 	if (properties.has_value()) {
 		auto &properties_value = *properties;
-		auto properties_value_obj = writer.CreateObject();
-		for (const auto &it : properties_value) {
-			auto &key = it.first;
-			auto &value = it.second;
-			properties_value_obj.AddString(key, value);
+		auto properties_json = writer.CreateObject();
+		for (const auto &[properties_json_key, properties_json_value] : properties_value) {
+			auto properties_json_value_json = writer.CreateString(properties_json_value);
+			properties_json.Add(properties_json_key, properties_json_value_json);
 		}
-		obj.Add("properties", properties_value_obj);
+		obj.Add("properties", properties_json);
 	}
 
 	// Serialize: secure
 	if (secure.has_value()) {
 		auto &secure_value = *secure;
-		obj.Add("secure", writer.CreateBoolean(secure_value));
+		auto secure_json = writer.CreateBoolean(secure_value);
+		obj.Add("secure", secure_json);
 	}
 
 	// Serialize: doc
 	if (_doc.has_value()) {
 		auto &_doc_value = *_doc;
-		obj.AddString("doc", _doc_value);
+		auto _doc_json = writer.CreateString(_doc_value);
+		obj.Add("doc", _doc_json);
 	}
 }
 

@@ -44,8 +44,8 @@ string TrueExpression::TryFromJSON(JSONValue obj) {
 
 void TrueExpression::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	auto type_val = type.ToJSON(writer);
-	obj.Add("type", type_val);
+	auto type_json = type.ToJSON(writer);
+	obj.Add("type", type_json);
 }
 
 JSONMutableValue TrueExpression::ToJSON(JSONWriter &writer) const {

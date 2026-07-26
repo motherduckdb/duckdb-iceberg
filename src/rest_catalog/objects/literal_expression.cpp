@@ -64,16 +64,16 @@ string LiteralExpression::TryFromJSON(JSONValue obj) {
 
 void LiteralExpression::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	auto type_val = type.ToJSON(writer);
-	obj.Add("type", type_val);
+	auto type_json = type.ToJSON(writer);
+	obj.Add("type", type_json);
 
 	// Serialize: term
-	auto term_val = term.ToJSON(writer);
-	obj.Add("term", term_val);
+	auto term_json = term.ToJSON(writer);
+	obj.Add("term", term_json);
 
 	// Serialize: value
-	auto value_val = value.ToJSON(writer);
-	obj.Add("value", value_val);
+	auto value_json = value.ToJSON(writer);
+	obj.Add("value", value_json);
 }
 
 JSONMutableValue LiteralExpression::ToJSON(JSONWriter &writer) const {

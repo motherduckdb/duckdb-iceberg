@@ -77,15 +77,16 @@ string FunctionStructType::TryFromJSON(JSONValue obj) {
 
 void FunctionStructType::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	obj.AddString("type", type);
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: fields
-	auto fields_arr = writer.CreateArray();
-	for (const auto &item : fields) {
-		auto item_val = item.ToJSON(writer);
-		fields_arr.Append(item_val);
+	auto fields_json = writer.CreateArray();
+	for (const auto &fields_json_item : fields) {
+		auto fields_json_item_json = fields_json_item.ToJSON(writer);
+		fields_json.Append(fields_json_item_json);
 	}
-	obj.Add("fields", fields_arr);
+	obj.Add("fields", fields_json);
 }
 
 JSONMutableValue FunctionStructType::ToJSON(JSONWriter &writer) const {

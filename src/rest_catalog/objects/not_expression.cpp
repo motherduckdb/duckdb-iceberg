@@ -55,12 +55,12 @@ string NotExpression::TryFromJSON(JSONValue obj) {
 
 void NotExpression::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	auto type_val = type.ToJSON(writer);
-	obj.Add("type", type_val);
+	auto type_json = type.ToJSON(writer);
+	obj.Add("type", type_json);
 
 	// Serialize: child
-	auto child_val = child->ToJSON(writer);
-	obj.Add("child", child_val);
+	auto child_json = child->ToJSON(writer);
+	obj.Add("child", child_json);
 }
 
 JSONMutableValue NotExpression::ToJSON(JSONWriter &writer) const {

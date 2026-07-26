@@ -71,7 +71,8 @@ void RemoveSnapshotRefUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue 
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: ref-name
-	obj.AddString("ref-name", ref_name);
+	auto ref_name_json = writer.CreateString(ref_name);
+	obj.Add("ref-name", ref_name_json);
 }
 
 JSONMutableValue RemoveSnapshotRefUpdate::ToJSON(JSONWriter &writer) const {

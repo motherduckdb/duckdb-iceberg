@@ -143,38 +143,37 @@ string CatalogConfig::TryFromJSON(JSONValue obj) {
 
 void CatalogConfig::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: defaults
-	auto defaults_obj = writer.CreateObject();
-	for (const auto &it : defaults) {
-		auto &key = it.first;
-		auto &value = it.second;
-		defaults_obj.AddString(key, value);
+	auto defaults_json = writer.CreateObject();
+	for (const auto &[defaults_json_key, defaults_json_value] : defaults) {
+		auto defaults_json_value_json = writer.CreateString(defaults_json_value);
+		defaults_json.Add(defaults_json_key, defaults_json_value_json);
 	}
-	obj.Add("defaults", defaults_obj);
+	obj.Add("defaults", defaults_json);
 
 	// Serialize: overrides
-	auto overrides_obj = writer.CreateObject();
-	for (const auto &it : overrides) {
-		auto &key = it.first;
-		auto &value = it.second;
-		overrides_obj.AddString(key, value);
+	auto overrides_json = writer.CreateObject();
+	for (const auto &[overrides_json_key, overrides_json_value] : overrides) {
+		auto overrides_json_value_json = writer.CreateString(overrides_json_value);
+		overrides_json.Add(overrides_json_key, overrides_json_value_json);
 	}
-	obj.Add("overrides", overrides_obj);
+	obj.Add("overrides", overrides_json);
 
 	// Serialize: endpoints
 	if (endpoints.has_value()) {
 		auto &endpoints_value = *endpoints;
-		auto endpoints_value_arr = writer.CreateArray();
-		for (const auto &item : endpoints_value) {
-			auto item_val = writer.CreateString(item);
-			endpoints_value_arr.Append(item_val);
+		auto endpoints_json = writer.CreateArray();
+		for (const auto &endpoints_json_item : endpoints_value) {
+			auto endpoints_json_item_json = writer.CreateString(endpoints_json_item);
+			endpoints_json.Append(endpoints_json_item_json);
 		}
-		obj.Add("endpoints", endpoints_value_arr);
+		obj.Add("endpoints", endpoints_json);
 	}
 
 	// Serialize: idempotency-key-lifetime
 	if (idempotency_key_lifetime.has_value()) {
 		auto &idempotency_key_lifetime_value = *idempotency_key_lifetime;
-		obj.AddString("idempotency-key-lifetime", idempotency_key_lifetime_value);
+		auto idempotency_key_lifetime_json = writer.CreateString(idempotency_key_lifetime_value);
+		obj.Add("idempotency-key-lifetime", idempotency_key_lifetime_json);
 	}
 }
 

@@ -129,31 +129,34 @@ string CommitReport::TryFromJSON(JSONValue obj) {
 
 void CommitReport::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: table-name
-	obj.AddString("table-name", table_name);
+	auto table_name_json = writer.CreateString(table_name);
+	obj.Add("table-name", table_name_json);
 
 	// Serialize: snapshot-id
-	obj.Add("snapshot-id", writer.CreateSignedInteger(snapshot_id));
+	auto snapshot_id_json = writer.CreateSignedInteger(snapshot_id);
+	obj.Add("snapshot-id", snapshot_id_json);
 
 	// Serialize: sequence-number
-	obj.Add("sequence-number", writer.CreateSignedInteger(sequence_number));
+	auto sequence_number_json = writer.CreateSignedInteger(sequence_number);
+	obj.Add("sequence-number", sequence_number_json);
 
 	// Serialize: operation
-	obj.AddString("operation", operation);
+	auto operation_json = writer.CreateString(operation);
+	obj.Add("operation", operation_json);
 
 	// Serialize: metrics
-	auto metrics_val = metrics.ToJSON(writer);
-	obj.Add("metrics", metrics_val);
+	auto metrics_json = metrics.ToJSON(writer);
+	obj.Add("metrics", metrics_json);
 
 	// Serialize: metadata
 	if (metadata.has_value()) {
 		auto &metadata_value = *metadata;
-		auto metadata_value_obj = writer.CreateObject();
-		for (const auto &it : metadata_value) {
-			auto &key = it.first;
-			auto &value = it.second;
-			metadata_value_obj.AddString(key, value);
+		auto metadata_json = writer.CreateObject();
+		for (const auto &[metadata_json_key, metadata_json_value] : metadata_value) {
+			auto metadata_json_value_json = writer.CreateString(metadata_json_value);
+			metadata_json.Add(metadata_json_key, metadata_json_value_json);
 		}
-		obj.Add("metadata", metadata_value_obj);
+		obj.Add("metadata", metadata_json);
 	}
 }
 

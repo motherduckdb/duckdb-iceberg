@@ -98,23 +98,23 @@ void CountMap::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: keys
 	if (keys.has_value()) {
 		auto &keys_value = *keys;
-		auto keys_value_arr = writer.CreateArray();
-		for (const auto &item : keys_value) {
-			auto item_val = item.ToJSON(writer);
-			keys_value_arr.Append(item_val);
+		auto keys_json = writer.CreateArray();
+		for (const auto &keys_json_item : keys_value) {
+			auto keys_json_item_json = keys_json_item.ToJSON(writer);
+			keys_json.Append(keys_json_item_json);
 		}
-		obj.Add("keys", keys_value_arr);
+		obj.Add("keys", keys_json);
 	}
 
 	// Serialize: values
 	if (values.has_value()) {
 		auto &values_value = *values;
-		auto values_value_arr = writer.CreateArray();
-		for (const auto &item : values_value) {
-			auto item_val = item.ToJSON(writer);
-			values_value_arr.Append(item_val);
+		auto values_json = writer.CreateArray();
+		for (const auto &values_json_item : values_value) {
+			auto values_json_item_json = values_json_item.ToJSON(writer);
+			values_json.Append(values_json_item_json);
 		}
-		obj.Add("values", values_value_arr);
+		obj.Add("values", values_json);
 	}
 }
 

@@ -128,39 +128,43 @@ string OAuthTokenExchangeRequest::TryFromJSON(JSONValue obj) {
 
 void OAuthTokenExchangeRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: grant_type
-	obj.AddString("grant_type", grant_type);
+	auto grant_type_json = writer.CreateString(grant_type);
+	obj.Add("grant_type", grant_type_json);
 
 	// Serialize: subject_token
-	obj.AddString("subject_token", subject_token);
+	auto subject_token_json = writer.CreateString(subject_token);
+	obj.Add("subject_token", subject_token_json);
 
 	// Serialize: subject_token_type
-	auto subject_token_type_val = subject_token_type.ToJSON(writer);
-	obj.Add("subject_token_type", subject_token_type_val);
+	auto subject_token_type_json = subject_token_type.ToJSON(writer);
+	obj.Add("subject_token_type", subject_token_type_json);
 
 	// Serialize: scope
 	if (scope.has_value()) {
 		auto &scope_value = *scope;
-		obj.AddString("scope", scope_value);
+		auto scope_json = writer.CreateString(scope_value);
+		obj.Add("scope", scope_json);
 	}
 
 	// Serialize: requested_token_type
 	if (requested_token_type.has_value()) {
 		auto &requested_token_type_value = *requested_token_type;
-		auto requested_token_type_value_val = requested_token_type_value.ToJSON(writer);
-		obj.Add("requested_token_type", requested_token_type_value_val);
+		auto requested_token_type_json = requested_token_type_value.ToJSON(writer);
+		obj.Add("requested_token_type", requested_token_type_json);
 	}
 
 	// Serialize: actor_token
 	if (actor_token.has_value()) {
 		auto &actor_token_value = *actor_token;
-		obj.AddString("actor_token", actor_token_value);
+		auto actor_token_json = writer.CreateString(actor_token_value);
+		obj.Add("actor_token", actor_token_json);
 	}
 
 	// Serialize: actor_token_type
 	if (actor_token_type.has_value()) {
 		auto &actor_token_type_value = *actor_token_type;
-		auto actor_token_type_value_val = actor_token_type_value.ToJSON(writer);
-		obj.Add("actor_token_type", actor_token_type_value_val);
+		auto actor_token_type_json = actor_token_type_value.ToJSON(writer);
+		obj.Add("actor_token_type", actor_token_type_json);
 	}
 }
 

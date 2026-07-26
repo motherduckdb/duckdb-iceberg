@@ -54,12 +54,12 @@ string UnaryExpression::TryFromJSON(JSONValue obj) {
 
 void UnaryExpression::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	auto type_val = type.ToJSON(writer);
-	obj.Add("type", type_val);
+	auto type_json = type.ToJSON(writer);
+	obj.Add("type", type_json);
 
 	// Serialize: term
-	auto term_val = term.ToJSON(writer);
-	obj.Add("term", term_val);
+	auto term_json = term.ToJSON(writer);
+	obj.Add("term", term_json);
 }
 
 JSONMutableValue UnaryExpression::ToJSON(JSONWriter &writer) const {

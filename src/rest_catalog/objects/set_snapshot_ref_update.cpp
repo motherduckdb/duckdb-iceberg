@@ -79,7 +79,8 @@ void SetSnapshotRefUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj
 	snapshot_reference.PopulateJSON(writer, obj);
 
 	// Serialize: ref-name
-	obj.AddString("ref-name", ref_name);
+	auto ref_name_json = writer.CreateString(ref_name);
+	obj.Add("ref-name", ref_name_json);
 }
 
 JSONMutableValue SetSnapshotRefUpdate::ToJSON(JSONWriter &writer) const {

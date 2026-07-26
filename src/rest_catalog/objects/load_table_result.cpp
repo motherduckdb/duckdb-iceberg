@@ -129,36 +129,36 @@ string LoadTableResult::TryFromJSON(JSONValue obj) {
 
 void LoadTableResult::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: metadata
-	auto metadata_val = metadata.ToJSON(writer);
-	obj.Add("metadata", metadata_val);
+	auto metadata_json = metadata.ToJSON(writer);
+	obj.Add("metadata", metadata_json);
 
 	// Serialize: metadata-location
 	if (metadata_location.has_value()) {
 		auto &metadata_location_value = *metadata_location;
-		obj.AddString("metadata-location", metadata_location_value);
+		auto metadata_location_json = writer.CreateString(metadata_location_value);
+		obj.Add("metadata-location", metadata_location_json);
 	}
 
 	// Serialize: config
 	if (config.has_value()) {
 		auto &config_value = *config;
-		auto config_value_obj = writer.CreateObject();
-		for (const auto &it : config_value) {
-			auto &key = it.first;
-			auto &value = it.second;
-			config_value_obj.AddString(key, value);
+		auto config_json = writer.CreateObject();
+		for (const auto &[config_json_key, config_json_value] : config_value) {
+			auto config_json_value_json = writer.CreateString(config_json_value);
+			config_json.Add(config_json_key, config_json_value_json);
 		}
-		obj.Add("config", config_value_obj);
+		obj.Add("config", config_json);
 	}
 
 	// Serialize: storage-credentials
 	if (storage_credentials.has_value()) {
 		auto &storage_credentials_value = *storage_credentials;
-		auto storage_credentials_value_arr = writer.CreateArray();
-		for (const auto &item : storage_credentials_value) {
-			auto item_val = item.ToJSON(writer);
-			storage_credentials_value_arr.Append(item_val);
+		auto storage_credentials_json = writer.CreateArray();
+		for (const auto &storage_credentials_json_item : storage_credentials_value) {
+			auto storage_credentials_json_item_json = storage_credentials_json_item.ToJSON(writer);
+			storage_credentials_json.Append(storage_credentials_json_item_json);
 		}
-		obj.Add("storage-credentials", storage_credentials_value_arr);
+		obj.Add("storage-credentials", storage_credentials_json);
 	}
 }
 

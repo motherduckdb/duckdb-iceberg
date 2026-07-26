@@ -204,54 +204,60 @@ string ContentFile::TryFromJSON(JSONValue obj) {
 
 void ContentFile::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: spec-id
-	obj.Add("spec-id", writer.CreateSignedInteger(spec_id));
+	auto spec_id_json = writer.CreateSignedInteger(spec_id);
+	obj.Add("spec-id", spec_id_json);
 
 	// Serialize: partition
-	auto partition_arr = writer.CreateArray();
-	for (const auto &item : partition) {
-		auto item_val = item.ToJSON(writer);
-		partition_arr.Append(item_val);
+	auto partition_json = writer.CreateArray();
+	for (const auto &partition_json_item : partition) {
+		auto partition_json_item_json = partition_json_item.ToJSON(writer);
+		partition_json.Append(partition_json_item_json);
 	}
-	obj.Add("partition", partition_arr);
+	obj.Add("partition", partition_json);
 
 	// Serialize: content
-	obj.AddString("content", content);
+	auto content_json = writer.CreateString(content);
+	obj.Add("content", content_json);
 
 	// Serialize: file-path
-	obj.AddString("file-path", file_path);
+	auto file_path_json = writer.CreateString(file_path);
+	obj.Add("file-path", file_path_json);
 
 	// Serialize: file-format
-	auto file_format_val = file_format.ToJSON(writer);
-	obj.Add("file-format", file_format_val);
+	auto file_format_json = file_format.ToJSON(writer);
+	obj.Add("file-format", file_format_json);
 
 	// Serialize: file-size-in-bytes
-	obj.Add("file-size-in-bytes", writer.CreateSignedInteger(file_size_in_bytes));
+	auto file_size_in_bytes_json = writer.CreateSignedInteger(file_size_in_bytes);
+	obj.Add("file-size-in-bytes", file_size_in_bytes_json);
 
 	// Serialize: record-count
-	obj.Add("record-count", writer.CreateSignedInteger(record_count));
+	auto record_count_json = writer.CreateSignedInteger(record_count);
+	obj.Add("record-count", record_count_json);
 
 	// Serialize: key-metadata
 	if (key_metadata.has_value()) {
 		auto &key_metadata_value = *key_metadata;
-		auto key_metadata_value_val = key_metadata_value.ToJSON(writer);
-		obj.Add("key-metadata", key_metadata_value_val);
+		auto key_metadata_json = key_metadata_value.ToJSON(writer);
+		obj.Add("key-metadata", key_metadata_json);
 	}
 
 	// Serialize: split-offsets
 	if (split_offsets.has_value()) {
 		auto &split_offsets_value = *split_offsets;
-		auto split_offsets_value_arr = writer.CreateArray();
-		for (const auto &item : split_offsets_value) {
-			auto item_val = writer.CreateSignedInteger(item);
-			split_offsets_value_arr.Append(item_val);
+		auto split_offsets_json = writer.CreateArray();
+		for (const auto &split_offsets_json_item : split_offsets_value) {
+			auto split_offsets_json_item_json = writer.CreateSignedInteger(split_offsets_json_item);
+			split_offsets_json.Append(split_offsets_json_item_json);
 		}
-		obj.Add("split-offsets", split_offsets_value_arr);
+		obj.Add("split-offsets", split_offsets_json);
 	}
 
 	// Serialize: sort-order-id
 	if (sort_order_id.has_value()) {
 		auto &sort_order_id_value = *sort_order_id;
-		obj.Add("sort-order-id", writer.CreateSignedInteger(sort_order_id_value));
+		auto sort_order_id_json = writer.CreateSignedInteger(sort_order_id_value);
+		obj.Add("sort-order-id", sort_order_id_json);
 	}
 }
 

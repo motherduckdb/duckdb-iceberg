@@ -84,19 +84,22 @@ string PartitionField::TryFromJSON(JSONValue obj) {
 
 void PartitionField::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: source-id
-	obj.Add("source-id", writer.CreateSignedInteger(source_id));
+	auto source_id_json = writer.CreateSignedInteger(source_id);
+	obj.Add("source-id", source_id_json);
 
 	// Serialize: transform
-	auto transform_val = transform.ToJSON(writer);
-	obj.Add("transform", transform_val);
+	auto transform_json = transform.ToJSON(writer);
+	obj.Add("transform", transform_json);
 
 	// Serialize: name
-	obj.AddString("name", name);
+	auto name_json = writer.CreateString(name);
+	obj.Add("name", name_json);
 
 	// Serialize: field-id
 	if (field_id.has_value()) {
 		auto &field_id_value = *field_id;
-		obj.Add("field-id", writer.CreateSignedInteger(field_id_value));
+		auto field_id_json = writer.CreateSignedInteger(field_id_value);
+		obj.Add("field-id", field_id_json);
 	}
 }
 

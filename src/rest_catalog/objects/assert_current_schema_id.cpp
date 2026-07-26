@@ -62,10 +62,12 @@ string AssertCurrentSchemaId::TryFromJSON(JSONValue obj) {
 
 void AssertCurrentSchemaId::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	obj.AddString("type", type);
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: current-schema-id
-	obj.Add("current-schema-id", writer.CreateSignedInteger(current_schema_id));
+	auto current_schema_id_json = writer.CreateSignedInteger(current_schema_id);
+	obj.Add("current-schema-id", current_schema_id_json);
 }
 
 JSONMutableValue AssertCurrentSchemaId::ToJSON(JSONWriter &writer) const {

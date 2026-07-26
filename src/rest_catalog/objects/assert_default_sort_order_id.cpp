@@ -63,10 +63,12 @@ string AssertDefaultSortOrderId::TryFromJSON(JSONValue obj) {
 
 void AssertDefaultSortOrderId::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	obj.AddString("type", type);
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: default-sort-order-id
-	obj.Add("default-sort-order-id", writer.CreateSignedInteger(default_sort_order_id));
+	auto default_sort_order_id_json = writer.CreateSignedInteger(default_sort_order_id);
+	obj.Add("default-sort-order-id", default_sort_order_id_json);
 }
 
 JSONMutableValue AssertDefaultSortOrderId::ToJSON(JSONWriter &writer) const {

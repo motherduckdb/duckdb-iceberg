@@ -93,12 +93,12 @@ void RemoveSnapshotsUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue ob
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: snapshot-ids
-	auto snapshot_ids_arr = writer.CreateArray();
-	for (const auto &item : snapshot_ids) {
-		auto item_val = writer.CreateSignedInteger(item);
-		snapshot_ids_arr.Append(item_val);
+	auto snapshot_ids_json = writer.CreateArray();
+	for (const auto &snapshot_ids_json_item : snapshot_ids) {
+		auto snapshot_ids_json_item_json = writer.CreateSignedInteger(snapshot_ids_json_item);
+		snapshot_ids_json.Append(snapshot_ids_json_item_json);
 	}
-	obj.Add("snapshot-ids", snapshot_ids_arr);
+	obj.Add("snapshot-ids", snapshot_ids_json);
 }
 
 JSONMutableValue RemoveSnapshotsUpdate::ToJSON(JSONWriter &writer) const {

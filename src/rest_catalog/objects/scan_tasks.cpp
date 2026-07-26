@@ -130,34 +130,34 @@ void ScanTasks::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: delete-files
 	if (delete_files.has_value()) {
 		auto &delete_files_value = *delete_files;
-		auto delete_files_value_arr = writer.CreateArray();
-		for (const auto &item : delete_files_value) {
-			auto item_val = item.ToJSON(writer);
-			delete_files_value_arr.Append(item_val);
+		auto delete_files_json = writer.CreateArray();
+		for (const auto &delete_files_json_item : delete_files_value) {
+			auto delete_files_json_item_json = delete_files_json_item.ToJSON(writer);
+			delete_files_json.Append(delete_files_json_item_json);
 		}
-		obj.Add("delete-files", delete_files_value_arr);
+		obj.Add("delete-files", delete_files_json);
 	}
 
 	// Serialize: file-scan-tasks
 	if (file_scan_tasks.has_value()) {
 		auto &file_scan_tasks_value = *file_scan_tasks;
-		auto file_scan_tasks_value_arr = writer.CreateArray();
-		for (const auto &item : file_scan_tasks_value) {
-			auto item_val = item.ToJSON(writer);
-			file_scan_tasks_value_arr.Append(item_val);
+		auto file_scan_tasks_json = writer.CreateArray();
+		for (const auto &file_scan_tasks_json_item : file_scan_tasks_value) {
+			auto file_scan_tasks_json_item_json = file_scan_tasks_json_item.ToJSON(writer);
+			file_scan_tasks_json.Append(file_scan_tasks_json_item_json);
 		}
-		obj.Add("file-scan-tasks", file_scan_tasks_value_arr);
+		obj.Add("file-scan-tasks", file_scan_tasks_json);
 	}
 
 	// Serialize: plan-tasks
 	if (plan_tasks.has_value()) {
 		auto &plan_tasks_value = *plan_tasks;
-		auto plan_tasks_value_arr = writer.CreateArray();
-		for (const auto &item : plan_tasks_value) {
-			auto item_val = item.ToJSON(writer);
-			plan_tasks_value_arr.Append(item_val);
+		auto plan_tasks_json = writer.CreateArray();
+		for (const auto &plan_tasks_json_item : plan_tasks_value) {
+			auto plan_tasks_json_item_json = plan_tasks_json_item.ToJSON(writer);
+			plan_tasks_json.Append(plan_tasks_json_item_json);
 		}
-		obj.Add("plan-tasks", plan_tasks_value_arr);
+		obj.Add("plan-tasks", plan_tasks_json);
 	}
 }
 

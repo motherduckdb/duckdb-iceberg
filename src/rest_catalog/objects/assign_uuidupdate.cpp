@@ -70,7 +70,8 @@ void AssignUUIDUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) co
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: uuid
-	obj.AddString("uuid", uuid);
+	auto uuid_json = writer.CreateString(uuid);
+	obj.Add("uuid", uuid_json);
 }
 
 JSONMutableValue AssignUUIDUpdate::ToJSON(JSONWriter &writer) const {

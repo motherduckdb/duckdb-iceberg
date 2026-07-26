@@ -56,11 +56,12 @@ string RemoteSignResult::TryFromJSON(JSONValue obj) {
 
 void RemoteSignResult::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: uri
-	obj.AddString("uri", uri);
+	auto uri_json = writer.CreateString(uri);
+	obj.Add("uri", uri_json);
 
 	// Serialize: headers
-	auto headers_val = headers.ToJSON(writer);
-	obj.Add("headers", headers_val);
+	auto headers_json = headers.ToJSON(writer);
+	obj.Add("headers", headers_json);
 }
 
 JSONMutableValue RemoteSignResult::ToJSON(JSONWriter &writer) const {

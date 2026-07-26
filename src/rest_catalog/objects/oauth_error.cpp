@@ -77,18 +77,21 @@ string OAuthError::TryFromJSON(JSONValue obj) {
 
 void OAuthError::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: error
-	obj.AddString("error", _error);
+	auto _error_json = writer.CreateString(_error);
+	obj.Add("error", _error_json);
 
 	// Serialize: error_description
 	if (error_description.has_value()) {
 		auto &error_description_value = *error_description;
-		obj.AddString("error_description", error_description_value);
+		auto error_description_json = writer.CreateString(error_description_value);
+		obj.Add("error_description", error_description_json);
 	}
 
 	// Serialize: error_uri
 	if (error_uri.has_value()) {
 		auto &error_uri_value = *error_uri;
-		obj.AddString("error_uri", error_uri_value);
+		auto error_uri_json = writer.CreateString(error_uri_value);
+		obj.Add("error_uri", error_uri_json);
 	}
 }
 

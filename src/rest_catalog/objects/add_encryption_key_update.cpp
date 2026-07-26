@@ -68,8 +68,8 @@ void AddEncryptionKeyUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue o
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: encryption-key
-	auto encryption_key_val = encryption_key.ToJSON(writer);
-	obj.Add("encryption-key", encryption_key_val);
+	auto encryption_key_json = encryption_key.ToJSON(writer);
+	obj.Add("encryption-key", encryption_key_json);
 }
 
 JSONMutableValue AddEncryptionKeyUpdate::ToJSON(JSONWriter &writer) const {

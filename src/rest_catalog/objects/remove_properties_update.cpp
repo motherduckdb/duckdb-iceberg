@@ -91,12 +91,12 @@ void RemovePropertiesUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue o
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: removals
-	auto removals_arr = writer.CreateArray();
-	for (const auto &item : removals) {
-		auto item_val = writer.CreateString(item);
-		removals_arr.Append(item_val);
+	auto removals_json = writer.CreateArray();
+	for (const auto &removals_json_item : removals) {
+		auto removals_json_item_json = writer.CreateString(removals_json_item);
+		removals_json.Append(removals_json_item_json);
 	}
-	obj.Add("removals", removals_arr);
+	obj.Add("removals", removals_json);
 }
 
 JSONMutableValue RemovePropertiesUpdate::ToJSON(JSONWriter &writer) const {

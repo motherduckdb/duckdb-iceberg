@@ -61,10 +61,12 @@ string AssertTableUUID::TryFromJSON(JSONValue obj) {
 
 void AssertTableUUID::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	obj.AddString("type", type);
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: uuid
-	obj.AddString("uuid", uuid);
+	auto uuid_json = writer.CreateString(uuid);
+	obj.Add("uuid", uuid_json);
 }
 
 JSONMutableValue AssertTableUUID::ToJSON(JSONWriter &writer) const {

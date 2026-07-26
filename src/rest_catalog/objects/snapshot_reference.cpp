@@ -113,27 +113,32 @@ string SnapshotReference::TryFromJSON(JSONValue obj) {
 
 void SnapshotReference::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	obj.AddString("type", type);
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: snapshot-id
-	obj.Add("snapshot-id", writer.CreateSignedInteger(snapshot_id));
+	auto snapshot_id_json = writer.CreateSignedInteger(snapshot_id);
+	obj.Add("snapshot-id", snapshot_id_json);
 
 	// Serialize: max-ref-age-ms
 	if (max_ref_age_ms.has_value()) {
 		auto &max_ref_age_ms_value = *max_ref_age_ms;
-		obj.Add("max-ref-age-ms", writer.CreateSignedInteger(max_ref_age_ms_value));
+		auto max_ref_age_ms_json = writer.CreateSignedInteger(max_ref_age_ms_value);
+		obj.Add("max-ref-age-ms", max_ref_age_ms_json);
 	}
 
 	// Serialize: max-snapshot-age-ms
 	if (max_snapshot_age_ms.has_value()) {
 		auto &max_snapshot_age_ms_value = *max_snapshot_age_ms;
-		obj.Add("max-snapshot-age-ms", writer.CreateSignedInteger(max_snapshot_age_ms_value));
+		auto max_snapshot_age_ms_json = writer.CreateSignedInteger(max_snapshot_age_ms_value);
+		obj.Add("max-snapshot-age-ms", max_snapshot_age_ms_json);
 	}
 
 	// Serialize: min-snapshots-to-keep
 	if (min_snapshots_to_keep.has_value()) {
 		auto &min_snapshots_to_keep_value = *min_snapshots_to_keep;
-		obj.Add("min-snapshots-to-keep", writer.CreateSignedInteger(min_snapshots_to_keep_value));
+		auto min_snapshots_to_keep_json = writer.CreateSignedInteger(min_snapshots_to_keep_value);
+		obj.Add("min-snapshots-to-keep", min_snapshots_to_keep_json);
 	}
 }
 

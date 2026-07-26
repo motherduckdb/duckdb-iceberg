@@ -42,7 +42,8 @@ string PageToken::TryFromJSON(JSONValue obj) {
 }
 
 JSONMutableValue PageToken::ToJSON(JSONWriter &writer) const {
-	return writer.CreateString(value);
+	auto result = writer.CreateString(value);
+	return result;
 }
 
 } // namespace rest_api_objects

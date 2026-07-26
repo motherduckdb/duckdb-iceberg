@@ -96,13 +96,15 @@ void PositionDeleteFile::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) 
 	// Serialize: content-offset
 	if (content_offset.has_value()) {
 		auto &content_offset_value = *content_offset;
-		obj.Add("content-offset", writer.CreateSignedInteger(content_offset_value));
+		auto content_offset_json = writer.CreateSignedInteger(content_offset_value);
+		obj.Add("content-offset", content_offset_json);
 	}
 
 	// Serialize: content-size-in-bytes
 	if (content_size_in_bytes.has_value()) {
 		auto &content_size_in_bytes_value = *content_size_in_bytes;
-		obj.Add("content-size-in-bytes", writer.CreateSignedInteger(content_size_in_bytes_value));
+		auto content_size_in_bytes_json = writer.CreateSignedInteger(content_size_in_bytes_value);
+		obj.Add("content-size-in-bytes", content_size_in_bytes_json);
 	}
 }
 

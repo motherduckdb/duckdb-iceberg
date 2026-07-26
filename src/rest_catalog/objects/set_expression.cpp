@@ -82,20 +82,20 @@ string SetExpression::TryFromJSON(JSONValue obj) {
 
 void SetExpression::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	auto type_val = type.ToJSON(writer);
-	obj.Add("type", type_val);
+	auto type_json = type.ToJSON(writer);
+	obj.Add("type", type_json);
 
 	// Serialize: term
-	auto term_val = term.ToJSON(writer);
-	obj.Add("term", term_val);
+	auto term_json = term.ToJSON(writer);
+	obj.Add("term", term_json);
 
 	// Serialize: values
-	auto values_arr = writer.CreateArray();
-	for (const auto &item : values) {
-		auto item_val = item.ToJSON(writer);
-		values_arr.Append(item_val);
+	auto values_json = writer.CreateArray();
+	for (const auto &values_json_item : values) {
+		auto values_json_item_json = values_json_item.ToJSON(writer);
+		values_json.Append(values_json_item_json);
 	}
-	obj.Add("values", values_arr);
+	obj.Add("values", values_json);
 }
 
 JSONMutableValue SetExpression::ToJSON(JSONWriter &writer) const {

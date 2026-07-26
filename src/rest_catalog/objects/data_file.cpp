@@ -155,49 +155,50 @@ void DataFile::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: first-row-id
 	if (first_row_id.has_value()) {
 		auto &first_row_id_value = *first_row_id;
-		obj.Add("first-row-id", writer.CreateSignedInteger(first_row_id_value));
+		auto first_row_id_json = writer.CreateSignedInteger(first_row_id_value);
+		obj.Add("first-row-id", first_row_id_json);
 	}
 
 	// Serialize: column-sizes
 	if (column_sizes.has_value()) {
 		auto &column_sizes_value = *column_sizes;
-		auto column_sizes_value_val = column_sizes_value.ToJSON(writer);
-		obj.Add("column-sizes", column_sizes_value_val);
+		auto column_sizes_json = column_sizes_value.ToJSON(writer);
+		obj.Add("column-sizes", column_sizes_json);
 	}
 
 	// Serialize: value-counts
 	if (value_counts.has_value()) {
 		auto &value_counts_value = *value_counts;
-		auto value_counts_value_val = value_counts_value.ToJSON(writer);
-		obj.Add("value-counts", value_counts_value_val);
+		auto value_counts_json = value_counts_value.ToJSON(writer);
+		obj.Add("value-counts", value_counts_json);
 	}
 
 	// Serialize: null-value-counts
 	if (null_value_counts.has_value()) {
 		auto &null_value_counts_value = *null_value_counts;
-		auto null_value_counts_value_val = null_value_counts_value.ToJSON(writer);
-		obj.Add("null-value-counts", null_value_counts_value_val);
+		auto null_value_counts_json = null_value_counts_value.ToJSON(writer);
+		obj.Add("null-value-counts", null_value_counts_json);
 	}
 
 	// Serialize: nan-value-counts
 	if (nan_value_counts.has_value()) {
 		auto &nan_value_counts_value = *nan_value_counts;
-		auto nan_value_counts_value_val = nan_value_counts_value.ToJSON(writer);
-		obj.Add("nan-value-counts", nan_value_counts_value_val);
+		auto nan_value_counts_json = nan_value_counts_value.ToJSON(writer);
+		obj.Add("nan-value-counts", nan_value_counts_json);
 	}
 
 	// Serialize: lower-bounds
 	if (lower_bounds.has_value()) {
 		auto &lower_bounds_value = *lower_bounds;
-		auto lower_bounds_value_val = lower_bounds_value.ToJSON(writer);
-		obj.Add("lower-bounds", lower_bounds_value_val);
+		auto lower_bounds_json = lower_bounds_value.ToJSON(writer);
+		obj.Add("lower-bounds", lower_bounds_json);
 	}
 
 	// Serialize: upper-bounds
 	if (upper_bounds.has_value()) {
 		auto &upper_bounds_value = *upper_bounds;
-		auto upper_bounds_value_val = upper_bounds_value.ToJSON(writer);
-		obj.Add("upper-bounds", upper_bounds_value_val);
+		auto upper_bounds_json = upper_bounds_value.ToJSON(writer);
+		obj.Add("upper-bounds", upper_bounds_json);
 	}
 }
 

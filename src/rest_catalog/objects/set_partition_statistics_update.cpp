@@ -68,8 +68,8 @@ void SetPartitionStatisticsUpdate::PopulateJSON(JSONWriter &writer, JSONMutableV
 	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: partition-statistics
-	auto partition_statistics_val = partition_statistics.ToJSON(writer);
-	obj.Add("partition-statistics", partition_statistics_val);
+	auto partition_statistics_json = partition_statistics.ToJSON(writer);
+	obj.Add("partition-statistics", partition_statistics_json);
 }
 
 JSONMutableValue SetPartitionStatisticsUpdate::ToJSON(JSONWriter &writer) const {
