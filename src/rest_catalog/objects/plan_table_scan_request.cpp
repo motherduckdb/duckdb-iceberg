@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/plan_table_scan_request.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 PlanTableScanRequest::PlanTableScanRequest() {
 }
 
-PlanTableScanRequest PlanTableScanRequest::FromJSON(yyjson_val *obj) {
+PlanTableScanRequest PlanTableScanRequest::FromJSON(JSONValue obj) {
 	PlanTableScanRequest res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -70,215 +68,224 @@ PlanTableScanRequest PlanTableScanRequest::Copy() const {
 	return res;
 }
 
-string PlanTableScanRequest::TryFromJSON(yyjson_val *obj) {
+string PlanTableScanRequest::TryFromJSON(JSONValue obj) {
 	string error;
-	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
-	if (snapshot_id_val) {
+	auto snapshot_id_val = obj.GetMember("snapshot-id");
+	if (snapshot_id_val.IsValid()) {
 		int64_t snapshot_id_tmp;
-		if (yyjson_is_sint(snapshot_id_val)) {
-			snapshot_id_tmp = yyjson_get_sint(snapshot_id_val);
-		} else if (yyjson_is_uint(snapshot_id_val)) {
-			snapshot_id_tmp = yyjson_get_uint(snapshot_id_val);
+		if (json_utils::IsInteger(snapshot_id_val)) {
+			snapshot_id_tmp = json_utils::GetSignedInteger(snapshot_id_val);
+		} else if (json_utils::IsUnsignedInteger(snapshot_id_val)) {
+			snapshot_id_tmp = json_utils::GetUnsignedInteger(snapshot_id_val);
 		} else {
 			return StringUtil::Format(
-			    "PlanTableScanRequest property 'snapshot_id_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(snapshot_id_val));
+			    "PlanTableScanRequest property 'snapshot_id_tmp' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(snapshot_id_val).c_str());
 		}
 		snapshot_id = std::move(snapshot_id_tmp);
 	}
-	auto select_val = yyjson_obj_get(obj, "select");
-	if (select_val) {
+	auto select_val = obj.GetMember("select");
+	if (select_val.IsValid()) {
 		vector<FieldName> select_tmp;
-		if (yyjson_is_arr(select_val)) {
-			size_t select_tmp_idx, select_tmp_max;
-			yyjson_val *select_tmp_item_val;
-			yyjson_arr_foreach(select_val, select_tmp_idx, select_tmp_max, select_tmp_item_val) {
+		if (select_val.IsArray()) {
+			select_val.IterateArray([&](JSONValue select_tmp_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				FieldName select_tmp_item;
 				error = select_tmp_item.TryFromJSON(select_tmp_item_val);
 				if (!error.empty()) {
-					return error;
+					return;
 				}
 				select_tmp.emplace_back(std::move(select_tmp_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "PlanTableScanRequest property 'select_tmp' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(select_val));
+			    "PlanTableScanRequest property 'select_tmp' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(select_val).c_str());
 		}
 		select = std::move(select_tmp);
 	}
-	auto filter_val = yyjson_obj_get(obj, "filter");
-	if (filter_val) {
+	auto filter_val = obj.GetMember("filter");
+	if (filter_val.IsValid()) {
 		filter = make_uniq<Expression>();
 		error = filter->TryFromJSON(filter_val);
 		if (!error.empty()) {
 			return error;
 		}
 	}
-	auto min_rows_requested_val = yyjson_obj_get(obj, "min-rows-requested");
-	if (min_rows_requested_val) {
+	auto min_rows_requested_val = obj.GetMember("min-rows-requested");
+	if (min_rows_requested_val.IsValid()) {
 		int64_t min_rows_requested_tmp;
-		if (yyjson_is_sint(min_rows_requested_val)) {
-			min_rows_requested_tmp = yyjson_get_sint(min_rows_requested_val);
-		} else if (yyjson_is_uint(min_rows_requested_val)) {
-			min_rows_requested_tmp = yyjson_get_uint(min_rows_requested_val);
+		if (json_utils::IsInteger(min_rows_requested_val)) {
+			min_rows_requested_tmp = json_utils::GetSignedInteger(min_rows_requested_val);
+		} else if (json_utils::IsUnsignedInteger(min_rows_requested_val)) {
+			min_rows_requested_tmp = json_utils::GetUnsignedInteger(min_rows_requested_val);
 		} else {
 			return StringUtil::Format(
-			    "PlanTableScanRequest property 'min_rows_requested_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(min_rows_requested_val));
+			    "PlanTableScanRequest property 'min_rows_requested_tmp' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(min_rows_requested_val).c_str());
 		}
 		min_rows_requested = std::move(min_rows_requested_tmp);
 	}
-	auto case_sensitive_val = yyjson_obj_get(obj, "case-sensitive");
-	if (case_sensitive_val) {
+	auto case_sensitive_val = obj.GetMember("case-sensitive");
+	if (case_sensitive_val.IsValid()) {
 		bool case_sensitive_tmp;
-		if (yyjson_is_bool(case_sensitive_val)) {
-			case_sensitive_tmp = yyjson_get_bool(case_sensitive_val);
+		if (json_utils::IsBoolean(case_sensitive_val)) {
+			case_sensitive_tmp = json_utils::GetBoolean(case_sensitive_val);
 		} else {
 			return StringUtil::Format(
-			    "PlanTableScanRequest property 'case_sensitive_tmp' is not of type 'boolean', found '%s' instead",
-			    yyjson_get_type_desc(case_sensitive_val));
+			    "PlanTableScanRequest property 'case_sensitive_tmp' is not of type 'boolean', found %s instead",
+			    json_utils::GetTypeDescription(case_sensitive_val).c_str());
 		}
 		case_sensitive = std::move(case_sensitive_tmp);
 	}
-	auto use_snapshot_schema_val = yyjson_obj_get(obj, "use-snapshot-schema");
-	if (use_snapshot_schema_val) {
+	auto use_snapshot_schema_val = obj.GetMember("use-snapshot-schema");
+	if (use_snapshot_schema_val.IsValid()) {
 		bool use_snapshot_schema_tmp;
-		if (yyjson_is_bool(use_snapshot_schema_val)) {
-			use_snapshot_schema_tmp = yyjson_get_bool(use_snapshot_schema_val);
+		if (json_utils::IsBoolean(use_snapshot_schema_val)) {
+			use_snapshot_schema_tmp = json_utils::GetBoolean(use_snapshot_schema_val);
 		} else {
 			return StringUtil::Format(
-			    "PlanTableScanRequest property 'use_snapshot_schema_tmp' is not of type 'boolean', found '%s' instead",
-			    yyjson_get_type_desc(use_snapshot_schema_val));
+			    "PlanTableScanRequest property 'use_snapshot_schema_tmp' is not of type 'boolean', found %s instead",
+			    json_utils::GetTypeDescription(use_snapshot_schema_val).c_str());
 		}
 		use_snapshot_schema = std::move(use_snapshot_schema_tmp);
 	}
-	auto start_snapshot_id_val = yyjson_obj_get(obj, "start-snapshot-id");
-	if (start_snapshot_id_val) {
+	auto start_snapshot_id_val = obj.GetMember("start-snapshot-id");
+	if (start_snapshot_id_val.IsValid()) {
 		int64_t start_snapshot_id_tmp;
-		if (yyjson_is_sint(start_snapshot_id_val)) {
-			start_snapshot_id_tmp = yyjson_get_sint(start_snapshot_id_val);
-		} else if (yyjson_is_uint(start_snapshot_id_val)) {
-			start_snapshot_id_tmp = yyjson_get_uint(start_snapshot_id_val);
+		if (json_utils::IsInteger(start_snapshot_id_val)) {
+			start_snapshot_id_tmp = json_utils::GetSignedInteger(start_snapshot_id_val);
+		} else if (json_utils::IsUnsignedInteger(start_snapshot_id_val)) {
+			start_snapshot_id_tmp = json_utils::GetUnsignedInteger(start_snapshot_id_val);
 		} else {
 			return StringUtil::Format(
-			    "PlanTableScanRequest property 'start_snapshot_id_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(start_snapshot_id_val));
+			    "PlanTableScanRequest property 'start_snapshot_id_tmp' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(start_snapshot_id_val).c_str());
 		}
 		start_snapshot_id = std::move(start_snapshot_id_tmp);
 	}
-	auto end_snapshot_id_val = yyjson_obj_get(obj, "end-snapshot-id");
-	if (end_snapshot_id_val) {
+	auto end_snapshot_id_val = obj.GetMember("end-snapshot-id");
+	if (end_snapshot_id_val.IsValid()) {
 		int64_t end_snapshot_id_tmp;
-		if (yyjson_is_sint(end_snapshot_id_val)) {
-			end_snapshot_id_tmp = yyjson_get_sint(end_snapshot_id_val);
-		} else if (yyjson_is_uint(end_snapshot_id_val)) {
-			end_snapshot_id_tmp = yyjson_get_uint(end_snapshot_id_val);
+		if (json_utils::IsInteger(end_snapshot_id_val)) {
+			end_snapshot_id_tmp = json_utils::GetSignedInteger(end_snapshot_id_val);
+		} else if (json_utils::IsUnsignedInteger(end_snapshot_id_val)) {
+			end_snapshot_id_tmp = json_utils::GetUnsignedInteger(end_snapshot_id_val);
 		} else {
 			return StringUtil::Format(
-			    "PlanTableScanRequest property 'end_snapshot_id_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(end_snapshot_id_val));
+			    "PlanTableScanRequest property 'end_snapshot_id_tmp' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(end_snapshot_id_val).c_str());
 		}
 		end_snapshot_id = std::move(end_snapshot_id_tmp);
 	}
-	auto stats_fields_val = yyjson_obj_get(obj, "stats-fields");
-	if (stats_fields_val) {
+	auto stats_fields_val = obj.GetMember("stats-fields");
+	if (stats_fields_val.IsValid()) {
 		vector<FieldName> stats_fields_tmp;
-		if (yyjson_is_arr(stats_fields_val)) {
-			size_t stats_fields_tmp_idx, stats_fields_tmp_max;
-			yyjson_val *stats_fields_tmp_item_val;
-			yyjson_arr_foreach(stats_fields_val, stats_fields_tmp_idx, stats_fields_tmp_max,
-			                   stats_fields_tmp_item_val) {
+		if (stats_fields_val.IsArray()) {
+			stats_fields_val.IterateArray([&](JSONValue stats_fields_tmp_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				FieldName stats_fields_tmp_item;
 				error = stats_fields_tmp_item.TryFromJSON(stats_fields_tmp_item_val);
 				if (!error.empty()) {
-					return error;
+					return;
 				}
 				stats_fields_tmp.emplace_back(std::move(stats_fields_tmp_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "PlanTableScanRequest property 'stats_fields_tmp' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(stats_fields_val));
+			    "PlanTableScanRequest property 'stats_fields_tmp' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(stats_fields_val).c_str());
 		}
 		stats_fields = std::move(stats_fields_tmp);
 	}
 	return "";
 }
 
-void PlanTableScanRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void PlanTableScanRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: snapshot-id
 	if (snapshot_id.has_value()) {
 		auto &snapshot_id_value = *snapshot_id;
-		yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id_value);
+		auto snapshot_id_json = writer.CreateSignedInteger(snapshot_id_value);
+		obj.Add("snapshot-id", snapshot_id_json);
 	}
 
 	// Serialize: select
 	if (select.has_value()) {
 		auto &select_value = *select;
-		yyjson_mut_val *select_value_arr = yyjson_mut_arr(doc);
-		for (const auto &item : select_value) {
-			yyjson_mut_val *item_val = item.ToJSON(doc);
-			yyjson_mut_arr_append(select_value_arr, item_val);
+		auto select_json = writer.CreateArray();
+		for (const auto &select_json_item : select_value) {
+			auto select_json_item_json = select_json_item.ToJSON(writer);
+			select_json.Append(select_json_item_json);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "select", select_value_arr);
+		obj.Add("select", select_json);
 	}
 
 	// Serialize: filter
 	if (filter != nullptr) {
-		yyjson_mut_val *filter_val = filter->ToJSON(doc);
-		yyjson_mut_obj_add_val(doc, obj, "filter", filter_val);
+		auto filter_json = filter->ToJSON(writer);
+		obj.Add("filter", filter_json);
 	}
 
 	// Serialize: min-rows-requested
 	if (min_rows_requested.has_value()) {
 		auto &min_rows_requested_value = *min_rows_requested;
-		yyjson_mut_obj_add_sint(doc, obj, "min-rows-requested", min_rows_requested_value);
+		auto min_rows_requested_json = writer.CreateSignedInteger(min_rows_requested_value);
+		obj.Add("min-rows-requested", min_rows_requested_json);
 	}
 
 	// Serialize: case-sensitive
 	if (case_sensitive.has_value()) {
 		auto &case_sensitive_value = *case_sensitive;
-		yyjson_mut_obj_add_bool(doc, obj, "case-sensitive", case_sensitive_value);
+		auto case_sensitive_json = writer.CreateBoolean(case_sensitive_value);
+		obj.Add("case-sensitive", case_sensitive_json);
 	}
 
 	// Serialize: use-snapshot-schema
 	if (use_snapshot_schema.has_value()) {
 		auto &use_snapshot_schema_value = *use_snapshot_schema;
-		yyjson_mut_obj_add_bool(doc, obj, "use-snapshot-schema", use_snapshot_schema_value);
+		auto use_snapshot_schema_json = writer.CreateBoolean(use_snapshot_schema_value);
+		obj.Add("use-snapshot-schema", use_snapshot_schema_json);
 	}
 
 	// Serialize: start-snapshot-id
 	if (start_snapshot_id.has_value()) {
 		auto &start_snapshot_id_value = *start_snapshot_id;
-		yyjson_mut_obj_add_sint(doc, obj, "start-snapshot-id", start_snapshot_id_value);
+		auto start_snapshot_id_json = writer.CreateSignedInteger(start_snapshot_id_value);
+		obj.Add("start-snapshot-id", start_snapshot_id_json);
 	}
 
 	// Serialize: end-snapshot-id
 	if (end_snapshot_id.has_value()) {
 		auto &end_snapshot_id_value = *end_snapshot_id;
-		yyjson_mut_obj_add_sint(doc, obj, "end-snapshot-id", end_snapshot_id_value);
+		auto end_snapshot_id_json = writer.CreateSignedInteger(end_snapshot_id_value);
+		obj.Add("end-snapshot-id", end_snapshot_id_json);
 	}
 
 	// Serialize: stats-fields
 	if (stats_fields.has_value()) {
 		auto &stats_fields_value = *stats_fields;
-		yyjson_mut_val *stats_fields_value_arr = yyjson_mut_arr(doc);
-		for (const auto &item : stats_fields_value) {
-			yyjson_mut_val *item_val = item.ToJSON(doc);
-			yyjson_mut_arr_append(stats_fields_value_arr, item_val);
+		auto stats_fields_json = writer.CreateArray();
+		for (const auto &stats_fields_json_item : stats_fields_value) {
+			auto stats_fields_json_item_json = stats_fields_json_item.ToJSON(writer);
+			stats_fields_json.Append(stats_fields_json_item_json);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "stats-fields", stats_fields_value_arr);
+		obj.Add("stats-fields", stats_fields_json);
 	}
 }
 
-yyjson_mut_val *PlanTableScanRequest::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue PlanTableScanRequest::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

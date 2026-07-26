@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/map_type.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 MapType::MapType() {
 }
 
-MapType MapType::FromJSON(yyjson_val *obj) {
+MapType MapType::FromJSON(JSONValue obj) {
 	MapType res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -35,35 +33,35 @@ MapType MapType::Copy() const {
 	return res;
 }
 
-string MapType::TryFromJSON(yyjson_val *obj) {
+string MapType::TryFromJSON(JSONValue obj) {
 	string error;
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
+	auto type_val = obj.GetMember("type");
+	if (!type_val.IsValid()) {
 		return "MapType required property 'type' is missing";
 	} else {
-		if (yyjson_is_str(type_val)) {
-			type = yyjson_get_str(type_val);
+		if (json_utils::IsString(type_val)) {
+			type = json_utils::GetString(type_val);
 		} else {
-			return StringUtil::Format("MapType property 'type' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(type_val));
+			return StringUtil::Format("MapType property 'type' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(type_val).c_str());
 		}
-		if (!yyjson_is_null(type_val) && type != "map") {
+		if (!type_val.IsNull() && type != "map") {
 			return "MapType property 'type' does not match its required const value";
 		}
 	}
-	auto key_id_val = yyjson_obj_get(obj, "key-id");
-	if (!key_id_val) {
+	auto key_id_val = obj.GetMember("key-id");
+	if (!key_id_val.IsValid()) {
 		return "MapType required property 'key-id' is missing";
 	} else {
-		if (yyjson_is_int(key_id_val)) {
-			key_id = yyjson_get_int(key_id_val);
+		if (json_utils::IsInteger(key_id_val)) {
+			key_id = json_utils::GetSignedInteger(key_id_val);
 		} else {
-			return StringUtil::Format("MapType property 'key_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(key_id_val));
+			return StringUtil::Format("MapType property 'key_id' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(key_id_val).c_str());
 		}
 	}
-	auto key_val = yyjson_obj_get(obj, "key");
-	if (!key_val) {
+	auto key_val = obj.GetMember("key");
+	if (!key_val.IsValid()) {
 		return "MapType required property 'key' is missing";
 	} else {
 		key = make_uniq<Type>();
@@ -72,19 +70,19 @@ string MapType::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto value_id_val = yyjson_obj_get(obj, "value-id");
-	if (!value_id_val) {
+	auto value_id_val = obj.GetMember("value-id");
+	if (!value_id_val.IsValid()) {
 		return "MapType required property 'value-id' is missing";
 	} else {
-		if (yyjson_is_int(value_id_val)) {
-			value_id = yyjson_get_int(value_id_val);
+		if (json_utils::IsInteger(value_id_val)) {
+			value_id = json_utils::GetSignedInteger(value_id_val);
 		} else {
-			return StringUtil::Format("MapType property 'value_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(value_id_val));
+			return StringUtil::Format("MapType property 'value_id' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(value_id_val).c_str());
 		}
 	}
-	auto value_val = yyjson_obj_get(obj, "value");
-	if (!value_val) {
+	auto value_val = obj.GetMember("value");
+	if (!value_val.IsValid()) {
 		return "MapType required property 'value' is missing";
 	} else {
 		value = make_uniq<Type>();
@@ -93,49 +91,49 @@ string MapType::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto value_required_val = yyjson_obj_get(obj, "value-required");
-	if (!value_required_val) {
+	auto value_required_val = obj.GetMember("value-required");
+	if (!value_required_val.IsValid()) {
 		return "MapType required property 'value-required' is missing";
 	} else {
-		if (yyjson_is_bool(value_required_val)) {
-			value_required = yyjson_get_bool(value_required_val);
+		if (json_utils::IsBoolean(value_required_val)) {
+			value_required = json_utils::GetBoolean(value_required_val);
 		} else {
-			return StringUtil::Format("MapType property 'value_required' is not of type 'boolean', found '%s' instead",
-			                          yyjson_get_type_desc(value_required_val));
+			return StringUtil::Format("MapType property 'value_required' is not of type 'boolean', found %s instead",
+			                          json_utils::GetTypeDescription(value_required_val).c_str());
 		}
 	}
 	return "";
 }
 
-void MapType::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void MapType::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: key-id
-	yyjson_mut_obj_add_int(doc, obj, "key-id", key_id);
+	auto key_id_json = writer.CreateSignedInteger(key_id);
+	obj.Add("key-id", key_id_json);
 
 	// Serialize: key
-	yyjson_mut_val *key_val = key->ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "key", key_val);
+	auto key_json = key->ToJSON(writer);
+	obj.Add("key", key_json);
 
 	// Serialize: value-id
-	yyjson_mut_obj_add_int(doc, obj, "value-id", value_id);
+	auto value_id_json = writer.CreateSignedInteger(value_id);
+	obj.Add("value-id", value_id_json);
 
 	// Serialize: value
-	yyjson_mut_val *value_val = value->ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "value", value_val);
+	auto value_json = value->ToJSON(writer);
+	obj.Add("value", value_json);
 
 	// Serialize: value-required
-	yyjson_mut_obj_add_bool(doc, obj, "value-required", value_required);
+	auto value_required_json = writer.CreateBoolean(value_required);
+	obj.Add("value-required", value_required_json);
 }
 
-yyjson_mut_val *MapType::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue MapType::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/storage_credential.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 StorageCredential::StorageCredential() {
 }
 
-StorageCredential StorageCredential::FromJSON(yyjson_val *obj) {
+StorageCredential StorageCredential::FromJSON(JSONValue obj) {
 	StorageCredential res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -33,37 +31,41 @@ StorageCredential StorageCredential::Copy() const {
 	return res;
 }
 
-string StorageCredential::TryFromJSON(yyjson_val *obj) {
+string StorageCredential::TryFromJSON(JSONValue obj) {
 	string error;
-	auto prefix_val = yyjson_obj_get(obj, "prefix");
-	if (!prefix_val) {
+	auto prefix_val = obj.GetMember("prefix");
+	if (!prefix_val.IsValid()) {
 		return "StorageCredential required property 'prefix' is missing";
 	} else {
-		if (yyjson_is_str(prefix_val)) {
-			prefix = yyjson_get_str(prefix_val);
+		if (json_utils::IsString(prefix_val)) {
+			prefix = json_utils::GetString(prefix_val);
 		} else {
-			return StringUtil::Format("StorageCredential property 'prefix' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(prefix_val));
+			return StringUtil::Format("StorageCredential property 'prefix' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(prefix_val).c_str());
 		}
 	}
-	auto config_val = yyjson_obj_get(obj, "config");
-	if (!config_val) {
+	auto config_val = obj.GetMember("config");
+	if (!config_val.IsValid()) {
 		return "StorageCredential required property 'config' is missing";
 	} else {
-		if (yyjson_is_obj(config_val)) {
-			size_t idx, max;
-			yyjson_val *key, *val;
-			yyjson_obj_foreach(config_val, idx, max, key, val) {
-				auto key_str = yyjson_get_str(key);
+		if (config_val.IsObject()) {
+			config_val.IterateObject([&](const string &key_str, JSONValue val) {
+				if (!error.empty()) {
+					return;
+				}
 				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
+				if (json_utils::IsString(val)) {
+					tmp = json_utils::GetString(val);
 				} else {
-					return StringUtil::Format(
-					    "StorageCredential property 'tmp' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(val));
+					error =
+					    StringUtil::Format("StorageCredential property 'tmp' is not of type 'string', found %s instead",
+					                       json_utils::GetTypeDescription(val).c_str());
+					return;
 				}
 				config.emplace(key_str, std::move(tmp));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return "StorageCredential property 'config' is not of type 'object'";
@@ -72,28 +74,23 @@ string StorageCredential::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void StorageCredential::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void StorageCredential::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: prefix
-	yyjson_mut_obj_add_strcpy(doc, obj, "prefix", prefix.c_str());
+	auto prefix_json = writer.CreateString(prefix);
+	obj.Add("prefix", prefix_json);
 
 	// Serialize: config
-	yyjson_mut_val *config_obj = yyjson_mut_obj(doc);
-	for (const auto &it : config) {
-		auto &key = it.first;
-		auto &value = it.second;
-		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
-		yyjson_mut_obj_add_strcpy(doc, config_obj, key_ptr, value.c_str());
+	auto config_json = writer.CreateObject();
+	for (const auto &[config_json_key, config_json_value] : config) {
+		auto config_json_value_json = writer.CreateString(config_json_value);
+		config_json.Add(config_json_key, config_json_value_json);
 	}
-	yyjson_mut_obj_add_val(doc, obj, "config", config_obj);
+	obj.Add("config", config_json);
 }
 
-yyjson_mut_val *StorageCredential::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue StorageCredential::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

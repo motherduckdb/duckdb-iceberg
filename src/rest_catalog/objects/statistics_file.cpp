@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/statistics_file.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 StatisticsFile::StatisticsFile() {
 }
 
-StatisticsFile StatisticsFile::FromJSON(yyjson_val *obj) {
+StatisticsFile StatisticsFile::FromJSON(JSONValue obj) {
 	StatisticsFile res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -37,115 +35,119 @@ StatisticsFile StatisticsFile::Copy() const {
 	return res;
 }
 
-string StatisticsFile::TryFromJSON(yyjson_val *obj) {
+string StatisticsFile::TryFromJSON(JSONValue obj) {
 	string error;
-	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
-	if (!snapshot_id_val) {
+	auto snapshot_id_val = obj.GetMember("snapshot-id");
+	if (!snapshot_id_val.IsValid()) {
 		return "StatisticsFile required property 'snapshot-id' is missing";
 	} else {
-		if (yyjson_is_sint(snapshot_id_val)) {
-			snapshot_id = yyjson_get_sint(snapshot_id_val);
-		} else if (yyjson_is_uint(snapshot_id_val)) {
-			snapshot_id = yyjson_get_uint(snapshot_id_val);
+		if (json_utils::IsInteger(snapshot_id_val)) {
+			snapshot_id = json_utils::GetSignedInteger(snapshot_id_val);
+		} else if (json_utils::IsUnsignedInteger(snapshot_id_val)) {
+			snapshot_id = json_utils::GetUnsignedInteger(snapshot_id_val);
 		} else {
 			return StringUtil::Format(
-			    "StatisticsFile property 'snapshot_id' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(snapshot_id_val));
+			    "StatisticsFile property 'snapshot_id' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(snapshot_id_val).c_str());
 		}
 	}
-	auto statistics_path_val = yyjson_obj_get(obj, "statistics-path");
-	if (!statistics_path_val) {
+	auto statistics_path_val = obj.GetMember("statistics-path");
+	if (!statistics_path_val.IsValid()) {
 		return "StatisticsFile required property 'statistics-path' is missing";
 	} else {
-		if (yyjson_is_str(statistics_path_val)) {
-			statistics_path = yyjson_get_str(statistics_path_val);
+		if (json_utils::IsString(statistics_path_val)) {
+			statistics_path = json_utils::GetString(statistics_path_val);
 		} else {
 			return StringUtil::Format(
-			    "StatisticsFile property 'statistics_path' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(statistics_path_val));
+			    "StatisticsFile property 'statistics_path' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(statistics_path_val).c_str());
 		}
 	}
-	auto file_size_in_bytes_val = yyjson_obj_get(obj, "file-size-in-bytes");
-	if (!file_size_in_bytes_val) {
+	auto file_size_in_bytes_val = obj.GetMember("file-size-in-bytes");
+	if (!file_size_in_bytes_val.IsValid()) {
 		return "StatisticsFile required property 'file-size-in-bytes' is missing";
 	} else {
-		if (yyjson_is_sint(file_size_in_bytes_val)) {
-			file_size_in_bytes = yyjson_get_sint(file_size_in_bytes_val);
-		} else if (yyjson_is_uint(file_size_in_bytes_val)) {
-			file_size_in_bytes = yyjson_get_uint(file_size_in_bytes_val);
+		if (json_utils::IsInteger(file_size_in_bytes_val)) {
+			file_size_in_bytes = json_utils::GetSignedInteger(file_size_in_bytes_val);
+		} else if (json_utils::IsUnsignedInteger(file_size_in_bytes_val)) {
+			file_size_in_bytes = json_utils::GetUnsignedInteger(file_size_in_bytes_val);
 		} else {
 			return StringUtil::Format(
-			    "StatisticsFile property 'file_size_in_bytes' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(file_size_in_bytes_val));
+			    "StatisticsFile property 'file_size_in_bytes' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(file_size_in_bytes_val).c_str());
 		}
 	}
-	auto file_footer_size_in_bytes_val = yyjson_obj_get(obj, "file-footer-size-in-bytes");
-	if (!file_footer_size_in_bytes_val) {
+	auto file_footer_size_in_bytes_val = obj.GetMember("file-footer-size-in-bytes");
+	if (!file_footer_size_in_bytes_val.IsValid()) {
 		return "StatisticsFile required property 'file-footer-size-in-bytes' is missing";
 	} else {
-		if (yyjson_is_sint(file_footer_size_in_bytes_val)) {
-			file_footer_size_in_bytes = yyjson_get_sint(file_footer_size_in_bytes_val);
-		} else if (yyjson_is_uint(file_footer_size_in_bytes_val)) {
-			file_footer_size_in_bytes = yyjson_get_uint(file_footer_size_in_bytes_val);
+		if (json_utils::IsInteger(file_footer_size_in_bytes_val)) {
+			file_footer_size_in_bytes = json_utils::GetSignedInteger(file_footer_size_in_bytes_val);
+		} else if (json_utils::IsUnsignedInteger(file_footer_size_in_bytes_val)) {
+			file_footer_size_in_bytes = json_utils::GetUnsignedInteger(file_footer_size_in_bytes_val);
 		} else {
 			return StringUtil::Format(
-			    "StatisticsFile property 'file_footer_size_in_bytes' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(file_footer_size_in_bytes_val));
+			    "StatisticsFile property 'file_footer_size_in_bytes' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(file_footer_size_in_bytes_val).c_str());
 		}
 	}
-	auto blob_metadata_val = yyjson_obj_get(obj, "blob-metadata");
-	if (!blob_metadata_val) {
+	auto blob_metadata_val = obj.GetMember("blob-metadata");
+	if (!blob_metadata_val.IsValid()) {
 		return "StatisticsFile required property 'blob-metadata' is missing";
 	} else {
-		if (yyjson_is_arr(blob_metadata_val)) {
-			size_t blob_metadata_idx, blob_metadata_max;
-			yyjson_val *blob_metadata_item_val;
-			yyjson_arr_foreach(blob_metadata_val, blob_metadata_idx, blob_metadata_max, blob_metadata_item_val) {
+		if (blob_metadata_val.IsArray()) {
+			blob_metadata_val.IterateArray([&](JSONValue blob_metadata_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				BlobMetadata blob_metadata_item;
 				error = blob_metadata_item.TryFromJSON(blob_metadata_item_val);
 				if (!error.empty()) {
-					return error;
+					return;
 				}
 				blob_metadata.emplace_back(std::move(blob_metadata_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "StatisticsFile property 'blob_metadata' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(blob_metadata_val));
+			    "StatisticsFile property 'blob_metadata' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(blob_metadata_val).c_str());
 		}
 	}
 	return "";
 }
 
-void StatisticsFile::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void StatisticsFile::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: snapshot-id
-	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+	auto snapshot_id_json = writer.CreateSignedInteger(snapshot_id);
+	obj.Add("snapshot-id", snapshot_id_json);
 
 	// Serialize: statistics-path
-	yyjson_mut_obj_add_strcpy(doc, obj, "statistics-path", statistics_path.c_str());
+	auto statistics_path_json = writer.CreateString(statistics_path);
+	obj.Add("statistics-path", statistics_path_json);
 
 	// Serialize: file-size-in-bytes
-	yyjson_mut_obj_add_sint(doc, obj, "file-size-in-bytes", file_size_in_bytes);
+	auto file_size_in_bytes_json = writer.CreateSignedInteger(file_size_in_bytes);
+	obj.Add("file-size-in-bytes", file_size_in_bytes_json);
 
 	// Serialize: file-footer-size-in-bytes
-	yyjson_mut_obj_add_sint(doc, obj, "file-footer-size-in-bytes", file_footer_size_in_bytes);
+	auto file_footer_size_in_bytes_json = writer.CreateSignedInteger(file_footer_size_in_bytes);
+	obj.Add("file-footer-size-in-bytes", file_footer_size_in_bytes_json);
 
 	// Serialize: blob-metadata
-	yyjson_mut_val *blob_metadata_arr = yyjson_mut_arr(doc);
-	for (const auto &item : blob_metadata) {
-		yyjson_mut_val *item_val = item.ToJSON(doc);
-		yyjson_mut_arr_append(blob_metadata_arr, item_val);
+	auto blob_metadata_json = writer.CreateArray();
+	for (const auto &blob_metadata_json_item : blob_metadata) {
+		auto blob_metadata_json_item_json = blob_metadata_json_item.ToJSON(writer);
+		blob_metadata_json.Append(blob_metadata_json_item_json);
 	}
-	yyjson_mut_obj_add_val(doc, obj, "blob-metadata", blob_metadata_arr);
+	obj.Add("blob-metadata", blob_metadata_json);
 }
 
-yyjson_mut_val *StatisticsFile::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue StatisticsFile::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/position_delete_file.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 PositionDeleteFile::PositionDeleteFile() {
 }
 
-PositionDeleteFile PositionDeleteFile::FromJSON(yyjson_val *obj) {
+PositionDeleteFile PositionDeleteFile::FromJSON(JSONValue obj) {
 	PositionDeleteFile res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -38,83 +36,81 @@ PositionDeleteFile PositionDeleteFile::Copy() const {
 	return res;
 }
 
-string PositionDeleteFile::TryFromJSON(yyjson_val *obj) {
+string PositionDeleteFile::TryFromJSON(JSONValue obj) {
 	string error;
 	error = content_file.TryFromJSON(obj);
 	if (!error.empty()) {
 		return error;
 	}
-	auto content_refinement_val = yyjson_obj_get(obj, "content");
-	if (content_refinement_val) {
+	auto content_refinement_val = obj.GetMember("content");
+	if (content_refinement_val.IsValid()) {
 		string content_refinement;
-		if (yyjson_is_str(content_refinement_val)) {
-			content_refinement = yyjson_get_str(content_refinement_val);
+		if (json_utils::IsString(content_refinement_val)) {
+			content_refinement = json_utils::GetString(content_refinement_val);
 		} else {
 			return StringUtil::Format(
-			    "PositionDeleteFile property 'content_refinement' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(content_refinement_val));
+			    "PositionDeleteFile property 'content_refinement' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(content_refinement_val).c_str());
 		}
-		if (!yyjson_is_null(content_refinement_val) && content_refinement != "position-deletes") {
+		if (!content_refinement_val.IsNull() && content_refinement != "position-deletes") {
 			return "PositionDeleteFile property 'content_refinement' does not match its required const value";
 		}
 	} else {
 		return "PositionDeleteFile required property 'content' is missing";
 	}
-	auto content_offset_val = yyjson_obj_get(obj, "content-offset");
-	if (content_offset_val) {
+	auto content_offset_val = obj.GetMember("content-offset");
+	if (content_offset_val.IsValid()) {
 		int64_t content_offset_tmp;
-		if (yyjson_is_sint(content_offset_val)) {
-			content_offset_tmp = yyjson_get_sint(content_offset_val);
-		} else if (yyjson_is_uint(content_offset_val)) {
-			content_offset_tmp = yyjson_get_uint(content_offset_val);
+		if (json_utils::IsInteger(content_offset_val)) {
+			content_offset_tmp = json_utils::GetSignedInteger(content_offset_val);
+		} else if (json_utils::IsUnsignedInteger(content_offset_val)) {
+			content_offset_tmp = json_utils::GetUnsignedInteger(content_offset_val);
 		} else {
 			return StringUtil::Format(
-			    "PositionDeleteFile property 'content_offset_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(content_offset_val));
+			    "PositionDeleteFile property 'content_offset_tmp' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(content_offset_val).c_str());
 		}
 		content_offset = std::move(content_offset_tmp);
 	}
-	auto content_size_in_bytes_val = yyjson_obj_get(obj, "content-size-in-bytes");
-	if (content_size_in_bytes_val) {
+	auto content_size_in_bytes_val = obj.GetMember("content-size-in-bytes");
+	if (content_size_in_bytes_val.IsValid()) {
 		int64_t content_size_in_bytes_tmp;
-		if (yyjson_is_sint(content_size_in_bytes_val)) {
-			content_size_in_bytes_tmp = yyjson_get_sint(content_size_in_bytes_val);
-		} else if (yyjson_is_uint(content_size_in_bytes_val)) {
-			content_size_in_bytes_tmp = yyjson_get_uint(content_size_in_bytes_val);
+		if (json_utils::IsInteger(content_size_in_bytes_val)) {
+			content_size_in_bytes_tmp = json_utils::GetSignedInteger(content_size_in_bytes_val);
+		} else if (json_utils::IsUnsignedInteger(content_size_in_bytes_val)) {
+			content_size_in_bytes_tmp = json_utils::GetUnsignedInteger(content_size_in_bytes_val);
 		} else {
 			return StringUtil::Format(
-			    "PositionDeleteFile property 'content_size_in_bytes_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(content_size_in_bytes_val));
+			    "PositionDeleteFile property 'content_size_in_bytes_tmp' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(content_size_in_bytes_val).c_str());
 		}
 		content_size_in_bytes = std::move(content_size_in_bytes_tmp);
 	}
 	return "";
 }
 
-void PositionDeleteFile::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void PositionDeleteFile::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize base class: ContentFile
-	content_file.PopulateJSON(doc, obj);
+	content_file.PopulateJSON(writer, obj);
 
 	// Serialize: content-offset
 	if (content_offset.has_value()) {
 		auto &content_offset_value = *content_offset;
-		yyjson_mut_obj_add_sint(doc, obj, "content-offset", content_offset_value);
+		auto content_offset_json = writer.CreateSignedInteger(content_offset_value);
+		obj.Add("content-offset", content_offset_json);
 	}
 
 	// Serialize: content-size-in-bytes
 	if (content_size_in_bytes.has_value()) {
 		auto &content_size_in_bytes_value = *content_size_in_bytes;
-		yyjson_mut_obj_add_sint(doc, obj, "content-size-in-bytes", content_size_in_bytes_value);
+		auto content_size_in_bytes_json = writer.CreateSignedInteger(content_size_in_bytes_value);
+		obj.Add("content-size-in-bytes", content_size_in_bytes_json);
 	}
 }
 
-yyjson_mut_val *PositionDeleteFile::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue PositionDeleteFile::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

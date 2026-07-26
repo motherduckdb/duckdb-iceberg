@@ -2,7 +2,7 @@
 #pragma once
 
 #include "rest_catalog/objects/type.hpp"
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
 #include <functional>
 #include "rest_catalog/objects/primitive_type_value.hpp"
 
@@ -16,8 +16,8 @@ public:
 	                                                           const std::function<idx_t()> &get_next_id);
 	static string LogicalTypeToIcebergType(const LogicalType &type);
 	static rest_api_objects::PrimitiveTypeValue PrimitiveTypeFromValue(const Value &val);
-	static yyjson_mut_val *PrimitiveTypeValueToJSON(yyjson_mut_doc *doc,
-	                                                const rest_api_objects::PrimitiveTypeValue &value);
+	static JSONMutableValue PrimitiveTypeValueToJSON(JSONWriter &writer,
+	                                                 const rest_api_objects::PrimitiveTypeValue &value);
 };
 
 } // namespace duckdb

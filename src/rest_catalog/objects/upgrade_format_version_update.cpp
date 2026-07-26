@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/upgrade_format_version_update.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 UpgradeFormatVersionUpdate::UpgradeFormatVersionUpdate() {
 }
 
-UpgradeFormatVersionUpdate UpgradeFormatVersionUpdate::FromJSON(yyjson_val *obj) {
+UpgradeFormatVersionUpdate UpgradeFormatVersionUpdate::FromJSON(JSONValue obj) {
 	UpgradeFormatVersionUpdate res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -31,58 +29,55 @@ UpgradeFormatVersionUpdate UpgradeFormatVersionUpdate::Copy() const {
 	return res;
 }
 
-string UpgradeFormatVersionUpdate::TryFromJSON(yyjson_val *obj) {
+string UpgradeFormatVersionUpdate::TryFromJSON(JSONValue obj) {
 	string error;
 	error = base_update.TryFromJSON(obj);
 	if (!error.empty()) {
 		return error;
 	}
-	auto action_refinement_val = yyjson_obj_get(obj, "action");
-	if (action_refinement_val) {
+	auto action_refinement_val = obj.GetMember("action");
+	if (action_refinement_val.IsValid()) {
 		string action_refinement;
-		if (yyjson_is_str(action_refinement_val)) {
-			action_refinement = yyjson_get_str(action_refinement_val);
+		if (json_utils::IsString(action_refinement_val)) {
+			action_refinement = json_utils::GetString(action_refinement_val);
 		} else {
 			return StringUtil::Format(
-			    "UpgradeFormatVersionUpdate property 'action_refinement' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_refinement_val));
+			    "UpgradeFormatVersionUpdate property 'action_refinement' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(action_refinement_val).c_str());
 		}
-		if (!yyjson_is_null(action_refinement_val) && action_refinement != "upgrade-format-version") {
+		if (!action_refinement_val.IsNull() && action_refinement != "upgrade-format-version") {
 			return "UpgradeFormatVersionUpdate property 'action_refinement' does not match its required const value";
 		}
 	} else {
 		return "UpgradeFormatVersionUpdate required property 'action' is missing";
 	}
-	auto format_version_val = yyjson_obj_get(obj, "format-version");
-	if (!format_version_val) {
+	auto format_version_val = obj.GetMember("format-version");
+	if (!format_version_val.IsValid()) {
 		return "UpgradeFormatVersionUpdate required property 'format-version' is missing";
 	} else {
-		if (yyjson_is_int(format_version_val)) {
-			format_version = yyjson_get_int(format_version_val);
+		if (json_utils::IsInteger(format_version_val)) {
+			format_version = json_utils::GetSignedInteger(format_version_val);
 		} else {
 			return StringUtil::Format(
-			    "UpgradeFormatVersionUpdate property 'format_version' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(format_version_val));
+			    "UpgradeFormatVersionUpdate property 'format_version' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(format_version_val).c_str());
 		}
 	}
 	return "";
 }
 
-void UpgradeFormatVersionUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void UpgradeFormatVersionUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize base class: BaseUpdate
-	base_update.PopulateJSON(doc, obj);
+	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: format-version
-	yyjson_mut_obj_add_int(doc, obj, "format-version", format_version);
+	auto format_version_json = writer.CreateSignedInteger(format_version);
+	obj.Add("format-version", format_version_json);
 }
 
-yyjson_mut_val *UpgradeFormatVersionUpdate::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue UpgradeFormatVersionUpdate::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

@@ -103,30 +103,29 @@ const IcebergPartitionSpecField &IcebergPartitionSpec::GetFieldBySourceId(idx_t 
 	return *res;
 }
 
-yyjson_mut_val *IcebergPartitionSpec::FieldsToJSON(yyjson_mut_doc *doc) const {
-	auto fields_array = yyjson_mut_arr(doc);
+JSONMutableValue IcebergPartitionSpec::FieldsToJSON(JSONWriter &writer) const {
+	auto fields_array = writer.CreateArray();
 	for (auto &field : fields) {
-		auto field_obj = yyjson_mut_arr_add_obj(doc, fields_array);
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "name", field.GetPartitionSpecFieldName().c_str());
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "transform", field.transform.RawType().c_str());
-		yyjson_mut_obj_add_uint(doc, field_obj, "source-id", field.source_id);
-		yyjson_mut_obj_add_uint(doc, field_obj, "field-id", field.partition_field_id);
+		auto field_obj = writer.CreateObject();
+		fields_array.Append(field_obj);
+		field_obj.AddString("name", field.GetPartitionSpecFieldName());
+		field_obj.AddString("transform", field.transform.RawType());
+		field_obj.Add("source-id", writer.CreateUnsignedInteger(field.source_id));
+		field_obj.Add("field-id", writer.CreateUnsignedInteger(field.partition_field_id));
 	}
 	return fields_array;
 }
 
 string IcebergPartitionSpec::FieldsToJSONString() const {
-	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-	auto doc = doc_p.get();
-	auto root_arr = FieldsToJSON(doc);
-	yyjson_mut_doc_set_root(doc, root_arr);
-	return ICUtils::JsonToString(std::move(doc_p));
+	JSONWriter writer;
+	writer.SetRoot(FieldsToJSON(writer));
+	return writer.ToString(JSONWriteFlags::ALLOW_INF_AND_NAN);
 }
 
-yyjson_mut_val *IcebergPartitionSpec::ToJSON(yyjson_mut_doc *doc) const {
-	auto partition_obj = yyjson_mut_obj(doc);
-	yyjson_mut_obj_add_val(doc, partition_obj, "spec-id", yyjson_mut_int(doc, spec_id));
-	yyjson_mut_obj_add_val(doc, partition_obj, "fields", FieldsToJSON(doc));
+JSONMutableValue IcebergPartitionSpec::ToJSON(JSONWriter &writer) const {
+	auto partition_obj = writer.CreateObject();
+	partition_obj.Add("spec-id", writer.CreateSignedInteger(spec_id));
+	partition_obj.Add("fields", FieldsToJSON(writer));
 	return partition_obj;
 }
 

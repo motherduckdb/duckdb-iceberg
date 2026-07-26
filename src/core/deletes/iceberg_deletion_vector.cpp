@@ -353,25 +353,24 @@ vector<data_t> IcebergDeletionVectorData::ToPuffinFile(const vector<data_t> &blo
 	//! Build the FooterPayload (FileMetadata). Per the spec, for `deletion-vector-v1` the blob's
 	//! `snapshot-id` and `sequence-number` must be -1, and it must carry the `referenced-data-file`
 	//! and `cardinality` properties. The blob is not compressed (no `compression-codec`).
-	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-	auto doc = doc_p.get();
-	auto root = yyjson_mut_obj(doc);
-	yyjson_mut_doc_set_root(doc, root);
-	auto blobs = yyjson_mut_arr(doc);
-	yyjson_mut_obj_add_val(doc, root, "blobs", blobs);
-	auto blob_meta = yyjson_mut_obj(doc);
-	yyjson_mut_arr_add_val(blobs, blob_meta);
-	yyjson_mut_obj_add_val(doc, blob_meta, "type", yyjson_mut_str(doc, "deletion-vector-v1"));
-	yyjson_mut_obj_add_val(doc, blob_meta, "fields", yyjson_mut_arr(doc));
-	yyjson_mut_obj_add_val(doc, blob_meta, "snapshot-id", yyjson_mut_int(doc, -1));
-	yyjson_mut_obj_add_val(doc, blob_meta, "sequence-number", yyjson_mut_int(doc, -1));
-	yyjson_mut_obj_add_val(doc, blob_meta, "offset", yyjson_mut_int(doc, static_cast<int64_t>(blob_offset)));
-	yyjson_mut_obj_add_val(doc, blob_meta, "length", yyjson_mut_int(doc, static_cast<int64_t>(blob.size())));
-	auto props = yyjson_mut_obj(doc);
-	yyjson_mut_obj_add_val(doc, blob_meta, "properties", props);
-	yyjson_mut_obj_add_strcpy(doc, props, "referenced-data-file", referenced_data_file.c_str());
-	yyjson_mut_obj_add_strcpy(doc, props, "cardinality", std::to_string(cardinality).c_str());
-	auto footer_payload = ICUtils::JsonToString(std::move(doc_p));
+	JSONWriter writer;
+	auto root = writer.CreateObject();
+	writer.SetRoot(root);
+	auto blobs = writer.CreateArray();
+	root.Add("blobs", blobs);
+	auto blob_meta = writer.CreateObject();
+	blobs.Append(blob_meta);
+	blob_meta.AddString("type", "deletion-vector-v1");
+	blob_meta.Add("fields", writer.CreateArray());
+	blob_meta.Add("snapshot-id", writer.CreateSignedInteger(-1));
+	blob_meta.Add("sequence-number", writer.CreateSignedInteger(-1));
+	blob_meta.Add("offset", writer.CreateSignedInteger(static_cast<int64_t>(blob_offset)));
+	blob_meta.Add("length", writer.CreateSignedInteger(static_cast<int64_t>(blob.size())));
+	auto props = writer.CreateObject();
+	blob_meta.Add("properties", props);
+	props.AddString("referenced-data-file", referenced_data_file);
+	props.AddString("cardinality", std::to_string(cardinality));
+	auto footer_payload = writer.ToString(JSONWriteFlags::ALLOW_INF_AND_NAN);
 
 	const idx_t footer_payload_size = footer_payload.size();
 	const idx_t total_size = blob_offset + blob.size() + sizeof(PUFFIN_MAGIC) + footer_payload_size +

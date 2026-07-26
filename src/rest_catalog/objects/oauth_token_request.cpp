@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/oauth_token_request.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 OAuthTokenRequest::OAuthTokenRequest() {
 }
 
-OAuthTokenRequest OAuthTokenRequest::FromJSON(yyjson_val *obj) {
+OAuthTokenRequest OAuthTokenRequest::FromJSON(JSONValue obj) {
 	OAuthTokenRequest res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -37,7 +35,7 @@ OAuthTokenRequest OAuthTokenRequest::Copy() const {
 	return res;
 }
 
-string OAuthTokenRequest::TryFromJSON(yyjson_val *obj) {
+string OAuthTokenRequest::TryFromJSON(JSONValue obj) {
 	string error;
 	oauth_client_credentials_request.emplace();
 	error = oauth_client_credentials_request->TryFromJSON(obj);
@@ -57,21 +55,17 @@ string OAuthTokenRequest::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void OAuthTokenRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void OAuthTokenRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	if (oauth_client_credentials_request.has_value()) {
-		oauth_client_credentials_request->PopulateJSON(doc, obj);
+		oauth_client_credentials_request->PopulateJSON(writer, obj);
 	} else if (oauth_token_exchange_request.has_value()) {
-		oauth_token_exchange_request->PopulateJSON(doc, obj);
+		oauth_token_exchange_request->PopulateJSON(writer, obj);
 	}
 }
 
-yyjson_mut_val *OAuthTokenRequest::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue OAuthTokenRequest::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/timestamp_nano_type_value.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 TimestampNanoTypeValue::TimestampNanoTypeValue() {
 }
 
-TimestampNanoTypeValue TimestampNanoTypeValue::FromJSON(yyjson_val *obj) {
+TimestampNanoTypeValue TimestampNanoTypeValue::FromJSON(JSONValue obj) {
 	TimestampNanoTypeValue res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -30,19 +28,20 @@ TimestampNanoTypeValue TimestampNanoTypeValue::Copy() const {
 	return res;
 }
 
-string TimestampNanoTypeValue::TryFromJSON(yyjson_val *obj) {
+string TimestampNanoTypeValue::TryFromJSON(JSONValue obj) {
 	string error;
-	if (yyjson_is_str(obj)) {
-		value = yyjson_get_str(obj);
+	if (json_utils::IsString(obj)) {
+		value = json_utils::GetString(obj);
 	} else {
-		return StringUtil::Format("TimestampNanoTypeValue property 'value' is not of type 'string', found '%s' instead",
-		                          yyjson_get_type_desc(obj));
+		return StringUtil::Format("TimestampNanoTypeValue property 'value' is not of type 'string', found %s instead",
+		                          json_utils::GetTypeDescription(obj).c_str());
 	}
 	return "";
 }
 
-yyjson_mut_val *TimestampNanoTypeValue::ToJSON(yyjson_mut_doc *doc) const {
-	return yyjson_mut_strcpy(doc, value.c_str());
+JSONMutableValue TimestampNanoTypeValue::ToJSON(JSONWriter &writer) const {
+	auto result = writer.CreateString(value);
+	return result;
 }
 
 } // namespace rest_api_objects

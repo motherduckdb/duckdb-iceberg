@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/function_parameter.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 FunctionParameter::FunctionParameter() {
 }
 
-FunctionParameter FunctionParameter::FromJSON(yyjson_val *obj) {
+FunctionParameter FunctionParameter::FromJSON(JSONValue obj) {
 	FunctionParameter res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -35,10 +33,10 @@ FunctionParameter FunctionParameter::Copy() const {
 	return res;
 }
 
-string FunctionParameter::TryFromJSON(yyjson_val *obj) {
+string FunctionParameter::TryFromJSON(JSONValue obj) {
 	string error;
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
+	auto type_val = obj.GetMember("type");
+	if (!type_val.IsValid()) {
 		return "FunctionParameter required property 'type' is missing";
 	} else {
 		type = make_uniq<FunctionDataType>();
@@ -47,54 +45,51 @@ string FunctionParameter::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto name_val = yyjson_obj_get(obj, "name");
-	if (!name_val) {
+	auto name_val = obj.GetMember("name");
+	if (!name_val.IsValid()) {
 		return "FunctionParameter required property 'name' is missing";
 	} else {
-		if (yyjson_is_str(name_val)) {
-			name = yyjson_get_str(name_val);
+		if (json_utils::IsString(name_val)) {
+			name = json_utils::GetString(name_val);
 		} else {
-			return StringUtil::Format("FunctionParameter property 'name' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(name_val));
+			return StringUtil::Format("FunctionParameter property 'name' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(name_val).c_str());
 		}
 	}
-	auto _doc_val = yyjson_obj_get(obj, "doc");
-	if (_doc_val) {
+	auto _doc_val = obj.GetMember("doc");
+	if (_doc_val.IsValid()) {
 		string _doc_tmp;
-		if (yyjson_is_str(_doc_val)) {
-			_doc_tmp = yyjson_get_str(_doc_val);
+		if (json_utils::IsString(_doc_val)) {
+			_doc_tmp = json_utils::GetString(_doc_val);
 		} else {
-			return StringUtil::Format(
-			    "FunctionParameter property '_doc_tmp' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(_doc_val));
+			return StringUtil::Format("FunctionParameter property '_doc_tmp' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(_doc_val).c_str());
 		}
 		_doc = std::move(_doc_tmp);
 	}
 	return "";
 }
 
-void FunctionParameter::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void FunctionParameter::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	yyjson_mut_val *type_val = type->ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+	auto type_json = type->ToJSON(writer);
+	obj.Add("type", type_json);
 
 	// Serialize: name
-	yyjson_mut_obj_add_strcpy(doc, obj, "name", name.c_str());
+	auto name_json = writer.CreateString(name);
+	obj.Add("name", name_json);
 
 	// Serialize: doc
 	if (_doc.has_value()) {
 		auto &_doc_value = *_doc;
-		yyjson_mut_obj_add_strcpy(doc, obj, "doc", _doc_value.c_str());
+		auto _doc_json = writer.CreateString(_doc_value);
+		obj.Add("doc", _doc_json);
 	}
 }
 
-yyjson_mut_val *FunctionParameter::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue FunctionParameter::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

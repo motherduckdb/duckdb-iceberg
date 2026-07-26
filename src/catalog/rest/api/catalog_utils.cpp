@@ -4,52 +4,43 @@
 
 namespace duckdb {
 
-yyjson_val *ICUtils::GetErrorMessage(const string &api_result, std::unique_ptr<yyjson_doc, YyjsonDocDeleter> &out_doc) {
-	out_doc = std::unique_ptr<yyjson_doc, YyjsonDocDeleter>(yyjson_read(api_result.c_str(), api_result.size(), 0));
-	auto *root = yyjson_doc_get_root(out_doc.get());
-	auto *error = yyjson_obj_get(root, "error");
-
-	if (error == nullptr) {
-		return nullptr;
+JSONValue ICUtils::GetErrorMessage(const string &api_result, unique_ptr<JSONDocument> &out_doc) {
+	JSONParseError parse_error;
+	out_doc = JSONDocument::TryParse(api_result.c_str(), api_result.size(), parse_error);
+	if (!out_doc) {
+		return JSONValue();
 	}
-	auto message = yyjson_obj_get(error, "message");
-	auto type = yyjson_obj_get(error, "type");
-	auto code = yyjson_obj_get(error, "code");
-	if (message != nullptr && type != nullptr && code != nullptr) {
+
+	auto root = out_doc->GetRoot();
+	auto error = root.GetMember("error");
+
+	if (!error.IsValid()) {
+		return JSONValue();
+	}
+	auto message = error.GetMember("message");
+	auto type = error.GetMember("type");
+	auto code = error.GetMember("code");
+	if (message.IsValid() && type.IsValid() && code.IsValid()) {
 		return root;
 	}
-	return nullptr;
+	return JSONValue();
 }
 
-std::unique_ptr<yyjson_doc, YyjsonDocDeleter> ICUtils::APIResultToDoc(const string &api_result) {
-	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> doc_p(yyjson_read(api_result.c_str(), api_result.size(), 0));
-	auto *root = yyjson_doc_get_root(doc_p.get());
-	auto *error = yyjson_obj_get(root, "error");
-	if (error != NULL) {
+unique_ptr<JSONDocument> ICUtils::APIResultToDoc(const string &api_result) {
+	auto doc = JSONDocument::Parse(api_result.c_str(), api_result.size());
+	auto root = doc->GetRoot();
+	auto error = root.GetMember("error");
+	if (error.IsValid()) {
 		try {
-			auto message = yyjson_obj_get(error, "message");
-			auto message_str = message ? yyjson_get_str(message) : nullptr;
-			throw InvalidInputException(!message ? "No message available" : string(message_str));
+			auto message = error.GetMember("message");
+			throw InvalidInputException(message.IsString() ? message.GetString() : "No message available");
 		} catch (InvalidConfigurationException &e) {
 			// keep going, we will throw the whole api result as an error message
 			throw InvalidConfigurationException(api_result);
 		}
 		throw InvalidConfigurationException("Could not parse api_result");
 	}
-	return doc_p;
-}
-
-string ICUtils::JsonToString(std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc) {
-	auto root_object = yyjson_mut_doc_get_root(doc.get());
-
-	//! Write the result to a string
-	auto data = yyjson_mut_val_write_opts(root_object, YYJSON_WRITE_ALLOW_INF_AND_NAN, nullptr, nullptr, nullptr);
-	if (!data) {
-		throw InvalidInputException("Could not serialize the JSON to string, yyjson failed");
-	}
-	auto res = string(data);
-	free(data);
-	return res;
+	return doc;
 }
 
 } // namespace duckdb

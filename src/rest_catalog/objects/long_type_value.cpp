@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/long_type_value.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 LongTypeValue::LongTypeValue() {
 }
 
-LongTypeValue LongTypeValue::FromJSON(yyjson_val *obj) {
+LongTypeValue LongTypeValue::FromJSON(JSONValue obj) {
 	LongTypeValue res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -30,21 +28,22 @@ LongTypeValue LongTypeValue::Copy() const {
 	return res;
 }
 
-string LongTypeValue::TryFromJSON(yyjson_val *obj) {
+string LongTypeValue::TryFromJSON(JSONValue obj) {
 	string error;
-	if (yyjson_is_sint(obj)) {
-		value = yyjson_get_sint(obj);
-	} else if (yyjson_is_uint(obj)) {
-		value = yyjson_get_uint(obj);
+	if (json_utils::IsInteger(obj)) {
+		value = json_utils::GetSignedInteger(obj);
+	} else if (json_utils::IsUnsignedInteger(obj)) {
+		value = json_utils::GetUnsignedInteger(obj);
 	} else {
-		return StringUtil::Format("LongTypeValue property 'value' is not of type 'integer', found '%s' instead",
-		                          yyjson_get_type_desc(obj));
+		return StringUtil::Format("LongTypeValue property 'value' is not of type 'integer', found %s instead",
+		                          json_utils::GetTypeDescription(obj).c_str());
 	}
 	return "";
 }
 
-yyjson_mut_val *LongTypeValue::ToJSON(yyjson_mut_doc *doc) const {
-	return yyjson_mut_sint(doc, value);
+JSONMutableValue LongTypeValue::ToJSON(JSONWriter &writer) const {
+	auto result = writer.CreateSignedInteger(value);
+	return result;
 }
 
 } // namespace rest_api_objects

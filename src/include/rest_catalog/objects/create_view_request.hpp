@@ -1,15 +1,13 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
 #include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/schema.hpp"
 #include "rest_catalog/objects/view_version.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -24,15 +22,15 @@ public:
 
 public:
 	// Deserialization
-	static CreateViewRequest FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *obj);
+	static CreateViewRequest FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
 	// Copy
 	CreateViewRequest Copy() const;
 
 	// Serialization
-	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
-	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	string name;
