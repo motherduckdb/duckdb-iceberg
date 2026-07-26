@@ -123,6 +123,7 @@ virtual_column_map_t IcebergTableEntry::VirtualColumns() {
 	return result;
 }
 
+//! NOTE: IcebergDelete::FindIcebergScan needs to change in tandem with this method
 vector<column_t> IcebergTableEntry::GetRowIdColumns() const {
 	vector<column_t> result;
 	auto &table_metadata = table_info.table_metadata;

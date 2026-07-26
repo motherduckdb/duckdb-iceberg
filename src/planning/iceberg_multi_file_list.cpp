@@ -505,7 +505,7 @@ vector<IcebergPartitionInfo> IcebergMultiFileList::GetPartitionInfoForDataFile(c
 	if (entry != shared_state->data_file_partition_info.end()) {
 		return entry->second;
 	}
-	throw InternalException("Could not find data file '%s' in manifest entries", file_path);
+	throw InvalidConfigurationException("Could not find data file '%s' in manifest entries", file_path);
 }
 
 const IcebergManifestFile &IcebergMultiFileList::GetManifestFileForEntry(const BoundIcebergManifestEntry &entry,
