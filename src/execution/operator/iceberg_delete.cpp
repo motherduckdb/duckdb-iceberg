@@ -31,23 +31,8 @@ class IcebergDeleteLocalState;
 class IcebergDeleteGlobalState;
 class IcebergTableEntry;
 
-static bool HasProjectionIds(const PhysicalTableScan &scan) {
-	if (scan.projection_ids.empty()) {
-		return false;
-	}
-	for (idx_t i = 0; i < scan.projection_ids.size(); i++) {
-		if (scan.projection_ids[i] != i) {
-			return true;
-		}
-	}
-	return false;
-}
-
 static bool IsScanCreatedByDelete(const PhysicalTableScan &scan) {
 	if (scan.function.GetName() != "iceberg_scan") {
-		return false;
-	}
-	if (HasProjectionIds(scan)) {
 		return false;
 	}
 	if (scan.column_ids.size() < 2) {
