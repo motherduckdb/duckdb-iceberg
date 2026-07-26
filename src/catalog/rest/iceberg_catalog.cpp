@@ -11,6 +11,7 @@
 
 #include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 #include "catalog/rest/api/catalog_api.hpp"
 #include "catalog/rest/api/catalog_utils.hpp"
@@ -22,6 +23,18 @@
 using namespace duckdb_yyjson;
 
 namespace duckdb {
+
+void LoadTableResultCache::EvictIfCurrent(const IcebergTableInformation &table) {
+	lock_guard<mutex> guard(lock);
+	auto it = tables.find(table.GetTableKey());
+	if (it == tables.end()) {
+		return;
+	}
+	if (it->second.load_table_result.get() != table.initialization_source.get()) {
+		return;
+	}
+	tables.erase(it);
+}
 
 IcebergCatalog::IcebergCatalog(AttachedDatabase &db_p, AccessMode access_mode,
                                unique_ptr<IcebergAuthorization> auth_handler, IcebergAttachOptions &attach_options_p,

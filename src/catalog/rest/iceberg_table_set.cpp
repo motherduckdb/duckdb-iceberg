@@ -68,8 +68,8 @@ bool IcebergTableSet::FillEntry(ClientContext &context, IcebergTableInformation 
 		                       EnumUtil::ToString(get_table_result.status_), get_table_result.error_->_error.message));
 	}
 	auto &load_table_result = *get_table_result.result_;
-	ic_catalog.table_request_cache.SetOrOverwrite(context, table_key, std::move(get_table_result.result_));
 	table.InitializeFromLoadTableResult(load_table_result);
+	ic_catalog.table_request_cache.SetOrOverwrite(table_key, std::move(get_table_result.result_));
 	return true;
 }
 
@@ -258,11 +258,11 @@ IcebergTableInformation &IcebergTableSet::CreateNewEntry(ClientContext &context,
 
 	auto key = IcebergTableInformation::GetTableKey(schema.namespace_items, info.GetTableName().GetIdentifierName());
 	auto &load_table_result = *new_table_result;
-	catalog.table_request_cache.SetOrOverwrite(context, key, std::move(new_table_result));
 	auto &alter_update = iceberg_transaction.GetOrCreateAlter();
 	auto &table_info = alter_update.CreateTable(
 	    key, IcebergTableInformation(catalog, schema, info.GetTableName().GetIdentifierName()));
 	table_info.InitializeFromLoadTableResult(load_table_result);
+	catalog.table_request_cache.SetOrOverwrite(key, std::move(new_table_result));
 
 	// if we stage created the table, we add an assert create
 	auto &transaction_data = table_info.GetOrCreateTransactionData(iceberg_transaction);
