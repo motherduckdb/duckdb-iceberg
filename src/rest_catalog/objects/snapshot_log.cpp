@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/snapshot_log.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -17,7 +15,7 @@ SnapshotLog::SnapshotLog() {
 SnapshotLog::Object3::Object3() {
 }
 
-SnapshotLog::Object3 SnapshotLog::Object3::FromJSON(yyjson_val *obj) {
+SnapshotLog::Object3 SnapshotLog::Object3::FromJSON(JSONValue obj) {
 	Object3 res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -33,56 +31,52 @@ SnapshotLog::Object3 SnapshotLog::Object3::Copy() const {
 	return res;
 }
 
-string SnapshotLog::Object3::TryFromJSON(yyjson_val *obj) {
+string SnapshotLog::Object3::TryFromJSON(JSONValue obj) {
 	string error;
-	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
-	if (!snapshot_id_val) {
+	auto snapshot_id_val = obj.GetMember("snapshot-id");
+	if (!snapshot_id_val.IsValid()) {
 		return "Object3 required property 'snapshot-id' is missing";
 	} else {
-		if (yyjson_is_sint(snapshot_id_val)) {
-			snapshot_id = yyjson_get_sint(snapshot_id_val);
-		} else if (yyjson_is_uint(snapshot_id_val)) {
-			snapshot_id = yyjson_get_uint(snapshot_id_val);
+		if (json_utils::IsInteger(snapshot_id_val)) {
+			snapshot_id = json_utils::GetSignedInteger(snapshot_id_val);
+		} else if (json_utils::IsUnsignedInteger(snapshot_id_val)) {
+			snapshot_id = json_utils::GetUnsignedInteger(snapshot_id_val);
 		} else {
-			return StringUtil::Format("Object3 property 'snapshot_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(snapshot_id_val));
+			return StringUtil::Format("Object3 property 'snapshot_id' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(snapshot_id_val).c_str());
 		}
 	}
-	auto timestamp_ms_val = yyjson_obj_get(obj, "timestamp-ms");
-	if (!timestamp_ms_val) {
+	auto timestamp_ms_val = obj.GetMember("timestamp-ms");
+	if (!timestamp_ms_val.IsValid()) {
 		return "Object3 required property 'timestamp-ms' is missing";
 	} else {
-		if (yyjson_is_sint(timestamp_ms_val)) {
-			timestamp_ms = yyjson_get_sint(timestamp_ms_val);
-		} else if (yyjson_is_uint(timestamp_ms_val)) {
-			timestamp_ms = yyjson_get_uint(timestamp_ms_val);
+		if (json_utils::IsInteger(timestamp_ms_val)) {
+			timestamp_ms = json_utils::GetSignedInteger(timestamp_ms_val);
+		} else if (json_utils::IsUnsignedInteger(timestamp_ms_val)) {
+			timestamp_ms = json_utils::GetUnsignedInteger(timestamp_ms_val);
 		} else {
-			return StringUtil::Format("Object3 property 'timestamp_ms' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(timestamp_ms_val));
+			return StringUtil::Format("Object3 property 'timestamp_ms' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(timestamp_ms_val).c_str());
 		}
 	}
 	return "";
 }
 
-void SnapshotLog::Object3::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void SnapshotLog::Object3::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: snapshot-id
-	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+	obj.Add("snapshot-id", writer.CreateSignedInteger(snapshot_id));
 
 	// Serialize: timestamp-ms
-	yyjson_mut_obj_add_sint(doc, obj, "timestamp-ms", timestamp_ms);
+	obj.Add("timestamp-ms", writer.CreateSignedInteger(timestamp_ms));
 }
 
-yyjson_mut_val *SnapshotLog::Object3::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue SnapshotLog::Object3::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 
-SnapshotLog SnapshotLog::FromJSON(yyjson_val *obj) {
+SnapshotLog SnapshotLog::FromJSON(JSONValue obj) {
 	SnapshotLog res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -100,30 +94,34 @@ SnapshotLog SnapshotLog::Copy() const {
 	return res;
 }
 
-string SnapshotLog::TryFromJSON(yyjson_val *obj) {
+string SnapshotLog::TryFromJSON(JSONValue obj) {
 	string error;
-	if (yyjson_is_arr(obj)) {
-		size_t value_idx, value_max;
-		yyjson_val *value_item_val;
-		yyjson_arr_foreach(obj, value_idx, value_max, value_item_val) {
+	if (obj.IsArray()) {
+		obj.IterateArray([&](JSONValue value_item_val) {
+			if (!error.empty()) {
+				return;
+			}
 			Object3 value_item;
 			error = value_item.TryFromJSON(value_item_val);
 			if (!error.empty()) {
-				return error;
+				return;
 			}
 			value.emplace_back(std::move(value_item));
+		});
+		if (!error.empty()) {
+			return error;
 		}
 	} else {
-		return StringUtil::Format("SnapshotLog property 'value' is not of type 'array', found '%s' instead",
-		                          yyjson_get_type_desc(obj));
+		return StringUtil::Format("SnapshotLog property 'value' is not of type 'array', found %s instead",
+		                          json_utils::GetTypeDescription(obj).c_str());
 	}
 	return "";
 }
 
-yyjson_mut_val *SnapshotLog::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *arr = yyjson_mut_arr(doc);
+JSONMutableValue SnapshotLog::ToJSON(JSONWriter &writer) const {
+	auto arr = writer.CreateArray();
 	for (const auto &item : value) {
-		yyjson_mut_arr_append(arr, item.ToJSON(doc));
+		arr.Append(item.ToJSON(writer));
 	}
 	return arr;
 }

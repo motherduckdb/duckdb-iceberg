@@ -14,10 +14,7 @@
 #include "core/metadata/snapshot/iceberg_snapshot.hpp"
 #include "common/iceberg_default.hpp"
 
-using namespace duckdb_yyjson;
 namespace duckdb {
-
-struct YyjsonDocDeleter;
 
 struct IcebergCreateTableRequest {
 	IcebergCreateTableRequest(string name, shared_ptr<IcebergTableSchema> schema, IcebergPartitionSpec partition_spec,
@@ -32,7 +29,7 @@ public:
 	CreateIcebergSchema(ClientContext &context, const IcebergTableMetadata &table_metadata, const ColumnList &columns,
 	                    optional_ptr<const vector<unique_ptr<Constraint>>> constraints, int32_t &last_column_id);
 	string CreateTableToJSON(bool stage_create) const;
-	static void PopulateSchema(yyjson_mut_doc *doc, yyjson_mut_val *schema_json, const IcebergTableSchema &schema);
+	static void PopulateSchema(JSONWriter &writer, JSONMutableValue schema_json, const IcebergTableSchema &schema);
 
 private:
 	string name;

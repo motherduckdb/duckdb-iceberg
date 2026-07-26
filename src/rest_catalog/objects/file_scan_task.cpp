@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/file_scan_task.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 FileScanTask::FileScanTask() {
 }
 
-FileScanTask FileScanTask::FromJSON(yyjson_val *obj) {
+FileScanTask FileScanTask::FromJSON(JSONValue obj) {
 	FileScanTask res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -40,10 +38,10 @@ FileScanTask FileScanTask::Copy() const {
 	return res;
 }
 
-string FileScanTask::TryFromJSON(yyjson_val *obj) {
+string FileScanTask::TryFromJSON(JSONValue obj) {
 	string error;
-	auto data_file_val = yyjson_obj_get(obj, "data-file");
-	if (!data_file_val) {
+	auto data_file_val = obj.GetMember("data-file");
+	if (!data_file_val.IsValid()) {
 		return "FileScanTask required property 'data-file' is missing";
 	} else {
 		error = data_file.TryFromJSON(data_file_val);
@@ -51,33 +49,38 @@ string FileScanTask::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto delete_file_references_val = yyjson_obj_get(obj, "delete-file-references");
-	if (delete_file_references_val) {
+	auto delete_file_references_val = obj.GetMember("delete-file-references");
+	if (delete_file_references_val.IsValid()) {
 		vector<int32_t> delete_file_references_tmp;
-		if (yyjson_is_arr(delete_file_references_val)) {
-			size_t delete_file_references_tmp_idx, delete_file_references_tmp_max;
-			yyjson_val *delete_file_references_tmp_item_val;
-			yyjson_arr_foreach(delete_file_references_val, delete_file_references_tmp_idx,
-			                   delete_file_references_tmp_max, delete_file_references_tmp_item_val) {
+		if (delete_file_references_val.IsArray()) {
+			delete_file_references_val.IterateArray([&](JSONValue delete_file_references_tmp_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				int32_t delete_file_references_tmp_item;
-				if (yyjson_is_int(delete_file_references_tmp_item_val)) {
-					delete_file_references_tmp_item = yyjson_get_int(delete_file_references_tmp_item_val);
+				if (json_utils::IsInteger(delete_file_references_tmp_item_val)) {
+					delete_file_references_tmp_item = json_utils::GetSignedInteger(delete_file_references_tmp_item_val);
 				} else {
-					return StringUtil::Format("FileScanTask property 'delete_file_references_tmp_item' is not of type "
-					                          "'integer', found '%s' instead",
-					                          yyjson_get_type_desc(delete_file_references_tmp_item_val));
+					error =
+					    StringUtil::Format("FileScanTask property 'delete_file_references_tmp_item' is not of type "
+					                       "'integer', found %s instead",
+					                       json_utils::GetTypeDescription(delete_file_references_tmp_item_val).c_str());
+					return;
 				}
 				delete_file_references_tmp.emplace_back(std::move(delete_file_references_tmp_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "FileScanTask property 'delete_file_references_tmp' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(delete_file_references_val));
+			    "FileScanTask property 'delete_file_references_tmp' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(delete_file_references_val).c_str());
 		}
 		delete_file_references = std::move(delete_file_references_tmp);
 	}
-	auto residual_filter_val = yyjson_obj_get(obj, "residual-filter");
-	if (residual_filter_val) {
+	auto residual_filter_val = obj.GetMember("residual-filter");
+	if (residual_filter_val.IsValid()) {
 		residual_filter = make_uniq<Expression>();
 		error = residual_filter->TryFromJSON(residual_filter_val);
 		if (!error.empty()) {
@@ -87,36 +90,32 @@ string FileScanTask::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void FileScanTask::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void FileScanTask::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: data-file
-	yyjson_mut_val *data_file_val = data_file.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "data-file", data_file_val);
+	auto data_file_val = data_file.ToJSON(writer);
+	obj.Add("data-file", data_file_val);
 
 	// Serialize: delete-file-references
 	if (delete_file_references.has_value()) {
 		auto &delete_file_references_value = *delete_file_references;
-		yyjson_mut_val *delete_file_references_value_arr = yyjson_mut_arr(doc);
+		auto delete_file_references_value_arr = writer.CreateArray();
 		for (const auto &item : delete_file_references_value) {
-			yyjson_mut_val *item_val = yyjson_mut_int(doc, item);
-			yyjson_mut_arr_append(delete_file_references_value_arr, item_val);
+			auto item_val = writer.CreateSignedInteger(item);
+			delete_file_references_value_arr.Append(item_val);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "delete-file-references", delete_file_references_value_arr);
+		obj.Add("delete-file-references", delete_file_references_value_arr);
 	}
 
 	// Serialize: residual-filter
 	if (residual_filter != nullptr) {
-		yyjson_mut_val *residual_filter_val = residual_filter->ToJSON(doc);
-		yyjson_mut_obj_add_val(doc, obj, "residual-filter", residual_filter_val);
+		auto residual_filter_val = residual_filter->ToJSON(writer);
+		obj.Add("residual-filter", residual_filter_val);
 	}
 }
 
-yyjson_mut_val *FileScanTask::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue FileScanTask::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

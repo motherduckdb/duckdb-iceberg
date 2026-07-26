@@ -8,7 +8,7 @@
 #include "duckdb/common/types/blob.hpp"
 #include "duckdb/logging/logger.hpp"
 #include "duckdb/main/client_context.hpp"
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
 
 #include "iceberg_logging.hpp"
 #include "catalog/rest/api/catalog_utils.hpp"
@@ -27,8 +27,6 @@
 
 #include <chrono>
 #include <thread>
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 
@@ -92,12 +90,12 @@ static void ThrowResponseError(const IRCEndpointBuilder &endpoint, const HTTPRes
 	                    endpoint.GetURLEncoded(), int(response.status), response.reason, response.body);
 }
 
-static string GetRequiredString(yyjson_val *obj, const char *key) {
-	auto value = yyjson_obj_get(obj, key);
-	if (!value || !yyjson_is_str(value)) {
+static string GetRequiredString(JSONValue obj, const char *key) {
+	auto value = obj.GetMember(key);
+	if (!value.IsString()) {
 		throw InvalidInputException("Invalid Iceberg server-side scan-planning response: '%s' must be a string", key);
 	}
-	return yyjson_get_str(value);
+	return value.GetString();
 }
 
 static void CopyCountMap(const optional<rest_api_objects::CountMap> &source, unordered_map<int32_t, int64_t> &target) {
@@ -283,9 +281,9 @@ static void AppendTasks(rest_api_objects::ScanTasks tasks, const IcebergTableMet
 }
 
 static string SerializePlanRequest(const rest_api_objects::PlanTableScanRequest &request) {
-	unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc(yyjson_mut_doc_new(nullptr));
-	yyjson_mut_doc_set_root(doc.get(), request.ToJSON(doc.get()));
-	return ICUtils::JsonToString(std::move(doc));
+	JSONWriter writer;
+	writer.SetRoot(request.ToJSON(writer));
+	return writer.ToString(JSONWriteFlags::ALLOW_INF_AND_NAN);
 }
 
 static void FetchPlanTasks(ClientContext &context, IcebergTableInformation &table_info,
@@ -298,9 +296,9 @@ static void FetchPlanTasks(ClientContext &context, IcebergTableInformation &tabl
 		endpoint.AddPathComponent(IRCPathComponent::RegularComponent("tasks"));
 		rest_api_objects::FetchScanTasksRequest request;
 		request.plan_task.value = task_identifier;
-		unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc(yyjson_mut_doc_new(nullptr));
-		yyjson_mut_doc_set_root(doc.get(), request.ToJSON(doc.get()));
-		auto body = ICUtils::JsonToString(std::move(doc));
+		JSONWriter writer;
+		writer.SetRoot(request.ToJSON(writer));
+		auto body = writer.ToString(JSONWriteFlags::ALLOW_INF_AND_NAN);
 		auto headers = PlanningHeaders(context);
 		headers.Insert("Idempotency-Key", UUID::ToString(UUID::GenerateRandomUUID()));
 		auto response =
@@ -309,8 +307,7 @@ static void FetchPlanTasks(ClientContext &context, IcebergTableInformation &tabl
 			ThrowResponseError(endpoint, *response);
 		}
 		auto response_doc = ICUtils::APIResultToDoc(response->body);
-		auto tasks =
-		    rest_api_objects::FetchScanTasksResult::FromJSON(yyjson_doc_get_root(response_doc.get())).scan_tasks;
+		auto tasks = rest_api_objects::FetchScanTasksResult::FromJSON(response_doc->GetRoot()).scan_tasks;
 		AppendTasks(std::move(tasks), table_info.table_metadata, accumulator);
 	}
 }
@@ -337,7 +334,7 @@ static void FetchCredentials(ClientContext &context, IcebergTableInformation &ta
 		ThrowResponseError(endpoint, *response);
 	}
 	auto doc = ICUtils::APIResultToDoc(response->body);
-	auto credentials = rest_api_objects::LoadCredentialsResponse::FromJSON(yyjson_doc_get_root(doc.get()));
+	auto credentials = rest_api_objects::LoadCredentialsResponse::FromJSON(doc->GetRoot());
 	result.storage_credentials = std::move(credentials.storage_credentials);
 }
 
@@ -425,7 +422,7 @@ bool IcebergServerSideScanPlanning::Plan(ClientContext &context, IcebergTableInf
 		idx_t poll_delay_ms = 100;
 		while (true) {
 			auto doc = ICUtils::APIResultToDoc(response->body);
-			auto root = yyjson_doc_get_root(doc.get());
+			auto root = doc->GetRoot();
 			auto status = GetRequiredString(root, "status");
 			if (status == "completed") {
 				auto completed = rest_api_objects::CompletedPlanningResult::FromJSON(root);
@@ -433,9 +430,9 @@ bool IcebergServerSideScanPlanning::Plan(ClientContext &context, IcebergTableInf
 				if (completed.object_5.storage_credentials) {
 					result.storage_credentials = std::move(*completed.object_5.storage_credentials);
 				}
-				auto plan_id = yyjson_obj_get(root, "plan-id");
-				if (plan_id && yyjson_is_str(plan_id)) {
-					active_plan_id = string(yyjson_get_str(plan_id));
+				auto plan_id = root.GetMember("plan-id");
+				if (plan_id.IsString()) {
+					active_plan_id = plan_id.GetString();
 					result.plan_id = active_plan_id;
 				}
 				break;

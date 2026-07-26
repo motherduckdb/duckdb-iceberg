@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/remote_sign_result.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 RemoteSignResult::RemoteSignResult() {
 }
 
-RemoteSignResult RemoteSignResult::FromJSON(yyjson_val *obj) {
+RemoteSignResult RemoteSignResult::FromJSON(JSONValue obj) {
 	RemoteSignResult res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -31,21 +29,21 @@ RemoteSignResult RemoteSignResult::Copy() const {
 	return res;
 }
 
-string RemoteSignResult::TryFromJSON(yyjson_val *obj) {
+string RemoteSignResult::TryFromJSON(JSONValue obj) {
 	string error;
-	auto uri_val = yyjson_obj_get(obj, "uri");
-	if (!uri_val) {
+	auto uri_val = obj.GetMember("uri");
+	if (!uri_val.IsValid()) {
 		return "RemoteSignResult required property 'uri' is missing";
 	} else {
-		if (yyjson_is_str(uri_val)) {
-			uri = yyjson_get_str(uri_val);
+		if (json_utils::IsString(uri_val)) {
+			uri = json_utils::GetString(uri_val);
 		} else {
-			return StringUtil::Format("RemoteSignResult property 'uri' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(uri_val));
+			return StringUtil::Format("RemoteSignResult property 'uri' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(uri_val).c_str());
 		}
 	}
-	auto headers_val = yyjson_obj_get(obj, "headers");
-	if (!headers_val) {
+	auto headers_val = obj.GetMember("headers");
+	if (!headers_val.IsValid()) {
 		return "RemoteSignResult required property 'headers' is missing";
 	} else {
 		error = headers.TryFromJSON(headers_val);
@@ -56,22 +54,18 @@ string RemoteSignResult::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void RemoteSignResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void RemoteSignResult::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: uri
-	yyjson_mut_obj_add_strcpy(doc, obj, "uri", uri.c_str());
+	obj.AddString("uri", uri);
 
 	// Serialize: headers
-	yyjson_mut_val *headers_val = headers.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "headers", headers_val);
+	auto headers_val = headers.ToJSON(writer);
+	obj.Add("headers", headers_val);
 }
 
-yyjson_mut_val *RemoteSignResult::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue RemoteSignResult::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

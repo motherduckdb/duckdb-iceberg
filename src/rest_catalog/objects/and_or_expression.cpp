@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/and_or_expression.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 AndOrExpression::AndOrExpression() {
 }
 
-AndOrExpression AndOrExpression::FromJSON(yyjson_val *obj) {
+AndOrExpression AndOrExpression::FromJSON(JSONValue obj) {
 	AndOrExpression res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -32,10 +30,10 @@ AndOrExpression AndOrExpression::Copy() const {
 	return res;
 }
 
-string AndOrExpression::TryFromJSON(yyjson_val *obj) {
+string AndOrExpression::TryFromJSON(JSONValue obj) {
 	string error;
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
+	auto type_val = obj.GetMember("type");
+	if (!type_val.IsValid()) {
 		return "AndOrExpression required property 'type' is missing";
 	} else {
 		error = type.TryFromJSON(type_val);
@@ -43,8 +41,8 @@ string AndOrExpression::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto left_val = yyjson_obj_get(obj, "left");
-	if (!left_val) {
+	auto left_val = obj.GetMember("left");
+	if (!left_val.IsValid()) {
 		return "AndOrExpression required property 'left' is missing";
 	} else {
 		left = make_uniq<Expression>();
@@ -53,8 +51,8 @@ string AndOrExpression::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto right_val = yyjson_obj_get(obj, "right");
-	if (!right_val) {
+	auto right_val = obj.GetMember("right");
+	if (!right_val.IsValid()) {
 		return "AndOrExpression required property 'right' is missing";
 	} else {
 		right = make_uniq<Expression>();
@@ -66,27 +64,23 @@ string AndOrExpression::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void AndOrExpression::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void AndOrExpression::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	yyjson_mut_val *type_val = type.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+	auto type_val = type.ToJSON(writer);
+	obj.Add("type", type_val);
 
 	// Serialize: left
-	yyjson_mut_val *left_val = left->ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "left", left_val);
+	auto left_val = left->ToJSON(writer);
+	obj.Add("left", left_val);
 
 	// Serialize: right
-	yyjson_mut_val *right_val = right->ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "right", right_val);
+	auto right_val = right->ToJSON(writer);
+	obj.Add("right", right_val);
 }
 
-yyjson_mut_val *AndOrExpression::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue AndOrExpression::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

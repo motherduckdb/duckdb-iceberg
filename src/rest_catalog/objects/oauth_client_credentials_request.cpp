@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/oauth_client_credentials_request.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 OAuthClientCredentialsRequest::OAuthClientCredentialsRequest() {
 }
 
-OAuthClientCredentialsRequest OAuthClientCredentialsRequest::FromJSON(yyjson_val *obj) {
+OAuthClientCredentialsRequest OAuthClientCredentialsRequest::FromJSON(JSONValue obj) {
 	OAuthClientCredentialsRequest res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -36,83 +34,79 @@ OAuthClientCredentialsRequest OAuthClientCredentialsRequest::Copy() const {
 	return res;
 }
 
-string OAuthClientCredentialsRequest::TryFromJSON(yyjson_val *obj) {
+string OAuthClientCredentialsRequest::TryFromJSON(JSONValue obj) {
 	string error;
-	auto grant_type_val = yyjson_obj_get(obj, "grant_type");
-	if (!grant_type_val) {
+	auto grant_type_val = obj.GetMember("grant_type");
+	if (!grant_type_val.IsValid()) {
 		return "OAuthClientCredentialsRequest required property 'grant_type' is missing";
 	} else {
-		if (yyjson_is_str(grant_type_val)) {
-			grant_type = yyjson_get_str(grant_type_val);
+		if (json_utils::IsString(grant_type_val)) {
+			grant_type = json_utils::GetString(grant_type_val);
 		} else {
 			return StringUtil::Format(
-			    "OAuthClientCredentialsRequest property 'grant_type' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(grant_type_val));
+			    "OAuthClientCredentialsRequest property 'grant_type' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(grant_type_val).c_str());
 		}
 	}
-	auto client_id_val = yyjson_obj_get(obj, "client_id");
-	if (!client_id_val) {
+	auto client_id_val = obj.GetMember("client_id");
+	if (!client_id_val.IsValid()) {
 		return "OAuthClientCredentialsRequest required property 'client_id' is missing";
 	} else {
-		if (yyjson_is_str(client_id_val)) {
-			client_id = yyjson_get_str(client_id_val);
+		if (json_utils::IsString(client_id_val)) {
+			client_id = json_utils::GetString(client_id_val);
 		} else {
 			return StringUtil::Format(
-			    "OAuthClientCredentialsRequest property 'client_id' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(client_id_val));
+			    "OAuthClientCredentialsRequest property 'client_id' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(client_id_val).c_str());
 		}
 	}
-	auto client_secret_val = yyjson_obj_get(obj, "client_secret");
-	if (!client_secret_val) {
+	auto client_secret_val = obj.GetMember("client_secret");
+	if (!client_secret_val.IsValid()) {
 		return "OAuthClientCredentialsRequest required property 'client_secret' is missing";
 	} else {
-		if (yyjson_is_str(client_secret_val)) {
-			client_secret = yyjson_get_str(client_secret_val);
+		if (json_utils::IsString(client_secret_val)) {
+			client_secret = json_utils::GetString(client_secret_val);
 		} else {
 			return StringUtil::Format(
-			    "OAuthClientCredentialsRequest property 'client_secret' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(client_secret_val));
+			    "OAuthClientCredentialsRequest property 'client_secret' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(client_secret_val).c_str());
 		}
 	}
-	auto scope_val = yyjson_obj_get(obj, "scope");
-	if (scope_val) {
+	auto scope_val = obj.GetMember("scope");
+	if (scope_val.IsValid()) {
 		string scope_tmp;
-		if (yyjson_is_str(scope_val)) {
-			scope_tmp = yyjson_get_str(scope_val);
+		if (json_utils::IsString(scope_val)) {
+			scope_tmp = json_utils::GetString(scope_val);
 		} else {
 			return StringUtil::Format(
-			    "OAuthClientCredentialsRequest property 'scope_tmp' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(scope_val));
+			    "OAuthClientCredentialsRequest property 'scope_tmp' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(scope_val).c_str());
 		}
 		scope = std::move(scope_tmp);
 	}
 	return "";
 }
 
-void OAuthClientCredentialsRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void OAuthClientCredentialsRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: grant_type
-	yyjson_mut_obj_add_strcpy(doc, obj, "grant_type", grant_type.c_str());
+	obj.AddString("grant_type", grant_type);
 
 	// Serialize: client_id
-	yyjson_mut_obj_add_strcpy(doc, obj, "client_id", client_id.c_str());
+	obj.AddString("client_id", client_id);
 
 	// Serialize: client_secret
-	yyjson_mut_obj_add_strcpy(doc, obj, "client_secret", client_secret.c_str());
+	obj.AddString("client_secret", client_secret);
 
 	// Serialize: scope
 	if (scope.has_value()) {
 		auto &scope_value = *scope;
-		yyjson_mut_obj_add_strcpy(doc, obj, "scope", scope_value.c_str());
+		obj.AddString("scope", scope_value);
 	}
 }
 
-yyjson_mut_val *OAuthClientCredentialsRequest::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue OAuthClientCredentialsRequest::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

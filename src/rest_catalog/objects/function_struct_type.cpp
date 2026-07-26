@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/function_struct_type.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 FunctionStructType::FunctionStructType() {
 }
 
-FunctionStructType FunctionStructType::FromJSON(yyjson_val *obj) {
+FunctionStructType FunctionStructType::FromJSON(JSONValue obj) {
 	FunctionStructType res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -34,65 +32,65 @@ FunctionStructType FunctionStructType::Copy() const {
 	return res;
 }
 
-string FunctionStructType::TryFromJSON(yyjson_val *obj) {
+string FunctionStructType::TryFromJSON(JSONValue obj) {
 	string error;
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
+	auto type_val = obj.GetMember("type");
+	if (!type_val.IsValid()) {
 		return "FunctionStructType required property 'type' is missing";
 	} else {
-		if (yyjson_is_str(type_val)) {
-			type = yyjson_get_str(type_val);
+		if (json_utils::IsString(type_val)) {
+			type = json_utils::GetString(type_val);
 		} else {
-			return StringUtil::Format("FunctionStructType property 'type' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(type_val));
+			return StringUtil::Format("FunctionStructType property 'type' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(type_val).c_str());
 		}
-		if (!yyjson_is_null(type_val) && type != "struct") {
+		if (!type_val.IsNull() && type != "struct") {
 			return "FunctionStructType property 'type' does not match its required const value";
 		}
 	}
-	auto fields_val = yyjson_obj_get(obj, "fields");
-	if (!fields_val) {
+	auto fields_val = obj.GetMember("fields");
+	if (!fields_val.IsValid()) {
 		return "FunctionStructType required property 'fields' is missing";
 	} else {
-		if (yyjson_is_arr(fields_val)) {
-			size_t fields_idx, fields_max;
-			yyjson_val *fields_item_val;
-			yyjson_arr_foreach(fields_val, fields_idx, fields_max, fields_item_val) {
+		if (fields_val.IsArray()) {
+			fields_val.IterateArray([&](JSONValue fields_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				FunctionStructField fields_item;
 				error = fields_item.TryFromJSON(fields_item_val);
 				if (!error.empty()) {
-					return error;
+					return;
 				}
 				fields.emplace_back(std::move(fields_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
-			return StringUtil::Format("FunctionStructType property 'fields' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(fields_val));
+			return StringUtil::Format("FunctionStructType property 'fields' is not of type 'array', found %s instead",
+			                          json_utils::GetTypeDescription(fields_val).c_str());
 		}
 	}
 	return "";
 }
 
-void FunctionStructType::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void FunctionStructType::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
+	obj.AddString("type", type);
 
 	// Serialize: fields
-	yyjson_mut_val *fields_arr = yyjson_mut_arr(doc);
+	auto fields_arr = writer.CreateArray();
 	for (const auto &item : fields) {
-		yyjson_mut_val *item_val = item.ToJSON(doc);
-		yyjson_mut_arr_append(fields_arr, item_val);
+		auto item_val = item.ToJSON(writer);
+		fields_arr.Append(item_val);
 	}
-	yyjson_mut_obj_add_val(doc, obj, "fields", fields_arr);
+	obj.Add("fields", fields_arr);
 }
 
-yyjson_mut_val *FunctionStructType::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue FunctionStructType::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

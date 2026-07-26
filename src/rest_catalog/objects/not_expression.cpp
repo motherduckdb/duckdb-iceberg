@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/not_expression.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 NotExpression::NotExpression() {
 }
 
-NotExpression NotExpression::FromJSON(yyjson_val *obj) {
+NotExpression NotExpression::FromJSON(JSONValue obj) {
 	NotExpression res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -31,10 +29,10 @@ NotExpression NotExpression::Copy() const {
 	return res;
 }
 
-string NotExpression::TryFromJSON(yyjson_val *obj) {
+string NotExpression::TryFromJSON(JSONValue obj) {
 	string error;
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
+	auto type_val = obj.GetMember("type");
+	if (!type_val.IsValid()) {
 		return "NotExpression required property 'type' is missing";
 	} else {
 		error = type.TryFromJSON(type_val);
@@ -42,8 +40,8 @@ string NotExpression::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto child_val = yyjson_obj_get(obj, "child");
-	if (!child_val) {
+	auto child_val = obj.GetMember("child");
+	if (!child_val.IsValid()) {
 		return "NotExpression required property 'child' is missing";
 	} else {
 		child = make_uniq<Expression>();
@@ -55,23 +53,19 @@ string NotExpression::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void NotExpression::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void NotExpression::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	yyjson_mut_val *type_val = type.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+	auto type_val = type.ToJSON(writer);
+	obj.Add("type", type_val);
 
 	// Serialize: child
-	yyjson_mut_val *child_val = child->ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "child", child_val);
+	auto child_val = child->ToJSON(writer);
+	obj.Add("child", child_val);
 }
 
-yyjson_mut_val *NotExpression::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue NotExpression::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

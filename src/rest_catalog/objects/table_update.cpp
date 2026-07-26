@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/table_update.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 TableUpdate::TableUpdate() {
 }
 
-TableUpdate TableUpdate::FromJSON(yyjson_val *obj) {
+TableUpdate TableUpdate::FromJSON(JSONValue obj) {
 	TableUpdate res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -121,7 +119,7 @@ TableUpdate TableUpdate::Copy() const {
 	return res;
 }
 
-string TableUpdate::TryFromJSON(yyjson_val *obj) {
+string TableUpdate::TryFromJSON(JSONValue obj) {
 	string error;
 	assign_uuidupdate.emplace();
 	error = assign_uuidupdate->TryFromJSON(obj);
@@ -278,63 +276,59 @@ string TableUpdate::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void TableUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void TableUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	if (assign_uuidupdate.has_value()) {
-		assign_uuidupdate->PopulateJSON(doc, obj);
+		assign_uuidupdate->PopulateJSON(writer, obj);
 	} else if (upgrade_format_version_update.has_value()) {
-		upgrade_format_version_update->PopulateJSON(doc, obj);
+		upgrade_format_version_update->PopulateJSON(writer, obj);
 	} else if (add_schema_update.has_value()) {
-		add_schema_update->PopulateJSON(doc, obj);
+		add_schema_update->PopulateJSON(writer, obj);
 	} else if (set_current_schema_update.has_value()) {
-		set_current_schema_update->PopulateJSON(doc, obj);
+		set_current_schema_update->PopulateJSON(writer, obj);
 	} else if (add_partition_spec_update.has_value()) {
-		add_partition_spec_update->PopulateJSON(doc, obj);
+		add_partition_spec_update->PopulateJSON(writer, obj);
 	} else if (set_default_spec_update.has_value()) {
-		set_default_spec_update->PopulateJSON(doc, obj);
+		set_default_spec_update->PopulateJSON(writer, obj);
 	} else if (add_sort_order_update.has_value()) {
-		add_sort_order_update->PopulateJSON(doc, obj);
+		add_sort_order_update->PopulateJSON(writer, obj);
 	} else if (set_default_sort_order_update.has_value()) {
-		set_default_sort_order_update->PopulateJSON(doc, obj);
+		set_default_sort_order_update->PopulateJSON(writer, obj);
 	} else if (add_snapshot_update.has_value()) {
-		add_snapshot_update->PopulateJSON(doc, obj);
+		add_snapshot_update->PopulateJSON(writer, obj);
 	} else if (set_snapshot_ref_update.has_value()) {
-		set_snapshot_ref_update->PopulateJSON(doc, obj);
+		set_snapshot_ref_update->PopulateJSON(writer, obj);
 	} else if (remove_snapshots_update.has_value()) {
-		remove_snapshots_update->PopulateJSON(doc, obj);
+		remove_snapshots_update->PopulateJSON(writer, obj);
 	} else if (remove_snapshot_ref_update.has_value()) {
-		remove_snapshot_ref_update->PopulateJSON(doc, obj);
+		remove_snapshot_ref_update->PopulateJSON(writer, obj);
 	} else if (set_location_update.has_value()) {
-		set_location_update->PopulateJSON(doc, obj);
+		set_location_update->PopulateJSON(writer, obj);
 	} else if (set_properties_update.has_value()) {
-		set_properties_update->PopulateJSON(doc, obj);
+		set_properties_update->PopulateJSON(writer, obj);
 	} else if (remove_properties_update.has_value()) {
-		remove_properties_update->PopulateJSON(doc, obj);
+		remove_properties_update->PopulateJSON(writer, obj);
 	} else if (set_statistics_update.has_value()) {
-		set_statistics_update->PopulateJSON(doc, obj);
+		set_statistics_update->PopulateJSON(writer, obj);
 	} else if (remove_statistics_update.has_value()) {
-		remove_statistics_update->PopulateJSON(doc, obj);
+		remove_statistics_update->PopulateJSON(writer, obj);
 	} else if (set_partition_statistics_update.has_value()) {
-		set_partition_statistics_update->PopulateJSON(doc, obj);
+		set_partition_statistics_update->PopulateJSON(writer, obj);
 	} else if (remove_partition_statistics_update.has_value()) {
-		remove_partition_statistics_update->PopulateJSON(doc, obj);
+		remove_partition_statistics_update->PopulateJSON(writer, obj);
 	} else if (remove_partition_specs_update.has_value()) {
-		remove_partition_specs_update->PopulateJSON(doc, obj);
+		remove_partition_specs_update->PopulateJSON(writer, obj);
 	} else if (remove_schemas_update.has_value()) {
-		remove_schemas_update->PopulateJSON(doc, obj);
+		remove_schemas_update->PopulateJSON(writer, obj);
 	} else if (add_encryption_key_update.has_value()) {
-		add_encryption_key_update->PopulateJSON(doc, obj);
+		add_encryption_key_update->PopulateJSON(writer, obj);
 	} else if (remove_encryption_key_update.has_value()) {
-		remove_encryption_key_update->PopulateJSON(doc, obj);
+		remove_encryption_key_update->PopulateJSON(writer, obj);
 	}
 }
 
-yyjson_mut_val *TableUpdate::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue TableUpdate::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

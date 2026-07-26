@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/table_metadata.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 TableMetadata::TableMetadata() {
 }
 
-TableMetadata TableMetadata::FromJSON(yyjson_val *obj) {
+TableMetadata TableMetadata::FromJSON(JSONValue obj) {
 	TableMetadata res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -138,262 +136,281 @@ TableMetadata TableMetadata::Copy() const {
 	return res;
 }
 
-string TableMetadata::TryFromJSON(yyjson_val *obj) {
+string TableMetadata::TryFromJSON(JSONValue obj) {
 	string error;
-	auto format_version_val = yyjson_obj_get(obj, "format-version");
-	if (!format_version_val) {
+	auto format_version_val = obj.GetMember("format-version");
+	if (!format_version_val.IsValid()) {
 		return "TableMetadata required property 'format-version' is missing";
 	} else {
-		if (yyjson_is_int(format_version_val)) {
-			format_version = yyjson_get_int(format_version_val);
+		if (json_utils::IsInteger(format_version_val)) {
+			format_version = json_utils::GetSignedInteger(format_version_val);
 		} else {
 			return StringUtil::Format(
-			    "TableMetadata property 'format_version' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(format_version_val));
+			    "TableMetadata property 'format_version' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(format_version_val).c_str());
 		}
 	}
-	auto table_uuid_val = yyjson_obj_get(obj, "table-uuid");
-	if (!table_uuid_val) {
+	auto table_uuid_val = obj.GetMember("table-uuid");
+	if (!table_uuid_val.IsValid()) {
 		return "TableMetadata required property 'table-uuid' is missing";
 	} else {
-		if (yyjson_is_str(table_uuid_val)) {
-			table_uuid = yyjson_get_str(table_uuid_val);
+		if (json_utils::IsString(table_uuid_val)) {
+			table_uuid = json_utils::GetString(table_uuid_val);
 		} else {
-			return StringUtil::Format("TableMetadata property 'table_uuid' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(table_uuid_val));
+			return StringUtil::Format("TableMetadata property 'table_uuid' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(table_uuid_val).c_str());
 		}
 	}
-	auto location_val = yyjson_obj_get(obj, "location");
-	if (location_val) {
+	auto location_val = obj.GetMember("location");
+	if (location_val.IsValid()) {
 		string location_tmp;
-		if (yyjson_is_str(location_val)) {
-			location_tmp = yyjson_get_str(location_val);
+		if (json_utils::IsString(location_val)) {
+			location_tmp = json_utils::GetString(location_val);
 		} else {
-			return StringUtil::Format(
-			    "TableMetadata property 'location_tmp' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(location_val));
+			return StringUtil::Format("TableMetadata property 'location_tmp' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(location_val).c_str());
 		}
 		location = std::move(location_tmp);
 	}
-	auto last_updated_ms_val = yyjson_obj_get(obj, "last-updated-ms");
-	if (last_updated_ms_val) {
+	auto last_updated_ms_val = obj.GetMember("last-updated-ms");
+	if (last_updated_ms_val.IsValid()) {
 		int64_t last_updated_ms_tmp;
-		if (yyjson_is_sint(last_updated_ms_val)) {
-			last_updated_ms_tmp = yyjson_get_sint(last_updated_ms_val);
-		} else if (yyjson_is_uint(last_updated_ms_val)) {
-			last_updated_ms_tmp = yyjson_get_uint(last_updated_ms_val);
+		if (json_utils::IsInteger(last_updated_ms_val)) {
+			last_updated_ms_tmp = json_utils::GetSignedInteger(last_updated_ms_val);
+		} else if (json_utils::IsUnsignedInteger(last_updated_ms_val)) {
+			last_updated_ms_tmp = json_utils::GetUnsignedInteger(last_updated_ms_val);
 		} else {
 			return StringUtil::Format(
-			    "TableMetadata property 'last_updated_ms_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(last_updated_ms_val));
+			    "TableMetadata property 'last_updated_ms_tmp' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(last_updated_ms_val).c_str());
 		}
 		last_updated_ms = std::move(last_updated_ms_tmp);
 	}
-	auto next_row_id_val = yyjson_obj_get(obj, "next-row-id");
-	if (next_row_id_val) {
+	auto next_row_id_val = obj.GetMember("next-row-id");
+	if (next_row_id_val.IsValid()) {
 		int64_t next_row_id_tmp;
-		if (yyjson_is_sint(next_row_id_val)) {
-			next_row_id_tmp = yyjson_get_sint(next_row_id_val);
-		} else if (yyjson_is_uint(next_row_id_val)) {
-			next_row_id_tmp = yyjson_get_uint(next_row_id_val);
+		if (json_utils::IsInteger(next_row_id_val)) {
+			next_row_id_tmp = json_utils::GetSignedInteger(next_row_id_val);
+		} else if (json_utils::IsUnsignedInteger(next_row_id_val)) {
+			next_row_id_tmp = json_utils::GetUnsignedInteger(next_row_id_val);
 		} else {
 			return StringUtil::Format(
-			    "TableMetadata property 'next_row_id_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(next_row_id_val));
+			    "TableMetadata property 'next_row_id_tmp' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(next_row_id_val).c_str());
 		}
 		next_row_id = std::move(next_row_id_tmp);
 	}
-	auto properties_val = yyjson_obj_get(obj, "properties");
-	if (properties_val) {
+	auto properties_val = obj.GetMember("properties");
+	if (properties_val.IsValid()) {
 		case_insensitive_map_t<string> properties_tmp;
-		if (yyjson_is_obj(properties_val)) {
-			size_t idx, max;
-			yyjson_val *key, *val;
-			yyjson_obj_foreach(properties_val, idx, max, key, val) {
-				auto key_str = yyjson_get_str(key);
+		if (properties_val.IsObject()) {
+			properties_val.IterateObject([&](const string &key_str, JSONValue val) {
+				if (!error.empty()) {
+					return;
+				}
 				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
+				if (json_utils::IsString(val)) {
+					tmp = json_utils::GetString(val);
 				} else {
-					return StringUtil::Format(
-					    "TableMetadata property 'tmp' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(val));
+					error = StringUtil::Format("TableMetadata property 'tmp' is not of type 'string', found %s instead",
+					                           json_utils::GetTypeDescription(val).c_str());
+					return;
 				}
 				properties_tmp.emplace(key_str, std::move(tmp));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return "TableMetadata property 'properties_tmp' is not of type 'object'";
 		}
 		properties = std::move(properties_tmp);
 	}
-	auto schemas_val = yyjson_obj_get(obj, "schemas");
-	if (schemas_val) {
+	auto schemas_val = obj.GetMember("schemas");
+	if (schemas_val.IsValid()) {
 		vector<Schema> schemas_tmp;
-		if (yyjson_is_arr(schemas_val)) {
-			size_t schemas_tmp_idx, schemas_tmp_max;
-			yyjson_val *schemas_tmp_item_val;
-			yyjson_arr_foreach(schemas_val, schemas_tmp_idx, schemas_tmp_max, schemas_tmp_item_val) {
+		if (schemas_val.IsArray()) {
+			schemas_val.IterateArray([&](JSONValue schemas_tmp_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				Schema schemas_tmp_item;
 				error = schemas_tmp_item.TryFromJSON(schemas_tmp_item_val);
 				if (!error.empty()) {
-					return error;
+					return;
 				}
 				schemas_tmp.emplace_back(std::move(schemas_tmp_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
-			return StringUtil::Format("TableMetadata property 'schemas_tmp' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(schemas_val));
+			return StringUtil::Format("TableMetadata property 'schemas_tmp' is not of type 'array', found %s instead",
+			                          json_utils::GetTypeDescription(schemas_val).c_str());
 		}
 		schemas = std::move(schemas_tmp);
 	}
-	auto current_schema_id_val = yyjson_obj_get(obj, "current-schema-id");
-	if (current_schema_id_val) {
+	auto current_schema_id_val = obj.GetMember("current-schema-id");
+	if (current_schema_id_val.IsValid()) {
 		int32_t current_schema_id_tmp;
-		if (yyjson_is_int(current_schema_id_val)) {
-			current_schema_id_tmp = yyjson_get_int(current_schema_id_val);
+		if (json_utils::IsInteger(current_schema_id_val)) {
+			current_schema_id_tmp = json_utils::GetSignedInteger(current_schema_id_val);
 		} else {
 			return StringUtil::Format(
-			    "TableMetadata property 'current_schema_id_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(current_schema_id_val));
+			    "TableMetadata property 'current_schema_id_tmp' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(current_schema_id_val).c_str());
 		}
 		current_schema_id = std::move(current_schema_id_tmp);
 	}
-	auto last_column_id_val = yyjson_obj_get(obj, "last-column-id");
-	if (last_column_id_val) {
+	auto last_column_id_val = obj.GetMember("last-column-id");
+	if (last_column_id_val.IsValid()) {
 		int32_t last_column_id_tmp;
-		if (yyjson_is_int(last_column_id_val)) {
-			last_column_id_tmp = yyjson_get_int(last_column_id_val);
+		if (json_utils::IsInteger(last_column_id_val)) {
+			last_column_id_tmp = json_utils::GetSignedInteger(last_column_id_val);
 		} else {
 			return StringUtil::Format(
-			    "TableMetadata property 'last_column_id_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(last_column_id_val));
+			    "TableMetadata property 'last_column_id_tmp' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(last_column_id_val).c_str());
 		}
 		last_column_id = std::move(last_column_id_tmp);
 	}
-	auto partition_specs_val = yyjson_obj_get(obj, "partition-specs");
-	if (partition_specs_val) {
+	auto partition_specs_val = obj.GetMember("partition-specs");
+	if (partition_specs_val.IsValid()) {
 		vector<PartitionSpec> partition_specs_tmp;
-		if (yyjson_is_arr(partition_specs_val)) {
-			size_t partition_specs_tmp_idx, partition_specs_tmp_max;
-			yyjson_val *partition_specs_tmp_item_val;
-			yyjson_arr_foreach(partition_specs_val, partition_specs_tmp_idx, partition_specs_tmp_max,
-			                   partition_specs_tmp_item_val) {
+		if (partition_specs_val.IsArray()) {
+			partition_specs_val.IterateArray([&](JSONValue partition_specs_tmp_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				PartitionSpec partition_specs_tmp_item;
 				error = partition_specs_tmp_item.TryFromJSON(partition_specs_tmp_item_val);
 				if (!error.empty()) {
-					return error;
+					return;
 				}
 				partition_specs_tmp.emplace_back(std::move(partition_specs_tmp_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "TableMetadata property 'partition_specs_tmp' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(partition_specs_val));
+			    "TableMetadata property 'partition_specs_tmp' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(partition_specs_val).c_str());
 		}
 		partition_specs = std::move(partition_specs_tmp);
 	}
-	auto default_spec_id_val = yyjson_obj_get(obj, "default-spec-id");
-	if (default_spec_id_val) {
+	auto default_spec_id_val = obj.GetMember("default-spec-id");
+	if (default_spec_id_val.IsValid()) {
 		int32_t default_spec_id_tmp;
-		if (yyjson_is_int(default_spec_id_val)) {
-			default_spec_id_tmp = yyjson_get_int(default_spec_id_val);
+		if (json_utils::IsInteger(default_spec_id_val)) {
+			default_spec_id_tmp = json_utils::GetSignedInteger(default_spec_id_val);
 		} else {
 			return StringUtil::Format(
-			    "TableMetadata property 'default_spec_id_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(default_spec_id_val));
+			    "TableMetadata property 'default_spec_id_tmp' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(default_spec_id_val).c_str());
 		}
 		default_spec_id = std::move(default_spec_id_tmp);
 	}
-	auto last_partition_id_val = yyjson_obj_get(obj, "last-partition-id");
-	if (last_partition_id_val) {
+	auto last_partition_id_val = obj.GetMember("last-partition-id");
+	if (last_partition_id_val.IsValid()) {
 		int32_t last_partition_id_tmp;
-		if (yyjson_is_int(last_partition_id_val)) {
-			last_partition_id_tmp = yyjson_get_int(last_partition_id_val);
+		if (json_utils::IsInteger(last_partition_id_val)) {
+			last_partition_id_tmp = json_utils::GetSignedInteger(last_partition_id_val);
 		} else {
 			return StringUtil::Format(
-			    "TableMetadata property 'last_partition_id_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(last_partition_id_val));
+			    "TableMetadata property 'last_partition_id_tmp' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(last_partition_id_val).c_str());
 		}
 		last_partition_id = std::move(last_partition_id_tmp);
 	}
-	auto sort_orders_val = yyjson_obj_get(obj, "sort-orders");
-	if (sort_orders_val) {
+	auto sort_orders_val = obj.GetMember("sort-orders");
+	if (sort_orders_val.IsValid()) {
 		vector<SortOrder> sort_orders_tmp;
-		if (yyjson_is_arr(sort_orders_val)) {
-			size_t sort_orders_tmp_idx, sort_orders_tmp_max;
-			yyjson_val *sort_orders_tmp_item_val;
-			yyjson_arr_foreach(sort_orders_val, sort_orders_tmp_idx, sort_orders_tmp_max, sort_orders_tmp_item_val) {
+		if (sort_orders_val.IsArray()) {
+			sort_orders_val.IterateArray([&](JSONValue sort_orders_tmp_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				SortOrder sort_orders_tmp_item;
 				error = sort_orders_tmp_item.TryFromJSON(sort_orders_tmp_item_val);
 				if (!error.empty()) {
-					return error;
+					return;
 				}
 				sort_orders_tmp.emplace_back(std::move(sort_orders_tmp_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "TableMetadata property 'sort_orders_tmp' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(sort_orders_val));
+			    "TableMetadata property 'sort_orders_tmp' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(sort_orders_val).c_str());
 		}
 		sort_orders = std::move(sort_orders_tmp);
 	}
-	auto default_sort_order_id_val = yyjson_obj_get(obj, "default-sort-order-id");
-	if (default_sort_order_id_val) {
+	auto default_sort_order_id_val = obj.GetMember("default-sort-order-id");
+	if (default_sort_order_id_val.IsValid()) {
 		int32_t default_sort_order_id_tmp;
-		if (yyjson_is_int(default_sort_order_id_val)) {
-			default_sort_order_id_tmp = yyjson_get_int(default_sort_order_id_val);
+		if (json_utils::IsInteger(default_sort_order_id_val)) {
+			default_sort_order_id_tmp = json_utils::GetSignedInteger(default_sort_order_id_val);
 		} else {
 			return StringUtil::Format(
-			    "TableMetadata property 'default_sort_order_id_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(default_sort_order_id_val));
+			    "TableMetadata property 'default_sort_order_id_tmp' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(default_sort_order_id_val).c_str());
 		}
 		default_sort_order_id = std::move(default_sort_order_id_tmp);
 	}
-	auto encryption_keys_val = yyjson_obj_get(obj, "encryption-keys");
-	if (encryption_keys_val) {
+	auto encryption_keys_val = obj.GetMember("encryption-keys");
+	if (encryption_keys_val.IsValid()) {
 		vector<EncryptedKey> encryption_keys_tmp;
-		if (yyjson_is_arr(encryption_keys_val)) {
-			size_t encryption_keys_tmp_idx, encryption_keys_tmp_max;
-			yyjson_val *encryption_keys_tmp_item_val;
-			yyjson_arr_foreach(encryption_keys_val, encryption_keys_tmp_idx, encryption_keys_tmp_max,
-			                   encryption_keys_tmp_item_val) {
+		if (encryption_keys_val.IsArray()) {
+			encryption_keys_val.IterateArray([&](JSONValue encryption_keys_tmp_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				EncryptedKey encryption_keys_tmp_item;
 				error = encryption_keys_tmp_item.TryFromJSON(encryption_keys_tmp_item_val);
 				if (!error.empty()) {
-					return error;
+					return;
 				}
 				encryption_keys_tmp.emplace_back(std::move(encryption_keys_tmp_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "TableMetadata property 'encryption_keys_tmp' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(encryption_keys_val));
+			    "TableMetadata property 'encryption_keys_tmp' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(encryption_keys_val).c_str());
 		}
 		encryption_keys = std::move(encryption_keys_tmp);
 	}
-	auto snapshots_val = yyjson_obj_get(obj, "snapshots");
-	if (snapshots_val) {
+	auto snapshots_val = obj.GetMember("snapshots");
+	if (snapshots_val.IsValid()) {
 		vector<Snapshot> snapshots_tmp;
-		if (yyjson_is_arr(snapshots_val)) {
-			size_t snapshots_tmp_idx, snapshots_tmp_max;
-			yyjson_val *snapshots_tmp_item_val;
-			yyjson_arr_foreach(snapshots_val, snapshots_tmp_idx, snapshots_tmp_max, snapshots_tmp_item_val) {
+		if (snapshots_val.IsArray()) {
+			snapshots_val.IterateArray([&](JSONValue snapshots_tmp_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				Snapshot snapshots_tmp_item;
 				error = snapshots_tmp_item.TryFromJSON(snapshots_tmp_item_val);
 				if (!error.empty()) {
-					return error;
+					return;
 				}
 				snapshots_tmp.emplace_back(std::move(snapshots_tmp_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
-			return StringUtil::Format(
-			    "TableMetadata property 'snapshots_tmp' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(snapshots_val));
+			return StringUtil::Format("TableMetadata property 'snapshots_tmp' is not of type 'array', found %s instead",
+			                          json_utils::GetTypeDescription(snapshots_val).c_str());
 		}
 		snapshots = std::move(snapshots_tmp);
 	}
-	auto refs_val = yyjson_obj_get(obj, "refs");
-	if (refs_val) {
+	auto refs_val = obj.GetMember("refs");
+	if (refs_val.IsValid()) {
 		SnapshotReferences refs_tmp;
 		error = refs_tmp.TryFromJSON(refs_val);
 		if (!error.empty()) {
@@ -401,40 +418,40 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 		refs = std::move(refs_tmp);
 	}
-	auto current_snapshot_id_val = yyjson_obj_get(obj, "current-snapshot-id");
-	if (current_snapshot_id_val) {
-		if (yyjson_is_null(current_snapshot_id_val)) {
+	auto current_snapshot_id_val = obj.GetMember("current-snapshot-id");
+	if (current_snapshot_id_val.IsValid()) {
+		if (current_snapshot_id_val.IsNull()) {
 			//! do nothing, property is explicitly nullable
 		} else {
 			int64_t current_snapshot_id_tmp;
-			if (yyjson_is_sint(current_snapshot_id_val)) {
-				current_snapshot_id_tmp = yyjson_get_sint(current_snapshot_id_val);
-			} else if (yyjson_is_uint(current_snapshot_id_val)) {
-				current_snapshot_id_tmp = yyjson_get_uint(current_snapshot_id_val);
+			if (json_utils::IsInteger(current_snapshot_id_val)) {
+				current_snapshot_id_tmp = json_utils::GetSignedInteger(current_snapshot_id_val);
+			} else if (json_utils::IsUnsignedInteger(current_snapshot_id_val)) {
+				current_snapshot_id_tmp = json_utils::GetUnsignedInteger(current_snapshot_id_val);
 			} else {
 				return StringUtil::Format(
-				    "TableMetadata property 'current_snapshot_id_tmp' is not of type 'integer', found '%s' instead",
-				    yyjson_get_type_desc(current_snapshot_id_val));
+				    "TableMetadata property 'current_snapshot_id_tmp' is not of type 'integer', found %s instead",
+				    json_utils::GetTypeDescription(current_snapshot_id_val).c_str());
 			}
 			current_snapshot_id = std::move(current_snapshot_id_tmp);
 		}
 	}
-	auto last_sequence_number_val = yyjson_obj_get(obj, "last-sequence-number");
-	if (last_sequence_number_val) {
+	auto last_sequence_number_val = obj.GetMember("last-sequence-number");
+	if (last_sequence_number_val.IsValid()) {
 		int64_t last_sequence_number_tmp;
-		if (yyjson_is_sint(last_sequence_number_val)) {
-			last_sequence_number_tmp = yyjson_get_sint(last_sequence_number_val);
-		} else if (yyjson_is_uint(last_sequence_number_val)) {
-			last_sequence_number_tmp = yyjson_get_uint(last_sequence_number_val);
+		if (json_utils::IsInteger(last_sequence_number_val)) {
+			last_sequence_number_tmp = json_utils::GetSignedInteger(last_sequence_number_val);
+		} else if (json_utils::IsUnsignedInteger(last_sequence_number_val)) {
+			last_sequence_number_tmp = json_utils::GetUnsignedInteger(last_sequence_number_val);
 		} else {
 			return StringUtil::Format(
-			    "TableMetadata property 'last_sequence_number_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(last_sequence_number_val));
+			    "TableMetadata property 'last_sequence_number_tmp' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(last_sequence_number_val).c_str());
 		}
 		last_sequence_number = std::move(last_sequence_number_tmp);
 	}
-	auto snapshot_log_val = yyjson_obj_get(obj, "snapshot-log");
-	if (snapshot_log_val) {
+	auto snapshot_log_val = obj.GetMember("snapshot-log");
+	if (snapshot_log_val.IsValid()) {
 		SnapshotLog snapshot_log_tmp;
 		error = snapshot_log_tmp.TryFromJSON(snapshot_log_val);
 		if (!error.empty()) {
@@ -442,8 +459,8 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 		snapshot_log = std::move(snapshot_log_tmp);
 	}
-	auto metadata_log_val = yyjson_obj_get(obj, "metadata-log");
-	if (metadata_log_val) {
+	auto metadata_log_val = obj.GetMember("metadata-log");
+	if (metadata_log_val.IsValid()) {
 		MetadataLog metadata_log_tmp;
 		error = metadata_log_tmp.TryFromJSON(metadata_log_val);
 		if (!error.empty()) {
@@ -451,238 +468,240 @@ string TableMetadata::TryFromJSON(yyjson_val *obj) {
 		}
 		metadata_log = std::move(metadata_log_tmp);
 	}
-	auto statistics_val = yyjson_obj_get(obj, "statistics");
-	if (statistics_val) {
+	auto statistics_val = obj.GetMember("statistics");
+	if (statistics_val.IsValid()) {
 		vector<StatisticsFile> statistics_tmp;
-		if (yyjson_is_arr(statistics_val)) {
-			size_t statistics_tmp_idx, statistics_tmp_max;
-			yyjson_val *statistics_tmp_item_val;
-			yyjson_arr_foreach(statistics_val, statistics_tmp_idx, statistics_tmp_max, statistics_tmp_item_val) {
+		if (statistics_val.IsArray()) {
+			statistics_val.IterateArray([&](JSONValue statistics_tmp_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				StatisticsFile statistics_tmp_item;
 				error = statistics_tmp_item.TryFromJSON(statistics_tmp_item_val);
 				if (!error.empty()) {
-					return error;
+					return;
 				}
 				statistics_tmp.emplace_back(std::move(statistics_tmp_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "TableMetadata property 'statistics_tmp' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(statistics_val));
+			    "TableMetadata property 'statistics_tmp' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(statistics_val).c_str());
 		}
 		statistics = std::move(statistics_tmp);
 	}
-	auto partition_statistics_val = yyjson_obj_get(obj, "partition-statistics");
-	if (partition_statistics_val) {
+	auto partition_statistics_val = obj.GetMember("partition-statistics");
+	if (partition_statistics_val.IsValid()) {
 		vector<PartitionStatisticsFile> partition_statistics_tmp;
-		if (yyjson_is_arr(partition_statistics_val)) {
-			size_t partition_statistics_tmp_idx, partition_statistics_tmp_max;
-			yyjson_val *partition_statistics_tmp_item_val;
-			yyjson_arr_foreach(partition_statistics_val, partition_statistics_tmp_idx, partition_statistics_tmp_max,
-			                   partition_statistics_tmp_item_val) {
+		if (partition_statistics_val.IsArray()) {
+			partition_statistics_val.IterateArray([&](JSONValue partition_statistics_tmp_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				PartitionStatisticsFile partition_statistics_tmp_item;
 				error = partition_statistics_tmp_item.TryFromJSON(partition_statistics_tmp_item_val);
 				if (!error.empty()) {
-					return error;
+					return;
 				}
 				partition_statistics_tmp.emplace_back(std::move(partition_statistics_tmp_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "TableMetadata property 'partition_statistics_tmp' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(partition_statistics_val));
+			    "TableMetadata property 'partition_statistics_tmp' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(partition_statistics_val).c_str());
 		}
 		partition_statistics = std::move(partition_statistics_tmp);
 	}
 	return "";
 }
 
-void TableMetadata::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void TableMetadata::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: format-version
-	yyjson_mut_obj_add_int(doc, obj, "format-version", format_version);
+	obj.Add("format-version", writer.CreateSignedInteger(format_version));
 
 	// Serialize: table-uuid
-	yyjson_mut_obj_add_strcpy(doc, obj, "table-uuid", table_uuid.c_str());
+	obj.AddString("table-uuid", table_uuid);
 
 	// Serialize: location
 	if (location.has_value()) {
 		auto &location_value = *location;
-		yyjson_mut_obj_add_strcpy(doc, obj, "location", location_value.c_str());
+		obj.AddString("location", location_value);
 	}
 
 	// Serialize: last-updated-ms
 	if (last_updated_ms.has_value()) {
 		auto &last_updated_ms_value = *last_updated_ms;
-		yyjson_mut_obj_add_sint(doc, obj, "last-updated-ms", last_updated_ms_value);
+		obj.Add("last-updated-ms", writer.CreateSignedInteger(last_updated_ms_value));
 	}
 
 	// Serialize: next-row-id
 	if (next_row_id.has_value()) {
 		auto &next_row_id_value = *next_row_id;
-		yyjson_mut_obj_add_sint(doc, obj, "next-row-id", next_row_id_value);
+		obj.Add("next-row-id", writer.CreateSignedInteger(next_row_id_value));
 	}
 
 	// Serialize: properties
 	if (properties.has_value()) {
 		auto &properties_value = *properties;
-		yyjson_mut_val *properties_value_obj = yyjson_mut_obj(doc);
+		auto properties_value_obj = writer.CreateObject();
 		for (const auto &it : properties_value) {
 			auto &key = it.first;
 			auto &value = it.second;
-			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
-			yyjson_mut_obj_add_strcpy(doc, properties_value_obj, key_ptr, value.c_str());
+			properties_value_obj.AddString(key, value);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "properties", properties_value_obj);
+		obj.Add("properties", properties_value_obj);
 	}
 
 	// Serialize: schemas
 	if (schemas.has_value()) {
 		auto &schemas_value = *schemas;
-		yyjson_mut_val *schemas_value_arr = yyjson_mut_arr(doc);
+		auto schemas_value_arr = writer.CreateArray();
 		for (const auto &item : schemas_value) {
-			yyjson_mut_val *item_val = item.ToJSON(doc);
-			yyjson_mut_arr_append(schemas_value_arr, item_val);
+			auto item_val = item.ToJSON(writer);
+			schemas_value_arr.Append(item_val);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "schemas", schemas_value_arr);
+		obj.Add("schemas", schemas_value_arr);
 	}
 
 	// Serialize: current-schema-id
 	if (current_schema_id.has_value()) {
 		auto &current_schema_id_value = *current_schema_id;
-		yyjson_mut_obj_add_int(doc, obj, "current-schema-id", current_schema_id_value);
+		obj.Add("current-schema-id", writer.CreateSignedInteger(current_schema_id_value));
 	}
 
 	// Serialize: last-column-id
 	if (last_column_id.has_value()) {
 		auto &last_column_id_value = *last_column_id;
-		yyjson_mut_obj_add_int(doc, obj, "last-column-id", last_column_id_value);
+		obj.Add("last-column-id", writer.CreateSignedInteger(last_column_id_value));
 	}
 
 	// Serialize: partition-specs
 	if (partition_specs.has_value()) {
 		auto &partition_specs_value = *partition_specs;
-		yyjson_mut_val *partition_specs_value_arr = yyjson_mut_arr(doc);
+		auto partition_specs_value_arr = writer.CreateArray();
 		for (const auto &item : partition_specs_value) {
-			yyjson_mut_val *item_val = item.ToJSON(doc);
-			yyjson_mut_arr_append(partition_specs_value_arr, item_val);
+			auto item_val = item.ToJSON(writer);
+			partition_specs_value_arr.Append(item_val);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "partition-specs", partition_specs_value_arr);
+		obj.Add("partition-specs", partition_specs_value_arr);
 	}
 
 	// Serialize: default-spec-id
 	if (default_spec_id.has_value()) {
 		auto &default_spec_id_value = *default_spec_id;
-		yyjson_mut_obj_add_int(doc, obj, "default-spec-id", default_spec_id_value);
+		obj.Add("default-spec-id", writer.CreateSignedInteger(default_spec_id_value));
 	}
 
 	// Serialize: last-partition-id
 	if (last_partition_id.has_value()) {
 		auto &last_partition_id_value = *last_partition_id;
-		yyjson_mut_obj_add_int(doc, obj, "last-partition-id", last_partition_id_value);
+		obj.Add("last-partition-id", writer.CreateSignedInteger(last_partition_id_value));
 	}
 
 	// Serialize: sort-orders
 	if (sort_orders.has_value()) {
 		auto &sort_orders_value = *sort_orders;
-		yyjson_mut_val *sort_orders_value_arr = yyjson_mut_arr(doc);
+		auto sort_orders_value_arr = writer.CreateArray();
 		for (const auto &item : sort_orders_value) {
-			yyjson_mut_val *item_val = item.ToJSON(doc);
-			yyjson_mut_arr_append(sort_orders_value_arr, item_val);
+			auto item_val = item.ToJSON(writer);
+			sort_orders_value_arr.Append(item_val);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "sort-orders", sort_orders_value_arr);
+		obj.Add("sort-orders", sort_orders_value_arr);
 	}
 
 	// Serialize: default-sort-order-id
 	if (default_sort_order_id.has_value()) {
 		auto &default_sort_order_id_value = *default_sort_order_id;
-		yyjson_mut_obj_add_int(doc, obj, "default-sort-order-id", default_sort_order_id_value);
+		obj.Add("default-sort-order-id", writer.CreateSignedInteger(default_sort_order_id_value));
 	}
 
 	// Serialize: encryption-keys
 	if (encryption_keys.has_value()) {
 		auto &encryption_keys_value = *encryption_keys;
-		yyjson_mut_val *encryption_keys_value_arr = yyjson_mut_arr(doc);
+		auto encryption_keys_value_arr = writer.CreateArray();
 		for (const auto &item : encryption_keys_value) {
-			yyjson_mut_val *item_val = item.ToJSON(doc);
-			yyjson_mut_arr_append(encryption_keys_value_arr, item_val);
+			auto item_val = item.ToJSON(writer);
+			encryption_keys_value_arr.Append(item_val);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "encryption-keys", encryption_keys_value_arr);
+		obj.Add("encryption-keys", encryption_keys_value_arr);
 	}
 
 	// Serialize: snapshots
 	if (snapshots.has_value()) {
 		auto &snapshots_value = *snapshots;
-		yyjson_mut_val *snapshots_value_arr = yyjson_mut_arr(doc);
+		auto snapshots_value_arr = writer.CreateArray();
 		for (const auto &item : snapshots_value) {
-			yyjson_mut_val *item_val = item.ToJSON(doc);
-			yyjson_mut_arr_append(snapshots_value_arr, item_val);
+			auto item_val = item.ToJSON(writer);
+			snapshots_value_arr.Append(item_val);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "snapshots", snapshots_value_arr);
+		obj.Add("snapshots", snapshots_value_arr);
 	}
 
 	// Serialize: refs
 	if (refs.has_value()) {
 		auto &refs_value = *refs;
-		yyjson_mut_val *refs_value_val = refs_value.ToJSON(doc);
-		yyjson_mut_obj_add_val(doc, obj, "refs", refs_value_val);
+		auto refs_value_val = refs_value.ToJSON(writer);
+		obj.Add("refs", refs_value_val);
 	}
 
 	// Serialize: current-snapshot-id
 	if (current_snapshot_id.has_value()) {
 		auto &current_snapshot_id_value = *current_snapshot_id;
-		yyjson_mut_obj_add_sint(doc, obj, "current-snapshot-id", current_snapshot_id_value);
+		obj.Add("current-snapshot-id", writer.CreateSignedInteger(current_snapshot_id_value));
 	}
 
 	// Serialize: last-sequence-number
 	if (last_sequence_number.has_value()) {
 		auto &last_sequence_number_value = *last_sequence_number;
-		yyjson_mut_obj_add_sint(doc, obj, "last-sequence-number", last_sequence_number_value);
+		obj.Add("last-sequence-number", writer.CreateSignedInteger(last_sequence_number_value));
 	}
 
 	// Serialize: snapshot-log
 	if (snapshot_log.has_value()) {
 		auto &snapshot_log_value = *snapshot_log;
-		yyjson_mut_val *snapshot_log_value_val = snapshot_log_value.ToJSON(doc);
-		yyjson_mut_obj_add_val(doc, obj, "snapshot-log", snapshot_log_value_val);
+		auto snapshot_log_value_val = snapshot_log_value.ToJSON(writer);
+		obj.Add("snapshot-log", snapshot_log_value_val);
 	}
 
 	// Serialize: metadata-log
 	if (metadata_log.has_value()) {
 		auto &metadata_log_value = *metadata_log;
-		yyjson_mut_val *metadata_log_value_val = metadata_log_value.ToJSON(doc);
-		yyjson_mut_obj_add_val(doc, obj, "metadata-log", metadata_log_value_val);
+		auto metadata_log_value_val = metadata_log_value.ToJSON(writer);
+		obj.Add("metadata-log", metadata_log_value_val);
 	}
 
 	// Serialize: statistics
 	if (statistics.has_value()) {
 		auto &statistics_value = *statistics;
-		yyjson_mut_val *statistics_value_arr = yyjson_mut_arr(doc);
+		auto statistics_value_arr = writer.CreateArray();
 		for (const auto &item : statistics_value) {
-			yyjson_mut_val *item_val = item.ToJSON(doc);
-			yyjson_mut_arr_append(statistics_value_arr, item_val);
+			auto item_val = item.ToJSON(writer);
+			statistics_value_arr.Append(item_val);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "statistics", statistics_value_arr);
+		obj.Add("statistics", statistics_value_arr);
 	}
 
 	// Serialize: partition-statistics
 	if (partition_statistics.has_value()) {
 		auto &partition_statistics_value = *partition_statistics;
-		yyjson_mut_val *partition_statistics_value_arr = yyjson_mut_arr(doc);
+		auto partition_statistics_value_arr = writer.CreateArray();
 		for (const auto &item : partition_statistics_value) {
-			yyjson_mut_val *item_val = item.ToJSON(doc);
-			yyjson_mut_arr_append(partition_statistics_value_arr, item_val);
+			auto item_val = item.ToJSON(writer);
+			partition_statistics_value_arr.Append(item_val);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "partition-statistics", partition_statistics_value_arr);
+		obj.Add("partition-statistics", partition_statistics_value_arr);
 	}
 }
 
-yyjson_mut_val *TableMetadata::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue TableMetadata::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

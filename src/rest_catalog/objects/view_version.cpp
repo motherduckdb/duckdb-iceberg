@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/view_version.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 ViewVersion::ViewVersion() {
 }
 
-ViewVersion ViewVersion::FromJSON(yyjson_val *obj) {
+ViewVersion ViewVersion::FromJSON(JSONValue obj) {
 	ViewVersion res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -44,90 +42,95 @@ ViewVersion ViewVersion::Copy() const {
 	return res;
 }
 
-string ViewVersion::TryFromJSON(yyjson_val *obj) {
+string ViewVersion::TryFromJSON(JSONValue obj) {
 	string error;
-	auto version_id_val = yyjson_obj_get(obj, "version-id");
-	if (!version_id_val) {
+	auto version_id_val = obj.GetMember("version-id");
+	if (!version_id_val.IsValid()) {
 		return "ViewVersion required property 'version-id' is missing";
 	} else {
-		if (yyjson_is_int(version_id_val)) {
-			version_id = yyjson_get_int(version_id_val);
+		if (json_utils::IsInteger(version_id_val)) {
+			version_id = json_utils::GetSignedInteger(version_id_val);
 		} else {
-			return StringUtil::Format("ViewVersion property 'version_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(version_id_val));
+			return StringUtil::Format("ViewVersion property 'version_id' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(version_id_val).c_str());
 		}
 	}
-	auto timestamp_ms_val = yyjson_obj_get(obj, "timestamp-ms");
-	if (!timestamp_ms_val) {
+	auto timestamp_ms_val = obj.GetMember("timestamp-ms");
+	if (!timestamp_ms_val.IsValid()) {
 		return "ViewVersion required property 'timestamp-ms' is missing";
 	} else {
-		if (yyjson_is_sint(timestamp_ms_val)) {
-			timestamp_ms = yyjson_get_sint(timestamp_ms_val);
-		} else if (yyjson_is_uint(timestamp_ms_val)) {
-			timestamp_ms = yyjson_get_uint(timestamp_ms_val);
+		if (json_utils::IsInteger(timestamp_ms_val)) {
+			timestamp_ms = json_utils::GetSignedInteger(timestamp_ms_val);
+		} else if (json_utils::IsUnsignedInteger(timestamp_ms_val)) {
+			timestamp_ms = json_utils::GetUnsignedInteger(timestamp_ms_val);
 		} else {
-			return StringUtil::Format(
-			    "ViewVersion property 'timestamp_ms' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(timestamp_ms_val));
+			return StringUtil::Format("ViewVersion property 'timestamp_ms' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(timestamp_ms_val).c_str());
 		}
 	}
-	auto schema_id_val = yyjson_obj_get(obj, "schema-id");
-	if (!schema_id_val) {
+	auto schema_id_val = obj.GetMember("schema-id");
+	if (!schema_id_val.IsValid()) {
 		return "ViewVersion required property 'schema-id' is missing";
 	} else {
-		if (yyjson_is_int(schema_id_val)) {
-			schema_id = yyjson_get_int(schema_id_val);
+		if (json_utils::IsInteger(schema_id_val)) {
+			schema_id = json_utils::GetSignedInteger(schema_id_val);
 		} else {
-			return StringUtil::Format("ViewVersion property 'schema_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(schema_id_val));
+			return StringUtil::Format("ViewVersion property 'schema_id' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(schema_id_val).c_str());
 		}
 	}
-	auto summary_val = yyjson_obj_get(obj, "summary");
-	if (!summary_val) {
+	auto summary_val = obj.GetMember("summary");
+	if (!summary_val.IsValid()) {
 		return "ViewVersion required property 'summary' is missing";
 	} else {
-		if (yyjson_is_obj(summary_val)) {
-			size_t idx, max;
-			yyjson_val *key, *val;
-			yyjson_obj_foreach(summary_val, idx, max, key, val) {
-				auto key_str = yyjson_get_str(key);
+		if (summary_val.IsObject()) {
+			summary_val.IterateObject([&](const string &key_str, JSONValue val) {
+				if (!error.empty()) {
+					return;
+				}
 				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
+				if (json_utils::IsString(val)) {
+					tmp = json_utils::GetString(val);
 				} else {
-					return StringUtil::Format("ViewVersion property 'tmp' is not of type 'string', found '%s' instead",
-					                          yyjson_get_type_desc(val));
+					error = StringUtil::Format("ViewVersion property 'tmp' is not of type 'string', found %s instead",
+					                           json_utils::GetTypeDescription(val).c_str());
+					return;
 				}
 				summary.emplace(key_str, std::move(tmp));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return "ViewVersion property 'summary' is not of type 'object'";
 		}
 	}
-	auto representations_val = yyjson_obj_get(obj, "representations");
-	if (!representations_val) {
+	auto representations_val = obj.GetMember("representations");
+	if (!representations_val.IsValid()) {
 		return "ViewVersion required property 'representations' is missing";
 	} else {
-		if (yyjson_is_arr(representations_val)) {
-			size_t representations_idx, representations_max;
-			yyjson_val *representations_item_val;
-			yyjson_arr_foreach(representations_val, representations_idx, representations_max,
-			                   representations_item_val) {
+		if (representations_val.IsArray()) {
+			representations_val.IterateArray([&](JSONValue representations_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				ViewRepresentation representations_item;
 				error = representations_item.TryFromJSON(representations_item_val);
 				if (!error.empty()) {
-					return error;
+					return;
 				}
 				representations.emplace_back(std::move(representations_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
-			return StringUtil::Format(
-			    "ViewVersion property 'representations' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(representations_val));
+			return StringUtil::Format("ViewVersion property 'representations' is not of type 'array', found %s instead",
+			                          json_utils::GetTypeDescription(representations_val).c_str());
 		}
 	}
-	auto default_namespace_val = yyjson_obj_get(obj, "default-namespace");
-	if (!default_namespace_val) {
+	auto default_namespace_val = obj.GetMember("default-namespace");
+	if (!default_namespace_val.IsValid()) {
 		return "ViewVersion required property 'default-namespace' is missing";
 	} else {
 		error = default_namespace.TryFromJSON(default_namespace_val);
@@ -135,67 +138,62 @@ string ViewVersion::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto default_catalog_val = yyjson_obj_get(obj, "default-catalog");
-	if (default_catalog_val) {
+	auto default_catalog_val = obj.GetMember("default-catalog");
+	if (default_catalog_val.IsValid()) {
 		string default_catalog_tmp;
-		if (yyjson_is_str(default_catalog_val)) {
-			default_catalog_tmp = yyjson_get_str(default_catalog_val);
+		if (json_utils::IsString(default_catalog_val)) {
+			default_catalog_tmp = json_utils::GetString(default_catalog_val);
 		} else {
 			return StringUtil::Format(
-			    "ViewVersion property 'default_catalog_tmp' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(default_catalog_val));
+			    "ViewVersion property 'default_catalog_tmp' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(default_catalog_val).c_str());
 		}
 		default_catalog = std::move(default_catalog_tmp);
 	}
 	return "";
 }
 
-void ViewVersion::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void ViewVersion::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: version-id
-	yyjson_mut_obj_add_int(doc, obj, "version-id", version_id);
+	obj.Add("version-id", writer.CreateSignedInteger(version_id));
 
 	// Serialize: timestamp-ms
-	yyjson_mut_obj_add_sint(doc, obj, "timestamp-ms", timestamp_ms);
+	obj.Add("timestamp-ms", writer.CreateSignedInteger(timestamp_ms));
 
 	// Serialize: schema-id
-	yyjson_mut_obj_add_int(doc, obj, "schema-id", schema_id);
+	obj.Add("schema-id", writer.CreateSignedInteger(schema_id));
 
 	// Serialize: summary
-	yyjson_mut_val *summary_obj = yyjson_mut_obj(doc);
+	auto summary_obj = writer.CreateObject();
 	for (const auto &it : summary) {
 		auto &key = it.first;
 		auto &value = it.second;
-		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
-		yyjson_mut_obj_add_strcpy(doc, summary_obj, key_ptr, value.c_str());
+		summary_obj.AddString(key, value);
 	}
-	yyjson_mut_obj_add_val(doc, obj, "summary", summary_obj);
+	obj.Add("summary", summary_obj);
 
 	// Serialize: representations
-	yyjson_mut_val *representations_arr = yyjson_mut_arr(doc);
+	auto representations_arr = writer.CreateArray();
 	for (const auto &item : representations) {
-		yyjson_mut_val *item_val = item.ToJSON(doc);
-		yyjson_mut_arr_append(representations_arr, item_val);
+		auto item_val = item.ToJSON(writer);
+		representations_arr.Append(item_val);
 	}
-	yyjson_mut_obj_add_val(doc, obj, "representations", representations_arr);
+	obj.Add("representations", representations_arr);
 
 	// Serialize: default-namespace
-	yyjson_mut_val *default_namespace_val = default_namespace.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "default-namespace", default_namespace_val);
+	auto default_namespace_val = default_namespace.ToJSON(writer);
+	obj.Add("default-namespace", default_namespace_val);
 
 	// Serialize: default-catalog
 	if (default_catalog.has_value()) {
 		auto &default_catalog_value = *default_catalog;
-		yyjson_mut_obj_add_strcpy(doc, obj, "default-catalog", default_catalog_value.c_str());
+		obj.AddString("default-catalog", default_catalog_value);
 	}
 }
 
-yyjson_mut_val *ViewVersion::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue ViewVersion::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

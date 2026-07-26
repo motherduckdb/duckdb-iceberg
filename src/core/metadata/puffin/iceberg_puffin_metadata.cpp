@@ -4,9 +4,7 @@
 #include "duckdb/common/allocator.hpp"
 #include "duckdb/common/string_util.hpp"
 
-#include "yyjson.hpp"
-
-using namespace duckdb_yyjson;
+#include "duckdb/common/json_document.hpp"
 
 namespace duckdb {
 
@@ -16,56 +14,61 @@ constexpr data_t PUFFIN_MAGIC[4] = {0x50, 0x46, 0x41, 0x31};
 constexpr idx_t FOOTER_TRAILER_SIZE = sizeof(int32_t) + sizeof(uint32_t) + sizeof(PUFFIN_MAGIC);
 constexpr idx_t FOOTER_FIXED_SIZE = sizeof(PUFFIN_MAGIC) + FOOTER_TRAILER_SIZE;
 
-string ParseProperties(optional<case_insensitive_map_t<string>> &target, yyjson_val *properties_val) {
-	if (!yyjson_is_obj(properties_val)) {
+string ParseProperties(optional<case_insensitive_map_t<string>> &target, JSONValue properties_val) {
+	if (!properties_val.IsObject()) {
 		return "properties is not an object";
 	}
 	case_insensitive_map_t<string> properties;
-	size_t idx, max;
-	yyjson_val *key, *val;
-	yyjson_obj_foreach(properties_val, idx, max, key, val) {
-		if (!yyjson_is_str(val)) {
-			return StringUtil::Format("property value is not a string, found '%s' instead", yyjson_get_type_desc(val));
+	string error;
+	properties_val.IterateObject([&](const string &key, JSONValue val) {
+		if (!val.IsString()) {
+			error = "property value is not a string";
+			return;
 		}
-		properties.emplace(yyjson_get_str(key), yyjson_get_str(val));
+		properties.emplace(key, val.GetString());
+	});
+	if (!error.empty()) {
+		return error;
 	}
 	target = std::move(properties);
 	return "";
 }
 
-string ParseBlobMetadata(IcebergPuffinBlobMetadata &result, yyjson_val *obj) {
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val || !yyjson_is_str(type_val)) {
+string ParseBlobMetadata(IcebergPuffinBlobMetadata &result, JSONValue obj) {
+	auto type_val = obj.GetMember("type");
+	if (!type_val.IsString()) {
 		return "Puffin blob metadata property 'type' is missing or not a string";
 	}
-	result.type = yyjson_get_str(type_val);
+	result.type = type_val.GetString();
 
-	auto fields_val = yyjson_obj_get(obj, "fields");
-	if (!fields_val || !yyjson_is_arr(fields_val)) {
+	auto fields_val = obj.GetMember("fields");
+	if (!fields_val.IsArray()) {
 		return "Puffin blob metadata property 'fields' is missing or not an array";
 	}
-	size_t idx, max;
-	yyjson_val *val;
-	yyjson_arr_foreach(fields_val, idx, max, val) {
-		if (!yyjson_is_int(val)) {
-			return StringUtil::Format("Puffin blob metadata field-id is not an integer, found '%s' instead",
-			                          yyjson_get_type_desc(val));
+	string fields_error;
+	fields_val.IterateArray([&](JSONValue val) {
+		if (!val.IsInteger()) {
+			fields_error = "Puffin blob metadata field-id is not an integer";
+			return;
 		}
-		result.fields.emplace_back(yyjson_get_int(val));
+		result.fields.emplace_back(val.GetType() == JSONValueType::SIGNED_INTEGER ? val.GetSignedInteger()
+		                                                                          : val.GetUnsignedInteger());
+	});
+	if (!fields_error.empty()) {
+		return fields_error;
 	}
 
 	auto parse_required_int = [&](const char *key, int64_t &target) -> string {
-		auto *int_val = yyjson_obj_get(obj, key);
-		if (!int_val) {
+		auto int_val = obj.GetMember(key);
+		if (!int_val.IsValid()) {
 			return StringUtil::Format("Puffin blob metadata property '%s' is missing", key);
 		}
-		if (yyjson_is_sint(int_val)) {
-			target = yyjson_get_sint(int_val);
-		} else if (yyjson_is_uint(int_val)) {
-			target = yyjson_get_uint(int_val);
+		if (int_val.GetType() == JSONValueType::SIGNED_INTEGER) {
+			target = int_val.GetSignedInteger();
+		} else if (int_val.GetType() == JSONValueType::UNSIGNED_INTEGER) {
+			target = static_cast<int64_t>(int_val.GetUnsignedInteger());
 		} else {
-			return StringUtil::Format("Puffin blob metadata property '%s' is not an integer, found '%s' instead", key,
-			                          yyjson_get_type_desc(int_val));
+			return StringUtil::Format("Puffin blob metadata property '%s' is not an integer", key);
 		}
 		return "";
 	};
@@ -87,18 +90,16 @@ string ParseBlobMetadata(IcebergPuffinBlobMetadata &result, yyjson_val *obj) {
 		return error;
 	}
 
-	auto compression_val = yyjson_obj_get(obj, "compression-codec");
-	if (compression_val) {
-		if (!yyjson_is_str(compression_val)) {
-			return StringUtil::Format(
-			    "Puffin blob metadata property 'compression-codec' is not a string, found '%s' instead",
-			    yyjson_get_type_desc(compression_val));
+	auto compression_val = obj.GetMember("compression-codec");
+	if (compression_val.IsValid()) {
+		if (!compression_val.IsString()) {
+			return "Puffin blob metadata property 'compression-codec' is not a string";
 		}
-		result.compression_codec = string(yyjson_get_str(compression_val));
+		result.compression_codec = compression_val.GetString();
 	}
 
-	auto properties_val = yyjson_obj_get(obj, "properties");
-	if (properties_val) {
+	auto properties_val = obj.GetMember("properties");
+	if (properties_val.IsValid()) {
 		error = ParseProperties(result.properties, properties_val);
 		if (!error.empty()) {
 			return "Puffin blob metadata " + error;
@@ -107,24 +108,22 @@ string ParseBlobMetadata(IcebergPuffinBlobMetadata &result, yyjson_val *obj) {
 	return "";
 }
 
-IcebergPuffinFileMetadata ParseFileMetadata(yyjson_val *root) {
+IcebergPuffinFileMetadata ParseFileMetadata(JSONValue root) {
 	IcebergPuffinFileMetadata result;
-	auto blobs_val = yyjson_obj_get(root, "blobs");
-	if (!blobs_val || !yyjson_is_arr(blobs_val)) {
+	auto blobs_val = root.GetMember("blobs");
+	if (!blobs_val.IsArray()) {
 		throw InvalidInputException("Puffin file metadata property 'blobs' is missing or not an array");
 	}
-	size_t idx, max;
-	yyjson_val *val;
-	yyjson_arr_foreach(blobs_val, idx, max, val) {
+	blobs_val.IterateArray([&](JSONValue val) {
 		IcebergPuffinBlobMetadata blob;
 		auto error = ParseBlobMetadata(blob, val);
 		if (!error.empty()) {
 			throw InvalidInputException(error);
 		}
 		result.blobs.emplace_back(std::move(blob));
-	}
-	auto properties_val = yyjson_obj_get(root, "properties");
-	if (properties_val) {
+	});
+	auto properties_val = root.GetMember("properties");
+	if (properties_val.IsValid()) {
 		auto error = ParseProperties(result.properties, properties_val);
 		if (!error.empty()) {
 			throw InvalidInputException("Puffin file metadata " + error);
@@ -191,12 +190,9 @@ IcebergPuffinFileFooter IcebergPuffinReader::ReadFooter(FileSystem &fs, FileHand
 		throw InvalidConfigurationException("Puffin file '%s' has invalid footer leading magic", path);
 	}
 
-	auto doc = std::unique_ptr<yyjson_doc, YyjsonDocDeleter>(
-	    yyjson_read(reinterpret_cast<const char *>(footer + sizeof(PUFFIN_MAGIC)), result.footer_payload_size, 0));
-	if (!doc) {
-		throw InvalidInputException("Failed to parse Puffin footer JSON from '%s'", path);
-	}
-	result.file_metadata = ParseFileMetadata(yyjson_doc_get_root(doc.get()));
+	auto doc =
+	    JSONDocument::Parse(reinterpret_cast<const char *>(footer + sizeof(PUFFIN_MAGIC)), result.footer_payload_size);
+	result.file_metadata = ParseFileMetadata(doc->GetRoot());
 	return result;
 }
 

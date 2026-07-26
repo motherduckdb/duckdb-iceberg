@@ -100,53 +100,53 @@ string IcebergTypeHelper::LogicalTypeToIcebergType(const LogicalType &type) {
 	}
 }
 
-yyjson_mut_val *IcebergTypeHelper::PrimitiveTypeValueToJSON(yyjson_mut_doc *doc,
-                                                            const rest_api_objects::PrimitiveTypeValue &value) {
+JSONMutableValue IcebergTypeHelper::PrimitiveTypeValueToJSON(JSONWriter &writer,
+                                                             const rest_api_objects::PrimitiveTypeValue &value) {
 	if (value.boolean_type_value) {
-		return yyjson_mut_bool(doc, value.boolean_type_value->value);
+		return writer.CreateBoolean(value.boolean_type_value->value);
 	} else if (value.long_type_value) {
-		return yyjson_mut_int(doc, value.long_type_value->value);
+		return writer.CreateSignedInteger(value.long_type_value->value);
 	} else if (value.integer_type_value) {
-		return yyjson_mut_int(doc, value.integer_type_value->value);
+		return writer.CreateSignedInteger(value.integer_type_value->value);
 	} else if (value.double_type_value) {
-		return yyjson_mut_real(doc, value.double_type_value->value);
+		return writer.CreateDouble(value.double_type_value->value);
 	} else if (value.float_type_value) {
-		return yyjson_mut_real(doc, value.float_type_value->value);
+		return writer.CreateDouble(value.float_type_value->value);
 	} else if (value.decimal_type_value) {
 		auto &str = value.decimal_type_value->value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
+		return writer.CreateString(str);
 	} else if (value.string_type_value) {
 		auto &str = value.string_type_value->value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
+		return writer.CreateString(str);
 	} else if (value.uuidtype_value) {
 		auto &str = value.uuidtype_value->value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
+		return writer.CreateString(str);
 	} else if (value.date_type_value) {
 		auto &str = value.date_type_value->value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
+		return writer.CreateString(str);
 	} else if (value.time_type_value) {
 		auto &str = value.time_type_value->value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
+		return writer.CreateString(str);
 	} else if (value.timestamp_type_value) {
 		auto &str = value.timestamp_type_value->value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
+		return writer.CreateString(str);
 	} else if (value.timestamp_tz_type_value) {
 		auto &str = value.timestamp_tz_type_value->value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
+		return writer.CreateString(str);
 	} else if (value.timestamp_nano_type_value) {
 		auto &str = value.timestamp_nano_type_value->value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
+		return writer.CreateString(str);
 	} else if (value.timestamp_tz_nano_type_value) {
 		auto &str = value.timestamp_tz_nano_type_value->value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
+		return writer.CreateString(str);
 	} else if (value.fixed_type_value) {
 		auto &str = value.fixed_type_value->value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
+		return writer.CreateString(str);
 	} else if (value.binary_type_value) {
 		auto &str = value.binary_type_value->value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
+		return writer.CreateString(str);
 	} else {
-		return yyjson_mut_null(doc);
+		return writer.CreateNull();
 	}
 }
 

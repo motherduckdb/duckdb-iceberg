@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/commit_table_response.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 CommitTableResponse::CommitTableResponse() {
 }
 
-CommitTableResponse CommitTableResponse::FromJSON(yyjson_val *obj) {
+CommitTableResponse CommitTableResponse::FromJSON(JSONValue obj) {
 	CommitTableResponse res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -31,22 +29,22 @@ CommitTableResponse CommitTableResponse::Copy() const {
 	return res;
 }
 
-string CommitTableResponse::TryFromJSON(yyjson_val *obj) {
+string CommitTableResponse::TryFromJSON(JSONValue obj) {
 	string error;
-	auto metadata_location_val = yyjson_obj_get(obj, "metadata-location");
-	if (!metadata_location_val) {
+	auto metadata_location_val = obj.GetMember("metadata-location");
+	if (!metadata_location_val.IsValid()) {
 		return "CommitTableResponse required property 'metadata-location' is missing";
 	} else {
-		if (yyjson_is_str(metadata_location_val)) {
-			metadata_location = yyjson_get_str(metadata_location_val);
+		if (json_utils::IsString(metadata_location_val)) {
+			metadata_location = json_utils::GetString(metadata_location_val);
 		} else {
 			return StringUtil::Format(
-			    "CommitTableResponse property 'metadata_location' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(metadata_location_val));
+			    "CommitTableResponse property 'metadata_location' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(metadata_location_val).c_str());
 		}
 	}
-	auto metadata_val = yyjson_obj_get(obj, "metadata");
-	if (!metadata_val) {
+	auto metadata_val = obj.GetMember("metadata");
+	if (!metadata_val.IsValid()) {
 		return "CommitTableResponse required property 'metadata' is missing";
 	} else {
 		error = metadata.TryFromJSON(metadata_val);
@@ -57,22 +55,18 @@ string CommitTableResponse::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void CommitTableResponse::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void CommitTableResponse::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: metadata-location
-	yyjson_mut_obj_add_strcpy(doc, obj, "metadata-location", metadata_location.c_str());
+	obj.AddString("metadata-location", metadata_location);
 
 	// Serialize: metadata
-	yyjson_mut_val *metadata_val = metadata.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "metadata", metadata_val);
+	auto metadata_val = metadata.ToJSON(writer);
+	obj.Add("metadata", metadata_val);
 }
 
-yyjson_mut_val *CommitTableResponse::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue CommitTableResponse::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

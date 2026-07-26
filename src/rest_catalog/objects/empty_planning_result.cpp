@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/empty_planning_result.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 EmptyPlanningResult::EmptyPlanningResult() {
 }
 
-EmptyPlanningResult EmptyPlanningResult::FromJSON(yyjson_val *obj) {
+EmptyPlanningResult EmptyPlanningResult::FromJSON(JSONValue obj) {
 	EmptyPlanningResult res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -30,10 +28,10 @@ EmptyPlanningResult EmptyPlanningResult::Copy() const {
 	return res;
 }
 
-string EmptyPlanningResult::TryFromJSON(yyjson_val *obj) {
+string EmptyPlanningResult::TryFromJSON(JSONValue obj) {
 	string error;
-	auto status_val = yyjson_obj_get(obj, "status");
-	if (!status_val) {
+	auto status_val = obj.GetMember("status");
+	if (!status_val.IsValid()) {
 		return "EmptyPlanningResult required property 'status' is missing";
 	} else {
 		error = status.TryFromJSON(status_val);
@@ -44,19 +42,15 @@ string EmptyPlanningResult::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void EmptyPlanningResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void EmptyPlanningResult::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: status
-	yyjson_mut_val *status_val = status.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "status", status_val);
+	auto status_val = status.ToJSON(writer);
+	obj.Add("status", status_val);
 }
 
-yyjson_mut_val *EmptyPlanningResult::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue EmptyPlanningResult::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/async_planning_result.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 AsyncPlanningResult::AsyncPlanningResult() {
 }
 
-AsyncPlanningResult AsyncPlanningResult::FromJSON(yyjson_val *obj) {
+AsyncPlanningResult AsyncPlanningResult::FromJSON(JSONValue obj) {
 	AsyncPlanningResult res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -31,10 +29,10 @@ AsyncPlanningResult AsyncPlanningResult::Copy() const {
 	return res;
 }
 
-string AsyncPlanningResult::TryFromJSON(yyjson_val *obj) {
+string AsyncPlanningResult::TryFromJSON(JSONValue obj) {
 	string error;
-	auto status_val = yyjson_obj_get(obj, "status");
-	if (!status_val) {
+	auto status_val = obj.GetMember("status");
+	if (!status_val.IsValid()) {
 		return "AsyncPlanningResult required property 'status' is missing";
 	} else {
 		error = status.TryFromJSON(status_val);
@@ -42,37 +40,33 @@ string AsyncPlanningResult::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto plan_id_val = yyjson_obj_get(obj, "plan-id");
-	if (!plan_id_val) {
+	auto plan_id_val = obj.GetMember("plan-id");
+	if (!plan_id_val.IsValid()) {
 		return "AsyncPlanningResult required property 'plan-id' is missing";
 	} else {
-		if (yyjson_is_str(plan_id_val)) {
-			plan_id = yyjson_get_str(plan_id_val);
+		if (json_utils::IsString(plan_id_val)) {
+			plan_id = json_utils::GetString(plan_id_val);
 		} else {
 			return StringUtil::Format(
-			    "AsyncPlanningResult property 'plan_id' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(plan_id_val));
+			    "AsyncPlanningResult property 'plan_id' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(plan_id_val).c_str());
 		}
 	}
 	return "";
 }
 
-void AsyncPlanningResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void AsyncPlanningResult::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: status
-	yyjson_mut_val *status_val = status.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "status", status_val);
+	auto status_val = status.ToJSON(writer);
+	obj.Add("status", status_val);
 
 	// Serialize: plan-id
-	yyjson_mut_obj_add_strcpy(doc, obj, "plan-id", plan_id.c_str());
+	obj.AddString("plan-id", plan_id);
 }
 
-yyjson_mut_val *AsyncPlanningResult::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue AsyncPlanningResult::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

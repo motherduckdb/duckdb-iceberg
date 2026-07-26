@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/sort_direction.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 SortDirection::SortDirection() {
 }
 
-SortDirection SortDirection::FromJSON(yyjson_val *obj) {
+SortDirection SortDirection::FromJSON(JSONValue obj) {
 	SortDirection res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -30,19 +28,19 @@ SortDirection SortDirection::Copy() const {
 	return res;
 }
 
-string SortDirection::TryFromJSON(yyjson_val *obj) {
+string SortDirection::TryFromJSON(JSONValue obj) {
 	string error;
-	if (yyjson_is_str(obj)) {
-		value = yyjson_get_str(obj);
+	if (json_utils::IsString(obj)) {
+		value = json_utils::GetString(obj);
 	} else {
-		return StringUtil::Format("SortDirection property 'value' is not of type 'string', found '%s' instead",
-		                          yyjson_get_type_desc(obj));
+		return StringUtil::Format("SortDirection property 'value' is not of type 'string', found %s instead",
+		                          json_utils::GetTypeDescription(obj).c_str());
 	}
 	return "";
 }
 
-yyjson_mut_val *SortDirection::ToJSON(yyjson_mut_doc *doc) const {
-	return yyjson_mut_strcpy(doc, value.c_str());
+JSONMutableValue SortDirection::ToJSON(JSONWriter &writer) const {
+	return writer.CreateString(value);
 }
 
 } // namespace rest_api_objects

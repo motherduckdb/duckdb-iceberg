@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/create_view_request.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 CreateViewRequest::CreateViewRequest() {
 }
 
-CreateViewRequest CreateViewRequest::FromJSON(yyjson_val *obj) {
+CreateViewRequest CreateViewRequest::FromJSON(JSONValue obj) {
 	CreateViewRequest res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -39,21 +37,21 @@ CreateViewRequest CreateViewRequest::Copy() const {
 	return res;
 }
 
-string CreateViewRequest::TryFromJSON(yyjson_val *obj) {
+string CreateViewRequest::TryFromJSON(JSONValue obj) {
 	string error;
-	auto name_val = yyjson_obj_get(obj, "name");
-	if (!name_val) {
+	auto name_val = obj.GetMember("name");
+	if (!name_val.IsValid()) {
 		return "CreateViewRequest required property 'name' is missing";
 	} else {
-		if (yyjson_is_str(name_val)) {
-			name = yyjson_get_str(name_val);
+		if (json_utils::IsString(name_val)) {
+			name = json_utils::GetString(name_val);
 		} else {
-			return StringUtil::Format("CreateViewRequest property 'name' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(name_val));
+			return StringUtil::Format("CreateViewRequest property 'name' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(name_val).c_str());
 		}
 	}
-	auto schema_val = yyjson_obj_get(obj, "schema");
-	if (!schema_val) {
+	auto schema_val = obj.GetMember("schema");
+	if (!schema_val.IsValid()) {
 		return "CreateViewRequest required property 'schema' is missing";
 	} else {
 		error = schema.TryFromJSON(schema_val);
@@ -61,8 +59,8 @@ string CreateViewRequest::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto view_version_val = yyjson_obj_get(obj, "view-version");
-	if (!view_version_val) {
+	auto view_version_val = obj.GetMember("view-version");
+	if (!view_version_val.IsValid()) {
 		return "CreateViewRequest required property 'view-version' is missing";
 	} else {
 		error = view_version.TryFromJSON(view_version_val);
@@ -70,80 +68,79 @@ string CreateViewRequest::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto properties_val = yyjson_obj_get(obj, "properties");
-	if (!properties_val) {
+	auto properties_val = obj.GetMember("properties");
+	if (!properties_val.IsValid()) {
 		return "CreateViewRequest required property 'properties' is missing";
 	} else {
-		if (yyjson_is_obj(properties_val)) {
-			size_t idx, max;
-			yyjson_val *key, *val;
-			yyjson_obj_foreach(properties_val, idx, max, key, val) {
-				auto key_str = yyjson_get_str(key);
+		if (properties_val.IsObject()) {
+			properties_val.IterateObject([&](const string &key_str, JSONValue val) {
+				if (!error.empty()) {
+					return;
+				}
 				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
+				if (json_utils::IsString(val)) {
+					tmp = json_utils::GetString(val);
 				} else {
-					return StringUtil::Format(
-					    "CreateViewRequest property 'tmp' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(val));
+					error =
+					    StringUtil::Format("CreateViewRequest property 'tmp' is not of type 'string', found %s instead",
+					                       json_utils::GetTypeDescription(val).c_str());
+					return;
 				}
 				properties.emplace(key_str, std::move(tmp));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return "CreateViewRequest property 'properties' is not of type 'object'";
 		}
 	}
-	auto location_val = yyjson_obj_get(obj, "location");
-	if (location_val) {
+	auto location_val = obj.GetMember("location");
+	if (location_val.IsValid()) {
 		string location_tmp;
-		if (yyjson_is_str(location_val)) {
-			location_tmp = yyjson_get_str(location_val);
+		if (json_utils::IsString(location_val)) {
+			location_tmp = json_utils::GetString(location_val);
 		} else {
 			return StringUtil::Format(
-			    "CreateViewRequest property 'location_tmp' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(location_val));
+			    "CreateViewRequest property 'location_tmp' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(location_val).c_str());
 		}
 		location = std::move(location_tmp);
 	}
 	return "";
 }
 
-void CreateViewRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void CreateViewRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: name
-	yyjson_mut_obj_add_strcpy(doc, obj, "name", name.c_str());
+	obj.AddString("name", name);
 
 	// Serialize: schema
-	yyjson_mut_val *schema_val = schema.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "schema", schema_val);
+	auto schema_val = schema.ToJSON(writer);
+	obj.Add("schema", schema_val);
 
 	// Serialize: view-version
-	yyjson_mut_val *view_version_val = view_version.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "view-version", view_version_val);
+	auto view_version_val = view_version.ToJSON(writer);
+	obj.Add("view-version", view_version_val);
 
 	// Serialize: properties
-	yyjson_mut_val *properties_obj = yyjson_mut_obj(doc);
+	auto properties_obj = writer.CreateObject();
 	for (const auto &it : properties) {
 		auto &key = it.first;
 		auto &value = it.second;
-		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
-		yyjson_mut_obj_add_strcpy(doc, properties_obj, key_ptr, value.c_str());
+		properties_obj.AddString(key, value);
 	}
-	yyjson_mut_obj_add_val(doc, obj, "properties", properties_obj);
+	obj.Add("properties", properties_obj);
 
 	// Serialize: location
 	if (location.has_value()) {
 		auto &location_value = *location;
-		yyjson_mut_obj_add_strcpy(doc, obj, "location", location_value.c_str());
+		obj.AddString("location", location_value);
 	}
 }
 
-yyjson_mut_val *CreateViewRequest::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue CreateViewRequest::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

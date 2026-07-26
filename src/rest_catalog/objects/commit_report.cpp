@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/commit_report.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 CommitReport::CommitReport() {
 }
 
-CommitReport CommitReport::FromJSON(yyjson_val *obj) {
+CommitReport CommitReport::FromJSON(JSONValue obj) {
 	CommitReport res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -40,60 +38,59 @@ CommitReport CommitReport::Copy() const {
 	return res;
 }
 
-string CommitReport::TryFromJSON(yyjson_val *obj) {
+string CommitReport::TryFromJSON(JSONValue obj) {
 	string error;
-	auto table_name_val = yyjson_obj_get(obj, "table-name");
-	if (!table_name_val) {
+	auto table_name_val = obj.GetMember("table-name");
+	if (!table_name_val.IsValid()) {
 		return "CommitReport required property 'table-name' is missing";
 	} else {
-		if (yyjson_is_str(table_name_val)) {
-			table_name = yyjson_get_str(table_name_val);
+		if (json_utils::IsString(table_name_val)) {
+			table_name = json_utils::GetString(table_name_val);
 		} else {
-			return StringUtil::Format("CommitReport property 'table_name' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(table_name_val));
+			return StringUtil::Format("CommitReport property 'table_name' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(table_name_val).c_str());
 		}
 	}
-	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
-	if (!snapshot_id_val) {
+	auto snapshot_id_val = obj.GetMember("snapshot-id");
+	if (!snapshot_id_val.IsValid()) {
 		return "CommitReport required property 'snapshot-id' is missing";
 	} else {
-		if (yyjson_is_sint(snapshot_id_val)) {
-			snapshot_id = yyjson_get_sint(snapshot_id_val);
-		} else if (yyjson_is_uint(snapshot_id_val)) {
-			snapshot_id = yyjson_get_uint(snapshot_id_val);
+		if (json_utils::IsInteger(snapshot_id_val)) {
+			snapshot_id = json_utils::GetSignedInteger(snapshot_id_val);
+		} else if (json_utils::IsUnsignedInteger(snapshot_id_val)) {
+			snapshot_id = json_utils::GetUnsignedInteger(snapshot_id_val);
 		} else {
-			return StringUtil::Format(
-			    "CommitReport property 'snapshot_id' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(snapshot_id_val));
+			return StringUtil::Format("CommitReport property 'snapshot_id' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(snapshot_id_val).c_str());
 		}
 	}
-	auto sequence_number_val = yyjson_obj_get(obj, "sequence-number");
-	if (!sequence_number_val) {
+	auto sequence_number_val = obj.GetMember("sequence-number");
+	if (!sequence_number_val.IsValid()) {
 		return "CommitReport required property 'sequence-number' is missing";
 	} else {
-		if (yyjson_is_sint(sequence_number_val)) {
-			sequence_number = yyjson_get_sint(sequence_number_val);
-		} else if (yyjson_is_uint(sequence_number_val)) {
-			sequence_number = yyjson_get_uint(sequence_number_val);
+		if (json_utils::IsInteger(sequence_number_val)) {
+			sequence_number = json_utils::GetSignedInteger(sequence_number_val);
+		} else if (json_utils::IsUnsignedInteger(sequence_number_val)) {
+			sequence_number = json_utils::GetUnsignedInteger(sequence_number_val);
 		} else {
 			return StringUtil::Format(
-			    "CommitReport property 'sequence_number' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(sequence_number_val));
+			    "CommitReport property 'sequence_number' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(sequence_number_val).c_str());
 		}
 	}
-	auto operation_val = yyjson_obj_get(obj, "operation");
-	if (!operation_val) {
+	auto operation_val = obj.GetMember("operation");
+	if (!operation_val.IsValid()) {
 		return "CommitReport required property 'operation' is missing";
 	} else {
-		if (yyjson_is_str(operation_val)) {
-			operation = yyjson_get_str(operation_val);
+		if (json_utils::IsString(operation_val)) {
+			operation = json_utils::GetString(operation_val);
 		} else {
-			return StringUtil::Format("CommitReport property 'operation' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(operation_val));
+			return StringUtil::Format("CommitReport property 'operation' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(operation_val).c_str());
 		}
 	}
-	auto metrics_val = yyjson_obj_get(obj, "metrics");
-	if (!metrics_val) {
+	auto metrics_val = obj.GetMember("metrics");
+	if (!metrics_val.IsValid()) {
 		return "CommitReport required property 'metrics' is missing";
 	} else {
 		error = metrics.TryFromJSON(metrics_val);
@@ -101,22 +98,26 @@ string CommitReport::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto metadata_val = yyjson_obj_get(obj, "metadata");
-	if (metadata_val) {
+	auto metadata_val = obj.GetMember("metadata");
+	if (metadata_val.IsValid()) {
 		case_insensitive_map_t<string> metadata_tmp;
-		if (yyjson_is_obj(metadata_val)) {
-			size_t idx, max;
-			yyjson_val *key, *val;
-			yyjson_obj_foreach(metadata_val, idx, max, key, val) {
-				auto key_str = yyjson_get_str(key);
+		if (metadata_val.IsObject()) {
+			metadata_val.IterateObject([&](const string &key_str, JSONValue val) {
+				if (!error.empty()) {
+					return;
+				}
 				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
+				if (json_utils::IsString(val)) {
+					tmp = json_utils::GetString(val);
 				} else {
-					return StringUtil::Format("CommitReport property 'tmp' is not of type 'string', found '%s' instead",
-					                          yyjson_get_type_desc(val));
+					error = StringUtil::Format("CommitReport property 'tmp' is not of type 'string', found %s instead",
+					                           json_utils::GetTypeDescription(val).c_str());
+					return;
 				}
 				metadata_tmp.emplace(key_str, std::move(tmp));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return "CommitReport property 'metadata_tmp' is not of type 'object'";
@@ -126,44 +127,39 @@ string CommitReport::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void CommitReport::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void CommitReport::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: table-name
-	yyjson_mut_obj_add_strcpy(doc, obj, "table-name", table_name.c_str());
+	obj.AddString("table-name", table_name);
 
 	// Serialize: snapshot-id
-	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+	obj.Add("snapshot-id", writer.CreateSignedInteger(snapshot_id));
 
 	// Serialize: sequence-number
-	yyjson_mut_obj_add_sint(doc, obj, "sequence-number", sequence_number);
+	obj.Add("sequence-number", writer.CreateSignedInteger(sequence_number));
 
 	// Serialize: operation
-	yyjson_mut_obj_add_strcpy(doc, obj, "operation", operation.c_str());
+	obj.AddString("operation", operation);
 
 	// Serialize: metrics
-	yyjson_mut_val *metrics_val = metrics.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "metrics", metrics_val);
+	auto metrics_val = metrics.ToJSON(writer);
+	obj.Add("metrics", metrics_val);
 
 	// Serialize: metadata
 	if (metadata.has_value()) {
 		auto &metadata_value = *metadata;
-		yyjson_mut_val *metadata_value_obj = yyjson_mut_obj(doc);
+		auto metadata_value_obj = writer.CreateObject();
 		for (const auto &it : metadata_value) {
 			auto &key = it.first;
 			auto &value = it.second;
-			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
-			yyjson_mut_obj_add_strcpy(doc, metadata_value_obj, key_ptr, value.c_str());
+			metadata_value_obj.AddString(key, value);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "metadata", metadata_value_obj);
+		obj.Add("metadata", metadata_value_obj);
 	}
 }
 
-yyjson_mut_val *CommitReport::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue CommitReport::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/base_update.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 BaseUpdate::BaseUpdate() {
 }
 
-BaseUpdate BaseUpdate::FromJSON(yyjson_val *obj) {
+BaseUpdate BaseUpdate::FromJSON(JSONValue obj) {
 	BaseUpdate res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -30,34 +28,30 @@ BaseUpdate BaseUpdate::Copy() const {
 	return res;
 }
 
-string BaseUpdate::TryFromJSON(yyjson_val *obj) {
+string BaseUpdate::TryFromJSON(JSONValue obj) {
 	string error;
-	auto action_val = yyjson_obj_get(obj, "action");
-	if (!action_val) {
+	auto action_val = obj.GetMember("action");
+	if (!action_val.IsValid()) {
 		return "BaseUpdate required property 'action' is missing";
 	} else {
-		if (yyjson_is_str(action_val)) {
-			action = yyjson_get_str(action_val);
+		if (json_utils::IsString(action_val)) {
+			action = json_utils::GetString(action_val);
 		} else {
-			return StringUtil::Format("BaseUpdate property 'action' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(action_val));
+			return StringUtil::Format("BaseUpdate property 'action' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(action_val).c_str());
 		}
 	}
 	return "";
 }
 
-void BaseUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void BaseUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: action
-	yyjson_mut_obj_add_strcpy(doc, obj, "action", action.c_str());
+	obj.AddString("action", action);
 }
 
-yyjson_mut_val *BaseUpdate::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue BaseUpdate::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/function_metadata.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 FunctionMetadata::FunctionMetadata() {
 }
 
-FunctionMetadata FunctionMetadata::FromJSON(yyjson_val *obj) {
+FunctionMetadata FunctionMetadata::FromJSON(JSONValue obj) {
 	FunctionMetadata res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -57,198 +55,204 @@ FunctionMetadata FunctionMetadata::Copy() const {
 	return res;
 }
 
-string FunctionMetadata::TryFromJSON(yyjson_val *obj) {
+string FunctionMetadata::TryFromJSON(JSONValue obj) {
 	string error;
-	auto function_uuid_val = yyjson_obj_get(obj, "function-uuid");
-	if (!function_uuid_val) {
+	auto function_uuid_val = obj.GetMember("function-uuid");
+	if (!function_uuid_val.IsValid()) {
 		return "FunctionMetadata required property 'function-uuid' is missing";
 	} else {
-		if (yyjson_is_str(function_uuid_val)) {
-			function_uuid = yyjson_get_str(function_uuid_val);
+		if (json_utils::IsString(function_uuid_val)) {
+			function_uuid = json_utils::GetString(function_uuid_val);
 		} else {
 			return StringUtil::Format(
-			    "FunctionMetadata property 'function_uuid' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(function_uuid_val));
+			    "FunctionMetadata property 'function_uuid' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(function_uuid_val).c_str());
 		}
 	}
-	auto format_version_val = yyjson_obj_get(obj, "format-version");
-	if (!format_version_val) {
+	auto format_version_val = obj.GetMember("format-version");
+	if (!format_version_val.IsValid()) {
 		return "FunctionMetadata required property 'format-version' is missing";
 	} else {
-		if (yyjson_is_int(format_version_val)) {
-			format_version = yyjson_get_int(format_version_val);
+		if (json_utils::IsInteger(format_version_val)) {
+			format_version = json_utils::GetSignedInteger(format_version_val);
 		} else {
 			return StringUtil::Format(
-			    "FunctionMetadata property 'format_version' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(format_version_val));
+			    "FunctionMetadata property 'format_version' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(format_version_val).c_str());
 		}
 	}
-	auto definitions_val = yyjson_obj_get(obj, "definitions");
-	if (!definitions_val) {
+	auto definitions_val = obj.GetMember("definitions");
+	if (!definitions_val.IsValid()) {
 		return "FunctionMetadata required property 'definitions' is missing";
 	} else {
-		if (yyjson_is_arr(definitions_val)) {
-			size_t definitions_idx, definitions_max;
-			yyjson_val *definitions_item_val;
-			yyjson_arr_foreach(definitions_val, definitions_idx, definitions_max, definitions_item_val) {
+		if (definitions_val.IsArray()) {
+			definitions_val.IterateArray([&](JSONValue definitions_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				FunctionDefinition definitions_item;
 				error = definitions_item.TryFromJSON(definitions_item_val);
 				if (!error.empty()) {
-					return error;
+					return;
 				}
 				definitions.emplace_back(std::move(definitions_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "FunctionMetadata property 'definitions' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(definitions_val));
+			    "FunctionMetadata property 'definitions' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(definitions_val).c_str());
 		}
 	}
-	auto definition_log_val = yyjson_obj_get(obj, "definition-log");
-	if (!definition_log_val) {
+	auto definition_log_val = obj.GetMember("definition-log");
+	if (!definition_log_val.IsValid()) {
 		return "FunctionMetadata required property 'definition-log' is missing";
 	} else {
-		if (yyjson_is_arr(definition_log_val)) {
-			size_t definition_log_idx, definition_log_max;
-			yyjson_val *definition_log_item_val;
-			yyjson_arr_foreach(definition_log_val, definition_log_idx, definition_log_max, definition_log_item_val) {
+		if (definition_log_val.IsArray()) {
+			definition_log_val.IterateArray([&](JSONValue definition_log_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				FunctionDefinitionLogEntry definition_log_item;
 				error = definition_log_item.TryFromJSON(definition_log_item_val);
 				if (!error.empty()) {
-					return error;
+					return;
 				}
 				definition_log.emplace_back(std::move(definition_log_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "FunctionMetadata property 'definition_log' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(definition_log_val));
+			    "FunctionMetadata property 'definition_log' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(definition_log_val).c_str());
 		}
 	}
-	auto location_val = yyjson_obj_get(obj, "location");
-	if (location_val) {
+	auto location_val = obj.GetMember("location");
+	if (location_val.IsValid()) {
 		string location_tmp;
-		if (yyjson_is_str(location_val)) {
-			location_tmp = yyjson_get_str(location_val);
+		if (json_utils::IsString(location_val)) {
+			location_tmp = json_utils::GetString(location_val);
 		} else {
 			return StringUtil::Format(
-			    "FunctionMetadata property 'location_tmp' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(location_val));
+			    "FunctionMetadata property 'location_tmp' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(location_val).c_str());
 		}
 		location = std::move(location_tmp);
 	}
-	auto properties_val = yyjson_obj_get(obj, "properties");
-	if (properties_val) {
+	auto properties_val = obj.GetMember("properties");
+	if (properties_val.IsValid()) {
 		case_insensitive_map_t<string> properties_tmp;
-		if (yyjson_is_obj(properties_val)) {
-			size_t idx, max;
-			yyjson_val *key, *val;
-			yyjson_obj_foreach(properties_val, idx, max, key, val) {
-				auto key_str = yyjson_get_str(key);
+		if (properties_val.IsObject()) {
+			properties_val.IterateObject([&](const string &key_str, JSONValue val) {
+				if (!error.empty()) {
+					return;
+				}
 				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
+				if (json_utils::IsString(val)) {
+					tmp = json_utils::GetString(val);
 				} else {
-					return StringUtil::Format(
-					    "FunctionMetadata property 'tmp' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(val));
+					error =
+					    StringUtil::Format("FunctionMetadata property 'tmp' is not of type 'string', found %s instead",
+					                       json_utils::GetTypeDescription(val).c_str());
+					return;
 				}
 				properties_tmp.emplace(key_str, std::move(tmp));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return "FunctionMetadata property 'properties_tmp' is not of type 'object'";
 		}
 		properties = std::move(properties_tmp);
 	}
-	auto secure_val = yyjson_obj_get(obj, "secure");
-	if (secure_val) {
+	auto secure_val = obj.GetMember("secure");
+	if (secure_val.IsValid()) {
 		bool secure_tmp;
-		if (yyjson_is_bool(secure_val)) {
-			secure_tmp = yyjson_get_bool(secure_val);
+		if (json_utils::IsBoolean(secure_val)) {
+			secure_tmp = json_utils::GetBoolean(secure_val);
 		} else {
 			return StringUtil::Format(
-			    "FunctionMetadata property 'secure_tmp' is not of type 'boolean', found '%s' instead",
-			    yyjson_get_type_desc(secure_val));
+			    "FunctionMetadata property 'secure_tmp' is not of type 'boolean', found %s instead",
+			    json_utils::GetTypeDescription(secure_val).c_str());
 		}
 		secure = std::move(secure_tmp);
 	}
-	auto _doc_val = yyjson_obj_get(obj, "doc");
-	if (_doc_val) {
+	auto _doc_val = obj.GetMember("doc");
+	if (_doc_val.IsValid()) {
 		string _doc_tmp;
-		if (yyjson_is_str(_doc_val)) {
-			_doc_tmp = yyjson_get_str(_doc_val);
+		if (json_utils::IsString(_doc_val)) {
+			_doc_tmp = json_utils::GetString(_doc_val);
 		} else {
-			return StringUtil::Format(
-			    "FunctionMetadata property '_doc_tmp' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(_doc_val));
+			return StringUtil::Format("FunctionMetadata property '_doc_tmp' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(_doc_val).c_str());
 		}
 		_doc = std::move(_doc_tmp);
 	}
 	return "";
 }
 
-void FunctionMetadata::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void FunctionMetadata::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: function-uuid
-	yyjson_mut_obj_add_strcpy(doc, obj, "function-uuid", function_uuid.c_str());
+	obj.AddString("function-uuid", function_uuid);
 
 	// Serialize: format-version
-	yyjson_mut_obj_add_int(doc, obj, "format-version", format_version);
+	obj.Add("format-version", writer.CreateSignedInteger(format_version));
 
 	// Serialize: definitions
-	yyjson_mut_val *definitions_arr = yyjson_mut_arr(doc);
+	auto definitions_arr = writer.CreateArray();
 	for (const auto &item : definitions) {
-		yyjson_mut_val *item_val = item.ToJSON(doc);
-		yyjson_mut_arr_append(definitions_arr, item_val);
+		auto item_val = item.ToJSON(writer);
+		definitions_arr.Append(item_val);
 	}
-	yyjson_mut_obj_add_val(doc, obj, "definitions", definitions_arr);
+	obj.Add("definitions", definitions_arr);
 
 	// Serialize: definition-log
-	yyjson_mut_val *definition_log_arr = yyjson_mut_arr(doc);
+	auto definition_log_arr = writer.CreateArray();
 	for (const auto &item : definition_log) {
-		yyjson_mut_val *item_val = item.ToJSON(doc);
-		yyjson_mut_arr_append(definition_log_arr, item_val);
+		auto item_val = item.ToJSON(writer);
+		definition_log_arr.Append(item_val);
 	}
-	yyjson_mut_obj_add_val(doc, obj, "definition-log", definition_log_arr);
+	obj.Add("definition-log", definition_log_arr);
 
 	// Serialize: location
 	if (location.has_value()) {
 		auto &location_value = *location;
-		yyjson_mut_obj_add_strcpy(doc, obj, "location", location_value.c_str());
+		obj.AddString("location", location_value);
 	}
 
 	// Serialize: properties
 	if (properties.has_value()) {
 		auto &properties_value = *properties;
-		yyjson_mut_val *properties_value_obj = yyjson_mut_obj(doc);
+		auto properties_value_obj = writer.CreateObject();
 		for (const auto &it : properties_value) {
 			auto &key = it.first;
 			auto &value = it.second;
-			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
-			yyjson_mut_obj_add_strcpy(doc, properties_value_obj, key_ptr, value.c_str());
+			properties_value_obj.AddString(key, value);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "properties", properties_value_obj);
+		obj.Add("properties", properties_value_obj);
 	}
 
 	// Serialize: secure
 	if (secure.has_value()) {
 		auto &secure_value = *secure;
-		yyjson_mut_obj_add_bool(doc, obj, "secure", secure_value);
+		obj.Add("secure", writer.CreateBoolean(secure_value));
 	}
 
 	// Serialize: doc
 	if (_doc.has_value()) {
 		auto &_doc_value = *_doc;
-		yyjson_mut_obj_add_strcpy(doc, obj, "doc", _doc_value.c_str());
+		obj.AddString("doc", _doc_value);
 	}
 }
 
-yyjson_mut_val *FunctionMetadata::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue FunctionMetadata::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

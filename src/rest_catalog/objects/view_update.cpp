@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/view_update.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 ViewUpdate::ViewUpdate() {
 }
 
-ViewUpdate ViewUpdate::FromJSON(yyjson_val *obj) {
+ViewUpdate ViewUpdate::FromJSON(JSONValue obj) {
 	ViewUpdate res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -61,7 +59,7 @@ ViewUpdate ViewUpdate::Copy() const {
 	return res;
 }
 
-string ViewUpdate::TryFromJSON(yyjson_val *obj) {
+string ViewUpdate::TryFromJSON(JSONValue obj) {
 	string error;
 	assign_uuidupdate.emplace();
 	error = assign_uuidupdate->TryFromJSON(obj);
@@ -120,33 +118,29 @@ string ViewUpdate::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void ViewUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void ViewUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	if (assign_uuidupdate.has_value()) {
-		assign_uuidupdate->PopulateJSON(doc, obj);
+		assign_uuidupdate->PopulateJSON(writer, obj);
 	} else if (upgrade_format_version_update.has_value()) {
-		upgrade_format_version_update->PopulateJSON(doc, obj);
+		upgrade_format_version_update->PopulateJSON(writer, obj);
 	} else if (add_schema_update.has_value()) {
-		add_schema_update->PopulateJSON(doc, obj);
+		add_schema_update->PopulateJSON(writer, obj);
 	} else if (set_location_update.has_value()) {
-		set_location_update->PopulateJSON(doc, obj);
+		set_location_update->PopulateJSON(writer, obj);
 	} else if (set_properties_update.has_value()) {
-		set_properties_update->PopulateJSON(doc, obj);
+		set_properties_update->PopulateJSON(writer, obj);
 	} else if (remove_properties_update.has_value()) {
-		remove_properties_update->PopulateJSON(doc, obj);
+		remove_properties_update->PopulateJSON(writer, obj);
 	} else if (add_view_version_update.has_value()) {
-		add_view_version_update->PopulateJSON(doc, obj);
+		add_view_version_update->PopulateJSON(writer, obj);
 	} else if (set_current_view_version_update.has_value()) {
-		set_current_view_version_update->PopulateJSON(doc, obj);
+		set_current_view_version_update->PopulateJSON(writer, obj);
 	}
 }
 
-yyjson_mut_val *ViewUpdate::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue ViewUpdate::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/blob_metadata.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 BlobMetadata::BlobMetadata() {
 }
 
-BlobMetadata BlobMetadata::FromJSON(yyjson_val *obj) {
+BlobMetadata BlobMetadata::FromJSON(JSONValue obj) {
 	BlobMetadata res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -42,86 +40,94 @@ BlobMetadata BlobMetadata::Copy() const {
 	return res;
 }
 
-string BlobMetadata::TryFromJSON(yyjson_val *obj) {
+string BlobMetadata::TryFromJSON(JSONValue obj) {
 	string error;
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
+	auto type_val = obj.GetMember("type");
+	if (!type_val.IsValid()) {
 		return "BlobMetadata required property 'type' is missing";
 	} else {
-		if (yyjson_is_str(type_val)) {
-			type = yyjson_get_str(type_val);
+		if (json_utils::IsString(type_val)) {
+			type = json_utils::GetString(type_val);
 		} else {
-			return StringUtil::Format("BlobMetadata property 'type' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(type_val));
+			return StringUtil::Format("BlobMetadata property 'type' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(type_val).c_str());
 		}
 	}
-	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
-	if (!snapshot_id_val) {
+	auto snapshot_id_val = obj.GetMember("snapshot-id");
+	if (!snapshot_id_val.IsValid()) {
 		return "BlobMetadata required property 'snapshot-id' is missing";
 	} else {
-		if (yyjson_is_sint(snapshot_id_val)) {
-			snapshot_id = yyjson_get_sint(snapshot_id_val);
-		} else if (yyjson_is_uint(snapshot_id_val)) {
-			snapshot_id = yyjson_get_uint(snapshot_id_val);
+		if (json_utils::IsInteger(snapshot_id_val)) {
+			snapshot_id = json_utils::GetSignedInteger(snapshot_id_val);
+		} else if (json_utils::IsUnsignedInteger(snapshot_id_val)) {
+			snapshot_id = json_utils::GetUnsignedInteger(snapshot_id_val);
 		} else {
-			return StringUtil::Format(
-			    "BlobMetadata property 'snapshot_id' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(snapshot_id_val));
+			return StringUtil::Format("BlobMetadata property 'snapshot_id' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(snapshot_id_val).c_str());
 		}
 	}
-	auto sequence_number_val = yyjson_obj_get(obj, "sequence-number");
-	if (!sequence_number_val) {
+	auto sequence_number_val = obj.GetMember("sequence-number");
+	if (!sequence_number_val.IsValid()) {
 		return "BlobMetadata required property 'sequence-number' is missing";
 	} else {
-		if (yyjson_is_sint(sequence_number_val)) {
-			sequence_number = yyjson_get_sint(sequence_number_val);
-		} else if (yyjson_is_uint(sequence_number_val)) {
-			sequence_number = yyjson_get_uint(sequence_number_val);
+		if (json_utils::IsInteger(sequence_number_val)) {
+			sequence_number = json_utils::GetSignedInteger(sequence_number_val);
+		} else if (json_utils::IsUnsignedInteger(sequence_number_val)) {
+			sequence_number = json_utils::GetUnsignedInteger(sequence_number_val);
 		} else {
 			return StringUtil::Format(
-			    "BlobMetadata property 'sequence_number' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(sequence_number_val));
+			    "BlobMetadata property 'sequence_number' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(sequence_number_val).c_str());
 		}
 	}
-	auto fields_val = yyjson_obj_get(obj, "fields");
-	if (!fields_val) {
+	auto fields_val = obj.GetMember("fields");
+	if (!fields_val.IsValid()) {
 		return "BlobMetadata required property 'fields' is missing";
 	} else {
-		if (yyjson_is_arr(fields_val)) {
-			size_t fields_idx, fields_max;
-			yyjson_val *fields_item_val;
-			yyjson_arr_foreach(fields_val, fields_idx, fields_max, fields_item_val) {
+		if (fields_val.IsArray()) {
+			fields_val.IterateArray([&](JSONValue fields_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				int32_t fields_item;
-				if (yyjson_is_int(fields_item_val)) {
-					fields_item = yyjson_get_int(fields_item_val);
+				if (json_utils::IsInteger(fields_item_val)) {
+					fields_item = json_utils::GetSignedInteger(fields_item_val);
 				} else {
-					return StringUtil::Format(
-					    "BlobMetadata property 'fields_item' is not of type 'integer', found '%s' instead",
-					    yyjson_get_type_desc(fields_item_val));
+					error = StringUtil::Format(
+					    "BlobMetadata property 'fields_item' is not of type 'integer', found %s instead",
+					    json_utils::GetTypeDescription(fields_item_val).c_str());
+					return;
 				}
 				fields.emplace_back(std::move(fields_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
-			return StringUtil::Format("BlobMetadata property 'fields' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(fields_val));
+			return StringUtil::Format("BlobMetadata property 'fields' is not of type 'array', found %s instead",
+			                          json_utils::GetTypeDescription(fields_val).c_str());
 		}
 	}
-	auto properties_val = yyjson_obj_get(obj, "properties");
-	if (properties_val) {
+	auto properties_val = obj.GetMember("properties");
+	if (properties_val.IsValid()) {
 		case_insensitive_map_t<string> properties_tmp;
-		if (yyjson_is_obj(properties_val)) {
-			size_t idx, max;
-			yyjson_val *key, *val;
-			yyjson_obj_foreach(properties_val, idx, max, key, val) {
-				auto key_str = yyjson_get_str(key);
+		if (properties_val.IsObject()) {
+			properties_val.IterateObject([&](const string &key_str, JSONValue val) {
+				if (!error.empty()) {
+					return;
+				}
 				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
+				if (json_utils::IsString(val)) {
+					tmp = json_utils::GetString(val);
 				} else {
-					return StringUtil::Format("BlobMetadata property 'tmp' is not of type 'string', found '%s' instead",
-					                          yyjson_get_type_desc(val));
+					error = StringUtil::Format("BlobMetadata property 'tmp' is not of type 'string', found %s instead",
+					                           json_utils::GetTypeDescription(val).c_str());
+					return;
 				}
 				properties_tmp.emplace(key_str, std::move(tmp));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return "BlobMetadata property 'properties_tmp' is not of type 'object'";
@@ -131,45 +137,40 @@ string BlobMetadata::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void BlobMetadata::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void BlobMetadata::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
+	obj.AddString("type", type);
 
 	// Serialize: snapshot-id
-	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+	obj.Add("snapshot-id", writer.CreateSignedInteger(snapshot_id));
 
 	// Serialize: sequence-number
-	yyjson_mut_obj_add_sint(doc, obj, "sequence-number", sequence_number);
+	obj.Add("sequence-number", writer.CreateSignedInteger(sequence_number));
 
 	// Serialize: fields
-	yyjson_mut_val *fields_arr = yyjson_mut_arr(doc);
+	auto fields_arr = writer.CreateArray();
 	for (const auto &item : fields) {
-		yyjson_mut_val *item_val = yyjson_mut_int(doc, item);
-		yyjson_mut_arr_append(fields_arr, item_val);
+		auto item_val = writer.CreateSignedInteger(item);
+		fields_arr.Append(item_val);
 	}
-	yyjson_mut_obj_add_val(doc, obj, "fields", fields_arr);
+	obj.Add("fields", fields_arr);
 
 	// Serialize: properties
 	if (properties.has_value()) {
 		auto &properties_value = *properties;
-		yyjson_mut_val *properties_value_obj = yyjson_mut_obj(doc);
+		auto properties_value_obj = writer.CreateObject();
 		for (const auto &it : properties_value) {
 			auto &key = it.first;
 			auto &value = it.second;
-			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
-			yyjson_mut_obj_add_strcpy(doc, properties_value_obj, key_ptr, value.c_str());
+			properties_value_obj.AddString(key, value);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "properties", properties_value_obj);
+		obj.Add("properties", properties_value_obj);
 	}
 }
 
-yyjson_mut_val *BlobMetadata::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue BlobMetadata::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

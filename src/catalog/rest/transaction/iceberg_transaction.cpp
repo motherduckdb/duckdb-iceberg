@@ -8,7 +8,7 @@
 #include "duckdb/storage/table/update_state.hpp"
 #include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/main/client_data.hpp"
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
 
 #include <chrono>
 #include <optional>
@@ -80,33 +80,15 @@ IcebergCatalog &IcebergTransaction::GetCatalog() {
 	return catalog;
 }
 
-string JsonDocToString(std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc) {
-	auto root_object = yyjson_mut_doc_get_root(doc.get());
-
-	//! Write the result to a string
-	auto data = yyjson_mut_val_write_opts(root_object, YYJSON_WRITE_ALLOW_INF_AND_NAN, nullptr, nullptr, nullptr);
-	if (!data) {
-		throw InvalidInputException("Could not create a JSON representation of the table schema, yyjson failed");
-	}
-	auto res = string(data);
-	free(data);
-	return res;
-}
-
 template <class RESTObject>
 static string RESTObjectToJSONString(const RESTObject &object) {
-	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-	auto doc = doc_p.get();
-	yyjson_mut_doc_set_root(doc, object.ToJSON(doc));
-	return JsonDocToString(std::move(doc_p));
+	JSONWriter writer;
+	writer.SetRoot(object.ToJSON(writer));
+	return writer.ToString(JSONWriteFlags::ALLOW_INF_AND_NAN);
 }
 
 static string ConstructTableUpdateJSON(rest_api_objects::CommitTableRequest &table_change) {
-	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-	auto doc = doc_p.get();
-	auto root_object = table_change.ToJSON(doc);
-	yyjson_mut_doc_set_root(doc, root_object);
-	return JsonDocToString(std::move(doc_p));
+	return RESTObjectToJSONString(table_change);
 }
 
 static rest_api_objects::TableRequirement CreateAssertRefSnapshotIdRequirement(const IcebergSnapshot &old_snapshot) {
@@ -620,12 +602,7 @@ void IcebergTransaction::DoMultiTableCommitUpdates(IcebergTransactionAlterUpdate
 			backoff.emplace(transaction_info.retry_config);
 		}
 
-		std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-		auto doc = doc_p.get();
-		auto root_object = transaction_info.request.ToJSON(doc);
-		yyjson_mut_doc_set_root(doc, root_object);
-
-		auto transaction_json = JsonDocToString(std::move(doc_p));
+		auto transaction_json = RESTObjectToJSONString(transaction_info.request);
 		auto result = IRCAPI::CommitMultiTableUpdate(context, catalog, transaction_json);
 		if (result.Success()) {
 			return;

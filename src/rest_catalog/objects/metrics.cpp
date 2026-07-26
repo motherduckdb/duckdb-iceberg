@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/metrics.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 Metrics::Metrics() {
 }
 
-Metrics Metrics::FromJSON(yyjson_val *obj) {
+Metrics Metrics::FromJSON(JSONValue obj) {
 	Metrics res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -32,40 +30,38 @@ Metrics Metrics::Copy() const {
 	return res;
 }
 
-string Metrics::TryFromJSON(yyjson_val *obj) {
+string Metrics::TryFromJSON(JSONValue obj) {
 	string error;
-	size_t idx, max;
-	yyjson_val *key, *val;
-	yyjson_obj_foreach(obj, idx, max, key, val) {
-		auto key_str = yyjson_get_str(key);
+	obj.IterateObject([&](const string &key_str, JSONValue val) {
+		if (!error.empty()) {
+			return;
+		}
 		MetricResult tmp;
 		error = tmp.TryFromJSON(val);
 		if (!error.empty()) {
-			return error;
+			return;
 		}
 		additional_properties.emplace(key_str, std::move(tmp));
+	});
+	if (!error.empty()) {
+		return error;
 	}
 	return "";
 }
 
-void Metrics::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void Metrics::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize additional properties
 	for (const auto &it : additional_properties) {
 		auto &key = it.first;
 		auto &value = it.second;
-		yyjson_mut_val *value_obj = value.ToJSON(doc);
-		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
-		yyjson_mut_obj_add_val(doc, obj, key_ptr, value_obj);
+		auto value_obj = value.ToJSON(writer);
+		obj.Add(key, value_obj);
 	}
 }
 
-yyjson_mut_val *Metrics::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue Metrics::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

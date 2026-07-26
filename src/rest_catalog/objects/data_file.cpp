@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/data_file.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 DataFile::DataFile() {
 }
 
-DataFile DataFile::FromJSON(yyjson_val *obj) {
+DataFile DataFile::FromJSON(JSONValue obj) {
 	DataFile res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -58,44 +56,43 @@ DataFile DataFile::Copy() const {
 	return res;
 }
 
-string DataFile::TryFromJSON(yyjson_val *obj) {
+string DataFile::TryFromJSON(JSONValue obj) {
 	string error;
 	error = content_file.TryFromJSON(obj);
 	if (!error.empty()) {
 		return error;
 	}
-	auto content_refinement_val = yyjson_obj_get(obj, "content");
-	if (content_refinement_val) {
+	auto content_refinement_val = obj.GetMember("content");
+	if (content_refinement_val.IsValid()) {
 		string content_refinement;
-		if (yyjson_is_str(content_refinement_val)) {
-			content_refinement = yyjson_get_str(content_refinement_val);
+		if (json_utils::IsString(content_refinement_val)) {
+			content_refinement = json_utils::GetString(content_refinement_val);
 		} else {
 			return StringUtil::Format(
-			    "DataFile property 'content_refinement' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(content_refinement_val));
+			    "DataFile property 'content_refinement' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(content_refinement_val).c_str());
 		}
-		if (!yyjson_is_null(content_refinement_val) && content_refinement != "data") {
+		if (!content_refinement_val.IsNull() && content_refinement != "data") {
 			return "DataFile property 'content_refinement' does not match its required const value";
 		}
 	} else {
 		return "DataFile required property 'content' is missing";
 	}
-	auto first_row_id_val = yyjson_obj_get(obj, "first-row-id");
-	if (first_row_id_val) {
+	auto first_row_id_val = obj.GetMember("first-row-id");
+	if (first_row_id_val.IsValid()) {
 		int64_t first_row_id_tmp;
-		if (yyjson_is_sint(first_row_id_val)) {
-			first_row_id_tmp = yyjson_get_sint(first_row_id_val);
-		} else if (yyjson_is_uint(first_row_id_val)) {
-			first_row_id_tmp = yyjson_get_uint(first_row_id_val);
+		if (json_utils::IsInteger(first_row_id_val)) {
+			first_row_id_tmp = json_utils::GetSignedInteger(first_row_id_val);
+		} else if (json_utils::IsUnsignedInteger(first_row_id_val)) {
+			first_row_id_tmp = json_utils::GetUnsignedInteger(first_row_id_val);
 		} else {
-			return StringUtil::Format(
-			    "DataFile property 'first_row_id_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(first_row_id_val));
+			return StringUtil::Format("DataFile property 'first_row_id_tmp' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(first_row_id_val).c_str());
 		}
 		first_row_id = std::move(first_row_id_tmp);
 	}
-	auto column_sizes_val = yyjson_obj_get(obj, "column-sizes");
-	if (column_sizes_val) {
+	auto column_sizes_val = obj.GetMember("column-sizes");
+	if (column_sizes_val.IsValid()) {
 		CountMap column_sizes_tmp;
 		error = column_sizes_tmp.TryFromJSON(column_sizes_val);
 		if (!error.empty()) {
@@ -103,8 +100,8 @@ string DataFile::TryFromJSON(yyjson_val *obj) {
 		}
 		column_sizes = std::move(column_sizes_tmp);
 	}
-	auto value_counts_val = yyjson_obj_get(obj, "value-counts");
-	if (value_counts_val) {
+	auto value_counts_val = obj.GetMember("value-counts");
+	if (value_counts_val.IsValid()) {
 		CountMap value_counts_tmp;
 		error = value_counts_tmp.TryFromJSON(value_counts_val);
 		if (!error.empty()) {
@@ -112,8 +109,8 @@ string DataFile::TryFromJSON(yyjson_val *obj) {
 		}
 		value_counts = std::move(value_counts_tmp);
 	}
-	auto null_value_counts_val = yyjson_obj_get(obj, "null-value-counts");
-	if (null_value_counts_val) {
+	auto null_value_counts_val = obj.GetMember("null-value-counts");
+	if (null_value_counts_val.IsValid()) {
 		CountMap null_value_counts_tmp;
 		error = null_value_counts_tmp.TryFromJSON(null_value_counts_val);
 		if (!error.empty()) {
@@ -121,8 +118,8 @@ string DataFile::TryFromJSON(yyjson_val *obj) {
 		}
 		null_value_counts = std::move(null_value_counts_tmp);
 	}
-	auto nan_value_counts_val = yyjson_obj_get(obj, "nan-value-counts");
-	if (nan_value_counts_val) {
+	auto nan_value_counts_val = obj.GetMember("nan-value-counts");
+	if (nan_value_counts_val.IsValid()) {
 		CountMap nan_value_counts_tmp;
 		error = nan_value_counts_tmp.TryFromJSON(nan_value_counts_val);
 		if (!error.empty()) {
@@ -130,8 +127,8 @@ string DataFile::TryFromJSON(yyjson_val *obj) {
 		}
 		nan_value_counts = std::move(nan_value_counts_tmp);
 	}
-	auto lower_bounds_val = yyjson_obj_get(obj, "lower-bounds");
-	if (lower_bounds_val) {
+	auto lower_bounds_val = obj.GetMember("lower-bounds");
+	if (lower_bounds_val.IsValid()) {
 		ValueMap lower_bounds_tmp;
 		error = lower_bounds_tmp.TryFromJSON(lower_bounds_val);
 		if (!error.empty()) {
@@ -139,8 +136,8 @@ string DataFile::TryFromJSON(yyjson_val *obj) {
 		}
 		lower_bounds = std::move(lower_bounds_tmp);
 	}
-	auto upper_bounds_val = yyjson_obj_get(obj, "upper-bounds");
-	if (upper_bounds_val) {
+	auto upper_bounds_val = obj.GetMember("upper-bounds");
+	if (upper_bounds_val.IsValid()) {
 		ValueMap upper_bounds_tmp;
 		error = upper_bounds_tmp.TryFromJSON(upper_bounds_val);
 		if (!error.empty()) {
@@ -151,66 +148,62 @@ string DataFile::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void DataFile::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void DataFile::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize base class: ContentFile
-	content_file.PopulateJSON(doc, obj);
+	content_file.PopulateJSON(writer, obj);
 
 	// Serialize: first-row-id
 	if (first_row_id.has_value()) {
 		auto &first_row_id_value = *first_row_id;
-		yyjson_mut_obj_add_sint(doc, obj, "first-row-id", first_row_id_value);
+		obj.Add("first-row-id", writer.CreateSignedInteger(first_row_id_value));
 	}
 
 	// Serialize: column-sizes
 	if (column_sizes.has_value()) {
 		auto &column_sizes_value = *column_sizes;
-		yyjson_mut_val *column_sizes_value_val = column_sizes_value.ToJSON(doc);
-		yyjson_mut_obj_add_val(doc, obj, "column-sizes", column_sizes_value_val);
+		auto column_sizes_value_val = column_sizes_value.ToJSON(writer);
+		obj.Add("column-sizes", column_sizes_value_val);
 	}
 
 	// Serialize: value-counts
 	if (value_counts.has_value()) {
 		auto &value_counts_value = *value_counts;
-		yyjson_mut_val *value_counts_value_val = value_counts_value.ToJSON(doc);
-		yyjson_mut_obj_add_val(doc, obj, "value-counts", value_counts_value_val);
+		auto value_counts_value_val = value_counts_value.ToJSON(writer);
+		obj.Add("value-counts", value_counts_value_val);
 	}
 
 	// Serialize: null-value-counts
 	if (null_value_counts.has_value()) {
 		auto &null_value_counts_value = *null_value_counts;
-		yyjson_mut_val *null_value_counts_value_val = null_value_counts_value.ToJSON(doc);
-		yyjson_mut_obj_add_val(doc, obj, "null-value-counts", null_value_counts_value_val);
+		auto null_value_counts_value_val = null_value_counts_value.ToJSON(writer);
+		obj.Add("null-value-counts", null_value_counts_value_val);
 	}
 
 	// Serialize: nan-value-counts
 	if (nan_value_counts.has_value()) {
 		auto &nan_value_counts_value = *nan_value_counts;
-		yyjson_mut_val *nan_value_counts_value_val = nan_value_counts_value.ToJSON(doc);
-		yyjson_mut_obj_add_val(doc, obj, "nan-value-counts", nan_value_counts_value_val);
+		auto nan_value_counts_value_val = nan_value_counts_value.ToJSON(writer);
+		obj.Add("nan-value-counts", nan_value_counts_value_val);
 	}
 
 	// Serialize: lower-bounds
 	if (lower_bounds.has_value()) {
 		auto &lower_bounds_value = *lower_bounds;
-		yyjson_mut_val *lower_bounds_value_val = lower_bounds_value.ToJSON(doc);
-		yyjson_mut_obj_add_val(doc, obj, "lower-bounds", lower_bounds_value_val);
+		auto lower_bounds_value_val = lower_bounds_value.ToJSON(writer);
+		obj.Add("lower-bounds", lower_bounds_value_val);
 	}
 
 	// Serialize: upper-bounds
 	if (upper_bounds.has_value()) {
 		auto &upper_bounds_value = *upper_bounds;
-		yyjson_mut_val *upper_bounds_value_val = upper_bounds_value.ToJSON(doc);
-		yyjson_mut_obj_add_val(doc, obj, "upper-bounds", upper_bounds_value_val);
+		auto upper_bounds_value_val = upper_bounds_value.ToJSON(writer);
+		obj.Add("upper-bounds", upper_bounds_value_val);
 	}
 }
 
-yyjson_mut_val *DataFile::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue DataFile::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

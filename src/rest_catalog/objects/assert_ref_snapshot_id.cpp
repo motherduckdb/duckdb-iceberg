@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/assert_ref_snapshot_id.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 AssertRefSnapshotId::AssertRefSnapshotId() {
 }
 
-AssertRefSnapshotId AssertRefSnapshotId::FromJSON(yyjson_val *obj) {
+AssertRefSnapshotId AssertRefSnapshotId::FromJSON(JSONValue obj) {
 	AssertRefSnapshotId res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -35,49 +33,49 @@ AssertRefSnapshotId AssertRefSnapshotId::Copy() const {
 	return res;
 }
 
-string AssertRefSnapshotId::TryFromJSON(yyjson_val *obj) {
+string AssertRefSnapshotId::TryFromJSON(JSONValue obj) {
 	string error;
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
+	auto type_val = obj.GetMember("type");
+	if (!type_val.IsValid()) {
 		return "AssertRefSnapshotId required property 'type' is missing";
 	} else {
-		if (yyjson_is_str(type_val)) {
-			type = yyjson_get_str(type_val);
+		if (json_utils::IsString(type_val)) {
+			type = json_utils::GetString(type_val);
 		} else {
-			return StringUtil::Format("AssertRefSnapshotId property 'type' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(type_val));
+			return StringUtil::Format("AssertRefSnapshotId property 'type' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(type_val).c_str());
 		}
-		if (!yyjson_is_null(type_val) && type != "assert-ref-snapshot-id") {
+		if (!type_val.IsNull() && type != "assert-ref-snapshot-id") {
 			return "AssertRefSnapshotId property 'type' does not match its required const value";
 		}
 	}
-	auto ref_val = yyjson_obj_get(obj, "ref");
-	if (!ref_val) {
+	auto ref_val = obj.GetMember("ref");
+	if (!ref_val.IsValid()) {
 		return "AssertRefSnapshotId required property 'ref' is missing";
 	} else {
-		if (yyjson_is_str(ref_val)) {
-			ref = yyjson_get_str(ref_val);
+		if (json_utils::IsString(ref_val)) {
+			ref = json_utils::GetString(ref_val);
 		} else {
-			return StringUtil::Format("AssertRefSnapshotId property 'ref' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(ref_val));
+			return StringUtil::Format("AssertRefSnapshotId property 'ref' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(ref_val).c_str());
 		}
 	}
-	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
-	if (!snapshot_id_val) {
+	auto snapshot_id_val = obj.GetMember("snapshot-id");
+	if (!snapshot_id_val.IsValid()) {
 		return "AssertRefSnapshotId required property 'snapshot-id' is missing";
 	} else {
-		if (yyjson_is_null(snapshot_id_val)) {
+		if (snapshot_id_val.IsNull()) {
 			snapshot_id = nullopt;
 		} else {
 			int64_t snapshot_id_tmp;
-			if (yyjson_is_sint(snapshot_id_val)) {
-				snapshot_id_tmp = yyjson_get_sint(snapshot_id_val);
-			} else if (yyjson_is_uint(snapshot_id_val)) {
-				snapshot_id_tmp = yyjson_get_uint(snapshot_id_val);
+			if (json_utils::IsInteger(snapshot_id_val)) {
+				snapshot_id_tmp = json_utils::GetSignedInteger(snapshot_id_val);
+			} else if (json_utils::IsUnsignedInteger(snapshot_id_val)) {
+				snapshot_id_tmp = json_utils::GetUnsignedInteger(snapshot_id_val);
 			} else {
 				return StringUtil::Format(
-				    "AssertRefSnapshotId property 'snapshot_id_tmp' is not of type 'integer', found '%s' instead",
-				    yyjson_get_type_desc(snapshot_id_val));
+				    "AssertRefSnapshotId property 'snapshot_id_tmp' is not of type 'integer', found %s instead",
+				    json_utils::GetTypeDescription(snapshot_id_val).c_str());
 			}
 			snapshot_id = std::move(snapshot_id_tmp);
 		}
@@ -85,29 +83,25 @@ string AssertRefSnapshotId::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void AssertRefSnapshotId::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void AssertRefSnapshotId::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
+	obj.AddString("type", type);
 
 	// Serialize: ref
-	yyjson_mut_obj_add_strcpy(doc, obj, "ref", ref.c_str());
+	obj.AddString("ref", ref);
 
 	// Serialize: snapshot-id
 	if (snapshot_id.has_value()) {
 		auto &snapshot_id_value = *snapshot_id;
-		yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id_value);
+		obj.Add("snapshot-id", writer.CreateSignedInteger(snapshot_id_value));
 	} else {
-		yyjson_mut_obj_add_null(doc, obj, "snapshot-id");
+		obj.Add("snapshot-id", writer.CreateNull());
 	}
 }
 
-yyjson_mut_val *AssertRefSnapshotId::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue AssertRefSnapshotId::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/false_expression.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 FalseExpression::FalseExpression() {
 }
 
-FalseExpression FalseExpression::FromJSON(yyjson_val *obj) {
+FalseExpression FalseExpression::FromJSON(JSONValue obj) {
 	FalseExpression res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -30,10 +28,10 @@ FalseExpression FalseExpression::Copy() const {
 	return res;
 }
 
-string FalseExpression::TryFromJSON(yyjson_val *obj) {
+string FalseExpression::TryFromJSON(JSONValue obj) {
 	string error;
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
+	auto type_val = obj.GetMember("type");
+	if (!type_val.IsValid()) {
 		return "FalseExpression required property 'type' is missing";
 	} else {
 		error = type.TryFromJSON(type_val);
@@ -44,19 +42,15 @@ string FalseExpression::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void FalseExpression::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void FalseExpression::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	yyjson_mut_val *type_val = type.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+	auto type_val = type.ToJSON(writer);
+	obj.Add("type", type_val);
 }
 
-yyjson_mut_val *FalseExpression::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue FalseExpression::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

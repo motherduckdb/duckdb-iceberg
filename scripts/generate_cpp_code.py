@@ -57,14 +57,12 @@ def safe_cpp_name(name: str) -> str:
 HEADER_FORMAT = """
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
 #include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 {ADDITIONAL_HEADERS}
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {{
 namespace rest_api_objects {{
@@ -80,19 +78,87 @@ namespace rest_api_objects {{
 SOURCE_FORMAT = """
 #include "rest_catalog/objects/{HEADER_NAME}.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {{
 namespace rest_api_objects {{
 
 {CLASS_DEFINITION}
 
+}} // namespace rest_api_objects
+}} // namespace duckdb
+"""
+
+JSON_UTILS_HEADER_FORMAT = """
+#pragma once
+
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/string.hpp"
+
+namespace duckdb {{
+namespace rest_api_objects {{
+namespace json_utils {{
+
+inline bool IsNull(const JSONValue &value) {{
+	return value.IsNull();
+}}
+
+inline void *GetNull(const JSONValue &value) {{
+	return nullptr;
+}}
+
+inline bool IsString(const JSONValue &value) {{
+	return value.IsString();
+}}
+
+inline string GetString(const JSONValue &value) {{
+	return value.GetString();
+}}
+
+inline bool IsInteger(const JSONValue &value) {{
+	return value.IsInteger();
+}}
+
+inline bool IsUnsignedInteger(const JSONValue &value) {{
+	return value.GetType() == JSONValueType::UNSIGNED_INTEGER;
+}}
+
+inline bool IsBoolean(const JSONValue &value) {{
+	return value.GetType() == JSONValueType::BOOLEAN;
+}}
+
+inline bool GetBoolean(const JSONValue &value) {{
+	return value.GetBoolean();
+}}
+
+inline bool IsNumber(const JSONValue &value) {{
+	return value.IsInteger() || value.GetType() == JSONValueType::DOUBLE;
+}}
+
+inline int64_t GetSignedInteger(const JSONValue &value) {{
+	return value.GetType() == JSONValueType::SIGNED_INTEGER ? value.GetSignedInteger()
+	                                                        : static_cast<int64_t>(value.GetUnsignedInteger());
+}}
+
+inline uint64_t GetUnsignedInteger(const JSONValue &value) {{
+	return value.GetType() == JSONValueType::UNSIGNED_INTEGER
+	           ? value.GetUnsignedInteger()
+	           : static_cast<uint64_t>(value.GetSignedInteger());
+}}
+
+inline double GetNumber(const JSONValue &value) {{
+	return value.IsInteger() ? static_cast<double>(GetSignedInteger(value)) : value.GetDouble();
+}}
+
+inline string GetTypeDescription(const JSONValue &value) {{
+	return StringUtil::Format("JSON type %d", static_cast<int>(value.GetType()));
+}}
+
+}} // namespace json_utils
 }} // namespace rest_api_objects
 }} // namespace duckdb
 """
@@ -205,18 +271,26 @@ class PrimitiveTypeMapping:
 
 
 PRIMITIVE_TYPE_MAPPING = {
-    None: PrimitiveTypeMapping(type_check='yyjson_is_null', conversion='(void *)', cpp_type='void*'),
-    'string': PrimitiveTypeMapping(type_check='yyjson_is_str', conversion='yyjson_get_str', cpp_type='string'),
+    None: PrimitiveTypeMapping(type_check='json_utils::IsNull', conversion='json_utils::GetNull', cpp_type='void*'),
+    'string': PrimitiveTypeMapping(
+        type_check='json_utils::IsString', conversion='json_utils::GetString', cpp_type='string'
+    ),
     'integer': PrimitiveTypeMapping(
-        type_check='yyjson_is_int',
-        conversion='yyjson_get_int',
+        type_check='json_utils::IsInteger',
+        conversion='json_utils::GetSignedInteger',
         cpp_type='int32_t',
         formats={
-            'int64': PrimitiveTypeMapping(type_check='yyjson_is_sint', conversion='yyjson_get_sint', cpp_type='int64_t')
+            'int64': PrimitiveTypeMapping(
+                type_check='json_utils::IsInteger', conversion='json_utils::GetSignedInteger', cpp_type='int64_t'
+            )
         },
     ),
-    'boolean': PrimitiveTypeMapping(type_check='yyjson_is_bool', conversion='yyjson_get_bool', cpp_type='bool'),
-    'number': PrimitiveTypeMapping(type_check='yyjson_is_num', conversion='yyjson_get_num', cpp_type='double'),
+    'boolean': PrimitiveTypeMapping(
+        type_check='json_utils::IsBoolean', conversion='json_utils::GetBoolean', cpp_type='bool'
+    ),
+    'number': PrimitiveTypeMapping(
+        type_check='json_utils::IsNumber', conversion='json_utils::GetNumber', cpp_type='double'
+    ),
 }
 
 
@@ -324,8 +398,8 @@ class CPPClass:
             property_schema = object_property.properties[property_name]
             variable_name = safe_cpp_name(property_name) + '_refinement'
             value_name = variable_name + '_val'
-            result.append(f'auto {value_name} = yyjson_obj_get(obj, "{property_name}");')
-            result.append(f'if ({value_name}) {{')
+            result.append(f'auto {value_name} = obj.GetMember("{property_name}");')
+            result.append(f'if ({value_name}.IsValid()) {{')
             result.append(f'\t{self.generate_variable_type(property_schema)} {variable_name};')
             assignment = self.generate_assignment(property_schema, variable_name, value_name, True)
             result.extend([f'\t{x}' for x in assignment])
@@ -381,8 +455,8 @@ class CPPClass:
         res = []
         res.extend(
             [
-                f'auto {required_property.variable_name}_val = yyjson_obj_get(obj, "{required_property.property_name}");',
-                f'if (!{required_property.variable_name}_val) {{',
+                f'auto {required_property.variable_name}_val = obj.GetMember("{required_property.property_name}");',
+                f'if (!{required_property.variable_name}_val.IsValid()) {{',
             ]
         )
         if required_property.default is not None:
@@ -400,14 +474,14 @@ class CPPClass:
         res = []
         res.extend(
             [
-                f'auto {optional_property.variable_name}_val = yyjson_obj_get(obj, "{optional_property.property_name}");',
-                f'if ({optional_property.variable_name}_val) {{',
+                f'auto {optional_property.variable_name}_val = obj.GetMember("{optional_property.property_name}");',
+                f'if ({optional_property.variable_name}_val.IsValid()) {{',
             ]
         )
         if optional_property.nullable:
             res.extend(
                 [
-                    f'\tif (yyjson_is_null({optional_property.variable_name}_val)) {{',
+                    f'\tif ({optional_property.variable_name}_val.IsNull()) {{',
                     '\t\t//! do nothing, property is explicitly nullable',
                     '\t} else {',
                 ]
@@ -419,26 +493,42 @@ class CPPClass:
         res.append('}')
         return res
 
+    @staticmethod
+    def make_callback_safe(lines: List[str]) -> List[str]:
+        result = []
+        for line in lines:
+            statement = line.strip()
+            if statement.startswith('return ') and statement.endswith(';'):
+                indent = line[: len(line) - len(line.lstrip())]
+                expression = statement[len('return ') : -1]
+                if expression != 'error':
+                    result.append(f'{indent}error = {expression};')
+                result.append(f'{indent}return;')
+            elif statement == 'continue;':
+                indent = line[: len(line) - len(line.lstrip())]
+                result.append(f'{indent}return;')
+            else:
+                result.append(line)
+        return result
+
     def write_additional_properties(self) -> List[str]:
         if not self.additional_properties:
             return []
         res = []
 
         res.extend(self.additional_properties.exclude_list)
-        res.extend(
-            [
-                'size_t idx, max;',
-                'yyjson_val *key, *val;',
-                'yyjson_obj_foreach(obj, idx, max, key, val) {',
-            ]
-        )
-        # FIXME: check for null in returned char*?
-        res.append('\tauto key_str = yyjson_get_str(key);')
-        res.extend(self.additional_properties.skip_if_excluded)
-        res.extend(self.additional_properties.body)
+        res.append('obj.IterateObject([&](const string &key_str, JSONValue val) {')
+        res.append('\tif (!error.empty()) {')
+        res.append('\t\treturn;')
+        res.append('\t}')
+        res.extend(self.make_callback_safe(self.additional_properties.skip_if_excluded))
+        res.extend(self.make_callback_safe(self.additional_properties.body))
         res.extend(
             [
                 '\tadditional_properties.emplace(key_str, std::move(tmp));',
+                '});',
+                'if (!error.empty()) {',
+                '\treturn error;',
                 '}',
             ]
         )
@@ -465,11 +555,11 @@ class CPPClass:
             return []
         if self.discriminator_property and all(item.discriminator_value is not None for item in self.one_of):
             res = [
-                f'auto discriminator_val = yyjson_obj_get(obj, "{self.discriminator_property}");',
-                'if (!discriminator_val || !yyjson_is_str(discriminator_val)) {',
+                f'auto discriminator_val = obj.GetMember("{self.discriminator_property}");',
+                'if (!discriminator_val.IsValid() || !discriminator_val.IsString()) {',
                 f'''\treturn "{self.name} discriminator '{self.discriminator_property}' is missing or is not a string";''',
                 '}',
-                'string discriminator = yyjson_get_str(discriminator_val);',
+                'string discriminator = discriminator_val.GetString();',
             ]
             for index, item in enumerate(self.one_of):
                 prefix = 'if' if index == 0 else 'else if'
@@ -692,7 +782,7 @@ class CPPClass:
 
     def generate_nullable_assignment(self, schema: Property, target: str, source: str) -> List[str]:
         uses_optional_wrapper = self.uses_optional_wrapper(schema)
-        result = [f'if (yyjson_is_null({source})) {{']
+        result = [f'if ({source}.IsNull()) {{']
         result.append(f'\t{target} = {"nullopt" if uses_optional_wrapper else "nullptr"};')
         result.append('} else {')
         if uses_optional_wrapper:
@@ -772,7 +862,7 @@ class CPPClass:
         res.extend(
             [
                 '',
-                f'{qualified_name} {qualified_name}::FromJSON(yyjson_val *obj) {{',
+                f'{qualified_name} {qualified_name}::FromJSON(JSONValue obj) {{',
                 f'\t{self.name} res;',
                 '\tauto error = res.TryFromJSON(obj);',
                 '\tif (!error.empty()) {',
@@ -786,7 +876,7 @@ class CPPClass:
         res.extend(
             [
                 '',
-                f'string {qualified_name}::TryFromJSON(yyjson_val *obj) {{',
+                f'string {qualified_name}::TryFromJSON(JSONValue obj) {{',
                 '\tstring error;',
             ]
         )
@@ -829,8 +919,8 @@ class CPPClass:
             [
                 'public:',
                 '\t// Deserialization',
-                f'\tstatic {self.name} FromJSON(yyjson_val *obj);',
-                '\tstring TryFromJSON(yyjson_val *obj);',
+                f'\tstatic {self.name} FromJSON(JSONValue obj);',
+                '\tstring TryFromJSON(JSONValue obj);',
                 '',
                 '\t// Copy',
                 f'\t{self.name} Copy() const;',
@@ -839,9 +929,9 @@ class CPPClass:
             ]
         )
         if supports_population:
-            res.append('\tvoid PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;')
+            res.append('\tvoid PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;')
         res.extend([
-            '\tyyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;',
+            '\tJSONMutableValue ToJSON(JSONWriter &writer) const;',
             '',
         ])
         res.extend(self.write_variables())
@@ -946,19 +1036,16 @@ class CPPClass:
         item_type = array_property.item_type
         item_name = f'{destination_name}_item'
         item_value_name = f'{destination_name}_item_val'
-        index_name = f'{destination_name}_idx'
-        max_name = f'{destination_name}_max'
         body = []
-        body.append(f'size_t {index_name}, {max_name};')
-        body.append(f'yyjson_val *{item_value_name};')
-        body.append(
-            f'yyjson_arr_foreach({array_name}, {index_name}, {max_name}, {item_value_name}) {{'
-        )
+        body.append(f'{array_name}.IterateArray([&](JSONValue {item_value_name}) {{')
+        body.append('\tif (!error.empty()) {')
+        body.append('\t\treturn;')
+        body.append('\t}')
 
         assignment = f'std::move({item_name})'
         if item_type.type != Property.Type.SCHEMA_REFERENCE:
             body.append(f'{self.generate_variable_type(item_type)} {item_name};')
-            body.extend(self.generate_assignment(item_type, item_name, item_value_name, True))
+            body.extend(self.make_callback_safe(self.generate_assignment(item_type, item_name, item_value_name, True)))
         else:
             schema_property = cast(SchemaReferenceProperty, item_type)
             self.referenced_schemas.add(schema_property.ref)
@@ -973,15 +1060,18 @@ class CPPClass:
                 assignment = f'std::move({item_pointer_name})'
             else:
                 body.append(f'\t{schema_property.ref} {item_name};')
-            body.extend(
+            body.extend(self.make_callback_safe(
                 [
                     f'\terror = {item_name}.TryFromJSON({item_value_name});',
                     '\tif (!error.empty()) {',
                     '\t\treturn error;',
                     '\t}',
                 ]
-            )
+            ))
         body.append(f'\t{destination_name}.emplace_back({assignment});')
+        body.append('});')
+        body.append('if (!error.empty()) {')
+        body.append('\treturn error;')
         body.append('}')
 
         res = []
@@ -990,22 +1080,22 @@ class CPPClass:
             prefix = '} else '
             if array_property.nullable == True:
                 res.extend(
-                    [f'if (yyjson_is_null({array_name})) {{', '\t//! do nothing, property is explicitly nullable']
+                    [f'if ({array_name}.IsNull()) {{', '\t//! do nothing, property is explicitly nullable']
                 )
             else:
                 res.extend(
                     [
-                        f'if (yyjson_is_null({array_name})) {{',
+                        f'if ({array_name}.IsNull()) {{',
                         f'''\treturn "{self.name} property '{destination_name}' is not nullable, but is 'null'";''',
                     ]
                 )
 
-        res.append(f'{prefix}if (yyjson_is_arr({array_name})) {{')
+        res.append(f'{prefix}if ({array_name}.IsArray()) {{')
         res.extend([f'\t{x}' for x in body])
         res.extend(
             [
                 '} else {',
-                f"""\treturn StringUtil::Format("{self.name} property '{destination_name}' is not of type 'array', found '%s' instead", yyjson_get_type_desc({array_name}));""",
+                f"""\treturn StringUtil::Format("{self.name} property '{destination_name}' is not of type 'array', found %s instead", json_utils::GetTypeDescription({array_name}).c_str());""",
                 '}',
             ]
         )
@@ -1022,14 +1112,14 @@ class CPPClass:
             if property.nullable == True:
                 res.extend(
                     [
-                        f'if (yyjson_is_null({source})) {{',
+                        f'if ({source}.IsNull()) {{',
                         '\t//! do nothing, property is explicitly nullable',
                     ]
                 )
             else:
                 res.extend(
                     [
-                        f'if (yyjson_is_null({source})) {{',
+                        f'if ({source}.IsNull()) {{',
                         f'''\treturn "{self.name} property '{target}' is not nullable, but is 'null'";''',
                     ]
                 )
@@ -1042,8 +1132,7 @@ class CPPClass:
                 source, target, cast(ArrayProperty, property), handle_nullable=handle_nullable
             )
         elif property.type == Property.Type.PRIMITIVE:
-            # FIXME: add a check to see that the yyjson_val* is of the right type
-            # FIXME: check for null in returned char* for 'yyjson_get_str?
+            # Validate the JSON type before extracting the value.
             primitive_property = cast(PrimitiveProperty, property)
             item_type = primitive_property.primitive_type
             if item_type not in PRIMITIVE_TYPE_MAPPING:
@@ -1068,8 +1157,8 @@ class CPPClass:
                 )
                 res.extend(
                     [
-                        f'}} else if (yyjson_is_uint({source})) {{',
-                        f'\t{target} = yyjson_get_uint({source});',
+                        f'}} else if (json_utils::IsUnsignedInteger({source})) {{',
+                        f'\t{target} = json_utils::GetUnsignedInteger({source});',
                     ]
                 )
             else:
@@ -1083,7 +1172,7 @@ class CPPClass:
             res.extend(
                 [
                     '} else {',
-                    f"""\treturn StringUtil::Format("{self.name} property '{target}' is not of type '{item_type}', found '%s' instead", yyjson_get_type_desc({source}));""",
+                    f"""\treturn StringUtil::Format("{self.name} property '{target}' is not of type '{item_type}', found %s instead", json_utils::GetTypeDescription({source}).c_str());""",
                     '}',
                 ]
             )
@@ -1096,7 +1185,7 @@ class CPPClass:
                     const_literal = str(primitive_property.const)
                 res.extend(
                     [
-                        f'if (!yyjson_is_null({source}) && {target} != {const_literal}) {{',
+                        f'if (!{source}.IsNull() && {target} != {const_literal}) {{',
                         f'''\treturn "{self.name} property '{target}' does not match its required const value";''',
                         '}',
                     ]
@@ -1104,7 +1193,7 @@ class CPPClass:
         elif property.type == Property.Type.OBJECT and property.is_raw_object():
             res.extend(
                 [
-                    f'{prefix}if (yyjson_is_obj({source})) {{',
+                    f'{prefix}if ({source}.IsObject()) {{',
                     f'\t{target} = {source};',
                     '} else {',
                     f"""\treturn "{self.name} property '{target}' is not of type 'object'";""",
@@ -1115,21 +1204,19 @@ class CPPClass:
             object_property = cast(ObjectProperty, property)
             additional_properties = property.additional_properties
 
-            res.append(f'{prefix}if (yyjson_is_obj({source})) {{')
-            res.extend(
-                [
-                    '\tsize_t idx, max;',
-                    '\tyyjson_val *key, *val;',
-                    f'\tyyjson_obj_foreach({source}, idx, max, key, val) {{',
-                ]
-            )
-            # FIXME: check for null in returned char*?
-            res.append('\t\tauto key_str = yyjson_get_str(key);')
+            res.append(f'{prefix}if ({source}.IsObject()) {{')
+            res.append(f'\t{source}.IterateObject([&](const string &key_str, JSONValue val) {{')
+            res.append('\t\tif (!error.empty()) {')
+            res.append('\t\t\treturn;')
+            res.append('\t\t}')
             res.append(f'\t\t{self.generate_variable_type(additional_properties)} tmp;')
 
             if additional_properties.type != Property.Type.SCHEMA_REFERENCE:
                 item_definition = [
-                    f'\t\t{x}' for x in self.generate_item_parse(additional_properties, 'val', 'tmp', True)
+                    f'\t\t{x}'
+                    for x in self.make_callback_safe(
+                        self.generate_item_parse(additional_properties, 'val', 'tmp', True)
+                    )
                 ]
                 res.extend(item_definition)
             else:
@@ -1139,17 +1226,20 @@ class CPPClass:
                     print(f"Encountered recursive schema '{schema_property.ref}' in 'generate_additional_properties'")
                     exit(1)
                 res.append(f'\t\t{schema_property.ref} tmp;')
-                res.extend(
+                res.extend(self.make_callback_safe(
                     [
                         '\t\terror = tmp.TryFromJSON(val);',
                         '\t\tif (!error.empty()) {',
                         '\t\t\treturn error;',
                         '\t\t}',
                     ]
-                )
+                ))
             res.extend(
                 [
                     f'\t\t{target}.emplace(key_str, std::move(tmp));',
+                    '\t});',
+                    '\tif (!error.empty()) {',
+                    '\t\treturn error;',
                     '\t}',
                 ]
             )
@@ -1299,7 +1389,7 @@ class CPPClass:
             if object_property.additional_properties:
                 variable_type = self.generate_variable_type(object_property.additional_properties)
                 return f'case_insensitive_map_t<{variable_type}>'
-            return 'yyjson_val *'
+            return 'JSONValue'
         elif schema.type == Property.Type.ARRAY:
             array_property = cast(ArrayProperty, schema)
             item_type = self.generate_variable_type(array_property.item_type)
@@ -1389,25 +1479,13 @@ class CPPClass:
     def _generate_json_object_merge(self, source_expr: str, temp_name: str, indent: int = 1) -> List[str]:
         prefix = '\t' * indent
         return [
-            f'{prefix}yyjson_mut_val *{temp_name} = {source_expr};',
-            f'{prefix}if (!yyjson_mut_is_obj({temp_name})) {{',
-            f'{prefix}\tthrow InternalException("PopulateJSON requires an object-like JSON value");',
-            f'{prefix}}}',
-            f'{prefix}{{',
-            f'{prefix}\tsize_t idx, max;',
-            f'{prefix}\tyyjson_mut_val *key, *val;',
-            f'{prefix}\tyyjson_mut_obj_foreach({temp_name}, idx, max, key, val) {{',
-            f'{prefix}\t\tyyjson_mut_obj_add(obj, key, val);',
-            f'{prefix}\t}}',
-            f'{prefix}}}',
+            f'{prefix}(void){source_expr};',
+            f'{prefix}throw InternalException("PopulateJSON requires an object-like JSON value");',
         ]
 
     def generate_populate_json_method(self, qualified_name: str) -> List[str]:
         lines = [
-            f"void {qualified_name}::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {{",
-            "\tif (!yyjson_mut_is_obj(obj)) {",
-            '\t\tthrow InternalException("PopulateJSON requires obj to be a JSON object");',
-            "\t}",
+            f"void {qualified_name}::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {{",
             "",
         ]
 
@@ -1419,9 +1497,9 @@ class CPPClass:
                     lines.append(f"\t}} else if ({self.variant_presence_condition(variant.name, variant.class_name)}) {{")
 
                 if self.class_supports_json_object_population(variant.class_name):
-                    lines.append(f"\t\t{variant.name}->PopulateJSON(doc, obj);")
+                    lines.append(f"\t\t{variant.name}->PopulateJSON(writer, obj);")
                 else:
-                    accessor = f"{variant.name}->ToJSON(doc)"
+                    accessor = f"{variant.name}->ToJSON(writer)"
                     lines.extend(self._generate_json_object_merge(accessor, f"{variant.name}_obj", indent=2))
 
             lines.extend([
@@ -1445,9 +1523,9 @@ class CPPClass:
                     lines.append(f"\t}} else if ({self.variant_presence_condition(variant.name, variant.class_name)}) {{")
 
                 if self.class_supports_json_object_population(variant.class_name):
-                    lines.append(f"\t\t{variant.name}->PopulateJSON(doc, obj);")
+                    lines.append(f"\t\t{variant.name}->PopulateJSON(writer, obj);")
                 else:
-                    accessor = f"{variant.name}->ToJSON(doc)"
+                    accessor = f"{variant.name}->ToJSON(writer)"
                     lines.extend(self._generate_json_object_merge(accessor, f"{variant.name}_obj", indent=2))
 
             lines.extend([
@@ -1464,9 +1542,9 @@ class CPPClass:
                     lines.append(f"\t}} else if ({self.variant_presence_condition(variant.name, variant.class_name)}) {{")
 
                 if self.class_supports_json_object_population(variant.class_name):
-                    lines.append(f"\t\t{variant.name}->PopulateJSON(doc, obj);")
+                    lines.append(f"\t\t{variant.name}->PopulateJSON(writer, obj);")
                 else:
-                    accessor = f"{variant.name}->ToJSON(doc)"
+                    accessor = f"{variant.name}->ToJSON(writer)"
                     lines.extend(self._generate_json_object_merge(accessor, f"{variant.name}_obj", indent=2))
 
             lines.append("\t}")
@@ -1477,11 +1555,11 @@ class CPPClass:
                 if base.class_name:
                     lines.append(f"\t// Serialize base class: {base.class_name}")
                     if self.class_supports_json_object_population(base.class_name):
-                        lines.append(f"\t{base.name}.PopulateJSON(doc, obj);")
+                        lines.append(f"\t{base.name}.PopulateJSON(writer, obj);")
                     else:
                         lines.extend(
                             self._generate_json_object_merge(
-                                f"{base.name}.ToJSON(doc)", f"{base.name}base_obj", indent=1
+                                f"{base.name}.ToJSON(writer)", f"{base.name}base_obj", indent=1
                             )
                         )
                     lines.append("")
@@ -1525,20 +1603,22 @@ class CPPClass:
             prim_type = prim.primitive_type
 
             lines = [
-                f"yyjson_mut_val* {qualified_name}::ToJSON(yyjson_mut_doc *doc) const {{"
+                f"JSONMutableValue {qualified_name}::ToJSON(JSONWriter &writer) const {{"
             ]
 
-            if prim_type == 'string':
-                lines.append("\treturn yyjson_mut_strcpy(doc, value.c_str());")
+            if prim_type is None:
+                lines.append("\treturn writer.CreateNull();")
+            elif prim_type == 'string':
+                lines.append("\treturn writer.CreateString(value);")
             elif prim_type == 'integer':
                 if prim.format == 'int64':
-                    lines.append("\treturn yyjson_mut_sint(doc, value);")
+                    lines.append("\treturn writer.CreateSignedInteger(value);")
                 else:
-                    lines.append("\treturn yyjson_mut_int(doc, value);")
+                    lines.append("\treturn writer.CreateSignedInteger(value);")
             elif prim_type == 'boolean':
-                lines.append("\treturn yyjson_mut_bool(doc, value);")
+                lines.append("\treturn writer.CreateBoolean(value);")
             elif prim_type == 'number':
-                lines.append("\treturn yyjson_mut_real(doc, value);")
+                lines.append("\treturn writer.CreateDouble(value);")
             else:
                 lines.append('\tthrow InternalException("Unsupported primitive serialization");')
 
@@ -1548,8 +1628,8 @@ class CPPClass:
         if root_schema and root_schema.type == Property.Type.ARRAY:
             array_schema = cast(ArrayProperty, root_schema)
             lines = [
-                f"yyjson_mut_val* {qualified_name}::ToJSON(yyjson_mut_doc *doc) const {{",
-                "\tyyjson_mut_val *arr = yyjson_mut_arr(doc);",
+                f"JSONMutableValue {qualified_name}::ToJSON(JSONWriter &writer) const {{",
+                "\tauto arr = writer.CreateArray();",
                 "\tfor (const auto &item : value) {"
             ]
 
@@ -1557,22 +1637,22 @@ class CPPClass:
             if item_type.type == Property.Type.PRIMITIVE:
                 prim_item = cast(PrimitiveProperty, item_type)
                 if prim_item.primitive_type == 'string':
-                    lines.append("\t\tyyjson_mut_arr_append(arr, yyjson_mut_str(doc, item.c_str()));")
+                    lines.append("\t\tarr.AppendString(item);")
                 elif prim_item.primitive_type == 'integer':
                     if prim_item.format == 'int64':
-                        lines.append("\t\tyyjson_mut_arr_append(arr, yyjson_mut_sint(doc, item));")
+                        lines.append("\t\tarr.Append(writer.CreateSignedInteger(item));")
                     else:
-                        lines.append("\t\tyyjson_mut_arr_append(arr, yyjson_mut_int(doc, item));")
+                        lines.append("\t\tarr.Append(writer.CreateSignedInteger(item));")
                 elif prim_item.primitive_type == 'boolean':
-                    lines.append("\t\tyyjson_mut_arr_append(arr, yyjson_mut_bool(doc, item));")
+                    lines.append("\t\tarr.Append(writer.CreateBoolean(item));")
                 elif prim_item.primitive_type == 'number':
-                    lines.append("\t\tyyjson_mut_arr_append(arr, yyjson_mut_real(doc, item));")
+                    lines.append("\t\tarr.Append(writer.CreateDouble(item));")
             elif item_type.type == Property.Type.SCHEMA_REFERENCE:
                 schema_ref = cast(SchemaReferenceProperty, item_type)
                 if schema_ref.ref in self.parse_info.recursive_schemas:
-                    lines.append("\t\tyyjson_mut_arr_append(arr, item->ToJSON(doc));")
+                    lines.append("\t\tarr.Append(item->ToJSON(writer));")
                 else:
-                    lines.append("\t\tyyjson_mut_arr_append(arr, item.ToJSON(doc));")
+                    lines.append("\t\tarr.Append(item.ToJSON(writer));")
 
             lines.extend([
                 "\t}",
@@ -1583,16 +1663,16 @@ class CPPClass:
 
         if supports_population:
             return [
-                f"yyjson_mut_val* {qualified_name}::ToJSON(yyjson_mut_doc *doc) const {{",
-                "\tyyjson_mut_val *obj = yyjson_mut_obj(doc);",
-                "\tPopulateJSON(doc, obj);",
+                f"JSONMutableValue {qualified_name}::ToJSON(JSONWriter &writer) const {{",
+                "\tauto obj = writer.CreateObject();",
+                "\tPopulateJSON(writer, obj);",
                 "\treturn obj;",
                 "}",
             ]
 
         lines = []
         lines.extend([
-            f"yyjson_mut_val* {qualified_name}::ToJSON(yyjson_mut_doc *doc) const {{",
+            f"JSONMutableValue {qualified_name}::ToJSON(JSONWriter &writer) const {{",
         ])
 
         if self.one_of:
@@ -1602,12 +1682,12 @@ class CPPClass:
                 else:
                     lines.append(f"\t}} else if ({self.variant_presence_condition(variant.name, variant.class_name)}) {{")
 
-                lines.append(f"\t\treturn {variant.name}->ToJSON(doc);")
+                lines.append(f"\t\treturn {variant.name}->ToJSON(writer);")
 
             lines.extend([
                 "\t}",
                 "\t// No variant is active - return empty object",
-                "\treturn yyjson_mut_obj(doc);",
+                "\treturn writer.CreateObject();",
                 "}"
             ])
             return lines
@@ -1641,14 +1721,14 @@ class CPPClass:
                 else:
                     lines.append(f"\t}} else if ({self.variant_presence_condition(variant.name, variant.class_name)}) {{")
 
-                lines.append(f"\t\treturn {variant.name}->ToJSON(doc);")
+                lines.append(f"\t\treturn {variant.name}->ToJSON(writer);")
 
             lines.extend([
                 "\t}",
                 "\t// No variant is active - return null"
                 if any_of_is_primitive
                 else "\t// No variant is active - return empty object",
-                "\treturn yyjson_mut_null(doc);" if any_of_is_primitive else "\treturn yyjson_mut_obj(doc);",
+                "\treturn writer.CreateNull();" if any_of_is_primitive else "\treturn writer.CreateObject();",
                 "}"
             ])
             return lines
@@ -1689,7 +1769,7 @@ class CPPClass:
                 lines.extend(
                     [
                         "\telse {",
-                        f'\t\tyyjson_mut_obj_add_null(doc, obj, "{json_name}");',
+                        f'\t\tobj.Add("{json_name}", writer.CreateNull());',
                         "\t}",
                     ]
                 )
@@ -1754,24 +1834,24 @@ class CPPClass:
         
         if prim_type == 'string':
             return [
-                f'{prefix}yyjson_mut_obj_add_strcpy(doc, obj, "{json_name}", {var_name}.c_str());'
+                f'{prefix}obj.AddString("{json_name}", {var_name});'
             ]
         elif prim_type == 'integer':
             if prop.format == 'int64':
                 return [
-                    f'{prefix}yyjson_mut_obj_add_sint(doc, obj, "{json_name}", {var_name});'
+                    f'{prefix}obj.Add("{json_name}", writer.CreateSignedInteger({var_name}));'
                 ]
             else:
                 return [
-                    f'{prefix}yyjson_mut_obj_add_int(doc, obj, "{json_name}", {var_name});'
+                    f'{prefix}obj.Add("{json_name}", writer.CreateSignedInteger({var_name}));'
                 ]
         elif prim_type == 'boolean':
             return [
-                f'{prefix}yyjson_mut_obj_add_bool(doc, obj, "{json_name}", {var_name});'
+                f'{prefix}obj.Add("{json_name}", writer.CreateBoolean({var_name}));'
             ]
         elif prim_type == 'number':
             return [
-                f'{prefix}yyjson_mut_obj_add_real(doc, obj, "{json_name}", {var_name});'
+                f'{prefix}obj.Add("{json_name}", writer.CreateDouble({var_name}));'
             ]
         else:
             return [
@@ -1788,7 +1868,7 @@ class CPPClass:
         """Serialize array types"""
         
         lines = [
-            f'{prefix}yyjson_mut_val *{var_name}_arr = yyjson_mut_arr(doc);',
+            f'{prefix}auto {var_name}_arr = writer.CreateArray();',
             f'{prefix}for (const auto &item : {var_name}) {{'
         ]
         
@@ -1804,11 +1884,11 @@ class CPPClass:
             schema_ref = cast(SchemaReferenceProperty, item_type)
             if schema_ref.ref in self.parse_info.recursive_schemas:
                 lines.append(
-                    f'{prefix}\tyyjson_mut_val *item_val = item->ToJSON(doc);'
+                    f'{prefix}\tauto item_val = item->ToJSON(writer);'
                 )
             else:
                 lines.append(
-                    f'{prefix}\tyyjson_mut_val *item_val = item.ToJSON(doc);'
+                    f'{prefix}\tauto item_val = item.ToJSON(writer);'
                 )
         elif item_type.type == Property.Type.OBJECT:
             # Object/Map array items
@@ -1830,9 +1910,9 @@ class CPPClass:
             )
         
         lines.extend([
-            f'{prefix}\tyyjson_mut_arr_append({var_name}_arr, item_val);',
+            f'{prefix}\t{var_name}_arr.Append(item_val);',
             f'{prefix}}}',
-            f'{prefix}yyjson_mut_obj_add_val(doc, obj, "{json_name}", {var_name}_arr);'
+            f'{prefix}obj.Add("{json_name}", {var_name}_arr);'
         ])
         
         return lines
@@ -1848,24 +1928,24 @@ class CPPClass:
         
         if prim_type == 'string':
             return [
-                f'{prefix}\tyyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());'
+                f'{prefix}\tauto item_val = writer.CreateString(item);'
             ]
         elif prim_type == 'integer':
             if prim_prop.format == 'int64':
                 return [
-                    f'{prefix}\tyyjson_mut_val *item_val = yyjson_mut_sint(doc, item);'
+                    f'{prefix}\tauto item_val = writer.CreateSignedInteger(item);'
                 ]
             else:
                 return [
-                    f'{prefix}\tyyjson_mut_val *item_val = yyjson_mut_int(doc, item);'
+                    f'{prefix}\tauto item_val = writer.CreateSignedInteger(item);'
                 ]
         elif prim_type == 'boolean':
             return [
-                f'{prefix}\tyyjson_mut_val *item_val = yyjson_mut_bool(doc, item);'
+                f'{prefix}\tauto item_val = writer.CreateBoolean(item);'
             ]
         elif prim_type == 'number':
             return [
-                f'{prefix}\tyyjson_mut_val *item_val = yyjson_mut_real(doc, item);'
+                f'{prefix}\tauto item_val = writer.CreateDouble(item);'
             ]
         else:
             return [
@@ -1889,7 +1969,7 @@ class CPPClass:
         if object_prop.additional_properties:
             lines.extend([
                 f'{prefix}\t// Map object - serialize key-value pairs',
-                f'{prefix}\tyyjson_mut_val *item_val = yyjson_mut_obj(doc);'
+                f'{prefix}\tauto item_val = writer.CreateObject();'
             ])
             
             value_type = object_prop.additional_properties
@@ -1917,7 +1997,7 @@ class CPPClass:
         if object_prop.properties:
             lines.extend([
                 f'{prefix}\t// Object with properties - serialize each field',
-                f'{prefix}\tyyjson_mut_val *item_val = yyjson_mut_obj(doc);'
+                f'{prefix}\tauto item_val = writer.CreateObject();'
             ])
             
             for prop_name, prop_schema in object_prop.properties.items():
@@ -1932,7 +2012,7 @@ class CPPClass:
         # Fallback
         lines.extend([
             f'{prefix}\t// Empty object',
-            f'{prefix}\tyyjson_mut_val *item_val = yyjson_mut_obj(doc);'
+            f'{prefix}\tauto item_val = writer.CreateObject();'
         ])
         return lines
 
@@ -1953,32 +2033,27 @@ class CPPClass:
         
         if prim_type == 'string':
             lines.extend([
-                f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
-                f'{prefix}\tyyjson_mut_obj_add_strcpy(doc, item_val, key_ptr, value.c_str());'
+                f'{prefix}\titem_val.AddString(key, value);'
             ])
         elif prim_type == 'integer':
             if prim_prop.format == 'int64':
                 lines.extend([
-                    f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
-                    f'{prefix}\tyyjson_mut_obj_add_sint(doc, item_val, key_ptr, value);'
+                    f'{prefix}\titem_val.Add(key, writer.CreateSignedInteger(value));'
                 ]
                 )
             else:
                 lines.extend([
-                    f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
-                    f'{prefix}\tyyjson_mut_obj_add_int(doc, item_val, key_ptr, value);'
+                    f'{prefix}\titem_val.Add(key, writer.CreateSignedInteger(value));'
                 ]
                 )
         elif prim_type == 'boolean':
             lines.extend([
-                f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
-                f'{prefix}\tyyjson_mut_obj_add_bool(doc, item_val, key_ptr, value);'
+                f'{prefix}\titem_val.Add(key, writer.CreateBoolean(value));'
             ]
             )
         elif prim_type == 'number':
             lines.extend([
-                f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
-                f'{prefix}\tyyjson_mut_obj_add_real(doc, item_val, key_ptr, value);'
+                f'{prefix}\titem_val.Add(key, writer.CreateDouble(value));'
             ]
             )
         
@@ -2000,15 +2075,13 @@ class CPPClass:
         
         if schema_ref.ref in self.parse_info.recursive_schemas:
             lines.extend([
-                f'{prefix}\tyyjson_mut_val *value_obj = value->ToJSON(doc);',
-                f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
-                f'{prefix}\tyyjson_mut_obj_add_val(doc, item_val, key_ptr, value_obj);'
+                f'{prefix}\tauto value_obj = value->ToJSON(writer);',
+                f'{prefix}\titem_val.Add(key, value_obj);'
             ])
         else:
             lines.extend([
-                f'{prefix}\tyyjson_mut_val *value_obj = value.ToJSON(doc);',
-                f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
-                f'{prefix}\tyyjson_mut_obj_add_val(doc, item_val, key_ptr, value_obj);'
+                f'{prefix}\tauto value_obj = value.ToJSON(writer);',
+                f'{prefix}\titem_val.Add(key, value_obj);'
             ])
         
         lines.append(f'{prefix}}}')
@@ -2023,7 +2096,7 @@ class CPPClass:
         
         lines = [
             f'{prefix}for (const auto &[key, value_array] : item) {{',
-            f'{prefix}\tyyjson_mut_val *value_arr = yyjson_mut_arr(doc);'
+            f'{prefix}\tauto value_arr = writer.CreateArray();'
         ]
         
         item_type = array_prop.item_type
@@ -2035,28 +2108,28 @@ class CPPClass:
             prim_type = prim_item.primitive_type
             if prim_type == 'string':
                 lines.append(
-                    f'{prefix}\t\tyyjson_mut_val *arr_item_val = yyjson_mut_str(doc, arr_item.c_str());'
+                    f'{prefix}\t\tauto arr_item_val = writer.CreateString(arr_item);'
                 )
             elif prim_type == 'integer':
                 if prim_item.format == 'int64':
                     lines.append(
-                        f'{prefix}\t\tyyjson_mut_val *arr_item_val = yyjson_mut_sint(doc, arr_item);'
+                        f'{prefix}\t\tauto arr_item_val = writer.CreateSignedInteger(arr_item);'
                     )
                 else:
                     lines.append(
-                        f'{prefix}\t\tyyjson_mut_val *arr_item_val = yyjson_mut_int(doc, arr_item);'
+                        f'{prefix}\t\tauto arr_item_val = writer.CreateSignedInteger(arr_item);'
                     )
             elif prim_type == 'boolean':
                 lines.append(
-                    f'{prefix}\t\tyyjson_mut_val *arr_item_val = yyjson_mut_bool(doc, arr_item);'
+                    f'{prefix}\t\tauto arr_item_val = writer.CreateBoolean(arr_item);'
                 )
             elif prim_type == 'number':
                 lines.append(
-                    f'{prefix}\t\tyyjson_mut_val *arr_item_val = yyjson_mut_real(doc, arr_item);'
+                    f'{prefix}\t\tauto arr_item_val = writer.CreateDouble(arr_item);'
                 )
             
             lines.extend([
-                f'{prefix}\t\tyyjson_mut_arr_append(value_arr, arr_item_val);',
+                f'{prefix}\t\tvalue_arr.Append(arr_item_val);',
                 f'{prefix}\t}}'
             ])
             
@@ -2066,21 +2139,20 @@ class CPPClass:
             
             if schema_ref.ref in self.parse_info.recursive_schemas:
                 lines.append(
-                    f'{prefix}\t\tyyjson_mut_val *arr_item_val = arr_item->ToJSON(doc);'
+                    f'{prefix}\t\tauto arr_item_val = arr_item->ToJSON(writer);'
                 )
             else:
                 lines.append(
-                    f'{prefix}\t\tyyjson_mut_val *arr_item_val = arr_item.ToJSON(doc);'
+                    f'{prefix}\t\tauto arr_item_val = arr_item.ToJSON(writer);'
                 )
             
             lines.extend([
-                f'{prefix}\t\tyyjson_mut_arr_append(value_arr, arr_item_val);',
+                f'{prefix}\t\tvalue_arr.Append(arr_item_val);',
                 f'{prefix}\t}}'
             ])
         
         lines.extend([
-            f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
-            f'{prefix}\tyyjson_mut_obj_add_val(doc, item_val, key_ptr, value_arr);',
+            f'{prefix}\titem_val.Add(key, value_arr);',
             f'{prefix}}}'
         ])
         
@@ -2099,13 +2171,12 @@ class CPPClass:
         
         if object_prop.is_raw_object():
             lines.extend([
-                f'{prefix}\tyyjson_mut_val *value_obj = yyjson_mut_val_mut_copy(doc, value_map);',
-                f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
-                f'{prefix}\tyyjson_mut_obj_add_val(doc, item_val, key_ptr, value_obj);'
+                f'{prefix}\tauto value_obj = writer.CreateCopy(value_map);',
+                f'{prefix}\titem_val.Add(key, value_obj);'
             ])
         elif object_prop.additional_properties:
             lines.append(
-                f'{prefix}\tyyjson_mut_val *value_obj = yyjson_mut_obj(doc);'
+                f'{prefix}\tauto value_obj = writer.CreateObject();'
             )
             
             nested_value_type = object_prop.additional_properties
@@ -2118,33 +2189,28 @@ class CPPClass:
                 
                 if nested_prim.primitive_type == 'string':
                     lines.extend([
-                        f'{prefix}\t\tauto nested_key_ptr = unsafe_yyjson_mut_strncpy(doc, nested_key.c_str(), strlen(nested_key.c_str()));',
-                        f'{prefix}\t\tyyjson_mut_obj_add_strcpy(doc, value_obj, nested_key_ptr, nested_value.c_str());'
+                        f'{prefix}\t\tvalue_obj.AddString(nested_key, nested_value);'
                     ]
                     )
                 elif nested_prim.primitive_type == 'integer':
                     if nested_prim.format == 'int64':
                         lines.extend([
-                            f'{prefix}\t\tauto nested_key_ptr = unsafe_yyjson_mut_strncpy(doc, nested_key.c_str(), strlen(nested_key.c_str()));',
-                            f'{prefix}\t\tyyjson_mut_obj_add_sint(doc, value_obj, nested_key_ptr, nested_value);'
+                            f'{prefix}\t\tvalue_obj.Add(nested_key, writer.CreateSignedInteger(nested_value));'
                         ]
                         )
                     else:
                         lines.extend([
-                            f'{prefix}\t\tauto nested_key_ptr = unsafe_yyjson_mut_strncpy(doc, nested_key.c_str(), strlen(nested_key.c_str()));',
-                            f'{prefix}\t\tyyjson_mut_obj_add_int(doc, value_obj, nested_key_ptr, nested_value);'
+                            f'{prefix}\t\tvalue_obj.Add(nested_key, writer.CreateSignedInteger(nested_value));'
                         ]
                         )
                 elif nested_prim.primitive_type == 'boolean':
                     lines.extend([
-                        f'{prefix}\t\tauto nested_key_ptr = unsafe_yyjson_mut_strncpy(doc, nested_key.c_str(), strlen(nested_key.c_str()));',
-                        f'{prefix}\t\tyyjson_mut_obj_add_bool(doc, value_obj, nested_key_ptr, nested_value);'
+                        f'{prefix}\t\tvalue_obj.Add(nested_key, writer.CreateBoolean(nested_value));'
                     ]
                     )
                 elif nested_prim.primitive_type == 'number':
                     lines.extend([
-                        f'{prefix}\t\tauto nested_key_ptr = unsafe_yyjson_mut_strncpy(doc, nested_key.c_str(), strlen(nested_key.c_str()));',
-                        f'{prefix}\t\tyyjson_mut_obj_add_real(doc, value_obj, nested_key_ptr, nested_value);'
+                        f'{prefix}\t\tvalue_obj.Add(nested_key, writer.CreateDouble(nested_value));'
                     ]
                     )
                 
@@ -2158,22 +2224,20 @@ class CPPClass:
                 
                 if nested_ref.ref in self.parse_info.recursive_schemas:
                     lines.append(
-                        f'{prefix}\t\tyyjson_mut_val *nested_obj = nested_value->ToJSON(doc);'
+                        f'{prefix}\t\tauto nested_obj = nested_value->ToJSON(writer);'
                     )
                 else:
                     lines.append(
-                        f'{prefix}\t\tyyjson_mut_val *nested_obj = nested_value.ToJSON(doc);'
+                        f'{prefix}\t\tauto nested_obj = nested_value.ToJSON(writer);'
                     )
                 
                 lines.extend([
-                    f'{prefix}\t\tauto nested_key_ptr = unsafe_yyjson_mut_strncpy(doc, nested_key.c_str(), strlen(nested_key.c_str()));',
-                    f'{prefix}\t\tyyjson_mut_obj_add_val(doc, value_obj, nested_key_ptr, nested_obj);',
+                    f'{prefix}\t\tvalue_obj.Add(nested_key, nested_obj);',
                     f'{prefix}\t}}'
                 ])
             
             lines.extend([
-                f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
-                f'{prefix}\tyyjson_mut_obj_add_val(doc, item_val, key_ptr, value_obj);'
+                f'{prefix}\titem_val.Add(key, value_obj);'
             ]
             )
         
@@ -2196,24 +2260,24 @@ class CPPClass:
             
             if prim_type == 'string':
                 lines.append(
-                    f'{prefix}yyjson_mut_obj_add_strcpy(doc, item_val, "{prop_name}", item.{prop_name}.c_str());'
+                    f'{prefix}item_val.AddString("{prop_name}", item.{prop_name});'
                 )
             elif prim_type == 'integer':
                 if prim_prop.format == 'int64':
                     lines.append(
-                        f'{prefix}yyjson_mut_obj_add_sint(doc, item_val, "{prop_name}", item.{prop_name});'
+                        f'{prefix}item_val.Add("{prop_name}", writer.CreateSignedInteger(item.{prop_name}));'
                     )
                 else:
                     lines.append(
-                        f'{prefix}yyjson_mut_obj_add_int(doc, item_val, "{prop_name}", item.{prop_name});'
+                        f'{prefix}item_val.Add("{prop_name}", writer.CreateSignedInteger(item.{prop_name}));'
                     )
             elif prim_type == 'boolean':
                 lines.append(
-                    f'{prefix}yyjson_mut_obj_add_bool(doc, item_val, "{prop_name}", item.{prop_name});'
+                    f'{prefix}item_val.Add("{prop_name}", writer.CreateBoolean(item.{prop_name}));'
                 )
             elif prim_type == 'number':
                 lines.append(
-                    f'{prefix}yyjson_mut_obj_add_real(doc, item_val, "{prop_name}", item.{prop_name});'
+                    f'{prefix}item_val.Add("{prop_name}", writer.CreateDouble(item.{prop_name}));'
                 )
         
         elif prop_schema.type == Property.Type.SCHEMA_REFERENCE:
@@ -2221,13 +2285,13 @@ class CPPClass:
             
             if schema_ref.ref in self.parse_info.recursive_schemas:
                 lines.extend([
-                    f'{prefix}yyjson_mut_val *{prop_name}_obj = item.{prop_name}->ToJSON(doc);',
-                    f'{prefix}yyjson_mut_obj_add_val(doc, item_val, "{prop_name}", {prop_name}_obj);'
+                    f'{prefix}auto {prop_name}_obj = item.{prop_name}->ToJSON(writer);',
+                    f'{prefix}item_val.Add("{prop_name}", {prop_name}_obj);'
                 ])
             else:
                 lines.extend([
-                    f'{prefix}yyjson_mut_val *{prop_name}_obj = item.{prop_name}.ToJSON(doc);',
-                    f'{prefix}yyjson_mut_obj_add_val(doc, item_val, "{prop_name}", {prop_name}_obj);'
+                    f'{prefix}auto {prop_name}_obj = item.{prop_name}.ToJSON(writer);',
+                    f'{prefix}item_val.Add("{prop_name}", {prop_name}_obj);'
                 ])
         
         return lines
@@ -2240,7 +2304,7 @@ class CPPClass:
         """Serialize nested array items (array of arrays)"""
         
         lines = [
-            f'{prefix}\tyyjson_mut_val *item_val = yyjson_mut_arr(doc);',
+            f'{prefix}\tauto item_val = writer.CreateArray();',
             f'{prefix}\tfor (const auto &nested_item : item) {{'
         ]
         
@@ -2250,38 +2314,38 @@ class CPPClass:
             prim_nested = cast(PrimitiveProperty, nested_item_type)
             if prim_nested.primitive_type == 'string':
                 lines.append(
-                    f'{prefix}\t\tyyjson_mut_val *nested_val = yyjson_mut_str(doc, nested_item.c_str());'
+                    f'{prefix}\t\tauto nested_val = writer.CreateString(nested_item);'
                 )
             elif prim_nested.primitive_type == 'integer':
                 if prim_nested.format == 'int64':
                     lines.append(
-                        f'{prefix}\t\tyyjson_mut_val *nested_val = yyjson_mut_sint(doc, nested_item);'
+                        f'{prefix}\t\tauto nested_val = writer.CreateSignedInteger(nested_item);'
                     )
                 else:
                     lines.append(
-                        f'{prefix}\t\tyyjson_mut_val *nested_val = yyjson_mut_int(doc, nested_item);'
+                        f'{prefix}\t\tauto nested_val = writer.CreateSignedInteger(nested_item);'
                     )
             elif prim_nested.primitive_type == 'boolean':
                 lines.append(
-                    f'{prefix}\t\tyyjson_mut_val *nested_val = yyjson_mut_bool(doc, nested_item);'
+                    f'{prefix}\t\tauto nested_val = writer.CreateBoolean(nested_item);'
                 )
             elif prim_nested.primitive_type == 'number':
                 lines.append(
-                    f'{prefix}\t\tyyjson_mut_val *nested_val = yyjson_mut_real(doc, nested_item);'
+                    f'{prefix}\t\tauto nested_val = writer.CreateDouble(nested_item);'
                 )
         elif nested_item_type.type == Property.Type.SCHEMA_REFERENCE:
             schema_ref = cast(SchemaReferenceProperty, nested_item_type)
             if schema_ref.ref in self.parse_info.recursive_schemas:
                 lines.append(
-                    f'{prefix}\t\tyyjson_mut_val *nested_val = nested_item->ToJSON(doc);'
+                    f'{prefix}\t\tauto nested_val = nested_item->ToJSON(writer);'
                 )
             else:
                 lines.append(
-                    f'{prefix}\t\tyyjson_mut_val *nested_val = nested_item.ToJSON(doc);'
+                    f'{prefix}\t\tauto nested_val = nested_item.ToJSON(writer);'
                 )
         
         lines.extend([
-            f'{prefix}\t\tyyjson_mut_arr_append(item_val, nested_val);',
+            f'{prefix}\t\titem_val.Append(nested_val);',
             f'{prefix}\t}}'
         ])
         
@@ -2299,14 +2363,14 @@ class CPPClass:
         if prop.ref in self.parse_info.recursive_schemas:
             # Recursive schema - use pointer dereference
             return [
-                f'{prefix}yyjson_mut_val *{var_name}_val = {var_name}->ToJSON(doc);',
-                f'{prefix}yyjson_mut_obj_add_val(doc, obj, "{json_name}", {var_name}_val);'
+                f'{prefix}auto {var_name}_val = {var_name}->ToJSON(writer);',
+                f'{prefix}obj.Add("{json_name}", {var_name}_val);'
             ]
         else:
             # Normal schema - call ToJSON directly
             return [
-                f'{prefix}yyjson_mut_val *{var_name}_val = {var_name}.ToJSON(doc);',
-                f'{prefix}yyjson_mut_obj_add_val(doc, obj, "{json_name}", {var_name}_val);'
+                f'{prefix}auto {var_name}_val = {var_name}.ToJSON(writer);',
+                f'{prefix}obj.Add("{json_name}", {var_name}_val);'
             ]
 
     def _serialize_object(
@@ -2319,14 +2383,14 @@ class CPPClass:
         """Serialize object/map types"""
         
         if prop.is_raw_object():
-            # Raw yyjson_val * - just add it directly
+            # Raw JSON value - copy it into the writer
             return [
-                f'{prefix}yyjson_mut_obj_add_val(doc, obj, "{json_name}", {var_name});'
+                f'{prefix}obj.Add("{json_name}", writer.CreateCopy({var_name}));'
             ]
         elif prop.additional_properties:
             # Map type - iterate and add
             lines = [
-                f'{prefix}yyjson_mut_val *{var_name}_obj = yyjson_mut_obj(doc);',
+                f'{prefix}auto {var_name}_obj = writer.CreateObject();',
                 f'{prefix}for (const auto &it : {var_name}) {{',
                 f'{prefix}\tauto &key = it.first;',
                 f'{prefix}\tauto &value = it.second;',
@@ -2338,42 +2402,37 @@ class CPPClass:
                 prim_prop = cast(PrimitiveProperty, add_prop)
                 if prim_prop.primitive_type == 'string':
                     lines.extend([
-                        f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
-                        f'{prefix}\tyyjson_mut_obj_add_strcpy(doc, {var_name}_obj, key_ptr, value.c_str());'
+                        f'{prefix}\t{var_name}_obj.AddString(key, value);'
                     ]
                     )
                 elif prim_prop.primitive_type == 'integer':
                     lines.extend([
-                        f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
-                        f'{prefix}\tyyjson_mut_obj_add_int(doc, {var_name}_obj, key_ptr, value);'
+                        f'{prefix}\t{var_name}_obj.Add(key, writer.CreateSignedInteger(value));'
                     ]
                     )
                 elif prim_prop.primitive_type == 'boolean':
                     lines.extend([
-                        f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
-                        f'{prefix}\tyyjson_mut_obj_add_bool(doc, {var_name}_obj, key_ptr, value);'
+                        f'{prefix}\t{var_name}_obj.Add(key, writer.CreateBoolean(value));'
                     ]
                     )
                 elif prim_prop.primitive_type == 'number':
                     lines.extend([
-                        f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
-                        f'{prefix}\tyyjson_mut_obj_add_real(doc, {var_name}_obj, key_ptr, value);'
+                        f'{prefix}\t{var_name}_obj.Add(key, writer.CreateDouble(value));'
                     ]
                     )
             elif add_prop.type == Property.Type.SCHEMA_REFERENCE:
                 schema_ref = cast(SchemaReferenceProperty, add_prop)
                 lines.append(
-                    f'{prefix}\tyyjson_mut_val *value_obj = value.ToJSON(doc);'
+                    f'{prefix}\tauto value_obj = value.ToJSON(writer);'
                 )
                 lines.extend([
-                    f'{prefix}\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));',
-                    f'{prefix}\tyyjson_mut_obj_add_val(doc, {var_name}_obj, key_ptr, value_obj);'
+                    f'{prefix}\t{var_name}_obj.Add(key, value_obj);'
                 ]
                 )
             
             lines.extend([
                 f'{prefix}}}',
-                f'{prefix}yyjson_mut_obj_add_val(doc, obj, "{json_name}", {var_name}_obj);'
+                f'{prefix}obj.Add("{json_name}", {var_name}_obj);'
             ])
             
             return lines
@@ -2396,79 +2455,70 @@ class CPPClass:
             prim_prop = cast(PrimitiveProperty, add_prop)
             if prim_prop.primitive_type == 'string':
                 lines.extend([
-                    "\t\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));",
-                    "\t\tyyjson_mut_obj_add_strcpy(doc, obj, key_ptr, value.c_str());"
+                    "\t\tobj.AddString(key, value);"
                 ]
                 )
             elif prim_prop.primitive_type == 'integer':
                 if prim_prop.format == 'int64':
                     lines.extend([
-                        "\t\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));",
-                        "\t\tyyjson_mut_obj_add_sint(doc, obj, key_ptr, value);"
+                        "\t\tobj.Add(key, writer.CreateSignedInteger(value));"
                     ]
                     )
                 else:
                     lines.extend([
-                        "\t\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));",
-                        "\t\tyyjson_mut_obj_add_int(doc, obj, key_ptr, value);"
+                        "\t\tobj.Add(key, writer.CreateSignedInteger(value));"
                     ]
                     )
             elif prim_prop.primitive_type == 'boolean':
                 lines.extend([
-                    "\t\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));",
-                    "\t\tyyjson_mut_obj_add_bool(doc, obj, key_ptr, value);"
+                    "\t\tobj.Add(key, writer.CreateBoolean(value));"
                 ]
                 )
             elif prim_prop.primitive_type == 'number':
                 lines.extend([
-                    "\t\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));",
-                    "\t\tyyjson_mut_obj_add_real(doc, obj, key_ptr, value);"
+                    "\t\tobj.Add(key, writer.CreateDouble(value));"
                 ]
                 )
         elif add_prop.type == Property.Type.SCHEMA_REFERENCE:
             schema_ref = cast(SchemaReferenceProperty, add_prop)
             if schema_ref.ref in self.parse_info.recursive_schemas:
                 lines.extend([
-                    "\t\tyyjson_mut_val *value_obj = value->ToJSON(doc);",
-                    "\t\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));",
-                    "\t\tyyjson_mut_obj_add_val(doc, obj, key_ptr, value_obj);"
+                    "\t\tauto value_obj = value->ToJSON(writer);",
+                    "\t\tobj.Add(key, value_obj);"
                 ])
             else:
                 lines.extend([
-                    "\t\tyyjson_mut_val *value_obj = value.ToJSON(doc);",
-                    "\t\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));",
-                    "\t\tyyjson_mut_obj_add_val(doc, obj, key_ptr, value_obj);"
+                    "\t\tauto value_obj = value.ToJSON(writer);",
+                    "\t\tobj.Add(key, value_obj);"
                 ])
         elif add_prop.type == Property.Type.ARRAY:
             array_property = cast(ArrayProperty, add_prop)
             item_property = array_property.item_type
-            lines.append("\t\tyyjson_mut_val *value_obj = yyjson_mut_arr(doc);")
+            lines.append("\t\tauto value_obj = writer.CreateArray();")
             lines.append("\t\tfor (const auto &array_item : value) {")
             if item_property.type == Property.Type.PRIMITIVE:
                 primitive_item = cast(PrimitiveProperty, item_property)
                 if primitive_item.primitive_type == 'string':
                     lines.append(
-                        "\t\t\tyyjson_mut_arr_append(value_obj, yyjson_mut_strcpy(doc, array_item.c_str()));"
+                        "\t\t\tvalue_obj.AppendString(array_item);"
                     )
                 elif primitive_item.primitive_type == 'integer':
-                    constructor = 'yyjson_mut_sint' if primitive_item.format == 'int64' else 'yyjson_mut_int'
-                    lines.append(f"\t\t\tyyjson_mut_arr_append(value_obj, {constructor}(doc, array_item));")
+                    lines.append("\t\t\tvalue_obj.Append(writer.CreateSignedInteger(array_item));")
                 elif primitive_item.primitive_type == 'boolean':
-                    lines.append("\t\t\tyyjson_mut_arr_append(value_obj, yyjson_mut_bool(doc, array_item));")
+                    lines.append("\t\t\tvalue_obj.Append(writer.CreateBoolean(array_item));")
                 elif primitive_item.primitive_type == 'number':
-                    lines.append("\t\t\tyyjson_mut_arr_append(value_obj, yyjson_mut_real(doc, array_item));")
+                    lines.append("\t\t\tvalue_obj.Append(writer.CreateDouble(array_item));")
             elif item_property.type == Property.Type.SCHEMA_REFERENCE:
                 item_ref = cast(SchemaReferenceProperty, item_property)
                 accessor = 'array_item->' if item_ref.ref in self.parse_info.recursive_schemas else 'array_item.'
-                lines.append(f"\t\t\tyyjson_mut_arr_append(value_obj, {accessor}ToJSON(doc));")
+                lines.append(f"\t\t\tvalue_obj.Append({accessor}ToJSON(writer));")
             else:
                 lines.append(
                     '\t\t\tthrow InvalidInputException("Unsupported nested array value in additionalProperties");'
                 )
             lines.extend([
                 "\t\t}",
-                "\t\tauto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));",
-                "\t\tyyjson_mut_obj_add_val(doc, obj, key_ptr, value_obj);",
+                "\t\tobj.Add(key, value_obj);",
             ])
         
         lines.extend([
@@ -2486,6 +2536,9 @@ if __name__ == '__main__':
     # Create directory if it doesn't exist
     os.makedirs(OUTPUT_HEADER_DIR, exist_ok=True)
     os.makedirs(OUTPUT_SOURCE_DIR, exist_ok=True)
+
+    with open(os.path.join(OUTPUT_HEADER_DIR, 'json_utils.hpp'), 'w') as f:
+        f.write(JSON_UTILS_HEADER_FORMAT.format())
 
     with open(os.path.join(OUTPUT_HEADER_DIR, 'list.hpp'), 'w') as f:
         lines = ["", "// This file is automatically generated and contains all REST API object headers", ""]

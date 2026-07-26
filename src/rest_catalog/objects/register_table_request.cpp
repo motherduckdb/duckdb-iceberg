@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/register_table_request.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 RegisterTableRequest::RegisterTableRequest() {
 }
 
-RegisterTableRequest RegisterTableRequest::FromJSON(yyjson_val *obj) {
+RegisterTableRequest RegisterTableRequest::FromJSON(JSONValue obj) {
 	RegisterTableRequest res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -35,68 +33,63 @@ RegisterTableRequest RegisterTableRequest::Copy() const {
 	return res;
 }
 
-string RegisterTableRequest::TryFromJSON(yyjson_val *obj) {
+string RegisterTableRequest::TryFromJSON(JSONValue obj) {
 	string error;
-	auto name_val = yyjson_obj_get(obj, "name");
-	if (!name_val) {
+	auto name_val = obj.GetMember("name");
+	if (!name_val.IsValid()) {
 		return "RegisterTableRequest required property 'name' is missing";
 	} else {
-		if (yyjson_is_str(name_val)) {
-			name = yyjson_get_str(name_val);
+		if (json_utils::IsString(name_val)) {
+			name = json_utils::GetString(name_val);
 		} else {
-			return StringUtil::Format(
-			    "RegisterTableRequest property 'name' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(name_val));
+			return StringUtil::Format("RegisterTableRequest property 'name' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(name_val).c_str());
 		}
 	}
-	auto metadata_location_val = yyjson_obj_get(obj, "metadata-location");
-	if (!metadata_location_val) {
+	auto metadata_location_val = obj.GetMember("metadata-location");
+	if (!metadata_location_val.IsValid()) {
 		return "RegisterTableRequest required property 'metadata-location' is missing";
 	} else {
-		if (yyjson_is_str(metadata_location_val)) {
-			metadata_location = yyjson_get_str(metadata_location_val);
+		if (json_utils::IsString(metadata_location_val)) {
+			metadata_location = json_utils::GetString(metadata_location_val);
 		} else {
 			return StringUtil::Format(
-			    "RegisterTableRequest property 'metadata_location' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(metadata_location_val));
+			    "RegisterTableRequest property 'metadata_location' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(metadata_location_val).c_str());
 		}
 	}
-	auto overwrite_val = yyjson_obj_get(obj, "overwrite");
-	if (overwrite_val) {
+	auto overwrite_val = obj.GetMember("overwrite");
+	if (overwrite_val.IsValid()) {
 		bool overwrite_tmp;
-		if (yyjson_is_bool(overwrite_val)) {
-			overwrite_tmp = yyjson_get_bool(overwrite_val);
+		if (json_utils::IsBoolean(overwrite_val)) {
+			overwrite_tmp = json_utils::GetBoolean(overwrite_val);
 		} else {
 			return StringUtil::Format(
-			    "RegisterTableRequest property 'overwrite_tmp' is not of type 'boolean', found '%s' instead",
-			    yyjson_get_type_desc(overwrite_val));
+			    "RegisterTableRequest property 'overwrite_tmp' is not of type 'boolean', found %s instead",
+			    json_utils::GetTypeDescription(overwrite_val).c_str());
 		}
 		overwrite = std::move(overwrite_tmp);
 	}
 	return "";
 }
 
-void RegisterTableRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void RegisterTableRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: name
-	yyjson_mut_obj_add_strcpy(doc, obj, "name", name.c_str());
+	obj.AddString("name", name);
 
 	// Serialize: metadata-location
-	yyjson_mut_obj_add_strcpy(doc, obj, "metadata-location", metadata_location.c_str());
+	obj.AddString("metadata-location", metadata_location);
 
 	// Serialize: overwrite
 	if (overwrite.has_value()) {
 		auto &overwrite_value = *overwrite;
-		yyjson_mut_obj_add_bool(doc, obj, "overwrite", overwrite_value);
+		obj.Add("overwrite", writer.CreateBoolean(overwrite_value));
 	}
 }
 
-yyjson_mut_val *RegisterTableRequest::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue RegisterTableRequest::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

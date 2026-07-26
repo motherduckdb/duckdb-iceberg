@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/boolean_expression.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 BooleanExpression::BooleanExpression() {
 }
 
-BooleanExpression BooleanExpression::FromJSON(yyjson_val *obj) {
+BooleanExpression BooleanExpression::FromJSON(JSONValue obj) {
 	BooleanExpression res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -30,19 +28,19 @@ BooleanExpression BooleanExpression::Copy() const {
 	return res;
 }
 
-string BooleanExpression::TryFromJSON(yyjson_val *obj) {
+string BooleanExpression::TryFromJSON(JSONValue obj) {
 	string error;
-	if (yyjson_is_bool(obj)) {
-		value = yyjson_get_bool(obj);
+	if (json_utils::IsBoolean(obj)) {
+		value = json_utils::GetBoolean(obj);
 	} else {
-		return StringUtil::Format("BooleanExpression property 'value' is not of type 'boolean', found '%s' instead",
-		                          yyjson_get_type_desc(obj));
+		return StringUtil::Format("BooleanExpression property 'value' is not of type 'boolean', found %s instead",
+		                          json_utils::GetTypeDescription(obj).c_str());
 	}
 	return "";
 }
 
-yyjson_mut_val *BooleanExpression::ToJSON(yyjson_mut_doc *doc) const {
-	return yyjson_mut_bool(doc, value);
+JSONMutableValue BooleanExpression::ToJSON(JSONWriter &writer) const {
+	return writer.CreateBoolean(value);
 }
 
 } // namespace rest_api_objects

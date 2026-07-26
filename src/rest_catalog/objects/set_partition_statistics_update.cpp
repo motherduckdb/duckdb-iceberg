@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/set_partition_statistics_update.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 SetPartitionStatisticsUpdate::SetPartitionStatisticsUpdate() {
 }
 
-SetPartitionStatisticsUpdate SetPartitionStatisticsUpdate::FromJSON(yyjson_val *obj) {
+SetPartitionStatisticsUpdate SetPartitionStatisticsUpdate::FromJSON(JSONValue obj) {
 	SetPartitionStatisticsUpdate res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -31,30 +29,30 @@ SetPartitionStatisticsUpdate SetPartitionStatisticsUpdate::Copy() const {
 	return res;
 }
 
-string SetPartitionStatisticsUpdate::TryFromJSON(yyjson_val *obj) {
+string SetPartitionStatisticsUpdate::TryFromJSON(JSONValue obj) {
 	string error;
 	error = base_update.TryFromJSON(obj);
 	if (!error.empty()) {
 		return error;
 	}
-	auto action_refinement_val = yyjson_obj_get(obj, "action");
-	if (action_refinement_val) {
+	auto action_refinement_val = obj.GetMember("action");
+	if (action_refinement_val.IsValid()) {
 		string action_refinement;
-		if (yyjson_is_str(action_refinement_val)) {
-			action_refinement = yyjson_get_str(action_refinement_val);
+		if (json_utils::IsString(action_refinement_val)) {
+			action_refinement = json_utils::GetString(action_refinement_val);
 		} else {
 			return StringUtil::Format(
-			    "SetPartitionStatisticsUpdate property 'action_refinement' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_refinement_val));
+			    "SetPartitionStatisticsUpdate property 'action_refinement' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(action_refinement_val).c_str());
 		}
-		if (!yyjson_is_null(action_refinement_val) && action_refinement != "set-partition-statistics") {
+		if (!action_refinement_val.IsNull() && action_refinement != "set-partition-statistics") {
 			return "SetPartitionStatisticsUpdate property 'action_refinement' does not match its required const value";
 		}
 	} else {
 		return "SetPartitionStatisticsUpdate required property 'action' is missing";
 	}
-	auto partition_statistics_val = yyjson_obj_get(obj, "partition-statistics");
-	if (!partition_statistics_val) {
+	auto partition_statistics_val = obj.GetMember("partition-statistics");
+	if (!partition_statistics_val.IsValid()) {
 		return "SetPartitionStatisticsUpdate required property 'partition-statistics' is missing";
 	} else {
 		error = partition_statistics.TryFromJSON(partition_statistics_val);
@@ -65,22 +63,18 @@ string SetPartitionStatisticsUpdate::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void SetPartitionStatisticsUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void SetPartitionStatisticsUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize base class: BaseUpdate
-	base_update.PopulateJSON(doc, obj);
+	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: partition-statistics
-	yyjson_mut_val *partition_statistics_val = partition_statistics.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "partition-statistics", partition_statistics_val);
+	auto partition_statistics_val = partition_statistics.ToJSON(writer);
+	obj.Add("partition-statistics", partition_statistics_val);
 }
 
-yyjson_mut_val *SetPartitionStatisticsUpdate::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue SetPartitionStatisticsUpdate::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

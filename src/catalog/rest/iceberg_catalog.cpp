@@ -19,8 +19,6 @@
 #include "catalog/rest/api/api_utils.hpp"
 #include "rest_catalog/objects/catalog_config.hpp"
 
-using namespace duckdb_yyjson;
-
 namespace duckdb {
 
 IcebergCatalog::IcebergCatalog(AttachedDatabase &db_p, AccessMode access_mode,

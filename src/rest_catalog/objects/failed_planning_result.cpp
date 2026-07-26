@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/failed_planning_result.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -17,7 +15,7 @@ FailedPlanningResult::FailedPlanningResult() {
 FailedPlanningResult::Object7::Object7() {
 }
 
-FailedPlanningResult::Object7 FailedPlanningResult::Object7::FromJSON(yyjson_val *obj) {
+FailedPlanningResult::Object7 FailedPlanningResult::Object7::FromJSON(JSONValue obj) {
 	Object7 res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -32,10 +30,10 @@ FailedPlanningResult::Object7 FailedPlanningResult::Object7::Copy() const {
 	return res;
 }
 
-string FailedPlanningResult::Object7::TryFromJSON(yyjson_val *obj) {
+string FailedPlanningResult::Object7::TryFromJSON(JSONValue obj) {
 	string error;
-	auto status_val = yyjson_obj_get(obj, "status");
-	if (!status_val) {
+	auto status_val = obj.GetMember("status");
+	if (!status_val.IsValid()) {
 		return "Object7 required property 'status' is missing";
 	} else {
 		error = status.TryFromJSON(status_val);
@@ -46,23 +44,19 @@ string FailedPlanningResult::Object7::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void FailedPlanningResult::Object7::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void FailedPlanningResult::Object7::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: status
-	yyjson_mut_val *status_val = status.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "status", status_val);
+	auto status_val = status.ToJSON(writer);
+	obj.Add("status", status_val);
 }
 
-yyjson_mut_val *FailedPlanningResult::Object7::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue FailedPlanningResult::Object7::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 
-FailedPlanningResult FailedPlanningResult::FromJSON(yyjson_val *obj) {
+FailedPlanningResult FailedPlanningResult::FromJSON(JSONValue obj) {
 	FailedPlanningResult res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -78,7 +72,7 @@ FailedPlanningResult FailedPlanningResult::Copy() const {
 	return res;
 }
 
-string FailedPlanningResult::TryFromJSON(yyjson_val *obj) {
+string FailedPlanningResult::TryFromJSON(JSONValue obj) {
 	string error;
 	error = iceberg_error_response.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -91,21 +85,17 @@ string FailedPlanningResult::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void FailedPlanningResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void FailedPlanningResult::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize base class: IcebergErrorResponse
-	iceberg_error_response.PopulateJSON(doc, obj);
+	iceberg_error_response.PopulateJSON(writer, obj);
 
 	// Serialize base class: Object7
-	object_7.PopulateJSON(doc, obj);
+	object_7.PopulateJSON(writer, obj);
 }
 
-yyjson_mut_val *FailedPlanningResult::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue FailedPlanningResult::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

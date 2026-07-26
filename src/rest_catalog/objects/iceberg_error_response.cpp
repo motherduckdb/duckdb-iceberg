@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/iceberg_error_response.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 IcebergErrorResponse::IcebergErrorResponse() {
 }
 
-IcebergErrorResponse IcebergErrorResponse::FromJSON(yyjson_val *obj) {
+IcebergErrorResponse IcebergErrorResponse::FromJSON(JSONValue obj) {
 	IcebergErrorResponse res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -30,10 +28,10 @@ IcebergErrorResponse IcebergErrorResponse::Copy() const {
 	return res;
 }
 
-string IcebergErrorResponse::TryFromJSON(yyjson_val *obj) {
+string IcebergErrorResponse::TryFromJSON(JSONValue obj) {
 	string error;
-	auto _error_val = yyjson_obj_get(obj, "error");
-	if (!_error_val) {
+	auto _error_val = obj.GetMember("error");
+	if (!_error_val.IsValid()) {
 		return "IcebergErrorResponse required property 'error' is missing";
 	} else {
 		error = _error.TryFromJSON(_error_val);
@@ -44,19 +42,15 @@ string IcebergErrorResponse::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void IcebergErrorResponse::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void IcebergErrorResponse::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: error
-	yyjson_mut_val *_error_val = _error.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "error", _error_val);
+	auto _error_val = _error.ToJSON(writer);
+	obj.Add("error", _error_val);
 }
 
-yyjson_mut_val *IcebergErrorResponse::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue IcebergErrorResponse::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/set_snapshot_ref_update.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 SetSnapshotRefUpdate::SetSnapshotRefUpdate() {
 }
 
-SetSnapshotRefUpdate SetSnapshotRefUpdate::FromJSON(yyjson_val *obj) {
+SetSnapshotRefUpdate SetSnapshotRefUpdate::FromJSON(JSONValue obj) {
 	SetSnapshotRefUpdate res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -32,7 +30,7 @@ SetSnapshotRefUpdate SetSnapshotRefUpdate::Copy() const {
 	return res;
 }
 
-string SetSnapshotRefUpdate::TryFromJSON(yyjson_val *obj) {
+string SetSnapshotRefUpdate::TryFromJSON(JSONValue obj) {
 	string error;
 	error = base_update.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -42,55 +40,51 @@ string SetSnapshotRefUpdate::TryFromJSON(yyjson_val *obj) {
 	if (!error.empty()) {
 		return error;
 	}
-	auto action_refinement_val = yyjson_obj_get(obj, "action");
-	if (action_refinement_val) {
+	auto action_refinement_val = obj.GetMember("action");
+	if (action_refinement_val.IsValid()) {
 		string action_refinement;
-		if (yyjson_is_str(action_refinement_val)) {
-			action_refinement = yyjson_get_str(action_refinement_val);
+		if (json_utils::IsString(action_refinement_val)) {
+			action_refinement = json_utils::GetString(action_refinement_val);
 		} else {
 			return StringUtil::Format(
-			    "SetSnapshotRefUpdate property 'action_refinement' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_refinement_val));
+			    "SetSnapshotRefUpdate property 'action_refinement' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(action_refinement_val).c_str());
 		}
-		if (!yyjson_is_null(action_refinement_val) && action_refinement != "set-snapshot-ref") {
+		if (!action_refinement_val.IsNull() && action_refinement != "set-snapshot-ref") {
 			return "SetSnapshotRefUpdate property 'action_refinement' does not match its required const value";
 		}
 	} else {
 		return "SetSnapshotRefUpdate required property 'action' is missing";
 	}
-	auto ref_name_val = yyjson_obj_get(obj, "ref-name");
-	if (!ref_name_val) {
+	auto ref_name_val = obj.GetMember("ref-name");
+	if (!ref_name_val.IsValid()) {
 		return "SetSnapshotRefUpdate required property 'ref-name' is missing";
 	} else {
-		if (yyjson_is_str(ref_name_val)) {
-			ref_name = yyjson_get_str(ref_name_val);
+		if (json_utils::IsString(ref_name_val)) {
+			ref_name = json_utils::GetString(ref_name_val);
 		} else {
 			return StringUtil::Format(
-			    "SetSnapshotRefUpdate property 'ref_name' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(ref_name_val));
+			    "SetSnapshotRefUpdate property 'ref_name' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(ref_name_val).c_str());
 		}
 	}
 	return "";
 }
 
-void SetSnapshotRefUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void SetSnapshotRefUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize base class: BaseUpdate
-	base_update.PopulateJSON(doc, obj);
+	base_update.PopulateJSON(writer, obj);
 
 	// Serialize base class: SnapshotReference
-	snapshot_reference.PopulateJSON(doc, obj);
+	snapshot_reference.PopulateJSON(writer, obj);
 
 	// Serialize: ref-name
-	yyjson_mut_obj_add_strcpy(doc, obj, "ref-name", ref_name.c_str());
+	obj.AddString("ref-name", ref_name);
 }
 
-yyjson_mut_val *SetSnapshotRefUpdate::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue SetSnapshotRefUpdate::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

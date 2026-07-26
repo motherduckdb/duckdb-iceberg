@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/fetch_planning_result.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 FetchPlanningResult::FetchPlanningResult() {
 }
 
-FetchPlanningResult FetchPlanningResult::FromJSON(yyjson_val *obj) {
+FetchPlanningResult FetchPlanningResult::FromJSON(JSONValue obj) {
 	FetchPlanningResult res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -41,13 +39,13 @@ FetchPlanningResult FetchPlanningResult::Copy() const {
 	return res;
 }
 
-string FetchPlanningResult::TryFromJSON(yyjson_val *obj) {
+string FetchPlanningResult::TryFromJSON(JSONValue obj) {
 	string error;
-	auto discriminator_val = yyjson_obj_get(obj, "status");
-	if (!discriminator_val || !yyjson_is_str(discriminator_val)) {
+	auto discriminator_val = obj.GetMember("status");
+	if (!discriminator_val.IsValid() || !discriminator_val.IsString()) {
 		return "FetchPlanningResult discriminator 'status' is missing or is not a string";
 	}
-	string discriminator = yyjson_get_str(discriminator_val);
+	string discriminator = discriminator_val.GetString();
 	if (discriminator == "completed") {
 		completed_planning_result.emplace();
 		error = completed_planning_result->TryFromJSON(obj);
@@ -72,23 +70,19 @@ string FetchPlanningResult::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void FetchPlanningResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void FetchPlanningResult::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	if (completed_planning_result.has_value()) {
-		completed_planning_result->PopulateJSON(doc, obj);
+		completed_planning_result->PopulateJSON(writer, obj);
 	} else if (failed_planning_result.has_value()) {
-		failed_planning_result->PopulateJSON(doc, obj);
+		failed_planning_result->PopulateJSON(writer, obj);
 	} else if (empty_planning_result.has_value()) {
-		empty_planning_result->PopulateJSON(doc, obj);
+		empty_planning_result->PopulateJSON(writer, obj);
 	}
 }
 
-yyjson_mut_val *FetchPlanningResult::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue FetchPlanningResult::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

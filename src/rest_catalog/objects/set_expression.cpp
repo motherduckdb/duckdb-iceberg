@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/set_expression.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 SetExpression::SetExpression() {
 }
 
-SetExpression SetExpression::FromJSON(yyjson_val *obj) {
+SetExpression SetExpression::FromJSON(JSONValue obj) {
 	SetExpression res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -35,10 +33,10 @@ SetExpression SetExpression::Copy() const {
 	return res;
 }
 
-string SetExpression::TryFromJSON(yyjson_val *obj) {
+string SetExpression::TryFromJSON(JSONValue obj) {
 	string error;
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
+	auto type_val = obj.GetMember("type");
+	if (!type_val.IsValid()) {
 		return "SetExpression required property 'type' is missing";
 	} else {
 		error = type.TryFromJSON(type_val);
@@ -46,8 +44,8 @@ string SetExpression::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto term_val = yyjson_obj_get(obj, "term");
-	if (!term_val) {
+	auto term_val = obj.GetMember("term");
+	if (!term_val.IsValid()) {
 		return "SetExpression required property 'term' is missing";
 	} else {
 		error = term.TryFromJSON(term_val);
@@ -55,54 +53,54 @@ string SetExpression::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto values_val = yyjson_obj_get(obj, "values");
-	if (!values_val) {
+	auto values_val = obj.GetMember("values");
+	if (!values_val.IsValid()) {
 		return "SetExpression required property 'values' is missing";
 	} else {
-		if (yyjson_is_arr(values_val)) {
-			size_t values_idx, values_max;
-			yyjson_val *values_item_val;
-			yyjson_arr_foreach(values_val, values_idx, values_max, values_item_val) {
+		if (values_val.IsArray()) {
+			values_val.IterateArray([&](JSONValue values_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				PrimitiveTypeValue values_item;
 				error = values_item.TryFromJSON(values_item_val);
 				if (!error.empty()) {
-					return error;
+					return;
 				}
 				values.emplace_back(std::move(values_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
-			return StringUtil::Format("SetExpression property 'values' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(values_val));
+			return StringUtil::Format("SetExpression property 'values' is not of type 'array', found %s instead",
+			                          json_utils::GetTypeDescription(values_val).c_str());
 		}
 	}
 	return "";
 }
 
-void SetExpression::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void SetExpression::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	yyjson_mut_val *type_val = type.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "type", type_val);
+	auto type_val = type.ToJSON(writer);
+	obj.Add("type", type_val);
 
 	// Serialize: term
-	yyjson_mut_val *term_val = term.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "term", term_val);
+	auto term_val = term.ToJSON(writer);
+	obj.Add("term", term_val);
 
 	// Serialize: values
-	yyjson_mut_val *values_arr = yyjson_mut_arr(doc);
+	auto values_arr = writer.CreateArray();
 	for (const auto &item : values) {
-		yyjson_mut_val *item_val = item.ToJSON(doc);
-		yyjson_mut_arr_append(values_arr, item_val);
+		auto item_val = item.ToJSON(writer);
+		values_arr.Append(item_val);
 	}
-	yyjson_mut_obj_add_val(doc, obj, "values", values_arr);
+	obj.Add("values", values_arr);
 }
 
-yyjson_mut_val *SetExpression::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue SetExpression::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

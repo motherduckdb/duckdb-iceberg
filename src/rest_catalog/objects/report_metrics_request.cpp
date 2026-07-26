@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/report_metrics_request.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 ReportMetricsRequest::ReportMetricsRequest() {
 }
 
-ReportMetricsRequest ReportMetricsRequest::FromJSON(yyjson_val *obj) {
+ReportMetricsRequest ReportMetricsRequest::FromJSON(JSONValue obj) {
 	ReportMetricsRequest res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -38,7 +36,7 @@ ReportMetricsRequest ReportMetricsRequest::Copy() const {
 	return res;
 }
 
-string ReportMetricsRequest::TryFromJSON(yyjson_val *obj) {
+string ReportMetricsRequest::TryFromJSON(JSONValue obj) {
 	string error;
 	scan_report.emplace();
 	error = scan_report->TryFromJSON(obj);
@@ -55,39 +53,35 @@ string ReportMetricsRequest::TryFromJSON(yyjson_val *obj) {
 	if (!(commit_report.has_value()) && !(scan_report.has_value())) {
 		return "ReportMetricsRequest failed to parse, none of the anyOf candidates matched";
 	}
-	auto report_type_val = yyjson_obj_get(obj, "report-type");
-	if (!report_type_val) {
+	auto report_type_val = obj.GetMember("report-type");
+	if (!report_type_val.IsValid()) {
 		return "ReportMetricsRequest required property 'report-type' is missing";
 	} else {
-		if (yyjson_is_str(report_type_val)) {
-			report_type = yyjson_get_str(report_type_val);
+		if (json_utils::IsString(report_type_val)) {
+			report_type = json_utils::GetString(report_type_val);
 		} else {
 			return StringUtil::Format(
-			    "ReportMetricsRequest property 'report_type' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(report_type_val));
+			    "ReportMetricsRequest property 'report_type' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(report_type_val).c_str());
 		}
 	}
 	return "";
 }
 
-void ReportMetricsRequest::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void ReportMetricsRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	if (scan_report.has_value()) {
-		scan_report->PopulateJSON(doc, obj);
+		scan_report->PopulateJSON(writer, obj);
 	} else if (commit_report.has_value()) {
-		commit_report->PopulateJSON(doc, obj);
+		commit_report->PopulateJSON(writer, obj);
 	}
 
 	// Serialize: report-type
-	yyjson_mut_obj_add_strcpy(doc, obj, "report-type", report_type.c_str());
+	obj.AddString("report-type", report_type);
 }
 
-yyjson_mut_val *ReportMetricsRequest::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue ReportMetricsRequest::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 
