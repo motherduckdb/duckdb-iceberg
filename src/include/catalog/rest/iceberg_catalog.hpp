@@ -63,16 +63,6 @@ public:
 		}
 		return entry;
 	}
-	void SetOrOverwriteInternal(lock_guard<mutex> &guard, ClientContext &context, const string &table_key,
-	                            timestamp_ms_t expire_timestamp_ms,
-	                            unique_ptr<const rest_api_objects::LoadTableResult> load_table_result) {
-		// erase load table result if it exists.
-		tables.erase(table_key);
-		auto &meta_transaction = MetaTransaction::Get(context);
-
-		tables.emplace(table_key, MetadataCacheValue(meta_transaction.global_transaction_id, expire_timestamp_ms,
-		                                             std::move(load_table_result)));
-	}
 	void SetOrOverwrite(ClientContext &context, const string &table_key,
 	                    unique_ptr<const rest_api_objects::LoadTableResult> load_table_result) {
 		lock_guard<mutex> guard(lock);
@@ -86,10 +76,17 @@ public:
 		}
 		auto epoch_micros = timestamp_t(duration_cast<microseconds>(expires_at.time_since_epoch()).count());
 		auto expire_timestamp_ms = timestamp_ms_t(Timestamp::GetEpochMs(epoch_micros));
-		SetOrOverwriteInternal(guard, context, table_key, expire_timestamp_ms, std::move(load_table_result));
+
+		// erase load table result if it exists.
+		tables.erase(table_key);
+		auto &meta_transaction = MetaTransaction::Get(context);
+
+		tables.emplace(table_key, MetadataCacheValue(meta_transaction.global_transaction_id, expire_timestamp_ms,
+		                                             std::move(load_table_result)));
 	}
 
-	void ExpireInternal(lock_guard<mutex> &guard, ClientContext &context, const string &table_key) {
+	void Expire(ClientContext &context, const string &table_key) {
+		lock_guard<mutex> guard(lock);
 		auto &meta_transaction = MetaTransaction::Get(context);
 		tables.erase(table_key);
 		auto it = tables.find(table_key);
@@ -102,10 +99,6 @@ public:
 			//! The entry we made is no longer the latest version, can't expire
 			return;
 		}
-	}
-	void Expire(ClientContext &context, const string &table_key) {
-		lock_guard<mutex> guard(lock);
-		ExpireInternal(guard, context, table_key);
 	}
 
 private:

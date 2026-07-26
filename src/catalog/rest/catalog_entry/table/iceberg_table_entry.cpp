@@ -158,8 +158,4 @@ TableStorageInfo IcebergTableEntry::GetStorageInfo(ClientContext &context) {
 	return result;
 }
 
-string IcebergTableEntry::GetUUID() const {
-	return table_info.table_id;
-}
-
 } // namespace duckdb
