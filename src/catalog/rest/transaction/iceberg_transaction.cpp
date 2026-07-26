@@ -688,25 +688,22 @@ void IcebergTransaction::DoSingleTableCommitUpdates(IcebergTransactionAlterUpdat
 void IcebergTransaction::DoTableDeletes(IcebergTransactionDeleteUpdate &delete_update, ClientContext &context) {
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	auto &table = delete_update.deleted_table.get();
-	auto schema_key = table.schema.name;
 	auto table_key = table.GetTableKey();
 	auto &table_name = table.name;
 	IRCAPI::CommitTableDelete(context, catalog, table.schema.namespace_items, table_name);
 	// remove the load table result
 	ic_catalog.table_request_cache.Expire(context, table_key);
 	// remove the table entry from the catalog
-	auto &schema_entry = ic_catalog.schemas.GetEntry(schema_key.GetIdentifierName()).Cast<IcebergSchemaEntry>();
 	DropInfo drop_info;
 	drop_info.GetQualifiedNameMutable() = Identifier(table_name);
 	drop_info.if_not_found = OnEntryNotFound::RETURN_NULL;
-	schema_entry.DropEntry(context, drop_info, true);
+	table.schema.DropEntry(context, drop_info, true);
 }
 
 void IcebergTransaction::DoSchemaCreates(ClientContext &context) {
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
-	retained_schema_entries.reserve(retained_schema_entries.size() + created_schemas.size());
-	for (auto created_schema = created_schemas.begin(); created_schema != created_schemas.end();) {
-		auto &schema_name = created_schema->first;
+	for (auto &created_schema : created_schemas) {
+		auto &schema_name = created_schema.first;
 		auto namespace_identifiers = IRCAPI::ParseSchemaName(schema_name);
 
 		rest_api_objects::CreateNamespaceRequest request;
@@ -715,11 +712,7 @@ void IcebergTransaction::DoSchemaCreates(ClientContext &context) {
 		auto create_body = RESTObjectToJSONString(request);
 
 		IRCAPI::CommitNamespaceCreate(context, ic_catalog, create_body);
-		D_ASSERT(created_schema->second);
-		if (!ic_catalog.GetSchemas().AddEntry(schema_name, created_schema->second)) {
-			retained_schema_entries.push_back(std::move(created_schema->second));
-		}
-		created_schema = created_schemas.erase(created_schema);
+		ic_catalog.GetSchemas().AddEntry(schema_name, created_schema.second);
 	}
 }
 
@@ -752,7 +745,6 @@ void IcebergTransaction::DoSchemaPropertyUpdates(ClientContext &context) {
 
 		IRCAPI::CommitNamespacePropertiesUpdate(context, ic_catalog, create_body, namespace_identifiers);
 	}
-	created_schemas.clear();
 }
 
 namespace {

@@ -27,18 +27,26 @@ optional_ptr<CatalogEntry> IcebergSchemaSet::GetEntry(ClientContext &context, co
 		throw CatalogException("Schema '%s' does not exist", name);
 	}
 
-	// If the schema was created in this transaction, return the transaction-local entry directly
+	// Transaction-local creations take precedence over catalog entries with the same name.
 	auto created_schema = iceberg_transaction.created_schemas.find(name);
 	if (created_schema != iceberg_transaction.created_schemas.end()) {
-		D_ASSERT(created_schema->second);
 		return created_schema->second.get();
+	}
+
+	// Return an entry already referenced by this transaction directly.
+	auto transaction_entry = iceberg_transaction.schemas.find(name);
+	if (transaction_entry != iceberg_transaction.schemas.end()) {
+		if (transaction_entry->second->DoesExist()) {
+			return transaction_entry->second.get();
+		}
+		return nullptr;
 	}
 
 	auto verify_existence = iceberg_transaction.looked_up_entries.insert(name).second;
 	auto entry = entries.find(name);
 	if (entry != entries.end()) {
-		auto &iceberg_schema_entry = entry->second->Cast<IcebergSchemaEntry>();
-		if (iceberg_schema_entry.DoesExist()) {
+		iceberg_transaction.schemas.emplace(name, entry->second);
+		if (entry->second->DoesExist()) {
 			return entry->second.get();
 		}
 		return nullptr;
@@ -63,49 +71,55 @@ optional_ptr<CatalogEntry> IcebergSchemaSet::GetEntry(ClientContext &context, co
 		info.SetQualifiedName(
 		    QualifiedName(info.GetQualifiedName().Catalog(), Identifier(name), info.GetQualifiedName().Name()));
 		info.internal = false;
-		auto schema_entry = make_uniq<IcebergSchemaEntry>(catalog, info);
+		auto schema_entry = make_shared_ptr<IcebergSchemaEntry>(catalog, info);
 		// we will not create entries with empty names
 		if (name.empty()) {
 			return nullptr;
 		}
-		CreateEntryInternal(context, std::move(schema_entry));
-		entry = entries.find(name);
-		D_ASSERT(entry != entries.end());
+		auto inserted_entry = CreateEntryInternal(std::move(schema_entry));
+		iceberg_transaction.schemas.emplace(name, inserted_entry);
+		return inserted_entry.get();
 	}
+	iceberg_transaction.schemas.emplace(name, entry->second);
 	return entry->second.get();
 }
 
 void IcebergSchemaSet::Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback) {
+	auto schema_entries = GetEntries(context);
+	for (auto &entry : schema_entries) {
+		callback(*entry);
+	}
+}
+
+vector<shared_ptr<IcebergSchemaEntry>> IcebergSchemaSet::GetEntries(ClientContext &context) {
 	lock_guard<mutex> l(entry_lock);
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
-	LoadEntries(context);
+	LoadEntriesInternal(context);
+	vector<shared_ptr<IcebergSchemaEntry>> result;
+	result.reserve(entries.size() + iceberg_transaction.created_schemas.size());
 	for (auto &entry : entries) {
 		if (iceberg_transaction.deleted_schemas.count(entry.first) ||
 		    iceberg_transaction.created_schemas.count(entry.first)) {
 			continue;
 		}
-		auto &iceberg_schema_entry = entry.second->Cast<IcebergSchemaEntry>();
-		if (iceberg_schema_entry.DoesExist()) {
-			callback(*entry.second);
+		auto transaction_entry = iceberg_transaction.schemas.find(entry.first);
+		if (transaction_entry == iceberg_transaction.schemas.end()) {
+			transaction_entry = iceberg_transaction.schemas.emplace(entry.first, entry.second).first;
+		}
+		if (transaction_entry->second->DoesExist()) {
+			result.push_back(transaction_entry->second);
 		}
 	}
-	for (auto &entry : iceberg_transaction.created_schemas) {
-		D_ASSERT(entry.second);
-		callback(*entry.second);
+	for (auto &created_schema : iceberg_transaction.created_schemas) {
+		result.push_back(created_schema.second);
 	}
+	return result;
 }
 
-bool IcebergSchemaSet::AddEntry(const string &name, unique_ptr<IcebergSchemaEntry> &entry) {
+void IcebergSchemaSet::AddEntry(const string &name, shared_ptr<IcebergSchemaEntry> entry) {
 	D_ASSERT(entry);
 	lock_guard<mutex> l(entry_lock);
-	auto existing_entry = entries.find(name);
-	if (existing_entry == entries.end()) {
-		entries.emplace(name, std::move(entry));
-		return true;
-	}
-	// Preserve the identity of an existing entry because other transactions may hold references to it.
-	existing_entry->second->Cast<IcebergSchemaEntry>().MarkAsExisting();
-	return false;
+	entries[name] = std::move(entry);
 }
 
 void IcebergSchemaSet::RemoveEntry(const string &name) {
@@ -113,24 +127,16 @@ void IcebergSchemaSet::RemoveEntry(const string &name) {
 	entries.erase(name);
 }
 
-CatalogEntry &IcebergSchemaSet::GetEntry(const string &name) {
-	auto entry_it = entries.find(name);
-	if (entry_it == entries.end()) {
-		throw CatalogException("Schema '%s' does not exist", name);
-	}
-	auto &entry = entry_it->second;
-	return *entry;
-}
-
-const case_insensitive_map_t<unique_ptr<CatalogEntry>> &IcebergSchemaSet::GetEntries() {
-	return entries;
-}
-
 static string GetSchemaName(const vector<string> &items) {
 	return StringUtil::Join(items, ".");
 }
 
 void IcebergSchemaSet::LoadEntries(ClientContext &context) {
+	lock_guard<mutex> l(entry_lock);
+	LoadEntriesInternal(context);
+}
+
+void IcebergSchemaSet::LoadEntriesInternal(ClientContext &context) {
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
 	bool schema_listed = iceberg_transaction.called_list_schemas;
@@ -143,21 +149,26 @@ void IcebergSchemaSet::LoadEntries(ClientContext &context) {
 		info.SetQualifiedName(QualifiedName(info.GetQualifiedName().Catalog(), Identifier(GetSchemaName(schema.items)),
 		                                    info.GetQualifiedName().Name()));
 		info.internal = false;
-		auto schema_entry = make_uniq<IcebergSchemaEntry>(catalog, info);
+		auto schema_entry = make_shared_ptr<IcebergSchemaEntry>(catalog, info);
 		schema_entry->namespace_items = std::move(schema.items);
-		CreateEntryInternal(context, std::move(schema_entry));
+		CreateEntryInternal(std::move(schema_entry));
 	}
 	iceberg_transaction.called_list_schemas = true;
 }
 
-optional_ptr<CatalogEntry> IcebergSchemaSet::CreateEntryInternal(ClientContext &context,
-                                                                 unique_ptr<CatalogEntry> entry) {
-	auto result = entry.get();
-	if (result->name.empty()) {
+shared_ptr<IcebergSchemaEntry> IcebergSchemaSet::CreateEntryInternal(shared_ptr<IcebergSchemaEntry> entry) {
+	auto &name = entry->name.GetIdentifierName();
+	if (name.empty()) {
 		throw InternalException("IcebergSchemaSet::CreateEntry called with empty name");
 	}
-	entries.insert(make_pair(result->name, std::move(entry)));
-	return result;
+	auto existing_entry = entries.find(name);
+	if (existing_entry == entries.end()) {
+		return entries.emplace(name, std::move(entry)).first->second;
+	}
+	if (!existing_entry->second->DoesExist()) {
+		existing_entry->second = std::move(entry);
+	}
+	return existing_entry->second;
 }
 
 } // namespace duckdb

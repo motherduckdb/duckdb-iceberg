@@ -92,15 +92,16 @@ optional_ptr<CatalogEntry> IcebergCatalog::CreateSchema(CatalogTransaction trans
 			if (entry) {
 				return entry;
 			}
-			auto new_schema = make_uniq<IcebergSchemaEntry>(*this, info);
+			auto new_schema = make_shared_ptr<IcebergSchemaEntry>(*this, info);
 			schemas.AddEntry(schema_name, new_schema);
-			return &schemas.GetEntry(schema_name);
+			iceberg_transaction.schemas[schema_name] = new_schema;
+			return new_schema.get();
 		}
 		throw CatalogException("Schema with name \"%s\" already exists", info.GetQualifiedName().Schema());
 	}
 
 	// Schema does not exist - stage it locally and defer the server creation and catalog publication to commit
-	auto new_schema = make_uniq<IcebergSchemaEntry>(*this, info);
+	auto new_schema = make_shared_ptr<IcebergSchemaEntry>(*this, info);
 	auto result = new_schema.get();
 	iceberg_transaction.created_schemas.emplace(schema_name, std::move(new_schema));
 	return result;

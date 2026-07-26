@@ -164,3 +164,38 @@ WHERE catalog_name = 'my_datalake' AND schema_name = 'connection_schema';
 
 statement ok
 drop schema my_datalake.connection_schema;
+
+# Replacing a stale cached entry must not invalidate another transaction's
+# reference to the old generation. That transaction keeps its original view;
+# a new transaction sees the schema published at commit.
+statement ok
+drop schema if exists my_datalake.pinned_missing_schema;
+
+statement ok con1
+begin;
+
+statement ok con1
+drop table if exists my_datalake.pinned_missing_schema.target;
+
+statement ok
+create schema my_datalake.pinned_missing_schema;
+
+query I con1
+SELECT count(*)
+FROM information_schema.schemata
+WHERE catalog_name = 'my_datalake' AND schema_name = 'pinned_missing_schema';
+----
+0
+
+statement ok con1
+rollback;
+
+query I con1
+SELECT count(*)
+FROM information_schema.schemata
+WHERE catalog_name = 'my_datalake' AND schema_name = 'pinned_missing_schema';
+----
+1
+
+statement ok
+drop schema my_datalake.pinned_missing_schema;
