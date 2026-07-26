@@ -67,14 +67,9 @@ bool IcebergTableSet::FillEntry(ClientContext &context, IcebergTableInformation 
 		    StringUtil::Format("GetTableInformation endpoint returned response code %s with message \"%s\"",
 		                       EnumUtil::ToString(get_table_result.status_), get_table_result.error_->_error.message));
 	}
+	auto &load_table_result = *get_table_result.result_;
 	ic_catalog.table_request_cache.SetOrOverwrite(context, table_key, std::move(get_table_result.result_));
-	{
-		lock_guard<std::mutex> cache_lock(ic_catalog.table_request_cache.Lock());
-		auto cached_table_result = ic_catalog.table_request_cache.Get(context, table_key, cache_lock, false);
-		D_ASSERT(cached_table_result);
-		auto &load_table_result = *cached_table_result->load_table_result;
-		table.InitializeFromLoadTableResult(load_table_result);
-	}
+	table.InitializeFromLoadTableResult(load_table_result);
 	return true;
 }
 
@@ -258,21 +253,16 @@ IcebergTableInformation &IcebergTableSet::CreateNewEntry(ClientContext &context,
 
 	// Immediately create the table with stage_create = true to get metadata & data location(s)
 	// transaction commit will either commit with data (OR) create the table with stage_create = false
-	auto load_table_result = make_uniq<const rest_api_objects::LoadTableResult>(
+	auto new_table_result = make_uniq<const rest_api_objects::LoadTableResult>(
 	    IRCAPI::CommitNewTable(context, catalog, schema.namespace_items, create_table_request));
 
 	auto key = IcebergTableInformation::GetTableKey(schema.namespace_items, info.GetTableName().GetIdentifierName());
-	catalog.table_request_cache.SetOrOverwrite(context, key, std::move(load_table_result));
+	auto &load_table_result = *new_table_result;
+	catalog.table_request_cache.SetOrOverwrite(context, key, std::move(new_table_result));
 	auto &alter_update = iceberg_transaction.GetOrCreateAlter();
 	auto &table_info = alter_update.CreateTable(
 	    key, IcebergTableInformation(catalog, schema, info.GetTableName().GetIdentifierName()));
-	{
-		lock_guard<mutex> cache_lock(catalog.table_request_cache.Lock());
-		auto cached_table_result = catalog.table_request_cache.Get(context, key, cache_lock, false);
-		D_ASSERT(cached_table_result);
-		auto &load_table_result = cached_table_result->load_table_result;
-		table_info.InitializeFromLoadTableResult(*load_table_result, true);
-	}
+	table_info.InitializeFromLoadTableResult(load_table_result);
 
 	// if we stage created the table, we add an assert create
 	auto &transaction_data = table_info.GetOrCreateTransactionData(iceberg_transaction);

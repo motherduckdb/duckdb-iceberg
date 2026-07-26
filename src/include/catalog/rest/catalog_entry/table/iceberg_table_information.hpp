@@ -67,15 +67,13 @@ public:
 	void InitSchemaVersions();
 
 	bool HasTransactionUpdates() const;
-	void InitializeFromLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result,
-	                                   bool initialize_schemas = true);
+	void InitializeFromLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result);
 	void RefreshFromCatalog(ClientContext &context);
 
 public:
 	IcebergCatalog &catalog;
 	IcebergSchemaEntry &schema;
 	string name;
-	string table_id;
 	IcebergTableMetadata table_metadata;
 	case_insensitive_map_t<string> config;
 	vector<rest_api_objects::StorageCredential> storage_credentials;
