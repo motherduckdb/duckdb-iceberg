@@ -18,7 +18,9 @@ public:
 	optional_ptr<CatalogEntry> GetEntry(ClientContext &context, const string &name, OnEntryNotFound if_not_found);
 	void Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback);
 	const case_insensitive_map_t<unique_ptr<CatalogEntry>> &GetEntries();
-	void AddEntry(const string &name, unique_ptr<IcebergSchemaEntry> entry);
+	//! Publish the entry if absent, or revive the existing cached entry without replacing its identity. Returns true
+	//! when ownership of entry was transferred to this set.
+	bool AddEntry(const string &name, unique_ptr<IcebergSchemaEntry> &entry);
 	void RemoveEntry(const string &name);
 	CatalogEntry &GetEntry(const string &name);
 

@@ -48,6 +48,9 @@ public:
 	bool DoesExist() const {
 		return exists;
 	}
+	void MarkAsExisting() {
+		exists = true;
+	}
 	string GetSchemaKey() const {
 		return this->catalog.GetName() + "." + this->name;
 	};

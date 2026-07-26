@@ -704,7 +704,9 @@ void IcebergTransaction::DoTableDeletes(IcebergTransactionDeleteUpdate &delete_u
 
 void IcebergTransaction::DoSchemaCreates(ClientContext &context) {
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
-	for (auto &schema_name : created_schemas) {
+	retained_schema_entries.reserve(retained_schema_entries.size() + created_schemas.size());
+	for (auto created_schema = created_schemas.begin(); created_schema != created_schemas.end();) {
+		auto &schema_name = created_schema->first;
 		auto namespace_identifiers = IRCAPI::ParseSchemaName(schema_name);
 
 		rest_api_objects::CreateNamespaceRequest request;
@@ -713,8 +715,12 @@ void IcebergTransaction::DoSchemaCreates(ClientContext &context) {
 		auto create_body = RESTObjectToJSONString(request);
 
 		IRCAPI::CommitNamespaceCreate(context, ic_catalog, create_body);
+		D_ASSERT(created_schema->second);
+		if (!ic_catalog.GetSchemas().AddEntry(schema_name, created_schema->second)) {
+			retained_schema_entries.push_back(std::move(created_schema->second));
+		}
+		created_schema = created_schemas.erase(created_schema);
 	}
-	created_schemas.clear();
 }
 
 void IcebergTransaction::DoSchemaDeletes(ClientContext &context) {

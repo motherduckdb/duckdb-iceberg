@@ -27,14 +27,11 @@ optional_ptr<CatalogEntry> IcebergSchemaSet::GetEntry(ClientContext &context, co
 		throw CatalogException("Schema '%s' does not exist", name);
 	}
 
-	// If the schema was created in this transaction, return the local entry directly
-	if (iceberg_transaction.created_schemas.count(name)) {
-		auto entry = entries.find(name);
-		if (entry != entries.end()) {
-			return entry->second.get();
-		}
-		throw InternalException("Schema '%s' was created in this transaction, but was no found in the local cache",
-		                        name);
+	// If the schema was created in this transaction, return the transaction-local entry directly
+	auto created_schema = iceberg_transaction.created_schemas.find(name);
+	if (created_schema != iceberg_transaction.created_schemas.end()) {
+		D_ASSERT(created_schema->second);
+		return created_schema->second.get();
 	}
 
 	auto verify_existence = iceberg_transaction.looked_up_entries.insert(name).second;
@@ -80,17 +77,35 @@ optional_ptr<CatalogEntry> IcebergSchemaSet::GetEntry(ClientContext &context, co
 
 void IcebergSchemaSet::Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback) {
 	lock_guard<mutex> l(entry_lock);
+	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
 	LoadEntries(context);
 	for (auto &entry : entries) {
+		if (iceberg_transaction.deleted_schemas.count(entry.first) ||
+		    iceberg_transaction.created_schemas.count(entry.first)) {
+			continue;
+		}
 		auto &iceberg_schema_entry = entry.second->Cast<IcebergSchemaEntry>();
 		if (iceberg_schema_entry.DoesExist()) {
 			callback(*entry.second);
 		}
 	}
+	for (auto &entry : iceberg_transaction.created_schemas) {
+		D_ASSERT(entry.second);
+		callback(*entry.second);
+	}
 }
 
-void IcebergSchemaSet::AddEntry(const string &name, unique_ptr<IcebergSchemaEntry> entry) {
-	entries.insert(make_pair(name, std::move(entry)));
+bool IcebergSchemaSet::AddEntry(const string &name, unique_ptr<IcebergSchemaEntry> &entry) {
+	D_ASSERT(entry);
+	lock_guard<mutex> l(entry_lock);
+	auto existing_entry = entries.find(name);
+	if (existing_entry == entries.end()) {
+		entries.emplace(name, std::move(entry));
+		return true;
+	}
+	// Preserve the identity of an existing entry because other transactions may hold references to it.
+	existing_entry->second->Cast<IcebergSchemaEntry>().MarkAsExisting();
+	return false;
 }
 
 void IcebergSchemaSet::RemoveEntry(const string &name) {

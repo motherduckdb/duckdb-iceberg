@@ -120,14 +120,19 @@ private:
 	AccessMode access_mode;
 
 public:
+	//! Keep transaction-local entries alive when publication revives an existing negative cache entry instead of
+	//! moving the staged entry into the shared schema set.
+	vector<unique_ptr<IcebergSchemaEntry>> retained_schema_entries;
+	//! Schema entries staged by this transaction. These are published to the catalog's shared schema set only after
+	//! the namespace create has committed to the REST catalog.
+	case_insensitive_map_t<unique_ptr<IcebergSchemaEntry>> created_schemas;
 	//! Tables referenced by this transaction that have to stay alive for the duration of the transaction.
 	case_insensitive_map_t<shared_ptr<IcebergTableInformation>> tables;
 	//! The visible state of every resolved table in this transaction.
 	case_insensitive_map_t<IcebergTransactionTableState> current_table_data;
-	//! Declared after current_table_data so update references are destroyed before the referenced table states.
+	//! Declared after the schema and table states so update references are destroyed before the referenced states.
 	IcebergTransactionUpdate transaction_update;
 
-	unordered_set<string> created_schemas;
 	unordered_set<string> deleted_schemas;
 
 	bool called_list_schemas = false;
