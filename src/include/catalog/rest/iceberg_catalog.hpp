@@ -189,9 +189,8 @@ public:
 	string uri;
 	//! version
 	const string version;
-	//! optional prefix
-	string prefix;
-	bool prefix_is_one_component = true;
+	//! optional prefix path components
+	vector<string> prefix;
 	//! attach options
 	IcebergAttachOptions attach_options;
 	string default_schema;
