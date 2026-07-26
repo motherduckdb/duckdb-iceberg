@@ -5,7 +5,12 @@
 namespace duckdb {
 
 JSONValue ICUtils::GetErrorMessage(const string &api_result, unique_ptr<JSONDocument> &out_doc) {
-	out_doc = JSONDocument::Parse(api_result.c_str(), api_result.size());
+	JSONParseError parse_error;
+	out_doc = JSONDocument::TryParse(api_result.c_str(), api_result.size(), parse_error);
+	if (!out_doc) {
+		return JSONValue();
+	}
+
 	auto root = out_doc->GetRoot();
 	auto error = root.GetMember("error");
 
