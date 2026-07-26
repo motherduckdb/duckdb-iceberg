@@ -380,6 +380,11 @@ void IcebergCatalog::GetConfig(ClientContext &context, IcebergEndpointType &endp
 	auto catalog_config = IRCAPI::GetCatalogConfig(context, *this, effective_warehouse);
 	overrides = catalog_config.overrides;
 	defaults = catalog_config.defaults;
+	auto uri_override_it = overrides.find("uri");
+	if (uri_override_it != overrides.end()) {
+		uri = uri_override_it->second;
+		StringUtil::RTrim(uri, "/");
+	}
 	ParsePrefix();
 
 	if (attach_options.encode_entire_prefix) {
