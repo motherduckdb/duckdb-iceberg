@@ -475,6 +475,7 @@
         "test/sql/filter/test_transitive_filters.test",
         "test/sql/function/time/test_extract_stats.test",
         "test/sql/storage/extended_string_stats.test",
+        "test/sql/delete/delete_compression_blocked_by_old_snapshot.test",
         "test/sql/storage/total_string_length_repeated_insert.test"
       ]
     },
@@ -593,6 +594,14 @@
       "reason": "regex_escape operator caching",
       "paths": [
         "test/sql/function/string/regex_escape.test"
+      ]
+    },
+    {
+      "reason": "Transactionality isolation guarantees don't match",
+      "paths": [
+        "test/sql/delete/full_vector_delete_conflict.test",
+        "test/sql/storage/piecemeal_delete_checkpoint_compress.test",
+        "test/sql/delete/full_vector_delete_rollback.test"
       ]
     },
     {
@@ -1349,7 +1358,9 @@
     {
       "reason": "Contains attach and use call, when config already uses iceberg attached db",
       "paths": [
-        "test/sql/storage/metadata/partial_column_metadata_reuse_small_block.test"
+        "test/sql/storage/metadata/partial_column_metadata_reuse_small_block.test",
+        "test/sql/storage/compression/fsst/invalid_fsst_bitpacking_width.test",
+        "test/sql/optimizer/boolean_wrapper_pushdown.test"
       ]
     },
     {
@@ -1474,6 +1485,7 @@
         "test/sql/aggregate/aggregate_state_export/first_last_export_state.test",
         "test/sql/aggregate/aggregate_state_export/list_export_state.test",
         "test/sql/aggregate/aggregate_state_export/test_state_export_quantile.test",
+        "test/sql/aggregate/aggregates/lttb.test",
         "test/sql/aggregate/aggregate_state_export/test_state_export_string_agg.test"
       ]
     },
@@ -1496,6 +1508,10 @@
         "test/sql/optimizer/monotone_function_zonemap_pruning.test",
         "test/sql/optimizer/monotone_preimage.test",
         "test/sql/optimizer/not_conjunction_simplification.test",
+        "test/sql/optimizer/empty_string_concat_pruning.test",
+        "test/sql/optimizer/power_zonemap_pruning.test",
+        "test/sql/optimizer/substring_zonemap_pruning.test",
+        "test/sql/optimizer/test_glob_row_group_pruning.test",
         "test/sql/sample/test_system_rows.test",
         "test/sql/window/test_streaming_window.test",
         "test/sql/transactions/test_index_delete_cleanup_non_main_storage.test",
@@ -1546,6 +1562,10 @@
         "test/sql/storage/types/variant/variant_extract_stats.test",
         "test/sql/storage/types/variant/variant_shredding_empty_keys.test",
         "test/sql/storage/types/variant/variant_shredding_omit_untyped.test",
+        "test/sql/function/variant/variant_array_length_shredded.test",
+        "test/sql/function/variant/variant_exists_shredded.test",
+        "test/sql/function/variant/variant_keys_shredded.test",
+        "test/sql/function/variant/variant_type_shredded.test",
         "test/sql/storage/types/variant/variant_storage_version.test",
         "test/sql/types/variant/implicit_cast_from_variant.test",
         "test/sql/types/variant/variant_cast_stats.test"
@@ -1561,6 +1581,14 @@
       "reason": "Triggers are not supported on Iceberg tables",
       "paths": [
         "test/sql/trigger/create_trigger_parse.test"
+      ]
+    },
+    {
+      "reason": "Tables already exist / Schema does not exist",
+      "paths": [
+        "test/sql/storage/wal/wal_replay_unbound_index_create_index_during_wal.test",
+        "test/sql/trigger/trigger_after_update_old_new_wal.test",
+        "test/sql/storage/wal/wal_null_update_row_group_pruning.test"
       ]
     },
     {
