@@ -1174,12 +1174,17 @@ IcebergMultiFileList::GetEqualityDeletesForFile(const BoundIcebergManifestEntry 
 					continue;
 				}
 				D_ASSERT(delete_file.partition_info.size() == data_file.partition_info.size());
+				bool partition_matches = true;
 				for (idx_t i = 0; i < delete_file.partition_info.size(); i++) {
 					if (delete_file.partition_info[i] != data_file.partition_info[i]) {
 						//! Same partition spec id, but the partitioning information doesn't match, delete file doesn't
 						//! apply.
-						continue;
+						partition_matches = false;
+						break;
 					}
+				}
+				if (!partition_matches) {
+					continue;
 				}
 			}
 			result.emplace_back(delete_file);

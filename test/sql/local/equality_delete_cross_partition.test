@@ -1,0 +1,26 @@
+# name: test/sql/local/equality_delete_cross_partition.test
+# description: Equality delete must not apply across partitions of the same spec
+# group: [local]
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Table before the equality delete (identity-partitioned on `part`):
+#   part | key | val
+#      0 | 100 | p0-k100
+#      0 | 999 | p0-k999
+#      1 | 100 | p1-k100
+#      1 | 888 | p1-k888
+# The equality delete on key=100 lives in partition part=0 only, so it must remove
+# (part=0, key=100) but NOT (part=1, key=100).
+query IIT
+SELECT part, key, val FROM ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/equality_delete_cross_partition/warehouse/ns/t/metadata/vfinal.metadata.json') ORDER BY part, key;
+----
+0	999	p0-k999
+1	100	p1-k100
+1	888	p1-k888
