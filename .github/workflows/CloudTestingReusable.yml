@@ -102,15 +102,6 @@ jobs:
         run: |
           python3 -m pip install -r scripts/requirements.txt
 
-      - name: Set up cloud testing
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.S3_ICEBERG_TEST_USER_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_ICEBERG_TEST_USER_SECRET }}
-          AWS_DEFAULT_REGION: ${{ secrets.S3_ICEBERG_TEST_USER_REGION }}
-          R2_TOKEN: ${{ secrets.r2_token }}
-        run: |
-          python3 scripts/create_s3_insert_table.py --action=delete-and-create --catalogs=s3tables,r2,glue
-
       - name: Run mitmproxy
         shell: bash
         run: |
