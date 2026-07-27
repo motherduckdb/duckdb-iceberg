@@ -5,9 +5,9 @@ on:
   workflow_dispatch:
     inputs:
       duckdb_ref:
-        description: 'DuckDB branch name or commit hash. Leave empty to use submodule in the branch'
+        description: 'DuckDB submodule branch name or commit hash. Leave empty to use submodule in the branch'
         required: false
-        default: 'main'
+        default: ''
       httpfs_fork:
         description: 'URL of a duckdb-httpfs fork. Leave empty to use default duckdb/duckdb-httpfs.'
         required: false
@@ -21,7 +21,7 @@ on:
     # list can't drift out of sync with the ones the steps below actually read.
     inputs:
       duckdb_ref:
-        description: 'DuckDB branch name or commit hash. Leave empty to use submodule in the branch'
+        description: 'DuckDB submodule branch name or commit hash. Leave empty to use submodule in the branch'
         required: false
         default: ''
         type: string
