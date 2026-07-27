@@ -75,7 +75,7 @@ bool IcebergTableSet::FillEntry(ClientContext &context, IcebergTableInformation 
 
 IcebergTableEntry &IcebergTableSet::GetOrCreateDummy(IcebergTableInformation &table_info) const {
 	if (table_info.dummy_entry) {
-		*table_info.dummy_entry;
+		return *table_info.dummy_entry;
 	}
 	// create a table entry with fake schema data to avoid calling the LoadTableInformation endpoint for every
 	// table while listing schemas
