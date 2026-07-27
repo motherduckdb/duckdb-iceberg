@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/remove_statistics_update.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 RemoveStatisticsUpdate::RemoveStatisticsUpdate() {
 }
 
-RemoveStatisticsUpdate RemoveStatisticsUpdate::FromJSON(yyjson_val *obj) {
+RemoveStatisticsUpdate RemoveStatisticsUpdate::FromJSON(JSONValue obj) {
 	RemoveStatisticsUpdate res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -31,60 +29,57 @@ RemoveStatisticsUpdate RemoveStatisticsUpdate::Copy() const {
 	return res;
 }
 
-string RemoveStatisticsUpdate::TryFromJSON(yyjson_val *obj) {
+string RemoveStatisticsUpdate::TryFromJSON(JSONValue obj) {
 	string error;
 	error = base_update.TryFromJSON(obj);
 	if (!error.empty()) {
 		return error;
 	}
-	auto action_refinement_val = yyjson_obj_get(obj, "action");
-	if (action_refinement_val) {
+	auto action_refinement_val = obj.GetMember("action");
+	if (action_refinement_val.IsValid()) {
 		string action_refinement;
-		if (yyjson_is_str(action_refinement_val)) {
-			action_refinement = yyjson_get_str(action_refinement_val);
+		if (json_utils::IsString(action_refinement_val)) {
+			action_refinement = json_utils::GetString(action_refinement_val);
 		} else {
 			return StringUtil::Format(
-			    "RemoveStatisticsUpdate property 'action_refinement' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_refinement_val));
+			    "RemoveStatisticsUpdate property 'action_refinement' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(action_refinement_val).c_str());
 		}
-		if (!yyjson_is_null(action_refinement_val) && action_refinement != "remove-statistics") {
+		if (!action_refinement_val.IsNull() && action_refinement != "remove-statistics") {
 			return "RemoveStatisticsUpdate property 'action_refinement' does not match its required const value";
 		}
 	} else {
 		return "RemoveStatisticsUpdate required property 'action' is missing";
 	}
-	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
-	if (!snapshot_id_val) {
+	auto snapshot_id_val = obj.GetMember("snapshot-id");
+	if (!snapshot_id_val.IsValid()) {
 		return "RemoveStatisticsUpdate required property 'snapshot-id' is missing";
 	} else {
-		if (yyjson_is_sint(snapshot_id_val)) {
-			snapshot_id = yyjson_get_sint(snapshot_id_val);
-		} else if (yyjson_is_uint(snapshot_id_val)) {
-			snapshot_id = yyjson_get_uint(snapshot_id_val);
+		if (json_utils::IsInteger(snapshot_id_val)) {
+			snapshot_id = json_utils::GetSignedInteger(snapshot_id_val);
+		} else if (json_utils::IsUnsignedInteger(snapshot_id_val)) {
+			snapshot_id = json_utils::GetUnsignedInteger(snapshot_id_val);
 		} else {
 			return StringUtil::Format(
-			    "RemoveStatisticsUpdate property 'snapshot_id' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(snapshot_id_val));
+			    "RemoveStatisticsUpdate property 'snapshot_id' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(snapshot_id_val).c_str());
 		}
 	}
 	return "";
 }
 
-void RemoveStatisticsUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void RemoveStatisticsUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize base class: BaseUpdate
-	base_update.PopulateJSON(doc, obj);
+	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: snapshot-id
-	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+	auto snapshot_id_json = writer.CreateSignedInteger(snapshot_id);
+	obj.Add("snapshot-id", snapshot_id_json);
 }
 
-yyjson_mut_val *RemoveStatisticsUpdate::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue RemoveStatisticsUpdate::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

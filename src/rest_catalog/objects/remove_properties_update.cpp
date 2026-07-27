@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/remove_properties_update.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 RemovePropertiesUpdate::RemovePropertiesUpdate() {
 }
 
-RemovePropertiesUpdate RemovePropertiesUpdate::FromJSON(yyjson_val *obj) {
+RemovePropertiesUpdate RemovePropertiesUpdate::FromJSON(JSONValue obj) {
 	RemovePropertiesUpdate res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -34,75 +32,76 @@ RemovePropertiesUpdate RemovePropertiesUpdate::Copy() const {
 	return res;
 }
 
-string RemovePropertiesUpdate::TryFromJSON(yyjson_val *obj) {
+string RemovePropertiesUpdate::TryFromJSON(JSONValue obj) {
 	string error;
 	error = base_update.TryFromJSON(obj);
 	if (!error.empty()) {
 		return error;
 	}
-	auto action_refinement_val = yyjson_obj_get(obj, "action");
-	if (action_refinement_val) {
+	auto action_refinement_val = obj.GetMember("action");
+	if (action_refinement_val.IsValid()) {
 		string action_refinement;
-		if (yyjson_is_str(action_refinement_val)) {
-			action_refinement = yyjson_get_str(action_refinement_val);
+		if (json_utils::IsString(action_refinement_val)) {
+			action_refinement = json_utils::GetString(action_refinement_val);
 		} else {
 			return StringUtil::Format(
-			    "RemovePropertiesUpdate property 'action_refinement' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_refinement_val));
+			    "RemovePropertiesUpdate property 'action_refinement' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(action_refinement_val).c_str());
 		}
-		if (!yyjson_is_null(action_refinement_val) && action_refinement != "remove-properties") {
+		if (!action_refinement_val.IsNull() && action_refinement != "remove-properties") {
 			return "RemovePropertiesUpdate property 'action_refinement' does not match its required const value";
 		}
 	} else {
 		return "RemovePropertiesUpdate required property 'action' is missing";
 	}
-	auto removals_val = yyjson_obj_get(obj, "removals");
-	if (!removals_val) {
+	auto removals_val = obj.GetMember("removals");
+	if (!removals_val.IsValid()) {
 		return "RemovePropertiesUpdate required property 'removals' is missing";
 	} else {
-		if (yyjson_is_arr(removals_val)) {
-			size_t removals_idx, removals_max;
-			yyjson_val *removals_item_val;
-			yyjson_arr_foreach(removals_val, removals_idx, removals_max, removals_item_val) {
+		if (removals_val.IsArray()) {
+			removals_val.IterateArray([&](JSONValue removals_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				string removals_item;
-				if (yyjson_is_str(removals_item_val)) {
-					removals_item = yyjson_get_str(removals_item_val);
+				if (json_utils::IsString(removals_item_val)) {
+					removals_item = json_utils::GetString(removals_item_val);
 				} else {
-					return StringUtil::Format(
-					    "RemovePropertiesUpdate property 'removals_item' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(removals_item_val));
+					error = StringUtil::Format(
+					    "RemovePropertiesUpdate property 'removals_item' is not of type 'string', found %s instead",
+					    json_utils::GetTypeDescription(removals_item_val).c_str());
+					return;
 				}
 				removals.emplace_back(std::move(removals_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "RemovePropertiesUpdate property 'removals' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(removals_val));
+			    "RemovePropertiesUpdate property 'removals' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(removals_val).c_str());
 		}
 	}
 	return "";
 }
 
-void RemovePropertiesUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void RemovePropertiesUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize base class: BaseUpdate
-	base_update.PopulateJSON(doc, obj);
+	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: removals
-	yyjson_mut_val *removals_arr = yyjson_mut_arr(doc);
-	for (const auto &item : removals) {
-		yyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());
-		yyjson_mut_arr_append(removals_arr, item_val);
+	auto removals_json = writer.CreateArray();
+	for (const auto &removals_json_item : removals) {
+		auto removals_json_item_json = writer.CreateString(removals_json_item);
+		removals_json.Append(removals_json_item_json);
 	}
-	yyjson_mut_obj_add_val(doc, obj, "removals", removals_arr);
+	obj.Add("removals", removals_json);
 }
 
-yyjson_mut_val *RemovePropertiesUpdate::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue RemovePropertiesUpdate::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

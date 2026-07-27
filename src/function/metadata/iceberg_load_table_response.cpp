@@ -16,9 +16,7 @@
 #include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
 #include "rest_catalog/objects/list.hpp"
-#include "yyjson.hpp"
-
-using namespace duckdb_yyjson;
+#include "duckdb/common/json_document.hpp"
 
 namespace duckdb {
 
@@ -47,7 +45,7 @@ static unique_ptr<HTTPResponse> MakeRequest(ClientContext &context, const Iceber
 	auto &ic_table_entry = bind_data.table_entry;
 
 	auto url_builder = ic_catalog.GetBaseUrl();
-	url_builder.AddPrefixComponent(ic_catalog.prefix, ic_catalog.prefix_is_one_component);
+	url_builder.AddPrefixComponents(ic_catalog.prefix);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
 	url_builder.AddPathComponent(IRCPathComponent::NamespaceComponent(ic_schema.namespace_items));
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("tables"));
@@ -151,9 +149,9 @@ static void IcebergLoadTableResponseFunction(ClientContext &context, TableFuncti
 
 	auto response = MakeRequest(context, bind_data);
 
-	// Parse the response using yyjson
+	// Parse the response as JSON
 	auto doc = ICUtils::APIResultToDoc(response->body);
-	auto *root = yyjson_doc_get_root(doc.get());
+	auto root = doc->GetRoot();
 
 	auto load_result = rest_api_objects::LoadTableResult::FromJSON(root);
 
@@ -171,15 +169,12 @@ static void IcebergLoadTableResponseFunction(ClientContext &context, TableFuncti
 	// metadata (VARIANT)
 	auto &metadata_vector = output.data[1];
 	{
-		auto *metadata_val = yyjson_obj_get(root, "metadata");
-		if (metadata_val) {
-			auto *json_str = yyjson_val_write(metadata_val, 0, nullptr);
-			if (json_str) {
-				Vector json_vec(LogicalType::JSON(), 1);
-				FlatVector::GetDataMutable<string_t>(json_vec)[0] = StringVector::AddString(json_vec, string(json_str));
-				free(json_str);
-				VectorOperations::Cast(context, json_vec, metadata_vector, 1);
-			}
+		auto metadata_val = root.GetMember("metadata");
+		if (metadata_val.IsValid()) {
+			Vector json_vec(LogicalType::JSON(), 1);
+			FlatVector::GetDataMutable<string_t>(json_vec)[0] =
+			    StringVector::AddString(json_vec, metadata_val.ToString());
+			VectorOperations::Cast(context, json_vec, metadata_vector, 1);
 		}
 	}
 

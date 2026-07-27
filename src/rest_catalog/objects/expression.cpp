@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/expression.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 Expression::Expression() {
 }
 
-Expression Expression::FromJSON(yyjson_val *obj) {
+Expression Expression::FromJSON(JSONValue obj) {
 	Expression res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -61,7 +59,7 @@ Expression Expression::Copy() const {
 	return res;
 }
 
-string Expression::TryFromJSON(yyjson_val *obj) {
+string Expression::TryFromJSON(JSONValue obj) {
 	string error;
 	do {
 		boolean_expression.emplace();
@@ -125,26 +123,26 @@ string Expression::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *Expression::ToJSON(yyjson_mut_doc *doc) const {
+JSONMutableValue Expression::ToJSON(JSONWriter &writer) const {
 	if (boolean_expression.has_value()) {
-		return boolean_expression->ToJSON(doc);
+		return boolean_expression->ToJSON(writer);
 	} else if (true_expression.has_value()) {
-		return true_expression->ToJSON(doc);
+		return true_expression->ToJSON(writer);
 	} else if (false_expression.has_value()) {
-		return false_expression->ToJSON(doc);
+		return false_expression->ToJSON(writer);
 	} else if (and_or_expression.has_value()) {
-		return and_or_expression->ToJSON(doc);
+		return and_or_expression->ToJSON(writer);
 	} else if (not_expression.has_value()) {
-		return not_expression->ToJSON(doc);
+		return not_expression->ToJSON(writer);
 	} else if (set_expression.has_value()) {
-		return set_expression->ToJSON(doc);
+		return set_expression->ToJSON(writer);
 	} else if (literal_expression.has_value()) {
-		return literal_expression->ToJSON(doc);
+		return literal_expression->ToJSON(writer);
 	} else if (unary_expression.has_value()) {
-		return unary_expression->ToJSON(doc);
+		return unary_expression->ToJSON(writer);
 	}
 	// No variant is active - return empty object
-	return yyjson_mut_obj(doc);
+	return writer.CreateObject();
 }
 
 } // namespace rest_api_objects

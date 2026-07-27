@@ -36,7 +36,7 @@ void IcebergMergeInto::ProjectAndCastForCopy(ClientContext &context, DataChunk &
 			cast_chunk.data[i].Reference(chunk_ref.get().data[i]);
 		}
 	}
-	cast_chunk.SetCardinality(chunk_ref.get().size());
+	cast_chunk.SetChildCardinality(chunk_ref.get().size());
 }
 
 namespace {

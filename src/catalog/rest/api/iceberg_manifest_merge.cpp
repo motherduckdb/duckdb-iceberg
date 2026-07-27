@@ -12,8 +12,6 @@
 #include "planning/metadata_io/avro/avro_scan.hpp"
 #include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
 
-#include "yyjson.hpp"
-
 #include <algorithm>
 #include <string>
 

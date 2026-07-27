@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/table_requirement.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 TableRequirement::TableRequirement() {
 }
 
-TableRequirement TableRequirement::FromJSON(yyjson_val *obj) {
+TableRequirement TableRequirement::FromJSON(JSONValue obj) {
 	TableRequirement res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -61,13 +59,13 @@ TableRequirement TableRequirement::Copy() const {
 	return res;
 }
 
-string TableRequirement::TryFromJSON(yyjson_val *obj) {
+string TableRequirement::TryFromJSON(JSONValue obj) {
 	string error;
-	auto discriminator_val = yyjson_obj_get(obj, "type");
-	if (!discriminator_val || !yyjson_is_str(discriminator_val)) {
+	auto discriminator_val = obj.GetMember("type");
+	if (!discriminator_val.IsValid() || !discriminator_val.IsString()) {
 		return "TableRequirement discriminator 'type' is missing or is not a string";
 	}
-	string discriminator = yyjson_get_str(discriminator_val);
+	string discriminator = discriminator_val.GetString();
 	if (discriminator == "assert-create") {
 		assert_create.emplace();
 		error = assert_create->TryFromJSON(obj);
@@ -122,33 +120,29 @@ string TableRequirement::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void TableRequirement::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void TableRequirement::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	if (assert_create.has_value()) {
-		assert_create->PopulateJSON(doc, obj);
+		assert_create->PopulateJSON(writer, obj);
 	} else if (assert_table_uuid.has_value()) {
-		assert_table_uuid->PopulateJSON(doc, obj);
+		assert_table_uuid->PopulateJSON(writer, obj);
 	} else if (assert_ref_snapshot_id.has_value()) {
-		assert_ref_snapshot_id->PopulateJSON(doc, obj);
+		assert_ref_snapshot_id->PopulateJSON(writer, obj);
 	} else if (assert_last_assigned_field_id.has_value()) {
-		assert_last_assigned_field_id->PopulateJSON(doc, obj);
+		assert_last_assigned_field_id->PopulateJSON(writer, obj);
 	} else if (assert_current_schema_id.has_value()) {
-		assert_current_schema_id->PopulateJSON(doc, obj);
+		assert_current_schema_id->PopulateJSON(writer, obj);
 	} else if (assert_last_assigned_partition_id.has_value()) {
-		assert_last_assigned_partition_id->PopulateJSON(doc, obj);
+		assert_last_assigned_partition_id->PopulateJSON(writer, obj);
 	} else if (assert_default_spec_id.has_value()) {
-		assert_default_spec_id->PopulateJSON(doc, obj);
+		assert_default_spec_id->PopulateJSON(writer, obj);
 	} else if (assert_default_sort_order_id.has_value()) {
-		assert_default_sort_order_id->PopulateJSON(doc, obj);
+		assert_default_sort_order_id->PopulateJSON(writer, obj);
 	}
 }
 
-yyjson_mut_val *TableRequirement::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue TableRequirement::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

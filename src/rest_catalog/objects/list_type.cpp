@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/list_type.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 ListType::ListType() {
 }
 
-ListType ListType::FromJSON(yyjson_val *obj) {
+ListType ListType::FromJSON(JSONValue obj) {
 	ListType res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -33,35 +31,35 @@ ListType ListType::Copy() const {
 	return res;
 }
 
-string ListType::TryFromJSON(yyjson_val *obj) {
+string ListType::TryFromJSON(JSONValue obj) {
 	string error;
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
+	auto type_val = obj.GetMember("type");
+	if (!type_val.IsValid()) {
 		return "ListType required property 'type' is missing";
 	} else {
-		if (yyjson_is_str(type_val)) {
-			type = yyjson_get_str(type_val);
+		if (json_utils::IsString(type_val)) {
+			type = json_utils::GetString(type_val);
 		} else {
-			return StringUtil::Format("ListType property 'type' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(type_val));
+			return StringUtil::Format("ListType property 'type' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(type_val).c_str());
 		}
-		if (!yyjson_is_null(type_val) && type != "list") {
+		if (!type_val.IsNull() && type != "list") {
 			return "ListType property 'type' does not match its required const value";
 		}
 	}
-	auto element_id_val = yyjson_obj_get(obj, "element-id");
-	if (!element_id_val) {
+	auto element_id_val = obj.GetMember("element-id");
+	if (!element_id_val.IsValid()) {
 		return "ListType required property 'element-id' is missing";
 	} else {
-		if (yyjson_is_int(element_id_val)) {
-			element_id = yyjson_get_int(element_id_val);
+		if (json_utils::IsInteger(element_id_val)) {
+			element_id = json_utils::GetSignedInteger(element_id_val);
 		} else {
-			return StringUtil::Format("ListType property 'element_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(element_id_val));
+			return StringUtil::Format("ListType property 'element_id' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(element_id_val).c_str());
 		}
 	}
-	auto element_val = yyjson_obj_get(obj, "element");
-	if (!element_val) {
+	auto element_val = obj.GetMember("element");
+	if (!element_val.IsValid()) {
 		return "ListType required property 'element' is missing";
 	} else {
 		element = make_uniq<Type>();
@@ -70,43 +68,41 @@ string ListType::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto element_required_val = yyjson_obj_get(obj, "element-required");
-	if (!element_required_val) {
+	auto element_required_val = obj.GetMember("element-required");
+	if (!element_required_val.IsValid()) {
 		return "ListType required property 'element-required' is missing";
 	} else {
-		if (yyjson_is_bool(element_required_val)) {
-			element_required = yyjson_get_bool(element_required_val);
+		if (json_utils::IsBoolean(element_required_val)) {
+			element_required = json_utils::GetBoolean(element_required_val);
 		} else {
-			return StringUtil::Format(
-			    "ListType property 'element_required' is not of type 'boolean', found '%s' instead",
-			    yyjson_get_type_desc(element_required_val));
+			return StringUtil::Format("ListType property 'element_required' is not of type 'boolean', found %s instead",
+			                          json_utils::GetTypeDescription(element_required_val).c_str());
 		}
 	}
 	return "";
 }
 
-void ListType::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void ListType::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: element-id
-	yyjson_mut_obj_add_int(doc, obj, "element-id", element_id);
+	auto element_id_json = writer.CreateSignedInteger(element_id);
+	obj.Add("element-id", element_id_json);
 
 	// Serialize: element
-	yyjson_mut_val *element_val = element->ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "element", element_val);
+	auto element_json = element->ToJSON(writer);
+	obj.Add("element", element_json);
 
 	// Serialize: element-required
-	yyjson_mut_obj_add_bool(doc, obj, "element-required", element_required);
+	auto element_required_json = writer.CreateBoolean(element_required);
+	obj.Add("element-required", element_required_json);
 }
 
-yyjson_mut_val *ListType::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue ListType::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

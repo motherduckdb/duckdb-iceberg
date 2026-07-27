@@ -52,6 +52,7 @@ public:
 	GetVendedCredentials(ClientContext &context,
 	                     const vector<rest_api_objects::StorageCredential> &storage_credentials) const;
 	const string &BaseFilePath() const;
+	bool IsRenamed() const;
 
 	IcebergTransactionData &GetOrCreateTransactionData(IcebergTransaction &transaction);
 
@@ -66,15 +67,13 @@ public:
 	void InitSchemaVersions();
 
 	bool HasTransactionUpdates() const;
-	void InitializeFromLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result,
-	                                   bool initialize_schemas = true);
+	void InitializeFromLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result);
 	void RefreshFromCatalog(ClientContext &context);
 
 public:
 	IcebergCatalog &catalog;
 	IcebergSchemaEntry &schema;
 	string name;
-	string table_id;
 	IcebergTableMetadata table_metadata;
 	case_insensitive_map_t<string> config;
 	vector<rest_api_objects::StorageCredential> storage_credentials;
@@ -82,6 +81,12 @@ public:
 	// dummy entry to hold existence of a table, but no schema versions
 	unique_ptr<IcebergTableEntry> dummy_entry;
 	unique_ptr<IcebergTransactionData> transaction_data;
+	//! The cached response this table was initialized from, used as an identity and never dereferenced.
+	optional_ptr<const rest_api_objects::LoadTableResult> initialization_source;
+
+private:
+	//! Unchanged by rename, used to check for a rename
+	const string original_name;
 };
 
 } // namespace duckdb

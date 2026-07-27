@@ -267,6 +267,10 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(
 	return result;
 }
 
+bool IcebergTableInformation::IsRenamed() const {
+	return original_name != name;
+}
+
 optional_ptr<CatalogEntry> IcebergTableInformation::CreateSchemaVersion(const IcebergTableSchema &table_schema) {
 	CreateTableInfo info;
 	info.SetTableName(Identifier(name));
@@ -651,23 +655,18 @@ void IcebergTableInformation::RefreshFromCatalog(ClientContext &context) {
 		    StringUtil::Format("GetTableInformation endpoint returned response code %s with message \"%s\"",
 		                       EnumUtil::ToString(get_table_result.status_), get_table_result.error_->_error.message));
 	}
-	ic_catalog.table_request_cache.SetOrOverwrite(context, table_key, std::move(get_table_result.result_));
+	auto &load_table_result = *get_table_result.result_;
 	schema_versions.clear();
 	dummy_entry.reset();
-	{
-		lock_guard<std::mutex> cache_lock(ic_catalog.table_request_cache.Lock());
-		auto cached_table_result = ic_catalog.table_request_cache.Get(context, table_key, cache_lock, false);
-		D_ASSERT(cached_table_result);
-		auto &load_table_result = *cached_table_result->load_table_result;
-		InitializeFromLoadTableResult(load_table_result);
-	}
+	InitializeFromLoadTableResult(load_table_result);
+	ic_catalog.table_request_cache.SetOrOverwrite(table_key, std::move(get_table_result.result_));
 }
 
 IcebergTableInformation IcebergTableInformation::Copy() const {
 	auto clone = IcebergTableInformation(catalog, schema, name);
-	clone.table_id = table_id;
 	clone.table_metadata = table_metadata.Copy();
 	clone.config = config;
+	clone.initialization_source = initialization_source;
 	for (auto &credential : storage_credentials) {
 		clone.storage_credentials.push_back(credential.Copy());
 	}
@@ -744,8 +743,7 @@ void IcebergTableInformation::InitSchemaVersions() {
 
 IcebergTableInformation::IcebergTableInformation(IcebergCatalog &catalog, IcebergSchemaEntry &schema,
                                                  const string &name)
-    : catalog(catalog), schema(schema), name(name) {
-	table_id = "uuid-" + schema.name + "-" + name;
+    : catalog(catalog), schema(schema), name(name), original_name(name) {
 }
 
 IcebergTransactionData &IcebergTableInformation::GetOrCreateTransactionData(IcebergTransaction &transaction) {
@@ -757,8 +755,9 @@ IcebergTransactionData &IcebergTableInformation::GetOrCreateTransactionData(Iceb
 	return *transaction_data;
 }
 
-void IcebergTableInformation::InitializeFromLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result,
-                                                            bool initialize_schemas) {
+void IcebergTableInformation::InitializeFromLoadTableResult(
+    const rest_api_objects::LoadTableResult &load_table_result) {
+	initialization_source = load_table_result;
 	table_metadata = IcebergTableMetadata::FromTableMetadata(load_table_result.metadata);
 	if (auto &val = load_table_result.config) {
 		config = *val;
@@ -770,12 +769,10 @@ void IcebergTableInformation::InitializeFromLoadTableResult(const rest_api_objec
 			storage_credentials.push_back(credential.Copy());
 		}
 	}
-	if (initialize_schemas) {
-		auto &schemas = table_metadata.GetSchemas();
-		D_ASSERT(!schemas.empty());
-		for (auto &table_schema : schemas) {
-			CreateSchemaVersion(*table_schema.second);
-		}
+	auto &schemas = table_metadata.GetSchemas();
+	D_ASSERT(!schemas.empty());
+	for (auto &table_schema : schemas) {
+		CreateSchemaVersion(*table_schema.second);
 	}
 }
 

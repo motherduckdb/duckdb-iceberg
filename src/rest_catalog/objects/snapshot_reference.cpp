@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/snapshot_reference.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 SnapshotReference::SnapshotReference() {
 }
 
-SnapshotReference SnapshotReference::FromJSON(yyjson_val *obj) {
+SnapshotReference SnapshotReference::FromJSON(JSONValue obj) {
 	SnapshotReference res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -43,109 +41,110 @@ SnapshotReference SnapshotReference::Copy() const {
 	return res;
 }
 
-string SnapshotReference::TryFromJSON(yyjson_val *obj) {
+string SnapshotReference::TryFromJSON(JSONValue obj) {
 	string error;
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
+	auto type_val = obj.GetMember("type");
+	if (!type_val.IsValid()) {
 		return "SnapshotReference required property 'type' is missing";
 	} else {
-		if (yyjson_is_str(type_val)) {
-			type = yyjson_get_str(type_val);
+		if (json_utils::IsString(type_val)) {
+			type = json_utils::GetString(type_val);
 		} else {
-			return StringUtil::Format("SnapshotReference property 'type' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(type_val));
+			return StringUtil::Format("SnapshotReference property 'type' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(type_val).c_str());
 		}
 	}
-	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
-	if (!snapshot_id_val) {
+	auto snapshot_id_val = obj.GetMember("snapshot-id");
+	if (!snapshot_id_val.IsValid()) {
 		return "SnapshotReference required property 'snapshot-id' is missing";
 	} else {
-		if (yyjson_is_sint(snapshot_id_val)) {
-			snapshot_id = yyjson_get_sint(snapshot_id_val);
-		} else if (yyjson_is_uint(snapshot_id_val)) {
-			snapshot_id = yyjson_get_uint(snapshot_id_val);
+		if (json_utils::IsInteger(snapshot_id_val)) {
+			snapshot_id = json_utils::GetSignedInteger(snapshot_id_val);
+		} else if (json_utils::IsUnsignedInteger(snapshot_id_val)) {
+			snapshot_id = json_utils::GetUnsignedInteger(snapshot_id_val);
 		} else {
 			return StringUtil::Format(
-			    "SnapshotReference property 'snapshot_id' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(snapshot_id_val));
+			    "SnapshotReference property 'snapshot_id' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(snapshot_id_val).c_str());
 		}
 	}
-	auto max_ref_age_ms_val = yyjson_obj_get(obj, "max-ref-age-ms");
-	if (max_ref_age_ms_val) {
+	auto max_ref_age_ms_val = obj.GetMember("max-ref-age-ms");
+	if (max_ref_age_ms_val.IsValid()) {
 		int64_t max_ref_age_ms_tmp;
-		if (yyjson_is_sint(max_ref_age_ms_val)) {
-			max_ref_age_ms_tmp = yyjson_get_sint(max_ref_age_ms_val);
-		} else if (yyjson_is_uint(max_ref_age_ms_val)) {
-			max_ref_age_ms_tmp = yyjson_get_uint(max_ref_age_ms_val);
+		if (json_utils::IsInteger(max_ref_age_ms_val)) {
+			max_ref_age_ms_tmp = json_utils::GetSignedInteger(max_ref_age_ms_val);
+		} else if (json_utils::IsUnsignedInteger(max_ref_age_ms_val)) {
+			max_ref_age_ms_tmp = json_utils::GetUnsignedInteger(max_ref_age_ms_val);
 		} else {
 			return StringUtil::Format(
-			    "SnapshotReference property 'max_ref_age_ms_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(max_ref_age_ms_val));
+			    "SnapshotReference property 'max_ref_age_ms_tmp' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(max_ref_age_ms_val).c_str());
 		}
 		max_ref_age_ms = std::move(max_ref_age_ms_tmp);
 	}
-	auto max_snapshot_age_ms_val = yyjson_obj_get(obj, "max-snapshot-age-ms");
-	if (max_snapshot_age_ms_val) {
+	auto max_snapshot_age_ms_val = obj.GetMember("max-snapshot-age-ms");
+	if (max_snapshot_age_ms_val.IsValid()) {
 		int64_t max_snapshot_age_ms_tmp;
-		if (yyjson_is_sint(max_snapshot_age_ms_val)) {
-			max_snapshot_age_ms_tmp = yyjson_get_sint(max_snapshot_age_ms_val);
-		} else if (yyjson_is_uint(max_snapshot_age_ms_val)) {
-			max_snapshot_age_ms_tmp = yyjson_get_uint(max_snapshot_age_ms_val);
+		if (json_utils::IsInteger(max_snapshot_age_ms_val)) {
+			max_snapshot_age_ms_tmp = json_utils::GetSignedInteger(max_snapshot_age_ms_val);
+		} else if (json_utils::IsUnsignedInteger(max_snapshot_age_ms_val)) {
+			max_snapshot_age_ms_tmp = json_utils::GetUnsignedInteger(max_snapshot_age_ms_val);
 		} else {
 			return StringUtil::Format(
-			    "SnapshotReference property 'max_snapshot_age_ms_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(max_snapshot_age_ms_val));
+			    "SnapshotReference property 'max_snapshot_age_ms_tmp' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(max_snapshot_age_ms_val).c_str());
 		}
 		max_snapshot_age_ms = std::move(max_snapshot_age_ms_tmp);
 	}
-	auto min_snapshots_to_keep_val = yyjson_obj_get(obj, "min-snapshots-to-keep");
-	if (min_snapshots_to_keep_val) {
+	auto min_snapshots_to_keep_val = obj.GetMember("min-snapshots-to-keep");
+	if (min_snapshots_to_keep_val.IsValid()) {
 		int32_t min_snapshots_to_keep_tmp;
-		if (yyjson_is_int(min_snapshots_to_keep_val)) {
-			min_snapshots_to_keep_tmp = yyjson_get_int(min_snapshots_to_keep_val);
+		if (json_utils::IsInteger(min_snapshots_to_keep_val)) {
+			min_snapshots_to_keep_tmp = json_utils::GetSignedInteger(min_snapshots_to_keep_val);
 		} else {
 			return StringUtil::Format(
-			    "SnapshotReference property 'min_snapshots_to_keep_tmp' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(min_snapshots_to_keep_val));
+			    "SnapshotReference property 'min_snapshots_to_keep_tmp' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(min_snapshots_to_keep_val).c_str());
 		}
 		min_snapshots_to_keep = std::move(min_snapshots_to_keep_tmp);
 	}
 	return "";
 }
 
-void SnapshotReference::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void SnapshotReference::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: snapshot-id
-	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+	auto snapshot_id_json = writer.CreateSignedInteger(snapshot_id);
+	obj.Add("snapshot-id", snapshot_id_json);
 
 	// Serialize: max-ref-age-ms
 	if (max_ref_age_ms.has_value()) {
 		auto &max_ref_age_ms_value = *max_ref_age_ms;
-		yyjson_mut_obj_add_sint(doc, obj, "max-ref-age-ms", max_ref_age_ms_value);
+		auto max_ref_age_ms_json = writer.CreateSignedInteger(max_ref_age_ms_value);
+		obj.Add("max-ref-age-ms", max_ref_age_ms_json);
 	}
 
 	// Serialize: max-snapshot-age-ms
 	if (max_snapshot_age_ms.has_value()) {
 		auto &max_snapshot_age_ms_value = *max_snapshot_age_ms;
-		yyjson_mut_obj_add_sint(doc, obj, "max-snapshot-age-ms", max_snapshot_age_ms_value);
+		auto max_snapshot_age_ms_json = writer.CreateSignedInteger(max_snapshot_age_ms_value);
+		obj.Add("max-snapshot-age-ms", max_snapshot_age_ms_json);
 	}
 
 	// Serialize: min-snapshots-to-keep
 	if (min_snapshots_to_keep.has_value()) {
 		auto &min_snapshots_to_keep_value = *min_snapshots_to_keep;
-		yyjson_mut_obj_add_int(doc, obj, "min-snapshots-to-keep", min_snapshots_to_keep_value);
+		auto min_snapshots_to_keep_json = writer.CreateSignedInteger(min_snapshots_to_keep_value);
+		obj.Add("min-snapshots-to-keep", min_snapshots_to_keep_json);
 	}
 }
 
-yyjson_mut_val *SnapshotReference::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue SnapshotReference::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

@@ -6,14 +6,12 @@
 #include "rest_catalog/objects/sort_order.hpp"
 #include "rest_catalog/objects/sort_field.hpp"
 
-using namespace duckdb_yyjson;
-
 namespace duckdb {
 
 struct IcebergSortOrderField {
 public:
 	static IcebergSortOrderField ParseFromJson(const rest_api_objects::SortField &field);
-	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	//! the source id of the field (field_id)
@@ -36,7 +34,7 @@ public:
 public:
 	static IcebergSortOrder ParseFromJson(const rest_api_objects::SortOrder &sort_order_spec);
 	bool IsSorted() const;
-	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 	bool Equals(const IcebergSortOrder &other) const;
 
 public:

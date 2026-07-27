@@ -1,0 +1,201 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/create/test_create_missing_schema.test
+# description: test creating a schema after a missing schema has been cached
+# group: [create]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+require core_functions
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+CALL enable_logging('HTTP');
+
+statement ok
+set logging_level='debug'
+
+# Make sure the schema doesn't exist
+statement ok
+drop schema if exists my_datalake.missing_schema;
+
+# Table creation fails on the missing schema
+statement error
+CREATE TABLE my_datalake.missing_schema.target (
+	id INTEGER,
+	data VARCHAR
+);
+----
+Invalid Input Error: Schema with name "missing_schema" does not exist
+
+# Create the schema
+statement ok
+CREATE SCHEMA my_datalake.missing_schema;
+
+# Verift existence
+query I
+SELECT count(*)
+FROM information_schema.schemata
+WHERE catalog_name = 'my_datalake' AND schema_name = 'missing_schema';
+----
+1
+
+# Create the table again, passes now
+statement ok
+CREATE TABLE my_datalake.missing_schema.target (
+	id INTEGER,
+	data VARCHAR
+);
+
+# Verify existence of the table
+query I
+SELECT count(*) FROM my_datalake.missing_schema.target;
+----
+0
+
+# Drop the table
+statement ok
+drop table my_datalake.missing_schema.target;
+
+# Drop the schema
+statement ok
+drop schema my_datalake.missing_schema;
+
+# A schema is visible to its creating transaction and is published to the shared
+# schema set only when that transaction commits.
+statement ok
+drop schema if exists my_datalake.committed_schema;
+
+statement ok
+begin;
+
+statement ok
+create schema my_datalake.committed_schema;
+
+query I
+SELECT count(*)
+FROM information_schema.schemata
+WHERE catalog_name = 'my_datalake' AND schema_name = 'committed_schema';
+----
+1
+
+statement ok
+commit;
+
+query I
+SELECT count(*)
+FROM information_schema.schemata
+WHERE catalog_name = 'my_datalake' AND schema_name = 'committed_schema';
+----
+1
+
+statement ok
+drop schema my_datalake.committed_schema;
+
+# Rolling back must not leave an uncommitted entry in the shared schema set.
+statement ok
+drop schema if exists my_datalake.rolled_back_schema;
+
+statement ok
+begin;
+
+statement ok
+create schema my_datalake.rolled_back_schema;
+
+query I
+SELECT count(*)
+FROM information_schema.schemata
+WHERE catalog_name = 'my_datalake' AND schema_name = 'rolled_back_schema';
+----
+1
+
+statement ok
+rollback;
+
+query I
+SELECT count(*)
+FROM information_schema.schemata
+WHERE catalog_name = 'my_datalake' AND schema_name = 'rolled_back_schema';
+----
+0
+
+# Uncommitted schemas must not leak to another connection, but the commit must
+# publish the same entry to that connection.
+statement ok
+drop schema if exists my_datalake.connection_schema;
+
+statement ok con1
+begin;
+
+statement ok con1
+create schema my_datalake.connection_schema;
+
+query I
+SELECT count(*)
+FROM information_schema.schemata
+WHERE catalog_name = 'my_datalake' AND schema_name = 'connection_schema';
+----
+0
+
+query I con1
+SELECT count(*)
+FROM information_schema.schemata
+WHERE catalog_name = 'my_datalake' AND schema_name = 'connection_schema';
+----
+1
+
+statement ok con1
+commit;
+
+query I
+SELECT count(*)
+FROM information_schema.schemata
+WHERE catalog_name = 'my_datalake' AND schema_name = 'connection_schema';
+----
+1
+
+statement ok
+drop schema my_datalake.connection_schema;
+
+# Replacing a stale cached entry must not invalidate another transaction's
+# reference to the old generation. That transaction keeps its original view;
+# a new transaction sees the schema published at commit.
+statement ok
+drop schema if exists my_datalake.pinned_missing_schema;
+
+statement ok con1
+begin;
+
+statement ok con1
+drop table if exists my_datalake.pinned_missing_schema.target;
+
+statement ok
+create schema my_datalake.pinned_missing_schema;
+
+query I con1
+SELECT count(*)
+FROM information_schema.schemata
+WHERE catalog_name = 'my_datalake' AND schema_name = 'pinned_missing_schema';
+----
+0
+
+statement ok con1
+rollback;
+
+query I con1
+SELECT count(*)
+FROM information_schema.schemata
+WHERE catalog_name = 'my_datalake' AND schema_name = 'pinned_missing_schema';
+----
+1
+
+statement ok
+drop schema my_datalake.pinned_missing_schema;

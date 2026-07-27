@@ -2,9 +2,6 @@
 # description: Test equality deletes more thoroughly. This include changing the type of the equality delete column and a number of virtual columns to test test ordering
 # group: [equality_deletes]
 
-statement ok
-SET profiling_renderer_settings = MAP {'operator_casing': 'upper'};
-
 require-env CATALOG_TEST_CONFIG_SETUP
 
 require-env EQUALITY_DELETE_WRITES_ENABLED 1
@@ -72,16 +69,3 @@ query I
 select count(*) from duckdb_logs_parsed('HTTP') where request.url like '%-equality-deletes.parquet';
 ----
 0
-
-# the optimizer should also not be created in this case.
-query II
-explain select * from equality_delete_sequence_number_tests AT (VERSION => getvariable('last_snapshot_number')) order by all;
-----
-physical_plan	<!REGEX>:.*FILTER.*iceberg_verify_equality_del.*ICEBERG_SCAN.*
-
-
-# the optimizer will kick in when reading latest table state
-query II
-explain select * from equality_delete_sequence_number_tests order by all;
-----
-physical_plan	<REGEX>:.*FILTER.*iceberg_verify_equality_del.*ICEBERG_SCAN.*

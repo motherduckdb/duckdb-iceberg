@@ -38,7 +38,9 @@
 #include "duckdb/common/types/geometry.hpp"
 #include "core/metadata/manifest/iceberg_manifest.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
+#include "catalog/rest/api/iceberg_scan_planning.hpp"
 #include "catalog/rest/api/iceberg_type.hpp"
+#include "catalog/rest/api/iceberg_expression.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "core/expression/iceberg_predicate_stats.hpp"
@@ -94,10 +96,6 @@ IcebergMultiFileListSharedState::~IcebergMultiFileListSharedState() {
 	}
 }
 
-string IcebergMultiFileList::ToDuckDBPath(const string &raw_path) {
-	return raw_path;
-}
-
 string IcebergMultiFileList::GetPath() const {
 	return shared_state->path;
 }
@@ -128,19 +126,19 @@ IcebergScanPlanProvider &IcebergMultiFileList::GetScanPlanProvider() const {
 	return *scan_plan_provider;
 }
 
-case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &IcebergMultiFileList::GetPositionalDeleteData() const {
+position_delete_map_t &IcebergMultiFileList::GetPositionalDeleteData() const {
 	return GetScanPlanProvider().PositionalDeleteData();
 }
 
-map<sequence_number_t, unique_ptr<IcebergEqualityDeleteData>> &IcebergMultiFileList::GetEqualityDeleteData() const {
+equality_delete_map_t &IcebergMultiFileList::GetEqualityDeleteData() const {
 	return GetScanPlanProvider().EqualityDeleteData();
 }
 
-IcebergTableEntry *IcebergMultiFileList::GetTable() const {
+optional_ptr<IcebergTableEntry> IcebergMultiFileList::GetTable() const {
 	return shared_state->table;
 }
 
-void IcebergMultiFileList::SetTable(IcebergTableEntry *table) {
+void IcebergMultiFileList::SetTable(IcebergTableEntry &table) {
 	shared_state->table = table;
 }
 
@@ -149,8 +147,17 @@ void IcebergMultiFileList::SetOptions(const IcebergOptions &options) {
 }
 
 void IcebergMultiFileList::SetScanOrder(unique_ptr<RowGroupOrderOptions> options) {
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
 	scan_order_options = std::move(options);
+	//! Indicate that 'EnsureScanOrderApplied' needs to run now
 	scan_order_applied = false;
+}
+
+void IcebergMultiFileList::DisableServerSidePlanning() {
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
+	if (!shared_state->manifest_list_loaded) {
+		shared_state->server_side_planning_enabled = false;
+	}
 }
 
 namespace {
@@ -271,11 +278,10 @@ static unique_ptr<Expression> ExtractFilterExpressionForPath(const Expression &e
 
 } // namespace
 
-unique_ptr<ExpressionFilter> IcebergMultiFileList::GetFilterForColumnIndex(const IcebergTableFilters &filter_set,
-                                                                           const ColumnIndex &column_index) const {
+unique_ptr<ExpressionFilter> IcebergMultiFileList::GetFilterForColumnIndex(const ColumnIndex &column_index) const {
 	auto primary_index = column_index.GetPrimaryIndex();
 
-	auto filter = filter_set.TryGetFilterByColumnIndex(primary_index);
+	auto filter = table_filters.TryGetFilterByColumnIndex(primary_index);
 	if (!filter) {
 		return nullptr;
 	}
@@ -294,7 +300,7 @@ unique_ptr<ExpressionFilter> IcebergMultiFileList::GetFilterForColumnIndex(const
 }
 
 void IcebergMultiFileList::Bind(vector<LogicalType> &return_types, vector<Identifier> &names) {
-	lock_guard<mutex> guard(shared_state->lock);
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
 
 	if (have_bound) {
 		names = StringsToIdentifiers(this->names);
@@ -336,6 +342,13 @@ void IcebergMultiFileList::Bind(vector<LogicalType> &return_types, vector<Identi
 unique_ptr<IcebergMultiFileList> IcebergMultiFileList::PushdownInternal(ClientContext &context,
                                                                         TableFilterSet &new_filters,
                                                                         const vector<column_t> &column_indexes) const {
+	unique_ptr<RowGroupOrderOptions> filtered_scan_order;
+	{
+		annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
+		if (scan_order_options) {
+			filtered_scan_order = make_uniq<RowGroupOrderOptions>(*scan_order_options);
+		}
+	}
 	auto filtered_list = unique_ptr<IcebergMultiFileList>(new IcebergMultiFileList(shared_state));
 
 	IcebergTableFilters result_filter_set;
@@ -343,26 +356,26 @@ unique_ptr<IcebergMultiFileList> IcebergMultiFileList::PushdownInternal(ClientCo
 	// The supplied filter set is the complete set of filters for the new view.
 	for (auto &entry : new_filters) {
 		auto column_idx = column_indexes[entry.GetIndex().GetIndex()];
-		if (column_idx < names.size()) {
-			auto &filter =
-			    ExpressionFilter::GetExpressionFilter(entry.Filter(), "IcebergMultiFileList::PushdownInternal");
-			result_filter_set.PushFilter(column_idx, filter.Copy());
+		if (column_idx >= names.size()) {
+			continue;
 		}
+		auto &filter = ExpressionFilter::GetExpressionFilter(entry.Filter(), "IcebergMultiFileList::PushdownInternal");
+		result_filter_set.PushFilter(column_idx, filter.Copy());
 	}
 
 	filtered_list->table_filters = std::move(result_filter_set);
 	filtered_list->names = names;
 	filtered_list->types = types;
 	filtered_list->have_bound = true;
-	if (scan_order_options) {
-		filtered_list->scan_order_options = make_uniq<RowGroupOrderOptions>(*scan_order_options);
+	if (filtered_scan_order) {
+		filtered_list->SetScanOrder(std::move(filtered_scan_order));
 	}
 	return filtered_list;
 }
 
 unique_ptr<MultiFileList>
 IcebergMultiFileList::DynamicFilterPushdown(ClientContext &context, const MultiFileOptions &options,
-                                            const vector<Identifier> &names, const vector<LogicalType> &types,
+                                            const vector<Identifier> &, const vector<LogicalType> &,
                                             const vector<column_t> &column_ids, TableFilterSet &filters) const {
 	if (!filters.HasFilters()) {
 		return nullptr;
@@ -390,8 +403,7 @@ IcebergMultiFileList::DynamicFilterPushdown(ClientContext &context, const MultiF
 	return nullptr;
 }
 
-unique_ptr<MultiFileList> IcebergMultiFileList::ComplexFilterPushdown(ClientContext &context,
-                                                                      const MultiFileOptions &options,
+unique_ptr<MultiFileList> IcebergMultiFileList::ComplexFilterPushdown(ClientContext &context, const MultiFileOptions &,
                                                                       MultiFilePushdownInfo &info,
                                                                       vector<unique_ptr<Expression>> &filters) const {
 	if (filters.empty()) {
@@ -415,7 +427,7 @@ unique_ptr<MultiFileList> IcebergMultiFileList::ComplexFilterPushdown(ClientCont
 vector<OpenFileInfo> IcebergMultiFileList::GetAllFiles() const {
 	vector<OpenFileInfo> file_list;
 	//! Lock is required because it reads the 'manifest_entries' vector
-	lock_guard<mutex> guard(shared_state->lock);
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
 	for (idx_t i = 0;; i++) {
 		auto file = GetFileInternal(i, guard);
 		if (file.path.empty()) {
@@ -428,7 +440,7 @@ vector<OpenFileInfo> IcebergMultiFileList::GetAllFiles() const {
 
 FileExpandResult IcebergMultiFileList::GetExpandResult() const {
 	// GetFileInternal(1) will ensure files with index 0 and index 1 are expanded if they are available
-	lock_guard<mutex> guard(shared_state->lock);
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
 	GetFileInternal(1, guard);
 
 	// always return multiple files, In the case there is only 1 data file,
@@ -439,7 +451,7 @@ FileExpandResult IcebergMultiFileList::GetExpandResult() const {
 idx_t IcebergMultiFileList::GetTotalFileCount() const {
 	// FIXME: the 'added_files_count' + the 'existing_files_count'
 	// in the Manifest List should give us this information without scanning the manifest file(s)
-	lock_guard<mutex> guard(shared_state->lock);
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
 
 	idx_t i = data_manifest_entries.size();
 	while (!GetFileInternal(i, guard).path.empty()) {
@@ -454,7 +466,7 @@ unique_ptr<NodeStatistics> IcebergMultiFileList::GetCardinality(ClientContext &c
 		return nullptr;
 	}
 
-	lock_guard<mutex> guard(shared_state->lock);
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
 	InitializeView(guard);
 
 	idx_t cardinality = 0;
@@ -477,17 +489,23 @@ unique_ptr<NodeStatistics> IcebergMultiFileList::GetCardinality(ClientContext &c
 }
 
 BoundIcebergManifestEntry IcebergMultiFileList::GetManifestEntry(idx_t file_id) const {
-	lock_guard<mutex> guard(shared_state->lock);
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
 	return data_manifest_entries[file_id];
 }
 
+IcebergManifestFile IcebergMultiFileList::GetManifestFileForDataFile(idx_t file_id) const {
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
+	auto manifest_file_idx = data_manifest_entries[file_id].manifest_file_idx;
+	return data_manifests[manifest_file_idx].entry.file;
+}
+
 vector<IcebergPartitionInfo> IcebergMultiFileList::GetPartitionInfoForDataFile(const string &file_path) const {
-	lock_guard<mutex> guard(shared_state->lock);
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
 	auto entry = shared_state->data_file_partition_info.find(file_path);
 	if (entry != shared_state->data_file_partition_info.end()) {
 		return entry->second;
 	}
-	throw InternalException("Could not find data file '%s' in manifest entries", file_path);
+	throw InvalidConfigurationException("Could not find data file '%s' in manifest entries", file_path);
 }
 
 const IcebergManifestFile &IcebergMultiFileList::GetManifestFileForEntry(const BoundIcebergManifestEntry &entry,
@@ -504,7 +522,7 @@ void IcebergMultiFileList::GetStatistics(vector<PartitionStatistics> &result) co
 		//! We collect no statistics information from manifests for V1 tables.
 		return;
 	}
-	lock_guard<mutex> guard(shared_state->lock);
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
 	InitializeView(guard);
 
 	for (idx_t i = 0; i < delete_manifests.size(); i++) {
@@ -655,7 +673,7 @@ bool IcebergMultiFileList::FilePartitionMatchesFilter(const IcebergDataFile &dat
 
 		const auto &column_id = source_to_column_id.at(field.source_id);
 		// Find if we have a filter for this source column
-		auto table_filter = GetFilterForColumnIndex(table_filters, column_id);
+		auto table_filter = GetFilterForColumnIndex(column_id);
 		if (!table_filter) {
 			continue;
 		}
@@ -837,17 +855,17 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 	return true;
 }
 
-bool IcebergMultiFileList::TryGetNextBatch(lock_guard<mutex> &guard) const {
+bool IcebergMultiFileList::TryGetNextBatch(annotated_lock_guard<annotated_mutex> &guard) const {
 	return GetScanPlanProvider().TryGetNextBatch(data_view_cursor);
 }
 
-void IcebergMultiFileList::FinishScanTasks(lock_guard<mutex> &guard) const {
+void IcebergMultiFileList::FinishScanTasks(annotated_lock_guard<annotated_mutex> &guard) const {
 	GetScanPlanProvider().FinishScanTasks();
 };
 
-optional_ptr<const BoundIcebergManifestEntry> IcebergMultiFileList::GetDataFile(idx_t file_id,
-                                                                                lock_guard<mutex> &guard) const {
-	D_ASSERT(view_initialized);
+optional_ptr<const BoundIcebergManifestEntry>
+IcebergMultiFileList::GetDataFile(idx_t file_id, annotated_lock_guard<annotated_mutex> &guard) const {
+	D_ASSERT(scan_plan_provider);
 	if (file_id < data_manifest_entries.size()) {
 		//! Have we already scanned this data file and returned it? If so, return it
 		return data_manifest_entries[file_id];
@@ -922,7 +940,7 @@ struct IcebergOrderEntry {
 
 } // namespace
 
-void IcebergMultiFileList::EnsureScanOrderApplied(lock_guard<mutex> &guard) const {
+void IcebergMultiFileList::EnsureScanOrderApplied(annotated_lock_guard<annotated_mutex> &guard) const {
 	if (!scan_order_options || scan_order_applied) {
 		return;
 	}
@@ -1040,7 +1058,7 @@ void IcebergMultiFileList::EnsureScanOrderApplied(lock_guard<mutex> &guard) cons
 	data_manifest_entries = std::move(reordered);
 }
 
-OpenFileInfo IcebergMultiFileList::GetFileInternal(idx_t file_id, lock_guard<mutex> &guard) const {
+OpenFileInfo IcebergMultiFileList::GetFileInternal(idx_t file_id, annotated_lock_guard<annotated_mutex> &guard) const {
 	InitializeView(guard);
 	StartDataManifestScan(guard);
 	EnsureScanOrderApplied(guard);
@@ -1084,7 +1102,7 @@ OpenFileInfo IcebergMultiFileList::GetFileInternal(idx_t file_id, lock_guard<mut
 }
 
 OpenFileInfo IcebergMultiFileList::GetFile(idx_t file_id) const {
-	lock_guard<mutex> guard(shared_state->lock);
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
 	return GetFileInternal(file_id, guard);
 }
 
@@ -1125,7 +1143,7 @@ bool IcebergMultiFileList::ManifestMatchesFilter(const IcebergManifestFile &mani
 		const auto &column_id = source_to_column_id.at(field.source_id);
 
 		// Find if we have a filter for this source column
-		auto table_filter = GetFilterForColumnIndex(table_filters, column_id);
+		auto table_filter = GetFilterForColumnIndex(column_id);
 		if (!table_filter) {
 			continue;
 		}
@@ -1153,7 +1171,8 @@ bool IcebergMultiFileList::ManifestMatchesFilter(const IcebergManifestFile &mani
 
 vector<reference<const IcebergEqualityDeleteFile>>
 IcebergMultiFileList::GetEqualityDeletesForFile(const BoundIcebergManifestEntry &bound_manifest_entry) const {
-	lock_guard<mutex> guard(shared_state->delete_lock);
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
+	annotated_lock_guard<annotated_mutex> delete_guard(shared_state->delete_lock);
 	vector<reference<const IcebergEqualityDeleteFile>> result;
 
 	//! Look through all the equality delete files with a *higher* sequence number
@@ -1164,8 +1183,11 @@ IcebergMultiFileList::GetEqualityDeletesForFile(const BoundIcebergManifestEntry 
 	auto &equality_delete_data = GetEqualityDeleteData();
 	auto it = equality_delete_data.upper_bound(manifest_entry.GetSequenceNumber(manifest_file));
 	for (; it != equality_delete_data.end(); it++) {
-		auto &delete_files = it->second->delete_files;
+		auto &delete_files = it->second;
 		for (auto &delete_file : delete_files) {
+			if (!GetScanPlanProvider().DeleteFileAppliesToDataFile(data_file.file_path, delete_file.source_file_path)) {
+				continue;
+			}
 			auto &partition_spec = metadata.partition_specs.at(delete_file.partition_spec_id);
 			if (partition_spec.IsPartitioned()) {
 				if (delete_file.partition_spec_id != manifest_file.partition_spec_id) {
@@ -1193,8 +1215,8 @@ IcebergMultiFileList::GetEqualityDeletesForFile(const BoundIcebergManifestEntry 
 	return result;
 }
 
-void IcebergMultiFileList::InitializeView(lock_guard<mutex> &guard) const {
-	if (view_initialized) {
+void IcebergMultiFileList::InitializeView(annotated_lock_guard<annotated_mutex> &guard) const {
+	if (scan_plan_provider) {
 		return;
 	}
 	LoadManifestList(guard);
@@ -1224,23 +1246,122 @@ void IcebergMultiFileList::InitializeView(lock_guard<mutex> &guard) const {
 		delete_manifests.emplace_back(delete_manifests.size(), manifest);
 		delete_manifest_matches.push_back(ManifestMatchesFilter(manifest.get().file));
 	}
-	view_initialized = true;
 }
+
+namespace {
+
+enum class ScanPlanningMode : uint8_t { UNSPECIFIED, SERVER_SIDE_ONLY, CLIENT_SIDE_ONLY };
+
+static ScanPlanningMode GetScanPlanningMode(optional_ptr<IcebergTableEntry> table) {
+	if (!table) {
+		return ScanPlanningMode::CLIENT_SIDE_ONLY;
+	}
+
+	auto &table_info = table->table_info;
+	auto &config = table_info.config;
+
+	auto it = config.find("scan-planning-mode");
+	if (it == config.end()) {
+		return ScanPlanningMode::UNSPECIFIED;
+	}
+	auto &mode = it->second;
+	if (StringUtil::CIEquals(mode, "client")) {
+		return ScanPlanningMode::CLIENT_SIDE_ONLY;
+	}
+	if (StringUtil::CIEquals(mode, "server")) {
+		return ScanPlanningMode::SERVER_SIDE_ONLY;
+	}
+	throw InvalidConfigurationException("Table's config 'scan-planning-mode' has unrecognized option: %s", mode);
+}
+
+} // namespace
 
 void IcebergMultiFileList::InitializeScanPlanProvider() const {
 	if (scan_plan_provider) {
 		return;
 	}
-	scan_plan_provider = make_uniq<ClientSideScanPlanProvider>(*shared_state);
+	auto &snapshot_info = shared_state->scan_info->snapshot_info;
+	auto table_entry = GetTable();
+	if (!snapshot_info.snapshot) {
+		scan_plan_provider = make_uniq<ClientSideScanPlanProvider>(*shared_state);
+		return;
+	}
+
+	auto scan_planning_mode = GetScanPlanningMode(table_entry);
+	bool server_side_planning_enabled = shared_state->server_side_planning_enabled;
+	if (scan_planning_mode == ScanPlanningMode::UNSPECIFIED) {
+		Value val;
+		if (context.TryGetCurrentSetting("iceberg_use_server_side_scan_planning", val) && !val.IsNull() &&
+		    val.type().id() == LogicalTypeId::BOOLEAN && !val.GetValue<bool>()) {
+			//! Without 'iceberg_use_server_side_scan_planning', only use client-side planning
+			scan_planning_mode = ScanPlanningMode::CLIENT_SIDE_ONLY;
+		}
+	}
+	if (!table_entry || HasTransactionData() || table_entry->table_info.IsRenamed() ||
+	    scan_planning_mode == ScanPlanningMode::CLIENT_SIDE_ONLY) {
+		server_side_planning_enabled = false;
+	}
+
+	if (server_side_planning_enabled) {
+		auto &table_info = table_entry->table_info;
+		auto &catalog = table_info.catalog;
+		if (catalog.supported_urls.count(IcebergServerSideScanPlanning::PLAN_ENDPOINT)) {
+			rest_api_objects::PlanTableScanRequest request;
+			request.snapshot_id = snapshot_info.snapshot->snapshot_id;
+			request.case_sensitive = true;
+			request.use_snapshot_schema = snapshot_info.snapshot->snapshot_id != GetMetadata().current_snapshot_id;
+			unique_ptr<rest_api_objects::Expression> server_side_filter;
+			for (auto &filter : table_filters) {
+				if (filter.first >= GetSchema().columns.size()) {
+					continue;
+				}
+				auto converted =
+				    IcebergExpression::TryConvertFilter(*filter.second->expr, GetSchema().columns[filter.first]->name);
+				server_side_filter =
+				    IcebergExpression::AndExpression(std::move(server_side_filter), std::move(converted));
+			}
+			request.filter = std::move(server_side_filter);
+			if (scan_order_options) {
+				if (scan_order_options->row_limit.IsValid()) {
+					request.min_rows_requested = NumericCast<int64_t>(scan_order_options->row_limit.GetIndex() +
+					                                                  scan_order_options->row_group_offset);
+				}
+				if (scan_order_options->column_idx.HasPrimaryIndex() &&
+				    scan_order_options->column_idx.GetPrimaryIndex() < GetSchema().columns.size()) {
+					rest_api_objects::FieldName stats_field;
+					stats_field.value = GetSchema().columns[scan_order_options->column_idx.GetPrimaryIndex()]->name;
+					request.stats_fields.emplace();
+					request.stats_fields->push_back(std::move(stats_field));
+				}
+			}
+			IcebergServerSideScanPlan plan;
+			if (IcebergServerSideScanPlanning::Plan(context, table_info, std::move(request), plan)) {
+				if (!plan.storage_credentials.empty()) {
+					table_info.LoadCredentials(context,
+					                           table_info.GetVendedCredentials(context, plan.storage_credentials));
+				}
+				scan_plan_provider = make_uniq<ServerSideScanPlanProvider>(std::move(plan));
+			}
+		}
+	}
+	if (!scan_plan_provider && scan_planning_mode == ScanPlanningMode::SERVER_SIDE_ONLY) {
+		D_ASSERT(table_entry);
+		throw BinderException(
+		    "Unable to plan scan for table %s, but table's config disabled non-server-side scan planning",
+		    table_entry->table_info.name);
+	}
+	if (!scan_plan_provider) {
+		scan_plan_provider = make_uniq<ClientSideScanPlanProvider>(*shared_state);
+	}
 }
 
-void IcebergMultiFileList::LoadManifestList(lock_guard<mutex> &guard) const {
+void IcebergMultiFileList::LoadManifestList(annotated_lock_guard<annotated_mutex> &guard) const {
 	InitializeScanPlanProvider();
 	GetScanPlanProvider().LoadManifestList(*this);
 }
 
-void IcebergMultiFileList::StartDataManifestScan(lock_guard<mutex> &guard) const {
-	D_ASSERT(view_initialized);
+void IcebergMultiFileList::StartDataManifestScan(annotated_lock_guard<annotated_mutex> &guard) const {
+	D_ASSERT(scan_plan_provider);
 	GetScanPlanProvider().StartDataManifestScan(*this);
 }
 
@@ -1248,18 +1369,32 @@ void IcebergMultiFileList::EnumerateDeleteManifestEntriesInternal() const {
 	GetScanPlanProvider().EnumerateDeleteManifestEntries(*this);
 }
 
-void IcebergMultiFileList::ScanDeleteFiles(const vector<MultiFileColumnDefinition> &global_columns,
-                                           const vector<ColumnIndex> &global_column_ids,
-                                           const vector<idx_t> &projection_ids) const {
+bool IcebergMultiFileList::DeleteEntryMatchesFilters(const BoundIcebergManifestEntry &bound_manifest_entry) const {
+	auto manifest_idx = bound_manifest_entry.manifest_file_idx;
+	if (!delete_manifest_matches[manifest_idx]) {
+		return false;
+	}
+	if (table_filters.HasFilters() &&
+	    !FileMatchesFilter(delete_manifests[manifest_idx].entry.file, bound_manifest_entry.entry,
+	                       IcebergManifestContentType::DELETE)) {
+		return false;
+	}
+	return true;
+}
+
+void IcebergMultiFileList::ScanDeleteFiles() const {
 	auto &provider = GetScanPlanProvider();
 	auto &next_entry = provider.NextDeleteEntryToProcess();
 	auto &delete_entries = provider.DeleteManifestEntries();
 	for (; next_entry < delete_entries.size(); next_entry++) {
 		auto &bound_manifest_entry = delete_entries[next_entry];
+		if (!DeleteEntryMatchesFilters(bound_manifest_entry)) {
+			continue;
+		}
 		auto &manifest_entry = bound_manifest_entry.entry;
 		auto &data_file = manifest_entry.data_file;
 		if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
-			ScanDeleteFile(bound_manifest_entry, global_columns, global_column_ids, projection_ids);
+			ScanDeleteFile(bound_manifest_entry);
 		} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
 			ScanPuffinFile(bound_manifest_entry);
 		} else {
@@ -1270,33 +1405,31 @@ void IcebergMultiFileList::ScanDeleteFiles(const vector<MultiFileColumnDefinitio
 	}
 }
 
-void IcebergMultiFileList::ProcessDeletes(const vector<MultiFileColumnDefinition> &global_columns,
-                                          const vector<ColumnIndex> &global_column_ids,
-                                          const vector<idx_t> &projection_ids) const {
-	lock_guard<mutex> guard(shared_state->lock);
+void IcebergMultiFileList::ProcessDeletes() const {
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
 	InitializeView(guard);
-	lock_guard<mutex> delete_guard(shared_state->delete_lock);
-	ProcessDeletesInternal(global_columns, global_column_ids, projection_ids);
+	annotated_lock_guard<annotated_mutex> delete_guard(shared_state->delete_lock);
+	ProcessDeletesInternal();
 }
 
-void IcebergMultiFileList::ProcessDeletesInternal(const vector<MultiFileColumnDefinition> &global_columns,
-                                                  const vector<ColumnIndex> &global_column_ids,
-                                                  const vector<idx_t> &projection_ids) const {
+void IcebergMultiFileList::ProcessDeletesInternal() const {
 	//! Enumerate the delete manifest entries, then read the delete files they reference.
-	//! Delete enumeration is idempotent, so this is safe even if the entries were
-	//! already enumerated earlier (e.g. by the optimizer).
+	//! Delete enumeration is idempotent, so this is safe if the entries were already enumerated.
 	EnumerateDeleteManifestEntriesInternal();
-	ScanDeleteFiles(global_columns, global_column_ids, projection_ids);
+	ScanDeleteFiles();
 }
 
 vector<BoundIcebergManifestEntry> IcebergMultiFileList::GetDeleteManifestEntries() const {
-	lock_guard<mutex> guard(shared_state->lock);
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
 	InitializeView(guard);
-	lock_guard<mutex> delete_guard(shared_state->delete_lock);
+	annotated_lock_guard<annotated_mutex> delete_guard(shared_state->delete_lock);
 	EnumerateDeleteManifestEntriesInternal();
 	vector<BoundIcebergManifestEntry> result;
 	auto &delete_entries = GetScanPlanProvider().DeleteManifestEntries();
 	for (auto &entry : delete_entries) {
+		if (!DeleteEntryMatchesFilters(entry)) {
+			continue;
+		}
 		auto manifest_idx = entry.manifest_file_idx;
 		auto &manifest = delete_manifests[manifest_idx];
 		auto &manifest_file = manifest.entry.file;
@@ -1312,10 +1445,7 @@ vector<BoundIcebergManifestEntry> IcebergMultiFileList::GetDeleteManifestEntries
 	return result;
 }
 
-void IcebergMultiFileList::ScanDeleteFile(const BoundIcebergManifestEntry &bound_manifest_entry,
-                                          const vector<MultiFileColumnDefinition> &global_columns,
-                                          const vector<ColumnIndex> &global_column_ids,
-                                          const vector<idx_t> &projection_ids) const {
+void IcebergMultiFileList::ScanDeleteFile(const BoundIcebergManifestEntry &bound_manifest_entry) const {
 	auto &manifest_entry = bound_manifest_entry.entry;
 	auto &data_file = manifest_entry.data_file;
 	auto delete_file_path = data_file.file_path;
@@ -1387,13 +1517,14 @@ void IcebergMultiFileList::ScanDeleteFile(const BoundIcebergManifestEntry &bound
 			delete_scan_function.function(context, function_input, result);
 			result.Flatten();
 			ScanEqualityDeleteFile(bound_manifest_entry, result, multi_file_local_state.job.reader->columns,
-			                       global_columns, global_column_ids, projection_ids);
+			                       return_names);
 		} while (result.size() != 0);
 	}
 }
 
 unique_ptr<DeleteFilter> IcebergMultiFileList::GetPositionalDeletesForFile(const string &file_path) const {
-	lock_guard<mutex> guard(shared_state->delete_lock);
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
+	annotated_lock_guard<annotated_mutex> delete_guard(shared_state->delete_lock);
 	auto &positional_delete_data = GetPositionalDeleteData();
 	auto it = positional_delete_data.find(file_path);
 	if (it != positional_delete_data.end()) {
@@ -1404,7 +1535,8 @@ unique_ptr<DeleteFilter> IcebergMultiFileList::GetPositionalDeletesForFile(const
 }
 
 shared_ptr<IcebergDeleteData> IcebergMultiFileList::GetExistingPositionalDeleteData(const string &file_path) const {
-	lock_guard<mutex> guard(shared_state->delete_lock);
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
+	annotated_lock_guard<annotated_mutex> delete_guard(shared_state->delete_lock);
 	auto &positional_delete_data = GetPositionalDeleteData();
 	auto it = positional_delete_data.find(file_path);
 	if (it == positional_delete_data.end()) {

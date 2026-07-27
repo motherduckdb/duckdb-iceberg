@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/load_table_result.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 LoadTableResult::LoadTableResult() {
 }
 
-LoadTableResult LoadTableResult::FromJSON(yyjson_val *obj) {
+LoadTableResult LoadTableResult::FromJSON(JSONValue obj) {
 	LoadTableResult res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -47,10 +45,10 @@ LoadTableResult LoadTableResult::Copy() const {
 	return res;
 }
 
-string LoadTableResult::TryFromJSON(yyjson_val *obj) {
+string LoadTableResult::TryFromJSON(JSONValue obj) {
 	string error;
-	auto metadata_val = yyjson_obj_get(obj, "metadata");
-	if (!metadata_val) {
+	auto metadata_val = obj.GetMember("metadata");
+	if (!metadata_val.IsValid()) {
 		return "LoadTableResult required property 'metadata' is missing";
 	} else {
 		error = metadata.TryFromJSON(metadata_val);
@@ -58,113 +56,115 @@ string LoadTableResult::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto metadata_location_val = yyjson_obj_get(obj, "metadata-location");
-	if (metadata_location_val) {
-		if (yyjson_is_null(metadata_location_val)) {
+	auto metadata_location_val = obj.GetMember("metadata-location");
+	if (metadata_location_val.IsValid()) {
+		if (metadata_location_val.IsNull()) {
 			//! do nothing, property is explicitly nullable
 		} else {
 			string metadata_location_tmp;
-			if (yyjson_is_str(metadata_location_val)) {
-				metadata_location_tmp = yyjson_get_str(metadata_location_val);
+			if (json_utils::IsString(metadata_location_val)) {
+				metadata_location_tmp = json_utils::GetString(metadata_location_val);
 			} else {
 				return StringUtil::Format(
-				    "LoadTableResult property 'metadata_location_tmp' is not of type 'string', found '%s' instead",
-				    yyjson_get_type_desc(metadata_location_val));
+				    "LoadTableResult property 'metadata_location_tmp' is not of type 'string', found %s instead",
+				    json_utils::GetTypeDescription(metadata_location_val).c_str());
 			}
 			metadata_location = std::move(metadata_location_tmp);
 		}
 	}
-	auto config_val = yyjson_obj_get(obj, "config");
-	if (config_val) {
+	auto config_val = obj.GetMember("config");
+	if (config_val.IsValid()) {
 		case_insensitive_map_t<string> config_tmp;
-		if (yyjson_is_obj(config_val)) {
-			size_t idx, max;
-			yyjson_val *key, *val;
-			yyjson_obj_foreach(config_val, idx, max, key, val) {
-				auto key_str = yyjson_get_str(key);
+		if (config_val.IsObject()) {
+			config_val.IterateObject([&](const string &key_str, JSONValue val) {
+				if (!error.empty()) {
+					return;
+				}
 				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
+				if (json_utils::IsString(val)) {
+					tmp = json_utils::GetString(val);
 				} else {
-					return StringUtil::Format(
-					    "LoadTableResult property 'tmp' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(val));
+					error =
+					    StringUtil::Format("LoadTableResult property 'tmp' is not of type 'string', found %s instead",
+					                       json_utils::GetTypeDescription(val).c_str());
+					return;
 				}
 				config_tmp.emplace(key_str, std::move(tmp));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return "LoadTableResult property 'config_tmp' is not of type 'object'";
 		}
 		config = std::move(config_tmp);
 	}
-	auto storage_credentials_val = yyjson_obj_get(obj, "storage-credentials");
-	if (storage_credentials_val) {
+	auto storage_credentials_val = obj.GetMember("storage-credentials");
+	if (storage_credentials_val.IsValid()) {
 		vector<StorageCredential> storage_credentials_tmp;
-		if (yyjson_is_arr(storage_credentials_val)) {
-			size_t storage_credentials_tmp_idx, storage_credentials_tmp_max;
-			yyjson_val *storage_credentials_tmp_item_val;
-			yyjson_arr_foreach(storage_credentials_val, storage_credentials_tmp_idx, storage_credentials_tmp_max,
-			                   storage_credentials_tmp_item_val) {
+		if (storage_credentials_val.IsArray()) {
+			storage_credentials_val.IterateArray([&](JSONValue storage_credentials_tmp_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				StorageCredential storage_credentials_tmp_item;
 				error = storage_credentials_tmp_item.TryFromJSON(storage_credentials_tmp_item_val);
 				if (!error.empty()) {
-					return error;
+					return;
 				}
 				storage_credentials_tmp.emplace_back(std::move(storage_credentials_tmp_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "LoadTableResult property 'storage_credentials_tmp' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(storage_credentials_val));
+			    "LoadTableResult property 'storage_credentials_tmp' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(storage_credentials_val).c_str());
 		}
 		storage_credentials = std::move(storage_credentials_tmp);
 	}
 	return "";
 }
 
-void LoadTableResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void LoadTableResult::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: metadata
-	yyjson_mut_val *metadata_val = metadata.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "metadata", metadata_val);
+	auto metadata_json = metadata.ToJSON(writer);
+	obj.Add("metadata", metadata_json);
 
 	// Serialize: metadata-location
 	if (metadata_location.has_value()) {
 		auto &metadata_location_value = *metadata_location;
-		yyjson_mut_obj_add_strcpy(doc, obj, "metadata-location", metadata_location_value.c_str());
+		auto metadata_location_json = writer.CreateString(metadata_location_value);
+		obj.Add("metadata-location", metadata_location_json);
 	}
 
 	// Serialize: config
 	if (config.has_value()) {
 		auto &config_value = *config;
-		yyjson_mut_val *config_value_obj = yyjson_mut_obj(doc);
-		for (const auto &it : config_value) {
-			auto &key = it.first;
-			auto &value = it.second;
-			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
-			yyjson_mut_obj_add_strcpy(doc, config_value_obj, key_ptr, value.c_str());
+		auto config_json = writer.CreateObject();
+		for (const auto &[config_json_key, config_json_value] : config_value) {
+			auto config_json_value_json = writer.CreateString(config_json_value);
+			config_json.Add(config_json_key, config_json_value_json);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "config", config_value_obj);
+		obj.Add("config", config_json);
 	}
 
 	// Serialize: storage-credentials
 	if (storage_credentials.has_value()) {
 		auto &storage_credentials_value = *storage_credentials;
-		yyjson_mut_val *storage_credentials_value_arr = yyjson_mut_arr(doc);
-		for (const auto &item : storage_credentials_value) {
-			yyjson_mut_val *item_val = item.ToJSON(doc);
-			yyjson_mut_arr_append(storage_credentials_value_arr, item_val);
+		auto storage_credentials_json = writer.CreateArray();
+		for (const auto &storage_credentials_json_item : storage_credentials_value) {
+			auto storage_credentials_json_item_json = storage_credentials_json_item.ToJSON(writer);
+			storage_credentials_json.Append(storage_credentials_json_item_json);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "storage-credentials", storage_credentials_value_arr);
+		obj.Add("storage-credentials", storage_credentials_json);
 	}
 }
 
-yyjson_mut_val *LoadTableResult::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue LoadTableResult::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

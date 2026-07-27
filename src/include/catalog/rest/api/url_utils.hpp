@@ -49,7 +49,7 @@ class IRCEndpointBuilder {
 public:
 	IRCEndpointBuilder();
 	void AddPathComponent(IRCPathComponent &&component);
-	void AddPrefixComponent(const string &component, const bool &prefix_is_one_component);
+	void AddPrefixComponents(const vector<string> &components);
 
 	void SetHost(const string &host);
 	string GetHost() const;

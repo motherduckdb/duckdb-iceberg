@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/update_namespace_properties_response.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 UpdateNamespacePropertiesResponse::UpdateNamespacePropertiesResponse() {
 }
 
-UpdateNamespacePropertiesResponse UpdateNamespacePropertiesResponse::FromJSON(yyjson_val *obj) {
+UpdateNamespacePropertiesResponse UpdateNamespacePropertiesResponse::FromJSON(JSONValue obj) {
 	UpdateNamespacePropertiesResponse res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -44,80 +42,95 @@ UpdateNamespacePropertiesResponse UpdateNamespacePropertiesResponse::Copy() cons
 	return res;
 }
 
-string UpdateNamespacePropertiesResponse::TryFromJSON(yyjson_val *obj) {
+string UpdateNamespacePropertiesResponse::TryFromJSON(JSONValue obj) {
 	string error;
-	auto updated_val = yyjson_obj_get(obj, "updated");
-	if (!updated_val) {
+	auto updated_val = obj.GetMember("updated");
+	if (!updated_val.IsValid()) {
 		return "UpdateNamespacePropertiesResponse required property 'updated' is missing";
 	} else {
-		if (yyjson_is_arr(updated_val)) {
-			size_t updated_idx, updated_max;
-			yyjson_val *updated_item_val;
-			yyjson_arr_foreach(updated_val, updated_idx, updated_max, updated_item_val) {
+		if (updated_val.IsArray()) {
+			updated_val.IterateArray([&](JSONValue updated_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				string updated_item;
-				if (yyjson_is_str(updated_item_val)) {
-					updated_item = yyjson_get_str(updated_item_val);
+				if (json_utils::IsString(updated_item_val)) {
+					updated_item = json_utils::GetString(updated_item_val);
 				} else {
-					return StringUtil::Format("UpdateNamespacePropertiesResponse property 'updated_item' is not of "
-					                          "type 'string', found '%s' instead",
-					                          yyjson_get_type_desc(updated_item_val));
+					error = StringUtil::Format("UpdateNamespacePropertiesResponse property 'updated_item' is not of "
+					                           "type 'string', found %s instead",
+					                           json_utils::GetTypeDescription(updated_item_val).c_str());
+					return;
 				}
 				updated.emplace_back(std::move(updated_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "UpdateNamespacePropertiesResponse property 'updated' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(updated_val));
+			    "UpdateNamespacePropertiesResponse property 'updated' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(updated_val).c_str());
 		}
 	}
-	auto removed_val = yyjson_obj_get(obj, "removed");
-	if (!removed_val) {
+	auto removed_val = obj.GetMember("removed");
+	if (!removed_val.IsValid()) {
 		return "UpdateNamespacePropertiesResponse required property 'removed' is missing";
 	} else {
-		if (yyjson_is_arr(removed_val)) {
-			size_t removed_idx, removed_max;
-			yyjson_val *removed_item_val;
-			yyjson_arr_foreach(removed_val, removed_idx, removed_max, removed_item_val) {
+		if (removed_val.IsArray()) {
+			removed_val.IterateArray([&](JSONValue removed_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				string removed_item;
-				if (yyjson_is_str(removed_item_val)) {
-					removed_item = yyjson_get_str(removed_item_val);
+				if (json_utils::IsString(removed_item_val)) {
+					removed_item = json_utils::GetString(removed_item_val);
 				} else {
-					return StringUtil::Format("UpdateNamespacePropertiesResponse property 'removed_item' is not of "
-					                          "type 'string', found '%s' instead",
-					                          yyjson_get_type_desc(removed_item_val));
+					error = StringUtil::Format("UpdateNamespacePropertiesResponse property 'removed_item' is not of "
+					                           "type 'string', found %s instead",
+					                           json_utils::GetTypeDescription(removed_item_val).c_str());
+					return;
 				}
 				removed.emplace_back(std::move(removed_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "UpdateNamespacePropertiesResponse property 'removed' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(removed_val));
+			    "UpdateNamespacePropertiesResponse property 'removed' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(removed_val).c_str());
 		}
 	}
-	auto missing_val = yyjson_obj_get(obj, "missing");
-	if (missing_val) {
-		if (yyjson_is_null(missing_val)) {
+	auto missing_val = obj.GetMember("missing");
+	if (missing_val.IsValid()) {
+		if (missing_val.IsNull()) {
 			//! do nothing, property is explicitly nullable
 		} else {
 			vector<string> missing_tmp;
-			if (yyjson_is_arr(missing_val)) {
-				size_t missing_tmp_idx, missing_tmp_max;
-				yyjson_val *missing_tmp_item_val;
-				yyjson_arr_foreach(missing_val, missing_tmp_idx, missing_tmp_max, missing_tmp_item_val) {
+			if (missing_val.IsArray()) {
+				missing_val.IterateArray([&](JSONValue missing_tmp_item_val) {
+					if (!error.empty()) {
+						return;
+					}
 					string missing_tmp_item;
-					if (yyjson_is_str(missing_tmp_item_val)) {
-						missing_tmp_item = yyjson_get_str(missing_tmp_item_val);
+					if (json_utils::IsString(missing_tmp_item_val)) {
+						missing_tmp_item = json_utils::GetString(missing_tmp_item_val);
 					} else {
-						return StringUtil::Format("UpdateNamespacePropertiesResponse property 'missing_tmp_item' is "
-						                          "not of type 'string', found '%s' instead",
-						                          yyjson_get_type_desc(missing_tmp_item_val));
+						error = StringUtil::Format("UpdateNamespacePropertiesResponse property 'missing_tmp_item' is "
+						                           "not of type 'string', found %s instead",
+						                           json_utils::GetTypeDescription(missing_tmp_item_val).c_str());
+						return;
 					}
 					missing_tmp.emplace_back(std::move(missing_tmp_item));
+				});
+				if (!error.empty()) {
+					return error;
 				}
 			} else {
-				return StringUtil::Format("UpdateNamespacePropertiesResponse property 'missing_tmp' is not of type "
-				                          "'array', found '%s' instead",
-				                          yyjson_get_type_desc(missing_val));
+				return StringUtil::Format(
+				    "UpdateNamespacePropertiesResponse property 'missing_tmp' is not of type 'array', found %s instead",
+				    json_utils::GetTypeDescription(missing_val).c_str());
 			}
 			missing = std::move(missing_tmp);
 		}
@@ -125,42 +138,38 @@ string UpdateNamespacePropertiesResponse::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void UpdateNamespacePropertiesResponse::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void UpdateNamespacePropertiesResponse::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: updated
-	yyjson_mut_val *updated_arr = yyjson_mut_arr(doc);
-	for (const auto &item : updated) {
-		yyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());
-		yyjson_mut_arr_append(updated_arr, item_val);
+	auto updated_json = writer.CreateArray();
+	for (const auto &updated_json_item : updated) {
+		auto updated_json_item_json = writer.CreateString(updated_json_item);
+		updated_json.Append(updated_json_item_json);
 	}
-	yyjson_mut_obj_add_val(doc, obj, "updated", updated_arr);
+	obj.Add("updated", updated_json);
 
 	// Serialize: removed
-	yyjson_mut_val *removed_arr = yyjson_mut_arr(doc);
-	for (const auto &item : removed) {
-		yyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());
-		yyjson_mut_arr_append(removed_arr, item_val);
+	auto removed_json = writer.CreateArray();
+	for (const auto &removed_json_item : removed) {
+		auto removed_json_item_json = writer.CreateString(removed_json_item);
+		removed_json.Append(removed_json_item_json);
 	}
-	yyjson_mut_obj_add_val(doc, obj, "removed", removed_arr);
+	obj.Add("removed", removed_json);
 
 	// Serialize: missing
 	if (missing.has_value()) {
 		auto &missing_value = *missing;
-		yyjson_mut_val *missing_value_arr = yyjson_mut_arr(doc);
-		for (const auto &item : missing_value) {
-			yyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());
-			yyjson_mut_arr_append(missing_value_arr, item_val);
+		auto missing_json = writer.CreateArray();
+		for (const auto &missing_json_item : missing_value) {
+			auto missing_json_item_json = writer.CreateString(missing_json_item);
+			missing_json.Append(missing_json_item_json);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "missing", missing_value_arr);
+		obj.Add("missing", missing_json);
 	}
 }
 
-yyjson_mut_val *UpdateNamespacePropertiesResponse::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue UpdateNamespacePropertiesResponse::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

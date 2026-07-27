@@ -120,14 +120,18 @@ private:
 	AccessMode access_mode;
 
 public:
+	//! Schemas referenced by this transaction that have to stay alive for the duration of the transaction.
+	case_insensitive_map_t<shared_ptr<IcebergSchemaEntry>> schemas;
+	//! Schemas staged by this transaction. These are separate from catalog-referenced schemas so both generations stay
+	//! alive when a transaction creates a schema after referencing a stale entry with the same name.
+	case_insensitive_map_t<shared_ptr<IcebergSchemaEntry>> created_schemas;
 	//! Tables referenced by this transaction that have to stay alive for the duration of the transaction.
 	case_insensitive_map_t<shared_ptr<IcebergTableInformation>> tables;
 	//! The visible state of every resolved table in this transaction.
 	case_insensitive_map_t<IcebergTransactionTableState> current_table_data;
-	//! Declared after current_table_data so update references are destroyed before the referenced table states.
+	//! Declared after the schema and table states so update references are destroyed before the referenced states.
 	IcebergTransactionUpdate transaction_update;
 
-	unordered_set<string> created_schemas;
 	unordered_set<string> deleted_schemas;
 
 	bool called_list_schemas = false;

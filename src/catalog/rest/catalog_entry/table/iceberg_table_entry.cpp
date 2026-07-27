@@ -100,7 +100,7 @@ TableFunction IcebergTableEntry::GetScanFunction(ClientContext &context, unique_
 	file_bind_data.virtual_columns = GetVirtualColumns();
 	D_ASSERT(file_bind_data.file_list);
 	auto &ic_file_list = file_bind_data.file_list->Cast<IcebergMultiFileList>();
-	ic_file_list.SetTable(this);
+	ic_file_list.SetTable(*this);
 	return iceberg_scan_function;
 }
 
@@ -123,6 +123,7 @@ virtual_column_map_t IcebergTableEntry::VirtualColumns() {
 	return result;
 }
 
+//! NOTE: IcebergDelete::FindIcebergScan needs to change in tandem with this method
 vector<column_t> IcebergTableEntry::GetRowIdColumns() const {
 	vector<column_t> result;
 	auto &table_metadata = table_info.table_metadata;
@@ -156,10 +157,6 @@ TableStorageInfo IcebergTableEntry::GetStorageInfo(ClientContext &context) {
 	TableStorageInfo result;
 	// TODO fill info
 	return result;
-}
-
-string IcebergTableEntry::GetUUID() const {
-	return table_info.table_id;
 }
 
 } // namespace duckdb

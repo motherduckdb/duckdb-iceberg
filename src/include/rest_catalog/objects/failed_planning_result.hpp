@@ -1,15 +1,13 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
 #include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/iceberg_error_response.hpp"
 #include "rest_catalog/objects/plan_status.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -31,15 +29,15 @@ public:
 
 	public:
 		// Deserialization
-		static Object7 FromJSON(yyjson_val *obj);
-		string TryFromJSON(yyjson_val *obj);
+		static Object7 FromJSON(JSONValue obj);
+		string TryFromJSON(JSONValue obj);
 
 		// Copy
 		Object7 Copy() const;
 
 		// Serialization
-		void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
-		yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+		void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+		JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 	public:
 		PlanStatus status;
@@ -47,15 +45,15 @@ public:
 
 public:
 	// Deserialization
-	static FailedPlanningResult FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *obj);
+	static FailedPlanningResult FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
 	// Copy
 	FailedPlanningResult Copy() const;
 
 	// Serialization
-	void PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const;
-	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	IcebergErrorResponse iceberg_error_response;

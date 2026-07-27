@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/view_history_entry.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 ViewHistoryEntry::ViewHistoryEntry() {
 }
 
-ViewHistoryEntry ViewHistoryEntry::FromJSON(yyjson_val *obj) {
+ViewHistoryEntry ViewHistoryEntry::FromJSON(JSONValue obj) {
 	ViewHistoryEntry res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -31,52 +29,50 @@ ViewHistoryEntry ViewHistoryEntry::Copy() const {
 	return res;
 }
 
-string ViewHistoryEntry::TryFromJSON(yyjson_val *obj) {
+string ViewHistoryEntry::TryFromJSON(JSONValue obj) {
 	string error;
-	auto version_id_val = yyjson_obj_get(obj, "version-id");
-	if (!version_id_val) {
+	auto version_id_val = obj.GetMember("version-id");
+	if (!version_id_val.IsValid()) {
 		return "ViewHistoryEntry required property 'version-id' is missing";
 	} else {
-		if (yyjson_is_int(version_id_val)) {
-			version_id = yyjson_get_int(version_id_val);
+		if (json_utils::IsInteger(version_id_val)) {
+			version_id = json_utils::GetSignedInteger(version_id_val);
 		} else {
 			return StringUtil::Format(
-			    "ViewHistoryEntry property 'version_id' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(version_id_val));
+			    "ViewHistoryEntry property 'version_id' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(version_id_val).c_str());
 		}
 	}
-	auto timestamp_ms_val = yyjson_obj_get(obj, "timestamp-ms");
-	if (!timestamp_ms_val) {
+	auto timestamp_ms_val = obj.GetMember("timestamp-ms");
+	if (!timestamp_ms_val.IsValid()) {
 		return "ViewHistoryEntry required property 'timestamp-ms' is missing";
 	} else {
-		if (yyjson_is_sint(timestamp_ms_val)) {
-			timestamp_ms = yyjson_get_sint(timestamp_ms_val);
-		} else if (yyjson_is_uint(timestamp_ms_val)) {
-			timestamp_ms = yyjson_get_uint(timestamp_ms_val);
+		if (json_utils::IsInteger(timestamp_ms_val)) {
+			timestamp_ms = json_utils::GetSignedInteger(timestamp_ms_val);
+		} else if (json_utils::IsUnsignedInteger(timestamp_ms_val)) {
+			timestamp_ms = json_utils::GetUnsignedInteger(timestamp_ms_val);
 		} else {
 			return StringUtil::Format(
-			    "ViewHistoryEntry property 'timestamp_ms' is not of type 'integer', found '%s' instead",
-			    yyjson_get_type_desc(timestamp_ms_val));
+			    "ViewHistoryEntry property 'timestamp_ms' is not of type 'integer', found %s instead",
+			    json_utils::GetTypeDescription(timestamp_ms_val).c_str());
 		}
 	}
 	return "";
 }
 
-void ViewHistoryEntry::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void ViewHistoryEntry::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: version-id
-	yyjson_mut_obj_add_int(doc, obj, "version-id", version_id);
+	auto version_id_json = writer.CreateSignedInteger(version_id);
+	obj.Add("version-id", version_id_json);
 
 	// Serialize: timestamp-ms
-	yyjson_mut_obj_add_sint(doc, obj, "timestamp-ms", timestamp_ms);
+	auto timestamp_ms_json = writer.CreateSignedInteger(timestamp_ms);
+	obj.Add("timestamp-ms", timestamp_ms_json);
 }
 
-yyjson_mut_val *ViewHistoryEntry::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue ViewHistoryEntry::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

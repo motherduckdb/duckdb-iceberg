@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/timestamp_tz_type_value.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 TimestampTzTypeValue::TimestampTzTypeValue() {
 }
 
-TimestampTzTypeValue TimestampTzTypeValue::FromJSON(yyjson_val *obj) {
+TimestampTzTypeValue TimestampTzTypeValue::FromJSON(JSONValue obj) {
 	TimestampTzTypeValue res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -30,19 +28,20 @@ TimestampTzTypeValue TimestampTzTypeValue::Copy() const {
 	return res;
 }
 
-string TimestampTzTypeValue::TryFromJSON(yyjson_val *obj) {
+string TimestampTzTypeValue::TryFromJSON(JSONValue obj) {
 	string error;
-	if (yyjson_is_str(obj)) {
-		value = yyjson_get_str(obj);
+	if (json_utils::IsString(obj)) {
+		value = json_utils::GetString(obj);
 	} else {
-		return StringUtil::Format("TimestampTzTypeValue property 'value' is not of type 'string', found '%s' instead",
-		                          yyjson_get_type_desc(obj));
+		return StringUtil::Format("TimestampTzTypeValue property 'value' is not of type 'string', found %s instead",
+		                          json_utils::GetTypeDescription(obj).c_str());
 	}
 	return "";
 }
 
-yyjson_mut_val *TimestampTzTypeValue::ToJSON(yyjson_mut_doc *doc) const {
-	return yyjson_mut_strcpy(doc, value.c_str());
+JSONMutableValue TimestampTzTypeValue::ToJSON(JSONWriter &writer) const {
+	auto result = writer.CreateString(value);
+	return result;
 }
 
 } // namespace rest_api_objects

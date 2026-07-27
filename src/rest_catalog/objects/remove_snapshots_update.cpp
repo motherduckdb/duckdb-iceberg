@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/remove_snapshots_update.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 RemoveSnapshotsUpdate::RemoveSnapshotsUpdate() {
 }
 
-RemoveSnapshotsUpdate RemoveSnapshotsUpdate::FromJSON(yyjson_val *obj) {
+RemoveSnapshotsUpdate RemoveSnapshotsUpdate::FromJSON(JSONValue obj) {
 	RemoveSnapshotsUpdate res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -34,77 +32,78 @@ RemoveSnapshotsUpdate RemoveSnapshotsUpdate::Copy() const {
 	return res;
 }
 
-string RemoveSnapshotsUpdate::TryFromJSON(yyjson_val *obj) {
+string RemoveSnapshotsUpdate::TryFromJSON(JSONValue obj) {
 	string error;
 	error = base_update.TryFromJSON(obj);
 	if (!error.empty()) {
 		return error;
 	}
-	auto action_refinement_val = yyjson_obj_get(obj, "action");
-	if (action_refinement_val) {
+	auto action_refinement_val = obj.GetMember("action");
+	if (action_refinement_val.IsValid()) {
 		string action_refinement;
-		if (yyjson_is_str(action_refinement_val)) {
-			action_refinement = yyjson_get_str(action_refinement_val);
+		if (json_utils::IsString(action_refinement_val)) {
+			action_refinement = json_utils::GetString(action_refinement_val);
 		} else {
 			return StringUtil::Format(
-			    "RemoveSnapshotsUpdate property 'action_refinement' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_refinement_val));
+			    "RemoveSnapshotsUpdate property 'action_refinement' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(action_refinement_val).c_str());
 		}
-		if (!yyjson_is_null(action_refinement_val) && action_refinement != "remove-snapshots") {
+		if (!action_refinement_val.IsNull() && action_refinement != "remove-snapshots") {
 			return "RemoveSnapshotsUpdate property 'action_refinement' does not match its required const value";
 		}
 	} else {
 		return "RemoveSnapshotsUpdate required property 'action' is missing";
 	}
-	auto snapshot_ids_val = yyjson_obj_get(obj, "snapshot-ids");
-	if (!snapshot_ids_val) {
+	auto snapshot_ids_val = obj.GetMember("snapshot-ids");
+	if (!snapshot_ids_val.IsValid()) {
 		return "RemoveSnapshotsUpdate required property 'snapshot-ids' is missing";
 	} else {
-		if (yyjson_is_arr(snapshot_ids_val)) {
-			size_t snapshot_ids_idx, snapshot_ids_max;
-			yyjson_val *snapshot_ids_item_val;
-			yyjson_arr_foreach(snapshot_ids_val, snapshot_ids_idx, snapshot_ids_max, snapshot_ids_item_val) {
+		if (snapshot_ids_val.IsArray()) {
+			snapshot_ids_val.IterateArray([&](JSONValue snapshot_ids_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				int64_t snapshot_ids_item;
-				if (yyjson_is_sint(snapshot_ids_item_val)) {
-					snapshot_ids_item = yyjson_get_sint(snapshot_ids_item_val);
-				} else if (yyjson_is_uint(snapshot_ids_item_val)) {
-					snapshot_ids_item = yyjson_get_uint(snapshot_ids_item_val);
+				if (json_utils::IsInteger(snapshot_ids_item_val)) {
+					snapshot_ids_item = json_utils::GetSignedInteger(snapshot_ids_item_val);
+				} else if (json_utils::IsUnsignedInteger(snapshot_ids_item_val)) {
+					snapshot_ids_item = json_utils::GetUnsignedInteger(snapshot_ids_item_val);
 				} else {
-					return StringUtil::Format("RemoveSnapshotsUpdate property 'snapshot_ids_item' is not of type "
-					                          "'integer', found '%s' instead",
-					                          yyjson_get_type_desc(snapshot_ids_item_val));
+					error = StringUtil::Format(
+					    "RemoveSnapshotsUpdate property 'snapshot_ids_item' is not of type 'integer', found %s instead",
+					    json_utils::GetTypeDescription(snapshot_ids_item_val).c_str());
+					return;
 				}
 				snapshot_ids.emplace_back(std::move(snapshot_ids_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "RemoveSnapshotsUpdate property 'snapshot_ids' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(snapshot_ids_val));
+			    "RemoveSnapshotsUpdate property 'snapshot_ids' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(snapshot_ids_val).c_str());
 		}
 	}
 	return "";
 }
 
-void RemoveSnapshotsUpdate::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void RemoveSnapshotsUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize base class: BaseUpdate
-	base_update.PopulateJSON(doc, obj);
+	base_update.PopulateJSON(writer, obj);
 
 	// Serialize: snapshot-ids
-	yyjson_mut_val *snapshot_ids_arr = yyjson_mut_arr(doc);
-	for (const auto &item : snapshot_ids) {
-		yyjson_mut_val *item_val = yyjson_mut_sint(doc, item);
-		yyjson_mut_arr_append(snapshot_ids_arr, item_val);
+	auto snapshot_ids_json = writer.CreateArray();
+	for (const auto &snapshot_ids_json_item : snapshot_ids) {
+		auto snapshot_ids_json_item_json = writer.CreateSignedInteger(snapshot_ids_json_item);
+		snapshot_ids_json.Append(snapshot_ids_json_item_json);
 	}
-	yyjson_mut_obj_add_val(doc, obj, "snapshot-ids", snapshot_ids_arr);
+	obj.Add("snapshot-ids", snapshot_ids_json);
 }
 
-yyjson_mut_val *RemoveSnapshotsUpdate::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue RemoveSnapshotsUpdate::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 
