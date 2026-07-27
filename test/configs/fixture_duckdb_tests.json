@@ -180,7 +180,8 @@
         "test/sql/transactions/concurrent_drop_table.test",
         "test/sql/types/bignum/test_bignum_sum.test_slow",
         "test/sql/catalog/test_alter_oid_stability.test",
-        "test/sql/storage/extensions/extension_default.test"
+        "test/sql/storage/extensions/extension_default.test",
+	"test/sql/function/string/regex_operators_v1_5_view.test"
       ]
     },
     {
