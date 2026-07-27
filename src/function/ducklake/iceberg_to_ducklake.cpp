@@ -829,9 +829,9 @@ static unique_ptr<FunctionData> IcebergToDuckLakeBind(ClientContext &context, Ta
 		}
 	}
 
-	schema_set.LoadEntries(context);
-	for (auto &it : schema_set.GetEntries()) {
-		auto &schema_entry = it.second->Cast<IcebergSchemaEntry>();
+	auto schema_entries = schema_set.GetEntries(context);
+	for (auto &schema_entry_ptr : schema_entries) {
+		auto &schema_entry = *schema_entry_ptr;
 		auto &tables = schema_entry.tables;
 		tables.LoadEntries(context);
 		for (auto &it : tables.GetEntriesMutable()) {

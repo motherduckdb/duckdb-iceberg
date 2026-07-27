@@ -1,8 +1,9 @@
 
 #pragma once
 
+#include "duckdb/common/shared_ptr.hpp"
 #include "duckdb/common/string.hpp"
-#include "duckdb/common/unique_ptr.hpp"
+#include "duckdb/common/vector.hpp"
 
 #include "catalog_entry/schema/iceberg_schema_entry.hpp"
 
@@ -17,19 +18,19 @@ public:
 	void LoadEntries(ClientContext &context);
 	optional_ptr<CatalogEntry> GetEntry(ClientContext &context, const string &name, OnEntryNotFound if_not_found);
 	void Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback);
-	const case_insensitive_map_t<unique_ptr<CatalogEntry>> &GetEntries();
-	void AddEntry(const string &name, unique_ptr<IcebergSchemaEntry> entry);
+	vector<shared_ptr<IcebergSchemaEntry>> GetEntries(ClientContext &context);
+	void AddEntry(const string &name, shared_ptr<IcebergSchemaEntry> entry);
 	void RemoveEntry(const string &name);
-	CatalogEntry &GetEntry(const string &name);
 
 protected:
-	optional_ptr<CatalogEntry> CreateEntryInternal(ClientContext &context, unique_ptr<CatalogEntry> entry);
+	void LoadEntriesInternal(ClientContext &context);
+	shared_ptr<IcebergSchemaEntry> CreateEntryInternal(shared_ptr<IcebergSchemaEntry> entry);
 
 public:
 	Catalog &catalog;
 
 private:
-	case_insensitive_map_t<unique_ptr<CatalogEntry>> entries;
+	case_insensitive_map_t<shared_ptr<IcebergSchemaEntry>> entries;
 	mutex entry_lock;
 };
 
