@@ -73,13 +73,33 @@ bool IcebergTableSet::FillEntry(ClientContext &context, IcebergTableInformation 
 	return true;
 }
 
+IcebergTableEntry &IcebergTableSet::GetOrCreateDummy(IcebergTableInformation &table_info) const {
+	if (table_info.dummy_entry) {
+		*table_info.dummy_entry;
+	}
+	// create a table entry with fake schema data to avoid calling the LoadTableInformation endpoint for every
+	// table while listing schemas
+	CreateTableInfo info(schema, Identifier(table_info.name));
+	vector<ColumnDefinition> columns;
+	auto col = ColumnDefinition(Identifier("__"), LogicalType::UNKNOWN);
+	columns.push_back(std::move(col));
+	info.columns = ColumnList(std::move(columns));
+	auto table_entry = make_uniq<IcebergTableEntry>(table_info, catalog, schema, info, optional_idx());
+	if (!table_entry->internal) {
+		table_entry->internal = schema.internal;
+	}
+	auto result = table_entry.get();
+	if (result->name.empty()) {
+		throw InternalException("IcebergTableSet::CreateEntry called with empty name");
+	}
+	table_info.dummy_entry = std::move(table_entry);
+	return *table_info.dummy_entry;
+}
+
 void IcebergTableSet::Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback) {
 	lock_guard<mutex> lock(entry_lock);
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
 	LoadEntries(context);
-	case_insensitive_set_t non_iceberg_tables;
-	auto schema_component = IRCPathComponent::NamespaceComponent(schema.namespace_items);
-	auto table_namespace = schema_component.encoded;
 	for (auto &entry : entries) {
 		auto &table_info = *entry.second;
 		auto table_key = table_info.GetTableKey();
@@ -96,35 +116,8 @@ void IcebergTableSet::Scan(ClientContext &context, const std::function<void(Cata
 			}
 		}
 
-		if (table_info.dummy_entry) {
-			// FIXME: why do we need to return the same entry again?
-			auto &optional = table_info.dummy_entry.get()->Cast<CatalogEntry>();
-			callback(optional);
-			continue;
-		}
-
-		// create a table entry with fake schema data to avoid calling the LoadTableInformation endpoint for every
-		// table while listing schemas
-		CreateTableInfo info(schema, Identifier(table_info.name));
-		vector<ColumnDefinition> columns;
-		auto col = ColumnDefinition(Identifier("__"), LogicalType::UNKNOWN);
-		columns.push_back(std::move(col));
-		info.columns = ColumnList(std::move(columns));
-		auto table_entry = make_uniq<IcebergTableEntry>(table_info, catalog, schema, info, optional_idx());
-		if (!table_entry->internal) {
-			table_entry->internal = schema.internal;
-		}
-		auto result = table_entry.get();
-		if (result->name.empty()) {
-			throw InternalException("IcebergTableSet::CreateEntry called with empty name");
-		}
-		table_info.dummy_entry = std::move(table_entry);
-		auto &optional = table_info.dummy_entry.get()->Cast<CatalogEntry>();
-		callback(optional);
-	}
-	// erase not iceberg tables
-	for (auto &entry : non_iceberg_tables) {
-		entries.erase(entry);
+		auto &dummy = GetOrCreateDummy(table_info);
+		callback(dummy);
 	}
 }
 

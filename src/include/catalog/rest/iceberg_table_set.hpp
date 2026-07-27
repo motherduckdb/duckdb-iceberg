@@ -28,6 +28,9 @@ public:
 	case_insensitive_map_t<shared_ptr<IcebergTableInformation>> &GetEntriesMutable();
 	mutex &GetEntryLock();
 
+private:
+	IcebergTableEntry &GetOrCreateDummy(IcebergTableInformation &table_info) const;
+
 public:
 	void LoadEntries(ClientContext &context);
 	//! return true if request to LoadTableInformation was successful and entry has been filled
