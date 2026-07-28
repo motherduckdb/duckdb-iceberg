@@ -126,6 +126,16 @@ IcebergScanPlanProvider &IcebergMultiFileList::GetScanPlanProvider() const {
 	return *scan_plan_provider;
 }
 
+const ColumnIndex &IcebergMultiFileList::GetColumnIndexForFilter(ProjectionIndex index) const {
+	auto &global_state = shared_state->global_state;
+	D_ASSERT(global_state);
+	auto &scan_column_ids = global_state->scan_column_ids;
+	if (index > scan_column_ids.size()) {
+		throw InternalException("Filter projection index (%d) is out of range of column_indexes", index.GetIndex());
+	}
+	return scan_column_ids[index];
+}
+
 position_delete_map_t &IcebergMultiFileList::GetPositionalDeleteData() const {
 	return GetScanPlanProvider().PositionalDeleteData();
 }
@@ -341,7 +351,7 @@ void IcebergMultiFileList::Bind(vector<LogicalType> &return_types, vector<Identi
 
 unique_ptr<IcebergMultiFileList> IcebergMultiFileList::PushdownInternal(ClientContext &context,
                                                                         TableFilterSet &new_filters,
-                                                                        const vector<column_t> &column_indexes) const {
+                                                                        const vector<column_t> &column_ids) const {
 	unique_ptr<RowGroupOrderOptions> filtered_scan_order;
 	{
 		annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
@@ -355,12 +365,13 @@ unique_ptr<IcebergMultiFileList> IcebergMultiFileList::PushdownInternal(ClientCo
 
 	// The supplied filter set is the complete set of filters for the new view.
 	for (auto &entry : new_filters) {
-		auto column_idx = column_indexes[entry.GetIndex().GetIndex()];
-		if (column_idx >= names.size()) {
+		auto projection_index = ProjectionIndex(entry.GetIndex().GetIndex());
+		auto primary_index = column_ids[projection_index];
+		if (primary_index >= names.size()) {
 			continue;
 		}
 		auto &filter = ExpressionFilter::GetExpressionFilter(entry.Filter(), "IcebergMultiFileList::PushdownInternal");
-		result_filter_set.PushFilter(column_idx, filter.Copy());
+		result_filter_set.PushFilter(projection_index, filter.Copy());
 	}
 
 	filtered_list->table_filters = std::move(result_filter_set);
@@ -737,7 +748,9 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 
 	for (auto &entry : table_filters) {
 		auto index = entry.first;
-		auto &column = *schema.columns[index];
+		auto &column_index = GetColumnIndexForFilter(index);
+		auto primary_index = column_index.GetPrimaryIndex();
+		auto &column = *schema.columns[primary_index];
 
 		auto &data_file = manifest_entry.data_file;
 		// First check if there are partitions

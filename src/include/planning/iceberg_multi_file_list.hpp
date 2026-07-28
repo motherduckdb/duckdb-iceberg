@@ -37,7 +37,7 @@ using equality_delete_map_t = map<sequence_number_t, vector<IcebergEqualityDelet
 using position_delete_map_t = unordered_map<string, shared_ptr<IcebergDeleteData>>;
 
 struct IcebergTableFilters {
-	using filter_set_t = unordered_map<idx_t, unique_ptr<ExpressionFilter>>;
+	using filter_set_t = unordered_map<ProjectionIndex, unique_ptr<ExpressionFilter>>;
 	using iterator = filter_set_t::iterator;
 	using const_iterator = filter_set_t::const_iterator;
 
@@ -49,11 +49,11 @@ public:
 		return table_filters.size();
 	}
 	void PushFilter(column_t column_idx, unique_ptr<ExpressionFilter> table_filter) {
-		D_ASSERT(table_filters.find(column_idx) == table_filters.end());
-		table_filters[column_idx] = std::move(table_filter);
+		D_ASSERT(table_filters.find(ProjectionIndex(column_idx)) == table_filters.end());
+		table_filters[ProjectionIndex(column_idx)] = std::move(table_filter);
 	}
 	optional_ptr<const ExpressionFilter> TryGetFilterByColumnIndex(column_t column_idx) const {
-		auto entry = table_filters.find(column_idx);
+		auto entry = table_filters.find(ProjectionIndex(column_idx));
 		if (entry == table_filters.end()) {
 			return nullptr;
 		}
@@ -82,6 +82,7 @@ class IcebergScanPlanProvider;
 class ClientSideScanPlanProvider;
 struct IcebergMultiFileList;
 struct IcebergMultiFileReader;
+struct IcebergMultiFileReaderGlobalState;
 struct RowGroupOrderOptions;
 
 struct IcebergManifestScanningState {
@@ -107,6 +108,7 @@ public:
 
 private:
 	friend struct IcebergMultiFileList;
+	friend struct IcebergMultiFileReader;
 	friend class ClientSideScanPlanProvider;
 
 	ClientContext &context;
@@ -119,6 +121,9 @@ private:
 	mutable annotated_mutex lock;
 	mutable annotated_mutex delete_lock DUCKDB_ACQUIRED_AFTER(lock);
 	mutable ManifestEntryReadState read_state;
+
+	//! Pointer to the multi file reader's global state
+	mutable optional_ptr<IcebergMultiFileReaderGlobalState> global_state;
 
 	mutable bool server_side_planning_enabled DUCKDB_GUARDED_BY(lock) = true;
 
@@ -197,7 +202,7 @@ private:
 	void SetOptions(const IcebergOptions &options);
 	void Bind(vector<LogicalType> &return_types, vector<Identifier> &names);
 	unique_ptr<IcebergMultiFileList> PushdownInternal(ClientContext &context, TableFilterSet &new_filters,
-	                                                  const vector<column_t> &column_indexes) const;
+	                                                  const vector<column_t> &column_ids) const;
 	IcebergMultiFileList(shared_ptr<IcebergMultiFileListSharedState> shared_state);
 	void GetStatistics(vector<PartitionStatistics> &result) const;
 
@@ -261,6 +266,7 @@ private:
 	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
 	equality_delete_map_t &GetEqualityDeleteData() const DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
 	IcebergScanPlanProvider &GetScanPlanProvider() const DUCKDB_REQUIRES(shared_state->lock);
+	const ColumnIndex &GetColumnIndexForFilter(ProjectionIndex index) const;
 
 private:
 	friend class ClientSideScanPlanProvider;

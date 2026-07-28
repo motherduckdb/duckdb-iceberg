@@ -201,6 +201,7 @@ IcebergMultiFileReader::InitializeGlobalState(ClientContext &context, const Mult
 	auto res =
 	    make_uniq<IcebergMultiFileReaderGlobalState>(std::move(extra_columns), file_list, std::move(scan_columns),
 	                                                 std::move(scan_column_ids), std::move(equality_delete_columns));
+	iceberg_multi_file_list.shared_state->global_state = *res;
 	return std::move(res);
 }
 

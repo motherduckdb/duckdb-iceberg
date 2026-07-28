@@ -1562,6 +1562,7 @@
         "test/sql/storage/types/variant/variant_extract_stats.test",
         "test/sql/storage/types/variant/variant_shredding_empty_keys.test",
         "test/sql/storage/types/variant/variant_shredding_omit_untyped.test",
+        "test/sql/storage/types/variant/variant_extract_filter_pushdown.test",
         "test/sql/function/variant/variant_array_length_shredded.test",
         "test/sql/function/variant/variant_exists_shredded.test",
         "test/sql/function/variant/variant_keys_shredded.test",
