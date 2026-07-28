@@ -374,9 +374,14 @@ IcebergMultiFileList::PushdownInternal(ClientContext &context, TableFilterSet &n
 }
 
 unique_ptr<MultiFileList>
-IcebergMultiFileList::DynamicFilterPushdown(ClientContext &context, const MultiFileOptions &options,
-                                            const vector<Identifier> &, const vector<LogicalType> &,
-                                            const vector<ColumnIndex> &column_indexes, TableFilterSet &filters) const {
+IcebergMultiFileList::DynamicFilterPushdown(MultiFileDynamicPushdownInfo &pushdown_info) const {
+	auto &options = pushdown_info.options;
+	auto &names = pushdown_info.column_names;
+	auto &types = pushdown_info.column_types;
+	auto &column_indexes = pushdown_info.column_indexes;
+	auto &context = pushdown_info.context;
+	auto &filters = pushdown_info.filters;
+
 	if (!filters.HasFilters()) {
 		return nullptr;
 	}

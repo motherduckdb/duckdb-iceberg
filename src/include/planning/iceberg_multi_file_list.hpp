@@ -167,10 +167,7 @@ public:
 
 public:
 	//! MultiFileList API
-	unique_ptr<MultiFileList> DynamicFilterPushdown(ClientContext &context, const MultiFileOptions &options,
-	                                                const vector<Identifier> &names, const vector<LogicalType> &types,
-	                                                const vector<ColumnIndex> &column_indexes,
-	                                                TableFilterSet &filters) const override;
+	unique_ptr<MultiFileList> DynamicFilterPushdown(MultiFileDynamicPushdownInfo &pushdown_info) const override;
 	unique_ptr<MultiFileList> ComplexFilterPushdown(ClientContext &context, const MultiFileOptions &options,
 	                                                MultiFilePushdownInfo &info,
 	                                                vector<unique_ptr<Expression>> &filters) const override;
