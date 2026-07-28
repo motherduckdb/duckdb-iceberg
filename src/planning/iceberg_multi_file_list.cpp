@@ -744,10 +744,14 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 		if (!FilePartitionMatchesFilter(data_file, manifest_file, metadata, schema)) {
 			return false;
 		}
+		// Equality-delete files carry per-column value bounds, so a predicate on an equality column that
+		// is disjoint from those bounds means the file cannot delete any row the scan returns - prune it.
+		// Positional-delete files only carry file_path bounds and remain filtered on partitions only.
+		bool is_equality_delete = data_file.content == IcebergManifestEntryContentType::EQUALITY_DELETES;
 		if (data_file.lower_bounds.empty() || data_file.upper_bounds.empty() ||
-		    file_type == IcebergManifestContentType::DELETE) {
+		    (file_type == IcebergManifestContentType::DELETE && !is_equality_delete)) {
 			// There are no bounds statistics for the file, can't filter,
-			// or it is a delete file, which should only be filtered on partitions
+			// or it is a positional delete file, which should only be filtered on partitions
 			continue;
 		}
 
