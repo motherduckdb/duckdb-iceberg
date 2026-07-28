@@ -1,0 +1,61 @@
+# name: benchmark/file_pruning_benchmarks/prune_equality_deletes.benchmark
+# description: prune equality deletes when a given predicate would not select rows an equality delete would filter out
+# group: [file_pruning_benchmarks]
+
+name Prune positional deletes from unread partitions
+group file_pruning_benchmarks
+subgroup positional_deletes
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Build a DuckDB-written, format-version 2 table partitioned by day(event_date):
+#   * 365 day-partitions
+#   * a single merge-on-read DELETE removes id=0 from every partition, which writes one
+#     positional delete file per data file => 365 positional delete files, one per partition.
+# The timed query touches a single day-partition. Only that day's positional delete file can
+# affect the result; the other 364 reference data files in partitions the filter excludes.
+# Without metrics/partition-based delete pruning every one of the 365 delete files is opened and
+# materialized; with pruning only the one belonging to the scanned partition is read.
+load
+SET enable_external_file_cache=false;
+SET unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=true;
+CREATE SECRET (
+    TYPE S3,
+    KEY_ID 'admin',
+    SECRET 'password',
+    ENDPOINT '127.0.0.1:9000',
+    URL_STYLE 'path',
+    USE_SSL 0
+);
+ATTACH '' AS my_datalake (
+    TYPE ICEBERG,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    ENDPOINT 'http://127.0.0.1:8181',
+);
+CREATE SCHEMA if not exists my_datalake.default;
+DROP TABLE IF EXISTS my_datalake.default.prune_positional_deletes;
+CREATE TABLE my_datalake.default.prune_positional_deletes (
+    id BIGINT,
+    event VARCHAR,
+    event_date DATE
+);
+INSERT INTO my_datalake.default.prune_positional_deletes
+SELECT
+    range % 1000,
+    'e' || range::VARCHAR,
+    DATE '2024-01-01' + (range // 1000)::INTEGER
+FROM range(365000);
+DELETE FROM my_datalake.default.prune_positional_deletes WHERE id = 1 or id = 2 or id = 3 or id = 10 or id = 20;
+
+run
+SELECT *
+FROM my_datalake.default.prune_positional_deletes
+WHERE id = 50;
+
