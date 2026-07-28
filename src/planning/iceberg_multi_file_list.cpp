@@ -126,16 +126,6 @@ IcebergScanPlanProvider &IcebergMultiFileList::GetScanPlanProvider() const {
 	return *scan_plan_provider;
 }
 
-const ColumnIndex &IcebergMultiFileList::GetColumnIndexForFilter(ProjectionIndex index) const {
-	auto &global_state = shared_state->global_state;
-	D_ASSERT(global_state);
-	auto &scan_column_ids = global_state->scan_column_ids;
-	if (index > scan_column_ids.size()) {
-		throw InternalException("Filter projection index (%d) is out of range of column_indexes", index.GetIndex());
-	}
-	return scan_column_ids[index];
-}
-
 position_delete_map_t &IcebergMultiFileList::GetPositionalDeleteData() const {
 	return GetScanPlanProvider().PositionalDeleteData();
 }
@@ -289,9 +279,7 @@ static unique_ptr<Expression> ExtractFilterExpressionForPath(const Expression &e
 } // namespace
 
 unique_ptr<ExpressionFilter> IcebergMultiFileList::GetFilterForColumnIndex(const ColumnIndex &column_index) const {
-	auto primary_index = column_index.GetPrimaryIndex();
-
-	auto filter = table_filters.TryGetFilterByColumnIndex(primary_index);
+	auto filter = table_filters.TryGetFilterByColumnIndex(column_index);
 	if (!filter) {
 		return nullptr;
 	}
@@ -349,9 +337,9 @@ void IcebergMultiFileList::Bind(vector<LogicalType> &return_types, vector<Identi
 	this->types = return_types;
 }
 
-unique_ptr<IcebergMultiFileList> IcebergMultiFileList::PushdownInternal(ClientContext &context,
-                                                                        TableFilterSet &new_filters,
-                                                                        const vector<column_t> &column_ids) const {
+unique_ptr<IcebergMultiFileList>
+IcebergMultiFileList::PushdownInternal(ClientContext &context, TableFilterSet &new_filters,
+                                       const vector<ColumnIndex> &column_indexes) const {
 	unique_ptr<RowGroupOrderOptions> filtered_scan_order;
 	{
 		annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
@@ -366,12 +354,13 @@ unique_ptr<IcebergMultiFileList> IcebergMultiFileList::PushdownInternal(ClientCo
 	// The supplied filter set is the complete set of filters for the new view.
 	for (auto &entry : new_filters) {
 		auto projection_index = ProjectionIndex(entry.GetIndex().GetIndex());
-		auto primary_index = column_ids[projection_index];
+		auto &column_index = column_indexes[projection_index];
+		auto primary_index = column_index.GetPrimaryIndex();
 		if (primary_index >= names.size()) {
 			continue;
 		}
 		auto &filter = ExpressionFilter::GetExpressionFilter(entry.Filter(), "IcebergMultiFileList::PushdownInternal");
-		result_filter_set.PushFilter(projection_index, filter.Copy());
+		result_filter_set.PushFilter(column_index, filter.Copy());
 	}
 
 	filtered_list->table_filters = std::move(result_filter_set);
@@ -387,7 +376,7 @@ unique_ptr<IcebergMultiFileList> IcebergMultiFileList::PushdownInternal(ClientCo
 unique_ptr<MultiFileList>
 IcebergMultiFileList::DynamicFilterPushdown(ClientContext &context, const MultiFileOptions &options,
                                             const vector<Identifier> &, const vector<LogicalType> &,
-                                            const vector<column_t> &column_ids, TableFilterSet &filters) const {
+                                            const vector<ColumnIndex> &column_indexes, TableFilterSet &filters) const {
 	if (!filters.HasFilters()) {
 		return nullptr;
 	}
@@ -398,7 +387,7 @@ IcebergMultiFileList::DynamicFilterPushdown(ClientContext &context, const MultiF
 	for (auto &entry : filters) {
 		auto &filter =
 		    ExpressionFilter::GetExpressionFilter(entry.Filter(), "IcebergMultiFileList::DynamicFilterPushdown");
-		auto column_id = column_ids[entry.GetIndex().GetIndex()];
+		auto column_id = column_indexes[entry.GetIndex().GetIndex()];
 		auto previously_pushed_down_filter = table_filters.TryGetFilterByColumnIndex(column_id);
 		if (!previously_pushed_down_filter || !filter.Equals(*previously_pushed_down_filter)) {
 			filters_changed = true;
@@ -408,7 +397,7 @@ IcebergMultiFileList::DynamicFilterPushdown(ClientContext &context, const MultiF
 	if (filters_changed) {
 		// Dynamic filter pushdown supplies the complete effective filter for every column. This includes filters
 		// already pushed down by ComplexFilterPushdown, potentially combined with a new runtime filter.
-		auto new_snap = PushdownInternal(context, *filters_copy, column_ids);
+		auto new_snap = PushdownInternal(context, *filters_copy, column_indexes);
 		return std::move(new_snap);
 	}
 	return nullptr;
@@ -432,7 +421,7 @@ unique_ptr<MultiFileList> IcebergMultiFileList::ComplexFilterPushdown(ClientCont
 		return nullptr;
 	}
 
-	return PushdownInternal(context, filter_set, info.column_ids);
+	return PushdownInternal(context, filter_set, info.column_indexes);
 }
 
 vector<OpenFileInfo> IcebergMultiFileList::GetAllFiles() const {
@@ -747,8 +736,7 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 	}
 
 	for (auto &entry : table_filters) {
-		auto index = entry.first;
-		auto &column_index = GetColumnIndexForFilter(index);
+		auto &column_index = entry.first;
 		auto primary_index = column_index.GetPrimaryIndex();
 		auto &column = *schema.columns[primary_index];
 
@@ -1325,11 +1313,13 @@ void IcebergMultiFileList::InitializeScanPlanProvider() const {
 			request.use_snapshot_schema = snapshot_info.snapshot->snapshot_id != GetMetadata().current_snapshot_id;
 			unique_ptr<rest_api_objects::Expression> server_side_filter;
 			for (auto &filter : table_filters) {
-				if (filter.first >= GetSchema().columns.size()) {
+				auto &column_index = filter.first;
+				auto primary_index = column_index.GetPrimaryIndex();
+				if (primary_index >= GetSchema().columns.size()) {
 					continue;
 				}
 				auto converted =
-				    IcebergExpression::TryConvertFilter(*filter.second->expr, GetSchema().columns[filter.first]->name);
+				    IcebergExpression::TryConvertFilter(*filter.second->expr, GetSchema().columns[primary_index]->name);
 				server_side_filter =
 				    IcebergExpression::AndExpression(std::move(server_side_filter), std::move(converted));
 			}
