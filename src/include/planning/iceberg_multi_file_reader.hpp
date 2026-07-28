@@ -26,42 +26,61 @@ namespace duckdb {
 
 struct IcebergEqualityDeleteColumn {
 	int32_t field_id;
-	idx_t expression_index;
+	ColumnIndex column_index;
+	//! Index in the query projection, or INVALID_INDEX when this is a private equality-delete column
+	idx_t projected_expression_index;
 	LogicalType type;
+};
+
+struct IcebergEqualityDeleteReadState {
+	vector<idx_t> expression_indexes;
+	unique_ptr<Expression> expression;
 };
 
 struct IcebergMultiFileReaderGlobalState : public MultiFileReaderGlobalState {
 public:
-	IcebergMultiFileReaderGlobalState(vector<LogicalType> extra_columns_p, const MultiFileList &file_list_p,
+	IcebergMultiFileReaderGlobalState(bool supports_local_extra_columns, const MultiFileList &file_list_p,
 	                                  vector<MultiFileColumnDefinition> scan_columns_p,
 	                                  vector<ColumnIndex> scan_column_ids_p,
 	                                  vector<IcebergEqualityDeleteColumn> equality_delete_columns_p)
-	    : MultiFileReaderGlobalState({}, file_list_p, !extra_columns_p.empty()),
-	      local_extra_columns(std::move(extra_columns_p)), scan_columns(std::move(scan_columns_p)),
-	      scan_column_ids(std::move(scan_column_ids_p)), equality_delete_columns(std::move(equality_delete_columns_p)) {
+	    : MultiFileReaderGlobalState({}, file_list_p, supports_local_extra_columns),
+	      scan_columns(std::move(scan_columns_p)), scan_column_ids(std::move(scan_column_ids_p)),
+	      equality_delete_columns(std::move(equality_delete_columns_p)) {
 		for (idx_t i = 0; i < equality_delete_columns.size(); i++) {
 			equality_delete_field_indexes.emplace(equality_delete_columns[i].field_id, i);
 			equality_delete_types.push_back(equality_delete_columns[i].type);
 		}
 	}
 
-	void CacheEqualityDeleteExpression(idx_t file_list_idx, unique_ptr<Expression> expression) {
-		lock_guard<mutex> guard(equality_delete_expression_lock);
-		equality_delete_expressions.emplace(file_list_idx, std::move(expression));
+	void CacheEqualityDeleteExpressionIndexes(idx_t file_list_idx, vector<idx_t> expression_indexes) {
+		lock_guard<mutex> guard(equality_delete_read_state_lock);
+		auto &state = equality_delete_read_states[file_list_idx];
+		if (!state) {
+			state = make_uniq<IcebergEqualityDeleteReadState>();
+		}
+		state->expression_indexes = std::move(expression_indexes);
 	}
 
-	optional_ptr<const Expression> GetEqualityDeleteExpression(idx_t file_list_idx) const {
-		lock_guard<mutex> guard(equality_delete_expression_lock);
-		auto entry = equality_delete_expressions.find(file_list_idx);
-		if (entry == equality_delete_expressions.end()) {
-			throw InternalException("Equality-delete expression was not initialized for file-list index %llu",
+	void CacheEqualityDeleteExpression(idx_t file_list_idx, unique_ptr<Expression> expression) {
+		lock_guard<mutex> guard(equality_delete_read_state_lock);
+		auto &state = equality_delete_read_states[file_list_idx];
+		if (!state) {
+			state = make_uniq<IcebergEqualityDeleteReadState>();
+		}
+		state->expression = std::move(expression);
+	}
+
+	const IcebergEqualityDeleteReadState &GetEqualityDeleteReadState(idx_t file_list_idx) const {
+		lock_guard<mutex> guard(equality_delete_read_state_lock);
+		auto entry = equality_delete_read_states.find(file_list_idx);
+		if (entry == equality_delete_read_states.end()) {
+			throw InternalException("Equality-delete state was not initialized for file-list index %llu",
 			                        file_list_idx);
 		}
-		return entry->second.get();
+		return *entry->second;
 	}
 
 public:
-	vector<LogicalType> local_extra_columns;
 	vector<MultiFileColumnDefinition> scan_columns;
 	vector<ColumnIndex> scan_column_ids;
 	vector<IcebergEqualityDeleteColumn> equality_delete_columns;
@@ -70,8 +89,9 @@ public:
 	unordered_map<int32_t, idx_t> equality_delete_field_indexes;
 
 private:
-	mutable mutex equality_delete_expression_lock;
-	unordered_map<idx_t, unique_ptr<Expression>> equality_delete_expressions;
+	mutable mutex equality_delete_read_state_lock;
+	//! The values are heap allocated so references remain stable while other files are initialized in parallel.
+	unordered_map<idx_t, unique_ptr<IcebergEqualityDeleteReadState>> equality_delete_read_states;
 };
 
 struct IcebergMultiFileReader : public MultiFileReader {

@@ -1,0 +1,86 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/equality_deletes/test_equality_delete_extra_columns_per_file.test
+# description: Each data file privately scans only the nested fields required by its applicable equality deletes
+# group: [equality_deletes]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require-env EQUALITY_DELETE_WRITES_ENABLED 1
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+use my_datalake.default;
+
+statement ok
+set unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=true;
+
+statement ok
+drop table if exists equality_delete_extra_columns_per_file;
+
+statement ok
+create table equality_delete_extra_columns_per_file (
+	id integer,
+	payload struct(
+		nested struct(
+			deeper struct(
+				even_deeper struct(
+					deepest struct(
+						key integer,
+						label varchar
+					)
+				)
+			)
+		)
+	),
+	marker varchar
+);
+
+# This data file predates both equality deletes, so it needs private INTEGER and VARCHAR columns.
+statement ok
+insert into equality_delete_extra_columns_per_file values
+	(1, {'nested': {'deeper': {'even_deeper': {'deepest': {'key': 1, 'label': 'one'}}}}}, 'keep-old'),
+	(2, {'nested': {'deeper': {'even_deeper': {'deepest': {'key': 2, 'label': 'two'}}}}}, 'delete-by-key'),
+	(3, {'nested': {'deeper': {'even_deeper': {'deepest': {'key': 3, 'label': 'shared'}}}}}, 'delete-old-by-label');
+
+statement ok
+delete from equality_delete_extra_columns_per_file
+where payload.nested.deeper.even_deeper.deepest.key = 2;
+
+# This data file is newer than the key delete but older than the label delete, so it only needs the VARCHAR column.
+statement ok
+insert into equality_delete_extra_columns_per_file values
+	(4, {'nested': {'deeper': {'even_deeper': {'deepest': {'key': 4, 'label': 'four'}}}}}, 'keep-newer'),
+	(5, {'nested': {'deeper': {'even_deeper': {'deepest': {'key': 5, 'label': 'shared'}}}}}, 'delete-newer-by-label'),
+	(6, {'nested': {'deeper': {'even_deeper': {'deepest': {'key': 2, 'label': 'six'}}}}}, 'key-delete-does-not-apply');
+
+statement ok
+delete from equality_delete_extra_columns_per_file
+where payload.nested.deeper.even_deeper.deepest.label = 'shared';
+
+# This data file is newer than both deletes and therefore needs no private equality-delete columns.
+statement ok
+insert into equality_delete_extra_columns_per_file values
+	(7, {'nested': {'deeper': {'even_deeper': {'deepest': {'key': 2, 'label': 'shared'}}}}}, 'both-deletes-do-not-apply');
+
+# Neither equality key is projected by the query.
+query II
+select id, marker
+from equality_delete_extra_columns_per_file
+order by id;
+----
+1	keep-old
+4	keep-newer
+6	key-delete-does-not-apply
+7	both-deletes-do-not-apply
+
+statement ok
+drop table equality_delete_extra_columns_per_file;
