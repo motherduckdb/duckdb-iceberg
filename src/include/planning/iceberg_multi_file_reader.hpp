@@ -24,14 +24,6 @@
 
 namespace duckdb {
 
-struct IcebergEqualityDeleteScanColumn {
-	int32_t field_id;
-	ColumnIndex column_index;
-	//! Index in the query projection, or INVALID_INDEX when this is a private equality-delete column
-	idx_t projected_expression_index;
-	LogicalType type;
-};
-
 struct IcebergEqualityDeleteReadColumn {
 	int32_t field_id;
 	idx_t expression_index;
@@ -55,13 +47,8 @@ struct IcebergEqualityDeleteReadState {
 
 struct IcebergMultiFileReaderGlobalState : public MultiFileReaderGlobalState {
 public:
-	IcebergMultiFileReaderGlobalState(bool supports_local_extra_columns, const MultiFileList &file_list_p,
-	                                  vector<MultiFileColumnDefinition> scan_columns_p,
-	                                  vector<ColumnIndex> scan_column_ids_p,
-	                                  vector<IcebergEqualityDeleteScanColumn> equality_delete_scan_columns_p)
-	    : MultiFileReaderGlobalState({}, file_list_p, supports_local_extra_columns),
-	      scan_columns(std::move(scan_columns_p)), scan_column_ids(std::move(scan_column_ids_p)),
-	      equality_delete_scan_columns(std::move(equality_delete_scan_columns_p)) {
+	explicit IcebergMultiFileReaderGlobalState(const MultiFileList &file_list_p)
+	    : MultiFileReaderGlobalState({}, file_list_p, true) {
 	}
 
 	void CacheEqualityDeleteColumns(idx_t file_list_idx, vector<IcebergEqualityDeleteReadColumn> columns) {
@@ -93,11 +80,6 @@ public:
 		}
 		return *entry->second;
 	}
-
-public:
-	vector<MultiFileColumnDefinition> scan_columns;
-	vector<ColumnIndex> scan_column_ids;
-	vector<IcebergEqualityDeleteScanColumn> equality_delete_scan_columns;
 
 private:
 	mutable mutex equality_delete_read_state_lock;
@@ -156,6 +138,15 @@ private:
 	                                                             const BoundIcebergManifestEntry &bound_manifest_entry,
 	                                                             const vector<MultiFileColumnDefinition> &local_columns,
 	                                                             const IcebergEqualityDeleteReadState &read_state);
+	static vector<IcebergEqualityDeleteReadColumn>
+	AddEqualityDeleteColumns(const IcebergMultiFileList &multi_file_list,
+	                         const BoundIcebergManifestEntry &bound_manifest_entry,
+	                         vector<MultiFileColumnDefinition> &scan_columns, vector<ColumnIndex> &scan_column_ids,
+	                         MultiFileReaderData &reader_data, ClientContext &context);
+	static IcebergEqualityDeleteReadColumn
+	AddEqualityDeleteColumn(const IcebergMultiFileList &multi_file_list, int32_t field_id,
+	                        vector<MultiFileColumnDefinition> &scan_columns, vector<ColumnIndex> &scan_column_ids,
+	                        MultiFileReaderData &reader_data, ClientContext &context);
 	static void ApplyPartitionConstants(const IcebergMultiFileList &multi_file_list, MultiFileReaderData &reader_data,
 	                                    const vector<MultiFileColumnDefinition> &global_columns,
 	                                    const vector<ColumnIndex> &global_column_ids, ClientContext &context);

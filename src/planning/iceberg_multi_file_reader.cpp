@@ -130,75 +130,74 @@ IcebergMultiFileReader::InitializeGlobalState(ClientContext &context, const Mult
                                               const MultiFileReaderBindData &bind_data, const MultiFileList &file_list,
                                               const vector<MultiFileColumnDefinition> &global_columns,
                                               const vector<ColumnIndex> &global_column_ids) {
-	auto &iceberg_multi_file_list = file_list.Cast<IcebergMultiFileList>();
-	auto delete_manifest_entries = iceberg_multi_file_list.GetDeleteManifestEntries();
+	return make_uniq<IcebergMultiFileReaderGlobalState>(file_list);
+}
 
-	//! Collect all the field ids referenced by equality deletes
-	set<int32_t> required_field_ids;
-	for (auto &entry : delete_manifest_entries) {
-		auto &data_file = entry.entry.data_file;
-		if (data_file.content != IcebergManifestEntryContentType::EQUALITY_DELETES) {
-			continue;
-		}
-		for (auto field_id : data_file.equality_ids) {
-			required_field_ids.insert(field_id);
-		}
-	}
-
-	auto scan_columns = global_columns;
-	auto scan_column_ids = global_column_ids;
-	bool supports_local_extra_columns = false;
-	vector<IcebergEqualityDeleteScanColumn> equality_delete_scan_columns;
+IcebergEqualityDeleteReadColumn IcebergMultiFileReader::AddEqualityDeleteColumn(
+    const IcebergMultiFileList &multi_file_list, int32_t field_id, vector<MultiFileColumnDefinition> &scan_columns,
+    vector<ColumnIndex> &scan_column_ids, MultiFileReaderData &reader_data, ClientContext &context) {
 	auto field_id_to_scan_column = CreateFieldIdMap(scan_columns);
-	for (auto field_id : required_field_ids) {
-		MultiFileColumnPath column_path;
-		auto field_entry = field_id_to_scan_column.find(field_id);
-		if (field_entry == field_id_to_scan_column.end()) {
-			auto column = iceberg_multi_file_list.GetMetadata().FindColumnByFieldId(field_id);
-			if (!column) {
-				throw InvalidConfigurationException(
-				    "Column %d must be read to apply equality deletes, but no schema contains that field id", field_id);
-			}
-			auto new_column = column->GetMultiFileColumnDefinition();
-			// Equality-delete matching treats a field that is absent from a data file as NULL,
-			// independently of any historical initial default.
-			new_column.default_expression = make_uniq<ConstantExpression>(Value(new_column.type));
-			scan_columns.push_back(std::move(new_column));
-			column_path.push_back(scan_columns.size() - 1);
-			DUCKDB_LOG(context, IcebergLogType, "Reading dropped column '%s' privately for equality deletes",
-			           column->name);
-		} else {
-			column_path = field_entry->second;
+	MultiFileColumnPath column_path;
+	auto field_entry = field_id_to_scan_column.find(field_id);
+	if (field_entry == field_id_to_scan_column.end()) {
+		auto column = multi_file_list.GetMetadata().FindColumnByFieldId(field_id);
+		if (!column) {
+			throw InvalidConfigurationException(
+			    "Column %d must be read to apply equality deletes, but no schema contains that field id", field_id);
 		}
-
-		auto equality_column_id = CreateColumnIndex(column_path);
-		auto root_column_index = equality_column_id.GetPrimaryIndex();
-		auto &column = GetColumnFromPath(scan_columns, column_path);
-		if (equality_column_id.HasChildren()) {
-			equality_column_id.SetPushdownExtractType(scan_columns[root_column_index].type);
-		}
-		idx_t expression_index = DConstants::INVALID_INDEX;
-		if (column_path.size() == 1) {
-			//! A nested query projection can contain additional struct-extract expressions outside the scan.
-			//! Always scan nested equality fields privately so their expression is independent of that projection.
-			for (idx_t i = 0; i < scan_column_ids.size(); i++) {
-				if (scan_column_ids[i] == equality_column_id) {
-					expression_index = i;
-					break;
-				}
-			}
-		}
-		if (expression_index == DConstants::INVALID_INDEX) {
-			supports_local_extra_columns = true;
-		}
-		equality_delete_scan_columns.push_back(
-		    {field_id, std::move(equality_column_id), expression_index, column.type});
+		auto new_column = column->GetMultiFileColumnDefinition();
+		// Equality-delete matching treats a field that is absent from a data file as NULL,
+		// independently of any historical initial default.
+		new_column.default_expression = make_uniq<ConstantExpression>(Value(new_column.type));
+		scan_columns.push_back(std::move(new_column));
+		column_path.push_back(scan_columns.size() - 1);
+		DUCKDB_LOG(context, IcebergLogType, "Reading dropped column '%s' privately for equality deletes", column->name);
+	} else {
+		column_path = field_entry->second;
 	}
 
-	auto res = make_uniq<IcebergMultiFileReaderGlobalState>(supports_local_extra_columns, file_list,
-	                                                        std::move(scan_columns), std::move(scan_column_ids),
-	                                                        std::move(equality_delete_scan_columns));
-	return std::move(res);
+	auto equality_column_id = CreateColumnIndex(column_path);
+	auto root_column_index = equality_column_id.GetPrimaryIndex();
+	auto &column = GetColumnFromPath(scan_columns, column_path);
+	if (equality_column_id.HasChildren()) {
+		equality_column_id.SetPushdownExtractType(scan_columns[root_column_index].type);
+	}
+	idx_t expression_index = DConstants::INVALID_INDEX;
+	if (column_path.size() == 1) {
+		//! A nested query projection can contain additional struct-extract expressions outside the scan.
+		//! Always scan nested equality fields privately so their expression is independent of that projection.
+		for (idx_t i = 0; i < scan_column_ids.size(); i++) {
+			if (scan_column_ids[i] == equality_column_id) {
+				expression_index = i;
+				break;
+			}
+		}
+	}
+	if (expression_index == DConstants::INVALID_INDEX) {
+		expression_index = scan_column_ids.size();
+		scan_column_ids.push_back(std::move(equality_column_id));
+		reader_data.extra_columns.push_back(column.type);
+	}
+	return {field_id, expression_index, column.type};
+}
+
+vector<IcebergEqualityDeleteReadColumn> IcebergMultiFileReader::AddEqualityDeleteColumns(
+    const IcebergMultiFileList &multi_file_list, const BoundIcebergManifestEntry &bound_manifest_entry,
+    vector<MultiFileColumnDefinition> &scan_columns, vector<ColumnIndex> &scan_column_ids,
+    MultiFileReaderData &reader_data, ClientContext &context) {
+	set<int32_t> required_field_ids;
+	for (auto &delete_file_ref : multi_file_list.GetEqualityDeletesForFile(bound_manifest_entry)) {
+		for (auto &entry : delete_file_ref.get().equality_values) {
+			required_field_ids.insert(entry.first);
+		}
+	}
+
+	vector<IcebergEqualityDeleteReadColumn> result;
+	for (auto field_id : required_field_ids) {
+		result.push_back(
+		    AddEqualityDeleteColumn(multi_file_list, field_id, scan_columns, scan_column_ids, reader_data, context));
+	}
+	return result;
 }
 
 static void ApplyFieldMapping(MultiFileColumnDefinition &col, const vector<IcebergFieldMapping> &mappings,
@@ -390,39 +389,18 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
 	auto file_id = reader_data.reader->file_list_idx.GetIndex();
 	auto bound_manifest_entry = multi_file_list.GetManifestEntry(file_id);
 	multi_file_list.ProcessDeletes();
-	auto delete_files = multi_file_list.GetEqualityDeletesForFile(bound_manifest_entry);
 
-	set<int32_t> required_field_ids;
-	for (auto &delete_file_ref : delete_files) {
-		for (auto &entry : delete_file_ref.get().equality_values) {
-			const auto field_id = entry.first;
-			required_field_ids.insert(field_id);
-		}
-	}
-
-	auto local_scan_column_ids = iceberg_state.scan_column_ids;
-	vector<IcebergEqualityDeleteReadColumn> read_columns;
-	for (auto &column : iceberg_state.equality_delete_scan_columns) {
-		if (!required_field_ids.count(column.field_id)) {
-			//! Not required by the read for this data file, delete doesn't apply
-			continue;
-		}
-		auto expression_index = column.projected_expression_index;
-		if (expression_index == DConstants::INVALID_INDEX) {
-			//! The column required by this equality delete is not projected
-			expression_index = local_scan_column_ids.size();
-			local_scan_column_ids.push_back(column.column_index);
-			reader_data.extra_columns.push_back(column.type);
-		}
-		read_columns.push_back({column.field_id, expression_index, column.type});
-	}
+	auto scan_columns = global_columns;
+	auto scan_column_ids = global_column_ids;
+	auto read_columns = AddEqualityDeleteColumns(multi_file_list, bound_manifest_entry, scan_columns, scan_column_ids,
+	                                             reader_data, context);
 	iceberg_state.CacheEqualityDeleteColumns(file_id, std::move(read_columns));
 
-	FinalizeBind(reader_data, bind_data.file_options, bind_data.reader_bind, iceberg_state.scan_columns,
-	             local_scan_column_ids, context, gstate);
+	FinalizeBind(reader_data, bind_data.file_options, bind_data.reader_bind, scan_columns, scan_column_ids, context,
+	             gstate);
 
-	return CreateMapping(context, reader_data, iceberg_state.scan_columns, local_scan_column_ids, table_filters,
-	                     gstate.file_list, bind_data.reader_bind, bind_data.virtual_columns);
+	return CreateMapping(context, reader_data, scan_columns, scan_column_ids, table_filters, gstate.file_list,
+	                     bind_data.reader_bind, bind_data.virtual_columns);
 }
 
 void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, const MultiFileOptions &file_options,
