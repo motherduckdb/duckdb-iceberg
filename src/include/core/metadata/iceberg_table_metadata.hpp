@@ -61,7 +61,8 @@ public:
 	//! Version extraction and identification
 	static bool UnsafeVersionGuessingEnabled(ClientContext &context);
 	static string GetTableVersionFromHint(const string &path, FileSystem &fs, string version_format);
-	static string GuessTableVersion(const string &meta_path, FileSystem &fs, const IcebergOptions &options);
+	static string GuessTableVersion(const string &meta_path, FileSystem &fs, const IcebergOptions &options,
+	                                const string &version_hint_probe_error = string());
 	static string PickTableVersion(vector<OpenFileInfo> &found_metadata, string &version_pattern, string &glob);
 
 	//! Internal JSON parsing functions
