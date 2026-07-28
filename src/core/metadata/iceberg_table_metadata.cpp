@@ -1,6 +1,9 @@
 #include "core/metadata/iceberg_table_metadata.hpp"
 
+#include "duckdb/common/error_data.hpp"
 #include "duckdb/common/exception.hpp"
+
+#include <cerrno>
 
 #include "common/iceberg_utils.hpp"
 #include "catalog/rest/api/catalog_utils.hpp"
@@ -180,6 +183,37 @@ static string GenerateMetaDataUrl(FileSystem &fs, const string &meta_path, strin
 	throw InvalidConfigurationException(error);
 }
 
+//! Probe for the version-hint file. We open it directly instead of calling FileSystem::FileExists because
+//! HTTPFileSystem implements FileExists as a try/catch around OpenFile, collapsing 403s, credential errors,
+//! unresolved cross-region redirects, throttling and timeouts into the same `false` as a genuinely absent file.
+//! out_error stays empty for a genuine absence (ENOENT / HTTP 404) so callers keep their original message.
+static bool TryVersionHintExists(FileSystem &fs, const string &version_hint_path, string &out_error) {
+	try {
+		auto handle = fs.OpenFile(version_hint_path, FileFlags::FILE_FLAGS_READ);
+		(void)handle;
+		return true;
+	} catch (std::exception &e) {
+		ErrorData error(e);
+		auto &extra_info = error.ExtraInfo();
+
+		auto errno_entry = extra_info.find("errno");
+		if (errno_entry != extra_info.end() && errno_entry->second == std::to_string(ENOENT)) {
+			return false;
+		}
+		auto status_entry = extra_info.find("status_code");
+		if (status_entry != extra_info.end() && status_entry->second == "404") {
+			return false;
+		}
+
+		// what() holds the JSON-serialized exception, RawMessage() the human-readable text
+		out_error = error.RawMessage();
+		return false;
+	} catch (...) {
+		out_error = "unknown error";
+		return false;
+	}
+}
+
 string IcebergTableMetadata::GetTableVersionFromHint(const string &meta_path, FileSystem &fs,
                                                      string version_file = DEFAULT_VERSION_HINT_FILE) {
 	auto version_file_path = fs.JoinPath(meta_path, version_file);
@@ -200,7 +234,8 @@ bool IcebergTableMetadata::UnsafeVersionGuessingEnabled(ClientContext &context) 
 	return !result.IsNull() && result.GetValue<bool>();
 }
 
-string IcebergTableMetadata::GuessTableVersion(const string &meta_path, FileSystem &fs, const IcebergOptions &options) {
+string IcebergTableMetadata::GuessTableVersion(const string &meta_path, FileSystem &fs, const IcebergOptions &options,
+                                               const string &version_hint_probe_error) {
 	string selected_metadata;
 	string version_pattern = "*"; // TODO: Different "table_version" strings could customize this
 	string compression_suffix = "";
@@ -224,9 +259,14 @@ string IcebergTableMetadata::GuessTableVersion(const string &meta_path, FileSyst
 		}
 	}
 
-	throw InvalidConfigurationException(
-	    "Could not guess Iceberg table version using '%s' compression and format(s): '%s'", metadata_compression_codec,
-	    version_format);
+	string error =
+	    StringUtil::Format("Could not guess Iceberg table version using '%s' compression and format(s): '%s'",
+	                       metadata_compression_codec, version_format);
+	if (!version_hint_probe_error.empty()) {
+		error += StringUtil::Format("\nProbed version-hint path '%s' and the filesystem reported: %s",
+		                            fs.JoinPath(meta_path, DEFAULT_VERSION_HINT_FILE), version_hint_probe_error);
+	}
+	throw InvalidConfigurationException(error);
 }
 
 string IcebergTableMetadata::PickTableVersion(vector<OpenFileInfo> &found_metadata, string &version_pattern,
@@ -263,22 +303,29 @@ string IcebergTableMetadata::GetMetaDataPath(ClientContext &context, const strin
 		version_hint = table_version;
 		return GenerateMetaDataUrl(fs, meta_path, version_hint, options);
 	}
-	if (fs.FileExists(fs.JoinPath(meta_path, DEFAULT_VERSION_HINT_FILE))) {
+	auto version_hint_path = fs.JoinPath(meta_path, DEFAULT_VERSION_HINT_FILE);
+	string version_hint_probe_error;
+	if (TryVersionHintExists(fs, version_hint_path, version_hint_probe_error)) {
 		// We're guessing, but a version-hint.text exists so we'll use that
 		version_hint = GetTableVersionFromHint(meta_path, fs, DEFAULT_VERSION_HINT_FILE);
 		return GenerateMetaDataUrl(fs, meta_path, version_hint, options);
 	}
 	if (!UnsafeVersionGuessingEnabled(context)) {
 		// Make sure we're allowed to guess versions
-		throw InvalidConfigurationException(
+		string error = StringUtil::Format(
 		    "Failed to read iceberg table. No version was provided and no version-hint could be found, globbing the "
 		    "filesystem to locate the latest version is disabled by default as this is considered unsafe and could "
 		    "result in reading uncommitted data. To enable this use 'SET %s = true;'",
 		    VERSION_GUESSING_CONFIG_VARIABLE);
+		if (!version_hint_probe_error.empty()) {
+			error += StringUtil::Format("\nProbed version-hint path '%s' and the filesystem reported: %s",
+			                            version_hint_path, version_hint_probe_error);
+		}
+		throw InvalidConfigurationException(error);
 	}
 
 	// We are allowed to guess to guess from file paths
-	return GuessTableVersion(meta_path, fs, options);
+	return GuessTableVersion(meta_path, fs, options, version_hint_probe_error);
 }
 
 bool IcebergTableMetadata::HasLastColumnId() const {
