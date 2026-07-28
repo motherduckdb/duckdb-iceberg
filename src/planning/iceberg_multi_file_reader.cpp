@@ -390,6 +390,9 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
 	auto bound_manifest_entry = multi_file_list.GetManifestEntry(file_id);
 	multi_file_list.ProcessDeletes();
 
+	//! Make a copy of the global columns+column_ids, if we have equality deletes we will add columns to this
+	//! This is done so CreateMapping treats these columns as required for the current file,
+	//! and sets up local_column_ids+expressions for these columns.
 	auto scan_columns = global_columns;
 	auto scan_column_ids = global_column_ids;
 	auto read_columns = AddEqualityDeleteColumns(multi_file_list, bound_manifest_entry, scan_columns, scan_column_ids,
