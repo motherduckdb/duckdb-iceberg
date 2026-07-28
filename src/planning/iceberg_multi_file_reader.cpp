@@ -148,7 +148,7 @@ IcebergMultiFileReader::InitializeGlobalState(ClientContext &context, const Mult
 	auto scan_columns = global_columns;
 	auto scan_column_ids = global_column_ids;
 	bool supports_local_extra_columns = false;
-	vector<IcebergEqualityDeleteColumn> equality_delete_columns;
+	vector<IcebergEqualityDeleteScanColumn> equality_delete_scan_columns;
 	auto field_id_to_scan_column = CreateFieldIdMap(scan_columns);
 	for (auto field_id : required_field_ids) {
 		MultiFileColumnPath column_path;
@@ -191,12 +191,13 @@ IcebergMultiFileReader::InitializeGlobalState(ClientContext &context, const Mult
 		if (expression_index == DConstants::INVALID_INDEX) {
 			supports_local_extra_columns = true;
 		}
-		equality_delete_columns.push_back({field_id, std::move(equality_column_id), expression_index, column.type});
+		equality_delete_scan_columns.push_back(
+		    {field_id, std::move(equality_column_id), expression_index, column.type});
 	}
 
-	auto res =
-	    make_uniq<IcebergMultiFileReaderGlobalState>(supports_local_extra_columns, file_list, std::move(scan_columns),
-	                                                 std::move(scan_column_ids), std::move(equality_delete_columns));
+	auto res = make_uniq<IcebergMultiFileReaderGlobalState>(supports_local_extra_columns, file_list,
+	                                                        std::move(scan_columns), std::move(scan_column_ids),
+	                                                        std::move(equality_delete_scan_columns));
 	return std::move(res);
 }
 
@@ -394,26 +395,28 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
 	set<int32_t> required_field_ids;
 	for (auto &delete_file_ref : delete_files) {
 		for (auto &entry : delete_file_ref.get().equality_values) {
-			required_field_ids.insert(entry.first);
+			const auto field_id = entry.first;
+			required_field_ids.insert(field_id);
 		}
 	}
 
 	auto local_scan_column_ids = iceberg_state.scan_column_ids;
-	vector<idx_t> equality_expression_indexes(iceberg_state.equality_delete_columns.size(), DConstants::INVALID_INDEX);
-	for (idx_t i = 0; i < iceberg_state.equality_delete_columns.size(); i++) {
-		auto &column = iceberg_state.equality_delete_columns[i];
+	vector<IcebergEqualityDeleteReadColumn> read_columns;
+	for (auto &column : iceberg_state.equality_delete_scan_columns) {
 		if (!required_field_ids.count(column.field_id)) {
+			//! Not required by the read for this data file, delete doesn't apply
 			continue;
 		}
 		auto expression_index = column.projected_expression_index;
 		if (expression_index == DConstants::INVALID_INDEX) {
+			//! The column required by this equality delete is not projected
 			expression_index = local_scan_column_ids.size();
 			local_scan_column_ids.push_back(column.column_index);
 			reader_data.extra_columns.push_back(column.type);
 		}
-		equality_expression_indexes[i] = expression_index;
+		read_columns.push_back({column.field_id, expression_index, column.type});
 	}
-	iceberg_state.CacheEqualityDeleteExpressionIndexes(file_id, std::move(equality_expression_indexes));
+	iceberg_state.CacheEqualityDeleteColumns(file_id, std::move(read_columns));
 
 	FinalizeBind(reader_data, bind_data.file_options, bind_data.reader_bind, iceberg_state.scan_columns,
 	             local_scan_column_ids, context, gstate);
@@ -452,10 +455,11 @@ void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, cons
 	}
 	ApplyPartitionConstants(multi_file_list, reader_data, global_columns, global_column_ids, context);
 
-	auto equality_delete_expression = CreateEqualityDeleteExpression(
-	    multi_file_list, bound_manifest_entry, local_columns, global_state->Cast<IcebergMultiFileReaderGlobalState>());
-	global_state->Cast<IcebergMultiFileReaderGlobalState>().CacheEqualityDeleteExpression(
-	    file_id, std::move(equality_delete_expression));
+	auto &iceberg_state = global_state->Cast<IcebergMultiFileReaderGlobalState>();
+	auto &equality_delete_state = iceberg_state.GetEqualityDeleteReadState(file_id);
+	auto equality_delete_expression =
+	    CreateEqualityDeleteExpression(multi_file_list, bound_manifest_entry, local_columns, equality_delete_state);
+	iceberg_state.CacheEqualityDeleteExpression(file_id, std::move(equality_delete_expression));
 }
 
 void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, const MultiFileOptions &file_options,
@@ -469,7 +473,7 @@ void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, cons
 
 unique_ptr<Expression> IcebergMultiFileReader::CreateEqualityDeleteExpression(
     const IcebergMultiFileList &multi_file_list, const BoundIcebergManifestEntry &bound_manifest_entry,
-    const vector<MultiFileColumnDefinition> &local_columns, const IcebergMultiFileReaderGlobalState &global_state) {
+    const vector<MultiFileColumnDefinition> &local_columns, const IcebergEqualityDeleteReadState &read_state) {
 	auto delete_files = multi_file_list.GetEqualityDeletesForFile(bound_manifest_entry);
 	if (delete_files.empty()) {
 		return nullptr;
@@ -510,12 +514,12 @@ unique_ptr<Expression> IcebergMultiFileReader::CreateEqualityDeleteExpression(
 					continue;
 				}
 
-				auto state_entry = global_state.equality_delete_field_indexes.find(field_id);
-				if (state_entry == global_state.equality_delete_field_indexes.end()) {
+				auto state_entry = read_state.field_indexes.find(field_id);
+				if (state_entry == read_state.field_indexes.end()) {
 					throw InternalException("Missing private scan column for equality-delete field id %d", field_id);
 				}
 				auto equality_column_index = state_entry->second;
-				auto &column = global_state.equality_delete_columns[equality_column_index];
+				auto &column = read_state.columns[equality_column_index];
 				auto bound_ref = make_uniq<BoundReferenceExpression>(column.type, equality_column_index);
 				if (!constant.IsNull()) {
 					equalities.push_back(
@@ -574,22 +578,12 @@ void IcebergMultiFileReader::FinalizeChunk(ClientContext &context, const MultiFi
 	auto equality_delete_expression = equality_delete_state.expression.get();
 	if (equality_delete_expression) {
 		ExpressionExecutor equality_delete_executor(context);
-		vector<unique_ptr<Expression>> unused_column_expressions;
-		unused_column_expressions.reserve(iceberg_state.equality_delete_columns.size());
-		D_ASSERT(equality_delete_state.expression_indexes.size() == iceberg_state.equality_delete_columns.size());
-		for (idx_t i = 0; i < iceberg_state.equality_delete_columns.size(); i++) {
-			auto expression_index = equality_delete_state.expression_indexes[i];
-			if (expression_index == DConstants::INVALID_INDEX) {
-				unused_column_expressions.push_back(
-				    make_uniq<BoundConstantExpression>(Value(iceberg_state.equality_delete_columns[i].type)));
-				equality_delete_executor.AddExpression(*unused_column_expressions.back());
-				continue;
-			}
-			D_ASSERT(expression_index < reader_data.expressions.size());
-			equality_delete_executor.AddExpression(*reader_data.expressions[expression_index]);
+		for (auto &column : equality_delete_state.columns) {
+			D_ASSERT(column.expression_index < reader_data.expressions.size());
+			equality_delete_executor.AddExpression(*reader_data.expressions[column.expression_index]);
 		}
 		DataChunk equality_delete_chunk;
-		equality_delete_chunk.Initialize(context, iceberg_state.equality_delete_types);
+		equality_delete_chunk.Initialize(context, equality_delete_state.types);
 		equality_delete_executor.Execute(input_chunk, equality_delete_chunk);
 
 		ExpressionExecutor filter_executor(context, *equality_delete_expression);
