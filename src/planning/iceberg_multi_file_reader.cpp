@@ -394,32 +394,13 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
 	auto scan_column_ids = global_column_ids;
 	auto read_columns = AddEqualityDeleteColumns(multi_file_list, bound_manifest_entry, scan_columns, scan_column_ids,
 	                                             reader_data, context);
-	iceberg_state.CacheEqualityDeleteColumns(file_id, std::move(read_columns));
+	auto equality_delete_state = make_uniq<IcebergEqualityDeleteReadState>(std::move(read_columns));
 
-	FinalizeBind(reader_data, bind_data.file_options, bind_data.reader_bind, scan_columns, scan_column_ids, context,
-	             gstate);
+	MultiFileReader::FinalizeBind(reader_data, bind_data.file_options, bind_data.reader_bind, scan_columns,
+	                              scan_column_ids, context, gstate.multi_file_reader_state.get());
 
-	return CreateMapping(context, reader_data, scan_columns, scan_column_ids, table_filters, gstate.file_list,
-	                     bind_data.reader_bind, bind_data.virtual_columns);
-}
-
-void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, const MultiFileOptions &file_options,
-                                          const MultiFileReaderBindData &options,
-                                          const vector<MultiFileColumnDefinition> &global_columns,
-                                          const vector<ColumnIndex> &global_column_ids, ClientContext &context,
-                                          MultiFileGlobalState &gstate) {
-	auto global_state = gstate.multi_file_reader_state.get();
-	FinalizeBind(reader_data, file_options, options, global_columns, global_column_ids, context, global_state);
-
-	D_ASSERT(global_state);
-	// Get the metadata for this file
-	const auto &multi_file_list = dynamic_cast<const IcebergMultiFileList &>(*global_state->file_list);
 	auto &reader = *reader_data.reader;
-	auto file_id = reader.file_list_idx.GetIndex();
-
-	auto bound_manifest_entry = multi_file_list.GetManifestEntry(file_id);
 	const auto &file_path = bound_manifest_entry.entry.data_file.file_path;
-	multi_file_list.ProcessDeletes();
 	reader.deletion_filter = multi_file_list.GetPositionalDeletesForFile(file_path);
 
 	auto &local_columns = reader_data.reader->columns;
@@ -431,13 +412,14 @@ void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, cons
 			ApplyFieldMapping(local_column, mappings, root.field_mapping_indexes, context);
 		}
 	}
-	ApplyPartitionConstants(multi_file_list, reader_data, global_columns, global_column_ids, context);
+	ApplyPartitionConstants(multi_file_list, reader_data, scan_columns, scan_column_ids, context);
 
-	auto &iceberg_state = global_state->Cast<IcebergMultiFileReaderGlobalState>();
-	auto &equality_delete_state = iceberg_state.GetEqualityDeleteReadState(file_id);
-	auto equality_delete_expression =
-	    CreateEqualityDeleteExpression(multi_file_list, bound_manifest_entry, local_columns, equality_delete_state);
-	iceberg_state.CacheEqualityDeleteExpression(file_id, std::move(equality_delete_expression));
+	equality_delete_state->expression =
+	    CreateEqualityDeleteExpression(multi_file_list, bound_manifest_entry, local_columns, *equality_delete_state);
+	iceberg_state.CacheEqualityDeleteReadState(file_id, std::move(equality_delete_state));
+
+	return CreateMapping(context, reader_data, scan_columns, scan_column_ids, table_filters, gstate.file_list,
+	                     bind_data.reader_bind, bind_data.virtual_columns);
 }
 
 void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, const MultiFileOptions &file_options,
@@ -445,8 +427,7 @@ void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, cons
                                           const vector<MultiFileColumnDefinition> &global_columns,
                                           const vector<ColumnIndex> &global_column_ids, ClientContext &context,
                                           optional_ptr<MultiFileReaderGlobalState> global_state) {
-	MultiFileReader::FinalizeBind(reader_data, file_options, options, global_columns, global_column_ids, context,
-	                              global_state);
+	throw InternalException("IcebergMultiFileReader::FinalizeBind is unreachable");
 }
 
 unique_ptr<Expression> IcebergMultiFileReader::CreateEqualityDeleteExpression(

@@ -51,24 +51,14 @@ public:
 	    : MultiFileReaderGlobalState({}, file_list_p, true) {
 	}
 
-	void CacheEqualityDeleteColumns(idx_t file_list_idx, vector<IcebergEqualityDeleteReadColumn> columns) {
+	void CacheEqualityDeleteReadState(idx_t file_list_idx, unique_ptr<IcebergEqualityDeleteReadState> read_state) {
 		lock_guard<mutex> guard(equality_delete_read_state_lock);
-		auto &state = equality_delete_read_states[file_list_idx];
-		if (state) {
+		auto &cached_state = equality_delete_read_states[file_list_idx];
+		if (cached_state) {
 			throw InternalException("Equality-delete state was initialized twice for file-list index %llu",
 			                        file_list_idx);
 		}
-		state = make_uniq<IcebergEqualityDeleteReadState>(std::move(columns));
-	}
-
-	void CacheEqualityDeleteExpression(idx_t file_list_idx, unique_ptr<Expression> expression) {
-		lock_guard<mutex> guard(equality_delete_read_state_lock);
-		auto entry = equality_delete_read_states.find(file_list_idx);
-		if (entry == equality_delete_read_states.end()) {
-			throw InternalException("Equality-delete columns were not initialized for file-list index %llu",
-			                        file_list_idx);
-		}
-		entry->second->expression = std::move(expression);
+		cached_state = std::move(read_state);
 	}
 
 	const IcebergEqualityDeleteReadState &GetEqualityDeleteReadState(idx_t file_list_idx) const {
@@ -115,10 +105,6 @@ public:
 	                                      const vector<ColumnIndex> &global_column_ids,
 	                                      optional_ptr<TableFilterSet> table_filters, ClientContext &context,
 	                                      MultiFileGlobalState &gstate) override;
-	void FinalizeBind(MultiFileReaderData &reader_data, const MultiFileOptions &file_options,
-	                  const MultiFileReaderBindData &options, const vector<MultiFileColumnDefinition> &global_columns,
-	                  const vector<ColumnIndex> &global_column_ids, ClientContext &context,
-	                  MultiFileGlobalState &gstate);
 	void FinalizeBind(MultiFileReaderData &reader_data, const MultiFileOptions &file_options,
 	                  const MultiFileReaderBindData &options, const vector<MultiFileColumnDefinition> &global_columns,
 	                  const vector<ColumnIndex> &global_column_ids, ClientContext &context,
