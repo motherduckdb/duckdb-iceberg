@@ -1584,10 +1584,16 @@
       ]
     },
     {
-      "reason": "Tables already exist / Schema does not exist",
+      "reason": "Tables already exist / Schema does not exist / already exists",
       "paths": [
         "test/sql/storage/wal/wal_replay_unbound_index_create_index_during_wal.test",
         "test/sql/trigger/trigger_after_update_old_new_wal.test",
+        "test/sql/catalog/sequence/test_sequence_google_fuzz.test",
+        "test/sql/catalog/sequence/test_sequence_google_fuzz.test",
+        "test/sql/catalog/nested_schema/nested_table_persist.test",
+        "test/sql/catalog/nested_schema/nested_table_dml_persist.test",
+        "test/sql/catalog/nested_schema/nested_table_dml.test",
+        "test/sql/catalog/nested_schema/nested_table.test",
         "test/sql/storage/wal/wal_null_update_row_group_pruning.test"
       ]
     },
