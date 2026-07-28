@@ -36,7 +36,8 @@ public:
 	                                  vector<MultiFileColumnDefinition> scan_columns_p,
 	                                  vector<ColumnIndex> scan_column_ids_p,
 	                                  vector<IcebergEqualityDeleteColumn> equality_delete_columns_p)
-	    : MultiFileReaderGlobalState(std::move(extra_columns_p), file_list_p), scan_columns(std::move(scan_columns_p)),
+	    : MultiFileReaderGlobalState({}, file_list_p, !extra_columns_p.empty()),
+	      local_extra_columns(std::move(extra_columns_p)), scan_columns(std::move(scan_columns_p)),
 	      scan_column_ids(std::move(scan_column_ids_p)), equality_delete_columns(std::move(equality_delete_columns_p)) {
 		for (idx_t i = 0; i < equality_delete_columns.size(); i++) {
 			equality_delete_field_indexes.emplace(equality_delete_columns[i].field_id, i);
@@ -60,6 +61,7 @@ public:
 	}
 
 public:
+	vector<LogicalType> local_extra_columns;
 	vector<MultiFileColumnDefinition> scan_columns;
 	vector<ColumnIndex> scan_column_ids;
 	vector<IcebergEqualityDeleteColumn> equality_delete_columns;

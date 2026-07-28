@@ -389,6 +389,7 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
                                                               optional_ptr<TableFilterSet> table_filters,
                                                               ClientContext &context, MultiFileGlobalState &gstate) {
 	auto &iceberg_state = gstate.multi_file_reader_state->Cast<IcebergMultiFileReaderGlobalState>();
+	reader_data.extra_columns = iceberg_state.local_extra_columns;
 	FinalizeBind(reader_data, bind_data.file_options, bind_data.reader_bind, iceberg_state.scan_columns,
 	             iceberg_state.scan_column_ids, context, gstate);
 
