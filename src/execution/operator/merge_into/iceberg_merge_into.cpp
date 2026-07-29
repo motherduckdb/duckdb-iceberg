@@ -5,6 +5,8 @@
 #include "duckdb/planner/operator/logical_update.hpp"
 #include "duckdb/planner/operator/logical_merge_into.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
+#include "duckdb/common/types/value_map.hpp"
+#include "duckdb/execution/physical_operator_states.hpp"
 
 #include "execution/operator/merge_into/iceberg_merge_insert.hpp"
 #include "execution/operator/merge_into/iceberg_merge_update.hpp"
@@ -18,6 +20,90 @@
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
 
 namespace duckdb {
+
+namespace {
+
+vector<LogicalType> AddMergeRowIdType(const vector<LogicalType> &input_types, idx_t row_id_start) {
+	auto result = input_types;
+	result.insert(result.begin() + row_id_start, LogicalType::BIGINT);
+	return result;
+}
+
+class IcebergMergeRowIdGlobalState : public GlobalOperatorState {
+public:
+	mutex lock;
+	value_map_t<row_t> row_ids;
+	row_t next_row_id = 0;
+};
+
+//! PhysicalMergeInto expects one BIGINT row-id for duplicate-match detection, while Iceberg row identity is a
+//! tuple of virtual columns. Insert a query-local BIGINT key immediately before the Iceberg row-id columns. The
+//! original columns remain at the end of the chunk, preserving the layout expected by IcebergUpdate/Delete.
+class IcebergMergeRowId : public PhysicalOperator {
+public:
+	IcebergMergeRowId(PhysicalPlan &physical_plan, const vector<LogicalType> &input_types, idx_t row_id_start)
+	    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, AddMergeRowIdType(input_types, row_id_start),
+	                       1),
+	      row_id_start(row_id_start) {
+	}
+
+	string GetName() const override {
+		return "ICEBERG_MERGE_ROW_ID";
+	}
+
+	bool ParallelOperator() const override {
+		return true;
+	}
+
+	unique_ptr<GlobalOperatorState> GetGlobalOperatorState(ClientContext &context) const override {
+		return make_uniq<IcebergMergeRowIdGlobalState>();
+	}
+
+	OperatorResultType Execute(ExecutionContext &context, DataChunk &input, DataChunk &output,
+	                           GlobalOperatorState &gstate_p, OperatorState &state) const override {
+		for (idx_t col_idx = 0; col_idx < row_id_start; col_idx++) {
+			output.data[col_idx].Reference(input.data[col_idx]);
+		}
+		for (idx_t col_idx = row_id_start; col_idx < input.ColumnCount(); col_idx++) {
+			output.data[col_idx + 1].Reference(input.data[col_idx]);
+		}
+
+		auto &merge_row_ids = output.data[row_id_start];
+		merge_row_ids.SetVectorType(VectorType::FLAT_VECTOR);
+		auto merge_row_id_data = FlatVector::GetDataMutable<row_t>(merge_row_ids);
+		auto &validity = FlatVector::ValidityMutable(merge_row_ids);
+		validity.SetAllValid(input.size());
+
+		auto &gstate = gstate_p.Cast<IcebergMergeRowIdGlobalState>();
+		lock_guard<mutex> guard(gstate.lock);
+		for (idx_t row_idx = 0; row_idx < input.size(); row_idx++) {
+			vector<Value> row_id;
+			row_id.reserve(input.ColumnCount() - row_id_start);
+			for (idx_t col_idx = row_id_start; col_idx < input.ColumnCount(); col_idx++) {
+				row_id.push_back(input.GetValue(col_idx, row_idx));
+			}
+			if (row_id[0].IsNull()) {
+				validity.SetInvalid(row_idx);
+				continue;
+			}
+
+			auto iceberg_row_id = Value::TUPLE(std::move(row_id));
+			auto entry = gstate.row_ids.find(iceberg_row_id);
+			if (entry == gstate.row_ids.end()) {
+				auto merge_row_id = gstate.next_row_id++;
+				entry = gstate.row_ids.emplace(std::move(iceberg_row_id), merge_row_id).first;
+			}
+			merge_row_id_data[row_idx] = entry->second;
+		}
+		output.SetChildCardinality(input.size());
+		return OperatorResultType::NEED_MORE_INPUT;
+	}
+
+private:
+	idx_t row_id_start;
+};
+
+} // namespace
 
 void IcebergMergeInto::ProjectAndCastForCopy(ClientContext &context, DataChunk &input_chunk, PhysicalOperator &copy_op,
                                              ExpressionExecutor *expression_executor, DataChunk &projected_chunk,
@@ -209,7 +295,7 @@ static unique_ptr<MergeIntoOperator> IcebergPlanMergeIntoAction(IcebergCatalog &
 		}
 		vector<LogicalType> row_id_types {LogicalType::VARCHAR, LogicalType::BIGINT};
 		for (idx_t i = 0; i < 2; i++) {
-			auto ref = make_uniq<BoundReferenceExpression>(row_id_types[i], op.row_id_start + i + column_offset);
+			auto ref = make_uniq<BoundReferenceExpression>(row_id_types[i], op.row_id_start + i + column_offset + 1);
 			delete_op.expressions.push_back(std::move(ref));
 		}
 		delete_op.bound_constraints = std::move(bound_constraints);
@@ -291,9 +377,12 @@ PhysicalOperator &IcebergCatalog::PlanMergeInto(ClientContext &context, Physical
 		actions.emplace(entry.first, std::move(planned_actions));
 	}
 
+	auto &merge_row_id = planner.Make<IcebergMergeRowId>(plan.types, op.row_id_start);
+	merge_row_id.children.push_back(plan);
+
 	auto &result = planner.Make<PhysicalMergeInto>(op.types, std::move(actions), op.row_id_start, op.source_marker,
 	                                               true, op.return_chunk);
-	result.children.push_back(plan);
+	result.children.push_back(merge_row_id);
 	return result;
 }
 
