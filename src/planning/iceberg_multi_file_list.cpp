@@ -1,5 +1,6 @@
 #include "planning/iceberg_multi_file_list.hpp"
 
+#include "core/metadata/manifest/iceberg_manifest_list.hpp"
 #include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
 #include "duckdb/function/partition_stats.hpp"
 #include "duckdb/logging/logger.hpp"
@@ -757,10 +758,11 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 		if (!FilePartitionMatchesFilter(data_file, manifest_file, metadata, schema)) {
 			return false;
 		}
+
 		if (data_file.lower_bounds.empty() || data_file.upper_bounds.empty() ||
-		    file_type == IcebergManifestContentType::DELETE) {
+		    data_file.content == IcebergManifestEntryContentType::POSITION_DELETES) {
 			// There are no bounds statistics for the file, can't filter,
-			// or it is a delete file, which should only be filtered on partitions
+			// or it is a positional delete file, which should only be filtered on partitions
 			continue;
 		}
 
