@@ -22,8 +22,7 @@ public:
 	                                 const IRCEndpointBuilder &endpoint_builder, HTTPHeaders &headers,
 	                                 const string &data = "") override;
 
-	//! Refresh the catalog's S3 secret if it has refresh_info and enough time has elapsed.
-	//! Serialized per-catalog instance so catalogs with different secrets don't interfere.
+	//! Refresh this catalog's S3 secret if it has refresh_info and the interval has elapsed.
 	void MaybeRefreshSecret(ClientContext &context);
 
 private:
@@ -38,14 +37,12 @@ public:
 	string sigv4_region;
 
 private:
-	//! Per-catalog mutex: only one thread refreshes this catalog's secret at a time.
-	//! Each SIGV4Authorization instance (i.e., each attached catalog) has its own mutex,
-	//! so catalogs with different secrets refresh independently.
+	//! Per-instance, so catalogs with different secrets refresh independently.
 	std::mutex refresh_mutex;
-	//! Time of last successful refresh for this catalog's secret
-	std::chrono::steady_clock::time_point last_refresh_time;
-	//! Minimum interval between refresh attempts (seconds). STS tokens last 900s minimum;
-	//! refreshing every 300s gives comfortable headroom.
+	//! Set to construction time, not the epoch: the secret was just created, so an
+	//! immediate refresh would be a redundant STS call.
+	std::chrono::steady_clock::time_point last_refresh_time = std::chrono::steady_clock::now();
+	//! STS tokens last at least 900s, so 300s leaves headroom.
 	static constexpr int REFRESH_INTERVAL_SECONDS = 300;
 };
 
