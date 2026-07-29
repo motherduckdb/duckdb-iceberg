@@ -114,6 +114,7 @@ jobs:
           bundle: bash duckdb/scripts/prepare_build_artifact.sh release
           upload-name: duckdb-iceberg-equality-delete-support
 
+  # Fixture catalog acts as the smoke test: it must pass before we spend CI on the other catalogs.
   test-fixture:
     name: Test against fixture catalog
     needs: build_iceberg
@@ -124,7 +125,7 @@ jobs:
 
   test-fixture-duckdb-tests:
     name: Test duckdb/duckdb tests against fixture catalog
-    needs: build_iceberg
+    needs: test-fixture
     uses: ./.github/workflows/test-fixture-catalog-duckdb-tests.yml
     with:
       artifact-name: duckdb-iceberg
@@ -132,7 +133,7 @@ jobs:
 
   test-fixture-latest:
     name: Test against latest fixture catalog
-    needs: build_iceberg
+    needs: test-fixture
     uses: ./.github/workflows/test-fixture-latest-catalog.yml
     with:
       artifact-name: duckdb-iceberg
@@ -147,7 +148,7 @@ jobs:
 
   test-fixture-equality-delete:
     name: Test against fixture Equality Deletes enabled
-    needs: build_iceberg
+    needs: test-fixture
     uses: ./.github/workflows/test-fixture-catalog.yml
     with:
       artifact-name: duckdb-iceberg-equality-delete-support
@@ -156,35 +157,35 @@ jobs:
 
   test-nessie:
     name: Test against Nessie Catalog
-    needs: build_iceberg
+    needs: test-fixture
     uses: ./.github/workflows/test-nessie-catalog.yml
     with:
       artifact-name: duckdb-iceberg
 
   test-gravitino:
     name: Test against Gravitino Catalog
-    needs: build_iceberg
+    needs: test-fixture
     uses: ./.github/workflows/test-gravitino-catalog.yml
     with:
       artifact-name: duckdb-iceberg
 
   test-local:
     name: Test against local Catalog
-    needs: build_iceberg
+    needs: test-fixture
     uses: ./.github/workflows/test-local-catalog.yml
     with:
       artifact-name: duckdb-iceberg
 
   test-polaris:
     name: Test against Polaris Catalog
-    needs: build_iceberg
+    needs: test-fixture
     uses: ./.github/workflows/test-polaris-catalog.yml
     with:
       artifact-name: duckdb-iceberg
 
   test-lakekeeper:
     name: Test against Lakekeeper Catalog
-    needs: build_iceberg
+    needs: test-fixture
     uses: ./.github/workflows/test-lakekeeper-catalog.yml
     with:
       artifact-name: duckdb-iceberg

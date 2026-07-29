@@ -20,119 +20,30 @@ if(ICEBERG_ENABLE_EQUALITY_DELETE_WRITES)
 	add_definitions(-DICEBERG_ENABLE_EQUALITY_DELETE_WRITES)
 endif()
 
+# Resolve dependencies before descending into src/ so that every per-directory OBJECT library
+# inherits the include directories it needs (these commands set directory-scoped properties that
+# are inherited by subdirectories added afterwards).
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+    find_package(CURL REQUIRED)
+    find_package(AWSSDK REQUIRED COMPONENTS core sso sts)
+    include_directories(${CURL_INCLUDE_DIRS})
+    include_directories(${AWSSDK_INCLUDE_DIRS})
+endif()
 
-set(EXTENSION_SOURCES
-	src/catalog/rest/api/api_utils.cpp
-	src/catalog/rest/api/catalog_api.cpp
-	src/catalog/rest/api/catalog_utils.cpp
-	src/catalog/rest/api/iceberg_add_snapshot.cpp
-	src/catalog/rest/api/iceberg_create_table_request.cpp
-	src/catalog/rest/api/iceberg_manifest_merge.cpp
-	src/catalog/rest/api/iceberg_scan_planning.cpp
-	src/catalog/rest/api/iceberg_retry.cpp
-	src/catalog/rest/api/iceberg_table_update.cpp
-	src/catalog/rest/api/iceberg_type.cpp
-	src/catalog/rest/api/iceberg_expression.cpp
-	src/catalog/rest/api/table_update.cpp
-	src/catalog/rest/api/url_utils.cpp
-	src/catalog/rest/catalog_entry/schema/iceberg_schema_entry.cpp
-	src/catalog/rest/catalog_entry/table/iceberg_table_entry.cpp
-	src/catalog/rest/catalog_entry/table/iceberg_table_information.cpp
-	src/catalog/rest/iceberg_catalog.cpp
-	src/catalog/rest/iceberg_schema_set.cpp
-	src/catalog/rest/iceberg_table_set.cpp
-	src/catalog/rest/storage/authorization/none.cpp
-	src/catalog/rest/storage/authorization/oauth2.cpp
-	src/catalog/rest/storage/authorization/sigv4.cpp
-	src/catalog/rest/storage/aws.cpp
-	src/catalog/rest/storage/iceberg_authorization.cpp
-	src/catalog/rest/storage/iceberg_table_secret_provider.cpp
-	src/catalog/rest/transaction/iceberg_transaction_data.cpp
-	src/catalog/rest/transaction/iceberg_transaction_manager.cpp
-	src/catalog/rest/transaction/iceberg_transaction.cpp
-	src/catalog/rest/transaction/iceberg_transaction_update.cpp
-	src/common/iceberg_utils.cpp
-	src/common/iceberg_default.cpp
-	src/core/deletes/iceberg_deletion_vector.cpp
-	src/core/deletes/iceberg_equality_delete.cpp
-	src/core/deletes/iceberg_positional_delete.cpp
-	src/core/expression/iceberg_hash.cpp
-	src/core/expression/iceberg_metrics.cpp
-	src/core/expression/iceberg_transform.cpp
-	src/core/expression/iceberg_value.cpp
-	src/core/metadata/puffin/iceberg_puffin_metadata.cpp
-	src/core/metadata/iceberg_table_metadata.cpp
-	src/core/metadata/manifest/iceberg_manifest_list.cpp
-	src/core/metadata/manifest/iceberg_manifest.cpp
-	src/core/metadata/manifest/iceberg_avro_codec.cpp
-	src/core/metadata/partition/iceberg_partition_spec.cpp
-	src/core/metadata/schema/iceberg_column_definition.cpp
-	src/core/metadata/schema/iceberg_field_mapping.cpp
-	src/core/metadata/schema/iceberg_table_schema.cpp
-	src/core/metadata/snapshot/iceberg_snapshot.cpp
-	src/core/metadata/sort/iceberg_sort_order.cpp
-	src/execution/helpers/equality_delete_helpers.cpp
-	src/execution/operator/copy/iceberg_copy.cpp
-	src/execution/operator/iceberg_delete.cpp
-	src/execution/operator/iceberg_insert.cpp
-	src/execution/operator/iceberg_update.cpp
-	src/execution/operator/physical_iceberg_create_table.cpp
-	src/execution/operator/merge_into/iceberg_merge_into.cpp
-	src/execution/operator/merge_into/iceberg_merge_insert.cpp
-	src/execution/operator/merge_into/iceberg_merge_update.cpp
-	src/function/copy/iceberg_copy_function.cpp
-	src/function/ducklake/iceberg_to_ducklake.cpp
-	src/function/ducklake/ducklake_column.cpp
-	src/function/ducklake/ducklake_column_stats.cpp
-	src/function/ducklake/ducklake_partition.cpp
-	src/function/ducklake/ducklake_partition_column.cpp
-	src/function/ducklake/ducklake_table.cpp
-	src/function/ducklake/ducklake_snapshot.cpp
-	src/function/ducklake/ducklake_schema.cpp
-	src/function/ducklake/ducklake_data_file.cpp
-	src/function/ducklake/ducklake_delete_file.cpp
-	src/function/iceberg_functions.cpp
-	src/function/iceberg_scalar_functions.cpp
-	src/function/metadata/iceberg_column_stats.cpp
-	src/function/metadata/iceberg_load_table_response.cpp
-	src/function/metadata/iceberg_metadata.cpp
-	src/function/metadata/iceberg_partition_stats.cpp
-	src/function/metadata/iceberg_rewrite_data_files.cpp
-	src/function/metadata/iceberg_snapshots.cpp
-	src/function/metadata/iceberg_table_properties_functions.cpp
-	src/function/metadata/iceberg_schema_properties_functions.cpp
-	src/function/scan/iceberg_scan.cpp
-	src/iceberg_extension.cpp
-	src/iceberg_logging.cpp
-	src/iceberg_options.cpp
-	src/iceberg_attach.cpp
-	src/maintenance/maintenance_table_loader.cpp
-	src/maintenance/rewrite_data_files_executor.cpp
-	src/maintenance/rewrite_data_files_operator.cpp
-	src/maintenance/rewrite_data_files_planner.cpp
-	src/planning/iceberg_multi_file_list.cpp
-	src/planning/iceberg_scan_plan_provider.cpp
-	src/planning/iceberg_multi_file_reader.cpp
-	src/planning/iceberg_optimizer.cpp
-	src/planning/metadata_io/avro/avro_scan.cpp
-	src/planning/metadata_io/avro/iceberg_avro_multi_file_list.cpp
-	src/planning/metadata_io/avro/iceberg_avro_multi_file_reader.cpp
-	src/planning/metadata_io/base_manifest_reader.cpp
-	src/planning/metadata_io/deletes/iceberg_deletes_file_reader.cpp
-	src/planning/metadata_io/manifest/bound_iceberg_manifest_entry.cpp
-	src/planning/metadata_io/manifest/iceberg_manifest_reader.cpp
-	src/planning/metadata_io/manifest_list/bound_iceberg_manifest_list_entry.cpp
-	src/planning/metadata_io/manifest_list/iceberg_manifest_list_reader.cpp
-	src/planning/pruning/iceberg_predicate.cpp
-	src/planning/snapshot/iceberg_snapshot_lookup.cpp
-	src/storage/statistics/iceberg_variant_statistics.cpp
-	src/storage/statistics/iceberg_statistics.cpp
-	src/storage/statistics/iceberg_data_file_stats.cpp
-)
+# Roaring is installed via vcpkg and used here
+find_package(roaring CONFIG REQUIRED)
+# Propagate roaring's usage requirements (its headers) to every OBJECT library under src/.
+link_libraries(roaring::roaring roaring::roaring-headers roaring::roaring-headers-cpp)
 
-add_subdirectory(src/rest_catalog/objects)
+# Reset the TARGET_NAME, the AWS find_package build could bleed into our build -
+# overriding `TARGET_NAME`
+set(TARGET_NAME iceberg)
 
-add_library(${EXTENSION_NAME} STATIC ${EXTENSION_SOURCES} ${ALL_OBJECT_FILES})
+# Each directory under src/ contributes its sources as an OBJECT library and appends them to
+# ALL_OBJECT_FILES (see the per-directory CMakeLists.txt files).
+add_subdirectory(src)
+
+add_library(${EXTENSION_NAME} STATIC ${ALL_OBJECT_FILES})
 
 set(PARAMETERS "-warnings")
 
@@ -141,20 +52,7 @@ if(EMSCRIPTEN)
 endif()
 
 
-build_loadable_extension(${TARGET_NAME} ${PARAMETERS} ${EXTENSION_SOURCES} ${ALL_OBJECT_FILES})
-
-if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-    find_package(CURL REQUIRED)
-    find_package(AWSSDK REQUIRED COMPONENTS core sso sts)
-    include_directories(${CURL_INCLUDE_DIRS})
-endif()
-
-# Roaring is installed via vcpkg and used here
-find_package(roaring CONFIG REQUIRED)
-
-# Reset the TARGET_NAME, the AWS find_package build could bleed into our build -
-# overriding `TARGET_NAME`
-set(TARGET_NAME iceberg)
+build_loadable_extension(${TARGET_NAME} ${PARAMETERS} ${ALL_OBJECT_FILES})
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
     # AWS SDK FROM vcpkg
