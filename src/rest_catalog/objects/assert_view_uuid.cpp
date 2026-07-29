@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/assert_view_uuid.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 AssertViewUUID::AssertViewUUID() {
 }
 
-AssertViewUUID AssertViewUUID::FromJSON(yyjson_val *obj) {
+AssertViewUUID AssertViewUUID::FromJSON(JSONValue obj) {
 	AssertViewUUID res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -31,51 +29,49 @@ AssertViewUUID AssertViewUUID::Copy() const {
 	return res;
 }
 
-string AssertViewUUID::TryFromJSON(yyjson_val *obj) {
+string AssertViewUUID::TryFromJSON(JSONValue obj) {
 	string error;
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
+	auto type_val = obj.GetMember("type");
+	if (!type_val.IsValid()) {
 		return "AssertViewUUID required property 'type' is missing";
 	} else {
-		if (yyjson_is_str(type_val)) {
-			type = yyjson_get_str(type_val);
+		if (json_utils::IsString(type_val)) {
+			type = json_utils::GetString(type_val);
 		} else {
-			return StringUtil::Format("AssertViewUUID property 'type' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(type_val));
+			return StringUtil::Format("AssertViewUUID property 'type' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(type_val).c_str());
 		}
-		if (!yyjson_is_null(type_val) && type != "assert-view-uuid") {
+		if (!type_val.IsNull() && type != "assert-view-uuid") {
 			return "AssertViewUUID property 'type' does not match its required const value";
 		}
 	}
-	auto uuid_val = yyjson_obj_get(obj, "uuid");
-	if (!uuid_val) {
+	auto uuid_val = obj.GetMember("uuid");
+	if (!uuid_val.IsValid()) {
 		return "AssertViewUUID required property 'uuid' is missing";
 	} else {
-		if (yyjson_is_str(uuid_val)) {
-			uuid = yyjson_get_str(uuid_val);
+		if (json_utils::IsString(uuid_val)) {
+			uuid = json_utils::GetString(uuid_val);
 		} else {
-			return StringUtil::Format("AssertViewUUID property 'uuid' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(uuid_val));
+			return StringUtil::Format("AssertViewUUID property 'uuid' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(uuid_val).c_str());
 		}
 	}
 	return "";
 }
 
-void AssertViewUUID::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void AssertViewUUID::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
-	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: uuid
-	yyjson_mut_obj_add_strcpy(doc, obj, "uuid", uuid.c_str());
+	auto uuid_json = writer.CreateString(uuid);
+	obj.Add("uuid", uuid_json);
 }
 
-yyjson_mut_val *AssertViewUUID::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue AssertViewUUID::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

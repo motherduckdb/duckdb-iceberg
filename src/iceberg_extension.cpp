@@ -25,11 +25,37 @@
 #include "iceberg_logging.hpp"
 #include "iceberg_attach.hpp"
 #include "iceberg_options.hpp"
+#include "common/iceberg_default.hpp"
 #include "function/copy/iceberg_copy_function.hpp"
 #include "duckdb/optimizer/optimizer_extension.hpp"
 #include "planning/iceberg_optimizer.hpp"
 
 namespace duckdb {
+
+static void SetDefaultFormatVersion(ClientContext &context, SetScope scope, Value &parameter) {
+	auto version = parameter.GetValue<uint64_t>();
+	if (version == 1) {
+		throw NotImplementedException("Writing Iceberg tables with format-version 1 is not supported, use 2 or 3");
+	}
+	if (version < 2 || version > 3) {
+		throw InvalidConfigurationException("'%s' must be 2 or 3, got %llu", DEFAULT_FORMAT_VERSION_CONFIG_VARIABLE,
+		                                    version);
+	}
+}
+
+static void SetUnsafeStructNullDefaultInterpretation(ClientContext &context, SetScope scope, Value &parameter) {
+	auto &value = IcebergDefault::InterpretStructNullAsEmpty();
+	if (parameter.IsNull()) {
+		value = false;
+		return;
+	}
+	auto interpretation = parameter.GetValue<string>();
+	if (interpretation != "{}") {
+		throw InvalidConfigurationException("'%s' must be NULL or '{}', got '%s'",
+		                                    UNSAFE_STRUCT_NULL_DEFAULT_INTERPRETATION_CONFIG_VARIABLE, interpretation);
+	}
+	value = true;
+}
 
 static unique_ptr<TransactionManager> CreateTransactionManager(optional_ptr<StorageExtensionInfo> storage_info,
                                                                AttachedDatabase &db, Catalog &catalog) {
@@ -70,15 +96,28 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                          "DEBUG SETTING: force OAuth2 token expiry for testing automatic refresh",
 	                          LogicalType::BOOLEAN, Value::BOOLEAN(false));
 	config.AddExtensionOption(
+	    DEFAULT_FORMAT_VERSION_CONFIG_VARIABLE,
+	    "The Iceberg format version used when creating a new table without an explicit 'format-version' property. "
+	    "Valid values are 2 and 3.",
+	    LogicalType::UBIGINT, Value::UBIGINT(DEFAULT_ICEBERG_FORMAT_VERSION), SetDefaultFormatVersion);
+	config.AddExtensionOption(
 	    "iceberg_use_metadata_log",
 	    "Whether or not to make use of the (optional) 'metadata-log' of a table to ensure atomicity guarantees hold, "
 	    "at the cost of making another GET for json metadata in rare circumstances",
 	    LogicalType::BOOLEAN, Value::BOOLEAN(false), nullptr, SetScope::GLOBAL);
+	config.AddExtensionOption("iceberg_use_server_side_scan_planning",
+	                          "Whether or not to use server-side scanning planning (if available)",
+	                          LogicalType::BOOLEAN, Value::BOOLEAN(false), nullptr, SetScope::GLOBAL);
 	config.AddExtensionOption(
 	    "iceberg_logging_post_body_truncate_limit",
 	    "Maximum number of characters of a REST catalog POST body to include in Iceberg log messages. "
 	    "Bodies longer than this are truncated with a trailing '... (truncated)' marker. Set to 0 to omit the body.",
 	    LogicalType::UBIGINT, Value::UBIGINT(10000));
+	config.AddExtensionOption(
+	    UNSAFE_STRUCT_NULL_DEFAULT_INTERPRETATION_CONFIG_VARIABLE,
+	    "DANGEROUS TESTING-ONLY SETTING: interpret a null Iceberg STRUCT default as an empty struct whose fields "
+	    "use their own defaults. The only non-null value accepted is '{}'.",
+	    LogicalType::VARCHAR, Value(LogicalType::VARCHAR), SetUnsafeStructNullDefaultInterpretation, SetScope::GLOBAL);
 #ifdef ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
 	config.AddExtensionOption(
 	    ENABLE_EQUALITY_DELETES_CONFIG_VARIABLE,
@@ -115,9 +154,6 @@ static void LoadInternal(ExtensionLoader &loader) {
 	auto &log_manager = instance.GetLogManager();
 	log_manager.RegisterLogType(make_uniq<IcebergLogType>());
 	StorageExtension::Register(config, "iceberg", make_shared_ptr<IRCStorageExtension>());
-
-	// Re-introduces equality-delete columns onto iceberg_scan LogicalGets after the built-in
-	// optimizers have run; see planning/iceberg_optimizer.hpp for the why.
 	OptimizerExtension::Register(config, IcebergOptimizer::Create());
 }
 

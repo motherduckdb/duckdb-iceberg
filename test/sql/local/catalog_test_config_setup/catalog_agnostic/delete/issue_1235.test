@@ -1,0 +1,83 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/issue_1235.test
+# group: [delete]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+require core_functions
+
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.dl_target;
+
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.dl_probe;
+
+statement ok
+CREATE TABLE my_datalake.default.dl_target (
+	id INTEGER,
+	data VARCHAR
+) WITH ('format-version' = 3);
+
+statement ok
+INSERT INTO my_datalake.default.dl_target VALUES
+	(1, 'a'),
+	(2, 'b'),
+	(3, 'c'),
+	(4, 'd'),
+	(5, 'e');
+
+statement ok
+CREATE TABLE my_datalake.default.dl_probe (
+	id INTEGER
+) WITH ('format-version' = 3);
+
+statement ok
+INSERT INTO my_datalake.default.dl_probe SELECT
+	2
+UNION ALL SELECT
+	i + 1000
+FROM range(100_000) t(i);
+
+statement ok
+DELETE FROM my_datalake.default.dl_target
+WHERE id IN (
+	SELECT
+		id
+	FROM my_datalake.default.dl_probe WHERE file_row_number < 1000000
+);
+
+query II
+select * from my_datalake.default.dl_target;
+----
+1	a
+3	c
+4	d
+5	e
+
+statement ok
+DELETE FROM my_datalake.default.dl_target
+WHERE file_row_number IN (
+	SELECT
+		3
+	FROM (
+		SELECT
+			filename,
+			file_row_number
+		FROM my_datalake.default.dl_probe
+	)
+);
+
+# id=4 was the 3rd remaining row in the table
+query II
+select * from my_datalake.default.dl_target;
+----
+1	a
+3	c
+5	e

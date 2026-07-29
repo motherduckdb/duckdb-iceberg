@@ -32,21 +32,8 @@ void IRCEndpointBuilder::AddPathComponent(IRCPathComponent &&component) {
 	path_components.push_back(std::move(component));
 }
 
-void IRCEndpointBuilder::AddPrefixComponent(const string &component, const bool &prefix_is_one_component) {
-	if (component.empty()) {
-		return;
-	}
-
-	// If the component contains slashes, split it into multiple segments
-	if (!prefix_is_one_component && component.find('/') != string::npos) {
-		auto segments = StringUtil::Split(component, '/');
-		for (const auto &segment : segments) {
-			if (!segment.empty()) {
-				AddPathComponent(IRCPathComponent::RegularComponent(segment));
-			}
-		}
-	} else {
-		// Single component without slashes
+void IRCEndpointBuilder::AddPrefixComponents(const vector<string> &components) {
+	for (const auto &component : components) {
 		AddPathComponent(IRCPathComponent::RegularComponent(component));
 	}
 }

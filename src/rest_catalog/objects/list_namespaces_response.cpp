@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/list_namespaces_response.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 ListNamespacesResponse::ListNamespacesResponse() {
 }
 
-ListNamespacesResponse ListNamespacesResponse::FromJSON(yyjson_val *obj) {
+ListNamespacesResponse ListNamespacesResponse::FromJSON(JSONValue obj) {
 	ListNamespacesResponse res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -40,11 +38,11 @@ ListNamespacesResponse ListNamespacesResponse::Copy() const {
 	return res;
 }
 
-string ListNamespacesResponse::TryFromJSON(yyjson_val *obj) {
+string ListNamespacesResponse::TryFromJSON(JSONValue obj) {
 	string error;
-	auto next_page_token_val = yyjson_obj_get(obj, "next-page-token");
-	if (next_page_token_val) {
-		if (yyjson_is_null(next_page_token_val)) {
+	auto next_page_token_val = obj.GetMember("next-page-token");
+	if (next_page_token_val.IsValid()) {
+		if (next_page_token_val.IsNull()) {
 			//! do nothing, property is explicitly nullable
 		} else {
 			PageToken next_page_token_tmp;
@@ -55,57 +53,57 @@ string ListNamespacesResponse::TryFromJSON(yyjson_val *obj) {
 			next_page_token = std::move(next_page_token_tmp);
 		}
 	}
-	auto namespaces_val = yyjson_obj_get(obj, "namespaces");
-	if (namespaces_val) {
+	auto namespaces_val = obj.GetMember("namespaces");
+	if (namespaces_val.IsValid()) {
 		vector<Namespace> namespaces_tmp;
-		if (yyjson_is_arr(namespaces_val)) {
-			size_t namespaces_tmp_idx, namespaces_tmp_max;
-			yyjson_val *namespaces_tmp_item_val;
-			yyjson_arr_foreach(namespaces_val, namespaces_tmp_idx, namespaces_tmp_max, namespaces_tmp_item_val) {
+		if (namespaces_val.IsArray()) {
+			namespaces_val.IterateArray([&](JSONValue namespaces_tmp_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				Namespace namespaces_tmp_item;
 				error = namespaces_tmp_item.TryFromJSON(namespaces_tmp_item_val);
 				if (!error.empty()) {
-					return error;
+					return;
 				}
 				namespaces_tmp.emplace_back(std::move(namespaces_tmp_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "ListNamespacesResponse property 'namespaces_tmp' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(namespaces_val));
+			    "ListNamespacesResponse property 'namespaces_tmp' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(namespaces_val).c_str());
 		}
 		namespaces = std::move(namespaces_tmp);
 	}
 	return "";
 }
 
-void ListNamespacesResponse::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void ListNamespacesResponse::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: next-page-token
 	if (next_page_token.has_value()) {
 		auto &next_page_token_value = *next_page_token;
-		yyjson_mut_val *next_page_token_value_val = next_page_token_value.ToJSON(doc);
-		yyjson_mut_obj_add_val(doc, obj, "next-page-token", next_page_token_value_val);
+		auto next_page_token_json = next_page_token_value.ToJSON(writer);
+		obj.Add("next-page-token", next_page_token_json);
 	}
 
 	// Serialize: namespaces
 	if (namespaces.has_value()) {
 		auto &namespaces_value = *namespaces;
-		yyjson_mut_val *namespaces_value_arr = yyjson_mut_arr(doc);
-		for (const auto &item : namespaces_value) {
-			yyjson_mut_val *item_val = item.ToJSON(doc);
-			yyjson_mut_arr_append(namespaces_value_arr, item_val);
+		auto namespaces_json = writer.CreateArray();
+		for (const auto &namespaces_json_item : namespaces_value) {
+			auto namespaces_json_item_json = namespaces_json_item.ToJSON(writer);
+			namespaces_json.Append(namespaces_json_item_json);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "namespaces", namespaces_value_arr);
+		obj.Add("namespaces", namespaces_json);
 	}
 }
 
-yyjson_mut_val *ListNamespacesResponse::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue ListNamespacesResponse::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

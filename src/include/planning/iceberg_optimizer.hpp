@@ -12,13 +12,16 @@
 
 namespace duckdb {
 
-class GuaranteeEqualityDeleteColumnsOptimizer {
+class IcebergOptimizerRoutine {
 public:
 	ClientContext &context;
 
 public:
-	GuaranteeEqualityDeleteColumnsOptimizer(ClientContext &context);
+	IcebergOptimizerRoutine(ClientContext &context);
 	void VisitOperator(unique_ptr<LogicalOperator> &op);
+
+private:
+	void VisitOperator(unique_ptr<LogicalOperator> &op, bool below_write);
 };
 
 class IcebergOptimizer {

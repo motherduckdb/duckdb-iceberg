@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/scan_report.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 ScanReport::ScanReport() {
 }
 
-ScanReport ScanReport::FromJSON(yyjson_val *obj) {
+ScanReport ScanReport::FromJSON(JSONValue obj) {
 	ScanReport res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -48,34 +46,34 @@ ScanReport ScanReport::Copy() const {
 	return res;
 }
 
-string ScanReport::TryFromJSON(yyjson_val *obj) {
+string ScanReport::TryFromJSON(JSONValue obj) {
 	string error;
-	auto table_name_val = yyjson_obj_get(obj, "table-name");
-	if (!table_name_val) {
+	auto table_name_val = obj.GetMember("table-name");
+	if (!table_name_val.IsValid()) {
 		return "ScanReport required property 'table-name' is missing";
 	} else {
-		if (yyjson_is_str(table_name_val)) {
-			table_name = yyjson_get_str(table_name_val);
+		if (json_utils::IsString(table_name_val)) {
+			table_name = json_utils::GetString(table_name_val);
 		} else {
-			return StringUtil::Format("ScanReport property 'table_name' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(table_name_val));
+			return StringUtil::Format("ScanReport property 'table_name' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(table_name_val).c_str());
 		}
 	}
-	auto snapshot_id_val = yyjson_obj_get(obj, "snapshot-id");
-	if (!snapshot_id_val) {
+	auto snapshot_id_val = obj.GetMember("snapshot-id");
+	if (!snapshot_id_val.IsValid()) {
 		return "ScanReport required property 'snapshot-id' is missing";
 	} else {
-		if (yyjson_is_sint(snapshot_id_val)) {
-			snapshot_id = yyjson_get_sint(snapshot_id_val);
-		} else if (yyjson_is_uint(snapshot_id_val)) {
-			snapshot_id = yyjson_get_uint(snapshot_id_val);
+		if (json_utils::IsInteger(snapshot_id_val)) {
+			snapshot_id = json_utils::GetSignedInteger(snapshot_id_val);
+		} else if (json_utils::IsUnsignedInteger(snapshot_id_val)) {
+			snapshot_id = json_utils::GetUnsignedInteger(snapshot_id_val);
 		} else {
-			return StringUtil::Format("ScanReport property 'snapshot_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(snapshot_id_val));
+			return StringUtil::Format("ScanReport property 'snapshot_id' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(snapshot_id_val).c_str());
 		}
 	}
-	auto filter_val = yyjson_obj_get(obj, "filter");
-	if (!filter_val) {
+	auto filter_val = obj.GetMember("filter");
+	if (!filter_val.IsValid()) {
 		return "ScanReport required property 'filter' is missing";
 	} else {
 		filter = make_uniq<Expression>();
@@ -84,69 +82,77 @@ string ScanReport::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto schema_id_val = yyjson_obj_get(obj, "schema-id");
-	if (!schema_id_val) {
+	auto schema_id_val = obj.GetMember("schema-id");
+	if (!schema_id_val.IsValid()) {
 		return "ScanReport required property 'schema-id' is missing";
 	} else {
-		if (yyjson_is_int(schema_id_val)) {
-			schema_id = yyjson_get_int(schema_id_val);
+		if (json_utils::IsInteger(schema_id_val)) {
+			schema_id = json_utils::GetSignedInteger(schema_id_val);
 		} else {
-			return StringUtil::Format("ScanReport property 'schema_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(schema_id_val));
+			return StringUtil::Format("ScanReport property 'schema_id' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(schema_id_val).c_str());
 		}
 	}
-	auto projected_field_ids_val = yyjson_obj_get(obj, "projected-field-ids");
-	if (!projected_field_ids_val) {
+	auto projected_field_ids_val = obj.GetMember("projected-field-ids");
+	if (!projected_field_ids_val.IsValid()) {
 		return "ScanReport required property 'projected-field-ids' is missing";
 	} else {
-		if (yyjson_is_arr(projected_field_ids_val)) {
-			size_t projected_field_ids_idx, projected_field_ids_max;
-			yyjson_val *projected_field_ids_item_val;
-			yyjson_arr_foreach(projected_field_ids_val, projected_field_ids_idx, projected_field_ids_max,
-			                   projected_field_ids_item_val) {
+		if (projected_field_ids_val.IsArray()) {
+			projected_field_ids_val.IterateArray([&](JSONValue projected_field_ids_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				int32_t projected_field_ids_item;
-				if (yyjson_is_int(projected_field_ids_item_val)) {
-					projected_field_ids_item = yyjson_get_int(projected_field_ids_item_val);
+				if (json_utils::IsInteger(projected_field_ids_item_val)) {
+					projected_field_ids_item = json_utils::GetSignedInteger(projected_field_ids_item_val);
 				} else {
-					return StringUtil::Format(
-					    "ScanReport property 'projected_field_ids_item' is not of type 'integer', found '%s' instead",
-					    yyjson_get_type_desc(projected_field_ids_item_val));
+					error = StringUtil::Format(
+					    "ScanReport property 'projected_field_ids_item' is not of type 'integer', found %s instead",
+					    json_utils::GetTypeDescription(projected_field_ids_item_val).c_str());
+					return;
 				}
 				projected_field_ids.emplace_back(std::move(projected_field_ids_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "ScanReport property 'projected_field_ids' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(projected_field_ids_val));
+			    "ScanReport property 'projected_field_ids' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(projected_field_ids_val).c_str());
 		}
 	}
-	auto projected_field_names_val = yyjson_obj_get(obj, "projected-field-names");
-	if (!projected_field_names_val) {
+	auto projected_field_names_val = obj.GetMember("projected-field-names");
+	if (!projected_field_names_val.IsValid()) {
 		return "ScanReport required property 'projected-field-names' is missing";
 	} else {
-		if (yyjson_is_arr(projected_field_names_val)) {
-			size_t projected_field_names_idx, projected_field_names_max;
-			yyjson_val *projected_field_names_item_val;
-			yyjson_arr_foreach(projected_field_names_val, projected_field_names_idx, projected_field_names_max,
-			                   projected_field_names_item_val) {
+		if (projected_field_names_val.IsArray()) {
+			projected_field_names_val.IterateArray([&](JSONValue projected_field_names_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				string projected_field_names_item;
-				if (yyjson_is_str(projected_field_names_item_val)) {
-					projected_field_names_item = yyjson_get_str(projected_field_names_item_val);
+				if (json_utils::IsString(projected_field_names_item_val)) {
+					projected_field_names_item = json_utils::GetString(projected_field_names_item_val);
 				} else {
-					return StringUtil::Format(
-					    "ScanReport property 'projected_field_names_item' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(projected_field_names_item_val));
+					error = StringUtil::Format(
+					    "ScanReport property 'projected_field_names_item' is not of type 'string', found %s instead",
+					    json_utils::GetTypeDescription(projected_field_names_item_val).c_str());
+					return;
 				}
 				projected_field_names.emplace_back(std::move(projected_field_names_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "ScanReport property 'projected_field_names' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(projected_field_names_val));
+			    "ScanReport property 'projected_field_names' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(projected_field_names_val).c_str());
 		}
 	}
-	auto metrics_val = yyjson_obj_get(obj, "metrics");
-	if (!metrics_val) {
+	auto metrics_val = obj.GetMember("metrics");
+	if (!metrics_val.IsValid()) {
 		return "ScanReport required property 'metrics' is missing";
 	} else {
 		error = metrics.TryFromJSON(metrics_val);
@@ -154,22 +160,26 @@ string ScanReport::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto metadata_val = yyjson_obj_get(obj, "metadata");
-	if (metadata_val) {
+	auto metadata_val = obj.GetMember("metadata");
+	if (metadata_val.IsValid()) {
 		case_insensitive_map_t<string> metadata_tmp;
-		if (yyjson_is_obj(metadata_val)) {
-			size_t idx, max;
-			yyjson_val *key, *val;
-			yyjson_obj_foreach(metadata_val, idx, max, key, val) {
-				auto key_str = yyjson_get_str(key);
+		if (metadata_val.IsObject()) {
+			metadata_val.IterateObject([&](const string &key_str, JSONValue val) {
+				if (!error.empty()) {
+					return;
+				}
 				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
+				if (json_utils::IsString(val)) {
+					tmp = json_utils::GetString(val);
 				} else {
-					return StringUtil::Format("ScanReport property 'tmp' is not of type 'string', found '%s' instead",
-					                          yyjson_get_type_desc(val));
+					error = StringUtil::Format("ScanReport property 'tmp' is not of type 'string', found %s instead",
+					                           json_utils::GetTypeDescription(val).c_str());
+					return;
 				}
 				metadata_tmp.emplace(key_str, std::move(tmp));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return "ScanReport property 'metadata_tmp' is not of type 'object'";
@@ -179,61 +189,58 @@ string ScanReport::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void ScanReport::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void ScanReport::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: table-name
-	yyjson_mut_obj_add_strcpy(doc, obj, "table-name", table_name.c_str());
+	auto table_name_json = writer.CreateString(table_name);
+	obj.Add("table-name", table_name_json);
 
 	// Serialize: snapshot-id
-	yyjson_mut_obj_add_sint(doc, obj, "snapshot-id", snapshot_id);
+	auto snapshot_id_json = writer.CreateSignedInteger(snapshot_id);
+	obj.Add("snapshot-id", snapshot_id_json);
 
 	// Serialize: filter
-	yyjson_mut_val *filter_val = filter->ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "filter", filter_val);
+	auto filter_json = filter->ToJSON(writer);
+	obj.Add("filter", filter_json);
 
 	// Serialize: schema-id
-	yyjson_mut_obj_add_int(doc, obj, "schema-id", schema_id);
+	auto schema_id_json = writer.CreateSignedInteger(schema_id);
+	obj.Add("schema-id", schema_id_json);
 
 	// Serialize: projected-field-ids
-	yyjson_mut_val *projected_field_ids_arr = yyjson_mut_arr(doc);
-	for (const auto &item : projected_field_ids) {
-		yyjson_mut_val *item_val = yyjson_mut_int(doc, item);
-		yyjson_mut_arr_append(projected_field_ids_arr, item_val);
+	auto projected_field_ids_json = writer.CreateArray();
+	for (const auto &projected_field_ids_json_item : projected_field_ids) {
+		auto projected_field_ids_json_item_json = writer.CreateSignedInteger(projected_field_ids_json_item);
+		projected_field_ids_json.Append(projected_field_ids_json_item_json);
 	}
-	yyjson_mut_obj_add_val(doc, obj, "projected-field-ids", projected_field_ids_arr);
+	obj.Add("projected-field-ids", projected_field_ids_json);
 
 	// Serialize: projected-field-names
-	yyjson_mut_val *projected_field_names_arr = yyjson_mut_arr(doc);
-	for (const auto &item : projected_field_names) {
-		yyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());
-		yyjson_mut_arr_append(projected_field_names_arr, item_val);
+	auto projected_field_names_json = writer.CreateArray();
+	for (const auto &projected_field_names_json_item : projected_field_names) {
+		auto projected_field_names_json_item_json = writer.CreateString(projected_field_names_json_item);
+		projected_field_names_json.Append(projected_field_names_json_item_json);
 	}
-	yyjson_mut_obj_add_val(doc, obj, "projected-field-names", projected_field_names_arr);
+	obj.Add("projected-field-names", projected_field_names_json);
 
 	// Serialize: metrics
-	yyjson_mut_val *metrics_val = metrics.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "metrics", metrics_val);
+	auto metrics_json = metrics.ToJSON(writer);
+	obj.Add("metrics", metrics_json);
 
 	// Serialize: metadata
 	if (metadata.has_value()) {
 		auto &metadata_value = *metadata;
-		yyjson_mut_val *metadata_value_obj = yyjson_mut_obj(doc);
-		for (const auto &it : metadata_value) {
-			auto &key = it.first;
-			auto &value = it.second;
-			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
-			yyjson_mut_obj_add_strcpy(doc, metadata_value_obj, key_ptr, value.c_str());
+		auto metadata_json = writer.CreateObject();
+		for (const auto &[metadata_json_key, metadata_json_value] : metadata_value) {
+			auto metadata_json_value_json = writer.CreateString(metadata_json_value);
+			metadata_json.Add(metadata_json_key, metadata_json_value_json);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "metadata", metadata_value_obj);
+		obj.Add("metadata", metadata_json);
 	}
 }
 
-yyjson_mut_val *ScanReport::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue ScanReport::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

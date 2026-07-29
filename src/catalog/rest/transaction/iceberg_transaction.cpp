@@ -8,7 +8,7 @@
 #include "duckdb/storage/table/update_state.hpp"
 #include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/main/client_data.hpp"
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
 
 #include <chrono>
 #include <optional>
@@ -80,33 +80,15 @@ IcebergCatalog &IcebergTransaction::GetCatalog() {
 	return catalog;
 }
 
-string JsonDocToString(std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc) {
-	auto root_object = yyjson_mut_doc_get_root(doc.get());
-
-	//! Write the result to a string
-	auto data = yyjson_mut_val_write_opts(root_object, YYJSON_WRITE_ALLOW_INF_AND_NAN, nullptr, nullptr, nullptr);
-	if (!data) {
-		throw InvalidInputException("Could not create a JSON representation of the table schema, yyjson failed");
-	}
-	auto res = string(data);
-	free(data);
-	return res;
-}
-
 template <class RESTObject>
 static string RESTObjectToJSONString(const RESTObject &object) {
-	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-	auto doc = doc_p.get();
-	yyjson_mut_doc_set_root(doc, object.ToJSON(doc));
-	return JsonDocToString(std::move(doc_p));
+	JSONWriter writer;
+	writer.SetRoot(object.ToJSON(writer));
+	return writer.ToString(JSONWriteFlags::ALLOW_INF_AND_NAN);
 }
 
 static string ConstructTableUpdateJSON(rest_api_objects::CommitTableRequest &table_change) {
-	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-	auto doc = doc_p.get();
-	auto root_object = table_change.ToJSON(doc);
-	yyjson_mut_doc_set_root(doc, root_object);
-	return JsonDocToString(std::move(doc_p));
+	return RESTObjectToJSONString(table_change);
 }
 
 static rest_api_objects::TableRequirement CreateAssertRefSnapshotIdRequirement(const IcebergSnapshot &old_snapshot) {
@@ -223,6 +205,74 @@ static void CreateTableRequirements(DatabaseInstance &db, ClientContext &context
 	}
 }
 
+//! Safe to re-apply a DELETE on retry only if every commit in (base, tip] was a
+//! pure append; anything else may have removed/rewritten the target data. Ranges
+//! over sequence numbers (parent links aren't populated on read snapshots). A
+//! scan/tip snapshot the catalog doesn't expose (e.g. no history) can't be
+//! proven safe, so it counts as not reappliable.
+static bool DeleteCanReapply(const IcebergTableMetadata &metadata, int64_t base_snapshot_id, int64_t tip_snapshot_id) {
+	if (base_snapshot_id == tip_snapshot_id) {
+		return true;
+	}
+	auto base = metadata.FindSnapshotByIdInternal(base_snapshot_id);
+	auto tip = metadata.FindSnapshotByIdInternal(tip_snapshot_id);
+	if (!base || !tip) {
+		return false;
+	}
+	if (!base->sequence_number || !tip->sequence_number) {
+		throw InvalidConfigurationException("Committed snapshot is missing a sequence number");
+	}
+	int64_t base_sequence = *base->sequence_number;
+	int64_t tip_sequence = *tip->sequence_number;
+	for (auto &entry : metadata.snapshots) {
+		auto &snapshot = entry.second;
+		if (!snapshot.sequence_number) {
+			throw InvalidConfigurationException("Committed snapshot is missing a sequence number");
+		}
+		int64_t sequence = *snapshot.sequence_number;
+		if (sequence <= base_sequence || sequence > tip_sequence) {
+			continue;
+		}
+		if (snapshot.operation != IcebergSnapshotOperationType::APPEND) {
+			return false;
+		}
+	}
+	return true;
+}
+
+//! Throw if a retried DELETE can't be safely re-applied. No-op on the first
+//! attempt (tip == scan) and for non-delete transactions.
+static void VerifyDeleteRetryability(const IcebergTableInformation &table_info,
+                                     optional_ptr<const IcebergSnapshot> current_snapshot) {
+	if (!table_info.transaction_data) {
+		return;
+	}
+	auto &transaction_data = *table_info.transaction_data;
+	if (!transaction_data.ContainsDelete()) {
+		return;
+	}
+	//! No base snapshot: the delete targets data created in this transaction, so there is no
+	//! committed base to rebase against and nothing to verify.
+	if (!transaction_data.base_snapshot_id) {
+		return;
+	}
+	if (!current_snapshot) {
+		return;
+	}
+	if (!current_snapshot->snapshot_id) {
+		throw InvalidConfigurationException("Committed snapshot is missing a snapshot_id");
+	}
+	auto scan_snapshot_id = *transaction_data.base_snapshot_id;
+	auto tip_snapshot_id = *current_snapshot->snapshot_id;
+	if (DeleteCanReapply(table_info.table_metadata, scan_snapshot_id, tip_snapshot_id)) {
+		return;
+	}
+	throw TransactionException(
+	    "DELETE on \"%s\" conflicts with a concurrent commit that removed or rewrote data (scanned snapshot "
+	    "%s, now at %s); re-run the DELETE.",
+	    table_info.name, std::to_string(scan_snapshot_id), std::to_string(tip_snapshot_id));
+}
+
 static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, IcebergTableInformation &table_info,
                                                       ClientContext &context) {
 	SingleTableStagedCommit info;
@@ -243,6 +293,8 @@ static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, Iceb
 		commit_state.LoadExistingManifests(db, std::move(transaction_data.existing_manifest_list));
 	}
 	commit_state.latest_snapshot = current_snapshot;
+
+	VerifyDeleteRetryability(commit_state.table_info, current_snapshot);
 
 	for (auto &update : transaction_data.updates) {
 		update->CreateUpdate(db, context, commit_state);
@@ -495,7 +547,7 @@ void IcebergTransaction::DoTableUpdates(IcebergTransactionAlterUpdate &alter_upd
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	if (ic_catalog.attach_options.max_table_staleness_micros.IsValid()) {
 		for (auto &entry : alter_update.updated_tables) {
-			ic_catalog.table_request_cache.Expire(context, entry.first);
+			ic_catalog.table_request_cache.EvictIfCurrent(entry.second.get());
 		}
 	}
 }
@@ -503,11 +555,9 @@ void IcebergTransaction::DoTableUpdates(IcebergTransactionAlterUpdate &alter_upd
 void IcebergTransaction::DoTableRename(IcebergTransactionRenameUpdate &rename_update, ClientContext &context) {
 	auto &original_table = rename_update.table.get();
 	auto &schema = original_table.schema;
-	auto source_table_key = original_table.GetTableKey();
 	auto &table_name = original_table.name;
 	auto new_name = rename_update.new_name;
 	auto &new_table = rename_update.new_table.get();
-	auto destination_table_key = new_table.GetTableKey();
 
 	rest_api_objects::RenameTableRequest request;
 	request.source._namespace.value = schema.namespace_items;
@@ -519,8 +569,8 @@ void IcebergTransaction::DoTableRename(IcebergTransactionRenameUpdate &rename_up
 
 	if (catalog.attach_options.max_table_staleness_micros.IsValid()) {
 		//! The shared cache must only change once the catalog rename is durable.
-		catalog.table_request_cache.Expire(context, source_table_key);
-		catalog.table_request_cache.Expire(context, destination_table_key);
+		catalog.table_request_cache.EvictIfCurrent(original_table);
+		catalog.table_request_cache.EvictIfCurrent(new_table);
 	}
 
 	DropInfo drop_info;
@@ -552,12 +602,7 @@ void IcebergTransaction::DoMultiTableCommitUpdates(IcebergTransactionAlterUpdate
 			backoff.emplace(transaction_info.retry_config);
 		}
 
-		std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-		auto doc = doc_p.get();
-		auto root_object = transaction_info.request.ToJSON(doc);
-		yyjson_mut_doc_set_root(doc, root_object);
-
-		auto transaction_json = JsonDocToString(std::move(doc_p));
+		auto transaction_json = RESTObjectToJSONString(transaction_info.request);
 		auto result = IRCAPI::CommitMultiTableUpdate(context, catalog, transaction_json);
 		if (result.Success()) {
 			return;
@@ -620,23 +665,21 @@ void IcebergTransaction::DoSingleTableCommitUpdates(IcebergTransactionAlterUpdat
 void IcebergTransaction::DoTableDeletes(IcebergTransactionDeleteUpdate &delete_update, ClientContext &context) {
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	auto &table = delete_update.deleted_table.get();
-	auto schema_key = table.schema.name;
-	auto table_key = table.GetTableKey();
 	auto &table_name = table.name;
 	IRCAPI::CommitTableDelete(context, catalog, table.schema.namespace_items, table_name);
 	// remove the load table result
-	ic_catalog.table_request_cache.Expire(context, table_key);
+	ic_catalog.table_request_cache.EvictIfCurrent(table);
 	// remove the table entry from the catalog
-	auto &schema_entry = ic_catalog.schemas.GetEntry(schema_key.GetIdentifierName()).Cast<IcebergSchemaEntry>();
 	DropInfo drop_info;
 	drop_info.GetQualifiedNameMutable() = Identifier(table_name);
 	drop_info.if_not_found = OnEntryNotFound::RETURN_NULL;
-	schema_entry.DropEntry(context, drop_info, true);
+	table.schema.DropEntry(context, drop_info, true);
 }
 
 void IcebergTransaction::DoSchemaCreates(ClientContext &context) {
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
-	for (auto &schema_name : created_schemas) {
+	for (auto &created_schema : created_schemas) {
+		auto &schema_name = created_schema.first;
 		auto namespace_identifiers = IRCAPI::ParseSchemaName(schema_name);
 
 		rest_api_objects::CreateNamespaceRequest request;
@@ -645,8 +688,8 @@ void IcebergTransaction::DoSchemaCreates(ClientContext &context) {
 		auto create_body = RESTObjectToJSONString(request);
 
 		IRCAPI::CommitNamespaceCreate(context, ic_catalog, create_body);
+		ic_catalog.GetSchemas().AddEntry(schema_name, created_schema.second);
 	}
-	created_schemas.clear();
 }
 
 void IcebergTransaction::DoSchemaDeletes(ClientContext &context) {
@@ -678,7 +721,6 @@ void IcebergTransaction::DoSchemaPropertyUpdates(ClientContext &context) {
 
 		IRCAPI::CommitNamespacePropertiesUpdate(context, ic_catalog, create_body, namespace_identifiers);
 	}
-	created_schemas.clear();
 }
 
 namespace {
@@ -762,17 +804,15 @@ void IcebergTransaction::EvictCachedTables() {
 	if (!catalog.attach_options.max_table_staleness_micros.IsValid()) {
 		return;
 	}
-	ScopedTransaction temp_con(db);
-	auto &temp_context = temp_con.GetContext();
 	std::visit(
 	    [&](auto &update) {
 		    using T = std::decay_t<decltype(update)>;
 		    if constexpr (std::is_same_v<T, IcebergTransactionAlterUpdate>) {
 			    for (auto &up_table : update.updated_tables) {
-				    catalog.table_request_cache.Expire(temp_context, up_table.first);
+				    catalog.table_request_cache.EvictIfCurrent(up_table.second.get());
 			    }
 		    } else if constexpr (std::is_same_v<T, IcebergTransactionDeleteUpdate>) {
-			    catalog.table_request_cache.Expire(temp_context, update.deleted_table.get().GetTableKey());
+			    catalog.table_request_cache.EvictIfCurrent(update.deleted_table.get());
 		    }
 	    },
 	    transaction_update);

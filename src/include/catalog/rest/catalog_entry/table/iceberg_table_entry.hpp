@@ -33,20 +33,11 @@ public:
 
 	void BindUpdateConstraints(Binder &binder, LogicalGet &get, LogicalProjection &proj, LogicalUpdate &update,
 	                           ClientContext &context) override;
-	string GetUUID() const;
 
 public:
 	IcebergTableInformation &table_info;
 	//! 'schema_id' used to create the entry, or invalid if this is a dummy
 	optional_idx schema_id;
-};
-
-struct IcebergTableEntryHashFunction {
-	uint64_t operator()(const optional_ptr<IcebergTableEntry> &entry) const {
-		D_ASSERT(entry);
-		auto table_uuid = entry->GetUUID();
-		return std::hash<string>()(table_uuid);
-	}
 };
 
 } // namespace duckdb

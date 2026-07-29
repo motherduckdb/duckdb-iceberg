@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/plan_table_scan_result.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 PlanTableScanResult::PlanTableScanResult() {
 }
 
-PlanTableScanResult PlanTableScanResult::FromJSON(yyjson_val *obj) {
+PlanTableScanResult PlanTableScanResult::FromJSON(JSONValue obj) {
 	PlanTableScanResult res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -45,13 +43,13 @@ PlanTableScanResult PlanTableScanResult::Copy() const {
 	return res;
 }
 
-string PlanTableScanResult::TryFromJSON(yyjson_val *obj) {
+string PlanTableScanResult::TryFromJSON(JSONValue obj) {
 	string error;
-	auto discriminator_val = yyjson_obj_get(obj, "status");
-	if (!discriminator_val || !yyjson_is_str(discriminator_val)) {
+	auto discriminator_val = obj.GetMember("status");
+	if (!discriminator_val.IsValid() || !discriminator_val.IsString()) {
 		return "PlanTableScanResult discriminator 'status' is missing or is not a string";
 	}
-	string discriminator = yyjson_get_str(discriminator_val);
+	string discriminator = discriminator_val.GetString();
 	if (discriminator == "completed") {
 		completed_planning_with_idresult.emplace();
 		error = completed_planning_with_idresult->TryFromJSON(obj);
@@ -82,25 +80,21 @@ string PlanTableScanResult::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void PlanTableScanResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void PlanTableScanResult::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	if (completed_planning_with_idresult.has_value()) {
-		completed_planning_with_idresult->PopulateJSON(doc, obj);
+		completed_planning_with_idresult->PopulateJSON(writer, obj);
 	} else if (failed_planning_result.has_value()) {
-		failed_planning_result->PopulateJSON(doc, obj);
+		failed_planning_result->PopulateJSON(writer, obj);
 	} else if (async_planning_result.has_value()) {
-		async_planning_result->PopulateJSON(doc, obj);
+		async_planning_result->PopulateJSON(writer, obj);
 	} else if (empty_planning_result.has_value()) {
-		empty_planning_result->PopulateJSON(doc, obj);
+		empty_planning_result->PopulateJSON(writer, obj);
 	}
 }
 
-yyjson_mut_val *PlanTableScanResult::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue PlanTableScanResult::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

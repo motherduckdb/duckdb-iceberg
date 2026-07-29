@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/type.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 Type::Type() {
 }
 
-Type Type::FromJSON(yyjson_val *obj) {
+Type Type::FromJSON(JSONValue obj) {
 	Type res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -45,7 +43,7 @@ Type Type::Copy() const {
 	return res;
 }
 
-string Type::TryFromJSON(yyjson_val *obj) {
+string Type::TryFromJSON(JSONValue obj) {
 	string error;
 	do {
 		primitive_type.emplace();
@@ -81,18 +79,18 @@ string Type::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *Type::ToJSON(yyjson_mut_doc *doc) const {
+JSONMutableValue Type::ToJSON(JSONWriter &writer) const {
 	if (primitive_type.has_value()) {
-		return primitive_type->ToJSON(doc);
+		return primitive_type->ToJSON(writer);
 	} else if (struct_type.has_value()) {
-		return struct_type->ToJSON(doc);
+		return struct_type->ToJSON(writer);
 	} else if (list_type.has_value()) {
-		return list_type->ToJSON(doc);
+		return list_type->ToJSON(writer);
 	} else if (map_type.has_value()) {
-		return map_type->ToJSON(doc);
+		return map_type->ToJSON(writer);
 	}
 	// No variant is active - return empty object
-	return yyjson_mut_obj(doc);
+	return writer.CreateObject();
 }
 
 } // namespace rest_api_objects

@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/error_model.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 ErrorModel::ErrorModel() {
 }
 
-ErrorModel ErrorModel::FromJSON(yyjson_val *obj) {
+ErrorModel ErrorModel::FromJSON(JSONValue obj) {
 	ErrorModel res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -39,96 +37,100 @@ ErrorModel ErrorModel::Copy() const {
 	return res;
 }
 
-string ErrorModel::TryFromJSON(yyjson_val *obj) {
+string ErrorModel::TryFromJSON(JSONValue obj) {
 	string error;
-	auto message_val = yyjson_obj_get(obj, "message");
-	if (!message_val) {
+	auto message_val = obj.GetMember("message");
+	if (!message_val.IsValid()) {
 		return "ErrorModel required property 'message' is missing";
 	} else {
-		if (yyjson_is_str(message_val)) {
-			message = yyjson_get_str(message_val);
+		if (json_utils::IsString(message_val)) {
+			message = json_utils::GetString(message_val);
 		} else {
-			return StringUtil::Format("ErrorModel property 'message' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(message_val));
+			return StringUtil::Format("ErrorModel property 'message' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(message_val).c_str());
 		}
 	}
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
+	auto type_val = obj.GetMember("type");
+	if (!type_val.IsValid()) {
 		return "ErrorModel required property 'type' is missing";
 	} else {
-		if (yyjson_is_str(type_val)) {
-			type = yyjson_get_str(type_val);
+		if (json_utils::IsString(type_val)) {
+			type = json_utils::GetString(type_val);
 		} else {
-			return StringUtil::Format("ErrorModel property 'type' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(type_val));
+			return StringUtil::Format("ErrorModel property 'type' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(type_val).c_str());
 		}
 	}
-	auto code_val = yyjson_obj_get(obj, "code");
-	if (!code_val) {
+	auto code_val = obj.GetMember("code");
+	if (!code_val.IsValid()) {
 		return "ErrorModel required property 'code' is missing";
 	} else {
-		if (yyjson_is_int(code_val)) {
-			code = yyjson_get_int(code_val);
+		if (json_utils::IsInteger(code_val)) {
+			code = json_utils::GetSignedInteger(code_val);
 		} else {
-			return StringUtil::Format("ErrorModel property 'code' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(code_val));
+			return StringUtil::Format("ErrorModel property 'code' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(code_val).c_str());
 		}
 	}
-	auto stack_val = yyjson_obj_get(obj, "stack");
-	if (stack_val) {
+	auto stack_val = obj.GetMember("stack");
+	if (stack_val.IsValid()) {
 		vector<string> stack_tmp;
-		if (yyjson_is_arr(stack_val)) {
-			size_t stack_tmp_idx, stack_tmp_max;
-			yyjson_val *stack_tmp_item_val;
-			yyjson_arr_foreach(stack_val, stack_tmp_idx, stack_tmp_max, stack_tmp_item_val) {
+		if (stack_val.IsArray()) {
+			stack_val.IterateArray([&](JSONValue stack_tmp_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				string stack_tmp_item;
-				if (yyjson_is_str(stack_tmp_item_val)) {
-					stack_tmp_item = yyjson_get_str(stack_tmp_item_val);
+				if (json_utils::IsString(stack_tmp_item_val)) {
+					stack_tmp_item = json_utils::GetString(stack_tmp_item_val);
 				} else {
-					return StringUtil::Format(
-					    "ErrorModel property 'stack_tmp_item' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(stack_tmp_item_val));
+					error = StringUtil::Format(
+					    "ErrorModel property 'stack_tmp_item' is not of type 'string', found %s instead",
+					    json_utils::GetTypeDescription(stack_tmp_item_val).c_str());
+					return;
 				}
 				stack_tmp.emplace_back(std::move(stack_tmp_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
-			return StringUtil::Format("ErrorModel property 'stack_tmp' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(stack_val));
+			return StringUtil::Format("ErrorModel property 'stack_tmp' is not of type 'array', found %s instead",
+			                          json_utils::GetTypeDescription(stack_val).c_str());
 		}
 		stack = std::move(stack_tmp);
 	}
 	return "";
 }
 
-void ErrorModel::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void ErrorModel::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: message
-	yyjson_mut_obj_add_strcpy(doc, obj, "message", message.c_str());
+	auto message_json = writer.CreateString(message);
+	obj.Add("message", message_json);
 
 	// Serialize: type
-	yyjson_mut_obj_add_strcpy(doc, obj, "type", type.c_str());
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
 
 	// Serialize: code
-	yyjson_mut_obj_add_int(doc, obj, "code", code);
+	auto code_json = writer.CreateSignedInteger(code);
+	obj.Add("code", code_json);
 
 	// Serialize: stack
 	if (stack.has_value()) {
 		auto &stack_value = *stack;
-		yyjson_mut_val *stack_value_arr = yyjson_mut_arr(doc);
-		for (const auto &item : stack_value) {
-			yyjson_mut_val *item_val = yyjson_mut_str(doc, item.c_str());
-			yyjson_mut_arr_append(stack_value_arr, item_val);
+		auto stack_json = writer.CreateArray();
+		for (const auto &stack_json_item : stack_value) {
+			auto stack_json_item_json = writer.CreateString(stack_json_item);
+			stack_json.Append(stack_json_item_json);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "stack", stack_value_arr);
+		obj.Add("stack", stack_json);
 	}
 }
 
-yyjson_mut_val *ErrorModel::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue ErrorModel::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

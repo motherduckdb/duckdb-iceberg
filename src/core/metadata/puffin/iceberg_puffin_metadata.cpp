@@ -1,0 +1,206 @@
+#include "core/metadata/puffin/iceberg_puffin_metadata.hpp"
+
+#include "catalog/rest/api/catalog_utils.hpp"
+#include "duckdb/common/allocator.hpp"
+#include "duckdb/common/string_util.hpp"
+
+#include "duckdb/common/json_document.hpp"
+
+namespace duckdb {
+
+namespace {
+
+constexpr data_t PUFFIN_MAGIC[4] = {0x50, 0x46, 0x41, 0x31};
+constexpr idx_t FOOTER_TRAILER_SIZE = sizeof(int32_t) + sizeof(uint32_t) + sizeof(PUFFIN_MAGIC);
+constexpr idx_t FOOTER_FIXED_SIZE = sizeof(PUFFIN_MAGIC) + FOOTER_TRAILER_SIZE;
+
+string ParseProperties(optional<case_insensitive_map_t<string>> &target, JSONValue properties_val) {
+	if (!properties_val.IsObject()) {
+		return "properties is not an object";
+	}
+	case_insensitive_map_t<string> properties;
+	string error;
+	properties_val.IterateObject([&](const string &key, JSONValue val) {
+		if (!val.IsString()) {
+			error = "property value is not a string";
+			return;
+		}
+		properties.emplace(key, val.GetString());
+	});
+	if (!error.empty()) {
+		return error;
+	}
+	target = std::move(properties);
+	return "";
+}
+
+string ParseBlobMetadata(IcebergPuffinBlobMetadata &result, JSONValue obj) {
+	auto type_val = obj.GetMember("type");
+	if (!type_val.IsString()) {
+		return "Puffin blob metadata property 'type' is missing or not a string";
+	}
+	result.type = type_val.GetString();
+
+	auto fields_val = obj.GetMember("fields");
+	if (!fields_val.IsArray()) {
+		return "Puffin blob metadata property 'fields' is missing or not an array";
+	}
+	string fields_error;
+	fields_val.IterateArray([&](JSONValue val) {
+		if (!val.IsInteger()) {
+			fields_error = "Puffin blob metadata field-id is not an integer";
+			return;
+		}
+		result.fields.emplace_back(val.GetType() == JSONValueType::SIGNED_INTEGER ? val.GetSignedInteger()
+		                                                                          : val.GetUnsignedInteger());
+	});
+	if (!fields_error.empty()) {
+		return fields_error;
+	}
+
+	auto parse_required_int = [&](const char *key, int64_t &target) -> string {
+		auto int_val = obj.GetMember(key);
+		if (!int_val.IsValid()) {
+			return StringUtil::Format("Puffin blob metadata property '%s' is missing", key);
+		}
+		if (int_val.GetType() == JSONValueType::SIGNED_INTEGER) {
+			target = int_val.GetSignedInteger();
+		} else if (int_val.GetType() == JSONValueType::UNSIGNED_INTEGER) {
+			target = static_cast<int64_t>(int_val.GetUnsignedInteger());
+		} else {
+			return StringUtil::Format("Puffin blob metadata property '%s' is not an integer", key);
+		}
+		return "";
+	};
+
+	auto error = parse_required_int("snapshot-id", result.snapshot_id);
+	if (!error.empty()) {
+		return error;
+	}
+	error = parse_required_int("sequence-number", result.sequence_number);
+	if (!error.empty()) {
+		return error;
+	}
+	error = parse_required_int("offset", result.offset);
+	if (!error.empty()) {
+		return error;
+	}
+	error = parse_required_int("length", result.length);
+	if (!error.empty()) {
+		return error;
+	}
+
+	auto compression_val = obj.GetMember("compression-codec");
+	if (compression_val.IsValid()) {
+		if (!compression_val.IsString()) {
+			return "Puffin blob metadata property 'compression-codec' is not a string";
+		}
+		result.compression_codec = compression_val.GetString();
+	}
+
+	auto properties_val = obj.GetMember("properties");
+	if (properties_val.IsValid()) {
+		error = ParseProperties(result.properties, properties_val);
+		if (!error.empty()) {
+			return "Puffin blob metadata " + error;
+		}
+	}
+	return "";
+}
+
+IcebergPuffinFileMetadata ParseFileMetadata(JSONValue root) {
+	IcebergPuffinFileMetadata result;
+	auto blobs_val = root.GetMember("blobs");
+	if (!blobs_val.IsArray()) {
+		throw InvalidInputException("Puffin file metadata property 'blobs' is missing or not an array");
+	}
+	blobs_val.IterateArray([&](JSONValue val) {
+		IcebergPuffinBlobMetadata blob;
+		auto error = ParseBlobMetadata(blob, val);
+		if (!error.empty()) {
+			throw InvalidInputException(error);
+		}
+		result.blobs.emplace_back(std::move(blob));
+	});
+	auto properties_val = root.GetMember("properties");
+	if (properties_val.IsValid()) {
+		auto error = ParseProperties(result.properties, properties_val);
+		if (!error.empty()) {
+			throw InvalidInputException("Puffin file metadata " + error);
+		}
+	}
+	return result;
+}
+
+} // namespace
+
+IcebergPuffinFileFooter IcebergPuffinReader::ReadFooter(FileSystem &fs, FileHandle &handle, const string &path,
+                                                        optional<int64_t> expected_file_size,
+                                                        optional<int64_t> expected_footer_size) {
+	IcebergPuffinFileFooter result;
+
+	auto file_size = handle.GetFileSize();
+	if (expected_file_size && file_size != *expected_file_size) {
+		throw InvalidConfigurationException("Puffin file '%s' size mismatch: expected %lld bytes, found %lld bytes",
+		                                    path, *expected_file_size, file_size);
+	}
+	if (file_size < static_cast<int64_t>(sizeof(PUFFIN_MAGIC) + FOOTER_FIXED_SIZE)) {
+		throw InvalidConfigurationException("Puffin file '%s' is too small to be valid", path);
+	}
+
+	auto trailer_buffer = Allocator::DefaultAllocator().Allocate(FOOTER_TRAILER_SIZE);
+	auto trailer = trailer_buffer.get();
+	fs.Read(handle, trailer, FOOTER_TRAILER_SIZE, file_size - FOOTER_TRAILER_SIZE);
+	if (memcmp(trailer + sizeof(int32_t) + sizeof(uint32_t), PUFFIN_MAGIC, sizeof(PUFFIN_MAGIC)) != 0) {
+		throw InvalidConfigurationException("Puffin file '%s' has invalid trailing magic", path);
+	}
+
+	auto flags = Load<uint32_t>(trailer + sizeof(int32_t));
+	if (flags & 0x1) {
+		throw NotImplementedException("Puffin file '%s' uses a compressed footer payload, which is not supported",
+		                              path);
+	}
+
+	auto footer_payload_size = Load<int32_t>(trailer);
+	if (footer_payload_size < 0) {
+		throw InvalidConfigurationException("Puffin file '%s' has a negative footer payload size", path);
+	}
+	result.footer_payload_size = static_cast<idx_t>(footer_payload_size);
+	result.footer_size = result.footer_payload_size + FOOTER_FIXED_SIZE;
+
+	if (expected_footer_size && result.footer_size != static_cast<idx_t>(*expected_footer_size)) {
+		throw InvalidConfigurationException(
+		    "Puffin file '%s' footer size mismatch: expected %lld bytes, found %llu bytes", path, *expected_footer_size,
+		    result.footer_size);
+	}
+	if (result.footer_size > static_cast<idx_t>(file_size)) {
+		throw InvalidConfigurationException("Puffin file '%s' footer extends past the end of the file", path);
+	}
+
+	auto footer_payload_start = file_size - FOOTER_TRAILER_SIZE - result.footer_payload_size;
+	if (footer_payload_start < static_cast<int64_t>(sizeof(PUFFIN_MAGIC))) {
+		throw InvalidConfigurationException("Puffin file '%s' has an invalid footer payload offset", path);
+	}
+
+	auto footer_buffer = Allocator::DefaultAllocator().Allocate(sizeof(PUFFIN_MAGIC) + result.footer_payload_size);
+	auto footer = footer_buffer.get();
+	fs.Read(handle, footer, sizeof(PUFFIN_MAGIC) + result.footer_payload_size,
+	        footer_payload_start - static_cast<int64_t>(sizeof(PUFFIN_MAGIC)));
+	if (memcmp(footer, PUFFIN_MAGIC, sizeof(PUFFIN_MAGIC)) != 0) {
+		throw InvalidConfigurationException("Puffin file '%s' has invalid footer leading magic", path);
+	}
+
+	auto doc =
+	    JSONDocument::Parse(reinterpret_cast<const char *>(footer + sizeof(PUFFIN_MAGIC)), result.footer_payload_size);
+	result.file_metadata = ParseFileMetadata(doc->GetRoot());
+	return result;
+}
+
+IcebergPuffinFileFooter IcebergPuffinReader::ReadFooter(FileSystem &fs, const string &path,
+                                                        optional<int64_t> expected_file_size,
+                                                        optional<int64_t> expected_footer_size) {
+	auto handle = fs.OpenFile(path, FileFlags::FILE_FLAGS_READ);
+	return ReadFooter(fs, *handle, path, std::move(expected_file_size), std::move(expected_footer_size));
+}
+
+} // namespace duckdb

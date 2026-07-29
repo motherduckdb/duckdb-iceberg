@@ -19,7 +19,7 @@
 #include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
 #include "planning/metadata_io/manifest_list/iceberg_manifest_list_reader.hpp"
 #include "rest_catalog/objects/schema.hpp"
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
 
 namespace duckdb {
 
@@ -75,22 +75,22 @@ static string GetRequiredMetadataString(const InsertionOrderPreservingMap<Value>
 }
 
 static optional<int32_t> TryParseSchemaIdFromSchemaJson(const string &schema_json) {
-	using namespace duckdb_yyjson;
-
-	auto doc = std::unique_ptr<yyjson_doc, void (*)(yyjson_doc *)>(
-	    yyjson_read(schema_json.c_str(), schema_json.size(), 0), yyjson_doc_free);
+	JSONParseError error;
+	auto doc = JSONDocument::TryParse(schema_json.c_str(), schema_json.size(), error);
 	if (!doc) {
 		return nullopt;
 	}
-	auto root = yyjson_doc_get_root(doc.get());
-	if (!root) {
+	auto root = doc->GetRoot();
+	if (!root.IsValid()) {
 		return nullopt;
 	}
-	auto schema_id_val = yyjson_obj_get(root, "schema-id");
-	if (!schema_id_val || !yyjson_is_int(schema_id_val)) {
+	auto schema_id_val = root.GetMember("schema-id");
+	if (!schema_id_val.IsInteger()) {
 		return nullopt;
 	}
-	return static_cast<int32_t>(yyjson_get_int(schema_id_val));
+	return static_cast<int32_t>(schema_id_val.GetType() == JSONValueType::SIGNED_INTEGER
+	                                ? schema_id_val.GetSignedInteger()
+	                                : schema_id_val.GetUnsignedInteger());
 }
 
 static IcebergManifestMetadata ParseManifestMetadata(const InsertionOrderPreservingMap<Value> &metadata,
@@ -569,8 +569,9 @@ static void FixSamePhysicalTypeCasts(BoundCastInfo &cast_info, const LogicalType
 static void FixSamePhysicalTypeCastsInExpr(Expression &expr) {
 	auto expression_type = expr.GetExpressionType();
 	if (expression_type == ExpressionType::OPERATOR_CAST) {
-		auto &cast_expr = expr.Cast<BoundCastExpression>();
-		FixSamePhysicalTypeCasts(cast_expr.GetBoundCastMutable(), cast_expr.source_type(), cast_expr.GetReturnType());
+		auto &cast_expr = expr.Cast<BoundFunctionExpression>();
+		FixSamePhysicalTypeCasts(BoundCastExpression::GetBoundCastMutable(cast_expr),
+		                         BoundCastExpression::SourceType(cast_expr), cast_expr.GetReturnType());
 	} else if (expression_type == ExpressionType::BOUND_FUNCTION) {
 		for (auto &child : expr.Cast<BoundFunctionExpression>().GetChildrenMutable()) {
 			if (child) {

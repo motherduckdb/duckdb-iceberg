@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/delete_file.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 DeleteFile::DeleteFile() {
 }
 
-DeleteFile DeleteFile::FromJSON(yyjson_val *obj) {
+DeleteFile DeleteFile::FromJSON(JSONValue obj) {
 	DeleteFile res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -37,13 +35,13 @@ DeleteFile DeleteFile::Copy() const {
 	return res;
 }
 
-string DeleteFile::TryFromJSON(yyjson_val *obj) {
+string DeleteFile::TryFromJSON(JSONValue obj) {
 	string error;
-	auto discriminator_val = yyjson_obj_get(obj, "content");
-	if (!discriminator_val || !yyjson_is_str(discriminator_val)) {
+	auto discriminator_val = obj.GetMember("content");
+	if (!discriminator_val.IsValid() || !discriminator_val.IsString()) {
 		return "DeleteFile discriminator 'content' is missing or is not a string";
 	}
-	string discriminator = yyjson_get_str(discriminator_val);
+	string discriminator = discriminator_val.GetString();
 	if (discriminator == "position-deletes") {
 		position_delete_file.emplace();
 		error = position_delete_file->TryFromJSON(obj);
@@ -62,21 +60,17 @@ string DeleteFile::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void DeleteFile::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void DeleteFile::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	if (position_delete_file.has_value()) {
-		position_delete_file->PopulateJSON(doc, obj);
+		position_delete_file->PopulateJSON(writer, obj);
 	} else if (equality_delete_file.has_value()) {
-		equality_delete_file->PopulateJSON(doc, obj);
+		equality_delete_file->PopulateJSON(writer, obj);
 	}
 }
 
-yyjson_mut_val *DeleteFile::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue DeleteFile::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/literal_expression.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 LiteralExpression::LiteralExpression() {
 }
 
-LiteralExpression LiteralExpression::FromJSON(yyjson_val *obj) {
+LiteralExpression LiteralExpression::FromJSON(JSONValue obj) {
 	LiteralExpression res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -32,10 +30,10 @@ LiteralExpression LiteralExpression::Copy() const {
 	return res;
 }
 
-string LiteralExpression::TryFromJSON(yyjson_val *obj) {
+string LiteralExpression::TryFromJSON(JSONValue obj) {
 	string error;
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
+	auto type_val = obj.GetMember("type");
+	if (!type_val.IsValid()) {
 		return "LiteralExpression required property 'type' is missing";
 	} else {
 		error = type.TryFromJSON(type_val);
@@ -43,8 +41,8 @@ string LiteralExpression::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto term_val = yyjson_obj_get(obj, "term");
-	if (!term_val) {
+	auto term_val = obj.GetMember("term");
+	if (!term_val.IsValid()) {
 		return "LiteralExpression required property 'term' is missing";
 	} else {
 		error = term.TryFromJSON(term_val);
@@ -52,8 +50,8 @@ string LiteralExpression::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto value_val = yyjson_obj_get(obj, "value");
-	if (!value_val) {
+	auto value_val = obj.GetMember("value");
+	if (!value_val.IsValid()) {
 		return "LiteralExpression required property 'value' is missing";
 	} else {
 		error = value.TryFromJSON(value_val);
@@ -64,8 +62,24 @@ string LiteralExpression::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *LiteralExpression::ToJSON(yyjson_mut_doc *doc) const {
-	throw InternalException("Can't serialize this class (LiteralExpression)");
+void LiteralExpression::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
+	// Serialize: type
+	auto type_json = type.ToJSON(writer);
+	obj.Add("type", type_json);
+
+	// Serialize: term
+	auto term_json = term.ToJSON(writer);
+	obj.Add("term", term_json);
+
+	// Serialize: value
+	auto value_json = value.ToJSON(writer);
+	obj.Add("value", value_json);
+}
+
+JSONMutableValue LiteralExpression::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

@@ -69,7 +69,7 @@ public:
 	//! Internal JSON parsing functions
 	optional_ptr<const IcebergSnapshot> FindSnapshotByIdInternal(int64_t target_id) const;
 	shared_ptr<IcebergTableSchema> GetSchemaFromId(int32_t schema_id) const;
-	//! Searches every schema (current and historical) for a top-level column with the given field-id.
+	//! Searches every schema (current and historical) for a column with the given field-id.
 	//! Used to resolve equality-delete columns that have since been dropped from the table.
 	optional_ptr<const IcebergColumnDefinition> FindColumnByFieldId(int32_t field_id) const;
 	optional_ptr<const IcebergPartitionSpec> FindPartitionSpecById(int32_t spec_id) const;
@@ -101,12 +101,12 @@ public:
 	const unordered_map<int32_t, shared_ptr<IcebergTableSchema>> &GetSchemas() const;
 
 private:
-	yyjson_mut_val *SchemasToJSON(yyjson_mut_doc *doc) const;
-	yyjson_mut_val *PartitionsToJSON(yyjson_mut_doc *doc) const;
-	yyjson_mut_val *TablePropertiesToJSON(yyjson_mut_doc *doc) const;
-	yyjson_mut_val *SnapshotsToJSON(yyjson_mut_doc *doc) const;
-	yyjson_mut_val *SnapshotLogToJSON(yyjson_mut_doc *doc) const;
-	yyjson_mut_val *SortOrdersToJSON(yyjson_mut_doc *doc) const;
+	JSONMutableValue SchemasToJSON(JSONWriter &writer) const;
+	JSONMutableValue PartitionsToJSON(JSONWriter &writer) const;
+	JSONMutableValue TablePropertiesToJSON(JSONWriter &writer) const;
+	JSONMutableValue SnapshotsToJSON(JSONWriter &writer) const;
+	JSONMutableValue SnapshotLogToJSON(JSONWriter &writer) const;
+	JSONMutableValue SortOrdersToJSON(JSONWriter &writer) const;
 
 public:
 	string table_uuid;

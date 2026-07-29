@@ -12,6 +12,7 @@
 #include "duckdb/common/operator/cast_operators.hpp"
 #include "duckdb/parser/column_definition.hpp"
 #include "duckdb/logging/logger.hpp"
+#include "duckdb/common/types/uuid.hpp"
 
 #include "catalog/rest/api/catalog_api.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
@@ -168,10 +169,14 @@ static void ParseConfigOptions(const case_insensitive_map_t<string> &config, cas
 }
 
 IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientContext &context) const {
+	return GetVendedCredentials(context, storage_credentials);
+}
+
+IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(
+    ClientContext &context, const vector<rest_api_objects::StorageCredential> &storage_credentials) const {
 	IRCAPITableCredentials result;
 	auto schema_component = IRCPathComponent::NamespaceComponent(schema.namespace_items);
-	auto secret_base_name = StringUtil::Format("__internal_ic_%s__%s__%s", catalog.GetName().GetIdentifierName(),
-	                                           schema_component.encoded, name);
+	auto secret_base_name = UUID::ToString(UUID::GenerateRandomUUID());
 	case_insensitive_map_t<Value> user_defaults;
 	if (catalog.auth_handler->type == IcebergAuthorizationType::SIGV4) {
 		auto &sigv4_auth = catalog.auth_handler->Cast<SIGV4Authorization>();
@@ -274,6 +279,10 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 	}
 
 	return result;
+}
+
+bool IcebergTableInformation::IsRenamed() const {
+	return original_name != name;
 }
 
 optional_ptr<CatalogEntry> IcebergTableInformation::CreateSchemaVersion(const IcebergTableSchema &table_schema) {
@@ -491,6 +500,14 @@ static void AddHTTPSecretsToOptions(SecretEntry &http_secret_entry, case_insensi
 }
 
 void IcebergTableInformation::LoadCredentials(ClientContext &context) const {
+	if (catalog.attach_options.access_mode != IRCAccessDelegationMode::VENDED_CREDENTIALS) {
+		// assume secret already exists
+		return;
+	}
+	LoadCredentials(context, GetVendedCredentials(context));
+}
+
+void IcebergTableInformation::LoadCredentials(ClientContext &context, IRCAPITableCredentials table_credentials) const {
 	auto &secret_manager = SecretManager::Get(context);
 
 	auto &transaction = IcebergTransaction::Get(context, catalog);
@@ -500,7 +517,6 @@ void IcebergTableInformation::LoadCredentials(ClientContext &context) const {
 	}
 	// Get Credentials from IRC API
 	auto &fs = FileSystem::GetFileSystem(context);
-	auto table_credentials = GetVendedCredentials(context);
 	auto metadata_path = table_metadata.GetMetadataPath(fs);
 
 	auto http_secret_entry = IcebergTableSecretProvider::GetHTTPSecretForCatalog(context, catalog);
@@ -632,24 +648,21 @@ void IcebergTableInformation::RefreshFromCatalog(ClientContext &context) {
 		    StringUtil::Format("GetTableInformation endpoint returned response code %s with message \"%s\"",
 		                       EnumUtil::ToString(get_table_result.status_), get_table_result.error_->_error.message));
 	}
-	ic_catalog.table_request_cache.SetOrOverwrite(context, table_key, std::move(get_table_result.result_));
+	auto &load_table_result = *get_table_result.result_;
 	schema_versions.clear();
 	dummy_entry.reset();
-	{
-		lock_guard<std::mutex> cache_lock(ic_catalog.table_request_cache.Lock());
-		auto cached_table_result = ic_catalog.table_request_cache.Get(context, table_key, cache_lock, false);
-		D_ASSERT(cached_table_result);
-		auto &load_table_result = *cached_table_result->load_table_result;
-		InitializeFromLoadTableResult(load_table_result);
-	}
+	InitializeFromLoadTableResult(load_table_result);
+	ic_catalog.table_request_cache.SetOrOverwrite(table_key, std::move(get_table_result.result_));
 }
 
 IcebergTableInformation IcebergTableInformation::Copy() const {
 	auto clone = IcebergTableInformation(catalog, schema, name);
-	clone.table_id = table_id;
 	clone.table_metadata = table_metadata.Copy();
 	clone.config = config;
-	clone.storage_credentials = storage_credentials;
+	clone.initialization_source = initialization_source;
+	for (auto &credential : storage_credentials) {
+		clone.storage_credentials.push_back(credential.Copy());
+	}
 	return clone;
 }
 
@@ -723,8 +736,7 @@ void IcebergTableInformation::InitSchemaVersions() {
 
 IcebergTableInformation::IcebergTableInformation(IcebergCatalog &catalog, IcebergSchemaEntry &schema,
                                                  const string &name)
-    : catalog(catalog), schema(schema), name(name) {
-	table_id = "uuid-" + schema.name + "-" + name;
+    : catalog(catalog), schema(schema), name(name), original_name(name) {
 }
 
 IcebergTransactionData &IcebergTableInformation::GetOrCreateTransactionData(IcebergTransaction &transaction) {
@@ -736,8 +748,9 @@ IcebergTransactionData &IcebergTableInformation::GetOrCreateTransactionData(Iceb
 	return *transaction_data;
 }
 
-void IcebergTableInformation::InitializeFromLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result,
-                                                            bool initialize_schemas) {
+void IcebergTableInformation::InitializeFromLoadTableResult(
+    const rest_api_objects::LoadTableResult &load_table_result) {
+	initialization_source = load_table_result;
 	table_metadata = IcebergTableMetadata::FromTableMetadata(load_table_result.metadata);
 	if (auto &val = load_table_result.config) {
 		config = *val;
@@ -746,15 +759,13 @@ void IcebergTableInformation::InitializeFromLoadTableResult(const rest_api_objec
 
 	if (auto &credentials = load_table_result.storage_credentials) {
 		for (auto &credential : *credentials) {
-			storage_credentials.push_back(credential);
+			storage_credentials.push_back(credential.Copy());
 		}
 	}
-	if (initialize_schemas) {
-		auto &schemas = table_metadata.GetSchemas();
-		D_ASSERT(!schemas.empty());
-		for (auto &table_schema : schemas) {
-			CreateSchemaVersion(*table_schema.second);
-		}
+	auto &schemas = table_metadata.GetSchemas();
+	D_ASSERT(!schemas.empty());
+	for (auto &table_schema : schemas) {
+		CreateSchemaVersion(*table_schema.second);
 	}
 }
 

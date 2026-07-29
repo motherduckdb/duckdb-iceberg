@@ -22,6 +22,7 @@
 #include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
 #include "core/metadata/partition/iceberg_partition_spec.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
+#include "iceberg_options.hpp"
 
 namespace duckdb {
 
@@ -66,24 +67,39 @@ bool IcebergTableSet::FillEntry(ClientContext &context, IcebergTableInformation 
 		    StringUtil::Format("GetTableInformation endpoint returned response code %s with message \"%s\"",
 		                       EnumUtil::ToString(get_table_result.status_), get_table_result.error_->_error.message));
 	}
-	ic_catalog.table_request_cache.SetOrOverwrite(context, table_key, std::move(get_table_result.result_));
-	{
-		lock_guard<std::mutex> cache_lock(ic_catalog.table_request_cache.Lock());
-		auto cached_table_result = ic_catalog.table_request_cache.Get(context, table_key, cache_lock, false);
-		D_ASSERT(cached_table_result);
-		auto &load_table_result = *cached_table_result->load_table_result;
-		table.InitializeFromLoadTableResult(load_table_result);
-	}
+	auto &load_table_result = *get_table_result.result_;
+	table.InitializeFromLoadTableResult(load_table_result);
+	ic_catalog.table_request_cache.SetOrOverwrite(table_key, std::move(get_table_result.result_));
 	return true;
+}
+
+IcebergTableEntry &IcebergTableSet::GetOrCreateDummy(IcebergTableInformation &table_info) const {
+	if (table_info.dummy_entry) {
+		return *table_info.dummy_entry;
+	}
+	// create a table entry with fake schema data to avoid calling the LoadTableInformation endpoint for every
+	// table while listing schemas
+	CreateTableInfo info(schema, Identifier(table_info.name));
+	vector<ColumnDefinition> columns;
+	auto col = ColumnDefinition(Identifier("__"), LogicalType::UNKNOWN);
+	columns.push_back(std::move(col));
+	info.columns = ColumnList(std::move(columns));
+	auto table_entry = make_uniq<IcebergTableEntry>(table_info, catalog, schema, info, optional_idx());
+	if (!table_entry->internal) {
+		table_entry->internal = schema.internal;
+	}
+	auto result = table_entry.get();
+	if (result->name.empty()) {
+		throw InternalException("IcebergTableSet::CreateEntry called with empty name");
+	}
+	table_info.dummy_entry = std::move(table_entry);
+	return *table_info.dummy_entry;
 }
 
 void IcebergTableSet::Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback) {
 	lock_guard<mutex> lock(entry_lock);
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
 	LoadEntries(context);
-	case_insensitive_set_t non_iceberg_tables;
-	auto schema_component = IRCPathComponent::NamespaceComponent(schema.namespace_items);
-	auto table_namespace = schema_component.encoded;
 	for (auto &entry : entries) {
 		auto &table_info = *entry.second;
 		auto table_key = table_info.GetTableKey();
@@ -100,35 +116,8 @@ void IcebergTableSet::Scan(ClientContext &context, const std::function<void(Cata
 			}
 		}
 
-		if (table_info.dummy_entry) {
-			// FIXME: why do we need to return the same entry again?
-			auto &optional = table_info.dummy_entry.get()->Cast<CatalogEntry>();
-			callback(optional);
-			continue;
-		}
-
-		// create a table entry with fake schema data to avoid calling the LoadTableInformation endpoint for every
-		// table while listing schemas
-		CreateTableInfo info(schema, Identifier(table_info.name));
-		vector<ColumnDefinition> columns;
-		auto col = ColumnDefinition(Identifier("__"), LogicalType::UNKNOWN);
-		columns.push_back(std::move(col));
-		info.columns = ColumnList(std::move(columns));
-		auto table_entry = make_uniq<IcebergTableEntry>(table_info, catalog, schema, info, optional_idx());
-		if (!table_entry->internal) {
-			table_entry->internal = schema.internal;
-		}
-		auto result = table_entry.get();
-		if (result->name.empty()) {
-			throw InternalException("IcebergTableSet::CreateEntry called with empty name");
-		}
-		table_info.dummy_entry = std::move(table_entry);
-		auto &optional = table_info.dummy_entry.get()->Cast<CatalogEntry>();
-		callback(optional);
-	}
-	// erase not iceberg tables
-	for (auto &entry : non_iceberg_tables) {
-		entries.erase(entry);
+		auto &dummy = GetOrCreateDummy(table_info);
+		callback(dummy);
 	}
 }
 
@@ -210,7 +199,12 @@ IcebergTableInformation &IcebergTableSet::CreateNewEntry(ClientContext &context,
 			throw InvalidInputException("The lowest supported iceberg version is 1!");
 		}
 	} else {
-		iceberg_version = 2;
+		Value default_version_value;
+		if (context.TryGetCurrentSetting(DEFAULT_FORMAT_VERSION_CONFIG_VARIABLE, default_version_value)) {
+			iceberg_version = default_version_value.GetValue<uint64_t>();
+		} else {
+			iceberg_version = DEFAULT_ICEBERG_FORMAT_VERSION;
+		}
 	}
 
 	string location;
@@ -252,21 +246,16 @@ IcebergTableInformation &IcebergTableSet::CreateNewEntry(ClientContext &context,
 
 	// Immediately create the table with stage_create = true to get metadata & data location(s)
 	// transaction commit will either commit with data (OR) create the table with stage_create = false
-	auto load_table_result = make_uniq<const rest_api_objects::LoadTableResult>(
+	auto new_table_result = make_uniq<const rest_api_objects::LoadTableResult>(
 	    IRCAPI::CommitNewTable(context, catalog, schema.namespace_items, create_table_request));
 
 	auto key = IcebergTableInformation::GetTableKey(schema.namespace_items, info.GetTableName().GetIdentifierName());
-	catalog.table_request_cache.SetOrOverwrite(context, key, std::move(load_table_result));
+	auto &load_table_result = *new_table_result;
 	auto &alter_update = iceberg_transaction.GetOrCreateAlter();
 	auto &table_info = alter_update.CreateTable(
 	    key, IcebergTableInformation(catalog, schema, info.GetTableName().GetIdentifierName()));
-	{
-		lock_guard<mutex> cache_lock(catalog.table_request_cache.Lock());
-		auto cached_table_result = catalog.table_request_cache.Get(context, key, cache_lock, false);
-		D_ASSERT(cached_table_result);
-		auto &load_table_result = cached_table_result->load_table_result;
-		table_info.InitializeFromLoadTableResult(*load_table_result, true);
-	}
+	table_info.InitializeFromLoadTableResult(load_table_result);
+	catalog.table_request_cache.SetOrOverwrite(key, std::move(new_table_result));
 
 	// if we stage created the table, we add an assert create
 	auto &transaction_data = table_info.GetOrCreateTransactionData(iceberg_transaction);

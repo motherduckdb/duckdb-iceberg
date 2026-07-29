@@ -8,8 +8,6 @@
 #include "rest_catalog/objects/sort_order.hpp"
 #include "rest_catalog/objects/sort_field.hpp"
 
-using namespace duckdb_yyjson;
-
 namespace duckdb {
 
 struct IcebergPartitionSpecField {
@@ -50,13 +48,13 @@ public:
 	bool IsPartitioned() const;
 	const IcebergPartitionSpecField &GetFieldBySourceId(idx_t source_id) const;
 	optional_ptr<const IcebergPartitionSpecField> TryGetFieldBySourceId(idx_t source_id) const;
-	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 	string FieldsToJSONString() const;
 	const vector<IcebergPartitionSpecField> &GetFields() const;
 	bool Equals(const IcebergPartitionSpec &other) const;
 
 private:
-	yyjson_mut_val *FieldsToJSON(yyjson_mut_doc *doc) const;
+	JSONMutableValue FieldsToJSON(JSONWriter &writer) const;
 
 public:
 	int32_t spec_id;

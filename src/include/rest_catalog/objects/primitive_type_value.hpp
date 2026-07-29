@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
 #include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
@@ -15,6 +15,7 @@
 #include "rest_catalog/objects/float_type_value.hpp"
 #include "rest_catalog/objects/integer_type_value.hpp"
 #include "rest_catalog/objects/long_type_value.hpp"
+#include "rest_catalog/objects/null_type_value.hpp"
 #include "rest_catalog/objects/string_type_value.hpp"
 #include "rest_catalog/objects/time_type_value.hpp"
 #include "rest_catalog/objects/timestamp_nano_type_value.hpp"
@@ -22,8 +23,6 @@
 #include "rest_catalog/objects/timestamp_tz_nano_type_value.hpp"
 #include "rest_catalog/objects/timestamp_tz_type_value.hpp"
 #include "rest_catalog/objects/uuidtype_value.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -38,16 +37,17 @@ public:
 
 public:
 	// Deserialization
-	static PrimitiveTypeValue FromJSON(yyjson_val *obj);
-	string TryFromJSON(yyjson_val *obj);
+	static PrimitiveTypeValue FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
 	// Copy
 	PrimitiveTypeValue Copy() const;
 
 	// Serialization
-	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
+	optional<NullTypeValue> null_type_value;
 	optional<BooleanTypeValue> boolean_type_value;
 	optional<IntegerTypeValue> integer_type_value;
 	optional<LongTypeValue> long_type_value;

@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/completed_planning_with_idresult.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -17,7 +15,7 @@ CompletedPlanningWithIDResult::CompletedPlanningWithIDResult() {
 CompletedPlanningWithIDResult::Object6::Object6() {
 }
 
-CompletedPlanningWithIDResult::Object6 CompletedPlanningWithIDResult::Object6::FromJSON(yyjson_val *obj) {
+CompletedPlanningWithIDResult::Object6 CompletedPlanningWithIDResult::Object6::FromJSON(JSONValue obj) {
 	Object6 res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -32,38 +30,35 @@ CompletedPlanningWithIDResult::Object6 CompletedPlanningWithIDResult::Object6::C
 	return res;
 }
 
-string CompletedPlanningWithIDResult::Object6::TryFromJSON(yyjson_val *obj) {
+string CompletedPlanningWithIDResult::Object6::TryFromJSON(JSONValue obj) {
 	string error;
-	auto plan_id_val = yyjson_obj_get(obj, "plan-id");
-	if (!plan_id_val) {
+	auto plan_id_val = obj.GetMember("plan-id");
+	if (!plan_id_val.IsValid()) {
 		return "Object6 required property 'plan-id' is missing";
 	} else {
-		if (yyjson_is_str(plan_id_val)) {
-			plan_id = yyjson_get_str(plan_id_val);
+		if (json_utils::IsString(plan_id_val)) {
+			plan_id = json_utils::GetString(plan_id_val);
 		} else {
-			return StringUtil::Format("Object6 property 'plan_id' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(plan_id_val));
+			return StringUtil::Format("Object6 property 'plan_id' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(plan_id_val).c_str());
 		}
 	}
 	return "";
 }
 
-void CompletedPlanningWithIDResult::Object6::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void CompletedPlanningWithIDResult::Object6::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: plan-id
-	yyjson_mut_obj_add_strcpy(doc, obj, "plan-id", plan_id.c_str());
+	auto plan_id_json = writer.CreateString(plan_id);
+	obj.Add("plan-id", plan_id_json);
 }
 
-yyjson_mut_val *CompletedPlanningWithIDResult::Object6::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue CompletedPlanningWithIDResult::Object6::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 
-CompletedPlanningWithIDResult CompletedPlanningWithIDResult::FromJSON(yyjson_val *obj) {
+CompletedPlanningWithIDResult CompletedPlanningWithIDResult::FromJSON(JSONValue obj) {
 	CompletedPlanningWithIDResult res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -79,7 +74,7 @@ CompletedPlanningWithIDResult CompletedPlanningWithIDResult::Copy() const {
 	return res;
 }
 
-string CompletedPlanningWithIDResult::TryFromJSON(yyjson_val *obj) {
+string CompletedPlanningWithIDResult::TryFromJSON(JSONValue obj) {
 	string error;
 	error = completed_planning_result.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -92,21 +87,17 @@ string CompletedPlanningWithIDResult::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void CompletedPlanningWithIDResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void CompletedPlanningWithIDResult::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize base class: CompletedPlanningResult
-	completed_planning_result.PopulateJSON(doc, obj);
+	completed_planning_result.PopulateJSON(writer, obj);
 
 	// Serialize base class: Object6
-	object_6.PopulateJSON(doc, obj);
+	object_6.PopulateJSON(writer, obj);
 }
 
-yyjson_mut_val *CompletedPlanningWithIDResult::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue CompletedPlanningWithIDResult::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

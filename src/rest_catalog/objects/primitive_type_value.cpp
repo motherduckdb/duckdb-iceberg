@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/primitive_type_value.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 PrimitiveTypeValue::PrimitiveTypeValue() {
 }
 
-PrimitiveTypeValue PrimitiveTypeValue::FromJSON(yyjson_val *obj) {
+PrimitiveTypeValue PrimitiveTypeValue::FromJSON(JSONValue obj) {
 	PrimitiveTypeValue res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -26,6 +24,10 @@ PrimitiveTypeValue PrimitiveTypeValue::FromJSON(yyjson_val *obj) {
 
 PrimitiveTypeValue PrimitiveTypeValue::Copy() const {
 	PrimitiveTypeValue res;
+	if (null_type_value.has_value()) {
+		res.null_type_value.emplace();
+		(*res.null_type_value) = (*null_type_value).Copy();
+	}
 	if (boolean_type_value.has_value()) {
 		res.boolean_type_value.emplace();
 		(*res.boolean_type_value) = (*boolean_type_value).Copy();
@@ -93,8 +95,14 @@ PrimitiveTypeValue PrimitiveTypeValue::Copy() const {
 	return res;
 }
 
-string PrimitiveTypeValue::TryFromJSON(yyjson_val *obj) {
+string PrimitiveTypeValue::TryFromJSON(JSONValue obj) {
 	string error;
+	null_type_value.emplace();
+	error = null_type_value->TryFromJSON(obj);
+	if (error.empty()) {
+	} else {
+		null_type_value = nullopt;
+	}
 	boolean_type_value.emplace();
 	error = boolean_type_value->TryFromJSON(obj);
 	if (error.empty()) {
@@ -194,7 +202,7 @@ string PrimitiveTypeValue::TryFromJSON(yyjson_val *obj) {
 	if (!(binary_type_value.has_value()) && !(boolean_type_value.has_value()) && !(date_type_value.has_value()) &&
 	    !(decimal_type_value.has_value()) && !(double_type_value.has_value()) && !(fixed_type_value.has_value()) &&
 	    !(float_type_value.has_value()) && !(integer_type_value.has_value()) && !(long_type_value.has_value()) &&
-	    !(string_type_value.has_value()) && !(time_type_value.has_value()) &&
+	    !(null_type_value.has_value()) && !(string_type_value.has_value()) && !(time_type_value.has_value()) &&
 	    !(timestamp_nano_type_value.has_value()) && !(timestamp_type_value.has_value()) &&
 	    !(timestamp_tz_nano_type_value.has_value()) && !(timestamp_tz_type_value.has_value()) &&
 	    !(uuidtype_value.has_value())) {
@@ -203,42 +211,44 @@ string PrimitiveTypeValue::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-yyjson_mut_val *PrimitiveTypeValue::ToJSON(yyjson_mut_doc *doc) const {
+JSONMutableValue PrimitiveTypeValue::ToJSON(JSONWriter &writer) const {
 	if (long_type_value.has_value()) {
-		return long_type_value->ToJSON(doc);
+		return long_type_value->ToJSON(writer);
 	} else if (double_type_value.has_value()) {
-		return double_type_value->ToJSON(doc);
+		return double_type_value->ToJSON(writer);
 	} else if (integer_type_value.has_value()) {
-		return integer_type_value->ToJSON(doc);
+		return integer_type_value->ToJSON(writer);
 	} else if (float_type_value.has_value()) {
-		return float_type_value->ToJSON(doc);
+		return float_type_value->ToJSON(writer);
+	} else if (null_type_value.has_value()) {
+		return null_type_value->ToJSON(writer);
 	} else if (boolean_type_value.has_value()) {
-		return boolean_type_value->ToJSON(doc);
+		return boolean_type_value->ToJSON(writer);
 	} else if (decimal_type_value.has_value()) {
-		return decimal_type_value->ToJSON(doc);
+		return decimal_type_value->ToJSON(writer);
 	} else if (string_type_value.has_value()) {
-		return string_type_value->ToJSON(doc);
+		return string_type_value->ToJSON(writer);
 	} else if (uuidtype_value.has_value()) {
-		return uuidtype_value->ToJSON(doc);
+		return uuidtype_value->ToJSON(writer);
 	} else if (date_type_value.has_value()) {
-		return date_type_value->ToJSON(doc);
+		return date_type_value->ToJSON(writer);
 	} else if (time_type_value.has_value()) {
-		return time_type_value->ToJSON(doc);
+		return time_type_value->ToJSON(writer);
 	} else if (timestamp_type_value.has_value()) {
-		return timestamp_type_value->ToJSON(doc);
+		return timestamp_type_value->ToJSON(writer);
 	} else if (timestamp_tz_type_value.has_value()) {
-		return timestamp_tz_type_value->ToJSON(doc);
+		return timestamp_tz_type_value->ToJSON(writer);
 	} else if (timestamp_nano_type_value.has_value()) {
-		return timestamp_nano_type_value->ToJSON(doc);
+		return timestamp_nano_type_value->ToJSON(writer);
 	} else if (timestamp_tz_nano_type_value.has_value()) {
-		return timestamp_tz_nano_type_value->ToJSON(doc);
+		return timestamp_tz_nano_type_value->ToJSON(writer);
 	} else if (fixed_type_value.has_value()) {
-		return fixed_type_value->ToJSON(doc);
+		return fixed_type_value->ToJSON(writer);
 	} else if (binary_type_value.has_value()) {
-		return binary_type_value->ToJSON(doc);
+		return binary_type_value->ToJSON(writer);
 	}
 	// No variant is active - return null
-	return yyjson_mut_null(doc);
+	return writer.CreateNull();
 }
 
 } // namespace rest_api_objects

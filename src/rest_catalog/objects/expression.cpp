@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/expression.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 Expression::Expression() {
 }
 
-Expression Expression::FromJSON(yyjson_val *obj) {
+Expression Expression::FromJSON(JSONValue obj) {
 	Expression res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -26,6 +24,10 @@ Expression Expression::FromJSON(yyjson_val *obj) {
 
 Expression Expression::Copy() const {
 	Expression res;
+	if (boolean_expression.has_value()) {
+		res.boolean_expression.emplace();
+		(*res.boolean_expression) = (*boolean_expression).Copy();
+	}
 	if (true_expression.has_value()) {
 		res.true_expression.emplace();
 		(*res.true_expression) = (*true_expression).Copy();
@@ -57,9 +59,16 @@ Expression Expression::Copy() const {
 	return res;
 }
 
-string Expression::TryFromJSON(yyjson_val *obj) {
+string Expression::TryFromJSON(JSONValue obj) {
 	string error;
 	do {
+		boolean_expression.emplace();
+		error = boolean_expression->TryFromJSON(obj);
+		if (error.empty()) {
+			break;
+		} else {
+			boolean_expression = nullopt;
+		}
 		true_expression.emplace();
 		error = true_expression->TryFromJSON(obj);
 		if (error.empty()) {
@@ -114,52 +123,26 @@ string Expression::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void Expression::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
-	if (true_expression.has_value()) {
-		true_expression->PopulateJSON(doc, obj);
+JSONMutableValue Expression::ToJSON(JSONWriter &writer) const {
+	if (boolean_expression.has_value()) {
+		return boolean_expression->ToJSON(writer);
+	} else if (true_expression.has_value()) {
+		return true_expression->ToJSON(writer);
 	} else if (false_expression.has_value()) {
-		false_expression->PopulateJSON(doc, obj);
+		return false_expression->ToJSON(writer);
 	} else if (and_or_expression.has_value()) {
-		and_or_expression->PopulateJSON(doc, obj);
+		return and_or_expression->ToJSON(writer);
 	} else if (not_expression.has_value()) {
-		not_expression->PopulateJSON(doc, obj);
+		return not_expression->ToJSON(writer);
 	} else if (set_expression.has_value()) {
-		set_expression->PopulateJSON(doc, obj);
+		return set_expression->ToJSON(writer);
 	} else if (literal_expression.has_value()) {
-		yyjson_mut_val *literal_expression_obj = literal_expression->ToJSON(doc);
-		if (!yyjson_mut_is_obj(literal_expression_obj)) {
-			throw InternalException("PopulateJSON requires an object-like JSON value");
-		}
-		{
-			size_t idx, max;
-			yyjson_mut_val *key, *val;
-			yyjson_mut_obj_foreach(literal_expression_obj, idx, max, key, val) {
-				yyjson_mut_obj_add(obj, key, val);
-			}
-		}
+		return literal_expression->ToJSON(writer);
 	} else if (unary_expression.has_value()) {
-		yyjson_mut_val *unary_expression_obj = unary_expression->ToJSON(doc);
-		if (!yyjson_mut_is_obj(unary_expression_obj)) {
-			throw InternalException("PopulateJSON requires an object-like JSON value");
-		}
-		{
-			size_t idx, max;
-			yyjson_mut_val *key, *val;
-			yyjson_mut_obj_foreach(unary_expression_obj, idx, max, key, val) {
-				yyjson_mut_obj_add(obj, key, val);
-			}
-		}
+		return unary_expression->ToJSON(writer);
 	}
-}
-
-yyjson_mut_val *Expression::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
-	return obj;
+	// No variant is active - return empty object
+	return writer.CreateObject();
 }
 
 } // namespace rest_api_objects

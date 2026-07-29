@@ -40,18 +40,14 @@ shared_ptr<IcebergTableSchema> IcebergTableSchema::ParseSchema(const rest_api_ob
 }
 
 rest_api_objects::Schema IcebergTableSchema::ToRESTObject() const {
-	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-	yyjson_mut_doc *doc = doc_p.get();
-	auto root_object = yyjson_mut_obj(doc);
-	yyjson_mut_doc_set_root(doc, root_object);
-	IcebergCreateTableRequest::PopulateSchema(doc, root_object, *this);
-	auto schema_json = ICUtils::JsonToString(std::move(doc_p));
+	JSONWriter writer;
+	auto root_object = writer.CreateObject();
+	writer.SetRoot(root_object);
+	IcebergCreateTableRequest::PopulateSchema(writer, root_object, *this);
+	auto schema_json = writer.ToString(JSONWriteFlags::ALLOW_INF_AND_NAN);
 
-	std::unique_ptr<yyjson_doc, YyjsonDocDeleter> parsed_doc(yyjson_read(schema_json.c_str(), schema_json.size(), 0));
-	if (!parsed_doc) {
-		throw InternalException("Failed to parse generated schema JSON");
-	}
-	return rest_api_objects::Schema::FromJSON(yyjson_doc_get_root(parsed_doc.get()));
+	auto parsed_doc = JSONDocument::Parse(schema_json.c_str(), schema_json.size());
+	return rest_api_objects::Schema::FromJSON(parsed_doc->GetRoot());
 }
 
 void IcebergTableSchema::PopulateSourceIdMap(unordered_map<uint64_t, ColumnIndex> &source_to_column_id,
@@ -98,9 +94,17 @@ IcebergTableSchema::GetFromColumnIndex(const vector<unique_ptr<IcebergColumnDefi
 	return GetFromColumnIndex(column->GetChildren(), column_index, depth + 1);
 }
 
+const unordered_map<uint64_t, ColumnIndex> &IcebergTableSchema::GetSourceIdMap() const {
+	lock_guard<mutex> guard(source_id_map_lock);
+	if (!source_id_map_populated) {
+		PopulateSourceIdMap(source_to_column_id, columns, nullptr);
+		source_id_map_populated = true;
+	}
+	return source_to_column_id;
+}
+
 optional<ColumnIndex> IcebergTableSchema::TryGetColumnIndexByFieldId(idx_t field_id) const {
-	unordered_map<uint64_t, ColumnIndex> source_to_column_id;
-	PopulateSourceIdMap(source_to_column_id, columns, nullptr);
+	auto &source_to_column_id = GetSourceIdMap();
 	auto it = source_to_column_id.find(field_id);
 	if (it == source_to_column_id.end()) {
 		return std::nullopt;
@@ -108,12 +112,20 @@ optional<ColumnIndex> IcebergTableSchema::TryGetColumnIndexByFieldId(idx_t field
 	return it->second;
 }
 
-const IcebergColumnDefinition &IcebergTableSchema::GetColumnByFieldId(idx_t field_id) const {
+optional_ptr<const IcebergColumnDefinition> IcebergTableSchema::TryGetColumnByFieldId(idx_t field_id) const {
 	auto column_index = TryGetColumnIndexByFieldId(field_id);
 	if (!column_index) {
-		throw InvalidInputException("Field id %d does not exist in schema with id %d", field_id, schema_id);
+		return nullptr;
 	}
 	return GetFromColumnIndex(columns, *column_index, 0);
+}
+
+const IcebergColumnDefinition &IcebergTableSchema::GetColumnByFieldId(idx_t field_id) const {
+	auto column = TryGetColumnByFieldId(field_id);
+	if (!column) {
+		throw InvalidInputException("Field id %d does not exist in schema with id %d", field_id, schema_id);
+	}
+	return *column;
 }
 
 optional_ptr<const IcebergColumnDefinition>
@@ -158,8 +170,15 @@ optional_ptr<IcebergColumnDefinition> IcebergTableSchema::GetMutableFromPath(con
 	if (!res) {
 		return nullptr;
 	}
+	InvalidateSourceIdMap();
 	auto &col = *res;
 	return const_cast<IcebergColumnDefinition &>(col);
+}
+
+void IcebergTableSchema::InvalidateSourceIdMap() {
+	lock_guard<mutex> guard(source_id_map_lock);
+	source_to_column_id.clear();
+	source_id_map_populated = false;
 }
 
 shared_ptr<IcebergTableSchema> IcebergTableSchema::Copy() const {

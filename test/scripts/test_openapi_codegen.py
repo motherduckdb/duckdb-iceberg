@@ -83,10 +83,23 @@ def test_overlapping_primitive_one_of_keeps_all_matching_views():
     cpp_class, _, source = render_class(parser, parse_info, "PrimitiveTypeValue")
 
     assert not cpp_class.one_of
-    assert len(cpp_class.any_of) == 16
+    assert len(cpp_class.any_of) == 17
     assert "integer_type_value.emplace()" in source
     assert "long_type_value.emplace()" in source
     assert "string_type_value.emplace()" in source
+
+
+def test_expression_accepts_canonical_boolean_constants():
+    parser, parse_info = parse_spec()
+    schema = parser.parsed_schemas["Expression"]
+
+    assert schema.one_of[0].ref == "BooleanExpression"
+
+    cpp_class, header, source = render_class(parser, parse_info, "Expression")
+    assert not cpp_class.supports_json_object_population()
+    assert "optional<BooleanExpression> boolean_expression" in header
+    assert "boolean_expression->TryFromJSON(obj)" in source
+    assert "return boolean_expression->ToJSON(writer)" in source
 
 
 def test_inherited_const_and_array_valued_map_are_generated():
@@ -98,12 +111,12 @@ def test_inherited_const_and_array_valued_map_are_generated():
     _, map_header, map_source = render_class(parser, parse_info, "MultiValuedMap")
     assert "case_insensitive_map_t<vector<string>> additional_properties" in map_header
     assert "tmp.emplace_back(std::move(tmp_item))" in map_source
-    assert "yyjson_mut_arr_append(value_obj" in map_source
+    assert "value_json.Append(value_json_item_json)" in map_source
 
     _, nullable_header, nullable_source = render_class(parser, parse_info, "AssertRefSnapshotId")
     assert "optional<int64_t> snapshot_id" in nullable_header
-    assert "yyjson_mut_obj_add_null(doc, obj, \"snapshot-id\")" in nullable_source
-    assert nullable_source.count('yyjson_mut_obj_add_null(doc, obj, "snapshot-id")') == 1
+    assert 'obj.Add("snapshot-id", writer.CreateNull())' in nullable_source
+    assert nullable_source.count('obj.Add("snapshot-id", writer.CreateNull())') == 1
 
     transaction_source = (REPO_ROOT / "src/catalog/rest/transaction/iceberg_transaction.cpp").read_text()
     assert "AddExplicitNullSnapshotIds" not in transaction_source
@@ -116,7 +129,7 @@ def test_table_metadata_accepts_null_current_snapshot_without_patching_spec():
     assert schema.properties["current-snapshot-id"].nullable is True
 
     _, _, source = render_class(parser, parse_info, "TableMetadata")
-    assert "if (yyjson_is_null(current_snapshot_id_val))" in source
+    assert "if (current_snapshot_id_val.IsNull())" in source
     assert "property is explicitly nullable" in source
 
 
@@ -160,10 +173,10 @@ components:
     _, header, source = render_class(parser, parse_info, "Container")
     assert "optional<string> required_value" in header
     assert "optional<NullableInteger> referenced_value" in header
-    assert "if (yyjson_is_null(required_value_val))" in source
-    assert "if (yyjson_is_null(optional_value_val))" in source
-    assert "if (yyjson_is_null(referenced_value_val))" in source
-    assert "if (yyjson_is_null(strict_value_val))" not in source
+    assert "if (required_value_val.IsNull())" in source
+    assert "if (optional_value_val.IsNull())" in source
+    assert "if (referenced_value_val.IsNull())" in source
+    assert "if (strict_value_val.IsNull())" not in source
 
 
 def test_nullable_page_token_reference_collapses_null_to_missing():
@@ -174,6 +187,6 @@ def test_nullable_page_token_reference_collapses_null_to_missing():
     assert schema.properties["next-page-token"].nullable is True
 
     _, _, source = render_class(parser, parse_info, "ListTablesResponse")
-    null_branch = source.index("if (yyjson_is_null(next_page_token_val))")
+    null_branch = source.index("if (next_page_token_val.IsNull())")
     parse_branch = source.index("next_page_token_tmp.TryFromJSON(next_page_token_val)")
     assert null_branch < parse_branch

@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/create_namespace_response.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 CreateNamespaceResponse::CreateNamespaceResponse() {
 }
 
-CreateNamespaceResponse CreateNamespaceResponse::FromJSON(yyjson_val *obj) {
+CreateNamespaceResponse CreateNamespaceResponse::FromJSON(JSONValue obj) {
 	CreateNamespaceResponse res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -36,10 +34,10 @@ CreateNamespaceResponse CreateNamespaceResponse::Copy() const {
 	return res;
 }
 
-string CreateNamespaceResponse::TryFromJSON(yyjson_val *obj) {
+string CreateNamespaceResponse::TryFromJSON(JSONValue obj) {
 	string error;
-	auto _namespace_val = yyjson_obj_get(obj, "namespace");
-	if (!_namespace_val) {
+	auto _namespace_val = obj.GetMember("namespace");
+	if (!_namespace_val.IsValid()) {
 		return "CreateNamespaceResponse required property 'namespace' is missing";
 	} else {
 		error = _namespace.TryFromJSON(_namespace_val);
@@ -47,23 +45,27 @@ string CreateNamespaceResponse::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto properties_val = yyjson_obj_get(obj, "properties");
-	if (properties_val) {
+	auto properties_val = obj.GetMember("properties");
+	if (properties_val.IsValid()) {
 		case_insensitive_map_t<string> properties_tmp;
-		if (yyjson_is_obj(properties_val)) {
-			size_t idx, max;
-			yyjson_val *key, *val;
-			yyjson_obj_foreach(properties_val, idx, max, key, val) {
-				auto key_str = yyjson_get_str(key);
+		if (properties_val.IsObject()) {
+			properties_val.IterateObject([&](const string &key_str, JSONValue val) {
+				if (!error.empty()) {
+					return;
+				}
 				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
+				if (json_utils::IsString(val)) {
+					tmp = json_utils::GetString(val);
 				} else {
-					return StringUtil::Format(
-					    "CreateNamespaceResponse property 'tmp' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(val));
+					error = StringUtil::Format(
+					    "CreateNamespaceResponse property 'tmp' is not of type 'string', found %s instead",
+					    json_utils::GetTypeDescription(val).c_str());
+					return;
 				}
 				properties_tmp.emplace(key_str, std::move(tmp));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return "CreateNamespaceResponse property 'properties_tmp' is not of type 'object'";
@@ -73,32 +75,26 @@ string CreateNamespaceResponse::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void CreateNamespaceResponse::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void CreateNamespaceResponse::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: namespace
-	yyjson_mut_val *_namespace_val = _namespace.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "namespace", _namespace_val);
+	auto _namespace_json = _namespace.ToJSON(writer);
+	obj.Add("namespace", _namespace_json);
 
 	// Serialize: properties
 	if (properties.has_value()) {
 		auto &properties_value = *properties;
-		yyjson_mut_val *properties_value_obj = yyjson_mut_obj(doc);
-		for (const auto &it : properties_value) {
-			auto &key = it.first;
-			auto &value = it.second;
-			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
-			yyjson_mut_obj_add_strcpy(doc, properties_value_obj, key_ptr, value.c_str());
+		auto properties_json = writer.CreateObject();
+		for (const auto &[properties_json_key, properties_json_value] : properties_value) {
+			auto properties_json_value_json = writer.CreateString(properties_json_value);
+			properties_json.Add(properties_json_key, properties_json_value_json);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "properties", properties_value_obj);
+		obj.Add("properties", properties_json);
 	}
 }
 
-yyjson_mut_val *CreateNamespaceResponse::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue CreateNamespaceResponse::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

@@ -46,20 +46,29 @@ attach '' as my_datalake (
 <REGEX>:.*Unrecognized access mode.*Supported options are 'vended_credentials' and 'none'.*
 
 statement ok
+call enable_logging(level='debug');
+
+statement ok
 attach 'warehouse' as my_datalake (
     type ICEBERG,
-    ENDPOINT 'http://127.0.0.1:19120/iceberg/',
+    ENDPOINT 'http://127.0.0.1:19120/iceberg/main',
     ACCESS_DELEGATION_MODE 'none',
     SECRET 'my_secret'
 );
 
+# make sure the branch-scoped endpoint is used to fetch the catalog config
+query I
+select request.url from duckdb_logs_parsed('HTTP') where request.url like '%/v1/config%';
+----
+http://127.0.0.1:19120/iceberg/main/v1/config?warehouse=warehouse
+
 statement ok
-call enable_logging(level='debug');
+call truncate_duckdb_logs();
 
 statement ok
 show all tables;
 
-# make sure warehouse main|warehouse is properly encoded
+# make sure the URI override becomes the base URL and main|warehouse is properly encoded
 query I
 select request.url from duckdb_logs_parsed('HTTP');
 ----

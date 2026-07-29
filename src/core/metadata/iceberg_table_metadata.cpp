@@ -317,13 +317,12 @@ const unordered_map<int32_t, shared_ptr<IcebergTableSchema>> &IcebergTableMetada
 	return schemas;
 }
 
-// TODO: this should also recursively check struct, map, and list columns
 optional_ptr<const IcebergColumnDefinition> IcebergTableMetadata::FindColumnByFieldId(int32_t field_id) const {
 	for (auto &schema_entry : schemas) {
-		for (auto &column : schema_entry.second->columns) {
-			if (column->id == field_id) {
-				return *column;
-			}
+		auto &schema = *schema_entry.second;
+		auto column = schema.TryGetColumnByFieldId(field_id);
+		if (column) {
+			return column;
 		}
 	}
 	return nullptr;
@@ -348,13 +347,8 @@ rest_api_objects::TableMetadata IcebergTableMetadata::Parse(const string &path, 
 	} else {
 		json_content = IcebergUtils::FileToString(path, fs);
 	}
-	auto doc = std::unique_ptr<yyjson_doc, YyjsonDocDeleter>(yyjson_read(json_content.c_str(), json_content.size(), 0));
-	if (!doc) {
-		throw InvalidInputException("Fails to parse iceberg metadata from %s", path);
-	}
-
-	auto root = yyjson_doc_get_root(doc.get());
-	return rest_api_objects::TableMetadata::FromJSON(root);
+	auto doc = JSONDocument::Parse(json_content.c_str(), json_content.size());
+	return rest_api_objects::TableMetadata::FromJSON(doc->GetRoot());
 }
 
 IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_objects::TableMetadata &table_metadata) {
@@ -430,12 +424,8 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_obje
 		auto &properties = *table_metadata.properties;
 		auto name_mapping = properties.find("schema.name-mapping.default");
 		if (name_mapping != properties.end()) {
-			auto doc = std::unique_ptr<yyjson_doc, YyjsonDocDeleter>(
-			    yyjson_read(name_mapping->second.c_str(), name_mapping->second.size(), 0));
-			if (doc == nullptr) {
-				throw InvalidInputException("Fails to parse iceberg metadata 'schema.name-mapping.default' property");
-			}
-			auto root = yyjson_doc_get_root(doc.get());
+			auto doc = JSONDocument::Parse(name_mapping->second.c_str(), name_mapping->second.size());
+			auto root = doc->GetRoot();
 			idx_t mapping_index = 0;
 			res.mappings.emplace_back();
 			mapping_index++;
@@ -544,104 +534,94 @@ bool IcebergTableMetadata::PropertiesAllowPositionalDeletes(IcebergSnapshotOpera
 	}
 }
 
-yyjson_mut_val *IcebergTableMetadata::SchemasToJSON(yyjson_mut_doc *doc) const {
-	auto schemas_array = yyjson_mut_arr(doc);
+JSONMutableValue IcebergTableMetadata::SchemasToJSON(JSONWriter &writer) const {
+	auto schemas_array = writer.CreateArray();
 	for (auto &it : schemas) {
 		auto &schema = *it.second;
-		auto schema_obj = yyjson_mut_obj(doc);
-		IcebergCreateTableRequest::PopulateSchema(doc, schema_obj, schema);
-		yyjson_mut_arr_add_val(schemas_array, schema_obj);
+		auto schema_obj = writer.CreateObject();
+		IcebergCreateTableRequest::PopulateSchema(writer, schema_obj, schema);
+		schemas_array.Append(schema_obj);
 	}
 	return schemas_array;
 }
 
-yyjson_mut_val *IcebergTableMetadata::PartitionsToJSON(yyjson_mut_doc *doc) const {
-	auto partitions_array = yyjson_mut_arr(doc);
+JSONMutableValue IcebergTableMetadata::PartitionsToJSON(JSONWriter &writer) const {
+	auto partitions_array = writer.CreateArray();
 	for (auto &it : partition_specs) {
 		auto &partition_spec = it.second;
-		auto partition_obj = partition_spec.ToJSON(doc);
-		yyjson_mut_arr_add_val(partitions_array, partition_obj);
+		partitions_array.Append(partition_spec.ToJSON(writer));
 	}
 	return partitions_array;
 }
 
-yyjson_mut_val *IcebergTableMetadata::TablePropertiesToJSON(yyjson_mut_doc *doc) const {
-	auto properties_obj = yyjson_mut_obj(doc);
+JSONMutableValue IcebergTableMetadata::TablePropertiesToJSON(JSONWriter &writer) const {
+	auto properties_obj = writer.CreateObject();
 	for (auto &property : table_properties) {
 		auto &key = property.first;
 		auto &val = property.second;
-		//! Register the string as part of the document, to ensure lifetime correctness
-		auto key_val = unsafe_yyjson_mut_strncpy(doc, key.c_str(), key.size());
-		yyjson_mut_obj_add_strncpy(doc, properties_obj, key_val, val.c_str(), val.size());
+		properties_obj.AddString(key, val);
 	}
 	return properties_obj;
 }
 
-yyjson_mut_val *IcebergTableMetadata::SnapshotsToJSON(yyjson_mut_doc *doc) const {
-	auto snapshots_array = yyjson_mut_arr(doc);
+JSONMutableValue IcebergTableMetadata::SnapshotsToJSON(JSONWriter &writer) const {
+	auto snapshots_array = writer.CreateArray();
 	for (auto &it : snapshots) {
 		auto &snapshot = it.second;
 		auto snapshot_rest_object = snapshot.ToRESTObject(*this);
-		auto snapshot_obj = snapshot_rest_object.ToJSON(doc);
-		yyjson_mut_arr_add_val(snapshots_array, snapshot_obj);
+		snapshots_array.Append(snapshot_rest_object.ToJSON(writer));
 	}
 	return snapshots_array;
 }
 
-yyjson_mut_val *IcebergTableMetadata::SnapshotLogToJSON(yyjson_mut_doc *doc) const {
-	auto log_array = yyjson_mut_arr(doc);
+JSONMutableValue IcebergTableMetadata::SnapshotLogToJSON(JSONWriter &writer) const {
+	auto log_array = writer.CreateArray();
 	for (auto &it : snapshots) {
 		auto &snapshot = it.second;
-		auto log_item = yyjson_mut_obj(doc);
+		auto log_item = writer.CreateObject();
 		if (!snapshot.snapshot_id) {
 			throw InvalidConfigurationException("snapshot.snapshot_id is not set");
 		}
-		yyjson_mut_obj_add_int(doc, log_item, "snapshot-id", *snapshot.snapshot_id);
-		yyjson_mut_obj_add_int(doc, log_item, "timestamp-ms", snapshot.timestamp_ms.value);
-		yyjson_mut_arr_add_val(log_array, log_item);
+		log_item.Add("snapshot-id", writer.CreateSignedInteger(*snapshot.snapshot_id));
+		log_item.Add("timestamp-ms", writer.CreateSignedInteger(snapshot.timestamp_ms.value));
+		log_array.Append(log_item);
 	}
 	return log_array;
 }
 
-yyjson_mut_val *IcebergTableMetadata::SortOrdersToJSON(yyjson_mut_doc *doc) const {
-	auto sort_orders_array = yyjson_mut_arr(doc);
+JSONMutableValue IcebergTableMetadata::SortOrdersToJSON(JSONWriter &writer) const {
+	auto sort_orders_array = writer.CreateArray();
 	for (auto &it : sort_specs) {
 		auto &sort_order = it.second;
-		auto sort_order_obj = sort_order.ToJSON(doc);
-		yyjson_mut_arr_add_val(sort_orders_array, sort_order_obj);
+		sort_orders_array.Append(sort_order.ToJSON(writer));
 	}
 	return sort_orders_array;
 }
 
 string IcebergTableMetadata::ToJSON() const {
-	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-	auto doc = doc_p.get();
-	auto root_obj = yyjson_mut_obj(doc);
-	yyjson_mut_doc_set_root(doc, root_obj);
+	JSONWriter writer;
+	auto root_obj = writer.CreateObject();
+	writer.SetRoot(root_obj);
 
-	yyjson_mut_obj_add_val(doc, root_obj, "format-version", yyjson_mut_int(doc, iceberg_version));
-	yyjson_mut_obj_add_val(doc, root_obj, "table-uuid", yyjson_mut_str(doc, table_uuid.c_str()));
-	yyjson_mut_obj_add_val(doc, root_obj, "location", yyjson_mut_str(doc, location.c_str()));
-	yyjson_mut_obj_add_val(doc, root_obj, "last-updated-ms", yyjson_mut_int(doc, last_updated_ms.value));
-	yyjson_mut_obj_add_val(doc, root_obj, "last-column-id", yyjson_mut_int(doc, last_column_id.GetIndex()));
-	yyjson_mut_obj_add_val(doc, root_obj, "schemas", SchemasToJSON(doc));
-	yyjson_mut_obj_add_val(doc, root_obj, "current-schema-id", yyjson_mut_int(doc, current_schema_id));
-	yyjson_mut_obj_add_val(doc, root_obj, "partition-specs", PartitionsToJSON(doc));
-	yyjson_mut_obj_add_val(doc, root_obj, "default-spec-id", yyjson_mut_int(doc, default_spec_id));
-	yyjson_mut_obj_add_val(doc, root_obj, "last-partition-id", yyjson_mut_int(doc, last_partition_field_id.GetIndex()));
-	yyjson_mut_obj_add_val(doc, root_obj, "properties", TablePropertiesToJSON(doc));
+	root_obj.Add("format-version", writer.CreateSignedInteger(iceberg_version));
+	root_obj.AddString("table-uuid", table_uuid);
+	root_obj.AddString("location", location);
+	root_obj.Add("last-updated-ms", writer.CreateSignedInteger(last_updated_ms.value));
+	root_obj.Add("last-column-id", writer.CreateSignedInteger(last_column_id.GetIndex()));
+	root_obj.Add("schemas", SchemasToJSON(writer));
+	root_obj.Add("current-schema-id", writer.CreateSignedInteger(current_schema_id));
+	root_obj.Add("partition-specs", PartitionsToJSON(writer));
+	root_obj.Add("default-spec-id", writer.CreateSignedInteger(default_spec_id));
+	root_obj.Add("last-partition-id", writer.CreateSignedInteger(last_partition_field_id.GetIndex()));
+	root_obj.Add("properties", TablePropertiesToJSON(writer));
 	if (current_snapshot_id) {
-		yyjson_mut_obj_add_val(doc, root_obj, "current-snapshot-id", yyjson_mut_int(doc, *current_snapshot_id));
+		root_obj.Add("current-snapshot-id", writer.CreateSignedInteger(*current_snapshot_id));
 	}
-	yyjson_mut_obj_add_val(doc, root_obj, "snapshots", SnapshotsToJSON(doc));
-	yyjson_mut_obj_add_val(doc, root_obj, "snapshot-log", SnapshotLogToJSON(doc));
-	// yyjson_mut_obj_add_val(doc, root_obj, "metadata-log", MetadataLogToJSON(doc));
-	yyjson_mut_obj_add_val(doc, root_obj, "sort-orders", SortOrdersToJSON(doc));
-	yyjson_mut_obj_add_val(doc, root_obj, "default-sort-order-id",
-	                       yyjson_mut_int(doc, default_sort_order_id.GetIndex()));
-	// yyjson_mut_obj_add_val(doc, root_obj, "refs", RefToJSON(doc));
-	// yyjson_mut_obj_add_val(doc, root_obj, "encryption-keys", EncryptionKeyToJSON(doc));
-	return ICUtils::JsonToString(std::move(doc_p));
+	root_obj.Add("snapshots", SnapshotsToJSON(writer));
+	root_obj.Add("snapshot-log", SnapshotLogToJSON(writer));
+	root_obj.Add("sort-orders", SortOrdersToJSON(writer));
+	root_obj.Add("default-sort-order-id", writer.CreateSignedInteger(default_sort_order_id.GetIndex()));
+	return writer.ToString(JSONWriteFlags::ALLOW_INF_AND_NAN);
 }
 
 void IcebergTableMetadata::WriteMetadata(ClientContext &context, const string &path) const {

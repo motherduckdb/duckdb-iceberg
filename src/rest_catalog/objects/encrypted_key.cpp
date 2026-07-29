@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/encrypted_key.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 EncryptedKey::EncryptedKey() {
 }
 
-EncryptedKey EncryptedKey::FromJSON(yyjson_val *obj) {
+EncryptedKey EncryptedKey::FromJSON(JSONValue obj) {
 	EncryptedKey res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -41,59 +39,63 @@ EncryptedKey EncryptedKey::Copy() const {
 	return res;
 }
 
-string EncryptedKey::TryFromJSON(yyjson_val *obj) {
+string EncryptedKey::TryFromJSON(JSONValue obj) {
 	string error;
-	auto key_id_val = yyjson_obj_get(obj, "key-id");
-	if (!key_id_val) {
+	auto key_id_val = obj.GetMember("key-id");
+	if (!key_id_val.IsValid()) {
 		return "EncryptedKey required property 'key-id' is missing";
 	} else {
-		if (yyjson_is_str(key_id_val)) {
-			key_id = yyjson_get_str(key_id_val);
+		if (json_utils::IsString(key_id_val)) {
+			key_id = json_utils::GetString(key_id_val);
 		} else {
-			return StringUtil::Format("EncryptedKey property 'key_id' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(key_id_val));
+			return StringUtil::Format("EncryptedKey property 'key_id' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(key_id_val).c_str());
 		}
 	}
-	auto encrypted_key_metadata_val = yyjson_obj_get(obj, "encrypted-key-metadata");
-	if (!encrypted_key_metadata_val) {
+	auto encrypted_key_metadata_val = obj.GetMember("encrypted-key-metadata");
+	if (!encrypted_key_metadata_val.IsValid()) {
 		return "EncryptedKey required property 'encrypted-key-metadata' is missing";
 	} else {
-		if (yyjson_is_str(encrypted_key_metadata_val)) {
-			encrypted_key_metadata = yyjson_get_str(encrypted_key_metadata_val);
+		if (json_utils::IsString(encrypted_key_metadata_val)) {
+			encrypted_key_metadata = json_utils::GetString(encrypted_key_metadata_val);
 		} else {
 			return StringUtil::Format(
-			    "EncryptedKey property 'encrypted_key_metadata' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(encrypted_key_metadata_val));
+			    "EncryptedKey property 'encrypted_key_metadata' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(encrypted_key_metadata_val).c_str());
 		}
 	}
-	auto encrypted_by_id_val = yyjson_obj_get(obj, "encrypted-by-id");
-	if (encrypted_by_id_val) {
+	auto encrypted_by_id_val = obj.GetMember("encrypted-by-id");
+	if (encrypted_by_id_val.IsValid()) {
 		string encrypted_by_id_tmp;
-		if (yyjson_is_str(encrypted_by_id_val)) {
-			encrypted_by_id_tmp = yyjson_get_str(encrypted_by_id_val);
+		if (json_utils::IsString(encrypted_by_id_val)) {
+			encrypted_by_id_tmp = json_utils::GetString(encrypted_by_id_val);
 		} else {
 			return StringUtil::Format(
-			    "EncryptedKey property 'encrypted_by_id_tmp' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(encrypted_by_id_val));
+			    "EncryptedKey property 'encrypted_by_id_tmp' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(encrypted_by_id_val).c_str());
 		}
 		encrypted_by_id = std::move(encrypted_by_id_tmp);
 	}
-	auto properties_val = yyjson_obj_get(obj, "properties");
-	if (properties_val) {
+	auto properties_val = obj.GetMember("properties");
+	if (properties_val.IsValid()) {
 		case_insensitive_map_t<string> properties_tmp;
-		if (yyjson_is_obj(properties_val)) {
-			size_t idx, max;
-			yyjson_val *key, *val;
-			yyjson_obj_foreach(properties_val, idx, max, key, val) {
-				auto key_str = yyjson_get_str(key);
+		if (properties_val.IsObject()) {
+			properties_val.IterateObject([&](const string &key_str, JSONValue val) {
+				if (!error.empty()) {
+					return;
+				}
 				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
+				if (json_utils::IsString(val)) {
+					tmp = json_utils::GetString(val);
 				} else {
-					return StringUtil::Format("EncryptedKey property 'tmp' is not of type 'string', found '%s' instead",
-					                          yyjson_get_type_desc(val));
+					error = StringUtil::Format("EncryptedKey property 'tmp' is not of type 'string', found %s instead",
+					                           json_utils::GetTypeDescription(val).c_str());
+					return;
 				}
 				properties_tmp.emplace(key_str, std::move(tmp));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return "EncryptedKey property 'properties_tmp' is not of type 'object'";
@@ -103,40 +105,37 @@ string EncryptedKey::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void EncryptedKey::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void EncryptedKey::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: key-id
-	yyjson_mut_obj_add_strcpy(doc, obj, "key-id", key_id.c_str());
+	auto key_id_json = writer.CreateString(key_id);
+	obj.Add("key-id", key_id_json);
 
 	// Serialize: encrypted-key-metadata
-	yyjson_mut_obj_add_strcpy(doc, obj, "encrypted-key-metadata", encrypted_key_metadata.c_str());
+	auto encrypted_key_metadata_json = writer.CreateString(encrypted_key_metadata);
+	obj.Add("encrypted-key-metadata", encrypted_key_metadata_json);
 
 	// Serialize: encrypted-by-id
 	if (encrypted_by_id.has_value()) {
 		auto &encrypted_by_id_value = *encrypted_by_id;
-		yyjson_mut_obj_add_strcpy(doc, obj, "encrypted-by-id", encrypted_by_id_value.c_str());
+		auto encrypted_by_id_json = writer.CreateString(encrypted_by_id_value);
+		obj.Add("encrypted-by-id", encrypted_by_id_json);
 	}
 
 	// Serialize: properties
 	if (properties.has_value()) {
 		auto &properties_value = *properties;
-		yyjson_mut_val *properties_value_obj = yyjson_mut_obj(doc);
-		for (const auto &it : properties_value) {
-			auto &key = it.first;
-			auto &value = it.second;
-			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
-			yyjson_mut_obj_add_strcpy(doc, properties_value_obj, key_ptr, value.c_str());
+		auto properties_json = writer.CreateObject();
+		for (const auto &[properties_json_key, properties_json_value] : properties_value) {
+			auto properties_json_value_json = writer.CreateString(properties_json_value);
+			properties_json.Add(properties_json_key, properties_json_value_json);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "properties", properties_value_obj);
+		obj.Add("properties", properties_json);
 	}
 }
 
-yyjson_mut_val *EncryptedKey::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue EncryptedKey::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

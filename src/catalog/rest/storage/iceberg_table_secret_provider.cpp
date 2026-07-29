@@ -13,6 +13,7 @@
 #include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/transaction/iceberg_transaction.hpp"
 #include "catalog/rest/storage/authorization/oauth2.hpp"
 #include "catalog/rest/storage/authorization/sigv4.hpp"
 #include "duckdb/logging/logger.hpp"
@@ -163,9 +164,14 @@ static CreateSecretInput ReVendVendedCredentials(ClientContext &context, CreateS
 
 	auto &catalog = Catalog::GetCatalog(context, Identifier(catalog_name));
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
+	auto &iceberg_transaction = IcebergTransaction::Get(context, ic_catalog);
 
 	auto schema_entry = ic_catalog.GetSchemas().GetEntry(context, schema_name, OnEntryNotFound::THROW_EXCEPTION);
 	auto &iceberg_schema = schema_entry->Cast<IcebergSchemaEntry>();
+	const auto table_key = IcebergTableInformation::GetTableKey(iceberg_schema.namespace_items, table_name);
+	auto latest_state = iceberg_transaction.GetLatestTableState(table_key);
+	D_ASSERT(latest_state);
+	auto &table_info = latest_state->GetInfo();
 
 	auto get_table_result = IRCAPI::GetTable(context, ic_catalog, iceberg_schema, table_name);
 	if (get_table_result.error_) {
@@ -174,10 +180,7 @@ static CreateSecretInput ReVendVendedCredentials(ClientContext &context, CreateS
 		                                       table_name, EnumUtil::ToString(get_table_result.status_),
 		                                       get_table_result.error_->_error.message));
 	}
-
-	auto table_info = IcebergTableInformation(ic_catalog, iceberg_schema, table_name);
-	table_info.InitializeFromLoadTableResult(*get_table_result.result_, false);
-	auto credentials = table_info.GetVendedCredentials(context);
+	auto credentials = table_info.GetVendedCredentials(context, *get_table_result.result_->storage_credentials);
 
 	optional_ptr<CreateSecretInput> match;
 	if (credentials.config) {

@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/multi_valued_map.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 MultiValuedMap::MultiValuedMap() {
 }
 
-MultiValuedMap MultiValuedMap::FromJSON(yyjson_val *obj) {
+MultiValuedMap MultiValuedMap::FromJSON(JSONValue obj) {
 	MultiValuedMap res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -32,57 +30,60 @@ MultiValuedMap MultiValuedMap::Copy() const {
 	return res;
 }
 
-string MultiValuedMap::TryFromJSON(yyjson_val *obj) {
+string MultiValuedMap::TryFromJSON(JSONValue obj) {
 	string error;
-	size_t idx, max;
-	yyjson_val *key, *val;
-	yyjson_obj_foreach(obj, idx, max, key, val) {
-		auto key_str = yyjson_get_str(key);
+	obj.IterateObject([&](const string &key_str, JSONValue val) {
+		if (!error.empty()) {
+			return;
+		}
 		vector<string> tmp;
-		if (yyjson_is_arr(val)) {
-			size_t tmp_idx, tmp_max;
-			yyjson_val *tmp_item_val;
-			yyjson_arr_foreach(val, tmp_idx, tmp_max, tmp_item_val) {
+		if (val.IsArray()) {
+			val.IterateArray([&](JSONValue tmp_item_val) {
+				if (!error.empty()) {
+					return;
+				}
 				string tmp_item;
-				if (yyjson_is_str(tmp_item_val)) {
-					tmp_item = yyjson_get_str(tmp_item_val);
+				if (json_utils::IsString(tmp_item_val)) {
+					tmp_item = json_utils::GetString(tmp_item_val);
 				} else {
-					return StringUtil::Format(
-					    "MultiValuedMap property 'tmp_item' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(tmp_item_val));
+					error = StringUtil::Format(
+					    "MultiValuedMap property 'tmp_item' is not of type 'string', found %s instead",
+					    json_utils::GetTypeDescription(tmp_item_val).c_str());
+					return;
 				}
 				tmp.emplace_back(std::move(tmp_item));
+			});
+			if (!error.empty()) {
+				return;
 			}
 		} else {
-			return StringUtil::Format("MultiValuedMap property 'tmp' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(val));
+			error = StringUtil::Format("MultiValuedMap property 'tmp' is not of type 'array', found %s instead",
+			                           json_utils::GetTypeDescription(val).c_str());
+			return;
 		}
 		additional_properties.emplace(key_str, std::move(tmp));
+	});
+	if (!error.empty()) {
+		return error;
 	}
 	return "";
 }
 
-void MultiValuedMap::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void MultiValuedMap::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize additional properties
-	for (const auto &it : additional_properties) {
-		auto &key = it.first;
-		auto &value = it.second;
-		yyjson_mut_val *value_obj = yyjson_mut_arr(doc);
-		for (const auto &array_item : value) {
-			yyjson_mut_arr_append(value_obj, yyjson_mut_strcpy(doc, array_item.c_str()));
+	for (const auto &[key, value] : additional_properties) {
+		auto value_json = writer.CreateArray();
+		for (const auto &value_json_item : value) {
+			auto value_json_item_json = writer.CreateString(value_json_item);
+			value_json.Append(value_json_item_json);
 		}
-		auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
-		yyjson_mut_obj_add_val(doc, obj, key_ptr, value_obj);
+		obj.Add(key, value_json);
 	}
 }
 
-yyjson_mut_val *MultiValuedMap::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue MultiValuedMap::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

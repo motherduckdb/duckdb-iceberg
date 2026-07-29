@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/load_view_result.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 LoadViewResult::LoadViewResult() {
 }
 
-LoadViewResult LoadViewResult::FromJSON(yyjson_val *obj) {
+LoadViewResult LoadViewResult::FromJSON(JSONValue obj) {
 	LoadViewResult res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -37,22 +35,22 @@ LoadViewResult LoadViewResult::Copy() const {
 	return res;
 }
 
-string LoadViewResult::TryFromJSON(yyjson_val *obj) {
+string LoadViewResult::TryFromJSON(JSONValue obj) {
 	string error;
-	auto metadata_location_val = yyjson_obj_get(obj, "metadata-location");
-	if (!metadata_location_val) {
+	auto metadata_location_val = obj.GetMember("metadata-location");
+	if (!metadata_location_val.IsValid()) {
 		return "LoadViewResult required property 'metadata-location' is missing";
 	} else {
-		if (yyjson_is_str(metadata_location_val)) {
-			metadata_location = yyjson_get_str(metadata_location_val);
+		if (json_utils::IsString(metadata_location_val)) {
+			metadata_location = json_utils::GetString(metadata_location_val);
 		} else {
 			return StringUtil::Format(
-			    "LoadViewResult property 'metadata_location' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(metadata_location_val));
+			    "LoadViewResult property 'metadata_location' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(metadata_location_val).c_str());
 		}
 	}
-	auto metadata_val = yyjson_obj_get(obj, "metadata");
-	if (!metadata_val) {
+	auto metadata_val = obj.GetMember("metadata");
+	if (!metadata_val.IsValid()) {
 		return "LoadViewResult required property 'metadata' is missing";
 	} else {
 		error = metadata.TryFromJSON(metadata_val);
@@ -60,23 +58,27 @@ string LoadViewResult::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto config_val = yyjson_obj_get(obj, "config");
-	if (config_val) {
+	auto config_val = obj.GetMember("config");
+	if (config_val.IsValid()) {
 		case_insensitive_map_t<string> config_tmp;
-		if (yyjson_is_obj(config_val)) {
-			size_t idx, max;
-			yyjson_val *key, *val;
-			yyjson_obj_foreach(config_val, idx, max, key, val) {
-				auto key_str = yyjson_get_str(key);
+		if (config_val.IsObject()) {
+			config_val.IterateObject([&](const string &key_str, JSONValue val) {
+				if (!error.empty()) {
+					return;
+				}
 				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
+				if (json_utils::IsString(val)) {
+					tmp = json_utils::GetString(val);
 				} else {
-					return StringUtil::Format(
-					    "LoadViewResult property 'tmp' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(val));
+					error =
+					    StringUtil::Format("LoadViewResult property 'tmp' is not of type 'string', found %s instead",
+					                       json_utils::GetTypeDescription(val).c_str());
+					return;
 				}
 				config_tmp.emplace(key_str, std::move(tmp));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return "LoadViewResult property 'config_tmp' is not of type 'object'";
@@ -86,35 +88,30 @@ string LoadViewResult::TryFromJSON(yyjson_val *obj) {
 	return "";
 }
 
-void LoadViewResult::PopulateJSON(yyjson_mut_doc *doc, yyjson_mut_val *obj) const {
-	if (!yyjson_mut_is_obj(obj)) {
-		throw InternalException("PopulateJSON requires obj to be a JSON object");
-	}
-
+void LoadViewResult::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: metadata-location
-	yyjson_mut_obj_add_strcpy(doc, obj, "metadata-location", metadata_location.c_str());
+	auto metadata_location_json = writer.CreateString(metadata_location);
+	obj.Add("metadata-location", metadata_location_json);
 
 	// Serialize: metadata
-	yyjson_mut_val *metadata_val = metadata.ToJSON(doc);
-	yyjson_mut_obj_add_val(doc, obj, "metadata", metadata_val);
+	auto metadata_json = metadata.ToJSON(writer);
+	obj.Add("metadata", metadata_json);
 
 	// Serialize: config
 	if (config.has_value()) {
 		auto &config_value = *config;
-		yyjson_mut_val *config_value_obj = yyjson_mut_obj(doc);
-		for (const auto &it : config_value) {
-			auto &key = it.first;
-			auto &value = it.second;
-			auto key_ptr = unsafe_yyjson_mut_strncpy(doc, key.c_str(), strlen(key.c_str()));
-			yyjson_mut_obj_add_strcpy(doc, config_value_obj, key_ptr, value.c_str());
+		auto config_json = writer.CreateObject();
+		for (const auto &[config_json_key, config_json_value] : config_value) {
+			auto config_json_value_json = writer.CreateString(config_json_value);
+			config_json.Add(config_json_key, config_json_value_json);
 		}
-		yyjson_mut_obj_add_val(doc, obj, "config", config_value_obj);
+		obj.Add("config", config_json);
 	}
 }
 
-yyjson_mut_val *LoadViewResult::ToJSON(yyjson_mut_doc *doc) const {
-	yyjson_mut_val *obj = yyjson_mut_obj(doc);
-	PopulateJSON(doc, obj);
+JSONMutableValue LoadViewResult::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
 	return obj;
 }
 

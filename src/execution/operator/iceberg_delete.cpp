@@ -31,17 +31,40 @@ class IcebergDeleteLocalState;
 class IcebergDeleteGlobalState;
 class IcebergTableEntry;
 
+static bool IsScanCreatedByDelete(const PhysicalTableScan &scan) {
+	if (scan.function.GetName() != "iceberg_scan") {
+		return false;
+	}
+	if (scan.column_ids.size() < 2) {
+		return false;
+	}
+
+	bool has_file_name = false;
+	bool has_file_row_number = false;
+	for (auto &column : scan.column_ids) {
+		if (!column.HasPrimaryIndex()) {
+			continue;
+		}
+		auto index = column.GetPrimaryIndex();
+		if (index == MultiFileReader::COLUMN_IDENTIFIER_FILENAME) {
+			has_file_name = true;
+		} else if (index == MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER) {
+			has_file_row_number = true;
+		}
+		if (has_file_name && has_file_row_number) {
+			return true;
+		}
+	}
+	return false;
+}
+
 optional_ptr<PhysicalTableScan> IcebergDelete::FindIcebergScan(PhysicalOperator &plan) {
 	if (plan.type == PhysicalOperatorType::TABLE_SCAN) {
 		// does this emit the virtual columns?
 		auto &scan = plan.Cast<PhysicalTableScan>();
 
-		if (scan.function.GetName() == "iceberg_scan") {
-			for (auto &col : scan.column_ids) {
-				if (col.GetPrimaryIndex() == MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER) {
-					return scan;
-				}
-			}
+		if (IsScanCreatedByDelete(scan)) {
+			return scan;
 		}
 		return nullptr;
 	}
@@ -461,8 +484,8 @@ SourceResultType IcebergDelete::GetDataInternal(ExecutionContext &context, DataC
                                                 OperatorSourceInput &input) const {
 	auto &global_state = sink_state->Cast<IcebergDeleteGlobalState>();
 	auto value = Value::BIGINT(NumericCast<int64_t>(global_state.total_deleted_count.load()));
-	chunk.SetCardinality(1);
 	chunk.data[0].Append(value);
+	chunk.SetChildCardinality(1);
 	return SourceResultType::FINISHED;
 }
 
@@ -481,8 +504,7 @@ InsertionOrderPreservingMap<string> IcebergDelete::ParamsToString() const {
 
 PhysicalOperator &IcebergDelete::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner,
                                             IcebergTableEntry &table, PhysicalOperator &child_plan,
-                                            vector<idx_t> row_id_indexes) {
-	auto &catalog = table.ParentCatalog();
+                                            vector<idx_t> &&row_id_indexes) {
 	auto scan = FindIcebergScan(child_plan);
 
 	optional_ptr<IcebergMultiFileList> multi_file_list;
@@ -545,7 +567,8 @@ PhysicalOperator &IcebergCatalog::PlanDelete(ClientContext &context, PhysicalPla
 		throw NotImplementedException(error_message);
 	}
 
-	auto &iceberg_delete = IcebergDelete::PlanDelete(context, planner, updated_table_entry, plan, row_id_indexes);
+	auto &iceberg_delete =
+	    IcebergDelete::PlanDelete(context, planner, updated_table_entry, plan, std::move(row_id_indexes));
 	return iceberg_delete;
 }
 

@@ -11,6 +11,7 @@
 
 #include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 #include "catalog/rest/api/catalog_api.hpp"
 #include "catalog/rest/api/catalog_utils.hpp"
@@ -19,9 +20,19 @@
 #include "catalog/rest/api/api_utils.hpp"
 #include "rest_catalog/objects/catalog_config.hpp"
 
-using namespace duckdb_yyjson;
-
 namespace duckdb {
+
+void LoadTableResultCache::EvictIfCurrent(const IcebergTableInformation &table) {
+	lock_guard<mutex> guard(lock);
+	auto it = tables.find(table.GetTableKey());
+	if (it == tables.end()) {
+		return;
+	}
+	if (it->second.load_table_result.get() != table.initialization_source.get()) {
+		return;
+	}
+	tables.erase(it);
+}
 
 IcebergCatalog::IcebergCatalog(AttachedDatabase &db_p, AccessMode access_mode,
                                unique_ptr<IcebergAuthorization> auth_handler, IcebergAttachOptions &attach_options_p,
@@ -72,34 +83,39 @@ optional_ptr<CatalogEntry> IcebergCatalog::CreateSchema(CatalogTransaction trans
 	}
 
 	D_ASSERT(context);
-
-	// Verify schema existence on the server first
-	bool schema_exists =
-	    IRCAPI::VerifySchemaExistence(*context, *this, info.GetQualifiedName().Schema().GetIdentifierName());
-
-	if (schema_exists) {
+	auto &iceberg_transaction = IcebergTransaction::Get(*context, *this);
+	auto &schema_name = info.GetQualifiedName().Schema().GetIdentifierName();
+	auto created_schema = iceberg_transaction.created_schemas.find(schema_name);
+	if (created_schema != iceberg_transaction.created_schemas.end()) {
 		if (info.on_conflict == OnCreateConflict::IGNORE_ON_CONFLICT) {
-			// Schema already exists on the server - get or create a local entry and return it
-			auto entry = schemas.GetEntry(*context, info.GetQualifiedName().Schema().GetIdentifierName(),
-			                              OnEntryNotFound::RETURN_NULL);
-			if (entry) {
-				return entry;
-			}
-			auto new_schema = make_uniq<IcebergSchemaEntry>(*this, info);
-			auto schema_name = new_schema->name;
-			schemas.AddEntry(schema_name.GetIdentifierName(), std::move(new_schema));
-			return &schemas.GetEntry(info.GetQualifiedName().Schema().GetIdentifierName());
+			return created_schema->second.get();
 		}
 		throw CatalogException("Schema with name \"%s\" already exists", info.GetQualifiedName().Schema());
 	}
 
-	// Schema does not exist - create it locally and defer the server creation to commit
-	auto &iceberg_transaction = IcebergTransaction::Get(*context, *this);
-	auto new_schema = make_uniq<IcebergSchemaEntry>(*this, info);
-	auto schema_name = new_schema->name;
-	schemas.AddEntry(schema_name.GetIdentifierName(), std::move(new_schema));
-	iceberg_transaction.created_schemas.insert(info.GetQualifiedName().Schema().GetIdentifierName());
-	return &schemas.GetEntry(info.GetQualifiedName().Schema().GetIdentifierName());
+	// Verify schema existence on the server first
+	bool schema_exists = IRCAPI::VerifySchemaExistence(*context, *this, schema_name);
+
+	if (schema_exists) {
+		if (info.on_conflict == OnCreateConflict::IGNORE_ON_CONFLICT) {
+			// Schema already exists on the server - get or create a local entry and return it
+			auto entry = schemas.GetEntry(*context, schema_name, OnEntryNotFound::RETURN_NULL);
+			if (entry) {
+				return entry;
+			}
+			auto new_schema = make_shared_ptr<IcebergSchemaEntry>(*this, info);
+			schemas.AddEntry(schema_name, new_schema);
+			iceberg_transaction.schemas[schema_name] = new_schema;
+			return new_schema.get();
+		}
+		throw CatalogException("Schema with name \"%s\" already exists", info.GetQualifiedName().Schema());
+	}
+
+	// Schema does not exist - stage it locally and defer the server creation and catalog publication to commit
+	auto new_schema = make_shared_ptr<IcebergSchemaEntry>(*this, info);
+	auto result = new_schema.get();
+	iceberg_transaction.created_schemas.emplace(schema_name, std::move(new_schema));
+	return result;
 }
 
 void IcebergCatalog::DropSchema(ClientContext &context, DropInfo &info) {
@@ -338,32 +354,23 @@ void IcebergCatalog::ParsePrefix() {
 	auto default_prefix_it = defaults.find("prefix");
 	auto override_prefix_it = overrides.find("prefix");
 
-	string decoded_prefix = "";
+	const string *prefix_property = nullptr;
 	if (default_prefix_it != defaults.end()) {
-		decoded_prefix = StringUtil::URLDecode(default_prefix_it->second);
-		prefix = decoded_prefix;
-		if (!StringUtil::Equals(decoded_prefix, default_prefix_it->second)) {
-			// decoded prefix contains a slash AND is not equal to the original
-			// means prefix was encoded, and is one URL component
-			prefix_is_one_component = true;
-		} else {
-			prefix_is_one_component = false;
-		}
+		prefix_property = &default_prefix_it->second;
+	}
+	// Sometimes the prefix is in the overrides. Prefer the override prefix.
+	if (override_prefix_it != overrides.end()) {
+		prefix_property = &override_prefix_it->second;
+	}
+	if (!prefix_property) {
+		return;
 	}
 
-	// sometimes the prefix in the overrides. Prefer the override prefix
-	if (override_prefix_it != overrides.end()) {
-		decoded_prefix = StringUtil::URLDecode(override_prefix_it->second);
-		prefix = decoded_prefix;
-
-		if (!StringUtil::Equals(decoded_prefix, override_prefix_it->second)) {
-			// decoded prefix is not equal to the original
-			// means prefix was encoded, and is one URL component
-			prefix_is_one_component = true;
-		} else {
-			// decoded prefix contains a '/' or is equal
-			prefix_is_one_component = false;
-		}
+	auto decoded_prefix = StringUtil::URLDecode(*prefix_property);
+	if (attach_options.encode_entire_prefix || !StringUtil::Equals(decoded_prefix, *prefix_property)) {
+		prefix.push_back(std::move(decoded_prefix));
+	} else {
+		prefix = StringUtil::Split(decoded_prefix, '/');
 	}
 }
 
@@ -380,11 +387,12 @@ void IcebergCatalog::GetConfig(ClientContext &context, IcebergEndpointType &endp
 	auto catalog_config = IRCAPI::GetCatalogConfig(context, *this, effective_warehouse);
 	overrides = catalog_config.overrides;
 	defaults = catalog_config.defaults;
-	ParsePrefix();
-
-	if (attach_options.encode_entire_prefix) {
-		prefix_is_one_component = true;
+	auto uri_override_it = overrides.find("uri");
+	if (uri_override_it != overrides.end()) {
+		uri = uri_override_it->second;
+		StringUtil::RTrim(uri, "/");
 	}
+	ParsePrefix();
 
 	if (auto &endpoints = catalog_config.endpoints) {
 		for (auto &endpoint : *endpoints) {

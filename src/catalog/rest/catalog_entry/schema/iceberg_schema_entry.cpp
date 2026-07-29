@@ -661,13 +661,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 
 		IcebergDefaultBinder binder(context);
 		auto default_constant_value = binder.Evaluate(expression.get(), column.type);
-		if (updated_table.table_metadata.iceberg_version < 3 && !default_constant_value.IsNull()) {
-			throw InvalidInputException("non-null DEFAULT values are not supported for <V3 tables");
-		}
-
-		if (updated_table.table_metadata.iceberg_version >= 3) {
-			column.write_default = make_uniq<Value>(default_constant_value);
-		}
+		column.SetWriteDefault(default_constant_value, updated_table.table_metadata.iceberg_version);
 
 		auto new_schema_id = new_schema->schema_id;
 

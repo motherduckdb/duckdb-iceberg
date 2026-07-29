@@ -28,9 +28,11 @@ set(EXTENSION_SOURCES
 	src/catalog/rest/api/iceberg_add_snapshot.cpp
 	src/catalog/rest/api/iceberg_create_table_request.cpp
 	src/catalog/rest/api/iceberg_manifest_merge.cpp
+	src/catalog/rest/api/iceberg_scan_planning.cpp
 	src/catalog/rest/api/iceberg_retry.cpp
 	src/catalog/rest/api/iceberg_table_update.cpp
 	src/catalog/rest/api/iceberg_type.cpp
+	src/catalog/rest/api/iceberg_expression.cpp
 	src/catalog/rest/api/table_update.cpp
 	src/catalog/rest/api/url_utils.cpp
 	src/catalog/rest/catalog_entry/schema/iceberg_schema_entry.cpp
@@ -58,6 +60,7 @@ set(EXTENSION_SOURCES
 	src/core/expression/iceberg_metrics.cpp
 	src/core/expression/iceberg_transform.cpp
 	src/core/expression/iceberg_value.cpp
+	src/core/metadata/puffin/iceberg_puffin_metadata.cpp
 	src/core/metadata/iceberg_table_metadata.cpp
 	src/core/metadata/manifest/iceberg_manifest_list.cpp
 	src/core/metadata/manifest/iceberg_manifest.cpp
@@ -97,7 +100,6 @@ set(EXTENSION_SOURCES
 	src/function/metadata/iceberg_rewrite_data_files.cpp
 	src/function/metadata/iceberg_snapshots.cpp
 	src/function/metadata/iceberg_table_properties_functions.cpp
-	src/function/metadata/iceberg_verify_equality_deletes.cpp
 	src/function/metadata/iceberg_schema_properties_functions.cpp
 	src/function/scan/iceberg_scan.cpp
 	src/iceberg_extension.cpp
@@ -109,6 +111,7 @@ set(EXTENSION_SOURCES
 	src/maintenance/rewrite_data_files_operator.cpp
 	src/maintenance/rewrite_data_files_planner.cpp
 	src/planning/iceberg_multi_file_list.cpp
+	src/planning/iceberg_scan_plan_provider.cpp
 	src/planning/iceberg_multi_file_reader.cpp
 	src/planning/iceberg_optimizer.cpp
 	src/planning/metadata_io/avro/avro_scan.cpp
