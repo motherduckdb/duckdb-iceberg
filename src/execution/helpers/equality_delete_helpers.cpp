@@ -34,20 +34,6 @@ namespace duckdb {
 //! ICEBERG_ENABLE_EQUALITY_DELETE_WRITES compile flag is on - in default builds the callers
 //! (in iceberg_delete.cpp) are #ifdef'd out, so this code is dead.
 
-static bool ExpressionContainsFunction(const Expression &expr, const char *function_name) {
-	if (expr.GetExpressionClass() == ExpressionClass::BOUND_FUNCTION &&
-	    expr.Cast<BoundFunctionExpression>().Function().GetName() == function_name) {
-		return true;
-	}
-	bool found = false;
-	ExpressionIterator::EnumerateChildren(expr, [&](const Expression &child) {
-		if (!found && ExpressionContainsFunction(child, function_name)) {
-			found = true;
-		}
-	});
-	return found;
-}
-
 //! Whether a physical-filter expression is built purely from equality-delete forms, i.e. `col = const`,
 //! `col IN (const, ...)`, and AND/OR of those. `col IN (...)` and `col = c1 OR ...` can leave such a physical
 //! filter behind even though they also push down as a scan filter; recognizing it here keeps that delete on
@@ -91,12 +77,10 @@ static bool ExpressionIsEqualityDeleteForm(const Expression &expr) {
 static bool PlanContainsPhysicalFilter(PhysicalOperator &plan) {
 	if (plan.type == PhysicalOperatorType::FILTER) {
 		auto &filter = plan.Cast<PhysicalFilter>();
-		//! Two physical filters are compatible with writing an equality delete and must not disqualify it:
-		//!  - the 'iceberg_verify_equality_deletes' filter the read path injects to apply existing equality
-		//!    deletes (otherwise every delete after the first falls back to positional deletes), and
-		//!  - the DELETE predicate itself when it is a pure equality form (`col IN (...)` / `col = c1 OR ...`).
-		if (!ExpressionContainsFunction(*filter.expression, "iceberg_verify_equality_deletes") &&
-		    !ExpressionIsEqualityDeleteForm(*filter.expression)) {
+		//! The DELETE predicate can leave a physical filter behind even when it is a pure equality form
+		//! (`col IN (...)` / `col = c1 OR ...` also push down as a scan filter). Such a filter must not
+		//! disqualify writing an equality delete; anything else does.
+		if (!ExpressionIsEqualityDeleteForm(*filter.expression)) {
 			return true;
 		}
 	}
