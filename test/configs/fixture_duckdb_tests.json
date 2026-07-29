@@ -632,6 +632,7 @@
       "paths": [
         "test/sql/join/mark/large_mark_join.test_slow",
         "test/sql/join/natural/natural_join.test",
+        "test/sql/join/pair_dependent_join_subquery.test",
         "test/sql/join/right_outer/right_join_complex_null.test"
       ]
     },
@@ -1595,6 +1596,7 @@
         "test/sql/catalog/nested_schema/nested_table_dml_persist.test",
         "test/sql/catalog/nested_schema/nested_table_dml.test",
         "test/sql/catalog/nested_schema/nested_table.test",
+        "test/sql/catalog/nested_schema/nested_table_columnref.test",
         "test/sql/storage/wal/wal_null_update_row_group_pruning.test"
       ]
     },
