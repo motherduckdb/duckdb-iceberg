@@ -275,7 +275,6 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(
 			config.options["refresh_info"] = IcebergTableSecretProvider::MakeRefreshInfo(
 			    catalog.GetName().GetIdentifierName(), schema.name.GetIdentifierName(), name);
 		}
-		config.storage_type = "memory";
 	}
 
 	return result;
