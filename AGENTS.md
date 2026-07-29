@@ -13,7 +13,7 @@ This file applies to the repository root. `duckdb/` is an upstream submodule wit
 - `scripts/data_generators/`: pytest-driven Iceberg data generator and catalog connection profiles.
 - `make/catalogs/`: local catalog lifecycle and data-generation targets.
 - `extension_config.cmake`: DuckDB extensions included in the build.
-- `CMakeLists.txt`: explicit C++ source list and extension dependencies.
+- `CMakeLists.txt`: top-level extension dependencies and linking; per-directory `src/**/CMakeLists.txt` list the C++ sources for each directory (mirroring the DuckDB submodule layout).
 - `duckdb/` and `extension-ci-tools/`: git submodules. Do not edit or update them unless the task explicitly requires it.
 
 Keep existing user changes intact. Runtime directories such as `.catalogs/`, `.venv-spark4/`, `build/`, `data/generated/`, `.cache/`, and test temp directories are generated or ignored and should not be committed.
@@ -58,7 +58,7 @@ make format-check
 make format-fix
 ```
 
-When adding a C++ implementation file, add it to `EXTENSION_SOURCES` in `CMakeLists.txt`. Follow existing DuckDB C++ conventions and prefer the narrowest relevant build before a full rebuild.
+When adding a C++ implementation file, add it to the `OBJECT` library in the `CMakeLists.txt` of the directory the file lives in (each source directory has its own `CMakeLists.txt`, mirroring the DuckDB submodule layout). If you add a new directory, give it a `CMakeLists.txt` that appends its objects to `ALL_OBJECT_FILES` and `add_subdirectory()` it from its parent. Follow existing DuckDB C++ conventions and prefer the narrowest relevant build before a full rebuild.
 
 ## Testing expectations
 
