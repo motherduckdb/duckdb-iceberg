@@ -463,6 +463,7 @@
       "reason": "EXPLAIN output differs because storage backend is Iceberg",
       "paths": [
         "test/sql/explain/explain_execute.test",
+		"test/sql/optimizer/test_common_subplan_table_filters.test",
         "test/sql/explain/test_explain_table_scan.test"
       ]
     },
