@@ -280,6 +280,13 @@ static unique_ptr<Expression> ExtractFilterExpressionForPath(const Expression &e
 
 unique_ptr<ExpressionFilter> IcebergMultiFileList::GetFilterForColumnIndex(const ColumnIndex &column_index) const {
 	auto filter = table_filters.TryGetFilterByColumnIndex(column_index);
+	if (!filter && column_index.HasChildren()) {
+		// Filters on struct fields can be registered for the top-level column. The path extraction below ensures
+		// that we only return the part of the parent filter that targets the requested field.
+		//! NOTE: This might have to be more granular (evaluate in a loop with reduced components instead of directly
+		//! cutting to the root)
+		filter = table_filters.TryGetFilterByColumnIndex(ColumnIndex(column_index.GetPrimaryIndex()));
+	}
 	if (!filter) {
 		return nullptr;
 	}
