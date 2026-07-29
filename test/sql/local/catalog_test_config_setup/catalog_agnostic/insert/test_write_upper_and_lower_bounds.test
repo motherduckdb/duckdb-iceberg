@@ -27,6 +27,8 @@ set logging_level='debug'
 statement ok
 SET TimeZone = 'UTC';
 
+# This test needs:
+# - spark_written_upper_lower_bounds
 
 statement ok
 drop table if exists my_datalake.default.lower_upper_bounds_test;
@@ -54,7 +56,7 @@ insert into my_datalake.default.lower_upper_bounds_test values
     -3.4028235E38,
     -1.7976931348623157E308,
     -9999999999999.999,
-    DATE '0001-01-01IC',
+    DATE '0001-01-01',
     TIMESTAMP '0001-01-01 00:00:00',
     ''::BLOB
 ),

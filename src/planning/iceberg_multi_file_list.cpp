@@ -279,9 +279,14 @@ static unique_ptr<Expression> ExtractFilterExpressionForPath(const Expression &e
 } // namespace
 
 unique_ptr<ExpressionFilter> IcebergMultiFileList::GetFilterForColumnIndex(const ColumnIndex &column_index) const {
-	auto primary_index = column_index.GetPrimaryIndex();
-
-	auto filter = table_filters.TryGetFilterByColumnIndex(primary_index);
+	auto filter = table_filters.TryGetFilterByColumnIndex(column_index);
+	if (!filter && column_index.HasChildren()) {
+		// Filters on struct fields can be registered for the top-level column. The path extraction below ensures
+		// that we only return the part of the parent filter that targets the requested field.
+		//! NOTE: This might have to be more granular (evaluate in a loop with reduced components instead of directly
+		//! cutting to the root)
+		filter = table_filters.TryGetFilterByColumnIndex(ColumnIndex(column_index.GetPrimaryIndex()));
+	}
 	if (!filter) {
 		return nullptr;
 	}
@@ -339,9 +344,9 @@ void IcebergMultiFileList::Bind(vector<LogicalType> &return_types, vector<Identi
 	this->types = return_types;
 }
 
-unique_ptr<IcebergMultiFileList> IcebergMultiFileList::PushdownInternal(ClientContext &context,
-                                                                        TableFilterSet &new_filters,
-                                                                        const vector<column_t> &column_indexes) const {
+unique_ptr<IcebergMultiFileList>
+IcebergMultiFileList::PushdownInternal(ClientContext &context, TableFilterSet &new_filters,
+                                       const vector<ColumnIndex> &column_indexes) const {
 	unique_ptr<RowGroupOrderOptions> filtered_scan_order;
 	{
 		annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
@@ -355,12 +360,14 @@ unique_ptr<IcebergMultiFileList> IcebergMultiFileList::PushdownInternal(ClientCo
 
 	// The supplied filter set is the complete set of filters for the new view.
 	for (auto &entry : new_filters) {
-		auto column_idx = column_indexes[entry.GetIndex().GetIndex()];
-		if (column_idx >= names.size()) {
+		auto projection_index = ProjectionIndex(entry.GetIndex().GetIndex());
+		auto &column_index = column_indexes[projection_index];
+		auto primary_index = column_index.GetPrimaryIndex();
+		if (primary_index >= names.size()) {
 			continue;
 		}
 		auto &filter = ExpressionFilter::GetExpressionFilter(entry.Filter(), "IcebergMultiFileList::PushdownInternal");
-		result_filter_set.PushFilter(column_idx, filter.Copy());
+		result_filter_set.PushFilter(column_index, filter.Copy());
 	}
 
 	filtered_list->table_filters = std::move(result_filter_set);
@@ -374,9 +381,14 @@ unique_ptr<IcebergMultiFileList> IcebergMultiFileList::PushdownInternal(ClientCo
 }
 
 unique_ptr<MultiFileList>
-IcebergMultiFileList::DynamicFilterPushdown(ClientContext &context, const MultiFileOptions &options,
-                                            const vector<Identifier> &, const vector<LogicalType> &,
-                                            const vector<column_t> &column_ids, TableFilterSet &filters) const {
+IcebergMultiFileList::DynamicFilterPushdown(MultiFileDynamicPushdownInfo &pushdown_info) const {
+	auto &options = pushdown_info.options;
+	auto &names = pushdown_info.column_names;
+	auto &types = pushdown_info.column_types;
+	auto &column_indexes = pushdown_info.column_indexes;
+	auto &context = pushdown_info.context;
+	auto &filters = pushdown_info.filters;
+
 	if (!filters.HasFilters()) {
 		return nullptr;
 	}
@@ -387,7 +399,7 @@ IcebergMultiFileList::DynamicFilterPushdown(ClientContext &context, const MultiF
 	for (auto &entry : filters) {
 		auto &filter =
 		    ExpressionFilter::GetExpressionFilter(entry.Filter(), "IcebergMultiFileList::DynamicFilterPushdown");
-		auto column_id = column_ids[entry.GetIndex().GetIndex()];
+		auto column_id = column_indexes[entry.GetIndex().GetIndex()];
 		auto previously_pushed_down_filter = table_filters.TryGetFilterByColumnIndex(column_id);
 		if (!previously_pushed_down_filter || !filter.Equals(*previously_pushed_down_filter)) {
 			filters_changed = true;
@@ -397,7 +409,7 @@ IcebergMultiFileList::DynamicFilterPushdown(ClientContext &context, const MultiF
 	if (filters_changed) {
 		// Dynamic filter pushdown supplies the complete effective filter for every column. This includes filters
 		// already pushed down by ComplexFilterPushdown, potentially combined with a new runtime filter.
-		auto new_snap = PushdownInternal(context, *filters_copy, column_ids);
+		auto new_snap = PushdownInternal(context, *filters_copy, column_indexes);
 		return std::move(new_snap);
 	}
 	return nullptr;
@@ -421,7 +433,7 @@ unique_ptr<MultiFileList> IcebergMultiFileList::ComplexFilterPushdown(ClientCont
 		return nullptr;
 	}
 
-	return PushdownInternal(context, filter_set, info.column_ids);
+	return PushdownInternal(context, filter_set, info.column_indexes);
 }
 
 vector<OpenFileInfo> IcebergMultiFileList::GetAllFiles() const {
@@ -736,8 +748,9 @@ bool IcebergMultiFileList::FileMatchesFilter(const IcebergManifestFile &manifest
 	}
 
 	for (auto &entry : table_filters) {
-		auto index = entry.first;
-		auto &column = *schema.columns[index];
+		auto &column_index = entry.first;
+		auto primary_index = column_index.GetPrimaryIndex();
+		auto &column = *schema.columns[primary_index];
 
 		auto &data_file = manifest_entry.data_file;
 		// First check if there are partitions
@@ -1312,11 +1325,13 @@ void IcebergMultiFileList::InitializeScanPlanProvider() const {
 			request.use_snapshot_schema = snapshot_info.snapshot->snapshot_id != GetMetadata().current_snapshot_id;
 			unique_ptr<rest_api_objects::Expression> server_side_filter;
 			for (auto &filter : table_filters) {
-				if (filter.first >= GetSchema().columns.size()) {
+				auto &column_index = filter.first;
+				auto primary_index = column_index.GetPrimaryIndex();
+				if (primary_index >= GetSchema().columns.size()) {
 					continue;
 				}
 				auto converted =
-				    IcebergExpression::TryConvertFilter(*filter.second->expr, GetSchema().columns[filter.first]->name);
+				    IcebergExpression::TryConvertFilter(*filter.second->expr, GetSchema().columns[primary_index]->name);
 				server_side_filter =
 				    IcebergExpression::AndExpression(std::move(server_side_filter), std::move(converted));
 			}
