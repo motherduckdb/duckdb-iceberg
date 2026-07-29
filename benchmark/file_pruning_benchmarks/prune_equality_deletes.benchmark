@@ -51,7 +51,7 @@ SELECT
     range % 1000,
     'e' || range::VARCHAR,
     DATE '2024-01-01' + (range // 1000)::INTEGER
-FROM range(365000);
+FROM range(900000);
 DELETE FROM my_datalake.default.prune_positional_deletes WHERE id = 1 or id = 2 or id = 3 or id = 10 or id = 20;
 
 run
