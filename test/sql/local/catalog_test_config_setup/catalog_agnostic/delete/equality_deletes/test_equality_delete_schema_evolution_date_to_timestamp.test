@@ -81,7 +81,6 @@ delete from my_datalake.default.equality_delete_evolve_date_to_timestamp where t
 query III
 select * from my_datalake.default.equality_delete_evolve_date_to_timestamp order by all
 ----
-2	2000-01-02 00:00:00	delete-after-evolution-old-file
 3	2000-01-03 00:00:00	keep-old
 4	2000-01-01 00:00:00	old-delete-does-not-apply-to-new-file
 7	2000-01-05 01:02:03	keep-new
