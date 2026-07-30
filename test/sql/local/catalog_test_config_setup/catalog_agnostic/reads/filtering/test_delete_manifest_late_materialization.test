@@ -1,0 +1,112 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/test_delete_manifest_late_materialization.test
+# description: Delete manifests are loaded only when their sequence and partition can apply to an initialized data file
+# group: [filtering]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+set ignore_error_messages
+
+statement ok
+set iceberg_use_server_side_scan_planning=false;
+
+statement ok
+set enable_external_file_cache=false;
+
+statement ok
+drop table if exists my_datalake.default.delete_manifest_late_materialization;
+
+statement ok
+create table my_datalake.default.delete_manifest_late_materialization (
+	part integer,
+	payload integer
+) partitioned by (part) with (
+	'format-version' = 3,
+	'commit.manifest-merge.enabled' = 'false'
+);
+
+# Both of these data files precede the delete manifest.
+statement ok
+insert into my_datalake.default.delete_manifest_late_materialization select 1, range from range(10, 14);
+
+statement ok
+insert into my_datalake.default.delete_manifest_late_materialization select 2, range from range(20, 24);
+
+statement ok
+delete from my_datalake.default.delete_manifest_late_materialization where part = 1 and payload = 10;
+
+# This data file has a sequence number newer than the delete manifest.
+statement ok
+insert into my_datalake.default.delete_manifest_late_materialization select 3, range from range(30, 34);
+
+query II
+select manifest_content, count(distinct manifest_path)
+from iceberg_metadata(my_datalake.default.delete_manifest_late_materialization)
+where status <> 'DELETED'
+group by manifest_content
+order by manifest_content;
+----
+DATA	3
+DELETE	1
+
+statement ok
+call enable_logging('Iceberg', storage='memory');
+
+statement ok
+set logging_level='debug';
+
+# The delete manifest has a different partition from this older data file.
+statement ok
+call truncate_duckdb_logs();
+
+query I
+select sum(payload) from my_datalake.default.delete_manifest_late_materialization where part = 2;
+----
+86
+
+query I
+select count(*) from duckdb_logs()
+where type = 'Iceberg' and message.contains('phase=delete_manifest_scan_started');
+----
+0
+
+# The delete manifest is older than this data file.
+statement ok
+call truncate_duckdb_logs();
+
+query I
+select sum(payload) from my_datalake.default.delete_manifest_late_materialization where part = 3;
+----
+126
+
+query I
+select count(*) from duckdb_logs()
+where type = 'Iceberg' and message.contains('phase=delete_manifest_scan_started');
+----
+0
+
+# The matching older data file causes the one applicable delete manifest to be loaded.
+statement ok
+call truncate_duckdb_logs();
+
+query I
+select sum(payload) from my_datalake.default.delete_manifest_late_materialization where part = 1;
+----
+36
+
+query I
+select count(*) from duckdb_logs()
+where type = 'Iceberg'
+  and message.contains('phase=delete_manifest_scan_started selected_delete_manifests=1 total_delete_manifests=1');
+----
+1
+
+statement ok
+drop table my_datalake.default.delete_manifest_late_materialization;

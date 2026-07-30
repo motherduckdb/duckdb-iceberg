@@ -1184,6 +1184,102 @@ bool IcebergMultiFileList::ManifestMatchesFilter(const IcebergManifestFile &mani
 	return true;
 }
 
+bool IcebergMultiFileList::DeleteManifestMatchesDataFile(const IcebergManifestFile &delete_manifest,
+                                                         const BoundIcebergManifestEntry &data_manifest_entry) const {
+	auto &metadata = GetMetadata();
+	auto partition_spec_it = metadata.partition_specs.find(delete_manifest.partition_spec_id);
+	if (partition_spec_it == metadata.partition_specs.end()) {
+		throw InvalidInputException("Delete manifest %s references partition_spec_id %d which doesn't exist",
+		                            delete_manifest.manifest_path, delete_manifest.partition_spec_id);
+	}
+	auto &delete_partition_spec = partition_spec_it->second;
+	if (delete_partition_spec.IsUnpartitioned()) {
+		//! An unpartitioned manifest can contain global equality deletes.
+		return true;
+	}
+
+	auto &data_manifest = data_manifests[data_manifest_entry.manifest_file_idx].entry.file;
+	if (delete_manifest.partition_spec_id != data_manifest.partition_spec_id) {
+		return false;
+	}
+	if (!delete_manifest.partitions.has_partitions) {
+		return true;
+	}
+
+	auto &field_summaries = delete_manifest.partitions.field_summary;
+	if (delete_partition_spec.fields.size() != field_summaries.size()) {
+		throw InvalidInputException("Delete manifest has %d partition summaries but partition spec %d has %d fields",
+		                            field_summaries.size(), delete_manifest.partition_spec_id,
+		                            delete_partition_spec.fields.size());
+	}
+
+	auto &data_file = data_manifest_entry.entry.data_file;
+	unordered_map<uint64_t, reference<const Value>> partition_values;
+	for (auto &partition : data_file.partition_info) {
+		partition_values.emplace(partition.field_id, partition.value);
+	}
+
+	for (idx_t field_idx = 0; field_idx < delete_partition_spec.fields.size(); field_idx++) {
+		auto &field = delete_partition_spec.fields[field_idx];
+		auto partition_value_it = partition_values.find(field.partition_field_id);
+		if (partition_value_it == partition_values.end()) {
+			//! Missing partition information cannot safely exclude the manifest.
+			return true;
+		}
+		auto &partition_value = partition_value_it->second.get();
+		auto &field_summary = field_summaries[field_idx];
+		if (partition_value.IsNull()) {
+			if (!field_summary.contains_null) {
+				return false;
+			}
+			continue;
+		}
+
+		auto source_column = metadata.FindColumnByFieldId(NumericCast<int32_t>(field.source_id));
+		if (!source_column) {
+			//! Schema evolution can make the source column unavailable; keep the manifest conservatively.
+			return true;
+		}
+		auto partition_type = field.transform.GetSerializedType(source_column->type);
+		auto stats = IcebergPredicateStats::DeserializeBounds(field_summary.lower_bound, field_summary.upper_bound,
+		                                                      source_column->name, partition_type);
+		auto typed_partition_value = partition_value.DefaultCastAs(partition_type);
+		if (stats.lower_bound && typed_partition_value < *stats.lower_bound) {
+			return false;
+		}
+		if (stats.upper_bound && typed_partition_value > *stats.upper_bound) {
+			return false;
+		}
+	}
+	return true;
+}
+
+vector<idx_t>
+IcebergMultiFileList::GetDeleteManifestsForDataFile(const BoundIcebergManifestEntry &data_manifest_entry) const {
+	vector<idx_t> result;
+	auto &data_manifest = data_manifests[data_manifest_entry.manifest_file_idx].entry.file;
+	auto data_sequence_number = data_manifest_entry.entry.GetSequenceNumber(data_manifest);
+	for (idx_t manifest_idx = 0; manifest_idx < delete_manifests.size(); manifest_idx++) {
+		if (!delete_manifest_matches[manifest_idx]) {
+			continue;
+		}
+		auto &delete_manifest = delete_manifests[manifest_idx].entry.file;
+		if (!delete_manifest.sequence_number) {
+			throw InvalidConfigurationException("Delete manifest %s does not have a sequence number",
+			                                    delete_manifest.manifest_path);
+		}
+		//! Position deletes can apply at an equal sequence number; equality deletes are filtered exactly after loading.
+		if (*delete_manifest.sequence_number < data_sequence_number) {
+			continue;
+		}
+		if (!DeleteManifestMatchesDataFile(delete_manifest, data_manifest_entry)) {
+			continue;
+		}
+		result.push_back(manifest_idx);
+	}
+	return result;
+}
+
 vector<reference<const IcebergEqualityDeleteFile>>
 IcebergMultiFileList::GetEqualityDeletesForFile(const BoundIcebergManifestEntry &bound_manifest_entry) const {
 	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
@@ -1253,14 +1349,20 @@ void IcebergMultiFileList::InitializeView(annotated_lock_guard<annotated_mutex> 
 	auto &transaction_delete_manifests = shared_state->transaction_delete_manifests;
 	delete_manifests.reserve(committed_delete_manifests.size() + transaction_delete_manifests.size());
 	delete_manifest_matches.reserve(committed_delete_manifests.size() + transaction_delete_manifests.size());
+	bool view_has_matching_delete_manifests = false;
 	for (auto &manifest : committed_delete_manifests) {
 		delete_manifests.emplace_back(delete_manifests.size(), manifest);
-		delete_manifest_matches.push_back(ManifestMatchesFilter(manifest.file));
+		auto matches = ManifestMatchesFilter(manifest.file);
+		delete_manifest_matches.push_back(matches);
+		view_has_matching_delete_manifests |= matches;
 	}
 	for (auto &manifest : transaction_delete_manifests) {
 		delete_manifests.emplace_back(delete_manifests.size(), manifest);
-		delete_manifest_matches.push_back(ManifestMatchesFilter(manifest.get().file));
+		auto matches = ManifestMatchesFilter(manifest.get().file);
+		delete_manifest_matches.push_back(matches);
+		view_has_matching_delete_manifests |= matches;
 	}
+	has_matching_delete_manifests.store(view_has_matching_delete_manifests);
 }
 
 namespace {
@@ -1382,8 +1484,8 @@ void IcebergMultiFileList::StartDataManifestScan(annotated_lock_guard<annotated_
 	GetScanPlanProvider().StartDataManifestScan(*this);
 }
 
-void IcebergMultiFileList::EnumerateDeleteManifestEntriesInternal() const {
-	GetScanPlanProvider().EnumerateDeleteManifestEntries(*this);
+void IcebergMultiFileList::EnumerateDeleteManifestEntriesInternal(const vector<idx_t> &manifest_indexes) const {
+	GetScanPlanProvider().EnumerateDeleteManifestEntries(*this, manifest_indexes);
 }
 
 bool IcebergMultiFileList::DeleteEntryMatchesFilters(const BoundIcebergManifestEntry &bound_manifest_entry) const {
@@ -1422,44 +1524,34 @@ void IcebergMultiFileList::ScanDeleteFiles() const {
 	}
 }
 
-void IcebergMultiFileList::ProcessDeletes() const {
-	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
-	InitializeView(guard);
-	annotated_lock_guard<annotated_mutex> delete_guard(shared_state->delete_lock);
-	ProcessDeletesInternal();
-}
-
-void IcebergMultiFileList::ProcessDeletesInternal() const {
-	//! Enumerate the delete manifest entries, then read the delete files they reference.
-	//! Delete enumeration is idempotent, so this is safe if the entries were already enumerated.
-	EnumerateDeleteManifestEntriesInternal();
-	ScanDeleteFiles();
-}
-
-vector<BoundIcebergManifestEntry> IcebergMultiFileList::GetDeleteManifestEntries() const {
-	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
-	InitializeView(guard);
-	annotated_lock_guard<annotated_mutex> delete_guard(shared_state->delete_lock);
-	EnumerateDeleteManifestEntriesInternal();
-	vector<BoundIcebergManifestEntry> result;
-	auto &delete_entries = GetScanPlanProvider().DeleteManifestEntries();
-	for (auto &entry : delete_entries) {
-		if (!DeleteEntryMatchesFilters(entry)) {
-			continue;
-		}
-		auto manifest_idx = entry.manifest_file_idx;
-		auto &manifest = delete_manifests[manifest_idx];
-		auto &manifest_file = manifest.entry.file;
-		if (!delete_manifest_matches[manifest_idx]) {
-			continue;
-		}
-		if (table_filters.HasFilters() &&
-		    !FileMatchesFilter(manifest_file, entry.entry, IcebergManifestContentType::DELETE)) {
-			continue;
-		}
-		result.push_back(entry);
+void IcebergMultiFileList::ProcessDeletes(const BoundIcebergManifestEntry &data_manifest_entry) const {
+	if (!has_matching_delete_manifests.load()) {
+		return;
 	}
-	return result;
+
+	vector<idx_t> manifest_indexes;
+	optional_ptr<IcebergScanPlanProvider> provider;
+	{
+		annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
+		InitializeView(guard);
+		manifest_indexes = GetDeleteManifestsForDataFile(data_manifest_entry);
+		provider = scan_plan_provider.get();
+	}
+	if (manifest_indexes.empty()) {
+		return;
+	}
+
+	D_ASSERT(provider);
+	provider->ReadDeleteManifests(*this, manifest_indexes);
+
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
+	annotated_lock_guard<annotated_mutex> delete_guard(shared_state->delete_lock);
+	ProcessDeletesInternal(manifest_indexes);
+}
+
+void IcebergMultiFileList::ProcessDeletesInternal(const vector<idx_t> &manifest_indexes) const {
+	EnumerateDeleteManifestEntriesInternal(manifest_indexes);
+	ScanDeleteFiles();
 }
 
 void IcebergMultiFileList::ScanDeleteFile(const BoundIcebergManifestEntry &bound_manifest_entry) const {

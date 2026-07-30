@@ -388,7 +388,7 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
 	const auto &multi_file_list = dynamic_cast<const IcebergMultiFileList &>(*iceberg_state.file_list);
 	auto file_id = reader_data.reader->file_list_idx.GetIndex();
 	auto bound_manifest_entry = multi_file_list.GetManifestEntry(file_id);
-	multi_file_list.ProcessDeletes();
+	multi_file_list.ProcessDeletes(bound_manifest_entry);
 
 	//! Make a copy of the global columns+column_ids, if we have equality deletes we will add columns to this
 	//! This is done so CreateMapping treats these columns as required for the current file,
