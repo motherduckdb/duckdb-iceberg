@@ -1,0 +1,140 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/test_delete_manifest_filter_pushdown.test
+# description: Delete manifests and entries are pruned using filters pushed into the Iceberg file list
+# group: [filtering]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+set ignore_error_messages
+
+statement ok
+set threads=1;
+
+statement ok
+set enable_external_file_cache=false;
+
+statement ok
+drop table if exists my_datalake.default.delete_manifest_filter_pushdown;
+
+statement ok
+create table my_datalake.default.delete_manifest_filter_pushdown (
+	part integer,
+	payload integer
+) partitioned by (part) with (
+	'format-version' = 3,
+	'commit.manifest-merge.enabled' = 'false'
+);
+
+statement ok
+insert into my_datalake.default.delete_manifest_filter_pushdown select 1, range from range(10, 14);
+
+statement ok
+insert into my_datalake.default.delete_manifest_filter_pushdown select 2, range from range(20, 24);
+
+statement ok
+insert into my_datalake.default.delete_manifest_filter_pushdown select 3, range from range(30, 34);
+
+statement ok
+delete from my_datalake.default.delete_manifest_filter_pushdown where part = 1 and payload = 10;
+
+statement ok
+delete from my_datalake.default.delete_manifest_filter_pushdown where part = 2 and payload = 20;
+
+statement ok
+delete from my_datalake.default.delete_manifest_filter_pushdown where part = 3 and payload = 30;
+
+query II
+select manifest_content, count(distinct manifest_path)
+from iceberg_metadata(my_datalake.default.delete_manifest_filter_pushdown)
+where status <> 'DELETED'
+group by manifest_content
+order by manifest_content;
+----
+DATA	3
+DELETE	3
+
+statement ok
+call enable_logging(['Iceberg', 'HTTP'], storage='memory');
+
+statement ok
+set logging_level='debug';
+
+# A partition predicate selects the matching data and delete manifests.
+statement ok
+call truncate_duckdb_logs();
+
+query I
+select sum(payload) from my_datalake.default.delete_manifest_filter_pushdown where part = 2;
+----
+66
+
+query I
+select count(*) from duckdb_logs()
+where type = 'Iceberg'
+  and message.contains('phase=delete_manifest_scan_started selected_delete_manifests=1 total_delete_manifests=3 filters=1');
+----
+1
+
+query I
+select count(distinct request.url) from duckdb_logs_parsed('HTTP') where request.url like '%.avro';
+----
+3
+
+# An impossible partition predicate opens neither data nor delete manifests.
+statement ok
+call truncate_duckdb_logs();
+
+query I
+select count(*) from my_datalake.default.delete_manifest_filter_pushdown where part = 99;
+----
+0
+
+query I
+select count(*) from duckdb_logs()
+where type = 'Iceberg'
+  and message.contains('phase=delete_manifest_scan_started');
+----
+0
+
+query I
+select count(distinct request.url) from duckdb_logs_parsed('HTTP') where request.url like '%.avro';
+----
+1
+
+# Without filter pushdown, all delete manifests are enumerated and the logical filter remains correct.
+statement ok
+set disabled_optimizers='filter_pushdown';
+
+statement ok
+call truncate_duckdb_logs();
+
+query I
+select sum(payload) from my_datalake.default.delete_manifest_filter_pushdown where part = 2;
+----
+66
+
+# 3 data manifests, all selecting 1 delete manifest to scan
+query I
+select count(*) from duckdb_logs()
+where type = 'Iceberg'
+  and message.contains('phase=delete_manifest_scan_started selected_delete_manifests=1 total_delete_manifests=3 filters=0');
+----
+3
+
+query I
+select count(distinct request.url) from duckdb_logs_parsed('HTTP') where request.url like '%.avro';
+----
+7
+
+statement ok
+set disabled_optimizers='';
+
+statement ok
+drop table my_datalake.default.delete_manifest_filter_pushdown;
