@@ -287,6 +287,8 @@ private:
 	//! Combination of committed + transaction delete manifests
 	mutable vector<BoundIcebergManifestListEntry> delete_manifests DUCKDB_GUARDED_BY(shared_state->lock);
 	mutable vector<bool> delete_manifest_matches DUCKDB_GUARDED_BY(shared_state->lock);
+	//! Conservative until InitializeView determines whether this filtered view has any matching delete manifests.
+	mutable atomic<bool> has_matching_delete_manifests {true};
 
 	mutable IcebergDataViewCursor data_view_cursor DUCKDB_GUARDED_BY(shared_state->lock);
 	//! References to items inside the 'manifest_entries' of the list entries in the 'data_manifests'

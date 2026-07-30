@@ -1349,14 +1349,20 @@ void IcebergMultiFileList::InitializeView(annotated_lock_guard<annotated_mutex> 
 	auto &transaction_delete_manifests = shared_state->transaction_delete_manifests;
 	delete_manifests.reserve(committed_delete_manifests.size() + transaction_delete_manifests.size());
 	delete_manifest_matches.reserve(committed_delete_manifests.size() + transaction_delete_manifests.size());
+	bool view_has_matching_delete_manifests = false;
 	for (auto &manifest : committed_delete_manifests) {
 		delete_manifests.emplace_back(delete_manifests.size(), manifest);
-		delete_manifest_matches.push_back(ManifestMatchesFilter(manifest.file));
+		auto matches = ManifestMatchesFilter(manifest.file);
+		delete_manifest_matches.push_back(matches);
+		view_has_matching_delete_manifests |= matches;
 	}
 	for (auto &manifest : transaction_delete_manifests) {
 		delete_manifests.emplace_back(delete_manifests.size(), manifest);
-		delete_manifest_matches.push_back(ManifestMatchesFilter(manifest.get().file));
+		auto matches = ManifestMatchesFilter(manifest.get().file);
+		delete_manifest_matches.push_back(matches);
+		view_has_matching_delete_manifests |= matches;
 	}
+	has_matching_delete_manifests.store(view_has_matching_delete_manifests);
 }
 
 namespace {
@@ -1519,6 +1525,10 @@ void IcebergMultiFileList::ScanDeleteFiles() const {
 }
 
 void IcebergMultiFileList::ProcessDeletes(const BoundIcebergManifestEntry &data_manifest_entry) const {
+	if (!has_matching_delete_manifests.load()) {
+		return;
+	}
+
 	vector<idx_t> manifest_indexes;
 	optional_ptr<IcebergScanPlanProvider> provider;
 	{
@@ -1526,6 +1536,9 @@ void IcebergMultiFileList::ProcessDeletes(const BoundIcebergManifestEntry &data_
 		InitializeView(guard);
 		manifest_indexes = GetDeleteManifestsForDataFile(data_manifest_entry);
 		provider = scan_plan_provider.get();
+	}
+	if (manifest_indexes.empty()) {
+		return;
 	}
 
 	D_ASSERT(provider);
