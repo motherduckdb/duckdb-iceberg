@@ -102,5 +102,33 @@ order by id;
 4	old-delete-does-not-apply-to-new-file
 7	keep-new
 
+# Dropping the evolved equality-delete target must not resurrect rows from older data files.
+statement ok
+alter table my_datalake.default.equality_delete_evolve_date_to_timestamp drop column target;
+
+query II
+select *
+from my_datalake.default.equality_delete_evolve_date_to_timestamp
+order by id;
+----
+3	keep-old
+4	old-delete-does-not-apply-to-new-file
+7	keep-new
+
+# New data files do not contain the dropped field and are newer than all three delete files.
+statement ok
+insert into my_datalake.default.equality_delete_evolve_date_to_timestamp values
+	(8, 'keep-after-drop');
+
+query II
+select *
+from my_datalake.default.equality_delete_evolve_date_to_timestamp
+order by id;
+----
+3	keep-old
+4	old-delete-does-not-apply-to-new-file
+7	keep-new
+8	keep-after-drop
+
 statement ok
 drop table my_datalake.default.equality_delete_evolve_date_to_timestamp;
