@@ -19,7 +19,7 @@ statement ok
 drop table if exists my_datalake.default.tbl;
 
 statement ok
-SET GLOBAL __iceberg_unsafe_struct_null_default_interpretation = '{}';
+SET GLOBAL __iceberg_unsafe_struct_null_default_interp = '{}';
 
 statement ok
 create table my_datalake.default.tbl(
@@ -92,7 +92,7 @@ select * from my_datalake.default.tbl where id = 3
 3	{'a': test, 'b': NULL, 'c': \xAA\xFF\xAA}	NULL
 
 statement ok
-RESET __iceberg_unsafe_struct_null_default_interpretation;
+RESET __iceberg_unsafe_struct_null_default_interp;
 
 # In the default safe mode, DEFAULT NULL on a STRUCT remains NULL.
 

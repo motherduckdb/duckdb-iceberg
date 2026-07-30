@@ -141,7 +141,7 @@ INSERT INTO my_datalake.default.alter_add_field_struct VALUES
 	(2, {'a': 'beta', 'nested': {'x': 'two'}});
 
 statement ok
-SET GLOBAL __iceberg_unsafe_struct_null_default_interpretation = '{}';
+SET GLOBAL __iceberg_unsafe_struct_null_default_interp = '{}';
 
 statement ok
 ALTER TABLE my_datalake.default.alter_add_field_struct ADD COLUMN payload.extra STRUCT(
@@ -184,7 +184,7 @@ select id, payload from my_datalake.default.alter_add_field_struct order by id;
 2	{'a': beta, 'nested': {'x': two}, 'extra': {'flag': true, 'inner': {'renamed_z': alpha-default}, 'flag2': NULL}}
 
 statement ok
-RESET __iceberg_unsafe_struct_null_default_interpretation;
+RESET __iceberg_unsafe_struct_null_default_interp;
 
 # Add a field of type STRUCT with DEFAULT NULL. Existing rows read it back as NULL.
 
