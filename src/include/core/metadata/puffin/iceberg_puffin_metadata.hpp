@@ -6,6 +6,8 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 
+#include <variant>
+
 namespace duckdb {
 
 struct IcebergPuffinBlobMetadata {
@@ -33,14 +35,16 @@ public:
 	idx_t footer_size = 0;
 };
 
+using IcebergPuffinFileFooterResult = std::variant<IcebergPuffinFileFooter, string>;
+
 class IcebergPuffinReader {
 public:
-	static IcebergPuffinFileFooter ReadFooter(FileSystem &fs, FileHandle &handle, const string &path,
-	                                          optional<int64_t> expected_file_size = optional<int64_t>(),
-	                                          optional<int64_t> expected_footer_size = optional<int64_t>());
-	static IcebergPuffinFileFooter ReadFooter(FileSystem &fs, const string &path,
-	                                          optional<int64_t> expected_file_size = optional<int64_t>(),
-	                                          optional<int64_t> expected_footer_size = optional<int64_t>());
+	static IcebergPuffinFileFooterResult ReadFooter(FileSystem &fs, FileHandle &handle, const string &path,
+	                                                optional<int64_t> expected_file_size = optional<int64_t>(),
+	                                                optional<int64_t> expected_footer_size = optional<int64_t>());
+	static IcebergPuffinFileFooterResult ReadFooter(FileSystem &fs, const string &path,
+	                                                optional<int64_t> expected_file_size = optional<int64_t>(),
+	                                                optional<int64_t> expected_footer_size = optional<int64_t>());
 };
 
 } // namespace duckdb
