@@ -356,7 +356,7 @@ bool IcebergVariantBoundsReader::RekeyBoundsVariant(const Value &bounds_variant,
 		// keys (the flat JSON paths "$['person']['address']['zip']", ...), with the leaf bounds as typed scalars.
 		Vector tmp(bounds_variant, count_t(1));
 		RecursiveUnifiedVectorFormat format;
-		Vector::RecursiveToUnifiedFormat(tmp, 1, format);
+		Vector::RecursiveToUnifiedFormat(tmp, format);
 		UnifiedVariantVectorData variant_data(format);
 		struct_value = VariantUtils::ConvertVariantToValue(variant_data, 0, 0);
 	} catch (...) {

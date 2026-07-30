@@ -5,6 +5,7 @@
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/common/types/uuid.hpp"
 #include "duckdb/execution/execution_context.hpp"
+#include "duckdb/execution/operator/filter/physical_filter.hpp"
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 #include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/function/copy_function.hpp"
@@ -12,12 +13,18 @@
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/parser/parsed_data/copy_info.hpp"
 #include "duckdb/parser/qualified_name.hpp"
+#include "duckdb/planner/expression/bound_conjunction_expression.hpp"
+#include "duckdb/planner/expression/bound_constant_expression.hpp"
+#include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
+#include "duckdb/planner/expression_iterator.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
+#include "duckdb/planner/filter/table_filter_functions.hpp"
 
 #include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "common/iceberg_utils.hpp"
+#include "core/expression/iceberg_value.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
 #include "iceberg_options.hpp"
 
@@ -27,9 +34,55 @@ namespace duckdb {
 //! ICEBERG_ENABLE_EQUALITY_DELETE_WRITES compile flag is on - in default builds the callers
 //! (in iceberg_delete.cpp) are #ifdef'd out, so this code is dead.
 
+//! Whether a physical-filter expression is built purely from equality-delete forms, i.e. `col = const`,
+//! `col IN (const, ...)`, and AND/OR of those. `col IN (...)` and `col = c1 OR ...` can leave such a physical
+//! filter behind even though they also push down as a scan filter; recognizing it here keeps that delete on
+//! the equality-delete path. Anything else (ranges, functions, arbitrary expressions) disqualifies.
+static bool ExpressionIsEqualityDeleteForm(const Expression &expr) {
+	if (expr.GetExpressionClass() == ExpressionClass::BOUND_FUNCTION &&
+	    expr.GetExpressionType() == ExpressionType::COMPARE_EQUAL) {
+		auto &comparison = expr.Cast<BoundFunctionExpression>();
+		auto &left = BoundComparisonExpression::Left(comparison);
+		auto &right = BoundComparisonExpression::Right(comparison);
+		//! Exactly one side must be a constant (the other is the column expression).
+		return (left.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT) !=
+		       (right.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT);
+	}
+	if (expr.GetExpressionClass() == ExpressionClass::BOUND_OPERATOR &&
+	    expr.GetExpressionType() == ExpressionType::COMPARE_IN) {
+		auto &op = expr.Cast<BoundOperatorExpression>();
+		auto &children = op.GetChildren();
+		if (children.size() < 2 || children[0]->GetExpressionClass() == ExpressionClass::BOUND_CONSTANT) {
+			return false;
+		}
+		for (idx_t i = 1; i < children.size(); i++) {
+			if (children[i]->GetExpressionClass() != ExpressionClass::BOUND_CONSTANT) {
+				return false;
+			}
+		}
+		return true;
+	}
+	if (expr.GetExpressionClass() == ExpressionClass::BOUND_CONJUNCTION) {
+		auto &conjunction = expr.Cast<BoundConjunctionExpression>();
+		for (auto &child : conjunction.GetChildren()) {
+			if (!ExpressionIsEqualityDeleteForm(*child)) {
+				return false;
+			}
+		}
+		return true;
+	}
+	return false;
+}
+
 static bool PlanContainsPhysicalFilter(PhysicalOperator &plan) {
 	if (plan.type == PhysicalOperatorType::FILTER) {
-		return true;
+		auto &filter = plan.Cast<PhysicalFilter>();
+		//! The DELETE predicate can leave a physical filter behind even when it is a pure equality form
+		//! (`col IN (...)` / `col = c1 OR ...` also push down as a scan filter). Such a filter must not
+		//! disqualify writing an equality delete; anything else does.
+		if (!ExpressionIsEqualityDeleteForm(*filter.expression)) {
+			return true;
+		}
 	}
 	for (auto &child : plan.children) {
 		if (PlanContainsPhysicalFilter(child.get())) {
@@ -97,6 +150,91 @@ static bool TryGetColumnPath(const Expression &expr, vector<Identifier> &column_
 	}
 }
 
+static bool SetOrMatchColumnExpression(optional_ptr<const Expression> &column_expression, const Expression &candidate) {
+	if (!column_expression) {
+		column_expression = candidate;
+		return true;
+	}
+	//! Every disjunct of an OR must reference the same column.
+	return Expression::Equals(*column_expression, candidate);
+}
+
+//! Extract the (single) column expression a filter targets and the set of values it deletes, for the
+//! supported forms: `col = c`, `col IN (c1, ...)`, and `col = c1 OR col = c2 OR ...` (which may nest IN).
+//! NULL constants are dropped - they can never match an equality. Returns false for any other shape.
+static bool TryGetEqualityDeleteValuesFromExpression(const Expression &expr,
+                                                     optional_ptr<const Expression> &column_expression,
+                                                     vector<Value> &values) {
+	//! `col IN (...)` / `col = c1 OR ...` push down as an optional scan filter, wrapped in an
+	//! optional-filter scalar function whose real predicate lives in the bind info. Unwrap it.
+	if (expr.GetExpressionClass() == ExpressionClass::BOUND_FUNCTION) {
+		auto &func = expr.Cast<BoundFunctionExpression>();
+		if (func.Function().GetName() == OptionalFilterScalarFun::NAME && func.BindInfo()) {
+			auto &data = func.BindInfo()->Cast<OptionalFilterFunctionData>();
+			return data.child_filter_expr &&
+			       TryGetEqualityDeleteValuesFromExpression(*data.child_filter_expr, column_expression, values);
+		}
+		if (func.Function().GetName() == SelectivityOptionalFilterScalarFun::NAME && func.BindInfo()) {
+			auto &data = func.BindInfo()->Cast<SelectivityOptionalFilterFunctionData>();
+			return data.child_filter_expr &&
+			       TryGetEqualityDeleteValuesFromExpression(*data.child_filter_expr, column_expression, values);
+		}
+	}
+	if (expr.GetExpressionClass() == ExpressionClass::BOUND_FUNCTION &&
+	    expr.GetExpressionType() == ExpressionType::COMPARE_EQUAL) {
+		auto &compare_expr = expr.Cast<BoundFunctionExpression>();
+		auto &left = BoundComparisonExpression::Left(compare_expr);
+		auto &right = BoundComparisonExpression::Right(compare_expr);
+		optional_ptr<const Expression> column;
+		optional_ptr<const Value> constant;
+		if (right.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT) {
+			column = left;
+			constant = right.Cast<BoundConstantExpression>().GetValue();
+		} else if (left.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT) {
+			column = right;
+			constant = left.Cast<BoundConstantExpression>().GetValue();
+		} else {
+			return false;
+		}
+		if (!SetOrMatchColumnExpression(column_expression, *column)) {
+			return false;
+		}
+		if (!constant->IsNull()) {
+			values.push_back(*constant);
+		}
+		return true;
+	}
+	if (expr.GetExpressionClass() == ExpressionClass::BOUND_OPERATOR &&
+	    expr.GetExpressionType() == ExpressionType::COMPARE_IN) {
+		auto &op = expr.Cast<BoundOperatorExpression>();
+		auto &children = op.GetChildren();
+		if (children.size() < 2 || !SetOrMatchColumnExpression(column_expression, *children[0])) {
+			return false;
+		}
+		for (idx_t i = 1; i < children.size(); i++) {
+			if (children[i]->GetExpressionClass() != ExpressionClass::BOUND_CONSTANT) {
+				return false;
+			}
+			auto &value = children[i]->Cast<BoundConstantExpression>().GetValue();
+			if (!value.IsNull()) {
+				values.push_back(value);
+			}
+		}
+		return true;
+	}
+	if (expr.GetExpressionClass() == ExpressionClass::BOUND_CONJUNCTION &&
+	    expr.GetExpressionType() == ExpressionType::CONJUNCTION_OR) {
+		auto &conjunction = expr.Cast<BoundConjunctionExpression>();
+		for (auto &child : conjunction.GetChildren()) {
+			if (!TryGetEqualityDeleteValuesFromExpression(*child, column_expression, values)) {
+				return false;
+			}
+		}
+		return !conjunction.GetChildren().empty();
+	}
+	return false;
+}
+
 } // namespace
 
 bool IcebergDelete::TryGetEqualityDeletePredicates(ClientContext &context, IcebergTableEntry &table,
@@ -139,27 +277,14 @@ bool IcebergDelete::TryGetEqualityDeletePredicates(ClientContext &context, Icebe
 		auto &table_filter = filter_entry.Filter().Cast<ExpressionFilter>();
 		auto &expr = *table_filter.expr;
 
-		//! Only a plain `column = constant` qualifies (rejects IN, OR/AND conjunctions, IS NULL, ...).
-
-		if (expr.GetExpressionClass() != ExpressionClass::BOUND_FUNCTION) {
-			return false;
-		}
-		if (expr.GetExpressionType() != ExpressionType::COMPARE_EQUAL) {
-			return false;
-		}
-		auto &compare_expr = expr.Cast<BoundFunctionExpression>();
-		auto &left = BoundComparisonExpression::Left(compare_expr);
-		auto &right = BoundComparisonExpression::Right(compare_expr);
-
-		optional_ptr<const Value> constant_value;
+		//! Accept `col = c`, `col IN (...)`, or `col = c1 OR col = c2 OR ...`; reject anything else.
 		optional_ptr<const Expression> column_expression;
-		if (right.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT) {
-			column_expression = left;
-			constant_value = right.Cast<BoundConstantExpression>().GetValue();
-		} else if (left.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT) {
-			column_expression = right;
-			constant_value = left.Cast<BoundConstantExpression>().GetValue();
-		} else {
+		vector<Value> raw_values;
+		if (!TryGetEqualityDeleteValuesFromExpression(expr, column_expression, raw_values)) {
+			return false;
+		}
+		if (!column_expression || raw_values.empty()) {
+			//! e.g. `col IN (NULL)` - nothing to delete via equality; fall back to positional.
 			return false;
 		}
 		vector<Identifier> column_path;
@@ -191,19 +316,35 @@ bool IcebergDelete::TryGetEqualityDeletePredicates(ClientContext &context, Icebe
 				return false;
 			}
 		}
-		Value delete_value;
-		string error_message;
-		if (!constant_value->DefaultTryCastAs(column_definition->type, delete_value, &error_message, true)) {
-			return false;
-		}
 		IcebergEqualityDeletePredicate predicate;
 		predicate.field_id = column_definition->id;
 		predicate.column_name = column_definition->name;
 		predicate.type = column_definition->type;
-		predicate.value = std::move(delete_value);
+		for (auto &raw_value : raw_values) {
+			Value delete_value;
+			string error_message;
+			if (!raw_value.DefaultTryCastAs(column_definition->type, delete_value, &error_message, true)) {
+				return false;
+			}
+			predicate.values.push_back(std::move(delete_value));
+		}
 		equality_predicates.push_back(std::move(predicate));
 	}
-	return !equality_predicates.empty();
+
+	if (equality_predicates.empty()) {
+		return false;
+	}
+	//! The equality-delete file materializes the cross product of every column's value set. Cap it so a
+	//! very large delete falls back to positional deletes instead of writing a huge equality-delete file.
+	static constexpr idx_t MAX_EQUALITY_DELETE_ROWS = 4096;
+	idx_t total_rows = 1;
+	for (auto &predicate : equality_predicates) {
+		total_rows *= predicate.values.size();
+		if (total_rows > MAX_EQUALITY_DELETE_ROWS) {
+			return false;
+		}
+	}
+	return true;
 }
 
 void IcebergDelete::WriteEqualityDeleteFile(ClientContext &context, IcebergDeleteGlobalState &global_state) const {
@@ -249,15 +390,39 @@ void IcebergDelete::WriteEqualityDeleteFile(ClientContext &context, IcebergDelet
 	CopyFunctionFileStatistics stats;
 	copy_fun.function.copy_to_get_written_statistics(context, *function_data, *copy_global_state, stats);
 
-	// Write a single row containing the equality-delete tuple (one value per equality column).
-	DataChunk write_chunk;
-	write_chunk.Initialize(context, types_to_write);
-	for (idx_t col_idx = 0; col_idx < equality_predicates.size(); col_idx++) {
-		write_chunk.data[col_idx].SetValue(0, equality_predicates[col_idx].value);
+	// Materialize the equality-delete rows: the cross product of every column's value set. Within a row
+	// the columns are AND-ed and rows are OR-ed, encoding `(col0 IN vals0) AND (col1 IN vals1) AND ...`.
+	vector<vector<Value>> rows;
+	rows.emplace_back();
+	for (auto &predicate : equality_predicates) {
+		vector<vector<Value>> expanded;
+		for (auto &existing_row : rows) {
+			for (auto &value : predicate.values) {
+				auto new_row = existing_row;
+				new_row.push_back(value);
+				expanded.push_back(std::move(new_row));
+			}
+		}
+		rows = std::move(expanded);
 	}
-	write_chunk.SetChildCardinality(1);
-	copy_fun.function.copy_to_sink(execution_context, *function_data, *copy_global_state, *copy_local_state,
-	                               write_chunk);
+
+	// Write the delete tuples (one per row), chunking at STANDARD_VECTOR_SIZE.
+	idx_t rows_written = 0;
+	while (rows_written < rows.size()) {
+		idx_t chunk_count = MinValue<idx_t>(STANDARD_VECTOR_SIZE, rows.size() - rows_written);
+		DataChunk write_chunk;
+		write_chunk.Initialize(context, types_to_write);
+		for (idx_t row_idx = 0; row_idx < chunk_count; row_idx++) {
+			auto &row = rows[rows_written + row_idx];
+			for (idx_t col_idx = 0; col_idx < row.size(); col_idx++) {
+				write_chunk.data[col_idx].SetValue(row_idx, row[col_idx]);
+			}
+		}
+		write_chunk.SetChildCardinality(chunk_count);
+		copy_fun.function.copy_to_sink(execution_context, *function_data, *copy_global_state, *copy_local_state,
+		                               write_chunk);
+		rows_written += chunk_count;
+	}
 
 	copy_fun.function.copy_to_combine(execution_context, *function_data, *copy_global_state, *copy_local_state);
 	copy_fun.function.copy_to_finalize(context, *function_data, *copy_global_state);
@@ -265,9 +430,38 @@ void IcebergDelete::WriteEqualityDeleteFile(ClientContext &context, IcebergDelet
 	IcebergDeleteFileInfo delete_file;
 	delete_file.file_name = delete_file_path;
 	delete_file.file_format = "parquet";
-	delete_file.delete_count = 1;
+	delete_file.delete_count = rows.size();
 	delete_file.file_size_bytes = stats.file_size_bytes;
 	delete_file.equality_ids = std::move(equality_ids);
+
+	// Record per-field metrics for the equality-delete values so scans can prune this delete file when its
+	// equality-field range is disjoint from the scan predicate / a data file's bounds. Each field's bound
+	// spans the min/max of its value set.
+	for (auto &predicate : equality_predicates) {
+		Value min_value = predicate.values[0];
+		Value max_value = predicate.values[0];
+		for (auto &value : predicate.values) {
+			if (value < min_value) {
+				min_value = value;
+			}
+			if (value > max_value) {
+				max_value = value;
+			}
+		}
+		auto lower = IcebergValue::SerializeValue(min_value, predicate.type, SerializeBound::LOWER_BOUND);
+		if (lower.HasError()) {
+			throw InvalidConfigurationException(lower.GetError());
+		} else if (lower.HasValue()) {
+			delete_file.lower_bounds[predicate.field_id] = lower.GetValue();
+		}
+		auto upper = IcebergValue::SerializeValue(max_value, predicate.type, SerializeBound::UPPER_BOUND);
+		if (upper.HasError()) {
+			throw InvalidConfigurationException(upper.GetError());
+		} else if (upper.HasValue()) {
+			delete_file.upper_bounds[predicate.field_id] = upper.GetValue();
+		}
+	}
+
 	global_state.written_files.emplace(delete_file_path, std::move(delete_file));
 }
 

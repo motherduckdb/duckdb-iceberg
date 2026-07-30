@@ -3,12 +3,16 @@
 #include "duckdb/common/allocator.hpp"
 #include "duckdb/common/bswap.hpp"
 #include "duckdb/common/file_system.hpp"
+#include "duckdb/common/string_util.hpp"
 #include "duckdb/common/vector_operations/unary_executor.hpp"
 
 #include "planning/iceberg_multi_file_list.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "catalog/rest/api/catalog_utils.hpp"
 #include "core/metadata/puffin/iceberg_puffin_metadata.hpp"
+#include "iceberg_options.hpp"
+
+#include <variant>
 
 namespace duckdb {
 
@@ -142,15 +146,20 @@ shared_ptr<IcebergDeletionVectorData> IcebergDeletionVectorData::FromBlob(const 
 //! footer can parse the FileMetadata without a decompressor. In debug builds we additionally parse
 //! the whole container -- leading/footer/trailing magic, the footer JSON, and that the single
 //! blob's offset/length agree with the manifest content_offset/content_size_in_bytes used below.
-static void VerifyPuffinDeletionVector(FileSystem &fs, FileHandle &handle, int64_t content_offset,
-                                       int64_t content_size) {
-	auto footer = IcebergPuffinReader::ReadFooter(fs, handle, handle.GetPath());
+using PuffinDeletionVectorVerificationResult = std::variant<std::monostate, string>;
+
+static PuffinDeletionVectorVerificationResult VerifyPuffinDeletionVector(FileSystem &fs, FileHandle &handle,
+                                                                         int64_t content_offset, int64_t content_size) {
+	auto footer_result = IcebergPuffinReader::ReadFooter(fs, handle, handle.GetPath());
+	if (auto error = std::get_if<string>(&footer_result)) {
+		return *error;
+	}
+	auto &footer = std::get<IcebergPuffinFileFooter>(footer_result);
 
 	bool contains_blob = false;
 	for (auto &blob : footer.file_metadata.blobs) {
 		if (blob.type != "deletion-vector-v1") {
-			throw InvalidConfigurationException(
-			    "Deletion vector Puffin blob type mismatch: expected deletion-vector-v1");
+			return "Deletion vector Puffin blob type mismatch: expected deletion-vector-v1";
 		}
 		if (blob.offset != content_offset || blob.length != content_size) {
 			continue;
@@ -158,10 +167,10 @@ static void VerifyPuffinDeletionVector(FileSystem &fs, FileHandle &handle, int64
 		contains_blob = true;
 	}
 	if (!contains_blob) {
-		throw InvalidConfigurationException(
-		    "Deletion vector blob with offset (%d) and length (%d) not found in Puffin file", content_offset,
-		    content_size);
+		return StringUtil::Format("Deletion vector blob with offset (%d) and length (%d) not found in Puffin file",
+		                          content_offset, content_size);
 	}
+	return std::monostate {};
 }
 
 void IcebergMultiFileList::ScanPuffinFile(const BoundIcebergManifestEntry &bound_entry) const {
@@ -191,10 +200,20 @@ void IcebergMultiFileList::ScanPuffinFile(const BoundIcebergManifestEntry &bound
 	auto offset = *data_file.content_offset;
 	auto length = *data_file.content_size_in_bytes;
 
-	VerifyPuffinDeletionVector(fs, *file_handle, offset, length);
-
 	auto local_buffer = Allocator::DefaultAllocator().Allocate(length);
 	fs.Read(*file_handle, local_buffer.get(), length, offset);
+
+	Value skip_verification;
+	if (!context.TryGetCurrentSetting(SKIP_PUFFIN_VERIFICATION_CONFIG_VARIABLE, skip_verification) ||
+	    !skip_verification.GetValue<bool>()) {
+		auto verification_result = VerifyPuffinDeletionVector(fs, *file_handle, offset, length);
+		if (auto error = std::get_if<string>(&verification_result)) {
+			throw InvalidConfigurationException("%s. Older versions of DuckDB wrote deletion vector files as bare "
+			                                    "blobs. To read those files, run \"SET "
+			                                    "%s = true\"",
+			                                    *error, SKIP_PUFFIN_VERIFICATION_CONFIG_VARIABLE);
+		}
+	}
 
 	auto &positional_delete_data = GetPositionalDeleteData();
 	auto it = positional_delete_data.find(*data_file.referenced_data_file);
