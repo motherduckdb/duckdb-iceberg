@@ -81,6 +81,7 @@ private:
 class IcebergTableEntry;
 class IcebergScanPlanProvider;
 class ClientSideScanPlanProvider;
+struct IcebergDeleteManifestLoadState;
 struct IcebergMultiFileList;
 struct IcebergMultiFileReader;
 struct RowGroupOrderOptions;
@@ -129,9 +130,8 @@ private:
 	//! Scanned delete manifests and their owners.
 	mutable vector<IcebergManifestListEntry> committed_delete_manifests DUCKDB_GUARDED_BY(lock);
 	mutable vector<reference<const IcebergManifestListEntry>> transaction_delete_manifests DUCKDB_GUARDED_BY(lock);
-	mutable unique_ptr<AvroScan> delete_manifest_scan DUCKDB_GUARDED_BY(delete_lock);
-	mutable unique_ptr<manifest_file::ManifestReader> delete_manifest_reader DUCKDB_GUARDED_BY(delete_lock);
-	mutable bool delete_entries_enumerated DUCKDB_GUARDED_BY(delete_lock) = false;
+	mutable vector<shared_ptr<IcebergDeleteManifestLoadState>> delete_manifest_loads DUCKDB_GUARDED_BY(delete_lock);
+	mutable vector<bool> delete_manifest_entries_enumerated DUCKDB_GUARDED_BY(delete_lock);
 	mutable idx_t next_delete_entry_to_process DUCKDB_GUARDED_BY(delete_lock) = 0;
 	mutable vector<BoundIcebergManifestEntry> delete_manifest_entries DUCKDB_GUARDED_BY(delete_lock);
 
@@ -213,13 +213,17 @@ private:
 	                                                   IcebergManifestContentType type) const
 	    DUCKDB_REQUIRES(shared_state->lock);
 
-	void ProcessDeletes() const;
+	void ProcessDeletes(const BoundIcebergManifestEntry &data_manifest_entry) const;
 	unique_ptr<DeleteFilter> GetPositionalDeletesForFile(const string &file_path) const;
 	vector<reference<const IcebergEqualityDeleteFile>>
 	GetEqualityDeletesForFile(const BoundIcebergManifestEntry &manifest_entry) const;
-	vector<BoundIcebergManifestEntry> GetDeleteManifestEntries() const;
 
 	bool ManifestMatchesFilter(const IcebergManifestFile &manifest) const;
+	bool DeleteManifestMatchesDataFile(const IcebergManifestFile &delete_manifest,
+	                                   const BoundIcebergManifestEntry &data_manifest_entry) const
+	    DUCKDB_REQUIRES(shared_state->lock);
+	vector<idx_t> GetDeleteManifestsForDataFile(const BoundIcebergManifestEntry &data_manifest_entry) const
+	    DUCKDB_REQUIRES(shared_state->lock);
 	bool FilePartitionMatchesFilter(const IcebergDataFile &data_file, const IcebergManifestFile &manifest_file,
 	                                const IcebergTableMetadata &metadata, const IcebergTableSchema &schema) const;
 	bool FileMatchesFilter(const IcebergManifestFile &manifest_file, const IcebergManifestEntry &manifest_entry,
@@ -242,8 +246,10 @@ private:
 	void LoadManifestList(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
 	void InitializeScanPlanProvider() const DUCKDB_REQUIRES(shared_state->lock);
 	void StartDataManifestScan(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
-	void EnumerateDeleteManifestEntriesInternal() const DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
-	void ProcessDeletesInternal() const DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
+	void EnumerateDeleteManifestEntriesInternal(const vector<idx_t> &manifest_indexes) const
+	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
+	void ProcessDeletesInternal(const vector<idx_t> &manifest_indexes) const
+	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
 	void ScanDeleteFiles() const DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
 	void ScanDeleteFile(const BoundIcebergManifestEntry &entry) const
 	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
