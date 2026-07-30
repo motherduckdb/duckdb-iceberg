@@ -25,8 +25,8 @@ static string SKIP_PUFFIN_VERIFICATION_CONFIG_VARIABLE = "iceberg_unsafe_skip_pu
 // of a positional delete. This exists only to exercise the equality-delete read path.
 static string ENABLE_EQUALITY_DELETES_CONFIG_VARIABLE = "unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes";
 
-static constexpr const char *UNSAFE_STRUCT_NULL_DEFAULT_INTERPRETATION_CONFIG_VARIABLE =
-    "__iceberg_unsafe_struct_null_default_interpretation";
+static constexpr const char *UNSAFE_STRUCT_NULL_DEFAULT_INTERP_CONFIG_VARIABLE =
+    "__iceberg_unsafe_struct_null_default_interp";
 
 // When this is provided (and unsafe_enable_version_guessing is true)
 // we first look for DEFAULT_VERSION_HINT_FILE, if it doesn't exist we

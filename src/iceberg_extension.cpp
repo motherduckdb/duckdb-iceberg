@@ -51,7 +51,7 @@ static void SetUnsafeStructNullDefaultInterpretation(ClientContext &context, Set
 	auto interpretation = parameter.GetValue<string>();
 	if (interpretation != "{}") {
 		throw InvalidConfigurationException("'%s' must be NULL or '{}', got '%s'",
-		                                    UNSAFE_STRUCT_NULL_DEFAULT_INTERPRETATION_CONFIG_VARIABLE, interpretation);
+		                                    UNSAFE_STRUCT_NULL_DEFAULT_INTERP_CONFIG_VARIABLE, interpretation);
 	}
 	value = true;
 }
@@ -118,7 +118,7 @@ static void LoadInternal(ExtensionLoader &loader) {
 	    "Bodies longer than this are truncated with a trailing '... (truncated)' marker. Set to 0 to omit the body.",
 	    LogicalType::UBIGINT, Value::UBIGINT(10000));
 	config.AddExtensionOption(
-	    UNSAFE_STRUCT_NULL_DEFAULT_INTERPRETATION_CONFIG_VARIABLE,
+	    UNSAFE_STRUCT_NULL_DEFAULT_INTERP_CONFIG_VARIABLE,
 	    "DANGEROUS TESTING-ONLY SETTING: interpret a null Iceberg STRUCT default as an empty struct whose fields "
 	    "use their own defaults. The only non-null value accepted is '{}'.",
 	    LogicalType::VARCHAR, Value(LogicalType::VARCHAR), SetUnsafeStructNullDefaultInterpretation, SetScope::GLOBAL);
