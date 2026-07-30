@@ -1,0 +1,81 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/equality_deletes/test_equality_delete_schema_evolution_decimal.test
+# description: Equality deletes remain valid when their target column evolves from DECIMAL(9,4) to DECIMAL(13,4)
+# group: [equality_deletes]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require-env EQUALITY_DELETE_WRITES_ENABLED 1
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+use my_datalake.default;
+
+statement ok
+set unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=true;
+
+statement ok
+drop table if exists my_datalake.default.equality_delete_evolve_decimal;
+
+statement ok
+create table my_datalake.default.equality_delete_evolve_decimal (
+	id integer,
+	target decimal(9, 4),
+	marker varchar
+);
+
+statement ok
+insert into my_datalake.default.equality_delete_evolve_decimal values
+	(1, 1.1111::decimal(9, 4), 'delete-before-evolution'),
+	(2, 2.2222::decimal(9, 4), 'delete-after-evolution-old-file'),
+	(3, 3.3333::decimal(9, 4), 'keep-old');
+
+# This delete file stores the target field using its original DECIMAL(9,4) type.
+statement ok
+delete from my_datalake.default.equality_delete_evolve_decimal where target = 1.1111::decimal(9, 4);
+
+statement ok
+alter table my_datalake.default.equality_delete_evolve_decimal alter column target set type decimal(13, 4);
+
+statement ok
+insert into my_datalake.default.equality_delete_evolve_decimal values
+	(4, 1.1111::decimal(13, 4), 'old-delete-does-not-apply-to-new-file'),
+	(5, 2.2222::decimal(13, 4), 'delete-after-evolution-new-file'),
+	(6, 123456789.1234::decimal(13, 4), 'delete-promoted-value'),
+	(7, 987654321.4321::decimal(13, 4), 'keep-new');
+
+# This promoted-type delete applies to matching rows in both the old DECIMAL(9,4) file and the new DECIMAL(13,4) file.
+statement ok
+delete from my_datalake.default.equality_delete_evolve_decimal where target = 2.2222::decimal(13, 4);
+
+statement ok
+delete from my_datalake.default.equality_delete_evolve_decimal where target = 123456789.1234::decimal(13, 4);
+
+query II
+select count(*), sum(record_count)
+from iceberg_metadata(my_datalake.default.equality_delete_evolve_decimal)
+where content = 'EQUALITY_DELETES' and status != 'DELETED';
+----
+3	3
+
+# Do not project the equality-delete target: it must be scanned privately with the promoted type.
+query II
+select id, marker
+from my_datalake.default.equality_delete_evolve_decimal
+order by id;
+----
+3	keep-old
+4	old-delete-does-not-apply-to-new-file
+7	keep-new
+
+statement ok
+drop table my_datalake.default.equality_delete_evolve_decimal;

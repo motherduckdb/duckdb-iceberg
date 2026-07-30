@@ -34,7 +34,7 @@
 
 namespace duckdb {
 
-using equality_delete_map_t = map<sequence_number_t, vector<IcebergEqualityDeleteFile>>;
+using equality_delete_map_t = map<sequence_number_t, vector<unique_ptr<IcebergEqualityDeleteFile>>>;
 using equality_delete_file_index_map_t = unordered_map<sequence_number_t, unordered_map<string, idx_t>>;
 using position_delete_map_t = unordered_map<string, shared_ptr<IcebergDeleteData>>;
 
@@ -209,6 +209,7 @@ private:
 	OpenFileInfo GetFileInternal(idx_t i, annotated_lock_guard<annotated_mutex> &guard) const
 	    DUCKDB_REQUIRES(shared_state->lock);
 	BoundIcebergManifestEntry GetManifestEntry(idx_t file_id) const;
+	BoundIcebergManifestEntry GetDeleteManifestEntry(idx_t manifest_entry_index) const;
 	IcebergManifestFile GetManifestFileForDataFile(idx_t file_id) const;
 	const IcebergManifestFile &GetManifestFileForEntry(const BoundIcebergManifestEntry &entry,
 	                                                   IcebergManifestContentType type) const
@@ -252,13 +253,13 @@ private:
 	void ProcessDeletesInternal(const vector<idx_t> &manifest_indexes) const
 	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
 	void ScanDeleteFiles() const DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
-	void ScanParquetDeleteFiles(const vector<reference<const BoundIcebergManifestEntry>> &entries,
+	void ScanParquetDeleteFiles(const vector<idx_t> &manifest_entry_indexes,
 	                            IcebergManifestEntryContentType content) const
 	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
 	void ScanPositionalDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result) const
 	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
-	void ScanEqualityDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result,
-	                            const vector<MultiFileColumnDefinition> &columns,
+	void ScanEqualityDeleteFile(idx_t manifest_entry_index, const BoundIcebergManifestEntry &manifest_entry,
+	                            DataChunk &result, const vector<MultiFileColumnDefinition> &columns,
 	                            equality_delete_file_index_map_t &file_indexes) const
 	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
 	void ScanPuffinFile(const BoundIcebergManifestEntry &entry) const

@@ -187,8 +187,10 @@ vector<IcebergEqualityDeleteReadColumn> IcebergMultiFileReader::AddEqualityDelet
     MultiFileReaderData &reader_data, ClientContext &context) {
 	set<int32_t> required_field_ids;
 	for (auto &delete_file_ref : multi_file_list.GetEqualityDeletesForFile(bound_manifest_entry)) {
-		for (auto &entry : delete_file_ref.get().equality_values) {
-			required_field_ids.insert(entry.first);
+		auto manifest_entry = multi_file_list.GetDeleteManifestEntry(delete_file_ref.get().manifest_entry_index);
+		auto &data_file = manifest_entry.entry.data_file;
+		for (auto field_id : data_file.equality_ids) {
+			required_field_ids.insert(field_id);
 		}
 	}
 
@@ -454,20 +456,21 @@ unique_ptr<Expression> IcebergMultiFileReader::CreateEqualityDeleteExpression(
 	vector<unique_ptr<Expression>> rows;
 	for (auto &delete_file_ref : delete_files) {
 		auto &delete_file = delete_file_ref.get();
-		if (delete_file.equality_values.empty()) {
+		auto &equality_values = delete_file.equality_values;
+		if (equality_values.size() == 0) {
 			continue;
 		}
-		auto row_count = delete_file.equality_values.begin()->second.size();
-		for (auto &entry : delete_file.equality_values) {
-			if (entry.second.size() != row_count) {
-				throw InvalidConfigurationException("Equality delete file contains columns with differing row counts");
-			}
+		auto manifest_entry = multi_file_list.GetDeleteManifestEntry(delete_file.manifest_entry_index);
+		auto &equality_ids = manifest_entry.entry.data_file.equality_ids;
+		if (equality_values.ColumnCount() != equality_ids.size()) {
+			throw InvalidConfigurationException("Equality delete file contains an unexpected number of columns");
 		}
+		auto row_count = equality_values.size();
 		for (idx_t row_index = 0; row_index < row_count; row_index++) {
 			vector<unique_ptr<Expression>> equalities;
-			for (auto &entry : delete_file.equality_values) {
-				auto field_id = entry.first;
-				auto &constant = entry.second[row_index];
+			for (idx_t column_index = 0; column_index < equality_ids.size(); column_index++) {
+				auto field_id = equality_ids[column_index];
+				auto constant = equality_values.GetValue(column_index, row_index);
 
 				if (!id_to_local_column.count(field_id)) {
 					//! A field absent from the data file is NULL for equality-delete matching,
