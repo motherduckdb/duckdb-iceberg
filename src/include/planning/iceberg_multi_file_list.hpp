@@ -35,6 +35,7 @@
 namespace duckdb {
 
 using equality_delete_map_t = map<sequence_number_t, vector<IcebergEqualityDeleteFile>>;
+using equality_delete_file_index_map_t = unordered_map<sequence_number_t, unordered_map<string, idx_t>>;
 using position_delete_map_t = unordered_map<string, shared_ptr<IcebergDeleteData>>;
 
 struct IcebergTableFilters {
@@ -257,7 +258,8 @@ private:
 	void ScanPositionalDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result) const
 	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
 	void ScanEqualityDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result,
-	                            const vector<MultiFileColumnDefinition> &columns) const
+	                            const vector<MultiFileColumnDefinition> &columns,
+	                            equality_delete_file_index_map_t &file_indexes) const
 	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
 	void ScanPuffinFile(const BoundIcebergManifestEntry &entry) const
 	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);

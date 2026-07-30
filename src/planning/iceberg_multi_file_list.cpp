@@ -1688,6 +1688,19 @@ void IcebergMultiFileList::ScanParquetDeleteFiles(const vector<reference<const B
 	auto local_state = delete_scan_function.init_local(execution_context, input, global_state.get());
 
 	auto &multi_file_local_state = local_state->Cast<MultiFileLocalState>();
+	equality_delete_file_index_map_t equality_delete_file_indexes;
+	if (content == IcebergManifestEntryContentType::EQUALITY_DELETES) {
+		for (auto &sequence_entry : GetEqualityDeleteData()) {
+			auto &sequence_indexes = equality_delete_file_indexes[sequence_entry.first];
+			auto &delete_files = sequence_entry.second;
+			for (idx_t delete_index = 0; delete_index < delete_files.size(); delete_index++) {
+				auto &file_path = delete_files[delete_index].source_file_path;
+				if (!file_path.empty()) {
+					sequence_indexes.emplace(file_path, delete_index);
+				}
+			}
+		}
+	}
 
 	do {
 		TableFunctionInput function_input(bind_data.get(), local_state.get(), global_state.get());
@@ -1709,7 +1722,8 @@ void IcebergMultiFileList::ScanParquetDeleteFiles(const vector<reference<const B
 			ScanPositionalDeleteFile(bound_manifest_entry, result);
 		} else {
 			D_ASSERT(content == IcebergManifestEntryContentType::EQUALITY_DELETES);
-			ScanEqualityDeleteFile(bound_manifest_entry, result, multi_file_bind_data.reader_bind.schema);
+			ScanEqualityDeleteFile(bound_manifest_entry, result, multi_file_bind_data.reader_bind.schema,
+			                       equality_delete_file_indexes);
 		}
 	} while (true);
 }

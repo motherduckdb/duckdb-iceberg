@@ -40,9 +40,33 @@ static void ColumnsReferencedByEqualityIds(DataChunk &source, DataChunk &result,
 	result.ReferenceColumns(source, column_ids);
 }
 
+static IcebergEqualityDeleteFile &GetOrCreateEqualityDeleteFile(vector<IcebergEqualityDeleteFile> &deletes,
+                                                                const IcebergDataFile &data_file,
+                                                                const IcebergManifestFile &manifest_file,
+                                                                sequence_number_t sequence_number,
+                                                                equality_delete_file_index_map_t &file_indexes) {
+	auto &sequence_indexes = file_indexes[sequence_number];
+	auto index_entry = sequence_indexes.find(data_file.file_path);
+	if (index_entry != sequence_indexes.end()) {
+		if (index_entry->second >= deletes.size()) {
+			throw InternalException("Equality-delete file index %llu is out of bounds for sequence number %lld",
+			                        index_entry->second, sequence_number);
+		}
+		auto &delete_file = deletes[index_entry->second];
+		D_ASSERT(delete_file.partition_spec_id == manifest_file.partition_spec_id);
+		return delete_file;
+	}
+
+	auto delete_index = deletes.size();
+	deletes.emplace_back(data_file.partition_info, manifest_file.partition_spec_id, data_file.file_path);
+	sequence_indexes.emplace(data_file.file_path, delete_index);
+	return deletes.back();
+}
+
 void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntry &bound_manifest_entry,
                                                   DataChunk &source,
-                                                  const vector<MultiFileColumnDefinition> &global_columns) const {
+                                                  const vector<MultiFileColumnDefinition> &global_columns,
+                                                  equality_delete_file_index_map_t &file_indexes) const {
 	auto &manifest_entry = bound_manifest_entry.entry;
 	auto &data_file = manifest_entry.data_file;
 	auto &manifest_file = GetManifestFileForEntry(bound_manifest_entry, IcebergManifestContentType::DELETE);
@@ -64,15 +88,15 @@ void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntr
 	auto &equality_delete_data = GetEqualityDeleteData();
 	auto &deletes = equality_delete_data[sequence_number];
 
-	deletes.emplace_back(data_file.partition_info, manifest_file.partition_spec_id, data_file.file_path);
-	auto &equality_values = deletes.back().equality_values;
+	auto &delete_file = GetOrCreateEqualityDeleteFile(deletes, data_file, manifest_file, sequence_number, file_indexes);
+	auto &equality_values = delete_file.equality_values;
 	D_ASSERT(result.ColumnCount() == data_file.equality_ids.size());
 
 	for (idx_t col_idx = 0; col_idx < result.ColumnCount(); col_idx++) {
 		auto &field_id = data_file.equality_ids[col_idx];
 		auto &vec = result.data[col_idx];
 		auto &values = equality_values[field_id];
-		values.reserve(count);
+		values.reserve(values.size() + count);
 		for (idx_t i = 0; i < count; i++) {
 			values.push_back(vec.GetValue(i));
 		}
