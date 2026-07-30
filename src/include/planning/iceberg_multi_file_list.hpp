@@ -257,8 +257,7 @@ private:
 	void ScanPositionalDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result) const
 	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
 	void ScanEqualityDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result,
-	                            const vector<MultiFileColumnDefinition> &columns,
-	                            const vector<string> &source_names) const
+	                            const vector<MultiFileColumnDefinition> &columns) const
 	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
 	void ScanPuffinFile(const BoundIcebergManifestEntry &entry) const
 	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);

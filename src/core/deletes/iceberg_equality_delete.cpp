@@ -13,33 +13,27 @@ static void InitializeFromOtherChunk(DataChunk &target, DataChunk &other, const 
 }
 
 static void ColumnsReferencedByEqualityIds(DataChunk &source, DataChunk &result,
-                                           const vector<MultiFileColumnDefinition> &local_columns,
-                                           const vector<string> &source_names, const vector<int32_t> &equality_ids) {
-	// The equality-delete file can physically contain more columns than the reader models for it - e.g. Spark
-	// embeds the partition columns next to the equality-key columns - and not necessarily in the same order. So
-	// resolve each equality field-id to its physical position in 'source' by name rather than by its position in
-	// 'local_columns', which only covers the modeled subset.
-	unordered_map<string, column_t> name_to_source_index;
-	for (column_t i = 0; i < source_names.size(); i++) {
-		name_to_source_index[source_names[i]] = i;
-	}
+                                           const vector<MultiFileColumnDefinition> &global_columns,
+                                           const vector<int32_t> &equality_ids) {
+	D_ASSERT(source.ColumnCount() == global_columns.size());
 
-	//! Map from equality field-id to the physical column index in 'source'.
+	//! The equality scan maps every physical file to this global schema by Iceberg field-id. Map the equality ids
+	//! for this particular delete file back to their positions in the global output chunk.
 	unordered_map<int32_t, column_t> id_to_column;
-	for (auto &col : local_columns) {
+	for (column_t column_idx = 0; column_idx < global_columns.size(); column_idx++) {
+		auto &col = global_columns[column_idx];
 		D_ASSERT(!col.identifier.IsNull());
-		auto entry = name_to_source_index.find(col.name.GetIdentifierName());
-		if (entry == name_to_source_index.end()) {
-			continue;
-		}
-		id_to_column[col.identifier.GetValue<int32_t>()] = entry->second;
+		id_to_column[col.identifier.GetValue<int32_t>()] = column_idx;
 	}
 
 	// column_ids we want to slice.
 	vector<column_t> column_ids;
 	for (auto id : equality_ids) {
-		D_ASSERT(id_to_column.count(id));
-		column_ids.push_back(id_to_column[id]);
+		auto entry = id_to_column.find(id);
+		if (entry == id_to_column.end()) {
+			throw InternalException("Equality-delete field id %d is missing from the global delete schema", id);
+		}
+		column_ids.push_back(entry->second);
 	}
 	//! Take only the relevant columns from the source (equality_delete_file)
 	InitializeFromOtherChunk(result, source, column_ids);
@@ -48,13 +42,12 @@ static void ColumnsReferencedByEqualityIds(DataChunk &source, DataChunk &result,
 
 void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntry &bound_manifest_entry,
                                                   DataChunk &source,
-                                                  const vector<MultiFileColumnDefinition> &local_columns,
-                                                  const vector<string> &source_names) const {
+                                                  const vector<MultiFileColumnDefinition> &global_columns) const {
 	auto &manifest_entry = bound_manifest_entry.entry;
 	auto &data_file = manifest_entry.data_file;
 	auto &manifest_file = GetManifestFileForEntry(bound_manifest_entry, IcebergManifestContentType::DELETE);
 	D_ASSERT(!data_file.equality_ids.empty());
-	D_ASSERT(source.ColumnCount() == source_names.size());
+	D_ASSERT(source.ColumnCount() == global_columns.size());
 
 	auto count = source.size();
 	if (count == 0) {
@@ -64,7 +57,7 @@ void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntr
 	// make result only reference the columns from source (equality delete file) that have equality_ids
 	// mentioned in the manifest file
 	DataChunk result;
-	ColumnsReferencedByEqualityIds(source, result, local_columns, source_names, data_file.equality_ids);
+	ColumnsReferencedByEqualityIds(source, result, global_columns, data_file.equality_ids);
 
 	const auto sequence_number = manifest_entry.GetSequenceNumber(manifest_file);
 	//! Get or create the equality delete data for this sequence number

@@ -1568,6 +1568,50 @@ void IcebergMultiFileList::ProcessDeletesInternal(const vector<idx_t> &manifest_
 	ScanDeleteFiles();
 }
 
+static vector<MultiFileColumnDefinition>
+BuildEqualityDeleteSchema(const IcebergTableMetadata &metadata,
+                          const vector<reference<const BoundIcebergManifestEntry>> &entries) {
+	vector<MultiFileColumnDefinition> schema;
+	unordered_set<int32_t> field_ids;
+	for (auto &entry_ref : entries) {
+		auto &data_file = entry_ref.get().entry.data_file;
+		for (auto field_id : data_file.equality_ids) {
+			if (!field_ids.insert(field_id).second) {
+				continue;
+			}
+			auto column = metadata.FindColumnByFieldId(field_id);
+			if (!column) {
+				throw InvalidConfigurationException(
+				    "Equality-delete file '%s' references field id %d, but no table schema contains that field",
+				    data_file.file_path, field_id);
+			}
+			auto schema_column = column->GetMultiFileColumnDefinition();
+			// These names are internal. Use the stable field id so renames and duplicate nested leaf names cannot make
+			// two distinct Iceberg fields collide in the global schema.
+			schema_column.name = Identifier(StringUtil::Format("r%d", field_id));
+			// Columns absent from a particular equality-delete file must be NULL, not the table column's initial
+			// default.
+			schema_column.default_expression = make_uniq<ConstantExpression>(Value(schema_column.type));
+			schema.push_back(std::move(schema_column));
+		}
+	}
+	return schema;
+}
+
+static vector<MultiFileColumnDefinition> BuildPositionalDeleteSchema() {
+	vector<MultiFileColumnDefinition> schema;
+
+	MultiFileColumnDefinition file_path("file_path", LogicalType::VARCHAR);
+	file_path.identifier = Value::INTEGER(MultiFileReader::DELETE_FILE_PATH_FIELD_ID);
+	schema.push_back(std::move(file_path));
+
+	MultiFileColumnDefinition pos("pos", LogicalType::BIGINT);
+	pos.identifier = Value::INTEGER(MultiFileReader::DELETE_POS_FIELD_ID);
+	schema.push_back(std::move(pos));
+
+	return schema;
+}
+
 void IcebergMultiFileList::ScanParquetDeleteFiles(const vector<reference<const BoundIcebergManifestEntry>> &entries,
                                                   IcebergManifestEntryContentType content) const {
 	if (entries.empty()) {
@@ -1602,21 +1646,23 @@ void IcebergMultiFileList::ScanParquetDeleteFiles(const vector<reference<const B
 	auto iceberg_deletes_scan = IcebergFunctions::GetIcebergDeletesScanFunction(context);
 	auto delete_scan_function =
 	    iceberg_deletes_scan.GetFunctionByArguments(context, {LogicalType::LIST(LogicalType::VARCHAR)});
+	vector<MultiFileColumnDefinition> delete_schema;
+	if (content == IcebergManifestEntryContentType::POSITION_DELETES) {
+		delete_schema = BuildPositionalDeleteSchema();
+	} else {
+		D_ASSERT(content == IcebergManifestEntryContentType::EQUALITY_DELETES);
+		delete_schema = BuildEqualityDeleteSchema(GetMetadata(), entries);
+	}
 	// Prepare the inputs for the bind
 	vector<Value> children;
 	children.reserve(1);
 	children.push_back(Value::LIST(LogicalType::VARCHAR, std::move(delete_file_paths)));
 	named_parameter_map_t named_params;
-	if (content == IcebergManifestEntryContentType::EQUALITY_DELETES) {
-		// Equality-delete files can contain different key columns. Merge their physical schemas while keeping this
-		// batch separate from the fixed positional-delete schema.
-		named_params[Identifier("union_by_name")] = Value::BOOLEAN(true);
-	}
 	vector<LogicalType> input_types;
 	vector<Identifier> input_names;
 
 	TableFunctionRef empty;
-	auto delete_info = make_shared_ptr<IcebergDeleteScanInfo>(std::move(delete_file_infos));
+	auto delete_info = make_shared_ptr<IcebergDeleteScanInfo>(std::move(delete_file_infos), std::move(delete_schema));
 	delete_scan_function.function_info = delete_info;
 
 	TableFunctionBindInput bind_input(children, named_params, input_types, input_names, nullptr, nullptr,
@@ -1624,6 +1670,7 @@ void IcebergMultiFileList::ScanParquetDeleteFiles(const vector<reference<const B
 	vector<LogicalType> return_types;
 	vector<string> return_names;
 	auto bind_data = delete_scan_function.bind(context, bind_input, return_types, return_names);
+	auto &multi_file_bind_data = bind_data->Cast<MultiFileBindData>();
 
 	DataChunk result;
 	// Reserve for STANDARD_VECTOR_SIZE instead of count, in case the returned table contains too many tuples
@@ -1662,7 +1709,7 @@ void IcebergMultiFileList::ScanParquetDeleteFiles(const vector<reference<const B
 			ScanPositionalDeleteFile(bound_manifest_entry, result);
 		} else {
 			D_ASSERT(content == IcebergManifestEntryContentType::EQUALITY_DELETES);
-			ScanEqualityDeleteFile(bound_manifest_entry, result, reader.columns, return_names);
+			ScanEqualityDeleteFile(bound_manifest_entry, result, multi_file_bind_data.reader_bind.schema);
 		}
 	} while (true);
 }

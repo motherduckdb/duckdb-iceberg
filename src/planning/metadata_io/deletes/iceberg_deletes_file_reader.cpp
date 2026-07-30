@@ -89,4 +89,23 @@ shared_ptr<MultiFileList> IcebergDeleteFileReader::CreateFileList(ClientContext 
 	return std::move(res);
 }
 
+bool IcebergDeleteFileReader::Bind(MultiFileOptions &options, MultiFileList &files, vector<LogicalType> &return_types,
+                                   vector<Identifier> &names, MultiFileReaderBindData &bind_data) {
+	if (!function_info) {
+		throw NotImplementedException("IcebergDeleteFileReader must be called with function info");
+	}
+	auto &scan_info = function_info->Cast<IcebergDeleteScanInfo>();
+	if (scan_info.schema.empty()) {
+		throw InternalException("Iceberg delete scan requires a global schema");
+	}
+
+	for (auto &column : scan_info.schema) {
+		return_types.push_back(column.type);
+		names.push_back(column.name);
+	}
+	bind_data.schema = scan_info.schema;
+	bind_data.mapping = MultiFileColumnMappingMode::BY_FIELD_ID;
+	return true;
+}
+
 } // namespace duckdb
