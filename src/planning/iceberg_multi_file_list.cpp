@@ -1505,6 +1505,8 @@ void IcebergMultiFileList::ScanDeleteFiles() const {
 	auto &provider = GetScanPlanProvider();
 	auto &next_entry = provider.NextDeleteEntryToProcess();
 	auto &delete_entries = provider.DeleteManifestEntries();
+	vector<reference<const BoundIcebergManifestEntry>> positional_delete_entries;
+	vector<reference<const BoundIcebergManifestEntry>> equality_delete_entries;
 	for (; next_entry < delete_entries.size(); next_entry++) {
 		auto &bound_manifest_entry = delete_entries[next_entry];
 		if (!DeleteEntryMatchesFilters(bound_manifest_entry)) {
@@ -1513,7 +1515,17 @@ void IcebergMultiFileList::ScanDeleteFiles() const {
 		auto &manifest_entry = bound_manifest_entry.entry;
 		auto &data_file = manifest_entry.data_file;
 		if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
-			ScanDeleteFile(bound_manifest_entry);
+			switch (data_file.content) {
+			case IcebergManifestEntryContentType::POSITION_DELETES:
+				positional_delete_entries.emplace_back(bound_manifest_entry);
+				break;
+			case IcebergManifestEntryContentType::EQUALITY_DELETES:
+				equality_delete_entries.emplace_back(bound_manifest_entry);
+				break;
+			default:
+				throw InvalidConfigurationException("Delete manifest references Parquet file '%s' with content type %d",
+				                                    data_file.file_path, static_cast<uint8_t>(data_file.content));
+			}
 		} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
 			ScanPuffinFile(bound_manifest_entry);
 		} else {
@@ -1522,6 +1534,8 @@ void IcebergMultiFileList::ScanDeleteFiles() const {
 			    data_file.file_format);
 		}
 	}
+	ScanParquetDeleteFiles(positional_delete_entries, IcebergManifestEntryContentType::POSITION_DELETES);
+	ScanParquetDeleteFiles(equality_delete_entries, IcebergManifestEntryContentType::EQUALITY_DELETES);
 }
 
 void IcebergMultiFileList::ProcessDeletes(const BoundIcebergManifestEntry &data_manifest_entry) const {
@@ -1554,38 +1568,55 @@ void IcebergMultiFileList::ProcessDeletesInternal(const vector<idx_t> &manifest_
 	ScanDeleteFiles();
 }
 
-void IcebergMultiFileList::ScanDeleteFile(const BoundIcebergManifestEntry &bound_manifest_entry) const {
-	auto &manifest_entry = bound_manifest_entry.entry;
-	auto &data_file = manifest_entry.data_file;
-	auto delete_file_path = data_file.file_path;
-	auto iceberg_deletes_scan = IcebergFunctions::GetIcebergDeletesScanFunction(context);
-	auto &delete_scan_function = iceberg_deletes_scan.functions[0];
-
-	if (options.allow_moved_paths) {
-		auto iceberg_path = GetPath();
-		auto &fs = FileSystem::GetFileSystem(context);
-		delete_file_path = IcebergUtils::GetFullPath(iceberg_path, delete_file_path, fs);
+void IcebergMultiFileList::ScanParquetDeleteFiles(const vector<reference<const BoundIcebergManifestEntry>> &entries,
+                                                  IcebergManifestEntryContentType content) const {
+	if (entries.empty()) {
+		return;
 	}
+
+	vector<Value> delete_file_paths;
+	vector<OpenFileInfo> delete_file_infos;
+	delete_file_paths.reserve(entries.size());
+	delete_file_infos.reserve(entries.size());
+	for (auto &entry_ref : entries) {
+		auto &data_file = entry_ref.get().entry.data_file;
+		D_ASSERT(data_file.content == content);
+		auto delete_file_path = data_file.file_path;
+		if (options.allow_moved_paths) {
+			auto iceberg_path = GetPath();
+			auto &fs = FileSystem::GetFileSystem(context);
+			delete_file_path = IcebergUtils::GetFullPath(iceberg_path, delete_file_path, fs);
+		}
+
+		delete_file_paths.emplace_back(delete_file_path);
+		delete_file_infos.emplace_back(delete_file_path);
+		auto &file_info = delete_file_infos.back();
+		file_info.extended_info = make_shared_ptr<ExtendedOpenFileInfo>();
+		file_info.extended_info->options["file_size"] = Value::UBIGINT(data_file.file_size_in_bytes);
+		// Files managed by Iceberg are immutable, so they can remain cached.
+		file_info.extended_info->options["validate_external_file_cache"] = Value::BOOLEAN(false);
+		file_info.extended_info->options["etag"] = Value("");
+		file_info.extended_info->options["last_modified"] = Value::TIMESTAMP(timestamp_t(0));
+	}
+
+	auto iceberg_deletes_scan = IcebergFunctions::GetIcebergDeletesScanFunction(context);
+	auto delete_scan_function =
+	    iceberg_deletes_scan.GetFunctionByArguments(context, {LogicalType::LIST(LogicalType::VARCHAR)});
 	// Prepare the inputs for the bind
 	vector<Value> children;
 	children.reserve(1);
-	children.push_back(Value(delete_file_path));
+	children.push_back(Value::LIST(LogicalType::VARCHAR, std::move(delete_file_paths)));
 	named_parameter_map_t named_params;
+	if (content == IcebergManifestEntryContentType::EQUALITY_DELETES) {
+		// Equality-delete files can contain different key columns. Merge their physical schemas while keeping this
+		// batch separate from the fixed positional-delete schema.
+		named_params[Identifier("union_by_name")] = Value::BOOLEAN(true);
+	}
 	vector<LogicalType> input_types;
 	vector<Identifier> input_names;
 
 	TableFunctionRef empty;
-	OpenFileInfo res(delete_file_path);
-	// create function info for the iceberg delete scan.
-	auto extended_info = make_shared_ptr<ExtendedOpenFileInfo>();
-	extended_info->options["file_size"] = Value::UBIGINT(data_file.file_size_in_bytes);
-	// files managed by Iceberg are never modified - we can keep them cached
-	extended_info->options["validate_external_file_cache"] = Value::BOOLEAN(false);
-	// etag / last modified time can be set to dummy values
-	extended_info->options["etag"] = Value("");
-	extended_info->options["last_modified"] = Value::TIMESTAMP(timestamp_t(0));
-	res.extended_info = extended_info;
-	auto delete_info = make_shared_ptr<IcebergDeleteScanInfo>(res);
+	auto delete_info = make_shared_ptr<IcebergDeleteScanInfo>(std::move(delete_file_infos));
 	delete_scan_function.function_info = delete_info;
 
 	TableFunctionBindInput bind_input(children, named_params, input_types, input_names, nullptr, nullptr,
@@ -1611,24 +1642,29 @@ void IcebergMultiFileList::ScanDeleteFile(const BoundIcebergManifestEntry &bound
 
 	auto &multi_file_local_state = local_state->Cast<MultiFileLocalState>();
 
-	if (data_file.content == IcebergManifestEntryContentType::POSITION_DELETES) {
-		do {
-			TableFunctionInput function_input(bind_data.get(), local_state.get(), global_state.get());
-			result.Reset();
-			delete_scan_function.function(context, function_input, result);
-			result.Flatten();
+	do {
+		TableFunctionInput function_input(bind_data.get(), local_state.get(), global_state.get());
+		result.Reset();
+		delete_scan_function.function(context, function_input, result);
+		if (result.size() == 0) {
+			break;
+		}
+		result.Flatten();
+
+		auto &reader = *multi_file_local_state.job.reader;
+		auto file_idx = reader.file_list_idx.GetIndex();
+		if (file_idx >= entries.size()) {
+			throw InternalException("Delete batch reader index %llu is out of bounds for %llu files", file_idx,
+			                        entries.size());
+		}
+		auto &bound_manifest_entry = entries[file_idx].get();
+		if (content == IcebergManifestEntryContentType::POSITION_DELETES) {
 			ScanPositionalDeleteFile(bound_manifest_entry, result);
-		} while (result.size() != 0);
-	} else if (data_file.content == IcebergManifestEntryContentType::EQUALITY_DELETES) {
-		do {
-			TableFunctionInput function_input(bind_data.get(), local_state.get(), global_state.get());
-			result.Reset();
-			delete_scan_function.function(context, function_input, result);
-			result.Flatten();
-			ScanEqualityDeleteFile(bound_manifest_entry, result, multi_file_local_state.job.reader->columns,
-			                       return_names);
-		} while (result.size() != 0);
-	}
+		} else {
+			D_ASSERT(content == IcebergManifestEntryContentType::EQUALITY_DELETES);
+			ScanEqualityDeleteFile(bound_manifest_entry, result, reader.columns, return_names);
+		}
+	} while (true);
 }
 
 unique_ptr<DeleteFilter> IcebergMultiFileList::GetPositionalDeletesForFile(const string &file_path) const {

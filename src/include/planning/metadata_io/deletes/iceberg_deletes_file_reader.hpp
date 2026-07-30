@@ -12,14 +12,14 @@
 
 namespace duckdb {
 
-// pass a open file info to the delete scan
+// Pass the already resolved open-file information to the delete scan.
 struct IcebergDeleteScanInfo : public TableFunctionInfo {
 public:
-	IcebergDeleteScanInfo(OpenFileInfo file_info) : file_info(file_info) {
+	IcebergDeleteScanInfo(vector<OpenFileInfo> file_infos) : file_infos(std::move(file_infos)) {
 	}
 
 public:
-	OpenFileInfo file_info;
+	vector<OpenFileInfo> file_infos;
 };
 
 struct IcebergDeleteFileReader : public MultiFileReader {

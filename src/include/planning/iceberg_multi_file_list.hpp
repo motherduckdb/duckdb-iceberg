@@ -251,7 +251,8 @@ private:
 	void ProcessDeletesInternal(const vector<idx_t> &manifest_indexes) const
 	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
 	void ScanDeleteFiles() const DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
-	void ScanDeleteFile(const BoundIcebergManifestEntry &entry) const
+	void ScanParquetDeleteFiles(const vector<reference<const BoundIcebergManifestEntry>> &entries,
+	                            IcebergManifestEntryContentType content) const
 	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
 	void ScanPositionalDeleteFile(const BoundIcebergManifestEntry &manifest_entry, DataChunk &result) const
 	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);

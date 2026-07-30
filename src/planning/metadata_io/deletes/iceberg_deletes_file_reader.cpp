@@ -76,15 +76,15 @@ unique_ptr<MultiFileReader> IcebergDeleteFileReader::CreateInstance(const TableF
 
 shared_ptr<MultiFileList> IcebergDeleteFileReader::CreateFileList(ClientContext &context, const vector<string> &paths,
                                                                   const FileGlobInput &glob_input) {
-	D_ASSERT(paths.size() == 1);
-	vector<OpenFileInfo> open_files;
-	// in case someone calls this
 	if (!function_info) {
 		throw NotImplementedException("IcebergDeleteFileReader must be called with function info");
 	}
 	auto &iceberg_delete_function_info = function_info->Cast<IcebergDeleteScanInfo>();
-	auto &extended_delete_info = iceberg_delete_function_info.file_info;
-	open_files.emplace_back(extended_delete_info);
+	if (paths.size() != iceberg_delete_function_info.file_infos.size()) {
+		throw InternalException("Iceberg delete scan received %llu paths but %llu open-file entries", paths.size(),
+		                        iceberg_delete_function_info.file_infos.size());
+	}
+	auto open_files = iceberg_delete_function_info.file_infos;
 	auto res = make_uniq<SimpleMultiFileList>(std::move(open_files));
 	return std::move(res);
 }
