@@ -1,0 +1,93 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/equality_deletes/test_equality_delete_in_and_or.test
+# description: DELETE with a single-column IN filter or an OR-conjunction of equalities writes an equality delete file
+# group: [equality_deletes]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require-env EQUALITY_DELETE_WRITES_ENABLED 1
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+set ignore_error_messages
+
+statement ok
+set unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=true;
+
+statement ok
+set disabled_optimizers='column_lifetime,statistics_propagation,join_order';
+
+statement ok
+set enable_external_file_cache=false;
+
+statement ok
+drop table if exists my_datalake.default.eq_delete_in_or;
+
+statement ok
+create table my_datalake.default.eq_delete_in_or as select range a, range % 50 b from range(1000);
+
+# --- single-column IN filter => one equality delete file with one row per value ---
+statement ok
+delete from my_datalake.default.eq_delete_in_or where a in (1, 5, 7, 9);
+
+# an EQUALITY_DELETES file with 4 rows (one per IN value) was written, no positional delete files.
+query II
+SELECT content, sum(record_count)
+FROM iceberg_metadata(my_datalake.default.eq_delete_in_or)
+WHERE content IN ('EQUALITY_DELETES', 'POSITION_DELETES') AND status != 'DELETED'
+GROUP BY content ORDER BY content;
+----
+EQUALITY_DELETES	4
+
+# the four rows are gone, others remain
+query I
+select count(*) from my_datalake.default.eq_delete_in_or where a in (1, 5, 7, 9);
+----
+0
+
+query I
+select count(*) from my_datalake.default.eq_delete_in_or;
+----
+996
+
+# --- single-column OR-of-equals => equality delete file ---
+statement ok
+delete from my_datalake.default.eq_delete_in_or where a = 100 or a = 200 or a = 300 or a = 400;
+
+query I
+SELECT sum(record_count)
+FROM iceberg_metadata(my_datalake.default.eq_delete_in_or)
+WHERE content = 'EQUALITY_DELETES' AND status != 'DELETED';
+----
+8
+
+query I
+select count(*) from my_datalake.default.eq_delete_in_or where a in (100, 200, 300, 400);
+----
+0
+
+query I
+select count(*) from my_datalake.default.eq_delete_in_or;
+----
+992
+
+# --- bounds pruning still applies: a predicate disjoint from every equality-delete range reads no delete file ---
+statement ok
+call enable_logging('HTTP');
+
+statement ok
+select a from my_datalake.default.eq_delete_in_or where a = 900 order by a;
+
+# a=900 is disjoint from [1,9] and [100,400], so no equality delete file is fetched.
+query I
+select count(*) from duckdb_logs_parsed('http') where request.url like '%equality-deletes.parquet' and request.type = 'GET';
+----
+0
+
+statement ok
+drop table my_datalake.default.eq_delete_in_or;

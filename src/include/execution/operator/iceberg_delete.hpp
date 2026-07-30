@@ -39,8 +39,10 @@ struct IcebergEqualityDeletePredicate {
 	string column_name;
 	//! The column type
 	LogicalType type;
-	//! The constant value to delete (cast to `type`)
-	Value value;
+	//! The set of values to delete for this column (cast to `type`). A single value for `col = c`,
+	//! multiple for `col IN (c1, c2, ...)` or `col = c1 OR col = c2 OR ...`. The equality-delete rows
+	//! are the cross product of every predicate's value set.
+	vector<Value> values;
 };
 
 class IcebergDeleteLocalState : public LocalSinkState {
@@ -63,6 +65,9 @@ struct IcebergDeleteFileInfo {
 	vector<IcebergPartitionInfo> partition_info;
 	//! When non-empty, this is an equality-delete file; holds the field-ids it applies to
 	vector<int32_t> equality_ids;
+	//! Per-field serialized lower/upper bounds of the equality-delete values (field-id -> bound blob).
+	unordered_map<int32_t, Value> lower_bounds;
+	unordered_map<int32_t, Value> upper_bounds;
 };
 
 class IcebergDeleteGlobalState : public GlobalSinkState {

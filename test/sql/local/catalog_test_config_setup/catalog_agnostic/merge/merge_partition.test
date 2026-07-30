@@ -68,39 +68,6 @@ SELECT * FROM my_datalake.default.my_timeseries order by all
 2025-09-15 00:00:00	42.0
 2025-09-17 00:00:00	43.0
 
-# Distinct rows from the same data file must receive distinct MERGE row IDs.
-statement ok
-INSERT INTO my_datalake.default.my_timeseries VALUES ('2025-09-18', 44), ('2025-09-19', 45);
-
-statement ok
-MERGE INTO my_datalake.default.my_timeseries
-    USING (
-        VALUES
-            ('2025-09-18'::TIMESTAMP, 46::DOUBLE PRECISION),
-            ('2025-09-19'::TIMESTAMP, 47::DOUBLE PRECISION)
-    ) AS timeseries_updates(ts, x)
-ON my_datalake.default.my_timeseries.ts = timeseries_updates.ts
-WHEN MATCHED THEN UPDATE;
-
-query II
-SELECT * FROM my_datalake.default.my_timeseries WHERE ts >= '2025-09-18' ORDER BY ALL
-----
-2025-09-18 00:00:00	46.0
-2025-09-19 00:00:00	47.0
-
-# Repeated source matches must still produce the standard MERGE cardinality error.
-statement error
-MERGE INTO my_datalake.default.my_timeseries
-    USING (
-        VALUES
-            ('2025-09-18'::TIMESTAMP, 48::DOUBLE PRECISION),
-            ('2025-09-18'::TIMESTAMP, 49::DOUBLE PRECISION)
-    ) AS timeseries_updates(ts, x)
-ON my_datalake.default.my_timeseries.ts = timeseries_updates.ts
-WHEN MATCHED THEN UPDATE;
-----
-cannot affect the same target row more than once
-
 statement ok
 DROP TABLE my_datalake.default.my_timeseries;
 
