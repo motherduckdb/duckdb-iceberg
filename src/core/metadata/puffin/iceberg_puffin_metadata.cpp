@@ -108,25 +108,35 @@ string ParseBlobMetadata(IcebergPuffinBlobMetadata &result, JSONValue obj) {
 	return "";
 }
 
-IcebergPuffinFileMetadata ParseFileMetadata(JSONValue root) {
+using IcebergPuffinFileMetadataResult = std::variant<IcebergPuffinFileMetadata, string>;
+
+IcebergPuffinFileMetadataResult ParseFileMetadata(JSONValue root) {
 	IcebergPuffinFileMetadata result;
 	auto blobs_val = root.GetMember("blobs");
 	if (!blobs_val.IsArray()) {
-		throw InvalidInputException("Puffin file metadata property 'blobs' is missing or not an array");
+		return "Puffin file metadata property 'blobs' is missing or not an array";
 	}
+	string blobs_error;
 	blobs_val.IterateArray([&](JSONValue val) {
+		if (!blobs_error.empty()) {
+			return;
+		}
 		IcebergPuffinBlobMetadata blob;
 		auto error = ParseBlobMetadata(blob, val);
 		if (!error.empty()) {
-			throw InvalidInputException(error);
+			blobs_error = std::move(error);
+			return;
 		}
 		result.blobs.emplace_back(std::move(blob));
 	});
+	if (!blobs_error.empty()) {
+		return blobs_error;
+	}
 	auto properties_val = root.GetMember("properties");
 	if (properties_val.IsValid()) {
 		auto error = ParseProperties(result.properties, properties_val);
 		if (!error.empty()) {
-			throw InvalidInputException("Puffin file metadata " + error);
+			return "Puffin file metadata " + error;
 		}
 	}
 	return result;
@@ -134,52 +144,50 @@ IcebergPuffinFileMetadata ParseFileMetadata(JSONValue root) {
 
 } // namespace
 
-IcebergPuffinFileFooter IcebergPuffinReader::ReadFooter(FileSystem &fs, FileHandle &handle, const string &path,
-                                                        optional<int64_t> expected_file_size,
-                                                        optional<int64_t> expected_footer_size) {
+IcebergPuffinFileFooterResult IcebergPuffinReader::ReadFooter(FileSystem &fs, FileHandle &handle, const string &path,
+                                                              optional<int64_t> expected_file_size,
+                                                              optional<int64_t> expected_footer_size) {
 	IcebergPuffinFileFooter result;
 
 	auto file_size = handle.GetFileSize();
 	if (expected_file_size && file_size != *expected_file_size) {
-		throw InvalidConfigurationException("Puffin file '%s' size mismatch: expected %lld bytes, found %lld bytes",
-		                                    path, *expected_file_size, file_size);
+		return StringUtil::Format("Puffin file '%s' size mismatch: expected %lld bytes, found %lld bytes", path,
+		                          *expected_file_size, file_size);
 	}
 	if (file_size < static_cast<int64_t>(sizeof(PUFFIN_MAGIC) + FOOTER_FIXED_SIZE)) {
-		throw InvalidConfigurationException("Puffin file '%s' is too small to be valid", path);
+		return StringUtil::Format("Puffin file '%s' is too small to be valid", path);
 	}
 
 	auto trailer_buffer = Allocator::DefaultAllocator().Allocate(FOOTER_TRAILER_SIZE);
 	auto trailer = trailer_buffer.get();
 	fs.Read(handle, trailer, FOOTER_TRAILER_SIZE, file_size - FOOTER_TRAILER_SIZE);
 	if (memcmp(trailer + sizeof(int32_t) + sizeof(uint32_t), PUFFIN_MAGIC, sizeof(PUFFIN_MAGIC)) != 0) {
-		throw InvalidConfigurationException("Puffin file '%s' has invalid trailing magic", path);
+		return StringUtil::Format("Puffin file '%s' has invalid trailing magic", path);
 	}
 
 	auto flags = Load<uint32_t>(trailer + sizeof(int32_t));
 	if (flags & 0x1) {
-		throw NotImplementedException("Puffin file '%s' uses a compressed footer payload, which is not supported",
-		                              path);
+		return StringUtil::Format("Puffin file '%s' uses a compressed footer payload, which is not supported", path);
 	}
 
 	auto footer_payload_size = Load<int32_t>(trailer);
 	if (footer_payload_size < 0) {
-		throw InvalidConfigurationException("Puffin file '%s' has a negative footer payload size", path);
+		return StringUtil::Format("Puffin file '%s' has a negative footer payload size", path);
 	}
 	result.footer_payload_size = static_cast<idx_t>(footer_payload_size);
 	result.footer_size = result.footer_payload_size + FOOTER_FIXED_SIZE;
 
 	if (expected_footer_size && result.footer_size != static_cast<idx_t>(*expected_footer_size)) {
-		throw InvalidConfigurationException(
-		    "Puffin file '%s' footer size mismatch: expected %lld bytes, found %llu bytes", path, *expected_footer_size,
-		    result.footer_size);
+		return StringUtil::Format("Puffin file '%s' footer size mismatch: expected %lld bytes, found %llu bytes", path,
+		                          *expected_footer_size, result.footer_size);
 	}
 	if (result.footer_size > static_cast<idx_t>(file_size)) {
-		throw InvalidConfigurationException("Puffin file '%s' footer extends past the end of the file", path);
+		return StringUtil::Format("Puffin file '%s' footer extends past the end of the file", path);
 	}
 
 	auto footer_payload_start = file_size - FOOTER_TRAILER_SIZE - result.footer_payload_size;
 	if (footer_payload_start < static_cast<int64_t>(sizeof(PUFFIN_MAGIC))) {
-		throw InvalidConfigurationException("Puffin file '%s' has an invalid footer payload offset", path);
+		return StringUtil::Format("Puffin file '%s' has an invalid footer payload offset", path);
 	}
 
 	auto footer_buffer = Allocator::DefaultAllocator().Allocate(sizeof(PUFFIN_MAGIC) + result.footer_payload_size);
@@ -187,18 +195,27 @@ IcebergPuffinFileFooter IcebergPuffinReader::ReadFooter(FileSystem &fs, FileHand
 	fs.Read(handle, footer, sizeof(PUFFIN_MAGIC) + result.footer_payload_size,
 	        footer_payload_start - static_cast<int64_t>(sizeof(PUFFIN_MAGIC)));
 	if (memcmp(footer, PUFFIN_MAGIC, sizeof(PUFFIN_MAGIC)) != 0) {
-		throw InvalidConfigurationException("Puffin file '%s' has invalid footer leading magic", path);
+		return StringUtil::Format("Puffin file '%s' has invalid footer leading magic", path);
 	}
 
-	auto doc =
-	    JSONDocument::Parse(reinterpret_cast<const char *>(footer + sizeof(PUFFIN_MAGIC)), result.footer_payload_size);
-	result.file_metadata = ParseFileMetadata(doc->GetRoot());
+	JSONParseError parse_error;
+	auto doc = JSONDocument::TryParse(reinterpret_cast<const char *>(footer + sizeof(PUFFIN_MAGIC)),
+	                                  result.footer_payload_size, parse_error);
+	if (!doc) {
+		return StringUtil::Format("Puffin file '%s' has invalid footer JSON at byte %llu: %s", path,
+		                          parse_error.position, parse_error.message);
+	}
+	auto metadata_result = ParseFileMetadata(doc->GetRoot());
+	if (auto error = std::get_if<string>(&metadata_result)) {
+		return StringUtil::Format("Puffin file '%s' has invalid metadata: %s", path, *error);
+	}
+	result.file_metadata = std::get<IcebergPuffinFileMetadata>(std::move(metadata_result));
 	return result;
 }
 
-IcebergPuffinFileFooter IcebergPuffinReader::ReadFooter(FileSystem &fs, const string &path,
-                                                        optional<int64_t> expected_file_size,
-                                                        optional<int64_t> expected_footer_size) {
+IcebergPuffinFileFooterResult IcebergPuffinReader::ReadFooter(FileSystem &fs, const string &path,
+                                                              optional<int64_t> expected_file_size,
+                                                              optional<int64_t> expected_footer_size) {
 	auto handle = fs.OpenFile(path, FileFlags::FILE_FLAGS_READ);
 	return ReadFooter(fs, *handle, path, std::move(expected_file_size), std::move(expected_footer_size));
 }
