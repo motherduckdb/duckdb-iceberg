@@ -13,9 +13,9 @@ IcebergSnapshotLookup IcebergSnapshotLookup::FromAtClause(optional_ptr<BoundAtCl
 	if (value.IsNull()) {
 		throw InvalidInputException("NULL values can not be used as the 'unit' of a time travel clause");
 	}
-	if (StringUtil::CIEquals(unit, "version")) {
+	if (unit == "version") {
 		return FromSnapshotId(value.DefaultCastAs(LogicalType::BIGINT).GetValue<int64_t>());
-	} else if (StringUtil::CIEquals(unit, "timestamp")) {
+	} else if (unit == "timestamp") {
 		return FromTimestamp(value.DefaultCastAs(LogicalType::TIMESTAMP_MS).GetValue<timestamp_ms_t>());
 	} else {
 		throw InvalidInputException(
