@@ -11,8 +11,6 @@ require iceberg
 
 require httpfs
 
-set ignore_error_messages
-
 statement ok
 SET threads=1;
 

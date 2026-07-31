@@ -11,8 +11,6 @@ require aws
 
 require tpch
 
-set ignore_error_messages
-
 mode skip
 
 statement ok

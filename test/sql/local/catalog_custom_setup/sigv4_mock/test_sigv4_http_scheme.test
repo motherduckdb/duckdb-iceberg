@@ -15,8 +15,6 @@ require httpfs
 
 require aws
 
-set ignore_error_messages
-
 # Create an S3 secret with fake credentials for SigV4 signing
 statement ok
 CREATE SECRET sigv4_secret (

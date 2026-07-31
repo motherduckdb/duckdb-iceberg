@@ -18,8 +18,6 @@ require httpfs
 
 require aws
 
-set ignore_error_messages
-
 statement ok
 CREATE SECRET glue_secret (
     TYPE S3,

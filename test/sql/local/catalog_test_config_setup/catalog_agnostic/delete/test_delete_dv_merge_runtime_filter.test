@@ -12,8 +12,6 @@ require iceberg
 
 require httpfs
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 DROP TABLE IF EXISTS my_datalake.default.test_dv_merge_runtime_filter;

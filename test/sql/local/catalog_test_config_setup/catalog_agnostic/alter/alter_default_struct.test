@@ -12,8 +12,6 @@ require iceberg
 
 require httpfs
 
-set ignore_error_messages
-
 # Default value of the setting
 statement ok
 SET GLOBAL __iceberg_unsafe_struct_null_default_interp = NULL;
