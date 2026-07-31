@@ -19,20 +19,6 @@
 
 namespace duckdb {
 
-void ManifestEntryReadState::PushBatch(ManifestReadBatch &&batch) {
-	lock_guard<mutex> guard(lock);
-	batches.push_back(std::move(batch));
-}
-
-bool ManifestEntryReadState::GetBatch(idx_t batch_idx, ManifestReadBatch &result) const {
-	lock_guard<mutex> guard(lock);
-	if (batch_idx >= batches.size()) {
-		return false;
-	}
-	result = batches[batch_idx];
-	return true;
-}
-
 IcebergMultiFileList::IcebergMultiFileList(ClientContext &context_p, shared_ptr<IcebergScanInfo> scan_info,
                                            const string &path, const IcebergOptions &options)
     : shared_state(make_shared_ptr<IcebergScanPlanState>(context_p, std::move(scan_info), path, options)),

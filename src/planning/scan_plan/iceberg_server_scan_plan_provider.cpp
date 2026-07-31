@@ -4,20 +4,6 @@
 
 namespace duckdb {
 
-namespace {
-
-static bool TryReadBatch(ManifestEntryReadState &read_state, IcebergDataViewCursor &cursor) {
-	if (!read_state.GetBatch(cursor.next_batch_idx, cursor.current_batch)) {
-		return false;
-	}
-	cursor.next_batch_idx++;
-	cursor.current_batch_offset = cursor.current_batch.start_index;
-	cursor.has_current_batch = true;
-	return true;
-}
-
-} // namespace
-
 ServerSideScanPlanProvider::ServerSideScanPlanProvider(IcebergServerSideScanPlan plan_p) : plan(std::move(plan_p)) {
 	delete_manifest_entries_enumerated.resize(plan.delete_manifests.size(), false);
 }
@@ -58,7 +44,7 @@ void ServerSideScanPlanProvider::EnumerateDeleteManifestEntries(const vector<idx
 }
 
 bool ServerSideScanPlanProvider::TryGetNextBatch(IcebergDataViewCursor &cursor) {
-	return cursor.has_current_batch || TryReadBatch(read_state, cursor);
+	return cursor.has_current_batch || read_state.TryReadBatch(cursor);
 }
 
 void ServerSideScanPlanProvider::FinishScanTasks() {

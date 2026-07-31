@@ -86,16 +86,6 @@ private:
 	manifest_file::ManifestReader reader;
 };
 
-static bool TryReadBatch(ManifestEntryReadState &read_state, IcebergDataViewCursor &cursor) {
-	if (!read_state.GetBatch(cursor.next_batch_idx, cursor.current_batch)) {
-		return false;
-	}
-	cursor.next_batch_idx++;
-	cursor.current_batch_offset = cursor.current_batch.start_index;
-	cursor.has_current_batch = true;
-	return true;
-}
-
 } // namespace
 
 ClientSideScanPlanProvider::ClientSideScanPlanProvider(IcebergScanPlanState &shared_state_p,
@@ -395,7 +385,7 @@ void ClientSideScanPlanProvider::EnumerateDeleteManifestEntries(const vector<idx
 }
 
 bool ClientSideScanPlanProvider::TryGetNextBatch(IcebergDataViewCursor &cursor) {
-	if (cursor.has_current_batch || TryReadBatch(shared_state.read_state, cursor)) {
+	if (cursor.has_current_batch || shared_state.read_state.TryReadBatch(cursor)) {
 		return true;
 	}
 	if (!shared_state.data_manifest_read_state) {
@@ -412,14 +402,14 @@ bool ClientSideScanPlanProvider::TryGetNextBatch(IcebergDataViewCursor &cursor) 
 				auto &token = *task_to_execute->token;
 				scheduler.ScheduleTask(token, std::move(task_to_execute));
 			}
-			if (TryReadBatch(shared_state.read_state, cursor)) {
+			if (shared_state.read_state.TryReadBatch(cursor)) {
 				return true;
 			}
 		}
 		executor.WorkOnTasks();
 		break;
 	}
-	return TryReadBatch(shared_state.read_state, cursor);
+	return shared_state.read_state.TryReadBatch(cursor);
 }
 
 void ClientSideScanPlanProvider::FinishScanTasks() {
