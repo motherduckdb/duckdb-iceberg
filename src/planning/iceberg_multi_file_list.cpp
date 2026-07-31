@@ -21,7 +21,7 @@ namespace duckdb {
 
 namespace {
 
-static void MergeDeleteScanResult(IcebergScanPlanProvider &provider, IcebergDeleteScanResult &scan_result) {
+static void MergeDeleteScanResult(IcebergScanPlanProvider &provider, IcebergDeleteScanResult &&scan_result) {
 	auto &positional_delete_data = provider.PositionalDeleteData();
 	for (auto &entry : scan_result.positional_delete_data) {
 		auto existing = positional_delete_data.find(entry.first);
@@ -53,12 +53,12 @@ static void MergeDeleteScanResult(IcebergScanPlanProvider &provider, IcebergDele
 		                                     source_positions.invalid_rows.end());
 	}
 
-	auto &equality_delete_data = provider.EqualityDeleteData();
-	for (auto &sequence_entry : scan_result.equality_delete_data) {
-		auto &target = equality_delete_data[sequence_entry.first];
-		for (auto &delete_file : sequence_entry.second) {
-			target.push_back(std::move(delete_file));
+	for (auto &entry : scan_result.equality_delete_data) {
+		if (entry.delete_file->equality_values.size() == 0) {
+			continue;
 		}
+		lock_guard<mutex> guard(entry.load->lock);
+		entry.load->equality_delete = std::move(entry.delete_file);
 	}
 }
 
@@ -362,17 +362,6 @@ BoundIcebergManifestEntry IcebergMultiFileList::GetManifestEntry(idx_t file_id) 
 	return data_manifest_entries[file_id];
 }
 
-BoundIcebergManifestEntry IcebergMultiFileList::GetDeleteManifestEntry(idx_t manifest_entry_index) const {
-	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
-	annotated_lock_guard<annotated_mutex> delete_guard(shared_state->delete_lock);
-	auto &entries = GetScanPlanProvider().DeleteManifestEntries();
-	if (manifest_entry_index >= entries.size()) {
-		throw InternalException("Delete manifest entry index %llu is out of bounds for %llu entries",
-		                        manifest_entry_index, entries.size());
-	}
-	return entries[manifest_entry_index];
-}
-
 IcebergManifestFile IcebergMultiFileList::GetManifestFileForDataFile(idx_t file_id) const {
 	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
 	auto manifest_file_idx = data_manifest_entries[file_id].manifest_file_idx;
@@ -558,13 +547,6 @@ OpenFileInfo IcebergMultiFileList::GetFile(idx_t file_id) const {
 	return GetFileInternal(file_id, guard);
 }
 
-vector<reference<const IcebergEqualityDeleteFile>>
-IcebergMultiFileList::GetEqualityDeletesForFile(const BoundIcebergManifestEntry &bound_manifest_entry) const {
-	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
-	annotated_lock_guard<annotated_mutex> delete_guard(shared_state->delete_lock);
-	return IcebergDeletePlanner::GetEqualityDeletesForFile(GetDeletePlanningContext(), bound_manifest_entry);
-}
-
 void IcebergMultiFileList::InitializeView(annotated_lock_guard<annotated_mutex> &guard) const {
 	if (scan_plan_provider) {
 		return;
@@ -623,14 +605,10 @@ void IcebergMultiFileList::StartDataManifestScan(annotated_lock_guard<annotated_
 	GetScanPlanProvider().StartDataManifestScan(data_manifest_matches, table_filters.FilterCount());
 }
 
-vector<idx_t>
-IcebergMultiFileList::EnumerateDeleteManifestEntriesInternal(const vector<idx_t> &manifest_indexes) const {
-	return GetScanPlanProvider().EnumerateDeleteManifestEntries(manifest_indexes);
-}
-
-void IcebergMultiFileList::ProcessDeletes(const BoundIcebergManifestEntry &data_manifest_entry) const {
+IcebergDeletePlan IcebergMultiFileList::ProcessDeletes(const BoundIcebergManifestEntry &data_manifest_entry) const {
+	IcebergDeletePlan result;
 	if (!has_matching_delete_manifests.load()) {
-		return;
+		return result;
 	}
 
 	vector<idx_t> manifest_indexes;
@@ -643,7 +621,7 @@ void IcebergMultiFileList::ProcessDeletes(const BoundIcebergManifestEntry &data_
 		provider = scan_plan_provider.get();
 	}
 	if (manifest_indexes.empty()) {
-		return;
+		return result;
 	}
 
 	D_ASSERT(provider);
@@ -656,34 +634,35 @@ void IcebergMultiFileList::ProcessDeletes(const BoundIcebergManifestEntry &data_
 	{
 		annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
 		annotated_lock_guard<annotated_mutex> delete_guard(shared_state->delete_lock);
-		auto entry_indexes = EnumerateDeleteManifestEntriesInternal(manifest_indexes);
+		auto delete_files = provider->GetDeleteFiles(manifest_indexes);
 		delete_context = make_uniq<IcebergDeletePlanningContext>(GetDeletePlanningContext());
-		auto &delete_entries = provider->DeleteManifestEntries();
-		auto &delete_file_loads = provider->DeleteFileLoads();
 		unordered_set<IcebergDeleteFileLoadState *> seen_loads;
-		for (auto entry_idx : entry_indexes) {
-			if (entry_idx >= delete_entries.size()) {
-				throw InternalException("Delete manifest entry index %llu is out of bounds for %llu entries", entry_idx,
-				                        delete_entries.size());
+		for (auto delete_file : delete_files) {
+			if (delete_file.manifest_idx >= delete_manifests.size()) {
+				throw InternalException("Delete manifest index %llu is out of bounds for %llu manifests",
+				                        delete_file.manifest_idx, delete_manifests.size());
 			}
-			auto &delete_entry = delete_entries[entry_idx];
-			if (!IcebergDeletePlanner::DeleteEntryMatchesFilters(*delete_context, delete_entry)) {
+			auto &delete_manifest = delete_manifests[delete_file.manifest_idx].entry;
+			auto &manifest_entries = delete_manifest.GetManifestEntries();
+			if (delete_file.entry_idx >= manifest_entries.size()) {
+				throw InternalException("Delete manifest entry index %llu is out of bounds for manifest %llu",
+				                        delete_file.entry_idx, delete_file.manifest_idx);
+			}
+			auto &delete_entry = manifest_entries[delete_file.entry_idx];
+			if (!IcebergDeletePlanner::DeleteEntryMatchesFilters(*delete_context, delete_file.manifest_idx,
+			                                                     delete_entry)) {
 				continue;
 			}
-			if (!IcebergDeletePlanner::DeleteEntryAppliesToDataFile(*delete_context, delete_entry,
-			                                                        data_manifest_entry)) {
+			if (!IcebergDeletePlanner::DeleteEntryAppliesToDataFile(*delete_context, delete_file.manifest_idx,
+			                                                        delete_entry, data_manifest_entry)) {
 				continue;
 			}
 
-			if (entry_idx >= delete_file_loads.size()) {
-				throw InternalException("Delete file load index %llu is out of bounds for %llu entries", entry_idx,
-				                        delete_file_loads.size());
-			}
-			auto &load = delete_file_loads[entry_idx];
+			auto &load = provider->GetDeleteFileLoad(delete_file);
 			if (!load) {
 				load = make_shared_ptr<IcebergDeleteFileLoadState>();
 				new_loads.push_back(load);
-				scan_entries.emplace_back(entry_idx, delete_entry);
+				scan_entries.emplace_back(delete_file.manifest_idx, delete_file.entry_idx, delete_manifest, load);
 			}
 			if (seen_loads.insert(load.get()).second) {
 				required_loads.push_back(load);
@@ -696,7 +675,7 @@ void IcebergMultiFileList::ProcessDeletes(const BoundIcebergManifestEntry &data_
 		try {
 			auto scan_result = IcebergDeleteFileScanner::ScanFiles(*delete_context, scan_entries);
 			annotated_lock_guard<annotated_mutex> delete_guard(shared_state->delete_lock);
-			MergeDeleteScanResult(*provider, scan_result);
+			MergeDeleteScanResult(*provider, std::move(scan_result));
 		} catch (std::exception &ex) {
 			scan_error = ErrorData(ex);
 		} catch (...) { // LCOV_EXCL_START
@@ -711,13 +690,20 @@ void IcebergMultiFileList::ProcessDeletes(const BoundIcebergManifestEntry &data_
 		if (load->error.HasError()) {
 			load->error.Throw();
 		}
+		if (load->equality_delete) {
+			result.equality_deletes.emplace_back(*load->equality_delete);
+		}
 	}
-}
 
-unique_ptr<DeleteFilter> IcebergMultiFileList::GetPositionalDeletesForFile(const string &file_path) const {
-	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
-	annotated_lock_guard<annotated_mutex> delete_guard(shared_state->delete_lock);
-	return IcebergDeletePlanner::GetPositionalDeletesForFile(GetDeletePlanningContext(), file_path);
+	{
+		annotated_lock_guard<annotated_mutex> delete_guard(shared_state->delete_lock);
+		auto &positional_delete_data = provider->PositionalDeleteData();
+		auto entry = positional_delete_data.find(data_manifest_entry.entry.data_file.file_path);
+		if (entry != positional_delete_data.end()) {
+			result.positional_deletes = entry->second->ToFilter();
+		}
+	}
+	return result;
 }
 
 shared_ptr<IcebergDeleteData> IcebergMultiFileList::GetExistingPositionalDeleteData(const string &file_path) const {

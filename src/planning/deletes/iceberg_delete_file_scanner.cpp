@@ -22,7 +22,18 @@
 
 namespace duckdb {
 
-using equality_delete_file_index_map_t = unordered_map<sequence_number_t, unordered_map<string, idx_t>>;
+const IcebergManifestEntry &IcebergDeleteScanEntry::GetEntry() const {
+	auto &manifest_entries = manifest.GetManifestEntries();
+	if (entry_idx >= manifest_entries.size()) {
+		throw InternalException("Delete manifest entry index %llu is out of bounds for manifest %llu", entry_idx,
+		                        manifest_idx);
+	}
+	return manifest_entries[entry_idx];
+}
+
+BoundIcebergManifestEntry IcebergDeleteScanEntry::BindEntry() const {
+	return BoundIcebergManifestListEntry(manifest_idx, manifest).BindEntry(GetEntry());
+}
 
 namespace {
 
@@ -52,8 +63,9 @@ static PuffinDeletionVectorVerificationResult VerifyPuffinDeletionVector(FileSys
 	return std::monostate {};
 }
 
-static void ScanPuffinFile(const IcebergDeletePlanningContext &context, const BoundIcebergManifestEntry &bound_entry,
+static void ScanPuffinFile(const IcebergDeletePlanningContext &context, const IcebergDeleteScanEntry &scan_entry,
                            IcebergDeleteScanResult &scan_result) {
+	auto bound_entry = scan_entry.BindEntry();
 	auto &data_file = bound_entry.entry.data_file;
 	if (context.metadata.iceberg_version < 3) {
 		throw InvalidConfigurationException("DeletionVector not supported in Iceberg V%d",
@@ -116,8 +128,9 @@ static optional_ptr<IcebergPositionalDeleteData> TryGetOrCreatePositionDeletes(p
 }
 
 static void ScanPositionalDeleteFile(const IcebergDeletePlanningContext &context,
-                                     const BoundIcebergManifestEntry &bound_entry, DataChunk &result,
+                                     const IcebergDeleteScanEntry &scan_entry, DataChunk &result,
                                      IcebergDeleteScanResult &scan_result) {
+	auto bound_entry = scan_entry.BindEntry();
 	auto names = FlatVector::GetData<string_t>(result.data[0]);
 	auto row_ids = FlatVector::GetData<int64_t>(result.data[1]);
 	if (result.size() == 0) {
@@ -179,36 +192,11 @@ static void ColumnsReferencedByEqualityIds(DataChunk &source, DataChunk &result,
 	result.ReferenceColumns(source, column_ids);
 }
 
-static IcebergEqualityDeleteFile &GetOrCreateEqualityDeleteFile(vector<unique_ptr<IcebergEqualityDeleteFile>> &deletes,
-                                                                idx_t manifest_entry_index,
-                                                                const BoundIcebergManifestEntry &manifest_entry,
-                                                                sequence_number_t sequence_number,
-                                                                equality_delete_file_index_map_t &file_indexes) {
-	auto &data_file = manifest_entry.entry.data_file;
-	auto &sequence_indexes = file_indexes[sequence_number];
-	auto index_entry = sequence_indexes.find(data_file.file_path);
-	if (index_entry != sequence_indexes.end()) {
-		if (index_entry->second >= deletes.size()) {
-			throw InternalException("Equality-delete file index %llu is out of bounds for sequence number %lld",
-			                        index_entry->second, sequence_number);
-		}
-		return *deletes[index_entry->second];
-	}
-
-	auto delete_index = deletes.size();
-	deletes.push_back(make_uniq<IcebergEqualityDeleteFile>(manifest_entry_index));
-	sequence_indexes.emplace(data_file.file_path, delete_index);
-	return *deletes.back();
-}
-
-static void ScanEqualityDeleteFile(const IcebergDeletePlanningContext &context, idx_t manifest_entry_index,
-                                   const BoundIcebergManifestEntry &bound_manifest_entry, DataChunk &source,
-                                   const vector<MultiFileColumnDefinition> &global_columns,
-                                   equality_delete_file_index_map_t &file_indexes,
-                                   IcebergDeleteScanResult &scan_result) {
-	auto &manifest_entry = bound_manifest_entry.entry;
+static void ScanEqualityDeleteFile(const IcebergDeletePlanningContext &context,
+                                   const IcebergDeleteScanEntry &scan_entry, IcebergEqualityDeleteFile &delete_file,
+                                   DataChunk &source, const vector<MultiFileColumnDefinition> &global_columns) {
+	auto &manifest_entry = scan_entry.GetEntry();
 	auto &data_file = manifest_entry.data_file;
-	auto &manifest_file = context.delete_manifests[bound_manifest_entry.manifest_file_idx].entry.file;
 	D_ASSERT(!data_file.equality_ids.empty());
 	D_ASSERT(source.ColumnCount() == global_columns.size());
 	if (source.size() == 0) {
@@ -217,10 +205,6 @@ static void ScanEqualityDeleteFile(const IcebergDeletePlanningContext &context, 
 
 	DataChunk result;
 	ColumnsReferencedByEqualityIds(source, result, global_columns, data_file.equality_ids);
-	const auto sequence_number = manifest_entry.GetSequenceNumber(manifest_file);
-	auto &deletes = scan_result.equality_delete_data[sequence_number];
-	auto &delete_file = GetOrCreateEqualityDeleteFile(deletes, manifest_entry_index, bound_manifest_entry,
-	                                                  sequence_number, file_indexes);
 	auto &equality_values = delete_file.equality_values;
 	if (data_file.record_count < 0) {
 		throw InvalidConfigurationException("Equality delete file '%s' has a negative record count",
@@ -255,7 +239,7 @@ BuildEqualityDeleteSchema(const IcebergTableMetadata &metadata,
 	vector<MultiFileColumnDefinition> schema;
 	unordered_set<int32_t> field_ids;
 	for (auto &scan_entry_ref : scan_entries) {
-		auto &data_file = scan_entry_ref.get().entry.entry.data_file;
+		auto &data_file = scan_entry_ref.get().GetEntry().data_file;
 		for (auto field_id : data_file.equality_ids) {
 			if (!field_ids.insert(field_id).second) {
 				continue;
@@ -297,7 +281,7 @@ static void ScanParquetDeleteFiles(const IcebergDeletePlanningContext &context,
 	delete_file_paths.reserve(scan_entries.size());
 	delete_file_infos.reserve(scan_entries.size());
 	for (auto &scan_entry_ref : scan_entries) {
-		auto &data_file = scan_entry_ref.get().entry.entry.data_file;
+		auto &data_file = scan_entry_ref.get().GetEntry().data_file;
 		D_ASSERT(data_file.content == content);
 		auto delete_file_path = data_file.file_path;
 		if (context.options.allow_moved_paths) {
@@ -349,7 +333,16 @@ static void ScanParquetDeleteFiles(const IcebergDeletePlanningContext &context,
 	auto local_state = delete_scan_function.init_local(execution_context, input, global_state.get());
 	auto &multi_file_local_state = local_state->Cast<MultiFileLocalState>();
 
-	equality_delete_file_index_map_t equality_delete_file_indexes;
+	vector<reference<IcebergEqualityDeleteFile>> equality_delete_files;
+	if (content == IcebergManifestEntryContentType::EQUALITY_DELETES) {
+		for (auto &scan_entry_ref : scan_entries) {
+			auto &scan_entry = scan_entry_ref.get();
+			auto equality_delete =
+			    make_shared_ptr<IcebergEqualityDeleteFile>(scan_entry.GetEntry().data_file.equality_ids);
+			equality_delete_files.emplace_back(*equality_delete);
+			scan_result.equality_delete_data.push_back({scan_entry.load, std::move(equality_delete)});
+		}
+	}
 
 	while (true) {
 		TableFunctionInput function_input(bind_data.get(), local_state.get(), global_state.get());
@@ -365,12 +358,11 @@ static void ScanParquetDeleteFiles(const IcebergDeletePlanningContext &context,
 			                        scan_entries.size());
 		}
 		auto &scan_entry = scan_entries[file_idx].get();
-		auto &bound_manifest_entry = scan_entry.entry;
 		if (content == IcebergManifestEntryContentType::POSITION_DELETES) {
-			ScanPositionalDeleteFile(context, bound_manifest_entry, result, scan_result);
+			ScanPositionalDeleteFile(context, scan_entry, result, scan_result);
 		} else {
-			ScanEqualityDeleteFile(context, scan_entry.manifest_entry_index, bound_manifest_entry, result,
-			                       multi_file_bind_data.reader_bind.schema, equality_delete_file_indexes, scan_result);
+			ScanEqualityDeleteFile(context, scan_entry, equality_delete_files[file_idx].get(), result,
+			                       multi_file_bind_data.reader_bind.schema);
 		}
 	}
 }
@@ -383,8 +375,7 @@ IcebergDeleteScanResult IcebergDeleteFileScanner::ScanFiles(const IcebergDeleteP
 	vector<reference<const IcebergDeleteScanEntry>> positional_delete_entries;
 	vector<reference<const IcebergDeleteScanEntry>> equality_delete_entries;
 	for (auto &scan_entry : entries) {
-		auto &bound_manifest_entry = scan_entry.entry;
-		auto &data_file = bound_manifest_entry.entry.data_file;
+		auto &data_file = scan_entry.GetEntry().data_file;
 		if (StringUtil::CIEquals(data_file.file_format, "parquet")) {
 			switch (data_file.content) {
 			case IcebergManifestEntryContentType::POSITION_DELETES:
@@ -398,7 +389,7 @@ IcebergDeleteScanResult IcebergDeleteFileScanner::ScanFiles(const IcebergDeleteP
 				                                    data_file.file_path, static_cast<uint8_t>(data_file.content));
 			}
 		} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
-			ScanPuffinFile(context, bound_manifest_entry, result);
+			ScanPuffinFile(context, scan_entry, result);
 		} else {
 			throw NotImplementedException(
 			    "File format '%s' not supported for deletes, only supports 'parquet' and 'puffin' currently",

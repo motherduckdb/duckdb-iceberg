@@ -195,6 +195,8 @@ bool IcebergFilePruner::DeleteManifestMatchesDataFile(const IcebergManifestFile 
 		return false;
 	}
 	if (!delete_manifest.partitions.has_partitions) {
+		//! NOTE: This is conservative: the manifest doesn't have partition stats, but the partition spec matches
+		//! So the manifest entries in the delete manifest might still apply
 		return true;
 	}
 

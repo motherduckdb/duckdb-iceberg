@@ -4,18 +4,31 @@
 
 namespace duckdb {
 
+struct IcebergDeleteFileLoadState;
+
 struct IcebergDeleteScanEntry {
-	IcebergDeleteScanEntry(idx_t manifest_entry_index_p, BoundIcebergManifestEntry entry_p)
-	    : manifest_entry_index(manifest_entry_index_p), entry(std::move(entry_p)) {
+	IcebergDeleteScanEntry(idx_t manifest_idx_p, idx_t entry_idx_p, const IcebergManifestListEntry &manifest_p,
+	                       shared_ptr<IcebergDeleteFileLoadState> load_p)
+	    : manifest_idx(manifest_idx_p), entry_idx(entry_idx_p), manifest(manifest_p), load(std::move(load_p)) {
 	}
 
-	idx_t manifest_entry_index;
-	BoundIcebergManifestEntry entry;
+	const IcebergManifestEntry &GetEntry() const;
+	BoundIcebergManifestEntry BindEntry() const;
+
+	idx_t manifest_idx;
+	idx_t entry_idx;
+	const IcebergManifestListEntry &manifest;
+	shared_ptr<IcebergDeleteFileLoadState> load;
+};
+
+struct IcebergEqualityDeleteScanResult {
+	shared_ptr<IcebergDeleteFileLoadState> load;
+	shared_ptr<IcebergEqualityDeleteFile> delete_file;
 };
 
 struct IcebergDeleteScanResult {
 	position_delete_map_t positional_delete_data;
-	equality_delete_map_t equality_delete_data;
+	vector<IcebergEqualityDeleteScanResult> equality_delete_data;
 };
 
 struct IcebergDeleteFileScanner {

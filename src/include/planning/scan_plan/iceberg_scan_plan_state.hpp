@@ -22,6 +22,7 @@ struct IcebergDeleteFileLoadState {
 	std::condition_variable cv;
 	bool complete = false;
 	ErrorData error;
+	shared_ptr<IcebergEqualityDeleteFile> equality_delete;
 };
 
 struct IcebergManifestScanningState {
@@ -69,19 +70,15 @@ struct IcebergScanPlanState {
 	mutable vector<IcebergManifestListEntry> committed_delete_manifests DUCKDB_GUARDED_BY(lock);
 	mutable vector<reference<const IcebergManifestListEntry>> transaction_delete_manifests DUCKDB_GUARDED_BY(lock);
 	mutable vector<shared_ptr<IcebergDeleteManifestLoadState>> delete_manifest_loads DUCKDB_GUARDED_BY(delete_lock);
-	mutable vector<bool> delete_manifest_entries_enumerated DUCKDB_GUARDED_BY(delete_lock);
-	mutable vector<vector<idx_t>> delete_manifest_entry_indexes DUCKDB_GUARDED_BY(delete_lock);
-	mutable vector<BoundIcebergManifestEntry> delete_manifest_entries DUCKDB_GUARDED_BY(delete_lock);
-	mutable vector<shared_ptr<IcebergDeleteFileLoadState>> delete_file_loads DUCKDB_GUARDED_BY(delete_lock);
+	mutable vector<unordered_map<idx_t, shared_ptr<IcebergDeleteFileLoadState>>>
+	    delete_file_loads DUCKDB_GUARDED_BY(delete_lock);
 
 	mutable vector<IcebergManifestListEntry> committed_data_manifests DUCKDB_GUARDED_BY(lock);
 	mutable vector<reference<const IcebergManifestListEntry>> transaction_data_manifests DUCKDB_GUARDED_BY(lock);
 	mutable unique_ptr<IcebergManifestScanningState> data_manifest_read_state DUCKDB_GUARDED_BY(lock);
 
-	//! Declared after manifest owners so references in parsed delete data are destroyed first.
+	//! Declared after manifest owners so references in parsed positional-delete data are destroyed first.
 	mutable unordered_map<string, shared_ptr<IcebergDeleteData>> positional_delete_data DUCKDB_GUARDED_BY(delete_lock);
-	mutable map<sequence_number_t, vector<unique_ptr<IcebergEqualityDeleteFile>>>
-	    equality_delete_data DUCKDB_GUARDED_BY(delete_lock);
 
 	mutable unordered_map<string, vector<IcebergPartitionInfo>> data_file_partition_info DUCKDB_GUARDED_BY(lock);
 };
