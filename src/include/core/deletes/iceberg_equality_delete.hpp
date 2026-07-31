@@ -1,10 +1,7 @@
 #pragma once
 
-#include "duckdb/common/unordered_map.hpp"
-#include "duckdb/common/vector.hpp"
-#include "duckdb/common/types/value.hpp"
 #include "duckdb/common/typedefs.hpp"
-#include "core/metadata/manifest/iceberg_manifest.hpp"
+#include "duckdb/common/types/data_chunk.hpp"
 
 namespace duckdb {
 
@@ -12,25 +9,17 @@ using sequence_number_t = int64_t;
 
 struct IcebergEqualityDeleteFile {
 public:
-	IcebergEqualityDeleteFile(vector<IcebergPartitionInfo> partition_info_p, int32_t partition_spec_id,
-	                          string source_file_path_p = string())
-	    : partition_info(std::move(partition_info_p)), partition_spec_id(partition_spec_id),
-	      source_file_path(std::move(source_file_path_p)) {
+	explicit IcebergEqualityDeleteFile(idx_t manifest_entry_index_p) : manifest_entry_index(manifest_entry_index_p) {
 	}
 	IcebergEqualityDeleteFile(const IcebergEqualityDeleteFile &) = delete;
 	IcebergEqualityDeleteFile &operator=(const IcebergEqualityDeleteFile &) = delete;
-	IcebergEqualityDeleteFile(IcebergEqualityDeleteFile &&) = default;
-	IcebergEqualityDeleteFile &operator=(IcebergEqualityDeleteFile &&) = default;
 
 public:
-	//! The partition info if the equality delete has partition information
-	vector<IcebergPartitionInfo> partition_info;
-	int32_t partition_spec_id;
-	//! Delete file that produced these values; used for explicit REST task references.
-	string source_file_path;
-	//! Raw equality delete values, keyed by Iceberg field-id. These are converted to bound expressions once the
-	//! scan output projection is known.
-	unordered_map<int32_t, vector<Value>> equality_values;
+	//! Index in IcebergScanPlanProvider::DeleteManifestEntries(). Unlike a reference, this remains stable when lazy
+	//! manifest enumeration grows the provider's vector.
+	idx_t manifest_entry_index;
+	//! Columns follow the referenced manifest entry's data_file.equality_ids order.
+	DataChunk equality_values;
 };
 
 } // namespace duckdb

@@ -13,48 +13,66 @@ static void InitializeFromOtherChunk(DataChunk &target, DataChunk &other, const 
 }
 
 static void ColumnsReferencedByEqualityIds(DataChunk &source, DataChunk &result,
-                                           const vector<MultiFileColumnDefinition> &local_columns,
-                                           const vector<string> &source_names, const vector<int32_t> &equality_ids) {
-	// The equality-delete file can physically contain more columns than the reader models for it - e.g. Spark
-	// embeds the partition columns next to the equality-key columns - and not necessarily in the same order. So
-	// resolve each equality field-id to its physical position in 'source' by name rather than by its position in
-	// 'local_columns', which only covers the modeled subset.
-	unordered_map<string, column_t> name_to_source_index;
-	for (column_t i = 0; i < source_names.size(); i++) {
-		name_to_source_index[source_names[i]] = i;
-	}
+                                           const vector<MultiFileColumnDefinition> &global_columns,
+                                           const vector<int32_t> &equality_ids) {
+	D_ASSERT(source.ColumnCount() == global_columns.size());
 
-	//! Map from equality field-id to the physical column index in 'source'.
+	//! The equality scan maps every physical file to this global schema by Iceberg field-id. Map the equality ids
+	//! for this particular delete file back to their positions in the global output chunk.
 	unordered_map<int32_t, column_t> id_to_column;
-	for (auto &col : local_columns) {
+	for (column_t column_idx = 0; column_idx < global_columns.size(); column_idx++) {
+		auto &col = global_columns[column_idx];
 		D_ASSERT(!col.identifier.IsNull());
-		auto entry = name_to_source_index.find(col.name.GetIdentifierName());
-		if (entry == name_to_source_index.end()) {
-			continue;
-		}
-		id_to_column[col.identifier.GetValue<int32_t>()] = entry->second;
+		id_to_column[col.identifier.GetValue<int32_t>()] = column_idx;
 	}
 
 	// column_ids we want to slice.
 	vector<column_t> column_ids;
 	for (auto id : equality_ids) {
-		D_ASSERT(id_to_column.count(id));
-		column_ids.push_back(id_to_column[id]);
+		auto entry = id_to_column.find(id);
+		if (entry == id_to_column.end()) {
+			throw InternalException("Equality-delete field id %d is missing from the global delete schema", id);
+		}
+		column_ids.push_back(entry->second);
 	}
 	//! Take only the relevant columns from the source (equality_delete_file)
 	InitializeFromOtherChunk(result, source, column_ids);
 	result.ReferenceColumns(source, column_ids);
 }
 
-void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntry &bound_manifest_entry,
+static IcebergEqualityDeleteFile &GetOrCreateEqualityDeleteFile(vector<unique_ptr<IcebergEqualityDeleteFile>> &deletes,
+                                                                idx_t manifest_entry_index,
+                                                                const BoundIcebergManifestEntry &manifest_entry,
+                                                                sequence_number_t sequence_number,
+                                                                equality_delete_file_index_map_t &file_indexes) {
+	auto &data_file = manifest_entry.entry.data_file;
+	auto &sequence_indexes = file_indexes[sequence_number];
+	auto index_entry = sequence_indexes.find(data_file.file_path);
+	if (index_entry != sequence_indexes.end()) {
+		if (index_entry->second >= deletes.size()) {
+			throw InternalException("Equality-delete file index %llu is out of bounds for sequence number %lld",
+			                        index_entry->second, sequence_number);
+		}
+		auto &delete_file = *deletes[index_entry->second];
+		return delete_file;
+	}
+
+	auto delete_index = deletes.size();
+	deletes.push_back(make_uniq<IcebergEqualityDeleteFile>(manifest_entry_index));
+	sequence_indexes.emplace(data_file.file_path, delete_index);
+	return *deletes.back();
+}
+
+void IcebergMultiFileList::ScanEqualityDeleteFile(idx_t manifest_entry_index,
+                                                  const BoundIcebergManifestEntry &bound_manifest_entry,
                                                   DataChunk &source,
-                                                  const vector<MultiFileColumnDefinition> &local_columns,
-                                                  const vector<string> &source_names) const {
+                                                  const vector<MultiFileColumnDefinition> &global_columns,
+                                                  equality_delete_file_index_map_t &file_indexes) const {
 	auto &manifest_entry = bound_manifest_entry.entry;
 	auto &data_file = manifest_entry.data_file;
 	auto &manifest_file = GetManifestFileForEntry(bound_manifest_entry, IcebergManifestContentType::DELETE);
 	D_ASSERT(!data_file.equality_ids.empty());
-	D_ASSERT(source.ColumnCount() == source_names.size());
+	D_ASSERT(source.ColumnCount() == global_columns.size());
 
 	auto count = source.size();
 	if (count == 0) {
@@ -64,26 +82,42 @@ void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntr
 	// make result only reference the columns from source (equality delete file) that have equality_ids
 	// mentioned in the manifest file
 	DataChunk result;
-	ColumnsReferencedByEqualityIds(source, result, local_columns, source_names, data_file.equality_ids);
+	ColumnsReferencedByEqualityIds(source, result, global_columns, data_file.equality_ids);
 
 	const auto sequence_number = manifest_entry.GetSequenceNumber(manifest_file);
 	//! Get or create the equality delete data for this sequence number
 	auto &equality_delete_data = GetEqualityDeleteData();
 	auto &deletes = equality_delete_data[sequence_number];
 
-	deletes.emplace_back(data_file.partition_info, manifest_file.partition_spec_id, data_file.file_path);
-	auto &equality_values = deletes.back().equality_values;
+	auto &delete_file = GetOrCreateEqualityDeleteFile(deletes, manifest_entry_index, bound_manifest_entry,
+	                                                  sequence_number, file_indexes);
+	auto &equality_values = delete_file.equality_values;
 	D_ASSERT(result.ColumnCount() == data_file.equality_ids.size());
-
-	for (idx_t col_idx = 0; col_idx < result.ColumnCount(); col_idx++) {
-		auto &field_id = data_file.equality_ids[col_idx];
-		auto &vec = result.data[col_idx];
-		auto &values = equality_values[field_id];
-		values.reserve(count);
-		for (idx_t i = 0; i < count; i++) {
-			values.push_back(vec.GetValue(i));
+	if (data_file.record_count < 0) {
+		throw InvalidConfigurationException("Equality delete file '%s' has a negative record count",
+		                                    data_file.file_path);
+	}
+	auto expected_row_count = NumericCast<idx_t>(data_file.record_count);
+	if (equality_values.size() > expected_row_count || count > expected_row_count - equality_values.size()) {
+		throw InvalidConfigurationException(
+		    "Equality delete file '%s' contains more rows than its record count of %llu", data_file.file_path,
+		    expected_row_count);
+	}
+	if (equality_values.ColumnCount() == 0) {
+		equality_values.Initialize(context, result.GetTypes(), expected_row_count);
+	} else {
+		if (equality_values.ColumnCount() != result.ColumnCount()) {
+			throw InvalidConfigurationException("Equality delete file '%s' produced chunks with differing schemas",
+			                                    data_file.file_path);
+		}
+		for (idx_t column_idx = 0; column_idx < result.ColumnCount(); column_idx++) {
+			if (equality_values.data[column_idx].GetType() != result.data[column_idx].GetType()) {
+				throw InvalidConfigurationException("Equality delete file '%s' produced chunks with differing schemas",
+				                                    data_file.file_path);
+			}
 		}
 	}
+	equality_values.Append(result, VectorAppendMode::ERROR_ON_NO_SPACE);
 }
 
 } // namespace duckdb

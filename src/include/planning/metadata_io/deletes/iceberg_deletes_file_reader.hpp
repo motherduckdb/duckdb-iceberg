@@ -12,14 +12,17 @@
 
 namespace duckdb {
 
-// pass a open file info to the delete scan
+// Pass the already resolved open-file information to the delete scan.
 struct IcebergDeleteScanInfo : public TableFunctionInfo {
 public:
-	IcebergDeleteScanInfo(OpenFileInfo file_info) : file_info(file_info) {
+	IcebergDeleteScanInfo(vector<OpenFileInfo> file_infos, vector<MultiFileColumnDefinition> schema)
+	    : file_infos(std::move(file_infos)), schema(std::move(schema)) {
 	}
 
 public:
-	OpenFileInfo file_info;
+	vector<OpenFileInfo> file_infos;
+	//! Global schema shared by every Parquet file in this positional or equality delete batch.
+	vector<MultiFileColumnDefinition> schema;
 };
 
 struct IcebergDeleteFileReader : public MultiFileReader {
@@ -27,6 +30,8 @@ struct IcebergDeleteFileReader : public MultiFileReader {
 
 	shared_ptr<MultiFileList> CreateFileList(ClientContext &context, const vector<string> &paths,
 	                                         const FileGlobInput &glob_input) override;
+	bool Bind(MultiFileOptions &options, MultiFileList &files, vector<LogicalType> &return_types,
+	          vector<Identifier> &names, MultiFileReaderBindData &bind_data) override;
 
 	static unique_ptr<MultiFileReader> CreateInstance(const TableFunction &table);
 
