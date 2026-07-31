@@ -1647,6 +1647,8 @@
         "test/sql/storage/compression/alp/alp_corrupted_exception_position.test",
         "test/sql/storage/compression/alprd/alprd_corrupted_exception_position.test",
         "test/sql/storage/compression/dictionary/dict_corrupted_offset.test",
+        "test/sql/alter/struct/rename_col_nested_struct.test",
+        "test/sql/attach/attach_enums.test",
         "test/sql/storage/types/variant/variant_duplicate_keys_shredding.test"
       ]
     }
