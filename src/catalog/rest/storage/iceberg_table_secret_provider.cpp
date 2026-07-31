@@ -158,29 +158,34 @@ unique_ptr<SecretEntry> IcebergTableSecretProvider::GetHTTPSecretForCatalog(Clie
 }
 
 static CreateSecretInput ReVendVendedCredentials(ClientContext &context, CreateSecretInput &input) {
-	auto catalog_name = GetRequiredRefreshOption(input, "catalog_name");
-	auto schema_name = GetRequiredRefreshOption(input, "schema");
-	auto table_name = GetRequiredRefreshOption(input, "table");
+	auto catalog_name = Identifier(GetRequiredRefreshOption(input, "catalog_name"));
+	auto schema_name = Identifier(GetRequiredRefreshOption(input, "schema"));
+	auto table_name = Identifier(GetRequiredRefreshOption(input, "table"));
 
 	auto &catalog = Catalog::GetCatalog(context, Identifier(catalog_name));
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
-	auto &iceberg_transaction = IcebergTransaction::Get(context, ic_catalog);
+	CatalogTransaction catalog_transaction(catalog, context);
 
-	auto schema_entry = ic_catalog.GetSchemas().GetEntry(context, schema_name, OnEntryNotFound::THROW_EXCEPTION);
+	auto schema_entry =
+	    ic_catalog.GetSchemas().GetEntry(context, schema_name.GetIdentifierName(), OnEntryNotFound::THROW_EXCEPTION);
 	auto &iceberg_schema = schema_entry->Cast<IcebergSchemaEntry>();
-	const auto table_key = IcebergTableInformation::GetTableKey(iceberg_schema.namespace_items, table_name);
-	auto latest_state = iceberg_transaction.GetLatestTableState(table_key);
-	D_ASSERT(latest_state);
-	auto &table_info = latest_state->GetInfo();
+	EntryLookupInfo lookup(CatalogType::TABLE_ENTRY, QualifiedName(catalog_name, schema_name, table_name));
+	auto table_entry_p = iceberg_schema.LookupEntry(catalog_transaction, lookup);
+	if (!table_entry_p) {
+		throw CatalogException("Table by name %s could not be located in secret refresh", table_name);
+	}
+	auto &table_entry = table_entry_p->Cast<IcebergTableEntry>();
+	auto &table_info = table_entry.table_info;
 
-	auto get_table_result = IRCAPI::GetTable(context, ic_catalog, iceberg_schema, table_name);
-	if (get_table_result.error_) {
+	auto refreshed_credentials =
+	    IRCAPI::GetTableCredentials(context, ic_catalog, iceberg_schema, table_name.GetIdentifierName());
+	if (refreshed_credentials.error_) {
 		throw HTTPException(StringUtil::Format("Could not refresh Iceberg vended credentials for table '%s': "
 		                                       "GetTableInformation returned response code %s with message \"%s\"",
-		                                       table_name, EnumUtil::ToString(get_table_result.status_),
-		                                       get_table_result.error_->_error.message));
+		                                       table_name, EnumUtil::ToString(refreshed_credentials.status_),
+		                                       refreshed_credentials.error_->_error.message));
 	}
-	auto credentials = table_info.GetVendedCredentials(context, *get_table_result.result_->storage_credentials);
+	auto credentials = table_info.GetVendedCredentials(context, refreshed_credentials.result_->storage_credentials);
 
 	optional_ptr<CreateSecretInput> match;
 	if (credentials.config) {

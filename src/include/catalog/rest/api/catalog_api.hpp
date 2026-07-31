@@ -78,6 +78,9 @@ public:
 	                                                                               IcebergCatalog &catalog,
 	                                                                               const IcebergSchemaEntry &schema,
 	                                                                               const string &table_name);
+	static APIResult<unique_ptr<const rest_api_objects::LoadCredentialsResponse>>
+	GetTableCredentials(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema,
+	                    const string &table_name);
 	static APIResult<unique_ptr<const rest_api_objects::GetNamespaceResponse>>
 	GetNamespace(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema);
 	static vector<IRCAPISchema> GetSchemas(ClientContext &context, IcebergCatalog &catalog,
