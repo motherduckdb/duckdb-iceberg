@@ -1,9 +1,18 @@
-#include "planning/iceberg_scan_plan_provider.hpp"
+#include "planning/scan_plan/iceberg_scan_plan_provider.hpp"
 
+#include "planning/iceberg_multi_file_list.hpp"
+#include "planning/pruning/iceberg_table_filter.hpp"
+#include "planning/scan_order/iceberg_scan_order.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/api/iceberg_expression.hpp"
+#include "catalog/rest/api/iceberg_type.hpp"
 #include "common/iceberg_utils.hpp"
+#include "duckdb/common/numeric_utils.hpp"
 #include "duckdb/logging/logger.hpp"
 #include "duckdb/parallel/task_notifier.hpp"
+#include "duckdb/storage/table/row_group_reorderer.hpp"
 #include "iceberg_logging.hpp"
 #include "planning/metadata_io/avro/avro_scan.hpp"
 #include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
@@ -89,31 +98,32 @@ static bool TryReadBatch(ManifestEntryReadState &read_state, IcebergDataViewCurs
 
 } // namespace
 
-ClientSideScanPlanProvider::ClientSideScanPlanProvider(IcebergMultiFileListSharedState &shared_state_p)
-    : shared_state(shared_state_p) {
+ClientSideScanPlanProvider::ClientSideScanPlanProvider(IcebergScanPlanState &shared_state_p,
+                                                       IcebergScanPlanContext context_p)
+    : shared_state(shared_state_p), context(std::move(context_p)) {
 }
 
-void ClientSideScanPlanProvider::LoadManifestList(const IcebergMultiFileList &file_list) {
+void ClientSideScanPlanProvider::LoadManifestList() {
 	if (shared_state.manifest_list_loaded) {
 		return;
 	}
 
-	auto &snapshot_info = shared_state.scan_info->snapshot_info;
+	auto &snapshot_info = context.snapshot;
 	if (snapshot_info.snapshot) {
-		auto iceberg_path = file_list.GetPath();
+		auto &iceberg_path = context.path;
 		auto &snapshot = *snapshot_info.snapshot;
-		auto &metadata = file_list.GetMetadata();
-		auto &fs = FileSystem::GetFileSystem(shared_state.context);
+		auto &metadata = context.metadata;
+		auto &fs = context.fs;
 
 		vector<IcebergManifestListEntry> manifest_list_entries;
-		if (file_list.HasTransactionData() && !file_list.GetTransactionData().alters.empty()) {
-			manifest_list_entries = file_list.GetTransactionData().existing_manifest_list;
+		if (context.transaction_data && !context.transaction_data->alters.empty()) {
+			manifest_list_entries = context.transaction_data->existing_manifest_list;
 		} else {
-			auto manifest_list_full_path = file_list.options.allow_moved_paths
+			auto manifest_list_full_path = context.options.allow_moved_paths
 			                                   ? IcebergUtils::GetFullPath(iceberg_path, snapshot.manifest_list, fs)
 			                                   : snapshot.manifest_list;
-			auto scan = AvroScan::ScanManifestList(snapshot_info, metadata, shared_state.context,
-			                                       manifest_list_full_path, manifest_list_entries);
+			auto scan = AvroScan::ScanManifestList(snapshot_info, metadata, context.context, manifest_list_full_path,
+			                                       manifest_list_entries);
 			auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
 			while (!manifest_list_reader->Finished()) {
 				manifest_list_reader->Read();
@@ -139,8 +149,8 @@ void ClientSideScanPlanProvider::LoadManifestList(const IcebergMultiFileList &fi
 		}
 	}
 
-	if (file_list.HasTransactionData()) {
-		for (auto &alter_p : file_list.GetTransactionData().alters) {
+	if (context.transaction_data) {
+		for (auto &alter_p : context.transaction_data->alters) {
 			for (auto &manifest_list_entry : alter_p.get().GetManifestFiles()) {
 				switch (manifest_list_entry.file.content) {
 				case IcebergManifestContentType::DATA:
@@ -171,7 +181,7 @@ void ClientSideScanPlanProvider::LoadManifestList(const IcebergMultiFileList &fi
 	           DeleteManifests().size() + shared_state.transaction_delete_manifests.size());
 }
 
-void ClientSideScanPlanProvider::StartDataManifestScan(const IcebergMultiFileList &file_list) {
+void ClientSideScanPlanProvider::StartDataManifestScan(const vector<bool> &matching_manifests, idx_t filter_count) {
 	if (shared_state.data_manifest_scan_started) {
 		return;
 	}
@@ -180,7 +190,7 @@ void ClientSideScanPlanProvider::StartDataManifestScan(const IcebergMultiFileLis
 	const auto committed_manifest_count = DataManifests().size();
 	vector<idx_t> selected_committed_manifests;
 	for (idx_t manifest_idx = 0; manifest_idx < committed_manifest_count; manifest_idx++) {
-		if (file_list.data_manifest_matches[manifest_idx]) {
+		if (matching_manifests[manifest_idx]) {
 			selected_committed_manifests.push_back(manifest_idx);
 		}
 	}
@@ -188,7 +198,7 @@ void ClientSideScanPlanProvider::StartDataManifestScan(const IcebergMultiFileLis
 	for (idx_t transaction_idx = 0; transaction_idx < shared_state.transaction_data_manifests.size();
 	     transaction_idx++) {
 		auto manifest_idx = committed_manifest_count + transaction_idx;
-		if (!file_list.data_manifest_matches[manifest_idx]) {
+		if (!matching_manifests[manifest_idx]) {
 			continue;
 		}
 		auto &manifest = shared_state.transaction_data_manifests[transaction_idx].get();
@@ -196,9 +206,9 @@ void ClientSideScanPlanProvider::StartDataManifestScan(const IcebergMultiFileLis
 	}
 
 	if (!selected_committed_manifests.empty()) {
-		auto data_scan = AvroScan::ScanManifest(
-		    file_list.GetSnapshot(), DataManifests(), file_list.options, shared_state.fs, file_list.GetPath(),
-		    file_list.GetMetadata(), shared_state.context, &shared_state.read_state, selected_committed_manifests);
+		auto data_scan = AvroScan::ScanManifest(context.snapshot, DataManifests(), context.options, context.fs,
+		                                        context.path, context.metadata, context.context,
+		                                        &shared_state.read_state, selected_committed_manifests);
 		shared_state.data_manifest_read_state =
 		    make_uniq<IcebergManifestScanningState>(shared_state.context, std::move(data_scan), DataManifests());
 
@@ -212,17 +222,16 @@ void ClientSideScanPlanProvider::StartDataManifestScan(const IcebergMultiFileLis
 	}
 
 	idx_t selected_manifest_count = 0;
-	for (auto matches : file_list.data_manifest_matches) {
+	for (auto matches : matching_manifests) {
 		selected_manifest_count += matches;
 	}
 	DUCKDB_LOG(shared_state.context, IcebergLogType,
 	           "Iceberg metadata phase=data_manifest_scan_started selected_data_manifests=%llu "
 	           "total_data_manifests=%llu filters=%llu",
-	           selected_manifest_count, file_list.data_manifest_matches.size(), file_list.table_filters.FilterCount());
+	           selected_manifest_count, matching_manifests.size(), filter_count);
 }
 
-void ClientSideScanPlanProvider::ReadDeleteManifests(const IcebergMultiFileList &file_list,
-                                                     const vector<idx_t> &manifest_indexes) {
+void ClientSideScanPlanProvider::ReadDeleteManifests(const vector<idx_t> &manifest_indexes, idx_t filter_count) {
 	shared_ptr<IcebergDeleteManifestLoadState> new_load;
 	vector<shared_ptr<IcebergDeleteManifestLoadState>> required_loads;
 	idx_t committed_manifest_count;
@@ -277,9 +286,8 @@ void ClientSideScanPlanProvider::ReadDeleteManifests(const IcebergMultiFileList 
 		//! At least one of the manifests we need aren't referenced yet, need to start a scan for it/them
 		ErrorData load_error;
 		try {
-			auto scan =
-			    AvroScan::ScanManifest(file_list.GetSnapshot(), new_load->manifests, file_list.options, shared_state.fs,
-			                           file_list.GetPath(), file_list.GetMetadata(), shared_state.context);
+			auto scan = AvroScan::ScanManifest(context.snapshot, new_load->manifests, context.options, context.fs,
+			                                   context.path, context.metadata, context.context);
 			new_load->scan_state = make_shared_ptr<IcebergManifestScanningState>(shared_state.context, std::move(scan),
 			                                                                     new_load->manifests);
 
@@ -294,8 +302,7 @@ void ClientSideScanPlanProvider::ReadDeleteManifests(const IcebergMultiFileList 
 			DUCKDB_LOG(shared_state.context, IcebergLogType,
 			           "Iceberg metadata phase=delete_manifest_scan_started selected_delete_manifests=%llu "
 			           "total_delete_manifests=%llu filters=%llu",
-			           new_load->manifest_indexes.size(), committed_manifest_count,
-			           file_list.table_filters.FilterCount());
+			           new_load->manifest_indexes.size(), committed_manifest_count, filter_count);
 			executor.WorkOnTasks();
 
 			annotated_lock_guard<annotated_mutex> guard(shared_state.lock);
@@ -329,11 +336,10 @@ void ClientSideScanPlanProvider::ReadDeleteManifests(const IcebergMultiFileList 
 	}
 }
 
-void ClientSideScanPlanProvider::EnumerateDeleteManifestEntries(const IcebergMultiFileList &file_list,
-                                                                const vector<idx_t> &manifest_indexes) {
+void ClientSideScanPlanProvider::EnumerateDeleteManifestEntries(const vector<idx_t> &manifest_indexes) {
 	optional_ptr<const case_insensitive_map_t<string>> transactional_delete_files;
-	if (file_list.HasTransactionData()) {
-		transactional_delete_files = file_list.GetTransactionData().transactional_delete_files;
+	if (context.transaction_data) {
+		transactional_delete_files = context.transaction_data->transactional_delete_files;
 	}
 	auto committed_manifest_count = DeleteManifests().size();
 	auto total_manifest_count = committed_manifest_count + shared_state.transaction_delete_manifests.size();
@@ -449,84 +455,6 @@ position_delete_map_t &ClientSideScanPlanProvider::PositionalDeleteData() {
 
 equality_delete_map_t &ClientSideScanPlanProvider::EqualityDeleteData() {
 	return shared_state.equality_delete_data;
-}
-
-ServerSideScanPlanProvider::ServerSideScanPlanProvider(IcebergServerSideScanPlan plan_p) : plan(std::move(plan_p)) {
-	delete_manifest_entries_enumerated.resize(plan.delete_manifests.size(), false);
-}
-
-void ServerSideScanPlanProvider::LoadManifestList(const IcebergMultiFileList &file_list) {
-}
-
-void ServerSideScanPlanProvider::ReadDeleteManifests(const IcebergMultiFileList &file_list,
-                                                     const vector<idx_t> &manifest_indexes) {
-}
-
-void ServerSideScanPlanProvider::StartDataManifestScan(const IcebergMultiFileList &file_list) {
-	if (data_manifest_scan_started) {
-		return;
-	}
-	data_manifest_scan_started = true;
-	for (idx_t i = 0; i < plan.data_manifests.size(); i++) {
-		read_state.PushBatch(ManifestReadBatch {i, 0, plan.data_manifests[i].GetManifestEntries().size()});
-	}
-}
-
-void ServerSideScanPlanProvider::EnumerateDeleteManifestEntries(const IcebergMultiFileList &file_list,
-                                                                const vector<idx_t> &manifest_indexes) {
-	for (auto manifest_idx : manifest_indexes) {
-		if (manifest_idx >= plan.delete_manifests.size()) {
-			throw InternalException("Selected server-side delete manifest index %llu is out of bounds", manifest_idx);
-		}
-		if (delete_manifest_entries_enumerated[manifest_idx]) {
-			continue;
-		}
-		auto &manifest_list_entry = plan.delete_manifests[manifest_idx];
-		auto manifest = BoundIcebergManifestListEntry(manifest_idx, manifest_list_entry);
-		for (auto &manifest_entry : manifest_list_entry.GetManifestEntries()) {
-			if (manifest_entry.status != IcebergManifestEntryStatusType::DELETED) {
-				delete_manifest_entries.push_back(manifest.BindEntry(manifest_entry));
-			}
-		}
-		delete_manifest_entries_enumerated[manifest_idx] = true;
-	}
-}
-
-bool ServerSideScanPlanProvider::TryGetNextBatch(IcebergDataViewCursor &cursor) {
-	return cursor.has_current_batch || TryReadBatch(read_state, cursor);
-}
-
-void ServerSideScanPlanProvider::FinishScanTasks() {
-}
-
-bool ServerSideScanPlanProvider::DeleteFileAppliesToDataFile(const string &data_file_path,
-                                                             const string &delete_file_path) const {
-	auto refs = plan.delete_files_by_data_file.find(data_file_path);
-	return refs != plan.delete_files_by_data_file.end() && refs->second.count(delete_file_path);
-}
-
-vector<IcebergManifestListEntry> &ServerSideScanPlanProvider::DataManifests() {
-	return plan.data_manifests;
-}
-
-vector<IcebergManifestListEntry> &ServerSideScanPlanProvider::DeleteManifests() {
-	return plan.delete_manifests;
-}
-
-idx_t &ServerSideScanPlanProvider::NextDeleteEntryToProcess() {
-	return next_delete_entry_to_process;
-}
-
-vector<BoundIcebergManifestEntry> &ServerSideScanPlanProvider::DeleteManifestEntries() {
-	return delete_manifest_entries;
-}
-
-position_delete_map_t &ServerSideScanPlanProvider::PositionalDeleteData() {
-	return positional_delete_data;
-}
-
-equality_delete_map_t &ServerSideScanPlanProvider::EqualityDeleteData() {
-	return equality_delete_data;
 }
 
 } // namespace duckdb

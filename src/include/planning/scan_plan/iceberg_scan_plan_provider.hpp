@@ -1,19 +1,44 @@
 #pragma once
 
-#include "planning/iceberg_multi_file_list.hpp"
 #include "catalog/rest/api/iceberg_scan_planning.hpp"
+#include "planning/deletes/iceberg_delete_planner.hpp"
+#include "planning/iceberg_manifest_read_state.hpp"
+#include "planning/scan_plan/iceberg_scan_plan_state.hpp"
+#include "planning/snapshot/iceberg_scan_info.hpp"
 
 namespace duckdb {
+
+class ClientContext;
+class FileSystem;
+class IcebergTableEntry;
+class IcebergScanOrder;
+struct IcebergTableFilters;
+struct IcebergTransactionData;
+
+struct IcebergScanPlanContext {
+	ClientContext &context;
+	FileSystem &fs;
+	const string &path;
+	const IcebergOptions &options;
+	const IcebergSnapshotScanInfo &snapshot;
+	const IcebergTableMetadata &metadata;
+	const IcebergTableSchema &schema;
+	optional_ptr<const IcebergTransactionData> transaction_data;
+};
 
 class IcebergScanPlanProvider {
 public:
 	virtual ~IcebergScanPlanProvider() = default;
 
-	virtual void LoadManifestList(const IcebergMultiFileList &file_list) = 0;
-	virtual void StartDataManifestScan(const IcebergMultiFileList &file_list) = 0;
-	virtual void ReadDeleteManifests(const IcebergMultiFileList &file_list, const vector<idx_t> &manifest_indexes) = 0;
-	virtual void EnumerateDeleteManifestEntries(const IcebergMultiFileList &file_list,
-	                                            const vector<idx_t> &manifest_indexes) = 0;
+	static unique_ptr<IcebergScanPlanProvider>
+	Create(IcebergScanPlanState &shared_state, IcebergScanPlanContext context,
+	       optional_ptr<IcebergTableEntry> table_entry, const IcebergTableFilters &table_filters,
+	       const IcebergScanOrder &scan_order, bool server_side_planning_enabled);
+
+	virtual void LoadManifestList() = 0;
+	virtual void StartDataManifestScan(const vector<bool> &matching_manifests, idx_t filter_count) = 0;
+	virtual void ReadDeleteManifests(const vector<idx_t> &manifest_indexes, idx_t filter_count) = 0;
+	virtual void EnumerateDeleteManifestEntries(const vector<idx_t> &manifest_indexes) = 0;
 	virtual bool TryGetNextBatch(IcebergDataViewCursor &cursor) = 0;
 	virtual void FinishScanTasks() = 0;
 	virtual bool DeleteFileAppliesToDataFile(const string &data_file_path, const string &delete_file_path) const = 0;
@@ -27,14 +52,13 @@ public:
 
 class ClientSideScanPlanProvider final : public IcebergScanPlanProvider {
 public:
-	explicit ClientSideScanPlanProvider(IcebergMultiFileListSharedState &shared_state);
+	ClientSideScanPlanProvider(IcebergScanPlanState &shared_state, IcebergScanPlanContext context);
 
-	void LoadManifestList(const IcebergMultiFileList &file_list) override DUCKDB_REQUIRES(shared_state.lock);
-	void StartDataManifestScan(const IcebergMultiFileList &file_list) override
-	    DUCKDB_REQUIRES(shared_state.lock, file_list.shared_state->lock);
-	void ReadDeleteManifests(const IcebergMultiFileList &file_list, const vector<idx_t> &manifest_indexes) override;
-	void EnumerateDeleteManifestEntries(const IcebergMultiFileList &file_list,
-	                                    const vector<idx_t> &manifest_indexes) override
+	void LoadManifestList() override DUCKDB_REQUIRES(shared_state.lock);
+	void StartDataManifestScan(const vector<bool> &matching_manifests, idx_t filter_count) override
+	    DUCKDB_REQUIRES(shared_state.lock);
+	void ReadDeleteManifests(const vector<idx_t> &manifest_indexes, idx_t filter_count) override;
+	void EnumerateDeleteManifestEntries(const vector<idx_t> &manifest_indexes) override
 	    DUCKDB_REQUIRES(shared_state.lock, shared_state.delete_lock);
 	bool TryGetNextBatch(IcebergDataViewCursor &cursor) override DUCKDB_REQUIRES(shared_state.lock);
 	void FinishScanTasks() override DUCKDB_REQUIRES(shared_state.lock);
@@ -47,18 +71,18 @@ public:
 	equality_delete_map_t &EqualityDeleteData() override DUCKDB_REQUIRES(shared_state.delete_lock);
 
 private:
-	IcebergMultiFileListSharedState &shared_state;
+	IcebergScanPlanState &shared_state;
+	IcebergScanPlanContext context;
 };
 
 class ServerSideScanPlanProvider final : public IcebergScanPlanProvider {
 public:
 	explicit ServerSideScanPlanProvider(IcebergServerSideScanPlan plan);
 
-	void LoadManifestList(const IcebergMultiFileList &file_list) override;
-	void StartDataManifestScan(const IcebergMultiFileList &file_list) override;
-	void ReadDeleteManifests(const IcebergMultiFileList &file_list, const vector<idx_t> &manifest_indexes) override;
-	void EnumerateDeleteManifestEntries(const IcebergMultiFileList &file_list,
-	                                    const vector<idx_t> &manifest_indexes) override;
+	void LoadManifestList() override;
+	void StartDataManifestScan(const vector<bool> &matching_manifests, idx_t filter_count) override;
+	void ReadDeleteManifests(const vector<idx_t> &manifest_indexes, idx_t filter_count) override;
+	void EnumerateDeleteManifestEntries(const vector<idx_t> &manifest_indexes) override;
 	bool TryGetNextBatch(IcebergDataViewCursor &cursor) override;
 	void FinishScanTasks() override;
 	bool DeleteFileAppliesToDataFile(const string &data_file_path, const string &delete_file_path) const override;
