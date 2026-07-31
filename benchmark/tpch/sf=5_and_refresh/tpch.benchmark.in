@@ -1,0 +1,93 @@
+# name: ${FILE_PATH}
+# description: ${DESCRIPTION}
+# group: [sf1]
+
+argument sf 5
+
+argument data_dir data/persistent/benchmark/tpch/sf=5/
+
+name Iceberg Q${QUERY_NUMBER_PADDED}
+group tpch
+subgroup sf${sf}
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+require tpch
+
+cache_file tpch_sf${sf}_iceberg.db
+
+load
+ATTACH ':memory:' AS mem;
+USE mem;
+CALL dbgen(sf=${sf});
+CREATE SECRET (
+    TYPE S3,
+    KEY_ID 'admin',
+    SECRET 'password',
+    ENDPOINT '127.0.0.1:9000',
+    URL_STYLE 'path',
+    USE_SSL 0
+);
+ATTACH '' AS my_datalake (
+    TYPE ICEBERG,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    ENDPOINT 'http://127.0.0.1:8181',
+    DEFAULT_SCHEMA 'default'
+);
+USE my_datalake;
+INSERT INTO orders SELECT * FROM read_parquet('${data_dir}/orders_u1.parquet');
+INSERT INTO lineitem SELECT * FROM read_parquet('${data_dir}/lineitem_u1.parquet');
+DELETE FROM orders   WHERE o_orderkey IN (SELECT o_orderkey FROM read_parquet('${data_dir}/delete_set_1.parquet'));
+DELETE FROM lineitem WHERE l_orderkey IN (SELECT o_orderkey FROM read_parquet('${data_dir}/delete_set_1.parquet'));
+INSERT INTO orders SELECT * FROM read_parquet('${data_dir}/orders_u2.parquet');
+INSERT INTO lineitem SELECT * FROM read_parquet('${data_dir}/lineitem_u2.parquet');
+DELETE FROM orders   WHERE o_orderkey IN (SELECT o_orderkey FROM read_parquet('${data_dir}/delete_set_2.parquet'));
+DELETE FROM lineitem WHERE l_orderkey IN (SELECT o_orderkey FROM read_parquet('${data_dir}/delete_set_2.parquet'));
+INSERT INTO orders SELECT * FROM read_parquet('${data_dir}/orders_u3.parquet');
+INSERT INTO lineitem SELECT * FROM read_parquet('${data_dir}/lineitem_u3.parquet');
+DELETE FROM orders   WHERE o_orderkey IN (SELECT o_orderkey FROM read_parquet('${data_dir}/delete_set_3.parquet'));
+DELETE FROM lineitem WHERE l_orderkey IN (SELECT o_orderkey FROM read_parquet('${data_dir}/delete_set_3.parquet'));
+INSERT INTO orders SELECT * FROM read_parquet('${data_dir}/orders_u4.parquet');
+INSERT INTO lineitem SELECT * FROM read_parquet('${data_dir}/lineitem_u4.parquet');
+DELETE FROM orders   WHERE o_orderkey IN (SELECT o_orderkey FROM read_parquet('${data_dir}/delete_set_4.parquet'));
+DELETE FROM lineitem WHERE l_orderkey IN (SELECT o_orderkey FROM read_parquet('${data_dir}/delete_set_4.parquet'));
+INSERT INTO orders SELECT * FROM read_parquet('${data_dir}/orders_u5.parquet');
+INSERT INTO lineitem SELECT * FROM read_parquet('${data_dir}/lineitem_u5.parquet');
+DELETE FROM orders   WHERE o_orderkey IN (SELECT o_orderkey FROM read_parquet('${data_dir}/delete_set_5.parquet'));
+DELETE FROM lineitem WHERE l_orderkey IN (SELECT o_orderkey FROM read_parquet('${data_dir}/delete_set_5.parquet'));
+
+
+
+reload
+ATTACH '' AS my_datalake (
+    TYPE ICEBERG,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    ENDPOINT 'http://127.0.0.1:8181',
+    DEFAULT_SCHEMA 'default'
+);
+DROP TABLE IF EXISTS my_datalake."default".customer;
+DROP TABLE IF EXISTS my_datalake."default".lineitem;
+DROP TABLE IF EXISTS my_datalake."default".nation;
+DROP TABLE IF EXISTS my_datalake."default".orders;
+DROP TABLE IF EXISTS my_datalake."default".part;
+DROP TABLE IF EXISTS my_datalake."default".partsupp;
+DROP TABLE IF EXISTS my_datalake."default".region;
+DROP TABLE IF EXISTS my_datalake."default".supplier;
+DROP SCHEMA IF EXISTS my_datalake."default";
+CREATE SCHEMA IF NOT EXISTS my_datalake."default";
+COPY FROM DATABASE mem TO my_datalake;
+USE my_datalake;
+DETACH mem;
+
+run 
+set enable_external_file_cache=false;
+pragma tpch(${QUERY_NUMBER_PADDED});
+
