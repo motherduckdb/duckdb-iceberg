@@ -39,6 +39,8 @@ attach or replace 'arn:aws:s3tables:us-east-2:840140254803:bucket/iceberg-testin
 	ENDPOINT 's3tables.us-east-2.amazonaws.com/iceberg'
 );
 
+set ignore_error_messages
+
 query T nosort tables_1
 show all tables;
 ----

@@ -11,6 +11,8 @@ require aws
 
 require tpch
 
+set ignore_error_messages
+
 mode skip
 
 # TO BE RUN LOCALLY ONLY

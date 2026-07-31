@@ -30,6 +30,8 @@ attach or replace 'arn:aws:s3tables:us-east-2:840140254803:bucket/iceberg-testin
     ENDPOINT_TYPE S3_TABLES
 );
 
+set ignore_error_messages
+
 statement ok
 create schema IF NOT EXISTS s3_catalog.test_create_schema;
 

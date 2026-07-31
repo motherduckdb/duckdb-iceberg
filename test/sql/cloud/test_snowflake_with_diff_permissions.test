@@ -20,6 +20,8 @@ require httpfs
 
 require aws
 
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
 
 statement ok
 create secret test_namespace_permissions (
