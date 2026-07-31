@@ -6,6 +6,7 @@ namespace duckdb {
 
 struct IcebergDeleteFileLoadState;
 
+//! Input to ScanFiles, so it can run without holding the (delete_)lock
 struct IcebergDeleteScanEntry {
 	IcebergDeleteScanEntry(idx_t manifest_idx_p, idx_t entry_idx_p, const IcebergManifestListEntry &manifest_p,
 	                       shared_ptr<IcebergDeleteFileLoadState> load_p)
@@ -18,14 +19,19 @@ struct IcebergDeleteScanEntry {
 	idx_t manifest_idx;
 	idx_t entry_idx;
 	const IcebergManifestListEntry &manifest;
+	//! The shared LoadState of the delete file to populate
 	shared_ptr<IcebergDeleteFileLoadState> load;
 };
 
+//! Intermediate to store the created delete file before adding it to the LoadState
 struct IcebergEqualityDeleteScanResult {
+	//! The LoadState to store the result into, after grabbing the lock
 	shared_ptr<IcebergDeleteFileLoadState> load;
+	//! The resulting equality delete data
 	shared_ptr<IcebergEqualityDeleteFile> delete_file;
 };
 
+//! Grouped result of all delete files scanned for a data file
 struct IcebergDeleteScanResult {
 	position_delete_map_t positional_delete_data;
 	vector<IcebergEqualityDeleteScanResult> equality_delete_data;
