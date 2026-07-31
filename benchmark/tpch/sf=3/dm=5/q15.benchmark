@@ -2,6 +2,6 @@
 # description: Run query 15 from the TPC-H benchmark
 # group: [sf1]
 
-template benchmark/tpch/tpch.benchmark.in
+template benchmark/tpch/sf=3/dm=5/tpch.benchmark.in
 QUERY_NUMBER=15
 QUERY_NUMBER_PADDED=15
