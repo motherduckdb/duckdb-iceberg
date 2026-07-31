@@ -257,12 +257,27 @@ bool IcebergFilePruner::DeleteFileMatchesDataFile(const IcebergManifestFile &del
 
 	auto delete_sequence_number = delete_manifest_entry.GetSequenceNumber(delete_manifest);
 	auto data_sequence_number = data_manifest_entry.GetSequenceNumber(data_manifest);
-	if (delete_file.content == IcebergManifestEntryContentType::EQUALITY_DELETES) {
+
+	switch (delete_file.content) {
+	case IcebergManifestEntryContentType::EQUALITY_DELETES: {
 		if (delete_sequence_number <= data_sequence_number) {
 			return false;
 		}
-	} else if (delete_sequence_number < data_sequence_number) {
-		return false;
+		break;
+	}
+	case IcebergManifestEntryContentType::POSITION_DELETES: {
+		if (delete_sequence_number < data_sequence_number) {
+			return false;
+		}
+		auto &referenced_data_file = delete_manifest_entry.data_file.referenced_data_file;
+		if (referenced_data_file && *referenced_data_file != data_manifest_entry.data_file.file_path) {
+			return false;
+		}
+		break;
+	}
+	default:
+		throw InternalException("Unexpected manifest entry content type: %d",
+		                        static_cast<uint8_t>(delete_file.content));
 	}
 
 	auto partition_spec_it = metadata.partition_specs.find(delete_manifest.partition_spec_id);
