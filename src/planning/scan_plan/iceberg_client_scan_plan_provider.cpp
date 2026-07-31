@@ -16,7 +16,6 @@
 #include "iceberg_logging.hpp"
 #include "planning/metadata_io/avro/avro_scan.hpp"
 #include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
-#include "planning/metadata_io/manifest_list/bound_iceberg_manifest_list_entry.hpp"
 #include "planning/metadata_io/manifest_list/iceberg_manifest_list_reader.hpp"
 
 #include <condition_variable>
@@ -160,8 +159,8 @@ void ClientSideScanPlanProvider::LoadManifestList() {
 	{
 		annotated_lock_guard<annotated_mutex> delete_guard(shared_state.delete_lock);
 		shared_state.delete_manifest_loads.resize(DeleteManifests().size());
-		shared_state.delete_manifest_entries_enumerated.resize(
-		    DeleteManifests().size() + shared_state.transaction_delete_manifests.size(), false);
+		shared_state.delete_file_loads.resize(DeleteManifests().size() +
+		                                      shared_state.transaction_delete_manifests.size());
 	}
 
 	shared_state.manifest_list_loaded = true;
@@ -326,7 +325,8 @@ void ClientSideScanPlanProvider::ReadDeleteManifests(const vector<idx_t> &manife
 	}
 }
 
-void ClientSideScanPlanProvider::EnumerateDeleteManifestEntries(const vector<idx_t> &manifest_indexes) {
+vector<IcebergDeleteFileReference> ClientSideScanPlanProvider::GetDeleteFiles(const vector<idx_t> &manifest_indexes) {
+	vector<IcebergDeleteFileReference> result;
 	optional_ptr<const case_insensitive_map_t<string>> transactional_delete_files;
 	if (context.transaction_data) {
 		transactional_delete_files = context.transaction_data->transactional_delete_files;
@@ -337,18 +337,15 @@ void ClientSideScanPlanProvider::EnumerateDeleteManifestEntries(const vector<idx
 		if (manifest_idx >= total_manifest_count) {
 			throw InternalException("Selected delete manifest index %llu is out of bounds", manifest_idx);
 		}
-		if (shared_state.delete_manifest_entries_enumerated[manifest_idx]) {
-			continue;
-		}
 
-		vector<BoundIcebergManifestEntry> bound_entries;
 		if (manifest_idx < committed_manifest_count) {
 			auto &manifest_list_entry = DeleteManifests()[manifest_idx];
 			if (!manifest_list_entry.HasManifestEntries()) {
 				throw InternalException("Selected delete manifest %llu was not loaded", manifest_idx);
 			}
-			auto manifest = BoundIcebergManifestListEntry(manifest_idx, manifest_list_entry);
-			for (auto &manifest_entry : manifest_list_entry.GetManifestEntries()) {
+			auto &manifest_entries = manifest_list_entry.GetManifestEntries();
+			for (idx_t entry_idx = 0; entry_idx < manifest_entries.size(); entry_idx++) {
+				auto &manifest_entry = manifest_entries[entry_idx];
 				if (manifest_entry.status == IcebergManifestEntryStatusType::DELETED) {
 					continue;
 				}
@@ -357,13 +354,14 @@ void ClientSideScanPlanProvider::EnumerateDeleteManifestEntries(const vector<idx
 				    transactional_delete_files->count(*referenced_data_file)) {
 					continue;
 				}
-				bound_entries.push_back(manifest.BindEntry(manifest_entry));
+				result.push_back({manifest_idx, entry_idx});
 			}
 		} else {
 			auto transaction_idx = manifest_idx - committed_manifest_count;
 			auto &manifest_list_entry = shared_state.transaction_delete_manifests[transaction_idx].get();
-			auto manifest = BoundIcebergManifestListEntry(manifest_idx, manifest_list_entry);
-			for (auto &manifest_entry : manifest_list_entry.GetManifestEntries()) {
+			auto &manifest_entries = manifest_list_entry.GetManifestEntries();
+			for (idx_t entry_idx = 0; entry_idx < manifest_entries.size(); entry_idx++) {
+				auto &manifest_entry = manifest_entries[entry_idx];
 				auto &data_file = manifest_entry.data_file;
 				auto &referenced_data_file = data_file.referenced_data_file;
 				if (referenced_data_file && transactional_delete_files) {
@@ -372,16 +370,11 @@ void ClientSideScanPlanProvider::EnumerateDeleteManifestEntries(const vector<idx
 						continue;
 					}
 				}
-				bound_entries.push_back(manifest.BindEntry(manifest_entry));
+				result.push_back({manifest_idx, entry_idx});
 			}
 		}
-		shared_state.delete_manifest_entries.reserve(shared_state.delete_manifest_entries.size() +
-		                                             bound_entries.size());
-		for (auto &bound_entry : bound_entries) {
-			shared_state.delete_manifest_entries.push_back(std::move(bound_entry));
-		}
-		shared_state.delete_manifest_entries_enumerated[manifest_idx] = true;
 	}
+	return result;
 }
 
 bool ClientSideScanPlanProvider::TryGetNextBatch(IcebergDataViewCursor &cursor) {
@@ -431,20 +424,28 @@ vector<IcebergManifestListEntry> &ClientSideScanPlanProvider::DeleteManifests() 
 	return shared_state.committed_delete_manifests;
 }
 
-idx_t &ClientSideScanPlanProvider::NextDeleteEntryToProcess() {
-	return shared_state.next_delete_entry_to_process;
-}
-
-vector<BoundIcebergManifestEntry> &ClientSideScanPlanProvider::DeleteManifestEntries() {
-	return shared_state.delete_manifest_entries;
+shared_ptr<IcebergDeleteFileLoadState> &
+ClientSideScanPlanProvider::GetDeleteFileLoad(IcebergDeleteFileReference delete_file) {
+	auto committed_manifest_count = DeleteManifests().size();
+	auto total_manifest_count = committed_manifest_count + shared_state.transaction_delete_manifests.size();
+	if (delete_file.manifest_idx >= total_manifest_count) {
+		throw InternalException("Delete manifest index %llu is out of bounds", delete_file.manifest_idx);
+	}
+	auto &manifest =
+	    delete_file.manifest_idx < committed_manifest_count
+	        ? DeleteManifests()[delete_file.manifest_idx]
+	        : shared_state.transaction_delete_manifests[delete_file.manifest_idx - committed_manifest_count].get();
+	auto &manifest_entries = manifest.GetManifestEntries();
+	if (delete_file.entry_idx >= manifest_entries.size()) {
+		throw InternalException("Delete manifest entry index %llu is out of bounds for manifest %llu",
+		                        delete_file.entry_idx, delete_file.manifest_idx);
+	}
+	auto &loads = shared_state.delete_file_loads[delete_file.manifest_idx];
+	return loads[delete_file.entry_idx];
 }
 
 position_delete_map_t &ClientSideScanPlanProvider::PositionalDeleteData() {
 	return shared_state.positional_delete_data;
-}
-
-equality_delete_map_t &ClientSideScanPlanProvider::EqualityDeleteData() {
-	return shared_state.equality_delete_data;
 }
 
 } // namespace duckdb

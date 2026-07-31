@@ -1,11 +1,9 @@
 #include "planning/scan_plan/iceberg_scan_plan_provider.hpp"
 
-#include "planning/metadata_io/manifest_list/bound_iceberg_manifest_list_entry.hpp"
-
 namespace duckdb {
 
 ServerSideScanPlanProvider::ServerSideScanPlanProvider(IcebergServerSideScanPlan plan_p) : plan(std::move(plan_p)) {
-	delete_manifest_entries_enumerated.resize(plan.delete_manifests.size(), false);
+	delete_file_loads.resize(plan.delete_manifests.size());
 }
 
 void ServerSideScanPlanProvider::LoadManifestList() {
@@ -24,23 +22,22 @@ void ServerSideScanPlanProvider::StartDataManifestScan(const vector<bool> &match
 	}
 }
 
-void ServerSideScanPlanProvider::EnumerateDeleteManifestEntries(const vector<idx_t> &manifest_indexes) {
+vector<IcebergDeleteFileReference> ServerSideScanPlanProvider::GetDeleteFiles(const vector<idx_t> &manifest_indexes) {
+	vector<IcebergDeleteFileReference> result;
 	for (auto manifest_idx : manifest_indexes) {
 		if (manifest_idx >= plan.delete_manifests.size()) {
 			throw InternalException("Selected server-side delete manifest index %llu is out of bounds", manifest_idx);
 		}
-		if (delete_manifest_entries_enumerated[manifest_idx]) {
-			continue;
-		}
 		auto &manifest_list_entry = plan.delete_manifests[manifest_idx];
-		auto manifest = BoundIcebergManifestListEntry(manifest_idx, manifest_list_entry);
-		for (auto &manifest_entry : manifest_list_entry.GetManifestEntries()) {
+		auto &manifest_entries = manifest_list_entry.GetManifestEntries();
+		for (idx_t entry_idx = 0; entry_idx < manifest_entries.size(); entry_idx++) {
+			auto &manifest_entry = manifest_entries[entry_idx];
 			if (manifest_entry.status != IcebergManifestEntryStatusType::DELETED) {
-				delete_manifest_entries.push_back(manifest.BindEntry(manifest_entry));
+				result.push_back({manifest_idx, entry_idx});
 			}
 		}
-		delete_manifest_entries_enumerated[manifest_idx] = true;
 	}
+	return result;
 }
 
 bool ServerSideScanPlanProvider::TryGetNextBatch(IcebergDataViewCursor &cursor) {
@@ -64,20 +61,22 @@ vector<IcebergManifestListEntry> &ServerSideScanPlanProvider::DeleteManifests() 
 	return plan.delete_manifests;
 }
 
-idx_t &ServerSideScanPlanProvider::NextDeleteEntryToProcess() {
-	return next_delete_entry_to_process;
-}
-
-vector<BoundIcebergManifestEntry> &ServerSideScanPlanProvider::DeleteManifestEntries() {
-	return delete_manifest_entries;
+shared_ptr<IcebergDeleteFileLoadState> &
+ServerSideScanPlanProvider::GetDeleteFileLoad(IcebergDeleteFileReference delete_file) {
+	if (delete_file.manifest_idx >= plan.delete_manifests.size()) {
+		throw InternalException("Delete manifest index %llu is out of bounds", delete_file.manifest_idx);
+	}
+	auto &manifest_entries = plan.delete_manifests[delete_file.manifest_idx].GetManifestEntries();
+	if (delete_file.entry_idx >= manifest_entries.size()) {
+		throw InternalException("Delete manifest entry index %llu is out of bounds for manifest %llu",
+		                        delete_file.entry_idx, delete_file.manifest_idx);
+	}
+	auto &loads = delete_file_loads[delete_file.manifest_idx];
+	return loads[delete_file.entry_idx];
 }
 
 position_delete_map_t &ServerSideScanPlanProvider::PositionalDeleteData() {
 	return positional_delete_data;
-}
-
-equality_delete_map_t &ServerSideScanPlanProvider::EqualityDeleteData() {
-	return equality_delete_data;
 }
 
 } // namespace duckdb

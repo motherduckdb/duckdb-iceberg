@@ -16,6 +16,13 @@ public:
 
 	bool ManifestMatchesFilter(const IcebergManifestFile &manifest) const;
 	bool FileMatchesFilter(const IcebergManifestFile &manifest_file, const IcebergManifestEntry &manifest_entry) const;
+	bool DeleteManifestMatchesDataFile(const IcebergManifestFile &delete_manifest,
+	                                   const IcebergManifestFile &data_manifest,
+	                                   const IcebergManifestEntry &data_manifest_entry) const;
+	bool DeleteFileMatchesDataFile(const IcebergManifestFile &delete_manifest,
+	                               const IcebergManifestEntry &delete_manifest_entry,
+	                               const IcebergManifestFile &data_manifest,
+	                               const IcebergManifestEntry &data_manifest_entry) const;
 
 private:
 	bool FilePartitionMatchesFilter(const IcebergDataFile &data_file, const IcebergManifestFile &manifest_file) const;

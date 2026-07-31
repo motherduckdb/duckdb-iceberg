@@ -14,8 +14,12 @@ class IcebergTableSchema;
 struct IcebergFilePruner;
 struct IcebergOptions;
 
-using equality_delete_map_t = map<sequence_number_t, vector<unique_ptr<IcebergEqualityDeleteFile>>>;
 using position_delete_map_t = unordered_map<string, shared_ptr<IcebergDeleteData>>;
+
+struct IcebergDeletePlan {
+	vector<reference<const IcebergEqualityDeleteFile>> equality_deletes;
+	unique_ptr<DeleteFilter> positional_deletes;
+};
 
 struct IcebergDeletePlanningContext {
 	ClientContext &context;
@@ -34,13 +38,11 @@ struct IcebergDeletePlanningContext {
 struct IcebergDeletePlanner {
 	static vector<idx_t> GetDeleteManifestsForDataFile(const IcebergDeletePlanningContext &context,
 	                                                   const BoundIcebergManifestEntry &data_manifest_entry);
-	static vector<reference<const IcebergEqualityDeleteFile>>
-	GetEqualityDeletesForFile(const IcebergDeletePlanningContext &context,
-	                          const BoundIcebergManifestEntry &data_manifest_entry);
-	static bool DeleteEntryMatchesFilters(const IcebergDeletePlanningContext &context,
-	                                      const BoundIcebergManifestEntry &delete_manifest_entry);
-	static unique_ptr<DeleteFilter> GetPositionalDeletesForFile(const IcebergDeletePlanningContext &context,
-	                                                            const string &file_path);
+	static bool DeleteEntryMatchesFilters(const IcebergDeletePlanningContext &context, idx_t delete_manifest_idx,
+	                                      const IcebergManifestEntry &delete_manifest_entry);
+	static bool DeleteEntryAppliesToDataFile(const IcebergDeletePlanningContext &context, idx_t delete_manifest_idx,
+	                                         const IcebergManifestEntry &delete_manifest_entry,
+	                                         const BoundIcebergManifestEntry &data_manifest_entry);
 	static shared_ptr<IcebergDeleteData> GetExistingPositionalDeleteData(const IcebergDeletePlanningContext &context,
 	                                                                     const string &file_path);
 };
