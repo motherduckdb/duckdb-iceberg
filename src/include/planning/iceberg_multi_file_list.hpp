@@ -109,7 +109,7 @@ private:
 	void LoadManifestList(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
 	void InitializeScanPlanProvider() const DUCKDB_REQUIRES(shared_state->lock);
 	void StartDataManifestScan(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
-	void EnumerateDeleteManifestEntriesInternal(const vector<idx_t> &manifest_indexes) const
+	vector<idx_t> EnumerateDeleteManifestEntriesInternal(const vector<idx_t> &manifest_indexes) const
 	    DUCKDB_REQUIRES(shared_state->lock, shared_state->delete_lock);
 	IcebergScanPlanProvider &GetScanPlanProvider() const DUCKDB_REQUIRES(shared_state->lock);
 	IcebergScanPlanContext GetScanPlanContext() const DUCKDB_REQUIRES(shared_state->lock);

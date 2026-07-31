@@ -6,6 +6,7 @@ namespace duckdb {
 
 ServerSideScanPlanProvider::ServerSideScanPlanProvider(IcebergServerSideScanPlan plan_p) : plan(std::move(plan_p)) {
 	delete_manifest_entries_enumerated.resize(plan.delete_manifests.size(), false);
+	delete_manifest_entry_indexes.resize(plan.delete_manifests.size());
 }
 
 void ServerSideScanPlanProvider::LoadManifestList() {
@@ -24,23 +25,31 @@ void ServerSideScanPlanProvider::StartDataManifestScan(const vector<bool> &match
 	}
 }
 
-void ServerSideScanPlanProvider::EnumerateDeleteManifestEntries(const vector<idx_t> &manifest_indexes) {
+vector<idx_t> ServerSideScanPlanProvider::EnumerateDeleteManifestEntries(const vector<idx_t> &manifest_indexes) {
+	vector<idx_t> result;
 	for (auto manifest_idx : manifest_indexes) {
 		if (manifest_idx >= plan.delete_manifests.size()) {
 			throw InternalException("Selected server-side delete manifest index %llu is out of bounds", manifest_idx);
 		}
 		if (delete_manifest_entries_enumerated[manifest_idx]) {
+			result.insert(result.end(), delete_manifest_entry_indexes[manifest_idx].begin(),
+			              delete_manifest_entry_indexes[manifest_idx].end());
 			continue;
 		}
 		auto &manifest_list_entry = plan.delete_manifests[manifest_idx];
 		auto manifest = BoundIcebergManifestListEntry(manifest_idx, manifest_list_entry);
 		for (auto &manifest_entry : manifest_list_entry.GetManifestEntries()) {
 			if (manifest_entry.status != IcebergManifestEntryStatusType::DELETED) {
+				auto entry_idx = delete_manifest_entries.size();
 				delete_manifest_entries.push_back(manifest.BindEntry(manifest_entry));
+				delete_file_loads.push_back(nullptr);
+				delete_manifest_entry_indexes[manifest_idx].push_back(entry_idx);
+				result.push_back(entry_idx);
 			}
 		}
 		delete_manifest_entries_enumerated[manifest_idx] = true;
 	}
+	return result;
 }
 
 bool ServerSideScanPlanProvider::TryGetNextBatch(IcebergDataViewCursor &cursor) {
@@ -64,12 +73,12 @@ vector<IcebergManifestListEntry> &ServerSideScanPlanProvider::DeleteManifests() 
 	return plan.delete_manifests;
 }
 
-idx_t &ServerSideScanPlanProvider::NextDeleteEntryToProcess() {
-	return next_delete_entry_to_process;
-}
-
 vector<BoundIcebergManifestEntry> &ServerSideScanPlanProvider::DeleteManifestEntries() {
 	return delete_manifest_entries;
+}
+
+vector<shared_ptr<IcebergDeleteFileLoadState>> &ServerSideScanPlanProvider::DeleteFileLoads() {
+	return delete_file_loads;
 }
 
 position_delete_map_t &ServerSideScanPlanProvider::PositionalDeleteData() {

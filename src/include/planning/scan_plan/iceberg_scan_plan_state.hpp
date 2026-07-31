@@ -10,10 +10,19 @@
 #include "planning/metadata_io/manifest/bound_iceberg_manifest_entry.hpp"
 #include "planning/snapshot/iceberg_scan_info.hpp"
 
+#include <condition_variable>
+
 namespace duckdb {
 
 class IcebergTableEntry;
 struct IcebergDeleteManifestLoadState;
+
+struct IcebergDeleteFileLoadState {
+	mutex lock;
+	std::condition_variable cv;
+	bool complete = false;
+	ErrorData error;
+};
 
 struct IcebergManifestScanningState {
 	IcebergManifestScanningState(ClientContext &context, unique_ptr<AvroScan> scan,
@@ -61,8 +70,9 @@ struct IcebergScanPlanState {
 	mutable vector<reference<const IcebergManifestListEntry>> transaction_delete_manifests DUCKDB_GUARDED_BY(lock);
 	mutable vector<shared_ptr<IcebergDeleteManifestLoadState>> delete_manifest_loads DUCKDB_GUARDED_BY(delete_lock);
 	mutable vector<bool> delete_manifest_entries_enumerated DUCKDB_GUARDED_BY(delete_lock);
-	mutable idx_t next_delete_entry_to_process DUCKDB_GUARDED_BY(delete_lock) = 0;
+	mutable vector<vector<idx_t>> delete_manifest_entry_indexes DUCKDB_GUARDED_BY(delete_lock);
 	mutable vector<BoundIcebergManifestEntry> delete_manifest_entries DUCKDB_GUARDED_BY(delete_lock);
+	mutable vector<shared_ptr<IcebergDeleteFileLoadState>> delete_file_loads DUCKDB_GUARDED_BY(delete_lock);
 
 	mutable vector<IcebergManifestListEntry> committed_data_manifests DUCKDB_GUARDED_BY(lock);
 	mutable vector<reference<const IcebergManifestListEntry>> transaction_data_manifests DUCKDB_GUARDED_BY(lock);

@@ -38,14 +38,14 @@ public:
 	virtual void LoadManifestList() = 0;
 	virtual void StartDataManifestScan(const vector<bool> &matching_manifests, idx_t filter_count) = 0;
 	virtual void ReadDeleteManifests(const vector<idx_t> &manifest_indexes, idx_t filter_count) = 0;
-	virtual void EnumerateDeleteManifestEntries(const vector<idx_t> &manifest_indexes) = 0;
+	virtual vector<idx_t> EnumerateDeleteManifestEntries(const vector<idx_t> &manifest_indexes) = 0;
 	virtual bool TryGetNextBatch(IcebergDataViewCursor &cursor) = 0;
 	virtual void FinishScanTasks() = 0;
 	virtual bool DeleteFileAppliesToDataFile(const string &data_file_path, const string &delete_file_path) const = 0;
 	virtual vector<IcebergManifestListEntry> &DataManifests() = 0;
 	virtual vector<IcebergManifestListEntry> &DeleteManifests() = 0;
-	virtual idx_t &NextDeleteEntryToProcess() = 0;
 	virtual vector<BoundIcebergManifestEntry> &DeleteManifestEntries() = 0;
+	virtual vector<shared_ptr<IcebergDeleteFileLoadState>> &DeleteFileLoads() = 0;
 	virtual position_delete_map_t &PositionalDeleteData() = 0;
 	virtual equality_delete_map_t &EqualityDeleteData() = 0;
 };
@@ -58,15 +58,16 @@ public:
 	void StartDataManifestScan(const vector<bool> &matching_manifests, idx_t filter_count) override
 	    DUCKDB_REQUIRES(shared_state.lock);
 	void ReadDeleteManifests(const vector<idx_t> &manifest_indexes, idx_t filter_count) override;
-	void EnumerateDeleteManifestEntries(const vector<idx_t> &manifest_indexes) override
+	vector<idx_t> EnumerateDeleteManifestEntries(const vector<idx_t> &manifest_indexes) override
 	    DUCKDB_REQUIRES(shared_state.lock, shared_state.delete_lock);
 	bool TryGetNextBatch(IcebergDataViewCursor &cursor) override DUCKDB_REQUIRES(shared_state.lock);
 	void FinishScanTasks() override DUCKDB_REQUIRES(shared_state.lock);
 	bool DeleteFileAppliesToDataFile(const string &data_file_path, const string &delete_file_path) const override;
 	vector<IcebergManifestListEntry> &DataManifests() override DUCKDB_REQUIRES(shared_state.lock);
 	vector<IcebergManifestListEntry> &DeleteManifests() override DUCKDB_REQUIRES(shared_state.lock);
-	idx_t &NextDeleteEntryToProcess() override DUCKDB_REQUIRES(shared_state.delete_lock);
 	vector<BoundIcebergManifestEntry> &DeleteManifestEntries() override DUCKDB_REQUIRES(shared_state.delete_lock);
+	vector<shared_ptr<IcebergDeleteFileLoadState>> &DeleteFileLoads() override
+	    DUCKDB_REQUIRES(shared_state.delete_lock);
 	position_delete_map_t &PositionalDeleteData() override DUCKDB_REQUIRES(shared_state.delete_lock);
 	equality_delete_map_t &EqualityDeleteData() override DUCKDB_REQUIRES(shared_state.delete_lock);
 
@@ -82,14 +83,14 @@ public:
 	void LoadManifestList() override;
 	void StartDataManifestScan(const vector<bool> &matching_manifests, idx_t filter_count) override;
 	void ReadDeleteManifests(const vector<idx_t> &manifest_indexes, idx_t filter_count) override;
-	void EnumerateDeleteManifestEntries(const vector<idx_t> &manifest_indexes) override;
+	vector<idx_t> EnumerateDeleteManifestEntries(const vector<idx_t> &manifest_indexes) override;
 	bool TryGetNextBatch(IcebergDataViewCursor &cursor) override;
 	void FinishScanTasks() override;
 	bool DeleteFileAppliesToDataFile(const string &data_file_path, const string &delete_file_path) const override;
 	vector<IcebergManifestListEntry> &DataManifests() override;
 	vector<IcebergManifestListEntry> &DeleteManifests() override;
-	idx_t &NextDeleteEntryToProcess() override;
 	vector<BoundIcebergManifestEntry> &DeleteManifestEntries() override;
+	vector<shared_ptr<IcebergDeleteFileLoadState>> &DeleteFileLoads() override;
 	position_delete_map_t &PositionalDeleteData() override;
 	equality_delete_map_t &EqualityDeleteData() override;
 
@@ -99,8 +100,9 @@ private:
 	ManifestEntryReadState read_state;
 	bool data_manifest_scan_started = false;
 	vector<bool> delete_manifest_entries_enumerated;
-	idx_t next_delete_entry_to_process = 0;
+	vector<vector<idx_t>> delete_manifest_entry_indexes;
 	vector<BoundIcebergManifestEntry> delete_manifest_entries;
+	vector<shared_ptr<IcebergDeleteFileLoadState>> delete_file_loads;
 	position_delete_map_t positional_delete_data;
 	equality_delete_map_t equality_delete_data;
 };

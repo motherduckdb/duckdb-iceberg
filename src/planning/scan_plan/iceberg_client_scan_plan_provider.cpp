@@ -162,6 +162,8 @@ void ClientSideScanPlanProvider::LoadManifestList() {
 		shared_state.delete_manifest_loads.resize(DeleteManifests().size());
 		shared_state.delete_manifest_entries_enumerated.resize(
 		    DeleteManifests().size() + shared_state.transaction_delete_manifests.size(), false);
+		shared_state.delete_manifest_entry_indexes.resize(DeleteManifests().size() +
+		                                                  shared_state.transaction_delete_manifests.size());
 	}
 
 	shared_state.manifest_list_loaded = true;
@@ -326,7 +328,8 @@ void ClientSideScanPlanProvider::ReadDeleteManifests(const vector<idx_t> &manife
 	}
 }
 
-void ClientSideScanPlanProvider::EnumerateDeleteManifestEntries(const vector<idx_t> &manifest_indexes) {
+vector<idx_t> ClientSideScanPlanProvider::EnumerateDeleteManifestEntries(const vector<idx_t> &manifest_indexes) {
+	vector<idx_t> result;
 	optional_ptr<const case_insensitive_map_t<string>> transactional_delete_files;
 	if (context.transaction_data) {
 		transactional_delete_files = context.transaction_data->transactional_delete_files;
@@ -338,6 +341,8 @@ void ClientSideScanPlanProvider::EnumerateDeleteManifestEntries(const vector<idx
 			throw InternalException("Selected delete manifest index %llu is out of bounds", manifest_idx);
 		}
 		if (shared_state.delete_manifest_entries_enumerated[manifest_idx]) {
+			result.insert(result.end(), shared_state.delete_manifest_entry_indexes[manifest_idx].begin(),
+			              shared_state.delete_manifest_entry_indexes[manifest_idx].end());
 			continue;
 		}
 
@@ -378,10 +383,15 @@ void ClientSideScanPlanProvider::EnumerateDeleteManifestEntries(const vector<idx
 		shared_state.delete_manifest_entries.reserve(shared_state.delete_manifest_entries.size() +
 		                                             bound_entries.size());
 		for (auto &bound_entry : bound_entries) {
+			auto entry_idx = shared_state.delete_manifest_entries.size();
 			shared_state.delete_manifest_entries.push_back(std::move(bound_entry));
+			shared_state.delete_file_loads.push_back(nullptr);
+			shared_state.delete_manifest_entry_indexes[manifest_idx].push_back(entry_idx);
+			result.push_back(entry_idx);
 		}
 		shared_state.delete_manifest_entries_enumerated[manifest_idx] = true;
 	}
+	return result;
 }
 
 bool ClientSideScanPlanProvider::TryGetNextBatch(IcebergDataViewCursor &cursor) {
@@ -431,12 +441,12 @@ vector<IcebergManifestListEntry> &ClientSideScanPlanProvider::DeleteManifests() 
 	return shared_state.committed_delete_manifests;
 }
 
-idx_t &ClientSideScanPlanProvider::NextDeleteEntryToProcess() {
-	return shared_state.next_delete_entry_to_process;
-}
-
 vector<BoundIcebergManifestEntry> &ClientSideScanPlanProvider::DeleteManifestEntries() {
 	return shared_state.delete_manifest_entries;
+}
+
+vector<shared_ptr<IcebergDeleteFileLoadState>> &ClientSideScanPlanProvider::DeleteFileLoads() {
+	return shared_state.delete_file_loads;
 }
 
 position_delete_map_t &ClientSideScanPlanProvider::PositionalDeleteData() {

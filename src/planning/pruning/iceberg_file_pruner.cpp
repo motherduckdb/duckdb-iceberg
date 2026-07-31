@@ -171,6 +171,126 @@ bool IcebergFilePruner::FileMatchesFilter(const IcebergManifestFile &manifest_fi
 	return true;
 }
 
+bool IcebergFilePruner::DeleteManifestMatchesDataFile(const IcebergManifestFile &delete_manifest,
+                                                      const IcebergManifestFile &data_manifest,
+                                                      const IcebergManifestEntry &data_manifest_entry) const {
+	if (!delete_manifest.sequence_number) {
+		throw InvalidConfigurationException("Delete manifest %s does not have a sequence number",
+		                                    delete_manifest.manifest_path);
+	}
+	if (*delete_manifest.sequence_number < data_manifest_entry.GetSequenceNumber(data_manifest)) {
+		return false;
+	}
+
+	auto partition_spec_it = metadata.partition_specs.find(delete_manifest.partition_spec_id);
+	if (partition_spec_it == metadata.partition_specs.end()) {
+		throw InvalidInputException("Delete manifest %s references partition_spec_id %d which doesn't exist",
+		                            delete_manifest.manifest_path, delete_manifest.partition_spec_id);
+	}
+	auto &delete_partition_spec = partition_spec_it->second;
+	if (delete_partition_spec.IsUnpartitioned()) {
+		return true;
+	}
+	if (delete_manifest.partition_spec_id != data_manifest.partition_spec_id) {
+		return false;
+	}
+	if (!delete_manifest.partitions.has_partitions) {
+		return true;
+	}
+
+	auto &field_summaries = delete_manifest.partitions.field_summary;
+	if (delete_partition_spec.fields.size() != field_summaries.size()) {
+		throw InvalidInputException("Delete manifest has %d partition summaries but partition spec %d has %d fields",
+		                            field_summaries.size(), delete_manifest.partition_spec_id,
+		                            delete_partition_spec.fields.size());
+	}
+
+	unordered_map<uint64_t, reference<const Value>> partition_values;
+	for (auto &partition : data_manifest_entry.data_file.partition_info) {
+		partition_values.emplace(partition.field_id, partition.value);
+	}
+
+	for (idx_t field_idx = 0; field_idx < delete_partition_spec.fields.size(); field_idx++) {
+		auto &field = delete_partition_spec.fields[field_idx];
+		auto partition_value_it = partition_values.find(field.partition_field_id);
+		if (partition_value_it == partition_values.end()) {
+			return true;
+		}
+		auto &partition_value = partition_value_it->second.get();
+		auto &field_summary = field_summaries[field_idx];
+		if (partition_value.IsNull()) {
+			if (!field_summary.contains_null) {
+				return false;
+			}
+			continue;
+		}
+
+		auto source_column = metadata.FindColumnByFieldId(NumericCast<int32_t>(field.source_id));
+		if (!source_column) {
+			return true;
+		}
+		auto partition_type = field.transform.GetSerializedType(source_column->type);
+		auto stats = IcebergPredicateStats::DeserializeBounds(field_summary.lower_bound, field_summary.upper_bound,
+		                                                      source_column->name, partition_type);
+		auto typed_partition_value = partition_value.DefaultCastAs(partition_type);
+		if (stats.lower_bound && typed_partition_value < *stats.lower_bound) {
+			return false;
+		}
+		if (stats.upper_bound && typed_partition_value > *stats.upper_bound) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool IcebergFilePruner::DeleteFileMatchesDataFile(const IcebergManifestFile &delete_manifest,
+                                                  const IcebergManifestEntry &delete_manifest_entry,
+                                                  const IcebergManifestFile &data_manifest,
+                                                  const IcebergManifestEntry &data_manifest_entry) const {
+	auto &delete_file = delete_manifest_entry.data_file;
+	auto &data_file = data_manifest_entry.data_file;
+	if (delete_file.referenced_data_file && *delete_file.referenced_data_file != data_file.file_path) {
+		return false;
+	}
+
+	auto delete_sequence_number = delete_manifest_entry.GetSequenceNumber(delete_manifest);
+	auto data_sequence_number = data_manifest_entry.GetSequenceNumber(data_manifest);
+	if (delete_file.content == IcebergManifestEntryContentType::EQUALITY_DELETES) {
+		if (delete_sequence_number <= data_sequence_number) {
+			return false;
+		}
+	} else if (delete_sequence_number < data_sequence_number) {
+		return false;
+	}
+
+	auto partition_spec_it = metadata.partition_specs.find(delete_manifest.partition_spec_id);
+	if (partition_spec_it == metadata.partition_specs.end()) {
+		throw InvalidInputException("Delete manifest %s references partition_spec_id %d which doesn't exist",
+		                            delete_manifest.manifest_path, delete_manifest.partition_spec_id);
+	}
+	if (partition_spec_it->second.IsUnpartitioned()) {
+		return true;
+	}
+	if (delete_manifest.partition_spec_id != data_manifest.partition_spec_id) {
+		return false;
+	}
+
+	unordered_map<uint64_t, reference<const Value>> data_partition_values;
+	for (auto &partition : data_file.partition_info) {
+		data_partition_values.emplace(partition.field_id, partition.value);
+	}
+	for (auto &delete_partition : delete_file.partition_info) {
+		auto data_partition = data_partition_values.find(delete_partition.field_id);
+		if (data_partition == data_partition_values.end()) {
+			return true;
+		}
+		if (delete_partition.value != data_partition->second.get()) {
+			return false;
+		}
+	}
+	return true;
+}
+
 bool IcebergFilePruner::ManifestMatchesFilter(const IcebergManifestFile &manifest) const {
 	auto spec_id = manifest.partition_spec_id;
 	auto partition_spec_it = metadata.partition_specs.find(spec_id);

@@ -39,6 +39,9 @@ struct IcebergDeletePlanner {
 	                          const BoundIcebergManifestEntry &data_manifest_entry);
 	static bool DeleteEntryMatchesFilters(const IcebergDeletePlanningContext &context,
 	                                      const BoundIcebergManifestEntry &delete_manifest_entry);
+	static bool DeleteEntryAppliesToDataFile(const IcebergDeletePlanningContext &context,
+	                                         const BoundIcebergManifestEntry &delete_manifest_entry,
+	                                         const BoundIcebergManifestEntry &data_manifest_entry);
 	static unique_ptr<DeleteFilter> GetPositionalDeletesForFile(const IcebergDeletePlanningContext &context,
 	                                                            const string &file_path);
 	static shared_ptr<IcebergDeleteData> GetExistingPositionalDeleteData(const IcebergDeletePlanningContext &context,
