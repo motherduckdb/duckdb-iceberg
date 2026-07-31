@@ -1633,6 +1633,22 @@
         "test/sql/types/geo/geometry_from_wkb_stats.test",
         "test/sql/types/geo/geometry_vertex_extract.test"
       ]
+    },
+    {
+      "reason": "New bump (fab741bf5cbf5c0bc073f68f2d66a304e7dab724 -> 22535309603770e24704c8b2e16de2065e27d7ff)",
+      "paths": [
+        "test/sql/catalog/nested_schema/nested_alter.test",
+        "test/sql/catalog/nested_schema/nested_constraints.test",
+        "test/sql/catalog/nested_schema/nested_entries.test",
+        "test/sql/catalog/nested_schema/nested_entries_persist.test",
+        "test/sql/catalog/nested_schema/nested_export.test",
+        "test/sql/catalog/nested_schema/nested_schema_limits.test",
+        "test/sql/catalog/nested_schema/nested_wal_replay.test",
+        "test/sql/storage/compression/alp/alp_corrupted_exception_position.test",
+        "test/sql/storage/compression/alprd/alprd_corrupted_exception_position.test",
+        "test/sql/storage/compression/dictionary/dict_corrupted_offset.test",
+        "test/sql/storage/types/variant/variant_duplicate_keys_shredding.test"
+      ]
     }
   ]
 }
