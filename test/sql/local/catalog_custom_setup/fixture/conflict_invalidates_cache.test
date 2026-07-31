@@ -14,6 +14,8 @@ require httpfs
 
 require core_functions
 
+set ignore_error_messages
+
 statement ok
 CREATE SECRET (
     TYPE S3,

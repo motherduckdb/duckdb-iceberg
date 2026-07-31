@@ -20,6 +20,8 @@ require iceberg
 
 require httpfs
 
+set ignore_error_messages
+
 statement ok
 CALL enable_logging('HTTP');
 

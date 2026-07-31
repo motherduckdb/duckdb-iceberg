@@ -12,6 +12,8 @@ require iceberg
 
 require httpfs
 
+set ignore_error_messages
+
 # Create S3 storage secret
 statement ok
 CREATE SECRET (
