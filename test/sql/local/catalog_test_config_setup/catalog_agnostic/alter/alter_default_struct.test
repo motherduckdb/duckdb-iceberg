@@ -16,7 +16,7 @@ set ignore_error_messages
 
 # Default value of the setting
 statement ok
-SET GLOBAL __iceberg_unsafe_struct_null_default_interpretation = NULL;
+SET GLOBAL __iceberg_unsafe_struct_null_default_interp = NULL;
 
 statement ok
 drop table if exists my_datalake.default.alter_default_struct;
@@ -112,7 +112,7 @@ drop table my_datalake.default.alter_default_struct;
 # Now test with reinterpreting struct default 'null' as {}
 
 statement ok
-SET GLOBAL __iceberg_unsafe_struct_null_default_interpretation = '{}';
+SET GLOBAL __iceberg_unsafe_struct_null_default_interp = '{}';
 
 statement ok
 create table my_datalake.default.alter_default_struct (
@@ -204,4 +204,4 @@ drop table my_datalake.default.alter_default_struct;
 
 # Reset the value, since it's a global static
 statement ok
-SET GLOBAL __iceberg_unsafe_struct_null_default_interpretation = NULL;
+SET GLOBAL __iceberg_unsafe_struct_null_default_interp = NULL;

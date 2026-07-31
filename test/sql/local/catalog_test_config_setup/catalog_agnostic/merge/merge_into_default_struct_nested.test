@@ -31,7 +31,7 @@ statement ok
 DROP TABLE IF EXISTS my_datalake.default.nested_nested_tbl;
 
 statement ok
-SET GLOBAL __iceberg_unsafe_struct_null_default_interpretation = '{}';
+SET GLOBAL __iceberg_unsafe_struct_null_default_interp = '{}';
 
 statement ok
 CREATE TABLE my_datalake.default.nested_nested_tbl(
@@ -191,4 +191,4 @@ select * from my_datalake.default.nested_nested_tbl where id = 6;
 6	{'a': test, 'b': {'v1': 1000, 'v2': {'f1': foo, 'f2': bar, 'f3': baz}, 'v3': -500}, 'e': NULL}	72
 
 statement ok
-RESET __iceberg_unsafe_struct_null_default_interpretation;
+RESET __iceberg_unsafe_struct_null_default_interp;

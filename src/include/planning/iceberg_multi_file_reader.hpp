@@ -120,20 +120,22 @@ public:
 	                           const LogicalType &type, MultiFileLocalIndex local_idx) override;
 
 private:
-	static unique_ptr<Expression> CreateEqualityDeleteExpression(const IcebergMultiFileList &multi_file_list,
-	                                                             const BoundIcebergManifestEntry &bound_manifest_entry,
-	                                                             const vector<MultiFileColumnDefinition> &local_columns,
-	                                                             const IcebergEqualityDeleteReadState &read_state);
+	static unique_ptr<Expression>
+	CreateEqualityDeleteExpression(const vector<reference<const IcebergEqualityDeleteFile>> &delete_files,
+	                               const vector<MultiFileColumnDefinition> &local_columns,
+	                               const IcebergEqualityDeleteReadState &read_state);
 	static vector<IcebergEqualityDeleteReadColumn>
-	AddEqualityDeleteColumns(const IcebergMultiFileList &multi_file_list,
-	                         const BoundIcebergManifestEntry &bound_manifest_entry,
+	AddEqualityDeleteColumns(const IcebergTableMetadata &metadata,
+	                         const vector<reference<const IcebergEqualityDeleteFile>> &delete_files,
 	                         vector<MultiFileColumnDefinition> &scan_columns, vector<ColumnIndex> &scan_column_ids,
 	                         MultiFileReaderData &reader_data, ClientContext &context);
 	static IcebergEqualityDeleteReadColumn
-	AddEqualityDeleteColumn(const IcebergMultiFileList &multi_file_list, int32_t field_id,
+	AddEqualityDeleteColumn(const IcebergTableMetadata &metadata, int32_t field_id,
 	                        vector<MultiFileColumnDefinition> &scan_columns, vector<ColumnIndex> &scan_column_ids,
 	                        MultiFileReaderData &reader_data, ClientContext &context);
-	static void ApplyPartitionConstants(const IcebergMultiFileList &multi_file_list, MultiFileReaderData &reader_data,
+	static void ApplyPartitionConstants(const IcebergManifestFile &manifest_file,
+	                                    const BoundIcebergManifestEntry &bound_manifest_entry,
+	                                    const IcebergTableMetadata &metadata, MultiFileReaderData &reader_data,
 	                                    const vector<MultiFileColumnDefinition> &global_columns,
 	                                    const vector<ColumnIndex> &global_column_ids, ClientContext &context);
 

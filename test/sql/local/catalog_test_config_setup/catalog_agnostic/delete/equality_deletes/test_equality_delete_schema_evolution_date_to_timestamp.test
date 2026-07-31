@@ -1,0 +1,134 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/equality_deletes/test_equality_delete_schema_evolution_date_to_timestamp.test
+# description: Equality deletes remain valid when their target column evolves from DATE to TIMESTAMP
+# group: [equality_deletes]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require-env EQUALITY_DELETE_WRITES_ENABLED 1
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+use my_datalake.default;
+
+statement ok
+set unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=true;
+
+statement ok
+drop table if exists my_datalake.default.equality_delete_evolve_date_to_timestamp;
+
+statement ok
+create table my_datalake.default.equality_delete_evolve_date_to_timestamp (
+	id integer,
+	target date,
+	marker varchar
+);
+
+statement ok
+insert into my_datalake.default.equality_delete_evolve_date_to_timestamp values
+	(1, date '2000-01-01', 'delete-before-evolution'),
+	(2, date '2000-01-02', 'delete-after-evolution-old-file'),
+	(3, date '2000-01-03', 'keep-old');
+
+# This delete file stores the target field using its original DATE type.
+# Deleting 'delete-before-evolution'
+statement ok
+delete from my_datalake.default.equality_delete_evolve_date_to_timestamp where target = date '2000-01-01';
+
+query III
+select * from my_datalake.default.equality_delete_evolve_date_to_timestamp order by all
+----
+2	2000-01-02	delete-after-evolution-old-file
+3	2000-01-03	keep-old
+
+# Now alter the table, changing the type of the column that we made an equality delete on
+statement ok
+alter table my_datalake.default.equality_delete_evolve_date_to_timestamp alter column target set type timestamp;
+
+statement ok
+insert into my_datalake.default.equality_delete_evolve_date_to_timestamp values
+	(4, timestamp '2000-01-01 00:00:00', 'old-delete-does-not-apply-to-new-file'),
+	(5, timestamp '2000-01-02 00:00:00', 'delete-after-evolution-new-file'),
+	(6, timestamp '2000-01-04 12:34:56.123456', 'delete-promoted-value'),
+	(7, timestamp '2000-01-05 01:02:03', 'keep-new');
+
+# This promoted-type delete applies to matching rows in both the old DATE file and the new TIMESTAMP file.
+statement ok
+delete from my_datalake.default.equality_delete_evolve_date_to_timestamp where target = timestamp '2000-01-02 00:00:00';
+
+# The new rows are not hit by the older delete, but the older row should be (delete-after-evolution-old-file)
+query III
+select * from my_datalake.default.equality_delete_evolve_date_to_timestamp order by all
+----
+3	2000-01-03 00:00:00	keep-old
+4	2000-01-01 00:00:00	old-delete-does-not-apply-to-new-file
+6	2000-01-04 12:34:56.123456	delete-promoted-value
+7	2000-01-05 01:02:03	keep-new
+
+statement ok
+delete from my_datalake.default.equality_delete_evolve_date_to_timestamp where target = timestamp '2000-01-04 12:34:56.123456';
+
+# Delete a row added after the ALTER was performed
+query III
+select * from my_datalake.default.equality_delete_evolve_date_to_timestamp order by all
+----
+3	2000-01-03 00:00:00	keep-old
+4	2000-01-01 00:00:00	old-delete-does-not-apply-to-new-file
+7	2000-01-05 01:02:03	keep-new
+
+query II
+select count(*), sum(record_count)
+from iceberg_metadata(my_datalake.default.equality_delete_evolve_date_to_timestamp)
+where content = 'EQUALITY_DELETES' and status != 'DELETED';
+----
+3	3
+
+# Do not project the equality-delete target: it must be scanned privately with the promoted type.
+query II
+select id, marker
+from my_datalake.default.equality_delete_evolve_date_to_timestamp
+order by id;
+----
+3	keep-old
+4	old-delete-does-not-apply-to-new-file
+7	keep-new
+
+# Dropping the evolved equality-delete target must not resurrect rows from older data files.
+statement ok
+alter table my_datalake.default.equality_delete_evolve_date_to_timestamp drop column target;
+
+query II
+select *
+from my_datalake.default.equality_delete_evolve_date_to_timestamp
+order by id;
+----
+3	keep-old
+4	old-delete-does-not-apply-to-new-file
+7	keep-new
+
+# New data files do not contain the dropped field and are newer than all three delete files.
+statement ok
+insert into my_datalake.default.equality_delete_evolve_date_to_timestamp values
+	(8, 'keep-after-drop');
+
+query II
+select *
+from my_datalake.default.equality_delete_evolve_date_to_timestamp
+order by id;
+----
+3	keep-old
+4	old-delete-does-not-apply-to-new-file
+7	keep-new
+8	keep-after-drop
+
+statement ok
+drop table my_datalake.default.equality_delete_evolve_date_to_timestamp;

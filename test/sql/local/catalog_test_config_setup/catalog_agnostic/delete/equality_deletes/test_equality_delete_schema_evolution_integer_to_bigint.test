@@ -1,0 +1,81 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/equality_deletes/test_equality_delete_schema_evolution_integer_to_bigint.test
+# description: Equality deletes remain valid when their target column evolves from INTEGER to BIGINT
+# group: [equality_deletes]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require-env EQUALITY_DELETE_WRITES_ENABLED 1
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+use my_datalake.default;
+
+statement ok
+set unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=true;
+
+statement ok
+drop table if exists my_datalake.default.equality_delete_evolve_integer_to_bigint;
+
+statement ok
+create table my_datalake.default.equality_delete_evolve_integer_to_bigint (
+	id integer,
+	target integer,
+	marker varchar
+);
+
+statement ok
+insert into my_datalake.default.equality_delete_evolve_integer_to_bigint values
+	(1, 1, 'delete-before-evolution'),
+	(2, 2, 'delete-after-evolution-old-file'),
+	(3, 3, 'keep-old');
+
+# This delete file stores the target field using its original INTEGER type.
+statement ok
+delete from my_datalake.default.equality_delete_evolve_integer_to_bigint where target = 1;
+
+statement ok
+alter table my_datalake.default.equality_delete_evolve_integer_to_bigint alter column target set type bigint;
+
+statement ok
+insert into my_datalake.default.equality_delete_evolve_integer_to_bigint values
+	(4, 1, 'old-delete-does-not-apply-to-new-file'),
+	(5, 2, 'delete-after-evolution-new-file'),
+	(6, 5000000000, 'delete-promoted-value'),
+	(7, 6000000000, 'keep-new');
+
+# This promoted-type delete applies to matching rows in both the old INTEGER file and the new BIGINT file.
+statement ok
+delete from my_datalake.default.equality_delete_evolve_integer_to_bigint where target = 2;
+
+statement ok
+delete from my_datalake.default.equality_delete_evolve_integer_to_bigint where target = 5000000000;
+
+query II
+select count(*), sum(record_count)
+from iceberg_metadata(my_datalake.default.equality_delete_evolve_integer_to_bigint)
+where content = 'EQUALITY_DELETES' and status != 'DELETED';
+----
+3	3
+
+# Do not project the equality-delete target: it must be scanned privately with the promoted type.
+query II
+select id, marker
+from my_datalake.default.equality_delete_evolve_integer_to_bigint
+order by id;
+----
+3	keep-old
+4	old-delete-does-not-apply-to-new-file
+7	keep-new
+
+statement ok
+drop table my_datalake.default.equality_delete_evolve_integer_to_bigint;

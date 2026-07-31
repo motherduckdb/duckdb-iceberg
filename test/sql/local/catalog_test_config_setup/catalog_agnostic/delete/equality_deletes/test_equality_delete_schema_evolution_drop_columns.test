@@ -1,0 +1,127 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/equality_deletes/test_equality_delete_schema_evolution_drop_columns.test
+# description: Multi-column equality deletes remain valid after their target columns evolve and are dropped
+# group: [equality_deletes]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require-env EQUALITY_DELETE_WRITES_ENABLED 1
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+use my_datalake.default;
+
+statement ok
+set unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=true;
+
+statement ok
+drop table if exists my_datalake.default.equality_delete_evolve_then_drop_columns;
+
+statement ok
+create table my_datalake.default.equality_delete_evolve_then_drop_columns (
+	id integer,
+	date_key date,
+	number_key integer,
+	marker varchar
+);
+
+statement ok
+insert into my_datalake.default.equality_delete_evolve_then_drop_columns values
+	(1, date '2000-01-01', 10, 'delete-before-evolution'),
+	(2, date '2000-01-01', 11, 'keep-same-date'),
+	(3, date '2000-01-02', 10, 'keep-same-number'),
+	(4, date '2000-01-02', 20, 'delete-after-evolution-old-file'),
+	(5, date '2000-01-03', 30, 'keep-old');
+
+# This delete file stores both equality fields using their original types.
+statement ok
+delete from my_datalake.default.equality_delete_evolve_then_drop_columns
+where date_key = date '2000-01-01' and number_key = 10;
+
+# Both fields are evolved before either equality-delete target is removed.
+statement ok
+alter table my_datalake.default.equality_delete_evolve_then_drop_columns alter column date_key set type timestamp;
+
+statement ok
+alter table my_datalake.default.equality_delete_evolve_then_drop_columns alter column number_key set type bigint;
+
+statement ok
+insert into my_datalake.default.equality_delete_evolve_then_drop_columns values
+	(6, timestamp '2000-01-01 00:00:00', 10, 'old-delete-does-not-apply-to-new-file'),
+	(7, timestamp '2000-01-02 00:00:00', 20, 'delete-after-evolution-new-file'),
+	(8, timestamp '2000-01-04 12:34:56.123456', 5000000000, 'delete-promoted-values'),
+	(9, timestamp '2000-01-05 01:02:03', 6000000000, 'keep-new');
+
+# This promoted-type delete applies to a matching tuple in both old and new data files.
+statement ok
+delete from my_datalake.default.equality_delete_evolve_then_drop_columns
+where date_key = timestamp '2000-01-02 00:00:00' and number_key = 20;
+
+statement ok
+delete from my_datalake.default.equality_delete_evolve_then_drop_columns
+where date_key = timestamp '2000-01-04 12:34:56.123456' and number_key = 5000000000;
+
+query II
+select count(*), sum(record_count)
+from iceberg_metadata(my_datalake.default.equality_delete_evolve_then_drop_columns)
+where content = 'EQUALITY_DELETES' and status != 'DELETED';
+----
+3	3
+
+# One equality field is now historical while the other remains in the current schema.
+statement ok
+alter table my_datalake.default.equality_delete_evolve_then_drop_columns drop column date_key;
+
+query III
+select id, number_key, marker
+from my_datalake.default.equality_delete_evolve_then_drop_columns
+order by id;
+----
+2	11	keep-same-date
+3	10	keep-same-number
+5	30	keep-old
+6	10	old-delete-does-not-apply-to-new-file
+9	6000000000	keep-new
+
+# Both equality fields are now historical and must be scanned privately by field id.
+statement ok
+alter table my_datalake.default.equality_delete_evolve_then_drop_columns drop column number_key;
+
+query II
+select *
+from my_datalake.default.equality_delete_evolve_then_drop_columns
+order by id;
+----
+2	keep-same-date
+3	keep-same-number
+5	keep-old
+6	old-delete-does-not-apply-to-new-file
+9	keep-new
+
+statement ok
+insert into my_datalake.default.equality_delete_evolve_then_drop_columns values
+	(10, 'keep-after-both-drops');
+
+query II
+select *
+from my_datalake.default.equality_delete_evolve_then_drop_columns
+order by id;
+----
+2	keep-same-date
+3	keep-same-number
+5	keep-old
+6	old-delete-does-not-apply-to-new-file
+9	keep-new
+10	keep-after-both-drops
+
+statement ok
+drop table my_datalake.default.equality_delete_evolve_then_drop_columns;

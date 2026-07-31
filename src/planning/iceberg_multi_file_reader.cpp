@@ -134,13 +134,13 @@ IcebergMultiFileReader::InitializeGlobalState(ClientContext &context, const Mult
 }
 
 IcebergEqualityDeleteReadColumn IcebergMultiFileReader::AddEqualityDeleteColumn(
-    const IcebergMultiFileList &multi_file_list, int32_t field_id, vector<MultiFileColumnDefinition> &scan_columns,
+    const IcebergTableMetadata &metadata, int32_t field_id, vector<MultiFileColumnDefinition> &scan_columns,
     vector<ColumnIndex> &scan_column_ids, MultiFileReaderData &reader_data, ClientContext &context) {
 	auto field_id_to_scan_column = CreateFieldIdMap(scan_columns);
 	MultiFileColumnPath column_path;
 	auto field_entry = field_id_to_scan_column.find(field_id);
 	if (field_entry == field_id_to_scan_column.end()) {
-		auto column = multi_file_list.GetMetadata().FindColumnByFieldId(field_id);
+		auto column = metadata.FindColumnByFieldId(field_id);
 		if (!column) {
 			throw InvalidConfigurationException(
 			    "Column %d must be read to apply equality deletes, but no schema contains that field id", field_id);
@@ -182,20 +182,20 @@ IcebergEqualityDeleteReadColumn IcebergMultiFileReader::AddEqualityDeleteColumn(
 }
 
 vector<IcebergEqualityDeleteReadColumn> IcebergMultiFileReader::AddEqualityDeleteColumns(
-    const IcebergMultiFileList &multi_file_list, const BoundIcebergManifestEntry &bound_manifest_entry,
+    const IcebergTableMetadata &metadata, const vector<reference<const IcebergEqualityDeleteFile>> &delete_files,
     vector<MultiFileColumnDefinition> &scan_columns, vector<ColumnIndex> &scan_column_ids,
     MultiFileReaderData &reader_data, ClientContext &context) {
 	set<int32_t> required_field_ids;
-	for (auto &delete_file_ref : multi_file_list.GetEqualityDeletesForFile(bound_manifest_entry)) {
-		for (auto &entry : delete_file_ref.get().equality_values) {
-			required_field_ids.insert(entry.first);
+	for (auto &delete_file_ref : delete_files) {
+		for (auto field_id : delete_file_ref.get().equality_ids) {
+			required_field_ids.insert(field_id);
 		}
 	}
 
 	vector<IcebergEqualityDeleteReadColumn> result;
 	for (auto field_id : required_field_ids) {
 		result.push_back(
-		    AddEqualityDeleteColumn(multi_file_list, field_id, scan_columns, scan_column_ids, reader_data, context));
+		    AddEqualityDeleteColumn(metadata, field_id, scan_columns, scan_column_ids, reader_data, context));
 	}
 	return result;
 }
@@ -289,21 +289,20 @@ static Value TransformPartitionValue(const Value &value, const LogicalType &type
 	}
 }
 
-void IcebergMultiFileReader::ApplyPartitionConstants(const IcebergMultiFileList &multi_file_list,
+void IcebergMultiFileReader::ApplyPartitionConstants(const IcebergManifestFile &manifest_file,
+                                                     const BoundIcebergManifestEntry &bound_manifest_entry,
+                                                     const IcebergTableMetadata &metadata,
                                                      MultiFileReaderData &reader_data,
                                                      const vector<MultiFileColumnDefinition> &global_columns,
                                                      const vector<ColumnIndex> &global_column_ids,
                                                      ClientContext &context) {
 	// Get the metadata for this file
 	auto &reader = *reader_data.reader;
-	auto file_id = reader.file_list_idx.GetIndex();
-	auto bound_manifest_entry = multi_file_list.GetManifestEntry(file_id);
-	auto manifest_file = multi_file_list.GetManifestFileForDataFile(file_id);
 	auto &manifest_entry = bound_manifest_entry.entry;
 	auto &data_file = manifest_entry.data_file;
 
 	// Get the partition spec for this file
-	auto &partition_specs = multi_file_list.GetMetadata().partition_specs;
+	auto &partition_specs = metadata.partition_specs;
 	auto spec_id = manifest_file.partition_spec_id;
 	auto partition_spec_it = partition_specs.find(spec_id);
 	if (partition_spec_it == partition_specs.end()) {
@@ -386,16 +385,18 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
                                                               ClientContext &context, MultiFileGlobalState &gstate) {
 	auto &iceberg_state = gstate.multi_file_reader_state->Cast<IcebergMultiFileReaderGlobalState>();
 	const auto &multi_file_list = dynamic_cast<const IcebergMultiFileList &>(*iceberg_state.file_list);
+	auto &metadata = multi_file_list.GetMetadata();
 	auto file_id = reader_data.reader->file_list_idx.GetIndex();
 	auto bound_manifest_entry = multi_file_list.GetManifestEntry(file_id);
-	multi_file_list.ProcessDeletes();
+	auto manifest_file = multi_file_list.GetManifestFileForDataFile(file_id);
+	auto delete_plan = multi_file_list.ProcessDeletes(bound_manifest_entry);
 
 	//! Make a copy of the global columns+column_ids, if we have equality deletes we will add columns to this
 	//! This is done so CreateMapping treats these columns as required for the current file,
 	//! and sets up local_column_ids+expressions for these columns.
 	auto scan_columns = global_columns;
 	auto scan_column_ids = global_column_ids;
-	auto read_columns = AddEqualityDeleteColumns(multi_file_list, bound_manifest_entry, scan_columns, scan_column_ids,
+	auto read_columns = AddEqualityDeleteColumns(metadata, delete_plan.equality_deletes, scan_columns, scan_column_ids,
 	                                             reader_data, context);
 	auto equality_delete_state = make_uniq<IcebergEqualityDeleteReadState>(std::move(read_columns));
 
@@ -403,22 +404,21 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
 	                              scan_column_ids, context, gstate.multi_file_reader_state.get());
 
 	auto &reader = *reader_data.reader;
-	const auto &file_path = bound_manifest_entry.entry.data_file.file_path;
-	reader.deletion_filter = multi_file_list.GetPositionalDeletesForFile(file_path);
+	reader.deletion_filter = std::move(delete_plan.positional_deletes);
 
 	auto &local_columns = reader_data.reader->columns;
-	auto &metadata = multi_file_list.GetMetadata();
 	auto &mappings = metadata.mappings;
-	if (!multi_file_list.GetMetadata().mappings.empty()) {
+	if (!metadata.mappings.empty()) {
 		auto &root = metadata.mappings[0];
 		for (auto &local_column : local_columns) {
 			ApplyFieldMapping(local_column, mappings, root.field_mapping_indexes, context);
 		}
 	}
-	ApplyPartitionConstants(multi_file_list, reader_data, scan_columns, scan_column_ids, context);
+	ApplyPartitionConstants(manifest_file, bound_manifest_entry, metadata, reader_data, scan_columns, scan_column_ids,
+	                        context);
 
 	equality_delete_state->expression =
-	    CreateEqualityDeleteExpression(multi_file_list, bound_manifest_entry, local_columns, *equality_delete_state);
+	    CreateEqualityDeleteExpression(delete_plan.equality_deletes, local_columns, *equality_delete_state);
 	iceberg_state.CacheEqualityDeleteReadState(file_id, std::move(equality_delete_state));
 
 	return CreateMapping(context, reader_data, scan_columns, scan_column_ids, table_filters, gstate.file_list,
@@ -434,9 +434,8 @@ void IcebergMultiFileReader::FinalizeBind(MultiFileReaderData &reader_data, cons
 }
 
 unique_ptr<Expression> IcebergMultiFileReader::CreateEqualityDeleteExpression(
-    const IcebergMultiFileList &multi_file_list, const BoundIcebergManifestEntry &bound_manifest_entry,
+    const vector<reference<const IcebergEqualityDeleteFile>> &delete_files,
     const vector<MultiFileColumnDefinition> &local_columns, const IcebergEqualityDeleteReadState &read_state) {
-	auto delete_files = multi_file_list.GetEqualityDeletesForFile(bound_manifest_entry);
 	if (delete_files.empty()) {
 		return nullptr;
 	}
@@ -454,20 +453,20 @@ unique_ptr<Expression> IcebergMultiFileReader::CreateEqualityDeleteExpression(
 	vector<unique_ptr<Expression>> rows;
 	for (auto &delete_file_ref : delete_files) {
 		auto &delete_file = delete_file_ref.get();
-		if (delete_file.equality_values.empty()) {
+		auto &equality_values = delete_file.equality_values;
+		if (equality_values.size() == 0) {
 			continue;
 		}
-		auto row_count = delete_file.equality_values.begin()->second.size();
-		for (auto &entry : delete_file.equality_values) {
-			if (entry.second.size() != row_count) {
-				throw InvalidConfigurationException("Equality delete file contains columns with differing row counts");
-			}
+		auto &equality_ids = delete_file.equality_ids;
+		if (equality_values.ColumnCount() != equality_ids.size()) {
+			throw InvalidConfigurationException("Equality delete file contains an unexpected number of columns");
 		}
+		auto row_count = equality_values.size();
 		for (idx_t row_index = 0; row_index < row_count; row_index++) {
 			vector<unique_ptr<Expression>> equalities;
-			for (auto &entry : delete_file.equality_values) {
-				auto field_id = entry.first;
-				auto &constant = entry.second[row_index];
+			for (idx_t column_index = 0; column_index < equality_ids.size(); column_index++) {
+				auto field_id = equality_ids[column_index];
+				auto constant = equality_values.GetValue(column_index, row_index);
 
 				if (!id_to_local_column.count(field_id)) {
 					//! A field absent from the data file is NULL for equality-delete matching,

@@ -1,0 +1,81 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/equality_deletes/test_equality_delete_schema_evolution_float_to_double.test
+# description: Equality deletes remain valid when their target column evolves from FLOAT to DOUBLE
+# group: [equality_deletes]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require-env EQUALITY_DELETE_WRITES_ENABLED 1
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+# Do not ignore 'HTTP' error messages!
+set ignore_error_messages
+
+statement ok
+use my_datalake.default;
+
+statement ok
+set unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=true;
+
+statement ok
+drop table if exists my_datalake.default.equality_delete_evolve_float_to_double;
+
+statement ok
+create table my_datalake.default.equality_delete_evolve_float_to_double (
+	id integer,
+	target float,
+	marker varchar
+);
+
+statement ok
+insert into my_datalake.default.equality_delete_evolve_float_to_double values
+	(1, 1.5::float, 'delete-before-evolution'),
+	(2, 2.5::float, 'delete-after-evolution-old-file'),
+	(3, 3.5::float, 'keep-old');
+
+# This delete file stores the target field using its original FLOAT type.
+statement ok
+delete from my_datalake.default.equality_delete_evolve_float_to_double where target = 1.5::float;
+
+statement ok
+alter table my_datalake.default.equality_delete_evolve_float_to_double alter column target set type double;
+
+statement ok
+insert into my_datalake.default.equality_delete_evolve_float_to_double values
+	(4, 1.5::double, 'old-delete-does-not-apply-to-new-file'),
+	(5, 2.5::double, 'delete-after-evolution-new-file'),
+	(6, 16777217.25::double, 'delete-promoted-value'),
+	(7, 16777219.25::double, 'keep-new');
+
+# This promoted-type delete applies to matching rows in both the old FLOAT file and the new DOUBLE file.
+statement ok
+delete from my_datalake.default.equality_delete_evolve_float_to_double where target = 2.5::double;
+
+statement ok
+delete from my_datalake.default.equality_delete_evolve_float_to_double where target = 16777217.25::double;
+
+query II
+select count(*), sum(record_count)
+from iceberg_metadata(my_datalake.default.equality_delete_evolve_float_to_double)
+where content = 'EQUALITY_DELETES' and status != 'DELETED';
+----
+3	3
+
+# Do not project the equality-delete target: it must be scanned privately with the promoted type.
+query II
+select id, marker
+from my_datalake.default.equality_delete_evolve_float_to_double
+order by id;
+----
+3	keep-old
+4	old-delete-does-not-apply-to-new-file
+7	keep-new
+
+statement ok
+drop table my_datalake.default.equality_delete_evolve_float_to_double;
