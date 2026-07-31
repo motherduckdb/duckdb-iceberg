@@ -6,6 +6,8 @@
 
 namespace duckdb {
 
+struct IcebergDataViewCursor;
+
 //! A batch of scanned/cached IcebergManifestEntry items to read
 struct ManifestReadBatch {
 public:
@@ -25,6 +27,7 @@ struct ManifestEntryReadState {
 public:
 	void PushBatch(ManifestReadBatch &&batch);
 	bool GetBatch(idx_t batch_idx, ManifestReadBatch &result) const;
+	bool TryReadBatch(IcebergDataViewCursor &cursor) const;
 
 private:
 	//! Lock guarding the batches against concurrent access

@@ -1,7 +1,4 @@
 #include "core/deletes/iceberg_positional_delete.hpp"
-#include "planning/iceberg_multi_file_list.hpp"
-#include "iceberg_logging.hpp"
-#include "duckdb/logging/logger.hpp"
 
 namespace duckdb {
 
@@ -11,57 +8,6 @@ unique_ptr<DeleteFilter> IcebergPositionalDeleteData::ToFilter() const {
 
 void IcebergPositionalDeleteData::ToSet(set<idx_t> &out) const {
 	out.insert(invalid_rows.begin(), invalid_rows.end());
-}
-
-static optional_ptr<IcebergPositionalDeleteData>
-TryGetOrCreate(position_delete_map_t &deletes, const BoundIcebergManifestEntry &entry, const string &file_path) {
-	auto it = deletes.find(file_path);
-	if (it == deletes.end()) {
-		it = deletes.emplace(file_path, make_shared_ptr<IcebergPositionalDeleteData>(entry)).first;
-	} else if (it->second->type == IcebergDeleteType::POSITIONAL_DELETE) {
-		it->second->entries.push_back(entry);
-	}
-	if (it->second->type != IcebergDeleteType::POSITIONAL_DELETE) {
-		return nullptr;
-	}
-	return reinterpret_cast<IcebergPositionalDeleteData &>(*it->second);
-}
-
-void IcebergMultiFileList::ScanPositionalDeleteFile(const BoundIcebergManifestEntry &bound_entry,
-                                                    DataChunk &result) const {
-	//! FIXME: might want to check the 'columns' of the 'reader' to check, field-ids are:
-	auto names = FlatVector::GetData<string_t>(result.data[0]);  //! 2147483546
-	auto row_ids = FlatVector::GetData<int64_t>(result.data[1]); //! 2147483545
-
-	auto count = result.size();
-	if (count == 0) {
-		return;
-	}
-	reference<const string_t> current_file_path = names[0];
-	auto initial_key = current_file_path.get().GetString();
-	auto &positional_delete_data = GetPositionalDeleteData();
-	auto deletes = TryGetOrCreate(positional_delete_data, bound_entry, initial_key);
-	DUCKDB_LOG(context, IcebergLogType,
-	           "Iceberg Delete Scan, read 'positional_delete_file': '%s', referencing 'data_file': '%s'",
-	           bound_entry.entry.data_file.file_path, initial_key);
-
-	for (idx_t i = 0; i < count; i++) {
-		auto &name = names[i];
-		auto &row_id = row_ids[i];
-
-		if (name != current_file_path.get()) {
-			current_file_path = name;
-			auto key = current_file_path.get().GetString();
-			DUCKDB_LOG(context, IcebergLogType,
-			           "Iceberg Delete Scan, read 'positional_delete_file': '%s', referencing 'data_file': '%s'",
-			           bound_entry.entry.data_file.file_path, key);
-			deletes = TryGetOrCreate(positional_delete_data, bound_entry, key);
-		}
-		if (!deletes) {
-			continue;
-		}
-		deletes->AddRow(row_id);
-	}
 }
 
 } // namespace duckdb
