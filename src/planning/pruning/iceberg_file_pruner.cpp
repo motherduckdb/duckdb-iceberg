@@ -269,10 +269,6 @@ bool IcebergFilePruner::DeleteFileMatchesDataFile(const IcebergManifestFile &del
 		if (delete_sequence_number < data_sequence_number) {
 			return false;
 		}
-		auto &referenced_data_file = delete_manifest_entry.data_file.referenced_data_file;
-		if (referenced_data_file && *referenced_data_file != data_manifest_entry.data_file.file_path) {
-			return false;
-		}
 		break;
 	}
 	default:
