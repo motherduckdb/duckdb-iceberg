@@ -245,6 +245,65 @@ bool IcebergFilePruner::DeleteManifestMatchesDataFile(const IcebergManifestFile 
 	return true;
 }
 
+bool IcebergFilePruner::EqualityDeleteMatchesDataFile(const IcebergDataFile &delete_file,
+                                                      const IcebergDataFile &data_file) const {
+	auto &equality_ids = delete_file.equality_ids;
+
+	for (auto field_id : equality_ids) {
+		auto delete_null_count = delete_file.null_value_counts.find(field_id);
+		if (delete_null_count == delete_file.null_value_counts.end() || delete_null_count->second != 0) {
+			//! A NULL delete key can match NULL data values - require a known zero null count
+			continue;
+		}
+
+		auto delete_lower = delete_file.lower_bounds.find(field_id);
+		auto delete_upper = delete_file.upper_bounds.find(field_id);
+		auto data_lower = data_file.lower_bounds.find(field_id);
+		auto data_upper = data_file.upper_bounds.find(field_id);
+		if (delete_lower == delete_file.lower_bounds.end() || delete_upper == delete_file.upper_bounds.end() ||
+		    data_lower == data_file.lower_bounds.end() || data_upper == data_file.upper_bounds.end()) {
+			continue;
+		}
+
+		auto column_p = metadata.FindColumnByFieldId(field_id);
+		if (!column_p) {
+			//! Could not locate the column in the current or any historical schema
+			continue;
+		}
+		auto &column = *column_p;
+		if (column.type.id() == LogicalTypeId::FLOAT || column.type.id() == LogicalTypeId::DOUBLE) {
+			auto delete_nan_count = delete_file.nan_value_counts.find(field_id);
+			if (delete_nan_count == delete_file.nan_value_counts.end() || delete_nan_count->second != 0) {
+				//! Manifest bounds exclude NaNs - require a known zero NaN count
+				continue;
+			}
+		}
+
+		try {
+			auto delete_stats = IcebergPredicateStats::DeserializeBounds(delete_lower->second, delete_upper->second,
+			                                                             column.name, column.type);
+			auto data_stats = IcebergPredicateStats::DeserializeBounds(data_lower->second, data_upper->second,
+			                                                           column.name, column.type);
+			if (!delete_stats.lower_bound || !delete_stats.upper_bound || !data_stats.lower_bound ||
+			    !data_stats.upper_bound || delete_stats.lower_bound->IsNull() || delete_stats.upper_bound->IsNull() ||
+			    data_stats.lower_bound->IsNull() || data_stats.upper_bound->IsNull()) {
+				continue;
+			}
+			//! Test for either of these conditions:
+			//! data:                   L --------- U
+			//! delete:                               L --------- U
+			//! delete:   L --------- U
+			if (*delete_stats.upper_bound < *data_stats.lower_bound ||
+			    *delete_stats.lower_bound > *data_stats.upper_bound) {
+				return false;
+			}
+		} catch (Exception &) {
+			continue;
+		}
+	}
+	return true;
+}
+
 bool IcebergFilePruner::DeleteFileMatchesDataFile(const IcebergManifestFile &delete_manifest,
                                                   const IcebergManifestEntry &delete_manifest_entry,
                                                   const IcebergManifestFile &data_manifest,
@@ -307,6 +366,9 @@ bool IcebergFilePruner::DeleteFileMatchesDataFile(const IcebergManifestFile &del
 		if (!Value::NotDistinctFrom(delete_partition.value, data_partition.value)) {
 			return false;
 		}
+	}
+	if (delete_file.content == IcebergManifestEntryContentType::EQUALITY_DELETES) {
+		return EqualityDeleteMatchesDataFile(delete_file, data_file);
 	}
 	return true;
 }
