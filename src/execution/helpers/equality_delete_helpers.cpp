@@ -440,11 +440,11 @@ void IcebergDelete::WriteEqualityDeleteFile(ClientContext &context, IcebergDelet
 	for (auto &predicate : equality_predicates) {
 		optional<Value> min_value;
 		optional<Value> max_value;
-		int64_t null_count = 0;
-		int64_t nan_count = 0;
+		bool has_null = false;
+		bool has_nan = false;
 		for (auto &value : predicate.values) {
 			if (value.IsNull()) {
-				null_count++;
+				has_null = true;
 				continue;
 			}
 			bool is_nan = false;
@@ -454,7 +454,7 @@ void IcebergDelete::WriteEqualityDeleteFile(ClientContext &context, IcebergDelet
 				is_nan = Value::IsNan(value.GetValue<double>());
 			}
 			if (is_nan) {
-				nan_count++;
+				has_nan = true;
 				continue;
 			}
 			if (!min_value || value < *min_value) {
@@ -464,9 +464,13 @@ void IcebergDelete::WriteEqualityDeleteFile(ClientContext &context, IcebergDelet
 				max_value = value;
 			}
 		}
-		delete_file.null_value_counts[predicate.field_id] = null_count;
+		if (!has_null) {
+			delete_file.null_value_counts[predicate.field_id] = 0;
+		}
 		if (predicate.type.id() == LogicalTypeId::FLOAT || predicate.type.id() == LogicalTypeId::DOUBLE) {
-			delete_file.nan_value_counts[predicate.field_id] = nan_count;
+			if (!has_nan) {
+				delete_file.nan_value_counts[predicate.field_id] = 0;
+			}
 		}
 		if (!min_value || !max_value) {
 			continue;
