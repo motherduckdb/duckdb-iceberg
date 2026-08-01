@@ -148,6 +148,7 @@ public:
 		if (this != &other) {
 			file = other.file;
 			manifest_entries = other.manifest_entries;
+			metrics = other.metrics;
 			if (other.manifest_metadata) {
 				manifest_metadata.reset();
 				manifest_metadata.emplace(*other.manifest_metadata);
@@ -161,6 +162,7 @@ public:
 		if (this != &other) {
 			file = std::move(other.file);
 			manifest_entries = std::move(other.manifest_entries);
+			metrics = std::move(other.metrics);
 			if (other.manifest_metadata) {
 				manifest_metadata.reset();
 				manifest_metadata.emplace(*other.manifest_metadata);

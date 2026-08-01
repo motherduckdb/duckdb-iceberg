@@ -64,6 +64,24 @@ static string MetricsTypeToString(IcebergSnapshotMetricType type) {
 	throw InvalidConfigurationException("Metrics type not implemented: %d", static_cast<uint8_t>(type));
 }
 
+static bool TryParseMetricValue(const string &raw_value, int64_t &value) {
+	if (raw_value.empty()) {
+		return false;
+	}
+	for (auto character : raw_value) {
+		if (character < '0' || character > '9') {
+			return false;
+		}
+	}
+	try {
+		size_t parsed_characters = 0;
+		value = std::stoll(raw_value, &parsed_characters);
+		return parsed_characters == raw_value.size();
+	} catch (...) {
+		return false;
+	}
+}
+
 } // namespace
 
 metrics_map_t IcebergSnapshotMetrics::EmptyMetrics() {
@@ -110,19 +128,12 @@ IcebergSnapshotMetrics::IcebergSnapshotMetrics(const case_insensitive_map_t<stri
 			//! Not present in the summary
 			continue;
 		}
-		auto raw_value = it->second;
 		int64_t value;
-		try {
-			value = std::stoll(it->second);
-		} catch (...) {
+		if (!TryParseMetricValue(it->second, value)) {
 			if (is_file_size_metric) {
 				file_size_metrics_are_valid = false;
 			}
 			// Skip invalid metrics
-			continue;
-		}
-		if (is_file_size_metric && value < 0) {
-			file_size_metrics_are_valid = false;
 			continue;
 		}
 		metrics[item.type] = value;
@@ -137,6 +148,45 @@ IcebergSnapshotMetrics::IcebergSnapshotMetrics(const case_insensitive_map_t<stri
 void IcebergSnapshotMetrics::AddSizeMetric(IcebergSnapshotMetricType type, int64_t value) {
 	auto &metric = metrics.emplace(type, 0).first->second;
 	metric = IcebergUtils::AddFileSizeChecked(metric, value);
+}
+
+void IcebergSnapshotMetrics::AddMetric(IcebergSnapshotMetricType type, int64_t value) {
+	if (value < 0) {
+		throw InvalidConfigurationException("Iceberg snapshot metric '%s' cannot be negative",
+		                                    MetricsTypeToString(type));
+	}
+	auto &metric = metrics.emplace(type, 0).first->second;
+	int64_t updated;
+	if (!TryAddOperator::Operation(metric, value, updated)) {
+		throw InvalidConfigurationException("Iceberg snapshot metric '%s' exceeds the supported BIGINT range",
+		                                    MetricsTypeToString(type));
+	}
+	metric = updated;
+}
+
+void IcebergSnapshotMetrics::UpdateTotalMetric(IcebergSnapshotMetricType type, int64_t added, int64_t removed) {
+	if (added < 0 || removed < 0) {
+		throw InvalidConfigurationException("Cannot update Iceberg snapshot metric '%s' with negative values",
+		                                    MetricsTypeToString(type));
+	}
+	auto total_it = metrics.find(type);
+	if (total_it == metrics.end()) {
+		return;
+	}
+	int64_t with_added;
+	int64_t updated;
+	if (!TryAddOperator::Operation(total_it->second, added, with_added) ||
+	    !TrySubtractOperator::Operation(with_added, removed, updated)) {
+		throw InvalidConfigurationException("Iceberg snapshot metric '%s' exceeds the supported BIGINT range",
+		                                    MetricsTypeToString(type));
+	}
+	if (updated < 0) {
+		//! An inherited optional total is inconsistent with the files being removed. Keep it unknown rather than
+		//! emitting an incorrect value or rejecting an otherwise valid commit.
+		metrics.erase(total_it);
+		return;
+	}
+	total_it->second = updated;
 }
 
 void IcebergSnapshotMetrics::UpdateTotalFilesSize(int64_t added, int64_t removed) {
@@ -173,98 +223,80 @@ void IcebergSnapshotMetrics::AddManifestListEntry(const IcebergManifestListEntry
 	auto &manifest_file = manifest_list_entry.file;
 	if (manifest_file.content == IcebergManifestContentType::DELETE) {
 		//! Delete file count metrics
-		metrics.emplace(IcebergSnapshotMetricType::ADDED_DELETE_FILES, 0).first->second +=
-		    manifest_metrics.added_delete_files;
-		metrics.emplace(IcebergSnapshotMetricType::REMOVED_DELETE_FILES, 0).first->second +=
-		    manifest_metrics.removed_delete_files;
-		{
-			auto it = metrics.find(IcebergSnapshotMetricType::TOTAL_DELETE_FILES);
-			if (it != metrics.end()) {
-				auto previous = it->second;
-				int64_t total_delete_files =
-				    previous + manifest_metrics.added_delete_files - manifest_metrics.removed_delete_files;
-				if (total_delete_files >= 0) {
-					metrics[IcebergSnapshotMetricType::TOTAL_DELETE_FILES] = total_delete_files;
-				}
-			}
-		}
+		AddMetric(IcebergSnapshotMetricType::ADDED_DELETE_FILES, manifest_metrics.added_delete_files);
+		AddMetric(IcebergSnapshotMetricType::REMOVED_DELETE_FILES, manifest_metrics.removed_delete_files);
+		UpdateTotalMetric(IcebergSnapshotMetricType::TOTAL_DELETE_FILES, manifest_metrics.added_delete_files,
+		                  manifest_metrics.removed_delete_files);
 
-		//! Deletion records metrics
-		metrics.emplace(IcebergSnapshotMetricType::ADDED_POSITION_DELETES, 0).first->second +=
-		    manifest_metrics.added_position_deletes;
-		metrics.emplace(IcebergSnapshotMetricType::REMOVED_POSITION_DELETE_FILES, 0).first->second +=
-		    manifest_metrics.added_position_delete_files;
+		//! Position delete file and record metrics. Deletion vectors contribute records, but not position delete files.
+		AddMetric(IcebergSnapshotMetricType::ADDED_POSITION_DELETE_FILES, manifest_metrics.added_position_delete_files);
+		AddMetric(IcebergSnapshotMetricType::REMOVED_POSITION_DELETE_FILES,
+		          manifest_metrics.removed_position_delete_files);
+		AddMetric(IcebergSnapshotMetricType::ADDED_DVS, manifest_metrics.added_deletion_vectors);
+		AddMetric(IcebergSnapshotMetricType::REMOVED_DVS, manifest_metrics.removed_deletion_vectors);
+		AddMetric(IcebergSnapshotMetricType::ADDED_POSITION_DELETES, manifest_metrics.added_position_deletes);
+		AddMetric(IcebergSnapshotMetricType::REMOVED_POSITION_DELETES, manifest_metrics.removed_position_deletes);
+		UpdateTotalMetric(IcebergSnapshotMetricType::TOTAL_POSITION_DELETES, manifest_metrics.added_position_deletes,
+		                  manifest_metrics.removed_position_deletes);
 
-		metrics.emplace(IcebergSnapshotMetricType::ADDED_DVS, 0).first->second +=
-		    manifest_metrics.added_deletion_vectors;
-		metrics.emplace(IcebergSnapshotMetricType::REMOVED_DVS, 0).first->second +=
-		    manifest_metrics.removed_deletion_vectors;
-
-		//! Total for position delete files (positional-deletes and dvs)
-		{
-			auto it = metrics.find(IcebergSnapshotMetricType::TOTAL_POSITION_DELETES);
-			if (it != metrics.end()) {
-				auto previous = it->second;
-				int64_t new_total = previous + manifest_metrics.added_position_delete_files -
-				                    manifest_metrics.removed_position_delete_files;
-				if (new_total >= 0) {
-					metrics[IcebergSnapshotMetricType::TOTAL_POSITION_DELETES] = new_total;
-				}
-			}
-		}
-
-		metrics.emplace(IcebergSnapshotMetricType::ADDED_EQUALITY_DELETES, 0).first->second +=
-		    manifest_metrics.added_equality_deletes;
-		metrics.emplace(IcebergSnapshotMetricType::REMOVED_EQUALITY_DELETE_FILES, 0).first->second +=
-		    manifest_metrics.added_equality_delete_files;
-		//! Total for equality delete files
-		{
-			auto it = metrics.find(IcebergSnapshotMetricType::TOTAL_EQUALITY_DELETES);
-			if (it != metrics.end()) {
-				auto previous = it->second;
-				int64_t new_total = previous + manifest_metrics.added_equality_delete_files -
-				                    manifest_metrics.removed_equality_delete_files;
-				if (new_total >= 0) {
-					metrics[IcebergSnapshotMetricType::TOTAL_EQUALITY_DELETES] = new_total;
-				}
-			}
-		}
+		//! Equality delete file and record metrics
+		AddMetric(IcebergSnapshotMetricType::ADDED_EQUALITY_DELETE_FILES, manifest_metrics.added_equality_delete_files);
+		AddMetric(IcebergSnapshotMetricType::REMOVED_EQUALITY_DELETE_FILES,
+		          manifest_metrics.removed_equality_delete_files);
+		AddMetric(IcebergSnapshotMetricType::ADDED_EQUALITY_DELETES, manifest_metrics.added_equality_deletes);
+		AddMetric(IcebergSnapshotMetricType::REMOVED_EQUALITY_DELETES, manifest_metrics.removed_equality_deletes);
+		UpdateTotalMetric(IcebergSnapshotMetricType::TOTAL_EQUALITY_DELETES, manifest_metrics.added_equality_deletes,
+		                  manifest_metrics.removed_equality_deletes);
 		return;
 	}
 
 	//! Data file count metrics
-	metrics.emplace(IcebergSnapshotMetricType::ADDED_DATA_FILES, 0).first->second += manifest_metrics.added_data_files;
-	metrics.emplace(IcebergSnapshotMetricType::DELETED_DATA_FILES, 0).first->second +=
-	    manifest_metrics.deleted_data_files;
-	{
-		auto it = metrics.find(IcebergSnapshotMetricType::TOTAL_DATA_FILES);
-		if (it != metrics.end()) {
-			auto previous = it->second;
-			int64_t new_total = previous + manifest_metrics.added_data_files - manifest_metrics.deleted_data_files;
-			if (new_total >= 0) {
-				metrics[IcebergSnapshotMetricType::TOTAL_DATA_FILES] = new_total;
-			}
-		}
-	}
+	AddMetric(IcebergSnapshotMetricType::ADDED_DATA_FILES, manifest_metrics.added_data_files);
+	AddMetric(IcebergSnapshotMetricType::DELETED_DATA_FILES, manifest_metrics.deleted_data_files);
+	UpdateTotalMetric(IcebergSnapshotMetricType::TOTAL_DATA_FILES, manifest_metrics.added_data_files,
+	                  manifest_metrics.deleted_data_files);
 
 	//! Data record metrics
-	metrics.emplace(IcebergSnapshotMetricType::ADDED_RECORDS, 0).first->second += manifest_metrics.added_records;
-	metrics.emplace(IcebergSnapshotMetricType::DELETED_RECORDS, 0).first->second += manifest_metrics.deleted_records;
-	{
-		auto it = metrics.find(IcebergSnapshotMetricType::TOTAL_RECORDS);
-		if (it != metrics.end()) {
-			auto previous = it->second;
-			int64_t new_total = previous + manifest_metrics.added_records - manifest_metrics.deleted_records;
-			if (new_total >= 0) {
-				metrics[IcebergSnapshotMetricType::TOTAL_RECORDS] = new_total;
-			}
-		}
-	}
+	AddMetric(IcebergSnapshotMetricType::ADDED_RECORDS, manifest_metrics.added_records);
+	AddMetric(IcebergSnapshotMetricType::DELETED_RECORDS, manifest_metrics.deleted_records);
+	UpdateTotalMetric(IcebergSnapshotMetricType::TOTAL_RECORDS, manifest_metrics.added_records,
+	                  manifest_metrics.deleted_records);
 }
 
-void IcebergSnapshotMetrics::RemoveFileSize(int64_t file_size_in_bytes) {
-	AddSizeMetric(IcebergSnapshotMetricType::REMOVED_FILES_SIZE, file_size_in_bytes);
-	UpdateTotalFilesSize(0, file_size_in_bytes);
+void IcebergSnapshotMetrics::RemoveManifestEntry(const IcebergManifestEntry &manifest_entry) {
+	auto &data_file = manifest_entry.data_file;
+	auto content_size = data_file.GetContentSizeInBytes();
+	AddSizeMetric(IcebergSnapshotMetricType::REMOVED_FILES_SIZE, content_size);
+	UpdateTotalFilesSize(0, content_size);
+
+	switch (data_file.content) {
+	case IcebergManifestEntryContentType::DATA:
+		AddMetric(IcebergSnapshotMetricType::DELETED_DATA_FILES, 1);
+		AddMetric(IcebergSnapshotMetricType::DELETED_RECORDS, data_file.record_count);
+		UpdateTotalMetric(IcebergSnapshotMetricType::TOTAL_DATA_FILES, 0, 1);
+		UpdateTotalMetric(IcebergSnapshotMetricType::TOTAL_RECORDS, 0, data_file.record_count);
+		break;
+	case IcebergManifestEntryContentType::POSITION_DELETES:
+		AddMetric(IcebergSnapshotMetricType::REMOVED_DELETE_FILES, 1);
+		UpdateTotalMetric(IcebergSnapshotMetricType::TOTAL_DELETE_FILES, 0, 1);
+		if (data_file.IsDeletionVector()) {
+			AddMetric(IcebergSnapshotMetricType::REMOVED_DVS, 1);
+		} else {
+			AddMetric(IcebergSnapshotMetricType::REMOVED_POSITION_DELETE_FILES, 1);
+		}
+		AddMetric(IcebergSnapshotMetricType::REMOVED_POSITION_DELETES, data_file.record_count);
+		UpdateTotalMetric(IcebergSnapshotMetricType::TOTAL_POSITION_DELETES, 0, data_file.record_count);
+		break;
+	case IcebergManifestEntryContentType::EQUALITY_DELETES:
+		AddMetric(IcebergSnapshotMetricType::REMOVED_DELETE_FILES, 1);
+		AddMetric(IcebergSnapshotMetricType::REMOVED_EQUALITY_DELETE_FILES, 1);
+		AddMetric(IcebergSnapshotMetricType::REMOVED_EQUALITY_DELETES, data_file.record_count);
+		UpdateTotalMetric(IcebergSnapshotMetricType::TOTAL_DELETE_FILES, 0, 1);
+		UpdateTotalMetric(IcebergSnapshotMetricType::TOTAL_EQUALITY_DELETES, 0, data_file.record_count);
+		break;
+	default:
+		throw InternalException("Unsupported Iceberg manifest entry content type");
+	}
 }
 
 bool IcebergSnapshotMetrics::HasTotalFilesSize() const {

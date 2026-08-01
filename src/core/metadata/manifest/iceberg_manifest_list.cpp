@@ -135,11 +135,11 @@ static void CollectDeleteManifestMetrics(const IcebergManifestEntry &manifest_en
 		break;
 	}
 	case IcebergManifestEntryContentType::POSITION_DELETES: {
-		metrics.position_delete_files++;
+		metrics.position_deletes += data_file.record_count;
 		if (data_file.IsDeletionVector()) {
-			metrics.deletion_vectors += data_file.record_count;
+			metrics.deletion_vectors++;
 		} else {
-			metrics.position_deletes += data_file.record_count;
+			metrics.position_delete_files++;
 		}
 		break;
 	}
@@ -215,7 +215,7 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 
 			//! Gather 'added-files-size' and 'removed-files-size' metrics
 			auto new_files_size =
-			    IcebergUtils::AddFileSizeChecked(entry_metrics.files_size, data_file.file_size_in_bytes);
+			    IcebergUtils::AddFileSizeChecked(entry_metrics.files_size, data_file.GetContentSizeInBytes());
 			entry_metrics.files_size = new_files_size;
 
 			if (manifest_metadata.content == IcebergManifestContentType::DATA) {

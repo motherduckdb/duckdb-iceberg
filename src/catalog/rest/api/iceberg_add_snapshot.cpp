@@ -65,7 +65,7 @@ static optional<IcebergManifestListEntry> RewriteManifestFile(const IcebergManif
 		}
 		if (manifest_entry.status != IcebergManifestEntryStatusType::DELETED &&
 		    deletes.IsInvalidated(manifest_entry.data_file.file_path)) {
-			snapshot_metrics.RemoveFileSize(manifest_entry.data_file.file_size_in_bytes);
+			snapshot_metrics.RemoveManifestEntry(manifest_entry);
 			manifest_entry.status = IcebergManifestEntryStatusType::DELETED;
 			removed_any_entries = true;
 		}
@@ -123,7 +123,8 @@ static int64_t ReconstructTotalFilesSize(IcebergCommitState &commit_state, int32
 			if (entry.status == IcebergManifestEntryStatusType::DELETED) {
 				continue;
 			}
-			total_files_size = IcebergUtils::AddFileSizeChecked(total_files_size, entry.data_file.file_size_in_bytes);
+			total_files_size =
+			    IcebergUtils::AddFileSizeChecked(total_files_size, entry.data_file.GetContentSizeInBytes());
 		}
 	}
 	return total_files_size;

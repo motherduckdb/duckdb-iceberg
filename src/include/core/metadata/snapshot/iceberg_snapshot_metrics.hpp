@@ -7,6 +7,7 @@
 namespace duckdb {
 
 class IcebergSnapshot;
+struct IcebergManifestEntry;
 struct IcebergManifestListEntry;
 
 //! Taken from https://iceberg.apache.org/spec/#metrics
@@ -84,7 +85,7 @@ public:
 
 public:
 	void AddManifestListEntry(const IcebergManifestListEntry &manifest_list_entry);
-	void RemoveFileSize(int64_t file_size_in_bytes);
+	void RemoveManifestEntry(const IcebergManifestEntry &manifest_entry);
 	bool HasTotalFilesSize() const;
 	void SetTotalFilesSize(int64_t total_files_size);
 	const metrics_map_t &GetMetrics() const;
@@ -92,6 +93,8 @@ public:
 
 private:
 	void AddSizeMetric(IcebergSnapshotMetricType type, int64_t value);
+	void AddMetric(IcebergSnapshotMetricType type, int64_t value);
+	void UpdateTotalMetric(IcebergSnapshotMetricType type, int64_t added, int64_t removed);
 	void UpdateTotalFilesSize(int64_t added, int64_t removed);
 	void InheritMetric(const IcebergSnapshotMetrics &parent, IcebergSnapshotMetricType metric);
 	static metrics_map_t EmptyMetrics();

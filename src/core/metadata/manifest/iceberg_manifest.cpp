@@ -337,6 +337,13 @@ bool IcebergDataFile::IsDeletionVector() const {
 	return true;
 }
 
+int64_t IcebergDataFile::GetContentSizeInBytes() const {
+	if (IsDeletionVector()) {
+		return *content_size_in_bytes;
+	}
+	return file_size_in_bytes;
+}
+
 LogicalType IcebergDataFile::GetType(const IcebergTableMetadata &metadata, const LogicalType &partition_type) {
 	auto &iceberg_version = metadata.iceberg_version;
 

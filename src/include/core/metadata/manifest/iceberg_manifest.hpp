@@ -83,6 +83,7 @@ public:
 	bool HasFirstRowId() const;
 	int64_t GetFirstRowId() const;
 	bool IsDeletionVector() const;
+	int64_t GetContentSizeInBytes() const;
 
 public:
 	IcebergManifestEntryContentType content;
