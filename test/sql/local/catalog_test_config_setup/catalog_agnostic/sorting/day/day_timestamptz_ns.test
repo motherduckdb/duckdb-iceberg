@@ -19,8 +19,6 @@ SET Calendar='gregorian';
 statement ok
 SET TimeZone='Europe/Amsterdam';
 
-set ignore_error_messages
-
 statement ok
 set threads=1;
 

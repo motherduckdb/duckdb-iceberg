@@ -52,10 +52,10 @@ bool IcebergSchemaEntry::HandleCreateConflict(CatalogTransaction &transaction, C
 		// We cannot create (or stage create) a table replace within a transaction yet.
 		// FIXME: With Snapshot operation type overwrite, you can handle create or replace for tables.
 		auto &iceberg_transaction = GetICTransaction(transaction);
-		auto table_key = IcebergTableInformation::GetTableKey(namespace_items, entry_name);
+		auto &ic_catalog = catalog.Cast<IcebergCatalog>();
+		auto table_key = IcebergTableInformation::GetTableKey(ic_catalog, namespace_items, entry_name);
 		auto latest_state = iceberg_transaction.GetLatestTableState(table_key);
 		if (latest_state && latest_state->IsDroppedOrRenamed()) {
-			auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 			vector<string> qualified_name = {ic_catalog.GetName().GetIdentifierName()};
 			qualified_name.insert(qualified_name.end(), namespace_items.begin(), namespace_items.end());
 			qualified_name.push_back(entry_name);

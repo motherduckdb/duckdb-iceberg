@@ -11,8 +11,6 @@ require iceberg
 
 require httpfs
 
-set ignore_error_messages
-
 # With 'target-file-size-bytes' set, 500_000 rows -> 4-6 files
 statement ok
 drop table if exists my_datalake.default.my_table;

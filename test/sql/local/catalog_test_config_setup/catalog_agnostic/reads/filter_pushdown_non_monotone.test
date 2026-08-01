@@ -12,8 +12,6 @@ require iceberg
 
 require httpfs
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 DROP TABLE IF EXISTS my_datalake.default.non_monotone_pruning;

@@ -15,8 +15,6 @@ require icu
 
 require core_functions
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 create schema if not exists my_datalake.default;

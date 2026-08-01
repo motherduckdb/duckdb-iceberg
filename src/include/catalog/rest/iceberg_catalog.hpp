@@ -101,6 +101,7 @@ public:
 	static unique_ptr<SecretEntry> GetIcebergSecret(ClientContext &context, const string &secret_name);
 	static unique_ptr<SecretEntry> GetHTTPSecret(ClientContext &context, const string &secret_name);
 	void ParsePrefix();
+	void ParseNamespaceSeparator();
 	void GetConfig(ClientContext &context, IcebergEndpointType &endpoint_type);
 	IRCEndpointBuilder GetBaseUrl() const;
 	string GetWarehouse() const {
@@ -173,6 +174,7 @@ public:
 	const string version;
 	//! optional prefix path components
 	vector<string> prefix;
+	string namespace_separator = "\x1f";
 	//! attach options
 	IcebergAttachOptions attach_options;
 	string default_schema;

@@ -175,7 +175,7 @@ IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(ClientConte
 IRCAPITableCredentials IcebergTableInformation::GetVendedCredentials(
     ClientContext &context, const vector<rest_api_objects::StorageCredential> &storage_credentials) const {
 	IRCAPITableCredentials result;
-	auto schema_component = IRCPathComponent::NamespaceComponent(schema.namespace_items);
+	auto schema_component = IRCPathComponent::NamespaceComponent(schema.namespace_items, catalog.namespace_separator);
 	auto secret_base_name = UUID::ToString(UUID::GenerateRandomUUID());
 	case_insensitive_map_t<Value> user_defaults;
 	if (catalog.auth_handler->type == IcebergAuthorizationType::SIGV4) {
@@ -606,16 +606,17 @@ optional_ptr<CatalogEntry> IcebergTableInformation::GetLatestSchema() {
 	return GetSchemaVersion(nullptr);
 }
 
-string IcebergTableInformation::GetTableKey(const vector<string> &namespace_items, const string &table_name) {
+string IcebergTableInformation::GetTableKey(const IcebergCatalog &catalog, const vector<string> &namespace_items,
+                                            const string &table_name) {
 	if (namespace_items.empty()) {
 		return table_name;
 	}
-	auto schema_component = IRCPathComponent::NamespaceComponent(namespace_items);
+	auto schema_component = IRCPathComponent::NamespaceComponent(namespace_items, catalog.namespace_separator);
 	return schema_component.encoded + "." + table_name;
 }
 
 string IcebergTableInformation::GetTableKey() const {
-	return GetTableKey(schema.namespace_items, name);
+	return GetTableKey(catalog, schema.namespace_items, name);
 }
 
 bool IcebergTableInformation::HasTransactionUpdates() const {

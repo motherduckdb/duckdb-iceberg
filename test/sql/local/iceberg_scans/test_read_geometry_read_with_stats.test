@@ -14,8 +14,6 @@ require httpfs
 # when requesting from google
 require-env CATALOG_TEST_CONFIG_SETUP 1
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 set logging_level='debug';

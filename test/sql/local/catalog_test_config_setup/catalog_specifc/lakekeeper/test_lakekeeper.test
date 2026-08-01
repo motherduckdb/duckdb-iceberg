@@ -11,8 +11,6 @@ require iceberg
 
 require-env CATALOG_TEST_CONFIG_SETUP lakekeeper
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 query III
 select * from my_datalake.my_namespace.my_table;

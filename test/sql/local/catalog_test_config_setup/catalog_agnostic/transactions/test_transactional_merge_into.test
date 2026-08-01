@@ -19,8 +19,6 @@ statement ok
 SET warnings_as_errors = True;
 
 # Do not ignore HTTP error messages.
-set ignore_error_messages
-
 statement ok
 set iceberg_use_metadata_log = true;
 

@@ -14,8 +14,6 @@ require httpfs
 
 require icu
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 set enable_logging=true

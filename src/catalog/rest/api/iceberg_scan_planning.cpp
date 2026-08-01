@@ -72,7 +72,8 @@ static IRCEndpointBuilder TableEndpoint(IcebergTableInformation &table_info) {
 	auto result = catalog.GetBaseUrl();
 	result.AddPrefixComponents(catalog.prefix);
 	result.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
-	result.AddPathComponent(IRCPathComponent::NamespaceComponent(table_info.schema.namespace_items));
+	result.AddPathComponent(
+	    IRCPathComponent::NamespaceComponent(table_info.schema.namespace_items, catalog.namespace_separator));
 	result.AddPathComponent(IRCPathComponent::RegularComponent("tables"));
 	result.AddPathComponent(IRCPathComponent::RegularComponent(table_info.name));
 	return result;

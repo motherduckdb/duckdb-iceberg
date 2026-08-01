@@ -16,8 +16,6 @@ require icu
 
 require core_functions
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 SET TimeZone = 'UTC';
