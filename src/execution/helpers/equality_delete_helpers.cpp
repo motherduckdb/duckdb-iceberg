@@ -35,8 +35,8 @@ namespace duckdb {
 //! (in iceberg_delete.cpp) are #ifdef'd out, so this code is dead.
 
 //! Whether a physical-filter expression is built purely from equality-delete forms, i.e. `col = const`,
-//! `col IN (const, ...)`, and AND/OR of those. `col IN (...)` and `col = c1 OR ...` can leave such a physical
-//! filter behind even though they also push down as a scan filter; recognizing it here keeps that delete on
+//! `col IN (const, ...)`, `col IS NULL`, and AND/OR of those. `col IN (...)` and `col = c1 OR ...` can leave such a
+//! physical filter behind even though they also push down as a scan filter; recognizing it here keeps that delete on
 //! the equality-delete path. Anything else (ranges, functions, arbitrary expressions) disqualifies.
 static bool ExpressionIsEqualityDeleteForm(const Expression &expr) {
 	if (expr.GetExpressionClass() == ExpressionClass::BOUND_FUNCTION &&
@@ -61,6 +61,11 @@ static bool ExpressionIsEqualityDeleteForm(const Expression &expr) {
 			}
 		}
 		return true;
+	}
+	if (expr.GetExpressionClass() == ExpressionClass::BOUND_OPERATOR &&
+	    expr.GetExpressionType() == ExpressionType::OPERATOR_IS_NULL) {
+		auto &children = expr.Cast<BoundOperatorExpression>().GetChildren();
+		return children.size() == 1 && children[0]->GetExpressionClass() != ExpressionClass::BOUND_CONSTANT;
 	}
 	if (expr.GetExpressionClass() == ExpressionClass::BOUND_CONJUNCTION) {
 		auto &conjunction = expr.Cast<BoundConjunctionExpression>();
@@ -160,8 +165,9 @@ static bool SetOrMatchColumnExpression(optional_ptr<const Expression> &column_ex
 }
 
 //! Extract the (single) column expression a filter targets and the set of values it deletes, for the
-//! supported forms: `col = c`, `col IN (c1, ...)`, and `col = c1 OR col = c2 OR ...` (which may nest IN).
-//! NULL constants are dropped - they can never match an equality. Returns false for any other shape.
+//! supported forms: `col = c`, `col IN (c1, ...)`, `col IS NULL`, and `col = c1 OR col = c2 OR ...` (which may
+//! nest IN / IS NULL). NULL constants in equality and IN expressions are dropped because those predicates do
+//! not match NULL; only IS NULL contributes a NULL equality-delete key. Returns false for any other shape.
 static bool TryGetEqualityDeleteValuesFromExpression(const Expression &expr,
                                                      optional_ptr<const Expression> &column_expression,
                                                      vector<Value> &values) {
@@ -222,6 +228,15 @@ static bool TryGetEqualityDeleteValuesFromExpression(const Expression &expr,
 		}
 		return true;
 	}
+	if (expr.GetExpressionClass() == ExpressionClass::BOUND_OPERATOR &&
+	    expr.GetExpressionType() == ExpressionType::OPERATOR_IS_NULL) {
+		auto &children = expr.Cast<BoundOperatorExpression>().GetChildren();
+		if (children.size() != 1 || !SetOrMatchColumnExpression(column_expression, *children[0])) {
+			return false;
+		}
+		values.emplace_back(children[0]->GetReturnType());
+		return true;
+	}
 	if (expr.GetExpressionClass() == ExpressionClass::BOUND_CONJUNCTION &&
 	    expr.GetExpressionType() == ExpressionType::CONJUNCTION_OR) {
 		auto &conjunction = expr.Cast<BoundConjunctionExpression>();
@@ -277,7 +292,7 @@ bool IcebergDelete::TryGetEqualityDeletePredicates(ClientContext &context, Icebe
 		auto &table_filter = filter_entry.Filter().Cast<ExpressionFilter>();
 		auto &expr = *table_filter.expr;
 
-		//! Accept `col = c`, `col IN (...)`, or `col = c1 OR col = c2 OR ...`; reject anything else.
+		//! Accept equality predicates, IN lists, and IS NULL (including OR combinations); reject anything else.
 		optional_ptr<const Expression> column_expression;
 		vector<Value> raw_values;
 		if (!TryGetEqualityDeleteValuesFromExpression(expr, column_expression, raw_values)) {
@@ -322,9 +337,13 @@ bool IcebergDelete::TryGetEqualityDeletePredicates(ClientContext &context, Icebe
 		predicate.type = column_definition->type;
 		for (auto &raw_value : raw_values) {
 			Value delete_value;
-			string error_message;
-			if (!raw_value.DefaultTryCastAs(column_definition->type, delete_value, &error_message, true)) {
-				return false;
+			if (raw_value.IsNull()) {
+				delete_value = Value(column_definition->type);
+			} else {
+				string error_message;
+				if (!raw_value.DefaultTryCastAs(column_definition->type, delete_value, &error_message, true)) {
+					return false;
+				}
 			}
 			predicate.values.push_back(std::move(delete_value));
 		}
