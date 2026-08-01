@@ -79,7 +79,7 @@ public:
 	IcebergManifestEntryMetrics(int64_t &position_deletes, int64_t &deletion_vectors, int64_t &equality_deletes,
 	                            int64_t &position_delete_files, int64_t &equality_delete_files, int64_t &delete_files,
 	                            int64_t &data_files, int64_t &records, int64_t &files_size, idx_t &files_count,
-	                            idx_t &rows_count, )
+	                            idx_t &rows_count)
 	    : position_deletes(position_deletes), deletion_vectors(deletion_vectors), equality_deletes(equality_deletes),
 	      position_delete_files(position_delete_files), equality_delete_files(equality_delete_files),
 	      delete_files(delete_files), data_files(data_files), records(records), files_size(files_size),
@@ -110,13 +110,13 @@ static IcebergManifestEntryMetrics GetManifestEntryMetrics(IcebergManifestMetric
 		                                   metrics.added_equality_deletes, metrics.added_position_delete_files,
 		                                   metrics.added_equality_delete_files, metrics.added_delete_files,
 		                                   metrics.added_data_files, metrics.added_records, metrics.added_files_size,
-		                                   manifest_file.added_files_count, manifest_file.added_rows_count, );
+		                                   manifest_file.added_files_count, manifest_file.added_rows_count);
 	} else {
 		return IcebergManifestEntryMetrics(
 		    metrics.removed_position_deletes, metrics.removed_deletion_vectors, metrics.removed_equality_deletes,
 		    metrics.removed_position_delete_files, metrics.removed_equality_delete_files, metrics.removed_delete_files,
 		    metrics.deleted_data_files, metrics.deleted_records, metrics.removed_files_size,
-		    manifest_file.deleted_files_count, manifest_file.deleted_rows_count, );
+		    manifest_file.deleted_files_count, manifest_file.deleted_rows_count);
 	}
 }
 
@@ -136,7 +136,7 @@ static void CollectDeleteManifestMetrics(const IcebergManifestEntry &manifest_en
 	}
 	case IcebergManifestEntryContentType::POSITION_DELETES: {
 		metrics.position_delete_files++;
-		if (IsDeletionVector(data_file)) {
+		if (data_file.IsDeletionVector()) {
 			metrics.deletion_vectors += data_file.record_count;
 		} else {
 			metrics.position_deletes += data_file.record_count;
@@ -211,7 +211,7 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 				manifest_file.existing_rows_count += data_file.record_count;
 				break;
 			}
-			auto entry_metrics = GetManifestEntryMetrics(metrics, manifest_entry.status);
+			auto entry_metrics = GetManifestEntryMetrics(metrics, manifest_file, manifest_entry.status);
 
 			//! Gather 'added-files-size' and 'removed-files-size' metrics
 			auto new_files_size =

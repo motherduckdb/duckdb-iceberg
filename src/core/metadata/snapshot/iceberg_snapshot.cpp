@@ -46,10 +46,7 @@ rest_api_objects::Snapshot IcebergSnapshot::ToRESTObject(const IcebergTableMetad
 	res.manifest_list = manifest_list;
 
 	res.summary.operation = OperationTypeToString(operation);
-	auto &metrics_map = metrics.metrics;
-	for (auto &entry : metrics_map) {
-		res.summary.additional_properties[MetricsTypeToString(entry.first)] = std::to_string(entry.second);
-	}
+	res.summary.additional_properties = metrics.ToString();
 
 	if (parent_snapshot_id) {
 		res.parent_snapshot_id = *parent_snapshot_id;
@@ -90,7 +87,7 @@ IcebergSnapshot IcebergSnapshot::ParseSnapshot(const rest_api_objects::Snapshot 
 	ret.snapshot_id = snapshot.snapshot_id;
 	ret.timestamp_ms = timestamp_ms_t(snapshot.timestamp_ms);
 	ret.manifest_list = snapshot.manifest_list;
-	ret.metrics = MetricsFromSummary(snapshot.summary.additional_properties);
+	ret.metrics = IcebergSnapshotMetrics(snapshot.summary.additional_properties);
 
 	auto &op = snapshot.summary.operation;
 	if (op == "append") {

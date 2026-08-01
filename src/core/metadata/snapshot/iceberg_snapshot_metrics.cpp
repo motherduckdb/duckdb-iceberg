@@ -66,12 +66,39 @@ static string MetricsTypeToString(IcebergSnapshotMetricType type) {
 
 } // namespace
 
-static IcebergSnapshotMetrics MetricsFromSummary(const case_insensitive_map_t<string> &snapshot_summary) {
-	IcebergSnapshotMetrics ret;
-	auto &metrics = ret.metrics;
-	//! Remove the default for `TOTAL_FILES_SIZE`, leaving it uninitialized if not present in the summary, rather than
-	//! setting it to 0.
-	metrics.erase(IcebergSnapshotMetricType::TOTAL_FILES_SIZE);
+metrics_map_t IcebergSnapshotMetrics::EmptyMetrics() {
+	//! First snapshot of a table, start all totals at 0
+	return metrics_map_t({{IcebergSnapshotMetricType::TOTAL_DATA_FILES, 0},
+	                      {IcebergSnapshotMetricType::TOTAL_DELETE_FILES, 0},
+	                      {IcebergSnapshotMetricType::TOTAL_RECORDS, 0},
+	                      {IcebergSnapshotMetricType::TOTAL_FILES_SIZE, 0},
+	                      {IcebergSnapshotMetricType::TOTAL_POSITION_DELETES, 0},
+	                      {IcebergSnapshotMetricType::TOTAL_EQUALITY_DELETES, 0}});
+}
+
+IcebergSnapshotMetrics::IcebergSnapshotMetrics() : metrics(EmptyMetrics()) {
+}
+
+void IcebergSnapshotMetrics::InheritMetric(const IcebergSnapshotMetrics &parent, IcebergSnapshotMetricType metric) {
+	auto it = parent.metrics.find(metric);
+	if (it == parent.metrics.end()) {
+		//! Nothing to inherit
+		return;
+	}
+	metrics[metric] = it->second;
+}
+
+IcebergSnapshotMetrics::IcebergSnapshotMetrics(const IcebergSnapshot &parent_snapshot) {
+	//! Start metrics from a parent snapshot, inherit all totals
+	InheritMetric(parent_snapshot.metrics, IcebergSnapshotMetricType::TOTAL_DATA_FILES);
+	InheritMetric(parent_snapshot.metrics, IcebergSnapshotMetricType::TOTAL_DELETE_FILES);
+	InheritMetric(parent_snapshot.metrics, IcebergSnapshotMetricType::TOTAL_RECORDS);
+	InheritMetric(parent_snapshot.metrics, IcebergSnapshotMetricType::TOTAL_FILES_SIZE);
+	InheritMetric(parent_snapshot.metrics, IcebergSnapshotMetricType::TOTAL_POSITION_DELETES);
+	InheritMetric(parent_snapshot.metrics, IcebergSnapshotMetricType::TOTAL_EQUALITY_DELETES);
+}
+
+IcebergSnapshotMetrics::IcebergSnapshotMetrics(const case_insensitive_map_t<string> &snapshot_summary) {
 	bool file_size_metrics_are_valid = true;
 	for (idx_t i = 0; i < SNAPSHOT_METRIC_KEYS_SIZE; i++) {
 		auto &item = SNAPSHOT_METRIC_KEYS[i];
@@ -105,39 +132,6 @@ static IcebergSnapshotMetrics MetricsFromSummary(const case_insensitive_map_t<st
 		metrics.erase(IcebergSnapshotMetricType::REMOVED_FILES_SIZE);
 		metrics.erase(IcebergSnapshotMetricType::TOTAL_FILES_SIZE);
 	}
-	return ret;
-}
-
-static metrics_map_t IcebergSnapshotMetrics::EmptyMetrics() {
-	//! First snapshot of a table, start all totals at 0
-	return metrics_map_t({{IcebergSnapshotMetricType::TOTAL_DATA_FILES, 0},
-	                      {IcebergSnapshotMetricType::TOTAL_DELETE_FILES, 0},
-	                      {IcebergSnapshotMetricType::TOTAL_RECORDS, 0},
-	                      {IcebergSnapshotMetricType::TOTAL_FILES_SIZE, 0},
-	                      {IcebergSnapshotMetricType::TOTAL_POSITION_DELETES, 0},
-	                      {IcebergSnapshotMetricType::TOTAL_EQUALITY_DELETES, 0}});
-}
-
-IcebergSnapshotMetrics::IcebergSnapshotMetrics() : metrics(EmptyMetrics()) {
-}
-
-void IcebergSnapshotMetrics::InheritMetric(const IcebergSnapshotMetrics &parent, IcebergSnapshotMetricType metric) {
-	auto it = parent.metrics.find(metric);
-	if (it == parent.metrics.end()) {
-		//! Nothing to inherit
-		return;
-	}
-	metrics[metric] = it->second;
-}
-
-IcebergSnapshotMetrics::IcebergSnapshotMetrics(const IcebergSnapshot &parent_snapshot) {
-	//! Start metrics from a parent snapshot, inherit all totals
-	InheritMetric(parent_snapshot.metrics, IcebergSnapshotMetricType::TOTAL_DATA_FILES);
-	InheritMetric(parent_snapshot.metrics, IcebergSnapshotMetricType::TOTAL_DELETE_FILES);
-	InheritMetric(parent_snapshot.metrics, IcebergSnapshotMetricType::TOTAL_RECORDS);
-	InheritMetric(parent_snapshot.metrics, IcebergSnapshotMetricType::TOTAL_FILES_SIZE);
-	InheritMetric(parent_snapshot.metrics, IcebergSnapshotMetricType::TOTAL_POSITION_DELETES);
-	InheritMetric(parent_snapshot.metrics, IcebergSnapshotMetricType::TOTAL_EQUALITY_DELETES);
 }
 
 void IcebergSnapshotMetrics::AddSizeMetric(IcebergSnapshotMetricType type, int64_t value) {
@@ -282,6 +276,18 @@ void IcebergSnapshotMetrics::SetTotalFilesSize(int64_t total_files_size) {
 		throw InvalidConfigurationException("Iceberg snapshot 'total-files-size' cannot be negative");
 	}
 	metrics[IcebergSnapshotMetricType::TOTAL_FILES_SIZE] = total_files_size;
+}
+
+const metrics_map_t &IcebergSnapshotMetrics::GetMetrics() const {
+	return metrics;
+}
+
+case_insensitive_map_t<string> IcebergSnapshotMetrics::ToString() const {
+	case_insensitive_map_t<string> result;
+	for (auto &entry : metrics) {
+		result[MetricsTypeToString(entry.first)] = std::to_string(entry.second);
+	}
+	return result;
 }
 
 } // namespace duckdb
