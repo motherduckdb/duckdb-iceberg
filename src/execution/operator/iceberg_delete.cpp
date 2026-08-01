@@ -397,9 +397,11 @@ vector<IcebergManifestEntry> IcebergDelete::GenerateDeleteManifestEntries(Iceber
 			data_file.record_count = delete_file.delete_count;
 			data_file.file_size_in_bytes = delete_file.file_size_bytes;
 			data_file.equality_ids = delete_file.equality_ids;
-			//! Record the equality-delete value bounds so the file can be pruned on metrics.
+			//! Record the equality-delete metrics so the file can be pruned safely.
 			data_file.lower_bounds = delete_file.lower_bounds;
 			data_file.upper_bounds = delete_file.upper_bounds;
+			data_file.null_value_counts = delete_file.null_value_counts;
+			data_file.nan_value_counts = delete_file.nan_value_counts;
 			iceberg_delete_files.push_back(manifest_entry);
 			continue;
 		}

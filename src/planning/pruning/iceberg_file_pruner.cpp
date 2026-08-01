@@ -295,6 +295,12 @@ bool IcebergFilePruner::EqualityDeleteMatchesDataFile(const IcebergDataFile &del
 			//! delete:   L --------- U
 			if (*delete_stats.upper_bound < *data_stats.lower_bound ||
 			    *delete_stats.lower_bound > *data_stats.upper_bound) {
+				DUCKDB_LOG(context, IcebergLogType,
+				           "Iceberg Equality Delete Pruning, skipped 'equality_delete_file': '%s' for 'data_file': "
+				           "'%s', equality field '%s' (field id %d) has bounds [%s, %s] outside data bounds [%s, %s]",
+				           delete_file.file_path, data_file.file_path, column.name, field_id,
+				           delete_stats.lower_bound->ToString(), delete_stats.upper_bound->ToString(),
+				           data_stats.lower_bound->ToString(), data_stats.upper_bound->ToString());
 				return false;
 			}
 		} catch (Exception &) {
@@ -340,31 +346,30 @@ bool IcebergFilePruner::DeleteFileMatchesDataFile(const IcebergManifestFile &del
 		throw InvalidInputException("Delete manifest %s references partition_spec_id %d which doesn't exist",
 		                            delete_manifest.manifest_path, delete_manifest.partition_spec_id);
 	}
-	if (partition_spec_it->second.IsUnpartitioned()) {
-		return true;
-	}
-	if (delete_manifest.partition_spec_id != data_manifest.partition_spec_id) {
-		return false;
-	}
-
-	if (delete_file.partition_info.size() != data_file.partition_info.size()) {
-		throw InvalidConfigurationException(
-		    "Delete file %s has %llu partition values, but data file %s has %llu for partition spec %d",
-		    delete_file.file_path, delete_file.partition_info.size(), data_file.file_path,
-		    data_file.partition_info.size(), delete_manifest.partition_spec_id);
-	}
-	for (idx_t partition_idx = 0; partition_idx < delete_file.partition_info.size(); partition_idx++) {
-		auto &delete_partition = delete_file.partition_info[partition_idx];
-		auto &data_partition = data_file.partition_info[partition_idx];
-		if (delete_partition.field_id != data_partition.field_id) {
-			throw InvalidConfigurationException(
-			    "Delete file %s has partition field id %llu at index %llu, but data file %s has field id %llu for "
-			    "partition spec %d",
-			    delete_file.file_path, delete_partition.field_id, partition_idx, data_file.file_path,
-			    data_partition.field_id, delete_manifest.partition_spec_id);
-		}
-		if (!Value::NotDistinctFrom(delete_partition.value, data_partition.value)) {
+	if (!partition_spec_it->second.IsUnpartitioned()) {
+		if (delete_manifest.partition_spec_id != data_manifest.partition_spec_id) {
 			return false;
+		}
+
+		if (delete_file.partition_info.size() != data_file.partition_info.size()) {
+			throw InvalidConfigurationException(
+			    "Delete file %s has %llu partition values, but data file %s has %llu for partition spec %d",
+			    delete_file.file_path, delete_file.partition_info.size(), data_file.file_path,
+			    data_file.partition_info.size(), delete_manifest.partition_spec_id);
+		}
+		for (idx_t partition_idx = 0; partition_idx < delete_file.partition_info.size(); partition_idx++) {
+			auto &delete_partition = delete_file.partition_info[partition_idx];
+			auto &data_partition = data_file.partition_info[partition_idx];
+			if (delete_partition.field_id != data_partition.field_id) {
+				throw InvalidConfigurationException(
+				    "Delete file %s has partition field id %llu at index %llu, but data file %s has field id %llu "
+				    "for partition spec %d",
+				    delete_file.file_path, delete_partition.field_id, partition_idx, data_file.file_path,
+				    data_partition.field_id, delete_manifest.partition_spec_id);
+			}
+			if (!Value::NotDistinctFrom(delete_partition.value, data_partition.value)) {
+				return false;
+			}
 		}
 	}
 	if (delete_file.content == IcebergManifestEntryContentType::EQUALITY_DELETES) {

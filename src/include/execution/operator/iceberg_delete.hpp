@@ -68,6 +68,9 @@ struct IcebergDeleteFileInfo {
 	//! Per-field serialized lower/upper bounds of the equality-delete values (field-id -> bound blob).
 	unordered_map<int32_t, Value> lower_bounds;
 	unordered_map<int32_t, Value> upper_bounds;
+	//! Per-field null/NaN counts used to decide whether bounds can safely prune an equality delete.
+	unordered_map<int32_t, int64_t> null_value_counts;
+	unordered_map<int32_t, int64_t> nan_value_counts;
 };
 
 class IcebergDeleteGlobalState : public GlobalSinkState {

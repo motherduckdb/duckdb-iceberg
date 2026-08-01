@@ -435,26 +435,49 @@ void IcebergDelete::WriteEqualityDeleteFile(ClientContext &context, IcebergDelet
 	delete_file.equality_ids = std::move(equality_ids);
 
 	// Record per-field metrics for the equality-delete values so scans can prune this delete file when its
-	// equality-field range is disjoint from the scan predicate / a data file's bounds. Each field's bound
-	// spans the min/max of its value set.
+	// equality-field range is disjoint from the scan predicate / a data file's bounds. Bounds span the min/max
+	// of the non-null, non-NaN values because Iceberg bounds exclude nulls and NaNs.
 	for (auto &predicate : equality_predicates) {
-		Value min_value = predicate.values[0];
-		Value max_value = predicate.values[0];
+		optional<Value> min_value;
+		optional<Value> max_value;
+		int64_t null_count = 0;
+		int64_t nan_count = 0;
 		for (auto &value : predicate.values) {
-			if (value < min_value) {
+			if (value.IsNull()) {
+				null_count++;
+				continue;
+			}
+			bool is_nan = false;
+			if (predicate.type.id() == LogicalTypeId::FLOAT) {
+				is_nan = Value::IsNan(value.GetValue<float>());
+			} else if (predicate.type.id() == LogicalTypeId::DOUBLE) {
+				is_nan = Value::IsNan(value.GetValue<double>());
+			}
+			if (is_nan) {
+				nan_count++;
+				continue;
+			}
+			if (!min_value || value < *min_value) {
 				min_value = value;
 			}
-			if (value > max_value) {
+			if (!max_value || value > *max_value) {
 				max_value = value;
 			}
 		}
-		auto lower = IcebergValue::SerializeValue(min_value, predicate.type, SerializeBound::LOWER_BOUND);
+		delete_file.null_value_counts[predicate.field_id] = null_count;
+		if (predicate.type.id() == LogicalTypeId::FLOAT || predicate.type.id() == LogicalTypeId::DOUBLE) {
+			delete_file.nan_value_counts[predicate.field_id] = nan_count;
+		}
+		if (!min_value || !max_value) {
+			continue;
+		}
+		auto lower = IcebergValue::SerializeValue(*min_value, predicate.type, SerializeBound::LOWER_BOUND);
 		if (lower.HasError()) {
 			throw InvalidConfigurationException(lower.GetError());
 		} else if (lower.HasValue()) {
 			delete_file.lower_bounds[predicate.field_id] = lower.GetValue();
 		}
-		auto upper = IcebergValue::SerializeValue(max_value, predicate.type, SerializeBound::UPPER_BOUND);
+		auto upper = IcebergValue::SerializeValue(*max_value, predicate.type, SerializeBound::UPPER_BOUND);
 		if (upper.HasError()) {
 			throw InvalidConfigurationException(upper.GetError());
 		} else if (upper.HasValue()) {
