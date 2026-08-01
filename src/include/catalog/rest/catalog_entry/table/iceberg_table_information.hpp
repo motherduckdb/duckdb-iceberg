@@ -56,7 +56,8 @@ public:
 
 	IcebergTransactionData &GetOrCreateTransactionData(IcebergTransaction &transaction);
 
-	static string GetTableKey(const vector<string> &namespace_items, const string &table_name);
+	static string GetTableKey(const IcebergCatalog &catalog, const vector<string> &namespace_items,
+	                          const string &table_name);
 	string GetTableKey() const;
 	IcebergTableMetadata CreateMetadataFromLog(ClientContext &context, timestamp_ms_t transaction_start_ms) const;
 	// With metadata-log enabled, reconstruct the complete table state at transaction start. Otherwise pin and copy

@@ -374,6 +374,24 @@ void IcebergCatalog::ParsePrefix() {
 	}
 }
 
+void IcebergCatalog::ParseNamespaceSeparator() {
+	auto default_namespace_separator_it = defaults.find("namespace-separator");
+	auto override_namespace_separator_it = overrides.find("namespace-separator");
+
+	const string *namespace_separator_property = nullptr;
+	if (default_namespace_separator_it != defaults.end()) {
+		namespace_separator_property = &default_namespace_separator_it->second;
+	}
+	// Sometimes the namespace_separator is in the overrides. Prefer the override namespace_separator.
+	if (override_namespace_separator_it != overrides.end()) {
+		namespace_separator_property = &override_namespace_separator_it->second;
+	}
+	if (!namespace_separator_property) {
+		return;
+	}
+	namespace_separator = *namespace_separator_property;
+}
+
 void IcebergCatalog::GetConfig(ClientContext &context, IcebergEndpointType &endpoint_type) {
 	// set the prefix to be empty. To get the config endpoint,
 	// we cannot add a default prefix.
@@ -393,6 +411,7 @@ void IcebergCatalog::GetConfig(ClientContext &context, IcebergEndpointType &endp
 		StringUtil::RTrim(uri, "/");
 	}
 	ParsePrefix();
+	ParseNamespaceSeparator();
 
 	if (auto &endpoints = catalog_config.endpoints) {
 		for (auto &endpoint : *endpoints) {

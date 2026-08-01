@@ -249,7 +249,8 @@ IcebergTableInformation &IcebergTableSet::CreateNewEntry(ClientContext &context,
 	auto new_table_result = make_uniq<const rest_api_objects::LoadTableResult>(
 	    IRCAPI::CommitNewTable(context, catalog, schema.namespace_items, create_table_request));
 
-	auto key = IcebergTableInformation::GetTableKey(schema.namespace_items, info.GetTableName().GetIdentifierName());
+	auto key =
+	    IcebergTableInformation::GetTableKey(catalog, schema.namespace_items, info.GetTableName().GetIdentifierName());
 	auto &load_table_result = *new_table_result;
 	auto &alter_update = iceberg_transaction.GetOrCreateAlter();
 	auto &table_info = alter_update.CreateTable(
@@ -286,7 +287,7 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetEntry(ClientContext &context, con
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
 	const auto &table_name = lookup.GetEntryName();
 	// first check transaction entries
-	const auto table_key = IcebergTableInformation::GetTableKey(schema.namespace_items, table_name);
+	const auto table_key = IcebergTableInformation::GetTableKey(ic_catalog, schema.namespace_items, table_name);
 	auto latest_state = iceberg_transaction.GetLatestTableState(table_key);
 
 	auto at = lookup.GetAtClause();

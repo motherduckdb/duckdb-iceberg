@@ -47,7 +47,8 @@ static unique_ptr<HTTPResponse> MakeRequest(ClientContext &context, const Iceber
 	auto url_builder = ic_catalog.GetBaseUrl();
 	url_builder.AddPrefixComponents(ic_catalog.prefix);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
-	url_builder.AddPathComponent(IRCPathComponent::NamespaceComponent(ic_schema.namespace_items));
+	url_builder.AddPathComponent(
+	    IRCPathComponent::NamespaceComponent(ic_schema.namespace_items, ic_catalog.namespace_separator));
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("tables"));
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent(ic_table_entry.name.GetIdentifierName()));
 
