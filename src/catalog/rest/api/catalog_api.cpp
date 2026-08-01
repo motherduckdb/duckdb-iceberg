@@ -203,6 +203,23 @@ static unique_ptr<HTTPResponse> GetTableMetadata(ClientContext &context, Iceberg
 	return catalog.auth_handler->Request(RequestType::GET_REQUEST, context, url_builder, headers);
 }
 
+static unique_ptr<HTTPResponse> LoadCredentials(ClientContext &context, IcebergCatalog &catalog,
+                                                const IcebergSchemaEntry &schema, const string &table) {
+	auto url_builder = catalog.GetBaseUrl();
+	url_builder.AddPrefixComponents(catalog.prefix);
+	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
+	url_builder.AddPathComponent(IRCPathComponent::NamespaceComponent(schema.namespace_items));
+	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("tables"));
+	url_builder.AddPathComponent(IRCPathComponent::RegularComponent(table));
+	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("credentials"));
+
+	HTTPHeaders headers(*context.db);
+	if (catalog.attach_options.access_mode == IRCAccessDelegationMode::VENDED_CREDENTIALS) {
+		headers.Insert("X-Iceberg-Access-Delegation", "vended-credentials");
+	}
+	return catalog.auth_handler->Request(RequestType::GET_REQUEST, context, url_builder, headers);
+}
+
 APIResult<unique_ptr<const rest_api_objects::LoadTableResult>> IRCAPI::GetTable(ClientContext &context,
                                                                                 IcebergCatalog &catalog,
                                                                                 const IcebergSchemaEntry &schema,
@@ -223,6 +240,28 @@ APIResult<unique_ptr<const rest_api_objects::LoadTableResult>> IRCAPI::GetTable(
 	auto metadata_root = doc->GetRoot();
 	ret.result_ =
 	    make_uniq<const rest_api_objects::LoadTableResult>(rest_api_objects::LoadTableResult::FromJSON(metadata_root));
+	return ret;
+}
+
+APIResult<unique_ptr<const rest_api_objects::LoadCredentialsResponse>>
+IRCAPI::GetTableCredentials(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema,
+                            const string &table_name) {
+	auto ret = APIResult<unique_ptr<const rest_api_objects::LoadCredentialsResponse>>();
+	auto result = LoadCredentials(context, catalog, schema, table_name);
+	if (result->status != HTTPStatusCode::OK_200) {
+		unique_ptr<JSONDocument> out_doc;
+		auto error_obj = ICUtils::GetErrorMessage(result->body, out_doc);
+		if (!error_obj.IsValid()) {
+			throw InvalidConfigurationException(result->body);
+		}
+		ret.status_ = result->status;
+		ret.error_ = rest_api_objects::IcebergErrorResponse::FromJSON(error_obj);
+		return ret;
+	}
+	auto doc = ICUtils::APIResultToDoc(result->body);
+	auto metadata_root = doc->GetRoot();
+	ret.result_ = make_uniq<const rest_api_objects::LoadCredentialsResponse>(
+	    rest_api_objects::LoadCredentialsResponse::FromJSON(metadata_root));
 	return ret;
 }
 
