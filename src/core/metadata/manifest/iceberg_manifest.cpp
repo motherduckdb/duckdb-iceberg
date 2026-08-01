@@ -324,6 +324,26 @@ int64_t IcebergDataFile::GetFirstRowId() const {
 	return *first_row_id;
 }
 
+bool IcebergDataFile::IsDeletionVector() const {
+	if (!referenced_data_file) {
+		return false;
+	}
+	if (!content_offset) {
+		return false;
+	}
+	if (!content_size_in_bytes) {
+		return false;
+	}
+	return true;
+}
+
+int64_t IcebergDataFile::GetContentSizeInBytes() const {
+	if (IsDeletionVector()) {
+		return *content_size_in_bytes;
+	}
+	return file_size_in_bytes;
+}
+
 LogicalType IcebergDataFile::GetType(const IcebergTableMetadata &metadata, const LogicalType &partition_type) {
 	auto &iceberg_version = metadata.iceberg_version;
 
