@@ -33,6 +33,10 @@ SELECT count(*) FROM iceberg_metadata(my_datalake.default.dv_puffin_container) W
 ----
 1
 
+# Start transaction to keep the credentials in scope
+statement ok
+begin
+
 # Resolve the deletion-vector file path from the manifest.
 statement ok
 set variable dv_path = (
@@ -70,3 +74,6 @@ SELECT
 FROM parsed;
 ----
 PFA1	PFA1	PFA1	deletion-vector-v1	4	1
+
+statement ok
+commit

@@ -25,6 +25,10 @@ INSERT INTO my_datalake.default.delete_manifest_content VALUES (1, 'a'), (2, 'b'
 statement ok
 DELETE FROM my_datalake.default.delete_manifest_content WHERE id IN (2, 4);
 
+# Start transaction to keep the credentials in scope
+statement ok
+begin
+
 # Resolve the path of the manifest holding the deletion vector (POSITION_DELETES) entries.
 statement ok
 set variable delete_manifest = (
@@ -47,3 +51,6 @@ SELECT
 FROM read_blob(getvariable('delete_manifest'));
 ----
 1	0
+
+statement ok
+commit

@@ -24,6 +24,10 @@ create table my_datalake.default.snapshot_file_size_metrics (id INTEGER, payload
 statement ok
 insert into my_datalake.default.snapshot_file_size_metrics values (1, 'a'), (2, 'b');
 
+# Start transaction to keep the credentials in scope
+statement ok
+begin
+
 statement ok
 set variable latest_snapshot_id = (
 	select snapshot_id::BIGINT
@@ -80,7 +84,14 @@ set variable parent_total_file_size = json_extract_string(
 )::BIGINT;
 
 statement ok
+commit
+
+statement ok
 insert into my_datalake.default.snapshot_file_size_metrics values (3, 'c'), (4, 'd');
+
+# Start transaction to keep the credentials in scope
+statement ok
+begin
 
 statement ok
 set variable latest_snapshot_id = (
@@ -138,7 +149,14 @@ set variable parent_total_file_size = json_extract_string(
 )::BIGINT;
 
 statement ok
+commit
+
+statement ok
 delete from my_datalake.default.snapshot_file_size_metrics where id = 2;
+
+# Start transaction to keep the credentials in scope
+statement ok
+begin
 
 statement ok
 set variable latest_snapshot_id = (
@@ -188,6 +206,9 @@ select
 	json_extract_string(getvariable('latest_summary'), '$.summary."removed-files-size"') is null
 ----
 true	true	true
+
+statement ok
+commit
 
 statement ok
 drop table my_datalake.default.snapshot_file_size_metrics;
