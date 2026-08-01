@@ -78,3 +78,15 @@ select
 		getvariable('content_file_size')
 ----
 true	true
+
+query IIIIIII
+select
+	json_extract_string(getvariable('metadata_json'), '$.snapshots[0].summary."added-data-files"')::BIGINT,
+	json_extract_string(getvariable('metadata_json'), '$.snapshots[0].summary."total-data-files"')::BIGINT,
+	json_extract_string(getvariable('metadata_json'), '$.snapshots[0].summary."added-records"')::BIGINT,
+	json_extract_string(getvariable('metadata_json'), '$.snapshots[0].summary."total-records"')::BIGINT,
+	json_extract_string(getvariable('metadata_json'), '$.snapshots[0].summary."total-delete-files"')::BIGINT,
+	json_extract_string(getvariable('metadata_json'), '$.snapshots[0].summary."total-position-deletes"')::BIGINT,
+	json_extract_string(getvariable('metadata_json'), '$.snapshots[0].summary."total-equality-deletes"')::BIGINT
+----
+1	1	1	1	0	0	0
