@@ -6,7 +6,7 @@ argument sf 1
 
 argument dm 5
 
-argument data_dir data/persistent/benchmark/tpch/sf=5
+argument data_dir data/persistent/benchmark/tpch/sf=1
 
 name Iceberg Q${QUERY_NUMBER_PADDED}
 group tpch
