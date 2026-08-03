@@ -25,7 +25,6 @@ require tpch
 cache tpch_sf${sf}_dm${dm}.db
 
 load
-set threads=4;
 CALL dbgen(sf=${sf});
 CREATE SECRET (
     TYPE S3,
@@ -102,6 +101,5 @@ ATTACH '' AS my_datalake (
 run
 set enable_external_file_cache=false;
 USE my_datalake.tpch_sf1_dm5;
-set threads=3;
 pragma tpch(${QUERY_NUMBER_PADDED});
 
