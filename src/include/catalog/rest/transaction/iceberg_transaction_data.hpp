@@ -34,7 +34,8 @@ public:
 
 	void AddSnapshot(IcebergSnapshotOperationType operation, vector<IcebergManifestEntry> &&data_files,
 	                 IcebergManifestDeletes &&altered_manifests);
-	void AddUpdateSnapshot(vector<IcebergManifestEntry> &&delete_files, vector<IcebergManifestEntry> &&data_files,
+	void AddDeleteSnapshot(IcebergDeleteManifestEntries &&delete_files, IcebergManifestDeletes &&altered_manifests);
+	void AddUpdateSnapshot(IcebergDeleteManifestEntries &&delete_files, vector<IcebergManifestEntry> &&data_files,
 	                       IcebergManifestDeletes &&altered_manifests);
 	// add a schema update for a table
 	void TableAddSchema(int32_t schema_id);
@@ -57,6 +58,9 @@ public:
 
 private:
 	void CacheExistingManifestList(lock_guard<mutex> &guard, const IcebergTableMetadata &metadata);
+	//! Writes one delete manifest per partition spec present in 'delete_files'.
+	void AddDeleteManifestFiles(IcebergAddSnapshot &add_snapshot, IcebergDeleteManifestEntries &&delete_files,
+	                            sequence_number_t sequence_number);
 
 public:
 	string initial_table_uuid;

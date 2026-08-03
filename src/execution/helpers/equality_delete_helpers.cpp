@@ -433,6 +433,9 @@ void IcebergDelete::WriteEqualityDeleteFile(ClientContext &context, IcebergDelet
 	delete_file.delete_count = rows.size();
 	delete_file.file_size_bytes = stats.file_size_bytes;
 	delete_file.equality_ids = std::move(equality_ids);
+	//! An equality delete targets no single data file, so it goes into a manifest of the current spec.
+	delete_file.data_file_partitioning.partition_spec_id =
+	    NumericCast<int32_t>(table.table_info.table_metadata.default_spec_id);
 
 	// Record per-field metrics for the equality-delete values so scans can prune this delete file when its
 	// equality-field range is disjoint from the scan predicate / a data file's bounds. Each field's bound

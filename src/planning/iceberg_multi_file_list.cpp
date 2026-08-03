@@ -368,10 +368,10 @@ IcebergManifestFile IcebergMultiFileList::GetManifestFileForDataFile(idx_t file_
 	return data_manifests[manifest_file_idx].entry.file;
 }
 
-vector<IcebergPartitionInfo> IcebergMultiFileList::GetPartitionInfoForDataFile(const string &file_path) const {
+IcebergDataFilePartitioning IcebergMultiFileList::GetPartitioningForDataFile(const string &file_path) const {
 	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
-	auto entry = shared_state->data_file_partition_info.find(file_path);
-	if (entry != shared_state->data_file_partition_info.end()) {
+	auto entry = shared_state->data_file_partitioning.find(file_path);
+	if (entry != shared_state->data_file_partitioning.end()) {
 		return entry->second;
 	}
 	throw InvalidConfigurationException("Could not find data file '%s' in manifest entries", file_path);
@@ -456,8 +456,9 @@ IcebergMultiFileList::GetDataFile(idx_t file_id, annotated_lock_guard<annotated_
 			if (options.allow_moved_paths) {
 				entry_path = IcebergUtils::GetFullPath(GetPath(), entry_path, fs);
 			}
-			shared_state->data_file_partition_info[entry_path] = data_file.partition_info;
-			shared_state->data_file_partition_info[data_file.file_path] = data_file.partition_info;
+			IcebergDataFilePartitioning partitioning {manifest_file.partition_spec_id, data_file.partition_info};
+			shared_state->data_file_partitioning[entry_path] = partitioning;
+			shared_state->data_file_partitioning[data_file.file_path] = std::move(partitioning);
 
 			if (manifest_entry.status == IcebergManifestEntryStatusType::DELETED) {
 				continue;

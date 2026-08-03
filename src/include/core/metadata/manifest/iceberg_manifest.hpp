@@ -65,6 +65,13 @@ struct IcebergPartitionInfo {
 	}
 };
 
+//! How a data file is partitioned: the values, plus the spec they were produced with.
+//! Partition values are only meaningful together with their spec, so the two travel as a pair.
+struct IcebergDataFilePartitioning {
+	int32_t partition_spec_id = 0;
+	vector<IcebergPartitionInfo> partition_info;
+};
+
 struct IcebergDataFile {
 public:
 	static map<idx_t, LogicalType> GetFieldIdToTypeMapping(const IcebergSnapshotScanInfo &snapshot_info,
@@ -137,6 +144,10 @@ private:
 	optional<sequence_number_t> sequence_number;
 	optional<sequence_number_t> file_sequence_number;
 };
+
+//! Delete-manifest entries grouped by the partition spec of the data files they target, so each group can be
+//! written into a manifest declaring that spec.
+using IcebergDeleteManifestEntries = map<int32_t, vector<IcebergManifestEntry>>;
 
 struct IcebergManifestListEntry;
 
