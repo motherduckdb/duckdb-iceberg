@@ -288,23 +288,30 @@ bool IcebergFilePruner::DeleteFileMatchesDataFile(const IcebergManifestFile &del
 		return false;
 	}
 
-	if (delete_file.partition_info.size() != data_file.partition_info.size()) {
-		throw InvalidConfigurationException(
-		    "Delete file %s has %llu partition values, but data file %s has %llu for partition spec %d",
-		    delete_file.file_path, delete_file.partition_info.size(), data_file.file_path,
-		    data_file.partition_info.size(), delete_manifest.partition_spec_id);
+	//! A partition struct is read as the union of the specs covered by its reader, and data and delete manifests
+	//! are read separately, so the same spec can yield a different set of fields on each side: a field belonging
+	//! to another spec is materialized as NULL for one file and missing for the other. Match on field id and
+	//! treat a missing field as NULL, rather than pairing the two structs up by position.
+	unordered_map<uint64_t, reference<const Value>> data_partition_values;
+	for (auto &data_partition : data_file.partition_info) {
+		data_partition_values.emplace(data_partition.field_id, data_partition.value);
 	}
-	for (idx_t partition_idx = 0; partition_idx < delete_file.partition_info.size(); partition_idx++) {
-		auto &delete_partition = delete_file.partition_info[partition_idx];
-		auto &data_partition = data_file.partition_info[partition_idx];
-		if (delete_partition.field_id != data_partition.field_id) {
-			throw InvalidConfigurationException(
-			    "Delete file %s has partition field id %llu at index %llu, but data file %s has field id %llu for "
-			    "partition spec %d",
-			    delete_file.file_path, delete_partition.field_id, partition_idx, data_file.file_path,
-			    data_partition.field_id, delete_manifest.partition_spec_id);
+
+	for (auto &delete_partition : delete_file.partition_info) {
+		auto it = data_partition_values.find(delete_partition.field_id);
+		if (it == data_partition_values.end()) {
+			if (!delete_partition.value.IsNull()) {
+				return false;
+			}
+			continue;
 		}
-		if (!Value::NotDistinctFrom(delete_partition.value, data_partition.value)) {
+		if (!Value::NotDistinctFrom(delete_partition.value, it->second.get())) {
+			return false;
+		}
+		data_partition_values.erase(it);
+	}
+	for (auto &data_partition : data_partition_values) {
+		if (!data_partition.second.get().IsNull()) {
 			return false;
 		}
 	}
