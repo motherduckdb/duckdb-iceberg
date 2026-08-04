@@ -39,14 +39,72 @@ static void S3OrGlueAttachInternal(IcebergAttachOptions &input, const string &se
 	input.endpoint = StringUtil::Format("%s.%s.amazonaws.com/iceberg", service, region);
 }
 
-static void S3TablesAttach(IcebergAttachOptions &input) {
-	// extract region from the amazon ARN
-	auto substrings = StringUtil::Split(input.warehouse, ":");
-	if (substrings.size() != 6) {
-		throw InvalidInputException("Could not parse S3 Tables ARN warehouse value");
+namespace {
+
+struct ParsedARN {
+public:
+	ParsedARN(const string &arn) {
+		idx_t section = 0;
+		idx_t start = 0;
+		//! NOTE: we can't use StringUtil::Split because it doesn't keep empty items
+		for (idx_t i = 0; i < arn.size() && section < 5; i++) {
+			if (arn[i] == ':') {
+				sections[section++] = arn.substr(start, i - start);
+				start = i + 1;
+			}
+		}
+		if (section < 5 || sections[0] != "arn") {
+			throw InvalidInputException("Expected an AWS ARN of the form "
+			                            "'arn:<partition>:<service>:<region>:<account-id>[:<resource>]', got '%s'",
+			                            arn);
+		}
+		sections[5] = arn.substr(start);
+		auto &partition = Partition();
+		if (partition.empty()) {
+			throw InvalidInputException("Invalid PARTITION Section of ARN: '%s'", partition);
+		}
+		auto &service = Service();
+		if (service.empty()) {
+			throw InvalidInputException("Invalid SERVICE Section of ARN: '%s'", service);
+		}
+		auto &resource = Resource();
+		if (resource.empty()) {
+			throw InvalidInputException("Invalid RESOURCE Section of ARN: '%s'", resource);
+		}
 	}
-	auto region = substrings[3];
+
+public:
+	const string &Partition() {
+		return sections[1];
+	}
+	const string &Service() {
+		return sections[2];
+	}
+	const string &Region() {
+		return sections[3];
+	}
+	const string &AccountID() {
+		return sections[4];
+	}
+	const string &Resource() {
+		return sections[5];
+	}
+
+private:
+	array<string, 6> sections;
+};
+
+} // namespace
+
+static void S3TablesAttach(IcebergAttachOptions &input) {
+	ParsedARN arn(input.warehouse);
+
 	// Populate sigv4_region so it can be used as a fallback region when creating storage secrets
+	auto &region = arn.Region();
+	if (region.empty()) {
+		throw InvalidInputException("Can't ATTACH to S3Tables with an ARN(%s) that has an empty REGION section",
+		                            input.warehouse);
+	}
 	input.options.emplace("sigv4_region", Value(region));
 	S3OrGlueAttachInternal(input, "s3tables", region);
 }
