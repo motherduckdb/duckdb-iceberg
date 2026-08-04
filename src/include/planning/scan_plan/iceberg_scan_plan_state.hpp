@@ -80,7 +80,7 @@ struct IcebergScanPlanState {
 	//! Declared after manifest owners so references in parsed positional-delete data are destroyed first.
 	mutable unordered_map<string, shared_ptr<IcebergDeleteData>> positional_delete_data DUCKDB_GUARDED_BY(delete_lock);
 
-	mutable unordered_map<string, vector<IcebergPartitionInfo>> data_file_partition_info DUCKDB_GUARDED_BY(lock);
+	mutable unordered_map<string, IcebergPartition> data_file_partitions DUCKDB_GUARDED_BY(lock);
 };
 
 } // namespace duckdb

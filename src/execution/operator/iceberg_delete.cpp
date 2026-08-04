@@ -342,7 +342,7 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 
 		IcebergDeleteFileInfo delete_file;
 		delete_file.data_file_path = filename;
-		delete_file.partition_info = multi_file_list->GetPartitionInfoForDataFile(filename);
+		delete_file.partition_info = multi_file_list->GetPartitionForDataFile(filename);
 
 		auto &fs = FileSystem::GetFileSystem(context);
 
@@ -374,10 +374,10 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 	}
 }
 
-vector<IcebergManifestEntry> IcebergDelete::GenerateDeleteManifestEntries(IcebergDeleteGlobalState &global_state) {
+partitioned_manifest_entry_map_t IcebergDelete::GenerateDeleteManifestEntries(IcebergDeleteGlobalState &global_state) {
 	lock_guard<mutex> guard(global_state.lock);
 	auto &delete_files = global_state.written_files;
-	vector<IcebergManifestEntry> iceberg_delete_files;
+	partitioned_manifest_entry_map_t iceberg_delete_files;
 	for (auto &delete_entry : delete_files) {
 		auto data_file_name = delete_entry.first;
 		auto &delete_file = delete_entry.second;
@@ -400,7 +400,7 @@ vector<IcebergManifestEntry> IcebergDelete::GenerateDeleteManifestEntries(Iceber
 			//! Record the equality-delete value bounds so the file can be pruned on metrics.
 			data_file.lower_bounds = delete_file.lower_bounds;
 			data_file.upper_bounds = delete_file.upper_bounds;
-			iceberg_delete_files.push_back(manifest_entry);
+			iceberg_delete_files[delete_file.partition_info.partition_spec_id].push_back(manifest_entry);
 			continue;
 		}
 
@@ -422,8 +422,11 @@ vector<IcebergManifestEntry> IcebergDelete::GenerateDeleteManifestEntries(Iceber
 		// set referenced_data_file
 		data_file.referenced_data_file = data_file_name;
 		// copy partition info from the data file being deleted
-		data_file.partition_info = delete_file.partition_info;
-		iceberg_delete_files.push_back(manifest_entry);
+		auto &partition = delete_file.partition_info;
+		data_file.partition_info = partition.fields;
+		//! Keyed by the data file's spec, not the table's current one: the values above are expressed in that
+		//! spec, and a reader only applies a delete whose partition (spec included) equals the data file's.
+		iceberg_delete_files[partition.partition_spec_id].push_back(manifest_entry);
 	}
 	return iceberg_delete_files;
 }
@@ -465,8 +468,8 @@ SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, Clien
 	if (!global_state.written_files.empty()) {
 		ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTableInformation &tbl) {
 			auto &transaction_data = tbl.GetOrCreateTransactionData(iceberg_transaction);
-			transaction_data.AddSnapshot(IcebergSnapshotOperationType::DELETE, std::move(iceberg_delete_files),
-			                             std::move(global_state.altered_manifests));
+			transaction_data.AddDeleteSnapshot(std::move(iceberg_delete_files),
+			                                   std::move(global_state.altered_manifests));
 
 			//! Add or overwrite the currently active transaction-local delete files
 			for (auto &entry : global_state.written_files) {

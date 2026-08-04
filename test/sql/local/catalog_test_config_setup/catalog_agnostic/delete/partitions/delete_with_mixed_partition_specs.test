@@ -1,0 +1,62 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/partitions/delete_with_mixed_partition_specs.test
+# description: A table holding data files under two partition specs must still apply a delete to a file written under the older one, even though the two specs project a different set of partition fields
+# group: [partitions]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+
+statement ok
+CALL enable_logging('HTTP');
+
+statement ok
+set logging_level='debug'
+
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.test_delete_mixed_specs;
+
+statement ok
+CREATE TABLE my_datalake.default.test_delete_mixed_specs (id INT, ts TIMESTAMP, val VARCHAR)
+PARTITIONED BY (day(ts));
+
+statement ok
+INSERT INTO my_datalake.default.test_delete_mixed_specs VALUES
+    (1, '2021-05-01 09:00:00'::TIMESTAMP, 'a'),
+    (2, '2021-05-01 10:30:00'::TIMESTAMP, 'b');
+
+statement ok
+ALTER TABLE my_datalake.default.test_delete_mixed_specs SET PARTITIONED BY (hour(ts));
+
+# A second data file under the new spec. Reading now merges both specs into the partition struct of the
+# data manifests, while the delete manifest below only covers the old one.
+statement ok
+INSERT INTO my_datalake.default.test_delete_mixed_specs VALUES
+    (3, '2021-06-02 11:00:00'::TIMESTAMP, 'c');
+
+statement ok
+DELETE FROM my_datalake.default.test_delete_mixed_specs WHERE val = 'b';
+
+query III
+SELECT id, ts, val FROM my_datalake.default.test_delete_mixed_specs ORDER BY id;
+----
+1	2021-05-01 09:00:00	a
+3	2021-06-02 11:00:00	c
+
+# A delete against the file written under the newer spec must not disturb the older one.
+statement ok
+DELETE FROM my_datalake.default.test_delete_mixed_specs WHERE val = 'c';
+
+query III
+SELECT id, ts, val FROM my_datalake.default.test_delete_mixed_specs ORDER BY id;
+----
+1	2021-05-01 09:00:00	a
+
+statement ok
+DROP TABLE my_datalake.default.test_delete_mixed_specs;

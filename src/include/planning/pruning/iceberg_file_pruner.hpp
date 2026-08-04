@@ -22,7 +22,10 @@ public:
 	bool DeleteFileMatchesDataFile(const IcebergManifestFile &delete_manifest,
 	                               const IcebergManifestEntry &delete_manifest_entry,
 	                               const IcebergManifestFile &data_manifest,
-	                               const IcebergManifestEntry &data_manifest_entry) const;
+	                               const IcebergManifestEntry &data_manifest_entry,
+	                               const partition_value_map_t &data_partition_values) const;
+	//! Built once per data file: every delete file considered for it is matched against the same values.
+	static partition_value_map_t PartitionValueMap(const IcebergDataFile &data_file);
 
 private:
 	bool FilePartitionMatchesFilter(const IcebergDataFile &data_file, const IcebergManifestFile &manifest_file) const;

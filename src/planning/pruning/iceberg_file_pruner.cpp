@@ -245,10 +245,19 @@ bool IcebergFilePruner::DeleteManifestMatchesDataFile(const IcebergManifestFile 
 	return true;
 }
 
+partition_value_map_t IcebergFilePruner::PartitionValueMap(const IcebergDataFile &data_file) {
+	partition_value_map_t result;
+	for (auto &partition : data_file.partition_info) {
+		result.emplace(partition.field_id, partition.value);
+	}
+	return result;
+}
+
 bool IcebergFilePruner::DeleteFileMatchesDataFile(const IcebergManifestFile &delete_manifest,
                                                   const IcebergManifestEntry &delete_manifest_entry,
                                                   const IcebergManifestFile &data_manifest,
-                                                  const IcebergManifestEntry &data_manifest_entry) const {
+                                                  const IcebergManifestEntry &data_manifest_entry,
+                                                  const partition_value_map_t &data_partition_values) const {
 	auto &delete_file = delete_manifest_entry.data_file;
 	auto &data_file = data_manifest_entry.data_file;
 	if (delete_file.referenced_data_file && *delete_file.referenced_data_file != data_file.file_path) {
@@ -288,23 +297,28 @@ bool IcebergFilePruner::DeleteFileMatchesDataFile(const IcebergManifestFile &del
 		return false;
 	}
 
-	if (delete_file.partition_info.size() != data_file.partition_info.size()) {
-		throw InvalidConfigurationException(
-		    "Delete file %s has %llu partition values, but data file %s has %llu for partition spec %d",
-		    delete_file.file_path, delete_file.partition_info.size(), data_file.file_path,
-		    data_file.partition_info.size(), delete_manifest.partition_spec_id);
-	}
-	for (idx_t partition_idx = 0; partition_idx < delete_file.partition_info.size(); partition_idx++) {
-		auto &delete_partition = delete_file.partition_info[partition_idx];
-		auto &data_partition = data_file.partition_info[partition_idx];
-		if (delete_partition.field_id != data_partition.field_id) {
-			throw InvalidConfigurationException(
-			    "Delete file %s has partition field id %llu at index %llu, but data file %s has field id %llu for "
-			    "partition spec %d",
-			    delete_file.file_path, delete_partition.field_id, partition_idx, data_file.file_path,
-			    data_partition.field_id, delete_manifest.partition_spec_id);
+	//! Both files are under this spec, so its fields are the partition. Each side is projected over the union of
+	//! the specs its own manifest covers, so a field can be absent on one side; absent means NULL.
+	for (auto &field : partition_spec_it->second.fields) {
+		const Value *delete_value = nullptr;
+		for (auto &delete_partition : delete_file.partition_info) {
+			if (delete_partition.field_id == field.partition_field_id) {
+				delete_value = &delete_partition.value;
+				break;
+			}
 		}
-		if (!Value::NotDistinctFrom(delete_partition.value, data_partition.value)) {
+		const Value *data_value = nullptr;
+		auto data_it = data_partition_values.find(field.partition_field_id);
+		if (data_it != data_partition_values.end()) {
+			data_value = &data_it->second.get();
+		}
+		if (!delete_value || !data_value) {
+			if ((delete_value && !delete_value->IsNull()) || (data_value && !data_value->IsNull())) {
+				return false;
+			}
+			continue;
+		}
+		if (!Value::NotDistinctFrom(*delete_value, *data_value)) {
 			return false;
 		}
 	}

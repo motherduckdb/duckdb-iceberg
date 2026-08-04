@@ -1,0 +1,66 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/partitions/delete_after_partition_spec_evolution.test
+# description: A delete against a data file written under a previous partition spec must go into a manifest declaring that spec, so that reads still see the delete partition and the data partition as equal
+# group: [partitions]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+
+statement ok
+CALL enable_logging('HTTP');
+
+statement ok
+set logging_level='debug'
+
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.test_delete_after_spec_evolution;
+
+statement ok
+CREATE TABLE my_datalake.default.test_delete_after_spec_evolution (id INT, ts TIMESTAMP, val VARCHAR)
+PARTITIONED BY (day(ts));
+
+statement ok
+INSERT INTO my_datalake.default.test_delete_after_spec_evolution VALUES
+    (1, '2021-05-01 09:00:00'::TIMESTAMP, 'a'),
+    (2, '2021-05-01 10:30:00'::TIMESTAMP, 'b');
+
+statement ok
+ALTER TABLE my_datalake.default.test_delete_after_spec_evolution SET PARTITIONED BY (hour(ts));
+
+# The predicate is on a non-partition column, so the whole data file is scanned and the delete takes
+# the row-level path. The data file it targets was written under the old spec.
+query I
+DELETE FROM my_datalake.default.test_delete_after_spec_evolution WHERE val = 'b';
+----
+1
+
+query III
+SELECT id, ts, val FROM my_datalake.default.test_delete_after_spec_evolution ORDER BY id;
+----
+1	2021-05-01 09:00:00	a
+
+# The delete file is committed and live either way - what matters is that reads apply it.
+query I
+SELECT count(*) FROM iceberg_metadata(my_datalake.default.test_delete_after_spec_evolution)
+WHERE content = 'POSITION_DELETES' AND status != 'DELETED';
+----
+1
+
+# Deleting the remaining row of a file written under the older spec must empty the table.
+statement ok
+DELETE FROM my_datalake.default.test_delete_after_spec_evolution WHERE val = 'a';
+
+query I
+SELECT count(*) FROM my_datalake.default.test_delete_after_spec_evolution;
+----
+0
+
+statement ok
+DROP TABLE my_datalake.default.test_delete_after_spec_evolution;
