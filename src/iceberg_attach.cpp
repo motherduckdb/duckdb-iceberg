@@ -58,6 +58,7 @@ public:
 			                            "'arn:<partition>:<service>:<region>:<account-id>[:<resource>]', got '%s'",
 			                            arn);
 		}
+		sections[5] = arn.substr(start);
 		auto &partition = Partition();
 		if (partition.empty()) {
 			throw InvalidInputException("Invalid PARTITION Section of ARN: '%s'", partition);
@@ -90,7 +91,7 @@ public:
 	}
 
 private:
-	array<string, 5> sections;
+	array<string, 6> sections;
 };
 
 } // namespace
