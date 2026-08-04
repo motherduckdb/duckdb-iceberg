@@ -115,7 +115,8 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
                                IcebergManifestReaderInput &input, vector<IcebergManifestEntry> &result) {
 	idx_t count = chunk.size();
 	auto &partition_spec = input.partition_spec;
-	auto &iceberg_version = input.metadata.format_version;
+	auto &manifest_format_version = input.metadata.format_version;
+	auto &table_format_version = input.table_format_version;
 
 	//! Setup logic
 
@@ -183,7 +184,7 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 	optional<Int32Entries> content_entries;
 	optional_ptr<Vector> referenced_data_file;
 	optional<StringEntries> referenced_data_file_entries;
-	if (iceberg_version >= 2) {
+	if (table_format_version >= 2) {
 		content = data_file_entries[entry_index++];
 		content_entries.emplace(content->Values<int32_t>());
 
@@ -193,7 +194,7 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 
 	optional_ptr<Vector> first_row_id;
 	optional<Int64Entries> first_row_id_entries;
-	if (iceberg_version >= 3) {
+	if (table_format_version >= 3) {
 		first_row_id = data_file_entries[entry_index++];
 		first_row_id_entries.emplace(first_row_id->Values<int64_t>());
 	}
@@ -202,7 +203,7 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 
 	optional_ptr<Vector> content_size_in_bytes;
 	optional<Int64Entries> content_size_in_bytes_entries;
-	if (iceberg_version >= 3) {
+	if (table_format_version >= 3) {
 		content_offset = data_file_entries[entry_index++];
 		content_size_in_bytes = data_file_entries[entry_index++];
 		content_offset_entries.emplace(content_offset->Values<int64_t>());
@@ -241,10 +242,16 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 		data_file.split_offsets = GetSplitOffsets(split_offsets_entries[i]);
 		data_file.sort_order_id = ReadOptionalField<int32_t>(sort_order_id_entries[i]);
 
-		entry.SetSnapshotId(ReadOptionalField<int64_t>(snapshot_id_entries[i]));
+		if (manifest_format_version >= 2) {
+			entry.SetSnapshotId(ReadOptionalField<int64_t>(snapshot_id_entries[i]));
+		} else {
+			entry.SetSnapshotId(ReadRequiredField<int64_t>("snapshot_id", snapshot_id_entries[i]));
+		}
 
 		//! >= V2
-		if (iceberg_version >= 2) {
+		if (manifest_format_version >= 2) {
+			D_ASSERT(content_entries);
+			D_ASSERT(referenced_data_file_entries);
 			data_file.content =
 			    (IcebergManifestEntryContentType)ReadRequiredField<int32_t>("content", (*content_entries)[i]);
 			data_file.equality_ids = GetEqualityIds(equality_ids_entries[i]);
@@ -265,7 +272,10 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 		}
 
 		//! >= V3
-		if (iceberg_version >= 3) {
+		if (manifest_format_version >= 3) {
+			D_ASSERT(first_row_id_entries);
+			D_ASSERT(content_offset_entries);
+			D_ASSERT(content_size_in_bytes_entries);
 			data_file.SetFirstRowId(ReadOptionalField<int64_t>((*first_row_id_entries)[i]));
 			data_file.content_offset = ReadOptionalField<int64_t>((*content_offset_entries)[i]);
 			data_file.content_size_in_bytes = ReadOptionalField<int64_t>((*content_size_in_bytes_entries)[i]);

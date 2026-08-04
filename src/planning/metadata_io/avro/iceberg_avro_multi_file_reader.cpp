@@ -313,8 +313,8 @@ BuildManifestSchema(const IcebergSnapshot &snapshot, const IcebergTableMetadata 
 	if (iceberg_version >= 2) {
 		MultiFileColumnDefinition content("content", LogicalType::INTEGER);
 		content.identifier = Value::INTEGER(CONTENT);
-		//! Default to 0 if missing (V1 compatibility)
-		content.default_expression = make_uniq<ConstantExpression>(Value::INTEGER(0));
+		//! Preserve missing content as NULL. ManifestReader applies the V1 default and validates V2+ manifests.
+		content.default_expression = make_uniq<ConstantExpression>(Value(content.type));
 		data_file.children.push_back(content);
 	}
 
@@ -651,7 +651,7 @@ void IcebergAvroMultiFileReader::FinalizeChunk(ClientContext &context, const Mul
 		}
 		auto &partition_spec = *partition_spec_p;
 
-		IcebergManifestReaderInput input(manifest_metadata, partition_spec);
+		IcebergManifestReaderInput input(manifest_metadata, partition_spec, metadata.iceberg_version);
 
 		auto &manifest_entries = manifest_file.GetOrCreateManifestEntries();
 		idx_t start_index = manifest_entries.size();

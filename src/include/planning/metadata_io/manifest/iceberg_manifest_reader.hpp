@@ -6,13 +6,15 @@ namespace duckdb {
 
 struct IcebergManifestReaderInput {
 public:
-	IcebergManifestReaderInput(const IcebergManifestMetadata &metadata, const IcebergPartitionSpec &partition_spec)
-	    : metadata(metadata), partition_spec(partition_spec) {
+	IcebergManifestReaderInput(const IcebergManifestMetadata &metadata, const IcebergPartitionSpec &partition_spec,
+	                           int32_t table_format_version)
+	    : metadata(metadata), partition_spec(partition_spec), table_format_version(table_format_version) {
 	}
 
 public:
 	const IcebergManifestMetadata &metadata;
 	const IcebergPartitionSpec &partition_spec;
+	const int32_t table_format_version;
 };
 
 namespace manifest_file {
