@@ -36,7 +36,12 @@ static void S3OrGlueAttachInternal(IcebergAttachOptions &input, const string &se
 	}
 
 	input.authorization_type = IcebergAuthorizationType::SIGV4;
-	input.endpoint = StringUtil::Format("%s.%s.amazonaws.com/iceberg", service, region);
+	if (input.endpoint.empty()) {
+		input.endpoint = StringUtil::Format("%s.%s.amazonaws.com/iceberg", service, region);
+	} else {
+		input.options.emplace("sigv4_service", Value(service));
+		input.options.emplace("sigv4_region", Value(region));
+	}
 }
 
 static void S3TablesAttach(IcebergAttachOptions &input) {
