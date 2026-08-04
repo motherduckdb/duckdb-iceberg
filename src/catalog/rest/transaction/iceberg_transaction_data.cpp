@@ -206,7 +206,7 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 }
 
 void IcebergTransactionData::AddDeleteManifestFiles(IcebergAddSnapshot &add_snapshot,
-                                                    IcebergDeleteManifestEntries &&delete_files,
+                                                    partitioned_manifest_entry_map_t &&delete_files,
                                                     sequence_number_t sequence_number) {
 	auto &table_metadata = table_info.table_metadata;
 	auto &fs = FileSystem::GetFileSystem(context);
@@ -220,7 +220,7 @@ void IcebergTransactionData::AddDeleteManifestFiles(IcebergAddSnapshot &add_snap
 	}
 }
 
-void IcebergTransactionData::AddDeleteSnapshot(IcebergDeleteManifestEntries &&delete_files,
+void IcebergTransactionData::AddDeleteSnapshot(partitioned_manifest_entry_map_t &&delete_files,
                                                IcebergManifestDeletes &&altered_manifests) {
 	//! NOTE: Lock has to be held to make sure the rows are assigned the correct row ids
 	lock_guard<mutex> guard(lock);
@@ -242,7 +242,7 @@ void IcebergTransactionData::AddDeleteSnapshot(IcebergDeleteManifestEntries &&de
 	updates.push_back(std::move(add_snapshot));
 }
 
-void IcebergTransactionData::AddUpdateSnapshot(IcebergDeleteManifestEntries &&delete_files,
+void IcebergTransactionData::AddUpdateSnapshot(partitioned_manifest_entry_map_t &&delete_files,
                                                vector<IcebergManifestEntry> &&data_files,
                                                IcebergManifestDeletes &&altered_manifests) {
 	//! NOTE: Lock has to be held to make sure the rows are assigned the correct row ids

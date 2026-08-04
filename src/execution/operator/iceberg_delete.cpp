@@ -342,7 +342,7 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 
 		IcebergDeleteFileInfo delete_file;
 		delete_file.data_file_path = filename;
-		delete_file.data_file_partitioning = multi_file_list->GetPartitioningForDataFile(filename);
+		delete_file.partition_info = multi_file_list->GetPartitionForDataFile(filename);
 
 		auto &fs = FileSystem::GetFileSystem(context);
 
@@ -374,10 +374,10 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 	}
 }
 
-IcebergDeleteManifestEntries IcebergDelete::GenerateDeleteManifestEntries(IcebergDeleteGlobalState &global_state) {
+partitioned_manifest_entry_map_t IcebergDelete::GenerateDeleteManifestEntries(IcebergDeleteGlobalState &global_state) {
 	lock_guard<mutex> guard(global_state.lock);
 	auto &delete_files = global_state.written_files;
-	IcebergDeleteManifestEntries iceberg_delete_files;
+	partitioned_manifest_entry_map_t iceberg_delete_files;
 	for (auto &delete_entry : delete_files) {
 		auto data_file_name = delete_entry.first;
 		auto &delete_file = delete_entry.second;
@@ -400,7 +400,7 @@ IcebergDeleteManifestEntries IcebergDelete::GenerateDeleteManifestEntries(Iceber
 			//! Record the equality-delete value bounds so the file can be pruned on metrics.
 			data_file.lower_bounds = delete_file.lower_bounds;
 			data_file.upper_bounds = delete_file.upper_bounds;
-			iceberg_delete_files[delete_file.data_file_partitioning.partition_spec_id].push_back(manifest_entry);
+			iceberg_delete_files[delete_file.partition_info.partition_spec_id].push_back(manifest_entry);
 			continue;
 		}
 
@@ -422,11 +422,11 @@ IcebergDeleteManifestEntries IcebergDelete::GenerateDeleteManifestEntries(Iceber
 		// set referenced_data_file
 		data_file.referenced_data_file = data_file_name;
 		// copy partition info from the data file being deleted
-		auto &partitioning = delete_file.data_file_partitioning;
-		data_file.partition_info = partitioning.partition_info;
+		auto &partition = delete_file.partition_info;
+		data_file.partition_info = partition.fields;
 		//! Keyed by the data file's spec, not the table's current one: the values above are expressed in that
 		//! spec, and a reader only applies a delete whose partition (spec included) equals the data file's.
-		iceberg_delete_files[partitioning.partition_spec_id].push_back(manifest_entry);
+		iceberg_delete_files[partition.partition_spec_id].push_back(manifest_entry);
 	}
 	return iceberg_delete_files;
 }

@@ -65,11 +65,11 @@ struct IcebergPartitionInfo {
 	}
 };
 
-//! How a data file is partitioned: the values, plus the spec they were produced with.
+//! The partition a file belongs to: the per-field values, plus the spec they were produced with.
 //! Partition values are only meaningful together with their spec, so the two travel as a pair.
-struct IcebergDataFilePartitioning {
+struct IcebergPartition {
 	int32_t partition_spec_id = 0;
-	vector<IcebergPartitionInfo> partition_info;
+	vector<IcebergPartitionInfo> fields;
 };
 
 struct IcebergDataFile {
@@ -145,9 +145,12 @@ private:
 	optional<sequence_number_t> file_sequence_number;
 };
 
-//! Delete-manifest entries grouped by the partition spec of the data files they target, so each group can be
-//! written into a manifest declaring that spec.
-using IcebergDeleteManifestEntries = map<int32_t, vector<IcebergManifestEntry>>;
+//! Manifest entries grouped by partition spec id, so each group can be written into a manifest declaring
+//! that spec.
+using partitioned_manifest_entry_map_t = map<int32_t, vector<IcebergManifestEntry>>;
+
+//! A file's partition values looked up by partition field id.
+using partition_value_map_t = unordered_map<uint64_t, reference<const Value>>;
 
 struct IcebergManifestListEntry;
 

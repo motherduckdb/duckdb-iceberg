@@ -245,10 +245,19 @@ bool IcebergFilePruner::DeleteManifestMatchesDataFile(const IcebergManifestFile 
 	return true;
 }
 
+partition_value_map_t IcebergFilePruner::PartitionValueMap(const IcebergDataFile &data_file) {
+	partition_value_map_t result;
+	for (auto &partition : data_file.partition_info) {
+		result.emplace(partition.field_id, partition.value);
+	}
+	return result;
+}
+
 bool IcebergFilePruner::DeleteFileMatchesDataFile(const IcebergManifestFile &delete_manifest,
                                                   const IcebergManifestEntry &delete_manifest_entry,
                                                   const IcebergManifestFile &data_manifest,
-                                                  const IcebergManifestEntry &data_manifest_entry) const {
+                                                  const IcebergManifestEntry &data_manifest_entry,
+                                                  const partition_value_map_t &data_partition_values) const {
 	auto &delete_file = delete_manifest_entry.data_file;
 	auto &data_file = data_manifest_entry.data_file;
 	if (delete_file.referenced_data_file && *delete_file.referenced_data_file != data_file.file_path) {
@@ -288,30 +297,28 @@ bool IcebergFilePruner::DeleteFileMatchesDataFile(const IcebergManifestFile &del
 		return false;
 	}
 
-	//! A partition struct is read as the union of the specs covered by its reader, and data and delete manifests
-	//! are read separately, so the same spec can yield a different set of fields on each side: a field belonging
-	//! to another spec is materialized as NULL for one file and missing for the other. Match on field id and
-	//! treat a missing field as NULL, rather than pairing the two structs up by position.
-	unordered_map<uint64_t, reference<const Value>> data_partition_values;
-	for (auto &data_partition : data_file.partition_info) {
-		data_partition_values.emplace(data_partition.field_id, data_partition.value);
-	}
-
-	for (auto &delete_partition : delete_file.partition_info) {
-		auto it = data_partition_values.find(delete_partition.field_id);
-		if (it == data_partition_values.end()) {
-			if (!delete_partition.value.IsNull()) {
+	//! Both files are under this spec, so its fields are the partition. Each side is projected over the union of
+	//! the specs its own manifest covers, so a field can be absent on one side; absent means NULL.
+	for (auto &field : partition_spec_it->second.fields) {
+		const Value *delete_value = nullptr;
+		for (auto &delete_partition : delete_file.partition_info) {
+			if (delete_partition.field_id == field.partition_field_id) {
+				delete_value = &delete_partition.value;
+				break;
+			}
+		}
+		const Value *data_value = nullptr;
+		auto data_it = data_partition_values.find(field.partition_field_id);
+		if (data_it != data_partition_values.end()) {
+			data_value = &data_it->second.get();
+		}
+		if (!delete_value || !data_value) {
+			if ((delete_value && !delete_value->IsNull()) || (data_value && !data_value->IsNull())) {
 				return false;
 			}
 			continue;
 		}
-		if (!Value::NotDistinctFrom(delete_partition.value, it->second.get())) {
-			return false;
-		}
-		data_partition_values.erase(it);
-	}
-	for (auto &data_partition : data_partition_values) {
-		if (!data_partition.second.get().IsNull()) {
+		if (!Value::NotDistinctFrom(*delete_value, *data_value)) {
 			return false;
 		}
 	}

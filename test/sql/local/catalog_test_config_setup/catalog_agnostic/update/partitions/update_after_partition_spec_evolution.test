@@ -35,8 +35,7 @@ statement ok
 ALTER TABLE my_datalake.default.test_update_after_spec_evolution SET PARTITIONED BY (hour(ts));
 
 # An update writes the new row under the current spec and a delete file hiding the old one, which
-# belongs with the spec of the data file it targets. If the two end up in one manifest, the delete is
-# either discarded (the row appears twice) or read under the wrong spec.
+# belongs with the spec of the data file it targets.
 query I
 UPDATE my_datalake.default.test_update_after_spec_evolution SET val = 'updated' WHERE val = 'b';
 ----

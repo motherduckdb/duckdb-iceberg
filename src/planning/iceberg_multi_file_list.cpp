@@ -368,10 +368,10 @@ IcebergManifestFile IcebergMultiFileList::GetManifestFileForDataFile(idx_t file_
 	return data_manifests[manifest_file_idx].entry.file;
 }
 
-IcebergDataFilePartitioning IcebergMultiFileList::GetPartitioningForDataFile(const string &file_path) const {
+IcebergPartition IcebergMultiFileList::GetPartitionForDataFile(const string &file_path) const {
 	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
-	auto entry = shared_state->data_file_partitioning.find(file_path);
-	if (entry != shared_state->data_file_partitioning.end()) {
+	auto entry = shared_state->data_file_partitions.find(file_path);
+	if (entry != shared_state->data_file_partitions.end()) {
 		return entry->second;
 	}
 	throw InvalidConfigurationException("Could not find data file '%s' in manifest entries", file_path);
@@ -456,9 +456,9 @@ IcebergMultiFileList::GetDataFile(idx_t file_id, annotated_lock_guard<annotated_
 			if (options.allow_moved_paths) {
 				entry_path = IcebergUtils::GetFullPath(GetPath(), entry_path, fs);
 			}
-			IcebergDataFilePartitioning partitioning {manifest_file.partition_spec_id, data_file.partition_info};
-			shared_state->data_file_partitioning[entry_path] = partitioning;
-			shared_state->data_file_partitioning[data_file.file_path] = std::move(partitioning);
+			IcebergPartition partition {manifest_file.partition_spec_id, data_file.partition_info};
+			shared_state->data_file_partitions[entry_path] = partition;
+			shared_state->data_file_partitions[data_file.file_path] = std::move(partition);
 
 			if (manifest_entry.status == IcebergManifestEntryStatusType::DELETED) {
 				continue;
@@ -637,6 +637,7 @@ IcebergDeletePlan IcebergMultiFileList::ProcessDeletes(const BoundIcebergManifes
 		annotated_lock_guard<annotated_mutex> delete_guard(shared_state->delete_lock);
 		auto delete_files = provider->GetDeleteFiles(manifest_indexes);
 		delete_context = make_uniq<IcebergDeletePlanningContext>(GetDeletePlanningContext());
+		auto data_partition_values = IcebergFilePruner::PartitionValueMap(data_manifest_entry.entry.data_file);
 		unordered_set<IcebergDeleteFileLoadState *> seen_loads;
 		for (auto delete_file : delete_files) {
 			if (delete_file.manifest_idx >= delete_manifests.size()) {
@@ -655,7 +656,8 @@ IcebergDeletePlan IcebergMultiFileList::ProcessDeletes(const BoundIcebergManifes
 				continue;
 			}
 			if (!IcebergDeletePlanner::DeleteEntryAppliesToDataFile(*delete_context, delete_file.manifest_idx,
-			                                                        delete_entry, data_manifest_entry)) {
+			                                                        delete_entry, data_manifest_entry,
+			                                                        data_partition_values)) {
 				continue;
 			}
 
