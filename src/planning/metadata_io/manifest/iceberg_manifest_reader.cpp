@@ -112,10 +112,10 @@ static vector<int64_t> GetSplitOffsets(const Int64ListEntries::ValueEntry &entry
 }
 
 void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &partition_field_id_to_type,
-                               const IcebergTableMetadata &metadata, vector<IcebergManifestEntry> &result) {
+                               IcebergManifestReaderInput &input, vector<IcebergManifestEntry> &result) {
 	idx_t count = chunk.size();
-	auto &partition_specs = metadata.partition_specs;
-	auto &iceberg_version = metadata.iceberg_version;
+	auto &partition_spec = input.partition_spec;
+	auto &iceberg_version = input.metadata.format_version;
 
 	//! Setup logic
 
@@ -274,15 +274,12 @@ void ManifestReader::ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &
 		for (auto &it : partition_vectors) {
 			auto field_id = it.first;
 			auto &partition_vector = it.second.get();
-			for (auto &id_spec : partition_specs) {
-				auto &spec = id_spec.second;
-				for (auto &field : spec.fields) {
-					if (field_id == field.partition_field_id) {
-						IcebergPartitionInfo info;
-						info.field_id = static_cast<uint64_t>(field_id);
-						info.value = partition_vector.GetValue(i);
-						data_file.partition_info.push_back(std::move(info));
-					}
+			for (auto &field : partition_spec.fields) {
+				if (field_id == field.partition_field_id) {
+					IcebergPartitionInfo info;
+					info.field_id = static_cast<uint64_t>(field_id);
+					info.value = partition_vector.GetValue(i);
+					data_file.partition_info.push_back(std::move(info));
 				}
 			}
 		}
