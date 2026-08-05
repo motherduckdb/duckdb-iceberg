@@ -152,7 +152,7 @@ static void SetIcebergSchemaPropertiesFunction(ClientContext &context, TableFunc
 		return;
 	}
 	if (global_state.properties_set) {
-		output.SetCardinality(0);
+		output.SetChildCardinality(0);
 		return;
 	}
 
@@ -199,7 +199,7 @@ static void RemoveIcebergSchemaPropertiesFunction(ClientContext &context, TableF
 		return;
 	}
 	if (global_state.properties_removed) {
-		output.SetCardinality(0);
+		output.SetChildCardinality(0);
 		return;
 	}
 
@@ -257,7 +257,7 @@ static void GetIcebergSchemaPropertiesFunction(ClientContext &context, TableFunc
 	auto &schema_properties = iceberg_schema->schema_info.properties;
 
 	if (schema_properties.empty()) {
-		output.SetCardinality(0);
+		output.SetChildCardinality(0);
 		return;
 	}
 	if (!global_state.all_properties_initialized) {
@@ -268,7 +268,7 @@ static void GetIcebergSchemaPropertiesFunction(ClientContext &context, TableFunc
 	}
 	// if we have already returned all properties.
 	if (global_state.property_count >= global_state.all_properties.size()) {
-		output.SetCardinality(0);
+		output.SetChildCardinality(0);
 		return;
 	}
 

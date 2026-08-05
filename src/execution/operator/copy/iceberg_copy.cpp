@@ -168,7 +168,6 @@ SourceResultType IcebergPhysicalCopy::GetDataInternal(ExecutionContext &context,
                                                       OperatorSourceInput &input) const {
 	auto &gstate = sink_state->Cast<IcebergInsertGlobalState>();
 	auto value = Value::BIGINT(gstate.insert_count);
-	chunk.SetCardinality(1);
 	chunk.data[0].Append(value);
 	return SourceResultType::FINISHED;
 }
