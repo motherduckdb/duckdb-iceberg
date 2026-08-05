@@ -17,6 +17,28 @@
 
 namespace duckdb {
 
+static void LoadMissingManifestCounts(ClientContext &context, const IcebergTableMetadata &metadata,
+                                      const IcebergSnapshotScanInfo &snapshot_info,
+                                      IcebergManifestListEntry &manifest_list_entry) {
+	if (manifest_list_entry.file.counts && manifest_list_entry.file.counts->Complete()) {
+		return;
+	}
+	vector<IcebergManifestListEntry> manifest_files;
+	manifest_files.push_back(manifest_list_entry);
+	manifest_files[0].manifest_entries.reset();
+
+	IcebergOptions options;
+	auto &fs = FileSystem::GetFileSystem(context);
+	auto scan = AvroScan::ScanManifest(snapshot_info, manifest_files, options, fs, "", metadata, context);
+	auto reader = make_uniq<manifest_file::ManifestReader>(*scan);
+	while (!reader->Finished()) {
+		reader->Read();
+	}
+
+	manifest_list_entry = std::move(manifest_files[0]);
+	manifest_list_entry.file.SetCountsFromEntries(manifest_list_entry.GetManifestEntries());
+}
+
 static optional<int64_t> LoadExistingManifestList(ClientContext &context, const IcebergTableMetadata &metadata,
                                                   vector<IcebergManifestListEntry> &existing_manifest_list,
                                                   int64_t &next_row_id) {
@@ -39,6 +61,9 @@ static optional<int64_t> LoadExistingManifestList(ClientContext &context, const 
 	while (!manifest_list_reader->Finished()) {
 		manifest_list_reader->Read();
 	}
+	for (auto &manifest_list_entry : existing_manifest_list) {
+		LoadMissingManifestCounts(context, metadata, snapshot_info, manifest_list_entry);
+	}
 
 	if (metadata.iceberg_version < 3) {
 		return base_snapshot_id;
@@ -58,9 +83,11 @@ static optional<int64_t> LoadExistingManifestList(ClientContext &context, const 
 			    "Table is corrupted, snapshot has 'first-row-id' but not all 'manifest_file' "
 			    "entries have a 'first_row_id'");
 		}
+		D_ASSERT(manifest_file.counts && manifest_file.counts->added_rows_count &&
+		         manifest_file.counts->existing_rows_count);
 		manifest_file.first_row_id = next_row_id;
-		next_row_id += manifest_file.added_rows_count;
-		next_row_id += manifest_file.existing_rows_count;
+		next_row_id += *manifest_file.counts->added_rows_count;
+		next_row_id += *manifest_file.counts->existing_rows_count;
 	}
 	return base_snapshot_id;
 }

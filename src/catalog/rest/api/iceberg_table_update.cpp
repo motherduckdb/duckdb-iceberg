@@ -22,17 +22,23 @@ static void AssignManifestFirstRowIds(const IcebergTableMetadata &metadata,
 			continue;
 		}
 		if (manifest_file.first_row_id) {
-			next_row_id = MaxValue<int64_t>(next_row_id, *manifest_file.first_row_id + manifest_file.added_rows_count +
-			                                                 manifest_file.existing_rows_count);
+			D_ASSERT(manifest_file.counts && manifest_file.counts->added_rows_count &&
+			         manifest_file.counts->existing_rows_count);
+			next_row_id =
+			    MaxValue<int64_t>(next_row_id, *manifest_file.first_row_id + *manifest_file.counts->added_rows_count +
+			                                       *manifest_file.counts->existing_rows_count);
 			continue;
 		}
 		if (current_snapshot && current_snapshot->first_row_id) {
-			throw InternalException("Table is corrupted, snapshot has 'first-row-id' but not all 'manifest_file' "
-			                        "entries have a 'first_row_id'");
+			throw InvalidConfigurationException(
+			    "Table is corrupted, snapshot has 'first-row-id' but not all 'manifest_file' "
+			    "entries have a 'first_row_id'");
 		}
+		D_ASSERT(manifest_file.counts && manifest_file.counts->added_rows_count &&
+		         manifest_file.counts->existing_rows_count);
 		manifest_file.first_row_id = next_row_id;
-		next_row_id += manifest_file.added_rows_count;
-		next_row_id += manifest_file.existing_rows_count;
+		next_row_id += *manifest_file.counts->added_rows_count;
+		next_row_id += *manifest_file.counts->existing_rows_count;
 	}
 }
 
@@ -65,6 +71,17 @@ void IcebergCommitState::LoadExistingManifests(DatabaseInstance &db,
 		while (!manifest_list_reader->Finished()) {
 			manifest_list_reader->Read();
 		}
+	}
+
+	//! In V1 the added/deleted/existing file counts were optional
+	//! But even if the attributes are present, they're allowed to be NULL
+	//! In both those situations we have to read all the entries of the manifest to materialize these counts on-demand
+	for (auto &manifest : manifests) {
+		if (manifest.file.counts && manifest.file.counts->Complete()) {
+			continue;
+		}
+		manifest =
+		    IcebergManifestMerge::ScanManifestEntries(manifest, *this, table_info.table_metadata.GetCurrentSchemaId());
 	}
 
 	next_row_id = 0;

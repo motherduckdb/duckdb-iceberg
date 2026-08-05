@@ -116,7 +116,8 @@ static void WriteIcebergMetadata(ClientContext &context, CopyIcebergBindData &bi
 			snapshot.first_row_id = first_row_id;
 
 			if (manifest_file.file.content == IcebergManifestContentType::DATA) {
-				snapshot.added_rows = manifest_file.file.added_rows_count;
+				D_ASSERT(manifest_file.file.counts && manifest_file.file.counts->added_rows_count);
+				snapshot.added_rows = *manifest_file.file.counts->added_rows_count;
 			} else {
 				snapshot.added_rows = 0;
 			}
