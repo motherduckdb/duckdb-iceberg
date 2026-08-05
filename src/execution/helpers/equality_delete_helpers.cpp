@@ -366,6 +366,28 @@ bool IcebergDelete::TryGetEqualityDeletePredicates(ClientContext &context, Icebe
 	return true;
 }
 
+//! This writer gives an equality delete no partition values, so only an unpartitioned spec makes it apply at
+//! all; a partitioned one would scope it to a partition it never names. Lowest id, to keep the choice stable.
+static int32_t GlobalEqualityDeleteSpecId(const IcebergTableMetadata &metadata) {
+	int32_t result = 0;
+	bool found = false;
+	for (auto &entry : metadata.GetPartitionSpecs()) {
+		if (!entry.second.IsUnpartitioned()) {
+			continue;
+		}
+		if (!found || entry.first < result) {
+			result = entry.first;
+			found = true;
+		}
+	}
+	if (!found) {
+		throw NotImplementedException(
+		    "Cannot write an equality delete for this table: none of its partition specs are unpartitioned, and "
+		    "writing partition-scoped equality deletes is not supported");
+	}
+	return result;
+}
+
 void IcebergDelete::WriteEqualityDeleteFile(ClientContext &context, IcebergDeleteGlobalState &global_state) const {
 	D_ASSERT(!equality_predicates.empty());
 
@@ -452,6 +474,8 @@ void IcebergDelete::WriteEqualityDeleteFile(ClientContext &context, IcebergDelet
 	delete_file.delete_count = rows.size();
 	delete_file.file_size_bytes = stats.file_size_bytes;
 	delete_file.equality_ids = std::move(equality_ids);
+	//! An equality delete targets no single data file, so it is not tied to any one partition.
+	delete_file.partition_info.partition_spec_id = GlobalEqualityDeleteSpecId(table.table_info.table_metadata);
 
 	// Record per-field metrics for the equality-delete values so scans can prune this delete file when its
 	// equality-field range is disjoint from the scan predicate / a data file's bounds. Bounds span the min/max

@@ -176,16 +176,14 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 
 	IcebergManifestContentType manifest_content_type;
 	switch (operation) {
-	case IcebergSnapshotOperationType::DELETE:
-		manifest_content_type = IcebergManifestContentType::DELETE;
-		break;
 	case IcebergSnapshotOperationType::APPEND:
 	case IcebergSnapshotOperationType::REPLACE:
 		//! This helper currently writes DATA manifest entries; REPLACE itself is not limited to data files.
 		manifest_content_type = IcebergManifestContentType::DATA;
 		break;
 	default:
-		throw NotImplementedException("Cannot have use snapshot operation type OVERWRITE here");
+		throw NotImplementedException("Snapshot operation type %d does not write data manifests",
+		                              static_cast<uint8_t>(operation));
 	};
 
 	auto temp_sequence_number = table_metadata.last_sequence_number + alters.size() + 1;
@@ -207,7 +205,44 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 	updates.push_back(std::move(add_snapshot));
 }
 
-void IcebergTransactionData::AddUpdateSnapshot(vector<IcebergManifestEntry> &&delete_files,
+void IcebergTransactionData::AddDeleteManifestFiles(IcebergAddSnapshot &add_snapshot,
+                                                    partitioned_manifest_entry_map_t &&delete_files,
+                                                    sequence_number_t sequence_number) {
+	auto &table_metadata = table_info.table_metadata;
+	auto &fs = FileSystem::GetFileSystem(context);
+	//! One manifest per partition spec: a manifest declares a single spec, and the entries it holds carry
+	//! partition values in that spec.
+	for (auto &entry : delete_files) {
+		auto manifest_metadata =
+		    IcebergManifestMetadata::FromTableMetadata(table_metadata, IcebergManifestContentType::DELETE, entry.first);
+		add_snapshot.AddManifestFile(IcebergManifestListEntry::CreateFromEntries(
+		    fs, sequence_number, table_metadata, manifest_metadata, std::move(entry.second), next_row_id));
+	}
+}
+
+void IcebergTransactionData::AddDeleteSnapshot(partitioned_manifest_entry_map_t &&delete_files,
+                                               IcebergManifestDeletes &&altered_manifests) {
+	//! NOTE: Lock has to be held to make sure the rows are assigned the correct row ids
+	lock_guard<mutex> guard(lock);
+
+	auto &table_metadata = table_info.table_metadata;
+	CacheExistingManifestList(guard, table_metadata);
+
+	const auto sequence_number = table_metadata.last_sequence_number + alters.size() + 1;
+
+	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info, IcebergSnapshotOperationType::DELETE);
+	AddDeleteManifestFiles(*add_snapshot, std::move(delete_files), sequence_number);
+	// make sure we are still inserting into the current schema
+	if (table_metadata.current_snapshot_id) {
+		TableAddAssertCurrentSchemaId();
+	}
+	add_snapshot->altered_manifests = std::move(altered_manifests);
+
+	alters.push_back(*add_snapshot);
+	updates.push_back(std::move(add_snapshot));
+}
+
+void IcebergTransactionData::AddUpdateSnapshot(partitioned_manifest_entry_map_t &&delete_files,
                                                vector<IcebergManifestEntry> &&data_files,
                                                IcebergManifestDeletes &&altered_manifests) {
 	//! NOTE: Lock has to be held to make sure the rows are assigned the correct row ids
@@ -222,20 +257,14 @@ void IcebergTransactionData::AddUpdateSnapshot(vector<IcebergManifestEntry> &&de
 	const auto sequence_number = last_sequence_number + alters.size() + 1;
 
 	auto &fs = FileSystem::GetFileSystem(context);
-	auto delete_manifest_metadata =
-	    IcebergManifestMetadata::FromTableMetadata(table_metadata, IcebergManifestContentType::DELETE);
 	auto data_manifest_metadata =
 	    IcebergManifestMetadata::FromTableMetadata(table_metadata, IcebergManifestContentType::DATA);
 
-	auto delete_manifest_file = IcebergManifestListEntry::CreateFromEntries(
-	    fs, sequence_number, table_metadata, delete_manifest_metadata, std::move(delete_files), next_row_id);
-	// Add a manifest_file for the new insert data
-	auto data_manifest_file = IcebergManifestListEntry::CreateFromEntries(
-	    fs, sequence_number, table_metadata, data_manifest_metadata, std::move(data_files), next_row_id);
-
 	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info);
-	add_snapshot->AddManifestFile(std::move(delete_manifest_file));
-	add_snapshot->AddManifestFile(std::move(data_manifest_file));
+	AddDeleteManifestFiles(*add_snapshot, std::move(delete_files), sequence_number);
+	// Add a manifest_file for the new insert data
+	add_snapshot->AddManifestFile(IcebergManifestListEntry::CreateFromEntries(
+	    fs, sequence_number, table_metadata, data_manifest_metadata, std::move(data_files), next_row_id));
 	add_snapshot->altered_manifests = std::move(altered_manifests);
 
 	alters.push_back(*add_snapshot);
