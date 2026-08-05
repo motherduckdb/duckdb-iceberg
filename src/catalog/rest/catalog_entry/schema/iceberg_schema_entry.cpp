@@ -358,7 +358,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			auto &rename_table_info = alter_table_info.Cast<RenameTableInfo>();
 			auto &new_name = rename_table_info.new_table_name;
 
-			EntryLookupInfo lookup(CatalogType::TABLE_ENTRY, new_name);
+			EntryLookupInfo lookup(CatalogType::TABLE_ENTRY, QualifiedName(new_name));
 			auto other_catalog_entry = tables.GetEntry(context, lookup);
 			if (other_catalog_entry) {
 				//! The table exists at this point, check if it was deleted/renamed in the transaction

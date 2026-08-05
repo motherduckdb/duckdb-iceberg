@@ -313,8 +313,8 @@ BuildManifestSchema(const IcebergSnapshot &snapshot, const IcebergTableMetadata 
 	if (iceberg_version >= 2) {
 		MultiFileColumnDefinition content("content", LogicalType::INTEGER);
 		content.identifier = Value::INTEGER(CONTENT);
-		//! Default to 0 if missing (V1 compatibility)
-		content.default_expression = make_uniq<ConstantExpression>(Value::INTEGER(0));
+		//! Preserve missing content as NULL. ManifestReader applies the V1 default and validates V2+ manifests.
+		content.default_expression = make_uniq<ConstantExpression>(Value(content.type));
 		data_file.children.push_back(content);
 	}
 
@@ -641,9 +641,21 @@ void IcebergAvroMultiFileReader::FinalizeChunk(ClientContext &context, const Mul
 		auto manifest_file_idx = manifest_scan_info.GetManifestIndex(reader.file_list_idx.GetIndex());
 		auto &manifest_file = manifest_scan_info.manifest_files[manifest_file_idx];
 
+		auto &manifest_metadata = *manifest_file.manifest_metadata;
+		auto spec_id = manifest_metadata.partition_spec_id;
+		auto partition_spec_p = metadata.FindPartitionSpecById(spec_id);
+		if (!partition_spec_p) {
+			throw InvalidConfigurationException("Manifest file '%s' key-value metadata references partition-spec-id: "
+			                                    "%d, but no spec with that ID exists in the metadata",
+			                                    manifest_file.file.manifest_path, spec_id);
+		}
+		auto &partition_spec = *partition_spec_p;
+
+		IcebergManifestReaderInput input(manifest_metadata, partition_spec, metadata.iceberg_version);
+
 		auto &manifest_entries = manifest_file.GetOrCreateManifestEntries();
 		idx_t start_index = manifest_entries.size();
-		manifest_file::ManifestReader::ReadChunk(output_chunk, manifest_scan_info.partition_field_id_to_type, metadata,
+		manifest_file::ManifestReader::ReadChunk(output_chunk, manifest_scan_info.partition_field_id_to_type, input,
 		                                         manifest_entries);
 		if (manifest_scan_info.read_state) {
 			auto &read_state = *manifest_scan_info.read_state;
