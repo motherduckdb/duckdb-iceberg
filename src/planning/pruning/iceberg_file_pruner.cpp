@@ -303,7 +303,12 @@ bool IcebergFilePruner::EqualityDeleteMatchesDataFile(const IcebergDataFile &del
 				           data_stats.lower_bound->ToString(), data_stats.upper_bound->ToString());
 				return false;
 			}
-		} catch (Exception &) {
+		} catch (std::exception &e) {
+			ErrorData error(e);
+			DUCKDB_LOG_DEBUG(context,
+			                 "Bounds for data file / equality delete file failed to deserialize in "
+			                 "EqualityDeleteMatchesDataFile, ignoring error: %s",
+			                 error.Message());
 			continue;
 		}
 	}
