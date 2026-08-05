@@ -466,7 +466,8 @@
 			"paths": [
 				"test/sql/explain/explain_execute.test",
 				"test/sql/optimizer/test_common_subplan_table_filters.test",
-				"test/sql/explain/test_explain_table_scan.test"
+				"test/sql/explain/test_explain_table_scan.test",
+				"test/sql/cte/materialized/materialized_cte_order_preservation.test"
 			]
 		},
 		{
@@ -1108,7 +1109,8 @@
 				"test/sql/storage/compression/dict_fsst/invalid_symbol_table.test",
 				"test/sql/storage/compression/dict_fsst/repeated_string_stats.test",
 				"test/sql/storage/compression/dictionary/invalid_dictionary_metadata.test",
-				"test/sql/storage/compression/dictionary/total_string_length_dictionary.test"
+				"test/sql/storage/compression/dictionary/total_string_length_dictionary.test",
+				"test/sql/storage/compression/fsst/fsst_small_symbol_table.test"
 			]
 		},
 		{
@@ -1516,7 +1518,8 @@
 				"test/sql/types/variant/tpch_test.test",
 				"test/sql/types/variant/tpch_test_through_json.test",
 				"test/sql/window/test_constant_orderby.test",
-				"test/sql/window/test_window_tpcds.test"
+				"test/sql/window/test_window_tpcds.test",
+				"test/sql/function/variant/variant_contains_shredded.test"
 			]
 		},
 		{
