@@ -73,11 +73,11 @@ void IcebergCommitState::LoadExistingManifests(DatabaseInstance &db,
 		}
 	}
 
-	//! To deal with V1 manifest lists, which don't have added/deleted/existing file counts
-	//! We have to read all the entries of the manifest to materialize these counts on-demand
+	//! In V1 the added/deleted/existing file counts were optional
+	//! But even if the attributes are present, they're allowed to be NULL
+	//! In both those situations we have to read all the entries of the manifest to materialize these counts on-demand
 	for (auto &manifest : manifests) {
 		if (manifest.file.counts && manifest.file.counts->Complete()) {
-			//! This skips >=V2 manifests, which are written with counts
 			continue;
 		}
 		manifest =
