@@ -8,6 +8,18 @@ require parquet
 
 require iceberg
 
+# The V3 table's current manifest list contains both a carried-forward V2 data manifest and a V3 delete manifest.
+query III
+SELECT manifest_content, content, count(*)
+FROM iceberg_metadata(
+    '{WORKING_DIRECTORY}/data/persistent/legacy_bare_deletion_vector/warehouse/default/legacy_bare_deletion_vector'
+)
+GROUP BY ALL
+ORDER BY ALL;
+----
+DATA	DATA	1
+DELETE	POSITION_DELETES	1
+
 # Puffin verification remains enabled by default, and the error explains the compatibility setting.
 statement error
 SELECT id, source
