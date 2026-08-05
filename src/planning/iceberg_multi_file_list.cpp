@@ -344,15 +344,21 @@ unique_ptr<NodeStatistics> IcebergMultiFileList::GetCardinality(ClientContext &c
 		if (!data_manifest_matches[i]) {
 			continue;
 		}
-		cardinality += manifest.added_rows_count;
-		cardinality += manifest.existing_rows_count;
+		if (!manifest.counts || !manifest.counts->added_rows_count || !manifest.counts->existing_rows_count) {
+			return nullptr;
+		}
+		cardinality += *manifest.counts->added_rows_count;
+		cardinality += *manifest.counts->existing_rows_count;
 	}
 	for (idx_t i = 0; i < delete_manifests.size(); i++) {
 		auto &manifest = delete_manifests[i].entry.file;
 		if (!delete_manifest_matches[i]) {
 			continue;
 		}
-		cardinality -= manifest.added_rows_count;
+		if (!manifest.counts || !manifest.counts->added_rows_count) {
+			return nullptr;
+		}
+		cardinality -= *manifest.counts->added_rows_count;
 	}
 	return make_uniq<NodeStatistics>(cardinality, cardinality);
 }
@@ -407,8 +413,11 @@ void IcebergMultiFileList::GetStatistics(vector<PartitionStatistics> &result) co
 		if (!data_manifest_matches[i]) {
 			continue;
 		}
-		count += manifest.existing_rows_count;
-		count += manifest.added_rows_count;
+		if (!manifest.counts || !manifest.counts->added_rows_count || !manifest.counts->existing_rows_count) {
+			return;
+		}
+		count += *manifest.counts->existing_rows_count;
+		count += *manifest.counts->added_rows_count;
 	}
 
 	PartitionStatistics partition_stats;

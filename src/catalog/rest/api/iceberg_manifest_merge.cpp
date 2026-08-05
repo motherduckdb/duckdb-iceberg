@@ -191,7 +191,9 @@ IcebergManifestListEntry IcebergManifestMerge::ScanManifestEntries(const Iceberg
 	while (!reader->Finished()) {
 		reader->Read();
 	}
-	return std::move(manifest_files[0]);
+	auto result = std::move(manifest_files[0]);
+	result.file.SetCountsFromEntries(result.GetManifestEntries());
+	return result;
 }
 
 IcebergManifestListEntry IcebergManifestMerge::WriteReplacementManifest(

@@ -74,6 +74,7 @@ struct IcebergScanPlanState {
 	    delete_file_loads DUCKDB_GUARDED_BY(delete_lock);
 
 	mutable vector<IcebergManifestListEntry> committed_data_manifests DUCKDB_GUARDED_BY(lock);
+	mutable vector<bool> eagerly_loaded_data_manifests DUCKDB_GUARDED_BY(lock);
 	mutable vector<reference<const IcebergManifestListEntry>> transaction_data_manifests DUCKDB_GUARDED_BY(lock);
 	mutable unique_ptr<IcebergManifestScanningState> data_manifest_read_state DUCKDB_GUARDED_BY(lock);
 
