@@ -13,14 +13,14 @@
 
 namespace duckdb {
 
-struct IcebergTableInformation;
+struct IcebergTable;
 struct IcebergManifestList;
 
 struct IcebergAddSnapshot : public IcebergTableUpdate {
 	static constexpr const IcebergTableUpdateType TYPE = IcebergTableUpdateType::ADD_SNAPSHOT;
 
 public:
-	IcebergAddSnapshot(const IcebergTableInformation &table_info,
+	IcebergAddSnapshot(const IcebergTable &table_info,
 	                   IcebergSnapshotOperationType operation = IcebergSnapshotOperationType::OVERWRITE);
 
 public:

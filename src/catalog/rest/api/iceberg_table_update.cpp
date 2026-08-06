@@ -1,7 +1,7 @@
 #include "catalog/rest/api/iceberg_table_update.hpp"
 #include "catalog/rest/api/iceberg_manifest_merge.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_data.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
 #include "duckdb/common/enums/catalog_type.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
@@ -42,7 +42,7 @@ static void AssignManifestFirstRowIds(const IcebergTableMetadata &metadata,
 	}
 }
 
-IcebergCommitState::IcebergCommitState(const IcebergTableInformation &table_info, ClientContext &context)
+IcebergCommitState::IcebergCommitState(const IcebergTable &table_info, ClientContext &context)
     : table_info(table_info), context(context) {
 	RefreshFromTable();
 }
@@ -65,12 +65,7 @@ void IcebergCommitState::LoadExistingManifests(DatabaseInstance &db,
 		snapshot_info.snapshot = current_snapshot;
 		snapshot_info.schema_id = table_info.table_metadata.GetCurrentSchemaId();
 
-		auto scan = AvroScan::ScanManifestList(snapshot_info, table_info.table_metadata, context,
-		                                       current_snapshot->manifest_list, manifests);
-		auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
-		while (!manifest_list_reader->Finished()) {
-			manifest_list_reader->Read();
-		}
+		IcebergManifestList::LoadManifestFiles(snapshot_info, table_info.table_metadata, context, manifests);
 	}
 
 	//! In V1 the added/deleted/existing file counts were optional

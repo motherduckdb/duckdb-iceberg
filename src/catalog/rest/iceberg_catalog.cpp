@@ -10,8 +10,8 @@
 #include "duckdb/common/exception/conversion_exception.hpp"
 
 #include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 #include "catalog/rest/api/catalog_api.hpp"
 #include "catalog/rest/api/catalog_utils.hpp"
@@ -22,7 +22,7 @@
 
 namespace duckdb {
 
-void LoadTableResultCache::EvictIfCurrent(const IcebergTableInformation &table) {
+void LoadTableResultCache::EvictIfCurrent(const IcebergTable &table) {
 	annotated_lock_guard<annotated_mutex> guard(lock);
 	auto it = tables.find(table.GetTableKey());
 	if (it == tables.end()) {

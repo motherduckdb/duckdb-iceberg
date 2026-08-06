@@ -10,7 +10,7 @@
 #include "core/metadata/snapshot/iceberg_snapshot.hpp"
 #include "catalog/rest/iceberg_table_set.hpp"
 #include "catalog/rest/api/table_update.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "planning/metadata_io/avro/avro_scan.hpp"
 #include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
 #include "planning/metadata_io/manifest_list/iceberg_manifest_list_reader.hpp"
@@ -54,13 +54,7 @@ static optional<int64_t> LoadExistingManifestList(ClientContext &context, const 
 	snapshot_info.snapshot = current_snapshot;
 	snapshot_info.schema_id = metadata.GetCurrentSchemaId();
 
-	auto &manifest_list_path = current_snapshot->manifest_list;
-	auto scan =
-	    AvroScan::ScanManifestList(snapshot_info, metadata, context, manifest_list_path, existing_manifest_list);
-	auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
-	while (!manifest_list_reader->Finished()) {
-		manifest_list_reader->Read();
-	}
+	IcebergManifestList::LoadManifestFiles(snapshot_info, metadata, context, existing_manifest_list);
 	for (auto &manifest_list_entry : existing_manifest_list) {
 		LoadMissingManifestCounts(context, metadata, snapshot_info, manifest_list_entry);
 	}
@@ -93,7 +87,7 @@ static optional<int64_t> LoadExistingManifestList(ClientContext &context, const 
 }
 
 IcebergTransactionData::IcebergTransactionData(ClientContext &context, IcebergTransaction &transaction,
-                                               const IcebergTableInformation &table_info)
+                                               const IcebergTable &table_info)
     : context(context), transaction(transaction), table_info(table_info) {
 	initial_table_uuid = table_info.table_metadata.table_uuid;
 	if (table_info.table_metadata.next_row_id) {
@@ -159,7 +153,7 @@ bool IcebergTransactionData::SupportsAppendRetry() const {
 	return true;
 }
 
-bool IcebergTransactionData::RetryStateMatches(const IcebergTableInformation &table) const {
+bool IcebergTransactionData::RetryStateMatches(const IcebergTable &table) const {
 	if (table.table_metadata.table_uuid != initial_table_uuid) {
 		return false;
 	}

@@ -8,7 +8,7 @@
 #include "duckdb/planner/filter/expression_filter.hpp"
 #include "duckdb/storage/table/row_group_reorderer.hpp"
 
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 #include "common/iceberg_utils.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
@@ -142,11 +142,11 @@ IcebergDeletePlanningContext IcebergMultiFileList::GetDeletePlanningContext() co
 	        GetScanPlanProvider()};
 }
 
-optional_ptr<IcebergTableEntry> IcebergMultiFileList::GetTable() const {
+optional_ptr<IcebergTableSchemaVersion> IcebergMultiFileList::GetTable() const {
 	return shared_state->table;
 }
 
-void IcebergMultiFileList::SetTable(IcebergTableEntry &table) {
+void IcebergMultiFileList::SetTable(IcebergTableSchemaVersion &table) {
 	shared_state->table = table;
 }
 

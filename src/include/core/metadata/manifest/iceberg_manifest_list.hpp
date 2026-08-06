@@ -257,6 +257,8 @@ public:
 public:
 	static LogicalType FieldSummaryType();
 	static Value FieldSummaryFieldIds();
+	static void LoadManifestFiles(const IcebergSnapshotScanInfo &snapshot_info, const IcebergTableMetadata &metadata,
+	                              ClientContext &context, vector<IcebergManifestListEntry> &result);
 	static unique_ptr<IcebergManifestList> Load(const string &iceberg_path, const IcebergTableMetadata &metadata,
 	                                            const IcebergSnapshotScanInfo &snapshot_info, ClientContext &context,
 	                                            const IcebergOptions &options);

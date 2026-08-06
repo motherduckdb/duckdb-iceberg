@@ -14,10 +14,10 @@
 #include "duckdb/planner/expression_binder/table_function_binder.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
 #include "catalog/rest/api/iceberg_type.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
 #include "common/iceberg_default.hpp"
@@ -53,7 +53,7 @@ bool IcebergSchemaEntry::HandleCreateConflict(CatalogTransaction &transaction, C
 		// FIXME: With Snapshot operation type overwrite, you can handle create or replace for tables.
 		auto &iceberg_transaction = GetICTransaction(transaction);
 		auto &ic_catalog = catalog.Cast<IcebergCatalog>();
-		auto table_key = IcebergTableInformation::GetTableKey(ic_catalog, namespace_items, entry_name);
+		auto table_key = IcebergTable::GetTableKey(ic_catalog, namespace_items, entry_name);
 		auto latest_state = iceberg_transaction.GetLatestTableState(table_key);
 		if (latest_state && latest_state->IsDroppedOrRenamed()) {
 			vector<string> qualified_name = {ic_catalog.GetName().GetIdentifierName()};
@@ -130,8 +130,8 @@ void IcebergSchemaEntry::DropEntry(ClientContext &context, DropInfo &info, bool 
 		auto &table_info = table_info_it->second;
 		auto &table = transaction.DeleteTable(*table_info);
 		//! FIXME: what?
-		// must init schema versions after copy. Schema versions have a pointer to IcebergTableInformation
-		// if the IcebergTableInformation is moved, then the pointer is no longer valid.
+		// must init schema versions after copy. Schema versions have a pointer to IcebergTable
+		// if the IcebergTable is moved, then the pointer is no longer valid.
 		table.InitSchemaVersions();
 	}
 }
@@ -312,7 +312,7 @@ static void ThrowIfColumnReferencedBySortOrder(const IcebergTableMetadata &table
 	    sort_order_field->null_order);
 }
 
-void IntroduceNewSchema(IcebergTableInformation &updated_table, IcebergTransactionData &transaction_data,
+void IntroduceNewSchema(IcebergTable &updated_table, IcebergTransactionData &transaction_data,
                         shared_ptr<IcebergTableSchema> new_schema) {
 	auto new_schema_id = new_schema->schema_id;
 
@@ -349,7 +349,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 	if (!catalog_entry) {
 		throw CatalogException("Table with name \"%s\" does not exist!", info.GetQualifiedName().Name());
 	}
-	auto &table_entry = catalog_entry->Cast<IcebergTableEntry>();
+	auto &table_entry = catalog_entry->Cast<IcebergTableSchemaVersion>();
 	auto &catalog_table_info = table_entry.table_info;
 
 	if (info.type == AlterType::ALTER_TABLE) {
@@ -362,7 +362,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			auto other_catalog_entry = tables.GetEntry(context, lookup);
 			if (other_catalog_entry) {
 				//! The table exists at this point, check if it was deleted/renamed in the transaction
-				auto &other_table_entry = other_catalog_entry->Cast<IcebergTableEntry>();
+				auto &other_table_entry = other_catalog_entry->Cast<IcebergTableSchemaVersion>();
 				auto &other_table_info = other_table_entry.table_info;
 				auto other_table_key = other_table_info.GetTableKey();
 				auto state = irc_transaction.GetLatestTableState(other_table_key);

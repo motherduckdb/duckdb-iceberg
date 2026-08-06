@@ -4,7 +4,7 @@
 #include "planning/pruning/iceberg_table_filter.hpp"
 #include "planning/scan_order/iceberg_scan_order.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/api/iceberg_expression.hpp"
 #include "catalog/rest/api/iceberg_type.hpp"
@@ -108,14 +108,18 @@ void ClientSideScanPlanProvider::LoadManifestList() {
 		if (context.transaction_data && !context.transaction_data->alters.empty()) {
 			manifest_list_entries = context.transaction_data->existing_manifest_list;
 		} else {
-			auto manifest_list_full_path = context.options.allow_moved_paths
-			                                   ? IcebergUtils::GetFullPath(iceberg_path, snapshot.manifest_list, fs)
-			                                   : snapshot.manifest_list;
-			auto scan = AvroScan::ScanManifestList(snapshot_info, metadata, context.context, manifest_list_full_path,
-			                                       manifest_list_entries);
-			auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
-			while (!manifest_list_reader->Finished()) {
-				manifest_list_reader->Read();
+			if (!snapshot.manifests.empty()) {
+				IcebergManifestList::LoadManifestFiles(snapshot_info, metadata, context.context, manifest_list_entries);
+			} else {
+				auto manifest_list_full_path = context.options.allow_moved_paths
+				                                   ? IcebergUtils::GetFullPath(iceberg_path, snapshot.manifest_list, fs)
+				                                   : snapshot.manifest_list;
+				auto scan = AvroScan::ScanManifestList(snapshot_info, metadata, context.context,
+				                                       manifest_list_full_path, manifest_list_entries);
+				auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
+				while (!manifest_list_reader->Finished()) {
+					manifest_list_reader->Read();
+				}
 			}
 		}
 

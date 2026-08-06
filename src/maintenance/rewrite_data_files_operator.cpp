@@ -5,7 +5,7 @@
 #include "duckdb/parallel/meta_pipeline.hpp"
 #include "duckdb/parallel/pipeline.hpp"
 
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "maintenance/maintenance_table_loader.hpp"
 #include "maintenance/rewrite_data_files_executor.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
