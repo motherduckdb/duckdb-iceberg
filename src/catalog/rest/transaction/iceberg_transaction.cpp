@@ -576,7 +576,7 @@ void IcebergTransaction::DoTableRename(IcebergTransactionRenameUpdate &rename_up
 	drop_info.if_not_found = OnEntryNotFound::THROW_EXCEPTION;
 	schema.DropEntry(context, drop_info, true);
 
-	lock_guard<mutex> guard(schema.tables.GetEntryLock());
+	annotated_lock_guard<annotated_mutex> guard(schema.tables.GetEntryLock());
 	shared_ptr<IcebergTable> old_version;
 	schema.tables.CreateEntryInternal(guard, new_name, std::move(new_table), old_version);
 	if (old_version) {

@@ -98,9 +98,9 @@ IcebergTableSchemaVersion &IcebergTableSet::GetOrCreateDummy(IcebergTable &table
 }
 
 void IcebergTableSet::Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback) {
-	lock_guard<mutex> lock(entry_lock);
+	annotated_lock_guard<annotated_mutex> lock(entry_lock);
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
-	LoadEntries(context);
+	LoadEntriesInternal(context);
 	for (auto &entry : entries) {
 		auto &table_info = *entry.second;
 		auto table_key = table_info.GetTableKey();
@@ -130,11 +130,16 @@ case_insensitive_map_t<shared_ptr<IcebergTable>> &IcebergTableSet::GetEntriesMut
 	return entries;
 }
 
-mutex &IcebergTableSet::GetEntryLock() {
+annotated_mutex &IcebergTableSet::GetEntryLock() {
 	return entry_lock;
 }
 
 void IcebergTableSet::LoadEntries(ClientContext &context) {
+	annotated_lock_guard<annotated_mutex> lock(entry_lock);
+	LoadEntriesInternal(context);
+}
+
+void IcebergTableSet::LoadEntriesInternal(ClientContext &context) {
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
 	bool schema_listed = iceberg_transaction.listed_schemas.find(schema.name.GetIdentifierName()) !=
 	                     iceberg_transaction.listed_schemas.end();
@@ -168,8 +173,8 @@ static Value ParseTableProperty(TableFunctionBinder &binder, ClientContext &cont
 	return val;
 }
 
-shared_ptr<IcebergTable> IcebergTableSet::CreateEntryInternal(lock_guard<mutex> &guard, const string &name,
-                                                              IcebergTable &&table,
+shared_ptr<IcebergTable> IcebergTableSet::CreateEntryInternal(annotated_lock_guard<annotated_mutex> &guard,
+                                                              const string &name, IcebergTable &&table,
                                                               shared_ptr<IcebergTable> &old_entry) {
 	auto it = entries.find(name);
 	if (it != entries.end()) {
@@ -281,7 +286,7 @@ IcebergTable &IcebergTableSet::CreateNewEntry(ClientContext &context, IcebergCat
 }
 
 optional_ptr<CatalogEntry> IcebergTableSet::GetEntry(ClientContext &context, const EntryLookupInfo &lookup) {
-	lock_guard<mutex> l(entry_lock);
+	annotated_lock_guard<annotated_mutex> l(entry_lock);
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
 	const auto &table_name = lookup.GetEntryName();

@@ -2,6 +2,8 @@
 #pragma once
 
 #include "duckdb/catalog/catalog_entry.hpp"
+#include "duckdb/common/mutex.hpp"
+#include "duckdb/common/thread_annotation.hpp"
 
 #include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
@@ -21,14 +23,16 @@ public:
 	void Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback);
 	static IcebergTable &CreateNewEntry(ClientContext &context, IcebergCatalog &catalog, IcebergSchemaEntry &schema,
 	                                    CreateTableInfo &info);
-	shared_ptr<IcebergTable> CreateEntryInternal(lock_guard<mutex> &guard, const string &name, IcebergTable &&table,
-	                                             shared_ptr<IcebergTable> &old_entry);
-	const case_insensitive_map_t<shared_ptr<IcebergTable>> &GetEntries();
-	case_insensitive_map_t<shared_ptr<IcebergTable>> &GetEntriesMutable();
-	mutex &GetEntryLock();
+	shared_ptr<IcebergTable> CreateEntryInternal(annotated_lock_guard<annotated_mutex> &guard, const string &name,
+	                                             IcebergTable &&table, shared_ptr<IcebergTable> &old_entry)
+	    DUCKDB_REQUIRES(entry_lock);
+	const case_insensitive_map_t<shared_ptr<IcebergTable>> &GetEntries() DUCKDB_REQUIRES(entry_lock);
+	case_insensitive_map_t<shared_ptr<IcebergTable>> &GetEntriesMutable() DUCKDB_REQUIRES(entry_lock);
+	annotated_mutex &GetEntryLock() DUCKDB_RETURN_CAPABILITY(entry_lock);
 
 private:
-	IcebergTableSchemaVersion &GetOrCreateDummy(IcebergTable &table_info) const;
+	IcebergTableSchemaVersion &GetOrCreateDummy(IcebergTable &table_info) const DUCKDB_REQUIRES(entry_lock);
+	void LoadEntriesInternal(ClientContext &context) DUCKDB_REQUIRES(entry_lock);
 
 public:
 	void LoadEntries(ClientContext &context);
@@ -41,8 +45,8 @@ public:
 	Catalog &catalog;
 
 private:
-	case_insensitive_map_t<shared_ptr<IcebergTable>> entries;
-	mutex entry_lock;
+	annotated_mutex entry_lock;
+	case_insensitive_map_t<shared_ptr<IcebergTable>> entries DUCKDB_GUARDED_BY(entry_lock);
 };
 
 } // namespace duckdb

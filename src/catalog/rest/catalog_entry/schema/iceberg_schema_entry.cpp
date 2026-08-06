@@ -109,6 +109,7 @@ void IcebergSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {
 }
 
 void IcebergSchemaEntry::DropEntry(ClientContext &context, DropInfo &info, bool delete_entry) {
+	annotated_lock_guard<annotated_mutex> guard(tables.GetEntryLock());
 	auto table_name = info.GetQualifiedName().Name();
 	// find if info has a table name, if so look for it in
 	auto table_info_it = tables.GetEntries().find(table_name.GetIdentifierName());

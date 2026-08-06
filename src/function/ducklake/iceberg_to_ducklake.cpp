@@ -834,6 +834,7 @@ static unique_ptr<FunctionData> IcebergToDuckLakeBind(ClientContext &context, Ta
 		auto &schema_entry = *schema_entry_ptr;
 		auto &tables = schema_entry.tables;
 		tables.LoadEntries(context);
+		annotated_lock_guard<annotated_mutex> guard(tables.GetEntryLock());
 		for (auto &it : tables.GetEntriesMutable()) {
 			auto &table = it.second;
 			tables.FillEntry(context, *table);
