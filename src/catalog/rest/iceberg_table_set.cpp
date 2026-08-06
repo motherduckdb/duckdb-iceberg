@@ -39,11 +39,12 @@ bool IcebergTableSet::FillEntry(ClientContext &context, IcebergTableInformation 
 
 	// Only check cache if MAX_TABLE_STALENESS option is set
 	if (ic_catalog.attach_options.max_table_staleness_micros.IsValid()) {
-		lock_guard<mutex> cache_lock(ic_catalog.table_request_cache.Lock());
-		auto cached_result = ic_catalog.table_request_cache.Get(context, table_key, cache_lock);
-		if (cached_result) {
-			// Use the cached result instead of making a new request
-			table.InitializeFromLoadTableResult(*cached_result->load_table_result);
+		auto cache_hit = ic_catalog.table_request_cache.Get(
+		    context, table_key, [&](const rest_api_objects::LoadTableResult &cached_result) {
+			    // Use the cached result instead of making a new request
+			    table.InitializeFromLoadTableResult(cached_result);
+		    });
+		if (cache_hit) {
 			return true;
 		}
 	}
