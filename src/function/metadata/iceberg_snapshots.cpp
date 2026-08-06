@@ -114,8 +114,12 @@ static void IcebergSnapshotsFunction(ClientContext &context, TableFunctionInput 
 		FlatVector::GetDataMutable<uint64_t>(output.data[0])[i] = *snapshot.sequence_number;
 		FlatVector::GetDataMutable<uint64_t>(output.data[1])[i] = *snapshot.snapshot_id;
 		FlatVector::GetDataMutable<timestamp_ms_t>(output.data[2])[i] = snapshot.timestamp_ms;
-		string_t manifest_string_t = StringVector::AddString(output.data[3], string_t(snapshot.manifest_list));
-		FlatVector::GetDataMutable<string_t>(output.data[3])[i] = manifest_string_t;
+		if (snapshot.manifest_list.empty()) {
+			FlatVector::SetNull(output.data[3], i, true);
+		} else {
+			string_t manifest_string_t = StringVector::AddString(output.data[3], string_t(snapshot.manifest_list));
+			FlatVector::GetDataMutable<string_t>(output.data[3])[i] = manifest_string_t;
+		}
 		auto operation_str = SnapshotOperationToString(snapshot.operation);
 		FlatVector::GetDataMutable<string_t>(output.data[4])[i] =
 		    StringVector::AddString(output.data[4], operation_str);

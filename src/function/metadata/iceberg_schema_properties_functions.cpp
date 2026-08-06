@@ -11,8 +11,8 @@
 
 #include "function/iceberg_functions.hpp"
 #include "common/iceberg_utils.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_data.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"

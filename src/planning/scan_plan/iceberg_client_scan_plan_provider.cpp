@@ -4,7 +4,7 @@
 #include "planning/pruning/iceberg_table_filter.hpp"
 #include "planning/scan_order/iceberg_scan_order.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/api/iceberg_expression.hpp"
 #include "catalog/rest/api/iceberg_type.hpp"
@@ -108,14 +108,18 @@ void ClientSideScanPlanProvider::LoadManifestList() {
 		if (context.transaction_data && !context.transaction_data->alters.empty()) {
 			manifest_list_entries = context.transaction_data->existing_manifest_list;
 		} else {
-			auto manifest_list_full_path = context.options.allow_moved_paths
-			                                   ? IcebergUtils::GetFullPath(iceberg_path, snapshot.manifest_list, fs)
-			                                   : snapshot.manifest_list;
-			auto scan = AvroScan::ScanManifestList(snapshot_info, metadata, context.context, manifest_list_full_path,
-			                                       manifest_list_entries);
-			auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
-			while (!manifest_list_reader->Finished()) {
-				manifest_list_reader->Read();
+			if (!snapshot.manifests.empty()) {
+				IcebergManifestList::LoadManifestFiles(snapshot_info, metadata, context.context, manifest_list_entries);
+			} else {
+				auto manifest_list_full_path = context.options.allow_moved_paths
+				                                   ? IcebergUtils::GetFullPath(iceberg_path, snapshot.manifest_list, fs)
+				                                   : snapshot.manifest_list;
+				auto scan = AvroScan::ScanManifestList(snapshot_info, metadata, context.context,
+				                                       manifest_list_full_path, manifest_list_entries);
+				auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
+				while (!manifest_list_reader->Finished()) {
+					manifest_list_reader->Read();
+				}
 			}
 		}
 
@@ -128,13 +132,43 @@ void ClientSideScanPlanProvider::LoadManifestList() {
 			}
 		}
 
-		for (auto &manifest : DataManifests()) {
-			if (!manifest.HasManifestEntries()) {
+		auto &data_manifests = DataManifests();
+		shared_state.eagerly_loaded_data_manifests.resize(data_manifests.size(), false);
+		vector<idx_t> manifests_to_eagerly_load;
+		for (idx_t manifest_idx = 0; manifest_idx < data_manifests.size(); manifest_idx++) {
+			auto &manifest = data_manifests[manifest_idx];
+			if (manifest.HasManifestEntries()) {
+				shared_state.eagerly_loaded_data_manifests[manifest_idx] = true;
+				if (!manifest.file.counts || !manifest.file.counts->Complete()) {
+					manifest.file.SetCountsFromEntries(manifest.GetManifestEntries());
+				}
 				continue;
 			}
-			auto &file = manifest.file;
-			idx_t reserve_size = file.existing_files_count + file.added_files_count + file.deleted_files_count;
-			manifest.GetManifestEntries().reserve(reserve_size);
+
+			auto &counts = manifest.file.counts;
+			if (!counts || !counts->FilesComplete()) {
+				manifests_to_eagerly_load.push_back(manifest_idx);
+				continue;
+			}
+
+			idx_t reserve_size =
+			    *counts->existing_files_count + *counts->added_files_count + *counts->deleted_files_count;
+			manifest.GetOrCreateManifestEntries().reserve(reserve_size);
+		}
+
+		if (!manifests_to_eagerly_load.empty()) {
+			auto scan =
+			    AvroScan::ScanManifest(context.snapshot, data_manifests, context.options, context.fs, context.path,
+			                           context.metadata, context.context, nullptr, manifests_to_eagerly_load);
+			auto reader = make_uniq<manifest_file::ManifestReader>(*scan);
+			while (!reader->Finished()) {
+				reader->Read();
+			}
+			for (auto manifest_idx : manifests_to_eagerly_load) {
+				auto &manifest = data_manifests[manifest_idx];
+				manifest.file.SetCountsFromEntries(manifest.GetManifestEntries());
+				shared_state.eagerly_loaded_data_manifests[manifest_idx] = true;
+			}
 		}
 	}
 
@@ -179,7 +213,14 @@ void ClientSideScanPlanProvider::StartDataManifestScan(const vector<bool> &match
 	const auto committed_manifest_count = DataManifests().size();
 	vector<idx_t> selected_committed_manifests;
 	for (idx_t manifest_idx = 0; manifest_idx < committed_manifest_count; manifest_idx++) {
-		if (matching_manifests[manifest_idx]) {
+		if (!matching_manifests[manifest_idx]) {
+			continue;
+		}
+		if (shared_state.eagerly_loaded_data_manifests[manifest_idx]) {
+			auto &manifest = DataManifests()[manifest_idx];
+			shared_state.read_state.PushBatch(
+			    ManifestReadBatch {manifest_idx, 0, manifest.GetManifestEntries().size()});
+		} else {
 			selected_committed_manifests.push_back(manifest_idx);
 		}
 	}

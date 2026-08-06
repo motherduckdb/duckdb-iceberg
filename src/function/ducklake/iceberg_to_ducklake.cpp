@@ -32,8 +32,8 @@
 #include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
 #include "catalog/rest/iceberg_schema_set.hpp"
 #include "catalog/rest/iceberg_table_set.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 
 #include "core/metadata/iceberg_table_metadata.hpp"
 
@@ -98,7 +98,7 @@ public:
 	}
 
 public:
-	void AddTable(IcebergTableInformation &table_info, ClientContext &context, const IcebergOptions &options) {
+	void AddTable(IcebergTable &table_info, ClientContext &context, const IcebergOptions &options) {
 		auto &metadata = table_info.table_metadata;
 		if (table_names_to_skip.count(table_info.name)) {
 			//! FIXME: perhaps log that the table was skipped
@@ -757,7 +757,7 @@ private:
 		return res.first->second;
 	}
 
-	DuckLakeTable &GetTable(const IcebergTableInformation &table_info) {
+	DuckLakeTable &GetTable(const IcebergTable &table_info) {
 		auto &metadata = table_info.table_metadata;
 		auto table_uuid = metadata.table_uuid;
 		auto it = tables.find(table_uuid);

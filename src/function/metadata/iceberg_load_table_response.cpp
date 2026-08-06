@@ -14,18 +14,18 @@
 #include "catalog/rest/api/url_utils.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
 #include "rest_catalog/objects/list.hpp"
 #include "duckdb/common/json_document.hpp"
 
 namespace duckdb {
 
 struct IcebergLoadTableResponseBindData : public TableFunctionData {
-	IcebergTableEntry &table_entry;
+	IcebergTableSchemaVersion &table_entry;
 	IcebergCatalog &ic_catalog;
 	IcebergSchemaEntry &ic_schema;
 
-	IcebergLoadTableResponseBindData(IcebergTableEntry &table_entry, IcebergCatalog &ic_catalog,
+	IcebergLoadTableResponseBindData(IcebergTableSchemaVersion &table_entry, IcebergCatalog &ic_catalog,
 	                                 IcebergSchemaEntry &ic_schema)
 	    : table_entry(table_entry), ic_catalog(ic_catalog), ic_schema(ic_schema) {
 	}
@@ -87,7 +87,7 @@ static unique_ptr<FunctionData> IcebergLoadTableResponseBind(ClientContext &cont
 		throw InvalidInputException("Table '%s' is not an Iceberg REST catalog table", input_string);
 	}
 
-	auto &table_entry = catalog_entry->Cast<IcebergTableEntry>();
+	auto &table_entry = catalog_entry->Cast<IcebergTableSchemaVersion>();
 	auto &ic_catalog = table_entry.catalog.Cast<IcebergCatalog>();
 	auto &ic_schema = table_entry.schema.Cast<IcebergSchemaEntry>();
 

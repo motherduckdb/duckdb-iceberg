@@ -10,8 +10,8 @@
 #include "duckdb/transaction/meta_transaction.hpp"
 #include "duckdb/common/operator/add.hpp"
 
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
 #include "duckdb/catalog/catalog_entry_retriever.hpp"
 
@@ -212,7 +212,7 @@ string IcebergUtils::GetStorageLocation(ClientContext &context, const string &in
 			if (table.catalog.GetCatalogType() != "iceberg") {
 				throw InvalidInputException("Table %s is not an Iceberg table", input);
 			}
-			auto &table_entry = catalog_entry->Cast<IcebergTableEntry>();
+			auto &table_entry = catalog_entry->Cast<IcebergTableSchemaVersion>();
 			storage_location = table_entry.table_info.table_metadata.GetLocation();
 			// Prepare Iceberg Scan from entry will create the secret needed to access the table
 			table_entry.PrepareIcebergScanFromEntry(context);
@@ -236,7 +236,7 @@ IcebergResolvedMetadata IcebergUtils::ResolveTableMetadata(ClientContext &contex
 				throw InvalidInputException("Table %s is not an Iceberg table", input);
 			}
 
-			auto &iceberg_table = catalog_entry->Cast<IcebergTableEntry>();
+			auto &iceberg_table = catalog_entry->Cast<IcebergTableSchemaVersion>();
 			iceberg_table.PrepareIcebergScanFromEntry(context);
 			auto &metadata = iceberg_table.table_info.table_metadata;
 			return IcebergResolvedMetadata(metadata.GetLocation(), metadata.Copy());

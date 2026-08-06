@@ -17,18 +17,17 @@
 
 namespace duckdb {
 
-struct IcebergTableInformation;
+struct IcebergTable;
 struct IcebergCreateTableRequest;
 
 struct IcebergTransactionData {
 public:
-	IcebergTransactionData(ClientContext &context, IcebergTransaction &transaction,
-	                       const IcebergTableInformation &table_info);
+	IcebergTransactionData(ClientContext &context, IcebergTransaction &transaction, const IcebergTable &table_info);
 
 public:
 	int64_t GetCommitRetryCount() const;
 	bool SupportsAppendRetry() const;
-	bool RetryStateMatches(const IcebergTableInformation &table_info) const;
+	bool RetryStateMatches(const IcebergTable &table_info) const;
 	//! Whether this transaction stages a DELETE snapshot; gates the commit-retry safety check.
 	bool ContainsDelete() const;
 
@@ -70,7 +69,7 @@ public:
 
 	ClientContext &context;
 	IcebergTransaction &transaction;
-	const IcebergTableInformation &table_info;
+	const IcebergTable &table_info;
 	//! schema updates etc.
 	vector<unique_ptr<IcebergTableUpdate>> updates;
 	vector<unique_ptr<IcebergTableRequirement>> requirements;
