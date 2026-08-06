@@ -10,7 +10,7 @@
 
 #include "core/metadata/partition/iceberg_partition_spec.hpp"
 #include "core/expression/iceberg_value.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "core/expression/iceberg_transform.hpp"
 #include "planning/metadata_io/avro/avro_scan.hpp"
 #include "common/iceberg_utils.hpp"

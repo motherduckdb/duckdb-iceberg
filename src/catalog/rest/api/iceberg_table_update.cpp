@@ -1,7 +1,7 @@
 #include "catalog/rest/api/iceberg_table_update.hpp"
 #include "catalog/rest/api/iceberg_manifest_merge.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_data.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
 #include "duckdb/common/enums/catalog_type.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
@@ -42,7 +42,7 @@ static void AssignManifestFirstRowIds(const IcebergTableMetadata &metadata,
 	}
 }
 
-IcebergCommitState::IcebergCommitState(const IcebergTableInformation &table_info, ClientContext &context)
+IcebergCommitState::IcebergCommitState(const IcebergTable &table_info, ClientContext &context)
     : table_info(table_info), context(context) {
 	RefreshFromTable();
 }

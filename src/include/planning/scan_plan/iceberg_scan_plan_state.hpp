@@ -14,7 +14,7 @@
 
 namespace duckdb {
 
-class IcebergTableEntry;
+class IcebergTableSchemaVersion;
 struct IcebergDeleteManifestLoadState;
 
 struct IcebergDeleteFileLoadState {
@@ -56,7 +56,7 @@ struct IcebergScanPlanState {
 	FileSystem &fs;
 	shared_ptr<IcebergScanInfo> scan_info;
 	string path;
-	optional_ptr<IcebergTableEntry> table;
+	optional_ptr<IcebergTableSchemaVersion> table;
 	IcebergOptions options;
 
 	mutable annotated_mutex lock;

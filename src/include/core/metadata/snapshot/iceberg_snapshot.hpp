@@ -7,7 +7,7 @@
 namespace duckdb {
 
 struct IcebergTableMetadata;
-struct IcebergTableInformation;
+struct IcebergTable;
 
 enum class IcebergSnapshotOperationType : uint8_t { APPEND, REPLACE, OVERWRITE, DELETE };
 
