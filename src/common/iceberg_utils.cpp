@@ -151,7 +151,7 @@ optional_ptr<CatalogEntry> IcebergUtils::GetTableEntry(ClientContext &context, s
 	}
 	case 1: {
 		auto schema = catalog.GetDefaultSchema();
-		auto table_entry = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, Identifier(schema),
+		auto table_entry = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, schema,
 		                                    Identifier(qualified_name[0]), OnEntryNotFound::THROW_EXCEPTION);
 		return table_entry;
 	}
