@@ -712,7 +712,9 @@ shared_ptr<MultiFileList> IcebergAvroMultiFileReader::CreateFileList(ClientConte
 			file_info.extended_info = make_uniq<ExtendedOpenFileInfo>();
 			file_info.extended_info->options["validate_external_file_cache"] = Value::BOOLEAN(false);
 			file_info.extended_info->options["force_full_download"] = Value::BOOLEAN(true);
-			file_info.extended_info->options["file_size"] = Value::UBIGINT(manifest.file.manifest_length);
+			if (manifest.file.manifest_length > 0) {
+				file_info.extended_info->options["file_size"] = Value::UBIGINT(manifest.file.manifest_length);
+			}
 			file_info.extended_info->options["etag"] = Value("");
 			file_info.extended_info->options["last_modified"] = Value::TIMESTAMP(timestamp_t(0));
 			file_info.extended_info->options["partition_spec_id"] = Value::INTEGER(manifest.file.partition_spec_id);
