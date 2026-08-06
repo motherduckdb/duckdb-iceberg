@@ -37,7 +37,7 @@ if (NOT EMSCRIPTEN)
             LOAD_TESTS
             GIT_URL https://github.com/duckdb/duckdb-aws
             GIT_TAG 9126ffd679dc7649402da9c1c02da37dafe6c54b
-	   APPLY_PATCHES
+            APPLY_PATCHES
     )
   endif()
 endif()
