@@ -158,6 +158,7 @@
 				"test/sql/storage/partial_blocks/many_columns_strings.test",
 				"test/sql/storage/partial_blocks/many_columns_structs.test_slow",
 				"test/sql/storage/partial_blocks/many_columns_validity.test",
+				"test/sql/storage/partial_delete_pending_compress.test",
 				"test/sql/storage/read_duckdb/concurrent_duckdb_read.test_slow",
 				"test/sql/storage/read_duckdb/read_duckdb_basic.test",
 				"test/sql/storage/reclaim_space/reclaim_space_drop_column_overflow_strings.test_slow",
@@ -1623,6 +1624,7 @@
 				"test/sql/function/variant/variant_exists_shredded.test",
 				"test/sql/function/variant/variant_keys_shredded.test",
 				"test/sql/function/variant/variant_type_shredded.test",
+				"test/sql/function/variant/variant_group_array_shredded.test",
 				"test/sql/storage/types/variant/variant_storage_version.test",
 				"test/sql/types/variant/implicit_cast_from_variant.test",
 				"test/sql/types/variant/variant_cast_stats.test"
