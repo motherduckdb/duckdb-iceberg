@@ -43,6 +43,9 @@ rest_api_objects::Snapshot IcebergSnapshot::ToRESTObject(const IcebergTableMetad
 	}
 	res.snapshot_id = *snapshot_id;
 	res.timestamp_ms = timestamp_ms.value;
+	if (manifest_list.empty()) {
+		throw InvalidConfigurationException("Writing snapshots without a manifest list is not supported");
+	}
 	res.manifest_list = manifest_list;
 
 	res.summary.operation = OperationTypeToString(operation);
@@ -86,7 +89,13 @@ IcebergSnapshot IcebergSnapshot::ParseSnapshot(const rest_api_objects::Snapshot 
 
 	ret.snapshot_id = snapshot.snapshot_id;
 	ret.timestamp_ms = timestamp_ms_t(snapshot.timestamp_ms);
-	ret.manifest_list = snapshot.manifest_list;
+	if (snapshot.manifest_list) {
+		ret.manifest_list = *snapshot.manifest_list;
+	} else if (snapshot.manifests) {
+		ret.manifests = *snapshot.manifests;
+	} else {
+		throw InvalidConfigurationException("Snapshot must contain either 'manifest-list' or 'manifests'");
+	}
 	ret.metrics = IcebergSnapshotMetrics(snapshot.summary.additional_properties);
 
 	auto &op = snapshot.summary.operation;

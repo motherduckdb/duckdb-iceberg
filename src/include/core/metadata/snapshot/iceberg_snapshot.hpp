@@ -36,6 +36,8 @@ public:
 	IcebergSnapshotOperationType operation;
 	timestamp_ms_t timestamp_ms;
 	string manifest_list;
+	//! V1 snapshots may embed manifest file paths instead of referencing a manifest list.
+	vector<string> manifests;
 	IcebergSnapshotMetrics metrics;
 };
 

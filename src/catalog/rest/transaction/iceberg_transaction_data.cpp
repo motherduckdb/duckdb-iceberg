@@ -54,13 +54,7 @@ static optional<int64_t> LoadExistingManifestList(ClientContext &context, const 
 	snapshot_info.snapshot = current_snapshot;
 	snapshot_info.schema_id = metadata.GetCurrentSchemaId();
 
-	auto &manifest_list_path = current_snapshot->manifest_list;
-	auto scan =
-	    AvroScan::ScanManifestList(snapshot_info, metadata, context, manifest_list_path, existing_manifest_list);
-	auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
-	while (!manifest_list_reader->Finished()) {
-		manifest_list_reader->Read();
-	}
+	IcebergManifestList::LoadManifestFiles(snapshot_info, metadata, context, existing_manifest_list);
 	for (auto &manifest_list_entry : existing_manifest_list) {
 		LoadMissingManifestCounts(context, metadata, snapshot_info, manifest_list_entry);
 	}

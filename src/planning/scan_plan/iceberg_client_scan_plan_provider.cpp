@@ -108,14 +108,18 @@ void ClientSideScanPlanProvider::LoadManifestList() {
 		if (context.transaction_data && !context.transaction_data->alters.empty()) {
 			manifest_list_entries = context.transaction_data->existing_manifest_list;
 		} else {
-			auto manifest_list_full_path = context.options.allow_moved_paths
-			                                   ? IcebergUtils::GetFullPath(iceberg_path, snapshot.manifest_list, fs)
-			                                   : snapshot.manifest_list;
-			auto scan = AvroScan::ScanManifestList(snapshot_info, metadata, context.context, manifest_list_full_path,
-			                                       manifest_list_entries);
-			auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
-			while (!manifest_list_reader->Finished()) {
-				manifest_list_reader->Read();
+			if (!snapshot.manifests.empty()) {
+				IcebergManifestList::LoadManifestFiles(snapshot_info, metadata, context.context, manifest_list_entries);
+			} else {
+				auto manifest_list_full_path = context.options.allow_moved_paths
+				                                   ? IcebergUtils::GetFullPath(iceberg_path, snapshot.manifest_list, fs)
+				                                   : snapshot.manifest_list;
+				auto scan = AvroScan::ScanManifestList(snapshot_info, metadata, context.context,
+				                                       manifest_list_full_path, manifest_list_entries);
+				auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
+				while (!manifest_list_reader->Finished()) {
+					manifest_list_reader->Read();
+				}
 			}
 		}
 
