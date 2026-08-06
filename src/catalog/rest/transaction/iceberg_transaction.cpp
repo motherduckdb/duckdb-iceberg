@@ -571,17 +571,7 @@ void IcebergTransaction::DoTableRename(IcebergTransactionRenameUpdate &rename_up
 		catalog.table_request_cache.EvictIfCurrent(new_table);
 	}
 
-	DropInfo drop_info;
-	drop_info.GetQualifiedNameMutable() = Identifier(table_name);
-	drop_info.if_not_found = OnEntryNotFound::THROW_EXCEPTION;
-	schema.DropEntry(context, drop_info, true);
-
-	lock_guard<mutex> guard(schema.tables.GetEntryLock());
-	shared_ptr<IcebergTable> old_version;
-	schema.tables.CreateEntryInternal(guard, new_name, std::move(new_table), old_version);
-	if (old_version) {
-		throw TransactionException("Table %s was already created by a different transaction!", new_name);
-	}
+	schema.tables.RenameEntry(table_name, new_name, std::move(new_table));
 }
 
 void IcebergTransaction::DoMultiTableCommitUpdates(IcebergTransactionAlterUpdate &alter_update,
