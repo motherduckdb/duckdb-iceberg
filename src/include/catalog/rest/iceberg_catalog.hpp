@@ -17,7 +17,7 @@
 namespace duckdb {
 
 class IcebergSchemaEntry;
-struct IcebergTableInformation;
+struct IcebergTable;
 
 class MetadataCacheValue {
 public:
@@ -81,7 +81,7 @@ public:
 	}
 
 	//! Evict only if the table was initialized from the result that is still cached for its key.
-	void EvictIfCurrent(const IcebergTableInformation &table);
+	void EvictIfCurrent(const IcebergTable &table);
 
 private:
 	IcebergAttachOptions &attach_options;

@@ -21,8 +21,8 @@
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/filter/table_filter_functions.hpp"
 
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "common/iceberg_utils.hpp"
 #include "core/expression/iceberg_value.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
@@ -252,7 +252,7 @@ static bool TryGetEqualityDeleteValuesFromExpression(const Expression &expr,
 
 } // namespace
 
-bool IcebergDelete::TryGetEqualityDeletePredicates(ClientContext &context, IcebergTableEntry &table,
+bool IcebergDelete::TryGetEqualityDeletePredicates(ClientContext &context, IcebergTableSchemaVersion &table,
                                                    PhysicalOperator &child_plan,
                                                    vector<IcebergEqualityDeletePredicate> &equality_predicates) {
 	//! Gated behind an explicit testing-only setting.

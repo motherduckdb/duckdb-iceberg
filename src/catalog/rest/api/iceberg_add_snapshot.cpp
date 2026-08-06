@@ -16,11 +16,10 @@
 
 namespace duckdb {
 
-IcebergAddSnapshot::IcebergAddSnapshot(const IcebergTableInformation &table_info,
-                                       IcebergSnapshotOperationType operation)
+IcebergAddSnapshot::IcebergAddSnapshot(const IcebergTable &table_info, IcebergSnapshotOperationType operation)
     : IcebergTableUpdate(IcebergTableUpdateType::ADD_SNAPSHOT), operation(operation) {
 	//! FIXME: Do we also need to capture the current partition spec and sort order?
-	//! This is a bit of a code smell, the `IcebergTableInformation` should instead be const
+	//! This is a bit of a code smell, the `IcebergTable` should instead be const
 	//! and all transactional changes should live in the IcebergTransactionData
 	schema_id = table_info.table_metadata.GetCurrentSchemaId();
 }
@@ -30,7 +29,7 @@ bool IcebergAddSnapshot::IsRetryable() const {
 	return operation == IcebergSnapshotOperationType::APPEND || operation == IcebergSnapshotOperationType::DELETE;
 }
 
-static rest_api_objects::TableUpdate CreateAddSnapshotUpdate(const IcebergTableInformation &table_info,
+static rest_api_objects::TableUpdate CreateAddSnapshotUpdate(const IcebergTable &table_info,
                                                              const IcebergSnapshot &snapshot) {
 	rest_api_objects::TableUpdate table_update;
 
@@ -130,7 +129,7 @@ static int64_t ReconstructTotalFilesSize(IcebergCommitState &commit_state, int32
 	return total_files_size;
 }
 
-static IcebergManifestListEntry WriteManifestListEntry(const IcebergTableInformation &table_info,
+static IcebergManifestListEntry WriteManifestListEntry(const IcebergTable &table_info,
                                                        const IcebergManifestListEntry &list_entry,
                                                        CopyFunction &avro_copy, DatabaseInstance &db,
                                                        ClientContext &context) {
@@ -143,9 +142,8 @@ static IcebergManifestListEntry WriteManifestListEntry(const IcebergTableInforma
 }
 
 static vector<IcebergManifestListEntry>
-CreateCommitManifestFiles(const vector<IcebergManifestListEntry> &manifest_files,
-                          const IcebergTableInformation &table_info, IcebergCommitState &commit_state,
-                          int64_t sequence_number) {
+CreateCommitManifestFiles(const vector<IcebergManifestListEntry> &manifest_files, const IcebergTable &table_info,
+                          IcebergCommitState &commit_state, int64_t sequence_number) {
 	vector<IcebergManifestListEntry> result;
 	result.reserve(manifest_files.size());
 	auto &fs = FileSystem::GetFileSystem(commit_state.context);

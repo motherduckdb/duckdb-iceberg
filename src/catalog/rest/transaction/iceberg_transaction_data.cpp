@@ -10,7 +10,7 @@
 #include "core/metadata/snapshot/iceberg_snapshot.hpp"
 #include "catalog/rest/iceberg_table_set.hpp"
 #include "catalog/rest/api/table_update.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "planning/metadata_io/avro/avro_scan.hpp"
 #include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
 #include "planning/metadata_io/manifest_list/iceberg_manifest_list_reader.hpp"
@@ -93,7 +93,7 @@ static optional<int64_t> LoadExistingManifestList(ClientContext &context, const 
 }
 
 IcebergTransactionData::IcebergTransactionData(ClientContext &context, IcebergTransaction &transaction,
-                                               const IcebergTableInformation &table_info)
+                                               const IcebergTable &table_info)
     : context(context), transaction(transaction), table_info(table_info) {
 	initial_table_uuid = table_info.table_metadata.table_uuid;
 	if (table_info.table_metadata.next_row_id) {
@@ -159,7 +159,7 @@ bool IcebergTransactionData::SupportsAppendRetry() const {
 	return true;
 }
 
-bool IcebergTransactionData::RetryStateMatches(const IcebergTableInformation &table) const {
+bool IcebergTransactionData::RetryStateMatches(const IcebergTable &table) const {
 	if (table.table_metadata.table_uuid != initial_table_uuid) {
 		return false;
 	}
