@@ -23,7 +23,7 @@
 namespace duckdb {
 
 void LoadTableResultCache::EvictIfCurrent(const IcebergTable &table) {
-	lock_guard<mutex> guard(lock);
+	annotated_lock_guard<annotated_mutex> guard(lock);
 	auto it = tables.find(table.GetTableKey());
 	if (it == tables.end()) {
 		return;
