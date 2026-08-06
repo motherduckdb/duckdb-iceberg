@@ -138,9 +138,10 @@ static MultiFileColumnDefinition CreateManifestFilePartitionsColumn() {
 	MultiFileColumnDefinition field_summary("field_summary", ListType::GetChildType(partitions.type));
 	field_summary.identifier = Value::INTEGER(PARTITIONS_ELEMENT);
 
-	//! contains_null - required
+	//! contains_null - required; map a missing field to NULL so ReadChunk can validate it
 	field_summary.children.emplace_back("contains_null", LogicalType::BOOLEAN);
 	field_summary.children.back().identifier = Value::INTEGER(FIELD_SUMMARY_CONTAINS_NULL);
+	field_summary.children.back().default_expression = make_uniq<ConstantExpression>(Value(LogicalType::BOOLEAN));
 
 	//! contains_nan - optional
 	field_summary.children.emplace_back("contains_nan", LogicalType::BOOLEAN);
@@ -175,47 +176,53 @@ static vector<MultiFileColumnDefinition> BuildManifestListSchema(const IcebergTa
 	manifest_length.identifier = Value::INTEGER(MANIFEST_LENGTH);
 	schema.push_back(manifest_length);
 
-	// partition_spec_id (optional, default 0)
+	// partition_spec_id (required)
 	MultiFileColumnDefinition partition_spec_id("partition_spec_id", LogicalType::INTEGER);
 	partition_spec_id.identifier = Value::INTEGER(PARTITION_SPEC_ID);
 	schema.push_back(partition_spec_id);
 
-	// added_snapshot_id
+	// added_snapshot_id (required)
 	MultiFileColumnDefinition added_snapshot_id("added_snapshot_id", LogicalType::BIGINT);
 	added_snapshot_id.identifier = Value::INTEGER(ADDED_SNAPSHOT_ID);
 	schema.push_back(added_snapshot_id);
 
-	// added_files_count (v2+)
+	// added_files_count (optional in V1, required in V2+)
 	MultiFileColumnDefinition added_files_count("added_files_count", LogicalType::INTEGER);
 	added_files_count.identifier = Value::INTEGER(ADDED_FILES_COUNT);
+	added_files_count.default_expression = make_uniq<ConstantExpression>(Value(added_files_count.type));
 	schema.push_back(added_files_count);
 
-	// existing_files_count (v2+)
+	// existing_files_count (optional in V1, required in V2+)
 	MultiFileColumnDefinition existing_files_count("existing_files_count", LogicalType::INTEGER);
 	existing_files_count.identifier = Value::INTEGER(EXISTING_FILES_COUNT);
+	existing_files_count.default_expression = make_uniq<ConstantExpression>(Value(existing_files_count.type));
 	schema.push_back(existing_files_count);
 
-	// deleted_files_count (v2+)
+	// deleted_files_count (optional in V1, required in V2+)
 	MultiFileColumnDefinition deleted_files_count("deleted_files_count", LogicalType::INTEGER);
 	deleted_files_count.identifier = Value::INTEGER(DELETED_FILES_COUNT);
+	deleted_files_count.default_expression = make_uniq<ConstantExpression>(Value(deleted_files_count.type));
 	schema.push_back(deleted_files_count);
 
-	// added_rows_count (v2+)
+	// added_rows_count (optional in V1, required in V2+)
 	MultiFileColumnDefinition added_rows_count("added_rows_count", LogicalType::BIGINT);
 	added_rows_count.identifier = Value::INTEGER(ADDED_ROWS_COUNT);
+	added_rows_count.default_expression = make_uniq<ConstantExpression>(Value(added_rows_count.type));
 	schema.push_back(added_rows_count);
 
-	// existing_rows_count (v2+)
+	// existing_rows_count (optional in V1, required in V2+)
 	MultiFileColumnDefinition existing_rows_count("existing_rows_count", LogicalType::BIGINT);
 	existing_rows_count.identifier = Value::INTEGER(EXISTING_ROWS_COUNT);
+	existing_rows_count.default_expression = make_uniq<ConstantExpression>(Value(existing_rows_count.type));
 	schema.push_back(existing_rows_count);
 
-	// deleted_rows_count (v2+)
+	// deleted_rows_count (optional in V1, required in V2+)
 	MultiFileColumnDefinition deleted_rows_count("deleted_rows_count", LogicalType::BIGINT);
 	deleted_rows_count.identifier = Value::INTEGER(DELETED_ROWS_COUNT);
+	deleted_rows_count.default_expression = make_uniq<ConstantExpression>(Value(deleted_rows_count.type));
 	schema.push_back(deleted_rows_count);
 
-	// partitions (v2+)
+	// partitions (optional in all versions)
 	schema.push_back(CreateManifestFilePartitionsColumn());
 
 	// content (v2+, default 0)
@@ -226,11 +233,11 @@ static vector<MultiFileColumnDefinition> BuildManifestListSchema(const IcebergTa
 		schema.push_back(content);
 	}
 
-	// sequence_number (v2+)
+	// sequence_number (v2+, default 0 when reading V1 manifest lists)
 	if (iceberg_version >= 2) {
 		MultiFileColumnDefinition sequence_number("sequence_number", LogicalType::BIGINT);
 		sequence_number.identifier = Value::INTEGER(SEQUENCE_NUMBER);
-		sequence_number.default_expression = make_uniq<ConstantExpression>(Value(sequence_number.type));
+		sequence_number.default_expression = make_uniq<ConstantExpression>(Value::BIGINT(0));
 		schema.push_back(sequence_number);
 	}
 
@@ -242,7 +249,7 @@ static vector<MultiFileColumnDefinition> BuildManifestListSchema(const IcebergTa
 		schema.push_back(min_sequence_number);
 	}
 
-	// first_row_id (v3+, default 0)
+	// first_row_id (optional in V3+)
 	if (iceberg_version >= 3) {
 		MultiFileColumnDefinition first_row_id("first_row_id", LogicalType::BIGINT);
 		first_row_id.identifier = Value::INTEGER(FIRST_ROW_ID);
@@ -313,8 +320,8 @@ BuildManifestSchema(const IcebergSnapshot &snapshot, const IcebergTableMetadata 
 	if (iceberg_version >= 2) {
 		MultiFileColumnDefinition content("content", LogicalType::INTEGER);
 		content.identifier = Value::INTEGER(CONTENT);
-		//! Default to 0 if missing (V1 compatibility)
-		content.default_expression = make_uniq<ConstantExpression>(Value::INTEGER(0));
+		//! Preserve missing content as NULL. ManifestReader applies the V1 default and validates V2+ manifests.
+		content.default_expression = make_uniq<ConstantExpression>(Value(content.type));
 		data_file.children.push_back(content);
 	}
 
@@ -641,9 +648,21 @@ void IcebergAvroMultiFileReader::FinalizeChunk(ClientContext &context, const Mul
 		auto manifest_file_idx = manifest_scan_info.GetManifestIndex(reader.file_list_idx.GetIndex());
 		auto &manifest_file = manifest_scan_info.manifest_files[manifest_file_idx];
 
+		auto &manifest_metadata = *manifest_file.manifest_metadata;
+		auto spec_id = manifest_metadata.partition_spec_id;
+		auto partition_spec_p = metadata.FindPartitionSpecById(spec_id);
+		if (!partition_spec_p) {
+			throw InvalidConfigurationException("Manifest file '%s' key-value metadata references partition-spec-id: "
+			                                    "%d, but no spec with that ID exists in the metadata",
+			                                    manifest_file.file.manifest_path, spec_id);
+		}
+		auto &partition_spec = *partition_spec_p;
+
+		IcebergManifestReaderInput input(manifest_metadata, partition_spec, metadata.iceberg_version);
+
 		auto &manifest_entries = manifest_file.GetOrCreateManifestEntries();
 		idx_t start_index = manifest_entries.size();
-		manifest_file::ManifestReader::ReadChunk(output_chunk, manifest_scan_info.partition_field_id_to_type, metadata,
+		manifest_file::ManifestReader::ReadChunk(output_chunk, manifest_scan_info.partition_field_id_to_type, input,
 		                                         manifest_entries);
 		if (manifest_scan_info.read_state) {
 			auto &read_state = *manifest_scan_info.read_state;

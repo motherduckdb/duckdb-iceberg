@@ -218,10 +218,13 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 		new_manifest_list.AddNewManifestFile(std::move(new_manifest_list_entry));
 
 		if (table_metadata.iceberg_version >= 3) {
-			commit_state.next_row_id += manifest_file.existing_rows_count + manifest_file.added_rows_count;
+			D_ASSERT(manifest_file.counts && manifest_file.counts->added_rows_count &&
+			         manifest_file.counts->existing_rows_count);
+			commit_state.next_row_id +=
+			    *manifest_file.counts->existing_rows_count + *manifest_file.counts->added_rows_count;
 
 			if (manifest_file.content == IcebergManifestContentType::DATA) {
-				*new_snapshot.added_rows += manifest_file.added_rows_count;
+				*new_snapshot.added_rows += *manifest_file.counts->added_rows_count;
 			}
 		}
 	}

@@ -344,15 +344,21 @@ unique_ptr<NodeStatistics> IcebergMultiFileList::GetCardinality(ClientContext &c
 		if (!data_manifest_matches[i]) {
 			continue;
 		}
-		cardinality += manifest.added_rows_count;
-		cardinality += manifest.existing_rows_count;
+		if (!manifest.counts || !manifest.counts->added_rows_count || !manifest.counts->existing_rows_count) {
+			return nullptr;
+		}
+		cardinality += *manifest.counts->added_rows_count;
+		cardinality += *manifest.counts->existing_rows_count;
 	}
 	for (idx_t i = 0; i < delete_manifests.size(); i++) {
 		auto &manifest = delete_manifests[i].entry.file;
 		if (!delete_manifest_matches[i]) {
 			continue;
 		}
-		cardinality -= manifest.added_rows_count;
+		if (!manifest.counts || !manifest.counts->added_rows_count) {
+			return nullptr;
+		}
+		cardinality -= *manifest.counts->added_rows_count;
 	}
 	return make_uniq<NodeStatistics>(cardinality, cardinality);
 }
@@ -368,10 +374,10 @@ IcebergManifestFile IcebergMultiFileList::GetManifestFileForDataFile(idx_t file_
 	return data_manifests[manifest_file_idx].entry.file;
 }
 
-vector<IcebergPartitionInfo> IcebergMultiFileList::GetPartitionInfoForDataFile(const string &file_path) const {
+IcebergPartition IcebergMultiFileList::GetPartitionForDataFile(const string &file_path) const {
 	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
-	auto entry = shared_state->data_file_partition_info.find(file_path);
-	if (entry != shared_state->data_file_partition_info.end()) {
+	auto entry = shared_state->data_file_partitions.find(file_path);
+	if (entry != shared_state->data_file_partitions.end()) {
 		return entry->second;
 	}
 	throw InvalidConfigurationException("Could not find data file '%s' in manifest entries", file_path);
@@ -407,8 +413,11 @@ void IcebergMultiFileList::GetStatistics(vector<PartitionStatistics> &result) co
 		if (!data_manifest_matches[i]) {
 			continue;
 		}
-		count += manifest.existing_rows_count;
-		count += manifest.added_rows_count;
+		if (!manifest.counts || !manifest.counts->added_rows_count || !manifest.counts->existing_rows_count) {
+			return;
+		}
+		count += *manifest.counts->existing_rows_count;
+		count += *manifest.counts->added_rows_count;
 	}
 
 	PartitionStatistics partition_stats;
@@ -456,8 +465,9 @@ IcebergMultiFileList::GetDataFile(idx_t file_id, annotated_lock_guard<annotated_
 			if (options.allow_moved_paths) {
 				entry_path = IcebergUtils::GetFullPath(GetPath(), entry_path, fs);
 			}
-			shared_state->data_file_partition_info[entry_path] = data_file.partition_info;
-			shared_state->data_file_partition_info[data_file.file_path] = data_file.partition_info;
+			IcebergPartition partition {manifest_file.partition_spec_id, data_file.partition_info};
+			shared_state->data_file_partitions[entry_path] = partition;
+			shared_state->data_file_partitions[data_file.file_path] = std::move(partition);
 
 			if (manifest_entry.status == IcebergManifestEntryStatusType::DELETED) {
 				continue;
@@ -636,6 +646,7 @@ IcebergDeletePlan IcebergMultiFileList::ProcessDeletes(const BoundIcebergManifes
 		annotated_lock_guard<annotated_mutex> delete_guard(shared_state->delete_lock);
 		auto delete_files = provider->GetDeleteFiles(manifest_indexes);
 		delete_context = make_uniq<IcebergDeletePlanningContext>(GetDeletePlanningContext());
+		auto data_partition_values = IcebergFilePruner::PartitionValueMap(data_manifest_entry.entry.data_file);
 		unordered_set<IcebergDeleteFileLoadState *> seen_loads;
 		for (auto delete_file : delete_files) {
 			if (delete_file.manifest_idx >= delete_manifests.size()) {
@@ -654,7 +665,8 @@ IcebergDeletePlan IcebergMultiFileList::ProcessDeletes(const BoundIcebergManifes
 				continue;
 			}
 			if (!IcebergDeletePlanner::DeleteEntryAppliesToDataFile(*delete_context, delete_file.manifest_idx,
-			                                                        delete_entry, data_manifest_entry)) {
+			                                                        delete_entry, data_manifest_entry,
+			                                                        data_partition_values)) {
 				continue;
 			}
 

@@ -1,0 +1,56 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/update/partitions/update_after_partition_spec_evolution.test
+# description: An update to a data file written under a previous partition spec must not leave the old version of the row visible alongside the new one
+# group: [partitions]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require avro
+
+require parquet
+
+require iceberg
+
+require httpfs
+
+
+statement ok
+CALL enable_logging('HTTP');
+
+statement ok
+set logging_level='debug'
+
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.test_update_after_spec_evolution;
+
+statement ok
+CREATE TABLE my_datalake.default.test_update_after_spec_evolution (id INT, ts TIMESTAMP, val VARCHAR)
+PARTITIONED BY (day(ts));
+
+statement ok
+INSERT INTO my_datalake.default.test_update_after_spec_evolution VALUES
+    (1, '2021-05-01 09:00:00'::TIMESTAMP, 'a'),
+    (2, '2021-05-01 10:30:00'::TIMESTAMP, 'b');
+
+statement ok
+ALTER TABLE my_datalake.default.test_update_after_spec_evolution SET PARTITIONED BY (hour(ts));
+
+# An update writes the new row under the current spec and a delete file hiding the old one, which
+# belongs with the spec of the data file it targets.
+query I
+UPDATE my_datalake.default.test_update_after_spec_evolution SET val = 'updated' WHERE val = 'b';
+----
+1
+
+query III
+SELECT id, ts, val FROM my_datalake.default.test_update_after_spec_evolution ORDER BY id, val;
+----
+1	2021-05-01 09:00:00	a
+2	2021-05-01 10:30:00	updated
+
+query I
+SELECT count(*) FROM my_datalake.default.test_update_after_spec_evolution;
+----
+2
+
+statement ok
+DROP TABLE my_datalake.default.test_update_after_spec_evolution;

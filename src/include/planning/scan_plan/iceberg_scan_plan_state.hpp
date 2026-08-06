@@ -74,13 +74,16 @@ struct IcebergScanPlanState {
 	    delete_file_loads DUCKDB_GUARDED_BY(delete_lock);
 
 	mutable vector<IcebergManifestListEntry> committed_data_manifests DUCKDB_GUARDED_BY(lock);
+	//! Keep track of which manifests we had to eagerly load, so we can emit batches for them once the data scan is
+	//! started
+	mutable vector<bool> eagerly_loaded_data_manifests DUCKDB_GUARDED_BY(lock);
 	mutable vector<reference<const IcebergManifestListEntry>> transaction_data_manifests DUCKDB_GUARDED_BY(lock);
 	mutable unique_ptr<IcebergManifestScanningState> data_manifest_read_state DUCKDB_GUARDED_BY(lock);
 
 	//! Declared after manifest owners so references in parsed positional-delete data are destroyed first.
 	mutable unordered_map<string, shared_ptr<IcebergDeleteData>> positional_delete_data DUCKDB_GUARDED_BY(delete_lock);
 
-	mutable unordered_map<string, vector<IcebergPartitionInfo>> data_file_partition_info DUCKDB_GUARDED_BY(lock);
+	mutable unordered_map<string, IcebergPartition> data_file_partitions DUCKDB_GUARDED_BY(lock);
 };
 
 } // namespace duckdb

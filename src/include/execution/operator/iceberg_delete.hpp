@@ -62,12 +62,17 @@ struct IcebergDeleteFileInfo {
 	idx_t pos_min_value;
 	optional_idx content_size_in_bytes;
 	optional_idx content_offset;
-	vector<IcebergPartitionInfo> partition_info;
+	//! The partition of the data file this delete targets. A delete file has to be written into a manifest
+	//! of that same spec, not the table's current one, or readers can't tell that the two partitions are equal.
+	IcebergPartition partition_info;
 	//! When non-empty, this is an equality-delete file; holds the field-ids it applies to
 	vector<int32_t> equality_ids;
 	//! Per-field serialized lower/upper bounds of the equality-delete values (field-id -> bound blob).
 	unordered_map<int32_t, Value> lower_bounds;
 	unordered_map<int32_t, Value> upper_bounds;
+	//! Per-field null/NaN counts used to decide whether bounds can safely prune an equality delete.
+	unordered_map<int32_t, int64_t> null_value_counts;
+	unordered_map<int32_t, int64_t> nan_value_counts;
 };
 
 class IcebergDeleteGlobalState : public GlobalSinkState {
@@ -167,7 +172,7 @@ public:
 	                          OperatorSinkFinalizeInput &input) const override;
 	unique_ptr<GlobalSinkState> GetGlobalSinkState(ClientContext &context) const override;
 	unique_ptr<LocalSinkState> GetLocalSinkState(ExecutionContext &context) const override;
-	static vector<IcebergManifestEntry> GenerateDeleteManifestEntries(IcebergDeleteGlobalState &global_state);
+	static partitioned_manifest_entry_map_t GenerateDeleteManifestEntries(IcebergDeleteGlobalState &global_state);
 
 	bool IsSink() const override {
 		return true;

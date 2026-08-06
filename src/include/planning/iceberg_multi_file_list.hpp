@@ -56,7 +56,7 @@ public:
 public:
 	void SetTable(IcebergTableEntry &table);
 	shared_ptr<IcebergDeleteData> GetExistingPositionalDeleteData(const string &file_path) const;
-	vector<IcebergPartitionInfo> GetPartitionInfoForDataFile(const string &file_path) const;
+	IcebergPartition GetPartitionForDataFile(const string &file_path) const;
 	void SetScanOrder(unique_ptr<RowGroupOrderOptions> options);
 	optional_ptr<IcebergTableEntry> GetTable() const;
 	void DisableServerSidePlanning();
