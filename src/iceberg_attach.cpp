@@ -320,7 +320,7 @@ unique_ptr<Catalog> IcebergAttach::Attach(optional_ptr<StorageExtensionInfo> sto
 	if (!default_schema.empty() &&
 	    !IRCAPI::VerifySchemaExistence(context, *catalog, default_schema.GetIdentifierName())) {
 		throw InvalidConfigurationException("default_schema %s does not exist", default_schema);
- 	}
+	}
 	return std::move(catalog);
 }
 
