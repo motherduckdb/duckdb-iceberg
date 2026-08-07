@@ -4,7 +4,7 @@
 #include "planning/pruning/iceberg_table_filter.hpp"
 #include "planning/scan_order/iceberg_scan_order.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/api/iceberg_expression.hpp"
 #include "catalog/rest/api/iceberg_type.hpp"
@@ -16,7 +16,6 @@
 #include "iceberg_logging.hpp"
 #include "planning/metadata_io/avro/avro_scan.hpp"
 #include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
-#include "planning/metadata_io/manifest_list/bound_iceberg_manifest_list_entry.hpp"
 #include "planning/metadata_io/manifest_list/iceberg_manifest_list_reader.hpp"
 
 #include <condition_variable>
@@ -109,14 +108,18 @@ void ClientSideScanPlanProvider::LoadManifestList() {
 		if (context.transaction_data && !context.transaction_data->alters.empty()) {
 			manifest_list_entries = context.transaction_data->existing_manifest_list;
 		} else {
-			auto manifest_list_full_path = context.options.allow_moved_paths
-			                                   ? IcebergUtils::GetFullPath(iceberg_path, snapshot.manifest_list, fs)
-			                                   : snapshot.manifest_list;
-			auto scan = AvroScan::ScanManifestList(snapshot_info, metadata, context.context, manifest_list_full_path,
-			                                       manifest_list_entries);
-			auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
-			while (!manifest_list_reader->Finished()) {
-				manifest_list_reader->Read();
+			if (!snapshot.manifests.empty()) {
+				IcebergManifestList::LoadManifestFiles(snapshot_info, metadata, context.context, manifest_list_entries);
+			} else {
+				auto manifest_list_full_path = context.options.allow_moved_paths
+				                                   ? IcebergUtils::GetFullPath(iceberg_path, snapshot.manifest_list, fs)
+				                                   : snapshot.manifest_list;
+				auto scan = AvroScan::ScanManifestList(snapshot_info, metadata, context.context,
+				                                       manifest_list_full_path, manifest_list_entries);
+				auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
+				while (!manifest_list_reader->Finished()) {
+					manifest_list_reader->Read();
+				}
 			}
 		}
 
@@ -129,13 +132,43 @@ void ClientSideScanPlanProvider::LoadManifestList() {
 			}
 		}
 
-		for (auto &manifest : DataManifests()) {
-			if (!manifest.HasManifestEntries()) {
+		auto &data_manifests = DataManifests();
+		shared_state.eagerly_loaded_data_manifests.resize(data_manifests.size(), false);
+		vector<idx_t> manifests_to_eagerly_load;
+		for (idx_t manifest_idx = 0; manifest_idx < data_manifests.size(); manifest_idx++) {
+			auto &manifest = data_manifests[manifest_idx];
+			if (manifest.HasManifestEntries()) {
+				shared_state.eagerly_loaded_data_manifests[manifest_idx] = true;
+				if (!manifest.file.counts || !manifest.file.counts->Complete()) {
+					manifest.file.SetCountsFromEntries(manifest.GetManifestEntries());
+				}
 				continue;
 			}
-			auto &file = manifest.file;
-			idx_t reserve_size = file.existing_files_count + file.added_files_count + file.deleted_files_count;
-			manifest.GetManifestEntries().reserve(reserve_size);
+
+			auto &counts = manifest.file.counts;
+			if (!counts || !counts->FilesComplete()) {
+				manifests_to_eagerly_load.push_back(manifest_idx);
+				continue;
+			}
+
+			idx_t reserve_size =
+			    *counts->existing_files_count + *counts->added_files_count + *counts->deleted_files_count;
+			manifest.GetOrCreateManifestEntries().reserve(reserve_size);
+		}
+
+		if (!manifests_to_eagerly_load.empty()) {
+			auto scan =
+			    AvroScan::ScanManifest(context.snapshot, data_manifests, context.options, context.fs, context.path,
+			                           context.metadata, context.context, nullptr, manifests_to_eagerly_load);
+			auto reader = make_uniq<manifest_file::ManifestReader>(*scan);
+			while (!reader->Finished()) {
+				reader->Read();
+			}
+			for (auto manifest_idx : manifests_to_eagerly_load) {
+				auto &manifest = data_manifests[manifest_idx];
+				manifest.file.SetCountsFromEntries(manifest.GetManifestEntries());
+				shared_state.eagerly_loaded_data_manifests[manifest_idx] = true;
+			}
 		}
 	}
 
@@ -160,8 +193,8 @@ void ClientSideScanPlanProvider::LoadManifestList() {
 	{
 		annotated_lock_guard<annotated_mutex> delete_guard(shared_state.delete_lock);
 		shared_state.delete_manifest_loads.resize(DeleteManifests().size());
-		shared_state.delete_manifest_entries_enumerated.resize(
-		    DeleteManifests().size() + shared_state.transaction_delete_manifests.size(), false);
+		shared_state.delete_file_loads.resize(DeleteManifests().size() +
+		                                      shared_state.transaction_delete_manifests.size());
 	}
 
 	shared_state.manifest_list_loaded = true;
@@ -180,7 +213,14 @@ void ClientSideScanPlanProvider::StartDataManifestScan(const vector<bool> &match
 	const auto committed_manifest_count = DataManifests().size();
 	vector<idx_t> selected_committed_manifests;
 	for (idx_t manifest_idx = 0; manifest_idx < committed_manifest_count; manifest_idx++) {
-		if (matching_manifests[manifest_idx]) {
+		if (!matching_manifests[manifest_idx]) {
+			continue;
+		}
+		if (shared_state.eagerly_loaded_data_manifests[manifest_idx]) {
+			auto &manifest = DataManifests()[manifest_idx];
+			shared_state.read_state.PushBatch(
+			    ManifestReadBatch {manifest_idx, 0, manifest.GetManifestEntries().size()});
+		} else {
 			selected_committed_manifests.push_back(manifest_idx);
 		}
 	}
@@ -326,7 +366,8 @@ void ClientSideScanPlanProvider::ReadDeleteManifests(const vector<idx_t> &manife
 	}
 }
 
-void ClientSideScanPlanProvider::EnumerateDeleteManifestEntries(const vector<idx_t> &manifest_indexes) {
+vector<IcebergDeleteFileReference> ClientSideScanPlanProvider::GetDeleteFiles(const vector<idx_t> &manifest_indexes) {
+	vector<IcebergDeleteFileReference> result;
 	optional_ptr<const case_insensitive_map_t<string>> transactional_delete_files;
 	if (context.transaction_data) {
 		transactional_delete_files = context.transaction_data->transactional_delete_files;
@@ -337,18 +378,15 @@ void ClientSideScanPlanProvider::EnumerateDeleteManifestEntries(const vector<idx
 		if (manifest_idx >= total_manifest_count) {
 			throw InternalException("Selected delete manifest index %llu is out of bounds", manifest_idx);
 		}
-		if (shared_state.delete_manifest_entries_enumerated[manifest_idx]) {
-			continue;
-		}
 
-		vector<BoundIcebergManifestEntry> bound_entries;
 		if (manifest_idx < committed_manifest_count) {
 			auto &manifest_list_entry = DeleteManifests()[manifest_idx];
 			if (!manifest_list_entry.HasManifestEntries()) {
 				throw InternalException("Selected delete manifest %llu was not loaded", manifest_idx);
 			}
-			auto manifest = BoundIcebergManifestListEntry(manifest_idx, manifest_list_entry);
-			for (auto &manifest_entry : manifest_list_entry.GetManifestEntries()) {
+			auto &manifest_entries = manifest_list_entry.GetManifestEntries();
+			for (idx_t entry_idx = 0; entry_idx < manifest_entries.size(); entry_idx++) {
+				auto &manifest_entry = manifest_entries[entry_idx];
 				if (manifest_entry.status == IcebergManifestEntryStatusType::DELETED) {
 					continue;
 				}
@@ -357,13 +395,14 @@ void ClientSideScanPlanProvider::EnumerateDeleteManifestEntries(const vector<idx
 				    transactional_delete_files->count(*referenced_data_file)) {
 					continue;
 				}
-				bound_entries.push_back(manifest.BindEntry(manifest_entry));
+				result.push_back({manifest_idx, entry_idx});
 			}
 		} else {
 			auto transaction_idx = manifest_idx - committed_manifest_count;
 			auto &manifest_list_entry = shared_state.transaction_delete_manifests[transaction_idx].get();
-			auto manifest = BoundIcebergManifestListEntry(manifest_idx, manifest_list_entry);
-			for (auto &manifest_entry : manifest_list_entry.GetManifestEntries()) {
+			auto &manifest_entries = manifest_list_entry.GetManifestEntries();
+			for (idx_t entry_idx = 0; entry_idx < manifest_entries.size(); entry_idx++) {
+				auto &manifest_entry = manifest_entries[entry_idx];
 				auto &data_file = manifest_entry.data_file;
 				auto &referenced_data_file = data_file.referenced_data_file;
 				if (referenced_data_file && transactional_delete_files) {
@@ -372,16 +411,11 @@ void ClientSideScanPlanProvider::EnumerateDeleteManifestEntries(const vector<idx
 						continue;
 					}
 				}
-				bound_entries.push_back(manifest.BindEntry(manifest_entry));
+				result.push_back({manifest_idx, entry_idx});
 			}
 		}
-		shared_state.delete_manifest_entries.reserve(shared_state.delete_manifest_entries.size() +
-		                                             bound_entries.size());
-		for (auto &bound_entry : bound_entries) {
-			shared_state.delete_manifest_entries.push_back(std::move(bound_entry));
-		}
-		shared_state.delete_manifest_entries_enumerated[manifest_idx] = true;
 	}
+	return result;
 }
 
 bool ClientSideScanPlanProvider::TryGetNextBatch(IcebergDataViewCursor &cursor) {
@@ -431,20 +465,28 @@ vector<IcebergManifestListEntry> &ClientSideScanPlanProvider::DeleteManifests() 
 	return shared_state.committed_delete_manifests;
 }
 
-idx_t &ClientSideScanPlanProvider::NextDeleteEntryToProcess() {
-	return shared_state.next_delete_entry_to_process;
-}
-
-vector<BoundIcebergManifestEntry> &ClientSideScanPlanProvider::DeleteManifestEntries() {
-	return shared_state.delete_manifest_entries;
+shared_ptr<IcebergDeleteFileLoadState> &
+ClientSideScanPlanProvider::GetDeleteFileLoad(IcebergDeleteFileReference delete_file) {
+	auto committed_manifest_count = DeleteManifests().size();
+	auto total_manifest_count = committed_manifest_count + shared_state.transaction_delete_manifests.size();
+	if (delete_file.manifest_idx >= total_manifest_count) {
+		throw InternalException("Delete manifest index %llu is out of bounds", delete_file.manifest_idx);
+	}
+	auto &manifest =
+	    delete_file.manifest_idx < committed_manifest_count
+	        ? DeleteManifests()[delete_file.manifest_idx]
+	        : shared_state.transaction_delete_manifests[delete_file.manifest_idx - committed_manifest_count].get();
+	auto &manifest_entries = manifest.GetManifestEntries();
+	if (delete_file.entry_idx >= manifest_entries.size()) {
+		throw InternalException("Delete manifest entry index %llu is out of bounds for manifest %llu",
+		                        delete_file.entry_idx, delete_file.manifest_idx);
+	}
+	auto &loads = shared_state.delete_file_loads[delete_file.manifest_idx];
+	return loads[delete_file.entry_idx];
 }
 
 position_delete_map_t &ClientSideScanPlanProvider::PositionalDeleteData() {
 	return shared_state.positional_delete_data;
-}
-
-equality_delete_map_t &ClientSideScanPlanProvider::EqualityDeleteData() {
-	return shared_state.equality_delete_data;
 }
 
 } // namespace duckdb

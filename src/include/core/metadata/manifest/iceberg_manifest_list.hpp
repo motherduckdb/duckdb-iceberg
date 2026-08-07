@@ -38,6 +38,29 @@ public:
 	vector<FieldSummary> field_summary;
 };
 
+struct IcebergManifestCounts {
+public:
+	static IcebergManifestCounts Zero();
+
+	bool FilesComplete() const {
+		return added_files_count && existing_files_count && deleted_files_count;
+	}
+	bool RowsComplete() const {
+		return added_rows_count && existing_rows_count && deleted_rows_count;
+	}
+	bool Complete() const {
+		return FilesComplete() && RowsComplete();
+	}
+
+public:
+	optional<idx_t> added_files_count;
+	optional<idx_t> existing_files_count;
+	optional<idx_t> deleted_files_count;
+	optional<idx_t> added_rows_count;
+	optional<idx_t> existing_rows_count;
+	optional<idx_t> deleted_rows_count;
+};
+
 enum class IcebergManifestContentType : uint8_t {
 	DATA = 0,
 	DELETE = 1,
@@ -81,24 +104,50 @@ public:
 	optional<sequence_number_t> sequence_number;
 	optional<sequence_number_t> min_sequence_number;
 	optional<int64_t> added_snapshot_id;
-	//! added files count
-	idx_t added_files_count = 0;
-	//! existing files count
-	idx_t existing_files_count = 0;
-	//! deleted files count
-	idx_t deleted_files_count = 0;
-	//! added rows in the manifest
-	idx_t added_rows_count = 0;
-	//! existing rows in the manifest
-	idx_t existing_rows_count = 0;
-	//! deleted rows in the manifest
-	idx_t deleted_rows_count = 0;
+	//! The count fields were optional in V1 manifest lists. A missing count means unknown/non-zero, not zero.
+	optional<IcebergManifestCounts> counts;
 	//! The field summaries of the partition (if present)
 	ManifestPartitions partitions;
 
 public:
 	IcebergManifestFile(const string &manifest_path) : manifest_path(manifest_path) {
 	}
+
+	void SetCountsFromEntries(const vector<IcebergManifestEntry> &entries);
+};
+
+//! Snapshot metrics gathered for a manifest
+struct IcebergManifestMetrics {
+public:
+	//! DELETE metrics
+	int64_t added_position_deletes = 0; // added-position-deletes
+	int64_t added_deletion_vectors = 0; // added-dvs
+	int64_t added_equality_deletes = 0; // added-equality-deletes
+
+	int64_t removed_position_deletes = 0; // removed-position-deletes
+	int64_t removed_deletion_vectors = 0; // removed-dvs
+	int64_t removed_equality_deletes = 0; // removed-equality-deletes
+
+	int64_t added_position_delete_files = 0; // added-position-delete-files
+	int64_t added_equality_delete_files = 0; // added-equality-delete-files
+	int64_t added_delete_files = 0;          // added-delete-files
+
+	int64_t removed_position_delete_files = 0; // removed-position-delete-files
+	int64_t removed_equality_delete_files = 0; // removed-equality-delete-files
+	int64_t removed_delete_files = 0;          // removed-delete-files
+
+public:
+	//! DATA metrics
+	int64_t added_data_files = 0; // added-data-files
+	int64_t added_records = 0;    // added-records
+
+	int64_t deleted_data_files = 0; // deleted-data-files
+	int64_t deleted_records = 0;    // deleted-records
+
+public:
+	//! Shared metrics
+	int64_t added_files_size = 0;
+	int64_t removed_files_size = 0;
 };
 
 struct IcebergManifestListEntry {
@@ -114,6 +163,7 @@ public:
 		if (this != &other) {
 			file = other.file;
 			manifest_entries = other.manifest_entries;
+			metrics = other.metrics;
 			if (other.manifest_metadata) {
 				manifest_metadata.reset();
 				manifest_metadata.emplace(*other.manifest_metadata);
@@ -127,6 +177,7 @@ public:
 		if (this != &other) {
 			file = std::move(other.file);
 			manifest_entries = std::move(other.manifest_entries);
+			metrics = std::move(other.metrics);
 			if (other.manifest_metadata) {
 				manifest_metadata.reset();
 				manifest_metadata.emplace(*other.manifest_metadata);
@@ -165,6 +216,8 @@ public:
 	IcebergManifestFile file;
 	optional<IcebergManifestMetadata> manifest_metadata;
 	optional<vector<IcebergManifestEntry>> manifest_entries;
+	//! Metrics gathered during 'CreateFromEntries'
+	optional<IcebergManifestMetrics> metrics;
 };
 
 struct IcebergManifestList {
@@ -204,6 +257,8 @@ public:
 public:
 	static LogicalType FieldSummaryType();
 	static Value FieldSummaryFieldIds();
+	static void LoadManifestFiles(const IcebergSnapshotScanInfo &snapshot_info, const IcebergTableMetadata &metadata,
+	                              ClientContext &context, vector<IcebergManifestListEntry> &result);
 	static unique_ptr<IcebergManifestList> Load(const string &iceberg_path, const IcebergTableMetadata &metadata,
 	                                            const IcebergSnapshotScanInfo &snapshot_info, ClientContext &context,
 	                                            const IcebergOptions &options);

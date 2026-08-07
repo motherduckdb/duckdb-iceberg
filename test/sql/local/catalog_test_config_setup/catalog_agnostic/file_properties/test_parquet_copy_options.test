@@ -14,8 +14,6 @@ require httpfs
 
 require aws
 
-set ignore_error_messages
-
 statement ok
 create schema if not exists my_datalake.default;
 

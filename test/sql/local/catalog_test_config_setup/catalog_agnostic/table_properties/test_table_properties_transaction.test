@@ -12,8 +12,6 @@ require httpfs
 
 require core_functions
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 DROP TABLE IF EXISTS my_datalake.default.table_properties_in_transaction;

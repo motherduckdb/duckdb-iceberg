@@ -12,8 +12,6 @@ require httpfs
 
 require-env CATALOG_TEST_CONFIG_SETUP fixture
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 # Retrieve the (snapshot_id + timestamp_ms) pairs, using offset and limit
 

@@ -12,8 +12,6 @@ require iceberg
 
 require httpfs
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 # ---- NULL handling ----
 # Iceberg spec: all transforms return null for null input

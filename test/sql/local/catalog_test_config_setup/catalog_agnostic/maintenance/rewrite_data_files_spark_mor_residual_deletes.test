@@ -12,8 +12,6 @@ require iceberg
 
 require httpfs
 
-set ignore_error_messages
-
 query I
 select count(*) from my_datalake.default.spark_rewrite_mor_residual_deletes;
 ----

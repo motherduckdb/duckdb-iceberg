@@ -16,11 +16,10 @@
 
 namespace duckdb {
 
-IcebergAddSnapshot::IcebergAddSnapshot(const IcebergTableInformation &table_info,
-                                       IcebergSnapshotOperationType operation)
+IcebergAddSnapshot::IcebergAddSnapshot(const IcebergTable &table_info, IcebergSnapshotOperationType operation)
     : IcebergTableUpdate(IcebergTableUpdateType::ADD_SNAPSHOT), operation(operation) {
 	//! FIXME: Do we also need to capture the current partition spec and sort order?
-	//! This is a bit of a code smell, the `IcebergTableInformation` should instead be const
+	//! This is a bit of a code smell, the `IcebergTable` should instead be const
 	//! and all transactional changes should live in the IcebergTransactionData
 	schema_id = table_info.table_metadata.GetCurrentSchemaId();
 }
@@ -30,7 +29,7 @@ bool IcebergAddSnapshot::IsRetryable() const {
 	return operation == IcebergSnapshotOperationType::APPEND || operation == IcebergSnapshotOperationType::DELETE;
 }
 
-static rest_api_objects::TableUpdate CreateAddSnapshotUpdate(const IcebergTableInformation &table_info,
+static rest_api_objects::TableUpdate CreateAddSnapshotUpdate(const IcebergTable &table_info,
                                                              const IcebergSnapshot &snapshot) {
 	rest_api_objects::TableUpdate table_update;
 
@@ -65,7 +64,7 @@ static optional<IcebergManifestListEntry> RewriteManifestFile(const IcebergManif
 		}
 		if (manifest_entry.status != IcebergManifestEntryStatusType::DELETED &&
 		    deletes.IsInvalidated(manifest_entry.data_file.file_path)) {
-			snapshot_metrics.RemoveFileSize(manifest_entry.data_file.file_size_in_bytes);
+			snapshot_metrics.RemoveManifestEntry(manifest_entry);
 			manifest_entry.status = IcebergManifestEntryStatusType::DELETED;
 			removed_any_entries = true;
 		}
@@ -123,13 +122,14 @@ static int64_t ReconstructTotalFilesSize(IcebergCommitState &commit_state, int32
 			if (entry.status == IcebergManifestEntryStatusType::DELETED) {
 				continue;
 			}
-			total_files_size = IcebergUtils::AddFileSizeChecked(total_files_size, entry.data_file.file_size_in_bytes);
+			total_files_size =
+			    IcebergUtils::AddFileSizeChecked(total_files_size, entry.data_file.GetContentSizeInBytes());
 		}
 	}
 	return total_files_size;
 }
 
-static IcebergManifestListEntry WriteManifestListEntry(const IcebergTableInformation &table_info,
+static IcebergManifestListEntry WriteManifestListEntry(const IcebergTable &table_info,
                                                        const IcebergManifestListEntry &list_entry,
                                                        CopyFunction &avro_copy, DatabaseInstance &db,
                                                        ClientContext &context) {
@@ -142,9 +142,8 @@ static IcebergManifestListEntry WriteManifestListEntry(const IcebergTableInforma
 }
 
 static vector<IcebergManifestListEntry>
-CreateCommitManifestFiles(const vector<IcebergManifestListEntry> &manifest_files,
-                          const IcebergTableInformation &table_info, IcebergCommitState &commit_state,
-                          int64_t sequence_number) {
+CreateCommitManifestFiles(const vector<IcebergManifestListEntry> &manifest_files, const IcebergTable &table_info,
+                          IcebergCommitState &commit_state, int64_t sequence_number) {
 	vector<IcebergManifestListEntry> result;
 	result.reserve(manifest_files.size());
 	auto &fs = FileSystem::GetFileSystem(commit_state.context);
@@ -217,10 +216,13 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 		new_manifest_list.AddNewManifestFile(std::move(new_manifest_list_entry));
 
 		if (table_metadata.iceberg_version >= 3) {
-			commit_state.next_row_id += manifest_file.existing_rows_count + manifest_file.added_rows_count;
+			D_ASSERT(manifest_file.counts && manifest_file.counts->added_rows_count &&
+			         manifest_file.counts->existing_rows_count);
+			commit_state.next_row_id +=
+			    *manifest_file.counts->existing_rows_count + *manifest_file.counts->added_rows_count;
 
 			if (manifest_file.content == IcebergManifestContentType::DATA) {
-				*new_snapshot.added_rows += manifest_file.added_rows_count;
+				*new_snapshot.added_rows += *manifest_file.counts->added_rows_count;
 			}
 		}
 	}

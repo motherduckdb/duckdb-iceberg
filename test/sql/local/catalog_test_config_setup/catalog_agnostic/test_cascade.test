@@ -13,8 +13,6 @@ require httpfs
 
 require aws
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement error
 DROP SCHEMA my_datalake.default CASCADE;

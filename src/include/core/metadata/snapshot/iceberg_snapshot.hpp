@@ -1,54 +1,15 @@
 #pragma once
 
 #include "core/metadata/schema/iceberg_column_definition.hpp"
+#include "core/metadata/snapshot/iceberg_snapshot_metrics.hpp"
 #include "rest_catalog/objects/snapshot.hpp"
 
 namespace duckdb {
 
 struct IcebergTableMetadata;
-struct IcebergTableInformation;
+struct IcebergTable;
 
 enum class IcebergSnapshotOperationType : uint8_t { APPEND, REPLACE, OVERWRITE, DELETE };
-
-enum class IcebergSnapshotMetricType : uint8_t {
-	ADDED_DATA_FILES,
-	ADDED_RECORDS,
-	DELETED_DATA_FILES,
-	DELETED_RECORDS,
-	ADDED_DELETE_FILES,
-	ADDED_POSITION_DELETES,
-	REMOVED_DELETE_FILES,
-	REMOVED_POSITION_DELETE_FILES,
-	ADDED_FILES_SIZE,
-	REMOVED_FILES_SIZE,
-	TOTAL_DATA_FILES,
-	TOTAL_RECORDS,
-	TOTAL_DELETE_FILES,
-	TOTAL_POSITION_DELETES,
-	TOTAL_FILES_SIZE
-};
-
-class IcebergSnapshot;
-struct IcebergManifestListEntry;
-
-struct IcebergSnapshotMetrics {
-public:
-	IcebergSnapshotMetrics();
-	IcebergSnapshotMetrics(const IcebergSnapshot &parent_snapshot);
-
-public:
-	void AddManifestListEntry(const IcebergManifestListEntry &manifest_list_entry);
-	void RemoveFileSize(int64_t file_size_in_bytes);
-	bool HasTotalFilesSize() const;
-	void SetTotalFilesSize(int64_t total_files_size);
-
-private:
-	void AddSizeMetric(IcebergSnapshotMetricType type, int64_t value);
-	void UpdateTotalFilesSize(int64_t added, int64_t removed);
-
-public:
-	map<IcebergSnapshotMetricType, int64_t> metrics;
-};
 
 //! An Iceberg snapshot https://iceberg.apache.org/spec/#snapshots
 class IcebergSnapshot {
@@ -75,6 +36,8 @@ public:
 	IcebergSnapshotOperationType operation;
 	timestamp_ms_t timestamp_ms;
 	string manifest_list;
+	//! V1 snapshots may embed manifest file paths instead of referencing a manifest list.
+	vector<string> manifests;
 	IcebergSnapshotMetrics metrics;
 };
 

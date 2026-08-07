@@ -14,8 +14,6 @@ require httpfs
 
 require tpch
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 create view customer as select * from my_datalake.default.customer;

@@ -18,8 +18,6 @@ require icu
 
 require core_functions
 
-set ignore_error_messages
-
 # ------------------------------------------------------------------------------
 # flat array field: bounds span every element across every row
 # elements are 1..7, so the array field bound is [1, 7] regardless of row grouping

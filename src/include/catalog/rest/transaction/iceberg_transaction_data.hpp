@@ -17,24 +17,24 @@
 
 namespace duckdb {
 
-struct IcebergTableInformation;
+struct IcebergTable;
 struct IcebergCreateTableRequest;
 
 struct IcebergTransactionData {
 public:
-	IcebergTransactionData(ClientContext &context, IcebergTransaction &transaction,
-	                       const IcebergTableInformation &table_info);
+	IcebergTransactionData(ClientContext &context, IcebergTransaction &transaction, const IcebergTable &table_info);
 
 public:
 	int64_t GetCommitRetryCount() const;
 	bool SupportsAppendRetry() const;
-	bool RetryStateMatches(const IcebergTableInformation &table_info) const;
+	bool RetryStateMatches(const IcebergTable &table_info) const;
 	//! Whether this transaction stages a DELETE snapshot; gates the commit-retry safety check.
 	bool ContainsDelete() const;
 
 	void AddSnapshot(IcebergSnapshotOperationType operation, vector<IcebergManifestEntry> &&data_files,
 	                 IcebergManifestDeletes &&altered_manifests);
-	void AddUpdateSnapshot(vector<IcebergManifestEntry> &&delete_files, vector<IcebergManifestEntry> &&data_files,
+	void AddDeleteSnapshot(partitioned_manifest_entry_map_t &&delete_files, IcebergManifestDeletes &&altered_manifests);
+	void AddUpdateSnapshot(partitioned_manifest_entry_map_t &&delete_files, vector<IcebergManifestEntry> &&data_files,
 	                       IcebergManifestDeletes &&altered_manifests);
 	// add a schema update for a table
 	void TableAddSchema(int32_t schema_id);
@@ -57,6 +57,9 @@ public:
 
 private:
 	void CacheExistingManifestList(lock_guard<mutex> &guard, const IcebergTableMetadata &metadata);
+	//! Writes one delete manifest per partition spec present in 'delete_files'.
+	void AddDeleteManifestFiles(IcebergAddSnapshot &add_snapshot, partitioned_manifest_entry_map_t &&delete_files,
+	                            sequence_number_t sequence_number);
 
 public:
 	string initial_table_uuid;
@@ -66,7 +69,7 @@ public:
 
 	ClientContext &context;
 	IcebergTransaction &transaction;
-	const IcebergTableInformation &table_info;
+	const IcebergTable &table_info;
 	//! schema updates etc.
 	vector<unique_ptr<IcebergTableUpdate>> updates;
 	vector<unique_ptr<IcebergTableRequirement>> requirements;

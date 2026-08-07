@@ -30,7 +30,7 @@ public:
 	MultiFileColumnDefinition GetMultiFileColumnDefinition() const;
 	unique_ptr<IcebergColumnDefinition> Copy() const;
 	bool Equals(const IcebergColumnDefinition &other) const;
-	void SetWriteDefault(const Value &default_value);
+	void SetWriteDefault(const Value &default_value, idx_t iceberg_version);
 
 public:
 	void AddChild(unique_ptr<IcebergColumnDefinition> &&child);

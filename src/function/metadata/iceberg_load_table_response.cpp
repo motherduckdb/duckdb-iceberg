@@ -14,18 +14,18 @@
 #include "catalog/rest/api/url_utils.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
 #include "rest_catalog/objects/list.hpp"
 #include "duckdb/common/json_document.hpp"
 
 namespace duckdb {
 
 struct IcebergLoadTableResponseBindData : public TableFunctionData {
-	IcebergTableEntry &table_entry;
+	IcebergTableSchemaVersion &table_entry;
 	IcebergCatalog &ic_catalog;
 	IcebergSchemaEntry &ic_schema;
 
-	IcebergLoadTableResponseBindData(IcebergTableEntry &table_entry, IcebergCatalog &ic_catalog,
+	IcebergLoadTableResponseBindData(IcebergTableSchemaVersion &table_entry, IcebergCatalog &ic_catalog,
 	                                 IcebergSchemaEntry &ic_schema)
 	    : table_entry(table_entry), ic_catalog(ic_catalog), ic_schema(ic_schema) {
 	}
@@ -47,7 +47,8 @@ static unique_ptr<HTTPResponse> MakeRequest(ClientContext &context, const Iceber
 	auto url_builder = ic_catalog.GetBaseUrl();
 	url_builder.AddPrefixComponents(ic_catalog.prefix);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
-	url_builder.AddPathComponent(IRCPathComponent::NamespaceComponent(ic_schema.namespace_items));
+	url_builder.AddPathComponent(
+	    IRCPathComponent::NamespaceComponent(ic_schema.namespace_items, ic_catalog.namespace_separator));
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("tables"));
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent(ic_table_entry.name.GetIdentifierName()));
 
@@ -74,9 +75,9 @@ static unique_ptr<FunctionData> IcebergLoadTableResponseBind(ClientContext &cont
 		                            input_string);
 	}
 
-	EntryLookupInfo table_lookup(CatalogType::TABLE_ENTRY, Identifier(qualified_name[2]));
-	auto catalog_entry = Catalog::GetEntry(context, Identifier(qualified_name[0]), Identifier(qualified_name[1]),
-	                                       table_lookup, OnEntryNotFound::THROW_EXCEPTION);
+	EntryLookupInfo table_lookup(CatalogType::TABLE_ENTRY,
+	                             QualifiedName(qualified_name[0], qualified_name[1], qualified_name[2]));
+	auto catalog_entry = Catalog::GetEntry(context, table_lookup, OnEntryNotFound::THROW_EXCEPTION);
 
 	if (catalog_entry->type != CatalogType::TABLE_ENTRY) {
 		throw InvalidInputException("'%s' is not a table", input_string);
@@ -86,7 +87,7 @@ static unique_ptr<FunctionData> IcebergLoadTableResponseBind(ClientContext &cont
 		throw InvalidInputException("Table '%s' is not an Iceberg REST catalog table", input_string);
 	}
 
-	auto &table_entry = catalog_entry->Cast<IcebergTableEntry>();
+	auto &table_entry = catalog_entry->Cast<IcebergTableSchemaVersion>();
 	auto &ic_catalog = table_entry.catalog.Cast<IcebergCatalog>();
 	auto &ic_schema = table_entry.schema.Cast<IcebergSchemaEntry>();
 
