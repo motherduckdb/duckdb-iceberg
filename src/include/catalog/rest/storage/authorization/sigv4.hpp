@@ -3,8 +3,10 @@
 #include "catalog/rest/storage/iceberg_authorization.hpp"
 #include "catalog/rest/storage/aws.hpp"
 
+#include "duckdb/common/mutex.hpp"
+#include "duckdb/common/thread_annotation.hpp"
+
 #include <chrono>
-#include <mutex>
 
 namespace duckdb {
 
@@ -22,11 +24,10 @@ public:
 	                                 const IRCEndpointBuilder &endpoint_builder, HTTPHeaders &headers,
 	                                 const string &data = "") override;
 
-	//! Refresh this catalog's S3 secret if it has refresh_info and the interval has elapsed.
-	void MaybeRefreshSecret(ClientContext &context);
-
 private:
 	AWSInput CreateAWSInput(ClientContext &context, const IRCEndpointBuilder &endpoint_builder);
+	//! Refresh this catalog's S3 secret if it has refresh_info and the interval has elapsed.
+	void MaybeRefreshSecret(ClientContext &context);
 
 public:
 	string secret;
@@ -38,10 +39,11 @@ public:
 
 private:
 	//! Per-instance, so catalogs with different secrets refresh independently.
-	std::mutex refresh_mutex;
+	annotated_mutex refresh_mutex;
 	//! Set to construction time, not the epoch: the secret was just created, so an
 	//! immediate refresh would be a redundant STS call.
-	std::chrono::steady_clock::time_point last_refresh_time = std::chrono::steady_clock::now();
+	std::chrono::steady_clock::time_point
+	    last_refresh_time DUCKDB_GUARDED_BY(refresh_mutex) = std::chrono::steady_clock::now();
 	//! STS tokens last at least 900s, so 300s leaves headroom.
 	static constexpr int REFRESH_INTERVAL_SECONDS = 300;
 };

@@ -118,25 +118,35 @@ AWSInput SIGV4Authorization::CreateAWSInput(ClientContext &context, const IRCEnd
 	return aws_input;
 }
 
+namespace {
+
+//! Test hook mirroring OAuth2Authorization::IsTokenExpiredUnlocked, so a test can observe a
+//! refresh without waiting out the interval.
+bool ForceExpiry(ClientContext &context) {
+	Value force_expiry_val;
+	if (context.TryGetCurrentSetting("iceberg_test_force_token_expiry", force_expiry_val)) {
+		return !force_expiry_val.IsNull() && force_expiry_val.type().id() == LogicalTypeId::BOOLEAN &&
+		       force_expiry_val.GetValue<bool>();
+	}
+	return false;
+}
+
+} // namespace
+
 void SIGV4Authorization::MaybeRefreshSecret(ClientContext &context) {
-	// Fast path: refreshed recently, no lock needed
-	auto now = std::chrono::steady_clock::now();
-	auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_refresh_time).count();
-	if (elapsed < REFRESH_INTERVAL_SECONDS) {
+	if (!refresh_mutex.try_lock()) {
+		// Another thread is already refreshing, proceed with the current credentials
 		return;
 	}
+	annotated_lock_guard<annotated_mutex> guard(refresh_mutex, std::adopt_lock);
 
-	// Another thread is already refreshing, nothing to do
-	std::unique_lock<std::mutex> lock(refresh_mutex, std::try_to_lock);
-	if (!lock.owns_lock()) {
-		return;
-	}
-
-	// Re-check now that we hold the lock
-	now = std::chrono::steady_clock::now();
-	elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_refresh_time).count();
-	if (elapsed < REFRESH_INTERVAL_SECONDS) {
-		return;
+	if (!ForceExpiry(context)) {
+		auto elapsed =
+		    std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - last_refresh_time)
+		        .count();
+		if (elapsed < REFRESH_INTERVAL_SECONDS) {
+			return;
+		}
 	}
 
 	auto secret_entry = IcebergCatalog::GetStorageSecret(context, secret);
