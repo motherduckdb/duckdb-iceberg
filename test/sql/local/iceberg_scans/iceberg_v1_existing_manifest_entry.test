@@ -15,3 +15,30 @@ select * from iceberg_scan('data/persistent/iceberg_v1_repro/repro/merch_v1/meta
 6	nba	60
 2	nba	20
 3	mlb	30
+
+# V1 manifests omit content and sequence fields. The manifest reader supplies their V1 defaults.
+query III
+select distinct content, data_sequence_number, file_sequence_number
+from iceberg_metadata('data/persistent/iceberg_v1_repro/repro/merch_v1/metadata/00003-8d01e4aa-d143-49c9-898e-b5e477577b70.metadata.json')
+order by all
+----
+DATA	0	0
+
+# A format upgrade does not write a snapshot, so this V3 metadata still references a V1 manifest list.
+# Its V2-only fields are absent and all six V1-optional count fields are NULL.
+query III
+select *
+from iceberg_scan('data/persistent/iceberg_v1_repro/repro/merch_v1/metadata/00004-v3-upgraded-v1-null-counts.metadata.json')
+order by id
+----
+2	nba	20
+3	mlb	30
+4	nhl	40
+6	nba	60
+
+query IT
+select distinct manifest_sequence_number, manifest_content
+from iceberg_metadata('data/persistent/iceberg_v1_repro/repro/merch_v1/metadata/00004-v3-upgraded-v1-null-counts.metadata.json')
+order by all
+----
+0	DATA

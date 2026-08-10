@@ -29,7 +29,7 @@
 
 namespace duckdb {
 
-class IcebergTableEntry;
+class IcebergTableSchemaVersion;
 class IcebergScanPlanProvider;
 struct IcebergScanPlanContext;
 struct IcebergMultiFileList;
@@ -54,11 +54,11 @@ public:
 	OpenFileInfo GetFile(idx_t i) const override;
 
 public:
-	void SetTable(IcebergTableEntry &table);
+	void SetTable(IcebergTableSchemaVersion &table);
 	shared_ptr<IcebergDeleteData> GetExistingPositionalDeleteData(const string &file_path) const;
 	IcebergPartition GetPartitionForDataFile(const string &file_path) const;
 	void SetScanOrder(unique_ptr<RowGroupOrderOptions> options);
-	optional_ptr<IcebergTableEntry> GetTable() const;
+	optional_ptr<IcebergTableSchemaVersion> GetTable() const;
 	void DisableServerSidePlanning();
 
 	//! Narrow integration surface used by IcebergMultiFileReader.
