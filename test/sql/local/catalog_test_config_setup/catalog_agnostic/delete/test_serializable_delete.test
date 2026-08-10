@@ -2,7 +2,7 @@
 # description: With write.delete.isolation-level = serializable, a DELETE aborts when a concurrent commit appends rows matching its predicate
 # group: [delete]
 
-# require-env CATALOG_TEST_CONFIG_SETUP
+require-env CATALOG_TEST_CONFIG_SETUP
 
 require avro
 
