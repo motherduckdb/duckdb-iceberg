@@ -146,6 +146,9 @@ RewritePlan PlanRewrite(ClientContext &context, const RewriteDataFilesPlanInput 
 	snapshot_info.snapshot = latest_snapshot;
 	snapshot_info.schema_id = table_metadata.GetCurrentSchemaId();
 
+	//! Install vended storage secrets before reading manifest lists from object storage.
+	table_info.LoadCredentials(context);
+
 	IcebergOptions options;
 	auto manifest_list =
 	    IcebergManifestList::Load(table_metadata.GetLocation(), table_metadata, snapshot_info, context, options);
