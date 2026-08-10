@@ -1,6 +1,7 @@
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 
 #include "duckdb/common/assert.hpp"
+#include "duckdb/common/string_util.hpp"
 #include "duckdb/logging/logger.hpp"
 #include "duckdb/parser/parsed_data/create_view_info.hpp"
 #include "duckdb/catalog/catalog_entry/index_catalog_entry.hpp"
@@ -264,6 +265,18 @@ static void VerifyDeleteRetryability(const IcebergTableInformation &table_info,
 	}
 	auto scan_snapshot_id = *transaction_data.base_snapshot_id;
 	auto tip_snapshot_id = *current_snapshot->snapshot_id;
+
+	//! Under serializable delete isolation any concurrent commit is a conflict: even a pure append can
+	//! introduce rows matching the delete predicate that a silent re-apply would leave behind. The default
+	//! ('snapshot') isolation only conflicts on data that was removed or rewritten, handled by DeleteCanReapply.
+	if (scan_snapshot_id != tip_snapshot_id &&
+	    StringUtil::CIEquals(table_info.table_metadata.GetTableProperty(WRITE_DELETE_ISOLATION_LEVEL),
+	                         "serializable")) {
+		throw TransactionException("DELETE on \"%s\" conflicts with a concurrent commit under serializable isolation "
+		                           "(scanned snapshot %s, now at %s); re-run the DELETE.",
+		                           table_info.name, std::to_string(scan_snapshot_id), std::to_string(tip_snapshot_id));
+	}
+
 	if (DeleteCanReapply(table_info.table_metadata, scan_snapshot_id, tip_snapshot_id)) {
 		return;
 	}
