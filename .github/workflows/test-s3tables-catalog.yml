@@ -36,10 +36,7 @@ on:
         default: ''
         type: string
 
-# The literal prefix keeps this group distinct from the calling workflow's own
-# group: an accidental collision would deadlock the caller against its own job.
-# Deliberately no cancel-in-progress either, since cancelling a run mid-flight
-# risks skipping the teardown step and leaking a table bucket.
+# cancel-in-progress = false to avoid skipping teardown step and leaking table buckets
 concurrency:
   group: s3tables-catalog-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
@@ -59,13 +56,8 @@ jobs:
       GEN: ninja
       CC: clang-20
       CXX: clang++-20
-      # Derived from the run rather than from the create step's output, so the
-      # teardown step can find the bucket even if creation only half-succeeded.
+      # bucket name unique to the run
       S3TABLES_BUCKET_NAME: duckdb-iceberg-ci-${{ github.run_id }}-${{ github.run_attempt }}
-      # Used by the aws CLI to create/destroy the bucket and by the S3 secret's
-      # credential_chain provider inside DuckDB. The bucket is created in
-      # AWS_DEFAULT_REGION, which therefore has to be a region where S3 Tables
-      # is available.
       AWS_ACCESS_KEY_ID: ${{ secrets.S3_ICEBERG_TEST_USER_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_ICEBERG_TEST_USER_SECRET }}
       AWS_DEFAULT_REGION: ${{ secrets.S3_ICEBERG_TEST_USER_REGION }}
