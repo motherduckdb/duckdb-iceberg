@@ -76,6 +76,13 @@ SELECT
     chr((65 + (range % 16))::INTEGER),
     'payload-' || (range + 80000)::VARCHAR
 FROM range(16000);
+-- Snapshot tip before rewrite; cleanup rolls back here so warmup + timed runs share state.
+SET VARIABLE pre_rewrite_snapshot = (
+    SELECT snapshot_id
+    FROM iceberg_snapshots(my_datalake.default.partitioned_rewrite_bench)
+    ORDER BY sequence_number DESC
+    LIMIT 1
+);
 
 run
 SELECT *
@@ -83,4 +90,11 @@ FROM iceberg_rewrite_data_files(
     'my_datalake.default.partitioned_rewrite_bench',
     min_input_files => 1,
     rewrite_all => true
+);
+
+cleanup
+SELECT *
+FROM iceberg_rollback_to_snapshot(
+    'my_datalake.default.partitioned_rewrite_bench',
+    getvariable('pre_rewrite_snapshot')
 );
