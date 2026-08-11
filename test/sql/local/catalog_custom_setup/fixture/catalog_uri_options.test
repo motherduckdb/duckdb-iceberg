@@ -59,17 +59,15 @@ ATTACH '' AS my_datalake (
 );
 
 statement ok
-use my_datalake;
+DROP TABLE IF EXISTS my_datalake.default.catalog_uri_test;
 
-query III
-select * from table_more_deletes;
+statement ok
+CREATE TABLE my_datalake.default.catalog_uri_test AS select 'hello world' a;
+
+query I
+select a from my_datalake.default.catalog_uri_test;
 ----
-2023-03-01	1	a
-2023-03-02	2	b
-2023-03-03	3	c
-2023-03-10	10	j
-2023-03-11	11	k
-2023-03-12	12	l
+hello world
 
 query I
 SELECT message FROM duckdb_logs() where type = 'Iceberg' and message like '%uri% is inferred%' order by timestamp
@@ -117,9 +115,9 @@ ATTACH '' AS my_datalake (
 )
 
 query I
-SELECT count(*) FROM my_datalake.default.table_more_deletes
+SELECT a FROM my_datalake.default.catalog_uri_test
 ----
-8
+hello world
 
 statement ok
 DETACH my_datalake
