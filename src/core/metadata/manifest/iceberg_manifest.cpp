@@ -10,7 +10,7 @@
 #include "catalog/rest/api/iceberg_create_table_request.hpp"
 #include "catalog/rest/api/catalog_utils.hpp"
 #include "core/expression/iceberg_value.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 
 #include <optional>
 
@@ -322,6 +322,26 @@ bool IcebergDataFile::HasFirstRowId() const {
 int64_t IcebergDataFile::GetFirstRowId() const {
 	D_ASSERT(HasFirstRowId());
 	return *first_row_id;
+}
+
+bool IcebergDataFile::IsDeletionVector() const {
+	if (!referenced_data_file) {
+		return false;
+	}
+	if (!content_offset) {
+		return false;
+	}
+	if (!content_size_in_bytes) {
+		return false;
+	}
+	return true;
+}
+
+int64_t IcebergDataFile::GetContentSizeInBytes() const {
+	if (IsDeletionVector()) {
+		return *content_size_in_bytes;
+	}
+	return file_size_in_bytes;
 }
 
 LogicalType IcebergDataFile::GetType(const IcebergTableMetadata &metadata, const LogicalType &partition_type) {

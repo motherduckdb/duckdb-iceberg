@@ -14,8 +14,6 @@ require httpfs
 statement ok
 SET default_transaction_invalidation_policy='SYNTACTIC_ERRORS_DO_NOT_INVALIDATE';
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 set iceberg_use_metadata_log = true;
@@ -42,7 +40,7 @@ insert into my_datalake.default.tbl VALUES ('hello world', true);
 statement error
 ALTER TABLE my_datalake.default.tbl RENAME a TO b;
 ----
-Catalog Error: Column with name 'b' already exists on the table 'tbl', RENAME COLUMN failed
+Binder Error: Column with name 'b' already exists on the table 'tbl', RENAME COLUMN failed
 
 # Rename to same name (second alter before commit)
 

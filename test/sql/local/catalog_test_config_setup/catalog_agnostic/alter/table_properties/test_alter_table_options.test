@@ -13,8 +13,6 @@ require httpfs
 
 require core_functions
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 drop table if exists my_datalake.default.alter_table_set_options;

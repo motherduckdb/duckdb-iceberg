@@ -1,0 +1,118 @@
+name: Test S3 Tables Catalog
+on:
+  # Manual only for now: every run creates and destroys a real AWS S3 Tables
+  # table bucket, so we don't want it firing on every push.
+  workflow_dispatch:
+
+# Deliberately no cancel-in-progress: cancelling a run mid-flight risks skipping
+# the teardown step and leaking a table bucket.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test-s3tables:
+    name: Test against S3 Tables catalog
+    runs-on: ubuntu-latest
+    # Bound the run so a hung cloud test can't keep the table bucket alive for
+    # the default six hours.
+    timeout-minutes: 120
+    env:
+      GEN: ninja
+      CC: clang-20
+      CXX: clang++-20
+      # Derived from the run rather than from the create step's output, so the
+      # teardown step can find the bucket even if creation only half-succeeded.
+      S3TABLES_BUCKET_NAME: duckdb-iceberg-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      # Used by the aws CLI to create/destroy the bucket and by the S3 secret's
+      # credential_chain provider inside DuckDB. The bucket is created in
+      # AWS_DEFAULT_REGION, which therefore has to be a region where S3 Tables
+      # is available.
+      AWS_ACCESS_KEY_ID: ${{ secrets.S3_ICEBERG_TEST_USER_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_ICEBERG_TEST_USER_SECRET }}
+      AWS_DEFAULT_REGION: ${{ secrets.S3_ICEBERG_TEST_USER_REGION }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: 'true'
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install tools
+        run: python3 duckdb/scripts/ci/retry.py -- make -C duckdb toolsci
+
+      - name: Setup Ccache
+        uses: hendrikmuhs/ccache-action@main
+        with:
+          key: ${{ github.job }}
+          save: ${{ github.ref == 'refs/heads/main' }}
+          max-size: 5GB
+          evict-old-files: job
+
+      - name: Build (release)
+        uses: duckdb/duckdb-ci/build-duckdb@main
+        env:
+          STATIC_LIBCPP: 1
+          ENABLE_EXTENSION_AUTOLOADING: 1
+          ENABLE_EXTENSION_AUTOINSTALL: 1
+        with:
+          build-type: release
+          build: python3 duckdb/scripts/ci/retry.py -- make release
+          vcpkg-commit: 84bab45d415d22042bd0b9081aea57f362da3f35
+
+      - name: Create S3 Tables table bucket
+        run: |
+          arn="$(scripts/s3tables_table_bucket.sh create "$S3TABLES_BUCKET_NAME")"
+          if [[ -z $arn ]]; then
+            echo "create-table-bucket returned no ARN" >&2
+            exit 1
+          fi
+          echo "Created table bucket $arn"
+          echo "S3TABLES_TABLE_BUCKET_ARN=$arn" >> "$GITHUB_ENV"
+
+      - name: Point the test config at the new table bucket
+        run: |
+          config=test/configs/cloud_s3tables.json
+          jq --arg arn "$S3TABLES_TABLE_BUCKET_ARN" \
+            '(.test_env[] | select(.env_name == "S3TABLES_TABLE_BUCKET_ARN") | .env_value) = $arn' \
+            "$config" > "$config.patched"
+          mv "$config.patched" "$config"
+
+          # Confirm the substitution landed without echoing the ARN itself.
+          patched="$(jq -r '.test_env[] | select(.env_name == "S3TABLES_TABLE_BUCKET_ARN") | .env_value' "$config")"
+          if [[ $patched != "$S3TABLES_TABLE_BUCKET_ARN" ]]; then
+            echo "Failed to write the table bucket ARN into $config" >&2
+            exit 1
+          fi
+          echo "$config now points at the table bucket created for this run"
+
+      - name: Smoke test the attached catalog
+        # Fail in seconds with a readable error if the bucket isn't reachable,
+        # rather than after the whole suite dies in on_init.
+        run: |
+          ./build/release/duckdb -unsigned -c "
+            CREATE SECRET s3tables_secret (TYPE S3, PROVIDER credential_chain);
+            ATTACH '${S3TABLES_TABLE_BUCKET_ARN}' AS my_datalake (TYPE ICEBERG, ENDPOINT_TYPE S3_TABLES);
+            CREATE SCHEMA IF NOT EXISTS my_datalake.default;
+            SELECT count(*) AS visible_tables FROM (SHOW ALL TABLES);
+          "
+
+      - name: Run Generic IRC tests
+        run: |
+          ./build/release/test/unittest --order lex "$PWD/test/sql/local/catalog_test_config_setup/*" --list-test-names-only || true
+          ./build/release/test/unittest --order lex "$PWD/test/sql/local/catalog_test_config_setup/*" --test-config test/configs/cloud_s3tables.json
+
+      - name: Tear down S3 Tables table bucket
+        # Must run even when the build, the smoke test or the suite failed, so a
+        # run never leaves a table bucket (and its storage bill) behind.
+        if: always()
+        run: |
+          scripts/s3tables_table_bucket.sh destroy "$S3TABLES_BUCKET_NAME"

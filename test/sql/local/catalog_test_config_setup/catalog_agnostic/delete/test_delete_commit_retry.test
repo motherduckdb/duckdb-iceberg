@@ -13,8 +13,6 @@ require iceberg
 require httpfs
 
 # Do not ignore 'HTTP' / conflict error messages!
-set ignore_error_messages
-
 # ----------------------------------------------------------------------------
 # Concurrent APPEND: the delete's targeted data is untouched, so on the commit
 # conflict it refreshes and re-applies against the new tip and succeeds.

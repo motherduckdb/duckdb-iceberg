@@ -10,8 +10,8 @@
 #include "duckdb/common/exception/conversion_exception.hpp"
 
 #include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 #include "catalog/rest/api/catalog_api.hpp"
 #include "catalog/rest/api/catalog_utils.hpp"
@@ -22,8 +22,8 @@
 
 namespace duckdb {
 
-void LoadTableResultCache::EvictIfCurrent(const IcebergTableInformation &table) {
-	lock_guard<mutex> guard(lock);
+void LoadTableResultCache::EvictIfCurrent(const IcebergTable &table) {
+	annotated_lock_guard<annotated_mutex> guard(lock);
 	auto it = tables.find(table.GetTableKey());
 	if (it == tables.end()) {
 		return;
@@ -374,6 +374,24 @@ void IcebergCatalog::ParsePrefix() {
 	}
 }
 
+void IcebergCatalog::ParseNamespaceSeparator() {
+	auto default_namespace_separator_it = defaults.find("namespace-separator");
+	auto override_namespace_separator_it = overrides.find("namespace-separator");
+
+	const string *namespace_separator_property = nullptr;
+	if (default_namespace_separator_it != defaults.end()) {
+		namespace_separator_property = &default_namespace_separator_it->second;
+	}
+	// Sometimes the namespace_separator is in the overrides. Prefer the override namespace_separator.
+	if (override_namespace_separator_it != overrides.end()) {
+		namespace_separator_property = &override_namespace_separator_it->second;
+	}
+	if (!namespace_separator_property) {
+		return;
+	}
+	namespace_separator = *namespace_separator_property;
+}
+
 void IcebergCatalog::GetConfig(ClientContext &context, IcebergEndpointType &endpoint_type) {
 	// set the prefix to be empty. To get the config endpoint,
 	// we cannot add a default prefix.
@@ -393,6 +411,7 @@ void IcebergCatalog::GetConfig(ClientContext &context, IcebergEndpointType &endp
 		StringUtil::RTrim(uri, "/");
 	}
 	ParsePrefix();
+	ParseNamespaceSeparator();
 
 	if (auto &endpoints = catalog_config.endpoints) {
 		for (auto &endpoint : *endpoints) {

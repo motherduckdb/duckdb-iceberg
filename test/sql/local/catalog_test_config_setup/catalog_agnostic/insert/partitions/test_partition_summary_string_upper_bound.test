@@ -12,8 +12,6 @@ require iceberg
 
 require httpfs
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 drop table if exists my_datalake.default.partition_summary_upper_bound;

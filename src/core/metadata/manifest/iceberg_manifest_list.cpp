@@ -10,7 +10,7 @@
 
 #include "core/metadata/partition/iceberg_partition_spec.hpp"
 #include "core/expression/iceberg_value.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "core/expression/iceberg_transform.hpp"
 #include "planning/metadata_io/avro/avro_scan.hpp"
 #include "common/iceberg_utils.hpp"
@@ -72,6 +72,132 @@ unordered_map<string, string> GetManifestMetadataMap(const IcebergTableMetadata 
 	return result;
 }
 
+IcebergManifestCounts IcebergManifestCounts::Zero() {
+	IcebergManifestCounts result;
+	result.added_files_count = 0;
+	result.existing_files_count = 0;
+	result.deleted_files_count = 0;
+	result.added_rows_count = 0;
+	result.existing_rows_count = 0;
+	result.deleted_rows_count = 0;
+	return result;
+}
+
+void IcebergManifestFile::SetCountsFromEntries(const vector<IcebergManifestEntry> &entries) {
+	counts = IcebergManifestCounts::Zero();
+	auto &manifest_counts = *counts;
+	for (const auto &entry : entries) {
+		switch (entry.status) {
+		case IcebergManifestEntryStatusType::ADDED:
+			(*manifest_counts.added_files_count)++;
+			*manifest_counts.added_rows_count += entry.data_file.record_count;
+			break;
+		case IcebergManifestEntryStatusType::EXISTING:
+			(*manifest_counts.existing_files_count)++;
+			*manifest_counts.existing_rows_count += entry.data_file.record_count;
+			break;
+		case IcebergManifestEntryStatusType::DELETED:
+			(*manifest_counts.deleted_files_count)++;
+			*manifest_counts.deleted_rows_count += entry.data_file.record_count;
+			break;
+		default:
+			throw InvalidConfigurationException("Invalid manifest entry status");
+		}
+	}
+}
+
+namespace {
+
+struct IcebergManifestEntryMetrics {
+public:
+	IcebergManifestEntryMetrics(int64_t &position_deletes, int64_t &deletion_vectors, int64_t &equality_deletes,
+	                            int64_t &position_delete_files, int64_t &equality_delete_files, int64_t &delete_files,
+	                            int64_t &data_files, int64_t &records, int64_t &files_size, idx_t &files_count,
+	                            idx_t &rows_count)
+	    : position_deletes(position_deletes), deletion_vectors(deletion_vectors), equality_deletes(equality_deletes),
+	      position_delete_files(position_delete_files), equality_delete_files(equality_delete_files),
+	      delete_files(delete_files), data_files(data_files), records(records), files_size(files_size),
+	      files_count(files_count), rows_count(rows_count) {
+	}
+
+public:
+	int64_t &position_deletes;      //! added|removed-position-deletes
+	int64_t &deletion_vectors;      //! added|removed-dvs
+	int64_t &equality_deletes;      //! added|removed-equality-deletes
+	int64_t &position_delete_files; //! added|removed-position-delete-files
+	int64_t &equality_delete_files; //! added|removed-equality-delete-files
+	int64_t &delete_files;          //! added|removed-delete-files
+	int64_t &data_files;            //! added|deleted-data-files
+	int64_t &records;               //! added|deleted-records
+	int64_t &files_size;            //! added|removed-files-size
+
+	idx_t &files_count;
+	idx_t &rows_count;
+};
+
+static IcebergManifestEntryMetrics GetManifestEntryMetrics(IcebergManifestMetrics &metrics,
+                                                           IcebergManifestFile &manifest_file,
+                                                           IcebergManifestEntryStatusType direction) {
+	D_ASSERT(direction != IcebergManifestEntryStatusType::EXISTING);
+	D_ASSERT(manifest_file.counts && manifest_file.counts->Complete());
+	auto &counts = *manifest_file.counts;
+	if (direction == IcebergManifestEntryStatusType::ADDED) {
+		return IcebergManifestEntryMetrics(metrics.added_position_deletes, metrics.added_deletion_vectors,
+		                                   metrics.added_equality_deletes, metrics.added_position_delete_files,
+		                                   metrics.added_equality_delete_files, metrics.added_delete_files,
+		                                   metrics.added_data_files, metrics.added_records, metrics.added_files_size,
+		                                   *counts.added_files_count, *counts.added_rows_count);
+	} else {
+		return IcebergManifestEntryMetrics(
+		    metrics.removed_position_deletes, metrics.removed_deletion_vectors, metrics.removed_equality_deletes,
+		    metrics.removed_position_delete_files, metrics.removed_equality_delete_files, metrics.removed_delete_files,
+		    metrics.deleted_data_files, metrics.deleted_records, metrics.removed_files_size,
+		    *counts.deleted_files_count, *counts.deleted_rows_count);
+	}
+}
+
+} // namespace
+
+static void CollectDeleteManifestMetrics(const IcebergManifestEntry &manifest_entry,
+                                         IcebergManifestEntryMetrics &metrics) {
+	auto &data_file = manifest_entry.data_file;
+	metrics.files_count++;
+	metrics.rows_count += data_file.record_count;
+	metrics.delete_files++;
+	switch (data_file.content) {
+	case IcebergManifestEntryContentType::EQUALITY_DELETES: {
+		metrics.equality_delete_files++;
+		metrics.equality_deletes += data_file.record_count;
+		break;
+	}
+	case IcebergManifestEntryContentType::POSITION_DELETES: {
+		metrics.position_deletes += data_file.record_count;
+		if (data_file.IsDeletionVector()) {
+			metrics.deletion_vectors++;
+		} else {
+			metrics.position_delete_files++;
+		}
+		break;
+	}
+	case IcebergManifestEntryContentType::DATA: {
+		throw InvalidConfigurationException("Encountered data_file.content == DATA in DELETE manifest");
+	}
+	}
+}
+
+static void CollectDataManifestMetrics(const IcebergManifestEntry &manifest_entry,
+                                       IcebergManifestEntryMetrics &metrics) {
+	auto &data_file = manifest_entry.data_file;
+	if (data_file.content != IcebergManifestEntryContentType::DATA) {
+		throw InvalidConfigurationException("Encountered data_file.content != DATA in DATA manifest");
+	}
+	metrics.files_count++;
+	metrics.rows_count += data_file.record_count;
+
+	metrics.data_files++;
+	metrics.records += data_file.record_count;
+}
+
 IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem &fs, sequence_number_t sequence_number,
                                                                      const IcebergTableMetadata &table_metadata,
                                                                      const IcebergManifestMetadata &manifest_metadata,
@@ -96,37 +222,40 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 	manifest_file.content = manifest_content;
 	//! NOTE: this gets overwritten on commit
 	manifest_file.sequence_number = sequence_number;
-	manifest_file.added_files_count = 0;
-	manifest_file.deleted_files_count = 0;
-	manifest_file.existing_files_count = 0;
-	manifest_file.added_rows_count = 0;
-	manifest_file.existing_rows_count = 0;
-	manifest_file.deleted_rows_count = 0;
+	manifest_file.counts = IcebergManifestCounts::Zero();
 	manifest_file.partition_spec_id = manifest_partition_spec_id;
+
+	manifest_list_entry.metrics.emplace();
+	auto &metrics = *manifest_list_entry.metrics;
 
 	//! Add the files to the manifest
 	for (auto &manifest_entry : manifest_entries) {
 		auto &data_file = manifest_entry.data_file;
+
 		if (data_file.content == IcebergManifestEntryContentType::DATA) {
 			next_row_id += data_file.record_count;
 		}
-		switch (manifest_entry.status) {
-		case IcebergManifestEntryStatusType::ADDED: {
-			manifest_file.added_files_count++;
-			manifest_file.added_rows_count += data_file.record_count;
-			break;
-		}
-		case IcebergManifestEntryStatusType::DELETED: {
-			manifest_file.deleted_files_count++;
-			manifest_file.deleted_rows_count += data_file.record_count;
-			break;
-		}
-		case IcebergManifestEntryStatusType::EXISTING: {
-			manifest_file.existing_files_count++;
-			manifest_file.existing_rows_count += data_file.record_count;
-			break;
-		}
-		}
+
+		do {
+			if (manifest_entry.status == IcebergManifestEntryStatusType::EXISTING) {
+				auto &counts = *manifest_file.counts;
+				(*counts.existing_files_count)++;
+				*counts.existing_rows_count += data_file.record_count;
+				break;
+			}
+			auto entry_metrics = GetManifestEntryMetrics(metrics, manifest_file, manifest_entry.status);
+
+			//! Gather 'added-files-size' and 'removed-files-size' metrics
+			auto new_files_size =
+			    IcebergUtils::AddFileSizeChecked(entry_metrics.files_size, data_file.GetContentSizeInBytes());
+			entry_metrics.files_size = new_files_size;
+
+			if (manifest_metadata.content == IcebergManifestContentType::DATA) {
+				CollectDataManifestMetrics(manifest_entry, entry_metrics);
+			} else {
+				CollectDeleteManifestMetrics(manifest_entry, entry_metrics);
+			}
+		} while (false);
 
 		//! NOTE: this gets overwritten on commit
 		auto entry_data_seq = manifest_entry.GetSequenceNumber(manifest_file);
@@ -360,8 +489,20 @@ static void WritePartitions(FieldSummaryListWriter &writer, const ManifestPartit
 	}
 }
 
+template <class T>
+static void WriteManifestCount(VectorWriter<T> &writer, const optional<idx_t> &count, bool required, const char *name) {
+	if (!count) {
+		if (required) {
+			throw InvalidConfigurationException("manifest_file.%s is not set", name);
+		}
+		writer.WriteNull();
+		return;
+	}
+	writer.WriteValue(static_cast<T>(*count));
+}
+
 struct ManifestListVectorWriters {
-	explicit ManifestListVectorWriters(DataChunk &data, idx_t row_count)
+	explicit ManifestListVectorWriters(DataChunk &data, idx_t row_count, bool counts_required_p)
 	    : manifest_path(data.data[MANIFEST_PATH_INDEX], row_count, 0),
 	      manifest_length(data.data[MANIFEST_LENGTH_INDEX], row_count, 0),
 	      partition_spec_id(data.data[PARTITION_SPEC_ID_INDEX], row_count, 0),
@@ -372,7 +513,7 @@ struct ManifestListVectorWriters {
 	      added_rows_count(data.data[ADDED_ROWS_COUNT_INDEX], row_count, 0),
 	      existing_rows_count(data.data[EXISTING_ROWS_COUNT_INDEX], row_count, 0),
 	      deleted_rows_count(data.data[DELETED_ROWS_COUNT_INDEX], row_count, 0),
-	      partitions(data.data[PARTITIONS_INDEX], row_count, 0) {
+	      partitions(data.data[PARTITIONS_INDEX], row_count, 0), counts_required(counts_required_p) {
 		if (data.ColumnCount() > CONTENT_INDEX) {
 			content.emplace(data.data[CONTENT_INDEX], row_count, 0);
 			sequence_number.emplace(data.data[SEQUENCE_NUMBER_INDEX], row_count, 0);
@@ -391,12 +532,14 @@ struct ManifestListVectorWriters {
 			throw InvalidConfigurationException("manifest_file.added_snapshot_id is not set");
 		}
 		added_snapshot_id.WriteValue(*manifest.added_snapshot_id);
-		added_files_count.WriteValue(static_cast<int32_t>(manifest.added_files_count));
-		existing_files_count.WriteValue(static_cast<int32_t>(manifest.existing_files_count));
-		deleted_files_count.WriteValue(static_cast<int32_t>(manifest.deleted_files_count));
-		added_rows_count.WriteValue(static_cast<int64_t>(manifest.added_rows_count));
-		existing_rows_count.WriteValue(static_cast<int64_t>(manifest.existing_rows_count));
-		deleted_rows_count.WriteValue(static_cast<int64_t>(manifest.deleted_rows_count));
+		IcebergManifestCounts empty_counts;
+		auto &counts = manifest.counts ? *manifest.counts : empty_counts;
+		WriteManifestCount(added_files_count, counts.added_files_count, counts_required, "added_files_count");
+		WriteManifestCount(existing_files_count, counts.existing_files_count, counts_required, "existing_files_count");
+		WriteManifestCount(deleted_files_count, counts.deleted_files_count, counts_required, "deleted_files_count");
+		WriteManifestCount(added_rows_count, counts.added_rows_count, counts_required, "added_rows_count");
+		WriteManifestCount(existing_rows_count, counts.existing_rows_count, counts_required, "existing_rows_count");
+		WriteManifestCount(deleted_rows_count, counts.deleted_rows_count, counts_required, "deleted_rows_count");
 		WritePartitions(partitions, manifest.partitions);
 
 		if (content) {
@@ -418,9 +561,12 @@ struct ManifestListVectorWriters {
 		auto row_id = manifest.first_row_id;
 		if (!row_id && manifest.content == IcebergManifestContentType::DATA) {
 			D_ASSERT(next_row_id);
+			if (!manifest.counts || !manifest.counts->added_rows_count || !manifest.counts->existing_rows_count) {
+				throw InvalidConfigurationException("manifest_file row counts are not set");
+			}
 			row_id = static_cast<int64_t>(*next_row_id);
-			*next_row_id += manifest.added_rows_count;
-			*next_row_id += manifest.existing_rows_count;
+			*next_row_id += *manifest.counts->added_rows_count;
+			*next_row_id += *manifest.counts->existing_rows_count;
 		}
 		if (row_id) {
 			first_row_id->WriteValue(*row_id);
@@ -461,6 +607,7 @@ private:
 	optional<VectorWriter<int64_t>> sequence_number;
 	optional<VectorWriter<int64_t>> min_sequence_number;
 	optional<VectorWriter<int64_t>> first_row_id;
+	bool counts_required;
 };
 
 } // namespace
@@ -501,23 +648,25 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
 	// added_snapshot_id: long - 503
 	AddSimpleColumn(metadata, "added_snapshot_id", LogicalType::BIGINT, ADDED_SNAPSHOT_ID, false);
 
+	const bool counts_nullable = table_metadata.iceberg_version == 1;
+
 	// added_files_count: int - 504
-	AddSimpleColumn(metadata, "added_files_count", LogicalType::INTEGER, ADDED_FILES_COUNT, false);
+	AddSimpleColumn(metadata, "added_files_count", LogicalType::INTEGER, ADDED_FILES_COUNT, counts_nullable);
 
 	// existing_files_count: int - 505
-	AddSimpleColumn(metadata, "existing_files_count", LogicalType::INTEGER, EXISTING_FILES_COUNT, false);
+	AddSimpleColumn(metadata, "existing_files_count", LogicalType::INTEGER, EXISTING_FILES_COUNT, counts_nullable);
 
 	// deleted_files_count: int - 506
-	AddSimpleColumn(metadata, "deleted_files_count", LogicalType::INTEGER, DELETED_FILES_COUNT, false);
+	AddSimpleColumn(metadata, "deleted_files_count", LogicalType::INTEGER, DELETED_FILES_COUNT, counts_nullable);
 
 	// added_rows_count: long - 512
-	AddSimpleColumn(metadata, "added_rows_count", LogicalType::BIGINT, ADDED_ROWS_COUNT, false);
+	AddSimpleColumn(metadata, "added_rows_count", LogicalType::BIGINT, ADDED_ROWS_COUNT, counts_nullable);
 
 	// existing_rows_count: long - 513
-	AddSimpleColumn(metadata, "existing_rows_count", LogicalType::BIGINT, EXISTING_ROWS_COUNT, false);
+	AddSimpleColumn(metadata, "existing_rows_count", LogicalType::BIGINT, EXISTING_ROWS_COUNT, counts_nullable);
 
 	// deleted_rows_count: long - 514
-	AddSimpleColumn(metadata, "deleted_rows_count", LogicalType::BIGINT, DELETED_ROWS_COUNT, false);
+	AddSimpleColumn(metadata, "deleted_rows_count", LogicalType::BIGINT, DELETED_ROWS_COUNT, counts_nullable);
 
 	// partitions: list<508: field_summary> - 507
 	metadata.names.push_back("partitions");
@@ -581,7 +730,7 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
 			data.Reset();
 		}
 
-		ManifestListVectorWriters writers(data, chunk_count);
+		ManifestListVectorWriters writers(data, chunk_count, table_metadata.iceberg_version >= 2);
 		for (idx_t i = 0; i < chunk_count; i++) {
 			const auto &manifest_entry = manifest_files[offset + i];
 			const auto &manifest = manifest_entry.file;
@@ -601,6 +750,35 @@ Value IcebergManifestList::FieldSummaryFieldIds() {
 	return manifest_list::FieldSummaryFieldIds();
 }
 
+void IcebergManifestList::LoadManifestFiles(const IcebergSnapshotScanInfo &snapshot_info,
+                                            const IcebergTableMetadata &metadata, ClientContext &context,
+                                            vector<IcebergManifestListEntry> &result) {
+	auto &snapshot = *snapshot_info.snapshot;
+	if (!snapshot.manifests.empty()) {
+		result.reserve(result.size() + snapshot.manifests.size());
+		for (auto &manifest_path : snapshot.manifests) {
+			IcebergManifestFile manifest_file(manifest_path);
+			manifest_file.manifest_length = 0;
+			manifest_file.partition_spec_id = metadata.default_spec_id;
+			manifest_file.content = IcebergManifestContentType::DATA;
+			manifest_file.sequence_number = 0;
+			manifest_file.min_sequence_number = 0;
+			manifest_file.added_snapshot_id = snapshot.snapshot_id;
+			result.emplace_back(std::move(manifest_file));
+		}
+		return;
+	}
+	if (snapshot.manifest_list.empty()) {
+		throw InvalidConfigurationException("Snapshot must contain either 'manifest-list' or 'manifests'");
+	}
+
+	auto scan = AvroScan::ScanManifestList(snapshot_info, metadata, context, snapshot.manifest_list, result);
+	auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
+	while (!manifest_list_reader->Finished()) {
+		manifest_list_reader->Read();
+	}
+}
+
 unique_ptr<IcebergManifestList> IcebergManifestList::Load(const string &iceberg_path,
                                                           const IcebergTableMetadata &metadata,
                                                           const IcebergSnapshotScanInfo &snapshot_info,
@@ -615,17 +793,18 @@ unique_ptr<IcebergManifestList> IcebergManifestList::Load(const string &iceberg_
 	auto ret = make_uniq<IcebergManifestList>(*snapshot.snapshot_id, *snapshot.sequence_number, snapshot.manifest_list);
 
 	auto &fs = FileSystem::GetFileSystem(context);
-	auto manifest_list_full_path = options.allow_moved_paths
-	                                   ? IcebergUtils::GetFullPath(iceberg_path, snapshot.manifest_list, fs)
-	                                   : snapshot.manifest_list;
-
-	//! Read the entire manifest list, producing 'manifest_file' items
-	auto scan =
-	    AvroScan::ScanManifestList(snapshot_info, metadata, context, manifest_list_full_path, ret->manifest_entries);
-	auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
-
-	while (!manifest_list_reader->Finished()) {
-		manifest_list_reader->Read();
+	if (!snapshot.manifests.empty()) {
+		LoadManifestFiles(snapshot_info, metadata, context, ret->manifest_entries);
+	} else {
+		auto manifest_list_full_path = options.allow_moved_paths
+		                                   ? IcebergUtils::GetFullPath(iceberg_path, snapshot.manifest_list, fs)
+		                                   : snapshot.manifest_list;
+		auto scan = AvroScan::ScanManifestList(snapshot_info, metadata, context, manifest_list_full_path,
+		                                       ret->manifest_entries);
+		auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
+		while (!manifest_list_reader->Finished()) {
+			manifest_list_reader->Read();
+		}
 	}
 
 	//! Read all manifest files, producing 'manifest_entry' items

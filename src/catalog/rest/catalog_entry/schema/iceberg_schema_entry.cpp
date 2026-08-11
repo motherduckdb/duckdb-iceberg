@@ -14,10 +14,10 @@
 #include "duckdb/planner/expression_binder/table_function_binder.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
 #include "catalog/rest/api/iceberg_type.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
 #include "common/iceberg_default.hpp"
@@ -52,10 +52,10 @@ bool IcebergSchemaEntry::HandleCreateConflict(CatalogTransaction &transaction, C
 		// We cannot create (or stage create) a table replace within a transaction yet.
 		// FIXME: With Snapshot operation type overwrite, you can handle create or replace for tables.
 		auto &iceberg_transaction = GetICTransaction(transaction);
-		auto table_key = IcebergTableInformation::GetTableKey(namespace_items, entry_name);
+		auto &ic_catalog = catalog.Cast<IcebergCatalog>();
+		auto table_key = IcebergTable::GetTableKey(ic_catalog, namespace_items, entry_name);
 		auto latest_state = iceberg_transaction.GetLatestTableState(table_key);
 		if (latest_state && latest_state->IsDroppedOrRenamed()) {
-			auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 			vector<string> qualified_name = {ic_catalog.GetName().GetIdentifierName()};
 			qualified_name.insert(qualified_name.end(), namespace_items.begin(), namespace_items.end());
 			qualified_name.push_back(entry_name);
@@ -130,8 +130,8 @@ void IcebergSchemaEntry::DropEntry(ClientContext &context, DropInfo &info, bool 
 		auto &table_info = table_info_it->second;
 		auto &table = transaction.DeleteTable(*table_info);
 		//! FIXME: what?
-		// must init schema versions after copy. Schema versions have a pointer to IcebergTableInformation
-		// if the IcebergTableInformation is moved, then the pointer is no longer valid.
+		// must init schema versions after copy. Schema versions have a pointer to IcebergTable
+		// if the IcebergTable is moved, then the pointer is no longer valid.
 		table.InitSchemaVersions();
 	}
 }
@@ -312,7 +312,7 @@ static void ThrowIfColumnReferencedBySortOrder(const IcebergTableMetadata &table
 	    sort_order_field->null_order);
 }
 
-void IntroduceNewSchema(IcebergTableInformation &updated_table, IcebergTransactionData &transaction_data,
+void IntroduceNewSchema(IcebergTable &updated_table, IcebergTransactionData &transaction_data,
                         shared_ptr<IcebergTableSchema> new_schema) {
 	auto new_schema_id = new_schema->schema_id;
 
@@ -333,8 +333,8 @@ IcebergColumnDefinition &ResolveColumn(T &alter_table_info, const shared_ptr<Ice
 
 	auto column_p = new_schema->GetMutableFromPath({column_name}, nullptr);
 	if (!column_p) {
-		throw CatalogException("Column with name '%s' does not exist on the table '%s'", column_name,
-		                       alter_table_info.GetAlterEntryData().GetQualifiedName().Name());
+		throw BinderException("Binder Error: Table \"%s\" does not have a column with name \"%s\"",
+		                      alter_table_info.GetAlterEntryData().GetQualifiedName().ToString(), column_name);
 	}
 	auto &column = *column_p;
 	return column;
@@ -349,7 +349,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 	if (!catalog_entry) {
 		throw CatalogException("Table with name \"%s\" does not exist!", info.GetQualifiedName().Name());
 	}
-	auto &table_entry = catalog_entry->Cast<IcebergTableEntry>();
+	auto &table_entry = catalog_entry->Cast<IcebergTableSchemaVersion>();
 	auto &catalog_table_info = table_entry.table_info;
 
 	if (info.type == AlterType::ALTER_TABLE) {
@@ -358,11 +358,11 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			auto &rename_table_info = alter_table_info.Cast<RenameTableInfo>();
 			auto &new_name = rename_table_info.new_table_name;
 
-			EntryLookupInfo lookup(CatalogType::TABLE_ENTRY, new_name);
+			EntryLookupInfo lookup(CatalogType::TABLE_ENTRY, QualifiedName(new_name));
 			auto other_catalog_entry = tables.GetEntry(context, lookup);
 			if (other_catalog_entry) {
 				//! The table exists at this point, check if it was deleted/renamed in the transaction
-				auto &other_table_entry = other_catalog_entry->Cast<IcebergTableEntry>();
+				auto &other_table_entry = other_catalog_entry->Cast<IcebergTableSchemaVersion>();
 				auto &other_table_info = other_table_entry.table_info;
 				auto other_table_key = other_table_info.GetTableKey();
 				auto state = irc_transaction.GetLatestTableState(other_table_key);
@@ -553,13 +553,13 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 
 		auto column_p = new_schema->GetMutableFromPath({column_name}, nullptr);
 		if (!column_p) {
-			throw CatalogException("Column with name '%s' does not exist on the table '%s', RENAME COLUMN failed",
-			                       column_name, table_entry.name);
+			throw BinderException("Column with name '%s' does not exist on the table '%s', RENAME COLUMN failed",
+			                      column_name, table_entry.name);
 		}
 		auto collision_column_p = new_schema->GetMutableFromPath({new_name}, nullptr);
 		if (collision_column_p) {
-			throw CatalogException("Column with name '%s' already exists on the table '%s', RENAME COLUMN failed",
-			                       new_name, table_entry.name);
+			throw BinderException("Column with name '%s' already exists on the table '%s', RENAME COLUMN failed",
+			                      new_name, table_entry.name);
 		}
 		auto &column = *column_p;
 		column.name = new_name.GetIdentifierName();
@@ -654,17 +654,14 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 
 		auto column_p = new_schema->GetMutableFromPath({column_name}, nullptr);
 		if (!column_p) {
-			throw CatalogException("Column with name '%s' does not exist on the table '%s', SET DEFAULT failed",
-			                       column_name, table_entry.name);
+			throw BinderException("Binder Error: Table \"%s\" does not have a column with name \"%s\"",
+			                      table_entry.name, column_name);
 		}
 		auto &column = *column_p;
-		if (updated_table.table_metadata.iceberg_version < 3) {
-			throw NotImplementedException("SET DEFAULT is not supported on tables < V3");
-		}
 
 		IcebergDefaultBinder binder(context);
 		auto default_constant_value = binder.Evaluate(expression.get(), column.type);
-		column.SetWriteDefault(default_constant_value);
+		column.SetWriteDefault(default_constant_value, updated_table.table_metadata.iceberg_version);
 
 		auto new_schema_id = new_schema->schema_id;
 

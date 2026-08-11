@@ -14,8 +14,6 @@ require httpfs
 
 require json
 
-set ignore_error_messages
-
 statement ok
 drop table if exists my_datalake.default.rewrite_commit_basic;
 
@@ -83,6 +81,25 @@ order by json_extract_string(snap, '$."sequence-number"')::BIGINT desc
 limit 1;
 ----
 true	true	true
+
+# Replacing six data files with one must also update file and record totals, not just sizes.
+query IIIIII
+select
+	json_extract_string(snap, '$.summary."added-data-files"')::BIGINT,
+	json_extract_string(snap, '$.summary."deleted-data-files"')::BIGINT,
+	json_extract_string(snap, '$.summary."total-data-files"')::BIGINT,
+	json_extract_string(snap, '$.summary."added-records"')::BIGINT,
+	json_extract_string(snap, '$.summary."deleted-records"')::BIGINT,
+	json_extract_string(snap, '$.summary."total-records"')::BIGINT
+from (
+	select unnest(json_extract(metadata::JSON, '$.snapshots[*]')) as snap
+	from iceberg_load_table_response(my_datalake.default.rewrite_commit_basic)
+)
+where json_extract_string(snap, '$.summary.operation') = 'replace'
+order by json_extract_string(snap, '$."sequence-number"')::BIGINT desc
+limit 1;
+----
+1	6	1	12	12	12
 
 query I
 select count(*) from my_datalake.default.rewrite_commit_basic;

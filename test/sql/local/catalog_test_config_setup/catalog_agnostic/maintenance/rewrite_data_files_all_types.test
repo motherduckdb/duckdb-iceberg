@@ -14,8 +14,6 @@ require httpfs
 
 require core_functions
 
-set ignore_error_messages
-
 statement ok
 drop table if exists my_datalake.default.rewrite_all_types;
 
