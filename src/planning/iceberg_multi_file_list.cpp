@@ -469,6 +469,8 @@ IcebergMultiFileList::GetDataFile(idx_t file_id, annotated_lock_guard<annotated_
 			shared_state->data_file_partitions[entry_path] = partition;
 			shared_state->data_file_partitions[data_file.file_path] = std::move(partition);
 
+			//! Bind the entry in order for the manifest list entry to record its row count
+			auto bound_entry = bound_manifest_list_entry.BindEntry(manifest_entry);
 			if (manifest_entry.status == IcebergManifestEntryStatusType::DELETED) {
 				continue;
 			}
@@ -486,8 +488,6 @@ IcebergMultiFileList::GetDataFile(idx_t file_id, annotated_lock_guard<annotated_
 				//! Skip this file
 				continue;
 			}
-
-			auto bound_entry = bound_manifest_list_entry.BindEntry(manifest_entry);
 			data_manifest_entries.push_back(bound_entry);
 		}
 		if (view_cursor.current_batch_offset >= current_batch.end_index) {
