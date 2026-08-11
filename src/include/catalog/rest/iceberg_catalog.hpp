@@ -144,6 +144,10 @@ public:
 	                                    PhysicalOperator &plan) override;
 	PhysicalOperator &PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,
 	                             PhysicalOperator &plan) override;
+	//! Shared delete-planning body. PlanDelete forwards here; MERGE plans its delete action through this too,
+	//! so both entry points share one implementation.
+	PhysicalOperator &PlanDeleteInternal(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,
+	                                     PhysicalOperator &plan);
 	PhysicalOperator &PlanUpdate(ClientContext &context, PhysicalPlanGenerator &planner, LogicalUpdate &op,
 	                             PhysicalOperator &plan) override;
 	PhysicalOperator &PlanMergeInto(ClientContext &context, PhysicalPlanGenerator &planner, LogicalMergeInto &op,
