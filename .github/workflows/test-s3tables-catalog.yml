@@ -37,7 +37,8 @@ jobs:
       AWS_DEFAULT_REGION: ${{ secrets.S3_ICEBERG_TEST_USER_REGION }}
 
     steps:
-      - uses: actions/checkout@v4
+      # v5 runs on Node 24; v4 still ships a Node 20 entrypoint and warns.
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           submodules: 'true'
