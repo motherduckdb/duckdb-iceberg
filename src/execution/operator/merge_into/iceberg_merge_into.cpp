@@ -214,8 +214,8 @@ static unique_ptr<MergeIntoOperator> IcebergPlanMergeIntoAction(IcebergCatalog &
 		}
 		delete_op.bound_constraints = std::move(bound_constraints);
 		//! MERGE shares this scan with its other actions, so it plans its delete action through the shared
-		//! internal path rather than the standalone PlanDelete entry point.
-		result->op = catalog.PlanDeleteInternal(context, planner, delete_op, child_plan);
+		//! PlanDeleteOperation path rather than the standalone PlanDelete entry point.
+		result->op = catalog.PlanDeleteOperation(context, planner, delete_op, child_plan);
 		break;
 	}
 	case MergeActionType::MERGE_INSERT: {

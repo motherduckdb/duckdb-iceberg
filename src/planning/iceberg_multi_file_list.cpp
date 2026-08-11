@@ -683,7 +683,9 @@ IcebergDeletePlan IcebergMultiFileList::ProcessDeletes(const BoundIcebergManifes
 		annotated_lock_guard<annotated_mutex> delete_guard(shared_state->delete_lock);
 		provider = scan_plan_provider.get();
 		if (!provider) {
-			return result;
+			//! ResolveApplicableDeleteFiles ran InitializeView, which creates the provider, so it is always
+			//! set here - a null is a broken invariant, not a "nothing to do".
+			throw InternalException("scan_plan_provider is not initialized in ProcessDeletes");
 		}
 		delete_context = make_uniq<IcebergDeletePlanningContext>(GetDeletePlanningContext());
 		unordered_set<IcebergDeleteFileLoadState *> seen_loads;

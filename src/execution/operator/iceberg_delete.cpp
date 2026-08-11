@@ -527,11 +527,11 @@ PhysicalOperator &IcebergDelete::PlanDelete(ClientContext &context, PhysicalPlan
 
 PhysicalOperator &IcebergCatalog::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,
                                              PhysicalOperator &plan) {
-	return PlanDeleteInternal(context, planner, op, plan);
+	return PlanDeleteOperation(context, planner, op, plan);
 }
 
-PhysicalOperator &IcebergCatalog::PlanDeleteInternal(ClientContext &context, PhysicalPlanGenerator &planner,
-                                                     LogicalDelete &op, PhysicalOperator &plan) {
+PhysicalOperator &IcebergCatalog::PlanDeleteOperation(ClientContext &context, PhysicalPlanGenerator &planner,
+                                                      LogicalDelete &op, PhysicalOperator &plan) {
 	if (op.return_chunk) {
 		throw BinderException("RETURNING clause not yet supported for deletion from Iceberg table");
 	}
