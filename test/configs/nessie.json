@@ -138,7 +138,10 @@
 				"test/sql/local/catalog_test_config_setup/catalog_agnostic/update/test_update_into_sorted_table.test",
 				"test/sql/local/catalog_test_config_setup/catalog_agnostic/update/partitions/test_update_into_partitioned_sorted_table.test",
 				"test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_snapshot_operation_in_transaction.test",
-				"test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/test_snapshot_summary_delete_metrics.test"
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/test_snapshot_summary_delete_metrics.test",
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/maintenance/rollback_to_snapshot.test",
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/maintenance/rollback_to_snapshot_partition_transforms.test",
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/maintenance/rollback_to_snapshot_schema_retained.test"
 			]
 		},
 		{
