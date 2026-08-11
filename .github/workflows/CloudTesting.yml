@@ -45,6 +45,15 @@ defaults:
     shell: bash
 
 jobs:
+  s3tables:
+    name: Test against a throwaway S3 Tables catalog
+    uses: ./.github/workflows/test-s3tables-catalog.yml
+    with:
+      duckdb_ref: ${{ inputs.duckdb_ref || '' }}
+      httpfs_fork: ${{ inputs.httpfs_fork || 'https://github.com/duckdb/duckdb-httpfs' }}
+      httpfs_ref: ${{ inputs.httpfs_ref || '' }}
+    secrets: inherit
+
   rest:
     name: Test against remote cloud catalogs
     runs-on: ubuntu-latest
