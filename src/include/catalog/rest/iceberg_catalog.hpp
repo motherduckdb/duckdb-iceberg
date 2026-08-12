@@ -170,8 +170,8 @@ public:
 public:
 	AccessMode access_mode;
 	unique_ptr<IcebergAuthorization> auth_handler;
-	//! host of the REST catalog
-	string uri;
+	//! Base URI of the REST catalog
+	string base_uri;
 	//! version
 	const string version;
 	//! optional prefix path components
@@ -187,8 +187,8 @@ private:
 	// defaults and overrides provided by a catalog.
 	case_insensitive_map_t<string> defaults;
 	case_insensitive_map_t<string> overrides;
-	//! raw attach options (after core stripping) used to detect a conflicting ATTACH OR REPLACE
-	unordered_map<string, Value> raw_attach_options;
+	//! Normalized attach options (after core stripping) used to detect a conflicting ATTACH OR REPLACE
+	unordered_map<string, Value> normalized_attach_options;
 
 public:
 	unordered_set<string> supported_urls;
