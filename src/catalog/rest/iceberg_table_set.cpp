@@ -118,7 +118,7 @@ void IcebergTableSet::Scan(ClientContext &context, const std::function<void(Cata
 			}
 			auto &transaction_table_info = latest_state->GetInfo();
 			if (transaction_table_info.HasTransactionUpdates()) {
-				auto transaction_entry = transaction_table_info.GetLatestSchema(context);
+				auto transaction_entry = transaction_table_info.GetLatestSchema();
 				if (transaction_entry) {
 					callback(*transaction_entry);
 					continue;
@@ -153,7 +153,7 @@ void IcebergTableSet::Scan(ClientContext &context, const std::function<void(Cata
 		if (&transaction_table_info.schema != &schema) {
 			continue;
 		}
-		auto transaction_entry = transaction_table_info.GetLatestSchema(context);
+		auto transaction_entry = transaction_table_info.GetLatestSchema();
 		if (transaction_entry) {
 			callback(*transaction_entry);
 		}
