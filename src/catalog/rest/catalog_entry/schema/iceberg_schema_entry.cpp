@@ -1024,7 +1024,7 @@ void IcebergSchemaEntry::Scan(ClientContext &context, CatalogType type,
 			}
 			auto &transaction_table_info = latest_state->GetInfo();
 			if (transaction_table_info.HasTransactionUpdates()) {
-				auto transaction_entry = transaction_table_info.GetLatestSchema(context);
+				auto transaction_entry = transaction_table_info.GetLatestSchema();
 				if (transaction_entry) {
 					callback(*transaction_entry);
 					return;
@@ -1046,7 +1046,7 @@ void IcebergSchemaEntry::Scan(ClientContext &context, CatalogType type,
 		if (&transaction_table_info.schema != this) {
 			continue;
 		}
-		auto transaction_entry = transaction_table_info.GetLatestSchema(context);
+		auto transaction_entry = transaction_table_info.GetLatestSchema();
 		if (transaction_entry) {
 			callback(*transaction_entry);
 		}
