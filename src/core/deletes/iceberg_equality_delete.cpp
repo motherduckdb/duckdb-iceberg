@@ -14,12 +14,13 @@ static void InitializeFromOtherChunk(DataChunk &target, DataChunk &other, const 
 
 static void ColumnsReferencedByEqualityIds(DataChunk &source, DataChunk &result,
                                            const vector<MultiFileColumnDefinition> &local_columns,
-                                           const vector<string> &source_names, const vector<int32_t> &equality_ids) {
+                                           const vector<Identifier> &source_names,
+                                           const vector<int32_t> &equality_ids) {
 	// The equality-delete file can physically contain more columns than the reader models for it - e.g. Spark
 	// embeds the partition columns next to the equality-key columns - and not necessarily in the same order. So
 	// resolve each equality field-id to its physical position in 'source' by name rather than by its position in
 	// 'local_columns', which only covers the modeled subset.
-	unordered_map<string, column_t> name_to_source_index;
+	identifier_map_t<column_t> name_to_source_index;
 	for (column_t i = 0; i < source_names.size(); i++) {
 		name_to_source_index[source_names[i]] = i;
 	}
@@ -28,7 +29,7 @@ static void ColumnsReferencedByEqualityIds(DataChunk &source, DataChunk &result,
 	unordered_map<int32_t, column_t> id_to_column;
 	for (auto &col : local_columns) {
 		D_ASSERT(!col.identifier.IsNull());
-		auto entry = name_to_source_index.find(col.name.GetIdentifierName());
+		auto entry = name_to_source_index.find(col.name);
 		if (entry == name_to_source_index.end()) {
 			continue;
 		}
@@ -49,7 +50,7 @@ static void ColumnsReferencedByEqualityIds(DataChunk &source, DataChunk &result,
 void IcebergMultiFileList::ScanEqualityDeleteFile(const BoundIcebergManifestEntry &bound_manifest_entry,
                                                   DataChunk &source,
                                                   const vector<MultiFileColumnDefinition> &local_columns,
-                                                  const vector<string> &source_names) const {
+                                                  const vector<Identifier> &source_names) const {
 	auto &manifest_entry = bound_manifest_entry.entry;
 	auto &data_file = manifest_entry.data_file;
 	auto &manifest_file = GetManifestFileForEntry(bound_manifest_entry, IcebergManifestContentType::DELETE);

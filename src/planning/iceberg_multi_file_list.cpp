@@ -1598,7 +1598,7 @@ void IcebergMultiFileList::ScanDeleteFile(const BoundIcebergManifestEntry &bound
 	TableFunctionBindInput bind_input(children, named_params, input_types, input_names, nullptr, nullptr,
 	                                  delete_scan_function, empty);
 	vector<LogicalType> return_types;
-	vector<string> return_names;
+	vector<Identifier> return_names;
 	auto bind_data = delete_scan_function.bind(context, bind_input, return_types, return_names);
 
 	DataChunk result;
