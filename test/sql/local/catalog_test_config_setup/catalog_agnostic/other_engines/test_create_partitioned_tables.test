@@ -25,6 +25,231 @@ create schema if not exists my_datalake.default;
 # INT
 # ============================================================
 
+statement ok
+drop table if exists my_datalake.default.test_table_partitioned_by_int_format_version_2;
+
+statement ok
+CREATE TABLE my_datalake.default.test_table_partitioned_by_int_format_version_2 (id INT, val INT)
+PARTITIONED BY (val)
+WITH ('format-version' = 2);
+
+statement ok
+INSERT INTO my_datalake.default.test_table_partitioned_by_int_format_version_2 VALUES
+    (1, 10), (2, 20), (3, 10), (4, 30);
+
+statement ok
+drop table if exists my_datalake.default.test_table_partitioned_by_int_format_version_3;
+
+statement ok
+CREATE TABLE my_datalake.default.test_table_partitioned_by_int_format_version_3 (id INT, val INT)
+PARTITIONED BY (val)
+WITH ('format-version' = 3);
+
+statement ok
+INSERT INTO my_datalake.default.test_table_partitioned_by_int_format_version_3 VALUES
+    (1, 10), (2, 20), (3, 10), (4, 30);
+
+# ============================================================
+# BIGINT
+# ============================================================
+
+statement ok
+drop table if exists my_datalake.default.test_table_partitioned_by_bigint_format_version_2;
+
+statement ok
+CREATE TABLE my_datalake.default.test_table_partitioned_by_bigint_format_version_2 (id INT, val BIGINT)
+PARTITIONED BY (val)
+WITH ('format-version' = 2);
+
+statement ok
+INSERT INTO my_datalake.default.test_table_partitioned_by_bigint_format_version_2 VALUES
+    (1, 1000000000), (2, 2000000000), (3, 1000000000), (4, 3000000000);
+
+statement ok
+drop table if exists my_datalake.default.test_table_partitioned_by_bigint_format_version_3;
+
+statement ok
+CREATE TABLE my_datalake.default.test_table_partitioned_by_bigint_format_version_3 (id INT, val BIGINT)
+PARTITIONED BY (val)
+WITH ('format-version' = 3);
+
+statement ok
+INSERT INTO my_datalake.default.test_table_partitioned_by_bigint_format_version_3 VALUES
+    (1, 1000000000), (2, 2000000000), (3, 1000000000), (4, 3000000000);
+
+# ============================================================
+# VARCHAR
+# ============================================================
+
+statement ok
+drop table if exists my_datalake.default.test_table_partitioned_by_varchar_format_version_2;
+
+statement ok
+CREATE TABLE my_datalake.default.test_table_partitioned_by_varchar_format_version_2 (id INT, val VARCHAR)
+PARTITIONED BY (val)
+WITH ('format-version' = 2);
+
+statement ok
+INSERT INTO my_datalake.default.test_table_partitioned_by_varchar_format_version_2 VALUES
+    (1, 'apple'), (2, 'banana'), (3, 'apple'), (4, 'cherry');
+
+statement ok
+drop table if exists my_datalake.default.test_table_partitioned_by_varchar_format_version_3;
+
+statement ok
+CREATE TABLE my_datalake.default.test_table_partitioned_by_varchar_format_version_3 (id INT, val VARCHAR)
+PARTITIONED BY (val)
+WITH ('format-version' = 3);
+
+statement ok
+INSERT INTO my_datalake.default.test_table_partitioned_by_varchar_format_version_3 VALUES
+    (1, 'apple'), (2, 'banana'), (3, 'apple'), (4, 'cherry');
+
+# ============================================================
+# DECIMAL
+# ============================================================
+
+statement ok
+drop table if exists my_datalake.default.test_table_partitioned_by_decimal_format_version_2;
+
+statement ok
+CREATE TABLE my_datalake.default.test_table_partitioned_by_decimal_format_version_2 (id INT, val DECIMAL(10, 2))
+PARTITIONED BY (val)
+WITH ('format-version' = 2);
+
+statement ok
+INSERT INTO my_datalake.default.test_table_partitioned_by_decimal_format_version_2 VALUES
+    (1, 1.50), (2, 2.75), (3, 1.50), (4, 3.00);
+
+statement ok
+drop table if exists my_datalake.default.test_table_partitioned_by_decimal_format_version_3;
+
+statement ok
+CREATE TABLE my_datalake.default.test_table_partitioned_by_decimal_format_version_3 (id INT, val DECIMAL(10, 2))
+PARTITIONED BY (val)
+WITH ('format-version' = 3);
+
+statement ok
+INSERT INTO my_datalake.default.test_table_partitioned_by_decimal_format_version_3 VALUES
+    (1, 1.50), (2, 2.75), (3, 1.50), (4, 3.00);
+
+# ============================================================
+# FLOAT
+# ============================================================
+
+statement ok
+drop table if exists my_datalake.default.test_table_partitioned_by_float_format_version_2;
+
+statement ok
+CREATE TABLE my_datalake.default.test_table_partitioned_by_float_format_version_2 (id INT, val FLOAT)
+PARTITIONED BY (val)
+WITH ('format-version' = 2);
+
+statement ok
+INSERT INTO my_datalake.default.test_table_partitioned_by_float_format_version_2 VALUES
+    (1, 1.0), (2, 2.0), (3, 1.0), (4, 3.0);
+
+statement ok
+drop table if exists my_datalake.default.test_table_partitioned_by_float_format_version_3;
+
+statement ok
+CREATE TABLE my_datalake.default.test_table_partitioned_by_float_format_version_3 (id INT, val FLOAT)
+PARTITIONED BY (val)
+WITH ('format-version' = 3);
+
+statement ok
+INSERT INTO my_datalake.default.test_table_partitioned_by_float_format_version_3 VALUES
+    (1, 1.0), (2, 2.0), (3, 1.0), (4, 3.0);
+
+# ============================================================
+# DOUBLE
+# ============================================================
+
+statement ok
+drop table if exists my_datalake.default.test_table_partitioned_by_double_format_version_2;
+
+statement ok
+CREATE TABLE my_datalake.default.test_table_partitioned_by_double_format_version_2 (id INT, val DOUBLE)
+PARTITIONED BY (val)
+WITH ('format-version' = 2);
+
+statement ok
+INSERT INTO my_datalake.default.test_table_partitioned_by_double_format_version_2 VALUES
+    (1, 1.0), (2, 2.0), (3, 1.0), (4, 3.0);
+
+statement ok
+drop table if exists my_datalake.default.test_table_partitioned_by_double_format_version_3;
+
+statement ok
+CREATE TABLE my_datalake.default.test_table_partitioned_by_double_format_version_3 (id INT, val DOUBLE)
+PARTITIONED BY (val)
+WITH ('format-version' = 3);
+
+statement ok
+INSERT INTO my_datalake.default.test_table_partitioned_by_double_format_version_3 VALUES
+    (1, 1.0), (2, 2.0), (3, 1.0), (4, 3.0);
+
+# ============================================================
+# UUID
+# ============================================================
+
+statement ok
+drop table if exists my_datalake.default.test_table_partitioned_by_uuid_format_version_2;
+
+statement ok
+CREATE TABLE my_datalake.default.test_table_partitioned_by_uuid_format_version_2 (id INT, val UUID)
+PARTITIONED BY (val)
+WITH ('format-version' = 2);
+
+statement ok
+INSERT INTO my_datalake.default.test_table_partitioned_by_uuid_format_version_2 VALUES
+    (1, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'),
+    (2, 'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'),
+    (3, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'),
+    (4, 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11');
+
+statement ok
+drop table if exists my_datalake.default.test_table_partitioned_by_uuid_format_version_3;
+
+statement ok
+CREATE TABLE my_datalake.default.test_table_partitioned_by_uuid_format_version_3 (id INT, val UUID)
+PARTITIONED BY (val)
+WITH ('format-version' = 3);
+
+statement ok
+INSERT INTO my_datalake.default.test_table_partitioned_by_uuid_format_version_3 VALUES
+    (1, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'),
+    (2, 'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'),
+    (3, 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'),
+    (4, 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11');
+
+# ============================================================
+# TIME
+# ============================================================
+
+statement ok
+drop table if exists my_datalake.default.test_table_partitioned_by_time_format_version_2;
+
+statement ok
+CREATE TABLE my_datalake.default.test_table_partitioned_by_time_format_version_2 (id INT, val TIME)
+PARTITIONED BY (val)
+WITH ('format-version' = 2);
+
+statement ok
+INSERT INTO my_datalake.default.test_table_partitioned_by_time_format_version_2 VALUES
+    (1, '08:00:00'), (2, '12:30:00'), (3, '08:00:00'), (4, '18:45:00');
+
+statement ok
+drop table if exists my_datalake.default.test_table_partitioned_by_time_format_version_3;
+
+statement ok
+CREATE TABLE my_datalake.default.test_table_partitioned_by_time_format_version_3 (id INT, val TIME)
+PARTITIONED BY (val)
+WITH ('format-version' = 3);
+
+statement ok
+INSERT INTO my_datalake.default.test_table_partitioned_by_time_format_version_3 VALUES
+    (1, '08:00:00'), (2, '12:30:00'), (3, '08:00:00'), (4, '18:45:00');
 
 # ============================================================
 # DATE — identity + year/month/day transforms
