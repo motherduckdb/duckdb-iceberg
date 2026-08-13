@@ -1,7 +1,7 @@
 {
   "description": "Use an AWS S3 Tables table bucket as Iceberg Rest Catalog.",
   "comment": "S3TABLES_TABLE_BUCKET_ARN is a placeholder: the Test S3 Tables Catalog workflow fills it in with the ARN of the throwaway table bucket it created for the run. To use this config locally, point it at a table bucket of your own and make sure AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_DEFAULT_REGION are exported for the credential chain to pick up.",
-  "on_init": "CREATE SECRET IF NOT EXISTS s3tables_secret (TYPE S3, PROVIDER credential_chain); ATTACH IF NOT EXISTS 'arn:aws:s3tables:eu-central-1:840140254803:bucket/duckdb-iceberg-benchmarking' AS my_datalake (TYPE ICEBERG, ENDPOINT_TYPE S3_TABLES); Create schema if not exists my_datalake.default; set iceberg_default_format_version=3",
+  "on_init": "CREATE SECRET IF NOT EXISTS s3tables_secret (TYPE S3, PROVIDER credential_chain); ATTACH IF NOT EXISTS 'S3TABLES_TABLE_BUCKET_ARN' AS my_datalake (TYPE ICEBERG, ENDPOINT_TYPE S3_TABLES); Create schema if not exists my_datalake.default; set iceberg_default_format_version=3",
   "skip_error_messages": [],
   "statically_loaded_extensions": [
     "core_functions",
@@ -90,7 +90,16 @@
     {
       "reason": "transaction issues",
       "paths": [
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/add_column/alter_add_column_transaction_with_select.test"
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/add_column/alter_add_column_transaction_with_select.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/create/default/test_create_default_struct_nested.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transaction_metadata_log_properties.test"
+      ]
+    },
+    {
+      "reason": "s3tables does not allow us to clean up",
+      "paths": [
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/test_delete_consolidation_transactional.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/delete_table.test"
       ]
     },
     {
@@ -131,42 +140,57 @@
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/test_use.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_concurrent_transactions.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/update/test_update_partitioned_table_failure.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/update/test_update_v3_table.test"
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/update/test_update_v3_table.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/irc_nested_types.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/logging/test_partition_read_logging.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/logging/test_partition_read_logic_month.test"
       ]
     },
     {
       "reason": "V3 is the default table type",
       "paths": [
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/alter_type.test"
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/alter_type.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/test_delete_rowid.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/table_properties/test_default_format_version.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/maintenance/rewrite_data_files_all_types.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/maintenance/rewrite_data_files_commit.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/maintenance/rewrite_data_files_file_size_rotation.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/maintenance/rewrite_data_files_partitioned.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/maintenance/rewrite_data_files_sequence_pin.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/maintenance/rewrite_data_files_spark_mor_residual_deletes.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/maintenance/rewrite_data_files_target_file_size.test"
       ]
     },
     {
-    	"reason": "Method not allowed (needs further investigation)",
-    	"paths": [
-    		"test/sql/local/catalog_test_config_setup/catalog_agnostic/partitioning/hour/hour_nested_struct_timestamp.test",
-    		"test/sql/local/catalog_test_config_setup/catalog_agnostic/partitioning/hour/hour_struct_timestamp.test",
-    		"test/sql/local/catalog_test_config_setup/catalog_agnostic/partitioning/identity/identity_struct_bool.test"
-    	]
+      "reason": "Method not allowed (needs further investigation)",
+      "paths": [
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/partitioning/hour/hour_nested_struct_timestamp.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/partitioning/hour/hour_struct_timestamp.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/partitioning/identity/identity_struct_bool.test"
+      ]
     },
     {
-    	"reason": "unsure - needs investigation",
-    	"paths": [
-    		"test/sql/local/catalog_test_config_setup/catalog_agnostic/other_engines/test_create_partitioned_tables.test"
-    	]
+      "reason": "unsure - needs investigation",
+      "paths": [
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/other_engines/test_create_partitioned_tables.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/test_no_head_request_for_deletes.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/test_snapshot_summary_delete_metrics.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_snapshot_summary_file_size_metrics.test"
+      ]
     },
     {
-    	"reason": "S3 tables does not support case sensitive table names",
-    	"paths": [
-    		"test/sql/local/catalog_test_config_setup/catalog_agnostic/test_case_sensitive_name.test"
-    	]
+      "reason": "S3 tables does not support case sensitive table names",
+      "paths": [
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/test_case_sensitive_name.test"
+      ]
     },
     {
-    	"reason": "s3tables does not support the operation",
-    	"paths": [
-    		"test/sql/local/catalog_test_config_setup/catalog_agnostic/schema_properties/schema_properties_update.test",
-    		"test/sql/local/catalog_test_config_setup/catalog_agnostic/schema_properties/schema_properties_update_concurrent_transactions.test",
-    		"test/sql/local/catalog_test_config_setup/catalog_agnostic/schema_properties/schema_properties_update_transaction.test"
-    	]
-    }    
+      "reason": "s3tables does not support the operation",
+      "paths": [
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/schema_properties/schema_properties_update.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/schema_properties/schema_properties_update_concurrent_transactions.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/schema_properties/schema_properties_update_transaction.test"
+      ]
+    }
   ]
 }
