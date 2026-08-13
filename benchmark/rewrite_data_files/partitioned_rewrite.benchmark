@@ -45,46 +45,52 @@ SELECT
     range,
     chr((65 + (range % 16))::INTEGER),
     'payload-' || range::VARCHAR
-FROM range(16000);
+FROM range(1000000);
 INSERT INTO my_datalake.default.partitioned_rewrite_bench
 SELECT
     range + 16000,
     chr((65 + (range % 16))::INTEGER),
     'payload-' || (range + 16000)::VARCHAR
-FROM range(16000);
+FROM range(1000000);
 INSERT INTO my_datalake.default.partitioned_rewrite_bench
 SELECT
     range + 32000,
     chr((65 + (range % 16))::INTEGER),
     'payload-' || (range + 32000)::VARCHAR
-FROM range(16000);
+FROM range(1000000);
 INSERT INTO my_datalake.default.partitioned_rewrite_bench
 SELECT
     range + 48000,
     chr((65 + (range % 16))::INTEGER),
     'payload-' || (range + 48000)::VARCHAR
-FROM range(16000);
+FROM range(1000000);
 INSERT INTO my_datalake.default.partitioned_rewrite_bench
 SELECT
     range + 64000,
     chr((65 + (range % 16))::INTEGER),
     'payload-' || (range + 64000)::VARCHAR
-FROM range(16000);
+FROM range(1000000);
 INSERT INTO my_datalake.default.partitioned_rewrite_bench
 SELECT
     range + 80000,
     chr((65 + (range % 16))::INTEGER),
     'payload-' || (range + 80000)::VARCHAR
-FROM range(16000);
--- Snapshot tip before rewrite; cleanup rolls back here so warmup + timed runs share state.
-SET VARIABLE pre_rewrite_snapshot = (
-    SELECT snapshot_id
+FROM range(1000000);
+drop table if exists my_datalake.default.pre_rewrite_snapshot;
+create table my_datalake.default.pre_rewrite_snapshot as
+    SELECT snapshot_id::BIGINT snapshot_id
     FROM iceberg_snapshots(my_datalake.default.partitioned_rewrite_bench)
     ORDER BY sequence_number DESC
-    LIMIT 1
-);
+    LIMIT 1;
 
 run
+set enable_external_file_cache=false;
+set variable pre_rewrite_snapshot_var = (select snapshot_id from my_datalake.default.pre_rewrite_snapshot limit 1);
+SELECT *
+FROM iceberg_rollback_to_snapshot(
+    'my_datalake.default.partitioned_rewrite_bench',
+    getvariable('pre_rewrite_snapshot_var')
+);
 SELECT *
 FROM iceberg_rewrite_data_files(
     'my_datalake.default.partitioned_rewrite_bench',
@@ -92,9 +98,3 @@ FROM iceberg_rewrite_data_files(
     rewrite_all => true
 );
 
-cleanup
-SELECT *
-FROM iceberg_rollback_to_snapshot(
-    'my_datalake.default.partitioned_rewrite_bench',
-    getvariable('pre_rewrite_snapshot')
-);
