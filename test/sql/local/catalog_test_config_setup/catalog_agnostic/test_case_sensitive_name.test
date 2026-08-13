@@ -14,6 +14,11 @@ require httpfs
 
 require tpch
 
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.Buy;
+
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.buy;
 
 statement ok
 create table my_datalake.default.Buy (price float, name varchar);
