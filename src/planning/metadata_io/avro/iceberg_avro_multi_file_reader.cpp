@@ -603,11 +603,13 @@ ReaderInitializeType IcebergAvroMultiFileReader::InitializeReader(
 			auto file_idx = manifest_scan_info.GetManifestIndex(reader_data.reader->file_list_idx.GetIndex());
 			lock_guard<mutex> manifest_guard(manifest_scan_info.GetManifestLock(file_idx));
 			auto &manifest_list_entry = manifest_scan_info.manifest_files[file_idx];
-			auto manifest_path = manifest_list_entry.file.manifest_path.empty()
-			                         ? reader_data.reader->GetFileName()
-			                         : manifest_list_entry.file.manifest_path;
-			manifest_list_entry.manifest_metadata.emplace(
-			    ParseManifestMetadata(reader_data.reader->GetMetadata(), manifest_path));
+			if (!manifest_list_entry.manifest_metadata) {
+				auto manifest_path = manifest_list_entry.file.manifest_path.empty()
+				                         ? reader_data.reader->GetFileName()
+				                         : manifest_list_entry.file.manifest_path;
+				manifest_list_entry.manifest_metadata.emplace(
+				    ParseManifestMetadata(reader_data.reader->GetMetadata(), manifest_path));
+			}
 		}
 		for (auto &partition_spec : avro_scan_info.metadata.partition_specs) {
 			for (auto &spec_field : partition_spec.second.fields) {
@@ -649,14 +651,10 @@ void IcebergAvroMultiFileReader::FinalizeChunk(ClientContext &context, const Mul
 		auto manifest_file_idx = manifest_scan_info.GetManifestIndex(reader.file_list_idx.GetIndex());
 		auto &manifest_file = manifest_scan_info.manifest_files[manifest_file_idx];
 
-		auto manifest_metadata = [&]() {
-			lock_guard<mutex> manifest_guard(manifest_scan_info.GetManifestLock(manifest_file_idx));
-			if (!manifest_file.manifest_metadata) {
-				throw InternalException("Manifest metadata was not initialized for '%s'",
-				                        manifest_file.file.manifest_path);
-			}
-			return *manifest_file.manifest_metadata;
-		}();
+		//! InitializeReader publishes this immutable value under the per-manifest lock
+		//! before this reader can produce chunks.
+		D_ASSERT(manifest_file.manifest_metadata);
+		auto &manifest_metadata = *manifest_file.manifest_metadata;
 		auto spec_id = manifest_metadata.partition_spec_id;
 		auto partition_spec_p = metadata.FindPartitionSpecById(spec_id);
 		if (!partition_spec_p) {
