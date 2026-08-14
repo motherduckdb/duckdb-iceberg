@@ -177,9 +177,24 @@ void IcebergTableSet::LoadEntriesInternal(ClientContext &context) {
 		return;
 	}
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
-	auto tables = IRCAPI::GetTables(context, ic_catalog, schema);
+	bool listing_complete = true;
+	auto tables = IRCAPI::GetTables(context, ic_catalog, schema, &listing_complete);
+	case_insensitive_set_t listed;
 	for (auto &table : tables) {
+		listed.insert(table.name);
 		entries.emplace(table.name, make_shared_ptr<IcebergTable>(ic_catalog, schema, table.name));
+	}
+	// 'entries' outlives the transaction, so a table dropped through another engine stays
+	// cached unless the listing is treated as authoritative and absent names are removed.
+	// Entries created in this transaction live on the transaction, not here, so they are safe.
+	if (listing_complete) {
+		for (auto it = entries.begin(); it != entries.end();) {
+			if (listed.find(it->first) == listed.end()) {
+				it = entries.erase(it);
+			} else {
+				++it;
+			}
+		}
 	}
 	iceberg_transaction.listed_schemas.insert(schema.name.GetIdentifierName());
 }
