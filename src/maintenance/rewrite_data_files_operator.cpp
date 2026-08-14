@@ -104,8 +104,8 @@ PhysicalOperator &LogicalRewriteDataFiles::CreatePlan(ClientContext &context, Ph
 		    "iceberg_rewrite_data_files: expected a single LogicalCopyToFile child with one scan child");
 	}
 	auto &scan = planner.CreatePlan(*logical_child.children[0]);
-	//! Install vended storage secrets before writing compacted files (mirrors IcebergInsert).
-	rewrite.plan.table_info->LoadCredentials(context);
+	//! Vended credentials are already installed: PlanRewrite loads them for the manifests,
+	//! and BindCandidateCopy's table scan bind calls PrepareIcebergScanFromEntry.
 	IcebergCopyInput copy_input(context, metadata, *schema_it->second);
 	auto &copy = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, &scan).Cast<PhysicalCopyToFile>();
 	copy.file_size_bytes = NumericCast<idx_t>(rewrite.plan.target_file_size_bytes);
