@@ -177,17 +177,16 @@ void IcebergTableSet::LoadEntriesInternal(ClientContext &context) {
 		return;
 	}
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
-	bool listing_complete = true;
-	auto tables = IRCAPI::GetTables(context, ic_catalog, schema, &listing_complete);
-	case_insensitive_set_t listed;
-	for (auto &table : tables) {
-		listed.insert(table.name);
-		entries.emplace(table.name, make_shared_ptr<IcebergTable>(ic_catalog, schema, table.name));
-	}
-	// 'entries' outlives the transaction, so a table dropped through another engine stays
-	// cached unless the listing is treated as authoritative and absent names are removed.
-	// Entries created in this transaction live on the transaction, not here, so they are safe.
-	if (listing_complete) {
+	auto tables = IRCAPI::GetTables(context, ic_catalog, schema);
+	// A refused listing says nothing about which tables exist, so the cache is left untouched.
+	if (tables) {
+		case_insensitive_set_t listed;
+		for (auto &table : *tables) {
+			listed.insert(table.name);
+			entries.emplace(table.name, make_shared_ptr<IcebergTable>(ic_catalog, schema, table.name));
+		}
+		// 'entries' outlives the transaction, so drop the names the listing no longer reports.
+		// Tables created in this transaction live on the transaction, not here, so they are safe.
 		for (auto it = entries.begin(); it != entries.end();) {
 			if (listed.find(it->first) == listed.end()) {
 				it = entries.erase(it);
