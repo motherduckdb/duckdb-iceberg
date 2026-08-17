@@ -138,6 +138,10 @@ bool IcebergTransactionData::ContainsDelete() const {
 	return false;
 }
 
+bool IcebergTransactionData::IsFileInvalidated(const string &file_path) const {
+	return manifest_deletes.IsInvalidated(file_path);
+}
+
 bool IcebergTransactionData::SupportsAppendRetry() const {
 	if (!requirements.empty() || pending_current_schema_id.has_value()) {
 		return false;
@@ -220,10 +224,7 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 	if (table_metadata.current_snapshot_id) {
 		TableAddAssertCurrentSchemaId();
 	}
-	add_snapshot->altered_manifests = std::move(altered_manifests);
-
-	alters.push_back(*add_snapshot);
-	updates.push_back(std::move(add_snapshot));
+	AddSnapshotUpdate(std::move(add_snapshot), std::move(altered_manifests));
 }
 
 void IcebergTransactionData::AddDeleteManifestFiles(IcebergAddSnapshot &add_snapshot,
@@ -239,6 +240,16 @@ void IcebergTransactionData::AddDeleteManifestFiles(IcebergAddSnapshot &add_snap
 		add_snapshot.AddManifestFile(IcebergManifestListEntry::CreateFromEntries(
 		    fs, sequence_number, table_metadata, manifest_metadata, std::move(entry.second), next_row_id));
 	}
+}
+
+void IcebergTransactionData::AddSnapshotUpdate(unique_ptr<IcebergAddSnapshot> add_snapshot,
+                                               IcebergManifestDeletes &&altered_manifests) {
+	auto versioned_deletes = manifest_deletes.AtVersion(alters.size());
+	if (versioned_deletes.Merge(std::move(altered_manifests))) {
+		add_snapshot->SetManifestDeletes(std::move(versioned_deletes));
+	}
+	alters.push_back(*add_snapshot);
+	updates.push_back(std::move(add_snapshot));
 }
 
 void IcebergTransactionData::AddDeleteSnapshot(partitioned_manifest_entry_map_t &&delete_files,
@@ -257,10 +268,7 @@ void IcebergTransactionData::AddDeleteSnapshot(partitioned_manifest_entry_map_t 
 	if (table_metadata.current_snapshot_id) {
 		TableAddAssertCurrentSchemaId();
 	}
-	add_snapshot->altered_manifests = std::move(altered_manifests);
-
-	alters.push_back(*add_snapshot);
-	updates.push_back(std::move(add_snapshot));
+	AddSnapshotUpdate(std::move(add_snapshot), std::move(altered_manifests));
 }
 
 void IcebergTransactionData::AddUpdateSnapshot(partitioned_manifest_entry_map_t &&delete_files,
@@ -286,10 +294,7 @@ void IcebergTransactionData::AddUpdateSnapshot(partitioned_manifest_entry_map_t 
 	// Add a manifest_file for the new insert data
 	add_snapshot->AddManifestFile(IcebergManifestListEntry::CreateFromEntries(
 	    fs, sequence_number, table_metadata, data_manifest_metadata, std::move(data_files), next_row_id));
-	add_snapshot->altered_manifests = std::move(altered_manifests);
-
-	alters.push_back(*add_snapshot);
-	updates.push_back(std::move(add_snapshot));
+	AddSnapshotUpdate(std::move(add_snapshot), std::move(altered_manifests));
 }
 
 void IcebergTransactionData::TableAddSchema(int32_t schema_id) {
@@ -376,6 +381,50 @@ void IcebergTransactionData::TableRemoveProperties(const vector<string> &propert
 
 void IcebergTransactionData::TableSetLocation() {
 	updates.push_back(make_uniq<SetLocation>(table_info.table_metadata.location));
+}
+
+static bool IsAncestorOfCurrentSnapshot(const IcebergTableMetadata &metadata, int64_t target_snapshot_id,
+                                        int64_t current_snapshot_id) {
+	if (target_snapshot_id == current_snapshot_id) {
+		return true;
+	}
+	optional_ptr<const IcebergSnapshot> cursor = metadata.FindSnapshotByIdInternal(current_snapshot_id);
+	while (cursor) {
+		if (!cursor->parent_snapshot_id) {
+			return false;
+		}
+		auto parent_id = *cursor->parent_snapshot_id;
+		if (parent_id == target_snapshot_id) {
+			return true;
+		}
+		cursor = metadata.FindSnapshotByIdInternal(parent_id);
+	}
+	return false;
+}
+
+void IcebergTransactionData::TableRollbackToSnapshot(int64_t snapshot_id) {
+	auto &metadata = table_info.table_metadata;
+	auto target = metadata.FindSnapshotByIdInternal(snapshot_id);
+	if (!target) {
+		throw InvalidInputException("Cannot roll back to unknown snapshot id: %lld", snapshot_id);
+	}
+
+	auto current = metadata.GetLatestSnapshot();
+	if (!current || !current->snapshot_id) {
+		throw InvalidInputException("Cannot roll back table with no current snapshot");
+	}
+	auto current_snapshot_id = *current->snapshot_id;
+	if (!IsAncestorOfCurrentSnapshot(metadata, snapshot_id, current_snapshot_id)) {
+		throw InvalidInputException("Cannot roll back to snapshot, not an ancestor of the current state: %lld",
+		                            snapshot_id);
+	}
+
+	// Optimistic concurrency: require main still points at the snapshot we observed.
+	requirements.push_back(make_uniq<AssertRefSnapshotId>(current_snapshot_id));
+	updates.push_back(make_uniq<SetSnapshotRef>(snapshot_id));
+
+	// Iceberg intentionally does not roll current-schema-id back with the snapshot;
+	// schema evolution stays forward-only. See https://github.com/apache/iceberg/issues/5591
 }
 
 } // namespace duckdb

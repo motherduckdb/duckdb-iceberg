@@ -91,7 +91,7 @@ class IcebergCatalog : public Catalog {
 public:
 	explicit IcebergCatalog(AttachedDatabase &db_p, AccessMode access_mode,
 	                        unique_ptr<IcebergAuthorization> auth_handler, IcebergAttachOptions &attach_options,
-	                        const string &default_schema);
+	                        const Identifier &default_schema);
 	~IcebergCatalog() override;
 
 public:
@@ -119,7 +119,7 @@ public:
 	bool CheckAmbiguousCatalogOrSchema(ClientContext &context, const Identifier &schema) override {
 		return false;
 	}
-	string GetDefaultSchema() const override {
+	Identifier GetDefaultSchema() const override {
 		return default_schema;
 	}
 	ErrorData SupportsCreateTable(BoundCreateTableInfo &info) override;
@@ -144,6 +144,10 @@ public:
 	                                    PhysicalOperator &plan) override;
 	PhysicalOperator &PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,
 	                             PhysicalOperator &plan) override;
+	//! Shared delete-planning body both PlanDelete and MERGE build on; only PlanDelete additionally opts the
+	//! standalone DELETE into metadata-only deletes, so MERGE must plan its delete action through here directly.
+	PhysicalOperator &PlanDeleteOperation(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,
+	                                      PhysicalOperator &plan);
 	PhysicalOperator &PlanUpdate(ClientContext &context, PhysicalPlanGenerator &planner, LogicalUpdate &op,
 	                             PhysicalOperator &plan) override;
 	PhysicalOperator &PlanMergeInto(ClientContext &context, PhysicalPlanGenerator &planner, LogicalMergeInto &op,
@@ -166,8 +170,8 @@ public:
 public:
 	AccessMode access_mode;
 	unique_ptr<IcebergAuthorization> auth_handler;
-	//! host of the REST catalog
-	string uri;
+	//! Base URI of the REST catalog
+	string base_uri;
 	//! version
 	const string version;
 	//! optional prefix path components
@@ -175,7 +179,7 @@ public:
 	string namespace_separator = "\x1f";
 	//! attach options
 	IcebergAttachOptions attach_options;
-	string default_schema;
+	Identifier default_schema;
 
 private:
 	//! warehouse
@@ -183,8 +187,8 @@ private:
 	// defaults and overrides provided by a catalog.
 	case_insensitive_map_t<string> defaults;
 	case_insensitive_map_t<string> overrides;
-	//! raw attach options (after core stripping) used to detect a conflicting ATTACH OR REPLACE
-	unordered_map<string, Value> raw_attach_options;
+	//! Normalized attach options (after core stripping) used to detect a conflicting ATTACH OR REPLACE
+	unordered_map<string, Value> normalized_attach_options;
 
 public:
 	unordered_set<string> supported_urls;

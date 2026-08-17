@@ -98,9 +98,9 @@ IcebergTableSchemaVersion &IcebergTableSet::GetOrCreateDummy(IcebergTable &table
 }
 
 void IcebergTableSet::Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback) {
-	lock_guard<mutex> lock(entry_lock);
+	annotated_lock_guard<annotated_mutex> lock(entry_lock);
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
-	LoadEntries(context);
+	LoadEntriesInternal(context);
 	for (auto &entry : entries) {
 		auto &table_info = *entry.second;
 		auto table_key = table_info.GetTableKey();
@@ -122,19 +122,54 @@ void IcebergTableSet::Scan(ClientContext &context, const std::function<void(Cata
 	}
 }
 
-const case_insensitive_map_t<shared_ptr<IcebergTable>> &IcebergTableSet::GetEntries() {
-	return entries;
+void IcebergTableSet::ScanTables(ClientContext &context, const std::function<void(IcebergTable &)> &callback) {
+	annotated_lock_guard<annotated_mutex> lock(entry_lock);
+	LoadEntriesInternal(context);
+	for (auto &entry : entries) {
+		callback(*entry.second);
+	}
 }
 
-case_insensitive_map_t<shared_ptr<IcebergTable>> &IcebergTableSet::GetEntriesMutable() {
-	return entries;
+void IcebergTableSet::DropEntry(ClientContext &context, DropInfo &info, bool delete_entry) {
+	annotated_lock_guard<annotated_mutex> lock(entry_lock);
+	auto table_name = info.GetQualifiedName().Name();
+	auto entry = entries.find(table_name.GetIdentifierName());
+	if (entry == entries.end()) {
+		if (info.if_not_found == OnEntryNotFound::RETURN_NULL) {
+			return;
+		}
+		throw CatalogException("Table %s does not exist", table_name);
+	}
+	if (info.cascade) {
+		throw NotImplementedException("DROP TABLE <table_name> CASCADE is not supported for Iceberg tables currently");
+	}
+	if (delete_entry) {
+		entries.erase(entry);
+		return;
+	}
+
+	// Add the table to the transaction's deleted tables.
+	auto &transaction = IcebergTransaction::Get(context, catalog).Cast<IcebergTransaction>();
+	auto &table = transaction.DeleteTable(*entry->second);
+	//! FIXME: Schema versions point back to their IcebergTable and must be reinitialized after the copy.
+	table.InitSchemaVersions();
 }
 
-mutex &IcebergTableSet::GetEntryLock() {
-	return entry_lock;
+void IcebergTableSet::RenameEntry(const string &name, const string &new_name, IcebergTable &&new_table) {
+	annotated_lock_guard<annotated_mutex> lock(entry_lock);
+	auto source = entries.find(name);
+	if (source == entries.end()) {
+		throw CatalogException("Table %s does not exist", name);
+	}
+	entries.erase(source);
+	shared_ptr<IcebergTable> old_version;
+	CreateEntryInternal(new_name, std::move(new_table), old_version);
+	if (old_version) {
+		throw TransactionException("Table %s was already created by a different transaction!", new_name);
+	}
 }
 
-void IcebergTableSet::LoadEntries(ClientContext &context) {
+void IcebergTableSet::LoadEntriesInternal(ClientContext &context) {
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
 	bool schema_listed = iceberg_transaction.listed_schemas.find(schema.name.GetIdentifierName()) !=
 	                     iceberg_transaction.listed_schemas.end();
@@ -168,8 +203,7 @@ static Value ParseTableProperty(TableFunctionBinder &binder, ClientContext &cont
 	return val;
 }
 
-shared_ptr<IcebergTable> IcebergTableSet::CreateEntryInternal(lock_guard<mutex> &guard, const string &name,
-                                                              IcebergTable &&table,
+shared_ptr<IcebergTable> IcebergTableSet::CreateEntryInternal(const string &name, IcebergTable &&table,
                                                               shared_ptr<IcebergTable> &old_entry) {
 	auto it = entries.find(name);
 	if (it != entries.end()) {
@@ -281,7 +315,6 @@ IcebergTable &IcebergTableSet::CreateNewEntry(ClientContext &context, IcebergCat
 }
 
 optional_ptr<CatalogEntry> IcebergTableSet::GetEntry(ClientContext &context, const EntryLookupInfo &lookup) {
-	lock_guard<mutex> l(entry_lock);
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
 	const auto &table_name = lookup.GetEntryName();
@@ -302,21 +335,18 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetEntry(ClientContext &context, con
 		return table_info.GetSchemaVersion(at);
 	}
 
-	//! Preserve the old version in case our replacement fails
-	shared_ptr<IcebergTable> old_version;
-	auto new_version = CreateEntryInternal(l, table_name, IcebergTable(ic_catalog, schema, table_name), old_version);
+	auto new_version = make_shared_ptr<IcebergTable>(ic_catalog, schema, table_name);
 	auto &table_info = *new_version;
 	if (!FillEntry(context, table_info)) {
-		if (old_version) {
-			entries[table_name] = std::move(old_version);
-		} else {
-			entries.erase(table_name);
-		}
 		//! The table doesn't exist in the catalog
 		iceberg_transaction.SetLatestTableState(table_key, IcebergTableStatus::MISSING);
 		return nullptr;
 	}
 
+	{
+		annotated_lock_guard<annotated_mutex> l(entry_lock);
+		entries[table_name] = new_version;
+	}
 	iceberg_transaction.tables[table_key] = new_version;
 	auto &state = iceberg_transaction.SetCatalogTableState(new_version);
 	if (iceberg_transaction.StartedBefore(table_info.table_metadata.last_updated_ms)) {

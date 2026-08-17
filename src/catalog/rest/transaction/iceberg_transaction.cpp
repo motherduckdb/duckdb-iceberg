@@ -1,6 +1,7 @@
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 
 #include "duckdb/common/assert.hpp"
+#include "duckdb/common/string_util.hpp"
 #include "duckdb/logging/logger.hpp"
 #include "duckdb/parser/parsed_data/create_view_info.hpp"
 #include "duckdb/catalog/catalog_entry/index_catalog_entry.hpp"
@@ -109,19 +110,6 @@ static rest_api_objects::TableRequirement CreateAssertNoSnapshotRequirement() {
 	res.ref = "main";
 	res.type = "assert-ref-snapshot-id";
 	return req;
-}
-
-static rest_api_objects::TableUpdate CreateSetSnapshotRefUpdate(int64_t snapshot_id) {
-	rest_api_objects::TableUpdate table_update;
-
-	table_update.set_snapshot_ref_update = rest_api_objects::SetSnapshotRefUpdate();
-	auto &update = *table_update.set_snapshot_ref_update;
-	update.base_update.action = "set-snapshot-ref";
-
-	update.ref_name = "main";
-	update.snapshot_reference.type = "branch";
-	update.snapshot_reference.snapshot_id = snapshot_id;
-	return table_update;
 }
 
 static bool NeedsAssertSchemaId(const IcebergTransactionData &transaction_data, const IcebergTable &table_info) {
@@ -262,12 +250,25 @@ static void VerifyDeleteRetryability(const IcebergTable &table_info,
 	}
 	auto scan_snapshot_id = *transaction_data.base_snapshot_id;
 	auto tip_snapshot_id = *current_snapshot->snapshot_id;
-	if (DeleteCanReapply(table_info.table_metadata, scan_snapshot_id, tip_snapshot_id)) {
+
+	//! Nothing to reconcile if the tip hasn't moved since we scanned (e.g. the first attempt).
+	if (scan_snapshot_id == tip_snapshot_id) {
+		return;
+	}
+
+	//! Re-applying a DELETE over concurrent commits is opt-in: the table must explicitly request
+	//! 'snapshot' isolation, and even then only a pure-append history is safe (DeleteCanReapply). Any
+	//! other isolation - unset (Iceberg's default is 'serializable') or an explicit 'serializable' - must
+	//! abort, since a concurrent append can add rows matching the delete predicate that a silent re-apply
+	//! would leave behind.
+	auto isolation_level = table_info.table_metadata.GetTableProperty(WRITE_DELETE_ISOLATION_LEVEL);
+	if (StringUtil::CIEquals(isolation_level, "snapshot") &&
+	    DeleteCanReapply(table_info.table_metadata, scan_snapshot_id, tip_snapshot_id)) {
 		return;
 	}
 	throw TransactionException(
-	    "DELETE on \"%s\" conflicts with a concurrent commit that removed or rewrote data (scanned snapshot "
-	    "%s, now at %s); re-run the DELETE.",
+	    "DELETE on \"%s\" conflicts with a concurrent commit (scanned snapshot %s, now at %s); re-run the DELETE. "
+	    "Set 'write.delete.isolation-level'='snapshot' to allow re-applying deletes over concurrent appends.",
 	    table_info.name, std::to_string(scan_snapshot_id), std::to_string(tip_snapshot_id));
 }
 
@@ -305,8 +306,8 @@ static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, Iceb
 		if (!snapshot.snapshot_id) {
 			throw InvalidConfigurationException("snapshot.snapshot_id is not set");
 		}
-		auto set_snapshot_ref_update = CreateSetSnapshotRefUpdate(*snapshot.snapshot_id);
-		commit_state.table_change.updates.push_back(std::move(set_snapshot_ref_update));
+		SetSnapshotRef set_snapshot_ref(*snapshot.snapshot_id);
+		set_snapshot_ref.CreateUpdate(db, context, commit_state);
 	}
 
 	if (transaction_data.pending_current_schema_id.has_value()) {
@@ -571,17 +572,7 @@ void IcebergTransaction::DoTableRename(IcebergTransactionRenameUpdate &rename_up
 		catalog.table_request_cache.EvictIfCurrent(new_table);
 	}
 
-	DropInfo drop_info;
-	drop_info.GetQualifiedNameMutable() = Identifier(table_name);
-	drop_info.if_not_found = OnEntryNotFound::THROW_EXCEPTION;
-	schema.DropEntry(context, drop_info, true);
-
-	lock_guard<mutex> guard(schema.tables.GetEntryLock());
-	shared_ptr<IcebergTable> old_version;
-	schema.tables.CreateEntryInternal(guard, new_name, std::move(new_table), old_version);
-	if (old_version) {
-		throw TransactionException("Table %s was already created by a different transaction!", new_name);
-	}
+	schema.tables.RenameEntry(table_name, new_name, std::move(new_table));
 }
 
 void IcebergTransaction::DoMultiTableCommitUpdates(IcebergTransactionAlterUpdate &alter_update,
