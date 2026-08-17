@@ -183,10 +183,7 @@ void SIGV4Authorization::MaybeRefreshSecret(ClientContext &context) {
 		(void)secret_manager.CreateSecret(context, refresh_input);
 		last_refresh_time = std::chrono::steady_clock::now();
 	} catch (std::exception &ex) {
-		// Leave last_refresh_time alone so the next call retries. Log it: the request is about
-		// to be signed with a credential that may already have expired, and without this the
-		// only symptom is a confusing authorization failure from the catalog. Log the resolved
-		// name rather than `secret`, which is empty when the catalog matched a secret by scope.
+		// Leave last_refresh_time alone so the next call retries with the same credentials.
 		DUCKDB_LOG_DEBUG(context, "Iceberg SigV4 secret '%s' was not updated, refresh failed: %s", refresh_input.name,
 		                 ex.what());
 	}
