@@ -37,6 +37,10 @@ struct RewritePlan {
 struct RewriteDataFilesPlanInput {
 	QualifiedName table_name;
 	optional<int64_t> target_file_size_bytes;
+	//! Optional override; defaults to 75% of the resolved target file size.
+	optional<int64_t> min_file_size_bytes;
+	//! Optional override; defaults to 180% of the resolved target file size.
+	optional<int64_t> max_file_size_bytes;
 	int64_t min_input_files = 5;
 	bool rewrite_all = false;
 };
