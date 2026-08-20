@@ -19,7 +19,8 @@ namespace duckdb {
 
 namespace {
 
-constexpr int64_t DEFAULT_TARGET_FILE_SIZE_BYTES = 134217728;
+//! Iceberg spec default for write.target-file-size-bytes (same as IcebergCopyOptions::file_size_bytes).
+constexpr int64_t DEFAULT_TARGET_FILE_SIZE_BYTES = 512LL * 1024 * 1024;
 constexpr int64_t MIN_TARGET_FILE_SIZE_BYTES = 100;
 
 static int64_t ParseTargetFileSizeProperty(const string &value, const string &property) {
