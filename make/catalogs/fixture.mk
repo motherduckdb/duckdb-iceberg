@@ -1,4 +1,6 @@
 FIXTURE_ENV_FILE ?= scripts/envs/fixture.env
+FIXTURE_COMPOSE_FILE ?= scripts/docker-compose.yml
+FIXTURE_LATEST_IMAGE ?= $(if $(OCI_REGISTRY_MIRROR),$(OCI_REGISTRY_MIRROR)/dockerhub/)apache/iceberg-rest-fixture:latest
 
 fixture-stop:
 	@echo "Stopping apache/iceberg-rest-fixture catalog..."
@@ -9,6 +11,7 @@ fixture: fixture-stop
 	@echo "Starting apache/iceberg-rest-fixture catalog..."
 	mkdir -p data/generated/iceberg/fixture
 	mkdir -p data/generated/intermediates
+	$(MIRROR_COMPOSE_IMAGES) $(FIXTURE_COMPOSE_FILE)
 	(cd scripts && docker compose up -d)
 	$(call set_active_catalog,fixture)
 
@@ -33,7 +36,8 @@ fixture-latest: fixture-latest-stop
 	@echo "Starting apache/iceberg-rest-fixture:latest catalog..."
 	mkdir -p data/generated/iceberg/fixture-latest
 	mkdir -p data/generated/intermediates
-	(cd scripts && ICEBERG_REST_FIXTURE_IMAGE=apache/iceberg-rest-fixture:latest FIXTURE_DATA_DIR=fixture-latest docker compose up -d)
+	$(MIRROR_COMPOSE_IMAGES) $(FIXTURE_COMPOSE_FILE)
+	(cd scripts && ICEBERG_REST_FIXTURE_IMAGE=$(FIXTURE_LATEST_IMAGE) FIXTURE_DATA_DIR=fixture-latest docker compose up -d)
 	$(call set_active_catalog,fixture-latest)
 
 fixture-latest-data: fixture-latest

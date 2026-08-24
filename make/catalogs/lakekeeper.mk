@@ -29,6 +29,7 @@ lakekeeper: lakekeeper-clone lakekeeper-stop
 	$(call stop_active_catalog)
 	@echo "Starting Lakekeeper catalog..."
 	@grep -q '127.0.0.1 minio' /etc/hosts || (echo "Adding minio host entry..." && echo "127.0.0.1 minio" | sudo tee -a /etc/hosts)
+	$(MIRROR_COMPOSE_IMAGES) .catalogs/lakekeeper/examples/access-control-simple/docker-compose.yaml
 	(cd .catalogs/lakekeeper/examples/access-control-simple && docker compose up -d)
 	$(MAKE) lakekeeper-configure-auth
 	@echo "Bootstrapping Lakekeeper..."

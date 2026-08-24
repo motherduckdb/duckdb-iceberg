@@ -11,6 +11,7 @@ gravitino: gravitino-stop
 	@echo "Starting Gravitino catalog..."
 	@grep -q '127.0.0.1 minio' /etc/hosts || (echo "Adding minio host entry..." && echo "127.0.0.1 minio" | sudo tee -a /etc/hosts)
 	@mkdir -p data/generated/iceberg/gravitino
+	@$(MIRROR_COMPOSE_IMAGES) $(GRAVITINO_COMPOSE_FILE)
 	@$(GRAVITINO_COMPOSE) up -d
 	@attempt=1; max_attempts=60; \
 	until curl -sf http://127.0.0.1:9001/iceberg/v1/config >/dev/null; do \

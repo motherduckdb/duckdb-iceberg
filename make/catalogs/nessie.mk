@@ -26,6 +26,7 @@ nessie-configure-auth:
 nessie: nessie-clone nessie-stop
 	$(call stop_active_catalog)
 	@echo "Starting Nessie catalog..."
+	$(MIRROR_COMPOSE_IMAGES) .catalogs/nessie/docker/catalog-auth-s3/docker-compose.yml
 	(cd .catalogs/nessie/docker/catalog-auth-s3 && docker compose up -d)
 	$(MAKE) nessie-configure-auth
 	$(call set_active_catalog,nessie)

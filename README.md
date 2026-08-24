@@ -115,6 +115,14 @@ The catalog targets start local services, generate compatible Iceberg test data,
 
 Starting a catalog stops the catalog currently named in `.catalogs/.active_catalog`. To stop one explicitly, use `make <catalog>-stop`. Catalog clones, runtime state, and generated data are kept in ignored directories.
 
+### Mirroring container images
+
+Every catalog target runs `scripts/mirror_compose_images.sh` on the Compose files it is about to start. When `OCI_REGISTRY_MIRROR` is set, the script rewrites `image:` references so third-party images are pulled from that registry instead of the upstream one: Docker Hub references move under `dockerhub/`, `quay.io` under `quay/`, and `registry.k8s.io`/`k8s.gcr.io` under `k8s/`. References on other registries, and references already pointing at the mirror, are left alone, and the rewrite is idempotent.
+
+`OCI_REGISTRY_MIRROR` is optional. When it is unset or empty the script exits without touching anything, so local runs and environments without mirror access pull from the upstream registries as before. Setting it rewrites the tracked `scripts/docker-compose.yml` in place along with the cloned catalogs' Compose files, so leave it unset unless you want that local modification.
+
+CI sets it to the ECR pull-through cache at `785715327372.dkr.ecr.<region>.amazonaws.com`, which has `dockerhub/`, `quay/`, and `k8s/` pull-through rules. Those pulls are authenticated, so catalog bring-up no longer depends on Docker Hub's anonymous token endpoint and does not fail when the upstream registries are unavailable.
+
 To generate only the data needed by one registered generator, pass a pytest `-k` expression through `TEST`:
 
 ```shell

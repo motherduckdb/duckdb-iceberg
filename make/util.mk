@@ -1,5 +1,8 @@
 ACTIVE_CATALOG_FILE := .catalogs/.active_catalog
 
+# Rewrites compose image references to $(OCI_REGISTRY_MIRROR); no-op when unset.
+MIRROR_COMPOSE_IMAGES := scripts/mirror_compose_images.sh
+
 # Stops whatever catalog is currently marked as active
 define stop_active_catalog
 	@if [ -f "$(ACTIVE_CATALOG_FILE)" ]; then \

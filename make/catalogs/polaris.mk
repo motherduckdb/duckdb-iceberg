@@ -20,6 +20,7 @@ polaris-stop:
 polaris: polaris-clone polaris-stop
 	$(call stop_active_catalog)
 	@echo "Starting Polaris catalog..."
+	$(MIRROR_COMPOSE_IMAGES) .catalogs/polaris/site/content/guides/minio/docker-compose.yml
 	(cd .catalogs/polaris/site/content/guides/minio && docker compose up -d)
 	$(call set_active_catalog,polaris)
 
