@@ -169,7 +169,7 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 		auto partition_values = chunk.GetValue(5, r);
 
 		auto table_current_schema_id = table_metadata.GetCurrentSchemaId();
-		auto &ic_schema = table_metadata.GetSchemas().at(table_current_schema_id);
+		auto ic_schema = table_metadata.GetSchemaFromId(table_current_schema_id);
 
 		auto ic_partition_info = table_metadata.GetLatestPartitionSpec();
 
@@ -863,7 +863,7 @@ PhysicalOperator &IcebergCatalog::PlanInsert(ClientContext &context, PhysicalPla
 }
 
 static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(ClientContext &context, BoundCreateTableInfo &info) {
-	auto metadata = make_uniq<IcebergTableMetadata>();
+	auto metadata = make_uniq<IcebergTableMetadata>(IcebergTableMetadataSchemas {});
 	metadata->iceberg_version = 2;
 	metadata->default_spec_id = 0;
 
@@ -880,7 +880,7 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(ClientContext &
 		schema->columns.push_back(std::move(col_def));
 	}
 	schema->last_column_id = static_cast<idx_t>(next_field_id - 1);
-	metadata->AddSchemaOrGetExisting(schema);
+	metadata->GetSchemasMutable().AddSchemaOrGetExisting(schema);
 	metadata->SetCurrentSchemaId(0);
 
 	auto binder = Binder::CreateBinder(context);

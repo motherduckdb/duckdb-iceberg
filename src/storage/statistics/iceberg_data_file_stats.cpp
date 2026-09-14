@@ -80,7 +80,7 @@ void IcebergDataFileStats::PopulateFromReturnStats(ClientContext &context, Icebe
 	}
 
 	auto table_current_schema_id = table_metadata.GetCurrentSchemaId();
-	auto &ic_schema = table_metadata.GetSchemas().at(table_current_schema_id);
+	auto ic_schema = table_metadata.GetSchemaFromId(table_current_schema_id);
 	auto &map_children = MapValue::GetChildren(column_stats);
 
 	//! Variant columns emit one stats entry per shredded leaf — accumulate them

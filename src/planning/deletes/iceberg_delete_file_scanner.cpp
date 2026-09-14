@@ -235,7 +235,7 @@ static void ScanEqualityDeleteFile(const IcebergDeleteExecutionContext &context,
 }
 
 static vector<MultiFileColumnDefinition>
-BuildEqualityDeleteSchema(const IcebergTableMetadata &metadata,
+BuildEqualityDeleteSchema(const IcebergTableMetadataSchemas &schemas,
                           const vector<reference<const IcebergDeleteScanEntry>> &scan_entries) {
 	vector<MultiFileColumnDefinition> schema;
 	unordered_set<int32_t> field_ids;
@@ -245,7 +245,7 @@ BuildEqualityDeleteSchema(const IcebergTableMetadata &metadata,
 			if (!field_ids.insert(field_id).second) {
 				continue;
 			}
-			auto column = metadata.FindColumnByFieldId(field_id);
+			auto column = schemas.FindColumnByFieldId(field_id);
 			if (!column) {
 				throw InvalidConfigurationException(
 				    "Equality-delete file '%s' references field id %d, but no table schema contains that field",
@@ -302,9 +302,10 @@ static void ScanParquetDeleteFiles(const IcebergDeleteExecutionContext &context,
 	// copied out of the local set: the bind mutates function_info and needs a mutable function
 	auto delete_scan_function =
 	    *iceberg_deletes_scan.GetFunctionByArguments(context.context, {LogicalType::LIST(LogicalType::VARCHAR)});
-	vector<MultiFileColumnDefinition> delete_schema = content == IcebergManifestEntryContentType::POSITION_DELETES
-	                                                      ? BuildPositionalDeleteSchema()
-	                                                      : BuildEqualityDeleteSchema(context.metadata, scan_entries);
+	vector<MultiFileColumnDefinition> delete_schema =
+	    content == IcebergManifestEntryContentType::POSITION_DELETES
+	        ? BuildPositionalDeleteSchema()
+	        : BuildEqualityDeleteSchema(context.metadata.GetSchemas(), scan_entries);
 
 	vector<Value> children;
 	children.push_back(Value::LIST(LogicalType::VARCHAR, std::move(delete_file_paths)));
@@ -412,26 +413,34 @@ static void MergeDeleteScanResult(position_delete_map_t &positional_delete_data,
 	for (auto &entry : scan_result.positional_delete_data) {
 		auto existing = positional_delete_data.find(entry.first);
 		if (existing == positional_delete_data.end()) {
+			//! First delete targeting this data file, just add it
 			positional_delete_data.emplace(entry.first, std::move(entry.second));
 			continue;
 		}
 
+		//! Delete data already exists targeting this data file
 		auto &target = existing->second;
 		auto &source = entry.second;
 		if (target->type == IcebergDeleteType::DELETION_VECTOR) {
+			//! If there's already a DV and we are adding another one, that's a corruption
 			if (source->type == IcebergDeleteType::DELETION_VECTOR) {
 				throw InvalidConfigurationException(
 				    "Table is corrupt, two or more deletion vectors exist for the same referenced_data_file");
 			}
+			//! If that's not the case, then the existing DV simply takes precedence and our delete data gets discarded
 			continue;
 		}
 		if (source->type == IcebergDeleteType::DELETION_VECTOR) {
+			//! We are adding a DV, it supersedes any previously seen positional data
 			target = std::move(source);
 			continue;
 		}
 
+		D_ASSERT(source->type == IcebergDeleteType::POSITIONAL_DELETE);
+		D_ASSERT(target->type == IcebergDeleteType::POSITIONAL_DELETE);
 		auto &target_positions = static_cast<IcebergPositionalDeleteData &>(*target);
 		auto &source_positions = static_cast<IcebergPositionalDeleteData &>(*source);
+		//! Add our new delete rows and source entries to the map of the existing delete data
 		for (auto &source_entry : source_positions.entries) {
 			target_positions.entries.push_back(source_entry);
 		}

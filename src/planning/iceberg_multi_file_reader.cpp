@@ -401,7 +401,8 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
 	if (!task) {
 		throw InternalException("Unable to find Iceberg scan task for file index %llu", file_id);
 	}
-	auto delete_plan = multi_file_list.ProcessDeletes(*task);
+	auto &delete_file_reader = multi_file_list.GetDeleteReader();
+	auto delete_plan = delete_file_reader.ProcessDeletes(multi_file_list.GetScanPlanner(), *task);
 
 	//! Make a copy of the global columns+column_ids, if we have equality deletes we will add columns to this
 	//! This is done so CreateMapping treats these columns as required for the current file,

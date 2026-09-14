@@ -34,6 +34,10 @@ const IcebergScanPlanner &IcebergMultiFileList::GetScanPlanner() const {
 	return *planner;
 }
 
+IcebergDeleteExecutionState &IcebergMultiFileList::GetDeleteReader() const {
+	return *delete_execution;
+}
+
 void IcebergMultiFileList::SetTable(IcebergTableSchemaVersion &table) {
 	planner->SetTable(table);
 }
@@ -52,8 +56,7 @@ void IcebergMultiFileList::Bind(vector<LogicalType> &return_types, vector<Identi
 		D_ASSERT(!planner->GetPath().empty());
 		auto resolved_metadata =
 		    IcebergUtils::ResolveTableMetadata(planner->GetContext(), planner->GetPath(), planner->GetOptions());
-		auto temp_data = make_uniq<IcebergScanTemporaryData>();
-		temp_data->metadata = std::move(resolved_metadata.metadata);
+		auto temp_data = make_uniq<IcebergScanTemporaryData>(std::move(resolved_metadata.metadata));
 		auto &metadata = temp_data->metadata;
 		auto snapshot_info = metadata.GetSnapshot(*planner->GetOptions().snapshot_lookup);
 		auto schema = metadata.GetSchemaFromId(snapshot_info.schema_id);

@@ -265,9 +265,10 @@ IcebergDataFile::GetExtendedPartitionInfo(const IcebergTableMetadata &metadata) 
 
 	// Build source_id -> LogicalType map from all schemas (schema evolution may spread columns).
 	unordered_map<uint64_t, const LogicalType *> source_id_to_type;
-	for (auto &schema_pair : metadata.GetSchemas()) {
-		PopulateSourceIdToTypeMap(schema_pair.second->columns, source_id_to_type);
-	}
+
+	auto &schemas = metadata.GetSchemas();
+	schemas.ForEachSchema(
+	    [&](const IcebergTableSchema &schema) { PopulateSourceIdToTypeMap(schema.columns, source_id_to_type); });
 
 	// Build field_id -> (spec field, source_type) map from all partition specs.
 	// Partition field ids are globally unique across all specs per the Iceberg spec.
