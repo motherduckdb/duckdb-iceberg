@@ -7,8 +7,8 @@ fixture-stop:
 fixture: fixture-stop
 	$(call stop_active_catalog)
 	@echo "Starting apache/iceberg-rest-fixture catalog..."
-	# Wipe the bind-mounted warehouse while the containers are down; the mc
-	# bootstrap recreates the bucket on startup. Wiping after `up` races with mc.
+	# Wipe the bind-mounted warehouse while the containers are down; s3-init
+	# recreates the bucket on startup. Wiping after `up` races with it.
 	rm -rf data/generated/iceberg/fixture data/generated/intermediates
 	mkdir -p data/generated/iceberg/fixture
 	mkdir -p data/generated/intermediates
