@@ -59,9 +59,9 @@ void IcebergMultiFileList::Bind(vector<LogicalType> &return_types, vector<Identi
 		auto temp_data = make_uniq<IcebergScanTemporaryData>(std::move(resolved_metadata.metadata));
 		auto &metadata = temp_data->metadata;
 		auto snapshot_info = metadata.GetSnapshot(*planner->GetOptions().snapshot_lookup);
-		auto schema = metadata.GetSchemaFromId(snapshot_info.schema_id);
+		auto &schema = metadata.GetSchemaFromId(snapshot_info.schema_id);
 		planner->SetScanInfo(make_shared_ptr<IcebergScanInfo>(resolved_metadata.table_location, std::move(temp_data),
-		                                                      snapshot_info, *schema));
+		                                                      snapshot_info, schema));
 	}
 	for (auto &schema_entry : planner->GetSchema().columns) {
 		names.push_back(Identifier(schema_entry->name));

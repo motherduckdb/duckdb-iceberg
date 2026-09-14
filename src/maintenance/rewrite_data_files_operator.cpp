@@ -89,8 +89,7 @@ PhysicalOperator &LogicalRewriteDataFiles::CreatePlan(ClientContext &context, Ph
 	D_ASSERT(children.size() == 1);
 	D_ASSERT(rewrite.plan.table_info);
 	auto &metadata = rewrite.plan.table_info->table_metadata;
-	auto schema_id = metadata.GetCurrentSchemaId();
-	auto current_schema = metadata.GetSchemaFromId(schema_id);
+	auto &current_schema = metadata.GetLatestSchema();
 
 	//! Bind attached a LogicalCopyToFile so RemoveUnusedColumns keeps all table
 	//! columns. Peel that logical COPY away and rebuild the physical copy with
@@ -103,7 +102,7 @@ PhysicalOperator &LogicalRewriteDataFiles::CreatePlan(ClientContext &context, Ph
 	auto &scan = planner.CreatePlan(*logical_child.children[0]);
 	//! Vended credentials are already installed: PlanRewrite loads them for the manifests,
 	//! and BindCandidateCopy's table scan bind calls PrepareIcebergScanFromEntry.
-	IcebergCopyInput copy_input(context, metadata, *current_schema);
+	IcebergCopyInput copy_input(context, metadata, current_schema);
 	auto &copy = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, &scan);
 	copy.file_size_bytes = NumericCast<idx_t>(rewrite.plan.target_file_size_bytes);
 	//! A file can never be smaller than a single row group; rotation only happens at row-group

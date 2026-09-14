@@ -169,7 +169,7 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 		auto partition_values = chunk.GetValue(5, r);
 
 		auto table_current_schema_id = table_metadata.GetCurrentSchemaId();
-		auto ic_schema = table_metadata.GetSchemaFromId(table_current_schema_id);
+		auto &ic_schema = table_metadata.GetSchemaFromId(table_current_schema_id);
 
 		auto ic_partition_info = table_metadata.GetLatestPartitionSpec();
 
@@ -183,13 +183,13 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 		// But if there are only identity transforms, we don't add a projection to the insert, so we can just use
 		// regular column names. So here when we populate our map, if there are transforms present, we need to use our
 		// transform partition column names. If not, we should use the identify names.
-		if (!CanWriteIdentityPartitionsDirectly(ic_partition_info, *ic_schema)) {
+		if (!CanWriteIdentityPartitionsDirectly(ic_partition_info, ic_schema)) {
 			for (auto &partition_field : ic_partition_info.fields) {
 				partition_colname_to_field.emplace(partition_field.GetPartitionSpecFieldName(), partition_field);
 			}
 		} else {
 			for (auto &partition_field : ic_partition_info.fields) {
-				auto actual_col_name = GetColumnNameBySourceId(*ic_schema, partition_field.source_id);
+				auto actual_col_name = GetColumnNameBySourceId(ic_schema, partition_field.source_id);
 				partition_colname_to_field.emplace(actual_col_name, partition_field);
 			}
 		}
@@ -204,7 +204,7 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 				auto field_it = partition_colname_to_field.find(partition_name);
 				D_ASSERT(field_it != partition_colname_to_field.end());
 				auto &partition_field = field_it->second.get();
-				auto source_type = ic_schema->GetColumnTypeFromFieldId(partition_field.source_id);
+				auto source_type = ic_schema.GetColumnTypeFromFieldId(partition_field.source_id);
 
 				IcebergPartitionInfo info;
 				info.field_id = partition_field.partition_field_id;

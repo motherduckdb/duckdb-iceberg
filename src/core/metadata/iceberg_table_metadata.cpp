@@ -21,12 +21,12 @@ optional_ptr<const IcebergColumnDefinition> IcebergTableMetadataSchemas::FindCol
 	return nullptr;
 }
 
-shared_ptr<IcebergTableSchema> IcebergTableMetadataSchemas::GetSchemaFromId(int32_t schema_id) const {
+const IcebergTableSchema &IcebergTableMetadataSchemas::GetSchemaFromId(int32_t schema_id) const {
 	auto it = schemas.find(schema_id);
 	if (it == schemas.end()) {
 		throw InternalException("Schema id %d not found in Iceberg metadata", schema_id);
 	}
-	return it->second;
+	return *it->second;
 }
 
 void IcebergTableMetadataSchemas::ForEachSchema(const std::function<void(const IcebergTableSchema &)> &callback) const {
@@ -85,7 +85,7 @@ optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetSnapshotByTimestamp
 	return max_snapshot;
 }
 
-shared_ptr<IcebergTableSchema> IcebergTableMetadata::GetSchemaFromId(int32_t schema_id) const {
+const IcebergTableSchema &IcebergTableMetadata::GetSchemaFromId(int32_t schema_id) const {
 	return schemas.GetSchemaFromId(schema_id);
 }
 
@@ -117,9 +117,7 @@ optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetLatestSnapshot() co
 }
 
 const IcebergTableSchema &IcebergTableMetadata::GetLatestSchema() const {
-	auto res = GetSchemaFromId(current_schema_id);
-	D_ASSERT(res);
-	return *res;
+	return GetSchemaFromId(current_schema_id);
 }
 
 bool IcebergTableMetadata::HasPartitionSpec() const {
@@ -325,6 +323,9 @@ int32_t IcebergTableMetadata::GetCurrentSchemaId() const {
 }
 
 IcebergTableSchema &IcebergTableMetadataSchemas::AddSchemaOrGetExisting(shared_ptr<IcebergTableSchema> schema) {
+	if (!schema) {
+		throw InternalException("Can't add NULL schema");
+	}
 	for (auto &it : schemas) {
 		auto &item = *it.second;
 		if (schema->Equals(item)) {

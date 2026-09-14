@@ -221,7 +221,7 @@ map<idx_t, LogicalType> IcebergDataFile::GetFieldIdToTypeMapping(const IcebergSn
                                                                  const unordered_set<int32_t> &partition_spec_ids) {
 	D_ASSERT(!partition_spec_ids.empty());
 	auto &partition_specs = metadata.GetPartitionSpecs();
-	auto &schema = *metadata.GetSchemaFromId(snapshot_info.schema_id);
+	auto &schema = metadata.GetSchemaFromId(snapshot_info.schema_id);
 
 	auto &source_to_column_id = schema.GetSourceIdMap();
 	map<idx_t, LogicalType> partition_field_id_to_type;
