@@ -42,10 +42,6 @@ optional_ptr<IcebergTableSchemaVersion> IcebergMultiFileList::GetTable() const {
 	return planner->GetTable();
 }
 
-void IcebergMultiFileList::SetOptions(const IcebergOptions &options) {
-	planner->SetOptions(options);
-}
-
 void IcebergMultiFileList::Bind(vector<LogicalType> &return_types, vector<Identifier> &names) {
 	if (have_bound) {
 		names = StringsToIdentifiers(this->names);

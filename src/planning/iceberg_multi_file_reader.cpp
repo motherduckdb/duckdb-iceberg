@@ -111,7 +111,7 @@ bool IcebergMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &file
                                   vector<Identifier> &names, MultiFileReaderBindData &bind_data) {
 	auto &iceberg_multi_file_list = dynamic_cast<IcebergMultiFileList &>(files);
 
-	iceberg_multi_file_list.SetOptions(this->options);
+	iceberg_multi_file_list.GetScanPlanner().SetOptions(this->options);
 	iceberg_multi_file_list.Bind(return_types, names);
 	// FIXME: apply final transformation for 'file_row_number' ???
 	auto &schema = iceberg_multi_file_list.GetScanPlanner().GetSchema().columns;

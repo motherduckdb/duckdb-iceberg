@@ -34,7 +34,6 @@ public:
 
 	void SetTable(IcebergTableSchemaVersion &table);
 	optional_ptr<IcebergTableSchemaVersion> GetTable() const;
-	void SetOptions(const IcebergOptions &options);
 	void Bind(vector<LogicalType> &return_types, vector<Identifier> &names);
 	shared_ptr<IcebergDeleteData> GetExistingPositionalDeleteData(const string &file_path) const;
 	IcebergDeletePlan ProcessDeletes(const IcebergScanTask &task) const;
