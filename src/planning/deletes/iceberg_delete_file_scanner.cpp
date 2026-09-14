@@ -530,7 +530,7 @@ IcebergDeletePlan IcebergDeleteExecutionState::ProcessDeletes(const IcebergScanP
 
 	{
 		lock_guard<mutex> guard(lock);
-		auto entry = positional_delete_data.find(task.data_file.entry.data_file.file_path);
+		auto entry = positional_delete_data.find(task.manifest_entry.entry.data_file.file_path);
 		if (entry != positional_delete_data.end()) {
 			result.positional_deletes = entry->second->ToFilter();
 		}

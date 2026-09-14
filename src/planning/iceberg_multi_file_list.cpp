@@ -148,7 +148,8 @@ OpenFileInfo IcebergMultiFileList::GetFileInternal(idx_t file_id) const {
 	if (!task) {
 		return OpenFileInfo();
 	}
-	auto &data_file = task->data_file.entry.data_file;
+	auto &manifest_entry = task->manifest_entry;
+	auto &data_file = manifest_entry.entry.data_file;
 	if (!StringUtil::CIEquals(data_file.file_format, "parquet")) {
 		throw NotImplementedException("File format '%s' not supported, only supports 'parquet' currently",
 		                              data_file.file_format);
@@ -159,11 +160,17 @@ OpenFileInfo IcebergMultiFileList::GetFileInternal(idx_t file_id) const {
 	extended_info->options["validate_external_file_cache"] = Value::BOOLEAN(false);
 	extended_info->options["etag"] = Value("");
 	extended_info->options["last_modified"] = Value::TIMESTAMP(timestamp_t(0));
-	if (task->data_file.HasFirstRowId()) {
-		extended_info->options["first_row_id"] = Value::BIGINT(task->data_file.GetFirstRowId());
+	if (task->manifest_entry.HasFirstRowId()) {
+		extended_info->options["first_row_id"] = Value::BIGINT(task->manifest_entry.GetFirstRowId());
 	}
-	extended_info->options["sequence_number"] =
-	    Value::BIGINT(task->data_file.entry.GetSequenceNumber(task->manifest_file));
+
+	sequence_number_t sequence_number;
+	planner->WithManifestFile(task->manifest_entry, IcebergManifestContentType::DATA,
+	                          [&sequence_number, &manifest_entry](const IcebergManifestFile &manifest) {
+		                          sequence_number = manifest_entry.entry.GetSequenceNumber(manifest);
+	                          });
+
+	extended_info->options["sequence_number"] = Value::BIGINT(sequence_number);
 	result.extended_info = std::move(extended_info);
 	return result;
 }

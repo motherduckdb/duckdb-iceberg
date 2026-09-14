@@ -24,8 +24,7 @@ struct IcebergScanPlanContext;
 //! A query-lifetime view of all metadata needed to initialize one data-file scan.
 //! The manifest entries referenced by this object are owned by the planner.
 struct IcebergScanTask {
-	BoundIcebergManifestEntry data_file;
-	IcebergManifestFile manifest_file;
+	BoundIcebergManifestEntry manifest_entry;
 	string file_path;
 	vector<IcebergDeleteFileReference> delete_files;
 };
@@ -66,6 +65,9 @@ public:
 	IcebergPartition GetPartitionForDataFile(const string &file_path) const;
 	const IcebergManifestListEntry &GetDeleteManifest(IcebergDeleteFileReference delete_file) const;
 	unique_ptr<IcebergDeletePlanningContext> CreateDeletePlanningContext() const;
+	void WithManifestFile(const BoundIcebergManifestEntry &entry, IcebergManifestContentType type,
+	                      const std::function<void(const IcebergManifestFile &manifest_file)> &callback) const
+	    DUCKDB_EXCLUDES(shared_state->lock);
 
 private:
 	explicit IcebergScanPlanner(shared_ptr<IcebergScanPlanState> shared_state);

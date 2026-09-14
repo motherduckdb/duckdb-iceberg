@@ -299,7 +299,7 @@ static Value TransformPartitionValue(const Value &value, const LogicalType &type
 	}
 }
 
-void IcebergMultiFileReader::ApplyPartitionConstants(const IcebergManifestFile &manifest_file,
+void IcebergMultiFileReader::ApplyPartitionConstants(int32_t partition_spec_id,
                                                      const BoundIcebergManifestEntry &bound_manifest_entry,
                                                      const IcebergTableMetadata &metadata,
                                                      MultiFileReaderData &reader_data,
@@ -313,10 +313,9 @@ void IcebergMultiFileReader::ApplyPartitionConstants(const IcebergManifestFile &
 
 	// Get the partition spec for this file
 	auto &partition_specs = metadata.partition_specs;
-	auto spec_id = manifest_file.partition_spec_id;
-	auto partition_spec_it = partition_specs.find(spec_id);
+	auto partition_spec_it = partition_specs.find(partition_spec_id);
 	if (partition_spec_it == partition_specs.end()) {
-		throw InvalidConfigurationException("'partition_spec_id' %d doesn't exist in the metadata", spec_id);
+		throw InvalidConfigurationException("'partition_spec_id' %d doesn't exist in the metadata", partition_spec_id);
 	}
 
 	auto &partition_spec = partition_spec_it->second;
@@ -427,8 +426,12 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
 			ApplyFieldMapping(local_column, mappings, root.field_mapping_indexes, context);
 		}
 	}
-	ApplyPartitionConstants(task->manifest_file, task->data_file, metadata, reader_data, scan_columns, scan_column_ids,
-	                        context);
+	int32_t partition_spec_id;
+	planner.WithManifestFile(
+	    task->manifest_entry, IcebergManifestContentType::DATA,
+	    [&partition_spec_id](const IcebergManifestFile &manifest) { partition_spec_id = manifest.partition_spec_id; });
+	ApplyPartitionConstants(partition_spec_id, task->manifest_entry, metadata, reader_data, scan_columns,
+	                        scan_column_ids, context);
 
 	vector<bool> accelerated_files;
 	Value fast_filter_setting;

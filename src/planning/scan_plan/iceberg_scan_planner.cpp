@@ -271,6 +271,14 @@ const IcebergManifestFile &IcebergScanPlanner::GetManifestFileForEntry(const Bou
 	                                                : delete_manifests[entry.manifest_file_idx].entry.file;
 }
 
+void IcebergScanPlanner::WithManifestFile(
+    const BoundIcebergManifestEntry &entry, IcebergManifestContentType type,
+    const std::function<void(const IcebergManifestFile &manifest_file)> &callback) const {
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
+	auto &manifest_file = GetManifestFileForEntry(entry, type);
+	callback(manifest_file);
+}
+
 optional<IcebergScanTask> IcebergScanPlanner::GetDataFileTask(idx_t file_id) const {
 	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
 	GetDataFile(file_id, guard);
@@ -279,18 +287,17 @@ optional<IcebergScanTask> IcebergScanPlanner::GetDataFileTask(idx_t file_id) con
 		return nullopt;
 	}
 	auto data_file = data_manifest_entries[file_id];
-	auto manifest_file = GetManifestFileForEntry(data_file, IcebergManifestContentType::DATA);
 	auto path = data_file.entry.data_file.file_path;
 	if (options.allow_moved_paths) {
 		path = IcebergUtils::GetFullPath(GetPath(), path, fs);
 	}
-	return IcebergScanTask {data_file, std::move(manifest_file), std::move(path), {}};
+	return IcebergScanTask {data_file, std::move(path), {}};
 }
 
 optional<IcebergScanTask> IcebergScanPlanner::GetScanTask(idx_t file_id) const {
 	auto task = GetDataFileTask(file_id);
 	if (task) {
-		task->delete_files = ResolveApplicableDeleteFiles(task->data_file);
+		task->delete_files = ResolveApplicableDeleteFiles(task->manifest_entry);
 	}
 	return task;
 }
