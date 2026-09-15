@@ -197,7 +197,7 @@ void IcebergTableSet::LoadEntriesInternal(ClientContext &context) {
 		case_insensitive_set_t listed;
 		for (auto &table : *tables) {
 			listed.insert(table.name);
-			entries.emplace(table.name, make_shared_ptr<IcebergTable>(ic_catalog, schema, table.name));
+			entries.emplace(table.name, IcebergTable::CreatePlaceholder(ic_catalog, schema, table.name));
 		}
 		// 'entries' outlives the transaction, so drop the names the listing no longer reports.
 		// Tables created in this transaction live on the transaction, not here, so they are safe.
@@ -287,7 +287,7 @@ IcebergTable &IcebergTableSet::CreateNewEntry(ClientContext &context, IcebergCat
 		}
 	}
 
-	IcebergTableMetadata bootstrap_metadata;
+	IcebergTableMetadata bootstrap_metadata(IcebergTableMetadataSchemas {});
 	bootstrap_metadata.iceberg_version = iceberg_version.GetIndex();
 	int32_t last_column_id;
 
@@ -324,9 +324,8 @@ IcebergTable &IcebergTableSet::CreateNewEntry(ClientContext &context, IcebergCat
 	auto key = IcebergTable::GetTableKey(catalog, schema.namespace_items, info.GetTableName().GetIdentifierName());
 	auto &load_table_result = *new_table_result;
 	auto &alter_update = iceberg_transaction.GetOrCreateAlter();
-	auto &table_info =
-	    alter_update.CreateTable(key, IcebergTable(catalog, schema, info.GetTableName().GetIdentifierName()));
-	table_info.InitializeFromLoadTableResult(load_table_result);
+	auto &table_info = alter_update.CreateTable(
+	    key, IcebergTable(catalog, schema, info.GetTableName().GetIdentifierName(), load_table_result));
 	catalog.table_request_cache.SetOrOverwrite(key, std::move(new_table_result));
 
 	// if we stage created the table, we add an assert create
@@ -337,6 +336,7 @@ IcebergTable &IcebergTableSet::CreateNewEntry(ClientContext &context, IcebergCat
 	if (!catalog.attach_options.stage_create_tables && catalog.attach_options.skip_create_table_metadata_updates) {
 		return table_info;
 	}
+
 	// other required updates to the table
 	transaction_data.TableAssignUUID();
 	transaction_data.TableAddUpradeFormatVersion();
@@ -373,7 +373,7 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetEntry(ClientContext &context, con
 		return table_info.GetSchemaVersion(at);
 	}
 
-	auto new_version = make_shared_ptr<IcebergTable>(ic_catalog, schema, table_name);
+	auto new_version = IcebergTable::CreatePlaceholder(ic_catalog, schema, table_name);
 	auto &table_info = *new_version;
 	if (!FillEntry(context, table_info)) {
 		//! The table doesn't exist in the catalog

@@ -136,17 +136,18 @@ private:
 	                               const IcebergEqualityDeleteReadState &read_state,
 	                               const vector<bool> &accelerated_files);
 	static vector<IcebergEqualityDeleteReadColumn>
-	AddEqualityDeleteColumns(const IcebergTableMetadata &metadata,
+	AddEqualityDeleteColumns(const IcebergTableMetadataSchemas &schemas,
 	                         const vector<reference<const IcebergEqualityDeleteFile>> &delete_files,
 	                         vector<MultiFileColumnDefinition> &scan_columns, vector<ColumnIndex> &scan_column_ids,
 	                         MultiFileReaderData &reader_data, ClientContext &context);
 	static IcebergEqualityDeleteReadColumn
-	AddEqualityDeleteColumn(const IcebergTableMetadata &metadata, int32_t field_id,
+	AddEqualityDeleteColumn(const IcebergTableMetadataSchemas &schemas, int32_t field_id,
 	                        vector<MultiFileColumnDefinition> &scan_columns, vector<ColumnIndex> &scan_column_ids,
 	                        MultiFileReaderData &reader_data, ClientContext &context);
-	static void ApplyPartitionConstants(const IcebergManifestFile &manifest_file,
+	static void ApplyPartitionConstants(int32_t partition_spec_id,
 	                                    const BoundIcebergManifestEntry &bound_manifest_entry,
-	                                    const IcebergTableMetadata &metadata, MultiFileReaderData &reader_data,
+	                                    const unordered_map<int32_t, IcebergPartitionSpec> &partition_specs,
+	                                    MultiFileReaderData &reader_data,
 	                                    const vector<MultiFileColumnDefinition> &global_columns,
 	                                    const vector<ColumnIndex> &global_column_ids, ClientContext &context);
 

@@ -670,8 +670,7 @@ void IcebergTable::RefreshFromCatalog(ClientContext &context) {
 }
 
 IcebergTable IcebergTable::Copy() const {
-	auto clone = IcebergTable(catalog, schema, name);
-	clone.table_metadata = table_metadata.Copy();
+	auto clone = IcebergTable(catalog, schema, name, table_metadata.Copy());
 	clone.config = config;
 	clone.initialization_source = initialization_source;
 	for (auto &credential : storage_credentials) {
@@ -743,13 +742,24 @@ IcebergTable IcebergTable::Copy(IcebergTransaction &iceberg_transaction) const {
 
 void IcebergTable::InitSchemaVersions() {
 	schema_versions.clear();
-	for (auto &table_schema : table_metadata.GetSchemas()) {
-		CreateSchemaVersion(*table_schema.second);
-	}
+	auto &schemas = table_metadata.GetSchemas();
+	schemas.ForEachSchema([&](const IcebergTableSchema &schema) { CreateSchemaVersion(schema); });
 }
 
-IcebergTable::IcebergTable(IcebergCatalog &catalog, IcebergSchemaEntry &schema, const string &name)
-    : catalog(catalog), schema(schema), name(name), original_name(name) {
+IcebergTable::IcebergTable(IcebergCatalog &catalog, IcebergSchemaEntry &schema, const string &name,
+                           IcebergTableMetadata metadata)
+    : catalog(catalog), schema(schema), name(name), table_metadata(std::move(metadata)), original_name(name) {
+}
+
+IcebergTable::IcebergTable(IcebergCatalog &catalog, IcebergSchemaEntry &schema, const string &name,
+                           const rest_api_objects::LoadTableResult &load_table_result)
+    : IcebergTable(catalog, schema, name, IcebergTableMetadata::FromTableMetadata(load_table_result.metadata)) {
+	SetLoadTableResult(load_table_result);
+}
+
+shared_ptr<IcebergTable> IcebergTable::CreatePlaceholder(IcebergCatalog &catalog, IcebergSchemaEntry &schema,
+                                                         const string &name) {
+	return make_shared_ptr<IcebergTable>(catalog, schema, name, IcebergTableMetadata(IcebergTableMetadataSchemas {}));
 }
 
 IcebergTransactionData &IcebergTable::GetOrCreateTransactionData(IcebergTransaction &transaction) {
@@ -762,8 +772,14 @@ IcebergTransactionData &IcebergTable::GetOrCreateTransactionData(IcebergTransact
 }
 
 void IcebergTable::InitializeFromLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result) {
-	initialization_source = load_table_result;
 	table_metadata = IcebergTableMetadata::FromTableMetadata(load_table_result.metadata);
+	SetLoadTableResult(load_table_result);
+	D_ASSERT(!table_metadata.GetSchemas().IsEmpty());
+	InitSchemaVersions();
+}
+
+void IcebergTable::SetLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result) {
+	initialization_source = load_table_result;
 	if (auto &val = load_table_result.config) {
 		config = *val;
 	}
@@ -773,11 +789,6 @@ void IcebergTable::InitializeFromLoadTableResult(const rest_api_objects::LoadTab
 		for (auto &credential : *credentials) {
 			storage_credentials.push_back(credential.Copy());
 		}
-	}
-	auto &schemas = table_metadata.GetSchemas();
-	D_ASSERT(!schemas.empty());
-	for (auto &table_schema : schemas) {
-		CreateSchemaVersion(*table_schema.second);
 	}
 }
 

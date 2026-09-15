@@ -292,7 +292,8 @@ void IntroduceNewSchema(IcebergTable &updated_table, IcebergTransactionData &tra
                         shared_ptr<IcebergTableSchema> new_schema) {
 	auto new_schema_id = new_schema->schema_id;
 
-	auto &result_schema = updated_table.table_metadata.AddSchemaOrGetExisting(std::move(new_schema));
+	auto &schemas = updated_table.table_metadata.GetSchemasMutable();
+	auto &result_schema = schemas.AddSchemaOrGetExisting(std::move(new_schema));
 	if (result_schema.schema_id == new_schema_id) {
 		// Update the Table Metadata to have our new schema
 		updated_table.CreateSchemaVersion(result_schema);
@@ -546,7 +547,8 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 
 		auto new_schema_id = new_schema->schema_id;
 
-		auto &result_schema = updated_table.table_metadata.AddSchemaOrGetExisting(std::move(new_schema));
+		auto &result_schema =
+		    updated_table.table_metadata.GetSchemasMutable().AddSchemaOrGetExisting(std::move(new_schema));
 		if (result_schema.schema_id == new_schema_id) {
 			// Update the Table Metadata to have our new schema
 			updated_table.CreateSchemaVersion(result_schema);
@@ -646,7 +648,8 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 
 		auto new_schema_id = new_schema->schema_id;
 
-		auto &result_schema = updated_table.table_metadata.AddSchemaOrGetExisting(std::move(new_schema));
+		auto &result_schema =
+		    updated_table.table_metadata.GetSchemasMutable().AddSchemaOrGetExisting(std::move(new_schema));
 		if (result_schema.schema_id == new_schema_id) {
 			// Update the Table Metadata to have our new schema
 			updated_table.CreateSchemaVersion(result_schema);
