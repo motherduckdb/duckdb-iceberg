@@ -34,8 +34,8 @@ public:
 struct IcebergTableMetadataSchemas {
 public:
 	IcebergTableMetadataSchemas() = default;
-	explicit IcebergTableMetadataSchemas(unordered_map<int32_t, shared_ptr<IcebergTableSchema>> schemas)
-	    : schemas(std::move(schemas)) {
+	explicit IcebergTableMetadataSchemas(unordered_map<int32_t, shared_ptr<IcebergTableSchema>> schemas_p)
+	    : schemas(std::move(schemas_p)) {
 		for (auto &[_, schema] : schemas) {
 			if (!schema) {
 				throw InternalException("Can't create IcebergTableMetadataSchemas from NULL schema(s)");
