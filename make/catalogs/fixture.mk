@@ -7,17 +7,13 @@ fixture-stop:
 fixture: fixture-stop
 	$(call stop_active_catalog)
 	@echo "Starting apache/iceberg-rest-fixture catalog..."
-	# Wipe the bind-mounted warehouse while the containers are down; the mc
-	# bootstrap recreates the bucket on startup. Wiping after `up` races with mc.
-	rm -rf data/generated/iceberg/spark-rest data/generated/intermediates
-	mkdir -p data/generated/iceberg/spark-rest
+	rm -rf data/generated/intermediates
 	mkdir -p data/generated/intermediates
 	(cd scripts && docker compose up -d)
 	$(call set_active_catalog,fixture)
 
 fixture-data-only:
 	@echo "Setting up venv-spark4 and generating data..."
-	mkdir -p data/generated/iceberg/spark-rest && \
 	mkdir -p data/generated/intermediates && \
 	python3 -m venv .venv-spark4 && \
 	. .venv-spark4/bin/activate && \
