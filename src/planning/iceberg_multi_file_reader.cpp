@@ -111,10 +111,10 @@ bool IcebergMultiFileReader::Bind(MultiFileOptions &options, MultiFileList &file
                                   vector<Identifier> &names, MultiFileReaderBindData &bind_data) {
 	auto &iceberg_multi_file_list = dynamic_cast<IcebergMultiFileList &>(files);
 
-	iceberg_multi_file_list.SetOptions(this->options);
+	iceberg_multi_file_list.GetScanPlanner().SetOptions(this->options);
 	iceberg_multi_file_list.Bind(return_types, names);
 	// FIXME: apply final transformation for 'file_row_number' ???
-	auto &schema = iceberg_multi_file_list.GetSchema().columns;
+	auto &schema = iceberg_multi_file_list.GetScanPlanner().GetSchema().columns;
 	auto &columns = bind_data.schema;
 	for (auto &item : schema) {
 		columns.push_back(item->GetMultiFileColumnDefinition());
@@ -144,13 +144,13 @@ IcebergMultiFileReader::InitializeGlobalState(ClientContext &context, const Mult
 }
 
 IcebergEqualityDeleteReadColumn IcebergMultiFileReader::AddEqualityDeleteColumn(
-    const IcebergTableMetadata &metadata, int32_t field_id, vector<MultiFileColumnDefinition> &scan_columns,
+    const IcebergTableMetadataSchemas &schemas, int32_t field_id, vector<MultiFileColumnDefinition> &scan_columns,
     vector<ColumnIndex> &scan_column_ids, MultiFileReaderData &reader_data, ClientContext &context) {
 	auto field_id_to_scan_column = CreateFieldIdMap(scan_columns);
 	MultiFileColumnPath column_path;
 	auto field_entry = field_id_to_scan_column.find(field_id);
 	if (field_entry == field_id_to_scan_column.end()) {
-		auto column = metadata.FindColumnByFieldId(field_id);
+		auto column = schemas.FindColumnByFieldId(field_id);
 		if (!column) {
 			throw InvalidConfigurationException(
 			    "Column %d must be read to apply equality deletes, but no schema contains that field id", field_id);
@@ -192,7 +192,7 @@ IcebergEqualityDeleteReadColumn IcebergMultiFileReader::AddEqualityDeleteColumn(
 }
 
 vector<IcebergEqualityDeleteReadColumn> IcebergMultiFileReader::AddEqualityDeleteColumns(
-    const IcebergTableMetadata &metadata, const vector<reference<const IcebergEqualityDeleteFile>> &delete_files,
+    const IcebergTableMetadataSchemas &schemas, const vector<reference<const IcebergEqualityDeleteFile>> &delete_files,
     vector<MultiFileColumnDefinition> &scan_columns, vector<ColumnIndex> &scan_column_ids,
     MultiFileReaderData &reader_data, ClientContext &context) {
 	set<int32_t> required_field_ids;
@@ -205,7 +205,7 @@ vector<IcebergEqualityDeleteReadColumn> IcebergMultiFileReader::AddEqualityDelet
 	vector<IcebergEqualityDeleteReadColumn> result;
 	for (auto field_id : required_field_ids) {
 		result.push_back(
-		    AddEqualityDeleteColumn(metadata, field_id, scan_columns, scan_column_ids, reader_data, context));
+		    AddEqualityDeleteColumn(schemas, field_id, scan_columns, scan_column_ids, reader_data, context));
 	}
 	return result;
 }
@@ -299,24 +299,20 @@ static Value TransformPartitionValue(const Value &value, const LogicalType &type
 	}
 }
 
-void IcebergMultiFileReader::ApplyPartitionConstants(const IcebergManifestFile &manifest_file,
-                                                     const BoundIcebergManifestEntry &bound_manifest_entry,
-                                                     const IcebergTableMetadata &metadata,
-                                                     MultiFileReaderData &reader_data,
-                                                     const vector<MultiFileColumnDefinition> &global_columns,
-                                                     const vector<ColumnIndex> &global_column_ids,
-                                                     ClientContext &context) {
+void IcebergMultiFileReader::ApplyPartitionConstants(
+    int32_t partition_spec_id, const BoundIcebergManifestEntry &bound_manifest_entry,
+    const unordered_map<int32_t, IcebergPartitionSpec> &partition_specs, MultiFileReaderData &reader_data,
+    const vector<MultiFileColumnDefinition> &global_columns, const vector<ColumnIndex> &global_column_ids,
+    ClientContext &context) {
 	// Get the metadata for this file
 	auto &reader = *reader_data.reader;
 	auto &manifest_entry = bound_manifest_entry.entry;
 	auto &data_file = manifest_entry.data_file;
 
 	// Get the partition spec for this file
-	auto &partition_specs = metadata.partition_specs;
-	auto spec_id = manifest_file.partition_spec_id;
-	auto partition_spec_it = partition_specs.find(spec_id);
+	auto partition_spec_it = partition_specs.find(partition_spec_id);
 	if (partition_spec_it == partition_specs.end()) {
-		throw InvalidConfigurationException("'partition_spec_id' %d doesn't exist in the metadata", spec_id);
+		throw InvalidConfigurationException("'partition_spec_id' %d doesn't exist in the metadata", partition_spec_id);
 	}
 
 	auto &partition_spec = partition_spec_it->second;
@@ -395,18 +391,23 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
                                                               ClientContext &context, MultiFileGlobalState &gstate) {
 	auto &iceberg_state = gstate.multi_file_reader_state->Cast<IcebergMultiFileReaderGlobalState>();
 	const auto &multi_file_list = dynamic_cast<const IcebergMultiFileList &>(*iceberg_state.file_list);
-	auto &metadata = multi_file_list.GetMetadata();
+	auto &planner = multi_file_list.GetScanPlanner();
+	auto &metadata = planner.GetMetadata();
+	auto &schemas = metadata.GetSchemas();
 	auto file_id = reader_data.reader->file_list_idx.GetIndex();
-	auto bound_manifest_entry = multi_file_list.GetManifestEntry(file_id);
-	auto manifest_file = multi_file_list.GetManifestFileForDataFile(file_id);
-	auto delete_plan = multi_file_list.ProcessDeletes(bound_manifest_entry);
+	auto task = planner.GetScanTask(file_id);
+	if (!task) {
+		throw InternalException("Unable to find Iceberg scan task for file index %llu", file_id);
+	}
+	auto &delete_file_reader = multi_file_list.GetDeleteReader();
+	auto delete_plan = delete_file_reader.ProcessDeletes(multi_file_list.GetScanPlanner(), *task);
 
 	//! Make a copy of the global columns+column_ids, if we have equality deletes we will add columns to this
 	//! This is done so CreateMapping treats these columns as required for the current file,
 	//! and sets up local_column_ids+expressions for these columns.
 	auto scan_columns = global_columns;
 	auto scan_column_ids = global_column_ids;
-	auto read_columns = AddEqualityDeleteColumns(metadata, delete_plan.equality_deletes, scan_columns, scan_column_ids,
+	auto read_columns = AddEqualityDeleteColumns(schemas, delete_plan.equality_deletes, scan_columns, scan_column_ids,
 	                                             reader_data, context);
 	auto equality_delete_state = make_uniq<IcebergEqualityDeleteReadState>(std::move(read_columns));
 
@@ -424,8 +425,14 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
 			ApplyFieldMapping(local_column, mappings, root.field_mapping_indexes, context);
 		}
 	}
-	ApplyPartitionConstants(manifest_file, bound_manifest_entry, metadata, reader_data, scan_columns, scan_column_ids,
-	                        context);
+	int32_t partition_spec_id;
+	planner.WithManifestFile(
+	    task->manifest_entry, IcebergManifestContentType::DATA,
+	    [&partition_spec_id](const IcebergManifestFile &manifest) { partition_spec_id = manifest.partition_spec_id; });
+
+	auto &partition_specs = metadata.partition_specs;
+	ApplyPartitionConstants(partition_spec_id, task->manifest_entry, partition_specs, reader_data, scan_columns,
+	                        scan_column_ids, context);
 
 	vector<bool> accelerated_files;
 	Value fast_filter_setting;
@@ -759,7 +766,8 @@ vector<PartitionStatistics> IcebergMultiFileReader::IcebergGetPartitionStats(Cli
 	auto &bind_data = input.bind_data->Cast<MultiFileBindData>();
 	vector<PartitionStatistics> result;
 	auto &multi_file_list = bind_data.file_list->Cast<IcebergMultiFileList>();
-	multi_file_list.GetStatistics(result);
+	auto &scan_planner = multi_file_list.GetScanPlanner();
+	scan_planner.GetStatistics(result);
 	return result;
 }
 
