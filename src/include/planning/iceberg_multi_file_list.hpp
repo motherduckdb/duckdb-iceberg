@@ -40,6 +40,8 @@ public:
 	IcebergScanPlanner &GetScanPlanner();
 	const IcebergScanPlanner &GetScanPlanner() const;
 
+	IcebergDeleteExecutionState &GetDeleteReader() const;
+
 private:
 	IcebergMultiFileList(unique_ptr<IcebergScanPlanner> planner,
 	                     shared_ptr<IcebergDeleteExecutionState> delete_execution);
