@@ -21,7 +21,6 @@ struct IcebergScanPlanBindData : public TableFunctionData {
 	IcebergOptions options;
 	bool produce_sequence_number = false;
 	vector<uint64_t> partition_source_ids;
-	unordered_set<const IcebergManifestEntry *> transaction_entries;
 	LogicalType partition_type;
 };
 
@@ -95,15 +94,6 @@ static unique_ptr<FunctionData> IcebergScanPlanBind(ClientContext &context, Tabl
 	if (produce_sequence_number != input.named_parameters.end()) {
 		ret->produce_sequence_number = BooleanValue::Get(produce_sequence_number->second);
 	}
-	if (ret->scan_info->transaction_data) {
-		for (auto &alter : ret->scan_info->transaction_data->alters) {
-			for (const auto &manifest : alter.get().GetManifestFiles()) {
-				for (const auto &entry : manifest.GetManifestEntries()) {
-					ret->transaction_entries.insert(&entry);
-				}
-			}
-		}
-	}
 
 	// A stable union of identity sources across specs, using the selected schema's types.
 	map<uint64_t, LogicalType> sources;
@@ -160,13 +150,7 @@ static Value PartitionConstants(const IcebergScanPlanBindData &bind, const Icebe
 				if (partition.field_id != field.partition_field_id || partition.value.IsNull()) {
 					continue;
 				}
-				// Pending inserts retain the COPY partition map's textual values.
-				// Persisted manifests instead require Iceberg's physical-value conversion.
-				if (bind.transaction_entries.count(&task.manifest_entry.entry)) {
-					value = partition.value.DefaultCastAs(type);
-				} else {
-					value = IcebergValue::TransformPartitionValue(partition.value, type);
-				}
+				value = IcebergValue::TransformPartitionValue(partition.value, type);
 				break;
 			}
 		} while (false);

@@ -30,6 +30,11 @@ static Value TransformPartitionValueTemplated(const Value &value, const LogicalT
 
 Value IcebergValue::TransformPartitionValue(const Value &value, const LogicalType &type) {
 	D_ASSERT(!value.type().IsNested());
+	// COPY's partition map contains textual values. VARCHAR and BLOB share a physical
+	// type, but only BLOB contains bytes that should be decoded as Iceberg values.
+	if (value.type().id() == LogicalTypeId::VARCHAR) {
+		return value.DefaultCastAs(type);
+	}
 	// DECIMAL partition values are already decoded as proper DuckDB DECIMALs by the Avro reader.
 	// The blob round-trip below misinterprets the little-endian internal representation as
 	// big-endian Iceberg bytes, producing garbage. Return directly (or cast if params differ).
