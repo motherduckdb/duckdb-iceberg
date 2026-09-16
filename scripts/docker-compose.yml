@@ -1,3 +1,5 @@
+name: duckdb-iceberg
+
 services:
   rest:
     image: ${ICEBERG_REST_FIXTURE_IMAGE:-apache/iceberg-rest-fixture:1.10.1}
