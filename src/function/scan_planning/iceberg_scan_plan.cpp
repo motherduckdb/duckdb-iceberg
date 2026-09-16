@@ -28,6 +28,8 @@ struct IcebergScanPlanGlobalState : public GlobalTableFunctionState {
 	explicit IcebergScanPlanGlobalState(ClientContext &context, const IcebergScanPlanBindData &bind)
 	    : planner(context, bind.scan_info, bind.scan_info->metadata.location, bind.options),
 	      metadata(LogicalType::VARIANT(), 1) {
+		// Vended credentials are transaction-scoped, so recreate them on every execution.
+		bind.table.PrepareIcebergScanFromEntry(context);
 		planner.SetTable(bind.table);
 		if (bind.produce_sequence_number) {
 			// The server planning API does not yet provide file sequence numbers.
@@ -80,7 +82,6 @@ static unique_ptr<FunctionData> IcebergScanPlanBind(ClientContext &context, Tabl
 	}
 	IcebergOptions options(input.named_parameters);
 	auto &table_entry = table.Cast<IcebergTableSchemaVersion>();
-	table_entry.PrepareIcebergScanFromEntry(context);
 	auto &metadata = table_entry.table_info.table_metadata;
 	auto snapshot = metadata.GetSnapshot(*options.snapshot_lookup);
 	auto &schema = metadata.GetSchemaFromId(snapshot.schema_id);
