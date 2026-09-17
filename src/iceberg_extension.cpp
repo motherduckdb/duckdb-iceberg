@@ -104,9 +104,9 @@ static void LoadInternal(ExtensionLoader &loader) {
 	    LogicalType::UBIGINT, Value::UBIGINT(DEFAULT_ICEBERG_FORMAT_VERSION), SetDefaultFormatVersion);
 	config.AddExtensionOption(
 	    "iceberg_use_metadata_log",
-	    "Whether or not to make use of the (optional) 'metadata-log' of a table to ensure atomicity guarantees hold, "
-	    "at the cost of making another GET for json metadata in rare circumstances",
-	    LogicalType::BOOLEAN, Value::BOOLEAN(false), nullptr, SetScope::GLOBAL);
+	    "Use metadata-log to select table metadata as of the transaction start for snapshot isolation. "
+	    "Disable to accept the latest table metadata resolved by the transaction instead",
+	    LogicalType::BOOLEAN, Value::BOOLEAN(true), nullptr, SetScope::GLOBAL);
 	config.AddExtensionOption("iceberg_use_server_side_scan_planning",
 	                          "Whether or not to use server-side scanning planning (if available)",
 	                          LogicalType::BOOLEAN, Value::BOOLEAN(false), nullptr, SetScope::GLOBAL);
