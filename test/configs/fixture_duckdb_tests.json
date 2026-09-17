@@ -286,7 +286,6 @@
         "test/sql/update/test_update_mix.test",
         "test/sql/storage/compression/roaring/roaring_bool_appends.test_slow",
         "test/sql/aggregate/aggregates/test_arg_min_max_null_nested.test_slow",
-        "test/sql/projection/test_complex_expressions.test",
         "test/sql/types/list/unnest_expand.test",
         "test/sql/optimizer/struct_segment_pruning.test",
         "test/sql/types/geo/geometry_stats_prune_null.test",
