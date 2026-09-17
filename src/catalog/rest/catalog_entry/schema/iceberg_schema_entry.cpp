@@ -730,6 +730,14 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			                       table_entry.name.GetIdentifierName());
 		}
 
+		auto parent_path = column_path;
+		parent_path.pop_back();
+		auto parent = new_schema->GetMutableFromPath(parent_path, nullptr);
+		if (parent->type.id() != LogicalTypeId::STRUCT) {
+			throw CatalogException("Cannot rename field %s from column %s - can only rename fields inside a struct",
+			                       column_path.back(), column_path.front());
+		}
+
 		auto new_path = column_path;
 		new_path.pop_back();
 		new_path.emplace_back(new_name.GetIdentifierName());
@@ -781,6 +789,11 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			    "The column ('%s') doesnt exist on the table '%s', DROP COLUMN failed to remove the field",
 			    StringUtil::Join(IdentifiersToStrings(column_path), "."), table_entry.name.GetIdentifierName());
 		}
+		if (parent.type.id() != LogicalTypeId::STRUCT) {
+			throw CatalogException("Cannot drop field %s from column %s - it's not a struct", column_path.back(),
+			                       column_path.front());
+		}
+
 		if (parent.GetChildCount() == 1) {
 			throw CatalogException("Can't drop field '%s' because it's the last field of the STRUCT!",
 			                       StringUtil::Join(IdentifiersToStrings(column_path), "."));
