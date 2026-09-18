@@ -262,6 +262,7 @@ bool IcebergColumnDefinition::IsIcebergPrimitiveType() const {
 	case LogicalTypeId::TIMESTAMP_TZ_NS:
 	case LogicalTypeId::VARIANT:
 	case LogicalTypeId::GEOMETRY:
+	case LogicalTypeId::SQLNULL:
 		return true;
 	default:
 		return false;
