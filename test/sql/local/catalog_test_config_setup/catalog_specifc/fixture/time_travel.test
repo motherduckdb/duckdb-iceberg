@@ -2,18 +2,10 @@
 # description: Test time travel using both snapshot id and timestamp
 # group: [fixture]
 
-require avro
-
-require parquet
-
-require iceberg
-
-require httpfs
+include test/sql/init_requires
 
 require-env CATALOG_TEST_CONFIG_SETUP fixture
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 # Retrieve the (snapshot_id + timestamp_ms) pairs, using offset and limit
 

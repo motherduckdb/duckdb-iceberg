@@ -5,6 +5,7 @@
 #include "catalog/rest/storage/authorization/oauth2.hpp"
 #include "catalog/rest/storage/authorization/sigv4.hpp"
 #include "catalog/rest/storage/authorization/none.hpp"
+#include "duckdb/logging/logger.hpp"
 #include "regex"
 
 namespace duckdb {
@@ -36,17 +37,80 @@ static void S3OrGlueAttachInternal(IcebergAttachOptions &input, const string &se
 	}
 
 	input.authorization_type = IcebergAuthorizationType::SIGV4;
-	input.endpoint = StringUtil::Format("%s.%s.amazonaws.com/iceberg", service, region);
+	if (input.catalog_uri.empty()) {
+		input.catalog_uri = StringUtil::Format("%s.%s.amazonaws.com/iceberg", service, region);
+	} else {
+		input.options.emplace("sigv4_service", Value(service));
+		input.options.emplace("sigv4_region", Value(region));
+	}
 }
 
-static void S3TablesAttach(IcebergAttachOptions &input) {
-	// extract region from the amazon ARN
-	auto substrings = StringUtil::Split(input.warehouse, ":");
-	if (substrings.size() != 6) {
-		throw InvalidInputException("Could not parse S3 Tables ARN warehouse value");
+namespace {
+
+struct ParsedARN {
+public:
+	ParsedARN(const string &arn) {
+		idx_t section = 0;
+		idx_t start = 0;
+		//! NOTE: we can't use StringUtil::Split because it doesn't keep empty items
+		for (idx_t i = 0; i < arn.size() && section < 5; i++) {
+			if (arn[i] == ':') {
+				sections[section++] = arn.substr(start, i - start);
+				start = i + 1;
+			}
+		}
+		if (section < 5 || sections[0] != "arn") {
+			throw InvalidInputException("Expected an AWS ARN of the form "
+			                            "'arn:<partition>:<service>:<region>:<account-id>[:<resource>]', got '%s'",
+			                            arn);
+		}
+		sections[5] = arn.substr(start);
+		auto &partition = Partition();
+		if (partition.empty()) {
+			throw InvalidInputException("Invalid PARTITION Section of ARN: '%s'", partition);
+		}
+		auto &service = Service();
+		if (service.empty()) {
+			throw InvalidInputException("Invalid SERVICE Section of ARN: '%s'", service);
+		}
+		auto &resource = Resource();
+		if (resource.empty()) {
+			throw InvalidInputException("Invalid RESOURCE Section of ARN: '%s'", resource);
+		}
 	}
-	auto region = substrings[3];
+
+public:
+	const string &Partition() {
+		return sections[1];
+	}
+	const string &Service() {
+		return sections[2];
+	}
+	const string &Region() {
+		return sections[3];
+	}
+	const string &AccountID() {
+		return sections[4];
+	}
+	const string &Resource() {
+		return sections[5];
+	}
+
+private:
+	array<string, 6> sections;
+};
+
+} // namespace
+
+static void S3TablesAttach(IcebergAttachOptions &input) {
+	ParsedARN arn(input.warehouse);
+
 	// Populate sigv4_region so it can be used as a fallback region when creating storage secrets
+	auto &region = arn.Region();
+	if (region.empty()) {
+		throw InvalidInputException("Can't ATTACH to S3Tables with an ARN(%s) that has an empty REGION section",
+		                            input.warehouse);
+	}
 	input.options.emplace("sigv4_region", Value(region));
 	S3OrGlueAttachInternal(input, "s3tables", region);
 }
@@ -92,7 +156,7 @@ static void GlueAttach(ClientContext &context, IcebergAttachOptions &input) {
 
 	if (region.IsNull()) {
 		throw InvalidConfigurationException("Assumed catalog secret '%s' for catalog '%s' does not have a region",
-		                                    secret_entry->secret->GetName(), input.name);
+		                                    secret_entry->secret->GetName().GetIdentifierName(), input.name);
 	}
 	S3OrGlueAttachInternal(input, "glue", region.ToString());
 }
@@ -111,6 +175,24 @@ static void SetAWSCatalogOptions(IcebergAttachOptions &attach_options, case_inse
 
 } // namespace
 
+unordered_map<string, Value> NormalizeIcebergAttachOptions(const unordered_map<string, Value> &options) {
+	unordered_map<string, Value> result;
+	for (const auto &entry : options) {
+		auto name = StringUtil::Lower(entry.first);
+		if (name == "endpoint") {
+			name = "uri";
+		}
+		if (!result.emplace(name, entry.second).second) {
+			if (name == "uri") {
+				throw InvalidConfigurationException(
+				    "Both 'uri' and deprecated 'endpoint' were provided for Iceberg attach; use only 'uri'");
+			}
+			throw InvalidConfigurationException("Duplicate Iceberg attach option '%s'", name);
+		}
+	}
+	return result;
+}
+
 unique_ptr<Catalog> IcebergAttach::Attach(optional_ptr<StorageExtensionInfo> storage_info, ClientContext &context,
                                           AttachedDatabase &db, const string &name, AttachInfo &info,
                                           AttachOptions &options) {
@@ -119,14 +201,19 @@ unique_ptr<Catalog> IcebergAttach::Attach(optional_ptr<StorageExtensionInfo> sto
 	attach_options.name = name;
 
 	// check if we have a secret provided
-	string default_schema;
+	Identifier default_schema;
 	string endpoint_type_string;
 	string authorization_type_string;
 	string access_mode_string;
 	case_insensitive_set_t set_by_attach_options;
+	bool used_legacy_endpoint = false;
+	for (const auto &entry : info.options) {
+		used_legacy_endpoint |= StringUtil::CIEquals(entry.first, "endpoint");
+	}
+	auto normalized_options = NormalizeIcebergAttachOptions(info.options);
 	//! First handle generic attach options
-	for (auto &entry : info.options) {
-		auto lower_name = StringUtil::Lower(entry.first);
+	for (auto &entry : normalized_options) {
+		auto &lower_name = entry.first;
 		if (lower_name == "type" || lower_name == "read_only") {
 			continue;
 		}
@@ -137,9 +224,8 @@ unique_ptr<Catalog> IcebergAttach::Attach(optional_ptr<StorageExtensionInfo> sto
 			authorization_type_string = StringUtil::Lower(entry.second.ToString());
 		} else if (lower_name == "access_delegation_mode") {
 			access_mode_string = StringUtil::Lower(entry.second.ToString());
-		} else if (lower_name == "endpoint") {
-			attach_options.endpoint = entry.second.ToString();
-			StringUtil::RTrim(attach_options.endpoint, "/");
+		} else if (lower_name == "uri") {
+			attach_options.catalog_uri = entry.second.ToString();
 		} else if (lower_name == "stage_create_tables") {
 			auto result = entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
 			attach_options.stage_create_tables = result;
@@ -160,8 +246,22 @@ unique_ptr<Catalog> IcebergAttach::Attach(optional_ptr<StorageExtensionInfo> sto
 		} else if (lower_name == "purge_requested") {
 			attach_options.purge_requested = entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
 			set_by_attach_options.insert("purge_requested");
+		} else if (lower_name == "default_table_location_from_namespace") {
+			attach_options.default_table_location_from_namespace =
+			    entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+			set_by_attach_options.insert("default_table_location_from_namespace");
+		} else if (lower_name == "table_resolution") {
+			auto value = StringUtil::Lower(entry.second.ToString());
+			if (value == "lazy") {
+				attach_options.table_resolution = IcebergTableResolution::LAZY;
+			} else if (value == "eager") {
+				attach_options.table_resolution = IcebergTableResolution::EAGER;
+			} else {
+				throw InvalidConfigurationException(
+				    "Unrecognized 'table_resolution' (%s), accepted options are: lazy, eager", value);
+			}
 		} else if (lower_name == "default_schema") {
-			default_schema = entry.second.ToString();
+			default_schema = Identifier(entry.second.ToString());
 		} else if (lower_name == "encode_entire_prefix") {
 			attach_options.encode_entire_prefix = true;
 		} else if (lower_name == "max_table_staleness") {
@@ -176,6 +276,10 @@ unique_ptr<Catalog> IcebergAttach::Attach(optional_ptr<StorageExtensionInfo> sto
 			attach_options.options.emplace(std::move(entry));
 		}
 	}
+	if (used_legacy_endpoint) {
+		DUCKDB_LOG_WARNING(context, "The Iceberg attach option 'endpoint' is deprecated; use 'uri' instead");
+	}
+	StringUtil::RTrim(attach_options.catalog_uri, "/");
 	IcebergEndpointType endpoint_type = IcebergEndpointType::INVALID;
 	//! Then check any if the 'endpoint_type' is set, for any well known catalogs
 	if (!endpoint_type_string.empty()) {
@@ -249,18 +353,23 @@ unique_ptr<Catalog> IcebergAttach::Attach(optional_ptr<StorageExtensionInfo> sto
 		                                    StringUtil::Join(unrecognized_options, ", "));
 	}
 
-	if (attach_options.endpoint.empty()) {
-		throw InvalidConfigurationException("Missing 'endpoint' option for Iceberg attach");
+	// The URI can be supplied by an ICEBERG secret during authorization setup.
+	StringUtil::RTrim(attach_options.catalog_uri, "/");
+	if (attach_options.catalog_uri.empty()) {
+		throw InvalidConfigurationException("Missing 'uri' option for Iceberg attach");
 	}
 
 	D_ASSERT(auth_handler);
 	auto catalog =
 	    make_uniq<IcebergCatalog>(db, options.access_mode, std::move(auth_handler), attach_options, default_schema);
-	//! Remember the raw attach options so that a later ATTACH OR REPLACE can detect when they change.
+	//! Remember the normalized attach options so that a later ATTACH OR REPLACE can detect when they change.
 	catalog->SetAttachOptions(options.options);
 	catalog->GetConfig(context, endpoint_type);
-	if (!default_schema.empty() && !IRCAPI::VerifySchemaExistence(context, *catalog, default_schema)) {
-		throw InvalidConfigurationException("default_schema '%s' does not exist", default_schema);
+	if (!default_schema.empty() &&
+	    !IRCAPI::VerifySchemaExistence(context, *catalog, default_schema.GetIdentifierName())) {
+		throw InvalidConfigurationException(
+		    "default_schema '%s' does not exist. ATTACH with no DEFAULT_SCHEMA to successfully attach",
+		    default_schema.GetIdentifierName());
 	}
 	return std::move(catalog);
 }

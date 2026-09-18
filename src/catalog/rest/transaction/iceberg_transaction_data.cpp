@@ -10,12 +10,34 @@
 #include "core/metadata/snapshot/iceberg_snapshot.hpp"
 #include "catalog/rest/iceberg_table_set.hpp"
 #include "catalog/rest/api/table_update.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "planning/metadata_io/avro/avro_scan.hpp"
 #include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
 #include "planning/metadata_io/manifest_list/iceberg_manifest_list_reader.hpp"
 
 namespace duckdb {
+
+static void LoadMissingManifestCounts(ClientContext &context, const IcebergTableMetadata &metadata,
+                                      const IcebergSnapshotScanInfo &snapshot_info,
+                                      IcebergManifestListEntry &manifest_list_entry) {
+	if (manifest_list_entry.file.counts && manifest_list_entry.file.counts->Complete()) {
+		return;
+	}
+	vector<IcebergManifestListEntry> manifest_files;
+	manifest_files.push_back(manifest_list_entry);
+	manifest_files[0].manifest_entries.reset();
+
+	IcebergOptions options;
+	auto &fs = FileSystem::GetFileSystem(context);
+	auto scan = AvroScan::ScanManifest(snapshot_info, manifest_files, options, fs, "", metadata, context);
+	auto reader = make_uniq<manifest_file::ManifestReader>(*scan);
+	while (!reader->Finished()) {
+		reader->Read();
+	}
+
+	manifest_list_entry = std::move(manifest_files[0]);
+	manifest_list_entry.file.SetCountsFromEntries(manifest_list_entry.GetManifestEntries());
+}
 
 static optional<int64_t> LoadExistingManifestList(ClientContext &context, const IcebergTableMetadata &metadata,
                                                   vector<IcebergManifestListEntry> &existing_manifest_list,
@@ -32,12 +54,9 @@ static optional<int64_t> LoadExistingManifestList(ClientContext &context, const 
 	snapshot_info.snapshot = current_snapshot;
 	snapshot_info.schema_id = metadata.GetCurrentSchemaId();
 
-	auto &manifest_list_path = current_snapshot->manifest_list;
-	auto scan =
-	    AvroScan::ScanManifestList(snapshot_info, metadata, context, manifest_list_path, existing_manifest_list);
-	auto manifest_list_reader = make_uniq<manifest_list::ManifestListReader>(*scan);
-	while (!manifest_list_reader->Finished()) {
-		manifest_list_reader->Read();
+	IcebergManifestList::LoadManifestFiles(snapshot_info, metadata, context, existing_manifest_list);
+	for (auto &manifest_list_entry : existing_manifest_list) {
+		LoadMissingManifestCounts(context, metadata, snapshot_info, manifest_list_entry);
 	}
 
 	if (metadata.iceberg_version < 3) {
@@ -58,15 +77,17 @@ static optional<int64_t> LoadExistingManifestList(ClientContext &context, const 
 			    "Table is corrupted, snapshot has 'first-row-id' but not all 'manifest_file' "
 			    "entries have a 'first_row_id'");
 		}
+		D_ASSERT(manifest_file.counts && manifest_file.counts->added_rows_count &&
+		         manifest_file.counts->existing_rows_count);
 		manifest_file.first_row_id = next_row_id;
-		next_row_id += manifest_file.added_rows_count;
-		next_row_id += manifest_file.existing_rows_count;
+		next_row_id += *manifest_file.counts->added_rows_count;
+		next_row_id += *manifest_file.counts->existing_rows_count;
 	}
 	return base_snapshot_id;
 }
 
 IcebergTransactionData::IcebergTransactionData(ClientContext &context, IcebergTransaction &transaction,
-                                               const IcebergTableInformation &table_info)
+                                               const IcebergTable &table_info)
     : context(context), transaction(transaction), table_info(table_info) {
 	initial_table_uuid = table_info.table_metadata.table_uuid;
 	if (table_info.table_metadata.next_row_id) {
@@ -117,6 +138,10 @@ bool IcebergTransactionData::ContainsDelete() const {
 	return false;
 }
 
+bool IcebergTransactionData::IsFileInvalidated(const string &file_path) const {
+	return manifest_deletes.IsInvalidated(file_path);
+}
+
 bool IcebergTransactionData::SupportsAppendRetry() const {
 	if (!requirements.empty() || pending_current_schema_id.has_value()) {
 		return false;
@@ -132,7 +157,7 @@ bool IcebergTransactionData::SupportsAppendRetry() const {
 	return true;
 }
 
-bool IcebergTransactionData::RetryStateMatches(const IcebergTableInformation &table) const {
+bool IcebergTransactionData::RetryStateMatches(const IcebergTable &table) const {
 	if (table.table_metadata.table_uuid != initial_table_uuid) {
 		return false;
 	}
@@ -176,16 +201,14 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 
 	IcebergManifestContentType manifest_content_type;
 	switch (operation) {
-	case IcebergSnapshotOperationType::DELETE:
-		manifest_content_type = IcebergManifestContentType::DELETE;
-		break;
 	case IcebergSnapshotOperationType::APPEND:
 	case IcebergSnapshotOperationType::REPLACE:
 		//! This helper currently writes DATA manifest entries; REPLACE itself is not limited to data files.
 		manifest_content_type = IcebergManifestContentType::DATA;
 		break;
 	default:
-		throw NotImplementedException("Cannot have use snapshot operation type OVERWRITE here");
+		throw NotImplementedException("Snapshot operation type %d does not write data manifests",
+		                              static_cast<uint8_t>(operation));
 	};
 
 	auto temp_sequence_number = table_metadata.last_sequence_number + alters.size() + 1;
@@ -201,13 +224,54 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 	if (table_metadata.current_snapshot_id) {
 		TableAddAssertCurrentSchemaId();
 	}
-	add_snapshot->altered_manifests = std::move(altered_manifests);
+	AddSnapshotUpdate(std::move(add_snapshot), std::move(altered_manifests));
+}
 
+void IcebergTransactionData::AddDeleteManifestFiles(IcebergAddSnapshot &add_snapshot,
+                                                    partitioned_manifest_entry_map_t &&delete_files,
+                                                    sequence_number_t sequence_number) {
+	auto &table_metadata = table_info.table_metadata;
+	auto &fs = FileSystem::GetFileSystem(context);
+	//! One manifest per partition spec: a manifest declares a single spec, and the entries it holds carry
+	//! partition values in that spec.
+	for (auto &entry : delete_files) {
+		auto manifest_metadata =
+		    IcebergManifestMetadata::FromTableMetadata(table_metadata, IcebergManifestContentType::DELETE, entry.first);
+		add_snapshot.AddManifestFile(IcebergManifestListEntry::CreateFromEntries(
+		    fs, sequence_number, table_metadata, manifest_metadata, std::move(entry.second), next_row_id));
+	}
+}
+
+void IcebergTransactionData::AddSnapshotUpdate(unique_ptr<IcebergAddSnapshot> add_snapshot,
+                                               IcebergManifestDeletes &&altered_manifests) {
+	auto versioned_deletes = manifest_deletes.AtVersion(alters.size());
+	if (versioned_deletes.Merge(std::move(altered_manifests))) {
+		add_snapshot->SetManifestDeletes(std::move(versioned_deletes));
+	}
 	alters.push_back(*add_snapshot);
 	updates.push_back(std::move(add_snapshot));
 }
 
-void IcebergTransactionData::AddUpdateSnapshot(vector<IcebergManifestEntry> &&delete_files,
+void IcebergTransactionData::AddDeleteSnapshot(partitioned_manifest_entry_map_t &&delete_files,
+                                               IcebergManifestDeletes &&altered_manifests) {
+	//! NOTE: Lock has to be held to make sure the rows are assigned the correct row ids
+	lock_guard<mutex> guard(lock);
+
+	auto &table_metadata = table_info.table_metadata;
+	CacheExistingManifestList(guard, table_metadata);
+
+	const auto sequence_number = table_metadata.last_sequence_number + alters.size() + 1;
+
+	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info, IcebergSnapshotOperationType::DELETE);
+	AddDeleteManifestFiles(*add_snapshot, std::move(delete_files), sequence_number);
+	// make sure we are still inserting into the current schema
+	if (table_metadata.current_snapshot_id) {
+		TableAddAssertCurrentSchemaId();
+	}
+	AddSnapshotUpdate(std::move(add_snapshot), std::move(altered_manifests));
+}
+
+void IcebergTransactionData::AddUpdateSnapshot(partitioned_manifest_entry_map_t &&delete_files,
                                                vector<IcebergManifestEntry> &&data_files,
                                                IcebergManifestDeletes &&altered_manifests) {
 	//! NOTE: Lock has to be held to make sure the rows are assigned the correct row ids
@@ -222,32 +286,20 @@ void IcebergTransactionData::AddUpdateSnapshot(vector<IcebergManifestEntry> &&de
 	const auto sequence_number = last_sequence_number + alters.size() + 1;
 
 	auto &fs = FileSystem::GetFileSystem(context);
-	auto delete_manifest_metadata =
-	    IcebergManifestMetadata::FromTableMetadata(table_metadata, IcebergManifestContentType::DELETE);
 	auto data_manifest_metadata =
 	    IcebergManifestMetadata::FromTableMetadata(table_metadata, IcebergManifestContentType::DATA);
 
-	auto delete_manifest_file = IcebergManifestListEntry::CreateFromEntries(
-	    fs, sequence_number, table_metadata, delete_manifest_metadata, std::move(delete_files), next_row_id);
-	// Add a manifest_file for the new insert data
-	auto data_manifest_file = IcebergManifestListEntry::CreateFromEntries(
-	    fs, sequence_number, table_metadata, data_manifest_metadata, std::move(data_files), next_row_id);
-
 	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info);
-	add_snapshot->AddManifestFile(std::move(delete_manifest_file));
-	add_snapshot->AddManifestFile(std::move(data_manifest_file));
-	add_snapshot->altered_manifests = std::move(altered_manifests);
-
-	alters.push_back(*add_snapshot);
-	updates.push_back(std::move(add_snapshot));
+	AddDeleteManifestFiles(*add_snapshot, std::move(delete_files), sequence_number);
+	// Add a manifest_file for the new insert data
+	add_snapshot->AddManifestFile(IcebergManifestListEntry::CreateFromEntries(
+	    fs, sequence_number, table_metadata, data_manifest_metadata, std::move(data_files), next_row_id));
+	AddSnapshotUpdate(std::move(add_snapshot), std::move(altered_manifests));
 }
 
 void IcebergTransactionData::TableAddSchema(int32_t schema_id) {
-	auto schema = table_info.table_metadata.GetSchemaFromId(schema_id);
-	if (!schema) {
-		throw InternalException("(TableAddSchema) Couldn't find schema with id: %d", schema_id);
-	}
-	auto add_schema_update = make_uniq<AddSchemaUpdate>(schema->Copy(), table_info.table_metadata.last_column_id);
+	auto &schema = table_info.table_metadata.GetSchemaFromId(schema_id);
+	auto add_schema_update = make_uniq<AddSchemaUpdate>(schema.Copy(), table_info.table_metadata.last_column_id);
 	updates.push_back(std::move(add_schema_update));
 	assert_schema_id = true;
 	pending_current_schema_id = schema_id;
@@ -326,6 +378,50 @@ void IcebergTransactionData::TableRemoveProperties(const vector<string> &propert
 
 void IcebergTransactionData::TableSetLocation() {
 	updates.push_back(make_uniq<SetLocation>(table_info.table_metadata.location));
+}
+
+static bool IsAncestorOfCurrentSnapshot(const IcebergTableMetadata &metadata, int64_t target_snapshot_id,
+                                        int64_t current_snapshot_id) {
+	if (target_snapshot_id == current_snapshot_id) {
+		return true;
+	}
+	optional_ptr<const IcebergSnapshot> cursor = metadata.FindSnapshotByIdInternal(current_snapshot_id);
+	while (cursor) {
+		if (!cursor->parent_snapshot_id) {
+			return false;
+		}
+		auto parent_id = *cursor->parent_snapshot_id;
+		if (parent_id == target_snapshot_id) {
+			return true;
+		}
+		cursor = metadata.FindSnapshotByIdInternal(parent_id);
+	}
+	return false;
+}
+
+void IcebergTransactionData::TableRollbackToSnapshot(int64_t snapshot_id) {
+	auto &metadata = table_info.table_metadata;
+	auto target = metadata.FindSnapshotByIdInternal(snapshot_id);
+	if (!target) {
+		throw InvalidInputException("Cannot roll back to unknown snapshot id: %lld", snapshot_id);
+	}
+
+	auto current = metadata.GetLatestSnapshot();
+	if (!current || !current->snapshot_id) {
+		throw InvalidInputException("Cannot roll back table with no current snapshot");
+	}
+	auto current_snapshot_id = *current->snapshot_id;
+	if (!IsAncestorOfCurrentSnapshot(metadata, snapshot_id, current_snapshot_id)) {
+		throw InvalidInputException("Cannot roll back to snapshot, not an ancestor of the current state: %lld",
+		                            snapshot_id);
+	}
+
+	// Optimistic concurrency: require main still points at the snapshot we observed.
+	requirements.push_back(make_uniq<AssertRefSnapshotId>(current_snapshot_id));
+	updates.push_back(make_uniq<SetSnapshotRef>(snapshot_id));
+
+	// Iceberg intentionally does not roll current-schema-id back with the snapshot;
+	// schema evolution stays forward-only. See https://github.com/apache/iceberg/issues/5591
 }
 
 } // namespace duckdb

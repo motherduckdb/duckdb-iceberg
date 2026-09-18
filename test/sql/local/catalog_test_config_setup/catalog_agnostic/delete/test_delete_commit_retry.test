@@ -4,17 +4,9 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
-
-require parquet
-
-require iceberg
-
-require httpfs
+include test/sql/init_requires
 
 # Do not ignore 'HTTP' / conflict error messages!
-set ignore_error_messages
-
 # ----------------------------------------------------------------------------
 # Concurrent APPEND: the delete's targeted data is untouched, so on the commit
 # conflict it refreshes and re-applies against the new tip and succeeds.
@@ -24,7 +16,7 @@ statement ok
 DROP TABLE IF EXISTS my_datalake.default.del_retry_append;
 
 statement ok
-CREATE TABLE my_datalake.default.del_retry_append (id INTEGER, name VARCHAR);
+CREATE TABLE my_datalake.default.del_retry_append (id INTEGER, name VARCHAR) WITH ('write.delete.isolation-level' = 'snapshot');
 
 statement ok
 INSERT INTO my_datalake.default.del_retry_append VALUES (1, 'a'), (2, 'b');

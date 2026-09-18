@@ -3,13 +3,7 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
-
-require parquet
-
-require iceberg
-
-require httpfs
+include test/sql/init_requires
 
 require icu
 
@@ -18,8 +12,6 @@ SET TimeZone='Europe/Amsterdam';
 
 statement ok
 SET Calendar='gregorian';
-
-set ignore_error_messages
 
 statement ok
 CREATE SCHEMA IF NOT EXISTS my_datalake.default;

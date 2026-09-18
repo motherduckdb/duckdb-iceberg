@@ -16,7 +16,7 @@
 
 namespace duckdb {
 
-struct IcebergTableInformation;
+struct IcebergTable;
 struct IcebergManifestFile;
 
 using sequence_number_t = int64_t;
@@ -65,6 +65,13 @@ struct IcebergPartitionInfo {
 	}
 };
 
+//! The partition a file belongs to: the per-field values, plus the spec they were produced with.
+//! Partition values are only meaningful together with their spec, so the two travel as a pair.
+struct IcebergPartition {
+	int32_t partition_spec_id = 0;
+	vector<IcebergPartitionInfo> fields;
+};
+
 struct IcebergDataFile {
 public:
 	static map<idx_t, LogicalType> GetFieldIdToTypeMapping(const IcebergSnapshotScanInfo &snapshot_info,
@@ -82,6 +89,8 @@ public:
 	void SetFirstRowId(optional<int64_t> first_row_id);
 	bool HasFirstRowId() const;
 	int64_t GetFirstRowId() const;
+	bool IsDeletionVector() const;
+	int64_t GetContentSizeInBytes() const;
 
 public:
 	IcebergManifestEntryContentType content;
@@ -135,6 +144,13 @@ private:
 	optional<sequence_number_t> sequence_number;
 	optional<sequence_number_t> file_sequence_number;
 };
+
+//! Manifest entries grouped by partition spec id, so each group can be written into a manifest declaring
+//! that spec.
+using partitioned_manifest_entry_map_t = map<int32_t, vector<IcebergManifestEntry>>;
+
+//! A file's partition values looked up by partition field id.
+using partition_value_map_t = unordered_map<uint64_t, reference<const Value>>;
 
 struct IcebergManifestListEntry;
 

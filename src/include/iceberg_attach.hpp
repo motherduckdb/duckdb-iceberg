@@ -15,8 +15,14 @@ enum class IcebergAuthorizationType : uint8_t { OAUTH2, SIGV4, NONE, INVALID };
 
 enum class IRCAccessDelegationMode : uint8_t { NONE, VENDED_CREDENTIALS };
 
+//! Whether listing the tables of a schema also resolves their columns.
+//! LAZY surfaces a placeholder entry per table and only loads a table when it is actually referenced.
+//! EAGER issues a LoadTable request for every listed table, so 'SHOW ALL TABLES' and
+//! 'information_schema.columns' report real columns, at the cost of one request per table.
+enum class IcebergTableResolution : uint8_t { LAZY, EAGER };
+
 struct IcebergAttachOptions {
-	string endpoint;
+	string catalog_uri;
 	string warehouse;
 	string secret;
 	string name;
@@ -32,12 +38,18 @@ struct IcebergAttachOptions {
 	bool encode_entire_prefix = false;
 	// in rest api spec, purge requested defaults to false.
 	bool purge_requested = false;
+	// some catalogs (e.g. AWS Glue) do not assign a table location server-side; derive one from the namespace's
+	// 'location' property
+	bool default_table_location_from_namespace = false;
+	IcebergTableResolution table_resolution = IcebergTableResolution::LAZY;
 	IRCAccessDelegationMode access_mode = IRCAccessDelegationMode::VENDED_CREDENTIALS;
 	IcebergAuthorizationType authorization_type = IcebergAuthorizationType::INVALID;
 	unordered_map<string, Value> options;
 	// max staleness for cached table metadata in minutes (optional - if not set, always request fresh metadata)
 	optional_idx max_table_staleness_micros;
 };
+
+unordered_map<string, Value> NormalizeIcebergAttachOptions(const unordered_map<string, Value> &options);
 
 struct IcebergAttach {
 	static unique_ptr<Catalog> Attach(optional_ptr<StorageExtensionInfo> storage_info, ClientContext &context,

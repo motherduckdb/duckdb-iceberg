@@ -4,16 +4,8 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
+include test/sql/init_requires
 
-require parquet
-
-require iceberg
-
-require httpfs
-
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 set logging_level='debug'
@@ -63,7 +55,7 @@ select * from my_datalake.default.test_delete_table;
 
 # purgeRequested defaults to False
 query I
-SELECT regexp_matches(request.url, 'http://127.0.0.1:.*namespaces/default/tables/test_delete_table\?purgeRequested=false') FROM duckdb_logs_parsed('HTTP') where request.type = 'DELETE';
+SELECT regexp_matches(request.url, '.*namespaces/default/tables/test_delete_table\?purgeRequested=false') FROM duckdb_logs_parsed('HTTP') where request.type = 'DELETE';
 ----
 1
 

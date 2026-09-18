@@ -10,7 +10,7 @@
 #include "catalog/rest/api/iceberg_create_table_request.hpp"
 #include "catalog/rest/api/catalog_utils.hpp"
 #include "core/expression/iceberg_value.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 
 #include <optional>
 
@@ -221,7 +221,7 @@ map<idx_t, LogicalType> IcebergDataFile::GetFieldIdToTypeMapping(const IcebergSn
                                                                  const unordered_set<int32_t> &partition_spec_ids) {
 	D_ASSERT(!partition_spec_ids.empty());
 	auto &partition_specs = metadata.GetPartitionSpecs();
-	auto &schema = *metadata.GetSchemaFromId(snapshot_info.schema_id);
+	auto &schema = metadata.GetSchemaFromId(snapshot_info.schema_id);
 
 	auto &source_to_column_id = schema.GetSourceIdMap();
 	map<idx_t, LogicalType> partition_field_id_to_type;
@@ -265,9 +265,10 @@ IcebergDataFile::GetExtendedPartitionInfo(const IcebergTableMetadata &metadata) 
 
 	// Build source_id -> LogicalType map from all schemas (schema evolution may spread columns).
 	unordered_map<uint64_t, const LogicalType *> source_id_to_type;
-	for (auto &schema_pair : metadata.GetSchemas()) {
-		PopulateSourceIdToTypeMap(schema_pair.second->columns, source_id_to_type);
-	}
+
+	auto &schemas = metadata.GetSchemas();
+	schemas.ForEachSchema(
+	    [&](const IcebergTableSchema &schema) { PopulateSourceIdToTypeMap(schema.columns, source_id_to_type); });
 
 	// Build field_id -> (spec field, source_type) map from all partition specs.
 	// Partition field ids are globally unique across all specs per the Iceberg spec.
@@ -322,6 +323,26 @@ bool IcebergDataFile::HasFirstRowId() const {
 int64_t IcebergDataFile::GetFirstRowId() const {
 	D_ASSERT(HasFirstRowId());
 	return *first_row_id;
+}
+
+bool IcebergDataFile::IsDeletionVector() const {
+	if (!referenced_data_file) {
+		return false;
+	}
+	if (!content_offset) {
+		return false;
+	}
+	if (!content_size_in_bytes) {
+		return false;
+	}
+	return true;
+}
+
+int64_t IcebergDataFile::GetContentSizeInBytes() const {
+	if (IsDeletionVector()) {
+		return *content_size_in_bytes;
+	}
+	return file_size_in_bytes;
 }
 
 LogicalType IcebergDataFile::GetType(const IcebergTableMetadata &metadata, const LogicalType &partition_type) {
@@ -505,13 +526,13 @@ static void WritePartitionValue(Vector &vector, idx_t row_idx, const Value &valu
 		FlatVector::SetNull(vector, row_idx, true);
 		return;
 	}
-	Value cast_value;
 	string error_message;
-	if (!value.DefaultTryCastAs(vector.GetType(), cast_value, &error_message, true)) {
+	auto cast_value = value.DefaultTryCastAs(vector.GetType(), &error_message, true);
+	if (!cast_value) {
 		throw InvalidInputException("Could not cast partition value %s to %s", value.type().ToString(),
 		                            vector.GetType().ToString());
 	}
-	vector.SetValue(row_idx, cast_value);
+	vector.SetValue(row_idx, *cast_value);
 }
 
 static void WritePartitionStructRow(Vector &partition_vector, idx_t row_idx, const IcebergDataFile &data_file,

@@ -16,7 +16,7 @@
 
 namespace duckdb {
 
-struct IcebergTableInformation;
+struct IcebergTable;
 
 struct AddSchemaUpdate : public IcebergTableUpdate {
 public:
@@ -184,6 +184,16 @@ struct SetLocation : public IcebergTableUpdate {
 	void CreateUpdate(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state) const override;
 
 	string location;
+};
+
+struct SetSnapshotRef : public IcebergTableUpdate {
+	static constexpr const IcebergTableUpdateType TYPE = IcebergTableUpdateType::SET_SNAPSHOT_REF;
+
+	explicit SetSnapshotRef(int64_t snapshot_id, string ref_name = "main");
+	void CreateUpdate(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state) const override;
+
+	int64_t snapshot_id;
+	string ref_name;
 };
 
 } // namespace duckdb

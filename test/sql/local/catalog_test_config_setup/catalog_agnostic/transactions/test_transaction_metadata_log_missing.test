@@ -4,22 +4,29 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
-
-require parquet
-
-require iceberg
-
-require httpfs
-
-set ignore_error_messages
+include test/sql/init_requires
 
 # A newly-created table has no prior metadata file to place in metadata-log.
 statement ok
 drop table if exists my_datalake.default.metadata_log_missing;
 
+# Snapshot isolation is enabled by default.
+query I
+select current_setting('iceberg_use_metadata_log');
+----
+true
+
+# Metadata older than transaction start needs no metadata-log.
 statement ok
-set iceberg_use_metadata_log = true;
+create table my_datalake.default.metadata_log_missing (a integer);
+
+query I
+select count(*) from my_datalake.default.metadata_log_missing;
+----
+0
+
+statement ok
+drop table my_datalake.default.metadata_log_missing;
 
 statement ok con1
 begin

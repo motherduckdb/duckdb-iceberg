@@ -3,13 +3,7 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
-
-require parquet
-
-require iceberg
-
-require httpfs
+include test/sql/init_requires
 
 statement ok
 CALL enable_logging(level='warning');
@@ -17,8 +11,6 @@ CALL enable_logging(level='warning');
 statement ok
 SET warnings_as_errors = True;
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 set iceberg_use_metadata_log = true;

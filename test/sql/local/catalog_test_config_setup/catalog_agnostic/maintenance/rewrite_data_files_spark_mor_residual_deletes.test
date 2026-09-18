@@ -4,15 +4,7 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
-
-require parquet
-
-require iceberg
-
-require httpfs
-
-set ignore_error_messages
+include test/sql/init_requires
 
 query I
 select count(*) from my_datalake.default.spark_rewrite_mor_residual_deletes;
@@ -99,7 +91,7 @@ query I
 select count(*)
 from iceberg_metadata('my_datalake.default.spark_rewrite_mor_residual_deletes')
 where content = 'DATA' and status = 'ADDED'
-  and file_path not like '%/category=%';
+  and file_path like '%/category=compact/%';
 ----
 1
 

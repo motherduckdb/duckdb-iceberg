@@ -25,7 +25,7 @@
 #include "common/iceberg_utils.hpp"
 #include "planning/iceberg_multi_file_reader.hpp"
 #include "function/iceberg_functions.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
 
 #include "duckdb/common/multi_file/multi_file_states.hpp"
 #include "duckdb/function/partition_stats.hpp"
@@ -49,7 +49,7 @@ static void AddNamedParameters(TableFunction &fun) {
 
 virtual_column_map_t IcebergVirtualColumns(ClientContext &context, optional_ptr<FunctionData> bind_data_p) {
 	auto &bind_data = bind_data_p->Cast<MultiFileBindData>();
-	auto result = IcebergTableEntry::VirtualColumns();
+	auto result = IcebergTableSchemaVersion::VirtualColumns();
 	bind_data.virtual_columns = result;
 	return result;
 }
@@ -75,7 +75,7 @@ BindInfo IcebergBindInfo(const optional_ptr<FunctionData> bind_data) {
 static void IcebergSetScanOrder(unique_ptr<RowGroupOrderOptions> order_options, optional_ptr<FunctionData> bind_data) {
 	auto &multi_file_data = bind_data->Cast<MultiFileBindData>();
 	auto &file_list = multi_file_data.file_list->Cast<IcebergMultiFileList>();
-	file_list.SetScanOrder(std::move(order_options));
+	file_list.GetScanPlanner().SetScanOrder(std::move(order_options));
 }
 
 //! FIXME: needs v1.5.1, causes a crash on v1.5.0
@@ -96,7 +96,7 @@ TableFunctionSet IcebergFunctions::GetIcebergScanFunction(ExtensionLoader &loade
 	auto &parquet_scan = loader.GetTableFunction("parquet_scan");
 	auto parquet_scan_copy = parquet_scan.functions;
 
-	for (auto &function : parquet_scan_copy.functions) {
+	parquet_scan_copy.ApplyToFunctions([](TableFunction &function) {
 		// Register the MultiFileReader as the driver for reads
 		function.get_multi_file_reader = IcebergMultiFileReader::CreateInstance;
 		function.late_materialization = false;
@@ -119,7 +119,7 @@ TableFunctionSet IcebergFunctions::GetIcebergScanFunction(ExtensionLoader &loade
 		AddNamedParameters(function);
 
 		function.SetName("iceberg_scan");
-	}
+	});
 
 	parquet_scan_copy.SetName("iceberg_scan");
 	return parquet_scan_copy;

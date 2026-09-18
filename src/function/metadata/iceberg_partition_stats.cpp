@@ -33,8 +33,8 @@ namespace duckdb {
 
 struct IcebergPartitionStatsBindData : public TableFunctionData {
 	IcebergSnapshotScanInfo snapshot_to_scan;
-	IcebergTableMetadata metadata;
-	shared_ptr<IcebergTableSchema> schema;
+	IcebergTableMetadata metadata {IcebergTableMetadataSchemas {}};
+	optional_ptr<const IcebergTableSchema> schema;
 	unordered_map<uint64_t, ColumnIndex> source_to_column_id;
 	unique_ptr<IcebergManifestList> iceberg_table;
 };
@@ -54,7 +54,8 @@ public:
 };
 
 static unique_ptr<FunctionData> IcebergPartitionStatsBind(ClientContext &context, TableFunctionBindInput &input,
-                                                          vector<LogicalType> &return_types, vector<string> &names) {
+                                                          vector<LogicalType> &return_types,
+                                                          vector<Identifier> &names) {
 	// return a TableRef that contains the scans for the
 	auto ret = make_uniq<IcebergPartitionStatsBindData>();
 

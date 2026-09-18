@@ -1,8 +1,10 @@
 #pragma once
 
 #include "duckdb/catalog/catalog.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/common/enums/access_mode.hpp"
+#include "duckdb/common/mutex.hpp"
 #include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/parser/parsed_data/attach_info.hpp"
 #include "duckdb/storage/storage_extension.hpp"
@@ -17,7 +19,7 @@
 namespace duckdb {
 
 class IcebergSchemaEntry;
-struct IcebergTableInformation;
+struct IcebergTable;
 
 class MetadataCacheValue {
 public:
@@ -39,17 +41,13 @@ public:
 	}
 
 public:
-	mutex &Lock() {
-		return lock;
-	}
-
-	//! NOTE: lock needs to be held by the caller until the result goes out of scope
-	optional_ptr<MetadataCacheValue> Get(ClientContext &context, const string &table_key, lock_guard<mutex> &lock,
-	                                     bool validate_cache = true) {
-		(void)lock;
+	bool Get(ClientContext &context, const string &table_key,
+	         const std::function<void(const rest_api_objects::LoadTableResult &)> &callback,
+	         bool validate_cache = true) {
+		annotated_lock_guard<annotated_mutex> guard(lock);
 		auto it = tables.find(table_key);
 		if (it == tables.end()) {
-			return nullptr;
+			return false;
 		}
 
 		auto transaction_start_ms = IcebergUtils::GetTransactionStartTimeMS(context);
@@ -57,13 +55,14 @@ public:
 		auto &entry = it->second;
 		if (validate_cache && transaction_start_ms > entry.expire_timestamp_ms) {
 			// cached value has expired
-			return nullptr;
+			return false;
 		}
-		return entry;
+		callback(*entry.load_table_result);
+		return true;
 	}
 	void SetOrOverwrite(const string &table_key,
 	                    unique_ptr<const rest_api_objects::LoadTableResult> load_table_result) {
-		lock_guard<mutex> guard(lock);
+		annotated_lock_guard<annotated_mutex> guard(lock);
 		// If max_table_staleness_minutes is not set, use a time in the past so cache is always expired
 		system_clock::time_point expires_at;
 		if (attach_options.max_table_staleness_micros.IsValid()) {
@@ -81,19 +80,19 @@ public:
 	}
 
 	//! Evict only if the table was initialized from the result that is still cached for its key.
-	void EvictIfCurrent(const IcebergTableInformation &table);
+	void EvictIfCurrent(const IcebergTable &table);
 
 private:
 	IcebergAttachOptions &attach_options;
-	mutex lock;
-	case_insensitive_map_t<MetadataCacheValue> tables;
+	annotated_mutex lock;
+	case_insensitive_map_t<MetadataCacheValue> tables DUCKDB_GUARDED_BY(lock);
 };
 
 class IcebergCatalog : public Catalog {
 public:
 	explicit IcebergCatalog(AttachedDatabase &db_p, AccessMode access_mode,
 	                        unique_ptr<IcebergAuthorization> auth_handler, IcebergAttachOptions &attach_options,
-	                        const string &default_schema);
+	                        const Identifier &default_schema);
 	~IcebergCatalog() override;
 
 public:
@@ -101,6 +100,7 @@ public:
 	static unique_ptr<SecretEntry> GetIcebergSecret(ClientContext &context, const string &secret_name);
 	static unique_ptr<SecretEntry> GetHTTPSecret(ClientContext &context, const string &secret_name);
 	void ParsePrefix();
+	void ParseNamespaceSeparator();
 	void GetConfig(ClientContext &context, IcebergEndpointType &endpoint_type);
 	IRCEndpointBuilder GetBaseUrl() const;
 	string GetWarehouse() const {
@@ -120,9 +120,7 @@ public:
 	bool CheckAmbiguousCatalogOrSchema(ClientContext &context, const Identifier &schema) override {
 		return false;
 	}
-	string GetDefaultSchema() const override {
-		return default_schema;
-	}
+	optional<Identifier> GetDefaultSchema() const override;
 	ErrorData SupportsCreateTable(BoundCreateTableInfo &info) override;
 
 public:
@@ -145,6 +143,10 @@ public:
 	                                    PhysicalOperator &plan) override;
 	PhysicalOperator &PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,
 	                             PhysicalOperator &plan) override;
+	//! Shared delete-planning body both PlanDelete and MERGE build on; only PlanDelete additionally opts the
+	//! standalone DELETE into metadata-only deletes, so MERGE must plan its delete action through here directly.
+	PhysicalOperator &PlanDeleteOperation(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,
+	                                      PhysicalOperator &plan);
 	PhysicalOperator &PlanUpdate(ClientContext &context, PhysicalPlanGenerator &planner, LogicalUpdate &op,
 	                             PhysicalOperator &plan) override;
 	PhysicalOperator &PlanMergeInto(ClientContext &context, PhysicalPlanGenerator &planner, LogicalMergeInto &op,
@@ -167,15 +169,16 @@ public:
 public:
 	AccessMode access_mode;
 	unique_ptr<IcebergAuthorization> auth_handler;
-	//! host of the REST catalog
-	string uri;
+	//! Base URI of the REST catalog
+	string base_uri;
 	//! version
 	const string version;
 	//! optional prefix path components
 	vector<string> prefix;
+	string namespace_separator = "\x1f";
 	//! attach options
 	IcebergAttachOptions attach_options;
-	string default_schema;
+	Identifier default_schema;
 
 private:
 	//! warehouse
@@ -183,8 +186,8 @@ private:
 	// defaults and overrides provided by a catalog.
 	case_insensitive_map_t<string> defaults;
 	case_insensitive_map_t<string> overrides;
-	//! raw attach options (after core stripping) used to detect a conflicting ATTACH OR REPLACE
-	unordered_map<string, Value> raw_attach_options;
+	//! Normalized attach options (after core stripping) used to detect a conflicting ATTACH OR REPLACE
+	unordered_map<string, Value> normalized_attach_options;
 
 public:
 	unordered_set<string> supported_urls;

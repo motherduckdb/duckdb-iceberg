@@ -9,6 +9,7 @@
 #include "duckdb/parser/parsed_data/create_secret_info.hpp"
 
 #include "catalog/rest/api/url_utils.hpp"
+#include "iceberg_attach.hpp"
 #include "rest_catalog/objects/list.hpp"
 
 namespace duckdb {
@@ -16,7 +17,7 @@ namespace duckdb {
 class IcebergCatalog;
 struct IcebergCreateTableRequest;
 class IcebergSchemaEntry;
-class IcebergTableEntry;
+class IcebergTableSchemaVersion;
 
 struct IRCAPISchema {
 	//! The (potentially multiple) levels that the namespace is made up of
@@ -66,8 +67,9 @@ public:
 class IRCAPI {
 public:
 	static const string API_VERSION_1;
-	static vector<rest_api_objects::TableIdentifier> GetTables(ClientContext &context, IcebergCatalog &catalog,
-	                                                           const IcebergSchemaEntry &schema);
+	//! Returns 'nullopt' if the catalog refused the listing, which must not be read as "the schema is empty".
+	static optional<vector<rest_api_objects::TableIdentifier>>
+	GetTables(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema);
 	static bool VerifyResponse(ClientContext &context, IcebergCatalog &catalog, IRCEndpointBuilder &url_builder,
 	                           bool execute_head);
 	static bool VerifySchemaExistence(ClientContext &context, IcebergCatalog &catalog, const string &schema);
@@ -78,6 +80,9 @@ public:
 	                                                                               IcebergCatalog &catalog,
 	                                                                               const IcebergSchemaEntry &schema,
 	                                                                               const string &table_name);
+	static APIResult<unique_ptr<const rest_api_objects::LoadCredentialsResponse>>
+	GetTableCredentials(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema,
+	                    const string &table_name);
 	static APIResult<unique_ptr<const rest_api_objects::GetNamespaceResponse>>
 	GetNamespace(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema);
 	static vector<IRCAPISchema> GetSchemas(ClientContext &context, IcebergCatalog &catalog,

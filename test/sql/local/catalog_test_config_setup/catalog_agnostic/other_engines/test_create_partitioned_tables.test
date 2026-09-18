@@ -4,21 +4,13 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
-
-require parquet
-
-require iceberg
-
-require httpfs
+include test/sql/init_requires
 
 require icu
 
 statement ok
 SET timezone='UTC';
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 create schema if not exists my_datalake.default;

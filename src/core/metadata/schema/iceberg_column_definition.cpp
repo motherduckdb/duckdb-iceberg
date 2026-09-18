@@ -390,16 +390,24 @@ ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
 	return res;
 }
 
-void IcebergColumnDefinition::SetWriteDefault(const Value &default_value) {
+void IcebergColumnDefinition::SetWriteDefault(const Value &default_value, idx_t iceberg_version) {
+	if (iceberg_version < 3) {
+		if (!default_value.IsNull()) {
+			throw InvalidInputException("non-null DEFAULT values are not supported for <V3 tables");
+		}
+		return;
+	}
+
 	if (type.id() != LogicalTypeId::STRUCT || default_value.IsNull()) {
 		write_default = make_uniq<Value>(default_value);
 		return;
 	}
+
 	auto &default_children = StructValue::GetChildren(default_value);
 	D_ASSERT(default_children.size() == children.size());
 	write_default = make_uniq<Value>(Value(type));
 	for (idx_t child_idx = 0; child_idx < children.size(); child_idx++) {
-		children[child_idx]->SetWriteDefault(default_children[child_idx]);
+		children[child_idx]->SetWriteDefault(default_children[child_idx], iceberg_version);
 	}
 }
 

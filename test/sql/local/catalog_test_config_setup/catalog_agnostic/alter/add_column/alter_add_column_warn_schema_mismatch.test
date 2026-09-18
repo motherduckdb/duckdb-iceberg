@@ -4,16 +4,8 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
+include test/sql/init_requires
 
-require parquet
-
-require iceberg
-
-require httpfs
-
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 set iceberg_use_metadata_log = true;
@@ -90,7 +82,7 @@ SELECT count(*), max(a) FROM my_datalake.default.alter_add_column_explicit_txn;
 statement error con3
 INSERT INTO my_datalake.default.alter_add_column_explicit_txn VALUES (43, 43);
 ----
-Binder Error: table alter_add_column_explicit_txn has 1 columns but 2 values were supplied
+Binder Error: table "alter_add_column_explicit_txn" has 1 columns but 2 values were supplied
 
 statement ok con2
 INSERT INTO my_datalake.default.alter_add_column_explicit_txn VALUES (43);

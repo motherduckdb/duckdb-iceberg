@@ -43,12 +43,12 @@ public:
 
 public:
 	string path;
-	optional_ptr<TableFunction> avro_scan;
+	optional_ptr<const TableFunction> avro_scan;
 	ClientContext &context;
 	unique_ptr<FunctionData> bind_data;
 	unique_ptr<GlobalTableFunctionState> global_state;
 	vector<LogicalType> return_types;
-	vector<string> return_names;
+	vector<Identifier> return_names;
 	vector<column_t> column_ids;
 
 	shared_ptr<IcebergAvroScanInfo> scan_info;

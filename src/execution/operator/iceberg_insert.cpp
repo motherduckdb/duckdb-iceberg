@@ -4,6 +4,7 @@
 #include "duckdb/logging/logger.hpp"
 #include "duckdb/main/client_data.hpp"
 #include "duckdb/execution/physical_operator_states.hpp"
+#include "duckdb/planner/expression_binder/table_function_binder.hpp"
 #include "duckdb/planner/operator/logical_copy_to_file.hpp"
 #include "duckdb/planner/operator/logical_insert.hpp"
 #include "duckdb/planner/operator/logical_create_table.hpp"
@@ -20,10 +21,9 @@
 #include "duckdb/common/string_util.hpp"
 
 #include "catalog/rest/iceberg_catalog.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
 #include "execution/operator/iceberg_delete.hpp"
-#include "execution/operator/physical_iceberg_create_table.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "core/metadata/schema/iceberg_column_definition.hpp"
 #include "core/metadata/schema/iceberg_table_schema.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
@@ -54,18 +54,16 @@ static bool WriteSequenceNumber(IcebergInsertVirtualColumns virtual_columns) {
 
 IcebergInsert::IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op, TableCatalogEntry &table,
                              physical_index_vector_t<idx_t> column_index_map_p)
-    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, op.types, 1), table(&table), schema(nullptr),
+    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, op.types, 1), table(&table),
       column_index_map(std::move(column_index_map_p)) {
 }
 
-IcebergInsert::IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op, SchemaCatalogEntry &schema,
-                             unique_ptr<BoundCreateTableInfo> info)
-    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, op.types, 1), table(nullptr), schema(&schema),
-      info(std::move(info)) {
+IcebergInsert::IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op)
+    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, op.types, 1), table(nullptr) {
 }
 
 IcebergInsert::IcebergInsert(PhysicalPlan &physical_plan, const vector<LogicalType> &types, TableCatalogEntry &table)
-    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, types, 1), table(&table), schema(nullptr) {
+    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, types, 1), table(&table) {
 }
 
 IcebergCopyOptions::IcebergCopyOptions(unique_ptr<CopyInfo> info_p, CopyFunction copy_function_p)
@@ -73,14 +71,15 @@ IcebergCopyOptions::IcebergCopyOptions(unique_ptr<CopyInfo> info_p, CopyFunction
 }
 
 IcebergCopyInput::IcebergCopyInput(ClientContext &context, const IcebergTableMetadata &table_metadata,
-                                   const IcebergTableSchema &schema)
-    : table_metadata(table_metadata), schema(schema) {
-	auto &fs = FileSystem::GetFileSystem(context);
-	data_path = table_metadata.GetDataPath(fs);
+                                   const IcebergTableSchema &schema, unique_ptr<BoundCreateTableInfo> ctas_info_p)
+    : table_metadata(table_metadata), schema(schema), ctas_info(std::move(ctas_info_p)) {
+	if (!ctas_info) {
+		auto &fs = FileSystem::GetFileSystem(context);
+		data_path = table_metadata.GetDataPath(fs);
+	}
 
 	// Get partition spec if the table is partitioned
-	auto &metadata = table_metadata;
-	if (metadata.GetLatestPartitionSpec().IsPartitioned()) {
+	if (table_metadata.GetLatestPartitionSpec().IsPartitioned()) {
 		partition_spec = table_metadata.FindPartitionSpecById(table_metadata.default_spec_id);
 	}
 }
@@ -170,7 +169,7 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 		auto partition_values = chunk.GetValue(5, r);
 
 		auto table_current_schema_id = table_metadata.GetCurrentSchemaId();
-		auto &ic_schema = table_metadata.GetSchemas().at(table_current_schema_id);
+		auto &ic_schema = table_metadata.GetSchemaFromId(table_current_schema_id);
 
 		auto ic_partition_info = table_metadata.GetLatestPartitionSpec();
 
@@ -184,13 +183,13 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 		// But if there are only identity transforms, we don't add a projection to the insert, so we can just use
 		// regular column names. So here when we populate our map, if there are transforms present, we need to use our
 		// transform partition column names. If not, we should use the identify names.
-		if (!CanWriteIdentityPartitionsDirectly(ic_partition_info, *ic_schema)) {
+		if (!CanWriteIdentityPartitionsDirectly(ic_partition_info, ic_schema)) {
 			for (auto &partition_field : ic_partition_info.fields) {
 				partition_colname_to_field.emplace(partition_field.GetPartitionSpecFieldName(), partition_field);
 			}
 		} else {
 			for (auto &partition_field : ic_partition_info.fields) {
-				auto actual_col_name = GetColumnNameBySourceId(*ic_schema, partition_field.source_id);
+				auto actual_col_name = GetColumnNameBySourceId(ic_schema, partition_field.source_id);
 				partition_colname_to_field.emplace(actual_col_name, partition_field);
 			}
 		}
@@ -205,7 +204,7 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 				auto field_it = partition_colname_to_field.find(partition_name);
 				D_ASSERT(field_it != partition_colname_to_field.end());
 				auto &partition_field = field_it->second.get();
-				auto source_type = ic_schema->GetColumnTypeFromFieldId(partition_field.source_id);
+				auto source_type = ic_schema.GetColumnTypeFromFieldId(partition_field.source_id);
 
 				IcebergPartitionInfo info;
 				info.field_id = partition_field.partition_field_id;
@@ -238,7 +237,7 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &chunk,
                                     optional_ptr<TableCatalogEntry> table) {
 	D_ASSERT(table);
-	auto &ic_table = table->Cast<IcebergTableEntry>();
+	auto &ic_table = table->Cast<IcebergTableSchemaVersion>();
 	auto &table_metadata = ic_table.table_info.table_metadata;
 	global_state.AddFiles(chunk, ic_table.name.GetIdentifierName(), table_metadata);
 }
@@ -247,9 +246,9 @@ optional_ptr<TableCatalogEntry> IcebergInsert::GetEffectiveTable() const {
 	if (table) {
 		return table;
 	}
-	if (create_state) {
-		lock_guard<mutex> guard(create_state->lock);
-		return create_state->table_entry ? create_state->table_entry.get() : nullptr;
+	if (ctas_copy_op) {
+		auto created_table = ctas_copy_op->GetCreatedTable();
+		return created_table ? created_table.get() : nullptr;
 	}
 	return nullptr;
 }
@@ -258,9 +257,9 @@ SinkResultType IcebergInsert::Sink(ExecutionContext &context, DataChunk &chunk, 
 	auto &global_state = input.global_state.Cast<IcebergInsertGlobalState>();
 
 	// For CTAS, `table` is null at planning time and the catalog entry is
-	// produced by an upstream PhysicalIcebergCreateTable on the first chunk.
-	// By the time Sink runs that upstream operator has already populated
-	// `create_state->table_entry`, so resolve the effective table here.
+	// produced by the IcebergCopyToFile below this insert. GetGlobalSinkState in
+	// IcebergCopyToFile will create the table, so we can resolve the effective
+	// table from there
 	auto effective_table = GetEffectiveTable();
 	AddWrittenFiles(global_state, chunk, effective_table);
 
@@ -291,7 +290,7 @@ SinkFinalizeType IcebergInsert::Finalize(Pipeline &pipeline, Event &event, Clien
 		// Table does not exist (INSERT INTO) or was not created in Physical Create Iceberg table (CTAS). Throw Error
 		throw InternalException("Table to insert into does not exist.");
 	}
-	auto &irc_table = effective_table->Cast<IcebergTableEntry>();
+	auto &irc_table = effective_table->Cast<IcebergTableSchemaVersion>();
 	auto &table_info = irc_table.table_info;
 	auto &transaction = IcebergTransaction::Get(context, effective_table->catalog);
 	auto &iceberg_transaction = transaction.Cast<IcebergTransaction>();
@@ -307,22 +306,16 @@ SinkFinalizeType IcebergInsert::Finalize(Pipeline &pipeline, Event &event, Clien
 		auto &delete_global_state = update_delete_op->sink_state->Cast<IcebergDeleteGlobalState>();
 		auto delete_manifest_entries = IcebergDelete::GenerateDeleteManifestEntries(delete_global_state);
 		if (!written_files.empty()) {
-			ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTableInformation &tbl) {
+			ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTable &tbl) {
 				auto &transaction_data = tbl.GetOrCreateTransactionData(iceberg_transaction);
 				transaction_data.AddUpdateSnapshot(std::move(delete_manifest_entries), std::move(written_files),
 				                                   std::move(delete_global_state.altered_manifests));
-				for (auto &entry : delete_global_state.written_files) {
-					auto &delete_file = entry.second;
-					if (table_info.table_metadata.iceberg_version >= 3) {
-						transaction_data.transactional_delete_files[delete_file.data_file_path] = delete_file.file_name;
-					}
-				}
 			});
 		}
 	} else {
 		// Regular insert: commit an append snapshot.
 		if (!written_files.empty()) {
-			ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTableInformation &tbl) {
+			ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTable &tbl) {
 				auto &transaction_data = tbl.GetOrCreateTransactionData(iceberg_transaction);
 				IcebergManifestDeletes empty_deletes;
 				transaction_data.AddSnapshot(IcebergSnapshotOperationType::APPEND, std::move(written_files),
@@ -344,12 +337,10 @@ InsertionOrderPreservingMap<string> IcebergInsert::ParamsToString() const {
 	InsertionOrderPreservingMap<string> result;
 	if (table) {
 		result["Table Name"] = table->name.GetIdentifierName();
-	} else if (info) {
-		result["Table Name"] = info->Base().GetTableName().GetIdentifierName();
-	} else if (create_state) {
-		lock_guard<mutex> guard(create_state->lock);
-		if (create_state->table_entry) {
-			result["Table Name"] = create_state->table_entry->name.GetIdentifierName();
+	} else if (ctas_copy_op) {
+		auto created_table = ctas_copy_op->GetCreatedTable();
+		if (created_table) {
+			result["Table Name"] = created_table->name.GetIdentifierName();
 		}
 	}
 	return result;
@@ -429,9 +420,20 @@ static unique_ptr<Expression> GetDateDiffFunction(ClientContext &context, const 
 	if (date_part == "hour") {
 		children.push_back(make_uniq<BoundConstantExpression>(Value::TIMESTAMP(Timestamp::FromEpochSeconds(0))));
 	} else {
-		children.push_back(make_uniq<BoundConstantExpression>(Value::DATE(Date::FromDate(1970, 1, 1))));
+		children.push_back(make_uniq<BoundConstantExpression>(Value::DATE(Date::FromDate(Date::EPOCH_YEAR, 1, 1))));
 	}
-	children.push_back(CreateSourceColumnReference(context, copy_input, source_id));
+
+	auto source = CreateSourceColumnReference(context, copy_input, source_id);
+	auto source_type = source->GetReturnType().id();
+	auto target_type = source->GetReturnType();
+	if (source_type == LogicalTypeId::TIMESTAMP_TZ) {
+		target_type = LogicalType::TIMESTAMP;
+	}
+	if (source_type == LogicalTypeId::TIMESTAMP_TZ_NS) {
+		target_type = LogicalType::TIMESTAMP_NS;
+	}
+	source = BoundCastExpression::AddDefaultCastToType(std::move(source), target_type);
+	children.push_back(std::move(source));
 	return BindTransformFunction(context, "date_diff", std::move(children));
 }
 
@@ -602,6 +604,7 @@ static const IcebergParquetOptionMapping ICEBERG_TABLE_PROPERTY_MAPPING[] = {
     {"write.parquet.compression-codec", "codec"},
     {"write.parquet.compression-level", "compression_level"},
     {"write.parquet.dict-size-bytes", "string_dictionary_page_size_limit"},
+    {"write.parquet.page-size-bytes", "data_page_size_limit"},
     {"write.parquet.row-group-size-bytes", "row_group_size_bytes"},
     {"write.parquet.row-group-size", "row_group_size"},
     {"write.parquet.row-groups-per-file", "row_groups_per_file"}};
@@ -656,7 +659,8 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 	info->options["geoparquet_version"].emplace_back("NONE");
 
 	auto &fs = FileSystem::GetFileSystem(context);
-	if (!fs.IsRemoteFile(copy_input.data_path)) {
+	// data_path is empty while a CTAS is being planned, because its table does not have a location yet
+	if (!copy_input.data_path.empty() && !fs.IsRemoteFile(copy_input.data_path)) {
 		// create data path if it does not yet exist
 		try {
 			fs.CreateDirectoriesRecursive(copy_input.data_path);
@@ -672,7 +676,7 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 	copy_input.schema.GetColumnNamesAndTypes(names_to_write, types_to_write);
 
 	// Get Parquet Copy function
-	auto &copy_fun = IcebergUtils::GetCopyFunction(context, file_format);
+	auto &copy_fun = IcebergUtils::GetCopyFunction(context, Identifier(file_format));
 	IcebergCopyOptions result(std::move(info), copy_fun.function);
 	GenerateSortOrderExpressions(context, copy_input, result);
 
@@ -690,7 +694,10 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 	}
 
 	result.file_path = copy_input.data_path;
-	StripTrailingSeparator(fs, result.file_path);
+	// A filesystem can throw if it has been disabled, so skip if the path is empty (namely for CTAS)
+	if (!result.file_path.empty()) {
+		StripTrailingSeparator(fs, result.file_path);
+	}
 	result.file_extension = file_format;
 	result.overwrite_mode = CopyOverwriteMode::COPY_OVERWRITE_OR_IGNORE;
 	result.per_thread_output = false;
@@ -783,9 +790,8 @@ static void GeneratePhysicalOrder(PhysicalPlanGenerator &planner, vector<BoundOr
 	plan = order;
 }
 
-PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, PhysicalPlanGenerator &planner,
-                                                   const IcebergCopyInput &copy_input,
-                                                   optional_ptr<PhysicalOperator> plan) {
+IcebergCopyToFile &IcebergInsert::PlanCopyForInsert(ClientContext &context, PhysicalPlanGenerator &planner,
+                                                    IcebergCopyInput &copy_input, optional_ptr<PhysicalOperator> plan) {
 	auto copy_options = GetCopyOptions(context, copy_input);
 
 	// If there are partition transform expressions (non-identity partitions), push a projection
@@ -799,31 +805,14 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 	}
 
 	auto copy_return_types = GetCopyFunctionReturnLogicalTypes(CopyFunctionReturnType::WRITTEN_FILE_STATISTICS);
+	// For CTAS the table does not exist yet, so the options resolved above are based on placeholder metadata
+	// without a location. The copy creates the table and re-resolves them before it needs a path.
 	auto &physical_copy = planner
-	                          .Make<PhysicalCopyToFile>(copy_return_types, std::move(copy_options.copy_function),
-	                                                    std::move(copy_options.bind_data), 1)
-	                          .Cast<PhysicalCopyToFile>();
+	                          .Make<IcebergCopyToFile>(copy_return_types, std::move(copy_options.copy_function),
+	                                                   nullptr, 1, std::move(copy_input.ctas_info))
+	                          .Cast<IcebergCopyToFile>();
 
-	physical_copy.file_path = std::move(copy_options.file_path);
-	physical_copy.use_tmp_file = false;
-	physical_copy.filename_pattern = std::move(copy_options.filename_pattern);
-	physical_copy.file_extension = std::move(copy_options.file_extension);
-	physical_copy.overwrite_mode = copy_options.overwrite_mode;
-	physical_copy.per_thread_output = copy_options.per_thread_output;
-	physical_copy.file_size_bytes = copy_options.file_size_bytes;
-	physical_copy.batch_size = copy_options.batch_size;
-	physical_copy.batch_size_bytes = copy_options.batch_size_bytes;
-	physical_copy.return_type = copy_options.return_type;
-
-	physical_copy.partition_output = copy_options.partition_output;
-	physical_copy.write_partition_columns = copy_options.write_partition_columns;
-	physical_copy.write_empty_file = copy_options.write_empty_file;
-	physical_copy.partition_columns = std::move(copy_options.partition_columns);
-	physical_copy.order_columns = std::move(copy_options.order_columns);
-	physical_copy.names = std::move(copy_options.names);
-	physical_copy.expected_types = std::move(copy_options.expected_types);
-	physical_copy.parallel = true;
-	physical_copy.hive_file_pattern = copy_options.partitioned_paths;
+	physical_copy.ApplyCopyOptions(copy_options);
 	if (plan) {
 		physical_copy.children.push_back(*plan);
 	}
@@ -832,7 +821,7 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 }
 
 PhysicalOperator &IcebergInsert::PlanInsert(ClientContext &context, PhysicalPlanGenerator &planner,
-                                            IcebergTableEntry &table) {
+                                            IcebergTableSchemaVersion &table) {
 	optional_idx partition_id;
 	vector<LogicalType> return_types;
 	// the one return value is how many rows we are inserting
@@ -853,7 +842,7 @@ PhysicalOperator &IcebergCatalog::PlanInsert(ClientContext &context, PhysicalPla
 	if (!op.column_index_map.empty()) {
 		plan = planner.ResolveDefaultsProjection(op, *plan);
 	}
-	auto &table_entry = op.table.Cast<IcebergTableEntry>();
+	auto &table_entry = op.table.Cast<IcebergTableSchemaVersion>();
 	table_entry.PrepareIcebergScanFromEntry(context);
 
 	auto &irc_transaction = IcebergTransaction::Get(context, *this);
@@ -865,16 +854,16 @@ PhysicalOperator &IcebergCatalog::PlanInsert(ClientContext &context, PhysicalPla
 	auto &updated_table_entry = *updated_table.schema_versions[schema.schema_id];
 
 	// Create Copy Info
-	IcebergCopyInput info(context, table_metadata, schema);
+	IcebergCopyInput copy_input(context, table_metadata, schema);
 	auto &insert = planner.Make<IcebergInsert>(op, updated_table_entry, op.column_index_map);
-	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, info, plan);
+	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, plan);
 	insert.children.push_back(physical_copy);
 
 	return insert;
 }
 
-static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(BoundCreateTableInfo &info) {
-	auto metadata = make_uniq<IcebergTableMetadata>();
+static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(ClientContext &context, BoundCreateTableInfo &info) {
+	auto metadata = make_uniq<IcebergTableMetadata>(IcebergTableMetadataSchemas {});
 	metadata->iceberg_version = 2;
 	metadata->default_spec_id = 0;
 
@@ -891,21 +880,33 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(BoundCreateTabl
 		schema->columns.push_back(std::move(col_def));
 	}
 	schema->last_column_id = static_cast<idx_t>(next_field_id - 1);
-	metadata->AddSchemaOrGetExisting(schema);
+	metadata->GetSchemasMutable().AddSchemaOrGetExisting(schema);
 	metadata->SetCurrentSchemaId(0);
+
+	auto binder = Binder::CreateBinder(context);
+	TableFunctionBinder property_binder(*binder, context, "format-version");
+	for (auto &option : create_info.options) {
+		auto expr_copy = option.second->Copy();
+		auto bound_expr = property_binder.Bind(expr_copy);
+		if (bound_expr->HasParameter()) {
+			throw ParameterNotResolvedException();
+		}
+		auto val = ExpressionExecutor::EvaluateScalar(context, *bound_expr, true);
+		metadata->table_properties[option.first] = val.GetValue<string>();
+	}
 
 	// Build a placeholder partition spec from the parsed PARTITIONED BY clause so that
 	// PlanCopyForInsert appends the partition projection at plan time. The real spec is
-	// applied during PhysicalIcebergCreateTable::MakeCreateTableRequest, but the projection
+	// applied when IcebergCopyToFile creates the table, but the projection
 	// indices are derived from the same partition_keys/schema and so remain consistent.
-	auto placeholder_spec = IcebergTableInformation::BuildPartitionSpec(create_info.partition_keys, *schema, 0, 1000);
+	auto placeholder_spec = IcebergTable::BuildPartitionSpec(create_info.partition_keys, *schema, 0, 1000);
 	metadata->partition_specs.emplace(0, std::move(placeholder_spec));
 
 	// Same for the SORTED BY clause: the ordering has to be part of the plan, so the placeholder metadata
 	// carries the sort order that the created table will end up with.
 	auto placeholder_sort_order_id = create_info.sort_keys.empty() ? UNSORTED_SORT_ORDER_ID : INITIAL_SORT_ORDER_ID;
 	auto placeholder_sort_order =
-	    IcebergTableInformation::BuildSortOrder(create_info.sort_keys, *schema, placeholder_sort_order_id);
+	    IcebergTable::BuildSortOrder(create_info.sort_keys, *schema, placeholder_sort_order_id);
 	metadata->sort_specs.emplace(placeholder_sort_order_id, std::move(placeholder_sort_order));
 	metadata->default_sort_order_id = placeholder_sort_order_id;
 	return metadata;
@@ -955,33 +956,16 @@ static PhysicalOperator &CastCtasToIcebergStorageTypes(ClientContext &context, P
 
 PhysicalOperator &IcebergCatalog::PlanCreateTableAs(ClientContext &context, PhysicalPlanGenerator &planner,
                                                     LogicalCreateTable &op, PhysicalOperator &plan_p) {
-	auto &schema = op.schema;
-	auto &ic_schema_entry = schema.Cast<IcebergSchemaEntry>();
-
 	// create a fake local iceberg table with desired columns
-	auto placeholder_metadata = BuildPlaceholderMetadata(*op.info);
+	auto placeholder_metadata = BuildPlaceholderMetadata(context, *op.info);
 	auto &placeholder_schema = placeholder_metadata->GetLatestSchema();
 	auto &plan = CastCtasToIcebergStorageTypes(context, planner, plan_p, *op.info, *placeholder_metadata);
-	IcebergCopyInput copy_input(context, *placeholder_metadata, placeholder_schema);
-	auto &physical_copy_op = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, &plan);
-	auto &physical_copy = physical_copy_op.Cast<PhysicalCopyToFile>();
+	IcebergCopyInput copy_input(context, *placeholder_metadata, placeholder_schema, std::move(op.info));
+	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, &plan);
 
-	D_ASSERT(physical_copy.children.size() == 1);
-	auto &upstream = physical_copy.children[0].get();
-	auto upstream_types = upstream.types;
-	auto upstream_card = upstream.estimated_cardinality;
-
-	// create shared state to be used between IcebergTableCreate and IcebergInsert
-	auto create_state = make_shared_ptr<IcebergCTASCreateState>();
-	// create a pass through IcebergCTASCreateStatement operator to make the
-	// CreateTable API call when the operator is executed.
-	auto &create_op = planner.Make<PhysicalIcebergCreateTable>(ic_schema_entry, std::move(op.info), create_state,
-	                                                           physical_copy, std::move(upstream_types), upstream_card);
-	create_op.children.push_back(upstream);
-	physical_copy.children[0] = create_op;
-
-	auto &insert = planner.Make<IcebergInsert>(op, schema, unique_ptr<BoundCreateTableInfo>()).Cast<IcebergInsert>();
-	insert.create_state = std::move(create_state);
+	auto &insert = planner.Make<IcebergInsert>(op).Cast<IcebergInsert>();
+	// the copy creates the table; the insert reads the resulting entry back out of it
+	insert.ctas_copy_op = physical_copy;
 	insert.children.push_back(physical_copy);
 	return insert;
 }

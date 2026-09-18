@@ -13,7 +13,7 @@
 #include "iceberg_logging.hpp"
 #include "catalog/rest/api/catalog_utils.hpp"
 #include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/storage/iceberg_authorization.hpp"
 #include "core/expression/iceberg_value.hpp"
@@ -52,13 +52,19 @@ public:
 		}
 		values.emplace_back(std::move(val));
 	}
-	const vector<string> &Tasks() const {
-		return values;
+	bool TryGetNextTask(string &task_identifier) {
+		if (next_task == values.size()) {
+			return false;
+		}
+		// Copy before fetching: the response can append tasks and reallocate values.
+		task_identifier = values[next_task++];
+		return true;
 	}
 
 private:
 	unordered_set<string> distinct_values;
 	vector<string> values;
+	idx_t next_task = 0;
 };
 
 struct PlanningAccumulator {
@@ -67,12 +73,13 @@ struct PlanningAccumulator {
 	PlanTasksContainer plan_tasks;
 };
 
-static IRCEndpointBuilder TableEndpoint(IcebergTableInformation &table_info) {
+static IRCEndpointBuilder TableEndpoint(IcebergTable &table_info) {
 	auto &catalog = table_info.catalog;
 	auto result = catalog.GetBaseUrl();
 	result.AddPrefixComponents(catalog.prefix);
 	result.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
-	result.AddPathComponent(IRCPathComponent::NamespaceComponent(table_info.schema.namespace_items));
+	result.AddPathComponent(
+	    IRCPathComponent::NamespaceComponent(table_info.schema.namespace_items, catalog.namespace_separator));
 	result.AddPathComponent(IRCPathComponent::RegularComponent("tables"));
 	result.AddPathComponent(IRCPathComponent::RegularComponent(table_info.name));
 	return result;
@@ -286,9 +293,10 @@ static string SerializePlanRequest(const rest_api_objects::PlanTableScanRequest 
 	return writer.ToString(JSONWriteFlags::ALLOW_INF_AND_NAN);
 }
 
-static void FetchPlanTasks(ClientContext &context, IcebergTableInformation &table_info,
-                           PlanningAccumulator &accumulator) {
-	for (auto &task_identifier : accumulator.plan_tasks.Tasks()) {
+static void FetchPlanTasks(ClientContext &context, IcebergTable &table_info, PlanningAccumulator &accumulator) {
+	string task_identifier;
+	// Task responses may contain further plan tasks. Drain the growing queue completely.
+	while (accumulator.plan_tasks.TryGetNextTask(task_identifier)) {
 		if (context.IsInterrupted()) {
 			throw InterruptException();
 		}
@@ -299,6 +307,7 @@ static void FetchPlanTasks(ClientContext &context, IcebergTableInformation &tabl
 		JSONWriter writer;
 		writer.SetRoot(request.ToJSON(writer));
 		auto body = writer.ToString(JSONWriteFlags::ALLOW_INF_AND_NAN);
+		ICUtils::LogPostBody(context, endpoint, body);
 		auto headers = PlanningHeaders(context);
 		headers.Insert("Idempotency-Key", UUID::ToString(UUID::GenerateRandomUUID()));
 		auto response =
@@ -312,8 +321,8 @@ static void FetchPlanTasks(ClientContext &context, IcebergTableInformation &tabl
 	}
 }
 
-static void FetchCredentials(ClientContext &context, IcebergTableInformation &table_info,
-                             const optional<string> &plan_id, IcebergServerSideScanPlan &result) {
+static void FetchCredentials(ClientContext &context, IcebergTable &table_info, const optional<string> &plan_id,
+                             IcebergServerSideScanPlan &result) {
 	if (!result.storage_credentials.empty() ||
 	    table_info.catalog.supported_urls.find(IcebergServerSideScanPlanning::CREDENTIALS_ENDPOINT) ==
 	        table_info.catalog.supported_urls.end()) {
@@ -398,7 +407,7 @@ static vector<IcebergManifestListEntry> MakeManifests(FileSystem &fs, const Iceb
 
 } // namespace
 
-bool IcebergServerSideScanPlanning::Plan(ClientContext &context, IcebergTableInformation &table_info,
+bool IcebergServerSideScanPlanning::Plan(ClientContext &context, IcebergTable &table_info,
                                          rest_api_objects::PlanTableScanRequest request,
                                          IcebergServerSideScanPlan &result) {
 	auto endpoint = TableEndpoint(table_info);
@@ -407,6 +416,7 @@ bool IcebergServerSideScanPlanning::Plan(ClientContext &context, IcebergTableInf
 	// A fresh key makes retries of each logical planning operation idempotent on servers that support it.
 	headers.Insert("Idempotency-Key", UUID::ToString(UUID::GenerateRandomUUID()));
 	auto body = SerializePlanRequest(request);
+	ICUtils::LogPostBody(context, endpoint, body);
 	auto response =
 	    table_info.catalog.auth_handler->Request(RequestType::POST_REQUEST, context, endpoint, headers, body);
 	if (response->status == HTTPStatusCode::NotAcceptable_406) {

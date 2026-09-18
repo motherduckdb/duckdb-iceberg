@@ -30,7 +30,7 @@ static string SnapshotOperationToString(IcebergSnapshotOperationType type) {
 
 struct IcebergSnaphotsBindData : public TableFunctionData {
 	IcebergSnaphotsBindData() {};
-	IcebergTableMetadata metadata;
+	IcebergTableMetadata metadata {IcebergTableMetadataSchemas {}};
 };
 
 struct IcebergSnapshotGlobalTableFunctionState : public GlobalTableFunctionState {
@@ -46,12 +46,12 @@ public:
 		return std::move(global_state);
 	}
 
-	IcebergTableMetadata metadata;
+	IcebergTableMetadata metadata {IcebergTableMetadataSchemas {}};
 	unordered_map<int64_t, IcebergSnapshot>::iterator snapshot_it;
 };
 
 static unique_ptr<FunctionData> IcebergSnapshotsBind(ClientContext &context, TableFunctionBindInput &input,
-                                                     vector<LogicalType> &return_types, vector<string> &names) {
+                                                     vector<LogicalType> &return_types, vector<Identifier> &names) {
 	auto bind_data = make_uniq<IcebergSnaphotsBindData>();
 	IcebergOptions options;
 	for (auto &kv : input.named_parameters) {
@@ -60,6 +60,7 @@ static unique_ptr<FunctionData> IcebergSnapshotsBind(ClientContext &context, Tab
 			options.metadata_compression_codec = StringValue::Get(kv.second);
 		} else if (loption == "version") {
 			options.table_version = StringValue::Get(kv.second);
+			options.version_explicitly_set = true;
 		} else if (loption == "version_name_format") {
 			auto value = StringValue::Get(kv.second);
 			auto string_substitutions = IcebergUtils::CountOccurrences(value, "%s");
@@ -114,8 +115,12 @@ static void IcebergSnapshotsFunction(ClientContext &context, TableFunctionInput 
 		FlatVector::GetDataMutable<uint64_t>(output.data[0])[i] = *snapshot.sequence_number;
 		FlatVector::GetDataMutable<uint64_t>(output.data[1])[i] = *snapshot.snapshot_id;
 		FlatVector::GetDataMutable<timestamp_ms_t>(output.data[2])[i] = snapshot.timestamp_ms;
-		string_t manifest_string_t = StringVector::AddString(output.data[3], string_t(snapshot.manifest_list));
-		FlatVector::GetDataMutable<string_t>(output.data[3])[i] = manifest_string_t;
+		if (snapshot.manifest_list.empty()) {
+			FlatVector::SetNull(output.data[3], i, true);
+		} else {
+			string_t manifest_string_t = StringVector::AddString(output.data[3], string_t(snapshot.manifest_list));
+			FlatVector::GetDataMutable<string_t>(output.data[3])[i] = manifest_string_t;
+		}
 		auto operation_str = SnapshotOperationToString(snapshot.operation);
 		FlatVector::GetDataMutable<string_t>(output.data[4])[i] =
 		    StringVector::AddString(output.data[4], operation_str);

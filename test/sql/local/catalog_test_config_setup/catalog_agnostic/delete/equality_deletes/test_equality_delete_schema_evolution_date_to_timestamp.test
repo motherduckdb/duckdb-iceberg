@@ -6,19 +6,15 @@ require-env CATALOG_TEST_CONFIG_SETUP
 
 require-env EQUALITY_DELETE_WRITES_ENABLED 1
 
-require avro
+include test/sql/init_requires
 
-require parquet
-
-require iceberg
-
-require httpfs
-
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 use my_datalake.default;
+
+# server-side scan planning has a bug on the server side currently
+statement ok
+set iceberg_use_server_side_scan_planning=false;
 
 statement ok
 set unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=true;

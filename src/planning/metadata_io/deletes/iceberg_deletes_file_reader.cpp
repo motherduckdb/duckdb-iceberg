@@ -6,14 +6,14 @@
 #include "duckdb/main/database.hpp"
 
 #include "function/iceberg_functions.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
 
 namespace duckdb {
 
 static virtual_column_map_t IcebergDeleteVirtualColumns(ClientContext &context,
                                                         optional_ptr<FunctionData> bind_data_p) {
 	auto &bind_data = bind_data_p->Cast<MultiFileBindData>();
-	auto result = IcebergTableEntry::VirtualColumns();
+	auto result = IcebergTableSchemaVersion::VirtualColumns();
 	bind_data.virtual_columns = result;
 	return result;
 }
@@ -42,7 +42,7 @@ TableFunctionSet IcebergFunctions::GetIcebergDeletesScanFunction(ClientContext &
 	auto &parquet_scan = catalog_entry->Cast<TableFunctionCatalogEntry>();
 	auto parquet_scan_copy = parquet_scan.functions;
 
-	for (auto &function : parquet_scan_copy.functions) {
+	parquet_scan_copy.ApplyToFunctions([](TableFunction &function) {
 		// Register the MultiFileReader as the driver for reads
 		function.get_multi_file_reader = IcebergDeleteFileReader::CreateInstance;
 		function.late_materialization = false;
@@ -60,7 +60,7 @@ TableFunctionSet IcebergFunctions::GetIcebergDeletesScanFunction(ClientContext &
 		// Schema param is just confusing here
 		function.named_parameters.erase("schema");
 		function.SetName("iceberg_deletes_scan");
-	}
+	});
 
 	parquet_scan_copy.SetName("iceberg_deletes_scan");
 	return parquet_scan_copy;

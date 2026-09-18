@@ -4,13 +4,7 @@
 
 require-env FIXTURE_SERVER_AVAILABLE
 
-require avro
-
-require parquet
-
-require iceberg
-
-require httpfs
+include test/sql/init_requires
 
 # Do not ignore 'HTTP' error messages!
 set ignore_error_messages
@@ -40,7 +34,7 @@ ATTACH '' AS my_datalake (
     TYPE ICEBERG,
     CLIENT_ID 'admin',
     CLIENT_SECRET 'password',
-    ENDPOINT 'http://127.0.0.1:8181'
+    URI 'http://127.0.0.1:8181'
 );
 
 query I
@@ -149,7 +143,7 @@ statement ok
 ATTACH '' AS my_datalake_empty (
     TYPE ICEBERG,
     SECRET iceberg_secret_empty_headers,
-    ENDPOINT 'http://127.0.0.1:8181'
+    URI 'http://127.0.0.1:8181'
 );
 
 query I
@@ -187,7 +181,7 @@ statement ok
 ATTACH '' AS my_datalake_header (
     TYPE ICEBERG,
     SECRET iceberg_secret_with_header,
-    ENDPOINT 'http://127.0.0.1:8181'
+    URI 'http://127.0.0.1:8181'
 );
 
 query I
@@ -226,7 +220,7 @@ call truncate_duckdb_logs();
 statement ok
 ATTACH '' AS my_datalake_none (
     TYPE ICEBERG,
-    ENDPOINT 'http://127.0.0.1:8181',
+    URI 'http://127.0.0.1:8181',
     AUTHORIZATION_TYPE 'none',
     EXTRA_HTTP_HEADERS MAP {'X-None-Header': 'none-value'}
 );
@@ -268,7 +262,7 @@ statement ok
 ATTACH '' AS my_datalake_multi (
     TYPE ICEBERG,
     SECRET iceberg_secret_multiple_headers,
-    ENDPOINT 'http://127.0.0.1:8181'
+    URI 'http://127.0.0.1:8181'
 );
 
 query I
@@ -311,7 +305,7 @@ statement ok
 ATTACH '' AS my_datalake_standard (
     TYPE ICEBERG,
     SECRET iceberg_secret_standard_check,
-    ENDPOINT 'http://127.0.0.1:8181'
+    URI 'http://127.0.0.1:8181'
 );
 
 query I
@@ -353,7 +347,7 @@ statement ok
 ATTACH '' AS my_datalake_override (
     TYPE ICEBERG,
     SECRET iceberg_secret_auth_override,
-    ENDPOINT 'http://127.0.0.1:8181'
+    URI 'http://127.0.0.1:8181'
 );
 
 query I

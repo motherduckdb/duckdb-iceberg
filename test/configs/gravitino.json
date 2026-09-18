@@ -1,6 +1,7 @@
 {
 	"description": "Use Apache Gravitino as Iceberg Rest Catalog.",
-	"on_init": "CREATE SECRET gravitino_storage (TYPE S3, KEY_ID 'admin', SECRET 'password', ENDPOINT '127.0.0.1:9000', URL_STYLE 'path', USE_SSL 0); ATTACH '' AS my_datalake (TYPE ICEBERG, ENDPOINT 'http://127.0.0.1:9001/iceberg', AUTHORIZATION_TYPE 'none', ACCESS_DELEGATION_MODE 'vended_credentials'); CREATE SCHEMA IF NOT EXISTS my_datalake.default;",
+	"on_init": "CREATE SECRET gravitino_storage (TYPE S3, KEY_ID 'admin', SECRET 'password', ENDPOINT '127.0.0.1:9000', URL_STYLE 'path', USE_SSL 0); ATTACH '' AS my_datalake (TYPE ICEBERG, URI 'http://127.0.0.1:9001/iceberg', AUTHORIZATION_TYPE 'none', ACCESS_DELEGATION_MODE 'vended_credentials'); CREATE SCHEMA IF NOT EXISTS my_datalake.default;",
+	"skip_error_messages": [],
 	"statically_loaded_extensions": [
 		"core_functions",
 		"parquet",
@@ -33,6 +34,7 @@
 				"test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transactional_merge_into.test",
 				"test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transactional_updates_error_omits_stacktrace.test",
 				"test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transactional_updates.test",
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transaction_get_from_transaction_start.test",
 				"test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transactions_reading_empty_tables.test"
 			]
 		},

@@ -3,16 +3,8 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
+include test/sql/init_requires
 
-require parquet
-
-require iceberg
-
-require httpfs
-
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 set iceberg_use_metadata_log = true;
@@ -23,11 +15,13 @@ create schema if not exists my_datalake.default;
 statement ok
 drop table if exists my_datalake.default.multi_transaction_delete;
 
+# 'snapshot' isolation opts this table into re-applying a DELETE over concurrent appends;
+# the Iceberg default ('serializable') aborts such a commit instead.
 statement ok
 create table my_datalake.default.multi_transaction_delete (
 	a int,
 	b int
-);
+) WITH ('write.delete.isolation-level' = 'snapshot');
 
 # Insert 0,0
 statement ok

@@ -6,15 +6,7 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
-
-require parquet
-
-require iceberg
-
-require httpfs
-
-set ignore_error_messages
+include test/sql/init_requires
 
 # --- Default codec (deflate): data round-trips correctly --------------------------------------
 statement ok

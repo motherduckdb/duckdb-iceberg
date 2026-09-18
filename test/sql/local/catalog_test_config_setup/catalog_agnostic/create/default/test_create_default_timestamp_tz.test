@@ -3,13 +3,7 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
-
-require parquet
-
-require iceberg
-
-require httpfs
+include test/sql/init_requires
 
 require icu
 
@@ -19,8 +13,6 @@ SET TimeZone='ECT';
 statement ok
 SET CALENDAR='gregorian';
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 set enable_logging=true

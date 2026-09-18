@@ -10,8 +10,8 @@
 #include "duckdb/common/exception/conversion_exception.hpp"
 
 #include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 #include "catalog/rest/api/catalog_api.hpp"
 #include "catalog/rest/api/catalog_utils.hpp"
@@ -22,8 +22,8 @@
 
 namespace duckdb {
 
-void LoadTableResultCache::EvictIfCurrent(const IcebergTableInformation &table) {
-	lock_guard<mutex> guard(lock);
+void LoadTableResultCache::EvictIfCurrent(const IcebergTable &table) {
+	annotated_lock_guard<annotated_mutex> guard(lock);
 	auto it = tables.find(table.GetTableKey());
 	if (it == tables.end()) {
 		return;
@@ -36,10 +36,11 @@ void LoadTableResultCache::EvictIfCurrent(const IcebergTableInformation &table) 
 
 IcebergCatalog::IcebergCatalog(AttachedDatabase &db_p, AccessMode access_mode,
                                unique_ptr<IcebergAuthorization> auth_handler, IcebergAttachOptions &attach_options_p,
-                               const string &default_schema)
-    : Catalog(db_p), access_mode(access_mode), auth_handler(std::move(auth_handler)), uri(attach_options_p.endpoint),
-      version("v1"), attach_options(attach_options_p), default_schema(default_schema),
-      warehouse(attach_options.warehouse), schemas(*this), table_request_cache(attach_options) {
+                               const Identifier &default_schema)
+    : Catalog(db_p), access_mode(access_mode), auth_handler(std::move(auth_handler)),
+      base_uri(attach_options_p.catalog_uri), version("v1"), attach_options(attach_options_p),
+      default_schema(default_schema), warehouse(attach_options.warehouse), schemas(*this),
+      table_request_cache(attach_options) {
 }
 
 IcebergCatalog::~IcebergCatalog() = default;
@@ -58,14 +59,6 @@ void IcebergCatalog::ScanSchemas(ClientContext &context, std::function<void(Sche
 optional_ptr<SchemaCatalogEntry> IcebergCatalog::LookupSchema(CatalogTransaction transaction,
                                                               const EntryLookupInfo &schema_lookup,
                                                               OnEntryNotFound if_not_found) {
-	if (schema_lookup.GetEntryName() == DEFAULT_SCHEMA && default_schema != DEFAULT_SCHEMA) {
-		// throws error if default schema is empty
-		if (default_schema.empty() && if_not_found == OnEntryNotFound::RETURN_NULL) {
-			return nullptr;
-		}
-		return GetSchema(transaction, Identifier(default_schema), if_not_found);
-	}
-
 	auto &schema_name = schema_lookup.GetEntryName();
 	auto entry = schemas.GetEntry(transaction.GetContext(), schema_name, if_not_found);
 	if (!entry && if_not_found != OnEntryNotFound::RETURN_NULL) {
@@ -73,6 +66,13 @@ optional_ptr<SchemaCatalogEntry> IcebergCatalog::LookupSchema(CatalogTransaction
 	}
 
 	return reinterpret_cast<SchemaCatalogEntry *>(entry.get());
+}
+
+optional<Identifier> IcebergCatalog::GetDefaultSchema() const {
+	if (default_schema.empty()) {
+		return nullopt;
+	}
+	return default_schema;
 }
 
 optional_ptr<CatalogEntry> IcebergCatalog::CreateSchema(CatalogTransaction transaction, CreateSchemaInfo &info) {
@@ -172,7 +172,7 @@ ErrorData IcebergCatalog::SupportsCreateTable(BoundCreateTableInfo &info) {
 
 IRCEndpointBuilder IcebergCatalog::GetBaseUrl() const {
 	auto url_builder = IRCEndpointBuilder();
-	url_builder.SetHost(uri);
+	url_builder.SetHost(base_uri);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent(version));
 
 	return url_builder;
@@ -369,6 +369,24 @@ void IcebergCatalog::ParsePrefix() {
 	}
 }
 
+void IcebergCatalog::ParseNamespaceSeparator() {
+	auto default_namespace_separator_it = defaults.find("namespace-separator");
+	auto override_namespace_separator_it = overrides.find("namespace-separator");
+
+	const string *namespace_separator_property = nullptr;
+	if (default_namespace_separator_it != defaults.end()) {
+		namespace_separator_property = &default_namespace_separator_it->second;
+	}
+	// Sometimes the namespace_separator is in the overrides. Prefer the override namespace_separator.
+	if (override_namespace_separator_it != overrides.end()) {
+		namespace_separator_property = &override_namespace_separator_it->second;
+	}
+	if (!namespace_separator_property) {
+		return;
+	}
+	namespace_separator = *namespace_separator_property;
+}
+
 void IcebergCatalog::GetConfig(ClientContext &context, IcebergEndpointType &endpoint_type) {
 	// set the prefix to be empty. To get the config endpoint,
 	// we cannot add a default prefix.
@@ -384,10 +402,11 @@ void IcebergCatalog::GetConfig(ClientContext &context, IcebergEndpointType &endp
 	defaults = catalog_config.defaults;
 	auto uri_override_it = overrides.find("uri");
 	if (uri_override_it != overrides.end()) {
-		uri = uri_override_it->second;
-		StringUtil::RTrim(uri, "/");
+		base_uri = uri_override_it->second;
+		StringUtil::RTrim(base_uri, "/");
 	}
 	ParsePrefix();
+	ParseNamespaceSeparator();
 
 	if (auto &endpoints = catalog_config.endpoints) {
 		for (auto &endpoint : *endpoints) {
@@ -417,7 +436,7 @@ void IcebergCatalog::GetConfig(ClientContext &context, IcebergEndpointType &endp
 //! Streamlined initialization for recognized catalog types
 
 void IcebergCatalog::SetAttachOptions(const unordered_map<string, Value> &options) {
-	raw_attach_options.insert(options.begin(), options.end());
+	normalized_attach_options = NormalizeIcebergAttachOptions(options);
 }
 
 bool IcebergCatalog::HasConflictingAttachOptions(const string &path, const AttachOptions &options) {
@@ -425,14 +444,15 @@ bool IcebergCatalog::HasConflictingAttachOptions(const string &path, const Attac
 	if (Catalog::HasConflictingAttachOptions(path, options)) {
 		return true;
 	}
-	//! Otherwise compare the iceberg-specific attach options (endpoint, credentials, MAX_TABLE_STALENESS, ...)
+	//! Otherwise compare the iceberg-specific attach options (URI, credentials, MAX_TABLE_STALENESS, ...)
 	//! so that ATTACH OR REPLACE re-runs Attach when any of them changes.
-	if (options.options.size() != raw_attach_options.size()) {
+	auto normalized_options = NormalizeIcebergAttachOptions(options.options);
+	if (normalized_options.size() != normalized_attach_options.size()) {
 		return true;
 	}
-	for (auto &entry : options.options) {
-		auto it = raw_attach_options.find(entry.first);
-		if (it == raw_attach_options.end()) {
+	for (auto &entry : normalized_options) {
+		auto it = normalized_attach_options.find(entry.first);
+		if (it == normalized_attach_options.end()) {
 			return true;
 		}
 		if (it->second.type() != entry.second.type() || it->second.ToString() != entry.second.ToString()) {

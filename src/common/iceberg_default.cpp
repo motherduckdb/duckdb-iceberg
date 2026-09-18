@@ -3,6 +3,7 @@
 #include "duckdb/function/scalar/generic_common.hpp"
 #include "duckdb/function/scalar/struct_functions.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
+#include "duckdb/planner/expression/bound_cast_expression.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "catalog/rest/api/iceberg_type.hpp"
@@ -25,13 +26,19 @@ Value IcebergDefaultBinder::Evaluate(optional_ptr<const ParsedExpression> expr, 
 	}
 	auto expr_copy = expr->Copy();
 	auto bound_expr = constant_binder.Bind(expr_copy, nullptr);
+
+	if (!bound_expr->IsFoldable()) {
+		throw NotImplementedException("Only foldable expressions are allowed as DEFAULT values");
+	}
+	auto val = ExpressionExecutor::EvaluateScalar(context, *bound_expr, false);
+
 	auto type_id = type.id();
 	switch (type_id) {
 	case LogicalTypeId::SQLNULL:
 	case LogicalTypeId::VARIANT:
 	// case LogicalTypeId::GEOGRAPHY:
 	case LogicalTypeId::GEOMETRY: {
-		if (bound_expr->GetReturnType().id() != LogicalTypeId::SQLNULL) {
+		if (!val.IsNull()) {
 			//! SPEC: All columns of unknown, variant, geometry, and geography types must default to null. Non-null
 			//! values for initial-default or write-default are invalid.
 			throw InvalidInputException("Non-null DEFAULT values are not accepted for columns of type %s",
@@ -42,11 +49,7 @@ Value IcebergDefaultBinder::Evaluate(optional_ptr<const ParsedExpression> expr, 
 	default:
 		break;
 	};
-
-	if (!bound_expr->IsFoldable()) {
-		throw NotImplementedException("Only foldable expressions are allowed as DEFAULT values");
-	}
-	return ExpressionExecutor::EvaluateScalar(context, *bound_expr, false).DefaultCastAs(type);
+	return val.DefaultCastAs(type);
 }
 
 namespace {
@@ -196,9 +199,9 @@ unique_ptr<Expression> IcebergDefaultProjectionResolver::ResolveDefault(ClientCo
 	auto default_descriptor = EvaluateStructDefault(context, default_expr);
 	if (default_descriptor.IsNull() || input_type.id() != LogicalTypeId::STRUCT ||
 	    result_type.id() != LogicalTypeId::STRUCT) {
-		// Explicit input NULL is preserved by the input reference itself. Whole-column DEFAULT values never reach
-		// this remapping path: DuckDB projects the already-bound default expression directly for omitted columns.
-		return make_uniq<BoundColumnRefExpression>(input_type, binding);
+		// STRUCT inputs are bound without a target type, so an explicit NULL still needs the column's type.
+		return BoundCastExpression::AddCastToType(context, make_uniq<BoundColumnRefExpression>(input_type, binding),
+		                                          result_type);
 	}
 
 	// A non-NULL STRUCT was supplied. Build a remap that preserves mapped fields and fills only omitted fields from

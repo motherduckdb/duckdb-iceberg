@@ -2,6 +2,8 @@
 
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/common/file_system.hpp"
+#include "duckdb/logging/logger.hpp"
+#include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/main/setting_info.hpp"
 #include "duckdb/common/types/value.hpp"
 
@@ -15,12 +17,8 @@ namespace duckdb {
 namespace {
 
 //! Detect the scheme from a host string, defaulting to HTTPS
-Aws::Http::Scheme DetectScheme(const string &host) {
-	auto lower = StringUtil::Lower(host);
-	if (StringUtil::StartsWith(lower, "http://")) {
-		return Aws::Http::Scheme::HTTP;
-	}
-	return Aws::Http::Scheme::HTTPS;
+bool DetectHttps(const string &host) {
+	return !StringUtil::StartsWith(StringUtil::Lower(host), "http://");
 }
 
 } // namespace
@@ -62,21 +60,9 @@ unique_ptr<IcebergAuthorization> SIGV4Authorization::FromAttachOptions(AttachedD
 
 AWSInput SIGV4Authorization::CreateAWSInput(ClientContext &context, const IRCEndpointBuilder &endpoint_builder) {
 	AWSInput aws_input(db);
-	aws_input.cert_path = APIUtils::GetCURLCertPath();
-
-	// Set the user Agent
-	auto &config = DBConfig::GetConfig(context);
-	aws_input.user_agent = config.UserAgent();
-	Value val;
-	auto lookup_result = context.TryGetCurrentSetting("http_timeout", val);
-	if (lookup_result.GetScope() != SettingScope::INVALID) {
-		aws_input.use_httpfs_timeout = true;
-		// http timeout is in seconds, multiply by 1000 to get ms
-		aws_input.request_timeout_in_ms = val.GetValue<idx_t>() * 1000;
-	}
 
 	auto host = endpoint_builder.GetHost();
-	aws_input.scheme = DetectScheme(host);
+	aws_input.use_https = DetectHttps(host);
 	auto stripped_host = StripScheme(host);
 
 	// AWS service and region: use explicit overrides if provided, otherwise parse from host
@@ -105,7 +91,8 @@ AWSInput SIGV4Authorization::CreateAWSInput(ClientContext &context, const IRCEnd
 		aws_input.query_string_parameters.emplace_back(param.first, param.second.raw);
 	}
 
-	// AWS credentials
+	MaybeRefreshSecret(context);
+
 	auto secret_entry = IcebergCatalog::GetStorageSecret(context, secret);
 	auto kv_secret = dynamic_cast<const KeyValueSecret &>(*secret_entry->secret);
 	aws_input.key_id = kv_secret.secret_map["key_id"].GetValue<string>();
@@ -114,6 +101,76 @@ AWSInput SIGV4Authorization::CreateAWSInput(ClientContext &context, const IRCEnd
 	    kv_secret.secret_map["session_token"].IsNull() ? "" : kv_secret.secret_map["session_token"].GetValue<string>();
 
 	return aws_input;
+}
+
+namespace {
+
+//! Test hook mirroring OAuth2Authorization::IsTokenExpiredUnlocked, so a test can observe a
+//! refresh without waiting out the interval.
+bool ForceExpiry(ClientContext &context) {
+	Value force_expiry_val;
+	if (context.TryGetCurrentSetting("iceberg_test_force_token_expiry", force_expiry_val)) {
+		return !force_expiry_val.IsNull() && force_expiry_val.type().id() == LogicalTypeId::BOOLEAN &&
+		       force_expiry_val.GetValue<bool>();
+	}
+	return false;
+}
+
+} // namespace
+
+void SIGV4Authorization::MaybeRefreshSecret(ClientContext &context) {
+	if (!refresh_mutex.try_lock()) {
+		// Another thread is already refreshing, proceed with the current credentials
+		return;
+	}
+	annotated_lock_guard<annotated_mutex> guard(refresh_mutex, std::adopt_lock);
+
+	if (!ForceExpiry(context)) {
+		auto elapsed =
+		    std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - last_refresh_time)
+		        .count();
+		if (elapsed < REFRESH_INTERVAL_SECONDS) {
+			return;
+		}
+	}
+
+	auto secret_entry = IcebergCatalog::GetStorageSecret(context, secret);
+	const auto &kv_secret = dynamic_cast<const KeyValueSecret &>(*secret_entry->secret);
+	Value refresh_info;
+	if (!kv_secret.TryGetValue("refresh_info", refresh_info)) {
+		// Static credentials, nothing to refresh
+		last_refresh_time = std::chrono::steady_clock::now();
+		return;
+	}
+
+	// refresh_info holds the named parameters the secret was created with (stored by the aws
+	// extension when refresh='auto'). Replaying them re-runs the credential chain provider,
+	// which fetches a fresh token.
+	CreateSecretInput refresh_input;
+	refresh_input.on_conflict = OnCreateConflict::REPLACE_ON_CONFLICT;
+	refresh_input.persist_type = SecretPersistType::TEMPORARY;
+	refresh_input.type = kv_secret.GetType();
+	refresh_input.name = kv_secret.GetName();
+	refresh_input.provider = kv_secret.GetProvider();
+	refresh_input.storage_type = Identifier(secret_entry->storage_mode);
+	refresh_input.scope = kv_secret.GetScope();
+
+	auto child_count = StructType::GetChildCount(refresh_info.type());
+	auto children = StructValue::GetChildren(refresh_info);
+	for (idx_t i = 0; i < child_count; i++) {
+		auto &key = StructType::GetChildName(refresh_info.type(), i);
+		refresh_input.options[key.GetIdentifierName()] = children[i];
+	}
+
+	try {
+		auto &secret_manager = context.db->GetSecretManager();
+		(void)secret_manager.CreateSecret(context, refresh_input);
+		last_refresh_time = std::chrono::steady_clock::now();
+	} catch (std::exception &ex) {
+		// Leave last_refresh_time alone so the next call retries with the same credentials.
+		DUCKDB_LOG_DEBUG(context, "Iceberg SigV4 secret '%s' was not updated, refresh failed: %s",
+		                 refresh_input.name.GetIdentifierName(), ex.what());
+	}
 }
 
 unique_ptr<HTTPResponse> SIGV4Authorization::Request(RequestType request_type, ClientContext &context,

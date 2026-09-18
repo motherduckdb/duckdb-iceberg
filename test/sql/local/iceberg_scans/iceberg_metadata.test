@@ -8,11 +8,7 @@ SELECT * FROM ICEBERG_METADATA('{WORKING_DIRECTORY}/data/persistent/iceberg/line
 ----
 Error
 
-require avro
-
-require parquet
-
-require iceberg
+include test/sql/init_requires
 
 query IIIIIIIIII
 SELECT * FROM ICEBERG_METADATA('{WORKING_DIRECTORY}/data/persistent/iceberg/lineitem_iceberg', ALLOW_MOVED_PATHS=TRUE);
@@ -61,6 +57,52 @@ statement error
 SELECT * FROM ICEBERG_METADATA('{WORKING_DIRECTORY}/data/persistent/iceberg/lineitem_iceberg_no_hint', ALLOW_MOVED_PATHS=TRUE);
 ----
 <REGEX>:.*SET unsafe_enable_version_guessing.*
+
+query I
+SELECT count(*)
+FROM ICEBERG_METADATA(
+	'{WORKING_DIRECTORY}/data/persistent/iceberg/lineitem_iceberg_no_hint',
+	ALLOW_MOVED_PATHS=TRUE,
+	version='?'
+);
+----
+2
+
+statement error
+SELECT count(*)
+FROM ICEBERG_SCAN(
+	'{WORKING_DIRECTORY}/data/persistent/iceberg/lineitem_iceberg_no_hint',
+	ALLOW_MOVED_PATHS=TRUE
+);
+----
+<REGEX>:.*SET unsafe_enable_version_guessing.*
+
+query I
+SELECT count(*)
+FROM ICEBERG_SCAN(
+	'{WORKING_DIRECTORY}/data/persistent/iceberg/lineitem_iceberg_no_hint',
+	ALLOW_MOVED_PATHS=TRUE,
+	version='?'
+);
+----
+51793
+
+statement error
+SELECT count(*)
+FROM ICEBERG_SNAPSHOTS(
+	'{WORKING_DIRECTORY}/data/persistent/iceberg/lineitem_iceberg_no_hint'
+);
+----
+<REGEX>:.*SET unsafe_enable_version_guessing.*
+
+query I
+SELECT count(*)
+FROM ICEBERG_SNAPSHOTS(
+	'{WORKING_DIRECTORY}/data/persistent/iceberg/lineitem_iceberg_no_hint',
+	version='?'
+);
+----
+2
 
 statement ok
 SET unsafe_enable_version_guessing = true;

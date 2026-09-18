@@ -4,13 +4,7 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
-
-require parquet
-
-require iceberg
-
-require httpfs
+include test/sql/init_requires
 
 statement ok
 DROP TABLE IF EXISTS my_datalake.default.delete_manifest_content;
@@ -24,6 +18,10 @@ INSERT INTO my_datalake.default.delete_manifest_content VALUES (1, 'a'), (2, 'b'
 # A v3 DELETE writes a delete manifest (content type DELETE) that holds the deletion vector.
 statement ok
 DELETE FROM my_datalake.default.delete_manifest_content WHERE id IN (2, 4);
+
+# Start transaction to keep the credentials in scope
+statement ok
+begin
 
 # Resolve the path of the manifest holding the deletion vector (POSITION_DELETES) entries.
 statement ok
@@ -47,3 +45,6 @@ SELECT
 FROM read_blob(getvariable('delete_manifest'));
 ----
 1	0
+
+statement ok
+commit
