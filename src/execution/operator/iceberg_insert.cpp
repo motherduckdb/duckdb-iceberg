@@ -216,6 +216,8 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 				data_file.partition_info.push_back(std::move(info));
 			}
 		}
+		// Partitioning alone does not imply sorted data. Only advertise the explicit sort order
+		// enforced by PlanCopyForInsert (PhysicalOrder or the partitioned copy writer).
 		if (table_metadata.HasSortOrder()) {
 			auto &sort_order = table_metadata.GetLatestSortOrder();
 			if (sort_order.IsSorted()) {
@@ -906,7 +908,7 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(ClientContext &
 	// carries the sort order that the created table will end up with.
 	auto placeholder_sort_order_id = create_info.sort_keys.empty() ? UNSORTED_SORT_ORDER_ID : INITIAL_SORT_ORDER_ID;
 	auto placeholder_sort_order =
-	    IcebergTable::BuildSortOrder(create_info.sort_keys, *schema, placeholder_sort_order_id);
+	    IcebergTable::BuildSortOrder(context, create_info.sort_keys, *schema, placeholder_sort_order_id);
 	metadata->sort_specs.emplace(placeholder_sort_order_id, std::move(placeholder_sort_order));
 	metadata->default_sort_order_id = placeholder_sort_order_id;
 	return metadata;
