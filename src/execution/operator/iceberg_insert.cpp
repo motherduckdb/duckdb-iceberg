@@ -130,8 +130,84 @@ static string GetColumnNameBySourceId(const IcebergTableSchema &schema, idx_t so
 	return schema.GetColumnByFieldId(source_id).name;
 }
 
-//! Whether every partition value is a top-level column, so the copy operator can partition on the columns
-//! themselves. Transforms and nested sources need a computed partition value instead.
+//! SPEC (Appendix A): `unknown` has no physical Parquet type and must be omitted from data files;
+//! readers replace the column with nulls. Iceberg maps `unknown` to SQLNULL, so the type says which fields
+//! are omitted. A struct whose fields are all omitted has no representation either, because a Parquet group
+//! needs at least one field.
+static bool IsWrittenToDataFile(const LogicalType &type) {
+	if (type.id() == LogicalTypeId::SQLNULL) {
+		return false;
+	}
+	if (type.id() != LogicalTypeId::STRUCT) {
+		return true;
+	}
+	for (auto &child : StructType::GetChildTypes(type)) {
+		if (IsWrittenToDataFile(child.second)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+//! The type a column is written with: omitted fields are dropped from nested structs. The spec has no
+//! representation for an omitted list element or map key/value.
+static LogicalType GetWrittenType(const LogicalType &type, const string &column_name) {
+	D_ASSERT(IsWrittenToDataFile(type));
+	switch (type.id()) {
+	case LogicalTypeId::STRUCT: {
+		child_list_t<LogicalType> children;
+		for (auto &child : StructType::GetChildTypes(type)) {
+			if (!IsWrittenToDataFile(child.second)) {
+				continue;
+			}
+			children.emplace_back(child.first, GetWrittenType(child.second, column_name));
+		}
+		return LogicalType::STRUCT(std::move(children));
+	}
+	case LogicalTypeId::LIST: {
+		auto &element = ListType::GetChildType(type);
+		if (!IsWrittenToDataFile(element)) {
+			throw NotImplementedException(
+			    "Cannot write column \"%s\": a list element of type unknown has no data file representation",
+			    column_name);
+		}
+		return LogicalType::LIST(GetWrittenType(element, column_name));
+	}
+	case LogicalTypeId::MAP: {
+		auto &key = MapType::KeyType(type);
+		auto &value = MapType::ValueType(type);
+		if (!IsWrittenToDataFile(key) || !IsWrittenToDataFile(value)) {
+			throw NotImplementedException(
+			    "Cannot write column \"%s\": a map key or value of type unknown has no data file representation",
+			    column_name);
+		}
+		return LogicalType::MAP(GetWrittenType(key, column_name), GetWrittenType(value, column_name));
+	}
+	default:
+		return type;
+	}
+}
+
+//! FIELD_IDS entry for a written column: its field id, or the ids of the fields it is written with.
+static Value GetWrittenFieldIdValue(const IcebergColumnDefinition &column) {
+	auto column_value = Value::BIGINT(column.id);
+	if (!column.GetChildCount()) {
+		return column_value;
+	}
+	child_list_t<Value> values;
+	values.emplace_back("__duckdb_field_id", std::move(column_value));
+	for (auto &child : column.GetChildren()) {
+		if (!IsWrittenToDataFile(child->type)) {
+			continue;
+		}
+		values.emplace_back(child->name, GetWrittenFieldIdValue(*child));
+	}
+	return Value::STRUCT(std::move(values));
+}
+
+//! Whether every partition value is a top-level written column, so the copy operator can partition on the
+//! columns themselves. Transforms, nested sources and columns absent from the data file (unknown) need a
+//! computed partition value instead.
 static bool CanWriteIdentityPartitionsDirectly(const IcebergPartitionSpec &spec, const IcebergTableSchema &schema) {
 	for (auto &field : spec.fields) {
 		if (field.transform.Type() == IcebergTransformType::VOID) {
@@ -141,6 +217,9 @@ static bool CanWriteIdentityPartitionsDirectly(const IcebergPartitionSpec &spec,
 			return false;
 		}
 		if (!IsTopLevelColumnSourceId(schema, field.source_id)) {
+			return false;
+		}
+		if (!IsWrittenToDataFile(schema.GetColumnByFieldId(field.source_id).type)) {
 			return false;
 		}
 	}
@@ -506,7 +585,7 @@ struct IcebergWriteColumn {
 	//! Expression over the child plan output (a plain column reference, or a partition transform). Used as the
 	//! projection expression when one is needed, and to tell where the column comes from when it is not.
 	unique_ptr<Expression> source;
-	//! FIELD_IDS entry for the parquet writer; unset for columns that have no field id.
+	//! FIELD_IDS entry for the parquet writer; unset for columns that are not written to the file.
 	optional<Value> field_id;
 	//! Added only to route rows by a transformed partition value (e.g. day(ts)); not written to the file.
 	bool is_computed_partition_value = false;
@@ -574,16 +653,24 @@ static IcebergWriteLayout BuildWriteLayout(ClientContext &context, const Iceberg
 	IcebergWriteLayout layout;
 	auto &schema = copy_input.schema;
 
-	// Physical columns, in schema order: the child plan produces them in the same order.
-	child_list_t<Value> field_ids;
-	schema.GetFieldIdValues(field_ids);
+	// Physical columns, in schema order. The child plan produces every schema column, so the source
+	// index is the schema index even when earlier columns are omitted.
 	for (idx_t schema_idx = 0; schema_idx < schema.columns.size(); schema_idx++) {
 		auto &column = *schema.columns[schema_idx];
+		if (!IsWrittenToDataFile(column.type)) {
+			// e.g. unknown: the column stays in the schema but has no data file representation
+			continue;
+		}
 		IcebergWriteColumn write_column;
 		write_column.name = column.name;
-		write_column.type = column.type;
+		write_column.type = GetWrittenType(column.type, column.name);
 		write_column.source = make_uniq<BoundReferenceExpression>(column.type, schema_idx);
-		write_column.field_id = std::move(field_ids[schema_idx].second);
+		if (write_column.type != column.type) {
+			// casting to the written type drops the omitted fields from the value
+			write_column.source =
+			    BoundCastExpression::AddCastToType(context, std::move(write_column.source), write_column.type);
+		}
+		write_column.field_id = GetWrittenFieldIdValue(column);
 		layout.columns.push_back(std::move(write_column));
 	}
 
@@ -750,6 +837,11 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 		types_to_write.push_back(column.type);
 	}
 
+	if (names_to_write.empty()) {
+		throw NotImplementedException("Cannot write to a table where every column is of type unknown: unknown "
+		                              "columns are omitted from data files, leaving no columns to write");
+	}
+
 	// Get Parquet Copy function
 	auto &copy_fun = IcebergUtils::GetCopyFunction(context, Identifier(file_format));
 	IcebergCopyOptions result(std::move(info), copy_fun.function);
@@ -866,7 +958,8 @@ IcebergCopyToFile &IcebergInsert::PlanCopyForInsert(ClientContext &context, Phys
 		GeneratePhysicalOrder(planner, copy_options.order_columns, plan);
 	}
 
-	// Produce the data file layout, computing the partition transforms.
+	// Produce the data file layout: drops columns that are not written (unknown) and computes
+	// non-identity partition transforms.
 	if (!copy_options.projection_list.empty() && plan) {
 		GenerateProjection(context, planner, copy_options.projection_list, plan);
 	}
