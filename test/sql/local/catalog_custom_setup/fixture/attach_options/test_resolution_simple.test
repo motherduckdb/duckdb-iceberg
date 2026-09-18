@@ -2,13 +2,7 @@
 # description: test the TABLE_RESOLUTION attach option
 # group: [attach_options]
 
-require parquet
-
-require iceberg
-
-require avro
-
-require httpfs
+include test/sql/init_requires
 
 statement ok
 CREATE SECRET (
