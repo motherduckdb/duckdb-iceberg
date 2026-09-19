@@ -39,6 +39,7 @@
 #include "common/iceberg_utils.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
 #include "iceberg_logging.hpp"
+#include "iceberg_options.hpp"
 
 namespace duckdb {
 
@@ -866,25 +867,15 @@ PhysicalOperator &IcebergCatalog::PlanInsert(ClientContext &context, PhysicalPla
 
 static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(ClientContext &context, BoundCreateTableInfo &info) {
 	auto metadata = make_uniq<IcebergTableMetadata>(IcebergTableMetadataSchemas {});
-	metadata->iceberg_version = 2;
+	metadata->iceberg_version = DEFAULT_ICEBERG_FORMAT_VERSION;
 	metadata->default_spec_id = 0;
-
-	auto schema = make_shared_ptr<IcebergTableSchema>();
-	schema->schema_id = 0;
-	int32_t next_field_id = 1;
-	auto &create_info = info.Base().Cast<CreateTableInfo>();
-	for (auto &col : create_info.columns.Logical()) {
-		auto col_def = make_uniq<IcebergColumnDefinition>();
-		col_def->id = next_field_id++;
-		col_def->name = col.Name().GetIdentifierName();
-		col_def->type = col.Type();
-		col_def->required = false;
-		schema->columns.push_back(std::move(col_def));
-	}
-	schema->last_column_id = static_cast<idx_t>(next_field_id - 1);
-	metadata->GetSchemasMutable().AddSchemaOrGetExisting(schema);
 	metadata->SetCurrentSchemaId(0);
 
+	Value default_version;
+	if (context.TryGetCurrentSetting(DEFAULT_FORMAT_VERSION_CONFIG_VARIABLE, default_version)) {
+		metadata->iceberg_version = default_version.GetValue<uint64_t>();
+	}
+	auto &create_info = info.Base().Cast<CreateTableInfo>();
 	auto binder = Binder::CreateBinder(context);
 	TableFunctionBinder property_binder(*binder, context, "format-version");
 	for (auto &option : create_info.options) {
@@ -894,8 +885,22 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(ClientContext &
 			throw ParameterNotResolvedException();
 		}
 		auto val = ExpressionExecutor::EvaluateScalar(context, *bound_expr, true);
+		if (option.first == "format-version") {
+			auto version = val.DefaultCastAs(LogicalType::INTEGER).GetValue<int32_t>();
+			if (version < 1) {
+				throw InvalidInputException("The lowest supported iceberg version is 1!");
+			}
+			metadata->iceberg_version = version;
+		}
 		metadata->table_properties[option.first] = val.GetValue<string>();
 	}
+
+	// Resolve nested field IDs and storage types exactly as table creation does.
+	int32_t last_column_id;
+	auto schema = IcebergCreateTableRequest::CreateIcebergSchema(context, *metadata, create_info.columns,
+	                                                             &create_info.constraints, last_column_id);
+	metadata->last_column_id = last_column_id;
+	metadata->GetSchemasMutable().AddSchemaOrGetExisting(schema);
 
 	// Build a placeholder partition spec from the parsed PARTITIONED BY clause so that
 	// PlanCopyForInsert appends the partition projection at plan time. The real spec is
@@ -918,20 +923,16 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(ClientContext &
 // the SELECT output. The write pipeline is typed with the storage types, so without a cast the append fails
 // with a type mismatch.
 static PhysicalOperator &CastCtasToIcebergStorageTypes(ClientContext &context, PhysicalPlanGenerator &planner,
-                                                       PhysicalOperator &plan, BoundCreateTableInfo &info,
-                                                       const IcebergTableMetadata &metadata) {
-	auto &create_info = info.Base().Cast<CreateTableInfo>();
-	int32_t last_column_id = 0;
-	auto storage_schema = IcebergCreateTableRequest::CreateIcebergSchema(context, metadata, create_info.columns,
-	                                                                     &create_info.constraints, last_column_id);
+                                                       PhysicalOperator &plan, const IcebergTableMetadata &metadata) {
+	auto &storage_schema = metadata.GetLatestSchema();
 	auto &src_types = plan.types;
-	D_ASSERT(src_types.size() == storage_schema->columns.size());
+	D_ASSERT(src_types.size() == storage_schema.columns.size());
 
 	bool needs_cast = false;
 	vector<LogicalType> target_types;
 	target_types.reserve(src_types.size());
 	for (idx_t i = 0; i < src_types.size(); i++) {
-		auto &target = storage_schema->columns[i]->type;
+		auto &target = storage_schema.columns[i]->type;
 		if (target != src_types[i]) {
 			needs_cast = true;
 		}
@@ -961,7 +962,7 @@ PhysicalOperator &IcebergCatalog::PlanCreateTableAs(ClientContext &context, Phys
 	// create a fake local iceberg table with desired columns
 	auto placeholder_metadata = BuildPlaceholderMetadata(context, *op.info);
 	auto &placeholder_schema = placeholder_metadata->GetLatestSchema();
-	auto &plan = CastCtasToIcebergStorageTypes(context, planner, plan_p, *op.info, *placeholder_metadata);
+	auto &plan = CastCtasToIcebergStorageTypes(context, planner, plan_p, *placeholder_metadata);
 	IcebergCopyInput copy_input(context, *placeholder_metadata, placeholder_schema, std::move(op.info));
 	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, &plan);
 

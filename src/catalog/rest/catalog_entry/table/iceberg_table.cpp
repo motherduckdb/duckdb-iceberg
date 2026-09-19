@@ -468,8 +468,8 @@ void IcebergTable::SetPartitionedBy(IcebergTransaction &transaction,
 
 void IcebergTable::SetSortedBy(IcebergTransaction &transaction, const vector<OrderByNode> &orders,
                                const IcebergTableSchema &schema, bool first_sort_spec) {
-	idx_t new_sort_order_id = 0;
-	if (!first_sort_spec) {
+	idx_t new_sort_order_id = UNSORTED_SORT_ORDER_ID;
+	if (!first_sort_spec && !orders.empty()) {
 		new_sort_order_id = GetNextSortOrderId();
 	}
 
