@@ -94,9 +94,6 @@ static void LoadInternal(ExtensionLoader &loader) {
 	    "Skip structural Puffin verification for deletion-vector files. This unsafe compatibility option permits "
 	    "reading invalid bare-blob files written by DuckDB Iceberg 1.5.3.",
 	    LogicalType::BOOLEAN, Value::BOOLEAN(false), nullptr, SetScope::GLOBAL);
-	config.AddExtensionOption("iceberg_via_aws_sdk_for_catalog_interactions",
-	                          "Use legacy code to interact with AWS-based catalogs, via AWS's SDK",
-	                          LogicalType::BOOLEAN, Value::BOOLEAN(false));
 	config.AddExtensionOption("iceberg_test_force_token_expiry",
 	                          "DEBUG SETTING: force OAuth2 token expiry for testing automatic refresh",
 	                          LogicalType::BOOLEAN, Value::BOOLEAN(false));
@@ -107,9 +104,9 @@ static void LoadInternal(ExtensionLoader &loader) {
 	    LogicalType::UBIGINT, Value::UBIGINT(DEFAULT_ICEBERG_FORMAT_VERSION), SetDefaultFormatVersion);
 	config.AddExtensionOption(
 	    "iceberg_use_metadata_log",
-	    "Whether or not to make use of the (optional) 'metadata-log' of a table to ensure atomicity guarantees hold, "
-	    "at the cost of making another GET for json metadata in rare circumstances",
-	    LogicalType::BOOLEAN, Value::BOOLEAN(false), nullptr, SetScope::GLOBAL);
+	    "Use metadata-log to select table metadata as of the transaction start for snapshot isolation. "
+	    "Disable to accept the latest table metadata resolved by the transaction instead",
+	    LogicalType::BOOLEAN, Value::BOOLEAN(true), nullptr, SetScope::GLOBAL);
 	config.AddExtensionOption("iceberg_use_server_side_scan_planning",
 	                          "Whether or not to use server-side scanning planning (if available)",
 	                          LogicalType::BOOLEAN, Value::BOOLEAN(false), nullptr, SetScope::GLOBAL);

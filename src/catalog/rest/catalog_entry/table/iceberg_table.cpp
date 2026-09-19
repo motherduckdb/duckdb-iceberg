@@ -716,7 +716,7 @@ IcebergTable IcebergTable::Copy(IcebergTransaction &iceberg_transaction) const {
 	if (table_metadata.last_updated_ms <= transaction_start_ms) {
 		return ret;
 	}
-	bool use_metadata_log = false;
+	bool use_metadata_log = true;
 	Value val;
 	if (context.TryGetCurrentSetting("iceberg_use_metadata_log", val)) {
 		if (!val.IsNull() && val.type().id() == LogicalTypeId::BOOLEAN) {

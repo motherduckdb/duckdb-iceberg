@@ -72,6 +72,7 @@
         "test/sql/types/nested/map/map_from_entries/column_null_entry.test",
         "test/sql/types/nested/map/test_map_nested_keys.test",
         "test/sql/types/struct/nested_structs.test",
+        "test/sql/types/struct/struct_updates.test",
         "test/sql/function/list/aggregates/entropy.test",
         "test/sql/function/list/list_unique.test",
         "test/sql/function/timestamp/test_icu_datediff.test",
@@ -248,14 +249,11 @@
     {
       "reason": "SIGSEGV / crash / incorrect result - needs manual investigation",
       "paths": [
-        "test/sql/alter/map/rename_column_in_struct.test",
         "test/sql/copy/csv/test_skip.test_slow",
         "test/sql/merge/merge_into_subquery_action.test",
         "test/sql/alter/struct/rename_col_struct.test",
         "test/sql/alter/alter_col/test_drop_not_null.test",
-        "test/sql/alter/map/drop_column_in_struct.test",
         "test/sql/alter/rename_table/test_rename_table_collision.test",
-        "test/sql/alter/list/rename_column_in_struct.test",
         "test/sql/alter/drop_col/test_drop_col_concurrent_dml_conflict.test",
         "test/sql/alter/rename_table/test_rename_table_many_transactions.test",
         "test/sql/alter/rename_view/test_rename_view_many_transactions.test",
@@ -270,7 +268,6 @@
         "test/sql/index/art/constraints/test_art_concurrent_loop.test_slow",
         "test/sql/index/art/constraints/test_art_eager_constraint_checking.test",
         "test/sql/index/art/create_drop/test_art_create_if_exists.test",
-        "test/sql/insert/unaligned_interleaved_appends.test",
         "test/sql/join/iejoin/iejoin_issue_6314.test_slow",
         "test/sql/join/iejoin/iejoin_projection_maps.test_slow",
         "test/sql/parallelism/interquery/concurrent_append_index_join.test_slow",
@@ -286,9 +283,7 @@
         "test/sql/update/test_update_mix.test",
         "test/sql/storage/compression/roaring/roaring_bool_appends.test_slow",
         "test/sql/aggregate/aggregates/test_arg_min_max_null_nested.test_slow",
-        "test/sql/projection/test_complex_expressions.test",
         "test/sql/types/list/unnest_expand.test",
-        "test/sql/optimizer/struct_segment_pruning.test",
         "test/sql/types/geo/geometry_stats_prune_null.test",
         "test/sql/window/test_duplicate_partition.test",
         "test/sql/storage/overflow_strings/null_overflow_string_memory.test",
@@ -1049,7 +1044,6 @@
         "test/sql/types/struct/struct_different_names.test",
         "test/sql/types/struct/struct_projection_pushdown_in_storage.test",
         "test/sql/types/struct/struct_stats.test",
-        "test/sql/types/struct/struct_updates.test",
         "test/sql/types/test_all_types.test_slow",
         "test/sql/types/timestamp/test_timestamp_tz.test"
       ]
@@ -1795,6 +1789,25 @@
         "test/sql/storage/types/list/list_corrupt_offset_order.test",
         "test/sql/storage/types/list/list_corrupt_offset_range.test",
         "test/sql/storage/types/list/list_corrupt_offset_skip.test"
+      ]
+    },
+    {
+      "reason": "New bump (99063af2bd7092aff02e14184a20e24699d34d71 -> 4e106d6883ab27b4db6469a760d76c0533bb5bb8)",
+      "paths": [
+        "test/sql/alter/add_col/test_add_col_compression.test",
+        "test/sql/filter/test_throwing_filter_pushdown.test",
+        "test/sql/function/generic/test_barrier.test",
+        "test/sql/join/mark/test_null_safe_semi_uncommitted_stats.test",
+        "test/sql/optimizer/barrier_row_group_pruning.test",
+        "test/sql/optimizer/cross_column_expression_stats_pruning.test",
+        "test/sql/optimizer/secure_view_pushdown_compression.test",
+        "test/sql/storage/optimistic_write/optimistic_write_batch_insert_sub_rowgroup.test",
+        "test/sql/storage/optimistic_write/optimistic_write_commit_failure.test",
+        "test/sql/storage/reclaim_space/reclaim_space_drop_table_optimistic.test",
+        "test/sql/types/numeric/float_precision.test",
+        "test/sql/storage/compression/chimp/chimp_fetch_row.test",
+        "test/sql/alter/rename_table/test_rename_table_conflict_storage_name.test",
+        "test/sql/storage/temp_directory/offload_failure_accounting.test"
       ]
     },
     {
