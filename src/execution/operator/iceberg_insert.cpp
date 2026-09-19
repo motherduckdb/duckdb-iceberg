@@ -578,6 +578,8 @@ static void GenerateSortOrderExpressions(ClientContext &context, const IcebergCo
 // Data file write layout
 //===--------------------------------------------------------------------===//
 
+namespace {
+
 //! One column of the chunk handed to the copy operator, and how to produce it from the child plan.
 struct IcebergWriteColumn {
 	string name;
@@ -604,6 +606,8 @@ struct IcebergWriteLayout {
 		return partition_columns.empty() || !columns[partition_columns[0]].is_computed_partition_value;
 	}
 };
+
+} // namespace
 
 //! The child plan column a layout column passes through unchanged, if it is a plain reference.
 static optional_idx PassThroughIndex(const IcebergWriteColumn &column) {
