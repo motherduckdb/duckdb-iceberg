@@ -693,6 +693,7 @@ static IcebergWriteLayout BuildWriteLayout(ClientContext &context, const Iceberg
 		write_column.name = "_last_updated_sequence_number";
 		write_column.type = LogicalType::BIGINT;
 		write_column.source = make_uniq<BoundReferenceExpression>(LogicalType::BIGINT, child_idx++);
+		write_column.field_id = Value::BIGINT(MultiFileReader::LAST_UPDATED_SEQUENCE_NUMBER_ID);
 		layout.columns.push_back(std::move(write_column));
 	}
 	D_ASSERT(child_idx == ChildColumnCount(copy_input));
