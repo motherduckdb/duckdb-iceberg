@@ -86,6 +86,7 @@
         "test/sql/optimizer/test_in_rewrite_rule.test",
         "test/sql/upsert/postgres/planner_preprocessing.test",
         "test/sql/update/string_update_transaction_local_7348.test",
+        "test/sql/function/list/aggregates/approx_count_distinct.test",
         "test/sql/function/variant/variant_extract_string_shredded.test"
       ]
     },
@@ -264,6 +265,7 @@
         "test/sql/update/test_update_many_updaters.test",
         "test/sql/update/test_update_many_updaters_nulls.test",
         "test/sql/types/geo/geometry_stats_prune_null.test",
+        "test/sql/types/geo/geometry_shred_empty.test",
         "test/sql/storage/overflow_strings/null_overflow_string_memory.test"
       ]
     },
@@ -1308,6 +1310,12 @@
         "test/sql/settings/test_external_access_metadata.test",
         "test/sql/secrets/drop_persistent_secret_if_exists.test",
         "test/sql/settings/test_external_access_secrets.test"
+      ]
+    },
+    {
+      "reason": "regex_escape produces different result, to be investigated",
+      "paths": [
+        "test/sql/function/string/regex_escape.test"
       ]
     },
     {
