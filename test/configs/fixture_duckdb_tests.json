@@ -1668,12 +1668,6 @@
       ]
     },
     {
-      "reason": "Default geometry CRS84 is lost on catalog round-trip, allowing incompatible CRS83 inserts",
-      "paths": [
-        "test/sql/types/geo/geometry_crs.test"
-      ]
-    },
-    {
       "reason": "MAP with a NULL/unknown key type reaches the REST server and returns HTTP 500",
       "paths": [
         "test/sql/types/test_null_type.test"
