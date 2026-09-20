@@ -992,7 +992,6 @@
         "test/sql/types/geo/geometry.test",
         "test/sql/types/geo/geometry_shred_checkpoint.test_slow",
         "test/sql/types/geo/geometry_compatability.test",
-        "test/sql/types/geo/geometry_shred_empty.test",
         "test/sql/types/geo/geometry_crs.test",
         "test/sql/types/geo/geometry_shred_fetch.test",
         "test/sql/types/geo/geometry_crs_projjson.test",
