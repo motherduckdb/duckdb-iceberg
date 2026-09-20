@@ -1686,6 +1686,12 @@
       ]
     },
     {
+      "reason": "Failing on unrelated test helper crash, needs https://github.com/duckdb/duckdb/pull/25934",
+      "paths": [
+        "duckdb/test/sql/types/geo/geometry_crs.test"
+      ]
+    },
+    {
       "reason": "Batch-dependent metadata visibility: newly created tables lack metadata-log or committed added columns are missing",
       "paths": [
         "test/sql/parallelism/interquery/concurrent_reads_while_updating.test_slow",
