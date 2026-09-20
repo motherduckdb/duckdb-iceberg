@@ -156,6 +156,10 @@ LogicalType IcebergColumnDefinition::ParsePrimitiveTypeString(const string &type
 		}
 		if (type_str.size() > 9 && type_str[8] == '(' && type_str.back() == ')') {
 			auto crs_str = type_str.substr(9, type_str.size() - 10);
+			// Catalogs can serialize the default CRS as either geometry or geometry(ogc:crs84).
+			if (StringUtil::CIEquals(crs_str, IcebergConstants::DefaultGeometryCRS)) {
+				return LogicalType::GEOMETRY();
+			}
 			return LogicalType::GEOMETRY(crs_str);
 		}
 		throw InvalidConfigurationException("Invalid geometry type format: %s", type_str);
