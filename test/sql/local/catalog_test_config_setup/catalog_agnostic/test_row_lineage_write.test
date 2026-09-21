@@ -166,3 +166,21 @@ true	0	0
 
 statement ok
 commit
+
+# Scalar subqueries are still separate bound plans when scan restrictions are applied.
+statement ok
+UPDATE my_datalake.default.duckdb_row_lineage
+SET data = (SELECT data FROM my_datalake.default.duckdb_row_lineage WHERE id = 2)
+WHERE id = 6;
+
+query ITI
+SELECT id, data, _last_updated_sequence_number
+FROM my_datalake.default.duckdb_row_lineage WHERE id = 6;
+----
+6	b_u1	8
+
+query I
+SELECT (SELECT _last_updated_sequence_number
+        FROM my_datalake.default.duckdb_row_lineage WHERE id = 6);
+----
+8
