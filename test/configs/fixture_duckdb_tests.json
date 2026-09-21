@@ -94,6 +94,7 @@
         "test/sql/update/string_update_transaction_local_7348.test",
         "test/sql/function/list/aggregates/approx_count_distinct.test",
         "test/sql/copy/csv/test_csv_timestamp_tz.test",
+        "test/sql/pivot/unpivot_non_aligned_columns.test",
         "test/sql/function/variant/variant_extract_string_shredded.test"
       ]
     },
