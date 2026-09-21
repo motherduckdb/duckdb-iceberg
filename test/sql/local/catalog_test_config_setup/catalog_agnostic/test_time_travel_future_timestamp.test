@@ -4,6 +4,8 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
+require-env TIMETRAVEL_SUPPORT true
+
 include test/sql/init_requires
 
 

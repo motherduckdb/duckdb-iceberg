@@ -4,6 +4,12 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
+require-env FORMAT_V3_SUPPORT true
+
+require-env UNKNOWN_SUPPORT true
+
+require-env VARIANT_SUPPORT true
+
 require avro
 
 require parquet
