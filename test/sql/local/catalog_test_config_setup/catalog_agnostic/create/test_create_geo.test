@@ -64,6 +64,26 @@ FROM my_datalake.default.tbl_geo_ctas;
 ----
 POINT EMPTY	POINT EMPTY	POINT (1 2)
 
+# Iceberg assigns its default CRS even when DuckDB's input has no CRS.
+query TTTT
+SELECT st_crs(g), st_crs(explicit_default), st_crs(nested_geometry.g[1]), st_crs(other_crs)
+FROM my_datalake.default.tbl_geo_ctas;
+----
+OGC:CRS84	OGC:CRS84	OGC:CRS84	OGC:CRS83
+
+# The default CRS is a constraint, not an unspecified CRS accepting any geometry.
+statement error
+INSERT INTO my_datalake.default.tbl_geo_ctas (g)
+SELECT other_crs FROM my_datalake.default.tbl_geo_ctas;
+----
+Cannot cast GEOMETRY with CRS 'OGC:CRS83' to GEOMETRY with different CRS 'OGC:CRS84'
+
+statement error
+INSERT INTO my_datalake.default.tbl_geo_ctas (other_crs)
+SELECT explicit_default FROM my_datalake.default.tbl_geo_ctas;
+----
+Cannot cast GEOMETRY with CRS 'OGC:CRS84' to GEOMETRY with different CRS 'OGC:CRS83'
+
 # Also cover CTAS from a catalog scan, as in geometry_shred_empty.test.
 statement ok
 DROP TABLE IF EXISTS my_datalake.default.tbl_geo_ctas_copy;
@@ -76,6 +96,11 @@ query T
 SELECT g::VARCHAR FROM my_datalake.default.tbl_geo_ctas_copy;
 ----
 POINT EMPTY
+
+query T
+SELECT st_crs(g) FROM my_datalake.default.tbl_geo_ctas_copy;
+----
+OGC:CRS84
 
 statement ok
 DROP TABLE my_datalake.default.tbl_geo_ctas_copy;
