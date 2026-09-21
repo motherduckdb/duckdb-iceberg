@@ -46,9 +46,9 @@ CREATE TEMP TABLE unknown_type_values AS SELECT
     {'n': 42, 's': 'hello'}::unknown_target_struct AS "unknown_target_struct",
     [42, NULL, 7]::INTEGER[] AS "INTEGER[]",
     MAP {1: 'hello', 2: NULL} AS "MAP(INTEGER,VARCHAR)",
-    'POINT (1 2)'::GEOMETRY AS "GEOMETRY";
+    'POINT (1 2)'::GEOMETRY('OGC:CRS84') AS "GEOMETRY('OGC:CRS84')";
 
-foreach type BOOLEAN INTEGER BIGINT FLOAT DOUBLE DECIMAL(4,1) DECIMAL(9,4) DECIMAL(18,6) DECIMAL(38,10) DATE TIME TIMESTAMP TIMESTAMPTZ TIMESTAMP_NS TIMESTAMPTZ_NS UUID VARCHAR BLOB unknown_target_struct INTEGER[] MAP(INTEGER,VARCHAR) GEOMETRY
+foreach type BOOLEAN INTEGER BIGINT FLOAT DOUBLE DECIMAL(4,1) DECIMAL(9,4) DECIMAL(18,6) DECIMAL(38,10) DATE TIME TIMESTAMP TIMESTAMPTZ TIMESTAMP_NS TIMESTAMPTZ_NS UUID VARCHAR BLOB unknown_target_struct INTEGER[] MAP(INTEGER,VARCHAR) GEOMETRY('OGC:CRS84')
 
 statement ok
 DROP TABLE IF EXISTS my_datalake.default.alter_unknown_type;
@@ -84,8 +84,23 @@ ALTER TABLE my_datalake.default.alter_unknown_type ALTER COLUMN l.element TYPE {
 
 # Check actual bound field types, including children of newly introduced containers.
 query IIII
-SELECT typeof(r) = typeof(v), typeof(s.v) = typeof(v),
-       typeof(map_extract_value(m, 'old')) = typeof(v), typeof(l[1]) = typeof(v)
+SELECT
+	CASE WHEN typeof(r) = typeof(v) THEN true::VARIANT ELSE {
+		'actual': typeof(r),
+		'expected': typeof(v)
+	}::VARIANT END,
+	CASE WHEN typeof(s.v) = typeof(v) THEN true::VARIANT ELSE {
+		'actual': typeof(s.v),
+		'expected': typeof(v)
+	}::VARIANT END,
+	CASE WHEN typeof(map_extract_value(m, 'old')) = typeof(v) THEN true::VARIANT ELSE {
+		'actual': typeof(map_extract_value(m, 'old')),
+		'expected': typeof(v)
+	}::VARIANT END,
+	CASE WHEN typeof(l[1]) = typeof(v) THEN true::VARIANT ELSE {
+		'actual': typeof(l[1]),
+		'expected': typeof(v)
+	}::VARIANT END
 FROM my_datalake.default.alter_unknown_type,
      (SELECT "{type}" AS v FROM unknown_type_values) expected
 WHERE id = 3;
