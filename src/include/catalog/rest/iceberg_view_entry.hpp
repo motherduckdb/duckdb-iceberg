@@ -1,7 +1,6 @@
 #pragma once
 
 #include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
-#include "rest_catalog/objects/view_version.hpp"
 
 namespace duckdb {
 
@@ -18,9 +17,5 @@ public:
 private:
 	string reason;
 };
-
-//! Resolve omitted table qualifications using the persisted view version, without changing CTE references.
-void QualifyIcebergView(ClientContext &context, SelectStatement &query, const rest_api_objects::ViewVersion &version,
-                        const Identifier &owning_catalog);
 
 } // namespace duckdb

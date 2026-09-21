@@ -571,7 +571,7 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetViewEntry(ClientContext &context,
 	}
 	auto &load_result = *get_view_result.result_;
 
-	// Find a SQL representation with the DuckDB dialect first, fall back to any SQL representation.
+	// Only DuckDB SQL representations are executable.
 	string view_sql;
 	optional_ptr<const rest_api_objects::ViewVersion> current_version;
 	auto &metadata = load_result.metadata;
@@ -581,7 +581,7 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetViewEntry(ClientContext &context,
 			continue;
 		}
 		current_version = &version;
-		// Search representations for DuckDB dialect first
+		// Select the DuckDB representation from the current version.
 		for (auto &repr : version.representations) {
 			if (!repr.sqlview_representation) {
 				continue;
@@ -591,27 +591,17 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetViewEntry(ClientContext &context,
 				break;
 			}
 		}
-		// If no DuckDB dialect found, use the first available SQL representation
-		if (view_sql.empty()) {
-			for (auto &repr : version.representations) {
-				if (repr.sqlview_representation) {
-					DUCKDB_LOG_WARNING(context,
-					                   "View '%s' has no representation with dialect '%s'; falling back to "
-					                   "dialect '%s' (the SQL may not parse cleanly in DuckDB)",
-					                   view_name, IcebergConstants::ViewDuckDBDialect,
-					                   repr.sqlview_representation->dialect);
-					view_sql = repr.sqlview_representation->sql;
-					break;
-				}
-			}
-		}
 		break;
 	}
 
 	unique_ptr<SelectStatement> view_query;
 	string unsupported_reason;
 	if (view_sql.empty()) {
-		unsupported_reason = "no SQL representation that DuckDB can use";
+		unsupported_reason = "no SQL representation with dialect 'duckdb'";
+	} else if (current_version->default_catalog && Identifier(*current_version->default_catalog) != catalog.GetName()) {
+		unsupported_reason = "a different default catalog is not supported";
+	} else if (current_version->default_namespace.value != schema.namespace_items) {
+		unsupported_reason = "a different default namespace is not supported";
 	} else {
 		Parser parser;
 		try {
@@ -626,14 +616,6 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetViewEntry(ClientContext &context,
 			} else {
 				view_query = unique_ptr_cast<SQLStatement, SelectStatement>(std::move(parser.statements[0]));
 			}
-		}
-	}
-	if (view_query && current_version) {
-		try {
-			QualifyIcebergView(context, *view_query, *current_version, catalog.GetName());
-		} catch (const NotImplementedException &ex) {
-			unsupported_reason = ex.what();
-			view_query.reset();
 		}
 	}
 

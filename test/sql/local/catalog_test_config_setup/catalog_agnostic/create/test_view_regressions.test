@@ -19,6 +19,9 @@ statement ok
 use my_datalake.view_regressions;
 
 statement ok
+drop view if exists scoped_view;
+
+statement ok
 drop view if exists duplicate_names;
 
 statement ok
@@ -88,7 +91,29 @@ insert into "table.parquet" values (88);
 statement ok
 create view dotted_table_view as select * from "table.parquet";
 
+# Native view binding handles CTE scope and subqueries in the owning namespace.
+statement ok
+create view scoped_view as
+with base as (select i + 1 as i from base)
+select i from base union all select (select max(i) from my_datalake.view_regressions.base);
+
 restart
+
+# Query from another catalog with a conflicting table to exercise view search paths.
+statement ok
+use memory.main;
+
+statement ok
+create table base as select 999 as i;
+
+query I rowsort
+select * from my_datalake.view_regressions.scoped_view;
+----
+42
+43
+
+statement ok
+drop table base;
 
 statement ok
 use my_datalake.view_regressions;
@@ -112,6 +137,9 @@ statement error
 alter view dotted_table_view rename to renamed_view;
 ----
 <REGEX>:.*ALTER VIEW is not supported.*
+
+statement ok
+drop view scoped_view;
 
 statement ok
 drop view duplicate_names;

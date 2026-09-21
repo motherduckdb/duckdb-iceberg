@@ -313,9 +313,13 @@ IcebergListTablesResult IcebergListTablesRequest::Execute(ClientContext &context
 		}
 		auto response = catalog.auth_handler->Request(RequestType::GET_REQUEST, context, url_builder, headers);
 		if (!response->Success()) {
+			if (response->status == HTTPStatusCode::NotFound_404) {
+				// A missing namespace has no entries. Native view binding may probe
+				// the catalog's default namespace before trying replacement scans.
+				return vector<rest_api_objects::TableIdentifier>();
+			}
 			if (response->status == HTTPStatusCode::Forbidden_403 ||
-			    response->status == HTTPStatusCode::Unauthorized_401 ||
-			    response->status == HTTPStatusCode::NotFound_404) {
+			    response->status == HTTPStatusCode::Unauthorized_401) {
 				// when listing tables, if a user is not allowed to list a schema for one of the error reasons above
 				// we log a warning to notify the user. We do not error, otherwise the user won't be able to see any
 				// results.
@@ -630,9 +634,13 @@ optional<vector<rest_api_objects::TableIdentifier>> IRCAPI::GetViews(ClientConte
 		HTTPHeaders headers(*context.db);
 		auto response = catalog.auth_handler->Request(RequestType::GET_REQUEST, context, url_builder, headers);
 		if (!response->Success()) {
+			if (response->status == HTTPStatusCode::NotFound_404) {
+				// A missing namespace has no entries. Native view binding may probe
+				// the catalog's default namespace before trying replacement scans.
+				return vector<rest_api_objects::TableIdentifier>();
+			}
 			if (response->status == HTTPStatusCode::Forbidden_403 ||
-			    response->status == HTTPStatusCode::Unauthorized_401 ||
-			    response->status == HTTPStatusCode::NotFound_404) {
+			    response->status == HTTPStatusCode::Unauthorized_401) {
 				DUCKDB_LOG_WARNING(context, "GET %s returned status code %s", url_builder.GetURLEncoded(),
 				                   EnumUtil::ToString(response->status));
 				return nullopt;

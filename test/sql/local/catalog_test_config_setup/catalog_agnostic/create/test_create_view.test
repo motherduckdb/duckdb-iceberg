@@ -133,6 +133,10 @@ select col_a, col_b from test_view_v2 order by col_a;
 statement ok
 alter database my_datalake set alias to renamed_datalake;
 
+# USE paths are session state; update the active path after renaming its catalog.
+statement ok
+use renamed_datalake.default;
+
 query II
 select col_a, col_b from renamed_datalake.default.test_view_v2 order by col_a;
 ----
@@ -142,6 +146,9 @@ select col_a, col_b from renamed_datalake.default.test_view_v2 order by col_a;
 
 statement ok
 alter database renamed_datalake set alias to my_datalake;
+
+statement ok
+use my_datalake.default;
 
 # Clean up
 statement ok
