@@ -266,8 +266,8 @@ unique_ptr<Catalog> IcebergAttach::Attach(optional_ptr<StorageExtensionInfo> sto
 			}
 			auto schema_name = argument.ToString();
 			if (schema_name.empty()) {
-				throw InvalidInputException(
-				    "DEFAULT_SCHEMA can't be empty, either omit it, provide NULL or provide a non-empty value");
+				default_schema = std::nullopt;
+				continue;
 			}
 			default_schema = Identifier(schema_name);
 		} else if (lower_name == "encode_entire_prefix") {
