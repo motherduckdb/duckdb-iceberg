@@ -216,6 +216,9 @@ optional_ptr<CatalogEntry> IcebergSchemaEntry::CreateIndex(CatalogTransaction tr
 }
 
 optional_ptr<CatalogEntry> IcebergSchemaEntry::CreateView(CatalogTransaction transaction, CreateViewInfo &info) {
+	if (info.binding_mode == CreateViewBindingMode::SKIP_BINDING) {
+		throw NotImplementedException("DEFER_BINDING is not supported for Iceberg views: an output schema is required");
+	}
 	if (info.security_type != ViewSecurityType::REGULAR_VIEW) {
 		throw NotImplementedException("Secure views are not supported in Iceberg catalogs");
 	}
