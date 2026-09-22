@@ -52,7 +52,10 @@ bool IcebergTableSet::FillEntry(ClientContext &context, IcebergTable &table) {
 	}
 
 	// No valid cached result or caching disabled, make a new request
-	auto get_table_result = IRCAPI::GetTable(context, ic_catalog, schema, table.name);
+	return ApplyLoadResult(table, IRCAPI::GetTable(context, ic_catalog, schema, table.name));
+}
+
+bool IcebergTableSet::ApplyLoadResult(IcebergTable &table, IcebergLoadTableResult get_table_result) {
 	if (get_table_result.error_) {
 		if (get_table_result.status_ == HTTPStatusCode::NotFound_404) {
 			// Glue returns 404 when a table is not an Iceberg Table with the error message
@@ -72,7 +75,8 @@ bool IcebergTableSet::FillEntry(ClientContext &context, IcebergTable &table) {
 	}
 	auto &load_table_result = *get_table_result.result_;
 	table.InitializeFromLoadTableResult(load_table_result);
-	ic_catalog.table_request_cache.SetOrOverwrite(table_key, std::move(get_table_result.result_));
+	catalog.Cast<IcebergCatalog>().table_request_cache.SetOrOverwrite(table.GetTableKey(),
+	                                                                  std::move(get_table_result.result_));
 	return true;
 }
 

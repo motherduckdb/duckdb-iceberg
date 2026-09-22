@@ -41,6 +41,20 @@ public:
 	optional<rest_api_objects::IcebergErrorResponse> error_;
 };
 
+using IcebergLoadTableResult = APIResult<unique_ptr<const rest_api_objects::LoadTableResult>>;
+
+//! Owns the request inputs; execution only fetches and parses a response.
+//! The caller supplies a live context and catalog and owns cache lookup and result publication.
+class IcebergLoadTableRequest {
+public:
+	IcebergLoadTableRequest(vector<string> namespace_items, string table_name);
+	IcebergLoadTableResult Execute(ClientContext &context, IcebergCatalog &catalog) const;
+
+private:
+	vector<string> namespace_items;
+	string table_name;
+};
+
 class CommitResult {
 public:
 	CommitResult() {
@@ -76,10 +90,8 @@ public:
 	static bool VerifyTableExistence(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema,
 	                                 const string &table);
 	static vector<string> ParseSchemaName(const string &namespace_name);
-	static APIResult<unique_ptr<const rest_api_objects::LoadTableResult>> GetTable(ClientContext &context,
-	                                                                               IcebergCatalog &catalog,
-	                                                                               const IcebergSchemaEntry &schema,
-	                                                                               const string &table_name);
+	static IcebergLoadTableResult GetTable(ClientContext &context, IcebergCatalog &catalog,
+	                                       const IcebergSchemaEntry &schema, const string &table_name);
 	static APIResult<unique_ptr<const rest_api_objects::LoadCredentialsResponse>>
 	GetTableCredentials(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema,
 	                    const string &table_name);
