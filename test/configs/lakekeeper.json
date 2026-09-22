@@ -19,16 +19,8 @@
 			"env_value": "true"
 		},
 		{
-			"env_name": "UNKNOWN_SUPPORT",
-			"env_value": "false"
-		},
-		{
 			"env_name": "VARIANT_SUPPORT",
 			"env_value": "true"
-		},
-		{
-			"env_name": "GEOMETRY_SUPPORT",
-			"env_value": "false"
 		},
 		{
 			"env_name": "TIMESTAMP_NS_SUPPORT",
@@ -37,14 +29,6 @@
 		{
 			"env_name": "COLUMN_DEFAULT_SUPPORT",
 			"env_value": "true"
-		},
-		{
-			"env_name": "TIMESTAMP_NS_DEFAULT_SUPPORT",
-			"env_value": "false"
-		},
-		{
-			"env_name": "TIMESTAMPTZ_NS_DEFAULT_SUPPORT",
-			"env_value": "false"
 		},
 		{
 			"env_name": "TIMETRAVEL_SUPPORT",

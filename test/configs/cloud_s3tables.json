@@ -29,30 +29,6 @@
       "env_value": "true"
     },
     {
-      "env_name": "VARIANT_SUPPORT",
-      "env_value": "false"
-    },
-    {
-      "env_name": "GEOMETRY_SUPPORT",
-      "env_value": "false"
-    },
-    {
-      "env_name": "TIMESTAMP_NS_SUPPORT",
-      "env_value": "false"
-    },
-    {
-      "env_name": "COLUMN_DEFAULT_SUPPORT",
-      "env_value": "false"
-    },
-    {
-      "env_name": "TIMESTAMP_NS_DEFAULT_SUPPORT",
-      "env_value": "false"
-    },
-    {
-      "env_name": "TIMESTAMPTZ_NS_DEFAULT_SUPPORT",
-      "env_value": "false"
-    },
-    {
       "env_name": "TIMETRAVEL_SUPPORT",
       "env_value": "true"
     },
@@ -69,24 +45,8 @@
       "env_value": "true"
     },
     {
-      "env_name": "STAGED_CREATE_SUPPORT",
-      "env_value": "false"
-    },
-    {
       "env_name": "MULTI_TABLE_COMMIT_SUPPORT",
       "env_value": "true"
-    },
-    {
-      "env_name": "FILE_CLEANUP_SUPPORT",
-      "env_value": "false"
-    },
-    {
-      "env_name": "NAMESPACE_PROPERTIES_SUPPORT",
-      "env_value": "false"
-    },
-    {
-      "env_name": "CASE_SENSITIVE_TABLE_NAMES_SUPPORT",
-      "env_value": "false"
     },
     {
       "env_name": "SCAN_PLANNING_MODE",

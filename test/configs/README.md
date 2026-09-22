@@ -6,25 +6,46 @@ declare their requirements near the top of the file, before SQL or includes:
 ```text
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require-env FORMAT_V3_SUPPORT true
+require-env FORMAT_V3_SUPPORT
 
-require-env UNKNOWN_SUPPORT true
+require-env UNKNOWN_SUPPORT
 ```
 
-Each requirement must match. Multiple accepted values on one directive are
-alternatives, for example `require-env SCAN_PLANNING_MODE client server`.
-`require-env-not NAME value [value ...]` excludes the listed values. Both forms
-skip the test if the variable is undefined; absence does not mean support.
-Use positive requirements for capabilities, and explicitly define every flag in
-each catalog config. Config `test_env` values take precedence over ordinary
-process environment variables unless explicitly passed through by the runner.
+Each requirement must match. Capability flags use presence: declaring
+`<FEATURE>_SUPPORT` means the configured catalog supports that feature; omitting
+it means it does not. Tests require support with `require-env <FEATURE>_SUPPORT`.
+Tests specifically exercising the absence of a capability can use:
 
-Boolean capabilities use the strings `true` and `false`. `unknown` is reserved
-for a capability that needs validation before enabling its tests; it also fails
-`require-env NAME true`. These values describe the configured catalog version,
-credentials, and execution mode, not every deployment of that catalog product.
-The initial declarations preserve the existing test policy; `true` is not a
-claim that a fresh cross-catalog certification was performed.
+```text
+require-env-not FORMAT_V3_SUPPORT
+```
+
+Existing negative coverage uses this form: `alter_add_column_default_without_v3.test`
+requires absence of `FORMAT_V3_SUPPORT`, and
+`test_delete_consolidation_cleanup_failure.test` requires absence of
+`FILE_CLEANUP_SUPPORT` together with presence of `FORMAT_V3_SUPPORT`.
+
+The no-value exclusion runs only when the variable is absent. Keep the
+`CATALOG_TEST_CONFIG_SETUP` requirement so missing catalog configuration does not
+look like an unsupported feature.
+
+Supported flags retain `"true"` as their config `env_value`, but the checks only
+look for presence. Do not declare unsupported flags with `"false"`, `"unknown"`,
+or an empty value: any defined value counts as support. Omit unverified
+capabilities until their tests have been validated. Config `test_env` values take
+precedence over ordinary process environment variables unless explicitly passed
+through by the runner. Avoid setting capability flags in the process environment:
+an omitted config entry does not mask a process environment variable.
+
+Value-based requirements remain useful for modes: for example,
+`require-env SCAN_PLANNING_MODE client server` accepts either value.
+`require-env-not NAME value [value ...]` excludes the listed values and requires
+the variable to exist, unlike the no-value form above.
+
+These declarations describe the configured catalog version, credentials, and
+execution mode, not every deployment of that catalog product. They preserve the
+existing test policy; a declared flag is not a claim that a fresh cross-catalog
+certification was performed.
 
 ## Flags
 
@@ -47,7 +68,7 @@ claim that a fresh cross-catalog certification was performed.
 | `FILE_CLEANUP_SUPPORT` | Allow deletion of uncommitted files using the configured credentials. |
 | `NAMESPACE_PROPERTIES_SUPPORT` | Support setting and removing namespace properties. Does not require an automatically populated `namespace_id`. |
 | `CASE_SENSITIVE_TABLE_NAMES_SUPPORT` | Support distinct table names differing only in case. |
-| `ATOMIC_COMMIT_CONFLICT_SUPPORT` | Reject concurrent commits with stale parent state so retries preserve every successful write. Enabled for Lakekeeper and S3 Tables; false for the standard fixture and unknown for the other configurations pending validation. |
+| `ATOMIC_COMMIT_CONFLICT_SUPPORT` | Reject concurrent commits with stale parent state so retries preserve every successful write. Declared for Lakekeeper and S3 Tables; omitted for the standard fixture, which lacks support, and for the other configurations pending validation. |
 | `SCAN_PLANNING_MODE` | `client` or `server`. Tests asserting client pruning logs or request counts require `client`; fixture-latest uses `server`. |
 
 Transaction-start reconstruction can require both `METADATA_LOG_SUPPORT` and
@@ -61,8 +82,9 @@ When adding a test, declare the capabilities it actually exercises. Keep
 `CATALOG_TEST_CONFIG_SETUP` for catalog initialization and genuinely
 catalog-specific tests; prefer capabilities over catalog-name allowlists in
 `catalog_agnostic`. When a catalog gains support, update its flag and run the
-affected tests. Include new flags in all configs, including
-`fixture_duckdb_tests.json`, which can also run extension tests.
+affected tests. Review all configs when adding a flag, including
+`fixture_duckdb_tests.json`, which can also run extension tests, and declare it
+only where support is verified. Remove the declaration when support is absent.
 
 Keep `skip_tests` for known bugs, unexplained failures, hardcoded fixture paths,
 and unavailable generated data. These are not evidence of absent capabilities.

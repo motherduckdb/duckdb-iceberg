@@ -4,7 +4,7 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require-env SNAPSHOT_HISTORY_SUPPORT true
+require-env SNAPSHOT_HISTORY_SUPPORT
 
 include test/sql/init_requires
 

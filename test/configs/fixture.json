@@ -86,10 +86,6 @@
 		{
 			"env_name": "SCAN_PLANNING_MODE",
 			"env_value": "client"
-		},
-		{
-			"env_name": "ATOMIC_COMMIT_CONFLICT_SUPPORT",
-			"env_value": "false"
 		}
 	]
 }

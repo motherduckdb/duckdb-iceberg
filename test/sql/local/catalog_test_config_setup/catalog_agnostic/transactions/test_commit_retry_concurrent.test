@@ -15,7 +15,7 @@
 # AWS S3 Tables, verified manually. Unknown configurations skip until validated.
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require-env ATOMIC_COMMIT_CONFLICT_SUPPORT true
+require-env ATOMIC_COMMIT_CONFLICT_SUPPORT
 
 include test/sql/init_requires
 

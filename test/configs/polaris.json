@@ -39,10 +39,6 @@
 			"env_value": "true"
 		},
 		{
-			"env_name": "TIMESTAMP_NS_DEFAULT_SUPPORT",
-			"env_value": "false"
-		},
-		{
 			"env_name": "TIMESTAMPTZ_NS_DEFAULT_SUPPORT",
 			"env_value": "true"
 		},
@@ -71,10 +67,6 @@
 			"env_value": "true"
 		},
 		{
-			"env_name": "FILE_CLEANUP_SUPPORT",
-			"env_value": "false"
-		},
-		{
 			"env_name": "NAMESPACE_PROPERTIES_SUPPORT",
 			"env_value": "true"
 		},
@@ -85,10 +77,6 @@
 		{
 			"env_name": "SCAN_PLANNING_MODE",
 			"env_value": "client"
-		},
-		{
-			"env_name": "ATOMIC_COMMIT_CONFLICT_SUPPORT",
-			"env_value": "unknown"
 		}
 	],
 	"skip_tests": [

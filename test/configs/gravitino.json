@@ -60,16 +60,8 @@
 			"env_value": "true"
 		},
 		{
-			"env_name": "METADATA_FILE_READ_SUPPORT",
-			"env_value": "false"
-		},
-		{
 			"env_name": "STAGED_CREATE_SUPPORT",
 			"env_value": "true"
-		},
-		{
-			"env_name": "MULTI_TABLE_COMMIT_SUPPORT",
-			"env_value": "false"
 		},
 		{
 			"env_name": "FILE_CLEANUP_SUPPORT",
@@ -86,10 +78,6 @@
 		{
 			"env_name": "SCAN_PLANNING_MODE",
 			"env_value": "client"
-		},
-		{
-			"env_name": "ATOMIC_COMMIT_CONFLICT_SUPPORT",
-			"env_value": "unknown"
 		}
 	],
 	"skip_tests": [
