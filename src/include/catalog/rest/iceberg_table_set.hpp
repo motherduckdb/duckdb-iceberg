@@ -29,6 +29,8 @@ public:
 	                                    CreateTableInfo &info);
 
 private:
+	bool TryFillEntryFromCache(ClientContext &context, IcebergTable &table);
+	void FillEntries(ClientContext &context, const vector<reference<IcebergTable>> &tables);
 	bool ApplyLoadResult(IcebergTable &table, IcebergLoadTableResult result);
 	IcebergTableSchemaVersion &GetOrCreateDummy(IcebergTable &table_info) const DUCKDB_REQUIRES(entry_lock);
 	void LoadEntriesInternal(ClientContext &context) DUCKDB_REQUIRES(entry_lock);
