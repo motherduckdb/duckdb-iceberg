@@ -138,6 +138,12 @@
       ]
     },
     {
+      "reason": "Tests in-memory db behavior",
+      "paths": [
+        "test/sql/storage/evict_unpinned_without_temp_directory.test"
+      ]
+    },
+    {
       "reason": "Original test does not define ordering",
       "paths": [
         "test/sql/catalog/test_create_from_select.test",
@@ -164,6 +170,7 @@
         "test/sql/update/string_update_transaction_local_7348.test",
         "test/sql/function/list/aggregates/approx_count_distinct.test",
         "test/sql/copy/csv/test_csv_timestamp_tz.test",
+        "test/sql/pivot/unpivot_non_aligned_columns.test",
         "test/sql/function/variant/variant_extract_string_shredded.test"
       ]
     },
@@ -342,7 +349,6 @@
         "test/sql/update/test_update_many_updaters.test",
         "test/sql/update/test_update_many_updaters_nulls.test",
         "test/sql/types/geo/geometry_stats_prune_null.test",
-        "test/sql/types/geo/geometry_shred_empty.test",
         "test/sql/storage/overflow_strings/null_overflow_string_memory.test"
       ]
     },
@@ -653,6 +659,8 @@
         "test/sql/storage/types/variant/variant_shredding.test_slow",
         "test/sql/storage/types/variant/variant_stats_merging.test_slow",
         "test/sql/types/variant/json_cast.test",
+        "test/sql/storage/types/variant/variant_object_key_order_shredded.test",
+        "test/sql/storage/types/variant/variant_object_key_order_shredded_json.test",
         "test/sql/types/variant/variant_distinct.test",
         "test/sql/types/variant/variant_map_to_variant_filter.test",
         "test/sql/function/string/test_starts_with_operator_utf8.test"
