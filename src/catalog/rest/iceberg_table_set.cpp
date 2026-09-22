@@ -255,7 +255,16 @@ void IcebergTableSet::LoadEntriesInternal(ClientContext &context) {
 		return;
 	}
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
-	ApplyListResult(IRCAPI::GetTables(context, ic_catalog, schema));
+	// The request owns its namespace; workers never access or mutate this table set.
+	IcebergRequestResult<IcebergListTablesResult> result;
+	TaskExecutor executor(context, TaskSchedulerType::ASYNC);
+	executor.ScheduleTask(make_uniq<IcebergRequestTask<IcebergListTablesRequest>>(
+	    executor, context, ic_catalog, IcebergListTablesRequest(schema.namespace_items), result));
+	executor.WorkOnTasks();
+	if (context.IsInterrupted()) {
+		throw InterruptException();
+	}
+	ApplyListResult(result.TakeResult());
 	iceberg_transaction.listed_schemas.insert(schema.name.GetIdentifierName());
 }
 
