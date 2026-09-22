@@ -282,7 +282,12 @@ void IcebergTableSet::LoadEntriesInternal(ClientContext &context) {
 		return;
 	}
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
-	auto tables = IRCAPI::GetTables(context, ic_catalog, schema);
+	ApplyListResult(IRCAPI::GetTables(context, ic_catalog, schema));
+	iceberg_transaction.listed_schemas.insert(schema.name.GetIdentifierName());
+}
+
+void IcebergTableSet::ApplyListResult(IcebergListTablesResult tables) {
+	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	// A refused listing says nothing about which tables exist, so the cache is left untouched.
 	if (tables) {
 		case_insensitive_set_t listed;
@@ -300,7 +305,6 @@ void IcebergTableSet::LoadEntriesInternal(ClientContext &context) {
 			}
 		}
 	}
-	iceberg_transaction.listed_schemas.insert(schema.name.GetIdentifierName());
 }
 
 static Value ParseTableProperty(TableFunctionBinder &binder, ClientContext &context, const ParsedExpression &expr_ref,

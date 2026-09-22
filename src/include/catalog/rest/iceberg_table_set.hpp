@@ -34,6 +34,7 @@ private:
 	bool ApplyLoadResult(IcebergTable &table, IcebergLoadTableResult result);
 	IcebergTableSchemaVersion &GetOrCreateDummy(IcebergTable &table_info) const DUCKDB_REQUIRES(entry_lock);
 	void LoadEntriesInternal(ClientContext &context) DUCKDB_REQUIRES(entry_lock);
+	void ApplyListResult(IcebergListTablesResult tables) DUCKDB_REQUIRES(entry_lock);
 	shared_ptr<IcebergTable> CreateEntryInternal(const string &name, IcebergTable &&table,
 	                                             shared_ptr<IcebergTable> &old_entry) DUCKDB_REQUIRES(entry_lock);
 
