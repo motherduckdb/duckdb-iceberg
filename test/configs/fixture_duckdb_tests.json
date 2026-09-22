@@ -515,6 +515,12 @@
       ]
     },
     {
+      "reason": "Progress isn't being reported properly by ICEBERG_SCAN",
+      "paths": [
+        "test/sql/progress/test_verify_progress.test"
+      ]
+    },
+    {
       "reason": "Generated/virtual columns - Iceberg inserts include virtual columns so binder rejects with fewer values",
       "paths": [
         "test/sql/join/pushdown/pushdown_generated_columns.test",
