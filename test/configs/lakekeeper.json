@@ -31,6 +31,14 @@
 			"env_value": "true"
 		},
 		{
+			"env_name": "TIMESTAMPTZ_NS_DEFAULT_SUPPORT",
+			"env_value": "true"
+		},
+		{
+			"env_name": "TIMESTAMP_NS_DEFAULT_SUPPORT",
+			"env_value": "true"
+		},
+		{
 			"env_name": "TIMETRAVEL_SUPPORT",
 			"env_value": "true"
 		},

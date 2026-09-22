@@ -76,6 +76,35 @@ Transaction-start reconstruction can require both `METADATA_LOG_SUPPORT` and
 because they read an older transaction state. Tests using V3 types/defaults
 declare the particular feature as well as format support where applicable.
 
+## Absence coverage
+
+`catalog_agnostic/capabilities/no_*.test` exercises configurations that omit a
+capability. Each test keeps `require-env CATALOG_TEST_CONFIG_SETUP` and uses
+`require-env-not <FEATURE>_SUPPORT` without a value. Ordinary control operations
+must succeed before the unsupported operation is checked. Unexpected success
+fails the test: verify the behavior and add the support declaration instead of
+adding a catalog-name restriction or a skip.
+
+The probes cover type creation, integer and nanosecond timestamp defaults,
+metadata-log and snapshot history, historical snapshot reads, direct metadata
+file access, namespace properties, case-sensitive table names, multi-table
+commits, and non-staged table visibility/rollback. Existing tests cover V3/default
+rejection and cleanup failure. Type-specific default probes require the type,
+V3, and general default support; when these prerequisites are absent, the
+corresponding broader absence probes apply instead.
+
+Absence need not mean an error: metadata/history probes check missing history,
+and the staging probe checks that a table is already remotely visible before
+commit and survives rollback. Multi-table rejection also checks that rollback
+preserves both tables.
+
+`ATOMIC_COMMIT_CONFLICT_SUPPORT` remains an explicit coverage gap. A catalog
+without atomic conflict detection can still serialize a particular run's writes;
+asserting that a race must lose data would make a flaky negative test. The
+existing concurrent commit test validates the positive guarantee. Catalogs
+currently marked unverified need a controlled REST-level race before this
+capability can be declared or its absence reproducibly tested.
+
 ## Maintaining the declarations
 
 When adding a test, declare the capabilities it actually exercises. Keep
