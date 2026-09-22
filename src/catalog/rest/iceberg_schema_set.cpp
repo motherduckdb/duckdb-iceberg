@@ -158,11 +158,12 @@ void IcebergSchemaSet::LoadEntriesInternal(ClientContext &context) {
 	TaskExecutor executor(context, TaskSchedulerType::ASYNC);
 	executor.ScheduleTask(make_uniq<IcebergRequestTask<IcebergListSchemasRequest>>(
 	    executor, context, ic_catalog, IcebergListSchemasRequest({}), result));
+	auto schemas = result.WaitAndTakeResult(context, executor);
 	executor.WorkOnTasks();
 	if (context.IsInterrupted()) {
 		throw InterruptException();
 	}
-	ApplyListResult(result.TakeResult());
+	ApplyListResult(std::move(schemas));
 	iceberg_transaction.called_list_schemas = true;
 }
 

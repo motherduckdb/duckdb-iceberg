@@ -260,11 +260,12 @@ void IcebergTableSet::LoadEntriesInternal(ClientContext &context) {
 	TaskExecutor executor(context, TaskSchedulerType::ASYNC);
 	executor.ScheduleTask(make_uniq<IcebergRequestTask<IcebergListTablesRequest>>(
 	    executor, context, ic_catalog, IcebergListTablesRequest(schema.namespace_items), result));
+	auto tables = result.WaitAndTakeResult(context, executor);
 	executor.WorkOnTasks();
 	if (context.IsInterrupted()) {
 		throw InterruptException();
 	}
-	ApplyListResult(result.TakeResult());
+	ApplyListResult(std::move(tables));
 	iceberg_transaction.listed_schemas.insert(schema.name.GetIdentifierName());
 }
 
