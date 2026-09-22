@@ -216,9 +216,6 @@ optional_ptr<CatalogEntry> IcebergSchemaEntry::CreateIndex(CatalogTransaction tr
 }
 
 optional_ptr<CatalogEntry> IcebergSchemaEntry::CreateView(CatalogTransaction transaction, CreateViewInfo &info) {
-	if (info.binding_mode == CreateViewBindingMode::SKIP_BINDING) {
-		throw NotImplementedException("DEFER_BINDING is not supported for Iceberg views: an output schema is required");
-	}
 	if (info.security_type != ViewSecurityType::REGULAR_VIEW) {
 		throw NotImplementedException("Secure views are not supported in Iceberg catalogs");
 	}
@@ -241,6 +238,11 @@ optional_ptr<CatalogEntry> IcebergSchemaEntry::CreateView(CatalogTransaction tra
 		// ERROR_ON_CONFLICT
 		throw CatalogException("%s with name \"%s\" already exists!", CatalogTypeToString(existing_entry->type),
 		                       info.GetViewName().GetIdentifierName());
+	}
+
+	// IF NOT EXISTS also skips binding when the view exists, so handle conflicts first.
+	if (info.binding_mode == CreateViewBindingMode::SKIP_BINDING) {
+		throw NotImplementedException("DEFER_BINDING is not supported for Iceberg views: an output schema is required");
 	}
 
 	// Generate default column names if the caller gave us types but no names.

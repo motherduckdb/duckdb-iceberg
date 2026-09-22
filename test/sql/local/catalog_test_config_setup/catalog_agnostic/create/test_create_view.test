@@ -55,6 +55,10 @@ select * from test_view_v1 order by i;
 statement ok
 create view if not exists test_view_v1 as select 1;
 
+# A no-op must not bind a replacement query, including invalid references.
+statement ok
+create view if not exists test_view_v1 as select * from missing_if_not_exists_source;
+
 # Original view should still be there
 query II
 select * from test_view_v1 order by i;

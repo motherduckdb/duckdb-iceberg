@@ -47,6 +47,11 @@ create view v_deferred_alias (answer) with (defer_binding) as select 42;
 ----
 DEFER_BINDING is not supported for Iceberg views: an output schema is required
 
+statement error
+create view if not exists v_deferred with (defer_binding) as select 42 as answer;
+----
+DEFER_BINDING is not supported for Iceberg views: an output schema is required
+
 query I
 select count(*) from duckdb_views() where database_name = 'my_datalake' and schema_name = 'default' and view_name in ('v_deferred', 'v_deferred_alias');
 ----
