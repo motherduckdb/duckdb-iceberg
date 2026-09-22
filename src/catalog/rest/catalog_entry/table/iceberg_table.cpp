@@ -671,9 +671,10 @@ bool IcebergTable::HasTransactionUpdates() const {
 }
 
 void IcebergTable::RefreshFromCatalog(ClientContext &context) {
-	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
-	auto table_key = GetTableKey();
-	auto get_table_result = IRCAPI::GetTable(context, ic_catalog, schema, name);
+	ApplyRefreshResult(IRCAPI::GetTable(context, catalog, schema, name));
+}
+
+void IcebergTable::ApplyRefreshResult(IcebergLoadTableResult get_table_result) {
 	if (get_table_result.error_) {
 		throw HTTPException(
 		    StringUtil::Format("GetTableInformation endpoint returned response code %s with message \"%s\"",
@@ -683,7 +684,7 @@ void IcebergTable::RefreshFromCatalog(ClientContext &context) {
 	schema_versions.clear();
 	dummy_entry.reset();
 	InitializeFromLoadTableResult(load_table_result);
-	ic_catalog.table_request_cache.SetOrOverwrite(table_key, std::move(get_table_result.result_));
+	catalog.table_request_cache.SetOrOverwrite(GetTableKey(), std::move(get_table_result.result_));
 }
 
 IcebergTable IcebergTable::Copy() const {
