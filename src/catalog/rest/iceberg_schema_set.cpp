@@ -152,8 +152,12 @@ void IcebergSchemaSet::LoadEntriesInternal(ClientContext &context) {
 	if (schema_listed) {
 		return;
 	}
-	auto schemas = IRCAPI::GetSchemas(context, ic_catalog, {});
-	for (const auto &schema : schemas) {
+	ApplyListResult(IRCAPI::GetSchemas(context, ic_catalog, {}));
+	iceberg_transaction.called_list_schemas = true;
+}
+
+void IcebergSchemaSet::ApplyListResult(IcebergListSchemasResult schemas) {
+	for (auto &schema : schemas) {
 		CreateSchemaInfo info;
 		info.SetQualifiedName(QualifiedName(info.GetQualifiedName().Catalog(), Identifier(GetSchemaName(schema.items)),
 		                                    info.GetQualifiedName().Name()));
@@ -162,7 +166,6 @@ void IcebergSchemaSet::LoadEntriesInternal(ClientContext &context) {
 		schema_entry->namespace_items = std::move(schema.items);
 		CreateEntryInternal(std::move(schema_entry));
 	}
-	iceberg_transaction.called_list_schemas = true;
 }
 
 shared_ptr<IcebergSchemaEntry> IcebergSchemaSet::CreateEntryInternal(shared_ptr<IcebergSchemaEntry> entry) {

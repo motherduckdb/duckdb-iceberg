@@ -283,8 +283,16 @@ IRCAPI::GetNamespace(ClientContext &context, IcebergCatalog &catalog, const Iceb
 	return ret;
 }
 
-optional<vector<rest_api_objects::TableIdentifier>> IRCAPI::GetTables(ClientContext &context, IcebergCatalog &catalog,
-                                                                      const IcebergSchemaEntry &schema) {
+IcebergListTablesResult IRCAPI::GetTables(ClientContext &context, IcebergCatalog &catalog,
+                                          const IcebergSchemaEntry &schema) {
+	return IcebergListTablesRequest(schema.namespace_items).Execute(context, catalog);
+}
+
+IcebergListTablesRequest::IcebergListTablesRequest(vector<string> namespace_items)
+    : namespace_items(std::move(namespace_items)) {
+}
+
+IcebergListTablesResult IcebergListTablesRequest::Execute(ClientContext &context, IcebergCatalog &catalog) const {
 	vector<rest_api_objects::TableIdentifier> all_identifiers;
 	string page_token;
 
@@ -293,7 +301,7 @@ optional<vector<rest_api_objects::TableIdentifier>> IRCAPI::GetTables(ClientCont
 		url_builder.AddPrefixComponents(catalog.prefix);
 		url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
 		url_builder.AddPathComponent(
-		    IRCPathComponent::NamespaceComponent(schema.namespace_items, catalog.namespace_separator));
+		    IRCPathComponent::NamespaceComponent(namespace_items, catalog.namespace_separator));
 		url_builder.AddPathComponent(IRCPathComponent::RegularComponent("tables"));
 		if (!page_token.empty()) {
 			url_builder.SetParam("pageToken", IRCPathComponent::RegularComponent(page_token));
@@ -342,7 +350,15 @@ optional<vector<rest_api_objects::TableIdentifier>> IRCAPI::GetTables(ClientCont
 	return all_identifiers;
 }
 
-vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IcebergCatalog &catalog, const vector<string> &parent) {
+IcebergListSchemasResult IRCAPI::GetSchemas(ClientContext &context, IcebergCatalog &catalog,
+                                            const vector<string> &parent) {
+	return IcebergListSchemasRequest(parent).Execute(context, catalog);
+}
+
+IcebergListSchemasRequest::IcebergListSchemasRequest(vector<string> parent) : parent(std::move(parent)) {
+}
+
+IcebergListSchemasResult IcebergListSchemasRequest::Execute(ClientContext &context, IcebergCatalog &catalog) const {
 	vector<IRCAPISchema> result;
 	string page_token = "";
 	do {
@@ -389,7 +405,7 @@ vector<IRCAPISchema> IRCAPI::GetSchemas(ClientContext &context, IcebergCatalog &
 			if (catalog.attach_options.support_nested_namespaces) {
 				auto new_parent = parent;
 				new_parent.push_back(schema_result.items.back());
-				auto nested_namespaces = GetSchemas(context, catalog, new_parent);
+				auto nested_namespaces = IcebergListSchemasRequest(std::move(new_parent)).Execute(context, catalog);
 				result.insert(result.end(), std::make_move_iterator(nested_namespaces.begin()),
 				              std::make_move_iterator(nested_namespaces.end()));
 			}
