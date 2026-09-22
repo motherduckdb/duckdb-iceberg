@@ -11,6 +11,7 @@
 #include "duckdb/planner/expression_binder/table_function_binder.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/logging/logger.hpp"
+#include "duckdb/parallel/task_executor.hpp"
 
 #include "catalog/rest/api/catalog_api.hpp"
 #include "catalog/rest/api/catalog_utils.hpp"
@@ -31,6 +32,13 @@ IcebergTableSet::IcebergTableSet(IcebergSchemaEntry &schema) : schema(schema), c
 }
 
 bool IcebergTableSet::FillEntry(ClientContext &context, IcebergTable &table) {
+	if (TryFillEntryFromCache(context, table)) {
+		return true;
+	}
+	return ApplyLoadResult(table, IRCAPI::GetTable(context, catalog.Cast<IcebergCatalog>(), schema, table.name));
+}
+
+bool IcebergTableSet::TryFillEntryFromCache(ClientContext &context, IcebergTable &table) {
 	// If the table is already loaded, no need to fill again
 	if (!table.schema_versions.empty()) {
 		return true;
@@ -51,8 +59,7 @@ bool IcebergTableSet::FillEntry(ClientContext &context, IcebergTable &table) {
 		}
 	}
 
-	// No valid cached result or caching disabled, make a new request
-	return ApplyLoadResult(table, IRCAPI::GetTable(context, ic_catalog, schema, table.name));
+	return false;
 }
 
 bool IcebergTableSet::ApplyLoadResult(IcebergTable &table, IcebergLoadTableResult get_table_result) {
@@ -78,6 +85,82 @@ bool IcebergTableSet::ApplyLoadResult(IcebergTable &table, IcebergLoadTableResul
 	catalog.Cast<IcebergCatalog>().table_request_cache.SetOrOverwrite(table.GetTableKey(),
 	                                                                  std::move(get_table_result.result_));
 	return true;
+}
+
+namespace {
+
+struct PendingTableLoad {
+	explicit PendingTableLoad(IcebergTable &table) : table(table), request(table.schema.namespace_items, table.name) {
+	}
+
+	IcebergTable &table;
+	IcebergLoadTableRequest request;
+	IcebergLoadTableResult result;
+	ErrorData error;
+};
+
+class LoadTableTask : public BaseExecutorTask {
+public:
+	LoadTableTask(TaskExecutor &executor, ClientContext &context, IcebergCatalog &catalog, PendingTableLoad &load)
+	    : BaseExecutorTask(executor), context(context), catalog(catalog), load(load) {
+	}
+
+	void ExecuteTask() override {
+		if (context.IsInterrupted()) {
+			throw InterruptException();
+		}
+		try {
+			// Workers only fetch owned responses. The caller initializes tables and updates the cache after draining.
+			load.result = load.request.Execute(context, catalog);
+		} catch (std::exception &ex) {
+			load.error = ErrorData(ex);
+		}
+	}
+
+private:
+	ClientContext &context;
+	IcebergCatalog &catalog;
+	PendingTableLoad &load;
+};
+
+void WarnTableLoadFailure(ClientContext &context, IcebergTable &table, const ErrorData &error) {
+	DUCKDB_LOG_WARNING(context, "Could not resolve the columns of Iceberg table '%s' while listing: %s",
+	                   table.GetTableKey(), error.RawMessage());
+}
+
+} // namespace
+
+void IcebergTableSet::FillEntries(ClientContext &context, const vector<reference<IcebergTable>> &tables) {
+	vector<unique_ptr<PendingTableLoad>> pending;
+	for (auto &table_ref : tables) {
+		auto &table = table_ref.get();
+		try {
+			if (!TryFillEntryFromCache(context, table)) {
+				pending.push_back(make_uniq<PendingTableLoad>(table));
+			}
+		} catch (std::exception &ex) {
+			WarnTableLoadFailure(context, table, ErrorData(ex));
+		}
+	}
+	// Declared after pending so even an exception during scheduling drains tasks before destroying their results.
+	TaskExecutor executor(context, TaskSchedulerType::ASYNC);
+	for (auto &load : pending) {
+		executor.ScheduleTask(make_uniq<LoadTableTask>(executor, context, catalog.Cast<IcebergCatalog>(), *load));
+	}
+	executor.WorkOnTasks();
+	if (context.IsInterrupted()) {
+		throw InterruptException();
+	}
+	for (auto &load : pending) {
+		try {
+			if (load->error.HasError()) {
+				load->error.Throw();
+			}
+			ApplyLoadResult(load->table, std::move(load->result));
+		} catch (std::exception &ex) {
+			WarnTableLoadFailure(context, load->table, ErrorData(ex));
+		}
+	}
 }
 
 IcebergTableSchemaVersion &IcebergTableSet::GetOrCreateDummy(IcebergTable &table_info) const {
@@ -109,34 +192,38 @@ void IcebergTableSet::Scan(ClientContext &context, const std::function<void(Cata
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	LoadEntriesInternal(context);
 	const bool eager = ic_catalog.attach_options.table_resolution == IcebergTableResolution::EAGER;
-	for (auto &entry : entries) {
-		auto &table_info = *entry.second;
-		auto table_key = table_info.GetTableKey();
-		iceberg_transaction.tables[table_key] = entry.second;
-
-		if (eager && table_info.schema_versions.empty()) {
-			try {
-				FillEntry(context, table_info);
-			} catch (std::exception &ex) {
-				ErrorData error(ex);
-				DUCKDB_LOG_WARNING(context, "Could not resolve the columns of Iceberg table '%s' while listing: %s",
-				                   table_key, error.RawMessage());
-			}
+	// Regular workers can also execute async tasks; NumberOfThreads includes the calling thread.
+	auto &scheduler = TaskScheduler::GetScheduler(context);
+	const auto batch_size =
+	    eager ? MinValue<idx_t>(8, scheduler.NumberOfThreads() + scheduler.NumberOfAsyncThreads()) : 1;
+	auto entry = entries.begin();
+	while (entry != entries.end()) {
+		vector<reference<IcebergTable>> batch;
+		for (idx_t i = 0; i < batch_size && entry != entries.end(); i++, ++entry) {
+			auto &table_info = *entry->second;
+			iceberg_transaction.tables[table_info.GetTableKey()] = entry->second;
+			batch.emplace_back(table_info);
+		}
+		if (eager) {
+			FillEntries(context, batch);
 		}
 
-		if (!table_info.schema_versions.empty()) {
-			// The table has already been resolved (e.g. via DESCRIBE or a scan), so its full schema -
-			// including column comments mapped from the Iceberg field 'doc' - is available. Surface the
-			// resolved entry instead of the placeholder so listings reflect the real columns.
-			auto resolved = table_info.GetLatestSchema();
-			if (resolved) {
-				callback(*resolved);
-				continue;
+		for (auto &table_ref : batch) {
+			auto &table_info = table_ref.get();
+			if (!table_info.schema_versions.empty()) {
+				// The table has already been resolved (e.g. via DESCRIBE or a scan), so its full schema -
+				// including column comments mapped from the Iceberg field 'doc' - is available. Surface the
+				// resolved entry instead of the placeholder so listings reflect the real columns.
+				auto resolved = table_info.GetLatestSchema();
+				if (resolved) {
+					callback(*resolved);
+					continue;
+				}
 			}
-		}
 
-		auto &dummy = GetOrCreateDummy(table_info);
-		callback(dummy);
+			auto &dummy = GetOrCreateDummy(table_info);
+			callback(dummy);
+		}
 	}
 }
 
