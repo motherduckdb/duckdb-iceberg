@@ -36,7 +36,7 @@ void LoadTableResultCache::EvictIfCurrent(const IcebergTable &table) {
 
 IcebergCatalog::IcebergCatalog(AttachedDatabase &db_p, AccessMode access_mode,
                                unique_ptr<IcebergAuthorization> auth_handler, IcebergAttachOptions &attach_options_p,
-                               const Identifier &default_schema)
+                               const optional<Identifier> &default_schema)
     : Catalog(db_p), access_mode(access_mode), auth_handler(std::move(auth_handler)),
       base_uri(attach_options_p.catalog_uri), version("v1"), attach_options(attach_options_p),
       default_schema(default_schema), warehouse(attach_options.warehouse), schemas(*this),
@@ -69,9 +69,6 @@ optional_ptr<SchemaCatalogEntry> IcebergCatalog::LookupSchema(CatalogTransaction
 }
 
 optional<Identifier> IcebergCatalog::GetDefaultSchema() const {
-	if (default_schema.empty()) {
-		return nullopt;
-	}
 	return default_schema;
 }
 
@@ -163,11 +160,6 @@ DatabaseSize IcebergCatalog::GetDatabaseSize(ClientContext &context) {
 }
 
 ErrorData IcebergCatalog::SupportsCreateTable(BoundCreateTableInfo &info) {
-	auto &base = info.Base().Cast<CreateTableInfo>();
-	if (!base.sort_keys.empty()) {
-		return ErrorData(ExceptionType::CATALOG,
-		                 StringUtil::Format("SORTED BY is not supported for tables in a %s catalog", GetCatalogType()));
-	}
 	return ErrorData();
 }
 

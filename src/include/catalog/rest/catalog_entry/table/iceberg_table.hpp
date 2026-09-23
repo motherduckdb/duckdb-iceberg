@@ -4,6 +4,7 @@
 #include "duckdb/storage/external_file_cache/caching_file_system_wrapper.hpp"
 
 #include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
+#include "catalog/rest/api/catalog_api.hpp"
 #include "core/metadata/manifest/iceberg_manifest.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_data.hpp"
@@ -52,8 +53,13 @@ public:
 	static IcebergPartitionSpec BuildPartitionSpec(const vector<unique_ptr<ParsedExpression>> &partition_keys,
 	                                               const IcebergTableSchema &schema, int32_t spec_id,
 	                                               idx_t base_partition_field_id);
-	static IcebergSortOrder BuildSortOrder(const vector<OrderByNode> &orders, const IcebergTableSchema &schema,
-	                                       int32_t sort_order_id);
+	static IcebergSortOrder BuildSortOrder(ClientContext &context, const vector<OrderByNode> &orders,
+	                                       const IcebergTableSchema &schema, int32_t sort_order_id);
+	//! Build a sort order from CreateTableInfo::sort_keys (expressions in the current DuckDB parser),
+	//! resolving direction and null ordering from the client settings.
+	static IcebergSortOrder BuildSortOrder(ClientContext &context,
+	                                       const vector<unique_ptr<ParsedExpression>> &sort_keys,
+	                                       const IcebergTableSchema &schema, int32_t sort_order_id);
 	IRCAPITableCredentials GetVendedCredentials(ClientContext &context) const;
 	IRCAPITableCredentials
 	GetVendedCredentials(ClientContext &context,
@@ -93,6 +99,7 @@ public:
 	optional_ptr<const rest_api_objects::LoadTableResult> initialization_source;
 
 private:
+	void ApplyRefreshResult(IcebergLoadTableResult result);
 	void SetLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result);
 
 	//! Unchanged by rename, used to check for a rename

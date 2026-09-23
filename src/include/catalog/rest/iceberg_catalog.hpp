@@ -92,7 +92,7 @@ class IcebergCatalog : public Catalog {
 public:
 	explicit IcebergCatalog(AttachedDatabase &db_p, AccessMode access_mode,
 	                        unique_ptr<IcebergAuthorization> auth_handler, IcebergAttachOptions &attach_options,
-	                        const Identifier &default_schema);
+	                        const optional<Identifier> &default_schema);
 	~IcebergCatalog() override;
 
 public:
@@ -178,7 +178,8 @@ public:
 	string namespace_separator = "\x1f";
 	//! attach options
 	IcebergAttachOptions attach_options;
-	Identifier default_schema;
+	//! Optionally (user-)provided default schema to use
+	optional<Identifier> default_schema;
 
 private:
 	//! warehouse

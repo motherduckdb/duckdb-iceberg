@@ -74,6 +74,10 @@ static string XWWWFormUrlEncode(const string &input) {
 }
 
 static unique_ptr<OAuth2Credentials> ExtractOAuth2CredentialsFromSecret(const KeyValueSecret &secret) {
+	// Extra headers are forwarded to the OAuth2 token endpoint as well, not just to catalog requests (issue #978).
+	unordered_map<string, string> extra_http_headers;
+	IcebergAuthorization::ParseExtraHttpHeaders(secret.TryGetValue("extra_http_headers"), extra_http_headers);
+
 	auto client_id = secret.TryGetValue("client_id");
 	auto client_secret = secret.TryGetValue("client_secret");
 	unique_ptr<ClientCredentials> client;
@@ -85,12 +89,17 @@ static unique_ptr<OAuth2Credentials> ExtractOAuth2CredentialsFromSecret(const Ke
 		if (!client) {
 			throw InvalidInputException("Refresh-token credentials require both 'client_id' and 'client_secret'");
 		}
-		return make_uniq<RefreshTokenCredentials>(*client, refresh_token.ToString());
+		auto refresh_credentials = make_uniq<RefreshTokenCredentials>(*client, refresh_token.ToString());
+		refresh_credentials->extra_http_headers = extra_http_headers;
+		return std::move(refresh_credentials);
 	}
 	auto grant_type = secret.TryGetValue("oauth2_grant_type");
 	if (!grant_type.IsNull() && !grant_type.ToString().empty() &&
 	    !StringUtil::CIEquals(grant_type.ToString(), "client_credentials")) {
 		throw InvalidInputException("Unsupported OAuth2 grant type '%s'", grant_type.ToString());
+	}
+	if (client) {
+		client->extra_http_headers = extra_http_headers;
 	}
 	return std::move(client);
 }
@@ -113,6 +122,11 @@ static rest_api_objects::OAuthTokenResponse FetchOAuth2TokenResponse(ClientConte
                                                                      const string &uri, const string &scope) {
 	vector<string> parameters;
 	HTTPHeaders headers(*context.db);
+	// Forward user-supplied headers (e.g. `Polaris-Realm` for multi-tenant Polaris catalogs, see
+	// issue #978) before the service headers so the latter always take precedence.
+	for (auto &entry : credentials.extra_http_headers) {
+		headers.Insert(entry.first, entry.second);
+	}
 	headers.Insert("Content-Type", "application/x-www-form-urlencoded");
 
 	switch (credentials.grant_type) {
@@ -149,7 +163,7 @@ static rest_api_objects::OAuthTokenResponse FetchOAuth2TokenResponse(ClientConte
 	unique_ptr<HTTPResponse> response;
 	try {
 		auto endpoint_builder = IRCEndpointBuilder::FromURL(uri);
-		response = APIUtils::Request(RequestType::POST_REQUEST, nullptr, context, endpoint_builder, headers, post_data);
+		response = APIUtils::Request(RequestType::POST_REQUEST, context, endpoint_builder, headers, post_data);
 	} catch (std::exception &ex) {
 		// Only catch actual transport/network errors (not HTTP errors)
 		ErrorData error(ex);
@@ -480,7 +494,7 @@ unique_ptr<HTTPResponse> OAuth2Authorization::Request(RequestType request_type, 
 		headers["Authorization"] = StringUtil::Format("Bearer %s", bearer_token);
 	}
 
-	auto response = APIUtils::Request(request_type, db, context, endpoint_builder, headers, data);
+	auto response = APIUtils::Request(request_type, context, endpoint_builder, headers, data);
 
 	// --- Step 3: Reactive 401 refresh (exactly once) ---
 	// If the server rejected our token (e.g., revoked before expiry, clock skew,
@@ -498,7 +512,7 @@ unique_ptr<HTTPResponse> OAuth2Authorization::Request(RequestType request_type, 
 		// Lock released before retry -- avoid serializing catalog requests
 		if (should_retry) {
 			headers["Authorization"] = StringUtil::Format("Bearer %s", bearer_token);
-			response = APIUtils::Request(request_type, db, context, endpoint_builder, headers, data);
+			response = APIUtils::Request(request_type, context, endpoint_builder, headers, data);
 		}
 	}
 

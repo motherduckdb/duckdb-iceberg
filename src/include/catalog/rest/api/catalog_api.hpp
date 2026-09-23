@@ -41,6 +41,51 @@ public:
 	optional<rest_api_objects::IcebergErrorResponse> error_;
 };
 
+using IcebergLoadTableResult = APIResult<unique_ptr<const rest_api_objects::LoadTableResult>>;
+
+//! Owns the request inputs; execution only fetches and parses a response.
+//! The caller supplies a live context and catalog and owns cache lookup and result publication.
+class IcebergLoadTableRequest {
+public:
+	using Result = IcebergLoadTableResult;
+
+	IcebergLoadTableRequest(vector<string> namespace_items, string table_name);
+	IcebergLoadTableResult Execute(ClientContext &context, IcebergCatalog &catalog) const;
+
+private:
+	vector<string> namespace_items;
+	string table_name;
+};
+
+//! A refused table listing is distinct from a successful, empty listing.
+using IcebergListTablesResult = optional<vector<rest_api_objects::TableIdentifier>>;
+//! Schema listings retain already collected results if a subsequent page is refused.
+using IcebergListSchemasResult = vector<IRCAPISchema>;
+
+//! Owns the namespace; execution fetches all pages without publishing catalog entries.
+class IcebergListTablesRequest {
+public:
+	using Result = IcebergListTablesResult;
+
+	explicit IcebergListTablesRequest(vector<string> namespace_items);
+	IcebergListTablesResult Execute(ClientContext &context, IcebergCatalog &catalog) const;
+
+private:
+	vector<string> namespace_items;
+};
+
+//! Owns the parent namespace; execution includes pagination and configured nested-namespace traversal.
+class IcebergListSchemasRequest {
+public:
+	using Result = IcebergListSchemasResult;
+
+	explicit IcebergListSchemasRequest(vector<string> parent);
+	IcebergListSchemasResult Execute(ClientContext &context, IcebergCatalog &catalog) const;
+
+private:
+	vector<string> parent;
+};
+
 class CommitResult {
 public:
 	CommitResult() {
@@ -68,25 +113,23 @@ class IRCAPI {
 public:
 	static const string API_VERSION_1;
 	//! Returns 'nullopt' if the catalog refused the listing, which must not be read as "the schema is empty".
-	static optional<vector<rest_api_objects::TableIdentifier>>
-	GetTables(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema);
+	static IcebergListTablesResult GetTables(ClientContext &context, IcebergCatalog &catalog,
+	                                         const IcebergSchemaEntry &schema);
 	static bool VerifyResponse(ClientContext &context, IcebergCatalog &catalog, IRCEndpointBuilder &url_builder,
 	                           bool execute_head);
 	static bool VerifySchemaExistence(ClientContext &context, IcebergCatalog &catalog, const string &schema);
 	static bool VerifyTableExistence(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema,
 	                                 const string &table);
 	static vector<string> ParseSchemaName(const string &namespace_name);
-	static APIResult<unique_ptr<const rest_api_objects::LoadTableResult>> GetTable(ClientContext &context,
-	                                                                               IcebergCatalog &catalog,
-	                                                                               const IcebergSchemaEntry &schema,
-	                                                                               const string &table_name);
+	static IcebergLoadTableResult GetTable(ClientContext &context, IcebergCatalog &catalog,
+	                                       const IcebergSchemaEntry &schema, const string &table_name);
 	static APIResult<unique_ptr<const rest_api_objects::LoadCredentialsResponse>>
 	GetTableCredentials(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema,
 	                    const string &table_name);
 	static APIResult<unique_ptr<const rest_api_objects::GetNamespaceResponse>>
 	GetNamespace(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema);
-	static vector<IRCAPISchema> GetSchemas(ClientContext &context, IcebergCatalog &catalog,
-	                                       const vector<string> &parent);
+	static IcebergListSchemasResult GetSchemas(ClientContext &context, IcebergCatalog &catalog,
+	                                           const vector<string> &parent);
 	static CommitResult CommitTableUpdate(ClientContext &context, IcebergCatalog &catalog, const vector<string> &schema,
 	                                      const string &table_name, const string &body);
 	static void CommitTableDelete(ClientContext &context, IcebergCatalog &catalog, const vector<string> &schema,

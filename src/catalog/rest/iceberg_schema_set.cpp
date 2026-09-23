@@ -6,6 +6,7 @@
 
 #include "catalog/rest/api/catalog_api.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/iceberg_request_task.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 
 namespace duckdb {
@@ -152,8 +153,22 @@ void IcebergSchemaSet::LoadEntriesInternal(ClientContext &context) {
 	if (schema_listed) {
 		return;
 	}
-	auto schemas = IRCAPI::GetSchemas(context, ic_catalog, {});
-	for (const auto &schema : schemas) {
+	// Drain before publishing entries or marking the transaction's listing complete.
+	IcebergRequestResult<IcebergListSchemasResult> result;
+	TaskExecutor executor(context, TaskSchedulerType::ASYNC);
+	executor.ScheduleTask(make_uniq<IcebergRequestTask<IcebergListSchemasRequest>>(
+	    executor, context, ic_catalog, IcebergListSchemasRequest({}), result));
+	auto schemas = result.WaitAndTakeResult(context, executor);
+	executor.WorkOnTasks();
+	if (context.IsInterrupted()) {
+		throw InterruptException();
+	}
+	ApplyListResult(std::move(schemas));
+	iceberg_transaction.called_list_schemas = true;
+}
+
+void IcebergSchemaSet::ApplyListResult(IcebergListSchemasResult schemas) {
+	for (auto &schema : schemas) {
 		CreateSchemaInfo info;
 		info.SetQualifiedName(QualifiedName(info.GetQualifiedName().Catalog(), Identifier(GetSchemaName(schema.items)),
 		                                    info.GetQualifiedName().Name()));
@@ -162,7 +177,6 @@ void IcebergSchemaSet::LoadEntriesInternal(ClientContext &context) {
 		schema_entry->namespace_items = std::move(schema.items);
 		CreateEntryInternal(std::move(schema_entry));
 	}
-	iceberg_transaction.called_list_schemas = true;
 }
 
 shared_ptr<IcebergSchemaEntry> IcebergSchemaSet::CreateEntryInternal(shared_ptr<IcebergSchemaEntry> entry) {

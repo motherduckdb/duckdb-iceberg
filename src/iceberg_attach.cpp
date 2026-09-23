@@ -201,7 +201,7 @@ unique_ptr<Catalog> IcebergAttach::Attach(optional_ptr<StorageExtensionInfo> sto
 	attach_options.name = name;
 
 	// check if we have a secret provided
-	Identifier default_schema;
+	optional<Identifier> default_schema;
 	string endpoint_type_string;
 	string authorization_type_string;
 	string access_mode_string;
@@ -214,44 +214,43 @@ unique_ptr<Catalog> IcebergAttach::Attach(optional_ptr<StorageExtensionInfo> sto
 	//! First handle generic attach options
 	for (auto &entry : normalized_options) {
 		auto &lower_name = entry.first;
+		auto &argument = entry.second;
 		if (lower_name == "type" || lower_name == "read_only") {
 			continue;
 		}
 
 		if (lower_name == "endpoint_type") {
-			endpoint_type_string = StringUtil::Lower(entry.second.ToString());
+			endpoint_type_string = StringUtil::Lower(argument.ToString());
 		} else if (lower_name == "authorization_type") {
-			authorization_type_string = StringUtil::Lower(entry.second.ToString());
+			authorization_type_string = StringUtil::Lower(argument.ToString());
 		} else if (lower_name == "access_delegation_mode") {
-			access_mode_string = StringUtil::Lower(entry.second.ToString());
+			access_mode_string = StringUtil::Lower(argument.ToString());
 		} else if (lower_name == "uri") {
-			attach_options.catalog_uri = entry.second.ToString();
+			attach_options.catalog_uri = argument.ToString();
 		} else if (lower_name == "stage_create_tables") {
-			auto result = entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+			auto result = argument.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
 			attach_options.stage_create_tables = result;
 			set_by_attach_options.insert("stage_create_tables");
 		} else if (lower_name == "disable_multi_table_commit") {
-			attach_options.disable_multi_table_commit =
-			    entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+			attach_options.disable_multi_table_commit = argument.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
 		} else if (lower_name == "skip_create_table_metadata_updates") {
 			attach_options.skip_create_table_metadata_updates =
-			    entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+			    argument.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
 		} else if (lower_name == "remove_files_on_delete") {
-			attach_options.remove_files_on_delete = entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+			attach_options.remove_files_on_delete = argument.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
 			set_by_attach_options.insert("remove_files_on_delete");
 		} else if (lower_name == "support_nested_namespaces") {
-			attach_options.support_nested_namespaces =
-			    entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+			attach_options.support_nested_namespaces = argument.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
 			set_by_attach_options.insert("support_nested_namespaces");
 		} else if (lower_name == "purge_requested") {
-			attach_options.purge_requested = entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+			attach_options.purge_requested = argument.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
 			set_by_attach_options.insert("purge_requested");
 		} else if (lower_name == "default_table_location_from_namespace") {
 			attach_options.default_table_location_from_namespace =
-			    entry.second.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
+			    argument.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
 			set_by_attach_options.insert("default_table_location_from_namespace");
 		} else if (lower_name == "table_resolution") {
-			auto value = StringUtil::Lower(entry.second.ToString());
+			auto value = StringUtil::Lower(argument.ToString());
 			if (value == "lazy") {
 				attach_options.table_resolution = IcebergTableResolution::LAZY;
 			} else if (value == "eager") {
@@ -261,11 +260,20 @@ unique_ptr<Catalog> IcebergAttach::Attach(optional_ptr<StorageExtensionInfo> sto
 				    "Unrecognized 'table_resolution' (%s), accepted options are: lazy, eager", value);
 			}
 		} else if (lower_name == "default_schema") {
-			default_schema = Identifier(entry.second.ToString());
+			if (argument.IsNull()) {
+				default_schema = std::nullopt;
+				continue;
+			}
+			auto schema_name = argument.ToString();
+			if (schema_name.empty()) {
+				default_schema = std::nullopt;
+				continue;
+			}
+			default_schema = Identifier(schema_name);
 		} else if (lower_name == "encode_entire_prefix") {
 			attach_options.encode_entire_prefix = true;
 		} else if (lower_name == "max_table_staleness") {
-			auto interval_option = entry.second.DefaultCastAs(LogicalType::INTERVAL);
+			auto interval_option = argument.DefaultCastAs(LogicalType::INTERVAL);
 			auto interval_value = interval_option.GetValue<interval_t>();
 			int64_t interval_in_micros = 0;
 			if (!Interval::TryGetMicro(interval_value, interval_in_micros)) {
@@ -365,11 +373,10 @@ unique_ptr<Catalog> IcebergAttach::Attach(optional_ptr<StorageExtensionInfo> sto
 	//! Remember the normalized attach options so that a later ATTACH OR REPLACE can detect when they change.
 	catalog->SetAttachOptions(options.options);
 	catalog->GetConfig(context, endpoint_type);
-	if (!default_schema.empty() &&
-	    !IRCAPI::VerifySchemaExistence(context, *catalog, default_schema.GetIdentifierName())) {
+	if (default_schema && !IRCAPI::VerifySchemaExistence(context, *catalog, default_schema->GetIdentifierName())) {
 		throw InvalidConfigurationException(
 		    "default_schema '%s' does not exist. ATTACH with no DEFAULT_SCHEMA to successfully attach",
-		    default_schema.GetIdentifierName());
+		    default_schema->GetIdentifierName());
 	}
 	return std::move(catalog);
 }

@@ -4,6 +4,10 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
+require-env FORMAT_V3_SUPPORT
+
+require-env UNKNOWN_SUPPORT
+
 require avro
 
 require parquet
@@ -46,9 +50,9 @@ CREATE TEMP TABLE unknown_type_values AS SELECT
     {'n': 42, 's': 'hello'}::unknown_target_struct AS "unknown_target_struct",
     [42, NULL, 7]::INTEGER[] AS "INTEGER[]",
     MAP {1: 'hello', 2: NULL} AS "MAP(INTEGER,VARCHAR)",
-    'POINT (1 2)'::GEOMETRY AS "GEOMETRY";
+    'POINT (1 2)'::GEOMETRY('OGC:CRS84') AS "GEOMETRY('OGC:CRS84')";
 
-foreach type BOOLEAN INTEGER BIGINT FLOAT DOUBLE DECIMAL(4,1) DECIMAL(9,4) DECIMAL(18,6) DECIMAL(38,10) DATE TIME TIMESTAMP TIMESTAMPTZ TIMESTAMP_NS TIMESTAMPTZ_NS UUID VARCHAR BLOB unknown_target_struct INTEGER[] MAP(INTEGER,VARCHAR) GEOMETRY
+foreach type BOOLEAN INTEGER BIGINT FLOAT DOUBLE DECIMAL(4,1) DECIMAL(9,4) DECIMAL(18,6) DECIMAL(38,10) DATE TIME TIMESTAMP TIMESTAMPTZ TIMESTAMP_NS TIMESTAMPTZ_NS UUID VARCHAR BLOB unknown_target_struct INTEGER[] MAP(INTEGER,VARCHAR) GEOMETRY('OGC:CRS84')
 
 statement ok
 DROP TABLE IF EXISTS my_datalake.default.alter_unknown_type;
@@ -71,22 +75,36 @@ ALTER TABLE my_datalake.default.alter_unknown_type ALTER COLUMN r TYPE {type};
 statement ok
 ALTER TABLE my_datalake.default.alter_unknown_type ALTER COLUMN s.v TYPE {type};
 
+# Check the actual bound field types on the row committed before the promotion.
+query II
+SELECT
+	CASE WHEN typeof(r) = typeof(v) THEN true::VARIANT ELSE {
+		'actual': typeof(r),
+		'expected': typeof(v)
+	}::VARIANT END,
+	CASE WHEN typeof(s.v) = typeof(v) THEN true::VARIANT ELSE {
+		'actual': typeof(s.v),
+		'expected': typeof(v)
+	}::VARIANT END
+FROM my_datalake.default.alter_unknown_type,
+     (SELECT "{type}" AS v FROM unknown_type_values) expected
+WHERE id = 1;
+----
+true	true
+
 statement ok
 INSERT INTO my_datalake.default.alter_unknown_type
 SELECT 2, v, {'kept': 7, 'v': v} FROM (SELECT "{type}" AS v FROM unknown_type_values);
 
-# Both fields take the new type. The old row keeps its NULLs and the field written next to them, and the new row
-# keeps its values.
-query IIIIIIII
-SELECT id, typeof(r) = typeof(v), typeof(s.v) = typeof(v),
-       r IS NULL, s.v IS NULL, s.kept,
-       r IS NOT DISTINCT FROM v, s.v IS NOT DISTINCT FROM v
+# The old row keeps its NULLs and the field written next to them, and the new row keeps its values.
+query IIIIII
+SELECT id, r IS NULL, s.v IS NULL, s.kept, r IS NOT DISTINCT FROM v, s.v IS NOT DISTINCT FROM v
 FROM my_datalake.default.alter_unknown_type,
      (SELECT "{type}" AS v FROM unknown_type_values) expected
 ORDER BY id;
 ----
-1	true	true	true	true	42	false	false
-2	true	true	false	false	7	true	true
+1	true	true	42	false	false
+2	false	false	7	true	true
 
 statement ok
 DROP TABLE my_datalake.default.alter_unknown_type;
@@ -119,7 +137,19 @@ FROM (SELECT "{type}" AS v FROM unknown_type_values);
 
 # Check actual bound field types, including children of newly introduced containers.
 query III
-SELECT typeof(s.v) = typeof(v), typeof(map_extract_value(m, 'new')) = typeof(v), typeof(l[1]) = typeof(v)
+SELECT
+	CASE WHEN typeof(s.v) = typeof(v) THEN true::VARIANT ELSE {
+		'actual': typeof(s.v),
+		'expected': typeof(v)
+	}::VARIANT END,
+	CASE WHEN typeof(map_extract_value(m, 'new')) = typeof(v) THEN true::VARIANT ELSE {
+		'actual': typeof(map_extract_value(m, 'new')),
+		'expected': typeof(v)
+	}::VARIANT END,
+	CASE WHEN typeof(l[1]) = typeof(v) THEN true::VARIANT ELSE {
+		'actual': typeof(l[1]),
+		'expected': typeof(v)
+	}::VARIANT END
 FROM my_datalake.default.alter_unknown_type_containers,
      (SELECT "{type}" AS v FROM unknown_type_values) expected;
 ----
