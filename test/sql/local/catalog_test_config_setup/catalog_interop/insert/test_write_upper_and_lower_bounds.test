@@ -22,7 +22,7 @@ SET TimeZone = 'UTC';
 # This test needs:
 # - spark_written_upper_lower_bounds
 
-include test/sql/local/catalog_test_config_setup/catalog_interop/other_engines/test_create_bounds.test
+include test/sql/local/catalog_test_config_setup/catalog_interop/setup/lower_upper_bounds_test.test_setup
 
 # Start transaction to keep necessary credentials in scope
 statement ok
