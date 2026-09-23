@@ -223,19 +223,21 @@ def rest_catalog(catalog_profile):
 def _find_generator_case(table_name: str):
     matches = []
     for generator_class in IcebergTest.registry:
-        generator = generator_class()
+        # Read the directory-derived identity without running subclass setup:
+        # some constructors open DuckDB connections and generate TPC-H data.
+        generator = IcebergTest(sys.modules[generator_class.__module__].__file__)
         if generator.table == table_name or generator.qualified_name == table_name:
-            matches.append(generator)
+            matches.append((generator.qualified_name, generator_class))
 
     if not matches:
         raise ValueError(f"No data generator registered for table '{table_name}'")
     if len(matches) > 1:
-        matched_names = ", ".join(generator.qualified_name for generator in matches)
+        matched_names = ", ".join(name for name, _ in matches)
         raise ValueError(
             f"Multiple data generators match '{table_name}': {matched_names}. "
             "Use the fully qualified generator name instead."
         )
-    return matches[0]
+    return matches[0][1]()
 
 
 def _resolve_seed_table(table):
