@@ -1,0 +1,7 @@
+# Reset this small fixture for each test.
+
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.slt_refresh_second;
+
+statement ok
+CREATE TABLE my_datalake.default.slt_refresh_second AS SELECT 42 AS id;

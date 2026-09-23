@@ -4,10 +4,9 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require-env DUCKDB_ICEBERG_HAVE_GENERATED_DATA
-
 include test/sql/init_requires
 
+include test/sql/local/catalog_test_config_setup/catalog_agnostic/setup/column_doc_comment.test_setup
 
 statement ok
 set enable_logging=true
@@ -19,13 +18,13 @@ set logging_level='debug'
 # catalog only exposes a lazy placeholder column (see #515), so column comments
 # are not available in a bare listing.
 statement ok
-describe my_datalake.default.column_doc_comment;
+describe my_datalake.default.slt_column_doc_comment;
 
 # The Iceberg field 'doc' is mapped to the DuckDB column comment. Fields without
 # a 'doc' (e.g. 'name') have a NULL comment.
 query II
 select column_name, comment from duckdb_columns()
-where database_name = 'my_datalake' and table_name = 'column_doc_comment'
+where database_name = 'my_datalake' and table_name = 'slt_column_doc_comment'
 order by column_index;
 ----
 id	Primary identifier

@@ -1,0 +1,13 @@
+# Small fixture: reset on every include; independent of Spark-generated tables.
+
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.slt_count_star_optimizer;
+
+statement ok
+CREATE TABLE my_datalake.default.slt_count_star_optimizer (
+    id INT,
+    name VARCHAR
+) WITH ('format-version' = '2');
+
+statement ok
+INSERT INTO my_datalake.default.slt_count_star_optimizer VALUES  (1,'aaa'), (2,'bbb');

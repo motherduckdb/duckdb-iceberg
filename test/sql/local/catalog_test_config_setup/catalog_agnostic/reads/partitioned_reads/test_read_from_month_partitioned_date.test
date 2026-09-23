@@ -7,6 +7,10 @@ include test/sql/init_requires
 
 require icu
 
+include test/sql/local/catalog_test_config_setup/catalog_agnostic/setup/month_partitioned_date.test_setup
+
+include test/sql/local/catalog_test_config_setup/catalog_agnostic/setup/hour_partitioned_timestamp.test_setup
+
 statement ok
 SET default_transaction_invalidation_policy='SYNTACTIC_ERRORS_DO_NOT_INVALIDATE';
 
@@ -21,12 +25,12 @@ statement ok
 call enable_logging('http');
 
 query I
-select dt from my_datalake.default.month_partitioned_date where dt = DATE '2025-06-01';
+select dt from my_datalake.default.slt_month_partitioned_date where dt = DATE '2025-06-01';
 ----
 2025-06-01
 
 query I
-select dt from my_datalake.default.hour_partitioned_timestamp where dt = '2025-01-01 00:00:00';
+select dt from my_datalake.default.slt_hour_partitioned_timestamp where dt = '2025-01-01 00:00:00';
 ----
 2025-01-01 00:00:00+00
 2025-01-01 00:00:00+00

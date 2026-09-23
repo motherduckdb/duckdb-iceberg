@@ -6,6 +6,7 @@ require-env CATALOG_TEST_CONFIG_SETUP
 
 include test/sql/init_requires
 
+include test/sql/local/catalog_test_config_setup/catalog_agnostic/setup/nested_types.test_setup
 
 statement ok
 set enable_logging=true
@@ -17,6 +18,6 @@ statement ok
 use my_datalake.default;
 
 query IIIII
-select * from nested_types
+select * from slt_nested_types
 ----
 1	Alice	{'street': 123 Main St, 'city': Metropolis, 'zip': 12345}	[123-456-7890, 987-654-3210]	{age=30, membership=gold}

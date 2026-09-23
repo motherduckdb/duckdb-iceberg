@@ -6,32 +6,32 @@ require-env CATALOG_TEST_CONFIG_SETUP
 
 include test/sql/init_requires
 
-require tpch
+include test/sql/local/catalog_test_config_setup/catalog_agnostic/setup/tpch_sf1.test_setup
 
 
 statement ok
-create view customer as select * from my_datalake.default.customer;
+create view customer as select * from my_datalake.slt_tpch_sf1_v1.customer;
 
 statement ok
-create view lineitem as select * from my_datalake.default.lineitem;
+create view lineitem as select * from my_datalake.slt_tpch_sf1_v1.lineitem;
 
 statement ok
-create view nation as select * from my_datalake.default.nation;
+create view nation as select * from my_datalake.slt_tpch_sf1_v1.nation;
 
 statement ok
-create view orders as select * from my_datalake.default.orders;
+create view orders as select * from my_datalake.slt_tpch_sf1_v1.orders;
 
 statement ok
-create view part as select * from my_datalake.default.part;
+create view part as select * from my_datalake.slt_tpch_sf1_v1.part;
 
 statement ok
-create view partsupp as select * from my_datalake.default.partsupp;
+create view partsupp as select * from my_datalake.slt_tpch_sf1_v1.partsupp;
 
 statement ok
-create view region as select * from my_datalake.default.region;
+create view region as select * from my_datalake.slt_tpch_sf1_v1.region;
 
 statement ok
-create view supplier as select * from my_datalake.default.supplier;
+create view supplier as select * from my_datalake.slt_tpch_sf1_v1.supplier;
 
 loop i 1 9
 

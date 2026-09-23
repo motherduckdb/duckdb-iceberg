@@ -9,6 +9,7 @@ require-env CATALOG_TEST_CONFIG_SETUP
 
 include test/sql/init_requires
 
+include test/sql/local/catalog_test_config_setup/catalog_agnostic/setup/count_star_optimizer.test_setup
 
 statement ok
 set enable_logging=true
@@ -18,7 +19,7 @@ set logging_level='debug'
 
 # use statistics information.
 query II
-explain SELECT count(*) FROM my_datalake.default.count_star_optimizer;
+explain SELECT count(*) FROM my_datalake.default.slt_count_star_optimizer;
 ----
 physical_plan	<REGEX>:.*COLUMN_DATA_SCAN.*~1.*
 
@@ -27,15 +28,15 @@ statement ok
 BEGIN;
 
 query I
-select count(*) from my_datalake.default.count_star_optimizer;
+select count(*) from my_datalake.default.slt_count_star_optimizer;
 ----
 2
 
 statement ok
-insert into my_datalake.default.count_star_optimizer select 3,'ccc';
+insert into my_datalake.default.slt_count_star_optimizer select 3,'ccc';
 
 query I
-select count(*) from my_datalake.default.count_star_optimizer;
+select count(*) from my_datalake.default.slt_count_star_optimizer;
 ----
 3
 
@@ -43,16 +44,16 @@ statement ok
 ABORT;
 
 statement ok
-delete from my_datalake.default.count_star_optimizer where id = 1;
+delete from my_datalake.default.slt_count_star_optimizer where id = 1;
 
 query I
-select count(*) from my_datalake.default.count_star_optimizer;
+select count(*) from my_datalake.default.slt_count_star_optimizer;
 ----
 1
 
 # contain delete file, do not use the statistics information.
 query II
-explain SELECT count(*) FROM  my_datalake.default.count_star_optimizer;
+explain SELECT count(*) FROM  my_datalake.default.slt_count_star_optimizer;
 ----
 physical_plan	<REGEX>:.*ICEBERG_SCAN.*row.*
 

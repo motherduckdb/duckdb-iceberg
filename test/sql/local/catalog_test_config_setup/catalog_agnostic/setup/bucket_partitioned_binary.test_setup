@@ -1,0 +1,28 @@
+# Small fixture: reset on every include; independent of Spark-generated tables.
+
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.slt_bucket_partitioned_binary;
+
+statement ok
+CREATE TABLE my_datalake.default.slt_bucket_partitioned_binary (
+    id INTEGER,
+    data BINARY,
+    label VARCHAR
+)
+PARTITIONED BY (bucket(4, data)) WITH ('format-version' = '2');
+
+statement ok
+INSERT INTO my_datalake.default.slt_bucket_partitioned_binary
+VALUES
+    (1,  from_hex('01'), 'one'),
+    (2,  from_hex('02'), 'two'),
+    (3,  from_hex('03'), 'three'),
+    (4,  from_hex('04'), 'four'),
+    (5,  from_hex('05'), 'five'),
+    (6,  from_hex('06'), 'six'),
+    (7,  from_hex('07'), 'seven'),
+    (8,  from_hex('08'), 'eight'),
+    (9,  from_hex('09'), 'nine'),
+    (10, from_hex('01'), 'one_dup'),
+    (11, from_hex('02'), 'two_dup'),
+    (12, NULL,  'null_row');

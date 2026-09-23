@@ -1,6 +1,7 @@
 import importlib
 import importlib.util
 import sys
+import subprocess
 from pathlib import Path
 import pytest
 from packaging.specifiers import SpecifierSet
@@ -118,6 +119,11 @@ def capability_param(value, *requirements: str, id: str | None = None):
 
 
 def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "duckdb_setup_tests(*paths): run sqllogictests relative to test/sql/local/catalog_test_config_setup "
+        "before reading their tables with another engine; once=True reuses an immutable setup within this session",
+    )
     config.addinivalue_line(
         "markers",
         "requires_spark(spec): require Spark version matching spec "
@@ -270,6 +276,46 @@ def catalog_connection(request, catalog_session_connection):
 @pytest.fixture()
 def spark_con(catalog_connection):
     return catalog_connection.con
+
+
+@pytest.fixture(scope="session")
+def completed_duckdb_setups():
+    return set()
+
+
+@pytest.fixture(autouse=True)
+def duckdb_setup_tests(request, completed_duckdb_setups):
+    marker = request.node.get_closest_marker("duckdb_setup_tests")
+    if marker is None:
+        return
+
+    # A Spark -> DuckDB -> Spark roundtrip must seed its source before DuckDB
+    # modifies it. Reuse the existing generator registry and capability checks.
+    if request.node.get_closest_marker("spark_seed_tables") is not None:
+        request.getfixturevalue("catalog_connection")
+
+    binary = Path(request.getfixturevalue("unittest_binary")).resolve()
+    test_config = request.getfixturevalue("unittest_test_config")
+    for relative_path in marker.args:
+        test_path = Path("test/sql/local/catalog_test_config_setup") / relative_path
+        once = marker.kwargs.get("once", False)
+        if once and test_path in completed_duckdb_setups:
+            continue
+        if not (REPO_ROOT / test_path).is_file():
+            raise pytest.UsageError(f"Missing DuckDB setup test: {test_path}")
+        result = subprocess.run(
+            [str(binary), "--test-config", str(test_config), str(test_path)],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+        )
+        output = result.stdout + result.stderr
+        if result.returncode:
+            pytest.fail(f"DuckDB setup failed: {test_path}\n{output}")
+        if "All tests were skipped" in output:
+            pytest.skip(f"DuckDB setup unavailable for this catalog/build: {test_path}\n{output}")
+        if once:
+            completed_duckdb_setups.add(test_path)
 
 
 def pytest_report_header(config):
