@@ -123,17 +123,23 @@ void IcebergTableSet::FillEntries(ClientContext &context, const vector<reference
 		executor.ScheduleTask(make_uniq<IcebergRequestTask<IcebergLoadTableRequest>>(
 		    executor, context, catalog.Cast<IcebergCatalog>(), std::move(request), load->result));
 	}
-	executor.WorkOnTasks();
-	if (context.IsInterrupted()) {
-		throw InterruptException();
-	}
+	// Consume each response independently while the other requests in this batch can still be running.
 	for (auto &load : pending) {
 		try {
-			ApplyLoadResult(load->table, load->result.TakeResult());
+			ApplyLoadResult(load->table, load->result.WaitAndTakeResult(context, executor));
 		} catch (std::exception &ex) {
-			WarnTableLoadFailure(context, load->table, ErrorData(ex));
+			ErrorData error(ex);
+			if (error.Type() == ExceptionType::INTERRUPT || executor.HasError()) {
+				throw;
+			}
+			context.InterruptCheck();
+			WarnTableLoadFailure(context, load->table, error);
 		}
 	}
+	// Join once at the batch boundary, including worker cleanup and executor-level errors.
+	// On an exception, the executor's destructor cancels and drains before pending is destroyed.
+	executor.WorkOnTasks();
+	context.InterruptCheck();
 }
 
 IcebergTableSchemaVersion &IcebergTableSet::GetOrCreateDummy(IcebergTable &table_info) const {
@@ -261,7 +267,6 @@ void IcebergTableSet::LoadEntriesInternal(ClientContext &context) {
 	executor.ScheduleTask(make_uniq<IcebergRequestTask<IcebergListTablesRequest>>(
 	    executor, context, ic_catalog, IcebergListTablesRequest(schema.namespace_items), result));
 	auto tables = result.WaitAndTakeResult(context, executor);
-	executor.WorkOnTasks();
 	if (context.IsInterrupted()) {
 		throw InterruptException();
 	}

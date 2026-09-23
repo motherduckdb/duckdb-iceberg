@@ -153,13 +153,12 @@ void IcebergSchemaSet::LoadEntriesInternal(ClientContext &context) {
 	if (schema_listed) {
 		return;
 	}
-	// Drain before publishing entries or marking the transaction's listing complete.
+	// The local executor drains on scope exit, before its result storage is destroyed.
 	IcebergRequestResult<IcebergListSchemasResult> result;
 	TaskExecutor executor(context, TaskSchedulerType::ASYNC);
 	executor.ScheduleTask(make_uniq<IcebergRequestTask<IcebergListSchemasRequest>>(
 	    executor, context, ic_catalog, IcebergListSchemasRequest({}), result));
 	auto schemas = result.WaitAndTakeResult(context, executor);
-	executor.WorkOnTasks();
 	if (context.IsInterrupted()) {
 		throw InterruptException();
 	}
