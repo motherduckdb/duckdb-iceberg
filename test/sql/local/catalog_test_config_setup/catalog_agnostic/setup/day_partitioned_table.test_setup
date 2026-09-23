@@ -1,10 +1,10 @@
-# Small fixture: reset on every include; independent of Spark-generated tables.
+# Small fixture: reset on every include.
 
 statement ok
-DROP TABLE IF EXISTS my_datalake.default.slt_day_partitioned_table;
+DROP TABLE IF EXISTS my_datalake.default.day_partitioned_table;
 
 statement ok
-CREATE TABLE my_datalake.default.slt_day_partitioned_table (
+CREATE TABLE my_datalake.default.day_partitioned_table (
 	id int,
 	ts TIMESTAMPTZ,
 	customer varchar(20),
@@ -13,7 +13,7 @@ CREATE TABLE my_datalake.default.slt_day_partitioned_table (
 PARTITIONED BY (day(ts)) WITH ('format-version' = '2');
 
 statement ok
-insert into my_datalake.default.slt_day_partitioned_table values
+insert into my_datalake.default.day_partitioned_table values
 (1000,TIMESTAMPTZ '2025-01-01 00:00:00+00','C01-00',16.87),
 (1001,TIMESTAMPTZ '2025-01-01 00:00:00+00','C01-01',80.19),
 (1002,TIMESTAMPTZ '2025-01-01 00:00:00+00','C01-02',49.46),

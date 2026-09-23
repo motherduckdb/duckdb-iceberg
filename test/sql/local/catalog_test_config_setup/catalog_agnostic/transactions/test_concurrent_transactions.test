@@ -25,6 +25,6 @@ statement ok
 SELECT * FROM information_schema.columns WHERE table_catalog = 'my_datalake';
 
 statement ok
-SELECT * FROM my_datalake.default.slt_quickstart_table LIMIT 1;
+SELECT * FROM my_datalake.default.quickstart_table LIMIT 1;
 
 endloop

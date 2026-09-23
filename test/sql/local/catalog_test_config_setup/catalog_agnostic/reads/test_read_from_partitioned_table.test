@@ -25,52 +25,52 @@ statement ok
 SET TimeZone = 'UTC';
 
 query I
-SELECT count(*) FROM my_datalake.default.slt_month_partitioned_table where ts < TIMESTAMPTZ '2025-02-01';
+SELECT count(*) FROM my_datalake.default.month_partitioned_table where ts < TIMESTAMPTZ '2025-02-01';
 ----
 5
 
 query I
-SELECT count(*) FROM my_datalake.default.slt_month_partitioned_table where ts <= TIMESTAMPTZ '2025-02-01';
+SELECT count(*) FROM my_datalake.default.month_partitioned_table where ts <= TIMESTAMPTZ '2025-02-01';
 ----
 6
 
 query I
-SELECT count(*) FROM my_datalake.default.slt_month_partitioned_table where ts = TIMESTAMPTZ '2025-02-01';
+SELECT count(*) FROM my_datalake.default.month_partitioned_table where ts = TIMESTAMPTZ '2025-02-01';
 ----
 1
 
 query I
-SELECT count(*) FROM my_datalake.default.slt_month_partitioned_table where ts > TIMESTAMPTZ '2025-02-01';
+SELECT count(*) FROM my_datalake.default.month_partitioned_table where ts > TIMESTAMPTZ '2025-02-01';
 ----
 9
 
 query I
-SELECT count(*) FROM my_datalake.default.slt_month_partitioned_table where ts >= TIMESTAMPTZ '2025-02-01';
+SELECT count(*) FROM my_datalake.default.month_partitioned_table where ts >= TIMESTAMPTZ '2025-02-01';
 ----
 10
 
 
 query I
-SELECT count(*) FROM my_datalake.default.slt_day_partitioned_table where ts < TIMESTAMPTZ '2025-01-02';
+SELECT count(*) FROM my_datalake.default.day_partitioned_table where ts < TIMESTAMPTZ '2025-01-02';
 ----
 4
 
 query I
-SELECT count(*) FROM my_datalake.default.slt_day_partitioned_table where ts <= TIMESTAMPTZ '2025-01-02';
+SELECT count(*) FROM my_datalake.default.day_partitioned_table where ts <= TIMESTAMPTZ '2025-01-02';
 ----
 9
 
 query I
-SELECT count(*) FROM my_datalake.default.slt_day_partitioned_table where ts = TIMESTAMPTZ '2025-01-02';
+SELECT count(*) FROM my_datalake.default.day_partitioned_table where ts = TIMESTAMPTZ '2025-01-02';
 ----
 5
 
 query I
-SELECT count(*) FROM my_datalake.default.slt_day_partitioned_table where ts >= TIMESTAMPTZ '2025-01-02';
+SELECT count(*) FROM my_datalake.default.day_partitioned_table where ts >= TIMESTAMPTZ '2025-01-02';
 ----
 11
 
 query I
-SELECT count(*) FROM my_datalake.default.slt_day_partitioned_table where ts > TIMESTAMPTZ '2025-01-02';
+SELECT count(*) FROM my_datalake.default.day_partitioned_table where ts > TIMESTAMPTZ '2025-01-02';
 ----
 6

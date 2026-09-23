@@ -1,10 +1,10 @@
 # Preserve both partition specs and their data files.
 
 statement ok
-DROP TABLE IF EXISTS my_datalake.default.slt_complicated_partitioned_table;
+DROP TABLE IF EXISTS my_datalake.default.complicated_partitioned_table;
 
 statement ok
-CREATE TABLE my_datalake.default.slt_complicated_partitioned_table (
+CREATE TABLE my_datalake.default.complicated_partitioned_table (
 	id int,
 	ts TIMESTAMPTZ,
 	customer varchar(20),
@@ -14,7 +14,7 @@ PARTITIONED BY (year(ts))
 WITH ('format-version' = '2', 'write.object-storage.enabled' = 'false');
 
 statement ok
-insert into my_datalake.default.slt_complicated_partitioned_table values
+insert into my_datalake.default.complicated_partitioned_table values
 (1000,TIMESTAMPTZ '2020-01-01 00:00:00+00','C01-00',16),
 (1001,TIMESTAMPTZ '2020-01-01 00:00:00+00','C01-01',80),
 (1002,TIMESTAMPTZ '2020-01-01 00:00:00+00','C01-02',49),
@@ -32,11 +32,11 @@ insert into my_datalake.default.slt_complicated_partitioned_table values
 (3004,TIMESTAMPTZ '2023-01-04 00:00:00+00','C03-04',35);
 
 statement ok
-ALTER TABLE my_datalake.default.slt_complicated_partitioned_table
+ALTER TABLE my_datalake.default.complicated_partitioned_table
 SET PARTITIONED BY (month(ts));
 
 statement ok
-insert into my_datalake.default.slt_complicated_partitioned_table values
+insert into my_datalake.default.complicated_partitioned_table values
 (4000,TIMESTAMPTZ '2020-01-10 00:00:00+00','C01-00',16),
 (4001,TIMESTAMPTZ '2020-01-10 00:00:00+00','C01-01',80),
 (4002,TIMESTAMPTZ '2020-01-10 00:00:00+00','C01-02',49),

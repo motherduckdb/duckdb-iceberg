@@ -1,10 +1,10 @@
-# Small fixture: reset on every include; independent of Spark-generated tables.
+# Small fixture: reset on every include.
 
 statement ok
-DROP TABLE IF EXISTS my_datalake.default.slt_empty_table;
+DROP TABLE IF EXISTS my_datalake.default.empty_table;
 
 statement ok
-CREATE TABLE my_datalake.default.slt_empty_table (
+CREATE TABLE my_datalake.default.empty_table (
      col1 date,
      col2 integer,
      col3 VARCHAR

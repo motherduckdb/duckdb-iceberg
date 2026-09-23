@@ -76,7 +76,7 @@ select count(*) from my_datalake.default.test;
 50
 
 query II
-select * from iceberg_table_properties(my_datalake.default.slt_table_properties) where key in ('write.update.mode', 'write.delete.mode', 'page-write-size', 'another1', 'duckdb_man') order by all;
+select * from iceberg_table_properties(my_datalake.default.table_properties) where key in ('write.update.mode', 'write.delete.mode', 'page-write-size', 'another1', 'duckdb_man') order by all;
 ----
 another1	neato
 duckdb_man	superman

@@ -18,6 +18,6 @@ statement ok
 use my_datalake.default;
 
 query IIIII
-select * from slt_nested_types
+select * from nested_types
 ----
 1	Alice	{'street': 123 Main St, 'city': Metropolis, 'zip': 12345}	[123-456-7890, 987-654-3210]	{age=30, membership=gold}

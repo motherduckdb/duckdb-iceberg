@@ -22,7 +22,7 @@ statement ok
 SET logging_level='trace';
 
 query I
-SELECT item_id FROM my_datalake.default.slt_issue_791
+SELECT item_id FROM my_datalake.default.issue_791
 WHERE
 item_id = '20000000-0000-0000-0000-000000000002';
 ----
@@ -52,7 +52,7 @@ statement ok
 CALL truncate_duckdb_logs();
 
 query I
-SELECT item_id FROM my_datalake.default.slt_issue_791
+SELECT item_id FROM my_datalake.default.issue_791
 WHERE
 item_id < '20000000-0000-0000-0000-000000000002';
 ----
@@ -88,7 +88,7 @@ statement ok
 CALL truncate_duckdb_logs();
 
 query I
-SELECT item_id FROM my_datalake.default.slt_issue_791
+SELECT item_id FROM my_datalake.default.issue_791
 WHERE
 item_id <= '20000000-0000-0000-0000-000000000002' order by all;
 ----
@@ -116,7 +116,7 @@ statement ok
 CALL truncate_duckdb_logs();
 
 query I
-SELECT item_id FROM my_datalake.default.slt_issue_791
+SELECT item_id FROM my_datalake.default.issue_791
 WHERE
 item_id >= '20000000-0000-0000-0000-000000000002' order by all;
 ----
@@ -140,7 +140,7 @@ statement ok
 CALL truncate_duckdb_logs();
 
 query I
-SELECT item_id FROM my_datalake.default.slt_issue_791
+SELECT item_id FROM my_datalake.default.issue_791
 WHERE
 item_id > '20000000-0000-0000-0000-000000000002' order by all;
 ----

@@ -1,10 +1,10 @@
-# Small fixture: reset on every include; independent of Spark-generated tables.
+# Small fixture: reset on every include.
 
 statement ok
-DROP TABLE IF EXISTS my_datalake.default.slt_bucket_partitioned_bigint;
+DROP TABLE IF EXISTS my_datalake.default.bucket_partitioned_bigint;
 
 statement ok
-CREATE TABLE my_datalake.default.slt_bucket_partitioned_bigint (
+CREATE TABLE my_datalake.default.bucket_partitioned_bigint (
     id BIGINT,
     value BIGINT,
     name VARCHAR
@@ -12,7 +12,7 @@ CREATE TABLE my_datalake.default.slt_bucket_partitioned_bigint (
 PARTITIONED BY (bucket(8, value)) WITH ('format-version' = '2');
 
 statement ok
-INSERT INTO my_datalake.default.slt_bucket_partitioned_bigint
+INSERT INTO my_datalake.default.bucket_partitioned_bigint
 VALUES
     (1, 1000000000000, 'row_1'),
     (2, 2000000000000, 'row_2'),

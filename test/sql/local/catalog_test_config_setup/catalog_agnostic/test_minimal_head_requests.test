@@ -12,7 +12,7 @@ statement ok
 CALL enable_logging('HTTP');
 
 query III nosort expected_res
-select * from my_datalake.default.slt_table_unpartitioned order by all;
+select * from my_datalake.default.table_unpartitioned order by all;
 ----
 2023-03-01	1	a
 2023-03-02	2	b
@@ -37,7 +37,7 @@ statement ok
 CALL truncate_duckdb_logs();
 
 query III nosort expected_res
-select * from my_datalake.default.slt_table_unpartitioned order by all;
+select * from my_datalake.default.table_unpartitioned order by all;
 ----
 
 # No additional HEAD requests should be made

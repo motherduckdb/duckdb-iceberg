@@ -1,10 +1,10 @@
-# Small fixture: reset on every include; independent of Spark-generated tables.
+# Small fixture: reset on every include.
 
 statement ok
-DROP TABLE IF EXISTS my_datalake.default.slt_month_partitioned_date;
+DROP TABLE IF EXISTS my_datalake.default.month_partitioned_date;
 
 statement ok
-CREATE TABLE my_datalake.default.slt_month_partitioned_date (
+CREATE TABLE my_datalake.default.month_partitioned_date (
 	id int,
 	dt date,
 	customer varchar(20),
@@ -13,7 +13,7 @@ CREATE TABLE my_datalake.default.slt_month_partitioned_date (
 PARTITIONED BY (month(dt)) WITH ('format-version' = '2');
 
 statement ok
-insert into my_datalake.default.slt_month_partitioned_date values
+insert into my_datalake.default.month_partitioned_date values
 (1000,DATE '2025-01-01','C01-00',16.87),
 (1001,DATE '2025-01-15','C01-01',80.19),
 (1002,DATE '2025-01-31','C01-02',49.46),

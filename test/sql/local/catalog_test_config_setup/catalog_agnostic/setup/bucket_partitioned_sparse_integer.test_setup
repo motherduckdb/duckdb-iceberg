@@ -1,10 +1,10 @@
-# Small fixture: reset on every include; independent of Spark-generated tables.
+# Small fixture: reset on every include.
 
 statement ok
-DROP TABLE IF EXISTS my_datalake.default.slt_bucket_partitioned_sparse_integer;
+DROP TABLE IF EXISTS my_datalake.default.bucket_partitioned_sparse_integer;
 
 statement ok
-CREATE TABLE my_datalake.default.slt_bucket_partitioned_sparse_integer (
+CREATE TABLE my_datalake.default.bucket_partitioned_sparse_integer (
     id INTEGER,
     value INTEGER,
     name VARCHAR
@@ -12,7 +12,7 @@ CREATE TABLE my_datalake.default.slt_bucket_partitioned_sparse_integer (
 PARTITIONED BY (bucket(16, value)) WITH ('format-version' = '2');
 
 statement ok
-INSERT INTO my_datalake.default.slt_bucket_partitioned_sparse_integer
+INSERT INTO my_datalake.default.bucket_partitioned_sparse_integer
 VALUES
     (1,  1,  'alpha'),
     (2,  2,  'beta'),

@@ -3,55 +3,55 @@
 require tpch
 
 statement ok
-CREATE SCHEMA IF NOT EXISTS my_datalake.slt_tpch_sf1_v1;
+CREATE SCHEMA IF NOT EXISTS my_datalake.tpch_sf1_v1;
 
 # foreach needs a nonempty list; continue skips the expensive block when all
 # tables exist. Missing tables are created with CTAS so ordinary successful
 # setup never leaves an empty table awaiting a separate INSERT.
 statement ok
-SET VARIABLE slt_tpch_missing = (
+SET VARIABLE tpch_missing = (
     SELECT [count(*) > 0]
     FROM (VALUES ('customer'), ('lineitem'), ('nation'), ('orders'),
                  ('part'), ('partsupp'), ('region'), ('supplier')) AS expected(name)
     WHERE NOT EXISTS (
         SELECT 1 FROM information_schema.tables
-        WHERE table_catalog = 'my_datalake' AND table_schema = 'slt_tpch_sf1_v1'
+        WHERE table_catalog = 'my_datalake' AND table_schema = 'tpch_sf1_v1'
           AND table_name = expected.name
     )
 );
 
-foreach missing <variable:slt_tpch_missing>
+foreach missing <variable:tpch_missing>
 
 onlyif missing=false
 continue
 
 statement ok
-CREATE SCHEMA slt_tpch_source;
+CREATE SCHEMA tpch_source;
 
 statement ok
-CALL dbgen(sf=1, schema='slt_tpch_source');
+CALL dbgen(sf=1, schema='tpch_source');
 
 foreach table customer lineitem nation orders part partsupp region supplier
 
 statement ok
-SET VARIABLE slt_tpch_exists = (
+SET VARIABLE tpch_exists = (
     SELECT [count(*) > 0] FROM information_schema.tables
-    WHERE table_catalog = 'my_datalake' AND table_schema = 'slt_tpch_sf1_v1' AND table_name = '{table}'
+    WHERE table_catalog = 'my_datalake' AND table_schema = 'tpch_sf1_v1' AND table_name = '{table}'
 );
 
-foreach exists <variable:slt_tpch_exists>
+foreach exists <variable:tpch_exists>
 
 onlyif exists=true
 continue
 
 statement ok
-CREATE TABLE my_datalake.slt_tpch_sf1_v1.{table} AS SELECT * FROM slt_tpch_source.{table};
+CREATE TABLE my_datalake.tpch_sf1_v1.{table} AS SELECT * FROM tpch_source.{table};
 
 endloop
 
 endloop
 
 statement ok
-DROP SCHEMA slt_tpch_source CASCADE;
+DROP SCHEMA tpch_source CASCADE;
 
 endloop

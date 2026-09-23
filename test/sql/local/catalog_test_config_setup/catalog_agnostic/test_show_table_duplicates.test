@@ -8,10 +8,10 @@ include test/sql/init_requires
 
 
 statement ok
-DROP TABLE IF EXISTS my_datalake.default.slt_show_table_duplicates;
+DROP TABLE IF EXISTS my_datalake.default.show_table_duplicates;
 
 statement ok
-CREATE TABLE my_datalake.default.slt_show_table_duplicates (id INTEGER, nested STRUCT(value INTEGER));
+CREATE TABLE my_datalake.default.show_table_duplicates (id INTEGER, nested STRUCT(value INTEGER));
 
 statement ok
 set enable_logging=true
@@ -21,6 +21,6 @@ set logging_level='debug'
 
 query I
 SELECT table_name,
-FROM information_schema.tables where table_name == 'slt_show_table_duplicates' and table_schema == 'default';
+FROM information_schema.tables where table_name == 'show_table_duplicates' and table_schema == 'default';
 ----
-slt_show_table_duplicates
+show_table_duplicates

@@ -1,17 +1,17 @@
-# Small fixture: reset on every include; independent of Spark-generated tables.
+# Small fixture: reset on every include.
 
 statement ok
-DROP TABLE IF EXISTS my_datalake.default.slt_table_unpartitioned;
+DROP TABLE IF EXISTS my_datalake.default.table_unpartitioned;
 
 statement ok
-CREATE TABLE my_datalake.default.slt_table_unpartitioned (
+CREATE TABLE my_datalake.default.table_unpartitioned (
     dt     date,
     number integer,
     letter VARCHAR
 ) WITH ('format-version' = '2');
 
 statement ok
-INSERT INTO my_datalake.default.slt_table_unpartitioned VALUES
+INSERT INTO my_datalake.default.table_unpartitioned VALUES
 	(CAST('2023-03-01' AS date), 1, 'a'),
 	(CAST('2023-03-02' AS date), 2, 'b'),
 	(CAST('2023-03-03' AS date), 3, 'c'),

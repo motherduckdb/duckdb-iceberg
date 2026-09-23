@@ -1,10 +1,10 @@
-# Small fixture: reset on every include; independent of Spark-generated tables.
+# Small fixture: reset on every include.
 
 statement ok
-DROP TABLE IF EXISTS my_datalake.default.slt_truncate_partitioned_decimal;
+DROP TABLE IF EXISTS my_datalake.default.truncate_partitioned_decimal;
 
 statement ok
-CREATE TABLE my_datalake.default.slt_truncate_partitioned_decimal (
+CREATE TABLE my_datalake.default.truncate_partitioned_decimal (
     id INTEGER,
     nested STRUCT(data decimal(10,2)),
     label VARCHAR
@@ -12,7 +12,7 @@ CREATE TABLE my_datalake.default.slt_truncate_partitioned_decimal (
 PARTITIONED BY (truncate(50, nested.data)) WITH ('format-version' = '2');
 
 statement ok
-INSERT INTO my_datalake.default.slt_truncate_partitioned_decimal
+INSERT INTO my_datalake.default.truncate_partitioned_decimal
 VALUES
     (1,  {'data': '10.65'::DECIMAL(10,2)}, 'tiger_owl_horse'),
     (2,  {'data': '10.49'::DECIMAL(10,2)}, 'tiger_owl_frog'),

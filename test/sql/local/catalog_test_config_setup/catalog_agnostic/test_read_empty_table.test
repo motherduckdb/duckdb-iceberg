@@ -15,5 +15,5 @@ statement ok
 set logging_level='debug'
 
 query III
-select * from my_datalake.default.slt_empty_table;
+select * from my_datalake.default.empty_table;
 ----

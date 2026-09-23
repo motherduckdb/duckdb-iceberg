@@ -1,10 +1,10 @@
-# Small fixture: reset on every include; independent of Spark-generated tables.
+# Small fixture: reset on every include.
 
 statement ok
-DROP TABLE IF EXISTS my_datalake.default.slt_bucket_partitioned_timestamp;
+DROP TABLE IF EXISTS my_datalake.default.bucket_partitioned_timestamp;
 
 statement ok
-CREATE TABLE my_datalake.default.slt_bucket_partitioned_timestamp (
+CREATE TABLE my_datalake.default.bucket_partitioned_timestamp (
     id INTEGER,
     ts_val TIMESTAMPTZ,
     label VARCHAR
@@ -12,7 +12,7 @@ CREATE TABLE my_datalake.default.slt_bucket_partitioned_timestamp (
 PARTITIONED BY (bucket(4, ts_val)) WITH ('format-version' = '2');
 
 statement ok
-INSERT INTO my_datalake.default.slt_bucket_partitioned_timestamp
+INSERT INTO my_datalake.default.bucket_partitioned_timestamp
 VALUES
     (1,  TIMESTAMPTZ '2023-01-01 00:00:00+00', 'jan'),
     (2,  TIMESTAMPTZ '2023-02-01 00:00:00+00', 'feb'),

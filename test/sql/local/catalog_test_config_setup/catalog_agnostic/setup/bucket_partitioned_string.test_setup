@@ -1,10 +1,10 @@
-# Small fixture: reset on every include; independent of Spark-generated tables.
+# Small fixture: reset on every include.
 
 statement ok
-DROP TABLE IF EXISTS my_datalake.default.slt_bucket_partitioned_string;
+DROP TABLE IF EXISTS my_datalake.default.bucket_partitioned_string;
 
 statement ok
-CREATE TABLE my_datalake.default.slt_bucket_partitioned_string (
+CREATE TABLE my_datalake.default.bucket_partitioned_string (
     id INTEGER,
     category VARCHAR,
     description VARCHAR
@@ -12,7 +12,7 @@ CREATE TABLE my_datalake.default.slt_bucket_partitioned_string (
 PARTITIONED BY (bucket(4, category)) WITH ('format-version' = '2');
 
 statement ok
-INSERT INTO my_datalake.default.slt_bucket_partitioned_string
+INSERT INTO my_datalake.default.bucket_partitioned_string
 VALUES
     (1, 'electronics', 'laptop'),
     (2, 'books', 'novel'),

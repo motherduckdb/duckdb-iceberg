@@ -15,13 +15,14 @@ tests serially: the tests share tables and storage, including setup includes.
 ## SQL fixtures
 
 Small fixtures in `catalog_agnostic/setup/*.test_setup` drop and recreate their
-own tables on every include. The `slt_` prefix separates them from Spark's source
-tables. Include setup after requirements and before enabling request logging or
-opening transactions, so setup does not affect the assertions being measured.
+own tables on every include. Their obsolete Spark generators have been removed.
+Generators still needed by tests outside this suite remain. Include setup after
+requirements and before enabling request logging or opening transactions, so setup
+does not affect the assertions being measured.
 Keep timestamps explicit about their UTC offset.
 
 `setup/tpch_sf1.test_setup` lazily builds SF1 data using `dbgen`. Its versioned
-`slt_tpch_sf1_v1` schema is reserved for immutable test data. The include uses a
+`tpch_sf1_v1` schema is reserved for immutable test data. The include uses a
 SQL variable containing a one-element boolean list, `foreach <variable:...>`, and
 `onlyif` / `continue` to bypass generation when every table exists. If some tables
 are missing, it generates local source data and creates only those missing tables.
