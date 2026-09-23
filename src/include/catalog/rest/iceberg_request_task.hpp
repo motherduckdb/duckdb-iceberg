@@ -3,6 +3,7 @@
 #include "duckdb/common/error_data.hpp"
 #include "duckdb/common/mutex.hpp"
 #include "duckdb/common/optional.hpp"
+#include "duckdb/common/shared_ptr.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/parallel/task_executor.hpp"
 
@@ -14,7 +15,7 @@ namespace duckdb {
 class IcebergCatalog;
 
 //! One task publishes this result and one caller consumes it. Completion is independent of executor draining.
-//! The result holder, execution context and catalog must all outlive the executor's tasks.
+//! The task retains the result holder. The execution context and catalog must outlive the executor's tasks.
 template <class RESULT>
 class IcebergRequestResult {
 public:
@@ -98,28 +99,29 @@ public:
 	using Result = typename REQUEST::Result;
 
 	IcebergRequestTask(TaskExecutor &executor, ClientContext &context, IcebergCatalog &catalog, REQUEST request,
-	                   IcebergRequestResult<Result> &result)
-	    : BaseExecutorTask(executor), context(context), catalog(catalog), request(std::move(request)), result(result) {
+	                   shared_ptr<IcebergRequestResult<Result>> result)
+	    : BaseExecutorTask(executor), context(context), catalog(catalog), request(std::move(request)),
+	      result(std::move(result)) {
 	}
 
 	void ExecuteTask() override {
 		if (context.IsInterrupted()) {
-			result.SetError(ErrorData(InterruptException()));
+			result->SetError(ErrorData(InterruptException()));
 			throw InterruptException();
 		}
 		try {
-			result.SetResult(request.Execute(context, catalog));
+			result->SetResult(request.Execute(context, catalog));
 		} catch (std::exception &ex) {
 			// Let the caller decide whether a request failure aborts the operation or is only a warning.
-			result.SetError(ErrorData(ex));
+			result->SetError(ErrorData(ex));
 		} catch (...) {
-			result.SetError(ErrorData("Unknown exception while executing an Iceberg catalog request"));
+			result->SetError(ErrorData("Unknown exception while executing an Iceberg catalog request"));
 			throw;
 		}
 	}
 
 	void Cancel() override {
-		result.SetError(ErrorData(ExceptionType::INTERRUPT, "Iceberg catalog request was cancelled"));
+		result->SetError(ErrorData(ExceptionType::INTERRUPT, "Iceberg catalog request was cancelled"));
 	}
 
 	string TaskType() const override {
@@ -130,7 +132,7 @@ private:
 	ClientContext &context;
 	IcebergCatalog &catalog;
 	REQUEST request;
-	IcebergRequestResult<Result> &result;
+	shared_ptr<IcebergRequestResult<Result>> result;
 };
 
 } // namespace duckdb

@@ -153,12 +153,12 @@ void IcebergSchemaSet::LoadEntriesInternal(ClientContext &context) {
 	if (schema_listed) {
 		return;
 	}
-	// The local executor drains on scope exit, before its result storage is destroyed.
-	IcebergRequestResult<IcebergListSchemasResult> result;
+	// The local executor drains on scope exit; the task retains its result storage until it finishes.
+	auto result = make_shared_ptr<IcebergRequestResult<IcebergListSchemasResult>>();
 	TaskExecutor executor(context, TaskSchedulerType::ASYNC);
 	executor.ScheduleTask(make_uniq<IcebergRequestTask<IcebergListSchemasRequest>>(
 	    executor, context, ic_catalog, IcebergListSchemasRequest({}), result));
-	auto schemas = result.WaitAndTakeResult(context, executor);
+	auto schemas = result->WaitAndTakeResult(context, executor);
 	if (context.IsInterrupted()) {
 		throw InterruptException();
 	}

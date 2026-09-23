@@ -11,6 +11,7 @@
 #include "duckdb/planner/expression_binder/table_function_binder.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/logging/logger.hpp"
+#include "duckdb/common/deque.hpp"
 
 #include "catalog/rest/api/catalog_api.hpp"
 #include "catalog/rest/api/catalog_utils.hpp"
@@ -94,7 +95,7 @@ struct PendingTableLoad {
 	}
 
 	IcebergTable &table;
-	IcebergRequestResult<IcebergLoadTableResult> result;
+	shared_ptr<IcebergRequestResult<IcebergLoadTableResult>> result;
 };
 
 void WarnTableLoadFailure(ClientContext &context, IcebergTable &table, const ErrorData &error) {
@@ -104,42 +105,77 @@ void WarnTableLoadFailure(ClientContext &context, IcebergTable &table, const Err
 
 } // namespace
 
-void IcebergTableSet::FillEntries(ClientContext &context, const vector<reference<IcebergTable>> &tables) {
-	vector<unique_ptr<PendingTableLoad>> pending;
-	for (auto &table_ref : tables) {
-		auto &table = table_ref.get();
+void IcebergTableSet::ScanEagerEntries(ClientContext &context, const std::function<void(CatalogEntry &)> &callback) {
+	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
+	auto &transaction = IcebergTransaction::Get(context, catalog);
+	auto &scheduler = TaskScheduler::GetScheduler(context);
+	// Regular workers can also execute async tasks; NumberOfThreads includes the calling thread.
+	const auto window_size = MinValue<idx_t>(8, scheduler.NumberOfThreads() + scheduler.NumberOfAsyncThreads());
+	deque<unique_ptr<PendingTableLoad>> pending;
+	TaskExecutor executor(context, TaskSchedulerType::ASYNC);
+	auto entry = entries.begin();
+
+	auto schedule_next = [&]() {
+		context.InterruptCheck();
+		auto &table = *entry->second;
+		transaction.tables[table.GetTableKey()] = entry->second;
+		++entry;
+		auto load = make_uniq<PendingTableLoad>(table);
 		try {
 			if (!TryFillEntryFromCache(context, table)) {
-				pending.push_back(make_uniq<PendingTableLoad>(table));
+				load->result = make_shared_ptr<IcebergRequestResult<IcebergLoadTableResult>>();
 			}
 		} catch (std::exception &ex) {
+			context.InterruptCheck();
 			WarnTableLoadFailure(context, table, ErrorData(ex));
 		}
-	}
-	// Declared after pending so even an exception during scheduling drains tasks before destroying their results.
-	TaskExecutor executor(context, TaskSchedulerType::ASYNC);
-	for (auto &load : pending) {
-		IcebergLoadTableRequest request(load->table.schema.namespace_items, load->table.name);
-		executor.ScheduleTask(make_uniq<IcebergRequestTask<IcebergLoadTableRequest>>(
-		    executor, context, catalog.Cast<IcebergCatalog>(), std::move(request), load->result));
-	}
-	// Consume each response independently while the other requests in this batch can still be running.
-	for (auto &load : pending) {
-		try {
-			ApplyLoadResult(load->table, load->result.WaitAndTakeResult(context, executor));
-		} catch (std::exception &ex) {
-			ErrorData error(ex);
-			if (error.Type() == ExceptionType::INTERRUPT || executor.HasError()) {
-				throw;
-			}
-			context.InterruptCheck();
-			WarnTableLoadFailure(context, load->table, error);
+		if (load->result) {
+			IcebergLoadTableRequest request(table.schema.namespace_items, table.name);
+			executor.ScheduleTask(make_uniq<IcebergRequestTask<IcebergLoadTableRequest>>(
+			    executor, context, ic_catalog, std::move(request), load->result));
 		}
+		pending.push_back(std::move(load));
+	};
+
+	while (entry != entries.end() && pending.size() < window_size) {
+		schedule_next();
 	}
-	// Join once at the batch boundary, including worker cleanup and executor-level errors.
-	// On an exception, the executor's destructor cancels and drains before pending is destroyed.
+	while (!pending.empty()) {
+		auto load = std::move(pending.front());
+		pending.pop_front();
+		if (load->result) {
+			try {
+				ApplyLoadResult(load->table, load->result->WaitAndTakeResult(context, executor));
+			} catch (std::exception &ex) {
+				ErrorData error(ex);
+				if (error.Type() == ExceptionType::INTERRUPT || executor.HasError()) {
+					throw;
+				}
+				context.InterruptCheck();
+				WarnTableLoadFailure(context, load->table, error);
+			}
+		}
+		// Refill before invoking the callback, so requests can overlap both consumption and callback work.
+		// The task owns its result holder even if this window slot is released before task cleanup finishes.
+		if (entry != entries.end()) {
+			schedule_next();
+		}
+		callback(GetScanEntry(load->table));
+	}
+	// Join at the scan boundary. Exceptions instead cancel and drain through the executor's destructor.
 	executor.WorkOnTasks();
 	context.InterruptCheck();
+}
+
+CatalogEntry &IcebergTableSet::GetScanEntry(IcebergTable &table_info) const {
+	if (!table_info.schema_versions.empty()) {
+		// Surface resolved columns, including comments, instead of a listing placeholder.
+		auto resolved = table_info.GetLatestSchema();
+		if (resolved) {
+			return *resolved;
+		}
+	}
+	return GetOrCreateDummy(table_info);
 }
 
 IcebergTableSchemaVersion &IcebergTableSet::GetOrCreateDummy(IcebergTable &table_info) const {
@@ -167,42 +203,16 @@ IcebergTableSchemaVersion &IcebergTableSet::GetOrCreateDummy(IcebergTable &table
 
 void IcebergTableSet::Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback) {
 	annotated_lock_guard<annotated_mutex> lock(entry_lock);
-	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
-	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	LoadEntriesInternal(context);
-	const bool eager = ic_catalog.attach_options.table_resolution == IcebergTableResolution::EAGER;
-	// Regular workers can also execute async tasks; NumberOfThreads includes the calling thread.
-	auto &scheduler = TaskScheduler::GetScheduler(context);
-	const auto batch_size =
-	    eager ? MinValue<idx_t>(8, scheduler.NumberOfThreads() + scheduler.NumberOfAsyncThreads()) : 1;
-	auto entry = entries.begin();
-	while (entry != entries.end()) {
-		vector<reference<IcebergTable>> batch;
-		for (idx_t i = 0; i < batch_size && entry != entries.end(); i++, ++entry) {
-			auto &table_info = *entry->second;
-			iceberg_transaction.tables[table_info.GetTableKey()] = entry->second;
-			batch.emplace_back(table_info);
-		}
-		if (eager) {
-			FillEntries(context, batch);
-		}
-
-		for (auto &table_ref : batch) {
-			auto &table_info = table_ref.get();
-			if (!table_info.schema_versions.empty()) {
-				// The table has already been resolved (e.g. via DESCRIBE or a scan), so its full schema -
-				// including column comments mapped from the Iceberg field 'doc' - is available. Surface the
-				// resolved entry instead of the placeholder so listings reflect the real columns.
-				auto resolved = table_info.GetLatestSchema();
-				if (resolved) {
-					callback(*resolved);
-					continue;
-				}
-			}
-
-			auto &dummy = GetOrCreateDummy(table_info);
-			callback(dummy);
-		}
+	if (catalog.Cast<IcebergCatalog>().attach_options.table_resolution == IcebergTableResolution::EAGER) {
+		ScanEagerEntries(context, callback);
+		return;
+	}
+	auto &transaction = IcebergTransaction::Get(context, catalog);
+	for (auto &entry : entries) {
+		auto &table = *entry.second;
+		transaction.tables[table.GetTableKey()] = entry.second;
+		callback(GetScanEntry(table));
 	}
 }
 
@@ -262,11 +272,11 @@ void IcebergTableSet::LoadEntriesInternal(ClientContext &context) {
 	}
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	// The request owns its namespace; workers never access or mutate this table set.
-	IcebergRequestResult<IcebergListTablesResult> result;
+	auto result = make_shared_ptr<IcebergRequestResult<IcebergListTablesResult>>();
 	TaskExecutor executor(context, TaskSchedulerType::ASYNC);
 	executor.ScheduleTask(make_uniq<IcebergRequestTask<IcebergListTablesRequest>>(
 	    executor, context, ic_catalog, IcebergListTablesRequest(schema.namespace_items), result));
-	auto tables = result.WaitAndTakeResult(context, executor);
+	auto tables = result->WaitAndTakeResult(context, executor);
 	if (context.IsInterrupted()) {
 		throw InterruptException();
 	}
