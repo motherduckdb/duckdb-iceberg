@@ -6,7 +6,13 @@ require-env CATALOG_TEST_CONFIG_SETUP
 
 include test/sql/init_requires
 
-include test/sql/local/catalog_test_config_setup/catalog_agnostic/setup/eager_refresh.test_setup
+# Reset this small fixture for each test.
+
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.refresh_second;
+
+statement ok
+CREATE TABLE my_datalake.default.refresh_second AS SELECT 42 AS id;
 
 include test/sql/local/catalog_test_config_setup/catalog_agnostic/setup/table_unpartitioned.test_setup
 
