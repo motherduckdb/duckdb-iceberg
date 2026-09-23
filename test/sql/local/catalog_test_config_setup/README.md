@@ -22,12 +22,13 @@ requirements and before enabling request logging or opening transactions, so set
 does not affect the assertions being measured.
 Keep timestamps explicit about their UTC offset.
 
-`catalog_agnostic/test_tpch.test` lazily builds SF1 data using `dbgen`. Its versioned
-`tpch_sf1_v1` schema is reserved for immutable test data. The setup uses a
+`catalog_agnostic/test_tpch.test` lazily builds SF1 data using
+`dbgen(sf=1, suffix='_tpch_sf1')`. The cached tables live in `my_datalake.default`
+with the same `_tpch_sf1` suffix and are reserved for immutable test data. The setup uses a
 SQL variable containing a one-element boolean list, `foreach <variable:...>`, and
 `onlyif` / `continue` to bypass generation when every table exists. If some tables
 are missing, it generates local source data and creates only those missing tables.
-Consumers must not modify this fixture; change its schema version when changing
+Consumers must not modify this fixture; change the table suffix when changing
 the data definition. The setup files are includes, not independently registered
 test cases.
 
