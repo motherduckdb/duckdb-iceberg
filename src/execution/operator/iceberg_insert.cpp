@@ -130,28 +130,15 @@ static string GetColumnNameBySourceId(const IcebergTableSchema &schema, idx_t so
 	return schema.GetColumnByFieldId(source_id).name;
 }
 
-//! SPEC (Appendix A): `unknown` has no physical Parquet type and must be omitted from data files;
-//! readers replace the column with nulls. Iceberg maps `unknown` to SQLNULL, so the type says which fields
-//! are omitted. A struct whose fields are all omitted has no representation either, because a Parquet group
-//! needs at least one field.
+//! SPEC (Appendix A): `unknown` has no physical Parquet type and must be omitted from data files.
 static bool IsWrittenToDataFile(const LogicalType &type) {
-	if (type.id() == LogicalTypeId::SQLNULL) {
-		return false;
-	}
-	if (type.id() != LogicalTypeId::STRUCT) {
-		return true;
-	}
-	for (auto &child : StructType::GetChildTypes(type)) {
-		if (IsWrittenToDataFile(child.second)) {
-			return true;
-		}
-	}
-	return false;
+	return type.id() != LogicalTypeId::SQLNULL;
 }
 
-//! The type a column is written with: omitted fields are dropped from nested structs. The spec has no
-//! representation for an omitted list element or map key/value.
-static LogicalType GetWrittenType(const LogicalType &type, const string &column_name) {
+//! The type used to write a column, with the omitted fields left out. Parquet keeps nullness in the definition
+//! levels of a value's leaves, so a container left without any leaf cannot be written. `path` names the position
+//! of `type` in the column, so that an error points at the container that has no leaf left.
+static LogicalType GetWrittenType(const LogicalType &type, const string &path) {
 	D_ASSERT(IsWrittenToDataFile(type));
 	switch (type.id()) {
 	case LogicalTypeId::STRUCT: {
@@ -160,7 +147,12 @@ static LogicalType GetWrittenType(const LogicalType &type, const string &column_
 			if (!IsWrittenToDataFile(child.second)) {
 				continue;
 			}
-			children.emplace_back(child.first, GetWrittenType(child.second, column_name));
+			children.emplace_back(child.first, GetWrittenType(child.second, path + "." + child.first));
+		}
+		if (children.empty()) {
+			throw NotImplementedException(
+			    "Cannot write \"%s\": a struct whose fields are all of type unknown has no data file representation",
+			    path);
 		}
 		return LogicalType::STRUCT(std::move(children));
 	}
@@ -168,20 +160,18 @@ static LogicalType GetWrittenType(const LogicalType &type, const string &column_
 		auto &element = ListType::GetChildType(type);
 		if (!IsWrittenToDataFile(element)) {
 			throw NotImplementedException(
-			    "Cannot write column \"%s\": a list element of type unknown has no data file representation",
-			    column_name);
+			    "Cannot write \"%s\": a list element of type unknown has no data file representation", path);
 		}
-		return LogicalType::LIST(GetWrittenType(element, column_name));
+		return LogicalType::LIST(GetWrittenType(element, path + ".element"));
 	}
 	case LogicalTypeId::MAP: {
 		auto &key = MapType::KeyType(type);
 		auto &value = MapType::ValueType(type);
 		if (!IsWrittenToDataFile(key) || !IsWrittenToDataFile(value)) {
 			throw NotImplementedException(
-			    "Cannot write column \"%s\": a map key or value of type unknown has no data file representation",
-			    column_name);
+			    "Cannot write \"%s\": a map key or value of type unknown has no data file representation", path);
 		}
-		return LogicalType::MAP(GetWrittenType(key, column_name), GetWrittenType(value, column_name));
+		return LogicalType::MAP(GetWrittenType(key, path + ".key"), GetWrittenType(value, path + ".value"));
 	}
 	default:
 		return type;

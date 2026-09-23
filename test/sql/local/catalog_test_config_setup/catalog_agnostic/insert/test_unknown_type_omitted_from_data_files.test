@@ -402,8 +402,7 @@ insert into my_datalake.default.unknown_omitted_only select NULL from range(3);
 ----
 Not implemented Error: Cannot write to a table where every column is of type unknown
 
-# Unknown fields are dropped from nested structs too; a struct whose fields are all unknown is omitted
-# entirely, because a Parquet group needs at least one field
+# Unknown fields are dropped from nested structs too
 statement ok
 drop table if exists my_datalake.default.unknown_omitted_nested;
 
@@ -413,8 +412,7 @@ create table my_datalake.default.unknown_omitted_nested (
 	s struct(x int, y "NULL", z varchar),
 	deep struct(mid struct(p int, q "NULL")),
 	l struct(x int, y "NULL")[],
-	m map(int, struct(x int, y "NULL")),
-	gone struct(only_unknown "NULL")
+	m map(int, struct(x int, y "NULL"))
 ) with ('format-version'='3');
 
 statement ok
@@ -423,8 +421,7 @@ insert into my_datalake.default.unknown_omitted_nested values (
 	{'x': 2, 'y': NULL, 'z': 'kept'},
 	{'mid': {'p': 3, 'q': NULL}},
 	[{'x': 4, 'y': NULL}],
-	map([5], [{'x': 6, 'y': NULL}]),
-	{'only_unknown': NULL}
+	map([5], [{'x': 6, 'y': NULL}])
 );
 
 statement ok
@@ -433,7 +430,7 @@ begin transaction
 statement ok
 set variable unknown_omitted_nested_files = (select list(file_path) from iceberg_metadata('my_datalake.default.unknown_omitted_nested') where manifest_content = 'DATA' and status <> 'DELETED');
 
-# Only the unknown fields are missing; the struct whose only field is unknown is omitted entirely
+# Only the unknown fields are missing
 query IIII
 select name, num_children, field_id, type
 from parquet_schema(getvariable('unknown_omitted_nested_files'));
@@ -441,20 +438,20 @@ from parquet_schema(getvariable('unknown_omitted_nested_files'));
 duckdb_schema	5	NULL	NULL
 a	NULL	1	INT32
 s	2	2	NULL
-x	NULL	7	INT32
-z	NULL	9	BYTE_ARRAY
+x	NULL	6	INT32
+z	NULL	8	BYTE_ARRAY
 deep	1	3	NULL
-mid	1	10	NULL
-p	NULL	11	INT32
+mid	1	9	NULL
+p	NULL	10	INT32
 l	1	4	NULL
 list	1	NULL	NULL
-element	1	13	NULL
-x	NULL	14	INT32
+element	1	12	NULL
+x	NULL	13	INT32
 m	1	5	NULL
 key_value	2	NULL	NULL
-key	NULL	16	INT32
-value	1	17	NULL
-x	NULL	18	INT32
+key	NULL	15	INT32
+value	1	16	NULL
+x	NULL	17	INT32
 
 statement ok
 commit
@@ -465,11 +462,60 @@ select a, s, deep, l, m from my_datalake.default.unknown_omitted_nested;
 ----
 1	{'x': 2, 'y': NULL, 'z': kept}	{'mid': {'p': 3, 'q': NULL}}	[{'x': 4, 'y': NULL}]	{5={'x': 6, 'y': NULL}}
 
-# A struct with no written fields reads back as NULL rather than a struct of nulls
-query I
-select gone from my_datalake.default.unknown_omitted_nested;
+#===--------------------------------------------------------------------===#
+# Writes rejected when omitting the unknown fields leaves a container empty
+#===--------------------------------------------------------------------===#
+
+# Parquet keeps a value's nullness in the definition levels of the leaf columns below it, so a container left
+# without any leaf cannot be written
+
+# A struct whose only field is unknown; the int column keeps the table itself writable
+statement ok
+drop table if exists my_datalake.default.unknown_omitted_all_fields;
+
+statement ok
+create table my_datalake.default.unknown_omitted_all_fields (a int, s struct(only_unknown "NULL")) with ('format-version'='3');
+
+statement error
+insert into my_datalake.default.unknown_omitted_all_fields values (1, {'only_unknown': NULL});
 ----
-NULL
+Not implemented Error: Cannot write "s": a struct whose fields are all of type unknown has no data file representation
+
+# The same applies to a nested struct, even when its parent has fields left to write
+statement ok
+drop table if exists my_datalake.default.unknown_omitted_nested_all_fields;
+
+statement ok
+create table my_datalake.default.unknown_omitted_nested_all_fields (a int, s struct(kept int, nested struct(only_unknown "NULL"))) with ('format-version'='3');
+
+statement error
+insert into my_datalake.default.unknown_omitted_nested_all_fields values (1, {'kept': 2, 'nested': {'only_unknown': NULL}});
+----
+Not implemented Error: Cannot write "s.nested": a struct whose fields are all of type unknown has no data file representation
+
+# A list whose element is unknown
+statement ok
+drop table if exists my_datalake.default.unknown_omitted_list_element;
+
+statement ok
+create table my_datalake.default.unknown_omitted_list_element (a int, l "NULL"[]) with ('format-version'='3');
+
+statement error
+insert into my_datalake.default.unknown_omitted_list_element values (1, [NULL, NULL]);
+----
+Not implemented Error: Cannot write "l": a list element of type unknown has no data file representation
+
+# A map whose value is unknown
+statement ok
+drop table if exists my_datalake.default.unknown_omitted_map_value;
+
+statement ok
+create table my_datalake.default.unknown_omitted_map_value (a int, m map(varchar, "NULL")) with ('format-version'='3');
+
+statement error
+insert into my_datalake.default.unknown_omitted_map_value values (1, MAP {'key': NULL});
+----
+Not implemented Error: Cannot write "m": a map key or value of type unknown has no data file representation
 
 # CREATE TABLE AS resolves the layout from placeholder metadata, which only carries the column types
 statement ok
