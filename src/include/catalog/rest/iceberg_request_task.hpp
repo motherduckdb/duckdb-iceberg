@@ -7,7 +7,6 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/parallel/task_executor.hpp"
 
-#include <chrono>
 #include <condition_variable>
 
 namespace duckdb {
@@ -22,29 +21,6 @@ public:
 	bool IsReady() const {
 		lock_guard<mutex> guard(lock);
 		return ready;
-	}
-
-	//! Wait for this scheduled request, helping the executor so zero-worker configurations also make progress.
-	//! This does not join the executor: other tasks and task cleanup may still be running when it returns.
-	RESULT WaitAndTakeResult(ClientContext &context, TaskExecutor &executor) {
-		while (true) {
-			context.InterruptCheck();
-			if (executor.HasError()) {
-				executor.ThrowError();
-			}
-			if (IsReady()) {
-				return TakeResult();
-			}
-			shared_ptr<Task> task;
-			if (executor.GetTask(task)) {
-				const auto task_result = task->Execute(TaskExecutionMode::PROCESS_ALL);
-				D_ASSERT(task_result != TaskExecutionResult::TASK_NOT_FINISHED);
-			} else {
-				unique_lock<mutex> guard(lock);
-				// Interruption does not notify this condition variable, so periodically check it on the caller.
-				completion.wait_for(guard, std::chrono::milliseconds(50), [&]() { return ready; });
-			}
-		}
 	}
 
 	RESULT TakeResult() {
@@ -64,6 +40,7 @@ public:
 	}
 
 private:
+	friend class IcebergRequestExecutor;
 	template <class REQUEST>
 	friend class IcebergRequestTask;
 
