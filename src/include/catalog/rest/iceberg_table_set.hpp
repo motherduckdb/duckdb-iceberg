@@ -57,6 +57,11 @@ public:
 
 private:
 	const case_insensitive_set_t &LoadViewEntries(ClientContext &context);
+	//! True when transaction-local state decides the lookup, including a deleted view with a null entry.
+	bool TryGetLocalViewEntry(ClientContext &context, const string &view_name, optional_ptr<CatalogEntry> &entry);
+	const case_insensitive_set_t &ApplyViewListResult(ClientContext &context, IcebergListViewsResult views);
+	optional_ptr<CatalogEntry> ApplyViewLoadResult(ClientContext &context, const string &view_name,
+	                                               IcebergLoadViewResult result);
 
 	annotated_mutex entry_lock;
 	case_insensitive_map_t<shared_ptr<IcebergTable>> entries DUCKDB_GUARDED_BY(entry_lock);
