@@ -46,7 +46,8 @@ void LoadTableResultCache::Release(LoadTableCachePublication &publication) {
 	annotated_lock_guard<annotated_mutex> guard(lock);
 	auto it = pending_loads.find(publication.table_key);
 	D_ASSERT(it != pending_loads.end() && it->second.count > 0);
-	if (--it->second.count == 0) {
+	it->second.count--;
+	if (it->second.count == 0) {
 		pending_loads.erase(it);
 	} else if (it->second.latest.get() == &publication) {
 		it->second.latest = nullptr;
