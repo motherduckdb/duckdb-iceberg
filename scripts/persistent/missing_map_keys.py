@@ -9,10 +9,10 @@ import pyarrow.parquet as pq
 from pyiceberg.catalog.sql import SqlCatalog
 from pyiceberg.io.pyarrow import schema_to_pyarrow
 
-WAREHOUSE = Path("data/persistent/missing_map_keys").resolve()
+WAREHOUSE = Path("data/persistent/missing_map_keys")
 shutil.rmtree(WAREHOUSE, ignore_errors=True)
 WAREHOUSE.mkdir(parents=True)
-catalog = SqlCatalog("missing_map_keys", uri="sqlite:///:memory:", warehouse=WAREHOUSE.as_uri())
+catalog = SqlCatalog("missing_map_keys", uri="sqlite:///:memory:", warehouse=WAREHOUSE.as_posix())
 catalog.create_namespace("default")
 
 
@@ -20,11 +20,11 @@ def generate_table(name, payload_type, payload):
     path = WAREHOUSE / name
     (path / "data").mkdir(parents=True)
     schema = pa.schema([("id", pa.int64()), ("payload", payload_type)])
-    table = catalog.create_table(f"default.{name}", schema=schema, location=path.as_uri())
+    table = catalog.create_table(f"default.{name}", schema=schema, location=path.as_posix())
     schema = schema_to_pyarrow(table.schema())
     data = pa.table({"id": [1], "payload": [payload]}, schema=schema)
     pq.write_table(data, path / "data" / "data.parquet")
-    table.add_files([(path / "data" / "data.parquet").as_uri()])
+    table.add_files([(path / "data" / "data.parquet").as_posix()])
     shutil.copyfile(Path(table.metadata_location.removeprefix("file://")), path / "metadata" / "v1.metadata.json")
     return path, data
 

@@ -7,7 +7,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from pyiceberg.catalog.sql import SqlCatalog
 
-WAREHOUSE = Path("data/persistent/issue1270/warehouse").resolve()
+WAREHOUSE = Path("data/persistent/issue1270/warehouse")
 TABLE_PATH = WAREHOUSE / "default.db" / "my_table"
 shutil.rmtree(WAREHOUSE, ignore_errors=True)
 (TABLE_PATH / "data").mkdir(parents=True)
@@ -44,10 +44,10 @@ pq.write_table(pa.table({
     ],
 }, schema=SCHEMA), p_group)
 
-catalog = SqlCatalog("repro", uri="sqlite:///:memory:", warehouse=WAREHOUSE.as_uri())
+catalog = SqlCatalog("repro", uri="sqlite:///:memory:", warehouse=WAREHOUSE.as_posix())
 catalog.create_namespace("default")
-table = catalog.create_table("default.my_table", schema=SCHEMA, location=TABLE_PATH.as_uri())
-table.add_files([p_list.as_uri(), p_group.as_uri()])
+table = catalog.create_table("default.my_table", schema=SCHEMA, location=TABLE_PATH.as_posix())
+table.add_files([p_list.as_posix(), p_group.as_posix()])
 shutil.copyfile(
     Path(table.metadata_location.removeprefix("file://")),
     TABLE_PATH / "metadata" / "v1.metadata.json",

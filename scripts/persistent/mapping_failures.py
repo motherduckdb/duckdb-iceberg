@@ -7,11 +7,11 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from pyiceberg.catalog.sql import SqlCatalog
 
-WAREHOUSE = Path("data/persistent/mapping_failures").resolve()
+WAREHOUSE = Path("data/persistent/mapping_failures")
 shutil.rmtree(WAREHOUSE, ignore_errors=True)
 WAREHOUSE.mkdir(parents=True)
 
-catalog = SqlCatalog("mapping_failures", uri="sqlite:///:memory:", warehouse=WAREHOUSE.as_uri())
+catalog = SqlCatalog("mapping_failures", uri="sqlite:///:memory:", warehouse=WAREHOUSE.as_posix())
 catalog.create_namespace("default")
 
 TYPES = {
@@ -25,12 +25,12 @@ def generate_table(name, expected_type, expected_value, physical_type, physical_
     table_path = WAREHOUSE / name
     (table_path / "data").mkdir(parents=True)
     schema = pa.schema([("id", pa.int64()), ("payload", expected_type)])
-    table = catalog.create_table(f"default.{name}", schema=schema, location=table_path.as_uri())
+    table = catalog.create_table(f"default.{name}", schema=schema, location=table_path.as_posix())
     valid_path = table_path / "data" / "valid.parquet"
     invalid_path = table_path / "data" / "invalid.parquet"
     for path, row_id in [(valid_path, 1), (invalid_path, 2)]:
         pq.write_table(pa.table({"id": [row_id], "payload": [expected_value]}, schema=schema), path)
-    table.add_files([valid_path.as_uri(), invalid_path.as_uri()])
+    table.add_files([valid_path.as_posix(), invalid_path.as_posix()])
     shutil.copyfile(
         Path(table.metadata_location.removeprefix("file://")),
         table_path / "metadata" / "v1.metadata.json",
