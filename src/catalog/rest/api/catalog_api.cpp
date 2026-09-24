@@ -676,29 +676,34 @@ IcebergListViewsResult IcebergListViewsRequest::Execute(ClientContext &context, 
 	return all_identifiers;
 }
 
-APIResult<unique_ptr<const rest_api_objects::LoadViewResult>> IRCAPI::GetView(ClientContext &context,
-                                                                              IcebergCatalog &catalog,
-                                                                              const IcebergSchemaEntry &schema,
-                                                                              const string &view_name) {
-	auto ret = APIResult<unique_ptr<const rest_api_objects::LoadViewResult>>();
+IcebergLoadViewResult IRCAPI::GetView(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema,
+                                      const string &view_name) {
+	return IcebergLoadViewRequest(schema.namespace_items, view_name).Execute(context, catalog);
+}
+
+IcebergLoadViewRequest::IcebergLoadViewRequest(vector<string> namespace_items, string view_name)
+    : namespace_items(std::move(namespace_items)), view_name(std::move(view_name)) {
+}
+
+IcebergLoadViewResult IcebergLoadViewRequest::Execute(ClientContext &context, IcebergCatalog &catalog) const {
+	auto ret = IcebergLoadViewResult();
 
 	auto url_builder = catalog.GetBaseUrl();
 	url_builder.AddPrefixComponents(catalog.prefix);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
-	url_builder.AddPathComponent(
-	    IRCPathComponent::NamespaceComponent(schema.namespace_items, catalog.namespace_separator));
+	url_builder.AddPathComponent(IRCPathComponent::NamespaceComponent(namespace_items, catalog.namespace_separator));
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("views"));
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent(view_name));
 
 	HTTPHeaders headers(*context.db);
 	auto response = catalog.auth_handler->Request(RequestType::GET_REQUEST, context, url_builder, headers);
+	ret.status_ = response->status;
 	if (response->status != HTTPStatusCode::OK_200) {
 		unique_ptr<JSONDocument> out_doc;
 		auto error_obj = ICUtils::GetErrorMessage(response->body, out_doc);
 		if (!error_obj.IsValid()) {
 			throw InvalidConfigurationException(response->body);
 		}
-		ret.status_ = response->status;
 		ret.error_ = rest_api_objects::IcebergErrorResponse::FromJSON(error_obj);
 		return ret;
 	}

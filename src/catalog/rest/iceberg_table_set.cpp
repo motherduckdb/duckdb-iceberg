@@ -576,8 +576,11 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetViewEntry(ClientContext &context,
 		return nullptr;
 	}
 
-	// Load the view from the REST catalog
-	auto get_view_result = IRCAPI::GetView(context, ic_catalog, schema, view_name);
+	return ApplyViewLoadResult(context, view_name, IRCAPI::GetView(context, ic_catalog, schema, view_name));
+}
+
+optional_ptr<CatalogEntry> IcebergTableSet::ApplyViewLoadResult(ClientContext &context, const string &view_name,
+                                                                IcebergLoadViewResult get_view_result) {
 	if (get_view_result.error_) {
 		if (get_view_result.status_ == HTTPStatusCode::NotFound_404) {
 			// View legitimately does not exist in the catalog — let DuckDB report "View ... does not exist".
@@ -660,6 +663,8 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetViewEntry(ClientContext &context,
 		view_entry = make_uniq<UnsupportedIcebergViewEntry>(catalog, schema, *view_info, unsupported_reason);
 	}
 	auto result = view_entry.get();
+	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
+	auto view_key = IcebergTable::GetTableKey(catalog.Cast<IcebergCatalog>(), schema.namespace_items, view_name);
 	iceberg_transaction.views.emplace(view_key, std::move(view_entry));
 	return result;
 }

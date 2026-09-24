@@ -43,6 +43,21 @@ public:
 };
 
 using IcebergLoadTableResult = APIResult<unique_ptr<const rest_api_objects::LoadTableResult>>;
+using IcebergLoadViewResult = APIResult<unique_ptr<const rest_api_objects::LoadViewResult>>;
+
+//! Owns the request inputs; execution only fetches and parses view metadata.
+//! SQL interpretation and transaction publication remain the caller's responsibility.
+class IcebergLoadViewRequest {
+public:
+	using Result = IcebergLoadViewResult;
+
+	IcebergLoadViewRequest(vector<string> namespace_items, string view_name);
+	IcebergLoadViewResult Execute(ClientContext &context, IcebergCatalog &catalog) const;
+
+private:
+	vector<string> namespace_items;
+	string view_name;
+};
 
 //! Owns the request inputs; execution only fetches and parses a response.
 //! The caller supplies a live context and catalog and owns cache lookup and result publication.
@@ -167,8 +182,8 @@ public:
 	//! View operations
 	static IcebergListViewsResult GetViews(ClientContext &context, IcebergCatalog &catalog,
 	                                       const IcebergSchemaEntry &schema);
-	static APIResult<unique_ptr<const rest_api_objects::LoadViewResult>>
-	GetView(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema, const string &view_name);
+	static IcebergLoadViewResult GetView(ClientContext &context, IcebergCatalog &catalog,
+	                                     const IcebergSchemaEntry &schema, const string &view_name);
 	static void CommitNewView(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema,
 	                          const string &json_body);
 	static void CommitViewDelete(ClientContext &context, IcebergCatalog &catalog, const vector<string> &schema,
