@@ -46,15 +46,13 @@ public:
 
 private:
 	friend class LoadTableResultCache;
-	LoadTableCachePublication(LoadTableResultCache &cache, string table_key)
-	    : cache(cache), table_key(std::move(table_key)) {
+	explicit LoadTableCachePublication(string table_key) : table_key(std::move(table_key)) {
 	}
 	LoadTableCachePublication(const LoadTableCachePublication &) = delete;
 	LoadTableCachePublication &operator=(const LoadTableCachePublication &) = delete;
 
-	LoadTableResultCache &cache;
+	optional_ptr<LoadTableResultCache> cache;
 	string table_key;
-	bool registered = false;
 };
 
 class LoadTableResultCache {

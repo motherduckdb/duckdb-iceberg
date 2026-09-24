@@ -23,22 +23,22 @@
 namespace duckdb {
 
 LoadTableCachePublication::~LoadTableCachePublication() {
-	if (registered) {
-		cache.Release(*this);
+	if (cache) {
+		cache->Release(*this);
 	}
 }
 
 bool LoadTableCachePublication::TryPublish(unique_ptr<const rest_api_objects::LoadTableResult> result) {
-	return cache.TryPublish(*this, std::move(result));
+	return cache->TryPublish(*this, std::move(result));
 }
 
 unique_ptr<LoadTableCachePublication> LoadTableResultCache::BeginLoad(const string &table_key) {
-	auto publication = unique_ptr<LoadTableCachePublication>(new LoadTableCachePublication(*this, table_key));
+	auto publication = unique_ptr<LoadTableCachePublication>(new LoadTableCachePublication(table_key));
 	annotated_lock_guard<annotated_mutex> guard(lock);
 	auto &pending = pending_loads[table_key];
 	pending.latest = publication.get();
 	pending.count++;
-	publication->registered = true;
+	publication->cache = this;
 	return publication;
 }
 
