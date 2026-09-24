@@ -40,7 +40,9 @@ bool IcebergTableSet::FillEntry(ClientContext &context, IcebergTable &table) {
 	if (TryFillEntryFromCache(context, table)) {
 		return true;
 	}
-	return ApplyLoadResult(table, IRCAPI::GetTable(context, catalog.Cast<IcebergCatalog>(), schema, table.name));
+	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
+	auto publication = ic_catalog.table_request_cache.BeginLoad(table.GetTableKey());
+	return ApplyLoadResult(table, IRCAPI::GetTable(context, ic_catalog, schema, table.name), *publication);
 }
 
 bool IcebergTableSet::TryFillEntryFromCache(ClientContext &context, IcebergTable &table) {
@@ -67,7 +69,8 @@ bool IcebergTableSet::TryFillEntryFromCache(ClientContext &context, IcebergTable
 	return false;
 }
 
-bool IcebergTableSet::ApplyLoadResult(IcebergTable &table, IcebergLoadTableResult get_table_result) {
+bool IcebergTableSet::ApplyLoadResult(IcebergTable &table, IcebergLoadTableResult get_table_result,
+                                      LoadTableCachePublication &publication) {
 	if (get_table_result.error_) {
 		if (get_table_result.status_ == HTTPStatusCode::NotFound_404) {
 			// Glue returns 404 when a table is not an Iceberg Table with the error message
@@ -87,8 +90,11 @@ bool IcebergTableSet::ApplyLoadResult(IcebergTable &table, IcebergLoadTableResul
 	}
 	auto &load_table_result = *get_table_result.result_;
 	table.InitializeFromLoadTableResult(load_table_result);
-	catalog.Cast<IcebergCatalog>().table_request_cache.SetOrOverwrite(table.GetTableKey(),
-	                                                                  std::move(get_table_result.result_));
+	// Rejected payloads are destroyed; they must not remain as cache identities on the local table.
+	table.initialization_source = nullptr;
+	if (publication.TryPublish(std::move(get_table_result.result_))) {
+		table.initialization_source = load_table_result;
+	}
 	return true;
 }
 
@@ -99,6 +105,7 @@ struct PendingTableLoad {
 	}
 
 	IcebergTable &table;
+	unique_ptr<LoadTableCachePublication> publication;
 	shared_ptr<IcebergRequestResult<IcebergLoadTableResult>> result;
 };
 
@@ -133,6 +140,7 @@ void IcebergTableSet::ScanEagerEntries(ClientContext &context, const std::functi
 			WarnTableLoadFailure(context, table, ErrorData(ex));
 		}
 		if (needs_load) {
+			load->publication = ic_catalog.table_request_cache.BeginLoad(table.GetTableKey());
 			load->result = executor.Schedule(IcebergLoadTableRequest(table.schema.namespace_items, table.name));
 		}
 		pending.push_back(std::move(load));
@@ -146,7 +154,7 @@ void IcebergTableSet::ScanEagerEntries(ClientContext &context, const std::functi
 		pending.pop_front();
 		if (load->result) {
 			try {
-				ApplyLoadResult(load->table, executor.WaitAndTakeResult(*load->result));
+				ApplyLoadResult(load->table, executor.WaitAndTakeResult(*load->result), *load->publication);
 			} catch (std::exception &ex) {
 				ErrorData error(ex);
 				if (error.Type() == ExceptionType::INTERRUPT || executor.HasError()) {
