@@ -47,6 +47,10 @@
 			"env_value": "true"
 		},
 		{
+			"env_name": "FILE_CLEANUP_SUPPORT",
+			"env_value": "true"
+		},
+		{
 			"env_name": "TIMETRAVEL_SUPPORT",
 			"env_value": "true"
 		},
