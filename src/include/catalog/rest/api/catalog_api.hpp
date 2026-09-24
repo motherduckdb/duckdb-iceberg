@@ -62,6 +62,20 @@ private:
 using IcebergListTablesResult = optional<vector<rest_api_objects::TableIdentifier>>;
 //! Schema listings retain already collected results if a subsequent page is refused.
 using IcebergListSchemasResult = vector<IRCAPISchema>;
+//! A refused view listing is distinct from an empty listing (including a missing namespace).
+using IcebergListViewsResult = optional<vector<rest_api_objects::TableIdentifier>>;
+
+//! Owns the namespace; execution fetches all pages without publishing view entries.
+class IcebergListViewsRequest {
+public:
+	using Result = IcebergListViewsResult;
+
+	explicit IcebergListViewsRequest(vector<string> namespace_items);
+	IcebergListViewsResult Execute(ClientContext &context, IcebergCatalog &catalog) const;
+
+private:
+	vector<string> namespace_items;
+};
 
 //! Owns the namespace; execution fetches all pages without publishing catalog entries.
 class IcebergListTablesRequest {
@@ -151,8 +165,8 @@ public:
 	                                                        const string &warehouse);
 
 	//! View operations
-	static optional<vector<rest_api_objects::TableIdentifier>> GetViews(ClientContext &context, IcebergCatalog &catalog,
-	                                                                    const IcebergSchemaEntry &schema);
+	static IcebergListViewsResult GetViews(ClientContext &context, IcebergCatalog &catalog,
+	                                       const IcebergSchemaEntry &schema);
 	static APIResult<unique_ptr<const rest_api_objects::LoadViewResult>>
 	GetView(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema, const string &view_name);
 	static void CommitNewView(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema,

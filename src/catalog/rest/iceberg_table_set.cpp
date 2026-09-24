@@ -519,16 +519,26 @@ const case_insensitive_set_t &IcebergTableSet::LoadViewEntries(ClientContext &co
 		return existing->second;
 	}
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
-	case_insensitive_set_t names;
+	IcebergListViewsResult views;
 	if (ic_catalog.supported_urls.count("GET /v1/{prefix}/namespaces/{namespace}/views")) {
-		auto views = IRCAPI::GetViews(context, ic_catalog, schema);
-		if (views) {
-			for (auto &view : *views) {
-				names.insert(view.name);
-			}
+		IcebergRequestExecutor executor(context, ic_catalog);
+		auto result = executor.Schedule(IcebergListViewsRequest(schema.namespace_items));
+		views = executor.WaitAndTakeResult(*result);
+		context.InterruptCheck();
+	}
+	return ApplyViewListResult(context, std::move(views));
+}
+
+const case_insensitive_set_t &IcebergTableSet::ApplyViewListResult(ClientContext &context,
+                                                                   IcebergListViewsResult views) {
+	auto &transaction = IcebergTransaction::Get(context, catalog);
+	case_insensitive_set_t names;
+	if (views) {
+		for (auto &view : *views) {
+			names.insert(view.name);
 		}
 	}
-	return transaction.listed_views.emplace(schema_name, std::move(names)).first->second;
+	return transaction.listed_views.emplace(schema.name.GetIdentifierName(), std::move(names)).first->second;
 }
 
 optional_ptr<CatalogEntry> IcebergTableSet::GetViewEntry(ClientContext &context, const string &view_name) {

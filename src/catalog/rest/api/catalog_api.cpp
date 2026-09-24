@@ -615,8 +615,16 @@ rest_api_objects::LoadTableResult IRCAPI::CommitNewTable(ClientContext &context,
 
 // ─── View operations ─────────────────────────────────────────────────────────
 
-optional<vector<rest_api_objects::TableIdentifier>> IRCAPI::GetViews(ClientContext &context, IcebergCatalog &catalog,
-                                                                     const IcebergSchemaEntry &schema) {
+IcebergListViewsResult IRCAPI::GetViews(ClientContext &context, IcebergCatalog &catalog,
+                                        const IcebergSchemaEntry &schema) {
+	return IcebergListViewsRequest(schema.namespace_items).Execute(context, catalog);
+}
+
+IcebergListViewsRequest::IcebergListViewsRequest(vector<string> namespace_items)
+    : namespace_items(std::move(namespace_items)) {
+}
+
+IcebergListViewsResult IcebergListViewsRequest::Execute(ClientContext &context, IcebergCatalog &catalog) const {
 	vector<rest_api_objects::TableIdentifier> all_identifiers;
 	string page_token;
 
@@ -625,7 +633,7 @@ optional<vector<rest_api_objects::TableIdentifier>> IRCAPI::GetViews(ClientConte
 		url_builder.AddPrefixComponents(catalog.prefix);
 		url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
 		url_builder.AddPathComponent(
-		    IRCPathComponent::NamespaceComponent(schema.namespace_items, catalog.namespace_separator));
+		    IRCPathComponent::NamespaceComponent(namespace_items, catalog.namespace_separator));
 		url_builder.AddPathComponent(IRCPathComponent::RegularComponent("views"));
 		if (!page_token.empty()) {
 			url_builder.SetParam("pageToken", IRCPathComponent::RegularComponent(page_token));
