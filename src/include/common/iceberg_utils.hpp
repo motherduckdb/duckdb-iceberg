@@ -43,11 +43,6 @@ public:
 	static optional_ptr<CatalogEntry> GetTableEntry(ClientContext &context, string &input_string);
 	static optional_ptr<SchemaCatalogEntry> GetSchemaEntry(ClientContext &context, string &input_string);
 	static idx_t CountOccurrences(const string &input, const string &to_find);
-	//! Escape 'name' so taht it is a valid Avro identifier ([A-Za-z_][A-Za-z0-9_]*).
-	//! Names that are already valid are returned unchanged, mirroring the escaping of the Iceberg reference
-	//! implementation (AvroSchemaUtil.sanitiza): a leading digit is prefixed with a underscore, any other
-	//! character that Avro does not accept becomes "_x" followed by its hexadecimal representation.
-	static string MakeAvroCompatibleName(const string &name);
 	static CopyFunctionCatalogEntry &GetCopyFunction(ClientContext &context, const Identifier &name);
 	static idx_t ParseByteSizeOptionallyFormatted(const string &input);
 	static int64_t AddFileSizeChecked(int64_t total, int64_t file_size_in_bytes);
