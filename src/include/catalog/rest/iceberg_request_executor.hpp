@@ -22,10 +22,11 @@ public:
 		return result;
 	}
 
-	//! Consume a result scheduled by this executor, helping only its producer's tasks while waiting.
+	//! Consume a result scheduled by this executor, leaving the caller available to refill its request window.
 	//! Other requests and task cleanup may still be running when this returns.
 	template <class RESULT>
 	RESULT WaitAndTakeResult(IcebergRequestResult<RESULT> &result) {
+		auto &scheduler = TaskScheduler::GetScheduler(context);
 		while (true) {
 			context.InterruptCheck();
 			if (executor.HasError()) {
@@ -35,7 +36,10 @@ public:
 				return result.TakeResult();
 			}
 			shared_ptr<Task> task;
-			if (executor.GetTask(task)) {
+			// With dedicated async workers, borrowing a request can block the caller after its awaited result
+			// is ready, leaving completed window slots unfilled. Help only when no async workers are available.
+			// Recheck on every iteration so reducing the pool to zero cannot strand queued requests.
+			if (scheduler.NumberOfAsyncThreads() == 0 && executor.GetTask(task)) {
 				const auto task_result = task->Execute(TaskExecutionMode::PROCESS_ALL);
 				D_ASSERT(task_result != TaskExecutionResult::TASK_NOT_FINISHED);
 			} else {
