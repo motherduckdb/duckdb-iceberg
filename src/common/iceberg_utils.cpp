@@ -36,6 +36,42 @@ timestamp_ms_t IcebergUtils::GetTransactionStartTimeMS(ClientContext &context) {
 	return timestamp_ms_t(Timestamp::GetEpochMs(transaction_start));
 }
 
+namespace {
+
+bool IsAvroLetter(char c) {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
+bool IsAvroDigit(char c) {
+	return c >= '0' && c <= '9';
+}
+
+} // namespace
+
+string IcebergUtils::MakeAvroCompatibleName(const string &name) {
+	string result;
+	result.reserve(name.size());
+	for (idx_t i = 0; i < name.size(); i++) {
+		const char c = name[i];
+		if (IsAvroLetter(c) || c == '_' || (i != 0 && IsAvroDigit(c))) {
+			result += c;
+			continue;
+		}
+		if (IsAvroDigit(c)) {
+			//! Avro identifiers can not start with a digit
+			result += '_';
+			result += c;
+			continue;
+		}
+		//! Escaped per byte, unlike the Iceberg reference implementation, which classifies characters with the
+		//! Unicode-aware Character.isLetterOrDigit. The Avro identifier grammar only accepts ASCII letters and
+		//! digits anyway, and the escaped name only has to make the Avro schema valid; field ids remain the
+		//! source of truth when the manifest is read back.
+		result += StringUtil::Format("_x%X", static_cast<uint8_t>(c));
+	}
+	return result;
+}
+
 idx_t IcebergUtils::ParseByteSizeOptionallyFormatted(const string &input) {
 	idx_t result;
 	auto error = StringUtil::TryParseFormattedBytes(input, result);

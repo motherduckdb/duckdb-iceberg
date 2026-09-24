@@ -11,6 +11,7 @@
 #include "catalog/rest/api/catalog_utils.hpp"
 #include "core/expression/iceberg_value.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
+#include "common/iceberg_utils.hpp"
 
 #include <optional>
 
@@ -300,7 +301,10 @@ IcebergDataFile::GetExtendedPartitionInfo(const IcebergTableMetadata &metadata) 
 		}
 		auto &resolved = it->second;
 		IcebergExtendedPartitionInfo extended;
-		extended.name = resolved.field->GetPartitionSpecFieldName();
+		//! The partition field name ends up as a field name in the Avro schema of the manifest, which only accepts
+		//! [A-Za-z_][A-Za-z0-9_]*. Partition field names are not restricted like that (they are derived from the
+		//! column name, or provided by whichever engine created the partition spec), so escape them here.
+		extended.name = IcebergUtils::MakeAvroCompatibleName(resolved.field->GetPartitionSpecFieldName());
 		extended.field_id = info.field_id;
 		extended.value = info.value;
 		extended.source_id = resolved.field->source_id;
