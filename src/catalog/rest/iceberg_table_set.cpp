@@ -541,28 +541,41 @@ const case_insensitive_set_t &IcebergTableSet::ApplyViewListResult(ClientContext
 	return transaction.listed_views.emplace(schema.name.GetIdentifierName(), std::move(names)).first->second;
 }
 
-optional_ptr<CatalogEntry> IcebergTableSet::GetViewEntry(ClientContext &context, const string &view_name) {
+bool IcebergTableSet::TryGetLocalViewEntry(ClientContext &context, const string &view_name,
+                                           optional_ptr<CatalogEntry> &entry) {
+	entry = nullptr;
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
 	auto view_key = IcebergTable::GetTableKey(ic_catalog, schema.namespace_items, view_name);
 	auto created_it = iceberg_transaction.created_views.find(view_key);
 	// A staged replacement is visible after DROP/CREATE in the same transaction.
 	if (created_it == iceberg_transaction.created_views.end() && iceberg_transaction.deleted_views.count(view_key)) {
-		return nullptr;
+		return true;
 	}
 
 	auto cached_it = iceberg_transaction.views.find(view_key);
 	if (cached_it != iceberg_transaction.views.end()) {
-		return cached_it->second.get();
+		entry = cached_it->second.get();
+		return true;
 	}
 
 	if (created_it != iceberg_transaction.created_views.end()) {
 		auto view_entry = make_uniq<ViewCatalogEntry>(catalog, schema, *created_it->second);
 		auto result = view_entry.get();
 		iceberg_transaction.views.emplace(view_key, std::move(view_entry));
-		return result;
+		entry = result;
+		return true;
 	}
 
+	return false;
+}
+
+optional_ptr<CatalogEntry> IcebergTableSet::GetViewEntry(ClientContext &context, const string &view_name) {
+	optional_ptr<CatalogEntry> entry;
+	if (TryGetLocalViewEntry(context, view_name, entry)) {
+		return entry;
+	}
+	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	// Check if the view endpoint is supported
 	if (ic_catalog.supported_urls.find("GET /v1/{prefix}/namespaces/{namespace}/views/{view}") ==
 	    ic_catalog.supported_urls.end()) {
@@ -679,12 +692,51 @@ void IcebergTableSet::ScanViews(ClientContext &context, const std::function<void
 			names.insert(info.GetViewName().GetIdentifierName());
 		}
 	}
-	for (auto &view_name : names) {
-		auto entry = GetViewEntry(context, view_name);
+	struct PendingViewLoad {
+		string name;
+		shared_ptr<IcebergRequestResult<IcebergLoadViewResult>> result;
+	};
+	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
+	auto &scheduler = TaskScheduler::GetScheduler(context);
+	const auto window_size = MinValue<idx_t>(8, scheduler.NumberOfThreads() + scheduler.NumberOfAsyncThreads());
+	deque<PendingViewLoad> pending;
+	IcebergRequestExecutor executor(context, ic_catalog);
+	auto name = names.begin();
+	auto schedule_next = [&]() {
+		context.InterruptCheck();
+		PendingViewLoad load {*name++, nullptr};
+		optional_ptr<CatalogEntry> local;
+		// Keep file-path probes on the ordinary lookup path, including their listing checks.
+		if (!TryGetLocalViewEntry(context, load.name, local) && load.name.find_first_of("/\\") == string::npos &&
+		    ic_catalog.supported_urls.count("GET /v1/{prefix}/namespaces/{namespace}/views/{view}")) {
+			load.result = executor.Schedule(IcebergLoadViewRequest(schema.namespace_items, load.name));
+		}
+		pending.push_back(std::move(load));
+	};
+	while (name != names.end() && pending.size() < window_size) {
+		schedule_next();
+	}
+	while (!pending.empty()) {
+		auto load = std::move(pending.front());
+		pending.pop_front();
+		optional_ptr<CatalogEntry> entry;
+		if (load.result) {
+			// Retire the request before refilling, even if a callback made its result obsolete.
+			executor.WaitUntilReady(*load.result);
+			if (!TryGetLocalViewEntry(context, load.name, entry)) {
+				entry = ApplyViewLoadResult(context, load.name, load.result->TakeResult());
+			}
+		} else {
+			entry = GetViewEntry(context, load.name);
+		}
+		if (name != names.end()) {
+			schedule_next();
+		}
 		if (entry) {
 			callback(*entry);
 		}
 	}
+	executor.Drain();
 }
 
 } // namespace duckdb

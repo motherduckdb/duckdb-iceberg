@@ -26,6 +26,13 @@ public:
 	//! Other requests and task cleanup may still be running when this returns.
 	template <class RESULT>
 	RESULT WaitAndTakeResult(IcebergRequestResult<RESULT> &result) {
+		WaitUntilReady(result);
+		return result.TakeResult();
+	}
+
+	//! Wait without consuming, so callers can discard responses superseded by transaction-local state.
+	template <class RESULT>
+	void WaitUntilReady(IcebergRequestResult<RESULT> &result) {
 		auto &scheduler = TaskScheduler::GetScheduler(context);
 		while (true) {
 			context.InterruptCheck();
@@ -33,7 +40,7 @@ public:
 				executor.ThrowError();
 			}
 			if (result.IsReady()) {
-				return result.TakeResult();
+				return;
 			}
 			shared_ptr<Task> task;
 			// With dedicated async workers, borrowing a request can block the caller after its awaited result
