@@ -167,6 +167,11 @@ IcebergMultiFileReader::InitializeGlobalState(ClientContext &context, const Mult
 	return make_uniq<IcebergMultiFileReaderGlobalState>(file_list);
 }
 
+// TODO: Audit equality-delete projection against Iceberg's normal projection rules, including name mapping.
+// Dropped delete columns must still be read; genuinely absent columns default to NULL. The physical-field
+// presence checks and NULL shortcuts below are not yet verified for all name-mapped files. In particular,
+// a field resolvable through name mapping must not be treated as absent. Cover both the expression and
+// fast-filter paths when addressing this limitation.
 IcebergEqualityDeleteReadColumn IcebergMultiFileReader::AddEqualityDeleteColumn(
     const IcebergTableMetadataSchemas &schemas, int32_t field_id, vector<MultiFileColumnDefinition> &scan_columns,
     vector<ColumnIndex> &scan_column_ids, MultiFileReaderData &reader_data, ClientContext &context) {
