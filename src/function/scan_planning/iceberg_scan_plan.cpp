@@ -95,13 +95,13 @@ static unique_ptr<FunctionData> IcebergScanPlanBind(ClientContext &context, Tabl
 		ret->produce_sequence_number = BooleanValue::Get(produce_sequence_number->second);
 	}
 
-	// A stable union of identity sources across specs, using the selected schema's types.
+	// Include historical identity sources even when they are absent from the selected output schema.
 	map<uint64_t, LogicalType> sources;
 	for (const auto &spec : metadata.partition_specs) {
 		for (const auto &field : spec.second.fields) {
-			auto column = schema.TryGetColumnByFieldId(field.source_id);
-			if (field.transform == IcebergTransformType::IDENTITY && column) {
-				sources.emplace(field.source_id, column->type);
+			auto type = IcebergPartitionConstants::GetType(field.source_id, schema, metadata.GetSchemas());
+			if (field.transform == IcebergTransformType::IDENTITY && type) {
+				sources.emplace(field.source_id, *type);
 			}
 		}
 	}
@@ -160,12 +160,8 @@ static void IcebergScanPlanFunction(ClientContext &context, TableFunctionInput &
 		row.first_row_id =
 		    task->manifest_entry.HasFirstRowId() ? optional<int64_t>(task->manifest_entry.GetFirstRowId()) : nullopt;
 		row.partition_spec_id = partition_spec_id;
-		row.partition_constants = IcebergPartitionConstants::Resolve(
-		    partition_spec_id, bind.scan_info->metadata.partition_specs, file.partition_info,
-		    [&](int32_t field_id) -> optional_ptr<const LogicalType> {
-			    auto column = bind.scan_info->schema.TryGetColumnByFieldId(field_id);
-			    return column ? optional_ptr<const LogicalType>(column->type) : nullptr;
-		    });
+		row.partition_constants = IcebergPartitionConstants::Resolve(partition_spec_id, file.partition_info,
+		                                                             bind.scan_info->metadata, bind.scan_info->schema);
 		row.delete_files = DeleteFiles(state.planner, *task);
 		IcebergScanTaskCodec::WriteTask(row, output, count);
 	}

@@ -3,12 +3,21 @@
 
 namespace duckdb {
 
-unordered_map<int32_t, Value>
-IcebergPartitionConstants::Resolve(int32_t spec_id, const unordered_map<int32_t, IcebergPartitionSpec> &specs,
-                                   const vector<IcebergPartitionInfo> &partition_values,
-                                   const TypeLookup &lookup_type) {
-	auto spec = specs.find(spec_id);
-	if (spec == specs.end()) {
+optional_ptr<const LogicalType> IcebergPartitionConstants::GetType(int32_t field_id, const IcebergTableSchema &schema,
+                                                                   const IcebergTableMetadataSchemas &schemas) {
+	auto column = schema.TryGetColumnByFieldId(field_id);
+	if (!column) {
+		column = schemas.FindColumnByFieldId(field_id);
+	}
+	return column ? optional_ptr<const LogicalType>(column->type) : nullptr;
+}
+
+unordered_map<int32_t, Value> IcebergPartitionConstants::Resolve(int32_t spec_id,
+                                                                 const vector<IcebergPartitionInfo> &partition_values,
+                                                                 const IcebergTableMetadata &metadata,
+                                                                 const IcebergTableSchema &schema) {
+	auto spec = metadata.partition_specs.find(spec_id);
+	if (spec == metadata.partition_specs.end()) {
 		throw InvalidConfigurationException("'partition_spec_id' %d doesn't exist in the metadata", spec_id);
 	}
 	unordered_map<int32_t, idx_t> field_indexes;
@@ -21,7 +30,7 @@ IcebergPartitionConstants::Resolve(int32_t spec_id, const unordered_map<int32_t,
 		if (field.transform != IcebergTransformType::IDENTITY) {
 			continue;
 		}
-		auto type = lookup_type(item.first);
+		auto type = GetType(item.first, schema, metadata.GetSchemas());
 		if (!type) {
 			continue;
 		}

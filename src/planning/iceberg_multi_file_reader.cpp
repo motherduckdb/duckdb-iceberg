@@ -315,17 +315,7 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
 	    task->manifest_entry, IcebergManifestContentType::DATA,
 	    [&](const IcebergManifestFile &manifest) { partition_spec_id = manifest.partition_spec_id; });
 	auto constants = IcebergPartitionConstants::Resolve(
-	    partition_spec_id, metadata.partition_specs, task->manifest_entry.entry.data_file.partition_info,
-	    [&](int32_t field_id) -> optional_ptr<const LogicalType> {
-		    for (auto &column : global_columns) {
-			    if (!column.identifier.IsNull() && column.GetIdentifierFieldId() == field_id) {
-				    return column.type;
-			    }
-		    }
-		    // Equality deletes can require fields absent from the selected output schema.
-		    auto column = metadata.GetSchemas().FindColumnByFieldId(field_id);
-		    return column ? optional_ptr<const LogicalType>(column->type) : nullptr;
-	    });
+	    partition_spec_id, task->manifest_entry.entry.data_file.partition_info, metadata, planner.GetSchema());
 	return InitializeTaskReader(reader_data, bind_data, global_columns, global_column_ids, table_filters, context,
 	                            gstate, metadata.GetSchemas(), metadata.mappings, multi_file_list.ProcessDeletes(*task),
 	                            constants);

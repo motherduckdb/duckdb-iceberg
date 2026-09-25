@@ -103,3 +103,48 @@ select * from iceberg_scan_tasks((select * from iceberg_scan_plan('my_datalake.d
 
 statement ok
 drop table my_datalake.default.scan_partition_value_encoding;
+
+# Dropping an identity source from the selected schema must not remove its historical constants.
+statement ok
+create table my_datalake.default.scan_partition_value_encoding(id integer, p integer) partitioned by (p);
+
+statement ok
+insert into my_datalake.default.scan_partition_value_encoding values (1, 42), (2, NULL);
+
+statement ok
+alter table my_datalake.default.scan_partition_value_encoding set partitioned by (id);
+
+statement ok
+alter table my_datalake.default.scan_partition_value_encoding drop column p;
+
+query III
+select sum(record_count), count(partition_constants."2"), max(partition_constants."2")
+from iceberg_scan_plan('my_datalake.default.scan_partition_value_encoding');
+----
+2	1	42
+
+query I
+select * from my_datalake.default.scan_partition_value_encoding order by id;
+----
+1
+2
+
+# Execution accepts the historical constant without exposing the dropped column.
+query I
+select * from iceberg_scan_tasks((select * from iceberg_scan_plan('my_datalake.default.scan_partition_value_encoding'))) order by id;
+----
+1
+2
+
+# Reusing the name does not change the identity of the historical field.
+statement ok
+alter table my_datalake.default.scan_partition_value_encoding add column p varchar;
+
+query IT
+select * from iceberg_scan_tasks((select * from iceberg_scan_plan('my_datalake.default.scan_partition_value_encoding'))) order by id;
+----
+1	NULL
+2	NULL
+
+statement ok
+drop table my_datalake.default.scan_partition_value_encoding;
