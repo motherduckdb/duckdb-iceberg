@@ -82,7 +82,14 @@ shared_ptr<IcebergDeleteData> IcebergMultiFileList::GetExistingPositionalDeleteD
 }
 
 IcebergDeletePlan IcebergMultiFileList::ProcessDeletes(const IcebergScanTask &task) const {
-	return delete_execution->ProcessDeletes(*planner, task);
+	vector<IcebergDeleteFile> files;
+	for (auto ref : task.delete_files) {
+		auto &manifest = planner->GetDeleteManifest(ref);
+		files.emplace_back(manifest.GetManifestEntries()[ref.entry_idx].data_file);
+	}
+	IcebergDeleteExecutionContext execution {planner->GetContext(), FileSystem::GetFileSystem(planner->GetContext()),
+	                                         planner->GetPath(), planner->GetOptions(), planner->GetMetadata()};
+	return delete_execution->ProcessDeletes(execution, task.manifest_entry.entry.data_file.file_path, files);
 }
 
 unique_ptr<IcebergMultiFileList>

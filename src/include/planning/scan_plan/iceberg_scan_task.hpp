@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/metadata/manifest/iceberg_manifest.hpp"
+#include "core/deletes/iceberg_delete_file.hpp"
 
 namespace duckdb {
 
@@ -26,7 +26,7 @@ struct IcebergScanTaskFormat {
 	static LogicalType DeleteFileType();
 	static LogicalType SchemaType(const IcebergTableSchema &schema);
 	static child_list_t<LogicalType> Columns(const LogicalType &partition_type, const LogicalType &schema_type);
-	static IcebergManifestEntry ReadDeleteFile(const Value &descriptor);
+	static IcebergDeleteFile ReadDeleteFile(const Value &descriptor);
 	static OpenFileInfo FileInfo(const string &path, const string &format, int64_t size, optional<int64_t> first_row_id,
 	                             optional<int64_t> sequence_number);
 };

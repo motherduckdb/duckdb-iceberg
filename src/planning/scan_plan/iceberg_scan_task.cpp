@@ -44,7 +44,7 @@ child_list_t<LogicalType> IcebergScanTaskFormat::Columns(const LogicalType &part
 	        {"schema", schema_type}};
 }
 
-IcebergManifestEntry IcebergScanTaskFormat::ReadDeleteFile(const Value &descriptor) {
+IcebergDeleteFile IcebergScanTaskFormat::ReadDeleteFile(const Value &descriptor) {
 	if (descriptor.IsNull() || descriptor.type() != DeleteFileType()) {
 		throw InvalidInputException("iceberg_scan_tasks requires non-NULL delete descriptors of the scan-plan type");
 	}
@@ -55,9 +55,7 @@ IcebergManifestEntry IcebergScanTaskFormat::ReadDeleteFile(const Value &descript
 			                            StructType::GetChildName(descriptor.type(), i));
 		}
 	}
-	IcebergManifestEntry result;
-	result.status = IcebergManifestEntryStatusType::EXISTING;
-	auto &file = result.data_file;
+	IcebergDeleteFile file;
 	file.file_path = StringValue::Get(values[0]);
 	file.file_format = StringValue::Get(values[1]);
 	auto content = IntegerValue::Get(values[2]);
@@ -100,7 +98,7 @@ IcebergManifestEntry IcebergScanTaskFormat::ReadDeleteFile(const Value &descript
 	} else if (!StringUtil::CIEquals(file.file_format, "parquet")) {
 		throw NotImplementedException("File format '%s' not supported for deletes", file.file_format);
 	}
-	return result;
+	return file;
 }
 
 OpenFileInfo IcebergScanTaskFormat::FileInfo(const string &path, const string &format, int64_t size,

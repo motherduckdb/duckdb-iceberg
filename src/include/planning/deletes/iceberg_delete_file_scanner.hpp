@@ -1,14 +1,20 @@
 #pragma once
 
-#include "planning/deletes/iceberg_delete_planner.hpp"
+#include "core/deletes/iceberg_delete_data.hpp"
+#include "core/deletes/iceberg_equality_delete.hpp"
+#include "core/deletes/iceberg_delete_file.hpp"
 
 #include <condition_variable>
 
 namespace duckdb {
 
-class IcebergScanPlanner;
-struct IcebergDeleteFileReference;
-struct IcebergScanTask;
+using position_delete_map_t = unordered_map<string, shared_ptr<IcebergDeleteData>>;
+
+struct IcebergDeletePlan {
+	//! Equality-delete values are materialized separately from positional deletes, which become a DeleteFilter.
+	vector<reference<const IcebergEqualityDeleteFile>> equality_deletes;
+	unique_ptr<DeleteFilter> positional_deletes;
+};
 
 //! Only execution dependencies: no manifest discovery, filtering, or scan-plan provider.
 struct IcebergDeleteExecutionContext {
@@ -19,6 +25,7 @@ struct IcebergDeleteExecutionContext {
 	const IcebergTableMetadata &metadata;
 };
 
+//! Contents are immutable after publication through complete under lock.
 //! Execution state for one delete file. This deliberately lives outside scan
 //! planning: it caches the result of reading the selected delete descriptor.
 struct IcebergDeleteFileLoadState {
@@ -27,25 +34,12 @@ struct IcebergDeleteFileLoadState {
 	bool complete = false;
 	ErrorData error;
 	shared_ptr<IcebergEqualityDeleteFile> equality_delete;
-	//! Owned descriptor storage keeps BoundIcebergManifestEntry references alive.
-	shared_ptr<IcebergManifestListEntry> descriptor_owner;
 	position_delete_map_t positional_deletes;
 };
 
-//! Input to ScanFiles, so it can run without holding the (delete_)lock
+//! A selected descriptor and the load state exclusively populated by its builder.
 struct IcebergDeleteScanEntry {
-	IcebergDeleteScanEntry(idx_t manifest_idx_p, idx_t entry_idx_p, const IcebergManifestListEntry &manifest_p,
-	                       shared_ptr<IcebergDeleteFileLoadState> load_p)
-	    : manifest_idx(manifest_idx_p), entry_idx(entry_idx_p), manifest(manifest_p), load(std::move(load_p)) {
-	}
-
-	const IcebergManifestEntry &GetEntry() const;
-	BoundIcebergManifestEntry BindEntry() const;
-
-	idx_t manifest_idx;
-	idx_t entry_idx;
-	const IcebergManifestListEntry &manifest;
-	//! The shared LoadState of the delete file to populate
+	IcebergDeleteFile file;
 	shared_ptr<IcebergDeleteFileLoadState> load;
 };
 
@@ -57,9 +51,9 @@ struct IcebergEqualityDeleteScanResult {
 	shared_ptr<IcebergEqualityDeleteFile> delete_file;
 };
 
-//! Grouped result of all delete files scanned for a data file
+//! Equality-delete results to publish after the batch completes.
+//! Positional contents are built in each file's exclusively owned load state.
 struct IcebergDeleteScanResult {
-	position_delete_map_t positional_delete_data;
 	vector<IcebergEqualityDeleteScanResult> equality_delete_data;
 };
 
@@ -72,21 +66,16 @@ struct IcebergDeleteFileScanner {
 //! The scan planner only selects descriptors; this state reads and caches them.
 class IcebergDeleteExecutionState {
 public:
-	IcebergDeletePlan ProcessDeletes(const IcebergScanPlanner &planner, const IcebergScanTask &task);
 	IcebergDeletePlan ProcessDeletes(const IcebergDeleteExecutionContext &context, const string &data_file_path,
-	                                 const vector<Value> &descriptors);
+	                                 const vector<IcebergDeleteFile> &descriptors);
 	shared_ptr<IcebergDeleteData> GetExistingPositionalDeleteData(const string &file_path) const;
 
 private:
-	shared_ptr<IcebergDeleteFileLoadState> &GetDeleteFileLoad(const IcebergScanPlanner &planner,
-	                                                          IcebergDeleteFileReference delete_file);
-
-private:
 	mutable mutex lock;
-	vector<unordered_map<idx_t, shared_ptr<IcebergDeleteFileLoadState>>> delete_file_loads;
+	//! Assembled task results retained for DELETE/UPDATE, never used to filter another task.
 	position_delete_map_t positional_delete_data;
-	//! Hash collisions are resolved by comparing the complete descriptor value.
-	unordered_map<hash_t, vector<pair<Value, shared_ptr<IcebergDeleteFileLoadState>>>> descriptor_loads;
+	//! Paths select buckets; complete descriptors distinguish blobs and scan semantics.
+	unordered_map<string, vector<pair<IcebergDeleteFile, shared_ptr<IcebergDeleteFileLoadState>>>> descriptor_loads;
 };
 
 } // namespace duckdb
