@@ -1,5 +1,5 @@
 #include "planning/iceberg_multi_file_list.hpp"
-#include "planning/scan_plan/iceberg_scan_task.hpp"
+#include "planning/iceberg_multi_file_reader.hpp"
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
@@ -167,7 +167,7 @@ OpenFileInfo IcebergMultiFileList::GetFileInternal(idx_t file_id) const {
 		                          sequence_number = manifest_entry.entry.GetSequenceNumber(manifest);
 	                          });
 
-	return IcebergScanTaskFormat::FileInfo(
+	return IcebergMultiFileReader::FileInfo(
 	    task->file_path, data_file.file_format, data_file.file_size_in_bytes,
 	    manifest_entry.HasFirstRowId() ? optional<int64_t>(manifest_entry.GetFirstRowId()) : nullopt, sequence_number);
 }
