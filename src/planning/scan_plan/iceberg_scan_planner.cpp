@@ -432,9 +432,4 @@ const IcebergManifestListEntry &IcebergScanPlanner::GetDeleteManifest(IcebergDel
 	return manifest;
 }
 
-unique_ptr<IcebergDeletePlanningContext> IcebergScanPlanner::CreateDeletePlanningContext() const {
-	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
-	return make_uniq<IcebergDeletePlanningContext>(GetDeletePlanningContext());
-}
-
 } // namespace duckdb

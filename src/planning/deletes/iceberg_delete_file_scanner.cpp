@@ -49,8 +49,7 @@ static PuffinDeletionVectorVerificationResult VerifyPuffinDeletionVector(FileSys
 	return std::monostate {};
 }
 
-static void ScanPuffinFile(const IcebergDeleteExecutionContext &context, const IcebergDeleteScanEntry &scan_entry,
-                           IcebergDeleteScanResult &scan_result) {
+static void ScanPuffinFile(const IcebergDeleteExecutionContext &context, const IcebergDeleteScanEntry &scan_entry) {
 	auto &data_file = scan_entry.file;
 	if (context.metadata.iceberg_version < 3) {
 		throw InvalidConfigurationException("DeletionVector not supported in Iceberg V%d",
@@ -117,8 +116,7 @@ TryGetOrCreatePositionDeletes(position_delete_map_t &deletes, const string &sour
 }
 
 static void ScanPositionalDeleteFile(const IcebergDeleteExecutionContext &context,
-                                     const IcebergDeleteScanEntry &scan_entry, DataChunk &result,
-                                     IcebergDeleteScanResult &scan_result) {
+                                     const IcebergDeleteScanEntry &scan_entry, DataChunk &result) {
 	auto &data_file = scan_entry.file;
 	auto names = FlatVector::GetData<string_t>(result.data[0]);
 	auto row_ids = FlatVector::GetData<int64_t>(result.data[1]);
@@ -350,7 +348,7 @@ static void ScanParquetDeleteFiles(const IcebergDeleteExecutionContext &context,
 		}
 		auto &scan_entry = scan_entries[file_idx].get();
 		if (content == IcebergManifestEntryContentType::POSITION_DELETES) {
-			ScanPositionalDeleteFile(context, scan_entry, result, scan_result);
+			ScanPositionalDeleteFile(context, scan_entry, result);
 		} else {
 			ScanEqualityDeleteFile(context, scan_entry, equality_delete_files[file_idx].get(), result,
 			                       multi_file_bind_data.reader_bind.schema);
@@ -380,7 +378,7 @@ IcebergDeleteScanResult IcebergDeleteFileScanner::ScanFiles(const IcebergDeleteE
 				                                    data_file.file_path, static_cast<uint8_t>(data_file.content));
 			}
 		} else if (StringUtil::CIEquals(data_file.file_format, "puffin")) {
-			ScanPuffinFile(context, scan_entry, result);
+			ScanPuffinFile(context, scan_entry);
 		} else {
 			throw NotImplementedException(
 			    "File format '%s' not supported for deletes, only supports 'parquet' and 'puffin' currently",

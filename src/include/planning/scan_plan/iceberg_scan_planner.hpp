@@ -64,7 +64,6 @@ public:
 	void GetStatistics(vector<PartitionStatistics> &result) const;
 	IcebergPartition GetPartitionForDataFile(const string &file_path) const;
 	const IcebergManifestListEntry &GetDeleteManifest(IcebergDeleteFileReference delete_file) const;
-	unique_ptr<IcebergDeletePlanningContext> CreateDeletePlanningContext() const;
 	void WithManifestFile(const BoundIcebergManifestEntry &entry, IcebergManifestContentType type,
 	                      const std::function<void(const IcebergManifestFile &manifest_file)> &callback) const
 	    DUCKDB_EXCLUDES(shared_state->lock);

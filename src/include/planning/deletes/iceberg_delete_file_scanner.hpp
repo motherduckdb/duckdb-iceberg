@@ -1,11 +1,20 @@
 #pragma once
 
-#include "planning/deletes/iceberg_delete_planner.hpp"
+#include "core/deletes/iceberg_delete_data.hpp"
+#include "core/deletes/iceberg_equality_delete.hpp"
 #include "core/deletes/iceberg_delete_file.hpp"
 
 #include <condition_variable>
 
 namespace duckdb {
+
+using position_delete_map_t = unordered_map<string, shared_ptr<IcebergDeleteData>>;
+
+struct IcebergDeletePlan {
+	//! Equality-delete values are materialized separately from positional deletes, which become a DeleteFilter.
+	vector<reference<const IcebergEqualityDeleteFile>> equality_deletes;
+	unique_ptr<DeleteFilter> positional_deletes;
+};
 
 //! Only execution dependencies: no manifest discovery, filtering, or scan-plan provider.
 struct IcebergDeleteExecutionContext {
@@ -16,6 +25,7 @@ struct IcebergDeleteExecutionContext {
 	const IcebergTableMetadata &metadata;
 };
 
+//! Contents are immutable after publication through complete under lock.
 //! Execution state for one delete file. This deliberately lives outside scan
 //! planning: it caches the result of reading the selected delete descriptor.
 struct IcebergDeleteFileLoadState {
@@ -41,7 +51,8 @@ struct IcebergEqualityDeleteScanResult {
 	shared_ptr<IcebergEqualityDeleteFile> delete_file;
 };
 
-//! Grouped result of all delete files scanned for a data file
+//! Equality-delete results to publish after the batch completes.
+//! Positional contents are built in each file's exclusively owned load state.
 struct IcebergDeleteScanResult {
 	vector<IcebergEqualityDeleteScanResult> equality_delete_data;
 };

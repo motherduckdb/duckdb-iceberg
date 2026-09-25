@@ -208,3 +208,24 @@ statement error
 select * from iceberg_scan_tasks((select * replace({'6':0} as partition_constants) from tasks));
 ----
 partition constant 6 does not match
+
+# Cache identity must include the descriptor, even for the same Parquet path.
+# The second task must validate its own record count rather than reuse the first load.
+statement ok
+set threads=1;
+
+statement error
+select count(*) from iceberg_scan_tasks((select * from equality_tasks
+ union all select * replace(list_transform(delete_files, lambda d: struct_update(d, record_count := 0::bigint)) as delete_files) from equality_tasks));
+----
+contains more rows than its record count
+
+# Failed batched loads must wake all workers sharing those descriptors.
+statement ok
+set threads=5;
+
+statement error
+select count(*) from iceberg_scan_tasks((select * replace(list_transform(delete_files,
+ lambda d: struct_update(d, record_count := 0::bigint)) as delete_files) from many_tasks));
+----
+contains more rows than its record count
