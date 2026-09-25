@@ -56,6 +56,24 @@ select count(*) from iceberg_scan_tasks((select * from tasks));
 ----
 4
 
+# One task can yield several chunks before advancing through an empty task to the next file.
+statement ok
+copy (select i::integer id from range(5000) t(i)) to '{TEST_DIR}/task_large.parquet'
+(format parquet, field_ids {id:1});
+
+query II
+select count(*), sum(id) from iceberg_scan_tasks((
+ select * replace('{TEST_DIR}/task_large.parquet' as file_path,
+  (select size from read_blob('{TEST_DIR}/task_large.parquet'))::bigint as file_size_in_bytes,
+  5000::bigint as record_count) from tasks
+ union all
+ select * replace('{TEST_DIR}/task_empty.parquet' as file_path,
+  (select size from read_blob('{TEST_DIR}/task_empty.parquet'))::bigint as file_size_in_bytes,
+  0::bigint as record_count) from tasks
+ union all select * from tasks));
+----
+5004	12497506
+
 # Non-NULL partition constants are only fallbacks. A real column wins.
 statement ok
 copy (select 8::integer id, 'physical'::varchar part) to '{TEST_DIR}/task_physical.parquet'
