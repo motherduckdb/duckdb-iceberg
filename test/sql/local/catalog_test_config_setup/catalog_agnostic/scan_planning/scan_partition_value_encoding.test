@@ -64,3 +64,42 @@ select * from iceberg_scan_tasks((select * from iceberg_scan_plan('my_datalake.d
 
 statement ok
 drop table my_datalake.default.scan_partition_value_encoding;
+
+# Evolved specs retain a stable typed SQL field, but only identity specs provide a fallback.
+statement ok
+create table my_datalake.default.scan_partition_value_encoding(id integer, p integer) partitioned by (p);
+
+statement ok
+insert into my_datalake.default.scan_partition_value_encoding values (1, 42), (2, NULL);
+
+statement ok
+alter table my_datalake.default.scan_partition_value_encoding alter p type bigint;
+
+statement ok
+alter table my_datalake.default.scan_partition_value_encoding set partitioned by (bucket(4, p));
+
+statement ok
+insert into my_datalake.default.scan_partition_value_encoding values (3, 99);
+
+query IIT
+select sum(record_count), count(partition_constants."2"), first(typeof(partition_constants."2"))
+from iceberg_scan_plan('my_datalake.default.scan_partition_value_encoding');
+----
+3	1	BIGINT
+
+query II
+select * from my_datalake.default.scan_partition_value_encoding order by id;
+----
+1	42
+2	NULL
+3	99
+
+query II
+select * from iceberg_scan_tasks((select * from iceberg_scan_plan('my_datalake.default.scan_partition_value_encoding'))) order by id;
+----
+1	42
+2	NULL
+3	99
+
+statement ok
+drop table my_datalake.default.scan_partition_value_encoding;
