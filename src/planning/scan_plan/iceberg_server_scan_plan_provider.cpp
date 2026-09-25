@@ -52,11 +52,11 @@ bool ServerSideScanPlanProvider::DeleteFileAppliesToDataFile(const string &data_
 	return refs != plan.delete_files_by_data_file.end() && refs->second.count(delete_file_path);
 }
 
-vector<IcebergManifestListEntry> &ServerSideScanPlanProvider::DataManifests() {
+const vector<IcebergManifestListEntry> &ServerSideScanPlanProvider::DataManifests() {
 	return plan.data_manifests;
 }
 
-vector<IcebergManifestListEntry> &ServerSideScanPlanProvider::DeleteManifests() {
+const vector<IcebergManifestListEntry> &ServerSideScanPlanProvider::DeleteManifests() {
 	return plan.delete_manifests;
 }
 

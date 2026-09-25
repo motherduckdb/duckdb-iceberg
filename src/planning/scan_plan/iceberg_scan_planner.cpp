@@ -160,7 +160,7 @@ void IcebergScanPlanner::InitializeView(annotated_lock_guard<annotated_mutex> &g
 		data_manifests.emplace_back(data_manifests.size(), manifest);
 		data_manifest_matches.push_back(pruner.ManifestMatchesFilter(manifest.file));
 	}
-	for (auto &manifest : shared_state->transaction_data_manifests) {
+	for (auto &manifest : GetScanPlanProvider().TransactionDataManifests()) {
 		data_manifests.emplace_back(data_manifests.size(), manifest);
 		data_manifest_matches.push_back(pruner.ManifestMatchesFilter(manifest.get().file));
 	}
@@ -172,7 +172,7 @@ void IcebergScanPlanner::InitializeView(annotated_lock_guard<annotated_mutex> &g
 		delete_manifest_matches.push_back(matches);
 		has_matching_deletes |= matches;
 	}
-	for (auto &manifest : shared_state->transaction_delete_manifests) {
+	for (auto &manifest : GetScanPlanProvider().TransactionDeleteManifests()) {
 		delete_manifests.emplace_back(delete_manifests.size(), manifest);
 		auto matches = pruner.ManifestMatchesFilter(manifest.get().file);
 		delete_manifest_matches.push_back(matches);
