@@ -309,9 +309,8 @@ static void PopulateAlteredManifests(const IcebergMultiFileList &multi_file_list
 	if (delete_data.type != IcebergDeleteType::DELETION_VECTOR) {
 		return;
 	}
-	for (auto &bound_entry : delete_data.entries) {
-		auto &entry = bound_entry.entry;
-		out.InvalidateFile(entry.data_file.file_path);
+	for (auto &file_path : delete_data.source_files) {
+		out.InvalidateFile(file_path);
 	}
 }
 

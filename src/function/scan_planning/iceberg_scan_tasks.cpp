@@ -97,7 +97,7 @@ struct IcebergTaskScanInfo : public TableFunctionInfo {
 	shared_ptr<IcebergTaskExecutionContext> execution;
 	OpenFileInfo file;
 	unordered_map<int32_t, Value> partition_constants;
-	vector<Value> delete_files;
+	vector<IcebergDeleteFile> delete_files;
 };
 
 //! The ordinary reader owns mapping and chunk finalization. Only its planner-facing
@@ -258,7 +258,9 @@ static unique_ptr<IcebergActiveTask> StartTask(ExecutionContext &context, const 
 		info->partition_constants.emplace(bind.partition_ids[i], values[i]);
 	}
 	auto deletes = TaskValue(input, bind, local.row, TaskFormat::DELETE_FILES);
-	info->delete_files = ListValue::GetChildren(deletes);
+	for (auto &descriptor : ListValue::GetChildren(deletes)) {
+		info->delete_files.push_back(TaskFormat::ReadDeleteFile(descriptor));
+	}
 
 	auto result = make_uniq<IcebergActiveTask>();
 	auto &entry = Catalog::GetEntry<TableFunctionCatalogEntry>(
