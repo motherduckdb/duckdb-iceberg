@@ -1,4 +1,5 @@
 #include "function/scan_planning/iceberg_scan_task_codec.hpp"
+#include "core/metadata/partition/iceberg_partition_constants.hpp"
 
 namespace duckdb {
 
@@ -187,9 +188,9 @@ IcebergFileScanTask IcebergScanTaskCodec::ReadTask(DataChunk &input, const Input
 	auto constants = ReadValue(input, bind, row, PARTITION_CONSTANTS);
 	auto &values = StructValue::GetChildren(constants);
 	for (idx_t i = 0; i < values.size(); i++) {
-		auto column = schema.TryGetColumnByFieldId(bind.partition_ids[i]);
-		if (!column || column->type != values[i].type()) {
-			throw InvalidInputException("iceberg_scan_tasks partition constant %d does not match the selected schema",
+		auto type = IcebergPartitionConstants::GetType(bind.partition_ids[i], schema, metadata.GetSchemas());
+		if (!type || *type != values[i].type()) {
+			throw InvalidInputException("iceberg_scan_tasks partition constant %d does not match the table schemas",
 			                            bind.partition_ids[i]);
 		}
 		result.partition_constants.emplace(bind.partition_ids[i], values[i]);

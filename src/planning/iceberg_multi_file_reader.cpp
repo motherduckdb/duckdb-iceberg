@@ -19,7 +19,7 @@
 #include "iceberg_logging.hpp"
 #include "planning/iceberg_multi_file_list.hpp"
 #include "planning/pruning/iceberg_predicate.hpp"
-#include "core/expression/iceberg_value.hpp"
+#include "core/metadata/partition/iceberg_partition_constants.hpp"
 #include "core/expression/iceberg_predicate_stats.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
 #include "duckdb/common/multi_file/multi_file_states.hpp"
@@ -167,6 +167,11 @@ IcebergMultiFileReader::InitializeGlobalState(ClientContext &context, const Mult
 	return make_uniq<IcebergMultiFileReaderGlobalState>(file_list);
 }
 
+// TODO: Audit equality-delete projection against Iceberg's normal projection rules, including name mapping.
+// Dropped delete columns must still be read; genuinely absent columns default to NULL. The physical-field
+// presence checks and NULL shortcuts below are not yet verified for all name-mapped files. In particular,
+// a field resolvable through name mapping must not be treated as absent. Cover both the expression and
+// fast-filter paths when addressing this limitation.
 IcebergEqualityDeleteReadColumn IcebergMultiFileReader::AddEqualityDeleteColumn(
     const IcebergTableMetadataSchemas &schemas, int32_t field_id, vector<MultiFileColumnDefinition> &scan_columns,
     vector<ColumnIndex> &scan_column_ids, MultiFileReaderData &reader_data, ClientContext &context) {
@@ -271,50 +276,6 @@ static void ApplyFieldMapping(MultiFileColumnDefinition &col, const vector<Icebe
 	}
 }
 
-unordered_map<int32_t, Value> IcebergMultiFileReader::PartitionConstants(
-    int32_t partition_spec_id, const BoundIcebergManifestEntry &bound_manifest_entry,
-    const unordered_map<int32_t, IcebergPartitionSpec> &partition_specs, const IcebergTableMetadataSchemas &schemas,
-    const vector<MultiFileColumnDefinition> &global_columns, ClientContext &context) {
-	auto spec = partition_specs.find(partition_spec_id);
-	if (spec == partition_specs.end()) {
-		throw InvalidConfigurationException("'partition_spec_id' %d doesn't exist in the metadata", partition_spec_id);
-	}
-	unordered_map<int32_t, idx_t> field_indexes;
-	for (idx_t i = 0; i < spec->second.fields.size(); i++) {
-		field_indexes[spec->second.fields[i].source_id] = i;
-	}
-	unordered_map<int32_t, Value> constants;
-	for (auto &item : field_indexes) {
-		auto &field = spec->second.fields[item.second];
-		if (field.transform != IcebergTransformType::IDENTITY) {
-			continue;
-		}
-		optional_ptr<const LogicalType> type;
-		for (auto &column : global_columns) {
-			if (!column.identifier.IsNull() && column.GetIdentifierFieldId() == item.first) {
-				type = column.type;
-				break;
-			}
-		}
-		if (!type) {
-			auto column = schemas.FindColumnByFieldId(item.first);
-			if (column) {
-				type = column->type;
-			}
-		}
-		if (!type) {
-			continue;
-		}
-		for (auto &partition : bound_manifest_entry.entry.data_file.partition_info) {
-			if (partition.field_id == field.partition_field_id && !partition.value.IsNull()) {
-				constants.emplace(item.first, IcebergValue::TransformPartitionValue(partition.value, *type));
-				break;
-			}
-		}
-	}
-	return constants;
-}
-
 void IcebergMultiFileReader::ApplyPartitionConstants(const unordered_map<int32_t, Value> &constants,
                                                      MultiFileReaderData &reader_data,
                                                      const vector<MultiFileColumnDefinition> &global_columns,
@@ -358,8 +319,8 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
 	planner.WithManifestFile(
 	    task->manifest_entry, IcebergManifestContentType::DATA,
 	    [&](const IcebergManifestFile &manifest) { partition_spec_id = manifest.partition_spec_id; });
-	auto constants = PartitionConstants(partition_spec_id, task->manifest_entry, metadata.partition_specs,
-	                                    metadata.GetSchemas(), global_columns, context);
+	auto constants = IcebergPartitionConstants::Resolve(
+	    partition_spec_id, task->manifest_entry.entry.data_file.partition_info, metadata, planner.GetSchema());
 	return InitializeTaskReader(reader_data, bind_data, global_columns, global_column_ids, table_filters, context,
 	                            gstate, metadata.GetSchemas(), metadata.mappings, multi_file_list.ProcessDeletes(*task),
 	                            constants);

@@ -247,3 +247,22 @@ select count(*) from iceberg_scan_tasks((select * replace(list_transform(delete_
  lambda d: struct_update(d, record_count := 0::bigint)) as delete_files) from many_tasks));
 ----
 contains more rows than its record count
+
+# A constant may reference a historical field absent from the selected output schema.
+query I
+select id from iceberg_scan_tasks((select * replace({'5':1::integer, '6':'P'::varchar} as partition_constants) from tasks)) order by id;
+----
+0
+1
+2
+3
+
+statement error
+select * from iceberg_scan_tasks((select * replace({'5':'wrong type'} as partition_constants) from tasks));
+----
+partition constant 5 does not match
+
+statement error
+select * from iceberg_scan_tasks((select * replace({'999':1} as partition_constants) from tasks));
+----
+partition constant 999 does not match

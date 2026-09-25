@@ -2,7 +2,7 @@
 
 #include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
-#include "core/expression/iceberg_value.hpp"
+#include "core/metadata/partition/iceberg_partition_constants.hpp"
 #include "duckdb/common/types/vector.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "planning/scan_plan/iceberg_scan_planner.hpp"
@@ -20,7 +20,6 @@ struct IcebergScanPlanBindData : public TableFunctionData {
 	shared_ptr<IcebergScanInfo> scan_info;
 	IcebergOptions options;
 	bool produce_sequence_number = false;
-	vector<uint64_t> partition_source_ids;
 	LogicalType partition_type;
 };
 
@@ -96,19 +95,18 @@ static unique_ptr<FunctionData> IcebergScanPlanBind(ClientContext &context, Tabl
 		ret->produce_sequence_number = BooleanValue::Get(produce_sequence_number->second);
 	}
 
-	// A stable union of identity sources across specs, using the selected schema's types.
+	// Include historical identity sources even when they are absent from the selected output schema.
 	map<uint64_t, LogicalType> sources;
 	for (const auto &spec : metadata.partition_specs) {
 		for (const auto &field : spec.second.fields) {
-			auto column = schema.TryGetColumnByFieldId(field.source_id);
-			if (field.transform == IcebergTransformType::IDENTITY && column) {
-				sources.emplace(field.source_id, column->type);
+			auto type = IcebergPartitionConstants::GetType(field.source_id, schema, metadata.GetSchemas());
+			if (field.transform == IcebergTransformType::IDENTITY && type) {
+				sources.emplace(field.source_id, *type);
 			}
 		}
 	}
 	child_list_t<LogicalType> constants;
 	for (const auto &source : sources) {
-		ret->partition_source_ids.push_back(source.first);
 		constants.emplace_back(std::to_string(source.first), source.second);
 	}
 	ret->partition_type = LogicalType::STRUCT(std::move(constants));
@@ -118,45 +116,6 @@ static unique_ptr<FunctionData> IcebergScanPlanBind(ClientContext &context, Tabl
 		return_types.push_back(column.second);
 	}
 	return std::move(ret);
-}
-
-static unordered_map<int32_t, Value> PartitionConstants(const IcebergScanPlanBindData &bind,
-                                                        const IcebergScanTask &task, int32_t partition_spec_id) {
-	auto &metadata = bind.scan_info->metadata;
-	auto spec = metadata.partition_specs.find(partition_spec_id);
-	if (spec == metadata.partition_specs.end()) {
-		throw InvalidConfigurationException("'partition_spec_id' %d doesn't exist in the metadata", partition_spec_id);
-	}
-	// Match the reader: the last spec field for a source determines its fallback.
-	unordered_map<uint64_t, idx_t> field_indexes;
-	for (idx_t i = 0; i < spec->second.fields.size(); i++) {
-		field_indexes[spec->second.fields[i].source_id] = i;
-	}
-	unordered_map<int32_t, Value> values;
-	auto &children = StructType::GetChildTypes(bind.partition_type);
-	for (idx_t i = 0; i < bind.partition_source_ids.size(); i++) {
-		auto &type = children[i].second;
-		Value value(type);
-		auto index = field_indexes.find(bind.partition_source_ids[i]);
-		do {
-			if (index == field_indexes.end()) {
-				break;
-			}
-			auto &field = spec->second.fields[index->second];
-			if (field.transform != IcebergTransformType::IDENTITY) {
-				break;
-			}
-			for (const auto &partition : task.manifest_entry.entry.data_file.partition_info) {
-				if (partition.field_id != field.partition_field_id || partition.value.IsNull()) {
-					continue;
-				}
-				value = IcebergValue::TransformPartitionValue(partition.value, type);
-				break;
-			}
-		} while (false);
-		values.emplace(bind.partition_source_ids[i], std::move(value));
-	}
-	return values;
 }
 
 static vector<IcebergDeleteFile> DeleteFiles(const IcebergScanPlanner &planner, const IcebergScanTask &task) {
@@ -201,7 +160,8 @@ static void IcebergScanPlanFunction(ClientContext &context, TableFunctionInput &
 		row.first_row_id =
 		    task->manifest_entry.HasFirstRowId() ? optional<int64_t>(task->manifest_entry.GetFirstRowId()) : nullopt;
 		row.partition_spec_id = partition_spec_id;
-		row.partition_constants = PartitionConstants(bind, *task, partition_spec_id);
+		row.partition_constants = IcebergPartitionConstants::Resolve(partition_spec_id, file.partition_info,
+		                                                             bind.scan_info->metadata, bind.scan_info->schema);
 		row.delete_files = DeleteFiles(state.planner, *task);
 		IcebergScanTaskCodec::WriteTask(row, output, count);
 	}

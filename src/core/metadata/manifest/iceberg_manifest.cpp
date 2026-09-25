@@ -1,3 +1,4 @@
+#include "core/metadata/partition/iceberg_partition_constants.hpp"
 #include "core/metadata/manifest/iceberg_manifest.hpp"
 #include "core/metadata/manifest/iceberg_manifest_list.hpp"
 #include "core/metadata/manifest/iceberg_avro_codec.hpp"
@@ -223,23 +224,17 @@ map<idx_t, LogicalType> IcebergDataFile::GetFieldIdToTypeMapping(const IcebergSn
 	auto &partition_specs = metadata.GetPartitionSpecs();
 	auto &schema = metadata.GetSchemaFromId(snapshot_info.schema_id);
 
-	auto &source_to_column_id = schema.GetSourceIdMap();
 	map<idx_t, LogicalType> partition_field_id_to_type;
 	for (auto &spec_id : partition_spec_ids) {
 		auto &partition_spec = partition_specs.at(spec_id);
 		auto &fields = partition_spec.GetFields();
 
 		for (auto &field : fields) {
-			auto it = source_to_column_id.find(field.source_id);
-			if (it == source_to_column_id.end()) {
-				//! FIXME: is this correct?
-				//! The column doesn't exist (anymore) in the schema we're scanning
-				//! So this essentially excludes these partition values from the scan
+			auto type = IcebergPartitionConstants::GetType(field.source_id, schema, metadata.GetSchemas());
+			if (!type) {
 				continue;
 			}
-			auto &column_id = it->second;
-			auto &column = IcebergTableSchema::GetFromColumnIndex(schema.columns, column_id, 0);
-			partition_field_id_to_type.emplace(field.partition_field_id, field.transform.GetBoundsType(column.type));
+			partition_field_id_to_type.emplace(field.partition_field_id, field.transform.GetBoundsType(*type));
 		}
 	}
 	return partition_field_id_to_type;
