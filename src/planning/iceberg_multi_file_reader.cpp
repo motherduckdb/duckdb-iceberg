@@ -28,6 +28,30 @@
 
 namespace duckdb {
 
+OpenFileInfo IcebergMultiFileReader::FileInfo(const string &path, const string &format, int64_t size,
+                                              optional<int64_t> first_row_id, optional<int64_t> sequence_number) {
+	if (!StringUtil::CIEquals(format, "parquet")) {
+		throw NotImplementedException("File format '%s' not supported, only supports 'parquet' currently", format);
+	}
+	if (path.empty() || size < 0) {
+		throw InvalidInputException("Iceberg data file requires a path and nonnegative size");
+	}
+	OpenFileInfo result(path);
+	result.extended_info = make_shared_ptr<ExtendedOpenFileInfo>();
+	auto &options = result.extended_info->options;
+	options["file_size"] = Value::UBIGINT(size);
+	options["validate_external_file_cache"] = Value::BOOLEAN(false);
+	options["etag"] = Value("");
+	options["last_modified"] = Value::TIMESTAMP(timestamp_t(0));
+	if (first_row_id) {
+		options["first_row_id"] = Value::BIGINT(*first_row_id);
+	}
+	if (sequence_number) {
+		options["sequence_number"] = Value::BIGINT(*sequence_number);
+	}
+	return result;
+}
+
 IcebergEqualityDeleteFastFilter::BuildResult IcebergMultiFileReaderGlobalState::GetOrCreateEqualityDeleteFastFilter(
     const vector<reference<const IcebergEqualityDeleteFile>> &delete_files,
     const IcebergEqualityDeleteReadState &read_state, const set<int32_t> &local_field_ids, ClientContext &context,

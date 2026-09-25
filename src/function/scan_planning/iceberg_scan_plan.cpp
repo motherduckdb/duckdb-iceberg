@@ -6,7 +6,7 @@
 #include "duckdb/common/types/vector.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "planning/scan_plan/iceberg_scan_planner.hpp"
-#include "planning/scan_plan/iceberg_scan_task.hpp"
+#include "function/scan_planning/iceberg_scan_task_codec.hpp"
 
 namespace duckdb {
 
@@ -113,16 +113,15 @@ static unique_ptr<FunctionData> IcebergScanPlanBind(ClientContext &context, Tabl
 	}
 	ret->partition_type = LogicalType::STRUCT(std::move(constants));
 
-	for (auto &column :
-	     IcebergScanTaskFormat::Columns(ret->partition_type, IcebergScanTaskFormat::SchemaType(schema))) {
+	for (auto &column : IcebergScanTaskCodec::Columns(ret->partition_type, IcebergScanTaskCodec::SchemaType(schema))) {
 		names.emplace_back(column.first);
 		return_types.push_back(column.second);
 	}
 	return std::move(ret);
 }
 
-static Value PartitionConstants(const IcebergScanPlanBindData &bind, const IcebergScanTask &task,
-                                int32_t partition_spec_id) {
+static unordered_map<int32_t, Value> PartitionConstants(const IcebergScanPlanBindData &bind,
+                                                        const IcebergScanTask &task, int32_t partition_spec_id) {
 	auto &metadata = bind.scan_info->metadata;
 	auto spec = metadata.partition_specs.find(partition_spec_id);
 	if (spec == metadata.partition_specs.end()) {
@@ -133,7 +132,7 @@ static Value PartitionConstants(const IcebergScanPlanBindData &bind, const Icebe
 	for (idx_t i = 0; i < spec->second.fields.size(); i++) {
 		field_indexes[spec->second.fields[i].source_id] = i;
 	}
-	vector<Value> values;
+	unordered_map<int32_t, Value> values;
 	auto &children = StructType::GetChildTypes(bind.partition_type);
 	for (idx_t i = 0; i < bind.partition_source_ids.size(); i++) {
 		auto &type = children[i].second;
@@ -155,34 +154,18 @@ static Value PartitionConstants(const IcebergScanPlanBindData &bind, const Icebe
 				break;
 			}
 		} while (false);
-		values.push_back(std::move(value));
+		values.emplace(bind.partition_source_ids[i], std::move(value));
 	}
-	return Value::STRUCT(bind.partition_type, std::move(values));
+	return values;
 }
 
-static Value DeleteFiles(const IcebergScanPlanner &planner, const IcebergScanTask &task) {
-	vector<Value> files;
+static vector<IcebergDeleteFile> DeleteFiles(const IcebergScanPlanner &planner, const IcebergScanTask &task) {
+	vector<IcebergDeleteFile> files;
 	for (auto ref : task.delete_files) {
 		auto &manifest = planner.GetDeleteManifest(ref);
-		auto &entries = manifest.GetManifestEntries();
-		if (ref.entry_idx >= entries.size()) {
-			throw InternalException("Iceberg scan plan delete entry index is out of bounds");
-		}
-		auto &file = entries[ref.entry_idx].data_file;
-		vector<Value> equality_ids;
-		for (auto id : file.equality_ids) {
-			equality_ids.push_back(Value::INTEGER(id));
-		}
-		files.push_back(Value::STRUCT(
-		    IcebergScanTaskFormat::DeleteFileType(),
-		    {Value(file.file_path), Value(file.file_format), Value::INTEGER(static_cast<int32_t>(file.content)),
-		     Value::BIGINT(file.file_size_in_bytes), Value::BIGINT(file.record_count),
-		     Value::LIST(LogicalType::INTEGER, std::move(equality_ids)),
-		     file.referenced_data_file ? Value(*file.referenced_data_file) : Value(LogicalType::VARCHAR),
-		     file.content_offset ? Value::BIGINT(*file.content_offset) : Value(LogicalType::BIGINT),
-		     file.content_size_in_bytes ? Value::BIGINT(*file.content_size_in_bytes) : Value(LogicalType::BIGINT)}));
+		files.emplace_back(manifest.GetManifestEntries()[ref.entry_idx].data_file);
 	}
-	return Value::LIST(IcebergScanTaskFormat::DeleteFileType(), std::move(files));
+	return files;
 }
 
 static void IcebergScanPlanFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
@@ -199,10 +182,11 @@ static void IcebergScanPlanFunction(ClientContext &context, TableFunctionInput &
 			break;
 		}
 		auto &file = task->manifest_entry.entry.data_file;
-		output.data[0].SetValue(count, Value(task->file_path));
-		output.data[1].SetValue(count, Value(file.file_format));
-		output.data[2].SetValue(count, Value::BIGINT(file.file_size_in_bytes));
-		output.data[3].SetValue(count, Value::BIGINT(file.record_count));
+		IcebergFileScanTask row;
+		row.file_path = task->file_path;
+		row.file_format = file.file_format;
+		row.file_size_in_bytes = file.file_size_in_bytes;
+		row.record_count = file.record_count;
 		int32_t partition_spec_id;
 		optional<int64_t> sequence_number;
 		state.planner.WithManifestFile(task->manifest_entry, IcebergManifestContentType::DATA,
@@ -213,23 +197,17 @@ static void IcebergScanPlanFunction(ClientContext &context, TableFunctionInput &
 			                               }
 		                               });
 		// Do not expose the synthetic sequence numbers used internally by server planning.
-		output.data[4].SetValue(count, bind.produce_sequence_number ? Value::BIGINT(*sequence_number)
-		                                                            : Value(LogicalType::BIGINT));
-		output.data[5].SetValue(count, task->manifest_entry.HasFirstRowId()
-		                                   ? Value::BIGINT(task->manifest_entry.GetFirstRowId())
-		                                   : Value(LogicalType::BIGINT));
-		output.data[6].SetValue(count, Value::INTEGER(partition_spec_id));
-		output.data[7].SetValue(count, PartitionConstants(bind, *task, partition_spec_id));
-		output.data[8].SetValue(count, DeleteFiles(state.planner, *task));
+		row.sequence_number = sequence_number;
+		row.first_row_id =
+		    task->manifest_entry.HasFirstRowId() ? optional<int64_t>(task->manifest_entry.GetFirstRowId()) : nullopt;
+		row.partition_spec_id = partition_spec_id;
+		row.partition_constants = PartitionConstants(bind, *task, partition_spec_id);
+		row.delete_files = DeleteFiles(state.planner, *task);
+		IcebergScanTaskCodec::WriteTask(row, output, count);
 	}
 	auto snapshot = bind.scan_info->snapshot_info.snapshot;
-	output.data[9].Reference(snapshot && snapshot->snapshot_id ? Value::BIGINT(*snapshot->snapshot_id)
-	                                                           : Value(LogicalType::BIGINT),
-	                         count_t(count));
-	output.data[10].Reference(Value::INTEGER(bind.scan_info->snapshot_info.schema_id), count_t(count));
-	output.data[11].Reference(state.metadata);
-	output.data[12].Reference(Value(output.data[12].GetType()), count_t(count));
-	output.SetChildCardinality(count);
+	IcebergScanTaskCodec::WriteContext(output, count, snapshot ? snapshot->snapshot_id : nullopt,
+	                                   bind.scan_info->snapshot_info.schema_id, state.metadata);
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergScanPlanFunction() {
