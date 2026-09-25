@@ -19,7 +19,6 @@
 #include "iceberg_logging.hpp"
 #include "planning/iceberg_multi_file_list.hpp"
 #include "planning/pruning/iceberg_predicate.hpp"
-#include "core/metadata/partition/iceberg_partition_constants.hpp"
 #include "core/expression/iceberg_predicate_stats.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
 #include "duckdb/common/multi_file/multi_file_states.hpp"
@@ -315,15 +314,9 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
 	if (!task) {
 		throw InternalException("Unable to find Iceberg scan task for file index %llu", file_id);
 	}
-	int32_t partition_spec_id;
-	planner.WithManifestFile(
-	    task->manifest_entry, IcebergManifestContentType::DATA,
-	    [&](const IcebergManifestFile &manifest) { partition_spec_id = manifest.partition_spec_id; });
-	auto constants = IcebergPartitionConstants::Resolve(
-	    partition_spec_id, task->manifest_entry.entry.data_file.partition_info, metadata, planner.GetSchema());
 	return InitializeTaskReader(reader_data, bind_data, global_columns, global_column_ids, table_filters, context,
 	                            gstate, metadata.GetSchemas(), metadata.mappings, multi_file_list.ProcessDeletes(*task),
-	                            constants);
+	                            task->partition_constants);
 }
 
 ReaderInitializeType IcebergMultiFileReader::InitializeTaskReader(

@@ -3,6 +3,7 @@
 #include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
 #include "common/iceberg_utils.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
+#include "core/metadata/partition/iceberg_partition_constants.hpp"
 #include "planning/pruning/iceberg_file_pruner.hpp"
 #include "planning/scan_plan/iceberg_scan_plan_provider.hpp"
 #include "duckdb/storage/table/row_group_reorderer.hpp"
@@ -256,55 +257,55 @@ void IcebergScanPlanner::EnsureScanOrderApplied(annotated_lock_guard<annotated_m
 	scan_order.Apply(context, GetSchema(), has_matching_delete_manifests.load(), data_manifest_entries);
 }
 
-optional_ptr<const BoundIcebergManifestEntry> IcebergScanPlanner::GetDataFile(idx_t file_id) const {
-	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
-	GetDataFile(file_id, guard);
-	EnsureScanOrderApplied(guard);
-	return file_id < data_manifest_entries.size()
-	           ? optional_ptr<const BoundIcebergManifestEntry>(data_manifest_entries[file_id])
-	           : nullptr;
+IcebergDataFileDescriptor IcebergScanPlanner::CreateDataFileDescriptor(const BoundIcebergManifestEntry &entry) const {
+	auto &file = entry.entry.data_file;
+	auto &manifest = data_manifests[entry.manifest_file_idx].entry.file;
+	IcebergDataFileDescriptor task;
+	task.original_file_path = file.file_path;
+	task.file_path =
+	    options.allow_moved_paths ? IcebergUtils::GetFullPath(GetPath(), file.file_path, fs) : file.file_path;
+	task.file_format = file.file_format;
+	task.file_size_in_bytes = file.file_size_in_bytes;
+	task.record_count = file.record_count;
+	task.sequence_number = entry.entry.GetSequenceNumber(manifest);
+	task.first_row_id = entry.HasFirstRowId() ? optional<int64_t>(entry.GetFirstRowId()) : nullopt;
+	task.partition_spec_id = manifest.partition_spec_id;
+	return task;
 }
 
-const IcebergManifestFile &IcebergScanPlanner::GetManifestFileForEntry(const BoundIcebergManifestEntry &entry,
-                                                                       IcebergManifestContentType type) const {
-	return type == IcebergManifestContentType::DATA ? data_manifests[entry.manifest_file_idx].entry.file
-	                                                : delete_manifests[entry.manifest_file_idx].entry.file;
-}
-
-void IcebergScanPlanner::WithManifestFile(
-    const BoundIcebergManifestEntry &entry, IcebergManifestContentType type,
-    const std::function<void(const IcebergManifestFile &manifest_file)> &callback) const {
-	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
-	auto &manifest_file = GetManifestFileForEntry(entry, type);
-	callback(manifest_file);
-}
-
-optional<IcebergScanTask> IcebergScanPlanner::GetDataFileTask(idx_t file_id) const {
+optional<IcebergDataFileDescriptor> IcebergScanPlanner::GetDataFileDescriptor(idx_t file_id) const {
 	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
 	GetDataFile(file_id, guard);
 	EnsureScanOrderApplied(guard);
 	if (file_id >= data_manifest_entries.size()) {
 		return nullopt;
 	}
-	auto data_file = data_manifest_entries[file_id];
-	auto path = data_file.entry.data_file.file_path;
-	if (options.allow_moved_paths) {
-		path = IcebergUtils::GetFullPath(GetPath(), path, fs);
-	}
-	return IcebergScanTask {data_file, std::move(path), {}};
+	return CreateDataFileDescriptor(data_manifest_entries[file_id]);
 }
 
-optional<IcebergScanTask> IcebergScanPlanner::GetScanTask(idx_t file_id) const {
-	auto task = GetDataFileTask(file_id);
-	if (task) {
-		task->delete_files = ResolveApplicableDeleteFiles(task->manifest_entry);
+optional<IcebergFileScanTask> IcebergScanPlanner::GetScanTask(idx_t file_id) const {
+	optional<BoundIcebergManifestEntry> entry;
+	IcebergFileScanTask task;
+	{
+		annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
+		GetDataFile(file_id, guard);
+		EnsureScanOrderApplied(guard);
+		if (file_id >= data_manifest_entries.size()) {
+			return nullopt;
+		}
+		entry.emplace(data_manifest_entries[file_id]);
+		task = IcebergFileScanTask(CreateDataFileDescriptor(*entry));
+		task.partition_constants = IcebergPartitionConstants::Resolve(
+		    task.partition_spec_id, entry->entry.data_file.partition_info, GetMetadata(), GetSchema());
 	}
+	// Delete manifest I/O must run without the shared planning lock.
+	task.delete_files = ResolveApplicableDeleteFiles(*entry);
 	return task;
 }
 
 idx_t IcebergScanPlanner::GetTotalFileCount() const {
 	idx_t file_id = 0;
-	while (GetDataFileTask(file_id)) {
+	while (GetDataFileDescriptor(file_id)) {
 		file_id++;
 	}
 	return file_id;
@@ -377,9 +378,9 @@ IcebergPartition IcebergScanPlanner::GetPartitionForDataFile(const string &file_
 	throw InvalidConfigurationException("Could not find data file '%s' in manifest entries", file_path);
 }
 
-vector<IcebergDeleteFileReference>
+vector<IcebergDeleteFile>
 IcebergScanPlanner::ResolveApplicableDeleteFiles(const BoundIcebergManifestEntry &data_manifest_entry) const {
-	vector<IcebergDeleteFileReference> result;
+	vector<IcebergDeleteFile> result;
 	if (!has_matching_delete_manifests.load()) {
 		return result;
 	}
@@ -413,23 +414,10 @@ IcebergScanPlanner::ResolveApplicableDeleteFiles(const BoundIcebergManifestEntry
 		if (IcebergDeletePlanner::DeleteEntryMatchesFilters(delete_context, delete_file.manifest_idx, delete_entry) &&
 		    IcebergDeletePlanner::DeleteEntryAppliesToDataFile(delete_context, delete_file.manifest_idx, delete_entry,
 		                                                       data_manifest_entry, partition_values)) {
-			result.push_back(delete_file);
+			result.emplace_back(delete_entry.data_file);
 		}
 	}
 	return result;
-}
-
-const IcebergManifestListEntry &IcebergScanPlanner::GetDeleteManifest(IcebergDeleteFileReference delete_file) const {
-	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
-	if (delete_file.manifest_idx >= delete_manifests.size()) {
-		throw InternalException("Delete manifest index %llu is out of bounds", delete_file.manifest_idx);
-	}
-	auto &manifest = delete_manifests[delete_file.manifest_idx].entry;
-	if (delete_file.entry_idx >= manifest.GetManifestEntries().size()) {
-		throw InternalException("Delete manifest entry index %llu is out of bounds for manifest %llu",
-		                        delete_file.entry_idx, delete_file.manifest_idx);
-	}
-	return manifest;
 }
 
 } // namespace duckdb

@@ -118,15 +118,6 @@ static unique_ptr<FunctionData> IcebergScanPlanBind(ClientContext &context, Tabl
 	return std::move(ret);
 }
 
-static vector<IcebergDeleteFile> DeleteFiles(const IcebergScanPlanner &planner, const IcebergScanTask &task) {
-	vector<IcebergDeleteFile> files;
-	for (auto ref : task.delete_files) {
-		auto &manifest = planner.GetDeleteManifest(ref);
-		files.emplace_back(manifest.GetManifestEntries()[ref.entry_idx].data_file);
-	}
-	return files;
-}
-
 static void IcebergScanPlanFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
 	auto &bind = data.bind_data->Cast<IcebergScanPlanBindData>();
 	auto &state = data.global_state->Cast<IcebergScanPlanGlobalState>();
@@ -140,30 +131,11 @@ static void IcebergScanPlanFunction(ClientContext &context, TableFunctionInput &
 			state.done = true;
 			break;
 		}
-		auto &file = task->manifest_entry.entry.data_file;
-		IcebergFileScanTask row;
-		row.file_path = task->file_path;
-		row.file_format = file.file_format;
-		row.file_size_in_bytes = file.file_size_in_bytes;
-		row.record_count = file.record_count;
-		int32_t partition_spec_id;
-		optional<int64_t> sequence_number;
-		state.planner.WithManifestFile(task->manifest_entry, IcebergManifestContentType::DATA,
-		                               [&](const IcebergManifestFile &manifest) {
-			                               partition_spec_id = manifest.partition_spec_id;
-			                               if (bind.produce_sequence_number) {
-				                               sequence_number = task->manifest_entry.entry.GetSequenceNumber(manifest);
-			                               }
-		                               });
-		// Do not expose the synthetic sequence numbers used internally by server planning.
-		row.sequence_number = sequence_number;
-		row.first_row_id =
-		    task->manifest_entry.HasFirstRowId() ? optional<int64_t>(task->manifest_entry.GetFirstRowId()) : nullopt;
-		row.partition_spec_id = partition_spec_id;
-		row.partition_constants = IcebergPartitionConstants::Resolve(partition_spec_id, file.partition_info,
-		                                                             bind.scan_info->metadata, bind.scan_info->schema);
-		row.delete_files = DeleteFiles(state.planner, *task);
-		IcebergScanTaskCodec::WriteTask(row, output, count);
+		// Server planning uses synthetic sequence numbers internally; export only when requested.
+		if (!bind.produce_sequence_number) {
+			task->sequence_number = nullopt;
+		}
+		IcebergScanTaskCodec::WriteTask(*task, output, count);
 	}
 	auto snapshot = bind.scan_info->snapshot_info.snapshot;
 	IcebergScanTaskCodec::WriteContext(output, count, snapshot ? snapshot->snapshot_id : nullopt,
