@@ -32,6 +32,16 @@ struct IcebergDataViewCursor {
 	idx_t current_batch_offset = 0;
 };
 
+//! Scan identity and options, configured during binding and frozen before planning or view creation.
+//! Consumers only receive a const reference; mutable manifest caches live in IcebergScanPlanState.
+struct IcebergScanConfiguration {
+	shared_ptr<IcebergScanInfo> scan_info;
+	string path;
+	optional_ptr<IcebergTableSchemaVersion> table;
+	IcebergOptions options;
+	bool server_side_planning_enabled = true;
+};
+
 //! Metadata-planning state shared by filtered views of one Iceberg scan.
 //! Delete-file contents and filters created while executing a task are intentionally
 //! kept outside this state.
@@ -42,16 +52,23 @@ struct IcebergScanPlanState {
 
 	ClientContext &context;
 	FileSystem &fs;
-	shared_ptr<IcebergScanInfo> scan_info;
-	string path;
-	optional_ptr<IcebergTableSchemaVersion> table;
-	IcebergOptions options;
+
+private:
+	//! Outlives the manifest caches and readers that reference scan metadata.
+	IcebergScanConfiguration configuration;
+
+public:
+	const IcebergScanConfiguration &Configuration() const;
+	void SetScanInfo(shared_ptr<IcebergScanInfo> scan_info) DUCKDB_REQUIRES(lock);
+	void SetOptions(const IcebergOptions &options) DUCKDB_REQUIRES(lock);
+	void SetTable(IcebergTableSchemaVersion &table) DUCKDB_REQUIRES(lock);
+	void DisableServerSidePlanning() DUCKDB_REQUIRES(lock);
+	void FreezeConfiguration() DUCKDB_REQUIRES(lock);
 
 	mutable annotated_mutex lock;
 	mutable annotated_mutex delete_manifest_lock DUCKDB_ACQUIRED_AFTER(lock);
 	mutable ManifestEntryReadState read_state;
 
-	mutable bool server_side_planning_enabled DUCKDB_GUARDED_BY(lock) = true;
 	mutable bool manifest_list_loaded DUCKDB_GUARDED_BY(lock) = false;
 	mutable bool data_manifest_scan_started DUCKDB_GUARDED_BY(lock) = false;
 
@@ -68,6 +85,10 @@ struct IcebergScanPlanState {
 	mutable unique_ptr<IcebergManifestScanningState> data_manifest_read_state DUCKDB_GUARDED_BY(lock);
 	//! FIXME: these are only used by deletes, we should find a better way to do this
 	mutable unordered_map<string, IcebergPartition> data_file_partitions DUCKDB_GUARDED_BY(lock);
+
+private:
+	void RequireConfigurable() const DUCKDB_REQUIRES(lock);
+	bool configuration_frozen DUCKDB_GUARDED_BY(lock) = false;
 };
 
 } // namespace duckdb
