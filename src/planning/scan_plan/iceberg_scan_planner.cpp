@@ -13,12 +13,11 @@ namespace duckdb {
 IcebergScanPlanner::IcebergScanPlanner(ClientContext &context_p, shared_ptr<IcebergScanInfo> scan_info,
                                        const string &path, const IcebergOptions &options_p)
     : shared_state(make_shared_ptr<IcebergScanPlanState>(context_p, std::move(scan_info), path, options_p)),
-      context(shared_state->context), fs(shared_state->fs), options(shared_state->options) {
+      context(shared_state->context), fs(shared_state->fs) {
 }
 
 IcebergScanPlanner::IcebergScanPlanner(shared_ptr<IcebergScanPlanState> shared_state_p)
-    : shared_state(std::move(shared_state_p)), context(shared_state->context), fs(shared_state->fs),
-      options(shared_state->options) {
+    : shared_state(std::move(shared_state_p)), context(shared_state->context), fs(shared_state->fs) {
 }
 
 IcebergScanPlanner::~IcebergScanPlanner() {
@@ -28,6 +27,7 @@ unique_ptr<IcebergScanPlanner> IcebergScanPlanner::CreateView(IcebergTableFilter
 	unique_ptr<RowGroupOrderOptions> filtered_scan_order;
 	{
 		annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
+		shared_state->FreezeConfiguration();
 		filtered_scan_order = scan_order.CopyOptions();
 	}
 	auto result = unique_ptr<IcebergScanPlanner>(new IcebergScanPlanner(shared_state));
@@ -39,19 +39,19 @@ unique_ptr<IcebergScanPlanner> IcebergScanPlanner::CreateView(IcebergTableFilter
 }
 
 const string &IcebergScanPlanner::GetPath() const {
-	return shared_state->path;
+	return shared_state->Configuration().path;
 }
 
 const IcebergOptions &IcebergScanPlanner::GetOptions() const {
-	return options;
+	return shared_state->Configuration().options;
 }
 
 const IcebergTableMetadata &IcebergScanPlanner::GetMetadata() const {
-	return shared_state->scan_info->metadata;
+	return shared_state->Configuration().scan_info->metadata;
 }
 
 const IcebergTableSchema &IcebergScanPlanner::GetSchema() const {
-	return shared_state->scan_info->schema;
+	return shared_state->Configuration().scan_info->schema;
 }
 
 ClientContext &IcebergScanPlanner::GetContext() const {
@@ -59,40 +59,39 @@ ClientContext &IcebergScanPlanner::GetContext() const {
 }
 
 bool IcebergScanPlanner::HasScanInfo() const {
-	return shared_state->scan_info != nullptr;
+	return shared_state->Configuration().scan_info != nullptr;
 }
 
 bool IcebergScanPlanner::HasTransactionData() const {
-	return shared_state->scan_info->transaction_data;
+	return shared_state->Configuration().scan_info->transaction_data;
 }
 
 const IcebergTransactionData &IcebergScanPlanner::GetTransactionData() const {
 	D_ASSERT(HasTransactionData());
-	return *shared_state->scan_info->transaction_data;
+	return *shared_state->Configuration().scan_info->transaction_data;
 }
 
 const IcebergSnapshotScanInfo &IcebergScanPlanner::GetSnapshot() const {
-	return shared_state->scan_info->snapshot_info;
+	return shared_state->Configuration().scan_info->snapshot_info;
 }
 
 optional_ptr<IcebergTableSchemaVersion> IcebergScanPlanner::GetTable() const {
-	return shared_state->table;
+	return shared_state->Configuration().table;
 }
 
 void IcebergScanPlanner::SetTable(IcebergTableSchemaVersion &table) {
-	shared_state->table = table;
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
+	shared_state->SetTable(table);
 }
 
 void IcebergScanPlanner::SetScanInfo(shared_ptr<IcebergScanInfo> scan_info) {
 	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
-	if (scan_plan_provider) {
-		throw InternalException("Cannot replace Iceberg scan info after scan planning has started");
-	}
-	shared_state->scan_info = std::move(scan_info);
+	shared_state->SetScanInfo(std::move(scan_info));
 }
 
 void IcebergScanPlanner::SetOptions(const IcebergOptions &new_options) {
-	shared_state->options = new_options;
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
+	shared_state->SetOptions(new_options);
 }
 
 void IcebergScanPlanner::SetScanOrder(unique_ptr<RowGroupOrderOptions> order_options) {
@@ -102,9 +101,7 @@ void IcebergScanPlanner::SetScanOrder(unique_ptr<RowGroupOrderOptions> order_opt
 
 void IcebergScanPlanner::DisableServerSidePlanning() {
 	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
-	if (!shared_state->manifest_list_loaded) {
-		shared_state->server_side_planning_enabled = false;
-	}
+	shared_state->DisableServerSidePlanning();
 }
 
 const IcebergTableFilters &IcebergScanPlanner::Filters() const {
@@ -121,14 +118,14 @@ IcebergScanPlanContext IcebergScanPlanner::GetScanPlanContext() const {
 	if (HasTransactionData()) {
 		transaction_data = &GetTransactionData();
 	}
-	return {context, fs, GetPath(), options, GetSnapshot(), GetMetadata(), GetSchema(), transaction_data};
+	return {context, fs, GetPath(), GetOptions(), GetSnapshot(), GetMetadata(), GetSchema(), transaction_data};
 }
 
 IcebergDeletePlanningContext IcebergScanPlanner::GetDeletePlanningContext() const {
 	return {context,
 	        fs,
 	        GetPath(),
-	        options,
+	        GetOptions(),
 	        GetMetadata(),
 	        GetSchema(),
 	        table_filters,
@@ -140,9 +137,10 @@ IcebergDeletePlanningContext IcebergScanPlanner::GetDeletePlanningContext() cons
 
 void IcebergScanPlanner::InitializeScanPlanProvider() const {
 	if (!scan_plan_provider) {
+		shared_state->FreezeConfiguration();
 		scan_plan_provider =
 		    IcebergScanPlanProvider::Create(*shared_state, GetScanPlanContext(), GetTable(), table_filters, scan_order,
-		                                    shared_state->server_side_planning_enabled);
+		                                    shared_state->Configuration().server_side_planning_enabled);
 	}
 }
 
@@ -220,7 +218,7 @@ IcebergScanPlanner::GetDataFile(idx_t file_id, annotated_lock_guard<annotated_mu
 			auto &manifest_entry = manifest_entries[data_view_cursor.current_batch_offset];
 			auto &data_file = manifest_entry.data_file;
 			auto entry_path = data_file.file_path;
-			if (options.allow_moved_paths) {
+			if (GetOptions().allow_moved_paths) {
 				entry_path = IcebergUtils::GetFullPath(GetPath(), entry_path, fs);
 			}
 			IcebergPartition partition {manifest_file.partition_spec_id, data_file.partition_info};
@@ -263,7 +261,7 @@ IcebergDataFileDescriptor IcebergScanPlanner::CreateDataFileDescriptor(const Bou
 	IcebergDataFileDescriptor task;
 	task.original_file_path = file.file_path;
 	task.file_path =
-	    options.allow_moved_paths ? IcebergUtils::GetFullPath(GetPath(), file.file_path, fs) : file.file_path;
+	    GetOptions().allow_moved_paths ? IcebergUtils::GetFullPath(GetPath(), file.file_path, fs) : file.file_path;
 	task.file_format = file.file_format;
 	task.file_size_in_bytes = file.file_size_in_bytes;
 	task.record_count = file.record_count;

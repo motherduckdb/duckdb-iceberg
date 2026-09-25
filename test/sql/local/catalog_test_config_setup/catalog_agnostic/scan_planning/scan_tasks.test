@@ -48,6 +48,40 @@ set variable saved_snapshot = (select snapshot_id from saved_tasks limit 1);
 statement ok
 create temp table expected_scan as select * from my_datalake.default.scan_tasks_test;
 
+# Repeated executions create filtered views with their own cursors while sharing
+# the bound scan configuration and manifest caches. Changing the build-side key
+# must neither retain the previous filter nor exhaust the original scan.
+statement ok
+create temp table scan_category(category integer);
+
+statement ok
+insert into scan_category values (0);
+
+statement ok
+prepare filtered_scan as
+select count(*), sum(id) from my_datalake.default.scan_tasks_test join scan_category using(category);
+
+query II
+execute filtered_scan;
+----
+3000	13495500
+
+statement ok
+update scan_category set category=2;
+
+query II
+execute filtered_scan;
+----
+3000	13501500
+
+statement ok
+update scan_category set category=0;
+
+query II
+execute filtered_scan;
+----
+3000	13495500
+
 # Both directions preserve types, nested values, and multiplicity.
 query I
 select count(*) from (

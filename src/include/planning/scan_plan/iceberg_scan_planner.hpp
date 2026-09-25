@@ -85,7 +85,6 @@ private:
 	shared_ptr<IcebergScanPlanState> shared_state;
 	ClientContext &context;
 	FileSystem &fs;
-	const IcebergOptions &options;
 	IcebergTableFilters table_filters;
 
 	mutable unique_ptr<IcebergScanPlanProvider> scan_plan_provider DUCKDB_GUARDED_BY(shared_state->lock);
