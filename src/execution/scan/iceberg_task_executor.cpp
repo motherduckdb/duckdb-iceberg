@@ -59,7 +59,8 @@ struct IcebergTaskReader : public IcebergMultiFileReader {
 		IcebergDeleteExecutionContext delete_context {context, FileSystem::GetFileSystem(context),
 		                                              execution.metadata.location, execution.options,
 		                                              execution.metadata};
-		auto deletes = execution.deletes.ProcessDeletes(delete_context, info.file.path, info.task.delete_files);
+		auto deletes =
+		    execution.deletes.ProcessDeletes(delete_context, info.task.original_file_path, info.task.delete_files);
 		return InitializeTaskReader(reader_data, bind, columns, column_ids, filters, context, gstate,
 		                            execution.metadata.GetSchemas(), execution.metadata.mappings, std::move(deletes),
 		                            info.task.partition_constants);

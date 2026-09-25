@@ -81,15 +81,10 @@ shared_ptr<IcebergDeleteData> IcebergMultiFileList::GetExistingPositionalDeleteD
 	return delete_execution->GetExistingPositionalDeleteData(file_path);
 }
 
-IcebergDeletePlan IcebergMultiFileList::ProcessDeletes(const IcebergScanTask &task) const {
-	vector<IcebergDeleteFile> files;
-	for (auto ref : task.delete_files) {
-		auto &manifest = planner->GetDeleteManifest(ref);
-		files.emplace_back(manifest.GetManifestEntries()[ref.entry_idx].data_file);
-	}
+IcebergDeletePlan IcebergMultiFileList::ProcessDeletes(const IcebergFileScanTask &task) const {
 	IcebergDeleteExecutionContext execution {planner->GetContext(), FileSystem::GetFileSystem(planner->GetContext()),
 	                                         planner->GetPath(), planner->GetOptions(), planner->GetMetadata()};
-	return delete_execution->ProcessDeletes(execution, task.manifest_entry.entry.data_file.file_path, files);
+	return delete_execution->ProcessDeletes(execution, task.original_file_path, task.delete_files);
 }
 
 unique_ptr<IcebergMultiFileList>
@@ -155,21 +150,12 @@ unique_ptr<MultiFileList> IcebergMultiFileList::ComplexFilterPushdown(ClientCont
 }
 
 OpenFileInfo IcebergMultiFileList::GetFileInternal(idx_t file_id) const {
-	auto task = planner->GetDataFileTask(file_id);
+	auto task = planner->GetDataFileDescriptor(file_id);
 	if (!task) {
 		return OpenFileInfo();
 	}
-	auto &manifest_entry = task->manifest_entry;
-	auto &data_file = manifest_entry.entry.data_file;
-	sequence_number_t sequence_number;
-	planner->WithManifestFile(task->manifest_entry, IcebergManifestContentType::DATA,
-	                          [&sequence_number, &manifest_entry](const IcebergManifestFile &manifest) {
-		                          sequence_number = manifest_entry.entry.GetSequenceNumber(manifest);
-	                          });
-
-	return IcebergMultiFileReader::FileInfo(
-	    task->file_path, data_file.file_format, data_file.file_size_in_bytes,
-	    manifest_entry.HasFirstRowId() ? optional<int64_t>(manifest_entry.GetFirstRowId()) : nullopt, sequence_number);
+	return IcebergMultiFileReader::FileInfo(task->file_path, task->file_format, task->file_size_in_bytes,
+	                                        task->first_row_id, task->sequence_number);
 }
 
 vector<OpenFileInfo> IcebergMultiFileList::GetAllFiles() const {

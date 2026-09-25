@@ -178,6 +178,7 @@ IcebergFileScanTask IcebergScanTaskCodec::ReadTask(DataChunk &input, const Input
 	auto first_row = ReadValue(input, bind, row, FIRST_ROW_ID, true);
 	auto sequence = ReadValue(input, bind, row, SEQUENCE_NUMBER, true);
 	result.file_path = StringValue::Get(path);
+	result.original_file_path = result.file_path;
 	result.file_format = StringValue::Get(format);
 	result.file_size_in_bytes = BigIntValue::Get(size);
 	result.record_count = BigIntValue::Get(count);

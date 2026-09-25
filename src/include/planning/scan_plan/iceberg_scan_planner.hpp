@@ -15,19 +15,12 @@
 #include "planning/scan_order/iceberg_scan_order.hpp"
 #include "planning/scan_plan/iceberg_scan_plan_provider.hpp"
 #include "planning/scan_plan/iceberg_scan_plan_state.hpp"
+#include "planning/scan_plan/iceberg_scan_task.hpp"
 
 namespace duckdb {
 
 class IcebergTableSchemaVersion;
 struct IcebergScanPlanContext;
-
-//! A query-lifetime view of all metadata needed to initialize one data-file scan.
-//! The manifest entries referenced by this object are owned by the planner.
-struct IcebergScanTask {
-	BoundIcebergManifestEntry manifest_entry;
-	string file_path;
-	vector<IcebergDeleteFileReference> delete_files;
-};
 
 //! Plans Iceberg data-file scans independently of DuckDB's MultiFileReader API.
 //! A planner represents one filtered view; filtered views share the underlying
@@ -56,17 +49,13 @@ public:
 	const IcebergOptions &GetOptions() const;
 	bool HasScanInfo() const;
 
-	optional<IcebergScanTask> GetScanTask(idx_t file_id) const;
-	optional<IcebergScanTask> GetDataFileTask(idx_t file_id) const;
-	optional_ptr<const BoundIcebergManifestEntry> GetDataFile(idx_t file_id) const;
+	optional<IcebergFileScanTask> GetScanTask(idx_t file_id) const;
+	//! File enumeration only: does not resolve partition constants or load delete manifests.
+	optional<IcebergDataFileDescriptor> GetDataFileDescriptor(idx_t file_id) const;
 	idx_t GetTotalFileCount() const;
 	unique_ptr<NodeStatistics> GetCardinality() const;
 	void GetStatistics(vector<PartitionStatistics> &result) const;
 	IcebergPartition GetPartitionForDataFile(const string &file_path) const;
-	const IcebergManifestListEntry &GetDeleteManifest(IcebergDeleteFileReference delete_file) const;
-	void WithManifestFile(const BoundIcebergManifestEntry &entry, IcebergManifestContentType type,
-	                      const std::function<void(const IcebergManifestFile &manifest_file)> &callback) const
-	    DUCKDB_EXCLUDES(shared_state->lock);
 
 private:
 	explicit IcebergScanPlanner(shared_ptr<IcebergScanPlanState> shared_state);
@@ -83,16 +72,14 @@ private:
 	optional_ptr<const BoundIcebergManifestEntry> GetDataFile(idx_t file_id,
 	                                                          annotated_lock_guard<annotated_mutex> &guard) const
 	    DUCKDB_REQUIRES(shared_state->lock);
-	const IcebergManifestFile &GetManifestFileForEntry(const BoundIcebergManifestEntry &entry,
-	                                                   IcebergManifestContentType type) const
+	IcebergDataFileDescriptor CreateDataFileDescriptor(const BoundIcebergManifestEntry &entry) const
 	    DUCKDB_REQUIRES(shared_state->lock);
 	bool TryGetNextBatch(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
 	void FinishScanTasks(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
 	void LoadManifestList(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
 	void InitializeScanPlanProvider() const DUCKDB_REQUIRES(shared_state->lock);
 	void StartDataManifestScan(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
-	vector<IcebergDeleteFileReference>
-	ResolveApplicableDeleteFiles(const BoundIcebergManifestEntry &data_manifest_entry) const;
+	vector<IcebergDeleteFile> ResolveApplicableDeleteFiles(const BoundIcebergManifestEntry &data_manifest_entry) const;
 
 private:
 	shared_ptr<IcebergScanPlanState> shared_state;
