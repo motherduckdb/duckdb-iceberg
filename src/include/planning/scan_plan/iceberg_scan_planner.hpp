@@ -39,6 +39,7 @@ public:
 	void SetOptions(const IcebergOptions &options);
 	void SetScanOrder(unique_ptr<RowGroupOrderOptions> options);
 	void DisableServerSidePlanning();
+	void RequireRowIds();
 
 	const IcebergTableFilters &Filters() const;
 

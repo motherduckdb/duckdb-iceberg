@@ -60,6 +60,10 @@ void IcebergPlannerRoutine::VisitScan(LogicalOperator &op) {
 	// Real inherited sequence numbers still require manifest-based planning.
 	for (auto &column_id : get.GetColumnIds()) {
 		if (column_id.IsVirtualColumn() &&
+		    column_id.GetPrimaryIndex() == IcebergMultiFileReader::COLUMN_IDENTIFIER_ROW_ID) {
+			iceberg_list.GetScanPlanner().RequireRowIds();
+		}
+		if (column_id.IsVirtualColumn() &&
 		    column_id.GetPrimaryIndex() == IcebergMultiFileReader::COLUMN_IDENTIFIER_LAST_SEQUENCE_NUMBER) {
 			iceberg_list.GetScanPlanner().DisableServerSidePlanning();
 			break;

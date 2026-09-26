@@ -105,6 +105,11 @@ void IcebergScanPlanner::DisableServerSidePlanning() {
 	shared_state->DisableServerSidePlanning();
 }
 
+void IcebergScanPlanner::RequireRowIds() {
+	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
+	shared_state->RequireRowIds();
+}
+
 const IcebergTableFilters &IcebergScanPlanner::Filters() const {
 	return table_filters;
 }

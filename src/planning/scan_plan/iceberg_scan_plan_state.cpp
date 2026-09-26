@@ -40,6 +40,11 @@ void IcebergScanPlanState::DisableServerSidePlanning() {
 	configuration.server_side_planning_enabled = false;
 }
 
+void IcebergScanPlanState::RequireRowIds() {
+	RequireConfigurable();
+	configuration.row_ids_required = true;
+}
+
 void IcebergScanPlanState::FreezeConfiguration() {
 	if (!configuration.scan_info) {
 		throw InternalException("Cannot start Iceberg scan planning without scan metadata");

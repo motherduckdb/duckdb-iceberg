@@ -399,8 +399,12 @@ static vector<IcebergManifestListEntry> MakeManifests(FileSystem &fs, const Iceb
 	int64_t next_row_id = 0;
 	for (auto &entry : by_spec) {
 		auto manifest_metadata = IcebergManifestMetadata::FromTableMetadata(metadata, content, entry.first);
-		result.push_back(IcebergManifestListEntry::CreateFromEntries(fs, sequence_number, metadata, manifest_metadata,
-		                                                             std::move(entry.second), next_row_id));
+		auto manifest = IcebergManifestListEntry::CreateFromEntries(fs, sequence_number, metadata, manifest_metadata,
+		                                                            std::move(entry.second), next_row_id);
+		// These entries came from a filtered server plan, not a real manifest. Its
+		// ordering cannot provide row-ID inheritance; only per-file IDs are valid.
+		manifest.file.first_row_id = nullopt;
+		result.push_back(std::move(manifest));
 	}
 	return result;
 }

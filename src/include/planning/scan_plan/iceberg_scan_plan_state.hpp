@@ -18,6 +18,7 @@ struct IcebergScanConfiguration {
 	optional_ptr<IcebergTableSchemaVersion> table;
 	IcebergOptions options;
 	bool server_side_planning_enabled = true;
+	bool row_ids_required = false;
 };
 
 //! Metadata-planning state shared by filtered views of one Iceberg scan.
@@ -41,6 +42,7 @@ public:
 	void SetOptions(const IcebergOptions &options) DUCKDB_REQUIRES(lock);
 	void SetTable(IcebergTableSchemaVersion &table) DUCKDB_REQUIRES(lock);
 	void DisableServerSidePlanning() DUCKDB_REQUIRES(lock);
+	void RequireRowIds() DUCKDB_REQUIRES(lock);
 	void FreezeConfiguration() DUCKDB_REQUIRES(lock);
 	IcebergManifestStore &GetManifestStore(IcebergScanPlanContext context) DUCKDB_REQUIRES(lock);
 
