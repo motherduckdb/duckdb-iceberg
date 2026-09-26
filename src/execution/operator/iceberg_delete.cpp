@@ -304,13 +304,12 @@ void IcebergDelete::WritePositionalDeleteFile(ClientContext &context, IcebergDel
 	global_state.written_files.emplace(filename, std::move(delete_file));
 }
 
-static void PopulateAlteredManifests(const IcebergMultiFileList &multi_file_list, IcebergManifestDeletes &out,
-                                     IcebergDeleteData &delete_data) {
+static void PopulateAlteredManifests(IcebergManifestDeletes &out, const IcebergDeleteData &delete_data) {
 	if (delete_data.type != IcebergDeleteType::DELETION_VECTOR) {
 		return;
 	}
-	for (auto &file_path : delete_data.source_files) {
-		out.InvalidateFile(file_path);
+	for (auto &file : delete_data.source_files) {
+		out.InvalidateFile(file);
 	}
 }
 
@@ -341,7 +340,7 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 			auto existing_delete = multi_file_list->GetExistingPositionalDeleteData(filename);
 			if (existing_delete) {
 				auto &delete_data = *existing_delete;
-				PopulateAlteredManifests(*multi_file_list, global_state.altered_manifests, delete_data);
+				PopulateAlteredManifests(global_state.altered_manifests, delete_data);
 				delete_data.ToSet(sorted_deletes);
 			}
 		}

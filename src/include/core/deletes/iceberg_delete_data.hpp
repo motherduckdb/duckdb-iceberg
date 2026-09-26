@@ -1,7 +1,7 @@
 #pragma once
 
 #include "duckdb/common/multi_file/multi_file_data.hpp"
-#include "duckdb/common/string.hpp"
+#include "core/metadata/iceberg_file_identity.hpp"
 
 namespace duckdb {
 
@@ -9,8 +9,8 @@ enum class IcebergDeleteType : uint8_t { POSITIONAL_DELETE, DELETION_VECTOR };
 
 struct IcebergDeleteData {
 public:
-	IcebergDeleteData(IcebergDeleteType type, const string &file_path) : type(type) {
-		source_files.push_back(file_path);
+	IcebergDeleteData(IcebergDeleteType type, const IcebergFileIdentity &file) : type(type) {
+		source_files.push_back(file);
 	}
 	virtual ~IcebergDeleteData() {
 	}
@@ -21,8 +21,8 @@ public:
 
 public:
 	IcebergDeleteType type;
-	//! Source delete-file paths retained for invalidation when replacing a deletion vector.
-	vector<string> source_files;
+	//! Original file identities retained for invalidation when replacing a deletion vector.
+	vector<IcebergFileIdentity> source_files;
 };
 
 } // namespace duckdb

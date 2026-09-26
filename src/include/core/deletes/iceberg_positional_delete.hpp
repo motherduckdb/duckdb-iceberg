@@ -7,8 +7,8 @@ namespace duckdb {
 
 struct IcebergPositionalDeleteData : public enable_shared_from_this<IcebergPositionalDeleteData>, IcebergDeleteData {
 public:
-	IcebergPositionalDeleteData(const string &file_path)
-	    : IcebergDeleteData(IcebergDeleteType::POSITIONAL_DELETE, file_path) {
+	IcebergPositionalDeleteData(const IcebergFileIdentity &file)
+	    : IcebergDeleteData(IcebergDeleteType::POSITIONAL_DELETE, file) {
 	}
 	virtual ~IcebergPositionalDeleteData() override {
 	}

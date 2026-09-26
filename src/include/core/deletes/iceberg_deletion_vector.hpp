@@ -9,14 +9,14 @@ namespace duckdb {
 
 struct IcebergDeletionVectorData : public enable_shared_from_this<IcebergDeletionVectorData>, IcebergDeleteData {
 public:
-	IcebergDeletionVectorData(const string &file_path)
-	    : IcebergDeleteData(IcebergDeleteType::DELETION_VECTOR, file_path) {
+	IcebergDeletionVectorData(const IcebergFileIdentity &file)
+	    : IcebergDeleteData(IcebergDeleteType::DELETION_VECTOR, file) {
 	}
 	virtual ~IcebergDeletionVectorData() override {
 	}
 
 public:
-	static shared_ptr<IcebergDeletionVectorData> FromBlob(const string &file_path, data_ptr_t blob_start,
+	static shared_ptr<IcebergDeletionVectorData> FromBlob(const IcebergFileIdentity &file, data_ptr_t blob_start,
 	                                                      idx_t blob_length);
 	static vector<data_t> ToBlob(const unordered_map<int32_t, roaring::Roaring> &bitmaps);
 	//! Wrap a `deletion-vector-v1` blob (from ToBlob) in a spec-compliant Puffin file

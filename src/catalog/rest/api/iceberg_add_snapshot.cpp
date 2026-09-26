@@ -63,7 +63,7 @@ static optional<IcebergManifestListEntry> RewriteManifestFile(const IcebergManif
 			manifest_entry.status = IcebergManifestEntryStatusType::EXISTING;
 		}
 		if (manifest_entry.status != IcebergManifestEntryStatusType::DELETED &&
-		    deletes.IsInvalidated(manifest_entry.data_file.file_path)) {
+		    deletes.IsInvalidated({manifest_entry.data_file.file_path, manifest_entry.data_file.content_offset})) {
 			snapshot_metrics.RemoveManifestEntry(manifest_entry);
 			manifest_entry.status = IcebergManifestEntryStatusType::DELETED;
 			removed_any_entries = true;

@@ -74,8 +74,10 @@ private:
 	mutable mutex lock;
 	//! Assembled task results retained for DELETE/UPDATE, never used to filter another task.
 	position_delete_map_t positional_delete_data;
-	//! Paths select buckets; complete descriptors distinguish blobs and scan semantics.
-	unordered_map<string, vector<pair<IcebergDeleteFile, shared_ptr<IcebergDeleteFileLoadState>>>> descriptor_loads;
+	//! File identities select buckets; complete descriptors retain scan semantics.
+	unordered_map<IcebergFileIdentity, vector<pair<IcebergDeleteFile, shared_ptr<IcebergDeleteFileLoadState>>>,
+	              IcebergFileIdentityHash>
+	    descriptor_loads;
 };
 
 } // namespace duckdb

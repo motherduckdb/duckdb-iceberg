@@ -30,7 +30,8 @@ public:
 	virtual vector<IcebergDeleteFileReference> GetDeleteFiles(const vector<idx_t> &manifest_indexes) = 0;
 	virtual bool TryGetNextBatch(IcebergDataViewCursor &cursor) = 0;
 	virtual void FinishScanTasks() = 0;
-	virtual bool DeleteFileAppliesToDataFile(const string &data_file_path, const string &delete_file_path) const = 0;
+	virtual bool DeleteFileAppliesToDataFile(const string &data_file_path,
+	                                         const IcebergFileIdentity &delete_file) const = 0;
 	virtual const vector<IcebergManifestListEntry> &DataManifests() = 0;
 	virtual const vector<IcebergManifestListEntry> &DeleteManifests() = 0;
 	virtual vector<reference<const IcebergManifestListEntry>> TransactionDataManifests() {
@@ -53,7 +54,8 @@ public:
 	    DUCKDB_REQUIRES(store.lock);
 	bool TryGetNextBatch(IcebergDataViewCursor &cursor) override DUCKDB_REQUIRES(store.lock);
 	void FinishScanTasks() override DUCKDB_REQUIRES(store.lock);
-	bool DeleteFileAppliesToDataFile(const string &data_file_path, const string &delete_file_path) const override;
+	bool DeleteFileAppliesToDataFile(const string &data_file_path,
+	                                 const IcebergFileIdentity &delete_file) const override;
 	const vector<IcebergManifestListEntry> &DataManifests() override DUCKDB_REQUIRES(store.lock);
 	const vector<IcebergManifestListEntry> &DeleteManifests() override DUCKDB_REQUIRES(store.lock);
 
@@ -74,7 +76,8 @@ public:
 	vector<IcebergDeleteFileReference> GetDeleteFiles(const vector<idx_t> &manifest_indexes) override;
 	bool TryGetNextBatch(IcebergDataViewCursor &cursor) override;
 	void FinishScanTasks() override;
-	bool DeleteFileAppliesToDataFile(const string &data_file_path, const string &delete_file_path) const override;
+	bool DeleteFileAppliesToDataFile(const string &data_file_path,
+	                                 const IcebergFileIdentity &delete_file) const override;
 	const vector<IcebergManifestListEntry> &DataManifests() override;
 	const vector<IcebergManifestListEntry> &DeleteManifests() override;
 
