@@ -74,9 +74,9 @@ private:
 	mutable mutex lock;
 	//! Assembled task results retained for DELETE/UPDATE, never used to filter another task.
 	position_delete_map_t positional_delete_data;
-	//! Content identities select buckets; complete descriptors retain scan semantics.
-	unordered_map<IcebergContentFileIdentity, vector<pair<IcebergDeleteFile, shared_ptr<IcebergDeleteFileLoadState>>>,
-	              IcebergContentFileIdentityHash>
+	//! File identities select buckets; complete descriptors retain scan semantics.
+	unordered_map<IcebergFileIdentity, vector<pair<IcebergDeleteFile, shared_ptr<IcebergDeleteFileLoadState>>>,
+	              IcebergFileIdentityHash>
 	    descriptor_loads;
 };
 

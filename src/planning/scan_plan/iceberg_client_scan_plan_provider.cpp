@@ -49,7 +49,7 @@ vector<reference<const IcebergManifestListEntry>> ClientSideScanPlanProvider::Tr
 }
 
 bool ClientSideScanPlanProvider::DeleteFileAppliesToDataFile(const string &data_file_path,
-                                                             const IcebergContentFileIdentity &delete_file) const {
+                                                             const IcebergFileIdentity &delete_file) const {
 	return true;
 }
 

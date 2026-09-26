@@ -1,7 +1,7 @@
 #pragma once
 
 #include "duckdb/common/optional_idx.hpp"
-#include "core/metadata/iceberg_content_file_identity.hpp"
+#include "core/metadata/iceberg_file_identity.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/unordered_map.hpp"
 
@@ -11,10 +11,10 @@ struct VersionedIcebergManifestDeletes;
 
 struct IcebergManifestDeletes {
 public:
-	void InvalidateFile(const IcebergContentFileIdentity &file) {
+	void InvalidateFile(const IcebergFileIdentity &file) {
 		data_files.emplace(file, optional_idx());
 	}
-	bool IsInvalidated(const IcebergContentFileIdentity &file) const {
+	bool IsInvalidated(const IcebergFileIdentity &file) const {
 		return data_files.count(file);
 	}
 	VersionedIcebergManifestDeletes AtVersion(idx_t alter_version);
@@ -30,7 +30,7 @@ private:
 		}
 		return added_count;
 	}
-	bool IsInvalidatedAt(const IcebergContentFileIdentity &file, idx_t alter_version) const {
+	bool IsInvalidatedAt(const IcebergFileIdentity &file, idx_t alter_version) const {
 		auto entry = data_files.find(file);
 		return entry != data_files.end() && entry->second.IsValid() && entry->second.GetIndex() == alter_version;
 	}
@@ -38,8 +38,8 @@ private:
 private:
 	friend struct VersionedIcebergManifestDeletes;
 
-	//! Content identities tagged with the alter that invalidated them.
-	unordered_map<IcebergContentFileIdentity, optional_idx, IcebergContentFileIdentityHash> data_files;
+	//! File identities tagged with the alter that invalidated them.
+	unordered_map<IcebergFileIdentity, optional_idx, IcebergFileIdentityHash> data_files;
 };
 
 struct VersionedIcebergManifestDeletes {
@@ -51,7 +51,7 @@ public:
 	idx_t Merge(IcebergManifestDeletes &&other) {
 		return manifest_deletes.Merge(std::move(other), alter_version);
 	}
-	bool IsInvalidated(const IcebergContentFileIdentity &file) const {
+	bool IsInvalidated(const IcebergFileIdentity &file) const {
 		return manifest_deletes.IsInvalidatedAt(file, alter_version);
 	}
 

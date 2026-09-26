@@ -7,14 +7,14 @@
 
 namespace duckdb {
 
-//! Manifest-entry identity. A Puffin file can contain multiple independently live deletion vectors.
+//! Identifies a file or an individual deletion-vector blob within a Puffin file.
 //! An absent offset identifies an ordinary data or delete file, not every blob at that path.
-struct IcebergContentFileIdentity {
-	IcebergContentFileIdentity(const string &file_path, optional<int64_t> content_offset = nullopt)
+struct IcebergFileIdentity {
+	IcebergFileIdentity(const string &file_path, optional<int64_t> content_offset = nullopt)
 	    : file_path(file_path), content_offset(content_offset) {
 	}
 
-	bool operator==(const IcebergContentFileIdentity &other) const {
+	bool operator==(const IcebergFileIdentity &other) const {
 		return file_path == other.file_path && content_offset == other.content_offset;
 	}
 
@@ -22,8 +22,8 @@ struct IcebergContentFileIdentity {
 	optional<int64_t> content_offset;
 };
 
-struct IcebergContentFileIdentityHash {
-	size_t operator()(const IcebergContentFileIdentity &identity) const {
+struct IcebergFileIdentityHash {
+	size_t operator()(const IcebergFileIdentity &identity) const {
 		return std::hash<string>()(identity.file_path) ^
 		       (identity.content_offset ? std::hash<int64_t>()(*identity.content_offset) : 0);
 	}
