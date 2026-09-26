@@ -59,8 +59,7 @@ void IcebergPlannerRoutine::VisitScan(LogicalOperator &op) {
 	// Server scan tasks provide the partition and delete-file metadata needed by writes.
 	// Real inherited sequence numbers still require manifest-based planning.
 	for (auto &column_id : get.GetColumnIds()) {
-		if (column_id.IsVirtualColumn() &&
-		    column_id.GetPrimaryIndex() == IcebergMultiFileReader::COLUMN_IDENTIFIER_ROW_ID) {
+		if (column_id.IsVirtualColumn() && column_id.GetPrimaryIndex() == COLUMN_IDENTIFIER_ROW_ID) {
 			iceberg_list.GetScanPlanner().RequireRowIds();
 		}
 		if (column_id.IsVirtualColumn() &&
