@@ -47,9 +47,9 @@ void ServerSideScanPlanProvider::FinishScanTasks() {
 }
 
 bool ServerSideScanPlanProvider::DeleteFileAppliesToDataFile(const string &data_file_path,
-                                                             const string &delete_file_path) const {
+                                                             const IcebergContentFileIdentity &delete_file) const {
 	auto refs = plan.delete_files_by_data_file.find(data_file_path);
-	return refs != plan.delete_files_by_data_file.end() && refs->second.count(delete_file_path);
+	return refs != plan.delete_files_by_data_file.end() && refs->second.count(delete_file);
 }
 
 const vector<IcebergManifestListEntry> &ServerSideScanPlanProvider::DataManifests() {

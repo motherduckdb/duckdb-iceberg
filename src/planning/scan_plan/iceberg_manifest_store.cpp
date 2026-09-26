@@ -357,7 +357,8 @@ vector<IcebergDeleteFileReference> IcebergManifestStore::GetDeleteFiles(const ve
 					continue;
 				}
 				if (context.transaction_data &&
-				    context.transaction_data->IsFileInvalidated(manifest_entry.data_file.file_path)) {
+				    context.transaction_data->IsFileInvalidated(
+				        {manifest_entry.data_file.file_path, manifest_entry.data_file.content_offset})) {
 					continue;
 				}
 				result.push_back({manifest_idx, entry_idx});
@@ -372,7 +373,8 @@ vector<IcebergDeleteFileReference> IcebergManifestStore::GetDeleteFiles(const ve
 					continue;
 				}
 				if (context.transaction_data &&
-				    context.transaction_data->IsFileInvalidated(manifest_entry.data_file.file_path)) {
+				    context.transaction_data->IsFileInvalidated(
+				        {manifest_entry.data_file.file_path, manifest_entry.data_file.content_offset})) {
 					continue;
 				}
 				result.push_back({manifest_idx, entry_idx});

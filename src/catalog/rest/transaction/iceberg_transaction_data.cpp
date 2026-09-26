@@ -138,8 +138,8 @@ bool IcebergTransactionData::ContainsDelete() const {
 	return false;
 }
 
-bool IcebergTransactionData::IsFileInvalidated(const string &file_path) const {
-	return manifest_deletes.IsInvalidated(file_path);
+bool IcebergTransactionData::IsFileInvalidated(const IcebergContentFileIdentity &file) const {
+	return manifest_deletes.IsInvalidated(file);
 }
 
 bool IcebergTransactionData::SupportsAppendRetry() const {

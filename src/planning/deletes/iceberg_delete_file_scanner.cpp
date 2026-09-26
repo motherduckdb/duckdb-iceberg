@@ -97,8 +97,8 @@ static void ScanPuffinFile(const IcebergDeleteExecutionContext &context, const I
 		throw InvalidConfigurationException(
 		    "Table is corrupt, two or more deletion vectors exist for the same referenced_data_file");
 	}
-	positional_delete_data[*data_file.referenced_data_file] =
-	    IcebergDeletionVectorData::FromBlob(data_file.file_path, local_buffer.get(), length);
+	positional_delete_data[*data_file.referenced_data_file] = IcebergDeletionVectorData::FromBlob(
+	    {data_file.file_path, data_file.content_offset}, local_buffer.get(), length);
 }
 
 static optional_ptr<IcebergPositionalDeleteData>
@@ -426,7 +426,7 @@ IcebergDeletePlan IcebergDeleteExecutionState::ProcessDeletes(const IcebergDelet
 		unordered_set<IcebergDeleteFileLoadState *> seen;
 		for (auto &descriptor : descriptors) {
 			shared_ptr<IcebergDeleteFileLoadState> load;
-			auto &bucket = descriptor_loads[descriptor.file_path];
+			auto &bucket = descriptor_loads[{descriptor.file_path, descriptor.content_offset}];
 			for (auto &entry : bucket) {
 				if (entry.first == descriptor) {
 					load = entry.second;
@@ -477,7 +477,9 @@ IcebergDeletePlan IcebergDeleteExecutionState::ProcessDeletes(const IcebergDelet
 			positions.push_back(entry->second);
 		}
 	}
-	// Assemble only this task's selected files. Cached contents remain immutable.
+	// Assemble only this task's live, selected blobs. Cached contents remain immutable.
+	// A live vector supersedes positional deletes, but two distinct live vectors for
+	// the same data file are corrupt; invalidated vectors must be excluded by planning.
 	shared_ptr<IcebergDeleteData> assembled;
 	for (auto &position : positions) {
 		if (position->type == IcebergDeleteType::DELETION_VECTOR) {

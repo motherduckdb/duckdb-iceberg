@@ -486,10 +486,10 @@ bool IcebergServerSideScanPlanning::Plan(ClientContext &context, IcebergTable &t
 			auto &refs = result.delete_files_by_data_file[task.data_file.file.file_path];
 			for (auto delete_idx : task.delete_file_references) {
 				auto &delete_file = accumulator.delete_files[delete_idx].file;
-				refs.insert(delete_file.file_path);
+				refs.insert({delete_file.file_path, delete_file.content_offset});
 				if (StringUtil::CIEquals(delete_file.file_format, "puffin")) {
 					if (delete_file.referenced_data_file &&
-					    !StringUtil::CIEquals(*delete_file.referenced_data_file, task.data_file.file.file_path)) {
+					    *delete_file.referenced_data_file != task.data_file.file.file_path) {
 						throw InvalidInputException(
 						    "Iceberg REST scan plan references one Puffin deletion vector from multiple data files");
 					}
