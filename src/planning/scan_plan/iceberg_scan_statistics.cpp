@@ -37,10 +37,12 @@ optional<idx_t> IcebergScanStatistics::EstimateCardinality() const {
 			continue;
 		}
 		auto &counts = delete_manifests[i].entry.file.counts;
-		if (!counts || !counts->added_rows_count) {
+		if (!counts || !counts->added_rows_count || !counts->existing_rows_count) {
 			return nullopt;
 		}
-		*cardinality -= *counts->added_rows_count;
+		// Both added and existing delete files are live. Deletes can overlap, so clamp the estimate at zero.
+		*cardinality -= MinValue(*cardinality, *counts->added_rows_count);
+		*cardinality -= MinValue(*cardinality, *counts->existing_rows_count);
 	}
 	return cardinality;
 }

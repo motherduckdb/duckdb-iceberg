@@ -102,6 +102,19 @@ unique_ptr<IcebergScanPlanProvider> IcebergScanPlanProvider::Create(IcebergScanP
 			IcebergServerSideScanPlan plan;
 			try {
 				if (IcebergServerSideScanPlanning::Plan(context.context, table_info, std::move(request), plan)) {
+					if (shared_state.Configuration().row_ids_required && context.metadata.iceberg_version >= 3) {
+						// Without inspecting Parquet we cannot know whether all row IDs are
+						// materialized. Fall back rather than silently replacing inherited IDs.
+						for (auto &manifest : plan.data_manifests) {
+							for (auto &entry : manifest.GetManifestEntries()) {
+								if (!entry.data_file.HasFirstRowId()) {
+									throw InvalidInputException("Server scan plan is missing first-row-id for file "
+									                            "'%s', but this scan requires row IDs",
+									                            entry.data_file.file_path);
+								}
+							}
+						}
+					}
 					if (!plan.storage_credentials.empty()) {
 						table_info.LoadCredentials(context.context, table_info.GetVendedCredentials(
 						                                                context.context, plan.storage_credentials));

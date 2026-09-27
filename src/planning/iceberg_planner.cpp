@@ -20,28 +20,25 @@
 
 namespace duckdb {
 
-void IcebergPlannerRoutine::VisitOperator(LogicalOperator &op, bool below_write) {
-	below_write = below_write || op.type == LogicalOperatorType::LOGICAL_INSERT ||
-	              op.type == LogicalOperatorType::LOGICAL_DELETE || op.type == LogicalOperatorType::LOGICAL_UPDATE ||
-	              op.type == LogicalOperatorType::LOGICAL_MERGE_INTO;
+void IcebergPlannerRoutine::VisitOperator(LogicalOperator &op) {
 	if (op.type == LogicalOperatorType::LOGICAL_GET) {
-		VisitScan(op, below_write);
+		VisitScan(op);
 	}
 	// Post-bind runs before subqueries are lowered into operator children.
 	LogicalOperatorVisitor::EnumerateExpressions(op, [&](unique_ptr<Expression> *expression) {
-		ExpressionIterator::VisitExpression<BoundSubqueryExpression>(
-		    **expression, [&](const BoundSubqueryExpression &subquery) {
-			    if (subquery.Subquery().plan) {
-				    VisitOperator(*subquery.Subquery().plan, below_write);
-			    }
-		    });
+		ExpressionIterator::VisitExpression<BoundSubqueryExpression>(**expression,
+		                                                             [&](const BoundSubqueryExpression &subquery) {
+			                                                             if (subquery.Subquery().plan) {
+				                                                             VisitOperator(*subquery.Subquery().plan);
+			                                                             }
+		                                                             });
 	});
 	for (auto &child : op.children) {
-		VisitOperator(*child, below_write);
+		VisitOperator(*child);
 	}
 }
 
-void IcebergPlannerRoutine::VisitScan(LogicalOperator &op, bool below_write) {
+void IcebergPlannerRoutine::VisitScan(LogicalOperator &op) {
 	auto &get = op.Cast<LogicalGet>();
 	// Identify our iceberg scan by the multi file reader it installs, not by
 	// function name alone. Other extensions might create their own
@@ -59,16 +56,17 @@ void IcebergPlannerRoutine::VisitScan(LogicalOperator &op, bool below_write) {
 		return;
 	}
 	auto &iceberg_list = mfbd.file_list->Cast<IcebergMultiFileList>();
-	bool requires_local_planning = below_write;
+	// Server scan tasks provide the partition and delete-file metadata needed by writes.
+	// Real inherited sequence numbers still require manifest-based planning.
 	for (auto &column_id : get.GetColumnIds()) {
+		if (column_id.IsVirtualColumn() && column_id.GetPrimaryIndex() == COLUMN_IDENTIFIER_ROW_ID) {
+			iceberg_list.GetScanPlanner().RequireRowIds();
+		}
 		if (column_id.IsVirtualColumn() &&
 		    column_id.GetPrimaryIndex() == IcebergMultiFileReader::COLUMN_IDENTIFIER_LAST_SEQUENCE_NUMBER) {
-			requires_local_planning = true;
+			iceberg_list.GetScanPlanner().DisableServerSidePlanning();
 			break;
 		}
-	}
-	if (requires_local_planning) {
-		iceberg_list.GetScanPlanner().DisableServerSidePlanning();
 	}
 }
 
