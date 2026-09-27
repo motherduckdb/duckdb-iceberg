@@ -79,6 +79,12 @@ select count(*) from my_datalake.default.count_star_optimizer;
 ----
 1
 
+# Check both client manifests and the server plan's synthetic EXISTING entries.
+foreach server_scan true false
+
+statement ok
+SET iceberg_use_server_side_scan_planning = {server_scan};
+
 # Deletes still contribute to the estimate even when an exact count is unavailable.
 query II
 explain SELECT * FROM my_datalake.default.count_star_optimizer;
@@ -91,4 +97,7 @@ explain SELECT count(*) FROM  my_datalake.default.count_star_optimizer;
 ----
 physical_plan	<REGEX>:.*ICEBERG_SCAN.*row.*
 
+endloop
 
+statement ok
+RESET iceberg_use_server_side_scan_planning;
