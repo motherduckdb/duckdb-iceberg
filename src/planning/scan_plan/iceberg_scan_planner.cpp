@@ -67,11 +67,6 @@ bool IcebergScanPlanner::HasTransactionData() const {
 	return shared_state->Configuration().scan_info->transaction_data;
 }
 
-const IcebergTransactionData &IcebergScanPlanner::GetTransactionData() const {
-	D_ASSERT(HasTransactionData());
-	return *shared_state->Configuration().scan_info->transaction_data;
-}
-
 const IcebergSnapshotScanInfo &IcebergScanPlanner::GetSnapshot() const {
 	return shared_state->Configuration().scan_info->snapshot_info;
 }
@@ -115,16 +110,7 @@ const IcebergTableFilters &IcebergScanPlanner::Filters() const {
 }
 
 IcebergScanPlanProvider &IcebergScanPlanner::GetScanPlanProvider() const {
-	D_ASSERT(scan_plan_provider);
-	return *scan_plan_provider;
-}
-
-IcebergScanPlanContext IcebergScanPlanner::GetScanPlanContext() const {
-	optional_ptr<const IcebergTransactionData> transaction_data;
-	if (HasTransactionData()) {
-		transaction_data = &GetTransactionData();
-	}
-	return {context, fs, GetPath(), GetOptions(), GetSnapshot(), GetMetadata(), GetSchema(), transaction_data};
+	return shared_state->GetScanPlanProvider(table_filters, scan_order);
 }
 
 IcebergDeletePlanningContext IcebergScanPlanner::GetDeletePlanningContext() const {
@@ -141,25 +127,11 @@ IcebergDeletePlanningContext IcebergScanPlanner::GetDeletePlanningContext() cons
 	        GetScanPlanProvider()};
 }
 
-void IcebergScanPlanner::InitializeScanPlanProvider() const {
-	if (!scan_plan_provider) {
-		shared_state->FreezeConfiguration();
-		scan_plan_provider =
-		    IcebergScanPlanProvider::Create(*shared_state, GetScanPlanContext(), GetTable(), table_filters, scan_order,
-		                                    shared_state->Configuration().server_side_planning_enabled);
-	}
-}
-
-void IcebergScanPlanner::LoadManifestList(annotated_lock_guard<annotated_mutex> &) const {
-	InitializeScanPlanProvider();
-	GetScanPlanProvider().LoadManifestList();
-}
-
 void IcebergScanPlanner::InitializeView(annotated_lock_guard<annotated_mutex> &guard) const {
-	if (scan_plan_provider) {
+	if (view_initialized) {
 		return;
 	}
-	LoadManifestList(guard);
+	GetScanPlanProvider().LoadManifestList();
 	IcebergFilePruner pruner(context, GetMetadata(), GetSchema(), table_filters);
 	auto &committed_data = GetScanPlanProvider().DataManifests();
 	for (auto &manifest : committed_data) {
@@ -185,10 +157,11 @@ void IcebergScanPlanner::InitializeView(annotated_lock_guard<annotated_mutex> &g
 		has_matching_deletes |= matches;
 	}
 	has_matching_delete_manifests.store(has_matching_deletes);
+	view_initialized = true;
 }
 
 void IcebergScanPlanner::StartDataManifestScan(annotated_lock_guard<annotated_mutex> &) const {
-	D_ASSERT(scan_plan_provider);
+	D_ASSERT(view_initialized);
 	GetScanPlanProvider().StartDataManifestScan(data_manifest_matches, table_filters.FilterCount());
 }
 
@@ -369,7 +342,7 @@ IcebergScanPlanner::ResolveApplicableDeleteFiles(const BoundIcebergManifestEntry
 		InitializeView(guard);
 		manifest_indexes =
 		    IcebergDeletePlanner::GetDeleteManifestsForDataFile(GetDeletePlanningContext(), data_manifest_entry);
-		provider = scan_plan_provider.get();
+		provider = &GetScanPlanProvider();
 	}
 	if (manifest_indexes.empty()) {
 		return result;

@@ -24,7 +24,7 @@ struct IcebergScanPlanContext;
 
 //! Plans Iceberg data-file scans independently of DuckDB's MultiFileReader API.
 //! A planner represents one filtered view; filtered views share the underlying
-//! manifest read state but own their provider, pruning, ordering, and cursors.
+//! provider and manifest read state but own their pruning, ordering, and cursors.
 class IcebergScanPlanner {
 public:
 	IcebergScanPlanner(ClientContext &context, shared_ptr<IcebergScanInfo> scan_info, const string &path,
@@ -63,9 +63,7 @@ public:
 private:
 	explicit IcebergScanPlanner(shared_ptr<IcebergScanPlanState> shared_state);
 
-	const IcebergTransactionData &GetTransactionData() const;
 	IcebergScanPlanProvider &GetScanPlanProvider() const DUCKDB_REQUIRES(shared_state->lock);
-	IcebergScanPlanContext GetScanPlanContext() const DUCKDB_REQUIRES(shared_state->lock);
 	IcebergDeletePlanningContext GetDeletePlanningContext() const DUCKDB_REQUIRES(shared_state->lock);
 
 	void InitializeView(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
@@ -77,8 +75,6 @@ private:
 	    DUCKDB_REQUIRES(shared_state->lock);
 	bool TryGetNextBatch(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
 	void FinishScanTasks(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
-	void LoadManifestList(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
-	void InitializeScanPlanProvider() const DUCKDB_REQUIRES(shared_state->lock);
 	void StartDataManifestScan(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
 	vector<IcebergDeleteFile> ResolveApplicableDeleteFiles(const BoundIcebergManifestEntry &data_manifest_entry) const;
 
@@ -88,7 +84,7 @@ private:
 	FileSystem &fs;
 	IcebergTableFilters table_filters;
 
-	mutable unique_ptr<IcebergScanPlanProvider> scan_plan_provider DUCKDB_GUARDED_BY(shared_state->lock);
+	mutable bool view_initialized DUCKDB_GUARDED_BY(shared_state->lock) = false;
 	mutable vector<BoundIcebergManifestListEntry> delete_manifests DUCKDB_GUARDED_BY(shared_state->lock);
 	mutable vector<bool> delete_manifest_matches DUCKDB_GUARDED_BY(shared_state->lock);
 	mutable atomic<bool> has_matching_delete_manifests {true};
