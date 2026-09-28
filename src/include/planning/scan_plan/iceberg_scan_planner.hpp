@@ -49,6 +49,8 @@ public:
 	const string &GetPath() const;
 	const IcebergOptions &GetOptions() const;
 	bool HasScanInfo() const;
+	bool HasTransactionData() const;
+	const IcebergSnapshotScanInfo &GetSnapshot() const;
 
 	optional<IcebergFileScanTask> GetScanTask(idx_t file_id) const;
 	//! File enumeration only: does not resolve partition constants or load delete manifests.
@@ -61,9 +63,7 @@ public:
 private:
 	explicit IcebergScanPlanner(shared_ptr<IcebergScanPlanState> shared_state);
 
-	bool HasTransactionData() const;
 	const IcebergTransactionData &GetTransactionData() const;
-	const IcebergSnapshotScanInfo &GetSnapshot() const;
 	IcebergScanPlanProvider &GetScanPlanProvider() const DUCKDB_REQUIRES(shared_state->lock);
 	IcebergScanPlanContext GetScanPlanContext() const DUCKDB_REQUIRES(shared_state->lock);
 	IcebergDeletePlanningContext GetDeletePlanningContext() const DUCKDB_REQUIRES(shared_state->lock);
