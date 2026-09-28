@@ -186,13 +186,9 @@ DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const Log
 		return Value::BLOB((data_ptr_t)blob.GetData(), blob.GetSize());
 	}
 	case LogicalTypeId::VARCHAR: {
-		// Iceberg string metrics default to truncate(N) bytes. Older writers (and
-		// DuckDB before lower-bound code-point truncation) can split a multi-byte
-		// UTF-8 sequence. Constructing a VARCHAR Value from those bytes throws
-		// "Invalid unicode (byte sequence mismatch)". Keep the longest valid
-		// UTF-8 prefix so iceberg_column_stats / pruning survive historical
-		// manifests. An empty prefix becomes NULL via DeserializeError so the
-		// bound can be omitted.
+		// Previous versions of DuckDB-Iceberg truncated string metrics to N bytes,
+		// which could split a multi-byte character and produce invalid UTF-8.
+		// Shorten the bound until it is a valid UTF-8 string.
 		auto data = blob.GetData();
 		auto size = blob.GetSize();
 		if (Utf8Proc::IsValid(data, size)) {
