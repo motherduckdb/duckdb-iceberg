@@ -1,5 +1,6 @@
 #include "planning/scan_plan/iceberg_scan_plan_state.hpp"
 #include "planning/scan_plan/iceberg_manifest_store.hpp"
+#include "planning/scan_plan/iceberg_scan_plan_provider.hpp"
 
 namespace duckdb {
 
@@ -53,6 +54,26 @@ void IcebergScanPlanState::FreezeConfiguration() {
 }
 
 IcebergScanPlanState::~IcebergScanPlanState() = default;
+
+IcebergScanPlanProvider &IcebergScanPlanState::GetScanPlanProvider(const IcebergTableFilters &filters,
+                                                                   const IcebergScanOrder &scan_order) {
+	if (!scan_plan_provider) {
+		FreezeConfiguration();
+		auto &scan_info = *configuration.scan_info;
+		IcebergScanPlanContext plan_context {context,
+		                                     fs,
+		                                     configuration.path,
+		                                     configuration.options,
+		                                     scan_info.snapshot_info,
+		                                     scan_info.metadata,
+		                                     scan_info.schema,
+		                                     scan_info.transaction_data.get()};
+		scan_plan_provider =
+		    IcebergScanPlanProvider::Create(*this, std::move(plan_context), configuration.table, filters, scan_order,
+		                                    configuration.server_side_planning_enabled);
+	}
+	return *scan_plan_provider;
+}
 
 IcebergManifestStore &IcebergScanPlanState::GetManifestStore(IcebergScanPlanContext context) {
 	FreezeConfiguration();
