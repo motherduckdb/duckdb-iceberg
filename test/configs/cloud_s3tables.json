@@ -55,6 +55,10 @@
     {
       "env_name": "ATOMIC_COMMIT_CONFLICT_SUPPORT",
       "env_value": "true"
+    },
+    {
+      "env_name": "VARIANT_SUPPORT",
+      "env_value": "true"
     }
   ],
   "skip_tests": [
@@ -67,6 +71,24 @@
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/create/test_view_regressions.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/create/test_view_scan_no_deadlock.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_view_transactions.test"
+      ]
+    },
+    {
+      "reason": "Don't support server side scan planning in s3tables",
+      "paths": [
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/scan_planning/scan_partition_value_encoding.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/scan_planning/scan_plan.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/scan_planning/scan_plan_batches.test_slow",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/scan_planning/scan_plan_equality.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/scan_planning/scan_plan_with_defaults.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/scan_planning/scan_tasks.test",
+        "test/sql/local/catalog_test_config_setup/catalog_specifc/fixture/scan_planning/scan_plan_sequence_number.test"
+      ]
+    },
+    {
+      "reason": "S3tables does not support column values, but will succeed on create table, so this needs explicit skip",
+      "paths": [
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/capabilities/no_column_default.test"
       ]
     },
     {
@@ -83,7 +105,8 @@
       "paths": [
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/add_column/alter_add_column_transaction_with_select.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/create/default/test_create_default_struct_nested.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transaction_metadata_log_properties.test"
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_transaction_metadata_log_properties.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/test_delete_consolidation_cleanup_failure.test"
       ]
     },
     {
