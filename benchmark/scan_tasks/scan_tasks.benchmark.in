@@ -6,6 +6,8 @@ name Iceberg scan tasks - ${CASE} - ${THREADS} threads
 group scan_tasks
 subgroup ${CASE}
 
+require avro
+
 require parquet
 
 require iceberg
