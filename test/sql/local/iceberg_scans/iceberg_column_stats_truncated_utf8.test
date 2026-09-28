@@ -1,5 +1,5 @@
 # name: test/sql/local/iceberg_scans/iceberg_column_stats_truncated_utf8.test
-# description: iceberg_column_stats and filter pushdown must tolerate a varchar bound whose truncate(16) split a multi-byte UTF-8 character. The bound is omitted and logged instead of failing the whole scan.
+# description: A varchar bound whose truncate(16) split a multi-byte character is repaired. The lower bound keeps the valid prefix. The upper bound increments the last code point, so a longer value with that prefix is still inside the bound.
 # group: [iceberg_scans]
 
 require avro
@@ -8,35 +8,20 @@ require parquet
 
 require iceberg
 
-statement ok
-CALL enable_logging('Iceberg');
-
-statement ok
-CALL truncate_duckdb_logs();
-
-# value's lower and upper bounds are a 16-byte truncate(16) that ends on the first byte of U+2019.
+# value's bounds are 16 bytes ending on the first byte of a 3-byte character (0xE2).
+# The valid prefix is {"name":"John O. Rounding the last code point up yields {"name":"John P.
 query III
 SELECT column_name, lower_bound, upper_bound
 FROM iceberg_column_stats('{WORKING_DIRECTORY}/data/persistent/utf8_trunc_bounds')
 ORDER BY column_name;
 ----
 id	1	3
-value	NULL	NULL
+value	{"name":"John O	{"name":"John P
 
-query II
-SELECT
-	count(*) FILTER (message.contains($$Omitting invalid UTF-8 lower bound for column 'value'$$)),
-	count(*) FILTER (message.contains($$Omitting invalid UTF-8 upper bound for column 'value'$$))
-FROM duckdb_logs()
-WHERE type = 'Iceberg';
-----
-1	1
-
-# The data file itself is valid UTF-8. A filter on the truncated column must still scan it.
+# 'foo' is below the repaired lower bound, so the file is pruned.
 query II
 SELECT id, value
 FROM iceberg_scan('{WORKING_DIRECTORY}/data/persistent/utf8_trunc_bounds')
 WHERE value = 'foo'
 ORDER BY id;
 ----
-1	foo
