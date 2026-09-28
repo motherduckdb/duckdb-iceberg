@@ -8,6 +8,9 @@ namespace duckdb {
 
 class IcebergTableSchemaVersion;
 class IcebergManifestStore;
+class IcebergScanPlanProvider;
+class IcebergScanOrder;
+struct IcebergTableFilters;
 struct IcebergScanPlanContext;
 
 //! Scan identity and options, configured during binding and frozen before planning or view creation.
@@ -44,6 +47,9 @@ public:
 	void DisableServerSidePlanning() DUCKDB_REQUIRES(lock);
 	void RequireRowIds() DUCKDB_REQUIRES(lock);
 	void FreezeConfiguration() DUCKDB_REQUIRES(lock);
+	//! The first planning request selects the provider; subsequent filtered views reuse it.
+	IcebergScanPlanProvider &GetScanPlanProvider(const IcebergTableFilters &filters, const IcebergScanOrder &scan_order)
+	    DUCKDB_REQUIRES(lock);
 	IcebergManifestStore &GetManifestStore(IcebergScanPlanContext context) DUCKDB_REQUIRES(lock);
 
 	mutable annotated_mutex lock;
@@ -54,6 +60,8 @@ private:
 	void RequireConfigurable() const DUCKDB_REQUIRES(lock);
 	bool configuration_frozen DUCKDB_GUARDED_BY(lock) = false;
 	unique_ptr<IcebergManifestStore> manifest_store DUCKDB_GUARDED_BY(lock);
+	//! Destroy the provider before the manifest store it may reference.
+	unique_ptr<IcebergScanPlanProvider> scan_plan_provider DUCKDB_GUARDED_BY(lock);
 };
 
 } // namespace duckdb
