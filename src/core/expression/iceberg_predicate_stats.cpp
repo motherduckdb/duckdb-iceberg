@@ -13,14 +13,8 @@ namespace duckdb {
 
 namespace {
 
-bool OmitInvalidUtf8VarcharBound(ClientContext &context, const string_t &blob, const LogicalType &type,
-                                 const string &name, const char *bound_kind) {
-	if (type.id() != LogicalTypeId::VARCHAR || Utf8Proc::IsValid(blob.GetData(), blob.GetSize())) {
-		return false;
-	}
-	// Truncated UTF-8 string metrics are not a safe zonemap bound. Omit them rather than failing the scan.
-	DUCKDB_LOG(context, IcebergLogType, "Omitting invalid UTF-8 %s bound for column '%s'", bound_kind, name);
-	return true;
+bool IsVarcharBoundUtf8Valid(const string_t &blob, const LogicalType &type) {
+	return type.id() != LogicalTypeId::VARCHAR || Utf8Proc::IsValid(blob.GetData(), blob.GetSize());
 }
 
 } // namespace
@@ -85,7 +79,10 @@ IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(ClientContext &co
 	if (!lower_bound.IsNull()) {
 		D_ASSERT(lower_bound.type().id() == LogicalTypeId::BLOB);
 		auto blob = lower_bound.GetValueUnsafe<string_t>();
-		if (!OmitInvalidUtf8VarcharBound(context, blob, type, name, "lower")) {
+		// Truncated UTF-8 string metrics are not a safe zonemap bound. Omit them rather than failing the scan.
+		if (!IsVarcharBoundUtf8Valid(blob, type)) {
+			DUCKDB_LOG(context, IcebergLogType, "Omitting invalid UTF-8 lower bound for column '%s'", name);
+		} else {
 			auto deserialized = IcebergValue::DeserializeValue(blob, type);
 			if (deserialized.HasError()) {
 				throw InvalidConfigurationException("Column %s lower bound deserialization failed: %s", name,
@@ -97,7 +94,9 @@ IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(ClientContext &co
 	if (!upper_bound.IsNull()) {
 		D_ASSERT(upper_bound.type().id() == LogicalTypeId::BLOB);
 		auto blob = upper_bound.GetValueUnsafe<string_t>();
-		if (!OmitInvalidUtf8VarcharBound(context, blob, type, name, "upper")) {
+		if (!IsVarcharBoundUtf8Valid(blob, type)) {
+			DUCKDB_LOG(context, IcebergLogType, "Omitting invalid UTF-8 upper bound for column '%s'", name);
+		} else {
 			auto deserialized = IcebergValue::DeserializeValue(blob, type);
 			if (deserialized.HasError()) {
 				throw InvalidConfigurationException("Column %s upper bound deserialization failed: %s", name,
