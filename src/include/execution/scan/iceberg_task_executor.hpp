@@ -7,7 +7,7 @@
 
 namespace duckdb {
 
-//! Query-owned metadata and delete caches shared by independently executing tasks.
+//! Query-owned metadata and delete caches shared by all tasks and workers.
 //! Schema references remain valid for the lifetime of this immovable context.
 struct IcebergTaskExecutionContext {
 	IcebergTaskExecutionContext(IcebergTableMetadata metadata, int32_t schema_id);
@@ -21,24 +21,25 @@ struct IcebergTaskExecutionContext {
 };
 
 //! Executes one already-decoded file task. No SQL task layout or planner is needed.
-//! Each instance is local to one worker; tasks share only their execution context.
+//! Workers share the executor and each own a separate local scanner.
 class IcebergTaskExecutor {
 public:
-	IcebergTaskExecutor(ExecutionContext &context, shared_ptr<IcebergTaskExecutionContext> execution,
+	IcebergTaskExecutor(ClientContext &context, shared_ptr<IcebergTaskExecutionContext> execution,
 	                    IcebergFileScanTask task);
 	~IcebergTaskExecutor();
 
-	//! Produces one chunk, or false at exhaustion. Destruction also supports early termination.
-	bool Read(ClientContext &context, DataChunk &output);
+	//! Creates a private scanner that claims work from the shared Parquet scan.
+	unique_ptr<LocalTableFunctionState> InitializeLocal(ExecutionContext &context);
+	//! Produces one chunk, or false when this worker has exhausted its scanner.
+	bool Read(ClientContext &context, LocalTableFunctionState &local, DataChunk &output);
 
 private:
-	//! Reverse destruction order releases local/global scanners before bind data and
+	//! Reverse destruction order releases the global scanner before bind data and
 	//! the function info that owns the task and shared execution context.
 	TableFunction function;
 	unique_ptr<FunctionData> bind;
 	unique_ptr<GlobalTableFunctionState> global;
-	unique_ptr<LocalTableFunctionState> local;
-	bool finished = false;
+	vector<column_t> column_ids;
 };
 
 } // namespace duckdb

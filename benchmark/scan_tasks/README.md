@@ -5,16 +5,35 @@ tasks. Each workload has a one-thread baseline and an eight-thread counterpart.
 
 | Case | Tasks | Rows per task | Purpose |
 | --- | ---: | ---: | --- |
-| `tiny_2048` | 2,048 | 32 | One vector of tasks; reader setup and scheduling overhead |
-| `tiny_16384` | 16,384 | 32 | Multiple input vectors; sustained task turnover |
+| `tiny_2048` | 2,048 | 32 | 2,048 task descriptors; reader setup and scheduling overhead |
+| `tiny_16384` | 16,384 | 32 | A larger task list; sustained task turnover |
 | `multi_row_group` | 64 | 262,144 | 32 Parquet row groups per task; sharing work within active tasks |
 | `skewed` | 4,096 | First task: 8,388,608; remaining: 32 | A long-running task mixed with many tiny tasks |
 
-The task table is deliberately small enough to fit in one DuckDB storage row
-group. Increasing `threads` alone need not parallelize its scan. This exposes the
-current dependence on upstream task-input parallelism and provides a baseline
-for sharing active task execution through global state. The eight-thread cases
-do not assert a speedup; compare their timings before and after executor changes.
+Task descriptors are collected into a list before the timed query. The scan is
+an independent source: workers share its active task and claim Parquet row groups
+from that task. The eight-thread cases do not assert a speedup; compare timings
+against the one-thread baseline.
+
+For catalog-backed plans, production and consumption must share a transaction:
+planning creates storage credentials whose lifetime is tied to that transaction.
+Saving the descriptors alone does not keep those credentials alive.
+
+```sql
+BEGIN;
+SET VARIABLE task_list = (
+    SELECT list(t) FROM iceberg_scan_plan('my_datalake.default.my_table') t
+);
+SELECT * FROM iceberg_scan_tasks(getvariable('task_list'));
+COMMIT;
+```
+
+These benchmarks use local files and collect their synthetic `tasks` table into
+`task_list` during setup, so they do not require catalog credentials.
+
+The list element type carries the output schema, including for an empty or NULL
+list of that type. Task structs must be non-NULL. Subqueries must be materialized
+into a list before calling the function; table-input invocation is not supported.
 
 Setup writes deterministic local Parquet files with field IDs and 8,192-row
 groups, reads their sizes, and materializes the complete task descriptors. Only
