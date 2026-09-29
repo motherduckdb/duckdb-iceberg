@@ -111,34 +111,6 @@
       ]
     },
     {
-      "reason": "requires table created in fixture setups (catalog_agnostic)",
-      "paths": [
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/test_delete_from_partitioned_table_errors.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/iceberg_catalog_eager_refresh.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/count_star_optimizer.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/should_do_filter_pruning_on_expressionless_string_filters.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/should_not_do_filter_pruning_on_expression_string_filters.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/partitioned_reads/test_read_from_month_partitioned_date.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/test_read_from_partitioned_table.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/test_read_nulls.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/test_requests_to_partitioned_table.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/partitioning/test_partitioning_pushdown_bucket.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/table_properties/test_set_table_properties.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/test_cascade.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/test_minimal_head_requests.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/test_read_empty_table.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/test_select_row_id.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/test_show_table_duplicates.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/test_tpch.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/test_use.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_concurrent_transactions.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/update/test_update_partitioned_table_failure.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/irc_nested_types.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/logging/test_partition_read_logging.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/logging/test_partition_read_logic_month.test"
-      ]
-    },
-    {
       "reason": "requires tables created or read by other engines (Spark/PyIceberg) (catalog_interop)",
       "paths": [
         "test/sql/local/catalog_test_config_setup/catalog_interop/delete/test_delete_from_v3_table.test",
