@@ -42,11 +42,12 @@ SELECT CASE WHEN i < ${DATA_TASKS} THEN '${BENCHMARK_DIR}/scan_tasks_${CASE}_${T
 FROM range(${TASKS}) t(i)
 CROSS JOIN (SELECT size AS data_size FROM read_blob('${BENCHMARK_DIR}/scan_tasks_${CASE}_${THREADS}_data.parquet')) d
 CROSS JOIN (SELECT size AS tiny_size FROM read_blob('${BENCHMARK_DIR}/scan_tasks_${CASE}_${THREADS}_tiny.parquet')) s;
+SET VARIABLE task_list = (SELECT list(t) FROM tasks t);
 SET threads=${THREADS};
 
 run
 SELECT count(*), sum(id), sum(payload), sum(task_id)
-FROM iceberg_scan_tasks((SELECT * FROM tasks));
+FROM iceberg_scan_tasks(getvariable('task_list'));
 
 result IIII
 ${COUNT}	${SUM_ID}	${SUM_PAYLOAD}	${SUM_TASK_ID}

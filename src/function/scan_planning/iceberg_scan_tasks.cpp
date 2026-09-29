@@ -1,7 +1,8 @@
 #include "function/iceberg_functions.hpp"
 
-#include "duckdb/common/vector_operations/vector_operations.hpp"
+#include "duckdb/execution/execution_context.hpp"
 #include "duckdb/main/client_context.hpp"
+#include "duckdb/parallel/thread_context.hpp"
 #include "function/scan_planning/iceberg_scan_task_codec.hpp"
 #include "execution/scan/iceberg_task_executor.hpp"
 
@@ -11,25 +12,42 @@ using TaskCodec = IcebergScanTaskCodec;
 
 struct IcebergScanTasksBindData : public TableFunctionData {
 	TaskCodec::InputLayout layout;
+	Value tasks;
 };
 
 struct IcebergScanTasksGlobalState : public GlobalTableFunctionState {
 	mutex lock;
+	idx_t next_task = 0;
 	string metadata_json;
 	Value schema_id;
 	Value snapshot_id;
 	shared_ptr<IcebergTaskExecutionContext> execution;
+	shared_ptr<IcebergTaskExecutor> active;
 
 	idx_t MaxThreads() const override {
 		return MAX_THREADS;
 	}
 
-	shared_ptr<IcebergTaskExecutionContext> GetContext(const IcebergScanTasksBindData &bind, const Value &json,
-	                                                   const Value &schema, const Value &snapshot) {
-		if (json.IsNull() || schema.IsNull()) {
+	// Called with lock held. Only the global state advances the input and publishes tasks.
+	shared_ptr<IcebergTaskExecutor> GetTask(ClientContext &context, const IcebergScanTasksBindData &bind) {
+		if (active || bind.tasks.IsNull()) {
+			return active;
+		}
+		auto &tasks = ListValue::GetChildren(bind.tasks);
+		if (next_task == tasks.size()) {
+			return nullptr;
+		}
+		auto &descriptor = tasks[next_task];
+		if (descriptor.IsNull()) {
+			throw InvalidInputException("iceberg_scan_tasks requires non-NULL task structs");
+		}
+		auto schema = TaskCodec::ReadValue(descriptor, bind.layout, TaskCodec::SCHEMA_ID, true);
+		auto snapshot = TaskCodec::ReadValue(descriptor, bind.layout, TaskCodec::SNAPSHOT_ID, true);
+		auto metadata_value = TaskCodec::ReadValue(descriptor, bind.layout, TaskCodec::METADATA, true);
+		if (metadata_value.IsNull() || schema.IsNull()) {
 			throw InvalidInputException("iceberg_scan_tasks metadata and schema_id cannot be NULL");
 		}
-		lock_guard<mutex> guard(lock);
+		auto json = metadata_value.CastAs(context, LogicalType::JSON());
 		auto &text = StringValue::Get(json);
 		if (execution) {
 			if (text != metadata_json || !Value::NotDistinctFrom(schema, schema_id) ||
@@ -37,75 +55,75 @@ struct IcebergScanTasksGlobalState : public GlobalTableFunctionState {
 				throw InvalidInputException(
 				    "iceberg_scan_tasks requires one metadata document, schema ID, and snapshot ID");
 			}
-			return execution;
+		} else {
+			auto metadata = TaskCodec::ReadMetadata(text, IntegerValue::Get(schema), snapshot, bind.layout.schema_type);
+			execution = make_shared_ptr<IcebergTaskExecutionContext>(std::move(metadata), IntegerValue::Get(schema));
+			metadata_json = text;
+			schema_id = schema;
+			snapshot_id = snapshot;
 		}
-		auto metadata = TaskCodec::ReadMetadata(text, IntegerValue::Get(schema), snapshot, bind.layout.schema_type);
-		auto result = make_shared_ptr<IcebergTaskExecutionContext>(std::move(metadata), IntegerValue::Get(schema));
-
-		metadata_json = text;
-		schema_id = schema;
-		snapshot_id = snapshot;
-		execution = result;
-		return result;
+		auto task = TaskCodec::ReadTask(descriptor, bind.layout, execution->metadata, execution->schema);
+		active = make_shared_ptr<IcebergTaskExecutor>(context, execution, std::move(task));
+		next_task++;
+		return active;
 	}
 };
 
 struct IcebergScanTasksLocalState : public LocalTableFunctionState {
-	idx_t row = 0;
-	Vector metadata_json {LogicalType::JSON()};
-	unique_ptr<IcebergTaskExecutor> active;
+	// Release the worker's scanner before the shared task it references.
+	shared_ptr<IcebergTaskExecutor> active;
+	unique_ptr<LocalTableFunctionState> scanner;
 };
 
 static unique_ptr<FunctionData> IcebergScanTasksBind(ClientContext &, TableFunctionBindInput &input,
                                                      vector<LogicalType> &types, vector<Identifier> &names) {
+	auto &tasks = input.inputs[0];
+	if (tasks.type().id() != LogicalTypeId::LIST ||
+	    ListType::GetChildType(tasks.type()).id() != LogicalTypeId::STRUCT) {
+		throw BinderException("iceberg_scan_tasks requires a list of task structs");
+	}
 	auto result = make_uniq<IcebergScanTasksBindData>();
-	result->layout = TaskCodec::BindInput(input, types, names);
+	result->layout = TaskCodec::BindInput(ListType::GetChildType(tasks.type()), types, names);
+	result->tasks = tasks;
 	return std::move(result);
 }
 
-static unique_ptr<IcebergTaskExecutor> StartTask(ExecutionContext &context, const IcebergScanTasksBindData &bind,
-                                                 IcebergScanTasksGlobalState &global, IcebergScanTasksLocalState &local,
-                                                 DataChunk &input) {
-	if (input.GetValue(bind.layout.columns[TaskCodec::METADATA], local.row).IsNull()) {
-		throw InvalidInputException("iceberg_scan_tasks metadata and schema_id cannot be NULL");
-	}
-	auto execution =
-	    global.GetContext(bind, local.metadata_json.GetValue(local.row),
-	                      TaskCodec::ReadValue(input, bind.layout, local.row, TaskCodec::SCHEMA_ID),
-	                      TaskCodec::ReadValue(input, bind.layout, local.row, TaskCodec::SNAPSHOT_ID, true));
-	auto task = TaskCodec::ReadTask(input, bind.layout, local.row, execution->metadata, execution->schema);
-	return make_uniq<IcebergTaskExecutor>(context, std::move(execution), std::move(task));
-}
-
-static OperatorResultType IcebergScanTasksFunction(ExecutionContext &context, TableFunctionInput &data,
-                                                   DataChunk &input, DataChunk &output) {
+static void IcebergScanTasksFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
 	auto &bind = data.bind_data->Cast<IcebergScanTasksBindData>();
 	auto &global = data.global_state->Cast<IcebergScanTasksGlobalState>();
 	auto &local = data.local_state->Cast<IcebergScanTasksLocalState>();
-	if (local.row == 0 && !local.active) {
-		// A previous constant input leaves the cast result constant; start with writable flat storage.
-		local.metadata_json.Initialize();
-		VectorOperations::Cast(context.client, input.data[bind.layout.columns[TaskCodec::METADATA]],
-		                       local.metadata_json, input.size());
-	}
-	while (local.row < input.size()) {
-		context.client.InterruptCheck();
+	while (true) {
+		context.InterruptCheck();
 		if (!local.active) {
-			local.active = StartTask(context, bind, global, local, input);
+			{
+				lock_guard<mutex> guard(global.lock);
+				local.active = global.GetTask(context, bind);
+			}
+			if (!local.active) {
+				return;
+			}
+			ThreadContext thread(context);
+			ExecutionContext execution(context, thread, nullptr);
+			local.scanner = local.active->InitializeLocal(execution);
 		}
-		if (local.active->Read(context.client, output)) {
-			return OperatorResultType::HAVE_MORE_OUTPUT;
+		if (local.active->Read(context, *local.scanner, output)) {
+			return;
 		}
+		{
+			lock_guard<mutex> guard(global.lock);
+			// Other workers can still drain assigned row groups from this task. Their
+			// references keep it alive while the global state advances to the next task.
+			if (global.active == local.active) {
+				global.active.reset();
+			}
+		}
+		local.scanner.reset();
 		local.active.reset();
-		local.row++;
 	}
-	local.row = 0;
-	return OperatorResultType::NEED_MORE_INPUT;
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergScanTasksFunction() {
-	TableFunction function("iceberg_scan_tasks", {LogicalType::TABLE}, nullptr, IcebergScanTasksBind);
-	function.in_out_function = IcebergScanTasksFunction;
+	TableFunction function("iceberg_scan_tasks", {LogicalType::ANY}, IcebergScanTasksFunction, IcebergScanTasksBind);
 	function.init_global = [](ClientContext &, TableFunctionInitInput &) -> unique_ptr<GlobalTableFunctionState> {
 		return make_uniq<IcebergScanTasksGlobalState>();
 	};
@@ -115,6 +133,7 @@ TableFunctionSet IcebergFunctions::GetIcebergScanTasksFunction() {
 	};
 	function.projection_pushdown = false;
 	function.filter_pushdown = false;
+	function.order_preservation_type = OrderPreservationType::NO_ORDER;
 	return TableFunctionSet(function);
 }
 
