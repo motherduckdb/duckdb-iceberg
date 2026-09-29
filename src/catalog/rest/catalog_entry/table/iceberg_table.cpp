@@ -344,6 +344,20 @@ idx_t IcebergTable::GetNextPartitionSpecId() {
 	return max_partition_spec_id + 1;
 }
 
+idx_t IcebergTable::GetNextPartitionFieldId() {
+	idx_t next_partition_field_id = 1000;
+	if (table_metadata.HasLastPartitionId()) {
+		next_partition_field_id = table_metadata.GetLastPartitionFieldId() + 1;
+	}
+	// Include specs added in this transaction, which are not yet reflected in last-partition-id.
+	for (auto &entry : table_metadata.GetPartitionSpecs()) {
+		for (auto &field : entry.second.fields) {
+			next_partition_field_id = MaxValue<idx_t>(next_partition_field_id, field.partition_field_id + 1);
+		}
+	}
+	return next_partition_field_id;
+}
+
 idx_t IcebergTable::GetNextSortOrderId() {
 	idx_t max_sort_order_id = 0;
 	if (table_metadata.default_sort_order_id.IsValid()) {
@@ -442,13 +456,42 @@ IcebergSortOrder IcebergTable::BuildSortOrder(ClientContext &context,
 void IcebergTable::SetPartitionedBy(IcebergTransaction &transaction,
                                     const vector<unique_ptr<ParsedExpression>> &partition_keys,
                                     const IcebergTableSchema &schema) {
-	idx_t base_partition_field_id = 1000;
-	if (table_metadata.HasLastPartitionId()) {
-		base_partition_field_id = table_metadata.GetLastPartitionFieldId() + 1;
-	}
+	auto base_partition_field_id = GetNextPartitionFieldId();
 	auto new_spec_id = static_cast<int32_t>(GetNextPartitionSpecId());
 
 	auto new_spec = BuildPartitionSpec(partition_keys, schema, new_spec_id, base_partition_field_id);
+	// V2+ tracks partition field IDs across specs, allowing equivalent historical fields to reuse IDs.
+	// V1 did not require explicit field IDs: they were assigned by position starting at 1000 in each spec.
+	// Its evolution rules preserve positions (using void transforms for removed fields), so the reference
+	// implementation does not recycle historical fields in V1.
+	if (table_metadata.iceberg_version >= 2) {
+		for (auto &field : new_spec.fields) {
+			optional_ptr<const IcebergPartitionSpecField> existing_field;
+			// Like Iceberg's BaseUpdatePartitionSpec.recycleOrCreatePartitionField, match the source
+			// ID and complete transform (including parameters). SET PARTITIONED BY supplies no
+			// explicit partition field name, so retain the historical name along with its ID.
+			for (auto &entry : table_metadata.GetPartitionSpecs()) {
+				for (auto &candidate : entry.second.fields) {
+					if (candidate.Equals(field) &&
+					    (!existing_field || candidate.partition_field_id < existing_field->partition_field_id)) {
+						existing_field = candidate;
+					}
+				}
+			}
+			// Preserve active fields even when older writers assigned multiple IDs to the same transform.
+			for (auto &candidate : table_metadata.GetLatestPartitionSpec().fields) {
+				if (candidate.Equals(field)) {
+					existing_field = candidate;
+					break;
+				}
+			}
+			if (existing_field) {
+				field = *existing_field;
+			} else {
+				field.partition_field_id = base_partition_field_id++;
+			}
+		}
+	}
 
 	// if spec definition already exists in a previous spec definition, set it to that spec id
 	// (some catalog may allow duplicate definitions, others not)
