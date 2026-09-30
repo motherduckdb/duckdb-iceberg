@@ -55,6 +55,8 @@ public:
 	JSONMutableValue ToJSON(JSONWriter &writer) const;
 	string FieldsToJSONString() const;
 	const vector<IcebergPartitionSpecField> &GetFields() const;
+	//! Spec compatibility: ordered source IDs, full transforms, and field names must match.
+	//! Spec IDs and partition field IDs are ignored, like Java's PartitionSpec.compatibleWith.
 	bool Equals(const IcebergPartitionSpec &other) const;
 
 private:
