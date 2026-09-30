@@ -69,7 +69,7 @@ struct IcebergTaskReader : public IcebergMultiFileReader {
 
 } // namespace
 
-IcebergTaskExecutor::IcebergTaskExecutor(ExecutionContext &context, shared_ptr<IcebergTaskExecutionContext> execution,
+IcebergTaskExecutor::IcebergTaskExecutor(ClientContext &context, shared_ptr<IcebergTaskExecutionContext> execution,
                                          IcebergFileScanTask task) {
 	auto info = make_shared_ptr<IcebergTaskScanInfo>();
 	info->execution = std::move(execution);
@@ -77,8 +77,8 @@ IcebergTaskExecutor::IcebergTaskExecutor(ExecutionContext &context, shared_ptr<I
 	                                              task.first_row_id, task.sequence_number);
 	info->task = std::move(task);
 	auto &entry = Catalog::GetEntry<TableFunctionCatalogEntry>(
-	    context.client, QualifiedName(SYSTEM_CATALOG, DEFAULT_SCHEMA, "parquet_scan"));
-	function = *entry.functions.GetFunctionByArguments(context.client, {LogicalType::VARCHAR});
+	    context, QualifiedName(SYSTEM_CATALOG, DEFAULT_SCHEMA, "parquet_scan"));
+	function = *entry.functions.GetFunctionByArguments(context, {LogicalType::VARCHAR});
 	function.function_info = info;
 	function.get_multi_file_reader = IcebergTaskReader::CreateInstance;
 	function.late_materialization = false;
@@ -90,28 +90,26 @@ IcebergTaskExecutor::IcebergTaskExecutor(ExecutionContext &context, shared_ptr<I
 	TableFunctionBindInput bind_input(arguments, parameters, input_types, input_names, nullptr, nullptr, function, ref);
 	vector<LogicalType> types;
 	vector<Identifier> names;
-	bind = function.bind(context.client, bind_input, types, names);
-	vector<column_t> ids;
+	bind = function.bind(context, bind_input, types, names);
 	for (idx_t i = 0; i < types.size(); i++) {
-		ids.push_back(i);
+		column_ids.push_back(i);
 	}
-	TableFunctionInitInput init(bind.get(), ids, {}, nullptr);
-	global = function.init_global(context.client, init);
-	global->Cast<MultiFileGlobalState>().max_threads = 1;
-	local = function.init_local(context, init, global.get());
+	TableFunctionInitInput init(bind.get(), column_ids, {}, nullptr);
+	global = function.init_global(context, init);
 }
 
 IcebergTaskExecutor::~IcebergTaskExecutor() = default;
 
-bool IcebergTaskExecutor::Read(ClientContext &context, DataChunk &output) {
+unique_ptr<LocalTableFunctionState> IcebergTaskExecutor::InitializeLocal(ExecutionContext &context) {
+	TableFunctionInitInput init(bind.get(), column_ids, {}, nullptr);
+	return function.init_local(context, init, global.get());
+}
+
+bool IcebergTaskExecutor::Read(ClientContext &context, LocalTableFunctionState &local, DataChunk &output) {
 	output.Reset();
-	if (finished) {
-		return false;
-	}
-	TableFunctionInput input(bind.get(), local.get(), global.get());
+	TableFunctionInput input(bind.get(), &local, global.get());
 	function.function(context, input, output);
-	finished = output.size() == 0;
-	return !finished;
+	return output.size() != 0;
 }
 
 } // namespace duckdb

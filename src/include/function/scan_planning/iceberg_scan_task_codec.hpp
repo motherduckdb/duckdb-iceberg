@@ -37,10 +37,9 @@ struct IcebergScanTaskCodec {
 		vector<int32_t> partition_ids;
 		LogicalType schema_type;
 	};
-	static InputLayout BindInput(TableFunctionBindInput &input, vector<LogicalType> &types, vector<Identifier> &names);
-	static Value ReadValue(DataChunk &input, const InputLayout &layout, idx_t row, Column column,
-	                       bool nullable = false);
-	static IcebergFileScanTask ReadTask(DataChunk &input, const InputLayout &layout, idx_t row,
+	static InputLayout BindInput(const LogicalType &task_type, vector<LogicalType> &types, vector<Identifier> &names);
+	static Value ReadValue(const Value &input, const InputLayout &layout, Column column, bool nullable = false);
+	static IcebergFileScanTask ReadTask(const Value &input, const InputLayout &layout,
 	                                    const IcebergTableMetadata &metadata, const IcebergTableSchema &schema);
 	static IcebergTableMetadata ReadMetadata(const string &text, int32_t schema_id, const Value &snapshot_id,
 	                                         const LogicalType &schema_type);

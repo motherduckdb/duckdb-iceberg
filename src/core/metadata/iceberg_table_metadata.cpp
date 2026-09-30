@@ -24,7 +24,7 @@ optional_ptr<const IcebergColumnDefinition> IcebergTableMetadataSchemas::FindCol
 const IcebergTableSchema &IcebergTableMetadataSchemas::GetSchemaFromId(int32_t schema_id) const {
 	auto it = schemas.find(schema_id);
 	if (it == schemas.end()) {
-		throw InternalException("Schema id %d not found in Iceberg metadata", schema_id);
+		throw InvalidConfigurationException("Schema id %d not found in Iceberg metadata", schema_id);
 	}
 	return *it->second;
 }

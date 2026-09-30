@@ -270,7 +270,7 @@ IcebergDataFile::GetExtendedPartitionInfo(const IcebergTableMetadata &metadata,
 			auto source_type =
 			    IcebergPartitionConstants::GetType(field.source_id, target_schema, metadata.GetSchemas());
 			if (!source_type) {
-				throw InternalException(
+				throw InvalidConfigurationException(
 				    "Partition %s with field_id %llu in data_file %s with source_id %llu not found in any table schema",
 				    field.GetPartitionSpecFieldName(), field.partition_field_id, file_path, field.source_id);
 			}
@@ -284,7 +284,8 @@ IcebergDataFile::GetExtendedPartitionInfo(const IcebergTableMetadata &metadata,
 	for (auto &info : partition_info) {
 		auto it = field_id_to_partition_spec_and_source_type.find(info.field_id);
 		if (it == field_id_to_partition_spec_and_source_type.end()) {
-			throw InternalException("Partition field_id %llu not found in any partition spec", info.field_id);
+			throw InvalidConfigurationException("Partition field_id %llu not found in any partition spec",
+			                                    info.field_id);
 		}
 		auto &resolved = it->second;
 		IcebergExtendedPartitionInfo extended;

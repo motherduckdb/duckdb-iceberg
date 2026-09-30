@@ -63,7 +63,7 @@ unordered_map<string, string> GetManifestMetadataMap(const IcebergTableMetadata 
 
 	auto partition_spec = table_metadata.FindPartitionSpecById(partition_spec_id);
 	if (!partition_spec) {
-		throw InternalException("Cannot find partition spec with id " + std::to_string(partition_spec_id));
+		throw InvalidConfigurationException("Cannot find partition spec with id " + std::to_string(partition_spec_id));
 	}
 	result.emplace("partition-spec", partition_spec->FieldsToJSONString());
 	result.emplace("partition-spec-id", std::to_string(partition_spec_id));
