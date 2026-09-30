@@ -102,6 +102,11 @@ public:
 	IcebergTable &RenameTable(IcebergTable &table, const string &new_name);
 	bool MultiTableCommitAvailable() const;
 
+public:
+	//! Set while a MERGE INTO is planned: its UPDATE and DELETE actions are governed by write.merge.mode, not by
+	//! write.update.mode and write.delete.mode
+	bool planning_merge_into = false;
+
 private:
 	bool HasTableUpdate() const;
 	IcebergTransactionAlterUpdate *GetAlterUpdate();

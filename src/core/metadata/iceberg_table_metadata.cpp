@@ -565,22 +565,10 @@ string IcebergTableMetadata::GetTableProperty(string property_string) const {
 	return "";
 }
 
-bool IcebergTableMetadata::PropertiesAllowPositionalDeletes(IcebergSnapshotOperationType operation_type) const {
-	// first check write.delete.mode. If not present go to write.update.mode
-	switch (operation_type) {
-	case IcebergSnapshotOperationType::DELETE: {
-		auto delete_mode = GetTableProperty("write.delete.mode");
-		// if unset or merge-on-read, it supports positional deletes
-		return delete_mode == "merge-on-read" || delete_mode.empty();
-	}
-	case IcebergSnapshotOperationType::OVERWRITE: {
-		// if unset or merge-on-read, it supports positional deletes
-		auto update_mode = GetTableProperty("write.update.mode");
-		return update_mode == "merge-on-read" || update_mode.empty();
-	}
-	default:
-		throw NotImplementedException("Operation type not supported");
-	}
+bool IcebergTableMetadata::AllowsMergeOnRead(const string &write_mode_property) const {
+	auto mode = GetTableProperty(write_mode_property);
+	// if unset or merge-on-read, it supports positional deletes
+	return mode == "merge-on-read" || mode.empty();
 }
 
 JSONMutableValue IcebergTableMetadata::SchemasToJSON(JSONWriter &writer) const {
