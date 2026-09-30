@@ -9,11 +9,30 @@ statement ok
 DROP TABLE IF EXISTS my_datalake.default.partition_field_id_reuse_schema;
 
 statement ok
-CREATE TABLE my_datalake.default.partition_field_id_reuse_schema (a INTEGER, amount DECIMAL(9, 2), s STRUCT(k INTEGER, obsolete VARCHAR))
-PARTITIONED BY (a, bucket(4, a), truncate(10, amount), s.k) WITH ('format-version' = '2');
+CREATE TABLE my_datalake.default.partition_field_id_reuse_schema (
+	a INTEGER,
+	amount DECIMAL(9, 2),
+	s STRUCT(
+		k INTEGER,
+		obsolete VARCHAR
+	)
+)
+PARTITIONED BY (
+	a,
+	bucket(4, a),
+	truncate(10, amount),
+	s.k
+) WITH ('format-version' = '2');
 
 statement ok
-INSERT INTO my_datalake.default.partition_field_id_reuse_schema VALUES (7, 12.34, {'k': 9, 'obsolete': 'old'});
+INSERT INTO my_datalake.default.partition_field_id_reuse_schema VALUES (
+	7,
+	12.34,
+	{
+		'k': 9,
+		'obsolete': 'old'
+	}
+);
 
 statement ok
 CREATE TEMP VIEW schema_partition_fields AS
@@ -41,7 +60,12 @@ statement ok
 ALTER TABLE my_datalake.default.partition_field_id_reuse_schema ALTER COLUMN amount TYPE DECIMAL(18, 2);
 
 statement ok
-ALTER TABLE my_datalake.default.partition_field_id_reuse_schema SET PARTITIONED BY (bucket(4, a), truncate(10, amount), s.k, a);
+ALTER TABLE my_datalake.default.partition_field_id_reuse_schema SET PARTITIONED BY (
+	bucket(4, a),
+	truncate(10, amount),
+	s.k,
+	a
+);
 
 query TI
 SELECT list_transform(fields, lambda f: f."field-id"::INTEGER), last_id FROM schema_partition_fields;
@@ -59,7 +83,12 @@ statement ok
 ALTER TABLE my_datalake.default.partition_field_id_reuse_schema DROP COLUMN s.obsolete;
 
 statement ok
-ALTER TABLE my_datalake.default.partition_field_id_reuse_schema SET PARTITIONED BY (s.k, a, truncate(10, amount), bucket(4, a));
+ALTER TABLE my_datalake.default.partition_field_id_reuse_schema SET PARTITIONED BY (
+	s.k,
+	a,
+	truncate(10, amount),
+	bucket(4, a)
+);
 
 statement ok
 COMMIT;
@@ -76,7 +105,13 @@ FROM schema_partition_fields, original_partition_sources;
 true
 
 statement ok
-INSERT INTO my_datalake.default.partition_field_id_reuse_schema VALUES (2147483648, 1234567890.12, {'k': 2147483649});
+INSERT INTO my_datalake.default.partition_field_id_reuse_schema VALUES (
+	2147483648,
+	1234567890.12,
+	{
+		'k': 2147483649
+	}
+);
 
 query TTT
 SELECT typeof(a), typeof(amount), typeof(s) FROM my_datalake.default.partition_field_id_reuse_schema LIMIT 1;
