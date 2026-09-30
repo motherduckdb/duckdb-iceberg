@@ -66,24 +66,7 @@ struct IdentityTransform {
 	static Value ApplyTransform(const Value &constant, const IcebergTransform &transform) {
 		return constant;
 	}
-	static bool MayContainNaN(const Value &constant, const IcebergPredicateStats &stats) {
-		auto type_id = constant.type().id();
-		return stats.has_nan && (type_id == LogicalTypeId::FLOAT || type_id == LogicalTypeId::DOUBLE);
-	}
-	static bool IsNaN(const Value &constant) {
-		switch (constant.type().id()) {
-		case LogicalTypeId::FLOAT:
-			return Value::IsNan(constant.GetValue<float>());
-		case LogicalTypeId::DOUBLE:
-			return Value::IsNan(constant.GetValue<double>());
-		default:
-			return false;
-		}
-	}
 	static bool CompareEqual(const Value &constant, const IcebergPredicateStats &stats) {
-		if (MayContainNaN(constant, stats) && IsNaN(constant)) {
-			return true;
-		}
 		return constant >= stats.lower_bound && constant <= stats.upper_bound;
 	}
 	static bool CompareLessThan(const Value &constant, const IcebergPredicateStats &stats) {
@@ -93,10 +76,10 @@ struct IdentityTransform {
 		return stats.lower_bound <= constant;
 	}
 	static bool CompareGreaterThan(const Value &constant, const IcebergPredicateStats &stats) {
-		return MayContainNaN(constant, stats) || stats.upper_bound > constant;
+		return stats.upper_bound > constant;
 	}
 	static bool CompareGreaterThanOrEqual(const Value &constant, const IcebergPredicateStats &stats) {
-		return MayContainNaN(constant, stats) || stats.upper_bound >= constant;
+		return stats.upper_bound >= constant;
 	}
 };
 
