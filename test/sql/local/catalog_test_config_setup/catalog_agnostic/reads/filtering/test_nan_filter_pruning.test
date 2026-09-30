@@ -6,6 +6,9 @@ require-env CATALOG_TEST_CONFIG_SETUP
 
 include test/sql/init_requires
 
+# All NaN representations are treated equal
+foreach nan 'NaN' '-NaN'
+
 statement ok
 DROP TABLE IF EXISTS my_datalake.default.nan_filter_pruning;
 
@@ -22,30 +25,30 @@ INSERT INTO my_datalake.default.nan_filter_pruning VALUES
 	(1, 1.0, 1.0),
 	(2, 2.0, 2.0),
 	(3, 3.0, 3.0),
-	(4, 'NaN'::FLOAT, 'NaN'::DOUBLE);
+	(4, {nan}::FLOAT, {nan}::DOUBLE);
 
 query I
-SELECT id FROM my_datalake.default.nan_filter_pruning WHERE flt = CAST('NaN' AS FLOAT);
+SELECT id FROM my_datalake.default.nan_filter_pruning WHERE flt = CAST({nan} AS FLOAT);
 ----
 4
 
-# query I
-# SELECT id FROM my_datalake.default.nan_filter_pruning WHERE dbl = 'NaN'::DOUBLE;
-# ----
-# 4
-
-# query I
-# SELECT id FROM my_datalake.default.nan_filter_pruning WHERE flt > 5;
-# ----
-# 4
-
-# query I
-# SELECT id FROM my_datalake.default.nan_filter_pruning WHERE dbl >= 100;
-# ----
-# 4
+query I
+SELECT id FROM my_datalake.default.nan_filter_pruning WHERE dbl = {nan}::DOUBLE;
+----
+4
 
 query I
-SELECT id FROM my_datalake.default.nan_filter_pruning WHERE flt IN ('NaN'::FLOAT, 2) ORDER BY id;
+SELECT id FROM my_datalake.default.nan_filter_pruning WHERE flt > 5;
+----
+4
+
+query I
+SELECT id FROM my_datalake.default.nan_filter_pruning WHERE dbl >= 100;
+----
+4
+
+query I
+SELECT id FROM my_datalake.default.nan_filter_pruning WHERE flt IN ({nan}::FLOAT, 2) ORDER BY id;
 ----
 2
 4
@@ -67,3 +70,6 @@ SELECT id FROM my_datalake.default.nan_filter_pruning WHERE dbl <= 0;
 
 statement ok
 DROP TABLE my_datalake.default.nan_filter_pruning;
+
+# nan
+endloop
