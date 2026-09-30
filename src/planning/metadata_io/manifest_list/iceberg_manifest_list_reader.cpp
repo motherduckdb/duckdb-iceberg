@@ -173,9 +173,7 @@ void ManifestListReader::ReadChunk(DataChunk &chunk, idx_t table_format_version,
 				auto contains_null_entry = summary_entry.template GetChildValue<0>();
 				summary.contains_null = ReadRequiredField<bool>("contains_null", contains_null_entry);
 				auto contains_nan_entry = summary_entry.template GetChildValue<1>();
-				if (contains_nan_entry.IsValid()) {
-					summary.contains_nan = contains_nan_entry.GetValueUnsafe();
-				}
+				summary.contains_nan = ReadOptionalField<bool>(contains_nan_entry);
 				auto lower_bound_entry = summary_entry.template GetChildValue<2>();
 				if (lower_bound_entry.IsValid()) {
 					auto &str = lower_bound_entry.GetValueUnsafe();

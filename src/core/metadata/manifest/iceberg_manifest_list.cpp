@@ -486,7 +486,11 @@ static void WritePartitions(FieldSummaryListWriter &writer, const ManifestPartit
 		summary_writer.WriteValue([&](auto &contains_null_writer, auto &contains_nan_writer, auto &lower_bound_writer,
 		                              auto &upper_bound_writer) {
 			contains_null_writer.WriteValue(summary.contains_null);
-			contains_nan_writer.WriteValue(summary.contains_nan);
+			if (summary.contains_nan) {
+				contains_nan_writer.WriteValue(*summary.contains_nan);
+			} else {
+				contains_nan_writer.WriteNull();
+			}
 			WriteBlobField(lower_bound_writer, summary.lower_bound);
 			WriteBlobField(upper_bound_writer, summary.upper_bound);
 		});

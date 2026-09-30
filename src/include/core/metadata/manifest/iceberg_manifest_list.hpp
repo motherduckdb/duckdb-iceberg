@@ -21,7 +21,7 @@ struct FieldSummary {
 public:
 	bool contains_null = false;
 	//! Optional
-	bool contains_nan = false;
+	optional<bool> contains_nan = false;
 	//! Optional
 	Value lower_bound;
 	//! Optional

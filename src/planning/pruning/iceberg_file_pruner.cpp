@@ -459,7 +459,7 @@ bool IcebergFilePruner::ManifestMatchesFilter(const IcebergManifestFile &manifes
 		auto result_type = field.transform.GetSerializedType(column.type);
 		auto stats = IcebergPredicateStats::DeserializeBounds(field_summary.lower_bound, field_summary.upper_bound,
 		                                                      column.name, result_type);
-		stats.has_nan = field_summary.contains_nan;
+		stats.has_nan = !field_summary.contains_nan || *field_summary.contains_nan;
 		stats.has_null = field_summary.contains_null;
 		stats.has_not_null = true;
 
