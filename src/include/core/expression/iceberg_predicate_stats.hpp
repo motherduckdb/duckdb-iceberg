@@ -26,7 +26,8 @@ public:
 	optional<Value> upper_bound;
 	bool has_null = true;
 	bool has_not_null = true;
-	bool has_nan = true;
+	//! Unset means NaN presence is unknown.
+	optional<bool> has_nan;
 	//! For GEOMETRY columns: a GEOMETRY_STATS BaseStatistics carrying the file's
 	//! bounding-box extent, used to delegate spatial predicate pruning to
 	//! GeometryStats::CheckZonemap. Null for non-geometry columns.

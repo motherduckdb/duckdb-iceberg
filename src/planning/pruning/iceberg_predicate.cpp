@@ -54,7 +54,7 @@ static bool IsNaN(const Value &value) {
 
 static bool NaNMayMatch(const Value &constant, ExpressionType comparison_type, const IcebergPredicateStats &stats) {
 	auto type_id = constant.type().id();
-	if (!stats.has_nan || (type_id != LogicalTypeId::FLOAT && type_id != LogicalTypeId::DOUBLE)) {
+	if ((stats.has_nan && !*stats.has_nan) || (type_id != LogicalTypeId::FLOAT && type_id != LogicalTypeId::DOUBLE)) {
 		return false;
 	}
 	switch (comparison_type) {

@@ -181,7 +181,9 @@ bool IcebergFilePruner::FileMatchesFilter(const IcebergManifestFile &manifest_fi
 		ApplyNullCounts(data_file, column_id, stats);
 
 		auto nan_counts_it = data_file.nan_value_counts.find(column_id);
-		stats.has_nan = nan_counts_it == data_file.nan_value_counts.end() || nan_counts_it->second > 0;
+		if (nan_counts_it != data_file.nan_value_counts.end()) {
+			stats.has_nan = nan_counts_it->second > 0;
+		}
 
 		auto &filter = *entry.second;
 		if (!IcebergPredicate::MatchBounds(context, filter, stats, IcebergTransform::Identity())) {
@@ -459,7 +461,7 @@ bool IcebergFilePruner::ManifestMatchesFilter(const IcebergManifestFile &manifes
 		auto result_type = field.transform.GetSerializedType(column.type);
 		auto stats = IcebergPredicateStats::DeserializeBounds(field_summary.lower_bound, field_summary.upper_bound,
 		                                                      column.name, result_type);
-		stats.has_nan = !field_summary.contains_nan || *field_summary.contains_nan;
+		stats.has_nan = field_summary.contains_nan;
 		stats.has_null = field_summary.contains_null;
 		stats.has_not_null = true;
 

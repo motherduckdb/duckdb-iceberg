@@ -8,6 +8,9 @@ require avro
 
 require json
 
+statement ok
+CALL enable_logging('Iceberg');
+
 foreach type FLOAT DOUBLE
 
 statement ok
@@ -84,6 +87,9 @@ COPY (SELECT to_json({
      'manifest-list': '{TEST_DIR}/nan_{type}_{flag}_list.avro', 'schema-id': 0, 'summary': {'operation': 'append'}}]
 }) AS metadata) TO '{TEST_DIR}/nan_{type}_{flag}.metadata.json' (FORMAT CSV, HEADER false, QUOTE '', ESCAPE '');
 
+statement ok
+CALL truncate_duckdb_logs();
+
 foreach nan 'NaN' '-NaN'
 
 query I
@@ -103,6 +109,13 @@ FROM iceberg_scan('{TEST_DIR}/nan_{type}_{flag}.metadata.json') WHERE x {op} 5;
 true
 
 endloop
+
+# Only an explicit false permits these comparisons to prune the manifest.
+query I
+SELECT (count(*) > 0) = ('{flag}' = 'false')
+FROM duckdb_logs() WHERE type = 'Iceberg' AND message LIKE '%skipped ''manifest_file''%';
+----
+true
 
 query I
 SELECT contains_nan IS NOT DISTINCT FROM CASE WHEN '{flag}' IN ('NULL', 'absent') THEN NULL ELSE '{flag}' = 'true' END
