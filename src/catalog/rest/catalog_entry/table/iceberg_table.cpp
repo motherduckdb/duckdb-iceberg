@@ -704,9 +704,6 @@ bool IcebergTable::HasTransactionUpdates() const {
 	if (!data.requirements.empty()) {
 		return true;
 	}
-	if (data.pending_current_schema_id.has_value()) {
-		return true;
-	}
 	if (data.assert_schema_id) {
 		return true;
 	}

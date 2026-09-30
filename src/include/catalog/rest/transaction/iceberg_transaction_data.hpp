@@ -94,8 +94,6 @@ public:
 	bool assert_schema_id = false;
 	//! Whether this transaction explicitly requires the table to be newly created.
 	bool has_assert_create = false;
-	//! The schema id that should become current when the commit is staged.
-	optional<int32_t> pending_current_schema_id;
 	mutex lock;
 };
 

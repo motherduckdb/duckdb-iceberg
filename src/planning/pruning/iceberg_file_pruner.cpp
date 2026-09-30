@@ -57,7 +57,12 @@ bool IcebergFilePruner::FilePartitionMatchesFilter(const IcebergDataFile &data_f
 	}
 
 	for (auto &field : partition_spec.fields) {
-		const auto &column_id = source_to_column_id.at(field.source_id);
+		auto source_it = source_to_column_id.find(field.source_id);
+		if (source_it == source_to_column_id.end()) {
+			// Historical partition sources can be absent from the selected schema.
+			continue;
+		}
+		const auto &column_id = source_it->second;
 		auto table_filter = table_filters.GetFilterForColumnIndex(column_id);
 		if (!table_filter) {
 			continue;
@@ -429,7 +434,12 @@ bool IcebergFilePruner::ManifestMatchesFilter(const IcebergManifestFile &manifes
 	for (idx_t i = 0; i < field_summaries.size(); i++) {
 		auto &field_summary = field_summaries[i];
 		auto &field = partition_spec.fields[i];
-		const auto &column_id = source_to_column_id.at(field.source_id);
+		auto source_it = source_to_column_id.find(field.source_id);
+		if (source_it == source_to_column_id.end()) {
+			// Historical partition sources can be absent from the selected schema.
+			continue;
+		}
+		const auto &column_id = source_it->second;
 		auto table_filter = table_filters.GetFilterForColumnIndex(column_id);
 		if (!table_filter) {
 			continue;
