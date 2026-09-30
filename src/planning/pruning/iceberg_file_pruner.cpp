@@ -361,8 +361,8 @@ bool IcebergFilePruner::DeleteFileMatchesDataFile(const IcebergManifestFile &del
 		break;
 	}
 	default:
-		throw InternalException("Unexpected manifest entry content type: %d",
-		                        static_cast<uint8_t>(delete_file.content));
+		throw InvalidConfigurationException("Unexpected manifest entry content type: %d",
+		                                    static_cast<uint8_t>(delete_file.content));
 	}
 
 	auto partition_spec_it = metadata.partition_specs.find(delete_manifest.partition_spec_id);
