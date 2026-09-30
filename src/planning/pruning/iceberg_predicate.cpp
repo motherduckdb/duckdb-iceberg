@@ -102,7 +102,7 @@ static bool MatchBoundsConstantTemplated(const Value &constant, ExpressionType c
 	}
 
 	if (NaNMayMatch(constant_value, comparison_type, stats)) {
-	  // bounds exclude NaN, but the file may hold NaN rows that match the comparison.
+		// bounds exclude NaN, but the file may hold NaN rows that match the comparison.
 		return true;
 	}
 
