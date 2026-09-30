@@ -58,6 +58,20 @@ target_link_libraries(
 target_link_libraries(${TARGET_NAME}_loadable_extension roaring::roaring
                       roaring::roaring-headers roaring::roaring-headers-cpp)
 
+option(ICEBERG_BUILD_CPP_TESTS "Build Iceberg C++ unit tests" OFF)
+if(ICEBERG_BUILD_CPP_TESTS)
+  add_executable(
+    iceberg_delete_unittest test/cpp/test_positional_delete.cpp
+                            src/core/deletes/iceberg_positional_delete.cpp)
+  target_include_directories(iceberg_delete_unittest
+                             PRIVATE ${CMAKE_SOURCE_DIR}/third_party/catch)
+  if(TARGET duckdb AND NOT WIN32)
+    target_link_libraries(iceberg_delete_unittest duckdb)
+  else()
+    target_link_libraries(iceberg_delete_unittest duckdb_static)
+  endif()
+endif()
+
 install(
   TARGETS ${EXTENSION_NAME} ${TARGET_NAME}_loadable_extension
   EXPORT "${DUCKDB_EXPORT_SET}"
