@@ -3,6 +3,7 @@
 #include "core/expression/iceberg_predicate_stats.hpp"
 #include "duckdb/common/numeric_utils.hpp"
 #include "duckdb/logging/logger.hpp"
+#include "duckdb/storage/statistics/geometry_stats.hpp"
 #include "iceberg_logging.hpp"
 #include "planning/pruning/iceberg_predicate.hpp"
 #include "storage/statistics/iceberg_variant_statistics.hpp"
@@ -31,6 +32,12 @@ void ApplyNullCounts(const IcebergDataFile &data_file, int32_t column_id, Iceber
 	} else {
 		stats.has_null = true;
 		stats.has_not_null = value_count ? *value_count > 0 : true;
+	}
+	if (stats.geometry_stats) {
+		stats.geometry_stats->Set(stats.has_null ? StatsInfo::CAN_HAVE_NULL_VALUES
+		                                         : StatsInfo::CANNOT_HAVE_NULL_VALUES);
+		stats.geometry_stats->Set(stats.has_not_null ? StatsInfo::CAN_HAVE_VALID_VALUES
+		                                             : StatsInfo::CANNOT_HAVE_VALID_VALUES);
 	}
 }
 
@@ -119,8 +126,7 @@ bool IcebergFilePruner::FileMatchesFilter(const IcebergManifestFile &manifest_fi
 		auto primary_index = column_index.GetPrimaryIndex();
 		auto &column = *schema.columns[primary_index];
 
-		if (data_file.lower_bounds.empty() || data_file.upper_bounds.empty() ||
-		    data_file.content == IcebergManifestEntryContentType::POSITION_DELETES) {
+		if (data_file.content == IcebergManifestEntryContentType::POSITION_DELETES) {
 			continue;
 		}
 
@@ -163,6 +169,10 @@ bool IcebergFilePruner::FileMatchesFilter(const IcebergManifestFile &manifest_fi
 			stats = IcebergPredicateStats::DeserializeBounds(lower_bound, upper_bound, column.name, column.type);
 		}
 
+		if (column.type.id() == LogicalTypeId::GEOMETRY && !stats.geometry_stats) {
+			// A missing bbox is unknown, but the null counts can still prove that no geometry matches.
+			stats.geometry_stats = make_shared_ptr<BaseStatistics>(GeometryStats::CreateUnknown(column.type));
+		}
 		ApplyNullCounts(data_file, column_id, stats);
 
 		auto nan_counts_it = data_file.nan_value_counts.find(column_id);
