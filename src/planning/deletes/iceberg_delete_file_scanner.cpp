@@ -171,7 +171,8 @@ static void ColumnsReferencedByEqualityIds(DataChunk &source, DataChunk &result,
 	for (auto id : equality_ids) {
 		auto entry = id_to_column.find(id);
 		if (entry == id_to_column.end()) {
-			throw InternalException("Equality-delete field id %d is missing from the global delete schema", id);
+			throw InvalidConfigurationException("Equality-delete field id %d is missing from the global delete schema",
+			                                    id);
 		}
 		column_ids.push_back(entry->second);
 	}

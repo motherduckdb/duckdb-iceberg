@@ -63,7 +63,7 @@ unordered_map<string, string> GetManifestMetadataMap(const IcebergTableMetadata 
 
 	auto partition_spec = table_metadata.FindPartitionSpecById(partition_spec_id);
 	if (!partition_spec) {
-		throw InternalException("Cannot find partition spec with id " + std::to_string(partition_spec_id));
+		throw InvalidConfigurationException("Cannot find partition spec with id " + std::to_string(partition_spec_id));
 	}
 	result.emplace("partition-spec", partition_spec->FieldsToJSONString());
 	result.emplace("partition-spec-id", std::to_string(partition_spec_id));
@@ -270,7 +270,8 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 	if (table_metadata.HasPartitionSpec() && table_metadata.GetLatestPartitionSpec().IsPartitioned()) {
 		auto partition_spec_it = table_metadata.partition_specs.find(manifest_partition_spec_id);
 		if (partition_spec_it == table_metadata.partition_specs.end()) {
-			throw InternalException("Cannot find partition spec with id " + std::to_string(manifest_partition_spec_id));
+			throw InvalidConfigurationException("Cannot find partition spec with id " +
+			                                    std::to_string(manifest_partition_spec_id));
 		}
 		auto &partition_spec = partition_spec_it->second;
 		manifest_file.partitions.Create(table_metadata, partition_spec, manifest_entries);
