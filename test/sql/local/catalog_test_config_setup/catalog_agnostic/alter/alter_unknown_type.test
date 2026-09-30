@@ -8,6 +8,8 @@ require-env FORMAT_V3_SUPPORT
 
 require-env UNKNOWN_SUPPORT
 
+require-env GEOMETRY_SUPPORT
+
 require avro
 
 require parquet

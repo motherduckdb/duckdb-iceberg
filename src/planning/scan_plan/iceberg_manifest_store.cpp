@@ -44,20 +44,38 @@ public:
 	    : BaseExecutorTask(state.executor), state(state), reader(*state.scan) {
 	}
 
-	//! One manifest read per step: the TaskExecutor wrapper loops this to completion when draining and yields
-	//! between steps on a background thread. Cancellation, error capture and task accounting live in the wrapper.
+	~ManifestReadTask() override {
+		AccountFinished();
+	}
+
+	//! One manifest read per step. The wrapper loops this while draining and yields between steps.
 	TaskExecutionResult ExecuteTaskStep() override {
-		while (!reader.Finished()) {
+		if (!reader.Finished()) {
 			reader.Read();
 			return TaskExecutionResult::TASK_NOT_FINISHED;
 		}
-		--state.in_progress_tasks;
+		AccountFinished();
 		return TaskExecutionResult::TASK_FINISHED;
 	}
 
+	void Cancel() override {
+		AccountFinished();
+	}
+
+	string TaskType() const override {
+		return "IcebergManifestReadTask";
+	}
+
 private:
+	void AccountFinished() {
+		if (!accounted.exchange(true)) {
+			--state.in_progress_tasks;
+		}
+	}
+
 	IcebergManifestScanningState &state;
 	manifest_file::ManifestReader reader;
+	atomic<bool> accounted {false};
 };
 
 } // namespace

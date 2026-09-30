@@ -103,13 +103,13 @@ IcebergDeleteFile IcebergScanTaskCodec::ReadDeleteFile(const Value &descriptor) 
 }
 
 IcebergScanTaskCodec::InputLayout
-IcebergScanTaskCodec::BindInput(TableFunctionBindInput &input, vector<LogicalType> &types, vector<Identifier> &names) {
+IcebergScanTaskCodec::BindInput(const LogicalType &task_type, vector<LogicalType> &types, vector<Identifier> &names) {
 	InputLayout result;
+	auto &fields = StructType::GetChildTypes(task_type);
 	case_insensitive_map_t<idx_t> indexes;
-	for (idx_t i = 0; i < input.input_table_names.size(); i++) {
-		if (!indexes.emplace(input.input_table_names[i].GetIdentifierName(), i).second) {
-			throw BinderException("iceberg_scan_tasks input contains duplicate column '%s'",
-			                      input.input_table_names[i]);
+	for (idx_t i = 0; i < fields.size(); i++) {
+		if (!indexes.emplace(fields[i].first.GetIdentifierName(), i).second) {
+			throw BinderException("iceberg_scan_tasks input contains duplicate column '%s'", fields[i].first);
 		}
 	}
 	auto expected = Columns(LogicalType::STRUCT({}), LogicalType::STRUCT({}));
@@ -119,7 +119,7 @@ IcebergScanTaskCodec::BindInput(TableFunctionBindInput &input, vector<LogicalTyp
 			throw BinderException("iceberg_scan_tasks missing required input column '%s'",
 			                      expected[i].first.GetIdentifierName());
 		}
-		auto &type = input.input_table_types[entry->second];
+		auto &type = fields[entry->second].second;
 		bool valid =
 		    i == PARTITION_CONSTANTS || i == SCHEMA ? type.id() == LogicalTypeId::STRUCT : type == expected[i].second;
 		if (!valid) {
@@ -129,7 +129,7 @@ IcebergScanTaskCodec::BindInput(TableFunctionBindInput &input, vector<LogicalTyp
 		}
 		result.columns.push_back(entry->second);
 	}
-	result.schema_type = input.input_table_types[result.columns[SCHEMA]];
+	result.schema_type = fields[result.columns[SCHEMA]].second;
 	for (auto &column : StructType::GetChildTypes(result.schema_type)) {
 		names.emplace_back(column.first);
 		types.push_back(column.second);
@@ -137,7 +137,7 @@ IcebergScanTaskCodec::BindInput(TableFunctionBindInput &input, vector<LogicalTyp
 	if (types.empty()) {
 		throw BinderException("iceberg_scan_tasks schema must contain at least one column");
 	}
-	auto &partition_type = input.input_table_types[result.columns[PARTITION_CONSTANTS]];
+	auto &partition_type = fields[result.columns[PARTITION_CONSTANTS]].second;
 	unordered_set<int32_t> field_ids;
 	for (auto &field : StructType::GetChildTypes(partition_type)) {
 		auto id = Value(field.first).DefaultTryCastAs(LogicalType::INTEGER);
@@ -149,9 +149,8 @@ IcebergScanTaskCodec::BindInput(TableFunctionBindInput &input, vector<LogicalTyp
 	return result;
 }
 
-Value IcebergScanTaskCodec::ReadValue(DataChunk &input, const InputLayout &bind, idx_t row, Column column,
-                                      bool nullable) {
-	auto value = input.GetValue(bind.columns[column], row);
+Value IcebergScanTaskCodec::ReadValue(const Value &input, const InputLayout &bind, Column column, bool nullable) {
+	auto value = StructValue::GetChildren(input)[bind.columns[column]];
 	if (!nullable && value.IsNull()) {
 		throw InvalidInputException(
 		    "iceberg_scan_tasks input column '%s' cannot be NULL",
@@ -160,23 +159,23 @@ Value IcebergScanTaskCodec::ReadValue(DataChunk &input, const InputLayout &bind,
 	return value;
 }
 
-IcebergFileScanTask IcebergScanTaskCodec::ReadTask(DataChunk &input, const InputLayout &bind, idx_t row,
+IcebergFileScanTask IcebergScanTaskCodec::ReadTask(const Value &input, const InputLayout &bind,
                                                    const IcebergTableMetadata &metadata,
                                                    const IcebergTableSchema &schema) {
 	IcebergFileScanTask result;
-	auto path = ReadValue(input, bind, row, FILE_PATH);
-	auto format = ReadValue(input, bind, row, FILE_FORMAT);
-	auto size = ReadValue(input, bind, row, FILE_SIZE);
-	auto count = ReadValue(input, bind, row, RECORD_COUNT);
+	auto path = ReadValue(input, bind, FILE_PATH);
+	auto format = ReadValue(input, bind, FILE_FORMAT);
+	auto size = ReadValue(input, bind, FILE_SIZE);
+	auto count = ReadValue(input, bind, RECORD_COUNT);
 	if (BigIntValue::Get(count) < 0) {
 		throw InvalidInputException("iceberg_scan_tasks record_count cannot be negative");
 	}
-	auto spec = ReadValue(input, bind, row, PARTITION_SPEC_ID);
+	auto spec = ReadValue(input, bind, PARTITION_SPEC_ID);
 	if (!metadata.partition_specs.count(IntegerValue::Get(spec))) {
 		throw InvalidInputException("iceberg_scan_tasks partition_spec_id is absent from the metadata");
 	}
-	auto first_row = ReadValue(input, bind, row, FIRST_ROW_ID, true);
-	auto sequence = ReadValue(input, bind, row, SEQUENCE_NUMBER, true);
+	auto first_row = ReadValue(input, bind, FIRST_ROW_ID, true);
+	auto sequence = ReadValue(input, bind, SEQUENCE_NUMBER, true);
 	result.file_path = StringValue::Get(path);
 	result.original_file_path = result.file_path;
 	result.file_format = StringValue::Get(format);
@@ -186,7 +185,7 @@ IcebergFileScanTask IcebergScanTaskCodec::ReadTask(DataChunk &input, const Input
 	result.first_row_id = first_row.IsNull() ? nullopt : optional<int64_t>(BigIntValue::Get(first_row));
 	result.sequence_number = sequence.IsNull() ? nullopt : optional<int64_t>(BigIntValue::Get(sequence));
 
-	auto constants = ReadValue(input, bind, row, PARTITION_CONSTANTS);
+	auto constants = ReadValue(input, bind, PARTITION_CONSTANTS);
 	auto &values = StructValue::GetChildren(constants);
 	for (idx_t i = 0; i < values.size(); i++) {
 		auto type = IcebergPartitionConstants::GetType(bind.partition_ids[i], schema, metadata.GetSchemas());
@@ -196,7 +195,7 @@ IcebergFileScanTask IcebergScanTaskCodec::ReadTask(DataChunk &input, const Input
 		}
 		result.partition_constants.emplace(bind.partition_ids[i], values[i]);
 	}
-	auto deletes = ReadValue(input, bind, row, DELETE_FILES);
+	auto deletes = ReadValue(input, bind, DELETE_FILES);
 	for (auto &descriptor : ListValue::GetChildren(deletes)) {
 		result.delete_files.push_back(ReadDeleteFile(descriptor));
 	}

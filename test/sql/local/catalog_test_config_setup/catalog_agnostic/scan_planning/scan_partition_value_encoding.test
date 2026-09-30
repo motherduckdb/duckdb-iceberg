@@ -34,8 +34,11 @@ from iceberg_scan_plan('my_datalake.default.scan_partition_value_encoding');
 ----
 1234	2024-03-01	2024-03-01 12:34:56.123456	90.12	1234
 
+statement ok
+set variable scan_task_list_1 = (select list(task) from (select * from iceberg_scan_plan('my_datalake.default.scan_partition_value_encoding')) task);
+
 query ITTTT
-select * from iceberg_scan_tasks((select * from iceberg_scan_plan('my_datalake.default.scan_partition_value_encoding')));
+select * from iceberg_scan_tasks(getvariable('scan_task_list_1'));
 ----
 1234	2024-03-01	2024-03-01 12:34:56.123456	90.12	1234
 
@@ -57,10 +60,20 @@ from iceberg_scan_plan('my_datalake.default.scan_partition_value_encoding');
 ----
 1234	2024-03-01	2024-03-01 12:34:56.123456	90.12	1234
 
+# Keep planning credentials alive until the task list has been consumed.
+statement ok
+begin;
+
+statement ok
+set variable scan_task_list_2 = (select list(task) from (select * from iceberg_scan_plan('my_datalake.default.scan_partition_value_encoding')) task);
+
 query ITTTT
-select * from iceberg_scan_tasks((select * from iceberg_scan_plan('my_datalake.default.scan_partition_value_encoding')));
+select * from iceberg_scan_tasks(getvariable('scan_task_list_2'));
 ----
 1234	2024-03-01	2024-03-01 12:34:56.123456	90.12	1234
+
+statement ok
+commit;
 
 statement ok
 drop table my_datalake.default.scan_partition_value_encoding;
@@ -94,12 +107,22 @@ select * from my_datalake.default.scan_partition_value_encoding order by id;
 2	NULL
 3	99
 
+# Keep planning credentials alive until the task list has been consumed.
+statement ok
+begin;
+
+statement ok
+set variable scan_task_list_3 = (select list(task) from (select * from iceberg_scan_plan('my_datalake.default.scan_partition_value_encoding')) task);
+
 query II
-select * from iceberg_scan_tasks((select * from iceberg_scan_plan('my_datalake.default.scan_partition_value_encoding'))) order by id;
+select * from iceberg_scan_tasks(getvariable('scan_task_list_3')) order by id;
 ----
 1	42
 2	NULL
 3	99
+
+statement ok
+commit;
 
 statement ok
 drop table my_datalake.default.scan_partition_value_encoding;
@@ -129,22 +152,42 @@ select * from my_datalake.default.scan_partition_value_encoding order by id;
 1
 2
 
+# Keep planning credentials alive until the task list has been consumed.
+statement ok
+begin;
+
+statement ok
+set variable scan_task_list_4 = (select list(task) from (select * from iceberg_scan_plan('my_datalake.default.scan_partition_value_encoding')) task);
+
 # Execution accepts the historical constant without exposing the dropped column.
 query I
-select * from iceberg_scan_tasks((select * from iceberg_scan_plan('my_datalake.default.scan_partition_value_encoding'))) order by id;
+select * from iceberg_scan_tasks(getvariable('scan_task_list_4')) order by id;
 ----
 1
 2
+
+statement ok
+commit;
 
 # Reusing the name does not change the identity of the historical field.
 statement ok
 alter table my_datalake.default.scan_partition_value_encoding add column p varchar;
 
+# Keep planning credentials alive until the task list has been consumed.
+statement ok
+begin;
+
+statement ok
+set variable scan_task_list_5 = (select list(task) from (select * from iceberg_scan_plan('my_datalake.default.scan_partition_value_encoding')) task);
+
 query IT
-select * from iceberg_scan_tasks((select * from iceberg_scan_plan('my_datalake.default.scan_partition_value_encoding'))) order by id;
+select * from iceberg_scan_tasks(getvariable('scan_task_list_5')) order by id;
 ----
 1	NULL
 2	NULL
+
+statement ok
+commit;
 
 statement ok
 drop table my_datalake.default.scan_partition_value_encoding;

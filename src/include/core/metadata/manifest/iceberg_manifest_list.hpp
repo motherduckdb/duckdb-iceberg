@@ -30,8 +30,8 @@ public:
 
 struct ManifestPartitions {
 public:
-	void Create(const IcebergTableMetadata &metadata, const IcebergPartitionSpec &partition_spec,
-	            const vector<IcebergManifestEntry> &entries);
+	void Create(const IcebergTableMetadata &metadata, const IcebergTableSchema &target_schema,
+	            const IcebergPartitionSpec &partition_spec, const vector<IcebergManifestEntry> &entries);
 
 public:
 	bool has_partitions = false;

@@ -49,6 +49,8 @@ public:
 	const string &GetPath() const;
 	const IcebergOptions &GetOptions() const;
 	bool HasScanInfo() const;
+	bool HasTransactionData() const;
+	const IcebergSnapshotScanInfo &GetSnapshot() const;
 
 	optional<IcebergFileScanTask> GetScanTask(idx_t file_id) const;
 	//! File enumeration only: does not resolve partition constants or load delete manifests.

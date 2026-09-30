@@ -6,10 +6,29 @@ namespace duckdb {
 optional_ptr<const LogicalType> IcebergPartitionConstants::GetType(int32_t field_id, const IcebergTableSchema &schema,
                                                                    const IcebergTableMetadataSchemas &schemas) {
 	auto column = schema.TryGetColumnByFieldId(field_id);
-	if (!column) {
-		column = schemas.FindColumnByFieldId(field_id);
+	if (column) {
+		return column->type;
 	}
-	return column ? optional_ptr<const LogicalType>(column->type) : nullptr;
+	// A dropped source can have several historical types. Iceberg promotions widen types, so use
+	// the widest historical version to read partitions from all schemas without narrowing values.
+	optional_ptr<const LogicalType> source_type;
+	schemas.ForEachSchema([&](const IcebergTableSchema &historical_schema) {
+		auto historical_column = historical_schema.TryGetColumnByFieldId(field_id);
+		if (!historical_column) {
+			return;
+		}
+		auto &historical_type = historical_column->type;
+		if (!source_type) {
+			source_type = historical_type;
+			return;
+		}
+		LogicalType widest_type;
+		if (LogicalType::DefaultTryGetMaxLogicalTypeUnchecked(*source_type, historical_type, widest_type) &&
+		    widest_type == historical_type) {
+			source_type = historical_type;
+		}
+	});
+	return source_type;
 }
 
 unordered_map<int32_t, Value> IcebergPartitionConstants::Resolve(int32_t spec_id,

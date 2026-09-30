@@ -314,11 +314,6 @@ static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, Iceb
 		set_snapshot_ref.CreateUpdate(db, context, commit_state);
 	}
 
-	if (transaction_data.pending_current_schema_id.has_value()) {
-		SetCurrentSchema update(*transaction_data.pending_current_schema_id);
-		update.CreateUpdate(db, context, commit_state);
-	}
-
 	info.created_metadata_files = std::move(commit_state.created_metadata_files);
 	info.request = std::move(table_change);
 	return info;

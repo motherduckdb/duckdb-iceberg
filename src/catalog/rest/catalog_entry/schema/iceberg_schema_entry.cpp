@@ -572,8 +572,8 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 
 		auto &last_column_id = updated_table.table_metadata.last_column_id;
 		if (!last_column_id.IsValid()) {
-			throw InternalException("No last_column_id when trying to ADD COLUMN %s",
-			                        add_column_info.GetQualifiedName().Name());
+			throw InvalidConfigurationException("No last_column_id when trying to ADD COLUMN %s",
+			                                    add_column_info.GetQualifiedName().Name());
 		}
 		auto field_id = last_column_id.GetIndex() + 1;
 		auto next_field_id = [&field_id]() -> idx_t {
@@ -663,7 +663,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			// Preserve the existing field ID, but allocate fresh IDs for any new nested fields.
 			auto &last_column_id = updated_table.table_metadata.last_column_id;
 			if (!last_column_id.IsValid()) {
-				throw InternalException("No last_column_id when evolving UNKNOWN column %s", column.name);
+				throw InvalidConfigurationException("No last_column_id when evolving UNKNOWN column %s", column.name);
 			}
 			auto field_id = last_column_id.GetIndex() + 1;
 			bool root = true;
@@ -862,8 +862,8 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 
 		auto &last_column_id = updated_table.table_metadata.last_column_id;
 		if (!last_column_id.IsValid()) {
-			throw InternalException("No last_column_id when trying to ADD COLUMN %s",
-			                        StringUtil::Join(IdentifiersToStrings(column_path), "."));
+			throw InvalidConfigurationException("No last_column_id when trying to ADD COLUMN %s",
+			                                    StringUtil::Join(IdentifiersToStrings(column_path), "."));
 		}
 		auto field_id = last_column_id.GetIndex() + 1;
 		auto next_field_id = [&field_id]() -> idx_t {

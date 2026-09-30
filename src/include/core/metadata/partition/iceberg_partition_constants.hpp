@@ -6,8 +6,8 @@ namespace duckdb {
 
 //! Resolves identity-partition fallback values independently of planning or reading.
 struct IcebergPartitionConstants {
-	//! Use the selected schema's type when present, otherwise the same historical
-	//! field lookup used to bind private equality-delete columns.
+	//! Use the selected schema's type when present, otherwise the widest historical
+	//! source type so dropped columns' partition values are not narrowed after promotion.
 	static optional_ptr<const LogicalType> GetType(int32_t field_id, const IcebergTableSchema &schema,
 	                                               const IcebergTableMetadataSchemas &schemas);
 

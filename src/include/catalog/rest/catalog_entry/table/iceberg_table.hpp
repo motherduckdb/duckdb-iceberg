@@ -43,6 +43,7 @@ public:
 	optional_ptr<CatalogEntry> CreateSchemaVersion(const IcebergTableSchema &table_schema);
 	idx_t GetMaxSchemaId();
 	idx_t GetNextPartitionSpecId();
+	idx_t GetNextPartitionFieldId();
 	idx_t GetNextSortOrderId();
 	optional<int64_t> GetExistingSpecId(IcebergPartitionSpec &spec);
 	optional<int64_t> GetExistingSortOrderId(IcebergSortOrder &sort_order);

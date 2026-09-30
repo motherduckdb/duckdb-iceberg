@@ -63,6 +63,14 @@ bool IcebergScanPlanner::HasScanInfo() const {
 	return shared_state->Configuration().scan_info != nullptr;
 }
 
+bool IcebergScanPlanner::HasTransactionData() const {
+	return shared_state->Configuration().scan_info->transaction_data;
+}
+
+const IcebergSnapshotScanInfo &IcebergScanPlanner::GetSnapshot() const {
+	return shared_state->Configuration().scan_info->snapshot_info;
+}
+
 optional_ptr<IcebergTableSchemaVersion> IcebergScanPlanner::GetTable() const {
 	return shared_state->Configuration().table;
 }
