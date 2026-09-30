@@ -23,7 +23,8 @@ bool IcebergPartitionSpec::Equals(const IcebergPartitionSpec &other) const {
 		return false;
 	}
 	for (idx_t i = 0; i < fields.size(); i++) {
-		if (!fields[i].Equals(other.fields[i])) {
+		if (!fields[i].Equals(other.fields[i]) ||
+		    fields[i].GetPartitionSpecFieldName() != other.fields[i].GetPartitionSpecFieldName()) {
 			return false;
 		}
 	}
