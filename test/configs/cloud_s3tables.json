@@ -188,6 +188,13 @@
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/maintenance/rollback_to_snapshot_partition_transforms.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/maintenance/rollback_to_snapshot_schema_retained.test"
       ]
+    },
+    {
+      "reason": "Creates ~2050 partitions/data files; too slow against S3 Tables for the CI timeout (covered by local catalogs)",
+      "paths": [
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_manifest_vector_writer_chunking.test_slow",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/test_scan_many_files.test"
+      ]
     }
   ]
 }
