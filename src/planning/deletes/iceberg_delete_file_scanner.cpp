@@ -497,7 +497,7 @@ IcebergDeletePlan IcebergDeleteExecutionState::ProcessDeletes(const IcebergDelet
 		combined->source_files.clear();
 		for (auto &position : positions) {
 			auto &source = static_cast<const IcebergPositionalDeleteData &>(*position);
-			combined->invalid_rows.insert(source.invalid_rows.begin(), source.invalid_rows.end());
+			combined->MergeRows(source);
 			combined->source_files.insert(combined->source_files.end(), source.source_files.begin(),
 			                              source.source_files.end());
 		}
