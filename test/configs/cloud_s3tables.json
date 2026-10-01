@@ -59,6 +59,14 @@
     {
       "env_name": "VARIANT_SUPPORT",
       "env_value": "true"
+    },
+    {
+      "env_name": "TIMESTAMP_NS_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "GEOMETRY_SUPPORT",
+      "env_value": "true"
     }
   ],
   "skip_tests": [
