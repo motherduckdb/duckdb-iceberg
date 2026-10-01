@@ -185,7 +185,8 @@ static void IcebergPartitionStatsFunction(ClientContext &context, TableFunctionI
 			//! contains_null
 			FlatVector::GetDataMutable<bool>(output.data[col++])[out] = field_summary.contains_null;
 			//! contains_nan
-			FlatVector::GetDataMutable<bool>(output.data[col++])[out] = field_summary.contains_nan;
+			output.data[col++].SetValue(out, field_summary.contains_nan ? Value::BOOLEAN(*field_summary.contains_nan)
+			                                                            : Value(LogicalType::BOOLEAN));
 
 			out++;
 		}

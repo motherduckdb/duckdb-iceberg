@@ -504,7 +504,7 @@ public:
 						stats.has_nan = nan_count != 0;
 					}
 
-					auto contains_nan = stats.has_nan ? "true" : "false";
+					auto contains_nan = (!stats.has_nan || *stats.has_nan) ? "true" : "false";
 					auto min_value = stats.lower_bound->IsNull() ? "NULL" : "'" + stats.lower_bound->ToString() + "'";
 					auto max_value = stats.upper_bound->IsNull() ? "NULL" : "'" + stats.upper_bound->ToString() + "'";
 

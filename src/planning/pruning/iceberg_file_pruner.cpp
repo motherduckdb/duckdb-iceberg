@@ -181,7 +181,9 @@ bool IcebergFilePruner::FileMatchesFilter(const IcebergManifestFile &manifest_fi
 		ApplyNullCounts(data_file, column_id, stats);
 
 		auto nan_counts_it = data_file.nan_value_counts.find(column_id);
-		stats.has_nan = nan_counts_it == data_file.nan_value_counts.end() || nan_counts_it->second > 0;
+		if (nan_counts_it != data_file.nan_value_counts.end()) {
+			stats.has_nan = nan_counts_it->second > 0;
+		}
 
 		auto &filter = *entry.second;
 		if (!IcebergPredicate::MatchBounds(context, filter, stats, IcebergTransform::Identity())) {
