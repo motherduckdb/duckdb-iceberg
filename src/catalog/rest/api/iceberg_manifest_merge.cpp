@@ -275,6 +275,8 @@ optional<IcebergManifestListEntry> MergeBin(const vector<IcebergManifestListEntr
 			}
 		}
 		for (auto &entry : loaded_entries) {
+			//! The merged manifest is added by this snapshot, so entries must keep their snapshot id
+			entry.SetSnapshotId(entry.GetSnapshotId(member.file));
 			//! These are already-committed manifests. Any ADDED entry describes a file added by an
 			//! earlier snapshot and must be materialized as EXISTING in the replacement manifest.
 			if (entry.status == IcebergManifestEntryStatusType::ADDED) {

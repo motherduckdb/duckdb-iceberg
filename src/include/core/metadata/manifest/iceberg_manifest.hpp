@@ -134,6 +134,8 @@ public:
 	void SetSnapshotId(optional<int64_t> snapshot_id);
 	bool HasSnapshotId() const;
 	int64_t GetSnapshotId() const;
+	//! The explicit snapshot id, or the one inherited from the manifest that holds this entry
+	optional<int64_t> GetSnapshotId(const IcebergManifestFile &manifest_file) const;
 	void SetSequenceNumber(optional<sequence_number_t> value);
 	void SetFileSequenceNumber(optional<sequence_number_t> value);
 	sequence_number_t GetSequenceNumber(const IcebergManifestFile &manifest_file) const;
