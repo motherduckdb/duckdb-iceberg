@@ -797,3 +797,91 @@ value	true
 
 statement ok
 call disable_logging();
+
+# Dense deletes cross vector/row-group boundaries; the last group is partial.
+statement ok
+copy (select i::integer id from range(16385) t(i)) to '{TEST_DIR}/bitmap_data.parquet'
+(format parquet, row_group_size 2048, field_ids {id:1});
+
+# Duplicate positions must be idempotent. High positions must not alias low rows.
+statement ok
+create temp table bitmap_positions as
+select i::bigint pos from range(1, 10000, 2) t(i)
+union all select i::bigint from range(1, 10000, 2) t(i)
+union all select 4294967296::bigint + i from range(32) t(i)
+union all select 9223372036854775807::bigint;
+
+statement ok
+copy (select '{TEST_DIR}/bitmap_data.parquet' file_path, pos from bitmap_positions order by pos)
+to '{TEST_DIR}/bitmap_dense.parquet' (format parquet, field_ids {file_path:2147483546, pos:2147483545});
+
+statement ok
+copy (select '{TEST_DIR}/bitmap_data.parquet' file_path, pos::bigint pos from (values (0), (9999), (10000), (16384)) t(pos))
+to '{TEST_DIR}/bitmap_sparse.parquet' (format parquet, field_ids {file_path:2147483546, pos:2147483545});
+
+statement ok
+copy (select '{TEST_DIR}/bitmap_data.parquet' file_path, 0::bigint pos where false)
+to '{TEST_DIR}/bitmap_empty.parquet' (format parquet, field_ids {file_path:2147483546, pos:2147483545});
+
+statement ok
+create temp table bitmap_tasks as select * replace(
+ '{TEST_DIR}/bitmap_data.parquet' as file_path,
+ (select size from read_blob('{TEST_DIR}/bitmap_data.parquet'))::bigint as file_size_in_bytes,
+ 16385::bigint as record_count,
+ [delete_descriptor('{TEST_DIR}/bitmap_dense.parquet', 1, [], 10033),
+  delete_descriptor('{TEST_DIR}/bitmap_sparse.parquet', 1, [], 4),
+  delete_descriptor('{TEST_DIR}/bitmap_empty.parquet', 1, [], 0)] as delete_files) from tasks;
+
+# Compare complete surviving rows against an independent SQL anti-join oracle.
+statement ok
+create temp table bitmap_expected as
+select i::integer id from range(16385) t(i)
+where not exists (select 1 from bitmap_positions p where p.pos=i)
+  and i not in (0, 9999, 10000, 16384);
+
+statement ok
+set variable bitmap_task_list = (select list(t) from bitmap_tasks t);
+
+# Alternating combined and single-descriptor tasks also checks source independence.
+statement ok
+set variable bitmap_shared_tasks = (select list(t) from (
+ select b.* from bitmap_tasks b, range(17)
+ union all
+ select b.* replace([delete_files[2]] as delete_files) from bitmap_tasks b, range(17)
+) t);
+
+foreach threads 1 4
+
+statement ok
+set threads={threads};
+
+query I
+with actual as (select id from iceberg_scan_tasks(getvariable('bitmap_task_list'))),
+ differences as (
+ (select * from actual except all select * from bitmap_expected)
+ union all
+ (select * from bitmap_expected except all select * from actual)
+ )
+select count(*) from differences;
+----
+0
+
+query I
+with actual as (select id from iceberg_scan_tasks(getvariable('bitmap_shared_tasks'))),
+ expected as (
+ select id from bitmap_expected, range(17)
+ union all
+ select i::integer from range(16385) t(i), range(17) where i not in (0, 9999, 10000, 16384)
+ ), differences as (
+ (select * from actual except all select * from expected)
+ union all
+ (select * from expected except all select * from actual)
+ )
+select count(*) from differences;
+----
+0
+
+endloop
+
+statement ok
+reset threads;
