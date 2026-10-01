@@ -568,12 +568,8 @@ PhysicalOperator &IcebergCatalog::PlanDeleteOperation(ClientContext &context, Ph
 		row_id_indexes.push_back(bound_ref.Index());
 	}
 
-	auto allows_positional_deletes = metadata.PropertiesAllowPositionalDeletes(IcebergSnapshotOperationType::DELETE);
-	if (!allows_positional_deletes) {
-		auto delete_table_property = metadata.GetTableProperty(WRITE_DELETE_MODE);
-		auto error_message = IcebergCatalog::GetOnlyMergeOnReadSupportedErrorMessage(
-		    updated_table_entry.name.GetIdentifierName(), WRITE_DELETE_MODE, delete_table_property);
-		throw NotImplementedException(error_message);
+	if (!irc_transaction.planning_merge_into) {
+		VerifyMergeOnRead(metadata, updated_table_entry.name.GetIdentifierName(), WRITE_DELETE_MODE);
 	}
 
 	auto &iceberg_delete =

@@ -535,14 +535,17 @@ bool IcebergCatalog::HasConflictingAttachOptions(const string &path, const Attac
 	return false;
 }
 
-string IcebergCatalog::GetOnlyMergeOnReadSupportedErrorMessage(const string &table_name, const string &property,
-                                                               const string &property_value) {
-	return StringUtil::Format("DuckDB-Iceberg only supports merge-on-read for updates/deletes. Table Property '%s' is "
-	                          "set to '%s' for table %s"
-	                          "You can modify Iceberg table properties wth the set_iceberg_table_properties() "
-	                          "function, and remove them with the remove_iceberg_table_properties() function. "
-	                          "You can view Iceberg table properties with the iceberg_table_properties() function",
-	                          property, property_value, table_name);
+void IcebergCatalog::VerifyMergeOnRead(const IcebergTableMetadata &metadata, const string &table_name,
+                                       const string &write_mode_property) {
+	if (metadata.AllowsMergeOnRead(write_mode_property)) {
+		return;
+	}
+	throw NotImplementedException(
+	    "DuckDB-Iceberg only supports merge-on-read for deletes, updates and merges. Table Property '%s' is set to "
+	    "'%s' for table %s. You can modify Iceberg table properties with the set_iceberg_table_properties() "
+	    "function, and remove them with the remove_iceberg_table_properties() function. You can view Iceberg table "
+	    "properties with the iceberg_table_properties() function",
+	    write_mode_property, metadata.GetTableProperty(write_mode_property), table_name);
 }
 
 } // namespace duckdb

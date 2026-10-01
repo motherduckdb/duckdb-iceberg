@@ -18,6 +18,7 @@ namespace duckdb {
 // common Iceberg table property keys
 const string WRITE_UPDATE_MODE = "write.update.mode";
 const string WRITE_DELETE_MODE = "write.delete.mode";
+const string WRITE_MERGE_MODE = "write.merge.mode";
 const string WRITE_DELETE_ISOLATION_LEVEL = "write.delete.isolation-level";
 
 struct IcebergMetadataLogItem {
@@ -113,7 +114,9 @@ public:
 
 	const case_insensitive_map_t<string> &GetTableProperties() const;
 	string GetTableProperty(string property_string) const;
-	bool PropertiesAllowPositionalDeletes(IcebergSnapshotOperationType operation_type) const;
+	//! Whether the given write mode property (write.delete.mode, write.update.mode or write.merge.mode) allows
+	//! writing merge-on-read delete files
+	bool AllowsMergeOnRead(const string &write_mode_property) const;
 	string ToJSON() const;
 	void WriteMetadata(ClientContext &context, const string &path) const;
 	void WriteVersionHint(ClientContext &context, const string &path, const string &metadata_json_path) const;
