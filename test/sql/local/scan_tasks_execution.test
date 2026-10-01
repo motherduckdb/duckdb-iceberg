@@ -422,3 +422,208 @@ statement error
 select * from iceberg_scan_tasks(42);
 ----
 requires a list of task structs
+
+# Preserve projection order, repeated references, and columns needed only by filters/sorting.
+query ITII
+select added, part, id, id from iceberg_scan_tasks(getvariable('scan_task_list_1'))
+where value >= 20 order by nested.key desc;
+----
+99	P	3	3
+99	P	2	2
+
+query I
+select nested.key from iceberg_scan_tasks(getvariable('scan_task_list_1')) order by id;
+----
+0
+NULL
+2
+3
+
+statement ok
+prepare projected_tasks as select part, added from iceberg_scan_tasks(getvariable('scan_task_list_1')) where id = 2;
+
+query TI
+execute projected_tasks;
+----
+P	99
+
+query TI
+execute projected_tasks;
+----
+P	99
+
+# Equality keys remain private even when the output contains only constants/defaults.
+foreach fast_filter true false
+
+statement ok
+set iceberg_equality_delete_fast_filter={fast_filter};
+
+query TI
+select part, added from iceberg_scan_tasks(getvariable('scan_task_list_9'));
+----
+P	99
+
+query I
+select count(*) from iceberg_scan_tasks(getvariable('scan_task_list_9'));
+----
+1
+
+query I
+select nested.key from iceberg_scan_tasks(getvariable('scan_task_list_9'));
+----
+3
+
+endloop
+
+statement ok
+reset iceberg_equality_delete_fast_filter;
+
+query T
+select part from iceberg_scan_tasks(getvariable('scan_task_list_13'));
+----
+P
+P
+
+# An unselected column must not be cast by the inner Parquet scan.
+statement ok
+copy (select 42::integer id, 'not an integer'::varchar value)
+to '{TEST_DIR}/task_projection.parquet' (format parquet, field_ids {id:1, value:2});
+
+statement ok
+set variable projection_tasks = (select list(task) from (select * replace(
+ '{TEST_DIR}/task_projection.parquet' as file_path,
+ (select size from read_blob('{TEST_DIR}/task_projection.parquet'))::bigint as file_size_in_bytes,
+ 1::bigint as record_count) from tasks) task);
+
+query I
+select id from iceberg_scan_tasks(getvariable('projection_tasks'));
+----
+42
+
+query I
+select count(*) from iceberg_scan_tasks(getvariable('projection_tasks'));
+----
+1
+
+statement error
+select value from iceberg_scan_tasks(getvariable('projection_tasks'));
+----
+Could not convert
+
+# Check physical READ ranges, not just decoding: the trailing column keeps footer
+# prefetch reads away from the id/value chunks whose byte ranges we assert on.
+statement ok
+copy (select i::integer id, i::integer value, i::integer dropped from range(100000) t(i))
+to '{TEST_DIR}/task_projection_io.parquet'
+(format parquet, compression uncompressed, row_group_size 100000, dictionary_size_limit 1,
+ field_ids {id:1, value:2, dropped:5});
+
+statement ok
+create temp table projection_chunk_ranges as
+select path_in_schema as column_name,
+       coalesce(dictionary_page_offset, data_page_offset) as start_offset,
+       coalesce(dictionary_page_offset, data_page_offset) + total_compressed_size as end_offset
+from parquet_metadata('{TEST_DIR}/task_projection_io.parquet')
+where path_in_schema in ('id', 'value');
+
+statement ok
+set variable projection_io_tasks = (select list(task) from (select * replace(
+ '{TEST_DIR}/task_projection_io.parquet' as file_path,
+ (select size from read_blob('{TEST_DIR}/task_projection_io.parquet'))::bigint as file_size_in_bytes,
+ 100000::bigint as record_count) from tasks) task);
+
+statement ok
+create temp macro projection_chunk_reads() as table
+select r.column_name, count(l.pos) as reads
+from projection_chunk_ranges r left join duckdb_logs_parsed('FileSystem') l
+on l.op = 'READ' and l.path = '{TEST_DIR}/task_projection_io.parquet'
+   and l.pos < r.end_offset and l.pos + l.bytes > r.start_offset
+group by r.column_name;
+
+# Test each direction, with a positive control for the selected column's reads.
+foreach projected_column id value
+
+statement ok
+call enable_logging('FileSystem');
+
+statement ok
+call truncate_duckdb_logs();
+
+query I
+select sum({projected_column}) from iceberg_scan_tasks(getvariable('projection_io_tasks'));
+----
+4999950000
+
+query II
+select count(*) filter (where column_name = '{projected_column}' and reads > 0),
+       count(*) filter (where column_name <> '{projected_column}' and reads = 0)
+from projection_chunk_reads();
+----
+1	1
+
+statement ok
+call disable_logging();
+
+endloop
+
+# Reading both columns must be visible in both ranges.
+statement ok
+call enable_logging('FileSystem');
+
+statement ok
+call truncate_duckdb_logs();
+
+query II
+select sum(value), sum(id) from iceberg_scan_tasks(getvariable('projection_io_tasks'));
+----
+4999950000	4999950000
+
+query I
+select count(*) from projection_chunk_reads() where reads > 0;
+----
+2
+
+statement ok
+call disable_logging();
+
+# An unprojected equality key must still be read; unrelated data columns must not.
+statement ok
+copy (select 123::integer value) to '{TEST_DIR}/task_projection_eq.parquet'
+(format parquet, field_ids {value:2});
+
+statement ok
+set variable projection_io_delete_tasks = (select list(task) from (select * replace(
+ '{TEST_DIR}/task_projection_io.parquet' as file_path,
+ (select size from read_blob('{TEST_DIR}/task_projection_io.parquet'))::bigint as file_size_in_bytes,
+ 100000::bigint as record_count,
+ [delete_descriptor('{TEST_DIR}/task_projection_eq.parquet', 2, [2], 1)] as delete_files) from tasks) task);
+
+foreach fast_filter true false
+
+statement ok
+set iceberg_equality_delete_fast_filter={fast_filter};
+
+statement ok
+call enable_logging('FileSystem');
+
+statement ok
+call truncate_duckdb_logs();
+
+query I
+select count(part) from iceberg_scan_tasks(getvariable('projection_io_delete_tasks'));
+----
+99999
+
+query TI rowsort
+select column_name, reads > 0 from projection_chunk_reads();
+----
+id	false
+value	true
+
+statement ok
+call disable_logging();
+
+endloop
+
+statement ok
+reset iceberg_equality_delete_fast_filter;
