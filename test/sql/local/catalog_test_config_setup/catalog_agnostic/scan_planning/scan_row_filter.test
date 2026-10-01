@@ -4,6 +4,9 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
+# Manifest-pruning log assertions require client-side planning.
+require-env SCAN_PLANNING_MODE client
+
 include test/sql/init_requires
 
 require json
