@@ -4,6 +4,12 @@
 #include "duckdb/common/multi_file/multi_file_states.hpp"
 #include "duckdb/parser/tableref/table_function_ref.hpp"
 #include "planning/iceberg_multi_file_reader.hpp"
+#include "function/scan_planning/iceberg_row_filter.hpp"
+#include "duckdb/execution/expression_executor.hpp"
+#include "duckdb/execution/execution_context.hpp"
+#include "duckdb/planner/expression/bound_columnref_expression.hpp"
+#include "duckdb/planner/expression/bound_reference_expression.hpp"
+#include "duckdb/planner/expression_iterator.hpp"
 
 namespace duckdb {
 
@@ -12,6 +18,13 @@ IcebergTaskExecutionContext::IcebergTaskExecutionContext(IcebergTableMetadata me
 }
 
 namespace {
+
+struct IcebergTaskLocalState : public LocalTableFunctionState {
+	unique_ptr<LocalTableFunctionState> scanner;
+	DataChunk chunk;
+	unique_ptr<ExpressionExecutor> filter;
+	SelectionVector selection {STANDARD_VECTOR_SIZE};
+};
 
 struct IcebergTaskScanInfo : public TableFunctionInfo {
 	shared_ptr<IcebergTaskExecutionContext> execution;
@@ -70,8 +83,9 @@ struct IcebergTaskReader : public IcebergMultiFileReader {
 } // namespace
 
 IcebergTaskExecutor::IcebergTaskExecutor(ClientContext &context, shared_ptr<IcebergTaskExecutionContext> execution,
-                                         IcebergFileScanTask task, vector<ColumnIndex> column_indexes_p)
-    : column_indexes(std::move(column_indexes_p)) {
+                                         IcebergFileScanTask task, vector<ColumnIndex> column_indexes_p,
+                                         unique_ptr<Expression> row_filter_p)
+    : column_indexes(std::move(column_indexes_p)), row_filter(std::move(row_filter_p)) {
 	auto info = make_shared_ptr<IcebergTaskScanInfo>();
 	info->execution = std::move(execution);
 	info->file = IcebergMultiFileReader::FileInfo(task.file_path, task.file_format, task.file_size_in_bytes,
@@ -92,22 +106,80 @@ IcebergTaskExecutor::IcebergTaskExecutor(ClientContext &context, shared_ptr<Iceb
 	vector<LogicalType> types;
 	vector<Identifier> names;
 	bind = function.bind(context, bind_input, types, names);
-	TableFunctionInitInput init(bind.get(), column_indexes, {}, nullptr);
+	for (idx_t i = 0; i < column_indexes.size(); i++) {
+		output_columns.push_back(i);
+	}
+	if (row_filter) {
+		vector<ColumnIndex> schema_columns;
+		for (idx_t i = 0; i < types.size(); i++) {
+			schema_columns.emplace_back(i);
+		}
+		bool always_false;
+		auto schema_filters = IcebergRowFilter::TableFilters(context, *row_filter, schema_columns, always_false);
+		ExpressionIterator::VisitExpressionClassMutable(
+		    row_filter, ExpressionClass::BOUND_COLUMN_REF, [&](unique_ptr<Expression> &expr) {
+			    auto column = expr->Cast<BoundColumnRefExpression>().Binding().column_index.GetIndex();
+			    idx_t index = 0;
+			    for (; index < column_indexes.size(); index++) {
+				    if (column_indexes[index] == ColumnIndex(column)) {
+					    break;
+				    }
+			    }
+			    if (index == column_indexes.size()) {
+				    column_indexes.emplace_back(column);
+			    }
+			    expr = make_uniq<BoundReferenceExpression>(expr->GetReturnType(), index);
+		    });
+		for (auto &entry : schema_filters) {
+			for (idx_t i = 0; i < column_indexes.size(); i++) {
+				if (column_indexes[i] == ColumnIndex(entry.GetIndex().GetIndex())) {
+					filters.PushFilter(ProjectionIndex(i), entry.TakeFilter());
+					break;
+				}
+			}
+		}
+	}
+	for (auto &column : column_indexes) {
+		scan_types.push_back(types[column.GetPrimaryIndex()]);
+	}
+	TableFunctionInitInput init(bind.get(), column_indexes, {}, &filters);
 	global = function.init_global(context, init);
 }
 
 IcebergTaskExecutor::~IcebergTaskExecutor() = default;
 
 unique_ptr<LocalTableFunctionState> IcebergTaskExecutor::InitializeLocal(ExecutionContext &context) {
-	TableFunctionInitInput init(bind.get(), column_indexes, {}, nullptr);
-	return function.init_local(context, init, global.get());
+	auto result = make_uniq<IcebergTaskLocalState>();
+	TableFunctionInitInput init(bind.get(), column_indexes, {}, &filters);
+	result->scanner = function.init_local(context, init, global.get());
+	result->chunk.Initialize(context.client, scan_types);
+	if (row_filter) {
+		result->filter = make_uniq<ExpressionExecutor>(context.client, *row_filter);
+	}
+	return std::move(result);
 }
 
 bool IcebergTaskExecutor::Read(ClientContext &context, LocalTableFunctionState &local, DataChunk &output) {
+	auto &state = local.Cast<IcebergTaskLocalState>();
 	output.Reset();
-	TableFunctionInput input(bind.get(), &local, global.get());
-	function.function(context, input, output);
-	return output.size() != 0;
+	TableFunctionInput input(bind.get(), state.scanner.get(), global.get());
+	while (true) {
+		context.InterruptCheck();
+		state.chunk.Reset();
+		function.function(context, input, state.chunk);
+		if (state.chunk.size() == 0) {
+			return false;
+		}
+		if (state.filter) {
+			auto count = state.filter->SelectExpression(state.chunk, state.selection);
+			if (!count) {
+				continue;
+			}
+			state.chunk.Slice(state.selection, count);
+		}
+		output.ReferenceColumns(state.chunk, output_columns);
+		return true;
+	}
 }
 
 } // namespace duckdb

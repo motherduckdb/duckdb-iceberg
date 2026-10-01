@@ -7,6 +7,7 @@
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "planning/scan_plan/iceberg_scan_planner.hpp"
 #include "function/scan_planning/iceberg_scan_task_codec.hpp"
+#include "function/scan_planning/iceberg_row_filter.hpp"
 
 namespace duckdb {
 
@@ -21,18 +22,35 @@ struct IcebergScanPlanBindData : public TableFunctionData {
 	IcebergOptions options;
 	bool produce_sequence_number = false;
 	LogicalType partition_type;
+	Value row_filter = Value(LogicalType::VARCHAR);
+	unique_ptr<Expression> filter_expression;
 };
 
 struct IcebergScanPlanGlobalState : public GlobalTableFunctionState {
 	explicit IcebergScanPlanGlobalState(ClientContext &context, const IcebergScanPlanBindData &bind)
-	    : planner(context, bind.scan_info, bind.scan_info->metadata.location, bind.options),
+	    : planner(
+	          make_uniq<IcebergScanPlanner>(context, bind.scan_info, bind.scan_info->metadata.location, bind.options)),
 	      metadata(LogicalType::VARIANT(), 1) {
 		// Vended credentials are transaction-scoped, so recreate them on every execution.
 		bind.table.PrepareIcebergScanFromEntry(context);
-		planner.SetTable(bind.table);
+		planner->SetTable(bind.table);
 		if (bind.produce_sequence_number) {
 			// The server planning API does not yet provide file sequence numbers.
-			planner.DisableServerSidePlanning();
+			planner->DisableServerSidePlanning();
+		}
+		if (bind.filter_expression) {
+			vector<ColumnIndex> columns;
+			for (idx_t i = 0; i < bind.scan_info->schema.columns.size(); i++) {
+				columns.emplace_back(i);
+			}
+			auto filters = IcebergRowFilter::TableFilters(context, *bind.filter_expression, columns, done);
+			IcebergTableFilters planning_filters;
+			for (auto &entry : filters) {
+				planning_filters.PushFilter(
+				    columns[entry.GetIndex().GetIndex()],
+				    ExpressionFilter::GetExpressionFilter(entry.Filter(), "iceberg_scan_plan").Copy());
+			}
+			planner = planner->CreateView(std::move(planning_filters));
 		}
 		Vector json(LogicalType::JSON(), 1);
 		json.SetValue(0, Value(bind.scan_info->metadata.ToJSON()));
@@ -40,7 +58,7 @@ struct IcebergScanPlanGlobalState : public GlobalTableFunctionState {
 		metadata.SetVectorType(VectorType::CONSTANT_VECTOR);
 	}
 
-	IcebergScanPlanner planner;
+	unique_ptr<IcebergScanPlanner> planner;
 	Vector metadata;
 	idx_t file_id = 0;
 	bool done = false;
@@ -73,6 +91,9 @@ static unique_ptr<FunctionData> IcebergScanPlanBind(ClientContext &context, Tabl
 	}
 	for (const auto &parameter : input.named_parameters) {
 		if (parameter.second.IsNull()) {
+			if (parameter.first == "row_filter") {
+				throw InvalidInputException("iceberg_scan_plan row_filter cannot be NULL");
+			}
 			if (parameter.first == "produce_sequence_number") {
 				throw InvalidInputException("iceberg_scan_plan produce_sequence_number cannot be NULL");
 			}
@@ -93,6 +114,13 @@ static unique_ptr<FunctionData> IcebergScanPlanBind(ClientContext &context, Tabl
 	auto produce_sequence_number = input.named_parameters.find("produce_sequence_number");
 	if (produce_sequence_number != input.named_parameters.end()) {
 		ret->produce_sequence_number = BooleanValue::Get(produce_sequence_number->second);
+	}
+
+	auto row_filter = input.named_parameters.find("row_filter");
+	if (row_filter != input.named_parameters.end()) {
+		ret->row_filter = row_filter->second;
+		ret->filter_expression = IcebergRowFilter::Bind(context, StringValue::Get(ret->row_filter),
+		                                                IcebergScanTaskCodec::SchemaType(schema));
 	}
 
 	// Include historical identity sources even when they are absent from the selected output schema.
@@ -126,7 +154,7 @@ static void IcebergScanPlanFunction(ClientContext &context, TableFunctionInput &
 	}
 	idx_t count = 0;
 	for (; count < STANDARD_VECTOR_SIZE; count++, state.file_id++) {
-		auto task = state.planner.GetScanTask(state.file_id);
+		auto task = state.planner->GetScanTask(state.file_id);
 		if (!task) {
 			state.done = true;
 			break;
@@ -137,6 +165,7 @@ static void IcebergScanPlanFunction(ClientContext &context, TableFunctionInput &
 		}
 		IcebergScanTaskCodec::WriteTask(*task, output, count);
 	}
+	output.data[IcebergScanTaskCodec::ROW_FILTER].Reference(bind.row_filter, count_t(count));
 	auto snapshot = bind.scan_info->snapshot_info.snapshot;
 	IcebergScanTaskCodec::WriteContext(output, count, snapshot ? snapshot->snapshot_id : nullopt,
 	                                   bind.scan_info->snapshot_info.schema_id, state.metadata);
@@ -146,6 +175,7 @@ TableFunctionSet IcebergFunctions::GetIcebergScanPlanFunction() {
 	TableFunctionSet function_set("iceberg_scan_plan");
 	auto fun = TableFunction({LogicalType::VARCHAR}, IcebergScanPlanFunction, IcebergScanPlanBind,
 	                         IcebergScanPlanGlobalState::Init);
+	fun.named_parameters["row_filter"] = LogicalType::VARCHAR;
 	fun.named_parameters["produce_sequence_number"] = LogicalType::BOOLEAN;
 	fun.named_parameters["snapshot_from_id"] = LogicalType::UBIGINT;
 	fun.named_parameters["snapshot_from_timestamp"] = LogicalType::TIMESTAMP_MS;

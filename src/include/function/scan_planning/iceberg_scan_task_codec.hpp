@@ -22,6 +22,7 @@ struct IcebergScanTaskCodec {
 		SCHEMA_ID,
 		METADATA,
 		SCHEMA,
+		ROW_FILTER,
 		COLUMN_COUNT
 	};
 

@@ -5,6 +5,7 @@
 #include "duckdb/parallel/thread_context.hpp"
 #include "function/scan_planning/iceberg_scan_task_codec.hpp"
 #include "execution/scan/iceberg_task_executor.hpp"
+#include "function/scan_planning/iceberg_row_filter.hpp"
 
 namespace duckdb {
 
@@ -28,6 +29,7 @@ struct IcebergScanTasksGlobalState : public GlobalTableFunctionState {
 	Value snapshot_id;
 	shared_ptr<IcebergTaskExecutionContext> execution;
 	shared_ptr<IcebergTaskExecutor> active;
+	unordered_map<string, unique_ptr<Expression>> row_filters;
 
 	idx_t MaxThreads() const override {
 		return MAX_THREADS;
@@ -68,7 +70,18 @@ struct IcebergScanTasksGlobalState : public GlobalTableFunctionState {
 			snapshot_id = snapshot;
 		}
 		auto task = TaskCodec::ReadTask(descriptor, bind.layout, execution->metadata, execution->schema);
-		active = make_shared_ptr<IcebergTaskExecutor>(context, execution, std::move(task), column_indexes);
+		auto sql = TaskCodec::ReadValue(descriptor, bind.layout, TaskCodec::ROW_FILTER, true);
+		unique_ptr<Expression> filter;
+		if (!sql.IsNull()) {
+			auto &text = StringValue::Get(sql);
+			auto entry = row_filters.find(text);
+			if (entry == row_filters.end()) {
+				entry = row_filters.emplace(text, IcebergRowFilter::Bind(context, text, bind.layout.schema_type)).first;
+			}
+			filter = entry->second->Copy();
+		}
+		active = make_shared_ptr<IcebergTaskExecutor>(context, execution, std::move(task), column_indexes,
+		                                              std::move(filter));
 		next_task++;
 		return active;
 	}
