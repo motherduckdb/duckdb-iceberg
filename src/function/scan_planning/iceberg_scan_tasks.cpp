@@ -29,6 +29,7 @@ struct IcebergScanTasksGlobalState : public GlobalTableFunctionState {
 	Value snapshot_id;
 	shared_ptr<IcebergTaskExecutionContext> execution;
 	shared_ptr<IcebergTaskExecutor> active;
+	//! Cache bound filters by SQL text for this execution; all tasks share the same schema.
 	unordered_map<string, unique_ptr<Expression>> row_filters;
 
 	idx_t MaxThreads() const override {
@@ -76,8 +77,10 @@ struct IcebergScanTasksGlobalState : public GlobalTableFunctionState {
 			auto &text = StringValue::Get(sql);
 			auto entry = row_filters.find(text);
 			if (entry == row_filters.end()) {
+				//! Parse and bind each distinct predicate once, even when many tasks carry it.
 				entry = row_filters.emplace(text, IcebergRowFilter::Bind(context, text, bind.layout.schema_type)).first;
 			}
+			//! The executor rewrites column references to scan positions, so preserve the cached expression.
 			filter = entry->second->Copy();
 		}
 		active = make_shared_ptr<IcebergTaskExecutor>(context, execution, std::move(task), column_indexes,

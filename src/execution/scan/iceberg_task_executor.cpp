@@ -21,6 +21,8 @@ namespace {
 
 struct IcebergTaskLocalState : public LocalTableFunctionState {
 	unique_ptr<LocalTableFunctionState> scanner;
+	//! Holds the reader's finalized rows, including predicate-only columns, for residual filtering.
+	//! After filtering, only the requested output columns are referenced into the result chunk.
 	DataChunk chunk;
 	unique_ptr<ExpressionExecutor> filter;
 	SelectionVector selection {STANDARD_VECTOR_SIZE};
@@ -115,7 +117,12 @@ IcebergTaskExecutor::IcebergTaskExecutor(ClientContext &context, shared_ptr<Iceb
 			schema_columns.emplace_back(i);
 		}
 		bool always_false;
+		//! Extract scan filters while column bindings still index the full table schema.
 		auto schema_filters = IcebergRowFilter::TableFilters(context, *row_filter, schema_columns, always_false);
+		//! Resolve bindings like ColumnBindingResolver: column_indexes maps scan-chunk positions to schema columns.
+		//! Append missing predicate columns, then replace schema bindings with references into
+		//! IcebergTaskLocalState::chunk. The residual ExpressionExecutor uses these positions; output_columns excludes
+		//! the appended columns.
 		ExpressionIterator::VisitExpressionClassMutable(
 		    row_filter, ExpressionClass::BOUND_COLUMN_REF, [&](unique_ptr<Expression> &expr) {
 			    auto column = expr->Cast<BoundColumnRefExpression>().Binding().column_index.GetIndex();
@@ -130,6 +137,7 @@ IcebergTaskExecutor::IcebergTaskExecutor(ClientContext &context, shared_ptr<Iceb
 			    }
 			    expr = make_uniq<BoundReferenceExpression>(expr->GetReturnType(), index);
 		    });
+		//! Remap the extracted filters' target columns to the same scan order for Parquet initialization.
 		for (auto &entry : schema_filters) {
 			for (idx_t i = 0; i < column_indexes.size(); i++) {
 				if (column_indexes[i] == ColumnIndex(entry.GetIndex().GetIndex())) {
