@@ -29,6 +29,22 @@ ATTACH '' AS unquoted_cache (
     MAX_TABLE_STALENESS '5 minutes'
 );
 
+# Clear leftovers from an earlier run that stopped before its cleanup.
+statement ok
+DROP TABLE IF EXISTS unquoted_cache.UNQUOTED_CASE.ORDERS;
+
+statement ok
+DROP TABLE IF EXISTS unquoted_cache.UNQUOTED_CASE.MixedCase;
+
+statement ok
+DROP TABLE IF EXISTS unquoted_cache.UNQUOTED_CASE.lower_t;
+
+statement ok
+DROP TABLE IF EXISTS unquoted_cache.UNQUOTED_CASE.Orders;
+
+statement ok
+DROP SCHEMA IF EXISTS unquoted_cache.UNQUOTED_CASE;
+
 statement ok
 CREATE SCHEMA unquoted_cache.UNQUOTED_CASE;
 

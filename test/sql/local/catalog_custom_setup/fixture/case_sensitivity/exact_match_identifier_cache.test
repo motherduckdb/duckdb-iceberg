@@ -36,6 +36,19 @@ ATTACH '' AS exact_cache (
     ENDPOINT 'http://127.0.0.1:8181'
 );
 
+# Clear leftovers from an earlier run that stopped before its cleanup.
+statement ok
+DROP TABLE IF EXISTS exact_cache.ExactCaseSchema.Twin;
+
+statement ok
+DROP TABLE IF EXISTS exact_cache.ExactCaseSchema.twin;
+
+statement ok
+DROP TABLE IF EXISTS exact_cache.ExactCaseSchema.ExactCaseTable;
+
+statement ok
+DROP SCHEMA IF EXISTS exact_cache.ExactCaseSchema;
+
 statement ok
 CREATE SCHEMA IF NOT EXISTS exact_cache.ExactCaseSchema;
 
