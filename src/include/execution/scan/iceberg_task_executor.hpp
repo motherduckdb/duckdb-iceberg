@@ -25,7 +25,7 @@ struct IcebergTaskExecutionContext {
 class IcebergTaskExecutor {
 public:
 	IcebergTaskExecutor(ClientContext &context, shared_ptr<IcebergTaskExecutionContext> execution,
-	                    IcebergFileScanTask task);
+	                    IcebergFileScanTask task, vector<ColumnIndex> column_indexes);
 	~IcebergTaskExecutor();
 
 	//! Creates a private scanner that claims work from the shared Parquet scan.
@@ -39,7 +39,7 @@ private:
 	TableFunction function;
 	unique_ptr<FunctionData> bind;
 	unique_ptr<GlobalTableFunctionState> global;
-	vector<column_t> column_ids;
+	vector<ColumnIndex> column_indexes;
 };
 
 } // namespace duckdb

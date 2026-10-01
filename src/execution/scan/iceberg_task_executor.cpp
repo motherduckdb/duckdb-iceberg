@@ -70,7 +70,8 @@ struct IcebergTaskReader : public IcebergMultiFileReader {
 } // namespace
 
 IcebergTaskExecutor::IcebergTaskExecutor(ClientContext &context, shared_ptr<IcebergTaskExecutionContext> execution,
-                                         IcebergFileScanTask task) {
+                                         IcebergFileScanTask task, vector<ColumnIndex> column_indexes_p)
+    : column_indexes(std::move(column_indexes_p)) {
 	auto info = make_shared_ptr<IcebergTaskScanInfo>();
 	info->execution = std::move(execution);
 	info->file = IcebergMultiFileReader::FileInfo(task.file_path, task.file_format, task.file_size_in_bytes,
@@ -91,17 +92,14 @@ IcebergTaskExecutor::IcebergTaskExecutor(ClientContext &context, shared_ptr<Iceb
 	vector<LogicalType> types;
 	vector<Identifier> names;
 	bind = function.bind(context, bind_input, types, names);
-	for (idx_t i = 0; i < types.size(); i++) {
-		column_ids.push_back(i);
-	}
-	TableFunctionInitInput init(bind.get(), column_ids, {}, nullptr);
+	TableFunctionInitInput init(bind.get(), column_indexes, {}, nullptr);
 	global = function.init_global(context, init);
 }
 
 IcebergTaskExecutor::~IcebergTaskExecutor() = default;
 
 unique_ptr<LocalTableFunctionState> IcebergTaskExecutor::InitializeLocal(ExecutionContext &context) {
-	TableFunctionInitInput init(bind.get(), column_ids, {}, nullptr);
+	TableFunctionInitInput init(bind.get(), column_indexes, {}, nullptr);
 	return function.init_local(context, init, global.get());
 }
 
