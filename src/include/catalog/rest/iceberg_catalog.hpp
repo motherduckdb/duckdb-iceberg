@@ -102,8 +102,8 @@ private:
 
 	IcebergAttachOptions &attach_options;
 	annotated_mutex lock;
-	case_insensitive_map_t<MetadataCacheValue> tables DUCKDB_GUARDED_BY(lock);
-	case_insensitive_map_t<PendingLoads> pending_loads DUCKDB_GUARDED_BY(lock);
+	unordered_map<string, MetadataCacheValue> tables DUCKDB_GUARDED_BY(lock);
+	unordered_map<string, PendingLoads> pending_loads DUCKDB_GUARDED_BY(lock);
 };
 
 class IcebergCatalog : public Catalog {
