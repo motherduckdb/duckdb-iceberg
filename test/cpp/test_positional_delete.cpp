@@ -100,6 +100,28 @@ TEST_CASE("Positional deletes retain high bits and append to mutation sets", "[i
 	REQUIRE(MatchesRange(*filter, boundary - 2, 16, expected));
 }
 
+TEST_CASE("Positional delete insertion resumes after a union replaces containers", "[iceberg][positional-delete]") {
+	auto data = make_shared_ptr<IcebergPositionalDeleteData>(IcebergFileIdentity("first.parquet"));
+	auto other = make_shared_ptr<IcebergPositionalDeleteData>(IcebergFileIdentity("second.parquet"));
+	data->AddRow(0);
+	set<idx_t> expected {0};
+	for (idx_t row = 1; row < 10000; row += 2) {
+		other->AddRow(row);
+		expected.insert(row);
+	}
+	data->MergeRows(*other);
+	// Both insertions address the same high 48 bits as the pre-union context.
+	data->AddRow(2);
+	data->AddRow(10000);
+	expected.insert(2);
+	expected.insert(10000);
+	set<idx_t> actual;
+	data->ToSet(actual);
+	REQUIRE(actual == expected);
+	auto filter = data->ToFilter();
+	REQUIRE(MatchesRange(*filter, 0, STANDARD_VECTOR_SIZE, expected));
+}
+
 TEST_CASE("Positional delete batches cross the 32-bit boundary", "[iceberg][positional-delete]") {
 	const idx_t boundary = idx_t(1) << 32;
 	auto data = make_shared_ptr<IcebergPositionalDeleteData>(IcebergFileIdentity("deletes.parquet"));
