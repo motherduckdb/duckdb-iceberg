@@ -627,3 +627,173 @@ endloop
 
 statement ok
 reset iceberg_equality_delete_fast_filter;
+
+# Stored SQL filters enforce exact rows and privately read predicate-only columns.
+statement ok
+set variable filtered_tasks = (select list(task) from (select *,
+ 'value >= 20 AND part = ''P'' AND added = 99'::varchar row_filter from tasks) task);
+
+query I
+select id from iceberg_scan_tasks(getvariable('filtered_tasks')) order by id;
+----
+2
+3
+
+query I
+select count(*) from iceberg_scan_tasks(getvariable('filtered_tasks')) where id = 3;
+----
+1
+
+statement ok
+prepare filtered_replay as select part from iceberg_scan_tasks(getvariable('filtered_tasks')) order by id;
+
+query T
+execute filtered_replay;
+----
+P
+P
+
+query T
+execute filtered_replay;
+----
+P
+P
+
+statement ok
+set variable filtered_tasks = (select list(task) from (select *,
+ 'NOT (value IN (10, NULL)) OR nested.key = 3'::varchar row_filter from tasks) task);
+
+query I
+select id from iceberg_scan_tasks(getvariable('filtered_tasks'));
+----
+3
+
+statement ok
+set variable filtered_tasks = (select list(task) from (select *,
+ 'value IS NULL OR id = 3'::varchar row_filter from tasks) task);
+
+query I
+select id from iceberg_scan_tasks(getvariable('filtered_tasks')) order by id;
+----
+0
+3
+
+# A residual-only filter may reject complete chunks before finding a matching row.
+statement ok
+set variable filtered_tasks = (select list(task) from (select t.*,
+ 'id >= 4096 OR value = 999999'::varchar row_filter
+ from (select unnest(getvariable('scan_task_list_5')) t)) task);
+
+query II
+select count(*), min(id) from iceberg_scan_tasks(getvariable('filtered_tasks'));
+----
+904	4096
+
+# Each descriptor's predicate remains attached when tasks with different predicates are combined.
+statement ok
+set variable filtered_tasks = (select list(task) from (
+ select *, 'id = 1'::varchar row_filter from tasks
+ union all select *, 'id = 3'::varchar row_filter from tasks) task);
+
+query I
+select id from iceberg_scan_tasks(getvariable('filtered_tasks')) order by id;
+----
+1
+3
+
+foreach fast_filter true false
+
+statement ok
+set iceberg_equality_delete_fast_filter={fast_filter};
+
+statement ok
+set variable filtered_tasks = (select list(task) from (select *,
+ 'value >= 20'::varchar row_filter from equality_tasks) task);
+
+query I
+select id from iceberg_scan_tasks(getvariable('filtered_tasks'));
+----
+3
+
+endloop
+
+statement ok
+reset iceberg_equality_delete_fast_filter;
+
+statement ok
+set variable filtered_tasks = (select list(task) from (select *,
+ 'value >= 20'::varchar row_filter from position_tasks) task);
+
+query I
+select id from iceberg_scan_tasks(getvariable('filtered_tasks'));
+----
+3
+
+statement ok
+set variable filtered_tasks = (select list(task) from (select *, NULL::varchar row_filter from tasks) task);
+
+query I
+select count(*) from iceberg_scan_tasks(getvariable('filtered_tasks'));
+----
+4
+
+foreach predicate false NULL
+
+statement ok
+set variable filtered_tasks = (select list(task) from (select *, '{predicate}'::varchar row_filter from tasks) task);
+
+query I
+select count(*) from iceberg_scan_tasks(getvariable('filtered_tasks'));
+----
+0
+
+endloop
+
+statement ok
+set variable filtered_tasks = (select list(task) from (select *, 'id = (select 1)'::varchar row_filter from tasks) task);
+
+statement error
+select * from iceberg_scan_tasks(getvariable('filtered_tasks'));
+----
+subqueries, parameters and function calls are not supported
+
+statement ok
+set variable filtered_tasks = (select list(task) from (select *, 'random() > 0.5'::varchar row_filter from tasks) task);
+
+statement error
+select * from iceberg_scan_tasks(getvariable('filtered_tasks'));
+----
+subqueries, parameters and function calls are not supported
+
+statement ok
+set variable filtered_tasks = (select list(task) from (select *, 'missing = 1'::varchar row_filter from tasks) task);
+
+statement error
+select * from iceberg_scan_tasks(getvariable('filtered_tasks'));
+----
+not found
+
+# Physical reads must include the SQL predicate column, but not unrelated data.
+statement ok
+set variable filtered_tasks = (select list(task) from (select t.*, 'value >= 99990'::varchar row_filter
+ from (select unnest(getvariable('projection_io_tasks')) t)) task);
+
+statement ok
+call enable_logging('FileSystem');
+
+statement ok
+call truncate_duckdb_logs();
+
+query T
+select distinct part from iceberg_scan_tasks(getvariable('filtered_tasks'));
+----
+P
+
+query TI rowsort
+select column_name, reads > 0 from projection_chunk_reads();
+----
+id	false
+value	true
+
+statement ok
+call disable_logging();

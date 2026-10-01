@@ -2,6 +2,7 @@
 
 #include "duckdb/function/table_function.hpp"
 #include "iceberg_options.hpp"
+#include "duckdb/planner/table_filter_set.hpp"
 #include "planning/deletes/iceberg_delete_file_scanner.hpp"
 #include "planning/scan_plan/iceberg_scan_task.hpp"
 
@@ -25,7 +26,8 @@ struct IcebergTaskExecutionContext {
 class IcebergTaskExecutor {
 public:
 	IcebergTaskExecutor(ClientContext &context, shared_ptr<IcebergTaskExecutionContext> execution,
-	                    IcebergFileScanTask task, vector<ColumnIndex> column_indexes);
+	                    IcebergFileScanTask task, vector<ColumnIndex> column_indexes,
+	                    unique_ptr<Expression> row_filter);
 	~IcebergTaskExecutor();
 
 	//! Creates a private scanner that claims work from the shared Parquet scan.
@@ -38,8 +40,12 @@ private:
 	//! the function info that owns the task and shared execution context.
 	TableFunction function;
 	unique_ptr<FunctionData> bind;
-	unique_ptr<GlobalTableFunctionState> global;
 	vector<ColumnIndex> column_indexes;
+	vector<column_t> output_columns;
+	vector<LogicalType> scan_types;
+	unique_ptr<Expression> row_filter;
+	TableFilterSet filters;
+	unique_ptr<GlobalTableFunctionState> global;
 };
 
 } // namespace duckdb
