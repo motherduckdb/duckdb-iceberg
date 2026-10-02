@@ -10,6 +10,7 @@
 #include "duckdb/common/types/string.hpp"
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/common/operator/cast_operators.hpp"
+#include "duckdb/common/operator/add.hpp"
 #include "duckdb/parser/column_definition.hpp"
 #include "duckdb/logging/logger.hpp"
 #include "duckdb/main/config.hpp"
@@ -28,6 +29,7 @@
 #include "catalog/rest/storage/iceberg_table_secret_provider.hpp"
 #include "core/expression/iceberg_transform.hpp"
 #include "common/iceberg_utils.hpp"
+#include "iceberg_options.hpp"
 
 #include <climits>
 
@@ -741,13 +743,13 @@ IcebergTable IcebergTable::Copy() const {
 	return clone;
 }
 
-IcebergTableMetadata IcebergTable::CreateMetadataFromLog(ClientContext &context,
-                                                         timestamp_ms_t transaction_start_ms) const {
+IcebergTableMetadata IcebergTable::CreateMetadataFromLog(ClientContext &context, timestamp_ms_t transaction_start_ms,
+                                                         timestamp_ms_t metadata_cutoff_ms) const {
 	auto &log = table_metadata.metadata_log;
 
 	optional_idx log_item_index;
 	for (idx_t i = log.size(); i-- > 0;) {
-		if (log[i].timestamp_ms <= transaction_start_ms) {
+		if (log[i].timestamp_ms <= metadata_cutoff_ms) {
 			log_item_index = i;
 			break;
 		}
@@ -756,8 +758,8 @@ IcebergTableMetadata IcebergTable::CreateMetadataFromLog(ClientContext &context,
 		auto timestamp = duckdb::Cast::Operation<timestamp_ms_t, timestamp_t>(transaction_start_ms);
 		throw InvalidConfigurationException(
 		    "Cannot reconstruct table '%s' at the transaction start (%s) because its metadata-log has no entry from "
-		    "that time or earlier. Set iceberg_use_metadata_log = false to accept the latest table state resolved by "
-		    "this transaction instead",
+		    "that time or earlier, including the clock-skew allowance. Set iceberg_use_metadata_log = false to accept "
+		    "the latest table state resolved by this transaction instead",
 		    GetTableKey(), Timestamp::ToString(timestamp));
 	}
 
@@ -774,12 +776,20 @@ IcebergTable IcebergTable::Copy(IcebergTransaction &iceberg_transaction) const {
 
 	auto ret = Copy();
 	auto transaction_start_ms = IcebergUtils::GetTransactionStartTimeMS(context);
+	auto clock_skew_ms = DEFAULT_METADATA_LOG_CLOCK_SKEW_MS;
+	Value val;
+	if (context.TryGetCurrentSetting(METADATA_LOG_CLOCK_SKEW_CONFIG_VARIABLE, val) && !val.IsNull()) {
+		clock_skew_ms = val.GetValue<int64_t>();
+	}
+	timestamp_ms_t metadata_cutoff_ms;
+	if (!TryAddOperator::Operation(transaction_start_ms.value, clock_skew_ms, metadata_cutoff_ms.value)) {
+		metadata_cutoff_ms.value = NumericLimits<int64_t>::Maximum();
+	}
 
-	if (table_metadata.last_updated_ms <= transaction_start_ms) {
+	if (table_metadata.last_updated_ms <= metadata_cutoff_ms) {
 		return ret;
 	}
 	bool use_metadata_log = true;
-	Value val;
 	if (context.TryGetCurrentSetting("iceberg_use_metadata_log", val)) {
 		if (!val.IsNull() && val.type().id() == LogicalTypeId::BOOLEAN) {
 			use_metadata_log = val.GetValue<bool>();
@@ -798,7 +808,7 @@ IcebergTable IcebergTable::Copy(IcebergTransaction &iceberg_transaction) const {
 	}
 
 	LoadCredentials(context);
-	ret.table_metadata = ret.CreateMetadataFromLog(context, transaction_start_ms);
+	ret.table_metadata = ret.CreateMetadataFromLog(context, transaction_start_ms, metadata_cutoff_ms);
 	return ret;
 }
 
