@@ -117,3 +117,35 @@ SELECT id, val FROM v1_tbl;
 
 statement ok
 drop table if exists v1_tbl;
+
+# an upgrade in the same transaction makes the table writable within that transaction
+statement ok
+drop table if exists v1_txn_tbl;
+
+statement ok
+create table v1_txn_tbl (id int, val varchar) WITH ('format-version' = 1);
+
+statement ok
+BEGIN;
+
+statement ok
+ALTER TABLE v1_txn_tbl SET ('format-version' = '2');
+
+statement ok
+INSERT INTO v1_txn_tbl VALUES (1, 'a');
+
+statement ok
+COMMIT;
+
+query I
+SELECT metadata."format-version"::INT FROM iceberg_load_table_response(my_datalake.default.v1_txn_tbl);
+----
+2
+
+query II
+SELECT id, val FROM v1_txn_tbl;
+----
+1	a
+
+statement ok
+drop table if exists v1_txn_tbl;
