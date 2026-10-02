@@ -169,7 +169,8 @@ static DeserializeResult DeserializeUUID(const string_t &blob, const LogicalType
 
 //! FIXME: because of schema evolution, there are rules for inferring the correct type that we need to apply:
 //! See https://iceberg.apache.org/spec/#schema-evolution
-DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const LogicalType &type) {
+DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const LogicalType &type,
+                                                 optional<SerializeBound> bound) {
 	switch (type.id()) {
 	case LogicalTypeId::INTEGER: {
 		if (blob.GetSize() != sizeof(int32_t)) {
@@ -243,14 +244,17 @@ DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const Log
 		return Value::BLOB((data_ptr_t)blob.GetData(), blob.GetSize());
 	}
 	case LogicalTypeId::VARCHAR: {
-		// Previous versions of DuckDB-Iceberg truncated string metrics to N bytes,
-		// which could split a multi-byte character and produce invalid UTF-8.
-		// Shorten the bound until it is a valid UTF-8 string.
 		auto data = blob.GetData();
 		auto size = blob.GetSize();
 		if (Utf8Proc::IsValid(data, size)) {
 			return Value(string(data, size));
 		}
+		if (!bound) {
+			return DeserializeError(blob, type);
+		}
+		// Previous versions of DuckDB-Iceberg truncated string metrics to N bytes,
+		// which could split a multi-byte character and produce invalid UTF-8.
+		// Repair the bound from its longest valid UTF-8 prefix.
 		idx_t len = size;
 		while (len > 0 && !Utf8Proc::IsValid(data, len)) {
 			len--;
@@ -258,7 +262,15 @@ DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const Log
 		if (len == 0) {
 			return DeserializeError(blob, type);
 		}
-		return Value(string(data, len));
+		if (*bound == SerializeBound::LOWER_BOUND) {
+			return Value(string(data, len));
+		}
+		// The stored bytes continue past the prefix, so the prefix itself is too small.
+		string rounded;
+		if (!TruncateAndIncrementString(string(data, size), rounded, len)) {
+			return DeserializeError(blob, type);
+		}
+		return Value(std::move(rounded));
 	}
 	case LogicalTypeId::DECIMAL: {
 		return DeserializeDecimal(blob, type);
