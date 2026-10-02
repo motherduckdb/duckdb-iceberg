@@ -3,6 +3,7 @@
 #include "core/expression/iceberg_predicate_stats.hpp"
 #include "duckdb/common/numeric_utils.hpp"
 #include "duckdb/logging/logger.hpp"
+#include "duckdb/storage/statistics/geometry_stats.hpp"
 #include "iceberg_logging.hpp"
 #include "planning/pruning/iceberg_predicate.hpp"
 #include "storage/statistics/iceberg_variant_statistics.hpp"
@@ -32,6 +33,12 @@ void ApplyNullCounts(const IcebergDataFile &data_file, int32_t column_id, Iceber
 		stats.has_null = true;
 		stats.has_not_null = value_count ? *value_count > 0 : true;
 	}
+	if (stats.geometry_stats) {
+		stats.geometry_stats->Set(stats.has_null ? StatsInfo::CAN_HAVE_NULL_VALUES
+		                                         : StatsInfo::CANNOT_HAVE_NULL_VALUES);
+		stats.geometry_stats->Set(stats.has_not_null ? StatsInfo::CAN_HAVE_VALID_VALUES
+		                                             : StatsInfo::CANNOT_HAVE_VALID_VALUES);
+	}
 }
 
 } // namespace
@@ -57,7 +64,12 @@ bool IcebergFilePruner::FilePartitionMatchesFilter(const IcebergDataFile &data_f
 	}
 
 	for (auto &field : partition_spec.fields) {
-		const auto &column_id = source_to_column_id.at(field.source_id);
+		auto source_it = source_to_column_id.find(field.source_id);
+		if (source_it == source_to_column_id.end()) {
+			// Historical partition sources can be absent from the selected schema.
+			continue;
+		}
+		const auto &column_id = source_it->second;
 		auto table_filter = table_filters.GetFilterForColumnIndex(column_id);
 		if (!table_filter) {
 			continue;
@@ -77,7 +89,7 @@ bool IcebergFilePruner::FilePartitionMatchesFilter(const IcebergDataFile &data_f
 			stats.has_not_null = true;
 		}
 
-		auto nan_counts_it = data_file.nan_value_counts.find(column_id.GetPrimaryIndex());
+		auto nan_counts_it = data_file.nan_value_counts.find(field.source_id);
 		if (nan_counts_it != data_file.nan_value_counts.end()) {
 			stats.has_nan = nan_counts_it->second != 0;
 		}
@@ -119,8 +131,7 @@ bool IcebergFilePruner::FileMatchesFilter(const IcebergManifestFile &manifest_fi
 		auto primary_index = column_index.GetPrimaryIndex();
 		auto &column = *schema.columns[primary_index];
 
-		if (data_file.lower_bounds.empty() || data_file.upper_bounds.empty() ||
-		    data_file.content == IcebergManifestEntryContentType::POSITION_DELETES) {
+		if (data_file.content == IcebergManifestEntryContentType::POSITION_DELETES) {
 			continue;
 		}
 
@@ -160,13 +171,20 @@ bool IcebergFilePruner::FileMatchesFilter(const IcebergManifestFile &manifest_fi
 				stats.SetUpperBound(upper_variant);
 			}
 		} else {
-			stats = IcebergPredicateStats::DeserializeBounds(lower_bound, upper_bound, column.name, column.type);
+			stats =
+			    IcebergPredicateStats::DeserializeBounds(context, lower_bound, upper_bound, column.name, column.type);
 		}
 
+		if (column.type.id() == LogicalTypeId::GEOMETRY && !stats.geometry_stats) {
+			// A missing bbox is unknown, but the null counts can still prove that no geometry matches.
+			stats.geometry_stats = make_shared_ptr<BaseStatistics>(GeometryStats::CreateUnknown(column.type));
+		}
 		ApplyNullCounts(data_file, column_id, stats);
 
 		auto nan_counts_it = data_file.nan_value_counts.find(column_id);
-		stats.has_nan = nan_counts_it == data_file.nan_value_counts.end() || nan_counts_it->second > 0;
+		if (nan_counts_it != data_file.nan_value_counts.end()) {
+			stats.has_nan = nan_counts_it->second > 0;
+		}
 
 		auto &filter = *entry.second;
 		if (!IcebergPredicate::MatchBounds(context, filter, stats, IcebergTransform::Identity())) {
@@ -242,8 +260,8 @@ bool IcebergFilePruner::DeleteManifestMatchesDataFile(const IcebergManifestFile 
 			return true;
 		}
 		auto partition_type = field.transform.GetSerializedType(source_column->type);
-		auto stats = IcebergPredicateStats::DeserializeBounds(field_summary.lower_bound, field_summary.upper_bound,
-		                                                      source_column->name, partition_type);
+		auto stats = IcebergPredicateStats::DeserializeBounds(
+		    context, field_summary.lower_bound, field_summary.upper_bound, source_column->name, partition_type);
 		auto typed_partition_value = partition_value.DefaultCastAs(partition_type);
 		if (stats.lower_bound && typed_partition_value < *stats.lower_bound) {
 			return false;
@@ -290,9 +308,9 @@ bool IcebergFilePruner::EqualityDeleteMatchesDataFile(const IcebergDataFile &del
 		}
 
 		try {
-			auto delete_stats = IcebergPredicateStats::DeserializeBounds(delete_lower->second, delete_upper->second,
-			                                                             column.name, column.type);
-			auto data_stats = IcebergPredicateStats::DeserializeBounds(data_lower->second, data_upper->second,
+			auto delete_stats = IcebergPredicateStats::DeserializeBounds(
+			    context, delete_lower->second, delete_upper->second, column.name, column.type);
+			auto data_stats = IcebergPredicateStats::DeserializeBounds(context, data_lower->second, data_upper->second,
 			                                                           column.name, column.type);
 			if (!delete_stats.lower_bound || !delete_stats.upper_bound || !data_stats.lower_bound ||
 			    !data_stats.upper_bound || delete_stats.lower_bound->IsNull() || delete_stats.upper_bound->IsNull() ||
@@ -361,8 +379,8 @@ bool IcebergFilePruner::DeleteFileMatchesDataFile(const IcebergManifestFile &del
 		break;
 	}
 	default:
-		throw InternalException("Unexpected manifest entry content type: %d",
-		                        static_cast<uint8_t>(delete_file.content));
+		throw InvalidConfigurationException("Unexpected manifest entry content type: %d",
+		                                    static_cast<uint8_t>(delete_file.content));
 	}
 
 	auto partition_spec_it = metadata.partition_specs.find(delete_manifest.partition_spec_id);
@@ -429,7 +447,12 @@ bool IcebergFilePruner::ManifestMatchesFilter(const IcebergManifestFile &manifes
 	for (idx_t i = 0; i < field_summaries.size(); i++) {
 		auto &field_summary = field_summaries[i];
 		auto &field = partition_spec.fields[i];
-		const auto &column_id = source_to_column_id.at(field.source_id);
+		auto source_it = source_to_column_id.find(field.source_id);
+		if (source_it == source_to_column_id.end()) {
+			// Historical partition sources can be absent from the selected schema.
+			continue;
+		}
+		const auto &column_id = source_it->second;
 		auto table_filter = table_filters.GetFilterForColumnIndex(column_id);
 		if (!table_filter) {
 			continue;
@@ -437,8 +460,8 @@ bool IcebergFilePruner::ManifestMatchesFilter(const IcebergManifestFile &manifes
 
 		auto &column = IcebergTableSchema::GetFromColumnIndex(schema.columns, column_id, 0);
 		auto result_type = field.transform.GetSerializedType(column.type);
-		auto stats = IcebergPredicateStats::DeserializeBounds(field_summary.lower_bound, field_summary.upper_bound,
-		                                                      column.name, result_type);
+		auto stats = IcebergPredicateStats::DeserializeBounds(context, field_summary.lower_bound,
+		                                                      field_summary.upper_bound, column.name, result_type);
 		stats.has_nan = field_summary.contains_nan;
 		stats.has_null = field_summary.contains_null;
 		stats.has_not_null = true;

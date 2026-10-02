@@ -304,14 +304,12 @@ void IcebergDelete::WritePositionalDeleteFile(ClientContext &context, IcebergDel
 	global_state.written_files.emplace(filename, std::move(delete_file));
 }
 
-static void PopulateAlteredManifests(const IcebergMultiFileList &multi_file_list, IcebergManifestDeletes &out,
-                                     IcebergDeleteData &delete_data) {
+static void PopulateAlteredManifests(IcebergManifestDeletes &out, const IcebergDeleteData &delete_data) {
 	if (delete_data.type != IcebergDeleteType::DELETION_VECTOR) {
 		return;
 	}
-	for (auto &bound_entry : delete_data.entries) {
-		auto &entry = bound_entry.entry;
-		out.InvalidateFile(entry.data_file.file_path);
+	for (auto &file : delete_data.source_files) {
+		out.InvalidateFile(file);
 	}
 }
 
@@ -342,7 +340,7 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 			auto existing_delete = multi_file_list->GetExistingPositionalDeleteData(filename);
 			if (existing_delete) {
 				auto &delete_data = *existing_delete;
-				PopulateAlteredManifests(*multi_file_list, global_state.altered_manifests, delete_data);
+				PopulateAlteredManifests(global_state.altered_manifests, delete_data);
 				delete_data.ToSet(sorted_deletes);
 			}
 		}
@@ -570,12 +568,8 @@ PhysicalOperator &IcebergCatalog::PlanDeleteOperation(ClientContext &context, Ph
 		row_id_indexes.push_back(bound_ref.Index());
 	}
 
-	auto allows_positional_deletes = metadata.PropertiesAllowPositionalDeletes(IcebergSnapshotOperationType::DELETE);
-	if (!allows_positional_deletes) {
-		auto delete_table_property = metadata.GetTableProperty(WRITE_DELETE_MODE);
-		auto error_message = IcebergCatalog::GetOnlyMergeOnReadSupportedErrorMessage(
-		    updated_table_entry.name.GetIdentifierName(), WRITE_DELETE_MODE, delete_table_property);
-		throw NotImplementedException(error_message);
+	if (!irc_transaction.planning_merge_into) {
+		VerifyMergeOnRead(metadata, updated_table_entry.name.GetIdentifierName(), WRITE_DELETE_MODE);
 	}
 
 	auto &iceberg_delete =

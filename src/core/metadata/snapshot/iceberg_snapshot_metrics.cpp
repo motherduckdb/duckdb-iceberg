@@ -295,7 +295,7 @@ void IcebergSnapshotMetrics::RemoveManifestEntry(const IcebergManifestEntry &man
 		UpdateTotalMetric(IcebergSnapshotMetricType::TOTAL_EQUALITY_DELETES, 0, data_file.record_count);
 		break;
 	default:
-		throw InternalException("Unsupported Iceberg manifest entry content type");
+		throw InvalidConfigurationException("Unsupported Iceberg manifest entry content type");
 	}
 }
 

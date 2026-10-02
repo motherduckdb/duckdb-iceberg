@@ -66,7 +66,7 @@ rest_api_objects::Snapshot IcebergSnapshot::ToRESTObject(const IcebergTableMetad
 	if (first_row_id) {
 		res.first_row_id = *first_row_id;
 	} else if (table_metadata.iceberg_version >= 3) {
-		throw InternalException("first-row-id required for V3 tables!");
+		throw InvalidConfigurationException("first-row-id required for V3 tables!");
 	}
 
 	return res;

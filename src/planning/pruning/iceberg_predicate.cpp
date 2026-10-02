@@ -41,6 +41,33 @@ public:
 
 } // namespace
 
+static bool IsNaN(const Value &value) {
+	switch (value.type().id()) {
+	case LogicalTypeId::FLOAT:
+		return Value::IsNan(value.GetValue<float>());
+	case LogicalTypeId::DOUBLE:
+		return Value::IsNan(value.GetValue<double>());
+	default:
+		return false;
+	}
+}
+
+static bool NaNMayMatch(const Value &constant, ExpressionType comparison_type, const IcebergPredicateStats &stats) {
+	auto type_id = constant.type().id();
+	if ((stats.has_nan && !*stats.has_nan) || (type_id != LogicalTypeId::FLOAT && type_id != LogicalTypeId::DOUBLE)) {
+		return false;
+	}
+	switch (comparison_type) {
+	case ExpressionType::COMPARE_GREATERTHAN:
+	case ExpressionType::COMPARE_GREATERTHANOREQUALTO:
+		return true;
+	case ExpressionType::COMPARE_EQUAL:
+		return IsNaN(constant);
+	default:
+		return false;
+	}
+}
+
 template <class TRANSFORM>
 static bool MatchBoundsConstantTemplated(const Value &constant, ExpressionType comparison_type,
                                          const IcebergPredicateStats &stats, const IcebergTransform &transform) {
@@ -71,6 +98,11 @@ static bool MatchBoundsConstantTemplated(const Value &constant, ExpressionType c
 
 	if (!stats.upper_bound || !stats.lower_bound) {
 		// we do not have upper or lower bounds, assume the file matches.
+		return true;
+	}
+
+	if (NaNMayMatch(constant_value, comparison_type, stats)) {
+		// bounds exclude NaN, but the file may hold NaN rows that match the comparison.
 		return true;
 	}
 

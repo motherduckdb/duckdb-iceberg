@@ -14,10 +14,10 @@ namespace duckdb {
 
 class IcebergPlannerRoutine {
 public:
-	void VisitOperator(LogicalOperator &op, bool below_write = false);
+	void VisitOperator(LogicalOperator &op);
 
 private:
-	void VisitScan(LogicalOperator &op, bool below_write);
+	void VisitScan(LogicalOperator &op);
 };
 
 class IcebergPlanner {

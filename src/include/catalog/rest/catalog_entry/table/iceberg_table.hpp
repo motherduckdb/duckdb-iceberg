@@ -43,6 +43,7 @@ public:
 	optional_ptr<CatalogEntry> CreateSchemaVersion(const IcebergTableSchema &table_schema);
 	idx_t GetMaxSchemaId();
 	idx_t GetNextPartitionSpecId();
+	idx_t GetNextPartitionFieldId();
 	idx_t GetNextSortOrderId();
 	optional<int64_t> GetExistingSpecId(IcebergPartitionSpec &spec);
 	optional<int64_t> GetExistingSortOrderId(IcebergSortOrder &sort_order);
@@ -73,9 +74,10 @@ public:
 	static string GetTableKey(const IcebergCatalog &catalog, const vector<string> &namespace_items,
 	                          const string &table_name);
 	string GetTableKey() const;
-	IcebergTableMetadata CreateMetadataFromLog(ClientContext &context, timestamp_ms_t transaction_start_ms) const;
-	// With metadata-log enabled, reconstruct the complete table state at transaction start. Otherwise pin and copy
-	// the complete catalog state that was resolved for this transaction.
+	IcebergTableMetadata CreateMetadataFromLog(ClientContext &context, timestamp_ms_t transaction_start_ms,
+	                                           timestamp_ms_t metadata_cutoff_ms) const;
+	// With metadata-log enabled, reconstruct table state at transaction start plus the clock-skew allowance.
+	// Otherwise pin and copy the complete catalog state that was resolved for this transaction.
 	IcebergTable Copy(IcebergTransaction &iceberg_transaction) const;
 	// This copy is used for deletes, where we don't care about valid table state
 	IcebergTable Copy() const;

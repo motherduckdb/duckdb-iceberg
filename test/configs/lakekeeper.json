@@ -47,6 +47,10 @@
 			"env_value": "true"
 		},
 		{
+			"env_name": "UNKNOWN_SUPPORT",
+			"env_value": "true"
+		},
+		{
 			"env_name": "SNAPSHOT_HISTORY_SUPPORT",
 			"env_value": "true"
 		},

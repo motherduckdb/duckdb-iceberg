@@ -45,7 +45,8 @@ bool IcebergDeletePlanner::DeleteEntryAppliesToDataFile(const IcebergDeletePlann
                                                         const partition_value_map_t &data_partition_values) {
 	auto &delete_file = delete_manifest_entry.data_file;
 	auto &data_file = data_manifest_entry.entry.data_file;
-	if (!context.provider.DeleteFileAppliesToDataFile(data_file.file_path, delete_file.file_path)) {
+	if (!context.provider.DeleteFileAppliesToDataFile(data_file.file_path,
+	                                                  {delete_file.file_path, delete_file.content_offset})) {
 		return false;
 	}
 

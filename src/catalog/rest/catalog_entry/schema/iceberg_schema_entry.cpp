@@ -26,6 +26,7 @@
 #include "catalog/rest/api/iceberg_type.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
 #include "common/iceberg_default.hpp"
+#include "iceberg_options.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
 
 namespace duckdb {
@@ -378,14 +379,15 @@ static void VerifySchemaEvolution(const IcebergTableMetadata &table_metadata, co
 				    partition_field->GetPartitionSpecFieldName(), partition_field->partition_field_id);
 				break;
 			}
-			if (target_type.id() == LogicalTypeId::TIMESTAMP_NS) {
-				if (table_metadata.iceberg_version >= 3) {
-					return;
-				}
-				extra_info = " (DATE to TIMESTAMP_NS is a Iceberg V3 feature)";
-				break;
+			// Promotion of `date` to `timestamp` or `timestamp_ns` is only valid for
+			// format version 3 and later (see the Iceberg spec's type promotion table).
+			if (table_metadata.iceberg_version >= 3) {
+				return;
 			}
-			return;
+			extra_info =
+			    StringUtil::Format(" (DATE to %s is an Iceberg V3 feature)",
+			                       target_type.id() == LogicalTypeId::TIMESTAMP_NS ? "TIMESTAMP_NS" : "TIMESTAMP");
+			break;
 		}
 		break;
 	}
@@ -572,8 +574,8 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 
 		auto &last_column_id = updated_table.table_metadata.last_column_id;
 		if (!last_column_id.IsValid()) {
-			throw InternalException("No last_column_id when trying to ADD COLUMN %s",
-			                        add_column_info.GetQualifiedName().Name());
+			throw InvalidConfigurationException("No last_column_id when trying to ADD COLUMN %s",
+			                                    add_column_info.GetQualifiedName().Name());
 		}
 		auto field_id = last_column_id.GetIndex() + 1;
 		auto next_field_id = [&field_id]() -> idx_t {
@@ -663,7 +665,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			// Preserve the existing field ID, but allocate fresh IDs for any new nested fields.
 			auto &last_column_id = updated_table.table_metadata.last_column_id;
 			if (!last_column_id.IsValid()) {
-				throw InternalException("No last_column_id when evolving UNKNOWN column %s", column.name);
+				throw InvalidConfigurationException("No last_column_id when evolving UNKNOWN column %s", column.name);
 			}
 			auto field_id = last_column_id.GetIndex() + 1;
 			bool root = true;
@@ -778,6 +780,10 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 				throw InvalidInputException("Cannot downgrade format-version from %d to %d", current_version,
 				                            new_format_version.GetIndex());
 			}
+			if ((int32_t)new_format_version.GetIndex() > MAX_ICEBERG_FORMAT_VERSION) {
+				throw InvalidInputException("Cannot upgrade format-version to %d, the highest supported version is %d",
+				                            new_format_version.GetIndex(), MAX_ICEBERG_FORMAT_VERSION);
+			}
 			updated_table.table_metadata.iceberg_version = (int32_t)new_format_version.GetIndex();
 			transaction_data.TableAddUpradeFormatVersion();
 		}
@@ -862,8 +868,8 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 
 		auto &last_column_id = updated_table.table_metadata.last_column_id;
 		if (!last_column_id.IsValid()) {
-			throw InternalException("No last_column_id when trying to ADD COLUMN %s",
-			                        StringUtil::Join(IdentifiersToStrings(column_path), "."));
+			throw InvalidConfigurationException("No last_column_id when trying to ADD COLUMN %s",
+			                                    StringUtil::Join(IdentifiersToStrings(column_path), "."));
 		}
 		auto field_id = last_column_id.GetIndex() + 1;
 		auto next_field_id = [&field_id]() -> idx_t {

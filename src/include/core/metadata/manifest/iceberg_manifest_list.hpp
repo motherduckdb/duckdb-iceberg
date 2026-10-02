@@ -21,7 +21,7 @@ struct FieldSummary {
 public:
 	bool contains_null = false;
 	//! Optional
-	bool contains_nan = false;
+	optional<bool> contains_nan = false;
 	//! Optional
 	Value lower_bound;
 	//! Optional
@@ -30,8 +30,8 @@ public:
 
 struct ManifestPartitions {
 public:
-	void Create(const IcebergTableMetadata &metadata, const IcebergPartitionSpec &partition_spec,
-	            const vector<IcebergManifestEntry> &entries);
+	void Create(const IcebergTableMetadata &metadata, const IcebergTableSchema &target_schema,
+	            const IcebergPartitionSpec &partition_spec, const vector<IcebergManifestEntry> &entries);
 
 public:
 	bool has_partitions = false;

@@ -47,16 +47,16 @@ void ServerSideScanPlanProvider::FinishScanTasks() {
 }
 
 bool ServerSideScanPlanProvider::DeleteFileAppliesToDataFile(const string &data_file_path,
-                                                             const string &delete_file_path) const {
+                                                             const IcebergFileIdentity &delete_file) const {
 	auto refs = plan.delete_files_by_data_file.find(data_file_path);
-	return refs != plan.delete_files_by_data_file.end() && refs->second.count(delete_file_path);
+	return refs != plan.delete_files_by_data_file.end() && refs->second.count(delete_file);
 }
 
-vector<IcebergManifestListEntry> &ServerSideScanPlanProvider::DataManifests() {
+const vector<IcebergManifestListEntry> &ServerSideScanPlanProvider::DataManifests() {
 	return plan.data_manifests;
 }
 
-vector<IcebergManifestListEntry> &ServerSideScanPlanProvider::DeleteManifests() {
+const vector<IcebergManifestListEntry> &ServerSideScanPlanProvider::DeleteManifests() {
 	return plan.delete_manifests;
 }
 

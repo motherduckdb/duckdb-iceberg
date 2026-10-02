@@ -1,5 +1,6 @@
 #pragma once
 
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/types/string_type.hpp"
 #include "duckdb/common/types/value.hpp"
@@ -84,7 +85,10 @@ public:
 public:
 	//! Convert a decoded manifest partition value to its source column type.
 	static Value TransformPartitionValue(const Value &value, const LogicalType &type);
-	static DeserializeResult DeserializeValue(const string_t &blob, const LogicalType &target);
+	//! Pass 'bound' when deserializing a lower/upper bound: invalid UTF-8 string bounds are then repaired
+	//! where possible.
+	static DeserializeResult DeserializeValue(const string_t &blob, const LogicalType &target,
+	                                          optional<SerializeBound> bound = nullopt);
 	static SerializeResult SerializeValue(IcebergColumnStats &stats, const LogicalType &column_type,
 	                                      SerializeBound bound_type);
 	static SerializeResult SerializeValue(Value input_value, const LogicalType &column_type, SerializeBound bound_type,

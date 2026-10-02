@@ -131,27 +131,23 @@ make fixture-data-local
 
 Each REST catalog has a config in `test/configs/`. A config initializes credentials and the `my_datalake` attachment, statically loads required extensions, sets `CATALOG_TEST_CONFIG_SETUP`, and lists catalog-specific skips where necessary.
 
-After starting a catalog, resolve its config from `.catalogs/.active_catalog`. The helper uses Bash's `BASH_SOURCE`, so invoke it through Bash when your interactive shell is zsh or another shell:
+After starting a catalog, resolve its config from `.catalogs/.active_catalog` by running the helper directly:
 
 ```shell
-TEST_CONFIG="$(bash -c 'source scripts/catalog_test_config.sh && active_catalog_test_config')"
-
 ./build/debug/test/unittest --order lex \
   "$PWD/test/sql/local/catalog_test_config_setup/*" \
-  --test-config "$TEST_CONFIG"
+  --test-config "$(scripts/catalog_test_config.sh)"
 ```
 
 To run one file:
 
 ```shell
-TEST_CONFIG="$(bash -c 'source scripts/catalog_test_config.sh && active_catalog_test_config')"
-
 ./build/debug/test/unittest \
-  --test-config "$TEST_CONFIG" \
+  --test-config "$(scripts/catalog_test_config.sh)" \
   test/sql/local/catalog_test_config_setup/catalog_agnostic/create/test_create_table.test
 ```
 
-`active_catalog_test_config` accepts `fixture`, `fixture-latest`, `gravitino`, `lakekeeper`, `nessie`, or `polaris`. It reports an error for a missing, empty, local-only, or unknown active-catalog marker.
+`scripts/catalog_test_config.sh` accepts `fixture`, `fixture-latest`, `gravitino`, `lakekeeper`, `nessie`, or `polaris`. It reports an error for a missing, empty, local-only, or unknown active-catalog marker.
 
 ### Catalog-backed Python tests
 

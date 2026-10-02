@@ -83,7 +83,9 @@ public:
 	// struct {partition_name: val} (with partition field id for the struct key.
 	// extended partition info returns extra information about these partitions
 	// like source column id, source type, transform, and partition value.
-	const vector<IcebergExtendedPartitionInfo> GetExtendedPartitionInfo(const IcebergTableMetadata &metadata) const;
+	// Resolve source types in target_schema, falling back to historical schemas for dropped columns.
+	const vector<IcebergExtendedPartitionInfo> GetExtendedPartitionInfo(const IcebergTableMetadata &metadata,
+	                                                                    const IcebergTableSchema &target_schema) const;
 
 public:
 	void SetFirstRowId(optional<int64_t> first_row_id);
@@ -132,6 +134,8 @@ public:
 	void SetSnapshotId(optional<int64_t> snapshot_id);
 	bool HasSnapshotId() const;
 	int64_t GetSnapshotId() const;
+	//! The explicit snapshot id, or the one inherited from the manifest that holds this entry
+	optional<int64_t> GetSnapshotId(const IcebergManifestFile &manifest_file) const;
 	void SetSequenceNumber(optional<sequence_number_t> value);
 	void SetFileSequenceNumber(optional<sequence_number_t> value);
 	sequence_number_t GetSequenceNumber(const IcebergManifestFile &manifest_file) const;

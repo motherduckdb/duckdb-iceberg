@@ -1,7 +1,5 @@
 #pragma once
 
-#include "core/deletes/iceberg_delete_data.hpp"
-#include "core/deletes/iceberg_equality_delete.hpp"
 #include "planning/metadata_io/manifest_list/bound_iceberg_manifest_list_entry.hpp"
 #include "planning/pruning/iceberg_table_filter.hpp"
 
@@ -13,14 +11,6 @@ struct IcebergTableMetadata;
 class IcebergTableSchema;
 struct IcebergFilePruner;
 struct IcebergOptions;
-
-using position_delete_map_t = unordered_map<string, shared_ptr<IcebergDeleteData>>;
-
-struct IcebergDeletePlan {
-	//! Equality-delete values are materialized separately from positional deletes, which become a DeleteFilter.
-	vector<reference<const IcebergEqualityDeleteFile>> equality_deletes;
-	unique_ptr<DeleteFilter> positional_deletes;
-};
 
 struct IcebergDeletePlanningContext {
 	ClientContext &context;

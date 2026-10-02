@@ -59,13 +59,17 @@ static optional<IcebergManifestListEntry> RewriteManifestFile(const IcebergManif
 		auto file_sequence_number = manifest_entry.GetFileSequenceNumber(loaded_manifest.file);
 		manifest_entry.SetSequenceNumber(sequence_number);
 		manifest_entry.SetFileSequenceNumber(file_sequence_number);
+		//! The replacement manifest is added by this snapshot, so carried-over entries must keep their snapshot id
+		manifest_entry.SetSnapshotId(manifest_entry.GetSnapshotId(loaded_manifest.file));
 		if (manifest_entry.status == IcebergManifestEntryStatusType::ADDED) {
 			manifest_entry.status = IcebergManifestEntryStatusType::EXISTING;
 		}
 		if (manifest_entry.status != IcebergManifestEntryStatusType::DELETED &&
-		    deletes.IsInvalidated(manifest_entry.data_file.file_path)) {
+		    deletes.IsInvalidated({manifest_entry.data_file.file_path, manifest_entry.data_file.content_offset})) {
 			snapshot_metrics.RemoveManifestEntry(manifest_entry);
 			manifest_entry.status = IcebergManifestEntryStatusType::DELETED;
+			//! Inherits this snapshot, which deleted the file; conflict checks in other engines rely on it
+			manifest_entry.SetSnapshotId(nullopt);
 			removed_any_entries = true;
 		}
 		rewritten_entries.push_back(std::move(manifest_entry));
