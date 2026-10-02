@@ -7,6 +7,7 @@
 #include "core/metadata/snapshot/iceberg_snapshot.hpp"
 #include "rest_catalog/objects/list.hpp"
 #include "catalog/rest/api/iceberg_create_table_request.hpp"
+#include "iceberg_options.hpp"
 
 namespace duckdb {
 
@@ -380,6 +381,10 @@ IcebergTableMetadata::IcebergTableMetadata(IcebergTableMetadataSchemas schemas) 
 }
 
 IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_objects::TableMetadata &table_metadata) {
+	if (table_metadata.format_version > MAX_ICEBERG_FORMAT_VERSION) {
+		throw NotImplementedException("Iceberg format-version %d is not supported, the highest supported version is %d",
+		                              table_metadata.format_version, MAX_ICEBERG_FORMAT_VERSION);
+	}
 	unordered_map<int32_t, shared_ptr<IcebergTableSchema>> schemas;
 	if (table_metadata.schemas) {
 		for (auto &schema : *table_metadata.schemas) {

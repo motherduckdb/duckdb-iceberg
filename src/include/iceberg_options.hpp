@@ -15,6 +15,8 @@ static constexpr const char *VERSION_GUESSING_CONFIG_VARIABLE = "unsafe_enable_v
 // (InvalidConfigurationException).
 static constexpr const char *DEFAULT_FORMAT_VERSION_CONFIG_VARIABLE = "iceberg_default_format_version";
 static constexpr uint64_t DEFAULT_ICEBERG_FORMAT_VERSION = 2;
+// The highest Iceberg format version this extension can read and write
+static constexpr int32_t MAX_ICEBERG_FORMAT_VERSION = 3;
 
 static constexpr const char *METADATA_LOG_CLOCK_SKEW_CONFIG_VARIABLE = "iceberg_metadata_log_clock_skew_ms";
 static constexpr int64_t DEFAULT_METADATA_LOG_CLOCK_SKEW_MS = 0;

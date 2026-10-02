@@ -361,6 +361,9 @@ IcebergTable &IcebergTableSet::CreateNewEntry(ClientContext &context, IcebergCat
 		if (iceberg_version.GetIndex() < 1) {
 			throw InvalidInputException("The lowest supported iceberg version is 1!");
 		}
+		if (iceberg_version.GetIndex() > MAX_ICEBERG_FORMAT_VERSION) {
+			throw InvalidInputException("The highest supported iceberg version is %d!", MAX_ICEBERG_FORMAT_VERSION);
+		}
 	} else {
 		Value default_version_value;
 		if (context.TryGetCurrentSetting(DEFAULT_FORMAT_VERSION_CONFIG_VARIABLE, default_version_value)) {
