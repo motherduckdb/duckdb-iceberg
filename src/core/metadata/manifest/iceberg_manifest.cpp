@@ -456,6 +456,13 @@ int64_t IcebergManifestEntry::GetSnapshotId() const {
 	return *snapshot_id;
 }
 
+optional<int64_t> IcebergManifestEntry::GetSnapshotId(const IcebergManifestFile &manifest_file) const {
+	if (snapshot_id) {
+		return snapshot_id;
+	}
+	return manifest_file.added_snapshot_id;
+}
+
 static Value CreateFieldID(int32_t field_id, bool nullable) {
 	child_list_t<Value> fields;
 	fields.emplace_back("__duckdb_field_id", Value::INTEGER(field_id));
@@ -829,7 +836,6 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 		for (idx_t i = 0; i < chunk_count; i++) {
 			auto &manifest_entry = manifest_entries[offset + i];
 			status_writer.WriteValue(static_cast<int32_t>(manifest_entry.status));
-			//! FIXME: this is missing logic, needs to be looked into
 			//! SPEC: Snapshot id where the file was added, or deleted if status is 2. Inherited when null.
 			// snapshot_id: long
 			if (manifest_entry.HasSnapshotId()) {
