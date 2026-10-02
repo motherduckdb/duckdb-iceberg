@@ -31,27 +31,27 @@ drop table if exists my_datalake.default.equality_delete_evolve_then_drop_column
 statement ok
 create table my_datalake.default.equality_delete_evolve_then_drop_columns (
 	id integer,
-	date_key date,
+	float_key float,
 	number_key integer,
 	marker varchar
 );
 
 statement ok
 insert into my_datalake.default.equality_delete_evolve_then_drop_columns values
-	(1, date '2000-01-01', 10, 'delete-before-evolution'),
-	(2, date '2000-01-01', 11, 'keep-same-date'),
-	(3, date '2000-01-02', 10, 'keep-same-number'),
-	(4, date '2000-01-02', 20, 'delete-after-evolution-old-file'),
-	(5, date '2000-01-03', 30, 'keep-old');
+	(1, 1.5::float, 10, 'delete-before-evolution'),
+	(2, 1.5::float, 11, 'keep-same-float'),
+	(3, 2.5::float, 10, 'keep-same-number'),
+	(4, 2.5::float, 20, 'delete-after-evolution-old-file'),
+	(5, 3.5::float, 30, 'keep-old');
 
 # This delete file stores both equality fields using their original types.
 statement ok
 delete from my_datalake.default.equality_delete_evolve_then_drop_columns
-where date_key = date '2000-01-01' and number_key = 10;
+where float_key = 1.5::float and number_key = 10;
 
 # Both fields are evolved before either equality-delete target is removed.
 statement ok
-alter table my_datalake.default.equality_delete_evolve_then_drop_columns alter column date_key set type timestamp;
+alter table my_datalake.default.equality_delete_evolve_then_drop_columns alter column float_key set type double;
 
 statement ok
 alter table my_datalake.default.equality_delete_evolve_then_drop_columns alter column number_key set type bigint;
@@ -63,20 +63,20 @@ alter table my_datalake.default.equality_delete_evolve_then_drop_columns add col
 
 statement ok
 insert into my_datalake.default.equality_delete_evolve_then_drop_columns values
-	(6, timestamp '2000-01-01 00:00:00', 10, 'old-delete-does-not-apply-to-new-file', NULL),
-	(7, timestamp '2000-01-02 00:00:00', 20, 'delete-after-evolution-new-file', NULL),
-	(8, timestamp '2000-01-04 12:34:56.123456', 5000000000, 'delete-promoted-values', NULL),
-	(9, timestamp '2000-01-05 01:02:03', 6000000000, 'keep-new', 'keep-added-key'),
-	(10, timestamp '2000-01-06 04:05:06', 7000000000, 'delete-added-column', 'delete-added-key');
+	(6, 1.5::double, 10, 'old-delete-does-not-apply-to-new-file', NULL),
+	(7, 2.5::double, 20, 'delete-after-evolution-new-file', NULL),
+	(8, 1e300::double, 5000000000, 'delete-promoted-values', NULL),
+	(9, 5.75::double, 6000000000, 'keep-new', 'keep-added-key'),
+	(10, 6.125::double, 7000000000, 'delete-added-column', 'delete-added-key');
 
 # This promoted-type delete applies to a matching tuple in both old and new data files.
 statement ok
 delete from my_datalake.default.equality_delete_evolve_then_drop_columns
-where date_key = timestamp '2000-01-02 00:00:00' and number_key = 20;
+where float_key = 2.5::double and number_key = 20;
 
 statement ok
 delete from my_datalake.default.equality_delete_evolve_then_drop_columns
-where date_key = timestamp '2000-01-04 12:34:56.123456' and number_key = 5000000000;
+where float_key = 1e300::double and number_key = 5000000000;
 
 statement ok
 delete from my_datalake.default.equality_delete_evolve_then_drop_columns
@@ -111,14 +111,14 @@ true
 
 # One equality field is now historical while the other remains in the current schema.
 statement ok
-alter table my_datalake.default.equality_delete_evolve_then_drop_columns drop column date_key;
+alter table my_datalake.default.equality_delete_evolve_then_drop_columns drop column float_key;
 
 query III
 select id, number_key, marker
 from my_datalake.default.equality_delete_evolve_then_drop_columns
 order by id;
 ----
-2	11	keep-same-date
+2	11	keep-same-float
 3	10	keep-same-number
 5	30	keep-old
 6	10	old-delete-does-not-apply-to-new-file
@@ -138,7 +138,7 @@ select *
 from my_datalake.default.equality_delete_evolve_then_drop_columns
 order by id;
 ----
-2	keep-same-date
+2	keep-same-float
 3	keep-same-number
 5	keep-old
 6	old-delete-does-not-apply-to-new-file
@@ -153,7 +153,7 @@ select *
 from my_datalake.default.equality_delete_evolve_then_drop_columns
 order by id;
 ----
-2	keep-same-date
+2	keep-same-float
 3	keep-same-number
 5	keep-old
 6	old-delete-does-not-apply-to-new-file

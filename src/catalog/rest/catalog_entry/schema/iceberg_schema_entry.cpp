@@ -378,14 +378,15 @@ static void VerifySchemaEvolution(const IcebergTableMetadata &table_metadata, co
 				    partition_field->GetPartitionSpecFieldName(), partition_field->partition_field_id);
 				break;
 			}
-			if (target_type.id() == LogicalTypeId::TIMESTAMP_NS) {
-				if (table_metadata.iceberg_version >= 3) {
-					return;
-				}
-				extra_info = " (DATE to TIMESTAMP_NS is a Iceberg V3 feature)";
-				break;
+			// Promotion of `date` to `timestamp` or `timestamp_ns` is only valid for
+			// format version 3 and later (see the Iceberg spec's type promotion table).
+			if (table_metadata.iceberg_version >= 3) {
+				return;
 			}
-			return;
+			extra_info =
+			    StringUtil::Format(" (DATE to %s is an Iceberg V3 feature)",
+			                       target_type.id() == LogicalTypeId::TIMESTAMP_NS ? "TIMESTAMP_NS" : "TIMESTAMP");
+			break;
 		}
 		break;
 	}
