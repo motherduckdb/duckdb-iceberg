@@ -642,6 +642,10 @@ string IcebergTableMetadata::ToJSON() const {
 	root_obj.Add("format-version", writer.CreateSignedInteger(iceberg_version));
 	root_obj.AddString("table-uuid", table_uuid);
 	root_obj.AddString("location", location);
+	if (iceberg_version >= 2) {
+		// Required since v2; readers may reject v2+ metadata without it
+		root_obj.Add("last-sequence-number", writer.CreateSignedInteger(last_sequence_number));
+	}
 	root_obj.Add("last-updated-ms", writer.CreateSignedInteger(last_updated_ms.value));
 	root_obj.Add("last-column-id", writer.CreateSignedInteger(last_column_id.GetIndex()));
 	root_obj.Add("schemas", SchemasToJSON(writer));
@@ -657,6 +661,10 @@ string IcebergTableMetadata::ToJSON() const {
 	root_obj.Add("snapshot-log", SnapshotLogToJSON(writer));
 	root_obj.Add("sort-orders", SortOrdersToJSON(writer));
 	root_obj.Add("default-sort-order-id", writer.CreateSignedInteger(default_sort_order_id.GetIndex()));
+	if (iceberg_version >= 3) {
+		// Required since v3 (row lineage)
+		root_obj.Add("next-row-id", writer.CreateSignedInteger(next_row_id ? *next_row_id : 0));
+	}
 	return writer.ToString(JSONWriteFlags::ALLOW_INF_AND_NAN);
 }
 
@@ -672,14 +680,33 @@ void IcebergTableMetadata::WriteMetadata(ClientContext &context, const string &p
 	file->Close();
 }
 
-void IcebergTableMetadata::WriteVersionHint(ClientContext &context, const string &path,
+bool IcebergTableMetadata::WriteVersionHint(ClientContext &context, const string &path,
                                             const string &version_hint) const {
 	auto &fs = FileSystem::GetFileSystem(context);
 
-	// Write to file
-	auto file = fs.OpenFile(path, FileFlags::FILE_FLAGS_WRITE | FileFlags::FILE_FLAGS_FILE_CREATE);
+	// The hint is the commit point of a new table. Local file systems create it atomically (O_EXCL), so of two
+	// writers creating the same table only one succeeds; on others this is a check right before the write.
+	if (fs.FileExists(path)) {
+		return false;
+	}
+	auto flags = FileFlags::FILE_FLAGS_WRITE | FileFlags::FILE_FLAGS_FILE_CREATE |
+	             FileFlags::FILE_FLAGS_EXCLUSIVE_CREATE | FileFlags::FILE_FLAGS_NULL_IF_EXISTS;
+	unique_ptr<FileHandle> file;
+	try {
+		file = fs.OpenFile(path, flags);
+	} catch (std::exception &) {
+		// Not every file system returns NULL for an existing file
+		if (fs.FileExists(path)) {
+			return false;
+		}
+		throw;
+	}
+	if (!file) {
+		return false;
+	}
 	file->Write((void *)version_hint.c_str(), version_hint.size());
 	file->Close();
+	return true;
 }
 
 } // namespace duckdb

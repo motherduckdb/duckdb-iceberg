@@ -119,7 +119,7 @@ public:
 	bool AllowsMergeOnRead(const string &write_mode_property) const;
 	string ToJSON() const;
 	void WriteMetadata(ClientContext &context, const string &path) const;
-	void WriteVersionHint(ClientContext &context, const string &path, const string &metadata_json_path) const;
+	bool WriteVersionHint(ClientContext &context, const string &path, const string &metadata_json_path) const;
 
 public:
 	void SetCurrentSchemaId(int32_t schema_id);
