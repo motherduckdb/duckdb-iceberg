@@ -163,7 +163,8 @@
       "paths": [
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/partitioning/hour/hour_nested_struct_timestamp.test",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/partitioning/hour/hour_struct_timestamp.test",
-        "test/sql/local/catalog_test_config_setup/catalog_agnostic/partitioning/identity/identity_struct_bool.test"
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/partitioning/identity/identity_struct_bool.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/alter_type_v3.test"
       ]
     },
     {
