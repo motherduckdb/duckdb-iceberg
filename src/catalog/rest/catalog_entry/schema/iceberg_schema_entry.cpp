@@ -537,6 +537,10 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 	switch (alter_table_info.alter_table_type) {
 	case AlterTableType::SET_PARTITIONED_BY: {
 		auto &partition_info = alter_table_info.Cast<SetPartitionedByInfo>();
+		if (updated_table.table_metadata.iceberg_version < 2) {
+			throw NotImplementedException("Partition evolution on Iceberg V%d tables",
+			                              updated_table.table_metadata.iceberg_version);
+		}
 
 		// Ensure schema is the same as current
 		transaction_data.TableAddAssertCurrentSchemaId();
