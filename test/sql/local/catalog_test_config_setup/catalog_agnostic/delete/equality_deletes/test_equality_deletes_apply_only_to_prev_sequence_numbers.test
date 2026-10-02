@@ -13,7 +13,7 @@ statement ok
 use my_datalake.default;
 
 statement ok
-set unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=true;
+set __iceberg_unsafe_enable_equality_deletes=true;
 
 statement ok
 drop table if exists equality_delete_table_test_multiple_equality_deletes;

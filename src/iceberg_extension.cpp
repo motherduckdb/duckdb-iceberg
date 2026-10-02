@@ -141,7 +141,8 @@ static void LoadInternal(ExtensionLoader &loader) {
 #ifdef ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
 	config.AddExtensionOption(
 	    ENABLE_EQUALITY_DELETES_CONFIG_VARIABLE,
-	    "DANGEROUS TESTING-ONLY SETTING: when enabled, a DELETE on a v2 Iceberg table whose WHERE clause is a pure "
+	    "DANGEROUS TESTING-ONLY SETTING: when enabled, a DELETE on a v2 or v3 Iceberg table whose WHERE clause is a "
+	    "pure "
 	    "conjunction of equality predicates writes an Iceberg equality-delete file. Used to exercise the "
 	    "equality-delete read path.",
 	    LogicalType::BOOLEAN, Value::BOOLEAN(false));

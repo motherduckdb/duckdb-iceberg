@@ -10,7 +10,7 @@ include test/sql/init_requires
 
 
 statement ok
-set unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=true;
+set __iceberg_unsafe_enable_equality_deletes=true;
 
 statement ok
 set threads=1;
