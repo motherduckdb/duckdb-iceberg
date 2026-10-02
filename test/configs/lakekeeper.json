@@ -19,6 +19,10 @@
 			"env_value": "true"
 		},
 		{
+			"env_name": "UNKNOWN_SUPPORT",
+			"env_value": "true"
+		},
+		{
 			"env_name": "VARIANT_SUPPORT",
 			"env_value": "true"
 		},
