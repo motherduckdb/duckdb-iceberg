@@ -29,9 +29,6 @@ insert into my_datalake.default.metadata_log_schema values (1);
 statement ok con1
 begin
 
-# Keep the later commit outside the default 100 ms clock-skew allowance.
-sleep 200 milliseconds
-
 statement ok con2
 begin
 
@@ -86,9 +83,6 @@ insert into my_datalake.default.metadata_log_default default values;
 
 statement ok con1
 begin
-
-# Keep the later commit outside the default 100 ms clock-skew allowance.
-sleep 200 milliseconds
 
 statement ok con2
 begin

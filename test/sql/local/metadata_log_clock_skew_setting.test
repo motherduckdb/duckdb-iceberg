@@ -7,7 +7,7 @@ require iceberg
 query I
 select current_setting('iceberg_metadata_log_clock_skew_ms');
 ----
-100
+0
 
 statement ok
 set iceberg_metadata_log_clock_skew_ms = 0;
@@ -41,4 +41,4 @@ reset iceberg_metadata_log_clock_skew_ms;
 query I
 select current_setting('iceberg_metadata_log_clock_skew_ms');
 ----
-100
+0

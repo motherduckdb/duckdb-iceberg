@@ -122,9 +122,6 @@ begin transaction
 statement ok con2
 begin transaction
 
-# Keep the later commit outside the default 100 ms clock-skew allowance.
-sleep 200 milliseconds
-
 statement ok con1
 ALTER TABLE my_datalake.default.tbl RENAME a TO c;
 

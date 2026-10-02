@@ -33,9 +33,6 @@ BEGIN;
 statement ok con3
 BEGIN;
 
-# Keep the later commit outside the default 100 ms clock-skew allowance.
-sleep 200 milliseconds
-
 statement ok con1
 ALTER TABLE my_datalake.default.alter_add_column_explicit_txn ADD COLUMN b int;
 

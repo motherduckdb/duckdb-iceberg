@@ -70,9 +70,6 @@ create table my_datalake.default.multi_transaction_read_reconstructed_empty (a i
 statement ok con3
 begin
 
-# Keep the later commit outside the default 100 ms clock-skew allowance.
-sleep 200 milliseconds
-
 statement ok con4
 begin
 

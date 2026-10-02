@@ -33,10 +33,6 @@ insert into my_datalake.default.multi_transaction_update select 0, 0;
 statement ok con1
 begin
 
-# Keep con2's metadata timestamp outside con1's 100 ms clock-skew allowance.
-# con1 must first resolve the table after con2 commits to exercise reconstruction.
-sleep 200 milliseconds
-
 statement ok con2
 begin
 

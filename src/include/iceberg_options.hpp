@@ -17,7 +17,7 @@ static constexpr const char *DEFAULT_FORMAT_VERSION_CONFIG_VARIABLE = "iceberg_d
 static constexpr uint64_t DEFAULT_ICEBERG_FORMAT_VERSION = 2;
 
 static constexpr const char *METADATA_LOG_CLOCK_SKEW_CONFIG_VARIABLE = "iceberg_metadata_log_clock_skew_ms";
-static constexpr int64_t DEFAULT_METADATA_LOG_CLOCK_SKEW_MS = 100;
+static constexpr int64_t DEFAULT_METADATA_LOG_CLOCK_SKEW_MS = 0;
 
 // Compatibility escape hatch for deletion-vector files written by DuckDB Iceberg 1.5.3,
 // which contain only the deletion-vector blob rather than a valid Puffin container.
