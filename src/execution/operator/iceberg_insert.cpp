@@ -1045,6 +1045,9 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(ClientContext &
 			if (version < 1) {
 				throw InvalidInputException("The lowest supported iceberg version is 1!");
 			}
+			if (version > MAX_ICEBERG_FORMAT_VERSION) {
+				throw InvalidInputException("The highest supported iceberg version is %d!", MAX_ICEBERG_FORMAT_VERSION);
+			}
 			metadata->iceberg_version = version;
 		}
 		metadata->table_properties[option.first] = val.GetValue<string>();
