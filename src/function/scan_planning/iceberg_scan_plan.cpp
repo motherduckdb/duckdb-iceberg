@@ -177,11 +177,10 @@ TableFunctionSet IcebergFunctions::GetIcebergScanPlanFunction() {
 	                         IcebergScanPlanGlobalState::Init);
 
 	fun.GetSignature().WithTypedKwargs("options", [&](TypedKwargs &options) {
-		options
-			.Add("row_filter", LogicalType::VARCHAR)
-			.Add("produce_sequence_number", LogicalType::BOOLEAN)
-			.Add("snapshot_from_id", LogicalType::UBIGINT)
-			.Add("snapshot_from_timestamp", LogicalType::TIMESTAMP_MS);
+		options.Add("row_filter", LogicalType::VARCHAR)
+		    .Add("produce_sequence_number", LogicalType::BOOLEAN)
+		    .Add("snapshot_from_id", LogicalType::UBIGINT)
+		    .Add("snapshot_from_timestamp", LogicalType::TIMESTAMP_MS);
 	});
 	function_set.AddFunction(fun);
 	return function_set;

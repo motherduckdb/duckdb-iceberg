@@ -22,7 +22,8 @@ static void IcebergDeletesScanSerialize(Serializer &serializer, const optional_p
                                         const BoundTableFunction &function) {
 	throw NotImplementedException("IcebergDeletesScan serialization not implemented");
 }
-static unique_ptr<FunctionData> IcebergDeletesScanDeserialize(Deserializer &deserializer, BoundTableFunction &function) {
+static unique_ptr<FunctionData> IcebergDeletesScanDeserialize(Deserializer &deserializer,
+                                                              BoundTableFunction &function) {
 	throw NotImplementedException("IcebergDeletesScan deserialization not implemented");
 }
 

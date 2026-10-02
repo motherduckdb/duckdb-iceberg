@@ -105,7 +105,8 @@ IcebergTaskExecutor::IcebergTaskExecutor(ClientContext &context, shared_ptr<Iceb
 	vector<Identifier> input_names;
 	TableFunctionRef ref;
 	BoundTableFunction bound_table_function(function);
-	TableFunctionBindInput bind_input(arguments, parameters, input_types, input_names, nullptr, nullptr, bound_table_function, ref);
+	TableFunctionBindInput bind_input(arguments, parameters, input_types, input_names, nullptr, nullptr,
+	                                  bound_table_function, ref);
 	vector<LogicalType> types;
 	vector<Identifier> names;
 	bind = function.bind(context, bind_input, types, names);

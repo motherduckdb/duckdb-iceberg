@@ -50,7 +50,7 @@ AvroScan::AvroScan(const string &path, ClientContext &context, shared_ptr<Iceber
 	dummy_table_function.get_multi_file_reader = IcebergAvroMultiFileReader::CreateInstance;
 	dummy_table_function.function_info = avro_scan_info;
 	BoundTableFunction bound_table_function(dummy_table_function);
-	
+
 	TableFunctionBindInput bind_input(children, named_params, input_types, input_names, nullptr, nullptr,
 	                                  bound_table_function, empty);
 	bind_data = avro_scan->bind(context, bind_input, return_types, return_names);
