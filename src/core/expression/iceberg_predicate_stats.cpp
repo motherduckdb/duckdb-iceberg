@@ -21,22 +21,25 @@ idx_t ValidUtf8PrefixLength(const char *data, idx_t size) {
 	return len;
 }
 
-bool TryRepairSplitVarcharBound(const string_t &blob, SerializeBound bound, Value &out) {
+//! Sets the repaired bound on 'result', or leaves it unset (and logs) if it cannot be repaired.
+void RepairSplitVarcharBound(ClientContext &context, const string_t &blob, SerializeBound bound, const string &name,
+                             IcebergPredicateStats &result) {
+	bool is_lower = bound == SerializeBound::LOWER_BOUND;
 	auto prefix_length = ValidUtf8PrefixLength(blob.GetData(), blob.GetSize());
-	if (prefix_length == 0) {
-		return false;
+	if (prefix_length > 0) {
+		if (is_lower) {
+			result.SetLowerBound(Value(string(blob.GetData(), prefix_length)));
+			return;
+		}
+		// The stored bytes continue past the prefix, so the prefix itself is too small.
+		string rounded;
+		if (IcebergValue::TruncateAndIncrementString(string(blob.GetData(), blob.GetSize()), rounded, prefix_length)) {
+			result.SetUpperBound(Value(std::move(rounded)));
+			return;
+		}
 	}
-	if (bound == SerializeBound::LOWER_BOUND) {
-		out = Value(string(blob.GetData(), prefix_length));
-		return true;
-	}
-	// The stored bytes continue past the prefix, so the prefix itself is too small.
-	string rounded;
-	if (!IcebergValue::TruncateAndIncrementString(string(blob.GetData(), blob.GetSize()), rounded, prefix_length)) {
-		return false;
-	}
-	out = Value(std::move(rounded));
-	return true;
+	DUCKDB_LOG(context, IcebergLogType, "Omitting invalid UTF-8 %s bound for column '%s'", is_lower ? "lower" : "upper",
+	           name);
 }
 
 } // namespace
@@ -101,13 +104,8 @@ IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(ClientContext &co
 	if (!lower_bound.IsNull()) {
 		D_ASSERT(lower_bound.type().id() == LogicalTypeId::BLOB);
 		auto blob = lower_bound.GetValueUnsafe<string_t>();
-		Value repaired;
 		if (type.id() == LogicalTypeId::VARCHAR && !Utf8Proc::IsValid(blob.GetData(), blob.GetSize())) {
-			if (!TryRepairSplitVarcharBound(blob, SerializeBound::LOWER_BOUND, repaired)) {
-				DUCKDB_LOG(context, IcebergLogType, "Omitting invalid UTF-8 lower bound for column '%s'", name);
-			} else {
-				result.SetLowerBound(repaired);
-			}
+			RepairSplitVarcharBound(context, blob, SerializeBound::LOWER_BOUND, name, result);
 		} else {
 			auto deserialized = IcebergValue::DeserializeValue(blob, type);
 			if (deserialized.HasError()) {
@@ -120,13 +118,8 @@ IcebergPredicateStats IcebergPredicateStats::DeserializeBounds(ClientContext &co
 	if (!upper_bound.IsNull()) {
 		D_ASSERT(upper_bound.type().id() == LogicalTypeId::BLOB);
 		auto blob = upper_bound.GetValueUnsafe<string_t>();
-		Value repaired;
 		if (type.id() == LogicalTypeId::VARCHAR && !Utf8Proc::IsValid(blob.GetData(), blob.GetSize())) {
-			if (!TryRepairSplitVarcharBound(blob, SerializeBound::UPPER_BOUND, repaired)) {
-				DUCKDB_LOG(context, IcebergLogType, "Omitting invalid UTF-8 upper bound for column '%s'", name);
-			} else {
-				result.SetUpperBound(repaired);
-			}
+			RepairSplitVarcharBound(context, blob, SerializeBound::UPPER_BOUND, name, result);
 		} else {
 			auto deserialized = IcebergValue::DeserializeValue(blob, type);
 			if (deserialized.HasError()) {
