@@ -138,12 +138,12 @@ bool IcebergTransactionData::ContainsDelete() const {
 	return false;
 }
 
-bool IcebergTransactionData::IsFileInvalidated(const string &file_path) const {
-	return manifest_deletes.IsInvalidated(file_path);
+bool IcebergTransactionData::IsFileInvalidated(const IcebergFileIdentity &file) const {
+	return manifest_deletes.IsInvalidated(file);
 }
 
 bool IcebergTransactionData::SupportsAppendRetry() const {
-	if (!requirements.empty() || pending_current_schema_id.has_value()) {
+	if (!requirements.empty()) {
 		return false;
 	}
 	if (updates.empty()) {
@@ -298,18 +298,16 @@ void IcebergTransactionData::AddUpdateSnapshot(partitioned_manifest_entry_map_t 
 }
 
 void IcebergTransactionData::TableAddSchema(int32_t schema_id) {
-	auto schema = table_info.table_metadata.GetSchemaFromId(schema_id);
-	if (!schema) {
-		throw InternalException("(TableAddSchema) Couldn't find schema with id: %d", schema_id);
-	}
-	auto add_schema_update = make_uniq<AddSchemaUpdate>(schema->Copy(), table_info.table_metadata.last_column_id);
+	auto &schema = table_info.table_metadata.GetSchemaFromId(schema_id);
+	auto add_schema_update = make_uniq<AddSchemaUpdate>(schema.Copy(), table_info.table_metadata.last_column_id);
 	updates.push_back(std::move(add_schema_update));
 	assert_schema_id = true;
-	pending_current_schema_id = schema_id;
+	TableSetCurrentSchema(schema_id);
 }
 
 void IcebergTransactionData::TableSetCurrentSchema(int32_t schema_id) {
-	pending_current_schema_id = schema_id;
+	// Later specs and sort orders are validated against the schema current at this point in the transaction.
+	updates.push_back(make_uniq<SetCurrentSchema>(schema_id));
 }
 
 void IcebergTransactionData::TableAssignUUID() {

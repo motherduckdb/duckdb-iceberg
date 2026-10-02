@@ -57,13 +57,13 @@ unordered_map<string, string> GetManifestMetadataMap(const IcebergTableMetadata 
 	JSONWriter writer;
 	auto schema_root_obj = writer.CreateObject();
 	writer.SetRoot(schema_root_obj);
-	IcebergCreateTableRequest::PopulateSchema(writer, schema_root_obj, *table_metadata.GetSchemaFromId(schema_id));
+	IcebergCreateTableRequest::PopulateSchema(writer, schema_root_obj, table_metadata.GetSchemaFromId(schema_id));
 	result.emplace("schema", writer.ToString(JSONWriteFlags::ALLOW_INF_AND_NAN));
 	result.emplace("schema-id", std::to_string(schema_id));
 
 	auto partition_spec = table_metadata.FindPartitionSpecById(partition_spec_id);
 	if (!partition_spec) {
-		throw InternalException("Cannot find partition spec with id " + std::to_string(partition_spec_id));
+		throw InvalidConfigurationException("Cannot find partition spec with id " + std::to_string(partition_spec_id));
 	}
 	result.emplace("partition-spec", partition_spec->FieldsToJSONString());
 	result.emplace("partition-spec-id", std::to_string(partition_spec_id));
@@ -267,13 +267,16 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 	manifest_file.added_snapshot_id = nullopt;
 
 	// Compute partition field summaries (upper/lower bounds) for the manifest list entry
-	if (table_metadata.HasPartitionSpec() && table_metadata.GetLatestPartitionSpec().IsPartitioned()) {
-		auto partition_spec_it = table_metadata.partition_specs.find(manifest_partition_spec_id);
-		if (partition_spec_it == table_metadata.partition_specs.end()) {
-			throw InternalException("Cannot find partition spec with id " + std::to_string(manifest_partition_spec_id));
-		}
-		auto &partition_spec = partition_spec_it->second;
-		manifest_file.partitions.Create(table_metadata, partition_spec, manifest_entries);
+	// Rewrites can use a historical spec even when the table's current spec is unpartitioned.
+	auto partition_spec_it = table_metadata.partition_specs.find(manifest_partition_spec_id);
+	if (partition_spec_it == table_metadata.partition_specs.end()) {
+		throw InvalidConfigurationException("Cannot find partition spec with id " +
+		                                    std::to_string(manifest_partition_spec_id));
+	}
+	auto &partition_spec = partition_spec_it->second;
+	if (partition_spec.IsPartitioned()) {
+		auto &target_schema = table_metadata.GetSchemaFromId(manifest_metadata.schema_id);
+		manifest_file.partitions.Create(table_metadata, target_schema, partition_spec, manifest_entries);
 	}
 
 	auto &stored_entries = manifest_list_entry.GetOrCreateManifestEntries();
@@ -282,7 +285,8 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 	return manifest_list_entry;
 }
 
-void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const IcebergPartitionSpec &partition_spec,
+void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const IcebergTableSchema &target_schema,
+                                const IcebergPartitionSpec &partition_spec,
                                 const vector<IcebergManifestEntry> &manifest_entries) {
 	if (manifest_entries.empty() || partition_spec.fields.empty()) {
 		return;
@@ -306,7 +310,7 @@ void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const Iceb
 
 	for (auto &entry : manifest_entries) {
 		auto &data_file = entry.data_file;
-		auto data_extended_partition_info = data_file.GetExtendedPartitionInfo(metadata);
+		auto data_extended_partition_info = data_file.GetExtendedPartitionInfo(metadata, target_schema);
 		for (idx_t i = 0; i < num_fields; i++) {
 			auto &spec_field = partition_spec.fields[i];
 
@@ -363,7 +367,7 @@ void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const Iceb
 		bool have_extended_partition_info = false;
 		for (auto &entry : manifest_entries) {
 			auto &data_file = entry.data_file;
-			auto data_extended_partition_info = data_file.GetExtendedPartitionInfo(metadata);
+			auto data_extended_partition_info = data_file.GetExtendedPartitionInfo(metadata, target_schema);
 			for (auto &pi : data_extended_partition_info) {
 				if (pi.field_id == spec_field.partition_field_id && !pi.value.IsNull()) {
 					extended_partition_info = pi;
@@ -482,7 +486,11 @@ static void WritePartitions(FieldSummaryListWriter &writer, const ManifestPartit
 		summary_writer.WriteValue([&](auto &contains_null_writer, auto &contains_nan_writer, auto &lower_bound_writer,
 		                              auto &upper_bound_writer) {
 			contains_null_writer.WriteValue(summary.contains_null);
-			contains_nan_writer.WriteValue(summary.contains_nan);
+			if (summary.contains_nan) {
+				contains_nan_writer.WriteValue(*summary.contains_nan);
+			} else {
+				contains_nan_writer.WriteNull();
+			}
 			WriteBlobField(lower_bound_writer, summary.lower_bound);
 			WriteBlobField(upper_bound_writer, summary.upper_bound);
 		});
@@ -705,6 +713,7 @@ void WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManife
 	copy_info.is_from = false;
 	copy_info.options["root_name"].push_back(Value("manifest_file"));
 	copy_info.options["field_ids"].push_back(Value::STRUCT(metadata.field_ids));
+	copy_info.options["SANITIZE_FIELD_NAMES"].push_back(Value::BOOLEAN(true));
 
 	//! write.manifest.compression-codec: let the Avro COPY writer emit the codec natively.
 	//! "null" is the COPY default (uncompressed), so only set the option for a compressing codec.

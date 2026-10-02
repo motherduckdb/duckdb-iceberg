@@ -32,8 +32,13 @@ constexpr column_t IcebergMultiFileReader::COLUMN_IDENTIFIER_LAST_SEQUENCE_NUMBE
 IcebergTableSchemaVersion::IcebergTableSchemaVersion(IcebergTable &table_info, Catalog &catalog,
                                                      SchemaCatalogEntry &schema, CreateTableInfo &info,
                                                      optional_idx schema_id)
-    : TableCatalogEntry(catalog, schema, info), table_info(table_info), schema_id(schema_id) {
+    : TableCatalogEntry(catalog, schema, info), columns(std::move(info.columns)), table_info(table_info),
+      schema_id(schema_id) {
 	this->internal = false;
+}
+
+const ColumnList &IcebergTableSchemaVersion::GetColumns() const {
+	return columns;
 }
 
 unique_ptr<BaseStatistics> IcebergTableSchemaVersion::GetStatistics(ClientContext &context, column_t column_id) {
@@ -65,7 +70,7 @@ TableFunction IcebergTableSchemaVersion::GetScanFunction(ClientContext &context,
 	}
 	const auto schema_id = this->schema_id.GetIndex();
 	const auto &metadata = table_info.table_metadata;
-	const auto &iceberg_schema = *metadata.GetSchemaFromId(schema_id);
+	const auto &iceberg_schema = metadata.GetSchemaFromId(schema_id);
 
 	// The pinned metadata object's current snapshot is the transaction-visible head. Only an explicit AT clause
 	// selects a different snapshot.

@@ -234,6 +234,9 @@ PhysicalOperator &IcebergCatalog::PlanUpdate(ClientContext &context, PhysicalPla
 	auto &table_metadata = updated_table.table_metadata;
 	auto &schema = table_metadata.GetLatestSchema();
 	auto &updated_table_entry = *updated_table.schema_versions[schema.schema_id];
+	if (!irc_transaction.planning_merge_into) {
+		VerifyMergeOnRead(table_metadata, updated_table_entry.name.GetIdentifierName(), WRITE_UPDATE_MODE);
+	}
 
 	// Plan the copy operator with update_op as child.
 	// PlanCopyForInsert will add a partition projection on top if needed.

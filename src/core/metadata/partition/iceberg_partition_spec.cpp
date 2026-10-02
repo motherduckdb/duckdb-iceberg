@@ -14,23 +14,17 @@ IcebergPartitionSpecField IcebergPartitionSpecField::ParseFromJson(const rest_ap
 	return result;
 }
 
+bool IcebergPartitionSpecField::Equals(const IcebergPartitionSpecField &other) const {
+	return source_id == other.source_id && transform.RawType() == other.transform.RawType();
+}
+
 bool IcebergPartitionSpec::Equals(const IcebergPartitionSpec &other) const {
-	if (other.fields.size() != fields.size()) {
+	if (fields.size() != other.fields.size()) {
 		return false;
 	}
-	for (idx_t i = 0; i < other.fields.size(); i++) {
-		auto existing_partition_col_source_id = other.fields[i].source_id;
-
-		//! Compare source ids
-		auto new_spec_col_source_id = fields[i].source_id;
-		if (existing_partition_col_source_id != new_spec_col_source_id) {
-			return false;
-		}
-
-		//! Compare transforms
-		auto existing_partition_col_transform = other.fields[i].transform.RawType();
-		auto new_spec_col_transform = fields[i].transform.RawType();
-		if (existing_partition_col_transform != new_spec_col_transform) {
+	for (idx_t i = 0; i < fields.size(); i++) {
+		if (!fields[i].Equals(other.fields[i]) ||
+		    fields[i].GetPartitionSpecFieldName() != other.fields[i].GetPartitionSpecFieldName()) {
 			return false;
 		}
 	}

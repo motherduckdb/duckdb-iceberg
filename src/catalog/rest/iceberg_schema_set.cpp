@@ -6,6 +6,7 @@
 
 #include "catalog/rest/api/catalog_api.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/iceberg_request_executor.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 
 namespace duckdb {
@@ -18,6 +19,10 @@ optional_ptr<CatalogEntry> IcebergSchemaSet::GetEntry(ClientContext &context, co
 	annotated_lock_guard<annotated_mutex> l(entry_lock);
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	auto &iceberg_transaction = IcebergTransaction::Get(context, catalog);
+
+	if (name.empty()) {
+		return nullptr;
+	}
 
 	// If the schema was deleted in this transaction, treat it as non-existent
 	if (iceberg_transaction.deleted_schemas.count(name)) {
@@ -59,23 +64,28 @@ optional_ptr<CatalogEntry> IcebergSchemaSet::GetEntry(ClientContext &context, co
 	}
 	if (entry == entries.end()) {
 		CreateSchemaInfo info;
-		// Look up existence of default schema to avoid lookup of `duckdb_*` tables
-		if (name == DEFAULT_SCHEMA) {
+		auto default_schema = ic_catalog.GetDefaultSchema();
+		auto lookup_name = Identifier(name);
+		if (lookup_name == default_schema) {
+			// Verify the default schema does exist
 			if (!IRCAPI::VerifySchemaExistence(context, ic_catalog, name)) {
 				if (if_not_found == OnEntryNotFound::RETURN_NULL) {
 					return nullptr;
 				}
-				throw CatalogException("default schema '%s' does not exist", name);
+				if (lookup_name == default_schema) {
+					throw CatalogException(
+					    "default namespace '%s' does not exist in this Iceberg catalog - create it, or attach "
+					    "with DEFAULT_SCHEMA '<namespace>'",
+					    name);
+				}
+				throw CatalogException("Iceberg namespace by the name of '%s' does not exist", name);
 			}
 		}
 		info.SetQualifiedName(
 		    QualifiedName(info.GetQualifiedName().Catalog(), Identifier(name), info.GetQualifiedName().Name()));
 		info.internal = false;
+		// assume schema exists to avoid extra roundtrip
 		auto schema_entry = make_shared_ptr<IcebergSchemaEntry>(catalog, info);
-		// we will not create entries with empty names
-		if (name.empty()) {
-			return nullptr;
-		}
 		auto inserted_entry = CreateEntryInternal(std::move(schema_entry));
 		iceberg_transaction.schemas.emplace(name, inserted_entry);
 		return inserted_entry.get();
@@ -143,8 +153,19 @@ void IcebergSchemaSet::LoadEntriesInternal(ClientContext &context) {
 	if (schema_listed) {
 		return;
 	}
-	auto schemas = IRCAPI::GetSchemas(context, ic_catalog, {});
-	for (const auto &schema : schemas) {
+	// The local executor drains on scope exit; the task retains its result storage until it finishes.
+	IcebergRequestExecutor executor(context, ic_catalog);
+	auto result = executor.Schedule(IcebergListSchemasRequest({}));
+	auto schemas = executor.WaitAndTakeResult(*result);
+	if (context.IsInterrupted()) {
+		throw InterruptException();
+	}
+	ApplyListResult(std::move(schemas));
+	iceberg_transaction.called_list_schemas = true;
+}
+
+void IcebergSchemaSet::ApplyListResult(IcebergListSchemasResult schemas) {
+	for (auto &schema : schemas) {
 		CreateSchemaInfo info;
 		info.SetQualifiedName(QualifiedName(info.GetQualifiedName().Catalog(), Identifier(GetSchemaName(schema.items)),
 		                                    info.GetQualifiedName().Name()));
@@ -153,7 +174,6 @@ void IcebergSchemaSet::LoadEntriesInternal(ClientContext &context) {
 		schema_entry->namespace_items = std::move(schema.items);
 		CreateEntryInternal(std::move(schema_entry));
 	}
-	iceberg_transaction.called_list_schemas = true;
 }
 
 shared_ptr<IcebergSchemaEntry> IcebergSchemaSet::CreateEntryInternal(shared_ptr<IcebergSchemaEntry> entry) {

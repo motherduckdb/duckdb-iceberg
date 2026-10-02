@@ -66,16 +66,29 @@ BindInfo IcebergBindInfo(const optional_ptr<FunctionData> bind_data) {
 	auto &multi_file_data = bind_data->Cast<MultiFileBindData>();
 	auto &file_list = multi_file_data.file_list->Cast<IcebergMultiFileList>();
 	auto table = file_list.GetTable();
-	if (!table) {
-		return BindInfo(ScanType::EXTERNAL);
+	BindInfo result = table ? BindInfo(*table) : BindInfo(ScanType::EXTERNAL);
+
+	auto &planner = file_list.GetScanPlanner();
+	if (!planner.HasScanInfo()) {
+		return result;
 	}
-	return BindInfo(*table);
+	auto &snapshot_info = planner.GetSnapshot();
+	auto &table_uuid = planner.GetMetadata().table_uuid;
+	if (!table_uuid.empty()) {
+		result.InsertOption("table_uuid", Value(table_uuid));
+	}
+	result.InsertOption("schema_id", Value::INTEGER(snapshot_info.schema_id));
+	// Omitted for empty tables, and when uncommitted transaction-local changes are also scanned
+	if (snapshot_info.snapshot && snapshot_info.snapshot->snapshot_id && !planner.HasTransactionData()) {
+		result.InsertOption("snapshot_id", Value::BIGINT(*snapshot_info.snapshot->snapshot_id));
+	}
+	return result;
 }
 
 static void IcebergSetScanOrder(unique_ptr<RowGroupOrderOptions> order_options, optional_ptr<FunctionData> bind_data) {
 	auto &multi_file_data = bind_data->Cast<MultiFileBindData>();
 	auto &file_list = multi_file_data.file_list->Cast<IcebergMultiFileList>();
-	file_list.SetScanOrder(std::move(order_options));
+	file_list.GetScanPlanner().SetScanOrder(std::move(order_options));
 }
 
 //! FIXME: needs v1.5.1, causes a crash on v1.5.0

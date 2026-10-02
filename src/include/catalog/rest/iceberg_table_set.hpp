@@ -4,6 +4,8 @@
 #include "duckdb/catalog/catalog_entry.hpp"
 #include "duckdb/common/mutex.hpp"
 #include "duckdb/common/thread_annotation.hpp"
+#include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
+#include "duckdb/parser/parsed_data/create_view_info.hpp"
 
 #include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
@@ -14,6 +16,7 @@ struct CreateTableInfo;
 struct DropInfo;
 class IcebergSchemaEntry;
 class IcebergTransaction;
+class LoadTableCachePublication;
 
 class IcebergTableSet {
 public:
@@ -29,8 +32,14 @@ public:
 	                                    CreateTableInfo &info);
 
 private:
+	bool TryFillEntryFromCache(ClientContext &context, IcebergTable &table);
+	void ScanEagerEntries(ClientContext &context, const std::function<void(CatalogEntry &)> &callback)
+	    DUCKDB_REQUIRES(entry_lock);
+	bool ApplyLoadResult(IcebergTable &table, IcebergLoadTableResult result, LoadTableCachePublication &publication);
+	CatalogEntry &GetScanEntry(IcebergTable &table_info) const DUCKDB_REQUIRES(entry_lock);
 	IcebergTableSchemaVersion &GetOrCreateDummy(IcebergTable &table_info) const DUCKDB_REQUIRES(entry_lock);
 	void LoadEntriesInternal(ClientContext &context) DUCKDB_REQUIRES(entry_lock);
+	void ApplyListResult(IcebergListTablesResult tables) DUCKDB_REQUIRES(entry_lock);
 	shared_ptr<IcebergTable> CreateEntryInternal(const string &name, IcebergTable &&table,
 	                                             shared_ptr<IcebergTable> &old_entry) DUCKDB_REQUIRES(entry_lock);
 
@@ -39,11 +48,22 @@ public:
 	//! or if entry is already filled. Returns False otherwise
 	bool FillEntry(ClientContext &context, IcebergTable &table);
 
+	//! View operations
+	optional_ptr<CatalogEntry> GetViewEntry(ClientContext &context, const string &view_name);
+	void ScanViews(ClientContext &context, const std::function<void(CatalogEntry &)> &callback);
+
 public:
 	IcebergSchemaEntry &schema;
 	Catalog &catalog;
 
 private:
+	const case_insensitive_set_t &LoadViewEntries(ClientContext &context);
+	//! True when transaction-local state decides the lookup, including a deleted view with a null entry.
+	bool TryGetLocalViewEntry(ClientContext &context, const string &view_name, optional_ptr<CatalogEntry> &entry);
+	const case_insensitive_set_t &ApplyViewListResult(ClientContext &context, IcebergListViewsResult views);
+	optional_ptr<CatalogEntry> ApplyViewLoadResult(ClientContext &context, const string &view_name,
+	                                               IcebergLoadViewResult result);
+
 	annotated_mutex entry_lock;
 	case_insensitive_map_t<shared_ptr<IcebergTable>> entries DUCKDB_GUARDED_BY(entry_lock);
 };

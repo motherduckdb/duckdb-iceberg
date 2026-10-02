@@ -12,6 +12,7 @@
 #include "duckdb/common/operator/cast_operators.hpp"
 #include "duckdb/parser/column_definition.hpp"
 #include "duckdb/logging/logger.hpp"
+#include "duckdb/main/config.hpp"
 #include "duckdb/common/types/uuid.hpp"
 
 #include "catalog/rest/api/catalog_api.hpp"
@@ -343,6 +344,20 @@ idx_t IcebergTable::GetNextPartitionSpecId() {
 	return max_partition_spec_id + 1;
 }
 
+idx_t IcebergTable::GetNextPartitionFieldId() {
+	idx_t next_partition_field_id = 1000;
+	if (table_metadata.HasLastPartitionId()) {
+		next_partition_field_id = table_metadata.GetLastPartitionFieldId() + 1;
+	}
+	// Include specs added in this transaction, which are not yet reflected in last-partition-id.
+	for (auto &entry : table_metadata.GetPartitionSpecs()) {
+		for (auto &field : entry.second.fields) {
+			next_partition_field_id = MaxValue<idx_t>(next_partition_field_id, field.partition_field_id + 1);
+		}
+	}
+	return next_partition_field_id;
+}
+
 idx_t IcebergTable::GetNextSortOrderId() {
 	idx_t max_sort_order_id = 0;
 	if (table_metadata.default_sort_order_id.IsValid()) {
@@ -401,9 +416,10 @@ IcebergPartitionSpec IcebergTable::BuildPartitionSpec(const vector<unique_ptr<Pa
 	return new_spec;
 }
 
-IcebergSortOrder IcebergTable::BuildSortOrder(const vector<OrderByNode> &orders, const IcebergTableSchema &schema,
-                                              int32_t sort_order_id) {
+IcebergSortOrder IcebergTable::BuildSortOrder(ClientContext &context, const vector<OrderByNode> &orders,
+                                              const IcebergTableSchema &schema, int32_t sort_order_id) {
 	IcebergSortOrder new_sort_order(sort_order_id);
+	auto &config = DBConfig::GetConfig(context);
 
 	for (auto &order : orders) {
 		vector<reference<const IcebergColumnDefinition>> source_columns;
@@ -413,26 +429,69 @@ IcebergSortOrder IcebergTable::BuildSortOrder(const vector<OrderByNode> &orders,
 		}
 		auto source_id = source_columns[0].get().id;
 
+		auto direction = config.ResolveOrder(context, order.type);
+		auto null_order = config.ResolveNullOrder(context, direction, order.null_order);
+
 		IcebergSortOrderField field;
 		field.source_id = source_id;
 		field.transform = transform;
-		field.direction = order.type == OrderType::ASCENDING ? "asc" : "desc";
-		field.null_order = order.null_order == OrderByNullType::NULLS_FIRST ? "nulls-first" : "nulls-last";
+		field.direction = direction == OrderType::ASCENDING ? "asc" : "desc";
+		field.null_order = null_order == OrderByNullType::NULLS_FIRST ? "nulls-first" : "nulls-last";
 		new_sort_order.fields.push_back(std::move(field));
 	}
 	return new_sort_order;
 }
 
+IcebergSortOrder IcebergTable::BuildSortOrder(ClientContext &context,
+                                              const vector<unique_ptr<ParsedExpression>> &sort_keys,
+                                              const IcebergTableSchema &schema, int32_t sort_order_id) {
+	vector<OrderByNode> orders;
+	orders.reserve(sort_keys.size());
+	for (auto &key : sort_keys) {
+		orders.emplace_back(OrderType::ORDER_DEFAULT, OrderByNullType::ORDER_DEFAULT, key->Copy());
+	}
+	return BuildSortOrder(context, orders, schema, sort_order_id);
+}
+
 void IcebergTable::SetPartitionedBy(IcebergTransaction &transaction,
                                     const vector<unique_ptr<ParsedExpression>> &partition_keys,
                                     const IcebergTableSchema &schema) {
-	idx_t base_partition_field_id = 1000;
-	if (table_metadata.HasLastPartitionId()) {
-		base_partition_field_id = table_metadata.GetLastPartitionFieldId() + 1;
-	}
+	auto base_partition_field_id = GetNextPartitionFieldId();
 	auto new_spec_id = static_cast<int32_t>(GetNextPartitionSpecId());
 
 	auto new_spec = BuildPartitionSpec(partition_keys, schema, new_spec_id, base_partition_field_id);
+	// V2+ tracks partition field IDs across specs, allowing equivalent historical fields to reuse IDs.
+	// V1 did not require explicit field IDs: they were assigned by position starting at 1000 in each spec.
+	// Its evolution rules preserve positions (using void transforms for removed fields), so the reference
+	// implementation does not recycle historical fields in V1.
+	if (table_metadata.iceberg_version >= 2) {
+		for (auto &field : new_spec.fields) {
+			optional_ptr<const IcebergPartitionSpecField> existing_field;
+			// Like Iceberg's BaseUpdatePartitionSpec.recycleOrCreatePartitionField, match the source
+			// ID and complete transform (including parameters). SET PARTITIONED BY supplies no
+			// explicit partition field name, so retain the historical name along with its ID.
+			for (auto &entry : table_metadata.GetPartitionSpecs()) {
+				for (auto &candidate : entry.second.fields) {
+					if (candidate.Equals(field) &&
+					    (!existing_field || candidate.partition_field_id < existing_field->partition_field_id)) {
+						existing_field = candidate;
+					}
+				}
+			}
+			// Preserve active fields even when older writers assigned multiple IDs to the same transform.
+			for (auto &candidate : table_metadata.GetLatestPartitionSpec().fields) {
+				if (candidate.Equals(field)) {
+					existing_field = candidate;
+					break;
+				}
+			}
+			if (existing_field) {
+				field = *existing_field;
+			} else {
+				field.partition_field_id = base_partition_field_id++;
+			}
+		}
+	}
 
 	// if spec definition already exists in a previous spec definition, set it to that spec id
 	// (some catalog may allow duplicate definitions, others not)
@@ -452,12 +511,13 @@ void IcebergTable::SetPartitionedBy(IcebergTransaction &transaction,
 
 void IcebergTable::SetSortedBy(IcebergTransaction &transaction, const vector<OrderByNode> &orders,
                                const IcebergTableSchema &schema, bool first_sort_spec) {
-	idx_t new_sort_order_id = 0;
-	if (!first_sort_spec) {
+	idx_t new_sort_order_id = UNSORTED_SORT_ORDER_ID;
+	if (!first_sort_spec && !orders.empty()) {
 		new_sort_order_id = GetNextSortOrderId();
 	}
 
-	auto new_sort_order = BuildSortOrder(orders, schema, static_cast<int32_t>(new_sort_order_id));
+	auto context = transaction.context.lock();
+	auto new_sort_order = BuildSortOrder(*context, orders, schema, static_cast<int32_t>(new_sort_order_id));
 
 	// if spec definition already exists in a previous spec definition, set it to that spec id
 	// (some catalog may allow duplicate definitions, others not)
@@ -644,9 +704,6 @@ bool IcebergTable::HasTransactionUpdates() const {
 	if (!data.requirements.empty()) {
 		return true;
 	}
-	if (data.pending_current_schema_id.has_value()) {
-		return true;
-	}
 	if (data.assert_schema_id) {
 		return true;
 	}
@@ -654,9 +711,11 @@ bool IcebergTable::HasTransactionUpdates() const {
 }
 
 void IcebergTable::RefreshFromCatalog(ClientContext &context) {
-	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
-	auto table_key = GetTableKey();
-	auto get_table_result = IRCAPI::GetTable(context, ic_catalog, schema, name);
+	auto publication = catalog.table_request_cache.BeginLoad(GetTableKey());
+	ApplyRefreshResult(IRCAPI::GetTable(context, catalog, schema, name), *publication);
+}
+
+void IcebergTable::ApplyRefreshResult(IcebergLoadTableResult get_table_result, LoadTableCachePublication &publication) {
 	if (get_table_result.error_) {
 		throw HTTPException(
 		    StringUtil::Format("GetTableInformation endpoint returned response code %s with message \"%s\"",
@@ -666,12 +725,14 @@ void IcebergTable::RefreshFromCatalog(ClientContext &context) {
 	schema_versions.clear();
 	dummy_entry.reset();
 	InitializeFromLoadTableResult(load_table_result);
-	ic_catalog.table_request_cache.SetOrOverwrite(table_key, std::move(get_table_result.result_));
+	initialization_source = nullptr;
+	if (publication.TryPublish(std::move(get_table_result.result_))) {
+		initialization_source = load_table_result;
+	}
 }
 
 IcebergTable IcebergTable::Copy() const {
-	auto clone = IcebergTable(catalog, schema, name);
-	clone.table_metadata = table_metadata.Copy();
+	auto clone = IcebergTable(catalog, schema, name, table_metadata.Copy());
 	clone.config = config;
 	clone.initialization_source = initialization_source;
 	for (auto &credential : storage_credentials) {
@@ -717,7 +778,7 @@ IcebergTable IcebergTable::Copy(IcebergTransaction &iceberg_transaction) const {
 	if (table_metadata.last_updated_ms <= transaction_start_ms) {
 		return ret;
 	}
-	bool use_metadata_log = false;
+	bool use_metadata_log = true;
 	Value val;
 	if (context.TryGetCurrentSetting("iceberg_use_metadata_log", val)) {
 		if (!val.IsNull() && val.type().id() == LogicalTypeId::BOOLEAN) {
@@ -743,13 +804,24 @@ IcebergTable IcebergTable::Copy(IcebergTransaction &iceberg_transaction) const {
 
 void IcebergTable::InitSchemaVersions() {
 	schema_versions.clear();
-	for (auto &table_schema : table_metadata.GetSchemas()) {
-		CreateSchemaVersion(*table_schema.second);
-	}
+	auto &schemas = table_metadata.GetSchemas();
+	schemas.ForEachSchema([&](const IcebergTableSchema &schema) { CreateSchemaVersion(schema); });
 }
 
-IcebergTable::IcebergTable(IcebergCatalog &catalog, IcebergSchemaEntry &schema, const string &name)
-    : catalog(catalog), schema(schema), name(name), original_name(name) {
+IcebergTable::IcebergTable(IcebergCatalog &catalog, IcebergSchemaEntry &schema, const string &name,
+                           IcebergTableMetadata metadata)
+    : catalog(catalog), schema(schema), name(name), table_metadata(std::move(metadata)), original_name(name) {
+}
+
+IcebergTable::IcebergTable(IcebergCatalog &catalog, IcebergSchemaEntry &schema, const string &name,
+                           const rest_api_objects::LoadTableResult &load_table_result)
+    : IcebergTable(catalog, schema, name, IcebergTableMetadata::FromTableMetadata(load_table_result.metadata)) {
+	SetLoadTableResult(load_table_result);
+}
+
+shared_ptr<IcebergTable> IcebergTable::CreatePlaceholder(IcebergCatalog &catalog, IcebergSchemaEntry &schema,
+                                                         const string &name) {
+	return make_shared_ptr<IcebergTable>(catalog, schema, name, IcebergTableMetadata(IcebergTableMetadataSchemas {}));
 }
 
 IcebergTransactionData &IcebergTable::GetOrCreateTransactionData(IcebergTransaction &transaction) {
@@ -762,8 +834,14 @@ IcebergTransactionData &IcebergTable::GetOrCreateTransactionData(IcebergTransact
 }
 
 void IcebergTable::InitializeFromLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result) {
-	initialization_source = load_table_result;
 	table_metadata = IcebergTableMetadata::FromTableMetadata(load_table_result.metadata);
+	SetLoadTableResult(load_table_result);
+	D_ASSERT(!table_metadata.GetSchemas().IsEmpty());
+	InitSchemaVersions();
+}
+
+void IcebergTable::SetLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result) {
+	initialization_source = load_table_result;
 	if (auto &val = load_table_result.config) {
 		config = *val;
 	}
@@ -773,11 +851,6 @@ void IcebergTable::InitializeFromLoadTableResult(const rest_api_objects::LoadTab
 		for (auto &credential : *credentials) {
 			storage_credentials.push_back(credential.Copy());
 		}
-	}
-	auto &schemas = table_metadata.GetSchemas();
-	D_ASSERT(!schemas.empty());
-	for (auto &table_schema : schemas) {
-		CreateSchemaVersion(*table_schema.second);
 	}
 }
 

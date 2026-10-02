@@ -45,7 +45,8 @@ bool IcebergDeletePlanner::DeleteEntryAppliesToDataFile(const IcebergDeletePlann
                                                         const partition_value_map_t &data_partition_values) {
 	auto &delete_file = delete_manifest_entry.data_file;
 	auto &data_file = data_manifest_entry.entry.data_file;
-	if (!context.provider.DeleteFileAppliesToDataFile(data_file.file_path, delete_file.file_path)) {
+	if (!context.provider.DeleteFileAppliesToDataFile(data_file.file_path,
+	                                                  {delete_file.file_path, delete_file.content_offset})) {
 		return false;
 	}
 
@@ -54,14 +55,6 @@ bool IcebergDeletePlanner::DeleteEntryAppliesToDataFile(const IcebergDeletePlann
 	return IcebergFilePruner(context.context, context.metadata, context.schema, context.table_filters)
 	    .DeleteFileMatchesDataFile(delete_manifest, delete_manifest_entry, data_manifest, data_manifest_entry.entry,
 	                               data_partition_values);
-}
-
-shared_ptr<IcebergDeleteData>
-IcebergDeletePlanner::GetExistingPositionalDeleteData(const IcebergDeletePlanningContext &context,
-                                                      const string &file_path) {
-	auto &positional_delete_data = context.provider.PositionalDeleteData();
-	auto it = positional_delete_data.find(file_path);
-	return it == positional_delete_data.end() ? nullptr : it->second;
 }
 
 } // namespace duckdb

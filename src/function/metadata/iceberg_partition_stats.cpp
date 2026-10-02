@@ -33,8 +33,8 @@ namespace duckdb {
 
 struct IcebergPartitionStatsBindData : public TableFunctionData {
 	IcebergSnapshotScanInfo snapshot_to_scan;
-	IcebergTableMetadata metadata;
-	shared_ptr<IcebergTableSchema> schema;
+	IcebergTableMetadata metadata {IcebergTableMetadataSchemas {}};
+	optional_ptr<const IcebergTableSchema> schema;
 	unordered_map<uint64_t, ColumnIndex> source_to_column_id;
 	unique_ptr<IcebergManifestList> iceberg_table;
 };
@@ -193,7 +193,8 @@ static void IcebergPartitionStatsFunction(ClientContext &context, TableFunctionI
 			//! contains_null
 			FlatVector::GetDataMutable<bool>(output.data[col++])[out] = field_summary.contains_null;
 			//! contains_nan
-			FlatVector::GetDataMutable<bool>(output.data[col++])[out] = field_summary.contains_nan;
+			output.data[col++].SetValue(out, field_summary.contains_nan ? Value::BOOLEAN(*field_summary.contains_nan)
+			                                                            : Value(LogicalType::BOOLEAN));
 
 			out++;
 		}

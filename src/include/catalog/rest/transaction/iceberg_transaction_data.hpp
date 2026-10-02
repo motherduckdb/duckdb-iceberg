@@ -30,7 +30,7 @@ public:
 	bool RetryStateMatches(const IcebergTable &table_info) const;
 	//! Whether this transaction stages a DELETE snapshot; gates the commit-retry safety check.
 	bool ContainsDelete() const;
-	bool IsFileInvalidated(const string &file_path) const;
+	bool IsFileInvalidated(const IcebergFileIdentity &file) const;
 
 	void AddSnapshot(IcebergSnapshotOperationType operation, vector<IcebergManifestEntry> &&data_files,
 	                 IcebergManifestDeletes &&altered_manifests);
@@ -94,8 +94,6 @@ public:
 	bool assert_schema_id = false;
 	//! Whether this transaction explicitly requires the table to be newly created.
 	bool has_assert_create = false;
-	//! The schema id that should become current when the commit is staged.
-	optional<int32_t> pending_current_schema_id;
 	mutex lock;
 };
 

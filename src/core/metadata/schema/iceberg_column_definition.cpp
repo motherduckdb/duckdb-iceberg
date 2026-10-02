@@ -149,13 +149,15 @@ LogicalType IcebergColumnDefinition::ParsePrimitiveTypeString(const string &type
 		// Geometry is an Iceberg v3 type stored as WKB binary in parquet.
 		// The type string may include a CRS parameter: geometry(<crs>)
 		if (type_str == "geometry") {
-			// If we use IcebergConstants::DefaultGeometryCRS, file pruning does not work as well
-			// since LogicalType::Geometry(<crs>) != LogicalType::Geometry(), so casts get introduced
-			// on Iceberg predicates.
-			return LogicalType::GEOMETRY();
+			// An omitted Iceberg CRS means OGC:CRS84, not DuckDB's unspecified CRS.
+			return LogicalType::GEOMETRY(IcebergConstants::DefaultGeometryCRS);
 		}
 		if (type_str.size() > 9 && type_str[8] == '(' && type_str.back() == ')') {
 			auto crs_str = type_str.substr(9, type_str.size() - 10);
+			// Catalogs can serialize the default CRS as either geometry or geometry(ogc:crs84).
+			if (StringUtil::CIEquals(crs_str, IcebergConstants::DefaultGeometryCRS)) {
+				return LogicalType::GEOMETRY(IcebergConstants::DefaultGeometryCRS);
+			}
 			return LogicalType::GEOMETRY(crs_str);
 		}
 		throw InvalidConfigurationException("Invalid geometry type format: %s", type_str);
@@ -262,6 +264,7 @@ bool IcebergColumnDefinition::IsIcebergPrimitiveType() const {
 	case LogicalTypeId::TIMESTAMP_TZ_NS:
 	case LogicalTypeId::VARIANT:
 	case LogicalTypeId::GEOMETRY:
+	case LogicalTypeId::SQLNULL:
 		return true;
 	default:
 		return false;
@@ -290,10 +293,13 @@ unique_ptr<IcebergColumnDefinition> IcebergColumnDefinition::Copy() const {
 
 MultiFileColumnDefinition IcebergColumnDefinition::GetMultiFileColumnDefinition() const {
 	MultiFileColumnDefinition column(name, type);
-	column.default_expression = make_uniq<ConstantExpression>(GetInitialDefault());
+	column.default_expression = ConstantExpression::FromValue(GetInitialDefault());
 	column.identifier = Value::INTEGER(id);
 	for (auto &child : children) {
 		column.children.push_back(child->GetMultiFileColumnDefinition());
+	}
+	if (type.id() == LogicalTypeId::MAP) {
+		column.children[0].default_expression.reset();
 	}
 	return column;
 }
@@ -373,14 +379,14 @@ ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
 		// ConstantOrNull::IsConstantOrNull and extracts the second argument only when it needs to remap a supplied
 		// non-NULL STRUCT. This envelope is internal and is not serialized into Iceberg metadata.
 		vector<unique_ptr<ParsedExpression>> arguments;
-		arguments.push_back(make_uniq<ConstantExpression>(std::move(write_default)));
-		arguments.push_back(make_uniq<ConstantExpression>(GetWriteDefaultDescriptor()));
+		arguments.push_back(ConstantExpression::FromValue(write_default));
+		arguments.push_back(ConstantExpression::FromValue(GetWriteDefaultDescriptor()));
 		res.SetDefaultValue(make_uniq<FunctionExpression>(Identifier(ConstantOrNullFun::Name), std::move(arguments)));
 	} else if (!write_default.IsNull()) {
 		if (type.IsNested()) {
 			throw NotImplementedException("DEFAULT values for nested types are not supported yet");
 		}
-		res.SetDefaultValue(make_uniq<ConstantExpression>(write_default));
+		res.SetDefaultValue(ConstantExpression::FromValue(write_default));
 	}
 
 	if (doc) {

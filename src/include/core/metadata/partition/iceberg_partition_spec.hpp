@@ -23,6 +23,10 @@ public:
 	//! "Used to identify a partition field and is unique within a partition spec"
 	uint64_t partition_field_id;
 
+	//! Field equivalence for unnamed partition expressions: source ID and full transform, including parameters.
+	//! Partition field IDs and names are deliberately ignored so historical fields can be reused.
+	bool Equals(const IcebergPartitionSpecField &other) const;
+
 	//! Sets the field name, derived from transform + column_name + source_id with Avro-compliance sanitization.
 	//! Must be called after transform and source_id are set.
 	void SetPartitionSpecFieldName(const string &column_name);
@@ -51,6 +55,8 @@ public:
 	JSONMutableValue ToJSON(JSONWriter &writer) const;
 	string FieldsToJSONString() const;
 	const vector<IcebergPartitionSpecField> &GetFields() const;
+	//! Spec compatibility: ordered source IDs, full transforms, and field names must match.
+	//! Spec IDs and partition field IDs are ignored, like Java's PartitionSpec.compatibleWith.
 	bool Equals(const IcebergPartitionSpec &other) const;
 
 private:

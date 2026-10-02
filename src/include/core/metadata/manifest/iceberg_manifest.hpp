@@ -83,7 +83,9 @@ public:
 	// struct {partition_name: val} (with partition field id for the struct key.
 	// extended partition info returns extra information about these partitions
 	// like source column id, source type, transform, and partition value.
-	const vector<IcebergExtendedPartitionInfo> GetExtendedPartitionInfo(const IcebergTableMetadata &metadata) const;
+	// Resolve source types in target_schema, falling back to historical schemas for dropped columns.
+	const vector<IcebergExtendedPartitionInfo> GetExtendedPartitionInfo(const IcebergTableMetadata &metadata,
+	                                                                    const IcebergTableSchema &target_schema) const;
 
 public:
 	void SetFirstRowId(optional<int64_t> first_row_id);

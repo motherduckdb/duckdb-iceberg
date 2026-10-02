@@ -52,13 +52,19 @@ public:
 		}
 		values.emplace_back(std::move(val));
 	}
-	const vector<string> &Tasks() const {
-		return values;
+	bool TryGetNextTask(string &task_identifier) {
+		if (next_task == values.size()) {
+			return false;
+		}
+		// Copy before fetching: the response can append tasks and reallocate values.
+		task_identifier = values[next_task++];
+		return true;
 	}
 
 private:
 	unordered_set<string> distinct_values;
 	vector<string> values;
+	idx_t next_task = 0;
 };
 
 struct PlanningAccumulator {
@@ -288,7 +294,9 @@ static string SerializePlanRequest(const rest_api_objects::PlanTableScanRequest 
 }
 
 static void FetchPlanTasks(ClientContext &context, IcebergTable &table_info, PlanningAccumulator &accumulator) {
-	for (auto &task_identifier : accumulator.plan_tasks.Tasks()) {
+	string task_identifier;
+	// Task responses may contain further plan tasks. Drain the growing queue completely.
+	while (accumulator.plan_tasks.TryGetNextTask(task_identifier)) {
 		if (context.IsInterrupted()) {
 			throw InterruptException();
 		}
@@ -299,6 +307,7 @@ static void FetchPlanTasks(ClientContext &context, IcebergTable &table_info, Pla
 		JSONWriter writer;
 		writer.SetRoot(request.ToJSON(writer));
 		auto body = writer.ToString(JSONWriteFlags::ALLOW_INF_AND_NAN);
+		ICUtils::LogPostBody(context, endpoint, body);
 		auto headers = PlanningHeaders(context);
 		headers.Insert("Idempotency-Key", UUID::ToString(UUID::GenerateRandomUUID()));
 		auto response =
@@ -390,8 +399,12 @@ static vector<IcebergManifestListEntry> MakeManifests(FileSystem &fs, const Iceb
 	int64_t next_row_id = 0;
 	for (auto &entry : by_spec) {
 		auto manifest_metadata = IcebergManifestMetadata::FromTableMetadata(metadata, content, entry.first);
-		result.push_back(IcebergManifestListEntry::CreateFromEntries(fs, sequence_number, metadata, manifest_metadata,
-		                                                             std::move(entry.second), next_row_id));
+		auto manifest = IcebergManifestListEntry::CreateFromEntries(fs, sequence_number, metadata, manifest_metadata,
+		                                                            std::move(entry.second), next_row_id);
+		// These entries came from a filtered server plan, not a real manifest. Its
+		// ordering cannot provide row-ID inheritance; only per-file IDs are valid.
+		manifest.file.first_row_id = nullopt;
+		result.push_back(std::move(manifest));
 	}
 	return result;
 }
@@ -407,6 +420,7 @@ bool IcebergServerSideScanPlanning::Plan(ClientContext &context, IcebergTable &t
 	// A fresh key makes retries of each logical planning operation idempotent on servers that support it.
 	headers.Insert("Idempotency-Key", UUID::ToString(UUID::GenerateRandomUUID()));
 	auto body = SerializePlanRequest(request);
+	ICUtils::LogPostBody(context, endpoint, body);
 	auto response =
 	    table_info.catalog.auth_handler->Request(RequestType::POST_REQUEST, context, endpoint, headers, body);
 	if (response->status == HTTPStatusCode::NotAcceptable_406) {
@@ -476,10 +490,10 @@ bool IcebergServerSideScanPlanning::Plan(ClientContext &context, IcebergTable &t
 			auto &refs = result.delete_files_by_data_file[task.data_file.file.file_path];
 			for (auto delete_idx : task.delete_file_references) {
 				auto &delete_file = accumulator.delete_files[delete_idx].file;
-				refs.insert(delete_file.file_path);
+				refs.insert({delete_file.file_path, delete_file.content_offset});
 				if (StringUtil::CIEquals(delete_file.file_format, "puffin")) {
 					if (delete_file.referenced_data_file &&
-					    !StringUtil::CIEquals(*delete_file.referenced_data_file, task.data_file.file.file_path)) {
+					    *delete_file.referenced_data_file != task.data_file.file.file_path) {
 						throw InvalidInputException(
 						    "Iceberg REST scan plan references one Puffin deletion vector from multiple data files");
 					}

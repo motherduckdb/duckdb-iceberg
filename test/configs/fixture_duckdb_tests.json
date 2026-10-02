@@ -14,6 +14,78 @@
     {
       "env_name": "CATALOG_TEST_CONFIG_SETUP",
       "env_value": "fixture"
+    },
+    {
+      "env_name": "FORMAT_V3_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "UNKNOWN_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "VARIANT_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "GEOMETRY_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "TIMESTAMP_NS_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "COLUMN_DEFAULT_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "TIMESTAMP_NS_DEFAULT_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "TIMESTAMPTZ_NS_DEFAULT_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "TIMETRAVEL_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "SNAPSHOT_HISTORY_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "METADATA_LOG_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "METADATA_FILE_READ_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "STAGED_CREATE_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "MULTI_TABLE_COMMIT_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "FILE_CLEANUP_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "NAMESPACE_PROPERTIES_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "CASE_SENSITIVE_TABLE_NAMES_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "SCAN_PLANNING_MODE",
+      "env_value": "client"
     }
   ],
   "skip_error_messages": [
@@ -37,6 +109,26 @@
     "file system operations are disabled by configuration"
   ],
   "skip_tests": [
+    {
+      "reason": "Iceberg views do not enforce DuckDB table/view dependency tracking",
+      "paths": [
+        "test/sql/catalog/view/test_view_schema_change_with_dependencies.test",
+        "test/sql/aggregate/qualify/test_qualify_view.test"
+      ]
+    },
+    {
+      "reason": "Iceberg view schemas persist all output names; duckdb_views reconstructs a full alias list rather than the original partial alias list",
+      "paths": [
+        "test/sql/catalog/view/test_view_sql.test"
+      ]
+    },
+    {
+      "reason": "Iceberg view metadata does not preserve DuckDB secure-view optimizer barriers; secure view creation is rejected",
+      "paths": [
+        "test/sql/catalog/view/secure_view.test",
+        "test/sql/catalog/view/secure_view_persistence.test"
+      ]
+    },
     {
       "reason": "Checks available databases/schemas",
       "paths": [
@@ -62,6 +154,12 @@
       ]
     },
     {
+      "reason": "Tests in-memory db behavior",
+      "paths": [
+        "test/sql/storage/evict_unpinned_without_temp_directory.test"
+      ]
+    },
+    {
       "reason": "Original test does not define ordering",
       "paths": [
         "test/sql/catalog/test_create_from_select.test",
@@ -72,6 +170,7 @@
         "test/sql/types/nested/map/map_from_entries/column_null_entry.test",
         "test/sql/types/nested/map/test_map_nested_keys.test",
         "test/sql/types/struct/nested_structs.test",
+        "test/sql/types/struct/struct_updates.test",
         "test/sql/function/list/aggregates/entropy.test",
         "test/sql/function/list/list_unique.test",
         "test/sql/function/timestamp/test_icu_datediff.test",
@@ -85,6 +184,9 @@
         "test/sql/optimizer/test_in_rewrite_rule.test",
         "test/sql/upsert/postgres/planner_preprocessing.test",
         "test/sql/update/string_update_transaction_local_7348.test",
+        "test/sql/function/list/aggregates/approx_count_distinct.test",
+        "test/sql/copy/csv/test_csv_timestamp_tz.test",
+        "test/sql/pivot/unpivot_non_aligned_columns.test",
         "test/sql/function/variant/variant_extract_string_shredded.test"
       ]
     },
@@ -109,7 +211,6 @@
         "test/sql/storage/wal/test_wal_bc.test",
         "test/sql/storage_version/storage_version.test_slow",
         "test/sql/tpch/dbgen_readonly.test",
-        "test/sql/function/string/regex_operators.test",
         "test/sql/storage/compression/uncompressed/uncompressed_count.test",
         "test/sql/storage/compression/uncompressed/uncompressed_count_boundary.test",
         "test/sql/storage/compression/uncompressed/uncompressed_offset.test",
@@ -163,7 +264,6 @@
         "test/sql/storage/partial_blocks/many_columns_strings.test",
         "test/sql/storage/partial_blocks/many_columns_structs.test_slow",
         "test/sql/storage/partial_blocks/many_columns_validity.test",
-        "test/sql/storage/partial_delete_pending_compress.test",
         "test/sql/storage/read_duckdb/concurrent_duckdb_read.test_slow",
         "test/sql/storage/read_duckdb/read_duckdb_basic.test",
         "test/sql/storage/reclaim_space/reclaim_space_drop_column_overflow_strings.test_slow",
@@ -177,7 +277,6 @@
         "test/sql/storage/vacuum/test_truncate_after_delete.test_slow",
         "test/sql/storage/vacuum/vacuum_deletes_cleanup.test_slow",
         "test/sql/storage/vacuum/vacuum_partial_deletes_cleanup.test_slow",
-        "test/sql/table_function/database_oid.test",
         "test/sql/table_function/duckdb_columns.test",
         "test/sql/table_function/duckdb_databases.test",
         "test/sql/table_function/duckdb_schemas.test",
@@ -186,19 +285,16 @@
         "test/sql/table_function/sqlite_master_quotes.test",
         "test/sql/transactions/concurrent_drop_table.test",
         "test/sql/types/bignum/test_bignum_sum.test_slow",
-        "test/sql/catalog/test_alter_oid_stability.test",
         "test/sql/storage/extensions/extension_default.test",
-        "test/sql/function/string/regex_operators_v1_5_view.test"
+        "test/sql/function/string/regex_operators_v1_5_view.test",
+        "test/sql/pg_catalog/pg_views.test",
+        "test/sql/table_function/duckdb_views.test"
       ]
     },
     {
       "reason": "DuckDB type is not Iceberg Type  i.e hugeint is stored as decimal(38,0)",
       "paths": [
-        "test/sql/aggregate/aggregates/test_arg_min_max.test",
-        "test/sql/storage/types/variant/test_all_types.test",
-        "test/sql/storage/types/variant/test_all_types_single_object.test",
-        "test/sql/storage/types/variant/test_all_types_single_table.test",
-        "test/sql/storage/types/variant/test_all_types_variant.test"
+        "test/sql/aggregate/aggregates/test_arg_min_max.test"
       ]
     },
     {
@@ -232,8 +328,6 @@
         "test/sql/constraints/unique/test_unique.test",
         "test/sql/constraints/unique/test_unique_multi_constraint.test",
         "test/sql/merge/merge_into_constraint.test",
-        "test/sql/storage/types/variant/variant_index.test",
-        "test/sql/alter/drop_col/test_drop_col_not_null.test",
         "test/sql/show_select/show_select_constraints.test",
         "test/sql/parser/statement_tostring_roundtrip.test"
       ]
@@ -248,68 +342,42 @@
     {
       "reason": "SIGSEGV / crash / incorrect result - needs manual investigation",
       "paths": [
-        "test/sql/alter/map/rename_column_in_struct.test",
         "test/sql/copy/csv/test_skip.test_slow",
         "test/sql/merge/merge_into_subquery_action.test",
         "test/sql/alter/struct/rename_col_struct.test",
         "test/sql/alter/alter_col/test_drop_not_null.test",
-        "test/sql/alter/map/drop_column_in_struct.test",
         "test/sql/alter/rename_table/test_rename_table_collision.test",
-        "test/sql/alter/list/rename_column_in_struct.test",
         "test/sql/alter/drop_col/test_drop_col_concurrent_dml_conflict.test",
         "test/sql/alter/rename_table/test_rename_table_many_transactions.test",
         "test/sql/alter/rename_view/test_rename_view_many_transactions.test",
         "test/sql/catalog/dependencies/test_prepare_dependencies_transactions.test",
-        "test/sql/catalog/dependencies/test_concurrent_rename.test_slow",
         "test/sql/catalog/test_schema.test",
         "test/sql/storage/concurrent_wal/concurrent_checkpoint_abort.test_slow",
-        "test/sql/storage/concurrent_wal/concurrent_checkpoint_abort_autocheckpoint.test_slow",
-        "test/sql/storage/concurrent_wal/concurrent_checkpoint_empty_checkpoint.test_slow",
         "test/sql/delete/cleanup_delete_on_conflict.test",
         "test/sql/index/art/constraints/test_art_compound_key_changes.test",
         "test/sql/index/art/constraints/test_art_concurrent_loop.test_slow",
         "test/sql/index/art/constraints/test_art_eager_constraint_checking.test",
         "test/sql/index/art/create_drop/test_art_create_if_exists.test",
-        "test/sql/insert/unaligned_interleaved_appends.test",
-        "test/sql/join/iejoin/iejoin_issue_6314.test_slow",
         "test/sql/join/iejoin/iejoin_projection_maps.test_slow",
         "test/sql/parallelism/interquery/concurrent_append_index_join.test_slow",
         "test/sql/storage/multiple_clients_checkpoing_dependents.test_slow",
-        "test/sql/transactions/test_null_version.test",
         "test/sql/transactions/transaction_insert_delete_chunks.test",
-        "test/sql/transactions/transaction_insert_mixed_deletes.test",
         "test/sql/update/test_cascading_updates.test",
         "test/sql/update/test_stress_update_issue_19688.test",
-        "test/sql/update/test_string_update_null.test",
         "test/sql/update/test_update_many_updaters.test",
         "test/sql/update/test_update_many_updaters_nulls.test",
-        "test/sql/update/test_update_mix.test",
-        "test/sql/storage/compression/roaring/roaring_bool_appends.test_slow",
-        "test/sql/aggregate/aggregates/test_arg_min_max_null_nested.test_slow",
-        "test/sql/projection/test_complex_expressions.test",
-        "test/sql/types/list/unnest_expand.test",
-        "test/sql/optimizer/struct_segment_pruning.test",
-        "test/sql/types/geo/geometry_stats_prune_null.test",
-        "test/sql/window/test_duplicate_partition.test",
-        "test/sql/storage/overflow_strings/null_overflow_string_memory.test",
-        "test/sql/json/table/read_geojson_large.test_slow"
+        "test/sql/storage/overflow_strings/null_overflow_string_memory.test"
       ]
     },
     {
       "reason": "ALTER TABLE ADD COLUMN with DEFAULT values not fully supported (HTTP 500 or wrong result)",
       "paths": [
-        "test/sql/alter/add_col/test_add_col_default.test",
         "test/sql/alter/add_col/test_add_col_chain.test",
         "test/sql/alter/add_col/test_add_col_local_storage.test",
         "test/sql/alter/alter_type/test_alter_type_local.test",
         "test/sql/catalog/dependencies/add_column_to_table_referenced_by_macro.test",
         "test/sql/catalog/dependencies/add_column_to_table_referenced_by_view.test",
-        "test/sql/copy/csv/test_copy_default.test",
-        "test/sql/storage/catalog/test_store_add_column.test",
-        "test/sql/storage/catalog/test_store_add_column_persistent.test",
-        "test/sql/alter/default/drop_default.test",
-        "test/sql/alter/default/test_set_default.test",
-        "test/sql/storage/types/struct/default_struct.test"
+        "test/sql/alter/default/test_set_default.test"
       ]
     },
     {
@@ -345,8 +413,7 @@
     {
       "reason": "Schema visibility / concurrent schema creation in Iceberg differs from DuckDB",
       "paths": [
-        "test/sql/catalog/dependencies/test_concurrent_schema_creation.test",
-        "test/sql/select/test_select_qualified_view.test"
+        "test/sql/catalog/dependencies/test_concurrent_schema_creation.test"
       ]
     },
     {
@@ -370,7 +437,6 @@
         "test/sql/alter/drop_col/test_drop_col_failure.test",
         "test/sql/catalog/test_temporary.test",
         "test/sql/alter/list/add_column_in_struct.test",
-        "test/sql/alter/list/drop_column_in_struct.test",
         "test/sql/alter/map/add_column_in_struct.test",
         "test/sql/alter/rename_table/test_rename_table_incorrect.test",
         "test/sql/alter/rename_table/test_rename_table_transactions.test",
@@ -410,7 +476,6 @@
     {
       "reason": "CSV / COPY behavior differs on Iceberg (timestamp_tz, batched_write, rejects)",
       "paths": [
-        "test/sql/copy/csv/test_csv_timestamp_tz.test",
         "test/sql/copy/csv/batched_write/batch_csv_write.test_slow",
         "test/sql/copy/csv/rejects/csv_rejects_read.test",
         "test/sql/copy/csv/test_export_force_quotes.test",
@@ -452,8 +517,6 @@
       "reason": "Parquet writer / round trip - Iceberg storage type/typeof differences",
       "paths": [
         "test/sql/copy/parquet/writer/writer_round_trip.test_slow",
-        "test/sql/create/big_create_table_as.test_slow",
-        "test/sql/create/big_create_table_as_varchar.test_slow",
         "test/sql/create/create_table_compression.test"
       ]
     },
@@ -491,11 +554,11 @@
       "reason": "Stats / memory_usage / transitive filter output reflects iceberg storage",
       "paths": [
         "test/sql/delete/in_memory_bulk_delete.test_slow",
+        "test/sql/transactions/test_commit_cleanup_oom.test",
         "test/sql/function/date/date_part_stats.test",
         "test/sql/function/time/test_extract_stats.test",
         "test/sql/function/generic/test_stats.test",
         "test/sql/filter/test_transitive_filters.test",
-        "test/sql/function/time/test_extract_stats.test",
         "test/sql/storage/extended_string_stats.test",
         "test/sql/delete/delete_compression_blocked_by_old_snapshot.test",
         "test/sql/storage/total_string_length_repeated_insert.test"
@@ -510,7 +573,6 @@
     {
       "reason": "Wrong result in list functions - file ordering or iceberg list semantics",
       "paths": [
-        "test/sql/function/list/aggregates/approx_count_distinct.test",
         "test/sql/function/list/aggregates/bool_and_or.test",
         "test/sql/function/list/aggregates/sum.test",
         "test/sql/function/list/lambdas/arrow/reduce_deprecated.test",
@@ -524,9 +586,7 @@
         "test/sql/function/list/list_sort.test_slow",
         "test/sql/function/list/list_value_nested_lists.test",
         "test/sql/function/list/list_value_structs.test",
-        "test/sql/function/list/aggregates/minmax_nested.test",
-        "test/sql/function/list/lambdas/arrow/lambdas_and_group_by_deprecated.test",
-        "test/sql/function/list/lambdas/lambdas_and_group_by.test"
+        "test/sql/function/list/aggregates/minmax_nested.test"
       ]
     },
     {
@@ -548,9 +608,14 @@
       ]
     },
     {
+      "reason": "Progress isn't being reported properly by ICEBERG_SCAN",
+      "paths": [
+        "test/sql/progress/test_verify_progress.test"
+      ]
+    },
+    {
       "reason": "Generated/virtual columns - Iceberg inserts include virtual columns so binder rejects with fewer values",
       "paths": [
-        "test/sql/join/iejoin/iejoin_projection_maps.test",
         "test/sql/join/pushdown/pushdown_generated_columns.test",
         "test/sql/parser/columns_aliases.test",
         "test/sql/pivot/pivot_generated.test",
@@ -595,60 +660,37 @@
       ]
     },
     {
-      "reason": "UTF8 string functions / contains / instr / starts_with return wrong result on iceberg",
+      "reason": "Upstream UTF8 tests assume insertion order without ORDER BY; Iceberg returns the rows in a different order",
       "paths": [
         "test/sql/function/string/test_contains_utf8.test",
         "test/sql/function/string/test_instr_utf8.test",
-        "test/sql/function/string/test_starts_with_function_utf8.test",
-        "test/sql/function/string/test_starts_with_operator_utf8.test"
+        "test/sql/function/string/test_starts_with_function_utf8.test"
       ]
     },
     {
       "reason": "Variant type / timestamp_ns need a default 'format-version'=3",
       "paths": [
-        "test/sql/function/timestamp/test_strftime_timestamp_ns.test",
-        "test/sql/function/variant/variant_extract_try_cast.test",
-        "test/sql/function/variant/variant_shredded_extract_nested.test",
-        "test/sql/function/variant/variant_typeof.test",
-        "test/sql/storage/types/variant/append_shredded.test",
         "test/sql/storage/types/variant/big_table.test_slow",
         "test/sql/storage/types/variant/extension_types.test",
-        "test/sql/storage/types/variant/index_fetch.test",
         "test/sql/storage/types/variant/list_of_variant.test_slow",
-        "test/sql/storage/types/variant/null_tests.test_slow",
-        "test/sql/storage/types/variant/struct_of_variant.test",
         "test/sql/storage/types/variant/test_all_types.test",
         "test/sql/storage/types/variant/test_all_types_single_object.test",
         "test/sql/storage/types/variant/test_all_types_single_table.test",
         "test/sql/storage/types/variant/test_all_types_variant.test",
-        "test/sql/storage/types/variant/tpcds_sf1.test_slow",
-        "test/sql/storage/types/variant/tpch_sf1.test_slow",
-        "test/sql/storage/types/variant/update.test",
-        "test/sql/storage/types/variant/variant_extract_stats.test",
         "test/sql/storage/types/variant/variant_index.test",
-        "test/sql/storage/types/variant/variant_null_missing.test",
         "test/sql/storage/types/variant/variant_null_shredding_inconsistency_issue.test",
         "test/sql/storage/types/variant/variant_shredding.test_slow",
-        "test/sql/storage/types/variant/variant_shredding_inconsistent.test",
-        "test/sql/storage/types/variant/variant_shredding_omit_untyped.test",
-        "test/sql/storage/types/variant/variant_parquet_shredding_bug.test",
         "test/sql/storage/types/variant/variant_stats_merging.test_slow",
-        "test/sql/storage/types/variant/variant_storage_version.test",
-        "test/sql/storage/types/variant/variant_shredding_empty_keys.test",
-        "test/sql/types/variant/implicit_cast_from_variant.test",
-        "test/sql/types/variant/tpch_test_through_json.test",
         "test/sql/types/variant/json_cast.test",
-        "test/sql/types/variant/try_cast_from_variant.test",
-        "test/sql/types/variant/test_all_types.test",
+        "test/sql/storage/types/variant/variant_object_key_order_shredded.test",
+        "test/sql/storage/types/variant/variant_object_key_order_shredded_json.test",
         "test/sql/types/variant/variant_distinct.test",
-        "test/sql/types/variant/tpch_test.test",
         "test/sql/types/variant/variant_map_to_variant_filter.test",
-        "test/sql/function/string/test_starts_with_operator_utf8.test",
-        "test/sql/function/string/test_jaro_winkler.test"
+        "test/sql/function/string/test_starts_with_operator_utf8.test"
       ]
     },
     {
-      "reason": "Timestamp / date diff/sub/age - wrong result on iceberg",
+      "reason": "Upstream age/date_diff/date_sub tests assume row ordering without ORDER BY",
       "paths": [
         "test/sql/function/timestamp/age.test",
         "test/sql/function/timestamp/date_diff.test_slow",
@@ -656,16 +698,9 @@
       ]
     },
     {
-      "reason": "regex_escape operator caching",
-      "paths": [
-        "test/sql/function/string/regex_escape.test"
-      ]
-    },
-    {
       "reason": "Transactionality isolation guarantees don't match",
       "paths": [
         "test/sql/delete/full_vector_delete_conflict.test",
-        "test/sql/storage/piecemeal_delete_checkpoint_compress.test",
         "test/sql/delete/full_vector_delete_rollback.test"
       ]
     },
@@ -673,11 +708,6 @@
       "reason": "Out of memory on external join/sort with iceberg-backed tables (parquet read consumes more memory)",
       "paths": [
         "test/sql/join/external/simple_external_join.test_slow",
-        "test/sql/order/order_parallel_complex.test_slow",
-        "test/sql/order/order_parallel_fixed.test_slow",
-        "test/sql/order/order_parallel_many_ties.test_slow",
-        "test/sql/order/order_parallel_varsize.test_slow",
-        "test/sql/outofcore/evicted_memory_bytes_updates.test_slow",
         "test/sql/storage/parallel/memory_limit_batch_load.test_slow",
         "test/sql/storage/parallel/memory_limit_batch_load_list.test_slow",
         "test/sql/storage/parallel/memory_limit_mixed_batches.test_slow",
@@ -687,8 +717,6 @@
         "test/sql/storage/temp_directory/max_swap_space_persistent.test",
         "test/sql/storage/update/larger_than_memory_update.test_slow",
         "test/sql/storage/update/larger_than_memory_update_transactions.test_slow",
-        "test/sql/outofcore/block_file_double_decrement.test_slow",
-        "test/sql/outofcore/block_file_evicted_bytes_accounting.test_slow",
         "test/sql/outofcore/buffer_managed_query_result.test_slow"
       ]
     },
@@ -704,14 +732,12 @@
     {
       "reason": "Copied/Unoptimized statement differs from original result",
       "paths": [
-        "test/sql/join/semianti/antijoin.test",
-        "test/sql/optimizer/expression/test_comparison_simplification.test"
+        "test/sql/join/semianti/antijoin.test"
       ]
     },
     {
       "reason": "Wrong result on join / merge / window - iceberg storage ordering",
       "paths": [
-        "test/sql/join/positional/test_positional_join.test",
         "test/sql/join/semianti/semijoin.test",
         "test/sql/limit/parallel_limit_transaction_local.test_slow",
         "test/sql/logging/http_log_timing.test",
@@ -742,7 +768,6 @@
     {
       "reason": "Pivot / parallel materialization wrong result due to iceberg storage ordering",
       "paths": [
-        "test/sql/pivot/unpivot_non_aligned_columns.test",
         "test/sql/parallelism/intraquery/parallel_materialization.test_slow"
       ]
     },
@@ -755,15 +780,7 @@
     {
       "reason": "SET schema with temp/main where iceberg has no main",
       "paths": [
-        "test/sql/settings/set_schema_temp_main.test",
-        "test/sql/show_select/show_settings.test"
-      ]
-    },
-    {
-      "reason": "DELETE wrong result on iceberg storage",
-      "paths": [
-        "test/sql/storage/delete/load_delete_modify.test",
-        "test/sql/storage/delete/repeated_deletes.test"
+        "test/sql/settings/set_schema_temp_main.test"
       ]
     },
     {
@@ -777,8 +794,6 @@
     {
       "reason": "DuckDB checkpoint / many_checkpoints semantics don't apply to Iceberg",
       "paths": [
-        "test/sql/storage/attach/attach_invalidation_default_db.test",
-        "test/sql/storage/checkpoint/initial_database_autocheckpoint_failure.test",
         "test/sql/storage/many_checkpoints.test"
       ]
     },
@@ -798,10 +813,6 @@
         "test/sql/storage/wal/wal_replay_consistency_add_column_current_timestamp.test",
         "test/sql/storage/wal/wal_replay_consistency_add_column_random.test",
         "test/sql/storage/wal/wal_size_unaligned_appends.test_slow",
-        "test/sql/storage/wal/wal_store_add_column.test",
-        "test/sql/storage/wal/wal_store_add_column_persistent.test",
-        "test/sql/storage/wal/wal_store_mixed_updates_big.test",
-        "test/sql/storage/wal/wal_store_mixed_updates_big_null.test",
         "test/sql/storage/wal/wal_view_explicit_aliases.test",
         "test/sql/storage/wal/wal_view_explicit_aliases_no_view_dependencies.test",
         "test/sql/storage/wal/wal_view_storage.test",
@@ -821,7 +832,6 @@
       "paths": [
         "test/sql/storage/optimistic_write/optimistic_write_add_column.test_slow",
         "test/sql/storage/optimistic_write/optimistic_write_large_strings.test",
-        "test/sql/storage/optimistic_write/optimistic_write_nulls.test",
         "test/sql/storage/optimistic_write/optimistic_write_primary_key.test_slow"
       ]
     },
@@ -830,16 +840,13 @@
       "paths": [
         "test/sql/storage/parallel/batch_insert_filtered_row_groups.test_slow",
         "test/sql/storage/parallel/insert_many_compressible_batches.test_slow",
-        "test/sql/storage/parallel/insert_order_preserving.test_slow",
         "test/sql/storage/parallel/insert_order_preserving_odd_sized_batches.test_slow",
-        "test/sql/storage/parallel/parallel_insert_selective_filter.test_slow",
         "test/sql/storage/parallel/tiny_row_group_size.test_slow"
       ]
     },
     {
       "reason": "DuckDB overflow_strings / partial_blocks / nested struct internal storage tests",
       "paths": [
-        "test/sql/storage/compression/dictionary/dict_corrupted_offset.test",
         "test/sql/storage/overflow_strings/load_overflow_strings_slowly.test_slow",
         "test/sql/storage/partial_blocks/many_columns_drop_table.test",
         "test/sql/storage/types/list/list_compression.test_slow",
@@ -882,7 +889,6 @@
         "test/sql/storage/test_large_interleaved_transactions.test_slow",
         "test/sql/storage/test_large_interleaved_updates_deletes.test_slow",
         "test/sql/transactions/test_interleaved_versions.test",
-        "test/sql/transactions/test_multi_transaction_append.test",
         "test/sql/update/test_update_delete_same_tuple.test"
       ]
     },
@@ -896,7 +902,6 @@
       "reason": "UPDATE / UPSERT - iceberg differences in same-value/non-regular-type/upsert distinct bug",
       "paths": [
         "test/sql/update/test_update_same_value.test",
-        "test/sql/update/test_update_with_non_regular_type.test",
         "test/sql/upsert/upsert_distinct_bug.test"
       ]
     },
@@ -913,7 +918,6 @@
       "reason": "Transactions: behavior differs because iceberg has its own transaction semantics",
       "paths": [
         "test/sql/transactions/aborted_transaction_commit.test",
-        "test/sql/transactions/test_basic_transactions.test",
         "test/sql/transactions/test_create_drop_conflict_variation1.test",
         "test/sql/transactions/test_create_drop_conflict_variation2.test",
         "test/sql/transactions/test_from_update_conflict.test",
@@ -923,9 +927,7 @@
         "test/sql/transactions/test_index_rollback_flushed_data.test",
         "test/sql/transactions/test_index_transaction_local.test",
         "test/sql/transactions/test_multi_version_large.test",
-        "test/sql/transactions/statement-preprocessor/copy_from_database_is_transactional.test",
         "test/sql/transactions/test_transaction_abort.test",
-        "test/sql/transactions/test_transaction_local_add.test",
         "test/sql/transactions/test_transaction_local_unique.test",
         "test/sql/transactions/test_transaction_local_unique_ops.test",
         "test/sql/alter/rename_table/test_rename_table_with_insert_transaction.test",
@@ -975,7 +977,6 @@
     {
       "reason": "BLOB / list / nested wrong result on iceberg",
       "paths": [
-        "test/sql/types/blob/test_blob.test",
         "test/sql/types/list/list_of_struct.test",
         "test/sql/types/list/list_stats.test",
         "test/sql/types/list/unnest_null_empty.test",
@@ -983,43 +984,37 @@
         "test/sql/types/nested/list/test_list_slice_step.test",
         "test/sql/types/nested/map/map_from_entries/column.test",
         "test/sql/types/nested/map/map_from_entries/null.test",
-        "test/sql/types/nested/map/map_from_entries/null_entry.test",
         "test/sql/types/nested/map/test_map_keys.test",
-        "test/sql/types/nested/map/test_map_subscript.test",
         "test/sql/types/nested/map/test_map_subscript_composite.test",
-        "test/sql/types/nested/map/test_map_values.test",
-        "test/sql/types/nested/map/test_map.test"
+        "test/sql/types/nested/map/test_map_values.test"
+      ]
+    },
+    {
+      "reason": "Native geometry EXPLAIN expectations: Iceberg adds a CRS cast and does not expose table-wide geometry stats for filter elimination; empty-geometry counts are absent from Iceberg metrics. Result coverage is in catalog_agnostic/reads/filtering/test_geometry_filter_correctness.test and file pruning in test_filtering_geometry_predicates.test.",
+      "paths": [
+        "test/sql/types/geo/geometry_intersection_filter.test_slow",
+        "test/sql/types/geo/geometry_stats_prune_null.test"
+      ]
+    },
+    {
+      "reason": "Uses native database ATTACH/USE/DETACH and geometry shredding; with fixture on_new_connection selecting its test namespace, CREATE TABLE fails resolving schema geoms. Iceberg coverage of the persisted polygon bbox regression is in catalog_agnostic/reads/filtering/test_geometry_filter_correctness.test.",
+      "paths": [
+        "test/sql/types/geo/geometry_stats_prune.test",
+        "test/sql/types/geo/geometry_stats_prune_shredded.test"
       ]
     },
     {
       "reason": "Geometry type needs default 'format-version'=3 table property",
       "paths": [
-        "test/sql/types/geo/geometry.test",
-        "test/sql/types/geo/geometry_shred_checkpoint.test_slow",
         "test/sql/types/geo/geometry_compatability.test",
-        "test/sql/types/geo/geometry_shred_empty.test",
-        "test/sql/types/geo/geometry_crs.test",
         "test/sql/types/geo/geometry_shred_fetch.test",
-        "test/sql/types/geo/geometry_crs_projjson.test",
         "test/sql/types/geo/geometry_shred_limit.test",
-        "test/sql/types/geo/geometry_crs_wkt2.test",
-        "test/sql/types/geo/geometry_shred_list.test",
-        "test/sql/types/geo/geometry_intersection_filter.test_slow",
         "test/sql/types/geo/geometry_shred_types.test_slow",
-        "test/sql/types/geo/geometry_intersection_filter_parquet.test",
         "test/sql/types/geo/geometry_stats.test",
-        "test/sql/types/geo/geometry_intersects.test",
-        "test/sql/types/geo/geometry_stats_prune.test",
-        "test/sql/types/geo/geometry_parquet_pushdown.test",
-        "test/sql/types/geo/geometry_stats_prune_shredded.test",
-        "test/sql/types/geo/geometry_persist.test",
         "test/sql/types/geo/geometry_storage_version.test",
-        "test/sql/types/geo/geometry_persist_wal.test",
         "test/sql/types/geo/geometry_update.test",
         "test/sql/types/geo/geometry_shred.test",
-        "test/sql/types/geo/geometry_shred_deletes.test",
-        "test/sql/types/geo/geometry_shred_more.test",
-        "test/sql/types/geo/geometry_wkb.test"
+        "test/sql/types/geo/geometry_shred_deletes.test"
       ]
     },
     {
@@ -1047,9 +1042,7 @@
       "reason": "Struct / timestamp_tz / all_types - iceberg type differences",
       "paths": [
         "test/sql/types/struct/struct_different_names.test",
-        "test/sql/types/struct/struct_projection_pushdown_in_storage.test",
         "test/sql/types/struct/struct_stats.test",
-        "test/sql/types/struct/struct_updates.test",
         "test/sql/types/test_all_types.test_slow",
         "test/sql/types/timestamp/test_timestamp_tz.test"
       ]
@@ -1069,7 +1062,6 @@
         "test/sql/storage/compression/string/table_copy.test",
         "test/sql/storage/compression/zstd/fetch_row.test",
         "test/sql/storage/compression/zstd/test_giant_lists.test_slow",
-        "test/sql/storage/compression/zstd/zstd_big_badly_compressed_list.test",
         "test/sql/storage/compression/zstd/zstd_compression_ratio.test_slow",
         "test/sql/storage/compression/zstd/zstd_force_compression.test",
         "test/sql/storage/memory/in_memory_disabled_zstd.test",
@@ -1079,10 +1071,6 @@
         "test/sql/storage/compression/alprd/alprd_skip.test_slow",
         "test/sql/storage/compression/alprd/alprd_stress_test.test_slow",
         "test/sql/storage/compression/alprd/alprd_uncompressed_mode_regression.test_slow",
-        "test/sql/storage/compression/alp/alp_corrupted_file.test",
-        "test/sql/storage/compression/alp/alp_corrupted_offsets.test",
-        "test/sql/storage/compression/alp/alp_corrupted_vector_size.test",
-        "test/sql/storage/compression/alprd/alprd_corrupted_dict_size.test",
         "test/sql/storage/compression/bitpacking/bitpacking_compression_ratio.test_slow",
         "test/sql/storage/compression/bitpacking/bitpacking_compression_ratio_hugeint.test_slow",
         "test/sql/storage/compression/bitpacking/bitpacking_delta_for.test",
@@ -1126,7 +1114,6 @@
         "test/sql/storage/compression/dict_fsst/dict_fsst_expression_filter.test",
         "test/sql/storage/compression/dict_fsst/invalid_symbol_table.test",
         "test/sql/storage/compression/dict_fsst/repeated_string_stats.test",
-        "test/sql/storage/compression/dictionary/invalid_dictionary_metadata.test",
         "test/sql/storage/compression/dictionary/total_string_length_dictionary.test",
         "test/sql/storage/compression/fsst/fsst_small_symbol_table.test"
       ]
@@ -1158,27 +1145,13 @@
         "test/sql/parallelism/interquery/concurrent_append_transactional.test_slow",
         "test/sql/parallelism/interquery/concurrent_append_transactions.test_slow",
         "test/sql/parallelism/interquery/concurrent_append_transactions_indexes.test_slow",
-        "test/sql/parallelism/interquery/concurrent_appends.test",
         "test/sql/parallelism/interquery/concurrent_batch_append.test_slow",
         "test/sql/parallelism/interquery/concurrent_batch_append_pk.test_slow",
-        "test/sql/parallelism/interquery/concurrent_checkpoint_deletes.test_slow",
-        "test/sql/parallelism/interquery/concurrent_checkpoint_deletes_index.test_slow",
-        "test/sql/parallelism/interquery/concurrent_checkpoint_deletes_insert.test_slow",
         "test/sql/parallelism/interquery/concurrent_checkpoint_deletes_mix_fk.test_slow",
-        "test/sql/parallelism/interquery/concurrent_checkpoint_deletes_mix_index.test_slow",
-        "test/sql/parallelism/interquery/concurrent_checkpoint_index_single_inserter.test_slow",
-        "test/sql/parallelism/interquery/concurrent_checkpoint_insert.test",
         "test/sql/parallelism/interquery/concurrent_checkpoint_multiple_updater.test_slow",
-        "test/sql/parallelism/interquery/concurrent_checkpoint_single_updater.test_slow",
-        "test/sql/parallelism/interquery/concurrent_checkpoint_wal.test",
         "test/sql/parallelism/interquery/concurrent_checkpoint_wal_fk.test_slow",
-        "test/sql/parallelism/interquery/concurrent_checkpoint_wal_index.test_slow",
-        "test/sql/parallelism/interquery/concurrent_checkpoint_wal_optimistic.test_slow",
-        "test/sql/parallelism/interquery/concurrent_checkpoint_wal_optimistic_index.test_slow",
-        "test/sql/parallelism/interquery/concurrent_checkpoints_long_reads.test_slow",
         "test/sql/parallelism/interquery/concurrent_delete.test_slow",
         "test/sql/parallelism/interquery/concurrent_force_checkpoint.test",
-        "test/sql/parallelism/interquery/concurrent_index_deletions_lookups.test_slow",
         "test/sql/parallelism/interquery/concurrent_index_reads_while_updating.test_slow",
         "test/sql/parallelism/interquery/concurrent_index_scans_while_appending.test",
         "test/sql/parallelism/interquery/concurrent_insert_pk.test_slow",
@@ -1186,25 +1159,15 @@
         "test/sql/parallelism/interquery/concurrent_pk_mix_updates_inserts.test_slow",
         "test/sql/parallelism/interquery/concurrent_pk_transactional_appends.test_slow",
         "test/sql/parallelism/interquery/concurrent_read_during_vacuum_rebuild.test_slow",
-        "test/sql/parallelism/interquery/concurrent_reads_append_list.test_slow",
         "test/sql/parallelism/interquery/concurrent_reads_during_index_creation.test_slow",
         "test/sql/parallelism/interquery/concurrent_reads_while_altering.test",
-        "test/sql/parallelism/interquery/concurrent_reads_while_appending.test_slow",
-        "test/sql/parallelism/interquery/concurrent_reads_while_appending_nulls.test_slow",
         "test/sql/parallelism/interquery/concurrent_reads_while_renaming.test",
-        "test/sql/parallelism/interquery/concurrent_reads_while_updating.test_slow",
-        "test/sql/parallelism/interquery/concurrent_settings.test_slow",
-        "test/sql/parallelism/interquery/concurrent_update_drop.test_slow",
         "test/sql/parallelism/interquery/concurrent_update_multiple_updaters.test_slow",
         "test/sql/parallelism/interquery/concurrent_update_pk.test_slow",
         "test/sql/parallelism/interquery/concurrent_update_single_updater.test_slow",
         "test/sql/parallelism/interquery/concurrent_writes_during_index_creation.test_slow",
         "test/sql/parallelism/interquery/parallel_dependencies_catalog_operations.test_slow",
         "test/sql/parallelism/interquery/parallel_dependencies_prepared_statement.test_slow",
-        "test/sql/parallelism/interquery/repeated_concurrent_checkpoint_wal.test_slow",
-        "test/sql/parallelism/interquery/scan_default_catalog.test_slow",
-        "test/sql/parallelism/interquery/scan_default_macros.test_slow",
-        "test/sql/parallelism/interquery/scan_default_system_tables.test_slow",
         "test/sql/parallelism/interquery/test_concurrent_sequence.test_slow",
         "test/sql/parallelism/interquery/tpch_concurrent_checkpoints.test_slow",
         "test/sql/parallelism/interquery/tpch_concurrent_operations.test_slow"
@@ -1245,7 +1208,6 @@
         "test/sql/index/art/create_drop/test_art_drop_index.test",
         "test/sql/index/art/create_drop/test_art_invalid_create_index.test",
         "test/sql/index/art/create_drop/test_art_long_keys.test_slow",
-        "test/sql/index/art/create_drop/test_art_many_versions.test",
         "test/sql/index/art/create_drop/test_art_single_value.test",
         "test/sql/index/art/insert_update_delete/test_art_linear_insert.test_slow",
         "test/sql/index/art/insert_update_delete/test_art_non_linear_insertion.test_slow",
@@ -1285,8 +1247,6 @@
         "test/sql/index/art/nodes/test_art_node_4.test",
         "test/sql/index/art/nodes/test_art_node_48.test",
         "test/sql/index/art/nodes/test_art_prefix_edge_cases.test_slow",
-        "test/sql/index/art/nodes/test_art_prefix_transform_deprecated.test_slow",
-        "test/sql/index/art/nodes/test_art_prefix_transform_deprecated_create.test",
         "test/sql/index/art/nodes/test_art_prefixes.test_slow",
         "test/sql/index/art/nodes/test_art_prefixes_restart.test",
         "test/sql/index/art/nodes/test_art_sparse_merge.test",
@@ -1457,7 +1417,6 @@
     {
       "reason": "Approximate aggregate produces different ordering depending on storage layout",
       "paths": [
-        "test/sql/aggregate/aggregates/approx_top_k_big.test_slow",
         "test/sql/aggregate/aggregates/approx_top_k.test"
       ]
     },
@@ -1470,6 +1429,12 @@
         "test/sql/settings/test_external_access_metadata.test",
         "test/sql/secrets/drop_persistent_secret_if_exists.test",
         "test/sql/settings/test_external_access_secrets.test"
+      ]
+    },
+    {
+      "reason": "regex_escape produces different result, to be investigated",
+      "paths": [
+        "test/sql/function/string/regex_escape.test"
       ]
     },
     {
@@ -1537,8 +1502,7 @@
         "test/sql/types/variant/tpch_test.test",
         "test/sql/types/variant/tpch_test_through_json.test",
         "test/sql/window/test_constant_orderby.test",
-        "test/sql/window/test_window_tpcds.test",
-        "test/sql/function/variant/variant_contains_shredded.test"
+        "test/sql/window/test_window_tpcds.test"
       ]
     },
     {
@@ -1596,15 +1560,8 @@
     {
       "reason": "Cast error location / overflow behavior differs when values round-trip through parquet",
       "paths": [
-        "test/sql/cast/cast_error_location.test",
         "test/sql/cast/signed_cast_repro.test",
         "test/sql/cast/timestamp_casts.test"
-      ]
-    },
-    {
-      "reason": "DEFAULT now() produces identical timestamps across separate iceberg inserts",
-      "paths": [
-        "test/sql/function/timestamp/test_now_prepared.test"
       ]
     },
     {
@@ -1614,7 +1571,7 @@
       ]
     },
     {
-      "reason": "ASan heap-buffer-overflow in the parquet shredded VARIANT read path (AnalyzeShred) - aborts the test binary",
+      "reason": "Historical ASan heap-buffer-overflow in shredded VARIANT AnalyzeShred; requires sanitizer recheck before unskipping",
       "paths": [
         "test/sql/storage/types/variant/index_fetch.test",
         "test/sql/storage/types/variant/variant_shredded_slice.test"
@@ -1635,14 +1592,7 @@
         "test/sql/storage/types/variant/struct_of_variant.test",
         "test/sql/storage/types/variant/variant_comparator_stats.test",
         "test/sql/storage/types/variant/variant_extract_stats.test",
-        "test/sql/storage/types/variant/variant_shredding_empty_keys.test",
         "test/sql/storage/types/variant/variant_shredding_omit_untyped.test",
-        "test/sql/storage/types/variant/variant_extract_filter_pushdown.test",
-        "test/sql/function/variant/variant_array_length_shredded.test",
-        "test/sql/function/variant/variant_exists_shredded.test",
-        "test/sql/function/variant/variant_keys_shredded.test",
-        "test/sql/function/variant/variant_type_shredded.test",
-        "test/sql/function/variant/variant_group_array_shredded.test",
         "test/sql/storage/types/variant/variant_storage_version.test",
         "test/sql/types/variant/implicit_cast_from_variant.test",
         "test/sql/types/variant/variant_cast_stats.test"
@@ -1666,7 +1616,6 @@
         "test/sql/storage/wal/wal_replay_unbound_index_create_index_during_wal.test",
         "test/sql/trigger/trigger_after_update_old_new_wal.test",
         "test/sql/catalog/sequence/test_sequence_google_fuzz.test",
-        "test/sql/catalog/sequence/test_sequence_google_fuzz.test",
         "test/sql/catalog/nested_schema/nested_table_persist.test",
         "test/sql/catalog/nested_schema/nested_table_dml_persist.test",
         "test/sql/catalog/nested_schema/nested_table_dml.test",
@@ -1674,26 +1623,6 @@
         "test/sql/catalog/nested_schema/nested_table_columnref.test",
         "test/sql/storage/wal/wal_null_update_row_group_pruning.test",
         "test/sql/catalog/nested_schema/nested_wal_replay_index.test"
-      ]
-    },
-    {
-      "reason": "Setting a low memory_limit interferes with the S3 write path (HTTP 403 Forbidden)",
-      "paths": [
-        "test/sql/settings/operator_memory_limit.test",
-        "test/sql/settings/reset/reset_memory_limit.test",
-        "test/sql/settings/setting_collation.test"
-      ]
-    },
-    {
-      "reason": "Parquet page offsets written by iceberg trip DuckDB's prefetching (IO Error)",
-      "paths": [
-        "test/sql/subquery/scalar/test_update_subquery.test"
-      ]
-    },
-    {
-      "reason": "INTERNAL assertion creating an iceberg table with a NULL/untyped column (iceberg_create_table_request.cpp)",
-      "paths": [
-        "test/sql/types/test_null_type.test"
       ]
     },
     {
@@ -1719,28 +1648,95 @@
         "test/sql/catalog/nested_schema/nested_export.test",
         "test/sql/catalog/nested_schema/nested_schema_limits.test",
         "test/sql/catalog/nested_schema/nested_wal_replay.test",
-        "test/sql/storage/compression/alp/alp_corrupted_exception_position.test",
-        "test/sql/storage/compression/alprd/alprd_corrupted_exception_position.test",
         "test/sql/storage/compression/dictionary/dict_corrupted_offset.test",
-        "test/sql/alter/struct/rename_col_nested_struct.test",
-        "test/sql/attach/attach_enums.test",
-        "test/sql/storage/types/variant/variant_duplicate_keys_shredding.test"
+        "test/sql/attach/attach_enums.test"
       ]
     },
     {
-      "reason": "Test takes too long and fills up backend storage for tests",
+      "reason": "New bump (169987abf3fcf2d4726af3784968e96c0cc84182 -> 99063af2bd7092aff02e14184a20e24699d34d71)",
       "paths": [
-        "test/sql/aggregate/aggregates/bitstring_agg_memory_limit.test",
-        "test/sql/aggregate/aggregates/aggregate_state_spilling.test_slow",
-        "test/sql/storage/external_file_cache/external_file_cache_spill.test_slow",
-        "test/sql/storage/optimistic_write/concurrent_bulk_append_commits.test_slow"
+        "test/sql/alter/alter_col/test_drop_not_null_primary_key.test",
+        "test/sql/catalog/nested_schema/deeply_nested_entries.test",
+        "test/sql/constraints/foreignkey/test_fk_self_reference_export.test",
+        "test/sql/cte/materialized/cte_filter_pusher.test",
+        "test/sql/export/export_compression_level.test",
+        "test/sql/export/export_hive_path.test",
+        "test/sql/export/export_quoted_structs.test",
+        "test/sql/export/parquet_export.test",
+        "test/sql/index/art/issues/test_art_issue_24246.test",
+        "test/sql/json/test_json_export.test",
+        "test/sql/optimizer/aggregate_stats_propagation.test",
+        "test/sql/optimizer/bool_ref_row_group_pruning.test",
+        "test/sql/optimizer/case_zonemap_pruning.test",
+        "test/sql/optimizer/coalesce_zonemap_pruning.test",
+        "test/sql/optimizer/contains_row_group_pruning.test",
+        "test/sql/optimizer/date_part_row_group_pruning.test",
+        "test/sql/optimizer/divide_zonemap_pruning.test",
+        "test/sql/optimizer/left_zonemap_pruning.test",
+        "test/sql/optimizer/list_contains_row_group_pruning.test",
+        "test/sql/optimizer/prefix_zonemap_pruning.test",
+        "test/sql/optimizer/sum_aggregate_stats_propagation.test",
+        "test/sql/optimizer/timestamp_tz_cast_zonemap_pruning.test",
+        "test/sql/optimizer/topn_window_elimination_multiplicity.test",
+        "test/sql/optimizer/upper_lower_zonemap_pruning.test",
+        "test/sql/setops/union_single_dedup.test",
+        "test/sql/storage/compression/alp/alp_corrupt_exception_position.test",
+        "test/sql/storage/compression/alp/alp_corrupt_file.test",
+        "test/sql/storage/compression/alp/alp_corrupt_offsets.test",
+        "test/sql/storage/compression/alp/alp_corrupt_vector_size.test",
+        "test/sql/storage/optimistic_write/optimistic_write_unique_index_wal_replay.test",
+        "test/sql/transactions/test_alter_preserves_delete_indexes.test",
+        "test/sql/trigger/trigger_dependency_restart.test",
+        "test/sql/upsert/insert_or_replace/generated_column.test",
+        "test/sql/window/test_window_agg_stats_propagation.test",
+        "test/sql/storage/compression/alp/alp_corrupt_count.test",
+        "test/sql/storage/compression/alp/alp_corrupt_exponent.test",
+        "test/sql/storage/compression/alp/alp_corrupt_header_undercount.test",
+        "test/sql/storage/compression/alp/alp_corrupt_metadata_offset.test",
+        "test/sql/storage/compression/alp/alp_corrupt_offset.test",
+        "test/sql/storage/compression/alp/alp_corrupt_offset_unordered.test",
+        "test/sql/storage/compression/alprd/alprd_corrupt_count.test",
+        "test/sql/storage/compression/alprd/alprd_corrupt_dictionary_count.test",
+        "test/sql/storage/compression/alprd/alprd_corrupt_dictionary_count_zero.test",
+        "test/sql/storage/compression/alprd/alprd_corrupt_exception_count.test",
+        "test/sql/storage/compression/alprd/alprd_corrupt_exception_position.test",
+        "test/sql/storage/compression/alprd/alprd_corrupt_header_undercount.test",
+        "test/sql/storage/compression/alprd/alprd_corrupt_left_bit_width.test",
+        "test/sql/storage/compression/alprd/alprd_corrupt_metadata_underflow.test",
+        "test/sql/storage/compression/alprd/alprd_corrupt_offset.test",
+        "test/sql/storage/compression/alprd/alprd_corrupt_offset_unordered.test",
+        "test/sql/storage/compression/alprd/alprd_corrupt_right_bit_width.test",
+        "test/sql/storage/compression/bitpacking/bitpacking_corrupt_count.test",
+        "test/sql/storage/compression/bitpacking/bitpacking_corrupt_group_offset.test",
+        "test/sql/storage/compression/bitpacking/bitpacking_corrupt_metadata_underflow.test",
+        "test/sql/storage/compression/bitpacking/bitpacking_corrupt_width.test",
+        "test/sql/storage/compression/rle/rle_corrupt_run_undercount.test",
+        "test/sql/storage/compression/rle/rle_corrupt_value_capacity.test",
+        "test/sql/storage/compression/uncompressed/validity_corrupt_count.test",
+        "test/sql/storage/compression/uncompressed/validity_corrupt_count_boundary.test",
+        "test/sql/storage/compression/uncompressed/validity_corrupt_offset.test",
+        "test/sql/storage/types/list/list_corrupt_offset_order.test",
+        "test/sql/storage/types/list/list_corrupt_offset_range.test",
+        "test/sql/storage/types/list/list_corrupt_offset_skip.test"
       ]
     },
     {
-      "reason": "Async IO behaves differently since backend is Iceberg",
+      "reason": "New bump (99063af2bd7092aff02e14184a20e24699d34d71 -> 4e106d6883ab27b4db6469a760d76c0533bb5bb8)",
       "paths": [
-        "test/sql/storage/prefetch/async_native_scan_pool.test",
-        "test/sql/collate/test_collate_null_constant.test"
+        "test/sql/alter/add_col/test_add_col_compression.test",
+        "test/sql/filter/test_throwing_filter_pushdown.test",
+        "test/sql/function/generic/test_barrier.test",
+        "test/sql/join/mark/test_null_safe_semi_uncommitted_stats.test",
+        "test/sql/optimizer/barrier_row_group_pruning.test",
+        "test/sql/optimizer/cross_column_expression_stats_pruning.test",
+        "test/sql/optimizer/secure_view_pushdown_compression.test",
+        "test/sql/storage/optimistic_write/optimistic_write_batch_insert_sub_rowgroup.test",
+        "test/sql/storage/optimistic_write/optimistic_write_commit_failure.test",
+        "test/sql/storage/reclaim_space/reclaim_space_drop_table_optimistic.test",
+        "test/sql/types/numeric/float_precision.test",
+        "test/sql/storage/compression/chimp/chimp_fetch_row.test",
+        "test/sql/alter/rename_table/test_rename_table_conflict_storage_name.test",
+        "test/sql/storage/temp_directory/offload_failure_accounting.test"
       ]
     },
     {
@@ -1753,15 +1749,135 @@
       ]
     },
     {
-      "reason": "Broken parquet pre-fetching, needs investigation",
+      "reason": "Case sensitive/insensitive column names",
+      "paths": [
+        "test/sql/binder/test_case_insensitive_binding.test"
+      ]
+    },
+    {
+      "reason": "Concurrent successful appends leave missing rows (20 inserts succeed, but only 200 of 2000 rows remain visible)",
+      "paths": [
+        "test/sql/parallelism/interquery/concurrent_appends.test"
+      ]
+    },
+    {
+      "reason": "VARIANT field equality filter returns 0 matches instead of 1; disabling filter_pushdown restores the correct result",
+      "paths": [
+        "test/sql/storage/types/variant/variant_extract_filter_pushdown.test"
+      ]
+    },
+    {
+      "reason": "Nested VARIANT projection fails with Parquet prefetching enabled",
       "paths": [
         "test/sql/optimizer/pushdown_extract_reapplied.test"
       ]
     },
     {
-      "reason": "Case sensitive/insensitive column names",
+      "reason": "Non-null whole-STRUCT defaults are accepted but DEFAULT inserts produce NULL",
       "paths": [
-        "test/sql/binder/test_case_insensitive_binding.test"
+        "test/sql/storage/types/struct/default_struct.test",
+        "test/sql/alter/struct/rename_col_nested_struct.test"
+      ]
+    },
+    {
+      "reason": "DEFAULT now() is frozen at table creation, so separate inserts receive the same timestamp",
+      "paths": [
+        "test/sql/function/timestamp/test_now_prepared.test"
+      ]
+    },
+    {
+      "reason": "MAP with a NULL/unknown key type reaches the REST server and returns HTTP 500",
+      "paths": [
+        "test/sql/types/test_null_type.test"
+      ]
+    },
+    {
+      "reason": "Empty VARIANT object key is rewritten to element1 during the Iceberg round-trip",
+      "paths": [
+        "test/sql/storage/types/variant/variant_shredding_empty_keys.test"
+      ]
+    },
+    {
+      "reason": "EXPORT DATABASE consumes unloaded table placeholder columns and fails binding column __",
+      "paths": [
+        "test/sql/export/export_temp_tables.test"
+      ]
+    },
+    {
+      "reason": "Failing on unrelated test helper crash, needs https://github.com/duckdb/duckdb/pull/25934",
+      "paths": [
+        "duckdb/test/sql/types/geo/geometry_crs.test"
+      ]
+    },
+    {
+      "reason": "Batch-dependent metadata visibility: newly created tables lack metadata-log or committed added columns are missing",
+      "paths": [
+        "test/sql/parallelism/interquery/concurrent_reads_while_updating.test_slow",
+        "test/sql/parallelism/interquery/concurrent_settings.test_slow",
+        "test/sql/parallelism/interquery/concurrent_update_drop.test_slow",
+        "test/sql/storage/catalog/test_store_add_column.test",
+        "test/sql/storage/delete/load_delete_modify.test",
+        "test/sql/storage/delete/repeated_deletes.test",
+        "test/sql/storage/optimistic_write/concurrent_bulk_append_commits.test_slow",
+        "test/sql/storage/types/variant/append_shredded.test",
+        "test/sql/storage/types/variant/null_tests.test_slow",
+        "test/sql/storage/types/variant/update.test",
+        "test/sql/storage/types/variant/variant_null_missing.test",
+        "test/sql/storage/types/variant/variant_shredding_inconsistent.test",
+        "test/sql/storage/wal/wal_prepared_storage.test",
+        "test/sql/storage/wal/wal_store_add_column.test",
+        "test/sql/storage/wal/wal_store_add_column_persistent.test",
+        "test/sql/subquery/scalar/test_update_subquery.test",
+        "test/sql/transactions/test_multi_transaction_append.test",
+        "test/sql/transactions/test_null_version.test",
+        "test/sql/transactions/transaction_insert_mixed_deletes.test",
+        "test/sql/types/blob/test_blob.test",
+        "test/sql/types/decimal/test_decimal_2975.test",
+        "test/sql/types/geo/geometry.test",
+        "test/sql/types/geo/geometry_persist.test",
+        "test/sql/types/geo/geometry_shred_list.test",
+        "test/sql/types/geo/geometry_wkb.test",
+        "test/sql/types/list/unnest_expand.test",
+        "test/sql/types/nested/list/test_list_slice_numeric_limits.test",
+        "test/sql/types/nested/map/map_from_entries/null_entry.test",
+        "test/sql/types/nested/map/test_map.test",
+        "test/sql/types/nested/map/test_map_nested_keys.test",
+        "test/sql/types/nested/map/test_map_subscript.test",
+        "test/sql/types/struct/struct_projection_pushdown_in_storage.test",
+        "test/sql/types/struct/struct_updates.test",
+        "test/sql/update/test_string_update_null.test",
+        "test/sql/update/test_update_mix.test"
+      ]
+    },
+    {
+      "reason": "ALTER VIEW is not supported in Iceberg catalogs",
+      "paths": [
+        "test/sql/alter/rename_view/test_rename_view_incorrect.test"
+      ]
+    },
+    {
+      "reason": "Native DuckDB storage versions and reopening a different database do not reset the remote Iceberg catalog",
+      "paths": [
+        "test/sql/pivot/pivot_star.test"
+      ]
+    },
+    {
+      "reason": "EXPLAIN and profiling assert native DuckDB row IDs and row group counts, not Iceberg scan behavior",
+      "paths": [
+        "test/sql/optimizer/topn_window_elimination_late_materialization.test",
+        "test/sql/pragma/profiling/test_custom_profiling_row_group_metrics_local_storage.test"
+      ]
+    },
+    {
+      "reason": "Test requires native table constraints and a fresh global test schema",
+      "paths": [
+        "test/sql/pragma/test_table_info.test"
+      ]
+    },
+    {
+      "reason": "Test expects current_schema() to be main rather than the configured per-test Iceberg namespace",
+      "paths": [
+        "test/sql/storage/extensions/extension_views.test"
       ]
     }
   ]

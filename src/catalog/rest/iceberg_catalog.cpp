@@ -22,8 +22,83 @@
 
 namespace duckdb {
 
+LoadTableCachePublication::~LoadTableCachePublication() {
+	if (cache) {
+		cache->Release(*this);
+	}
+}
+
+bool LoadTableCachePublication::TryPublish(unique_ptr<const rest_api_objects::LoadTableResult> result) {
+	return cache->TryPublish(*this, std::move(result));
+}
+
+unique_ptr<LoadTableCachePublication> LoadTableResultCache::BeginLoad(const string &table_key) {
+	auto publication = unique_ptr<LoadTableCachePublication>(new LoadTableCachePublication(table_key));
+	annotated_lock_guard<annotated_mutex> guard(lock);
+	auto &pending = pending_loads[table_key];
+	pending.latest = publication.get();
+	pending.count++;
+	publication->cache = this;
+	return publication;
+}
+
+void LoadTableResultCache::Release(LoadTableCachePublication &publication) {
+	annotated_lock_guard<annotated_mutex> guard(lock);
+	auto it = pending_loads.find(publication.table_key);
+	D_ASSERT(it != pending_loads.end() && it->second.count > 0);
+	it->second.count--;
+	if (it->second.count == 0) {
+		pending_loads.erase(it);
+	} else if (it->second.latest.get() == &publication) {
+		it->second.latest = nullptr;
+	}
+}
+
+void LoadTableResultCache::InvalidateLoads(const string &table_key) {
+	auto it = pending_loads.find(table_key);
+	if (it != pending_loads.end()) {
+		it->second.latest = nullptr;
+	}
+}
+
+bool LoadTableResultCache::TryPublish(LoadTableCachePublication &publication,
+                                      unique_ptr<const rest_api_objects::LoadTableResult> result) {
+	annotated_lock_guard<annotated_mutex> guard(lock);
+	auto it = pending_loads.find(publication.table_key);
+	if (it == pending_loads.end() || it->second.latest.get() != &publication) {
+		return false;
+	}
+	Store(publication.table_key, std::move(result));
+	it->second.latest = nullptr;
+	return true;
+}
+
+void LoadTableResultCache::SetOrOverwrite(const string &table_key,
+                                          unique_ptr<const rest_api_objects::LoadTableResult> result) {
+	annotated_lock_guard<annotated_mutex> guard(lock);
+	InvalidateLoads(table_key);
+	Store(table_key, std::move(result));
+}
+
+void LoadTableResultCache::Store(const string &table_key, unique_ptr<const rest_api_objects::LoadTableResult> result) {
+	// With staleness disabled, retain the payload for identity-based invalidation but expire it immediately.
+	system_clock::time_point expires_at;
+	if (attach_options.max_table_staleness_micros.IsValid()) {
+		expires_at =
+		    system_clock::now() + std::chrono::microseconds(attach_options.max_table_staleness_micros.GetIndex());
+	} else {
+		expires_at = system_clock::time_point::min();
+	}
+	auto epoch_micros = timestamp_t(duration_cast<microseconds>(expires_at.time_since_epoch()).count());
+	auto expire_timestamp_ms = timestamp_ms_t(Timestamp::GetEpochMs(epoch_micros));
+	tables.erase(table_key);
+	tables.emplace(table_key, MetadataCacheValue(expire_timestamp_ms, std::move(result)));
+}
+
 void LoadTableResultCache::EvictIfCurrent(const IcebergTable &table) {
 	annotated_lock_guard<annotated_mutex> guard(lock);
+	// Even without a matching cached payload, a pre-write fetch must not repopulate the cache.
+	InvalidateLoads(table.GetTableKey());
 	auto it = tables.find(table.GetTableKey());
 	if (it == tables.end()) {
 		return;
@@ -36,7 +111,7 @@ void LoadTableResultCache::EvictIfCurrent(const IcebergTable &table) {
 
 IcebergCatalog::IcebergCatalog(AttachedDatabase &db_p, AccessMode access_mode,
                                unique_ptr<IcebergAuthorization> auth_handler, IcebergAttachOptions &attach_options_p,
-                               const Identifier &default_schema)
+                               const optional<Identifier> &default_schema)
     : Catalog(db_p), access_mode(access_mode), auth_handler(std::move(auth_handler)),
       base_uri(attach_options_p.catalog_uri), version("v1"), attach_options(attach_options_p),
       default_schema(default_schema), warehouse(attach_options.warehouse), schemas(*this),
@@ -59,14 +134,6 @@ void IcebergCatalog::ScanSchemas(ClientContext &context, std::function<void(Sche
 optional_ptr<SchemaCatalogEntry> IcebergCatalog::LookupSchema(CatalogTransaction transaction,
                                                               const EntryLookupInfo &schema_lookup,
                                                               OnEntryNotFound if_not_found) {
-	if (schema_lookup.GetEntryName() == DEFAULT_SCHEMA && default_schema != DEFAULT_SCHEMA) {
-		// throws error if default schema is empty
-		if (default_schema.empty() && if_not_found == OnEntryNotFound::RETURN_NULL) {
-			return nullptr;
-		}
-		return GetSchema(transaction, default_schema, if_not_found);
-	}
-
 	auto &schema_name = schema_lookup.GetEntryName();
 	auto entry = schemas.GetEntry(transaction.GetContext(), schema_name, if_not_found);
 	if (!entry && if_not_found != OnEntryNotFound::RETURN_NULL) {
@@ -74,6 +141,10 @@ optional_ptr<SchemaCatalogEntry> IcebergCatalog::LookupSchema(CatalogTransaction
 	}
 
 	return reinterpret_cast<SchemaCatalogEntry *>(entry.get());
+}
+
+optional<Identifier> IcebergCatalog::GetDefaultSchema() const {
+	return default_schema;
 }
 
 optional_ptr<CatalogEntry> IcebergCatalog::CreateSchema(CatalogTransaction transaction, CreateSchemaInfo &info) {
@@ -164,11 +235,6 @@ DatabaseSize IcebergCatalog::GetDatabaseSize(ClientContext &context) {
 }
 
 ErrorData IcebergCatalog::SupportsCreateTable(BoundCreateTableInfo &info) {
-	auto &base = info.Base().Cast<CreateTableInfo>();
-	if (!base.sort_keys.empty()) {
-		return ErrorData(ExceptionType::CATALOG,
-		                 StringUtil::Format("SORTED BY is not supported for tables in a %s catalog", GetCatalogType()));
-	}
 	return ErrorData();
 }
 
@@ -294,6 +360,7 @@ void IcebergCatalog::AddDefaultSupportedEndpoints() {
 	supported_urls.insert("POST /v1/{prefix}/tables/rename");
 	// commit updates to multiple tables in an atomic transaction
 	supported_urls.insert("POST /v1/{prefix}/transactions/commit");
+	// Views aren't in the spec defaults; catalogs that support them advertise via /v1/config
 }
 
 void IcebergCatalog::AddS3TablesEndpoints() {
@@ -468,14 +535,17 @@ bool IcebergCatalog::HasConflictingAttachOptions(const string &path, const Attac
 	return false;
 }
 
-string IcebergCatalog::GetOnlyMergeOnReadSupportedErrorMessage(const string &table_name, const string &property,
-                                                               const string &property_value) {
-	return StringUtil::Format("DuckDB-Iceberg only supports merge-on-read for updates/deletes. Table Property '%s' is "
-	                          "set to '%s' for table %s"
-	                          "You can modify Iceberg table properties wth the set_iceberg_table_properties() "
-	                          "function, and remove them with the remove_iceberg_table_properties() function. "
-	                          "You can view Iceberg table properties with the iceberg_table_properties() function",
-	                          property, property_value, table_name);
+void IcebergCatalog::VerifyMergeOnRead(const IcebergTableMetadata &metadata, const string &table_name,
+                                       const string &write_mode_property) {
+	if (metadata.AllowsMergeOnRead(write_mode_property)) {
+		return;
+	}
+	throw NotImplementedException(
+	    "DuckDB-Iceberg only supports merge-on-read for deletes, updates and merges. Table Property '%s' is set to "
+	    "'%s' for table %s. You can modify Iceberg table properties with the set_iceberg_table_properties() "
+	    "function, and remove them with the remove_iceberg_table_properties() function. You can view Iceberg table "
+	    "properties with the iceberg_table_properties() function",
+	    write_mode_property, metadata.GetTableProperty(write_mode_property), table_name);
 }
 
 } // namespace duckdb
