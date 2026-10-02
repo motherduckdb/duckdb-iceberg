@@ -1306,6 +1306,7 @@
       "reason": "Iceberg catalog is case-sensitive on table names (DuckDB normalizes)",
       "paths": [
         "test/sql/aggregate/aggregates/test_aggregate_types.test",
+        "test/sql/catalog/drop_create_rollback.test",
         "test/sql/aggregate/distinct/issue2656.test",
         "test/sql/catalog/case_insensitive_binder.test",
         "test/sql/catalog/case_insensitive_caps.test",
