@@ -29,6 +29,9 @@ BEGIN;
 statement ok con2
 BEGIN;
 
+# Keep the later commit outside the default 100 ms clock-skew allowance.
+sleep 200 milliseconds
+
 statement ok con1
 ALTER TABLE my_datalake.default.my_table ALTER COLUMN a DROP NOT NULL;
 

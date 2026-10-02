@@ -36,6 +36,9 @@ insert into my_datalake.default.metadata_log_partition_spec values (1, 10);
 statement ok con1
 begin
 
+# Keep the later commit outside the default 100 ms clock-skew allowance.
+sleep 200 milliseconds
+
 statement ok con2
 begin
 
@@ -78,6 +81,9 @@ insert into my_datalake.default.metadata_log_sort_order values (1, 10);
 
 statement ok con1
 begin
+
+# Keep the later commit outside the default 100 ms clock-skew allowance.
+sleep 200 milliseconds
 
 statement ok con2
 begin
