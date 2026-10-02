@@ -38,6 +38,6 @@ jobs:
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_code_quality.yml@main
     with:
       extension_name: iceberg
-      duckdb_version: 3f59160bb2d74e22ea53b346afbf204ec1b3de4f
+      duckdb_version: e4e0d23ce092c56f8034672186cb03507e79fb04
       ci_tools_version: main
       format_checks: 'format'
