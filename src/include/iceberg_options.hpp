@@ -20,11 +20,11 @@ static constexpr uint64_t DEFAULT_ICEBERG_FORMAT_VERSION = 2;
 // which contain only the deletion-vector blob rather than a valid Puffin container.
 static constexpr const char *SKIP_PUFFIN_VERIFICATION_CONFIG_VARIABLE = "iceberg_unsafe_skip_puffin_verification";
 
-// When this is true, a DELETE on a v2 Iceberg table whose WHERE clause is a pure
+// When this is true, a DELETE on a v2, v3 Iceberg table whose WHERE clause is a pure
 // conjunction of equality predicates writes an Iceberg equality-delete file instead
-// of a positional delete. This exists only to exercise the equality-delete read path.
-static constexpr const char *ENABLE_EQUALITY_DELETES_CONFIG_VARIABLE =
-    "unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes";
+// of a positional delete (v2) or deletion vector (v3). This exists only to exercise
+// the equality-delete read path.
+static constexpr const char *ENABLE_EQUALITY_DELETES_CONFIG_VARIABLE = "__iceberg_unsafe_enable_equality_deletes";
 
 static constexpr const char *UNSAFE_STRUCT_NULL_DEFAULT_INTERP_CONFIG_VARIABLE =
     "__iceberg_unsafe_struct_null_default_interp";

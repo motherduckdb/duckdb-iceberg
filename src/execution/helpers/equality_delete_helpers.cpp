@@ -262,9 +262,9 @@ bool IcebergDelete::TryGetEqualityDeletePredicates(ClientContext &context, Icebe
 		return false;
 	}
 
-	//! Equality-delete writing is only supported for v2, unpartitioned tables.
+	//! Equality-delete writing is only supported for v2 & v3, unpartitioned tables.
 	auto &table_metadata = table.table_info.table_metadata;
-	if (table_metadata.iceberg_version != 2) {
+	if (table_metadata.iceberg_version < 2) {
 		return false;
 	}
 	if (table_metadata.HasPartitionSpec() && table_metadata.GetLatestPartitionSpec().IsPartitioned()) {
