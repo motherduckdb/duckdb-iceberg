@@ -71,9 +71,8 @@ Assume tests must run serially unless their isolation has been verified. Do not 
 ./build/debug/test/unittest test/sql/local/iceberg_scans/iceberg_scan.test
 
 # A catalog-backed test
-TEST_CONFIG="$(bash -c 'source scripts/catalog_test_config.sh && active_catalog_test_config')"
 ./build/debug/test/unittest \
-  --test-config "$TEST_CONFIG" \
+  --test-config "$(scripts/catalog_test_config.sh)" \
   test/sql/local/catalog_test_config_setup/catalog_agnostic/create/test_create_table.test
 
 # Python integration tests
@@ -102,7 +101,7 @@ Pass `TEST=<pytest -k expression>` to a `*-data` target to generate a subset. Th
 Important lifecycle details:
 
 - A start target stops the catalog recorded in `.catalogs/.active_catalog`, starts the requested service, and updates the marker.
-- `scripts/catalog_test_config.sh` uses `BASH_SOURCE`; resolve configs through Bash rather than sourcing it directly from zsh.
+- Execute `scripts/catalog_test_config.sh` directly to resolve the active config; its shebang selects Bash even from zsh.
 - All four local catalog targets require Docker Compose. Lakekeeper and Gravitino may use `sudo` to add `127.0.0.1 seaweedfs` to `/etc/hosts`.
 - Lakekeeper is cloned at a pinned commit and patched. Polaris uses `release/1.4.x`. Preserve these choices unless the task is an intentional version update.
 - Catalog start and data targets mutate local services and generated data. Do not run them merely to validate documentation or inspect Make behavior.

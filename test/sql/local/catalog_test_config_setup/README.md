@@ -4,8 +4,7 @@
 generation step. Use the config for the active catalog, from the repository root:
 
 ```sh
-TEST_CONFIG="$(bash -c 'source scripts/catalog_test_config.sh && active_catalog_test_config')"
-./build/reldebug/test/unittest --test-config "$TEST_CONFIG" \
+./build/reldebug/test/unittest --test-config "$(scripts/catalog_test_config.sh)" \
   'test/sql/local/catalog_test_config_setup/catalog_agnostic/*'
 ```
 
