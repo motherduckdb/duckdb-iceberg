@@ -294,7 +294,7 @@ void IcebergTableSet::ApplyListResult(IcebergListTablesResult tables) {
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	// A refused listing says nothing about which tables exist, so the cache is left untouched.
 	if (tables) {
-		case_insensitive_set_t listed;
+		unordered_set<string> listed;
 		for (auto &table : *tables) {
 			listed.insert(table.name);
 			entries.emplace(table.name, IcebergTable::CreatePlaceholder(ic_catalog, schema, table.name));
@@ -465,7 +465,7 @@ static bool EntryMissingFromListing(const optional<vector<rest_api_objects::Tabl
 		return false;
 	}
 	for (auto &entry : *listing) {
-		if (StringUtil::CIEquals(entry.name, name)) {
+		if (entry.name == name) {
 			return false;
 		}
 	}
@@ -522,7 +522,7 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetEntry(ClientContext &context, con
 
 // ─── View operations ─────────────────────────────────────────────────────────
 
-const case_insensitive_set_t &IcebergTableSet::LoadViewEntries(ClientContext &context) {
+const unordered_set<string> &IcebergTableSet::LoadViewEntries(ClientContext &context) {
 	auto &transaction = IcebergTransaction::Get(context, catalog);
 	auto &schema_name = schema.name.GetIdentifierName();
 	auto existing = transaction.listed_views.find(schema_name);
@@ -540,10 +540,10 @@ const case_insensitive_set_t &IcebergTableSet::LoadViewEntries(ClientContext &co
 	return ApplyViewListResult(context, std::move(views));
 }
 
-const case_insensitive_set_t &IcebergTableSet::ApplyViewListResult(ClientContext &context,
-                                                                   IcebergListViewsResult views) {
+const unordered_set<string> &IcebergTableSet::ApplyViewListResult(ClientContext &context,
+                                                                  IcebergListViewsResult views) {
 	auto &transaction = IcebergTransaction::Get(context, catalog);
-	case_insensitive_set_t names;
+	unordered_set<string> names;
 	if (views) {
 		for (auto &view : *views) {
 			names.insert(view.name);
