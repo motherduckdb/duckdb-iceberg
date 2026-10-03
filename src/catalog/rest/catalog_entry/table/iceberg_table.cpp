@@ -866,28 +866,17 @@ void IcebergTable::InitializeFromCatalogResponse(ClientContext &context,
 	//! match the metadata file, so this deviates from the spec and only happens when the option is set.
 	if (catalog.attach_options.use_metadata_location && load_table_result.metadata_location.has_value()) {
 		auto &metadata_location = *load_table_result.metadata_location;
-		shared_ptr<const rest_api_objects::TableMetadata> file_metadata;
-		{
-			annotated_lock_guard<annotated_mutex> guard(catalog.metadata_file_cache_lock);
-			auto entry = catalog.metadata_file_cache.find(metadata_location);
-			if (entry != catalog.metadata_file_cache.end()) {
-				file_metadata = entry->second;
-			}
-		}
-		if (!file_metadata) {
-			try {
-				auto &fs = FileSystem::GetFileSystem(context);
-				auto caching_fs = make_shared_ptr<CachingFileSystemWrapper>(fs, *context.db);
-				file_metadata = make_shared_ptr<const rest_api_objects::TableMetadata>(
-				    IcebergTableMetadata::Parse(metadata_location, *caching_fs, "none"));
-				annotated_lock_guard<annotated_mutex> guard(catalog.metadata_file_cache_lock);
-				catalog.metadata_file_cache.emplace(metadata_location, file_metadata);
-			} catch (std::exception &ex) {
-				DUCKDB_LOG(context, IcebergLogType,
-				           "Could not load table metadata from metadata-location '%s': %s - falling back to the "
-				           "metadata embedded in the catalog response",
-				           metadata_location, ex.what());
-			}
+		unique_ptr<const rest_api_objects::TableMetadata> file_metadata;
+		try {
+			auto &fs = FileSystem::GetFileSystem(context);
+			auto caching_fs = make_shared_ptr<CachingFileSystemWrapper>(fs, *context.db);
+			file_metadata = make_uniq<const rest_api_objects::TableMetadata>(
+			    IcebergTableMetadata::Parse(metadata_location, *caching_fs, "none"));
+		} catch (std::exception &ex) {
+			DUCKDB_LOG(context, IcebergLogType,
+			           "Could not load table metadata from metadata-location '%s': %s - falling back to the "
+			           "metadata embedded in the catalog response",
+			           metadata_location, ex.what());
 		}
 		if (file_metadata) {
 			InitializeFromLoadTableResult(load_table_result, file_metadata.get());

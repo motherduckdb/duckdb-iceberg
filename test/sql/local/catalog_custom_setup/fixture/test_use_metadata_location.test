@@ -76,8 +76,36 @@ CALL truncate_duckdb_logs();
 statement ok
 FROM my_datalake.default.table_unpartitioned;
 
-# the metadata file is cached per catalog, re-scanning issues no new request
+# The external file cache avoids another metadata GET on re-scan
 query I
 select count(*) from duckdb_logs_parsed('HTTP') where request.type = 'GET' and request.url like '%.metadata.json%';
 ----
 0
+
+# Recreate the catalog so no catalog-local state can satisfy the metadata read.
+statement ok
+DETACH my_datalake;
+
+statement ok
+ATTACH '' AS my_datalake (
+    TYPE ICEBERG,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    URI 'http://127.0.0.1:8181',
+    USE_METADATA_LOCATION true
+);
+
+statement ok
+CALL truncate_duckdb_logs();
+
+statement ok
+FROM my_datalake.default.table_unpartitioned;
+
+# The external file cache also avoids a metadata GET for the new catalog.
+query I
+select count(*) from duckdb_logs_parsed('HTTP') where request.type = 'GET' and request.url like '%.metadata.json%';
+----
+0
+
+statement ok
+DETACH my_datalake;
