@@ -10,27 +10,27 @@
 namespace duckdb {
 namespace rest_api_objects {
 
-class BooleanExpression {
+class TermReference {
 public:
-	BooleanExpression();
-	BooleanExpression(const BooleanExpression &) = delete;
-	BooleanExpression &operator=(const BooleanExpression &) = delete;
-	BooleanExpression(BooleanExpression &&) = default;
-	BooleanExpression &operator=(BooleanExpression &&) = default;
+	TermReference();
+	TermReference(const TermReference &) = delete;
+	TermReference &operator=(const TermReference &) = delete;
+	TermReference(TermReference &&) = default;
+	TermReference &operator=(TermReference &&) = default;
 
 public:
 	// Deserialization
-	static BooleanExpression FromJSON(JSONValue obj);
+	static TermReference FromJSON(JSONValue obj);
 	string TryFromJSON(JSONValue obj);
 
 	// Copy
-	BooleanExpression Copy() const;
+	TermReference Copy() const;
 
 	// Serialization
 	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
-	bool value;
+	string value;
 };
 
 } // namespace rest_api_objects

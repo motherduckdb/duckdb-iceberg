@@ -1,5 +1,5 @@
 
-#include "rest_catalog/objects/and_or_expression.hpp"
+#include "rest_catalog/objects/and_or_predicate.hpp"
 
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
@@ -10,11 +10,11 @@
 namespace duckdb {
 namespace rest_api_objects {
 
-AndOrExpression::AndOrExpression() {
+AndOrPredicate::AndOrPredicate() {
 }
 
-AndOrExpression AndOrExpression::FromJSON(JSONValue obj) {
-	AndOrExpression res;
+AndOrPredicate AndOrPredicate::FromJSON(JSONValue obj) {
+	AndOrPredicate res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
 		throw InvalidInputException(error);
@@ -22,19 +22,19 @@ AndOrExpression AndOrExpression::FromJSON(JSONValue obj) {
 	return res;
 }
 
-AndOrExpression AndOrExpression::Copy() const {
-	AndOrExpression res;
+AndOrPredicate AndOrPredicate::Copy() const {
+	AndOrPredicate res;
 	res.type = type.Copy();
-	res.left = left ? make_uniq<Expression>(left->Copy()) : nullptr;
-	res.right = right ? make_uniq<Expression>(right->Copy()) : nullptr;
+	res.left = left ? make_uniq<Predicate>(left->Copy()) : nullptr;
+	res.right = right ? make_uniq<Predicate>(right->Copy()) : nullptr;
 	return res;
 }
 
-string AndOrExpression::TryFromJSON(JSONValue obj) {
+string AndOrPredicate::TryFromJSON(JSONValue obj) {
 	string error;
 	auto type_val = obj.GetMember("type");
 	if (!type_val.IsValid()) {
-		return "AndOrExpression required property 'type' is missing";
+		return "AndOrPredicate required property 'type' is missing";
 	} else {
 		error = type.TryFromJSON(type_val);
 		if (!error.empty()) {
@@ -43,9 +43,9 @@ string AndOrExpression::TryFromJSON(JSONValue obj) {
 	}
 	auto left_val = obj.GetMember("left");
 	if (!left_val.IsValid()) {
-		return "AndOrExpression required property 'left' is missing";
+		return "AndOrPredicate required property 'left' is missing";
 	} else {
-		left = make_uniq<Expression>();
+		left = make_uniq<Predicate>();
 		error = left->TryFromJSON(left_val);
 		if (!error.empty()) {
 			return error;
@@ -53,9 +53,9 @@ string AndOrExpression::TryFromJSON(JSONValue obj) {
 	}
 	auto right_val = obj.GetMember("right");
 	if (!right_val.IsValid()) {
-		return "AndOrExpression required property 'right' is missing";
+		return "AndOrPredicate required property 'right' is missing";
 	} else {
-		right = make_uniq<Expression>();
+		right = make_uniq<Predicate>();
 		error = right->TryFromJSON(right_val);
 		if (!error.empty()) {
 			return error;
@@ -64,7 +64,7 @@ string AndOrExpression::TryFromJSON(JSONValue obj) {
 	return "";
 }
 
-void AndOrExpression::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
+void AndOrPredicate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
 	// Serialize: type
 	auto type_json = type.ToJSON(writer);
 	obj.Add("type", type_json);
@@ -78,7 +78,7 @@ void AndOrExpression::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) con
 	obj.Add("right", right_json);
 }
 
-JSONMutableValue AndOrExpression::ToJSON(JSONWriter &writer) const {
+JSONMutableValue AndOrPredicate::ToJSON(JSONWriter &writer) const {
 	auto obj = writer.CreateObject();
 	PopulateJSON(writer, obj);
 	return obj;

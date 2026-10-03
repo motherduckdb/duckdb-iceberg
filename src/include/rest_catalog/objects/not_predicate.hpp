@@ -7,27 +7,27 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/expression_type.hpp"
-#include "rest_catalog/objects/primitive_type_value.hpp"
-#include "rest_catalog/objects/term.hpp"
 
 namespace duckdb {
 namespace rest_api_objects {
 
-class LiteralExpression {
+class Predicate;
+
+class NotPredicate {
 public:
-	LiteralExpression();
-	LiteralExpression(const LiteralExpression &) = delete;
-	LiteralExpression &operator=(const LiteralExpression &) = delete;
-	LiteralExpression(LiteralExpression &&) = default;
-	LiteralExpression &operator=(LiteralExpression &&) = default;
+	NotPredicate();
+	NotPredicate(const NotPredicate &) = delete;
+	NotPredicate &operator=(const NotPredicate &) = delete;
+	NotPredicate(NotPredicate &&) = default;
+	NotPredicate &operator=(NotPredicate &&) = default;
 
 public:
 	// Deserialization
-	static LiteralExpression FromJSON(JSONValue obj);
+	static NotPredicate FromJSON(JSONValue obj);
 	string TryFromJSON(JSONValue obj);
 
 	// Copy
-	LiteralExpression Copy() const;
+	NotPredicate Copy() const;
 
 	// Serialization
 	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
@@ -35,8 +35,7 @@ public:
 
 public:
 	ExpressionType type;
-	Term term;
-	PrimitiveTypeValue value;
+	unique_ptr<Predicate> child;
 };
 
 } // namespace rest_api_objects
