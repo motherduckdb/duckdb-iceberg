@@ -1,9 +1,10 @@
 import ctypes
+import os
 import pathlib
+import re
 import subprocess
 import sys
-
-import pytest
+import tempfile
 
 
 # SQL PREPARE does not accept CTAS, but ADBC prepares and executes CTAS through
@@ -11,7 +12,7 @@ import pytest
 def _duckdb_library_path(build_dir):
     candidates = [path for path in (build_dir / "src").glob("libduckdb.*") if path.suffix in (".so", ".dylib", ".dll")]
     if not candidates:
-        pytest.skip(f"libduckdb was not built in {build_dir}")
+        raise FileNotFoundError(f"libduckdb was not built in {build_dir}")
     return candidates[0]
 
 
@@ -65,7 +66,8 @@ def _init_api(lib):
 
 class DuckDB:
     def __init__(self, build_dir):
-        self.lib = ctypes.CDLL(str(_duckdb_library_path(build_dir)))
+        # EXTENSION_STATIC_BUILD=0 extensions resolve DuckDB symbols from the host.
+        self.lib = ctypes.CDLL(str(_duckdb_library_path(build_dir)), mode=ctypes.RTLD_GLOBAL)
         _init_api(self.lib)
         self.db = ctypes.c_void_p()
         self.con = ctypes.c_void_p()
@@ -139,15 +141,19 @@ class DuckDB:
 def _run_ctas_test(test, build_dir, catalog_init_sql):
     db = DuckDB(build_dir)
     try:
-        for extension in ("core_functions", "parquet"):
-            db.query(f"LOAD {extension}")
-        for extension in ("avro", "httpfs", "iceberg"):
-            extension_path = build_dir / "extension" / extension / f"{extension}.duckdb_extension"
-            assert extension_path.is_file(), f"Extension was not built: {extension_path}"
-            escaped_path = str(extension_path).replace("'", "''")
-            db.query(f"LOAD '{escaped_path}'")
-        db.query(catalog_init_sql)
-        test(db)
+        with tempfile.TemporaryDirectory(prefix="iceberg-capi-extensions-") as extension_dir:
+            escaped_dir = extension_dir.replace("'", "''")
+            db.query(f"SET extension_directory='{escaped_dir}'")
+            for extension in ("core_functions", "parquet"):
+                db.query(f"LOAD {extension}")
+            # The local repository is also included in CI's trimmed build artifacts.
+            repository = str(build_dir / "repository").replace("'", "''")
+            for extension in ("avro", "httpfs", "iceberg"):
+                db.query(f"INSTALL {extension} FROM '{repository}'")
+                db.query(f"LOAD {extension}")
+            if catalog_init_sql.strip():
+                db.query(catalog_init_sql)
+            test(db)
     finally:
         db.close()
 
@@ -180,23 +186,65 @@ def _duplicate_ctas_in_transaction_still_errors(duckdb_capi):
     duckdb_capi.query("ROLLBACK")
 
 
-@pytest.fixture()
-def run_ctas_test(duckdb_catalog_init_sql, unittest_binary):
-    build_dir = pathlib.Path(unittest_binary).resolve().parents[1]
-    _duckdb_library_path(build_dir)
+def _darwin_asan_runtime(library_path):
+    load_commands = subprocess.check_output(["otool", "-l", str(library_path)], text=True)
+    dependencies = re.findall(r"^\s+name (.+) \(offset \d+\)$", load_commands, re.MULTILINE)
+    runtime = next((name for name in dependencies if pathlib.Path(name).name.startswith("libclang_rt.asan")), None)
+    if runtime is None:
+        return None
 
-    def run(test_name):
-        # Catalog test collection imports the installed Python duckdb package.
-        # Keep its native library out of the process exercising this build's C API.
-        result = subprocess.run(
-            [sys.executable, str(pathlib.Path(__file__).resolve()), test_name, str(build_dir)],
-            input=duckdb_catalog_init_sql,
-            text=True,
-            capture_output=True,
+    def resolve_loader_path(path):
+        return pathlib.Path(
+            path.replace("@loader_path", str(library_path.resolve().parent)).replace(
+                "@executable_path", str(pathlib.Path(sys.executable).resolve().parent)
+            )
         )
-        assert result.returncode == 0, f"C API test failed:\n{result.stdout}\n{result.stderr}"
 
-    return run
+    if runtime.startswith("@rpath/"):
+        rpaths = re.findall(r"^\s+path (.+) \(offset \d+\)$", load_commands, re.MULTILINE)
+        candidates = [resolve_loader_path(path) / runtime.removeprefix("@rpath/") for path in rpaths]
+    else:
+        candidates = [resolve_loader_path(runtime)]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(f"Could not find ASan runtime {runtime} linked by {library_path}; checked {candidates}")
+
+
+def _capi_subprocess_env(build_dir):
+    env = os.environ.copy()
+    runtimes = []
+    if sys.platform == "linux":
+        # CI bundles the runtime from the compiler that instrumented libduckdb.
+        runtimes = list((build_dir / "repository" / "capi_runtime").glob("libclang_rt.asan*.so"))
+        preload_variable = "LD_PRELOAD"
+    elif sys.platform == "darwin":
+        # Resolve the runtime recorded in the library, which may differ from the current compiler.
+        runtime = _darwin_asan_runtime(_duckdb_library_path(build_dir))
+        if runtime:
+            runtimes.append(runtime)
+        preload_variable = "DYLD_INSERT_LIBRARIES"
+    if runtimes:
+        assert len(runtimes) == 1, f"Expected one ASan runtime, found: {runtimes}"
+        env[preload_variable] = os.pathsep.join(filter(None, (str(runtimes[0]), env.get(preload_variable))))
+        # CPython is not built with ASan and leaves interpreter allocations at exit.
+        # Keep ASan/UBSan checks; the native unittest process still runs LSan.
+        env["ASAN_OPTIONS"] = ":".join(filter(None, (env.get("ASAN_OPTIONS"), "detect_leaks=0")))
+    return env
+
+
+def _run_in_subprocess(test_name, build_dir, catalog_init_sql):
+    _duckdb_library_path(build_dir)
+    # Catalog test collection imports the installed Python duckdb package.
+    # Keep its native library out of the process exercising this build's C API.
+    result = subprocess.run(
+        [sys.executable, str(pathlib.Path(__file__).resolve()), test_name, str(build_dir)],
+        input=catalog_init_sql,
+        text=True,
+        capture_output=True,
+        env=_capi_subprocess_env(build_dir),
+    )
+    assert result.returncode == 0, f"C API test failed:\n{result.stdout}\n{result.stderr}"
 
 
 def test_iceberg_ctas_prepared_statement_rebinds_at_execute(run_ctas_test):
@@ -209,7 +257,23 @@ def test_iceberg_duplicate_ctas_in_transaction_still_errors(run_ctas_test):
 
 if __name__ == "__main__":
     tests = {
+        "load_extensions": lambda db: None,
         "prepared_statement_rebinds_at_execute": _prepared_statement_rebinds_at_execute,
         "duplicate_ctas_in_transaction_still_errors": _duplicate_ctas_in_transaction_still_errors,
     }
-    _run_ctas_test(tests[sys.argv[1]], pathlib.Path(sys.argv[2]), sys.stdin.read())
+    if sys.argv[1] == "check_build":
+        _run_in_subprocess("load_extensions", pathlib.Path(sys.argv[2]).resolve(), "")
+    else:
+        _run_ctas_test(tests[sys.argv[1]], pathlib.Path(sys.argv[2]), sys.stdin.read())
+else:
+    # The standalone build check and C API worker require only the standard library.
+    import pytest
+
+    @pytest.fixture()
+    def run_ctas_test(duckdb_catalog_init_sql, unittest_binary):
+        build_dir = pathlib.Path(unittest_binary).resolve().parents[1]
+        try:
+            _duckdb_library_path(build_dir)
+        except FileNotFoundError as error:
+            pytest.skip(str(error))
+        return lambda test_name: _run_in_subprocess(test_name, build_dir, duckdb_catalog_init_sql)
