@@ -13,7 +13,9 @@ IcebergPartitionSpecField IcebergPartitionSpecField::ParseFromJson(const rest_ap
 	if (assigned_field_id.IsValid()) {
 		result.partition_field_id = assigned_field_id.GetIndex();
 	} else {
-		D_ASSERT(field.field_id);
+		if (!field.field_id) {
+			throw InvalidConfigurationException("Partition field '%s' is missing 'field-id'", field.name);
+		}
 		result.partition_field_id = *field.field_id;
 	}
 	return result;
