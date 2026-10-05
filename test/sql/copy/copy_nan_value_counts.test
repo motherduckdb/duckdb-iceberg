@@ -1,6 +1,5 @@
 # name: test/sql/copy/copy_nan_value_counts.test
-# description: nan_value_counts are written to the manifest like Iceberg Java does: every float/double column gets
-#              a count (0 included), except fields nested in a list or map and columns with metrics mode 'none'
+# description: Write nan_value_counts for float/double columns (0 included), except in lists/maps or with metrics mode 'none'
 # group: [copy]
 
 include test/sql/init_requires
