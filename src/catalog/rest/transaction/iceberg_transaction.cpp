@@ -923,9 +923,8 @@ void IcebergTransaction::CleanupFiles() {
 				ic_table_entry.PrepareIcebergScanFromEntry(temp_context);
 
 				auto &add_snapshot = update->Cast<IcebergAddSnapshot>();
-				const auto manifest_list_entries = add_snapshot.GetManifestFiles();
-				for (const auto &manifest : manifest_list_entries) {
-					for (auto &manifest_entry : manifest.GetManifestEntries()) {
+				for (const auto &manifest : add_snapshot.GetPendingManifests()) {
+					for (const auto &manifest_entry : manifest.GetEntries()) {
 						data_files.push_back(manifest_entry.data_file.file_path);
 					}
 				}

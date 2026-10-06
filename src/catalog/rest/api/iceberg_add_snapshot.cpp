@@ -146,18 +146,17 @@ static IcebergManifestListEntry WriteManifestListEntry(const IcebergTable &table
 }
 
 static vector<IcebergManifestListEntry>
-CreateCommitManifestFiles(const vector<IcebergManifestListEntry> &manifest_files, const IcebergTable &table_info,
+CreateCommitManifestFiles(const vector<IcebergPendingManifest> &pending_manifests, const IcebergTable &table_info,
                           IcebergCommitState &commit_state, int64_t sequence_number) {
 	vector<IcebergManifestListEntry> result;
-	result.reserve(manifest_files.size());
+	result.reserve(pending_manifests.size());
 	auto &fs = FileSystem::GetFileSystem(commit_state.context);
 	auto next_row_id = commit_state.next_row_id;
-	for (const auto &manifest_entry : manifest_files) {
-		D_ASSERT(manifest_entry.manifest_metadata);
-		auto copied_entries = manifest_entry.GetManifestEntries();
+	for (const auto &pending_manifest : pending_manifests) {
+		auto copied_entries = pending_manifest.GetEntries();
 		auto copied_manifest = IcebergManifestListEntry::CreateFromEntries(
-		    fs, sequence_number, table_info.table_metadata, *manifest_entry.manifest_metadata,
-		    std::move(copied_entries), next_row_id);
+		    fs, sequence_number, table_info.table_metadata, pending_manifest.GetMetadata(), std::move(copied_entries),
+		    next_row_id);
 		result.push_back(std::move(copied_manifest));
 	}
 	return result;
@@ -176,7 +175,7 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 	const auto snapshot_id = IcebergSnapshot::NewSnapshotId();
 	const auto sequence_number = commit_state.next_sequence_number++;
 	auto uncommitted_manifest_files =
-	    CreateCommitManifestFiles(manifest_files, commit_state.table_info, commit_state, sequence_number);
+	    CreateCommitManifestFiles(pending_manifests, commit_state.table_info, commit_state, sequence_number);
 	D_ASSERT(!uncommitted_manifest_files.empty());
 
 	auto &fs = FileSystem::GetFileSystem(context);
@@ -243,16 +242,16 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 	    CreateAddSnapshotUpdate(commit_state.table_info, *commit_state.latest_snapshot));
 }
 
-void IcebergAddSnapshot::AddManifestFile(IcebergManifestListEntry &&manifest_file) {
-	manifest_files.push_back(std::move(manifest_file));
+void IcebergAddSnapshot::AddPendingManifest(IcebergPendingManifest manifest) {
+	pending_manifests.push_back(std::move(manifest));
 }
 
 void IcebergAddSnapshot::SetManifestDeletes(VersionedIcebergManifestDeletes manifest_deletes_p) {
 	manifest_deletes.emplace(std::move(manifest_deletes_p));
 }
 
-const vector<IcebergManifestListEntry> &IcebergAddSnapshot::GetManifestFiles() const {
-	return manifest_files;
+const vector<IcebergPendingManifest> &IcebergAddSnapshot::GetPendingManifests() const {
+	return pending_manifests;
 }
 
 } // namespace duckdb

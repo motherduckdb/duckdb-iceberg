@@ -1,4 +1,5 @@
 #include "core/metadata/manifest/iceberg_manifest_list.hpp"
+#include "core/metadata/manifest/iceberg_pending_manifest.hpp"
 
 #include "core/metadata/manifest/iceberg_avro_codec.hpp"
 #include "duckdb/common/string_util.hpp"
@@ -198,29 +199,22 @@ static void CollectDataManifestMetrics(const IcebergManifestEntry &manifest_entr
 	metrics.records += data_file.record_count;
 }
 
-IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem &fs, sequence_number_t sequence_number,
-                                                                     const IcebergTableMetadata &table_metadata,
-                                                                     const IcebergManifestMetadata &manifest_metadata,
-                                                                     vector<IcebergManifestEntry> &&manifest_entries,
-                                                                     int64_t &next_row_id) {
-	//! create manifest file path
-	auto manifest_file_uuid = UUID::ToString(UUID::GenerateRandomUUID());
-	auto manifest_file_path = fs.JoinPath(table_metadata.GetMetadataPath(fs), manifest_file_uuid + "-m0.avro");
-
-	// Add a manifest list entry for the entries
-	IcebergManifestListEntry manifest_list_entry(IcebergManifestFile {manifest_file_path}, manifest_metadata);
+static IcebergManifestListEntry CreateManifestListEntry(sequence_number_t sequence_number,
+                                                        const IcebergTableMetadata &table_metadata,
+                                                        const IcebergManifestMetadata &manifest_metadata,
+                                                        vector<IcebergManifestEntry> &&manifest_entries,
+                                                        int64_t &next_row_id, bool assign_row_ids) {
+	IcebergManifestListEntry manifest_list_entry(IcebergManifestFile {""}, manifest_metadata);
 	auto manifest_content = manifest_metadata.content;
 	auto manifest_partition_spec_id = manifest_metadata.partition_spec_id;
 	auto &manifest_file = manifest_list_entry.file;
-	manifest_file.manifest_path = manifest_file_path;
-	if (table_metadata.iceberg_version >= 3 && manifest_content == IcebergManifestContentType::DATA) {
+	manifest_file.manifest_length = 0;
+	if (assign_row_ids && manifest_content == IcebergManifestContentType::DATA) {
 		//! 'first_row_id' is only assigned to data manifests (row lineage), deletes manifests leave it null
 		manifest_file.first_row_id = next_row_id;
 	}
 
-	manifest_file.manifest_path = manifest_file_path;
 	manifest_file.content = manifest_content;
-	//! NOTE: this gets overwritten on commit
 	manifest_file.sequence_number = sequence_number;
 	manifest_file.counts = IcebergManifestCounts::Zero();
 	manifest_file.partition_spec_id = manifest_partition_spec_id;
@@ -257,7 +251,6 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 			}
 		} while (false);
 
-		//! NOTE: this gets overwritten on commit
 		auto entry_data_seq = manifest_entry.GetSequenceNumber(manifest_file);
 		if (!manifest_file.min_sequence_number || entry_data_seq < *manifest_file.min_sequence_number) {
 			manifest_file.min_sequence_number = entry_data_seq;
@@ -283,6 +276,27 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem 
 	stored_entries.insert(stored_entries.end(), std::make_move_iterator(manifest_entries.begin()),
 	                      std::make_move_iterator(manifest_entries.end()));
 	return manifest_list_entry;
+}
+
+IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem &fs, sequence_number_t sequence_number,
+                                                                     const IcebergTableMetadata &table_metadata,
+                                                                     const IcebergManifestMetadata &manifest_metadata,
+                                                                     vector<IcebergManifestEntry> &&manifest_entries,
+                                                                     int64_t &next_row_id) {
+	auto result =
+	    CreateManifestListEntry(sequence_number, table_metadata, manifest_metadata, std::move(manifest_entries),
+	                            next_row_id, table_metadata.iceberg_version >= 3);
+	auto uuid = UUID::ToString(UUID::GenerateRandomUUID());
+	result.file.manifest_path = fs.JoinPath(table_metadata.GetMetadataPath(fs), uuid + "-m0.avro");
+	return result;
+}
+
+IcebergManifestListEntry IcebergPendingManifest::CreateScanEntry(const IcebergTableMetadata &table_metadata,
+                                                                 sequence_number_t sequence_number,
+                                                                 int64_t &next_row_id) const {
+	auto copied_entries = entries;
+	return CreateManifestListEntry(sequence_number, table_metadata, metadata, std::move(copied_entries), next_row_id,
+	                               metadata.format_version >= 3);
 }
 
 void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const IcebergTableSchema &target_schema,
