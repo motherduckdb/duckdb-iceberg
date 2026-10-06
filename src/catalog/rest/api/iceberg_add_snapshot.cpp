@@ -121,7 +121,7 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 	for (const auto &manifest : pending_manifests) {
 		writer.WriteManifest(manifest);
 	}
-	auto written = writer.Finish();
+	auto written = IcebergWrittenSnapshot::Create(std::move(writer));
 	commit_state.next_row_id = written.next_row_id;
 	commit_state.manifests = std::move(written.manifests);
 	commit_state.created_snapshots.push_back(std::move(written.snapshot));

@@ -5,8 +5,13 @@
 
 namespace duckdb {
 
+class IcebergSnapshotWriter;
+
 //! Metadata files have been written, but publication is still the caller's responsibility.
 struct IcebergWrittenSnapshot {
+	//! Consume the writer and persist its manifest list. Publication remains with the caller.
+	static IcebergWrittenSnapshot Create(IcebergSnapshotWriter writer);
+
 	IcebergSnapshot snapshot;
 	vector<IcebergManifestListEntry> manifests;
 	int64_t next_row_id;
@@ -14,11 +19,14 @@ struct IcebergWrittenSnapshot {
 
 //! Assembles one snapshot in one commit attempt. Pending content remains reusable for retries.
 class IcebergSnapshotWriter {
+	friend struct IcebergWrittenSnapshot;
+
 public:
 	IcebergSnapshotWriter(ClientContext &context, const IcebergTableMetadata &table_metadata, int32_t schema_id,
 	                      IcebergSnapshotOperationType operation, sequence_number_t sequence_number,
 	                      int64_t next_row_id, vector<string> &created_metadata_files,
 	                      optional_ptr<const IcebergSnapshot> parent = nullptr);
+	IcebergSnapshotWriter(IcebergSnapshotWriter &&) = default;
 	IcebergSnapshotWriter(const IcebergSnapshotWriter &) = delete;
 	IcebergSnapshotWriter &operator=(const IcebergSnapshotWriter &) = delete;
 
@@ -31,10 +39,8 @@ public:
 	                                                  optional<int64_t> first_row_id);
 	void RemoveManifestEntry(const IcebergManifestEntry &entry);
 	void SetTotalFilesSize(int64_t total_files_size);
-	IcebergWrittenSnapshot Finish();
 
 private:
-	void CheckNotFinished() const;
 	void WriteManifestFile(IcebergManifestListEntry &manifest);
 
 	ClientContext &context;
@@ -46,7 +52,6 @@ private:
 	IcebergSnapshot snapshot;
 	IcebergManifestList manifest_list;
 	int64_t next_row_id;
-	bool finished = false;
 };
 
 } // namespace duckdb

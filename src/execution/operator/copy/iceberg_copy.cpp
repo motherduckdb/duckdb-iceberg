@@ -153,7 +153,7 @@ static void WriteIcebergMetadata(ClientContext &context, CopyIcebergBindData &bi
 		writer.WriteManifest(IcebergPendingManifest(
 		    IcebergManifestMetadata::FromTableMetadata(table_metadata, IcebergManifestContentType::DATA),
 		    std::move(written_files)));
-		auto written = writer.Finish();
+		auto written = IcebergWrittenSnapshot::Create(std::move(writer));
 		next_row_id = written.next_row_id;
 		auto &snapshot = written.snapshot;
 
