@@ -35,6 +35,11 @@ static string ConvertBlobDefault(const string_t &str) {
 
 string IcebergTypeHelper::LogicalTypeToIcebergType(const LogicalType &type) {
 	switch (type.id()) {
+	// Iceberg has no 8- or 16-bit integers; widen them losslessly, as other engines do
+	case LogicalTypeId::TINYINT:
+	case LogicalTypeId::SMALLINT:
+	case LogicalTypeId::UTINYINT:
+	case LogicalTypeId::USMALLINT:
 	case LogicalTypeId::INTEGER:
 		return "int";
 	case LogicalTypeId::BOOLEAN:
@@ -47,6 +52,7 @@ string IcebergTypeHelper::LogicalTypeToIcebergType(const LogicalType &type) {
 	}
 	case LogicalTypeId::DATE:
 		return "date";
+	case LogicalTypeId::UINTEGER:
 	case LogicalTypeId::BIGINT:
 		return "long";
 	case LogicalTypeId::HUGEINT:
