@@ -241,6 +241,12 @@ optional_ptr<CatalogEntry> IcebergSchemaEntry::CreateView(CatalogTransaction tra
 		                       info.GetViewName().GetIdentifierName());
 	}
 
+	// The view is only sent at commit, so reject catalogs without a create view endpoint here.
+	const auto &ic_catalog = catalog.Cast<IcebergCatalog>();
+	if (!ic_catalog.supported_urls.count("POST /v1/{prefix}/namespaces/{namespace}/views")) {
+		throw NotImplementedException("This Iceberg REST catalog server does not support creating views");
+	}
+
 	// IF NOT EXISTS also skips binding when the view exists, so handle conflicts first.
 	if (info.binding_mode == CreateViewBindingMode::SKIP_BINDING) {
 		throw NotImplementedException("DEFER_BINDING is not supported for Iceberg views: an output schema is required");
