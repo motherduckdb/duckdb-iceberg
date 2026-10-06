@@ -246,6 +246,30 @@ rest_api_objects::PrimitiveTypeValue IcebergTypeHelper::PrimitiveTypeFromValue(c
 	}
 }
 
+int32_t IcebergTypeHelper::MinimumFormatVersion(const LogicalType &type) {
+	switch (type.id()) {
+	case LogicalTypeId::TIMESTAMP_NS:
+	case LogicalTypeId::TIMESTAMP_TZ_NS:
+	case LogicalTypeId::VARIANT:
+	case LogicalTypeId::GEOMETRY:
+	case LogicalTypeId::SQLNULL:
+		return 3;
+	case LogicalTypeId::STRUCT: {
+		int32_t result = 1;
+		for (auto &child : StructType::GetChildTypes(type)) {
+			result = MaxValue(result, MinimumFormatVersion(child.second));
+		}
+		return result;
+	}
+	case LogicalTypeId::LIST:
+		return MinimumFormatVersion(ListType::GetChildType(type));
+	case LogicalTypeId::MAP:
+		return MaxValue(MinimumFormatVersion(MapType::KeyType(type)), MinimumFormatVersion(MapType::ValueType(type)));
+	default:
+		return 1;
+	}
+}
+
 rest_api_objects::StructField IcebergTypeHelper::CreateIcebergRestType(const string &name, const LogicalType &type,
                                                                        bool required, const string &doc,
                                                                        const Value &default_val,
