@@ -46,12 +46,12 @@ static optional<IcebergManifestListEntry> RewriteManifestFile(const IcebergManif
 	rewritten_entries.reserve(scanned_entries.size());
 	bool removed_any_entries = false;
 	for (auto &manifest_entry : scanned_entries) {
-		auto sequence_number = manifest_entry.GetSequenceNumber(loaded_manifest.file);
-		auto file_sequence_number = manifest_entry.GetFileSequenceNumber(loaded_manifest.file);
+		auto sequence_number = manifest_entry.GetSequenceNumber(loaded_manifest.GetSummary());
+		auto file_sequence_number = manifest_entry.GetFileSequenceNumber(loaded_manifest.GetSummary());
 		manifest_entry.SetSequenceNumber(sequence_number);
 		manifest_entry.SetFileSequenceNumber(file_sequence_number);
 		//! The replacement manifest is added by this snapshot, so carried-over entries must keep their snapshot id
-		manifest_entry.SetSnapshotId(manifest_entry.GetSnapshotId(loaded_manifest.file));
+		manifest_entry.SetSnapshotId(manifest_entry.GetSnapshotId(loaded_manifest.GetFile()));
 		if (manifest_entry.status == IcebergManifestEntryStatusType::ADDED) {
 			manifest_entry.status = IcebergManifestEntryStatusType::EXISTING;
 		}
@@ -69,7 +69,7 @@ static optional<IcebergManifestListEntry> RewriteManifestFile(const IcebergManif
 		return nullopt;
 	}
 	return writer.WriteReplacementManifest(*loaded_manifest.manifest_metadata, std::move(rewritten_entries),
-	                                       loaded_manifest.file.first_row_id);
+	                                       loaded_manifest.GetSummary().first_row_id);
 }
 
 void IcebergAddSnapshot::ConstructManifestList(IcebergSnapshotWriter &writer, IcebergCommitState &commit_state) const {

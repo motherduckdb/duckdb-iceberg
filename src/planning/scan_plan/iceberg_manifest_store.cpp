@@ -116,10 +116,10 @@ void IcebergManifestStore::LoadManifestList() {
 		}
 
 		for (auto &manifest_list_entry : manifest_list_entries) {
-			if (manifest_list_entry.file.content == IcebergManifestContentType::DATA) {
+			if (manifest_list_entry.GetSummary().content == IcebergManifestContentType::DATA) {
 				committed_data_manifests.push_back(std::move(manifest_list_entry));
 			} else {
-				D_ASSERT(manifest_list_entry.file.content == IcebergManifestContentType::DELETE);
+				D_ASSERT(manifest_list_entry.GetSummary().content == IcebergManifestContentType::DELETE);
 				committed_delete_manifests.push_back(std::move(manifest_list_entry));
 			}
 		}
@@ -131,13 +131,13 @@ void IcebergManifestStore::LoadManifestList() {
 			auto &manifest = data_manifests[manifest_idx];
 			if (manifest.HasManifestEntries()) {
 				eagerly_loaded_data_manifests[manifest_idx] = true;
-				if (!manifest.file.counts || !manifest.file.counts->Complete()) {
-					manifest.file.SetCountsFromEntries(manifest.GetManifestEntries());
+				if (!manifest.GetSummary().counts || !manifest.GetSummary().counts->Complete()) {
+					manifest.GetSummary().SetCountsFromEntries(manifest.GetManifestEntries());
 				}
 				continue;
 			}
 
-			auto &counts = manifest.file.counts;
+			auto &counts = manifest.GetSummary().counts;
 			if (!counts || !counts->FilesComplete()) {
 				manifests_to_eagerly_load.push_back(manifest_idx);
 				continue;
@@ -158,7 +158,7 @@ void IcebergManifestStore::LoadManifestList() {
 			}
 			for (auto manifest_idx : manifests_to_eagerly_load) {
 				auto &manifest = data_manifests[manifest_idx];
-				manifest.file.SetCountsFromEntries(manifest.GetManifestEntries());
+				manifest.GetSummary().SetCountsFromEntries(manifest.GetManifestEntries());
 				eagerly_loaded_data_manifests[manifest_idx] = true;
 			}
 		}
@@ -171,7 +171,7 @@ void IcebergManifestStore::LoadManifestList() {
 			for (const auto &pending_manifest : alter_p.get().GetPendingManifests()) {
 				auto manifest_list_entry =
 				    pending_manifest.CreateScanEntry(context.metadata, sequence_number, next_row_id);
-				switch (manifest_list_entry.file.content) {
+				switch (manifest_list_entry.GetSummary().content) {
 				case IcebergManifestContentType::DATA:
 					transaction_data_manifests.push_back(std::move(manifest_list_entry));
 					break;
@@ -180,7 +180,7 @@ void IcebergManifestStore::LoadManifestList() {
 					break;
 				default:
 					throw NotImplementedException("IcebergManifestContentType: %d",
-					                              static_cast<uint8_t>(manifest_list_entry.file.content));
+					                              static_cast<uint8_t>(manifest_list_entry.GetSummary().content));
 				}
 			}
 			sequence_number++;

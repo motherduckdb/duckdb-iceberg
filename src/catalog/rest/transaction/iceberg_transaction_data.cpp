@@ -20,7 +20,7 @@ namespace duckdb {
 static void LoadMissingManifestCounts(ClientContext &context, const IcebergTableMetadata &metadata,
                                       const IcebergSnapshotScanInfo &snapshot_info,
                                       IcebergManifestListEntry &manifest_list_entry) {
-	if (manifest_list_entry.file.counts && manifest_list_entry.file.counts->Complete()) {
+	if (manifest_list_entry.GetSummary().counts && manifest_list_entry.GetSummary().counts->Complete()) {
 		return;
 	}
 	vector<IcebergManifestListEntry> manifest_files;
@@ -36,7 +36,7 @@ static void LoadMissingManifestCounts(ClientContext &context, const IcebergTable
 	}
 
 	manifest_list_entry = std::move(manifest_files[0]);
-	manifest_list_entry.file.SetCountsFromEntries(manifest_list_entry.GetManifestEntries());
+	manifest_list_entry.GetSummary().SetCountsFromEntries(manifest_list_entry.GetManifestEntries());
 }
 
 static optional<int64_t> LoadExistingManifestList(ClientContext &context, const IcebergTableMetadata &metadata,
@@ -65,7 +65,7 @@ static optional<int64_t> LoadExistingManifestList(ClientContext &context, const 
 
 	//! Deal with upgraded tables, if the snapshot originated from V2
 	for (auto &manifest_list_entry : existing_manifest_list) {
-		auto &manifest_file = manifest_list_entry.file;
+		auto &manifest_file = manifest_list_entry.GetSummary();
 		if (manifest_file.content != IcebergManifestContentType::DATA) {
 			continue;
 		}
