@@ -462,6 +462,12 @@ bool IcebergFilePruner::ManifestMatchesFilter(const IcebergManifestFile &manifes
 		auto result_type = field.transform.GetSerializedType(column.type);
 		auto stats = IcebergPredicateStats::DeserializeBounds(context, field_summary.lower_bound,
 		                                                      field_summary.upper_bound, column.name, result_type);
+		if (result_type.id() == LogicalTypeId::UUID && stats.lower_bound && stats.upper_bound &&
+		    *stats.lower_bound > *stats.upper_bound) {
+			//! UUID bounds with the lower bound above the upper bound can't be used for pruning, so ignore them
+			stats.lower_bound.reset();
+			stats.upper_bound.reset();
+		}
 		stats.has_nan = field_summary.contains_nan;
 		stats.has_null = field_summary.contains_null;
 		stats.has_not_null = true;

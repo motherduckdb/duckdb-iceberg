@@ -299,6 +299,24 @@ IcebergManifestListEntry IcebergPendingManifest::CreateScanEntry(const IcebergTa
 	                               metadata.format_version >= 3);
 }
 
+static bool UUIDLessThanSigned(const Value &left, const Value &right) {
+	auto left_bits = BaseUUID::ToUHugeint(left.GetValueUnsafe<hugeint_t>());
+	auto right_bits = BaseUUID::ToUHugeint(right.GetValueUnsafe<hugeint_t>());
+	auto left_upper = static_cast<int64_t>(left_bits.upper);
+	auto right_upper = static_cast<int64_t>(right_bits.upper);
+	if (left_upper != right_upper) {
+		return left_upper < right_upper;
+	}
+	return static_cast<int64_t>(left_bits.lower) < static_cast<int64_t>(right_bits.lower);
+}
+
+//! A UUID bound is its 16 bytes in big-endian order
+static Value SerializeUUIDBound(const Value &uuid) {
+	data_t bytes[16];
+	BaseUUID::ToBlob(uuid.GetValueUnsafe<hugeint_t>(), bytes);
+	return Value::BLOB(bytes, sizeof(bytes));
+}
+
 void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const IcebergTableSchema &target_schema,
                                 const IcebergPartitionSpec &partition_spec,
                                 const vector<IcebergManifestEntry> &manifest_entries) {
@@ -356,6 +374,13 @@ void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const Iceb
 				min_values[i] = typed_value;
 				max_values[i] = typed_value;
 				initialized[i] = true;
+			} else if (typed_value.type().id() == LogicalTypeId::UUID) {
+				if (UUIDLessThanSigned(typed_value, min_values[i])) {
+					min_values[i] = typed_value;
+				}
+				if (UUIDLessThanSigned(max_values[i], typed_value)) {
+					max_values[i] = typed_value;
+				}
 			} else {
 				if (typed_value < min_values[i]) {
 					min_values[i] = typed_value;
@@ -399,7 +424,11 @@ void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const Iceb
 		// again unless they are blob, in which case we do not cast and serialize
 		SerializeResult lower_result = SerializeResult(min_values[i].type(), min_values[i]);
 		SerializeResult upper_result = SerializeResult(max_values[i].type(), max_values[i]);
-		if (min_values[i].type() != LogicalType::BLOB && max_values[i].type() != LogicalType::BLOB) {
+		if (min_values[i].type().id() == LogicalTypeId::UUID) {
+			//! Only partition summaries get UUID bounds; UUID data files still get none
+			lower_result = SerializeResult(min_values[i].type(), SerializeUUIDBound(min_values[i]));
+			upper_result = SerializeResult(max_values[i].type(), SerializeUUIDBound(max_values[i]));
+		} else if (min_values[i].type() != LogicalType::BLOB && max_values[i].type() != LogicalType::BLOB) {
 			lower_result = IcebergValue::SerializeValue(min_values[i].DefaultCastAs(LogicalType::VARCHAR),
 			                                            min_values[i].type(), SerializeBound::LOWER_BOUND);
 			upper_result = IcebergValue::SerializeValue(max_values[i].DefaultCastAs(LogicalType::VARCHAR),
