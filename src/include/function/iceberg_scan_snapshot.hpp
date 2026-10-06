@@ -20,20 +20,18 @@ namespace duckdb {
 //! iceberg_scan_plan -- otherwise has no way to learn which snapshot the scan
 //! reads.
 struct IcebergBoundSnapshot {
-  //! The snapshot id, or unset for a table with no snapshot (an empty table).
-  optional<int64_t> snapshot_id;
-  //! The schema id the scan reads with.
-  int32_t schema_id;
-  //! The table's metadata location.
-  string metadata_location;
+	//! The snapshot id, or unset for a table with no snapshot (an empty table).
+	optional<int64_t> snapshot_id;
+	//! The schema id the scan reads with.
+	int32_t schema_id;
+	//! The table's metadata location.
+	string metadata_location;
 };
 
 //! The bound snapshot of an iceberg_scan, from the table function's info, or
 //! unset when `function` is not an iceberg_scan.  Depends only on core DuckDB
 //! types, so a caller needs no Iceberg headers.
-optional<IcebergBoundSnapshot>
-IcebergScanGetSnapshot(const TableFunction &function);
-optional<IcebergBoundSnapshot>
-IcebergScanGetSnapshot(optional_ptr<const TableFunctionInfo> function_info);
+optional<IcebergBoundSnapshot> IcebergScanGetSnapshot(const TableFunction &function);
+optional<IcebergBoundSnapshot> IcebergScanGetSnapshot(optional_ptr<const TableFunctionInfo> function_info);
 
 } // namespace duckdb
