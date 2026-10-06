@@ -3,6 +3,7 @@
 #include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/logging/log_manager.hpp"
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/error_data.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/function/scalar_function.hpp"
@@ -78,17 +79,25 @@ public:
 	}
 };
 
+static void LoadRequiredExtension(DatabaseInstance &instance, const string &extension_name) {
+	try {
+		ExtensionHelper::AutoLoadExtension(instance, extension_name);
+	} catch (std::exception &ex) {
+		ErrorData error(ex);
+		throw MissingExtensionException("The iceberg extension requires the %s extension, but it could not be "
+		                                "loaded. Try running \"INSTALL %s; LOAD %s;\" first.\nCause: %s",
+		                                extension_name, extension_name, extension_name, error.RawMessage());
+	}
+	if (!instance.ExtensionIsLoaded(extension_name)) {
+		throw MissingExtensionException("The iceberg extension requires the %s extension to be loaded!",
+		                                extension_name);
+	}
+}
+
 static void LoadInternal(ExtensionLoader &loader) {
 	auto &instance = loader.GetDatabaseInstance();
-	ExtensionHelper::AutoLoadExtension(instance, "parquet");
-	ExtensionHelper::AutoLoadExtension(instance, "avro");
-
-	if (!instance.ExtensionIsLoaded("parquet")) {
-		throw MissingExtensionException("The iceberg extension requires the parquet extension to be loaded!");
-	}
-	if (!instance.ExtensionIsLoaded("avro")) {
-		throw MissingExtensionException("The iceberg extension requires the avro extension to be loaded!");
-	}
+	LoadRequiredExtension(instance, "parquet");
+	LoadRequiredExtension(instance, "avro");
 
 	auto &config = DBConfig::GetConfig(instance);
 
