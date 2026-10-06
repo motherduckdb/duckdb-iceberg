@@ -165,20 +165,25 @@ void IcebergManifestStore::LoadManifestList() {
 	}
 
 	if (context.transaction_data) {
+		auto sequence_number = context.transaction_data->scan_sequence_number;
+		auto next_row_id = context.transaction_data->scan_first_row_id;
 		for (auto &alter_p : context.transaction_data->alters) {
-			for (auto &manifest_list_entry : alter_p.get().GetManifestFiles()) {
+			for (const auto &pending_manifest : alter_p.get().GetPendingManifests()) {
+				auto manifest_list_entry =
+				    pending_manifest.CreateScanEntry(context.metadata, sequence_number, next_row_id);
 				switch (manifest_list_entry.file.content) {
 				case IcebergManifestContentType::DATA:
-					transaction_data_manifests.push_back(manifest_list_entry);
+					transaction_data_manifests.push_back(std::move(manifest_list_entry));
 					break;
 				case IcebergManifestContentType::DELETE:
-					transaction_delete_manifests.push_back(manifest_list_entry);
+					transaction_delete_manifests.push_back(std::move(manifest_list_entry));
 					break;
 				default:
 					throw NotImplementedException("IcebergManifestContentType: %d",
 					                              static_cast<uint8_t>(manifest_list_entry.file.content));
 				}
 			}
+			sequence_number++;
 		}
 	}
 
@@ -219,7 +224,7 @@ void IcebergManifestStore::StartDataManifestScan(const vector<bool> &matching_ma
 		if (!matching_manifests[manifest_idx]) {
 			continue;
 		}
-		auto &manifest = transaction_data_manifests[transaction_idx].get();
+		auto &manifest = transaction_data_manifests[transaction_idx];
 		read_state.PushBatch(ManifestReadBatch {manifest_idx, 0, manifest.GetManifestEntries().size()});
 	}
 
@@ -383,7 +388,7 @@ vector<IcebergDeleteFileReference> IcebergManifestStore::GetDeleteFiles(const ve
 			}
 		} else {
 			auto transaction_idx = manifest_idx - committed_manifest_count;
-			auto &manifest_list_entry = transaction_delete_manifests[transaction_idx].get();
+			auto &manifest_list_entry = transaction_delete_manifests[transaction_idx];
 			auto &manifest_entries = manifest_list_entry.GetManifestEntries();
 			for (idx_t entry_idx = 0; entry_idx < manifest_entries.size(); entry_idx++) {
 				auto &manifest_entry = manifest_entries[entry_idx];
@@ -457,12 +462,20 @@ IcebergManifestStore::~IcebergManifestStore() {
 	}
 }
 
-const vector<reference<const IcebergManifestListEntry>> &IcebergManifestStore::TransactionDataManifests() const {
-	return transaction_data_manifests;
+vector<reference<const IcebergManifestListEntry>> IcebergManifestStore::TransactionDataManifests() const {
+	vector<reference<const IcebergManifestListEntry>> result;
+	for (const auto &manifest : transaction_data_manifests) {
+		result.push_back(manifest);
+	}
+	return result;
 }
 
-const vector<reference<const IcebergManifestListEntry>> &IcebergManifestStore::TransactionDeleteManifests() const {
-	return transaction_delete_manifests;
+vector<reference<const IcebergManifestListEntry>> IcebergManifestStore::TransactionDeleteManifests() const {
+	vector<reference<const IcebergManifestListEntry>> result;
+	for (const auto &manifest : transaction_delete_manifests) {
+		result.push_back(manifest);
+	}
+	return result;
 }
 
 } // namespace duckdb
