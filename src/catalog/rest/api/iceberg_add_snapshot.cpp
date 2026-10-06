@@ -218,15 +218,14 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 		commit_state.created_metadata_files.push_back(new_manifest_list_entry.file.manifest_path);
 		new_manifest_list.AddNewManifestFile(std::move(new_manifest_list_entry));
 
-		if (table_metadata.iceberg_version >= 3) {
+		//! Delete records do not allocate row IDs for subsequent snapshots in this commit.
+		if (table_metadata.iceberg_version >= 3 && manifest_file.content == IcebergManifestContentType::DATA) {
 			D_ASSERT(manifest_file.counts && manifest_file.counts->added_rows_count &&
 			         manifest_file.counts->existing_rows_count);
 			commit_state.next_row_id +=
 			    *manifest_file.counts->existing_rows_count + *manifest_file.counts->added_rows_count;
 
-			if (manifest_file.content == IcebergManifestContentType::DATA) {
-				*new_snapshot.added_rows += *manifest_file.counts->added_rows_count;
-			}
+			*new_snapshot.added_rows += *manifest_file.counts->added_rows_count;
 		}
 	}
 

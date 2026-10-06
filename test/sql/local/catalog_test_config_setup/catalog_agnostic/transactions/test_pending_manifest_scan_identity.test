@@ -53,18 +53,20 @@ FROM my_datalake.default.pending_manifest_scan_identity WHERE p = 10 ORDER BY id
 2	2	2
 
 statement ok
+DELETE FROM my_datalake.default.pending_manifest_scan_identity WHERE id = 1;
+
+statement ok
 INSERT INTO my_datalake.default.pending_manifest_scan_identity VALUES (4, 30);
 
-# Later writes must not change the identities seen by previous scans.
+# A delete consumes a sequence number, but its records must not allocate row IDs.
 query III
 SELECT id, _row_id, _last_updated_sequence_number
 FROM my_datalake.default.pending_manifest_scan_identity ORDER BY id;
 ----
 0	0	1
-1	1	2
 2	2	2
 3	3	3
-4	4	4
+4	4	5
 
 statement ok
 COMMIT;
@@ -74,10 +76,9 @@ SELECT id, _row_id, _last_updated_sequence_number
 FROM my_datalake.default.pending_manifest_scan_identity ORDER BY id;
 ----
 0	0	1
-1	1	2
 2	2	2
 3	3	3
-4	4	4
+4	4	5
 
 statement ok
 BEGIN;
@@ -89,7 +90,7 @@ query III
 SELECT id, _row_id, _last_updated_sequence_number
 FROM my_datalake.default.pending_manifest_scan_identity WHERE id = 5;
 ----
-5	5	5
+5	5	6
 
 statement ok
 ROLLBACK;
@@ -110,7 +111,7 @@ query III
 SELECT id, _row_id, _last_updated_sequence_number
 FROM my_datalake.default.pending_manifest_scan_identity WHERE id = 6;
 ----
-6	5	5
+6	5	6
 
 statement ok
 COMMIT;
@@ -119,7 +120,7 @@ query III
 SELECT id, _row_id, _last_updated_sequence_number
 FROM my_datalake.default.pending_manifest_scan_identity WHERE id = 6;
 ----
-6	5	5
+6	5	6
 
 statement ok
 DROP TABLE my_datalake.default.pending_manifest_scan_identity;
