@@ -338,6 +338,9 @@ void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const Iceb
 	field_summary.resize(num_fields);
 	vector<Value> min_values(num_fields);
 	vector<Value> max_values(num_fields);
+	//! For UUID fields, the lowest and highest value when both 64-bit halves are compared as signed longs
+	vector<Value> signed_min_values(num_fields);
+	vector<Value> signed_max_values(num_fields);
 	vector<bool> initialized(num_fields, false);
 
 	for (auto &entry : manifest_entries) {
@@ -373,14 +376,9 @@ void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const Iceb
 			if (!initialized[i]) {
 				min_values[i] = typed_value;
 				max_values[i] = typed_value;
+				signed_min_values[i] = typed_value;
+				signed_max_values[i] = typed_value;
 				initialized[i] = true;
-			} else if (typed_value.type().id() == LogicalTypeId::UUID) {
-				if (UUIDLessThanSigned(typed_value, min_values[i])) {
-					min_values[i] = typed_value;
-				}
-				if (UUIDLessThanSigned(max_values[i], typed_value)) {
-					max_values[i] = typed_value;
-				}
 			} else {
 				if (typed_value < min_values[i]) {
 					min_values[i] = typed_value;
@@ -388,7 +386,29 @@ void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const Iceb
 				if (typed_value > max_values[i]) {
 					max_values[i] = typed_value;
 				}
+				if (typed_value.type().id() == LogicalTypeId::UUID) {
+					if (UUIDLessThanSigned(typed_value, signed_min_values[i])) {
+						signed_min_values[i] = typed_value;
+					}
+					if (UUIDLessThanSigned(signed_max_values[i], typed_value)) {
+						signed_max_values[i] = typed_value;
+					}
+				}
 			}
+		}
+	}
+
+	for (idx_t i = 0; i < num_fields; i++) {
+		if (!initialized[i] || min_values[i].type().id() != LogicalTypeId::UUID) {
+			continue;
+		}
+		if (min_values[i] != signed_min_values[i] || max_values[i] != signed_max_values[i]) {
+			//! The lowest and highest UUID differ between comparing the bytes in order and comparing both 64-bit
+			//! halves as signed longs, so any bounds would be wrong for readers that use the other order. Without
+			//! partition summaries, readers don't skip this manifest.
+			has_partitions = false;
+			field_summary.clear();
+			return;
 		}
 	}
 
