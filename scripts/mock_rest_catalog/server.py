@@ -15,6 +15,8 @@ ENDPOINTS = [
     "POST /v1/{prefix}/namespaces",
     "GET /v1/{prefix}/namespaces/{namespace}",
     "DELETE /v1/{prefix}/namespaces/{namespace}",
+    "POST /v1/{prefix}/namespaces/{namespace}/properties",
+    "POST /v1/{prefix}/tables/rename",
     "GET /v1/{prefix}/namespaces/{namespace}/tables",
     "POST /v1/{prefix}/namespaces/{namespace}/tables",
     "GET /v1/{prefix}/namespaces/{namespace}/tables/{table}",
@@ -40,6 +42,9 @@ class Handler(BaseHTTPRequestHandler):
                 return 200, {}
         if parts == ["v1", "config"] and method == "GET":
             return 200, {"defaults": {}, "overrides": {}, "endpoints": ENDPOINTS}
+        if parts == ["v1", "tables", "rename"] and method == "POST":
+            catalog.rename(body)
+            return 204, None
         if parts[:2] != ["v1", "namespaces"]:
             unsupported(f"Unknown route: {method} {url.path}")
         if len(parts) == 2:
@@ -56,6 +61,8 @@ class Handler(BaseHTTPRequestHandler):
                 return 200, catalog.create_namespace(body)
         if len(parts) >= 3:
             namespace = tuple(parts[2].split("\x1f"))
+            if len(parts) == 4 and parts[3] == "properties" and method == "POST":
+                return 200, catalog.update_namespace_properties(namespace, body)
             if len(parts) == 3:
                 if method == "GET":
                     return 200, catalog.namespace(namespace)

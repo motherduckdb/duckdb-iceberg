@@ -9,6 +9,7 @@
 		{"env_name": "CATALOG_TEST_CONFIG_SETUP", "env_value": "mock"},
 		{"env_name": "STAGED_CREATE_SUPPORT", "env_value": "true"},
 		{"env_name": "SNAPSHOT_HISTORY_SUPPORT", "env_value": "true"},
+		{"env_name": "NAMESPACE_PROPERTIES_SUPPORT", "env_value": "true"},
 		{"env_name": "SCAN_PLANNING_MODE", "env_value": "client"}
 	],
 	"skip_tests": [

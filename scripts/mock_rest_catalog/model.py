@@ -23,6 +23,20 @@ def unsupported(message):
     raise CatalogError(501, "UnsupportedOperationException", message)
 
 
+def namespace_parts(value):
+    if not isinstance(value, list) or not value or any(not isinstance(part, str) or not part for part in value):
+        invalid("Namespace must contain nonempty strings")
+    return tuple(value)
+
+
+def string_properties(value):
+    if not isinstance(value, dict) or any(
+        not isinstance(key, str) or not isinstance(item, str) for key, item in value.items()
+    ):
+        invalid("Properties must be a string-to-string map")
+    return copy.deepcopy(value)
+
+
 def field_ids(value):
     if isinstance(value, dict):
         for key, child in value.items():
@@ -51,13 +65,32 @@ class Catalog:
         return {"namespace": list(namespace), "properties": copy.deepcopy(self.namespaces[namespace])}
 
     def create_namespace(self, body):
-        namespace = tuple(body["namespace"])
-        if not namespace or any(not isinstance(part, str) or not part for part in namespace):
-            invalid("Namespace must contain nonempty strings")
+        namespace = namespace_parts(body["namespace"])
+        properties = string_properties(body.get("properties", {}))
         if namespace in self.namespaces:
             raise CatalogError(409, "AlreadyExistsException", "Namespace already exists")
-        self.namespaces[namespace] = copy.deepcopy(body.get("properties", {}))
+        # Tables use unique UUID directories below this default warehouse root.
+        properties.setdefault("location", str(self.warehouse))
+        self.namespaces[namespace] = properties
         return self.namespace(namespace)
+
+    def update_namespace_properties(self, namespace, body):
+        properties = self.namespace(namespace)["properties"]
+        updates = string_properties(body.get("updates", {}))
+        removals = body.get("removals", [])
+        if not isinstance(removals, list) or any(not isinstance(key, str) for key in removals):
+            invalid("Property removals must be a list of strings")
+        if len(set(removals)) != len(removals):
+            invalid("Property removals must be unique")
+        if set(removals).intersection(updates):
+            raise CatalogError(422, "UnprocessableEntityException", "A property cannot be updated and removed together")
+        removed = [key for key in removals if key in properties]
+        missing = [key for key in removals if key not in properties]
+        for key in removed:
+            del properties[key]
+        properties.update(updates)
+        self.namespaces[namespace] = properties
+        return {"updated": list(updates), "removed": removed, "missing": missing}
 
     def drop_namespace(self, namespace):
         self.namespace(namespace)
@@ -72,6 +105,25 @@ class Catalog:
         if key not in self.tables:
             raise CatalogError(404, "NoSuchTableException", f"Table does not exist: {key[1]}")
         return copy.deepcopy(self.tables[key])
+
+    def rename(self, body):
+        identifiers = []
+        for field in ("source", "destination"):
+            identifier = body[field]
+            namespace = namespace_parts(identifier["namespace"])
+            name = identifier["name"]
+            if not isinstance(name, str) or not name:
+                invalid("Table name must be a nonempty string")
+            identifiers.append((namespace, name))
+        source, destination = identifiers
+        if source not in self.tables:
+            raise CatalogError(404, "NoSuchTableException", f"Table does not exist: {source[1]}")
+        self.namespace(destination[0])
+        if destination in self.tables:
+            raise CatalogError(409, "AlreadyExistsException", f"Table already exists: {destination[1]}")
+        # Move only the published identifier. UUID, location, snapshots and metadata
+        # file stay unchanged; staged creates remain bound to their original names.
+        self.tables[destination] = self.tables.pop(source)
 
     def create(self, namespace, body):
         self.namespace(namespace)

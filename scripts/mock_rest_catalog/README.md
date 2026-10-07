@@ -32,11 +32,14 @@ if it names `mock`, and retains the run files. Restarting does not reload old
 warehouse metadata. Large request/response journal payloads are truncated to
 16 KiB; published metadata files remain complete.
 
-The mock supports basic namespace operations, staged v2 table creation, create-time
-metadata updates, append/delete/overwrite/replace snapshots, optimistic requirements,
-table loading/listing, and unregistering tables. Committed snapshots are retained
-and exposed through the snapshot-history capability. Metadata files are immutable
-and completed before publication. Unregistering leaves storage files intact.
+The mock supports namespace operations and property updates, staged v2 table
+creation, create-time metadata updates, append/delete/overwrite/replace snapshots,
+optimistic requirements, table loading/listing, renaming (including across
+namespaces), and unregistering tables. Renames preserve the UUID, storage location,
+and metadata file. Namespace property changes preserve unrelated keys and report
+missing removals. Committed snapshots are retained and exposed through the
+snapshot-history capability. Metadata files are immutable and completed before
+publication. Unregistering leaves storage files intact.
 
 History reconstruction/time travel, multi-table commits, v3, views, purge,
 relocation, credentials, and server-side scan planning remain unsupported.
