@@ -1,4 +1,4 @@
-"""The deliberately small v2 catalog contract used by the mock SQL suite."""
+"""The v2/v3 catalog metadata contract used by the mock SQL suite."""
 
 import copy
 import json
@@ -46,15 +46,52 @@ def table_identifier(value):
 
 
 def field_ids(value):
-    if isinstance(value, dict):
-        for key, child in value.items():
-            if key in ("id", "element-id", "key-id", "value-id"):
-                yield child
-            else:
-                yield from field_ids(child)
-    elif isinstance(value, list):
-        for child in value:
-            yield from field_ids(child)
+    # Defaults can contain arbitrary objects; only type definitions assign IDs.
+    if not isinstance(value, dict):
+        return
+    if value["type"] == "struct":
+        for field in value["fields"]:
+            yield field["id"]
+            yield from field_ids(field["type"])
+    elif value["type"] == "list":
+        yield value["element-id"]
+        yield from field_ids(value["element"])
+    elif value["type"] == "map":
+        yield value["key-id"]
+        yield value["value-id"]
+        yield from field_ids(value["key"])
+        yield from field_ids(value["value"])
+
+
+def validate_type(value, version):
+    if isinstance(value, str):
+        base = value.split("(", 1)[0]
+        if version < 3 and base in ("unknown", "variant", "timestamp_ns", "timestamptz_ns", "geometry", "geography"):
+            invalid(f"Type {value} requires format-version 3")
+        return
+    if value["type"] == "struct":
+        for field in value["fields"]:
+            validate_type(field["type"], version)
+            defaults = (field.get("initial-default"), field.get("write-default"))
+            if version < 3 and any(default is not None for default in defaults):
+                invalid("Non-null column defaults require format-version 3")
+            if (
+                isinstance(field["type"], str)
+                and field["type"].split("(", 1)[0] in ("unknown", "variant", "geometry", "geography")
+                and any(default is not None for default in defaults)
+            ):
+                invalid(f"Non-null defaults are not supported for {field['type']}")
+    elif value["type"] == "list":
+        validate_type(value["element"], version)
+    elif value["type"] == "map":
+        validate_type(value["key"], version)
+        validate_type(value["value"], version)
+
+
+def row_id_value(value, field):
+    if type(value) is not int or value < 0 or value > (1 << 63) - 1:
+        invalid(f"{field} must be a nonnegative 64-bit integer")
+    return value
 
 
 class Catalog:
@@ -134,8 +171,8 @@ class Catalog:
             raise CatalogError(409, "AlreadyExistsException", "Table already exists")
         properties = copy.deepcopy(body.get("properties", {}))
         version = int(properties.pop("format-version", "2"))
-        if version != 2:
-            unsupported("The mock implements only format-version 2")
+        if version not in (2, 3):
+            unsupported("The mock implements format-version 2 and 3")
         if body.get("location"):
             unsupported("Explicit table locations are outside the mock's temporary warehouse contract")
         table_uuid = str(uuid.uuid4())
@@ -151,7 +188,7 @@ class Catalog:
         order = copy.deepcopy(body.get("write-order") or {"order-id": 0, "fields": []})
         order.setdefault("order-id", 1 if order["fields"] else 0)
         metadata = {
-            "format-version": 2,
+            "format-version": version,
             "table-uuid": table_uuid,
             "location": str(location),
             "last-updated-ms": int(time.time() * 1000),
@@ -170,6 +207,9 @@ class Catalog:
             "snapshot-log": [],
             "metadata-log": [],
         }
+        if version == 3:
+            metadata["next-row-id"] = 0
+        self.validate_metadata(metadata)
         if body.get("stage-create", False):
             self.staged[table_uuid] = (key, metadata)
             return {"metadata": copy.deepcopy(metadata), "config": {}}
@@ -179,6 +219,10 @@ class Catalog:
         return copy.deepcopy(self.publish_many({key: metadata})[key])
 
     def validate_metadata(self, metadata):
+        for schema in metadata["schemas"]:
+            validate_type(schema, metadata["format-version"])
+        if metadata["format-version"] == 3:
+            row_id_value(metadata["next-row-id"], "next-row-id")
         schema = next(s for s in metadata["schemas"] if s["schema-id"] == metadata["current-schema-id"])
         current_fields = set(field_ids(schema))
         for collection, id_key, current_key in (
@@ -304,8 +348,15 @@ class Catalog:
             if update["uuid"] != metadata["table-uuid"]:
                 invalid("Cannot replace table UUID")
         elif action == "upgrade-format-version":
-            if update["format-version"] != 2:
-                unsupported("The mock implements only format-version 2")
+            version = update["format-version"]
+            if type(version) is not int or version not in (2, 3):
+                unsupported("The mock implements format-version 2 and 3")
+            if version < metadata["format-version"]:
+                invalid("Cannot downgrade a table's format-version")
+            if version == 3 and metadata["format-version"] == 2:
+                # Historical v2 snapshots and their files have no row lineage.
+                metadata["next-row-id"] = 0
+            metadata["format-version"] = version
         elif action == "set-location":
             if update["location"] != metadata["location"]:
                 unsupported("Relocating tables is not implemented")
@@ -366,6 +417,16 @@ class Catalog:
             for field in ("manifest-list", "timestamp-ms"):
                 if field not in snapshot:
                     invalid(f"Missing snapshot {field}")
+            if metadata["format-version"] == 3:
+                first = row_id_value(snapshot.get("first-row-id"), "first-row-id")
+                added = row_id_value(snapshot.get("added-rows"), "added-rows")
+                if first < metadata["next-row-id"]:
+                    raise CatalogError(409, "CommitFailedException", "Snapshot row IDs overlap a committed allocation")
+                # Reserve gaps too: upgrading writers may assign IDs to carried-forward
+                # v2 manifests before the new data. Never lower this cursor on rollback.
+                metadata["next-row-id"] = row_id_value(first + added, "next-row-id")
+            elif "first-row-id" in snapshot or "added-rows" in snapshot:
+                invalid("Snapshot row lineage requires format-version 3")
             metadata["snapshots"].append(snapshot)
             metadata["last-sequence-number"] = snapshot["sequence-number"]
             last_added.setdefault("snapshots", set()).add(identifier)

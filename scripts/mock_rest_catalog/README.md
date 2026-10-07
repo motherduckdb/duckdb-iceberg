@@ -32,7 +32,7 @@ if it names `mock`, and retains the run files. Restarting does not reload old
 warehouse metadata. Large request/response journal payloads are truncated to
 16 KiB; published metadata files remain complete.
 
-The mock supports namespace operations and property updates, staged v2 table
+The mock supports namespace operations and property updates, staged v2/v3 table
 creation, create-time metadata updates, append/delete/overwrite/replace snapshots,
 optimistic requirements, table loading/listing, renaming (including across
 namespaces), and unregistering tables. Renames preserve the UUID, storage location,
@@ -47,8 +47,20 @@ contents, allowing transaction-start reconstruction of schema, layout, propertie
 and snapshots. The main snapshot log records new snapshots at their creation
 timestamps and rollbacks at the time of the reference change. Time travel by
 snapshot ID or timestamp and rollback to an ancestor snapshot are supported for
-v2 tables. Historical files remain in the run directory; restarting still creates
+v2 and v3 tables. Historical files remain in the run directory; restarting still creates
 a fresh catalog.
+
+V3 creation initializes `next-row-id` to zero. Upgrading a v2 table does the same
+without changing historical snapshots or their files. New v3 snapshots must carry
+nonnegative 64-bit `first-row-id` and `added-rows` values, and their allocations
+must not overlap previously reserved IDs. The cursor advances past the complete
+reserved range, including gaps, and is retained across snapshot rollback.
+Downgrades are rejected. V3 schemas retain defaults and extended types; v2 schemas
+reject v3-only types and non-null defaults. Schema field IDs are collected only
+from type definitions, never from default values. Initial field IDs are preserved
+from the client; tests requiring the fixture catalog's different assignment order
+are explicitly excluded in the config. Client cleanup of uncommitted local files
+is allowed; dropping a table still unregisters it without purging storage.
 
 Single- and multi-table commits use the same candidate validation and publication
 path. The catalog lock covers requirement checks, metadata preparation, and the
@@ -63,7 +75,7 @@ rejects transactions that mix staged creation or rename/drop operations with
 other table updates when it cannot represent them as one atomic REST request.
 The SQL suite covers multi-table success/failure and concurrent append retries.
 
-V3, views, purge, relocation, credentials, and server-side scan planning remain unsupported.
+Views, purge, relocation, credentials, and server-side scan planning remain unsupported.
 The SQL config controls exclusions and expected
 unsupported errors; a passing suite does not imply support for skipped behavior.
 The server reports unsupported/error counts on stop.

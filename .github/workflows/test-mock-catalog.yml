@@ -9,7 +9,7 @@ on:
 
 jobs:
   test-mock:
-    name: Test v2 mock REST catalog
+    name: Test mock REST catalog
     runs-on: ubuntu-latest
     env:
       ASAN_SYMBOLIZER_PATH: "/usr/bin/llvm-symbolizer"
