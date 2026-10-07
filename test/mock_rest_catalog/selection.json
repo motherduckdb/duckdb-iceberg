@@ -1,0 +1,10 @@
+{
+	"create/test_create_schema.test": "Namespace create, existence and drop.",
+	"create/test_create_table_unsupported_format_version.test": "Client rejects unsupported format versions before publication.",
+	"create/test_create_empty_table.test": "Empty CTAS and first append, including identity partitioning.",
+	"create/test_create_table_not_null.test": "Required fields and append.",
+	"create/test_create_table_unsupported_constraints.test": "Client constraint validation preserves existing tables.",
+	"create/test_create_table.test": "Staged rollback, publication and multiple appends.",
+	"insert/test_insert_into_supplied_columns.test": "Supplied columns and rollback.",
+	"drop/test_drop_table.test": "Read appended data and unregister."
+}

@@ -1,0 +1,11 @@
+{
+	"description": "Test-only v2 REST mock started with make mock. Supported SQL coverage is documented in test/mock_rest_catalog/selection.json.",
+	"on_init": "ATTACH '' AS my_datalake (TYPE ICEBERG, URI 'http://127.0.0.1:19134', AUTHORIZATION_TYPE 'none', ACCESS_DELEGATION_MODE 'none', STAGE_CREATE_TABLES true, DISABLE_MULTI_TABLE_COMMIT true); CREATE SCHEMA IF NOT EXISTS my_datalake.default;",
+	"skip_error_messages": [],
+	"statically_loaded_extensions": ["core_functions", "parquet", "avro", "iceberg", "httpfs", "icu"],
+	"test_env": [
+		{"env_name": "CATALOG_TEST_CONFIG_SETUP", "env_value": "mock"},
+		{"env_name": "STAGED_CREATE_SUPPORT", "env_value": "true"},
+		{"env_name": "SCAN_PLANNING_MODE", "env_value": "client"}
+	]
+}
