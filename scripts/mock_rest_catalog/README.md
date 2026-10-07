@@ -33,13 +33,14 @@ warehouse metadata. Large request/response journal payloads are truncated to
 16 KiB; published metadata files remain complete.
 
 The mock supports basic namespace operations, staged v2 table creation, create-time
-metadata updates, append snapshots, optimistic requirements, table loading/listing,
-and unregistering tables. Metadata files are immutable and completed before
-publication. Unregistering leaves storage files intact.
+metadata updates, append/delete/overwrite/replace snapshots, optimistic requirements,
+table loading/listing, and unregistering tables. Committed snapshots are retained
+and exposed through the snapshot-history capability. Metadata files are immutable
+and completed before publication. Unregistering leaves storage files intact.
 
 History reconstruction/time travel, multi-table commits, v3, views, purge,
-relocation, non-append snapshot operations, credentials, and server-side scan
-planning remain unsupported. The SQL config controls exclusions and expected
+relocation, credentials, and server-side scan planning remain unsupported.
+The SQL config controls exclusions and expected
 unsupported errors; a passing suite does not imply support for skipped behavior.
 The server reports unsupported/error counts on stop.
 

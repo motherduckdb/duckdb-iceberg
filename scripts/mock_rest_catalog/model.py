@@ -254,8 +254,10 @@ class Catalog:
                 invalid("Unknown parent snapshot")
             if not any(s["schema-id"] == snapshot["schema-id"] for s in metadata["schemas"]):
                 invalid("Unknown snapshot schema")
-            if snapshot["summary"]["operation"] != "append":
-                unsupported("Only append snapshots are implemented")
+            # DuckDB writes the data/delete files and manifest list for every operation.
+            # The catalog publishes their metadata identically, preserving the summary.
+            if snapshot["summary"]["operation"] not in ("append", "replace", "overwrite", "delete"):
+                invalid("Unknown snapshot operation")
             for field in ("manifest-list", "timestamp-ms"):
                 if field not in snapshot:
                     invalid(f"Missing snapshot {field}")
