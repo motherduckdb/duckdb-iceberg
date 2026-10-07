@@ -17,6 +17,7 @@ ENDPOINTS = [
     "DELETE /v1/{prefix}/namespaces/{namespace}",
     "POST /v1/{prefix}/namespaces/{namespace}/properties",
     "POST /v1/{prefix}/tables/rename",
+    "POST /v1/{prefix}/transactions/commit",
     "GET /v1/{prefix}/namespaces/{namespace}/tables",
     "POST /v1/{prefix}/namespaces/{namespace}/tables",
     "GET /v1/{prefix}/namespaces/{namespace}/tables/{table}",
@@ -44,6 +45,9 @@ class Handler(BaseHTTPRequestHandler):
             return 200, {"defaults": {}, "overrides": {}, "endpoints": ENDPOINTS}
         if parts == ["v1", "tables", "rename"] and method == "POST":
             catalog.rename(body)
+            return 204, None
+        if parts == ["v1", "transactions", "commit"] and method == "POST":
+            catalog.commit_transaction(body)
             return 204, None
         if parts[:2] != ["v1", "namespaces"]:
             unsupported(f"Unknown route: {method} {url.path}")

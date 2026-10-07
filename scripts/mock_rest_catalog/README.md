@@ -50,8 +50,20 @@ snapshot ID or timestamp and rollback to an ancestor snapshot are supported for
 v2 tables. Historical files remain in the run directory; restarting still creates
 a fresh catalog.
 
-Multi-table commits, v3, views, purge,
-relocation, credentials, and server-side scan planning remain unsupported.
+Single- and multi-table commits use the same candidate validation and publication
+path. The catalog lock covers requirement checks, metadata preparation, and the
+publication of all changed table pointers. Every candidate is validated and every
+metadata file is completed before any pointer changes; a conflict or write error
+publishes none. A successful batch gives all its metadata versions the same update
+timestamp. A failed write may leave unreferenced files in the run directory for
+diagnosis. Staged creates are removed from staging only after successful publication.
+
+The config enables atomic commit conflicts and multi-table commits. DuckDB still
+rejects transactions that mix staged creation or rename/drop operations with
+other table updates when it cannot represent them as one atomic REST request.
+The SQL suite covers multi-table success/failure and concurrent append retries.
+
+V3, views, purge, relocation, credentials, and server-side scan planning remain unsupported.
 The SQL config controls exclusions and expected
 unsupported errors; a passing suite does not imply support for skipped behavior.
 The server reports unsupported/error counts on stop.

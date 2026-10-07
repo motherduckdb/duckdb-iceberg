@@ -37,6 +37,14 @@ def string_properties(value):
     return copy.deepcopy(value)
 
 
+def table_identifier(value):
+    namespace = namespace_parts(value["namespace"])
+    name = value["name"]
+    if not isinstance(name, str) or not name:
+        invalid("Table name must be a nonempty string")
+    return namespace, name
+
+
 def field_ids(value):
     if isinstance(value, dict):
         for key, child in value.items():
@@ -107,15 +115,7 @@ class Catalog:
         return copy.deepcopy(self.tables[key])
 
     def rename(self, body):
-        identifiers = []
-        for field in ("source", "destination"):
-            identifier = body[field]
-            namespace = namespace_parts(identifier["namespace"])
-            name = identifier["name"]
-            if not isinstance(name, str) or not name:
-                invalid("Table name must be a nonempty string")
-            identifiers.append((namespace, name))
-        source, destination = identifiers
+        source, destination = table_identifier(body["source"]), table_identifier(body["destination"])
         if source not in self.tables:
             raise CatalogError(404, "NoSuchTableException", f"Table does not exist: {source[1]}")
         self.namespace(destination[0])
@@ -176,6 +176,9 @@ class Catalog:
         return self.publish(key, metadata)
 
     def publish(self, key, metadata):
+        return copy.deepcopy(self.publish_many({key: metadata})[key])
+
+    def validate_metadata(self, metadata):
         schema = next(s for s in metadata["schemas"] if s["schema-id"] == metadata["current-schema-id"])
         current_fields = set(field_ids(schema))
         for collection, id_key, current_key in (
@@ -187,7 +190,9 @@ class Catalog:
                 # A void partition field may remain after its source column is dropped.
                 if field["transform"] != "void" and field["source-id"] not in current_fields:
                     invalid(f"Current {collection} reference missing schema field {field['source-id']}")
-        metadata["last-updated-ms"] = time.time_ns() // 1_000_000
+
+    def write_metadata(self, key, metadata, timestamp):
+        metadata["last-updated-ms"] = timestamp
         previous = self.tables.get(key)
         if previous:
             # Each entry describes the *previous* file and its own update time.
@@ -204,9 +209,21 @@ class Catalog:
         # No published state changes until the complete immutable file is closed.
         with path.open("x") as output:
             json.dump(metadata, output)
-        result = {"metadata": metadata, "metadata-location": str(path), "config": {}}
-        self.tables[key] = result
-        return copy.deepcopy(result)
+        return {"metadata": metadata, "metadata-location": str(path), "config": {}}
+
+    def publish_many(self, candidates):
+        # The HTTP adapter holds the catalog lock through validation and publication.
+        # A later validation or file-write failure must not publish earlier tables.
+        for metadata in candidates.values():
+            self.validate_metadata(metadata)
+        timestamp = time.time_ns() // 1_000_000
+        results = {key: self.write_metadata(key, metadata, timestamp) for key, metadata in candidates.items()}
+        published = self.tables.copy()
+        published.update(results)
+        self.tables = published
+        for metadata in candidates.values():
+            self.staged.pop(metadata["table-uuid"], None)
+        return results
 
     def check_requirement(self, metadata, requirement):
         kind = requirement["type"]
@@ -227,13 +244,30 @@ class Catalog:
             field, argument = fields[kind]
             valid = metadata is not None and metadata[field] == requirement[argument]
         else:
-            unsupported(f"Unknown requirement: {kind}")
+            invalid(f"Unknown requirement: {kind}")
         if not valid:
             raise CatalogError(409, "CommitFailedException", f"Requirement failed: {kind}")
 
     def commit(self, key, body):
+        return self.publish(key, self.prepare_commit(key, body))
+
+    def commit_transaction(self, body):
+        changes = body["table-changes"]
+        if not isinstance(changes, list):
+            invalid("table-changes must be a list")
+        candidates = {}
+        for change in changes:
+            key = table_identifier(change["identifier"])
+            if key in candidates:
+                invalid("Duplicate table identifier in transaction")
+            candidates[key] = self.prepare_commit(key, change)
+        self.publish_many(candidates)
+
+    def prepare_commit(self, key, body):
         self.namespace(key[0])
         requirements, updates = body["requirements"], body["updates"]
+        if not isinstance(requirements, list) or not isinstance(updates, list):
+            invalid("requirements and updates must be lists")
         old = self.tables.get(key)
         for requirement in requirements:
             self.check_requirement(old["metadata"] if old else None, requirement)
@@ -252,9 +286,7 @@ class Catalog:
         last_added = {}
         for update in updates:
             self.apply(candidate, update, last_added)
-        result = self.publish(key, candidate)
-        self.staged.pop(candidate["table-uuid"], None)
-        return result
+        return candidate
 
     def apply(self, metadata, update, last_added):
         action = update["action"]
@@ -354,4 +386,4 @@ class Catalog:
                 metadata["snapshot-log"].append({"snapshot-id": identifier, "timestamp-ms": timestamp})
                 metadata["current-snapshot-id"] = identifier
         else:
-            unsupported(f"Unknown update action: {action}")
+            invalid(f"Unknown update action: {action}")
