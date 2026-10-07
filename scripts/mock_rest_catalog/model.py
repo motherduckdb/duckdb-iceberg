@@ -176,7 +176,28 @@ class Catalog:
         return self.publish(key, metadata)
 
     def publish(self, key, metadata):
-        metadata["last-updated-ms"] = int(time.time() * 1000)
+        schema = next(s for s in metadata["schemas"] if s["schema-id"] == metadata["current-schema-id"])
+        current_fields = set(field_ids(schema))
+        for collection, id_key, current_key in (
+            ("partition-specs", "spec-id", "default-spec-id"),
+            ("sort-orders", "order-id", "default-sort-order-id"),
+        ):
+            layout = next(item for item in metadata[collection] if item[id_key] == metadata[current_key])
+            for field in layout["fields"]:
+                # A void partition field may remain after its source column is dropped.
+                if field["transform"] != "void" and field["source-id"] not in current_fields:
+                    invalid(f"Current {collection} reference missing schema field {field['source-id']}")
+        metadata["last-updated-ms"] = time.time_ns() // 1_000_000
+        previous = self.tables.get(key)
+        if previous:
+            # Each entry describes the *previous* file and its own update time.
+            # Keep metadata-only versions as well as versions that add snapshots.
+            metadata["metadata-log"].append(
+                {
+                    "metadata-file": previous["metadata-location"],
+                    "timestamp-ms": previous["metadata"]["last-updated-ms"],
+                }
+            )
         directory = Path(metadata["location"]) / "metadata"
         directory.mkdir(exist_ok=True)
         path = directory / f"{uuid.uuid4()}.metadata.json"
@@ -315,6 +336,7 @@ class Catalog:
                     invalid(f"Missing snapshot {field}")
             metadata["snapshots"].append(snapshot)
             metadata["last-sequence-number"] = snapshot["sequence-number"]
+            last_added.setdefault("snapshots", set()).add(identifier)
         elif action == "set-snapshot-ref":
             identifier = update["snapshot-id"]
             if not any(s["snapshot-id"] == identifier for s in metadata["snapshots"]):
@@ -322,7 +344,14 @@ class Catalog:
             if update["ref-name"] != "main" or update["type"] != "branch":
                 unsupported("Only the main branch is implemented")
             metadata["refs"]["main"] = {k: v for k, v in update.items() if k not in ("action", "ref-name")}
-            metadata["current-snapshot-id"] = identifier
-            metadata["snapshot-log"].append({"snapshot-id": identifier, "timestamp-ms": int(time.time() * 1000)})
+            if metadata.get("current-snapshot-id") != identifier:
+                # New snapshots are addressable at their own timestamps. Moving main
+                # back to an existing snapshot is a new history event, not a rewrite
+                # of the snapshot's creation time.
+                timestamp = time.time_ns() // 1_000_000
+                if identifier in last_added.get("snapshots", set()):
+                    timestamp = next(s["timestamp-ms"] for s in metadata["snapshots"] if s["snapshot-id"] == identifier)
+                metadata["snapshot-log"].append({"snapshot-id": identifier, "timestamp-ms": timestamp})
+                metadata["current-snapshot-id"] = identifier
         else:
             unsupported(f"Unknown update action: {action}")

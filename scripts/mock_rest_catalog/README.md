@@ -41,7 +41,16 @@ missing removals. Committed snapshots are retained and exposed through the
 snapshot-history capability. Metadata files are immutable and completed before
 publication. Unregistering leaves storage files intact.
 
-History reconstruction/time travel, multi-table commits, v3, views, purge,
+Every published metadata version links its predecessor in `metadata-log`, including
+metadata-only changes. Old files retain their original update timestamps and
+contents, allowing transaction-start reconstruction of schema, layout, properties
+and snapshots. The main snapshot log records new snapshots at their creation
+timestamps and rollbacks at the time of the reference change. Time travel by
+snapshot ID or timestamp and rollback to an ancestor snapshot are supported for
+v2 tables. Historical files remain in the run directory; restarting still creates
+a fresh catalog.
+
+Multi-table commits, v3, views, purge,
 relocation, credentials, and server-side scan planning remain unsupported.
 The SQL config controls exclusions and expected
 unsupported errors; a passing suite does not imply support for skipped behavior.

@@ -10,6 +10,9 @@
 		{"env_name": "STAGED_CREATE_SUPPORT", "env_value": "true"},
 		{"env_name": "SNAPSHOT_HISTORY_SUPPORT", "env_value": "true"},
 		{"env_name": "NAMESPACE_PROPERTIES_SUPPORT", "env_value": "true"},
+		{"env_name": "METADATA_FILE_READ_SUPPORT", "env_value": "true"},
+		{"env_name": "METADATA_LOG_SUPPORT", "env_value": "true"},
+		{"env_name": "TIMETRAVEL_SUPPORT", "env_value": "true"},
 		{"env_name": "SCAN_PLANNING_MODE", "env_value": "client"}
 	],
 	"skip_tests": [
@@ -23,9 +26,7 @@
 			"reason": "Failure mode doesn't match the expected error message in the mock catalog",
 			"paths": [
 				"test/sql/local/catalog_test_config_setup/catalog_agnostic/create/test_create_local_fs_disabled.test",
-				"test/sql/local/catalog_test_config_setup/catalog_agnostic/capabilities/no_time_travel.test",
 				"test/sql/local/catalog_test_config_setup/catalog_agnostic/capabilities/no_case_sensitive_table_names.test",
-				"test/sql/local/catalog_test_config_setup/catalog_agnostic/capabilities/no_metadata_file_read.test",
 				"test/sql/local/catalog_test_config_setup/catalog_agnostic/capabilities/no_view.test",
 				"test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/alter_add_column_default_without_v3.test"
 			]
