@@ -89,7 +89,7 @@ Python tests outside `test/python/cloud/` require an active REST catalog. Cloud 
 
 Supported REST catalog markers are `fixture`, `lakekeeper`, `nessie`, and `polaris`; `local` is valid for data generation but not for REST-catalog unittest config resolution.
 
-The test-only `mock` marker is also supported for SQL tests. `make mock` / `make mock-stop` manage a Python standard-library server without Docker, using the endpoint in `test/configs/mock.json` and fresh run directories under `.catalogs/mock/`. Use explicit filters from `test/mock_rest_catalog/selection.json`; the mock has no Spark generator or Python integration profile. See `test/mock_rest_catalog/README.md`.
+The test-only `mock` marker is also supported for SQL tests. `make mock` / `make mock-stop` manage a Python standard-library server without Docker, using the endpoint and skip policy in `test/configs/mock.json` and fresh run directories under `.catalogs/mock/`. CI runs the catalog-agnostic SQL suite excluding `.test_slow`; the mock has no Spark generator or Python integration profile. See `scripts/mock_rest_catalog/README.md`.
 
 ```shell
 make fixture-data

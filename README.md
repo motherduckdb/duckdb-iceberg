@@ -112,7 +112,7 @@ The catalog targets start local services, generate compatible Iceberg test data,
 | Lakekeeper | `make lakekeeper` | `make lakekeeper-data` | Clones a pinned revision, applies the repository patch, and may add `seaweedfs` to `/etc/hosts` with `sudo` |
 | Nessie | `make nessie` | `make nessie-data` | Uses Nessie's `catalog-auth-s3` Compose setup |
 | Apache Polaris | `make polaris` | `make polaris-data` | Clones the `release/1.4.x` branch and uses its RustFS quickstart |
-| Test-only v2 mock | `make mock` | Not required | Python standard library and local warehouse; supports the [initial SQL subset](test/mock_rest_catalog/README.md) |
+| Test-only v2 mock | `make mock` | Not required | Python standard library and local warehouse; [SQL testing and skip policy](scripts/mock_rest_catalog/README.md) |
 
 Starting a catalog stops the catalog currently named in `.catalogs/.active_catalog`. To stop one explicitly, use `make <catalog>-stop`. Catalog clones, runtime state, and generated data are kept in ignored directories.
 
@@ -150,7 +150,7 @@ To run one file:
 
 `scripts/catalog_test_config.sh` accepts `fixture`, `fixture-latest`, `gravitino`, `lakekeeper`, `nessie`, `polaris`, or `mock`. It reports an error for a missing, empty, local-only, or unknown active-catalog marker.
 
-For the mock, use an explicit supported test file as above, or pass `--test-config test/configs/mock.json` directly after `make mock`. The mock currently supports a subset of SQL tests; it has no Spark generator or Python integration profile. Stop it with `make mock-stop`.
+For the mock, run the catalog-agnostic SQL suite excluding `.test_slow`, with capability flags and skips controlled by `test/configs/mock.json`. You can pass that config directly after `make mock`; see the [mock catalog instructions](scripts/mock_rest_catalog/README.md). It has no Spark generator or Python integration profile. Stop it with `make mock-stop`.
 
 ### Catalog-backed Python tests
 

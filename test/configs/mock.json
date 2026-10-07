@@ -1,5 +1,5 @@
 {
-	"description": "Test-only v2 REST mock started with make mock. Supported SQL coverage is documented in test/mock_rest_catalog/selection.json.",
+	"description": "Test-only v2 REST mock started with make mock. Run the catalog-agnostic SQL suite with the capability flags and skip policy in this config.",
 	"on_init": "ATTACH '' AS my_datalake (TYPE ICEBERG, URI 'http://127.0.0.1:19134', AUTHORIZATION_TYPE 'none', ACCESS_DELEGATION_MODE 'none', STAGE_CREATE_TABLES true, DISABLE_MULTI_TABLE_COMMIT true); CREATE SCHEMA IF NOT EXISTS my_datalake.default;",
 	"skip_error_messages": [
 		".*Only append snapshots are implemented.*",

@@ -16,7 +16,6 @@ jobs:
       ASAN_OPTIONS: "detect_leaks=1:halt_on_error=1:abort_on_error=0:external_symbolizer_path=/usr/bin/llvm-symbolizer"
       LSAN_OPTIONS: "suppressions=${{ github.workspace }}/.combined-sanitizer-leak-suppressions.txt"
       UBSAN_OPTIONS: "halt_on_error=1:print_stacktrace=1"
-      TMPDIR: "${{ runner.temp }}/iceberg-mock"
     steps:
       - uses: actions/checkout@v5
         with:
@@ -34,9 +33,8 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Prepare diagnostics and sanitizer support
+      - name: Prepare sanitizer support
         run: |
-          mkdir -p "$TMPDIR"
           sudo apt-get update -qq
           sudo apt-get install -y -qq llvm
           python3 - <<'PY'
@@ -47,26 +45,20 @@ jobs:
           )
           PY
 
-      - name: Test protocol and lifecycle
-        run: python3 -m unittest discover -s test/mock_rest_catalog -v
-
-      - name: Run selected SQL files serially
-        run: python3 scripts/run_mock_catalog_tests.py --unittest-binary build/relassert/test/unittest
-
-      - name: Test Make catalog lifecycle and direct config
+      - name: Run catalog-agnostic SQL tests
         run: |
-          make mock
           trap 'make mock-stop' EXIT
-          test "$(scripts/catalog_test_config.sh)" = "$PWD/test/configs/mock.json"
-          ./build/relassert/test/unittest --test-config test/configs/mock.json test/mock_rest_catalog/smoke.test
+          make mock
+          ./build/relassert/test/unittest \
+            --test-config "$(scripts/catalog_test_config.sh)" \
+            "test/sql/local/catalog_test_config_setup/catalog_agnostic/*" \
+            "exclude:*.test_slow"
 
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: mock-catalog-diagnostics
-          path: |
-            ${{ runner.temp }}/iceberg-mock
-            .catalogs/mock
+          path: .catalogs/mock
           if-no-files-found: ignore
           retention-days: 3
