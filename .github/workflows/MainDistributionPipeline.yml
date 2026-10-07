@@ -20,6 +20,7 @@ jobs:
       ci_tools_version: main
       exclude_archs: 'windows_amd64_mingw'
       extra_toolchains: 'python3'
+      test_config: '{"test_env_variables": {"ICEBERG_RUN_MOCK_TESTS": "1"}}'
 
   duckdb-stable-deploy:
     name: Deploy extension binaries

@@ -20,6 +20,47 @@ across normal unittest invocations until stopped. You can also pass
 `--test-config test/configs/mock.json` directly or select an individual SQL test.
 Run test files serially against the shared catalog.
 
+## Makefile and CI entry points
+
+The test target manages startup, serial SQL execution, and shutdown on success or
+failure:
+
+```sh
+make test_mock_reldebug
+make test_mock_reldebug \
+  MOCK_TEST_FILTER='test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/*'
+```
+
+`test_mock_release`, `test_mock_debug`, and `test_mock_relassert` select the other
+build directories. `test_mock` accepts `MOCK_TEST_BINARY` for an already-built
+unittest executable, including a binary built in a separate core checkout.
+These targets follow `make mock`'s active-catalog switching behavior.
+
+The existing `extension-ci-tools` test phase invokes `make test_<build_type>` and
+forwards `test_config.test_env_variables`. The distribution workflow sets
+`ICEBERG_RUN_MOCK_TESTS=1`, which adds the mock suite as a prerequisite to the
+standard `test_release`, `test_debug`, or `test_reldebug` target. It completes
+before the normal test runner starts; catalog files are not split into parallel
+batches. `SKIP_TESTS=1` skips this phase too, including the tools' host-side
+invocation after Linux container tests. Ordinary local test targets retain their
+existing behavior unless explicitly opted in.
+
+`LOAD_TESTS` registers extension tests; it does not start a catalog or select a
+test config. DuckDB's current `.github/config/extensions/iceberg.cmake` still
+comments out Iceberg's `LOAD_TESTS`. For core CI adoption, use an Iceberg revision
+containing this mock, enable its tests and dependencies, then invoke the same
+Make target from the existing test phase:
+
+```sh
+make -C /path/to/iceberg test_mock \
+  MOCK_TEST_BINARY=/path/to/duckdb/build/release/test/unittest
+```
+
+The core binary and loaded Iceberg/HTTPFS/Avro extensions must be built together.
+No separate test runner is required.
+
+## Catalog behavior
+
 [mock.json](../../test/configs/mock.json) owns the fixed loopback endpoint,
 attachment SQL, capability flags, and skip policy. The launcher reads the endpoint
 from that file and fails if the port is occupied. Python integration tests and
@@ -80,6 +121,13 @@ The SQL config controls exclusions and expected
 unsupported errors; a passing suite does not imply support for skipped behavior.
 The server reports unsupported/error counts on stop.
 
-The `test-mock-catalog.yml` workflow runs the catalog-agnostic SQL suite with the
+The `test-mock-catalog.yml` workflow runs the catalog-agnostic SQL suite through
+`make test_mock_relassert` with the
 Linux relassert build artifact, excluding `.test_slow`, and uploads `.catalogs/mock`
 on failure. Real-catalog CI remains necessary for interoperability testing.
+
+Nested ALTER tests exercise struct widening and collection-field add/drop/rename.
+The expanded `alter_field_type.test` covers widening, rollback, and fresh
+connections. A broader regression found an unresolved projection failure after
+nested field-name reuse; its [handoff and reproducer](../../docs/handoffs/nested-alter-projection/README.md)
+are kept outside the active suite pending investigation.
