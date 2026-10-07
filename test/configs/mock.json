@@ -1,11 +1,44 @@
 {
 	"description": "Test-only v2 REST mock started with make mock. Supported SQL coverage is documented in test/mock_rest_catalog/selection.json.",
 	"on_init": "ATTACH '' AS my_datalake (TYPE ICEBERG, URI 'http://127.0.0.1:19134', AUTHORIZATION_TYPE 'none', ACCESS_DELEGATION_MODE 'none', STAGE_CREATE_TABLES true, DISABLE_MULTI_TABLE_COMMIT true); CREATE SCHEMA IF NOT EXISTS my_datalake.default;",
-	"skip_error_messages": [],
+	"skip_error_messages": [
+		".*Only append snapshots are implemented.*",
+		"UnsupportedOperationException"
+	],
 	"statically_loaded_extensions": ["core_functions", "parquet", "avro", "iceberg", "httpfs", "icu"],
 	"test_env": [
 		{"env_name": "CATALOG_TEST_CONFIG_SETUP", "env_value": "mock"},
 		{"env_name": "STAGED_CREATE_SUPPORT", "env_value": "true"},
 		{"env_name": "SCAN_PLANNING_MODE", "env_value": "client"}
+	],
+	"skip_tests": [
+		{
+			"reason": "Iceberg V1 tables are not supported in the mock catalog",
+			"paths": [
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/test_v1_unsupported_writes.test"
+			]
+		},
+		{
+			"reason": "Failure mode doesn't match the expected error message in the mock catalog",
+			"paths": [
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/create/test_create_local_fs_disabled.test",
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/capabilities/no_snapshot_history.test",
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/capabilities/no_time_travel.test",
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/capabilities/no_case_sensitive_table_names.test",
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/capabilities/no_metadata_file_read.test",
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/capabilities/no_view.test",
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/maintenance/rewrite_data_files_plan_shape.test",
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/alter_add_column_default_without_v3.test"
+			]
+		},
+		{
+			"reason": "No applicable HTTP logs are produced",
+			"paths": [
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/partitioning/test_partitioning_pushdown_bucket.test",
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/test_data_manifest_late_materialization.test",
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/partitioned_reads/test_in_filter_partition_pruning.test",
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/test_requests_to_partitioned_table.test"
+			]
+		}
 	]
 }
