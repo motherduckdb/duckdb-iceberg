@@ -6,17 +6,8 @@
 #include "duckdb/main/database.hpp"
 
 #include "function/iceberg_functions.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
 
 namespace duckdb {
-
-static virtual_column_map_t IcebergDeleteVirtualColumns(ClientContext &context,
-                                                        optional_ptr<FunctionData> bind_data_p) {
-	auto &bind_data = bind_data_p->Cast<MultiFileBindData>();
-	auto result = IcebergTableSchemaVersion::VirtualColumns();
-	bind_data.virtual_columns = result;
-	return result;
-}
 
 static void IcebergDeletesScanSerialize(Serializer &serializer, const optional_ptr<FunctionData> bind_data,
                                         const TableFunction &function) {
@@ -55,7 +46,6 @@ TableFunctionSet IcebergFunctions::GetIcebergDeletesScanFunction(ClientContext &
 		function.statistics = nullptr;
 		function.table_scan_progress = nullptr;
 		function.get_bind_info = nullptr;
-		function.get_virtual_columns = IcebergDeleteVirtualColumns;
 
 		// Schema param is just confusing here
 		function.named_parameters.erase("schema");

@@ -49,7 +49,8 @@ static void AddNamedParameters(TableFunction &fun) {
 
 virtual_column_map_t IcebergVirtualColumns(ClientContext &context, optional_ptr<FunctionData> bind_data_p) {
 	auto &bind_data = bind_data_p->Cast<MultiFileBindData>();
-	auto result = IcebergTableSchemaVersion::VirtualColumns();
+	auto &file_list = bind_data.file_list->Cast<IcebergMultiFileList>();
+	auto result = IcebergTableSchemaVersion::VirtualColumns(file_list.GetScanPlanner().GetMetadata().iceberg_version);
 	bind_data.virtual_columns = result;
 	return result;
 }
