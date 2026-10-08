@@ -189,11 +189,12 @@ public:
 	}
 
 public:
-	static IcebergManifestListEntry CreateFromEntries(FileSystem &fs, sequence_number_t sequence_number,
+	//! Compute a descriptor and summaries from content, without allocating paths or row IDs.
+	static IcebergManifestListEntry CreateFromEntries(sequence_number_t sequence_number,
 	                                                  const IcebergTableMetadata &table_metadata,
 	                                                  const IcebergManifestMetadata &manifest_metadata,
 	                                                  vector<IcebergManifestEntry> &&manifest_entries,
-	                                                  int64_t &next_row_id);
+	                                                  optional<int64_t> first_row_id);
 	bool HasManifestEntries() const {
 		return manifest_entries.has_value();
 	}
@@ -222,8 +223,7 @@ public:
 
 struct IcebergManifestList {
 public:
-	IcebergManifestList(int64_t snapshot_id, sequence_number_t sequence_number, const string &path)
-	    : path(path), snapshot_id(snapshot_id), sequence_number(sequence_number) {
+	explicit IcebergManifestList(const string &path) : path(path) {
 	}
 
 public:
@@ -231,20 +231,6 @@ public:
 	const vector<IcebergManifestListEntry> &GetManifestFilesConst() const;
 	const string &GetPath() const {
 		return path;
-	}
-	sequence_number_t GetSequenceNumber() const {
-		return sequence_number;
-	}
-
-	void AddNewManifestFile(IcebergManifestListEntry &&manifest_list_entry) {
-		auto &manifest_file = manifest_list_entry.file;
-		manifest_file.sequence_number = sequence_number;
-		manifest_file.added_snapshot_id = snapshot_id;
-
-		if (!manifest_file.min_sequence_number || *manifest_file.min_sequence_number > sequence_number) {
-			manifest_file.min_sequence_number = sequence_number;
-		}
-		manifest_entries.push_back(std::move(manifest_list_entry));
 	}
 	void AddExistingManifestFile(IcebergManifestListEntry &&manifest_file) {
 		manifest_entries.push_back(std::move(manifest_file));
@@ -265,8 +251,6 @@ public:
 
 private:
 	string path;
-	int64_t snapshot_id;
-	sequence_number_t sequence_number;
 	vector<IcebergManifestListEntry> manifest_entries;
 };
 
