@@ -199,19 +199,18 @@ static void CollectDataManifestMetrics(const IcebergManifestEntry &manifest_entr
 	metrics.records += data_file.record_count;
 }
 
-static IcebergManifestListEntry CreateManifestListEntry(sequence_number_t sequence_number,
-                                                        const IcebergTableMetadata &table_metadata,
-                                                        const IcebergManifestMetadata &manifest_metadata,
-                                                        vector<IcebergManifestEntry> &&manifest_entries,
-                                                        int64_t &next_row_id, bool assign_row_ids) {
+IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(sequence_number_t sequence_number,
+                                                                     const IcebergTableMetadata &table_metadata,
+                                                                     const IcebergManifestMetadata &manifest_metadata,
+                                                                     vector<IcebergManifestEntry> &&manifest_entries,
+                                                                     optional<int64_t> first_row_id) {
 	IcebergManifestListEntry manifest_list_entry(IcebergManifestFile {""}, manifest_metadata);
 	auto manifest_content = manifest_metadata.content;
 	auto manifest_partition_spec_id = manifest_metadata.partition_spec_id;
 	auto &manifest_file = manifest_list_entry.file;
 	manifest_file.manifest_length = 0;
-	if (assign_row_ids && manifest_content == IcebergManifestContentType::DATA) {
-		//! 'first_row_id' is only assigned to data manifests (row lineage), deletes manifests leave it null
-		manifest_file.first_row_id = next_row_id;
+	if (manifest_content == IcebergManifestContentType::DATA) {
+		manifest_file.first_row_id = first_row_id;
 	}
 
 	manifest_file.content = manifest_content;
@@ -225,10 +224,6 @@ static IcebergManifestListEntry CreateManifestListEntry(sequence_number_t sequen
 	//! Add the files to the manifest
 	for (auto &manifest_entry : manifest_entries) {
 		auto &data_file = manifest_entry.data_file;
-
-		if (data_file.content == IcebergManifestEntryContentType::DATA) {
-			next_row_id += data_file.record_count;
-		}
 
 		do {
 			if (manifest_entry.status == IcebergManifestEntryStatusType::EXISTING) {
@@ -256,7 +251,7 @@ static IcebergManifestListEntry CreateManifestListEntry(sequence_number_t sequen
 			manifest_file.min_sequence_number = entry_data_seq;
 		}
 	}
-	//! NOTE: this gets assigned when the manifest is added to a manifest list
+	//! The writer assigns the snapshot identity when it persists this manifest.
 	manifest_file.added_snapshot_id = nullopt;
 
 	// Compute partition field summaries (upper/lower bounds) for the manifest list entry
@@ -278,25 +273,21 @@ static IcebergManifestListEntry CreateManifestListEntry(sequence_number_t sequen
 	return manifest_list_entry;
 }
 
-IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(FileSystem &fs, sequence_number_t sequence_number,
-                                                                     const IcebergTableMetadata &table_metadata,
-                                                                     const IcebergManifestMetadata &manifest_metadata,
-                                                                     vector<IcebergManifestEntry> &&manifest_entries,
-                                                                     int64_t &next_row_id) {
-	auto result =
-	    CreateManifestListEntry(sequence_number, table_metadata, manifest_metadata, std::move(manifest_entries),
-	                            next_row_id, table_metadata.iceberg_version >= 3);
-	auto uuid = UUID::ToString(UUID::GenerateRandomUUID());
-	result.file.manifest_path = fs.JoinPath(table_metadata.GetMetadataPath(fs), uuid + "-m0.avro");
-	return result;
-}
-
 IcebergManifestListEntry IcebergPendingManifest::CreateScanEntry(const IcebergTableMetadata &table_metadata,
                                                                  sequence_number_t sequence_number,
                                                                  int64_t &next_row_id) const {
 	auto copied_entries = entries;
-	return CreateManifestListEntry(sequence_number, table_metadata, metadata, std::move(copied_entries), next_row_id,
-	                               metadata.format_version >= 3);
+	optional<int64_t> first_row_id;
+	if (metadata.format_version >= 3 && metadata.content == IcebergManifestContentType::DATA) {
+		first_row_id = next_row_id;
+	}
+	for (const auto &entry : entries) {
+		if (entry.data_file.content == IcebergManifestEntryContentType::DATA) {
+			next_row_id += entry.data_file.record_count;
+		}
+	}
+	return IcebergManifestListEntry::CreateFromEntries(sequence_number, table_metadata, metadata,
+	                                                   std::move(copied_entries), first_row_id);
 }
 
 void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const IcebergTableSchema &target_schema,
@@ -813,7 +804,7 @@ unique_ptr<IcebergManifestList> IcebergManifestList::Load(const string &iceberg_
 	if (!snapshot.sequence_number) {
 		throw InvalidConfigurationException("snapshot.sequence_number is not set");
 	}
-	auto ret = make_uniq<IcebergManifestList>(*snapshot.snapshot_id, *snapshot.sequence_number, snapshot.manifest_list);
+	auto ret = make_uniq<IcebergManifestList>(snapshot.manifest_list);
 
 	auto &fs = FileSystem::GetFileSystem(context);
 	if (!snapshot.manifests.empty()) {
