@@ -224,6 +224,11 @@ IcebergTable::GetVendedCredentials(ClientContext &context,
 	// Detect storage type from metadata location
 	const auto &table_location = table_metadata.GetLocation();
 	string storage_type = DetectStorageType(table_location);
+	auto log_table_name =
+	    IcebergLogType::Redact(context, StringUtil::Format("%s.%s.%s", catalog.GetName(), schema.name, name));
+	DUCKDB_LOG_DEBUG(
+	    context, "Iceberg table '%s': preparing %llu storage credentials for storage type '%s' at location '%s'",
+	    log_table_name, storage_credentials.size(), storage_type, IcebergLogType::Redact(context, table_location));
 
 	// Mapping from config key to a duckdb secret option
 	case_insensitive_map_t<Value> config_options;
@@ -239,6 +244,10 @@ IcebergTable::GetVendedCredentials(ClientContext &context,
 		//! Only use credentials whose prefix matches the storage type (e.g. "s3"),
 		//! matching Iceberg Java S3FileIO behavior: filter(c -> c.prefix().startsWith(ROOT_PREFIX))
 		if (!use_table_scope && !CredentialMatchesStorageType(credential.prefix, storage_type)) {
+			DUCKDB_LOG_DEBUG(context,
+			                 "Iceberg table '%s': skipping credential %llu with prefix '%s' because it does not "
+			                 "match storage type '%s'",
+			                 log_table_name, index, IcebergLogType::Redact(context, credential.prefix), storage_type);
 			continue;
 		}
 
@@ -252,8 +261,17 @@ IcebergTable::GetVendedCredentials(ClientContext &context,
 		    StringUtil::Contains(credential.prefix, "://") ? credential.prefix : credential.prefix + "://";
 		if (use_table_scope) {
 			create_secret_input.scope.push_back(table_location);
+			DUCKDB_LOG_INFO(context,
+			                "Iceberg table '%s': replacing singleton credential prefix '/' with table scope "
+			                "'%s' for legacy R2 compatibility",
+			                log_table_name, IcebergLogType::Redact(context, table_location));
 		} else {
 			create_secret_input.scope.push_back(scope_prefix);
+			if (scope_prefix != credential.prefix) {
+				DUCKDB_LOG_DEBUG(context, "Iceberg table '%s': normalizing bare credential prefix '%s' to scope '%s'",
+				                 log_table_name, IcebergLogType::Redact(context, credential.prefix),
+				                 IcebergLogType::Redact(context, scope_prefix));
+			}
 			//! For scheme aliases, preserve the credential's authority and path.
 			auto table_scheme_end = table_location.find("://");
 			if (table_scheme_end != string::npos) {
@@ -261,6 +279,11 @@ IcebergTable::GetVendedCredentials(ClientContext &context,
 				if (!StringUtil::StartsWith(scope_prefix, table_scheme)) {
 					auto credential_path = scope_prefix.substr(scope_prefix.find("://") + 3);
 					create_secret_input.scope.push_back(table_scheme + credential_path);
+					DUCKDB_LOG_DEBUG(context,
+					                 "Iceberg table '%s': adding scheme-alias scope '%s' for credential prefix "
+					                 "'%s', preserving its authority and path",
+					                 log_table_name, IcebergLogType::Redact(context, create_secret_input.scope.back()),
+					                 IcebergLogType::Redact(context, credential.prefix));
 				}
 			}
 		}
@@ -278,11 +301,21 @@ IcebergTable::GetVendedCredentials(ClientContext &context,
 
 		ParseConfigOptions(credential.config, create_secret_input.options, context, storage_type);
 		//! TODO: apply the 'overrides' retrieved from the /v1/config endpoint
+		DUCKDB_LOG_DEBUG(context,
+		                 "Iceberg table '%s': credential %llu with prefix '%s' prepared as secret '%s' with "
+		                 "scopes [%s]",
+		                 log_table_name, index, IcebergLogType::Redact(context, credential.prefix),
+		                 IcebergLogType::Redact(context, create_secret_input.name.GetIdentifierName()),
+		                 IcebergLogType::Redact(context, create_secret_input.scope));
 		result.storage_credentials.push_back(create_secret_input);
 	}
 
 	if (result.storage_credentials.empty() && !config_options.empty()) {
 		//! Only create a secret out of the 'config' if there are no 'storage-credentials'
+		DUCKDB_LOG_DEBUG(context,
+		                 "Iceberg table '%s': no usable storage-credentials out of %llu received; falling back "
+		                 "to config options",
+		                 log_table_name, storage_credentials.size());
 		result.config = make_uniq<CreateSecretInput>();
 		auto &config = *result.config;
 		config.on_conflict = OnCreateConflict::REPLACE_ON_CONFLICT;
@@ -298,6 +331,9 @@ IcebergTable::GetVendedCredentials(ClientContext &context,
 			config.options["refresh_info"] = IcebergTableSecretProvider::MakeRefreshInfo(
 			    catalog.GetName().GetIdentifierName(), schema.name.GetIdentifierName(), name);
 		}
+	} else if (result.storage_credentials.empty()) {
+		DUCKDB_LOG_DEBUG(context, "Iceberg table '%s': no usable vended credentials or config options available",
+		                 log_table_name);
 	}
 
 	return result;
@@ -613,12 +649,17 @@ void IcebergTable::LoadCredentials(ClientContext &context, IRCAPITableCredential
 
 	auto &info = *table_credentials.config;
 	D_ASSERT(info.scope.empty());
+	auto log_table_name =
+	    IcebergLogType::Redact(context, StringUtil::Format("%s.%s.%s", catalog.GetName(), schema.name, name));
 	string storage_scope;
+	const char *scope_source;
 	auto data_path = table_metadata.table_properties.find("write.data.path");
 	if (data_path != table_metadata.table_properties.end()) {
 		storage_scope = data_path->second;
+		scope_source = "write.data.path";
 	} else {
 		storage_scope = table_metadata.GetLocation();
+		scope_source = "table location";
 	}
 	if (!storage_scope.empty()) {
 		if (!StringUtil::EndsWith(storage_scope, "/")) {
@@ -630,11 +671,18 @@ void IcebergTable::LoadCredentials(ClientContext &context, IRCAPITableCredential
 		size_t metadata_pos = lc_storage_location.find("metadata");
 		if (metadata_pos != string::npos) {
 			info.scope = {metadata_path.substr(0, metadata_pos)};
+			scope_source = "metadata path heuristic";
 		} else {
-			DUCKDB_LOG_INFO(context, "Creating Iceberg Table secret with no scope. Returned metadata location is %s",
-			                lc_storage_location);
+			scope_source = "unscoped fallback";
+			DUCKDB_LOG_INFO(context,
+			                "Iceberg table '%s': creating config secret without a scope because no storage "
+			                "scope could be derived from metadata path '%s'",
+			                log_table_name, IcebergLogType::Redact(context, metadata_path));
 		}
 	}
+	DUCKDB_LOG_DEBUG(context, "Iceberg table '%s': config secret '%s' uses scopes [%s] derived from %s", log_table_name,
+	                 IcebergLogType::Redact(context, info.name.GetIdentifierName()),
+	                 IcebergLogType::Redact(context, info.scope), scope_source);
 
 	if (StringUtil::StartsWith(catalog.base_uri, "glue")) {
 		auto &sigv4 = catalog.auth_handler->Cast<SIGV4Authorization>();
@@ -679,7 +727,8 @@ void IcebergTable::LoadCredentials(ClientContext &context, IRCAPITableCredential
 	                       info.options.find("connection_string") != info.options.end();
 	bool has_gcs_creds = info.options.find("bearer_token") != info.options.end();
 	if (!has_s3_creds && !has_azure_creds && !has_gcs_creds) {
-		DUCKDB_LOG_INFO(context, "Failed to create valid secret from Vended Credentials for table '%s'", name);
+		DUCKDB_LOG_INFO(context, "Failed to create valid secret from Vended Credentials for table '%s'",
+		                log_table_name);
 	}
 }
 
