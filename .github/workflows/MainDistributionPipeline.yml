@@ -36,7 +36,8 @@ jobs:
       vcpkg_commit: cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3
       exclude_archs: 'windows_amd64_mingw'
       extra_toolchains: 'python3'
-      test_config: '{"test_env_variables": {"ICEBERG_RUN_MOCK_TESTS": "1"}}'
+      # Service-backed catalog tests run in BuildIceberg.yml's dedicated Linux jobs.
+      # Keep distribution testing on the standard extension-ci-tools entry points.
 
   duckdb-stable-deploy:
     name: Deploy extension binaries

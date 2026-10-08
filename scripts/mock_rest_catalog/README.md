@@ -36,20 +36,25 @@ build directories. `test_mock` accepts `MOCK_TEST_BINARY` for an already-built
 unittest executable, including a binary built in a separate core checkout.
 These targets follow `make mock`'s active-catalog switching behavior.
 
-The existing `extension-ci-tools` test phase invokes `make test_<build_type>` and
-forwards `test_config.test_env_variables`. The distribution workflow sets
-`ICEBERG_RUN_MOCK_TESTS=1`, which adds the mock suite as a prerequisite to the
-standard `test_release`, `test_debug`, or `test_reldebug` target. It completes
-before the normal test runner starts; catalog files are not split into parallel
-batches. `SKIP_TESTS=1` skips this phase too, including the tools' host-side
-invocation after Linux container tests. Ordinary local test targets retain their
-existing behavior unless explicitly opted in.
+The distribution workflow uses the standard `extension-ci-tools` test phase on
+each platform. It does not start the mock. The service-backed mock suite runs in
+the dedicated Linux `test-mock-catalog.yml` job, which invokes
+`make test_mock_relassert` against the existing build artifact and retains failure
+diagnostics. Catalog files run serially against one server.
+
+This follows DuckLake's split between its
+[distribution workflow](https://github.com/duckdb/ducklake/blob/main/.github/workflows/MainDistributionPipeline.yml)
+and dedicated Linux
+[catalog tests](https://github.com/duckdb/ducklake/blob/main/.github/workflows/Catalogs.yml).
+Native distribution tests remain enabled on all configured platforms; full mock
+catalog coverage is provided by the Linux job. The explicit `test_mock_*` targets
+remain available for local use, and `SKIP_TESTS=1` skips them.
 
 `LOAD_TESTS` registers extension tests; it does not start a catalog or select a
 test config. DuckDB's current `.github/config/extensions/iceberg.cmake` still
 comments out Iceberg's `LOAD_TESTS`. For core CI adoption, use an Iceberg revision
 containing this mock, enable its tests and dependencies, then invoke the same
-Make target from the existing test phase:
+Make target from a dedicated Linux catalog-test step:
 
 ```sh
 make -C /path/to/iceberg test_mock \

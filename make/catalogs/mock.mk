@@ -14,15 +14,6 @@ mock-stop:
 		rm -f "$(ACTIVE_CATALOG_FILE)"; \
 	fi
 
-# Opt in through extension-ci-tools' test_config environment. Its normal
-# make test_<build_type> invocation then runs the catalog suite before the
-# standard tests, without sharing a server between runner batches.
-ifeq ($(ICEBERG_RUN_MOCK_TESTS),1)
-test_release: test_mock_release
-test_debug: test_mock_debug
-test_reldebug: test_mock_reldebug
-endif
-
 test_mock_release test_mock_debug test_mock_reldebug test_mock_relassert:
 	$(MAKE) test_mock MOCK_TEST_BINARY="$(PROJ_DIR)build/$(patsubst test_mock_%,%,$@)/test/unittest"
 
