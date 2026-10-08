@@ -4,8 +4,9 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-include test/sql/init_requires
+require-env TIMETRAVEL_SUPPORT
 
+include test/sql/init_requires
 
 statement ok
 drop table if exists my_datalake.default.merge_txn_schema;
@@ -106,9 +107,13 @@ order by sequence_number, min_sequence_number;
 4	4	0
 
 query II
-select count(*), bool_and(m.added_snapshot_id = s.snapshot_id)
+select
+	count(*),
+	bool_and(m.added_snapshot_id = s.snapshot_id)
 from read_avro(getvariable('latest_txn_manifest_list')) m
-join iceberg_snapshots(my_datalake.default.merge_txn_schema) s using (sequence_number);
+join iceberg_snapshots(
+	my_datalake.default.merge_txn_schema
+) s using (sequence_number);
 ----
 3	true
 
