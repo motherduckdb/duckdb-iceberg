@@ -344,19 +344,21 @@ void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const Iceb
 		D_ASSERT(have_extended_partition_info);
 		auto serialized_type = extended_partition_info.transform.GetSerializedType(extended_partition_info.source_type);
 		// min/max_values already in their partition result value types. We cast those to varchar to serialize them
-		// again unless they are blob, in which case we do not cast and serialize
-		SerializeResult lower_result = SerializeResult(min_values[i].type(), min_values[i]);
-		SerializeResult upper_result = SerializeResult(max_values[i].type(), max_values[i]);
-		if (min_values[i].type().id() == LogicalTypeId::UUID) {
+		// again unless they are blob (binary or fixed[L]), which already hold the serialized bytes.
+		auto &value_type = min_values[i].type();
+		SerializeResult lower_result = SerializeResult(value_type, min_values[i]);
+		SerializeResult upper_result = SerializeResult(value_type, max_values[i]);
+		if (value_type.id() == LogicalTypeId::UUID) {
 			// File metrics only provide unsigned extrema, so they cannot perform this compatibility check.
 			// Keep UUID serialization here, after checking both orders over all partition values.
-			lower_result = SerializeResult(min_values[i].type(), SerializeUUIDBound(min_values[i]));
-			upper_result = SerializeResult(max_values[i].type(), SerializeUUIDBound(max_values[i]));
-		} else if (min_values[i].type() != LogicalType::BLOB && max_values[i].type() != LogicalType::BLOB) {
-			lower_result = IcebergValue::SerializeValue(min_values[i].DefaultCastAs(LogicalType::VARCHAR),
-			                                            min_values[i].type(), SerializeBound::LOWER_BOUND);
-			upper_result = IcebergValue::SerializeValue(max_values[i].DefaultCastAs(LogicalType::VARCHAR),
-			                                            max_values[i].type(), SerializeBound::UPPER_BOUND);
+			lower_result = SerializeResult(value_type, SerializeUUIDBound(min_values[i]));
+			upper_result = SerializeResult(value_type, SerializeUUIDBound(max_values[i]));
+		} else {
+			auto blob_bounds = value_type.id() == LogicalTypeId::BLOB;
+			auto lower_input = blob_bounds ? min_values[i] : min_values[i].DefaultCastAs(LogicalType::VARCHAR);
+			auto upper_input = blob_bounds ? max_values[i] : max_values[i].DefaultCastAs(LogicalType::VARCHAR);
+			lower_result = IcebergValue::SerializeValue(lower_input, value_type, SerializeBound::LOWER_BOUND);
+			upper_result = IcebergValue::SerializeValue(upper_input, value_type, SerializeBound::UPPER_BOUND);
 		}
 
 		if (!lower_result.HasValue() || !upper_result.HasValue()) {
