@@ -204,7 +204,9 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(sequence_nu
                                                                      const IcebergManifestMetadata &manifest_metadata,
                                                                      vector<IcebergManifestEntry> &&manifest_entries,
                                                                      optional<int64_t> first_row_id) {
-	IcebergManifestListEntry manifest_list_entry(IcebergManifest {}, manifest_metadata);
+	IcebergManifestListEntry manifest_list_entry(
+	    IcebergManifest(manifest_metadata.partition_spec_id, manifest_metadata.content, sequence_number),
+	    manifest_metadata);
 	auto manifest_content = manifest_metadata.content;
 	auto manifest_partition_spec_id = manifest_metadata.partition_spec_id;
 	auto &manifest_file = manifest_list_entry.GetManifest();
@@ -212,10 +214,7 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(sequence_nu
 		manifest_file.first_row_id = first_row_id;
 	}
 
-	manifest_file.content = manifest_content;
-	manifest_file.sequence_number = sequence_number;
 	manifest_file.counts = IcebergManifestCounts::Zero();
-	manifest_file.partition_spec_id = manifest_partition_spec_id;
 
 	manifest_list_entry.metrics.emplace();
 	auto &metrics = *manifest_list_entry.metrics;
@@ -550,10 +549,7 @@ struct ManifestListVectorWriters {
 
 		if (content) {
 			content->WriteValue(static_cast<int32_t>(manifest.content));
-			if (!manifest.sequence_number) {
-				throw InvalidConfigurationException("manifest_file.sequence_number is not set");
-			}
-			sequence_number->WriteValue(*manifest.sequence_number);
+			sequence_number->WriteValue(manifest.sequence_number);
 			if (!manifest.min_sequence_number) {
 				min_sequence_number->WriteValue(int64_t(-1));
 			} else {
@@ -767,10 +763,7 @@ void IcebergManifestList::LoadManifestFiles(const IcebergSnapshotScanInfo &snaps
 		}
 		result.reserve(result.size() + snapshot.manifests.size());
 		for (auto &manifest_path : snapshot.manifests) {
-			IcebergManifest manifest_file;
-			manifest_file.partition_spec_id = metadata.default_spec_id;
-			manifest_file.content = IcebergManifestContentType::DATA;
-			manifest_file.sequence_number = 0;
+			IcebergManifest manifest_file(metadata.default_spec_id, IcebergManifestContentType::DATA, 0);
 			manifest_file.min_sequence_number = 0;
 			result.emplace_back(IcebergManifestFile(manifest_path, 0, *snapshot.snapshot_id, std::move(manifest_file)));
 		}
