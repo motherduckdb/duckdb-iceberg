@@ -11,12 +11,16 @@ if (NOT EMSCRIPTEN)
 endif()
 
 # Extension from this repo
+duckdb_extension_load(parquet)
 duckdb_extension_load(json)
 duckdb_extension_load(iceberg
     SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}
     LOAD_TESTS
 )
-duckdb_extension_statically_link(json iceberg)
+# Static registration order is also database startup load order. Avro above and
+# Parquet here must precede Iceberg, so fresh databases (including CSV result readers)
+# do not try to auto-install unsigned copies from the build's extension repository.
+duckdb_extension_statically_link(parquet json iceberg)
 
 if (NOT EMSCRIPTEN)
   duckdb_extension_load(tpch)
