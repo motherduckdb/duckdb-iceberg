@@ -39,6 +39,9 @@ where content = 'DATA' and status <> 'DELETED';
 ----
 3
 
+statement ok
+begin
+
 # Verify the input-byte precondition independently of Parquet encoding details.
 statement ok
 set variable input_file_paths = (
@@ -52,6 +55,9 @@ select bool_and(size < 2000), sum(size) >= 2000
 from read_blob($input_file_paths);
 ----
 true	true
+
+statement ok
+commit
 
 # Spark's default min is 75% of target (1500 here). Catalogs write slightly
 # different parquet sizes for the same rows (Nessie ~1.7KiB, fixture ~1.5KiB),
