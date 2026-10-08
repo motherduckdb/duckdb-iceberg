@@ -661,7 +661,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			throw NotImplementedException("ALTER TYPE with a USING expression is not supported for Iceberg tables");
 		}
 		auto &column_path = cast.Child().Cast<ColumnRefExpression>().ColumnNames();
-		if (change_type_info.column_path.size() != 1 || column_path[0] != change_type_info.column_path[0]) {
+		if (column_path != change_type_info.column_path) {
 			throw NotImplementedException("ALTER TYPE with a USING expression is not supported for Iceberg tables");
 		}
 		auto column_p = new_schema->GetMutableFromPath(column_path, nullptr);
