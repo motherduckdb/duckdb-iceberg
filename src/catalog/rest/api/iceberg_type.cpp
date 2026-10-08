@@ -173,11 +173,16 @@ rest_api_objects::PrimitiveTypeValue IcebergTypeHelper::PrimitiveTypeFromValue(c
 		result.boolean_type_value->value = value.GetValue<bool>();
 		return result;
 	}
+	case LogicalTypeId::TINYINT:
+	case LogicalTypeId::SMALLINT:
+	case LogicalTypeId::UTINYINT:
+	case LogicalTypeId::USMALLINT:
 	case LogicalTypeId::INTEGER: {
 		result.integer_type_value = rest_api_objects::IntegerTypeValue();
 		result.integer_type_value->value = value.GetValue<int32_t>();
 		return result;
 	}
+	case LogicalTypeId::UINTEGER:
 	case LogicalTypeId::BIGINT: {
 		result.long_type_value = rest_api_objects::LongTypeValue();
 		result.long_type_value->value = value.GetValue<int64_t>();
