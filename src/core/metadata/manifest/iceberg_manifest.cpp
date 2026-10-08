@@ -421,10 +421,7 @@ sequence_number_t IcebergManifestEntry::GetSequenceNumber(const IcebergManifest 
 			throw InvalidConfigurationException(
 			    "'manifest_entry.sequence_number' is only allowed to be NULL for ADDED entries");
 		}
-		if (!manifest_file.sequence_number) {
-			throw InvalidConfigurationException("'manifest_file.sequence_number' is not set");
-		}
-		return *manifest_file.sequence_number;
+		return manifest_file.sequence_number;
 	}
 	return *sequence_number;
 }
@@ -435,10 +432,7 @@ sequence_number_t IcebergManifestEntry::GetFileSequenceNumber(const IcebergManif
 			throw InvalidConfigurationException(
 			    "'manifest_entry.file_sequence_number' is only allowed to be NULL for ADDED entries");
 		}
-		if (!manifest_file.sequence_number) {
-			throw InvalidConfigurationException("'manifest_file.sequence_number' is not set");
-		}
-		return *manifest_file.sequence_number;
+		return manifest_file.sequence_number;
 	}
 	return *file_sequence_number;
 }
