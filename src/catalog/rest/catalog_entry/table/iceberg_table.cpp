@@ -231,15 +231,14 @@ IcebergTable::GetVendedCredentials(ClientContext &context,
 	config_options.insert(user_defaults.begin(), user_defaults.end());
 	ParseConfigOptions(config, config_options, context, storage_type);
 
-	//! If there is only one credential listed, we don't really care about the prefix,
-	//! we can use the table_location instead.
-	const bool ignore_credential_prefix = storage_credentials.size() == 1;
 	for (idx_t index = 0; index < storage_credentials.size(); index++) {
 		auto &credential = storage_credentials[index];
 
+		//! Legacy R2 catalogs vend "/" for a single credential, which cannot match an S3 URI.
+		const bool use_table_scope = storage_credentials.size() == 1 && credential.prefix == "/";
 		//! Only use credentials whose prefix matches the storage type (e.g. "s3"),
 		//! matching Iceberg Java S3FileIO behavior: filter(c -> c.prefix().startsWith(ROOT_PREFIX))
-		if (!ignore_credential_prefix && !CredentialMatchesStorageType(credential.prefix, storage_type)) {
+		if (!use_table_scope && !CredentialMatchesStorageType(credential.prefix, storage_type)) {
 			continue;
 		}
 
@@ -251,15 +250,18 @@ IcebergTable::GetVendedCredentials(ClientContext &context,
 		//! widen it to that prefix: it stays the least specific credential, as in Java's S3FileIO
 		const string scope_prefix =
 		    StringUtil::Contains(credential.prefix, "://") ? credential.prefix : credential.prefix + "://";
-		if (ignore_credential_prefix) {
+		if (use_table_scope) {
 			create_secret_input.scope.push_back(table_location);
 		} else {
 			create_secret_input.scope.push_back(scope_prefix);
-			//! Also match paths whose scheme differs from the credential prefix
-			//! (e.g. oss:// files with s3 credentials), equivalent to Java S3FileIO's
-			//! ROOT_PREFIX fallback in clientForStoragePath()
-			if (!StringUtil::StartsWith(table_location, scope_prefix)) {
-				create_secret_input.scope.push_back(table_location);
+			//! For scheme aliases, preserve the credential's authority and path.
+			auto table_scheme_end = table_location.find("://");
+			if (table_scheme_end != string::npos) {
+				auto table_scheme = table_location.substr(0, table_scheme_end + 3);
+				if (!StringUtil::StartsWith(scope_prefix, table_scheme)) {
+					auto credential_path = scope_prefix.substr(scope_prefix.find("://") + 3);
+					create_secret_input.scope.push_back(table_scheme + credential_path);
+				}
 			}
 		}
 		create_secret_input.name = Identifier(StringUtil::Format("%s__%d", secret_base_name, index));
