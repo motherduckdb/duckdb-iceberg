@@ -6,37 +6,33 @@
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
-#include "rest_catalog/objects/expression_type.hpp"
 
 namespace duckdb {
 namespace rest_api_objects {
 
-class Expression;
-
-class AndOrExpression {
+class TruncateToMonth {
 public:
-	AndOrExpression();
-	AndOrExpression(const AndOrExpression &) = delete;
-	AndOrExpression &operator=(const AndOrExpression &) = delete;
-	AndOrExpression(AndOrExpression &&) = default;
-	AndOrExpression &operator=(AndOrExpression &&) = default;
+	TruncateToMonth();
+	TruncateToMonth(const TruncateToMonth &) = delete;
+	TruncateToMonth &operator=(const TruncateToMonth &) = delete;
+	TruncateToMonth(TruncateToMonth &&) = default;
+	TruncateToMonth &operator=(TruncateToMonth &&) = default;
 
 public:
 	// Deserialization
-	static AndOrExpression FromJSON(JSONValue obj);
+	static TruncateToMonth FromJSON(JSONValue obj);
 	string TryFromJSON(JSONValue obj);
 
 	// Copy
-	AndOrExpression Copy() const;
+	TruncateToMonth Copy() const;
 
 	// Serialization
 	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
 	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
-	ExpressionType type;
-	unique_ptr<Expression> left;
-	unique_ptr<Expression> right;
+	string action;
+	int32_t field_id;
 };
 
 } // namespace rest_api_objects
