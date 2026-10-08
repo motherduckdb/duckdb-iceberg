@@ -338,6 +338,12 @@ void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const Iceb
 			// values
 			auto typed_value = extended_partition_info.value.DefaultCastAs(serialized_type);
 
+			if ((serialized_type.id() == LogicalTypeId::FLOAT && Value::IsNan(typed_value.GetValue<float>())) ||
+			    (serialized_type.id() == LogicalTypeId::DOUBLE && Value::IsNan(typed_value.GetValue<double>()))) {
+				field_summary[i].contains_nan = true;
+				continue;
+			}
+
 			if (!initialized[i]) {
 				min_values[i] = typed_value;
 				max_values[i] = typed_value;
@@ -356,7 +362,7 @@ void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const Iceb
 	// Serialize the min/max values as bounds
 	for (idx_t i = 0; i < num_fields; i++) {
 		if (!initialized[i]) {
-			// All values for this field are null - set bounds to null BLOBs
+			// Bounds exclude nulls and NaNs. A field containing only those values has null bounds.
 			field_summary[i].lower_bound = Value(LogicalType::BLOB);
 			field_summary[i].upper_bound = Value(LogicalType::BLOB);
 			continue;
@@ -392,16 +398,16 @@ void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const Iceb
 			                                            max_values[i].type(), SerializeBound::UPPER_BOUND);
 		}
 
-		if (lower_result.HasValue()) {
-			field_summary[i].lower_bound = lower_result.GetValue();
-		} else {
-			field_summary[i].lower_bound = Value(LogicalType::BLOB);
+		if (!lower_result.HasValue() || !upper_result.HasValue()) {
+			// Unlike data-file metrics, null partition bounds mean all values are null or NaN.
+			// If either bound is unavailable, omit the entire optional summary list so readers
+			// cannot prune a manifest containing ordinary values. Partial lists are not valid.
+			has_partitions = false;
+			field_summary.clear();
+			return;
 		}
-		if (upper_result.HasValue()) {
-			field_summary[i].upper_bound = upper_result.GetValue();
-		} else {
-			field_summary[i].upper_bound = Value(LogicalType::BLOB);
-		}
+		field_summary[i].lower_bound = lower_result.GetValue();
+		field_summary[i].upper_bound = upper_result.GetValue();
 	}
 }
 
