@@ -151,7 +151,7 @@ static void IcebergMetaDataFunction(ClientContext &context, TableFunctionInput &
 				output.SetChildCardinality(out);
 				return;
 			}
-			auto &manifest = table_entry.file;
+			auto &manifest = table_entry.GetFile();
 			auto &manifest_entry = entries[global_state.current_manifest_entry_idx];
 			auto &data_file = manifest_entry.data_file;
 
