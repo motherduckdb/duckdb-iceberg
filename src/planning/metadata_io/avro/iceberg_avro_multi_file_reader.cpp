@@ -726,26 +726,25 @@ shared_ptr<MultiFileList> IcebergAvroMultiFileReader::CreateFileList(ClientConte
 		auto &iceberg_path = manifest_files_scan.iceberg_path;
 		for (auto manifest_idx : manifest_files_scan.manifest_indexes) {
 			auto &manifest = manifest_files[manifest_idx];
-			auto full_path = options.allow_moved_paths
-			                     ? IcebergUtils::GetFullPath(iceberg_path, manifest.GetFile().manifest_path, fs)
-			                     : manifest.GetFile().manifest_path;
+			const auto &file = manifest.GetFile();
+			auto full_path = options.allow_moved_paths ? IcebergUtils::GetFullPath(iceberg_path, file.manifest_path, fs)
+			                                           : file.manifest_path;
 			open_files.emplace_back(full_path);
 			auto &file_info = open_files.back();
 			file_info.extended_info = make_uniq<ExtendedOpenFileInfo>();
 			file_info.extended_info->options["validate_external_file_cache"] = Value::BOOLEAN(false);
 			file_info.extended_info->options["force_full_download"] = Value::BOOLEAN(true);
-			if (manifest.GetFile().manifest_length > 0) {
-				file_info.extended_info->options["file_size"] = Value::UBIGINT(manifest.GetFile().manifest_length);
+			if (file.manifest_length > 0) {
+				file_info.extended_info->options["file_size"] = Value::UBIGINT(file.manifest_length);
 			}
 			file_info.extended_info->options["etag"] = Value("");
 			file_info.extended_info->options["last_modified"] = Value::TIMESTAMP(timestamp_t(0));
-			file_info.extended_info->options["partition_spec_id"] =
-			    Value::INTEGER(manifest.GetSummary().partition_spec_id);
-			if (!manifest.GetSummary().sequence_number) {
+			file_info.extended_info->options["partition_spec_id"] = Value::INTEGER(file.partition_spec_id);
+			if (!file.sequence_number) {
 				throw InvalidConfigurationException("manifest_file.sequence_number is not set");
 			}
-			file_info.extended_info->options["sequence_number"] = Value::BIGINT(*manifest.GetSummary().sequence_number);
-			file_info.extended_info->options["manifest_file_path"] = Value(manifest.GetFile().manifest_path);
+			file_info.extended_info->options["sequence_number"] = Value::BIGINT(*file.sequence_number);
+			file_info.extended_info->options["manifest_file_path"] = Value(file.manifest_path);
 		}
 	}
 

@@ -195,10 +195,10 @@ public:
 			vector<DuckLakeDeleteFile> new_delete_files;
 			vector<string> deleted_delete_files;
 			for (auto &entry : iceberg_manifest_list->GetManifestFilesConst()) {
-				auto &manifest = entry.GetSummary();
+				auto &manifest = entry.GetFile();
 				auto &entries = entry.GetManifestEntries();
 
-				if (entry.GetFile().added_snapshot_id != snapshot.snapshot_id) {
+				if (manifest.added_snapshot_id != snapshot.snapshot_id) {
 					//! This is essentially an "EXISTING" manifest
 					//! there just isn't a 'status' field to indicate that
 					continue;

@@ -415,7 +415,7 @@ optional<sequence_number_t> IcebergManifestEntry::ExplicitFileSequenceNumber() c
 	return file_sequence_number;
 }
 
-sequence_number_t IcebergManifestEntry::GetSequenceNumber(const IcebergManifestSummary &manifest_file) const {
+sequence_number_t IcebergManifestEntry::GetSequenceNumber(const IcebergManifest &manifest_file) const {
 	if (!sequence_number) {
 		if (status != IcebergManifestEntryStatusType::ADDED) {
 			throw InvalidConfigurationException(
@@ -429,7 +429,7 @@ sequence_number_t IcebergManifestEntry::GetSequenceNumber(const IcebergManifestS
 	return *sequence_number;
 }
 
-sequence_number_t IcebergManifestEntry::GetFileSequenceNumber(const IcebergManifestSummary &manifest_file) const {
+sequence_number_t IcebergManifestEntry::GetFileSequenceNumber(const IcebergManifest &manifest_file) const {
 	if (!file_sequence_number) {
 		if (status != IcebergManifestEntryStatusType::ADDED) {
 			throw InvalidConfigurationException(
@@ -618,7 +618,7 @@ static Value FieldIdsForList(int32_t list_field_id, int32_t element_field_id) {
 
 idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManifestListEntry &manifest_entry,
                   const string &path, CopyFunction &copy, DatabaseInstance &db, ClientContext &context) {
-	auto &manifest_file = manifest_entry.GetSummary();
+	auto &manifest_file = manifest_entry.GetManifest();
 	if (!manifest_entry.manifest_metadata) {
 		throw InternalException("Manifest entry for '%s' is missing typed manifest metadata", path);
 	}

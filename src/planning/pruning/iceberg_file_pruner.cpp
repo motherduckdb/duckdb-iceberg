@@ -44,7 +44,7 @@ void ApplyNullCounts(const IcebergDataFile &data_file, int32_t column_id, Iceber
 } // namespace
 
 bool IcebergFilePruner::FilePartitionMatchesFilter(const IcebergDataFile &data_file,
-                                                   const IcebergManifestSummary &manifest_file) const {
+                                                   const IcebergManifest &manifest_file) const {
 	if (data_file.partition_info.empty()) {
 		return true;
 	}
@@ -111,7 +111,7 @@ bool IcebergFilePruner::FilePartitionMatchesFilter(const IcebergDataFile &data_f
 	return true;
 }
 
-bool IcebergFilePruner::FileMatchesFilter(const IcebergManifestSummary &manifest_file,
+bool IcebergFilePruner::FileMatchesFilter(const IcebergManifest &manifest_file,
                                           const IcebergManifestEntry &manifest_entry) const {
 	D_ASSERT(table_filters.HasFilters());
 	unordered_set<int32_t> mapping_field_ids;
@@ -199,8 +199,8 @@ bool IcebergFilePruner::FileMatchesFilter(const IcebergManifestSummary &manifest
 	return true;
 }
 
-bool IcebergFilePruner::DeleteManifestMatchesDataFile(const IcebergManifestSummary &delete_manifest,
-                                                      const IcebergManifestSummary &data_manifest,
+bool IcebergFilePruner::DeleteManifestMatchesDataFile(const IcebergManifest &delete_manifest,
+                                                      const IcebergManifest &data_manifest,
                                                       const IcebergManifestEntry &data_manifest_entry) const {
 	if (!delete_manifest.sequence_number) {
 		throw InvalidConfigurationException("Delete manifest does not have a sequence number");
@@ -350,9 +350,9 @@ partition_value_map_t IcebergFilePruner::PartitionValueMap(const IcebergDataFile
 	return result;
 }
 
-bool IcebergFilePruner::DeleteFileMatchesDataFile(const IcebergManifestSummary &delete_manifest,
+bool IcebergFilePruner::DeleteFileMatchesDataFile(const IcebergManifest &delete_manifest,
                                                   const IcebergManifestEntry &delete_manifest_entry,
-                                                  const IcebergManifestSummary &data_manifest,
+                                                  const IcebergManifest &data_manifest,
                                                   const IcebergManifestEntry &data_manifest_entry,
                                                   const partition_value_map_t &data_partition_values) const {
 	auto &delete_file = delete_manifest_entry.data_file;
@@ -421,7 +421,7 @@ bool IcebergFilePruner::DeleteFileMatchesDataFile(const IcebergManifestSummary &
 }
 
 bool IcebergFilePruner::ManifestMatchesFilter(const IcebergManifestListEntry &entry) const {
-	auto &manifest = entry.GetSummary();
+	auto &manifest = entry.GetManifest();
 	auto path = entry.HasFile() ? entry.GetFile().manifest_path : "<in-memory>";
 	auto spec_id = manifest.partition_spec_id;
 	auto partition_spec_it = metadata.partition_specs.find(spec_id);

@@ -50,21 +50,21 @@ void IcebergSnapshotWriter::AddExistingManifest(IcebergManifestListEntry manifes
 	manifest_list.AddExistingManifestFile(std::move(manifest));
 }
 
-void IcebergSnapshotWriter::WriteManifestFile(IcebergManifestListEntry &manifest) {
-	if (manifest.GetManifestEntries().empty()) {
+void IcebergSnapshotWriter::WriteManifestFile(IcebergManifestListEntry &list_entry) {
+	if (list_entry.GetManifestEntries().empty()) {
 		throw InternalException("Cannot write an empty Iceberg manifest");
 	}
-	auto &summary = manifest.GetSummary();
+	auto &manifest = list_entry.GetManifest();
 	auto &fs = FileSystem::GetFileSystem(context);
 	auto path =
 	    fs.JoinPath(table_metadata.GetMetadataPath(fs), UUID::ToString(UUID::GenerateRandomUUID()) + "-m0.avro");
-	summary.sequence_number = snapshot.sequence_number;
-	if (!summary.min_sequence_number || *summary.min_sequence_number > *summary.sequence_number) {
-		summary.min_sequence_number = summary.sequence_number;
+	manifest.sequence_number = snapshot.sequence_number;
+	if (!manifest.min_sequence_number || *manifest.min_sequence_number > *manifest.sequence_number) {
+		manifest.min_sequence_number = manifest.sequence_number;
 	}
 	created_metadata_files.push_back(path);
-	auto length = manifest_file::WriteToFile(table_metadata, manifest, path, avro_copy, db, context);
-	manifest.SetFile(std::move(path), length, *snapshot.snapshot_id);
+	auto length = manifest_file::WriteToFile(table_metadata, list_entry, path, avro_copy, db, context);
+	list_entry.SetFile(std::move(path), length, *snapshot.snapshot_id);
 }
 
 void IcebergSnapshotWriter::WriteManifest(const IcebergPendingManifest &pending) {
@@ -78,7 +78,7 @@ void IcebergSnapshotWriter::WriteManifest(const IcebergPendingManifest &pending)
 	snapshot.metrics.AddManifestListEntry(manifest);
 	WriteManifestFile(manifest);
 	if (first_row_id) {
-		auto &counts = *manifest.GetSummary().counts;
+		auto &counts = *manifest.GetFile().counts;
 		next_row_id += *counts.existing_rows_count + *counts.added_rows_count;
 		*snapshot.added_rows += *counts.added_rows_count;
 	}

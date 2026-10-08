@@ -132,14 +132,14 @@ static void IcebergPartitionStatsFunction(ClientContext &context, TableFunctionI
 	auto &metadata = bind_data.metadata;
 	for (; global_state.current_manifest_idx < table_entries.size(); global_state.current_manifest_idx++) {
 		auto &table_entry = table_entries[global_state.current_manifest_idx];
-		auto &manifest = table_entry.GetSummary();
+		auto &manifest = table_entry.GetFile();
 		auto &field_summaries = manifest.partitions.field_summary;
 
 		auto spec_id = manifest.partition_spec_id;
 		auto partition_spec_it = metadata.partition_specs.find(spec_id);
 		if (partition_spec_it == metadata.partition_specs.end()) {
 			throw InvalidInputException("Manifest %s references 'partition_spec_id' %d which doesn't exist",
-			                            table_entry.GetFile().manifest_path, spec_id);
+			                            manifest.manifest_path, spec_id);
 		}
 		auto &partition_spec = partition_spec_it->second;
 		for (; global_state.current_manifest_entry_idx < field_summaries.size();
@@ -157,9 +157,9 @@ static void IcebergPartitionStatsFunction(ClientContext &context, TableFunctionI
 
 			idx_t col = 0;
 			//! manifest_path
-			AddString(output.data[col++], out, string_t(table_entry.GetFile().manifest_path));
+			AddString(output.data[col++], out, string_t(manifest.manifest_path));
 			//! added_snapshot_id
-			FlatVector::GetDataMutable<int64_t>(output.data[col++])[out] = table_entry.GetFile().added_snapshot_id;
+			FlatVector::GetDataMutable<int64_t>(output.data[col++])[out] = manifest.added_snapshot_id;
 			//! partition_spec_id
 			FlatVector::GetDataMutable<int32_t>(output.data[col++])[out] = manifest.partition_spec_id;
 			//! partition_field_id

@@ -18,7 +18,7 @@ namespace duckdb {
 
 struct IcebergTable;
 struct IcebergManifestFile;
-struct IcebergManifestSummary;
+struct IcebergManifest;
 
 using sequence_number_t = int64_t;
 
@@ -139,8 +139,8 @@ public:
 	int64_t GetSnapshotId(const IcebergManifestFile &manifest_file) const;
 	void SetSequenceNumber(optional<sequence_number_t> value);
 	void SetFileSequenceNumber(optional<sequence_number_t> value);
-	sequence_number_t GetSequenceNumber(const IcebergManifestSummary &manifest_file) const;
-	sequence_number_t GetFileSequenceNumber(const IcebergManifestSummary &manifest_file) const;
+	sequence_number_t GetSequenceNumber(const IcebergManifest &manifest_file) const;
+	sequence_number_t GetFileSequenceNumber(const IcebergManifest &manifest_file) const;
 	optional<sequence_number_t> ExplicitSequenceNumber() const;
 	optional<sequence_number_t> ExplicitFileSequenceNumber() const;
 

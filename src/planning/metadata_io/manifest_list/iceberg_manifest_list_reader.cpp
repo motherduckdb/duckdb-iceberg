@@ -126,7 +126,7 @@ void ManifestListReader::ReadChunk(DataChunk &chunk, idx_t table_format_version,
 		auto manifest_path = ReadRequiredField<string_t>("manifest_path", manifest_path_entries[i]).GetString();
 		auto manifest_length = ReadRequiredField<int64_t>("manifest_length", manifest_length_entries[i]);
 		auto snapshot_id = ReadRequiredField<int64_t>("added_snapshot_id", added_snapshot_id_entries[i]);
-		IcebergManifestSummary manifest;
+		IcebergManifest manifest;
 		manifest.partition_spec_id = ReadRequiredField<int32_t>("partition_spec_id", partition_spec_id_entries[i]);
 		IcebergManifestCounts manifest_counts;
 		manifest_counts.added_files_count =

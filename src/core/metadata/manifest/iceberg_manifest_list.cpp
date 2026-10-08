@@ -84,7 +84,7 @@ IcebergManifestCounts IcebergManifestCounts::Zero() {
 	return result;
 }
 
-void IcebergManifestSummary::SetCountsFromEntries(const vector<IcebergManifestEntry> &entries) {
+void IcebergManifest::SetCountsFromEntries(const vector<IcebergManifestEntry> &entries) {
 	counts = IcebergManifestCounts::Zero();
 	auto &manifest_counts = *counts;
 	for (const auto &entry : entries) {
@@ -137,7 +137,7 @@ public:
 };
 
 static IcebergManifestEntryMetrics GetManifestEntryMetrics(IcebergManifestMetrics &metrics,
-                                                           IcebergManifestSummary &manifest_file,
+                                                           IcebergManifest &manifest_file,
                                                            IcebergManifestEntryStatusType direction) {
 	D_ASSERT(direction != IcebergManifestEntryStatusType::EXISTING);
 	D_ASSERT(manifest_file.counts && manifest_file.counts->Complete());
@@ -204,10 +204,10 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(sequence_nu
                                                                      const IcebergManifestMetadata &manifest_metadata,
                                                                      vector<IcebergManifestEntry> &&manifest_entries,
                                                                      optional<int64_t> first_row_id) {
-	IcebergManifestListEntry manifest_list_entry(IcebergManifestSummary {}, manifest_metadata);
+	IcebergManifestListEntry manifest_list_entry(IcebergManifest {}, manifest_metadata);
 	auto manifest_content = manifest_metadata.content;
 	auto manifest_partition_spec_id = manifest_metadata.partition_spec_id;
-	auto &manifest_file = manifest_list_entry.GetSummary();
+	auto &manifest_file = manifest_list_entry.GetManifest();
 	if (manifest_content == IcebergManifestContentType::DATA) {
 		manifest_file.first_row_id = first_row_id;
 	}
@@ -533,12 +533,11 @@ struct ManifestListVectorWriters {
 		}
 	}
 
-	void WriteRow(const IcebergManifestFile &file, idx_t *next_row_id = nullptr) {
-		auto &manifest = file.summary;
-		manifest_path.WriteValue(string_t(file.manifest_path));
-		manifest_length.WriteValue(file.manifest_length);
+	void WriteRow(const IcebergManifestFile &manifest, idx_t *next_row_id = nullptr) {
+		manifest_path.WriteValue(string_t(manifest.manifest_path));
+		manifest_length.WriteValue(manifest.manifest_length);
 		partition_spec_id.WriteValue(manifest.partition_spec_id);
-		added_snapshot_id.WriteValue(file.added_snapshot_id);
+		added_snapshot_id.WriteValue(manifest.added_snapshot_id);
 		IcebergManifestCounts empty_counts;
 		auto &counts = manifest.counts ? *manifest.counts : empty_counts;
 		WriteManifestCount(added_files_count, counts.added_files_count, counts_required, "added_files_count");
@@ -768,7 +767,7 @@ void IcebergManifestList::LoadManifestFiles(const IcebergSnapshotScanInfo &snaps
 		}
 		result.reserve(result.size() + snapshot.manifests.size());
 		for (auto &manifest_path : snapshot.manifests) {
-			IcebergManifestSummary manifest_file;
+			IcebergManifest manifest_file;
 			manifest_file.partition_spec_id = metadata.default_spec_id;
 			manifest_file.content = IcebergManifestContentType::DATA;
 			manifest_file.sequence_number = 0;

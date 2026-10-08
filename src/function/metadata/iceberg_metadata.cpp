@@ -151,12 +151,12 @@ static void IcebergMetaDataFunction(ClientContext &context, TableFunctionInput &
 				output.SetChildCardinality(out);
 				return;
 			}
-			auto &manifest = table_entry.GetSummary();
+			auto &manifest = table_entry.GetFile();
 			auto &manifest_entry = entries[global_state.current_manifest_entry_idx];
 			auto &data_file = manifest_entry.data_file;
 
 			//! manifest_path
-			AddString(output.data[0], out, string_t(table_entry.GetFile().manifest_path));
+			AddString(output.data[0], out, string_t(manifest.manifest_path));
 			//! manifest_sequence_number
 			if (!manifest.sequence_number) {
 				throw InvalidConfigurationException("manifest_file.sequence_number is not set");

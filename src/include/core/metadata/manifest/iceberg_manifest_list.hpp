@@ -91,8 +91,8 @@ public:
 unordered_map<string, string> GetManifestMetadataMap(const IcebergTableMetadata &table_metadata,
                                                      const IcebergManifestMetadata &manifest_metadata);
 
-//! Fields needed to scan manifest content, whether or not it has an Avro file.
-struct IcebergManifestSummary {
+//! Manifest attributes shared by in-memory content and Avro files.
+struct IcebergManifest {
 public:
 	//! The id of the partition spec referenced by this manifest (and the data files that are part of it)
 	int32_t partition_spec_id;
@@ -112,16 +112,15 @@ public:
 };
 
 //! A descriptor for an existing Avro manifest, including its snapshot identity.
-struct IcebergManifestFile {
-	IcebergManifestFile(string path, int64_t length, int64_t snapshot_id, IcebergManifestSummary summary)
-	    : manifest_path(std::move(path)), manifest_length(length), added_snapshot_id(snapshot_id),
-	      summary(std::move(summary)) {
+struct IcebergManifestFile : public IcebergManifest {
+	IcebergManifestFile(string path, int64_t length, int64_t snapshot_id, IcebergManifest manifest)
+	    : IcebergManifest(std::move(manifest)), manifest_path(std::move(path)), manifest_length(length),
+	      added_snapshot_id(snapshot_id) {
 	}
 
 	string manifest_path;
 	int64_t manifest_length;
 	int64_t added_snapshot_id;
-	IcebergManifestSummary summary;
 };
 
 //! Snapshot metrics gathered for a manifest
@@ -162,8 +161,8 @@ struct IcebergManifestListEntry {
 public:
 	IcebergManifestListEntry(IcebergManifestFile file) : manifest(std::move(file)) {
 	}
-	IcebergManifestListEntry(IcebergManifestSummary summary, IcebergManifestMetadata manifest_metadata)
-	    : manifest_metadata(std::move(manifest_metadata)), manifest(std::move(summary)) {
+	IcebergManifestListEntry(IcebergManifest manifest, IcebergManifestMetadata manifest_metadata)
+	    : manifest_metadata(std::move(manifest_metadata)), manifest(std::move(manifest)) {
 	}
 	IcebergManifestListEntry(const IcebergManifestListEntry &) = default;
 	IcebergManifestListEntry(IcebergManifestListEntry &&) = default;
@@ -231,14 +230,14 @@ public:
 		}
 		return std::get<IcebergManifestFile>(manifest);
 	}
-	IcebergManifestSummary &GetSummary() {
-		return HasFile() ? std::get<IcebergManifestFile>(manifest).summary : std::get<IcebergManifestSummary>(manifest);
+	IcebergManifest &GetManifest() {
+		return HasFile() ? std::get<IcebergManifestFile>(manifest) : std::get<IcebergManifest>(manifest);
 	}
-	const IcebergManifestSummary &GetSummary() const {
-		return HasFile() ? std::get<IcebergManifestFile>(manifest).summary : std::get<IcebergManifestSummary>(manifest);
+	const IcebergManifest &GetManifest() const {
+		return HasFile() ? std::get<IcebergManifestFile>(manifest) : std::get<IcebergManifest>(manifest);
 	}
 	void SetFile(string path, int64_t length, int64_t snapshot_id) {
-		manifest = IcebergManifestFile(std::move(path), length, snapshot_id, std::move(GetSummary()));
+		manifest = IcebergManifestFile(std::move(path), length, snapshot_id, std::move(GetManifest()));
 	}
 
 	optional<IcebergManifestMetadata> manifest_metadata;
@@ -247,7 +246,7 @@ public:
 	optional<IcebergManifestMetrics> metrics;
 
 private:
-	std::variant<IcebergManifestSummary, IcebergManifestFile> manifest;
+	std::variant<IcebergManifest, IcebergManifestFile> manifest;
 };
 
 struct IcebergManifestList {
