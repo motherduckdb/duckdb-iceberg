@@ -8,7 +8,6 @@ require-env-not FORMAT_V3_SUPPORT
 
 include test/sql/init_requires
 
-
 statement ok
 CREATE SCHEMA IF NOT EXISTS my_datalake.default;
 

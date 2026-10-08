@@ -124,9 +124,9 @@ void ManifestListReader::ReadChunk(DataChunk &chunk, idx_t table_format_version,
 	//! Conversion logic
 	for (idx_t i = 0; i < count; i++) {
 		auto manifest_path = ReadRequiredField<string_t>("manifest_path", manifest_path_entries[i]).GetString();
-		IcebergManifestFile manifest(manifest_path);
-		manifest.manifest_length = ReadRequiredField<int64_t>("manifest_length", manifest_length_entries[i]);
-		manifest.added_snapshot_id = ReadRequiredField<int64_t>("added_snapshot_id", added_snapshot_id_entries[i]);
+		auto manifest_length = ReadRequiredField<int64_t>("manifest_length", manifest_length_entries[i]);
+		auto snapshot_id = ReadRequiredField<int64_t>("added_snapshot_id", added_snapshot_id_entries[i]);
+		IcebergManifest manifest;
 		manifest.partition_spec_id = ReadRequiredField<int32_t>("partition_spec_id", partition_spec_id_entries[i]);
 		IcebergManifestCounts manifest_counts;
 		manifest_counts.added_files_count =
@@ -191,7 +191,8 @@ void ManifestListReader::ReadChunk(DataChunk &chunk, idx_t table_format_version,
 				summaries.push_back(summary);
 			}
 		}
-		result.push_back(std::move(manifest));
+		result.emplace_back(
+		    IcebergManifestFile(std::move(manifest_path), manifest_length, snapshot_id, std::move(manifest)));
 	}
 }
 

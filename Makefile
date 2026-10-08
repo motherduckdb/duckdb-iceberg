@@ -23,6 +23,7 @@ include make/catalogs/gravitino.mk
 include make/catalogs/lakekeeper.mk
 include make/catalogs/nessie.mk
 include make/catalogs/polaris.mk
+include make/catalogs/mock.mk
 
 install_requirements:
 	python3 -m pip install -r scripts/requirements.txt

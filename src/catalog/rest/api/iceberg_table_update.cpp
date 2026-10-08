@@ -2,8 +2,6 @@
 #include "catalog/rest/api/iceberg_manifest_merge.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_data.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
-#include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
-#include "duckdb/common/enums/catalog_type.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
 #include "planning/metadata_io/avro/avro_scan.hpp"
 #include "planning/metadata_io/manifest_list/iceberg_manifest_list_reader.hpp"
@@ -17,7 +15,7 @@ static void AssignManifestFirstRowIds(const IcebergTableMetadata &metadata,
 		return;
 	}
 	for (auto &manifest_list_entry : existing_manifest_list) {
-		auto &manifest_file = manifest_list_entry.file;
+		auto &manifest_file = manifest_list_entry.GetManifest();
 		if (manifest_file.content != IcebergManifestContentType::DATA) {
 			continue;
 		}
@@ -72,7 +70,8 @@ void IcebergCommitState::LoadExistingManifests(DatabaseInstance &db,
 	//! But even if the attributes are present, they're allowed to be NULL
 	//! In both those situations we have to read all the entries of the manifest to materialize these counts on-demand
 	for (auto &manifest : manifests) {
-		if (manifest.file.counts && manifest.file.counts->Complete()) {
+		auto &counts = manifest.GetFile().counts;
+		if (counts && counts->Complete()) {
 			continue;
 		}
 		manifest =
@@ -84,15 +83,6 @@ void IcebergCommitState::LoadExistingManifests(DatabaseInstance &db,
 		next_row_id = *table_info.table_metadata.next_row_id;
 	}
 	AssignManifestFirstRowIds(table_info.table_metadata, current_snapshot, manifests, next_row_id);
-
-	auto &system_catalog = Catalog::GetSystemCatalog(db);
-	auto data = CatalogTransaction::GetSystemTransaction(db);
-	auto &schema = system_catalog.GetSchema(data, Identifier::DefaultSchema());
-	auto avro_copy_p = schema.GetEntry(data, CatalogType::COPY_FUNCTION_ENTRY, "avro");
-	D_ASSERT(avro_copy_p);
-	auto &avro_copy = avro_copy_p->Cast<CopyFunctionCatalogEntry>().function;
-	IcebergManifestMerge::MergeManifestList(manifests, table_info.table_metadata.GetCurrentSchemaId(), avro_copy, db,
-	                                        *this);
 }
 
 IcebergTableUpdate::IcebergTableUpdate(IcebergTableUpdateType type) : type(type) {

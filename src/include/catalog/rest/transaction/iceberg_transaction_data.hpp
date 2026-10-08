@@ -60,9 +60,8 @@ public:
 
 private:
 	void CacheExistingManifestList(lock_guard<mutex> &guard, const IcebergTableMetadata &metadata);
-	//! Writes one delete manifest per partition spec present in 'delete_files'.
-	void AddDeleteManifestFiles(IcebergAddSnapshot &add_snapshot, partitioned_manifest_entry_map_t &&delete_files,
-	                            sequence_number_t sequence_number);
+	//! Retains one pending delete manifest per partition spec present in 'delete_files'.
+	void AddPendingDeleteManifests(IcebergAddSnapshot &add_snapshot, partitioned_manifest_entry_map_t &&delete_files);
 	void AddSnapshotUpdate(unique_ptr<IcebergAddSnapshot> add_snapshot, IcebergManifestDeletes &&altered_manifests);
 
 public:
@@ -87,8 +86,10 @@ public:
 	//! Snapshot this transaction is based on (the tip when the manifest list was first cached).
 	//! Drives the delete commit-retry safety check.
 	optional<int64_t> base_snapshot_id;
-	//! Track the current row id for this transaction
-	int64_t next_row_id = 0;
+	//! Starting identities for read-your-writes, captured with the base manifest list.
+	//! Commit attempts allocate their identities independently.
+	sequence_number_t scan_sequence_number = 0;
+	int64_t scan_first_row_id = 0;
 
 	//! If we perform an update that relies on the current schema id staying unchanged
 	bool assert_schema_id = false;
