@@ -68,6 +68,7 @@ certification was performed.
 | `FILE_CLEANUP_SUPPORT` | Allow deletion of uncommitted files using the configured credentials. |
 | `NAMESPACE_PROPERTIES_SUPPORT` | Support setting and removing namespace properties. Does not require an automatically populated `namespace_id`. |
 | `CASE_SENSITIVE_TABLE_NAMES_SUPPORT` | Support distinct table names differing only in case. |
+| `VIEW_SUPPORT` | Expose the Iceberg REST view endpoints, so views can be created and loaded. Omitted for S3 Tables, whose endpoint set has none. |
 | `ATOMIC_COMMIT_CONFLICT_SUPPORT` | Reject concurrent commits with stale parent state so retries preserve every successful write. Declared for Lakekeeper and S3 Tables; omitted for the standard fixture, which lacks support, and for the other configurations pending validation. |
 | `SCAN_PLANNING_MODE` | `client` or `server`. Tests asserting client pruning logs or request counts require `client`; fixture-latest uses `server`. |
 
@@ -88,7 +89,7 @@ adding a catalog-name restriction or a skip.
 The probes cover type creation, integer and nanosecond timestamp defaults,
 metadata-log and snapshot history, historical snapshot reads, direct metadata
 file access, namespace properties, case-sensitive table names, multi-table
-commits, and non-staged table visibility/rollback. Existing tests cover V3/default
+commits, view creation, and non-staged table visibility/rollback. Existing tests cover V3/default
 rejection and cleanup failure. Type-specific default probes require the type,
 V3, and general default support; when these prerequisites are absent, the
 corresponding broader absence probes apply instead.

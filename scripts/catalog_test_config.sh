@@ -19,7 +19,7 @@ if [[ -z "$active_catalog" ]]; then
 fi
 
 case "$active_catalog" in
-	fixture|fixture-latest|gravitino|lakekeeper|polaris|nessie)
+	fixture|fixture-latest|gravitino|lakekeeper|polaris|nessie|mock)
 		config_path="$repo_root/test/configs/${active_catalog}.json"
 		;;
 	*)
