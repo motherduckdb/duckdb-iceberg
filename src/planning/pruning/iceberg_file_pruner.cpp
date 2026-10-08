@@ -131,6 +131,13 @@ bool IcebergFilePruner::FileMatchesFilter(const IcebergManifest &manifest_file,
 		auto primary_index = column_index.GetPrimaryIndex();
 		auto &column = *schema.columns[primary_index];
 
+		if (column_index.IsPushdownExtract() && column.type.id() == LogicalTypeId::STRUCT) {
+			// These metrics describe the parent struct, not the extracted field. In particular,
+			// a non-NULL struct can contain a NULL child. Child metrics also exclude NULL parents,
+			// so pruning an extracted field requires accounting for every ancestor's validity.
+			continue;
+		}
+
 		if (data_file.content == IcebergManifestEntryContentType::POSITION_DELETES) {
 			continue;
 		}
