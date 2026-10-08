@@ -128,7 +128,14 @@ jobs:
             python3 test/python/test_python_ctas.py check_build build/release-artifact/release
           upload-name: duckdb-iceberg-equality-delete-support
 
-  # Fixture catalog acts as the smoke test: it must pass before we spend CI on the other catalogs.
+  test-mock:
+    name: Test against mock REST catalog
+    needs: build_iceberg
+    uses: ./.github/workflows/test-mock-catalog.yml
+    with:
+      artifact-name: duckdb-iceberg
+
+  # Fixture catalog acts as the smoke test: it must pass before we spend CI on the other real catalogs.
   test-fixture:
     name: Test against fixture catalog
     needs: build_iceberg

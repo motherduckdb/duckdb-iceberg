@@ -2,6 +2,7 @@
 
 #include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
+#include "common/iceberg_utils.hpp"
 #include "core/metadata/partition/iceberg_partition_constants.hpp"
 #include "duckdb/common/types/vector.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
@@ -12,12 +13,14 @@
 namespace duckdb {
 
 struct IcebergScanPlanBindData : public TableFunctionData {
-	IcebergScanPlanBindData(IcebergTableSchemaVersion &table, shared_ptr<IcebergScanInfo> scan_info,
+	IcebergScanPlanBindData(IcebergTableSchemaVersion *table, shared_ptr<IcebergScanInfo> scan_info,
 	                        const IcebergOptions &options)
 	    : table(table), scan_info(std::move(scan_info)), options(options) {
 	}
 
-	IcebergTableSchemaVersion &table;
+	//! The catalog table being planned, or null for a table given by its
+	//! location.
+	IcebergTableSchemaVersion *table;
 	shared_ptr<IcebergScanInfo> scan_info;
 	IcebergOptions options;
 	bool produce_sequence_number = false;
@@ -28,12 +31,18 @@ struct IcebergScanPlanBindData : public TableFunctionData {
 
 struct IcebergScanPlanGlobalState : public GlobalTableFunctionState {
 	explicit IcebergScanPlanGlobalState(ClientContext &context, const IcebergScanPlanBindData &bind)
-	    : planner(
-	          make_uniq<IcebergScanPlanner>(context, bind.scan_info, bind.scan_info->metadata.location, bind.options)),
+	    : planner(make_uniq<IcebergScanPlanner>(context, bind.scan_info, bind.scan_info->metadata_path, bind.options)),
 	      metadata(LogicalType::VARIANT(), 1) {
-		// Vended credentials are transaction-scoped, so recreate them on every execution.
-		bind.table.PrepareIcebergScanFromEntry(context);
-		planner->SetTable(bind.table);
+		if (bind.table) {
+			auto &table = *bind.table;
+			// Vended credentials are transaction-scoped, so recreate them on every
+			// execution.
+			table.PrepareIcebergScanFromEntry(context);
+			planner->SetTable(table);
+		} else {
+			// A table given by its location has no catalog to plan it.
+			planner->DisableServerSidePlanning();
+		}
 		if (bind.produce_sequence_number) {
 			// The server planning API does not yet provide file sequence numbers.
 			planner->DisableServerSidePlanning();
@@ -71,24 +80,10 @@ struct IcebergScanPlanGlobalState : public GlobalTableFunctionState {
 static unique_ptr<FunctionData> IcebergScanPlanBind(ClientContext &context, TableFunctionBindInput &input,
                                                     vector<LogicalType> &return_types, vector<Identifier> &names) {
 	if (input.inputs[0].IsNull()) {
-		throw InvalidInputException("Expected fully qualified table name (catalog.schema.table), got NULL");
+		throw InvalidInputException("Expected a table name (catalog.schema.table) "
+		                            "or a table location, got NULL");
 	}
 	auto input_string = input.inputs[0].ToString();
-	auto qualified_name = QualifiedName::ParseComponents(input_string);
-	if (qualified_name.size() != 3) {
-		throw InvalidInputException("Expected fully qualified table name (catalog.schema.table), got: %s",
-		                            input_string);
-	}
-	EntryLookupInfo table_lookup(CatalogType::TABLE_ENTRY,
-	                             QualifiedName(qualified_name[0], qualified_name[1], qualified_name[2]));
-	auto catalog_entry = Catalog::GetEntry(context, table_lookup, OnEntryNotFound::THROW_EXCEPTION);
-	if (catalog_entry->type != CatalogType::TABLE_ENTRY) {
-		throw InvalidInputException("'%s' is not a table", input_string);
-	}
-	auto &table = catalog_entry->Cast<TableCatalogEntry>();
-	if (table.catalog.GetCatalogType() != "iceberg") {
-		throw InvalidInputException("Table '%s' is not an Iceberg REST catalog table", input_string);
-	}
 	for (const auto &parameter : input.named_parameters) {
 		if (parameter.second.IsNull()) {
 			if (parameter.first == "row_filter") {
@@ -101,15 +96,45 @@ static unique_ptr<FunctionData> IcebergScanPlanBind(ClientContext &context, Tabl
 		}
 	}
 	IcebergOptions options(input.named_parameters);
-	auto &table_entry = table.Cast<IcebergTableSchemaVersion>();
-	auto &metadata = table_entry.table_info.table_metadata;
-	auto snapshot = metadata.GetSnapshot(*options.snapshot_lookup);
-	auto &schema = metadata.GetSchemaFromId(snapshot.schema_id);
-	auto &fs = FileSystem::GetFileSystem(context);
-	auto scan_info = make_shared_ptr<IcebergScanInfo>(metadata.GetMetadataPath(fs), metadata, snapshot, schema);
-	if (options.snapshot_lookup->IsLatest() && table_entry.table_info.transaction_data) {
-		scan_info->transaction_data = table_entry.table_info.transaction_data.get();
+	// A catalog table is planned from the catalog's pinned metadata; anything
+	// else is a table location or metadata file, resolved exactly as iceberg_scan
+	// resolves it (version hint, version, options).
+	IcebergTableSchemaVersion *table_entry = nullptr;
+	shared_ptr<IcebergScanInfo> scan_info;
+	auto qualified_name = QualifiedName::ParseComponents(input_string);
+	optional_ptr<CatalogEntry> catalog_entry;
+	if (qualified_name.size() == 3) {
+		EntryLookupInfo table_lookup(CatalogType::TABLE_ENTRY,
+		                             QualifiedName(qualified_name[0], qualified_name[1], qualified_name[2]));
+		catalog_entry = Catalog::GetEntry(context, table_lookup, OnEntryNotFound::RETURN_NULL);
 	}
+	if (catalog_entry) {
+		if (catalog_entry->type != CatalogType::TABLE_ENTRY) {
+			throw InvalidInputException("'%s' is not a table", input_string);
+		}
+		auto &table = catalog_entry->Cast<TableCatalogEntry>();
+		if (table.catalog.GetCatalogType() != "iceberg") {
+			throw InvalidInputException("Table '%s' is not an Iceberg REST catalog table", input_string);
+		}
+		table_entry = &table.Cast<IcebergTableSchemaVersion>();
+		auto &metadata = table_entry->table_info.table_metadata;
+		auto snapshot = metadata.GetSnapshot(*options.snapshot_lookup);
+		auto &schema = metadata.GetSchemaFromId(snapshot.schema_id);
+		auto &fs = FileSystem::GetFileSystem(context);
+		scan_info = make_shared_ptr<IcebergScanInfo>(metadata.GetMetadataPath(fs), metadata, snapshot, schema);
+		if (options.snapshot_lookup->IsLatest() && table_entry->table_info.transaction_data) {
+			scan_info->transaction_data = table_entry->table_info.transaction_data.get();
+		}
+	} else {
+		auto resolved = IcebergUtils::ResolveTableMetadata(context, input_string, options);
+		auto temp_data = make_uniq<IcebergScanTemporaryData>(std::move(resolved.metadata));
+		auto &metadata = temp_data->metadata;
+		auto snapshot = metadata.GetSnapshot(*options.snapshot_lookup);
+		auto &schema = metadata.GetSchemaFromId(snapshot.schema_id);
+		scan_info = make_shared_ptr<IcebergScanInfo>(resolved.table_location, std::move(temp_data), snapshot, schema);
+	}
+	auto &metadata = scan_info->metadata;
+	auto &schema = scan_info->schema;
 	auto ret = make_uniq<IcebergScanPlanBindData>(table_entry, std::move(scan_info), options);
 	auto produce_sequence_number = input.named_parameters.find("produce_sequence_number");
 	if (produce_sequence_number != input.named_parameters.end()) {
@@ -123,7 +148,8 @@ static unique_ptr<FunctionData> IcebergScanPlanBind(ClientContext &context, Tabl
 		                                                IcebergScanTaskCodec::SchemaType(schema));
 	}
 
-	// Include historical identity sources even when they are absent from the selected output schema.
+	// Include historical identity sources even when they are absent from the
+	// selected output schema.
 	map<uint64_t, LogicalType> sources;
 	for (const auto &spec : metadata.partition_specs) {
 		for (const auto &field : spec.second.fields) {
@@ -159,7 +185,8 @@ static void IcebergScanPlanFunction(ClientContext &context, TableFunctionInput &
 			state.done = true;
 			break;
 		}
-		// Server planning uses synthetic sequence numbers internally; export only when requested.
+		// Server planning uses synthetic sequence numbers internally; export only
+		// when requested.
 		if (!bind.produce_sequence_number) {
 			task->sequence_number = nullopt;
 		}
@@ -180,7 +207,13 @@ TableFunctionSet IcebergFunctions::GetIcebergScanPlanFunction() {
 		options.Add("row_filter", LogicalType::VARCHAR)
 		    .Add("produce_sequence_number", LogicalType::BOOLEAN)
 		    .Add("snapshot_from_id", LogicalType::UBIGINT)
-		    .Add("snapshot_from_timestamp", LogicalType::TIMESTAMP_MS);
+		    .Add("snapshot_from_timestamp", LogicalType::TIMESTAMP_MS)
+		    // The location options iceberg_scan takes, for a table given by its
+		    // location.
+		    .Add("allow_moved_paths", LogicalType::BOOLEAN)
+		    .Add("metadata_compression_codec", LogicalType::VARCHAR)
+		    .Add("version", LogicalType::VARCHAR)
+		    .Add("version_name_format", LogicalType::VARCHAR);
 	});
 	function_set.AddFunction(fun);
 	return function_set;

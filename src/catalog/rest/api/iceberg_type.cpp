@@ -2,11 +2,10 @@
 #include "common/iceberg_constants.hpp"
 
 #include "duckdb/common/string_util.hpp"
-#include "duckdb/common/extra_type_info.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/blob.hpp"
 #include "duckdb/parser/column_definition.hpp"
-
+#include "duckdb/common/types/geometry_crs.hpp"
 #include "rest_catalog/objects/list_type.hpp"
 #include "rest_catalog/objects/map_type.hpp"
 #include "rest_catalog/objects/struct_type.hpp"
