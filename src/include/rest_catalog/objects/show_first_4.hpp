@@ -6,35 +6,33 @@
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
-#include "rest_catalog/objects/expression_type.hpp"
-#include "rest_catalog/objects/term.hpp"
 
 namespace duckdb {
 namespace rest_api_objects {
 
-class UnaryExpression {
+class ShowFirst4 {
 public:
-	UnaryExpression();
-	UnaryExpression(const UnaryExpression &) = delete;
-	UnaryExpression &operator=(const UnaryExpression &) = delete;
-	UnaryExpression(UnaryExpression &&) = default;
-	UnaryExpression &operator=(UnaryExpression &&) = default;
+	ShowFirst4();
+	ShowFirst4(const ShowFirst4 &) = delete;
+	ShowFirst4 &operator=(const ShowFirst4 &) = delete;
+	ShowFirst4(ShowFirst4 &&) = default;
+	ShowFirst4 &operator=(ShowFirst4 &&) = default;
 
 public:
 	// Deserialization
-	static UnaryExpression FromJSON(JSONValue obj);
+	static ShowFirst4 FromJSON(JSONValue obj);
 	string TryFromJSON(JSONValue obj);
 
 	// Copy
-	UnaryExpression Copy() const;
+	ShowFirst4 Copy() const;
 
 	// Serialization
 	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
 	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
-	ExpressionType type;
-	Term term;
+	string action;
+	int32_t field_id;
 };
 
 } // namespace rest_api_objects

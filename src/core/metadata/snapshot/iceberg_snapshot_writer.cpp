@@ -58,8 +58,7 @@ void IcebergSnapshotWriter::WriteManifestFile(IcebergManifestListEntry &list_ent
 	auto &fs = FileSystem::GetFileSystem(context);
 	auto path =
 	    fs.JoinPath(table_metadata.GetMetadataPath(fs), UUID::ToString(UUID::GenerateRandomUUID()) + "-m0.avro");
-	manifest.sequence_number = snapshot.sequence_number;
-	if (!manifest.min_sequence_number || *manifest.min_sequence_number > *manifest.sequence_number) {
+	if (!manifest.min_sequence_number || *manifest.min_sequence_number > manifest.sequence_number) {
 		manifest.min_sequence_number = manifest.sequence_number;
 	}
 	created_metadata_files.push_back(path);

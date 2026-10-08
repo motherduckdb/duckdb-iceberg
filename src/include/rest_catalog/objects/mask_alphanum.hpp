@@ -6,36 +6,33 @@
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
-#include "rest_catalog/objects/expression_type.hpp"
 
 namespace duckdb {
 namespace rest_api_objects {
 
-class Expression;
-
-class NotExpression {
+class MaskAlphanum {
 public:
-	NotExpression();
-	NotExpression(const NotExpression &) = delete;
-	NotExpression &operator=(const NotExpression &) = delete;
-	NotExpression(NotExpression &&) = default;
-	NotExpression &operator=(NotExpression &&) = default;
+	MaskAlphanum();
+	MaskAlphanum(const MaskAlphanum &) = delete;
+	MaskAlphanum &operator=(const MaskAlphanum &) = delete;
+	MaskAlphanum(MaskAlphanum &&) = default;
+	MaskAlphanum &operator=(MaskAlphanum &&) = default;
 
 public:
 	// Deserialization
-	static NotExpression FromJSON(JSONValue obj);
+	static MaskAlphanum FromJSON(JSONValue obj);
 	string TryFromJSON(JSONValue obj);
 
 	// Copy
-	NotExpression Copy() const;
+	MaskAlphanum Copy() const;
 
 	// Serialization
 	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
 	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
-	ExpressionType type;
-	unique_ptr<Expression> child;
+	string action;
+	int32_t field_id;
 };
 
 } // namespace rest_api_objects

@@ -94,13 +94,18 @@ unordered_map<string, string> GetManifestMetadataMap(const IcebergTableMetadata 
 //! Manifest attributes shared by in-memory content and Avro files.
 struct IcebergManifest {
 public:
+	IcebergManifest(int32_t partition_spec_id, IcebergManifestContentType content, sequence_number_t sequence_number)
+	    : partition_spec_id(partition_spec_id), content(content), sequence_number(sequence_number) {
+	}
+
+public:
 	//! The id of the partition spec referenced by this manifest (and the data files that are part of it)
 	int32_t partition_spec_id;
 	optional<sequence_number_t> first_row_id;
 	//! either data or deletes
 	IcebergManifestContentType content;
-	//! sequence_number when manifest was added to table (0 for Iceberg v1)
-	optional<sequence_number_t> sequence_number;
+	//! Sequence number used for entry inheritance: transaction-local or persisted (0 for Iceberg v1).
+	sequence_number_t sequence_number;
 	optional<sequence_number_t> min_sequence_number;
 	//! The count fields were optional in V1 manifest lists. A missing count means unknown/non-zero, not zero.
 	optional<IcebergManifestCounts> counts;

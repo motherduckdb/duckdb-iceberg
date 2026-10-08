@@ -202,10 +202,7 @@ bool IcebergFilePruner::FileMatchesFilter(const IcebergManifest &manifest_file,
 bool IcebergFilePruner::DeleteManifestMatchesDataFile(const IcebergManifest &delete_manifest,
                                                       const IcebergManifest &data_manifest,
                                                       const IcebergManifestEntry &data_manifest_entry) const {
-	if (!delete_manifest.sequence_number) {
-		throw InvalidConfigurationException("Delete manifest does not have a sequence number");
-	}
-	if (*delete_manifest.sequence_number < data_manifest_entry.GetSequenceNumber(data_manifest)) {
+	if (delete_manifest.sequence_number < data_manifest_entry.GetSequenceNumber(data_manifest)) {
 		return false;
 	}
 
