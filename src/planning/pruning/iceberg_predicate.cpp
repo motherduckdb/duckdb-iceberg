@@ -192,6 +192,13 @@ static bool TryEvaluateVariantScalarBound(ClientContext &context, const Expressi
 bool MatchVariantBounds(ClientContext &context, ExpressionType comparison_type, const Expression &left,
                         const Expression &right, const IcebergPredicateStats &stats,
                         const IcebergTransform &transform) {
+	if (comparison_type == ExpressionType::COMPARE_GREATERTHAN ||
+	    comparison_type == ExpressionType::COMPARE_GREATERTHANOREQUALTO) {
+		// Iceberg uses the same primitive bounds for a scalar and for the elements of an array.
+		// An ARRAY variant sorts after every primitive, so it may match even when its elements do not.
+		// Without the field's actual type, these bounds cannot rule out either comparison.
+		return true;
+	}
 	if (!stats.lower_bound || !stats.upper_bound) {
 		return true;
 	}
@@ -306,7 +313,8 @@ static bool MatchBoundsExpression(ClientContext &context, const unique_ptr<Expre
 				return MatchBoundsConstant(left.Cast<BoundConstantExpression>().GetValue(),
 				                           FlipComparisonExpression(comparison_type), stats, transform);
 			} else if (is_identity && IsVariantReference(right)) {
-				return MatchVariantBounds(context, comparison_type, right, left, stats, transform);
+				return MatchVariantBounds(context, FlipComparisonExpression(comparison_type), right, left, stats,
+				                          transform);
 			}
 		}
 		return true;
