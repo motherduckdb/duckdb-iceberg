@@ -133,7 +133,7 @@ struct SingleTableStagedCommit {
 struct MultiTableStagedCommit {
 	rest_api_objects::CommitTransactionRequest request;
 	vector<string> created_metadata_files;
-	case_insensitive_set_t table_keys;
+	unordered_set<string> table_keys;
 	bool retryable = false;
 	IcebergRetryConfig retry_config;
 };
@@ -448,7 +448,7 @@ void IcebergTransaction::CleanupMetadataFiles(ClientContext &context, const vect
 }
 
 void IcebergTransaction::RefreshRetryTables(IcebergTransactionAlterUpdate &alter_update,
-                                            const case_insensitive_set_t &table_keys, ClientContext &context) {
+                                            const unordered_set<string> &table_keys, ClientContext &context) {
 	for (const auto &table_key : table_keys) {
 		auto it = alter_update.updated_tables.find(table_key);
 		if (it == alter_update.updated_tables.end()) {
@@ -670,7 +670,7 @@ void IcebergTransaction::DoSingleTableCommitUpdates(IcebergTransactionAlterUpdat
 			result.Throw(catalog.GetBaseUrl().GetURLEncoded());
 		}
 		CleanupMetadataFiles(context, table_transaction_info.created_metadata_files);
-		case_insensitive_set_t retry_tables;
+		unordered_set<string> retry_tables;
 		retry_tables.insert(table_key);
 		RefreshRetryTables(alter_update, retry_tables, context);
 		//! Back off before the next attempt; stop if the retry budget would be exceeded.
@@ -923,9 +923,8 @@ void IcebergTransaction::CleanupFiles() {
 				ic_table_entry.PrepareIcebergScanFromEntry(temp_context);
 
 				auto &add_snapshot = update->Cast<IcebergAddSnapshot>();
-				const auto manifest_list_entries = add_snapshot.GetManifestFiles();
-				for (const auto &manifest : manifest_list_entries) {
-					for (auto &manifest_entry : manifest.GetManifestEntries()) {
+				for (const auto &manifest : add_snapshot.GetPendingManifests()) {
+					for (const auto &manifest_entry : manifest.GetEntries()) {
 						data_files.push_back(manifest_entry.data_file.file_path);
 					}
 				}

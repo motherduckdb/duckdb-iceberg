@@ -26,6 +26,7 @@
 #include "catalog/rest/api/iceberg_type.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
 #include "common/iceberg_default.hpp"
+#include "iceberg_options.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
 
 namespace duckdb {
@@ -240,6 +241,12 @@ optional_ptr<CatalogEntry> IcebergSchemaEntry::CreateView(CatalogTransaction tra
 		                       info.GetViewName().GetIdentifierName());
 	}
 
+	// The view is only sent at commit, so reject catalogs without a create view endpoint here.
+	const auto &ic_catalog = catalog.Cast<IcebergCatalog>();
+	if (!ic_catalog.supported_urls.count("POST /v1/{prefix}/namespaces/{namespace}/views")) {
+		throw NotImplementedException("This Iceberg REST catalog server does not support creating views");
+	}
+
 	// IF NOT EXISTS also skips binding when the view exists, so handle conflicts first.
 	if (info.binding_mode == CreateViewBindingMode::SKIP_BINDING) {
 		throw NotImplementedException("DEFER_BINDING is not supported for Iceberg views: an output schema is required");
@@ -378,14 +385,15 @@ static void VerifySchemaEvolution(const IcebergTableMetadata &table_metadata, co
 				    partition_field->GetPartitionSpecFieldName(), partition_field->partition_field_id);
 				break;
 			}
-			if (target_type.id() == LogicalTypeId::TIMESTAMP_NS) {
-				if (table_metadata.iceberg_version >= 3) {
-					return;
-				}
-				extra_info = " (DATE to TIMESTAMP_NS is a Iceberg V3 feature)";
-				break;
+			// Promotion of `date` to `timestamp` or `timestamp_ns` is only valid for
+			// format version 3 and later (see the Iceberg spec's type promotion table).
+			if (table_metadata.iceberg_version >= 3) {
+				return;
 			}
-			return;
+			extra_info =
+			    StringUtil::Format(" (DATE to %s is an Iceberg V3 feature)",
+			                       target_type.id() == LogicalTypeId::TIMESTAMP_NS ? "TIMESTAMP_NS" : "TIMESTAMP");
+			break;
 		}
 		break;
 	}
@@ -448,12 +456,13 @@ void IntroduceNewSchema(IcebergTable &updated_table, IcebergTransactionData &tra
 
 template <typename T>
 IcebergColumnDefinition &ResolveColumn(T &alter_table_info, const shared_ptr<IcebergTableSchema> &new_schema) {
-	auto &column_name = alter_table_info.column_name;
+	auto &column_path = alter_table_info.column_path;
 
-	auto column_p = new_schema->GetMutableFromPath({column_name}, nullptr);
+	auto column_p = new_schema->GetMutableFromPath(column_path, nullptr);
 	if (!column_p) {
 		throw BinderException("Binder Error: Table \"%s\" does not have a column with name \"%s\"",
-		                      alter_table_info.GetAlterEntryData().GetQualifiedName().ToString(), column_name);
+		                      alter_table_info.GetAlterEntryData().GetQualifiedName().ToString(),
+		                      column_path.back().GetIdentifierName());
 	}
 	auto &column = *column_p;
 	return column;
@@ -535,6 +544,10 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 	switch (alter_table_info.alter_table_type) {
 	case AlterTableType::SET_PARTITIONED_BY: {
 		auto &partition_info = alter_table_info.Cast<SetPartitionedByInfo>();
+		if (updated_table.table_metadata.iceberg_version < 2) {
+			throw NotImplementedException("Partition evolution on Iceberg V%d tables",
+			                              updated_table.table_metadata.iceberg_version);
+		}
 
 		// Ensure schema is the same as current
 		transaction_data.TableAddAssertCurrentSchemaId();
@@ -648,7 +661,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			throw NotImplementedException("ALTER TYPE with a USING expression is not supported for Iceberg tables");
 		}
 		auto &column_path = cast.Child().Cast<ColumnRefExpression>().ColumnNames();
-		if (column_path[0] != change_type_info.column_name) {
+		if (column_path != change_type_info.column_path) {
 			throw NotImplementedException("ALTER TYPE with a USING expression is not supported for Iceberg tables");
 		}
 		auto column_p = new_schema->GetMutableFromPath(column_path, nullptr);
@@ -778,6 +791,10 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 				throw InvalidInputException("Cannot downgrade format-version from %d to %d", current_version,
 				                            new_format_version.GetIndex());
 			}
+			if ((int32_t)new_format_version.GetIndex() > MAX_ICEBERG_FORMAT_VERSION) {
+				throw InvalidInputException("Cannot upgrade format-version to %d, the highest supported version is %d",
+				                            new_format_version.GetIndex(), MAX_ICEBERG_FORMAT_VERSION);
+			}
 			updated_table.table_metadata.iceberg_version = (int32_t)new_format_version.GetIndex();
 			transaction_data.TableAddUpradeFormatVersion();
 		}
@@ -806,15 +823,15 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 	}
 	case AlterTableType::SET_DEFAULT: {
 		auto &set_default_info = alter_table_info.Cast<SetDefaultInfo>();
-		auto &column_name = set_default_info.column_name;
+		auto &column_path = set_default_info.column_path;
 		auto &expression = set_default_info.expression;
 
 		auto new_schema = current_schema.Copy();
 
-		auto column_p = new_schema->GetMutableFromPath({column_name}, nullptr);
+		auto column_p = new_schema->GetMutableFromPath(column_path, nullptr);
 		if (!column_p) {
 			throw BinderException("Binder Error: Table \"%s\" does not have a column with name \"%s\"",
-			                      table_entry.name.GetIdentifierName(), column_name.GetIdentifierName());
+			                      table_entry.name.GetIdentifierName(), column_path.back().GetIdentifierName());
 		}
 		auto &column = *column_p;
 

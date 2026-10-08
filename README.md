@@ -112,6 +112,7 @@ The catalog targets start local services, generate compatible Iceberg test data,
 | Lakekeeper | `make lakekeeper` | `make lakekeeper-data` | Clones a pinned revision, applies the repository patch, and may add `seaweedfs` to `/etc/hosts` with `sudo` |
 | Nessie | `make nessie` | `make nessie-data` | Uses Nessie's `catalog-auth-s3` Compose setup |
 | Apache Polaris | `make polaris` | `make polaris-data` | Clones the `release/1.4.x` branch and uses its RustFS quickstart |
+| Test-only v2 mock | `make mock` | Not required | Python standard library and local warehouse; [SQL testing and skip policy](scripts/mock_rest_catalog/README.md) |
 
 Starting a catalog stops the catalog currently named in `.catalogs/.active_catalog`. To stop one explicitly, use `make <catalog>-stop`. Catalog clones, runtime state, and generated data are kept in ignored directories.
 
@@ -131,27 +132,25 @@ make fixture-data-local
 
 Each REST catalog has a config in `test/configs/`. A config initializes credentials and the `my_datalake` attachment, statically loads required extensions, sets `CATALOG_TEST_CONFIG_SETUP`, and lists catalog-specific skips where necessary.
 
-After starting a catalog, resolve its config from `.catalogs/.active_catalog`. The helper uses Bash's `BASH_SOURCE`, so invoke it through Bash when your interactive shell is zsh or another shell:
+After starting a catalog, resolve its config from `.catalogs/.active_catalog` by running the helper directly:
 
 ```shell
-TEST_CONFIG="$(bash -c 'source scripts/catalog_test_config.sh && active_catalog_test_config')"
-
 ./build/debug/test/unittest --order lex \
   "$PWD/test/sql/local/catalog_test_config_setup/*" \
-  --test-config "$TEST_CONFIG"
+  --test-config "$(scripts/catalog_test_config.sh)"
 ```
 
 To run one file:
 
 ```shell
-TEST_CONFIG="$(bash -c 'source scripts/catalog_test_config.sh && active_catalog_test_config')"
-
 ./build/debug/test/unittest \
-  --test-config "$TEST_CONFIG" \
+  --test-config "$(scripts/catalog_test_config.sh)" \
   test/sql/local/catalog_test_config_setup/catalog_agnostic/create/test_create_table.test
 ```
 
-`active_catalog_test_config` accepts `fixture`, `fixture-latest`, `gravitino`, `lakekeeper`, `nessie`, or `polaris`. It reports an error for a missing, empty, local-only, or unknown active-catalog marker.
+`scripts/catalog_test_config.sh` accepts `fixture`, `fixture-latest`, `gravitino`, `lakekeeper`, `nessie`, `polaris`, or `mock`. It reports an error for a missing, empty, local-only, or unknown active-catalog marker.
+
+For the mock, run the catalog-agnostic SQL suite excluding `.test_slow`, with capability flags and skips controlled by `test/configs/mock.json`. You can pass that config directly after `make mock`; see the [mock catalog instructions](scripts/mock_rest_catalog/README.md). It has no Spark generator or Python integration profile. Stop it with `make mock-stop`.
 
 ### Catalog-backed Python tests
 

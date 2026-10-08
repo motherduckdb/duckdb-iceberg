@@ -10,10 +10,14 @@
 #include "duckdb/common/types/string.hpp"
 #include "duckdb/common/types/timestamp.hpp"
 #include "duckdb/common/operator/cast_operators.hpp"
+#include "duckdb/common/operator/add.hpp"
 #include "duckdb/parser/column_definition.hpp"
 #include "duckdb/logging/logger.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/common/types/uuid.hpp"
+#include "duckdb/common/file_system.hpp"
+
+#include "iceberg_logging.hpp"
 
 #include "catalog/rest/api/catalog_api.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
@@ -28,6 +32,7 @@
 #include "catalog/rest/storage/iceberg_table_secret_provider.hpp"
 #include "core/expression/iceberg_transform.hpp"
 #include "common/iceberg_utils.hpp"
+#include "iceberg_options.hpp"
 
 #include <climits>
 
@@ -712,10 +717,11 @@ bool IcebergTable::HasTransactionUpdates() const {
 
 void IcebergTable::RefreshFromCatalog(ClientContext &context) {
 	auto publication = catalog.table_request_cache.BeginLoad(GetTableKey());
-	ApplyRefreshResult(IRCAPI::GetTable(context, catalog, schema, name), *publication);
+	ApplyRefreshResult(context, IRCAPI::GetTable(context, catalog, schema, name), *publication);
 }
 
-void IcebergTable::ApplyRefreshResult(IcebergLoadTableResult get_table_result, LoadTableCachePublication &publication) {
+void IcebergTable::ApplyRefreshResult(ClientContext &context, IcebergLoadTableResult get_table_result,
+                                      LoadTableCachePublication &publication) {
 	if (get_table_result.error_) {
 		throw HTTPException(
 		    StringUtil::Format("GetTableInformation endpoint returned response code %s with message \"%s\"",
@@ -724,7 +730,7 @@ void IcebergTable::ApplyRefreshResult(IcebergLoadTableResult get_table_result, L
 	auto &load_table_result = *get_table_result.result_;
 	schema_versions.clear();
 	dummy_entry.reset();
-	InitializeFromLoadTableResult(load_table_result);
+	InitializeFromCatalogResponse(context, load_table_result);
 	initialization_source = nullptr;
 	if (publication.TryPublish(std::move(get_table_result.result_))) {
 		initialization_source = load_table_result;
@@ -741,13 +747,13 @@ IcebergTable IcebergTable::Copy() const {
 	return clone;
 }
 
-IcebergTableMetadata IcebergTable::CreateMetadataFromLog(ClientContext &context,
-                                                         timestamp_ms_t transaction_start_ms) const {
+IcebergTableMetadata IcebergTable::CreateMetadataFromLog(ClientContext &context, timestamp_ms_t transaction_start_ms,
+                                                         timestamp_ms_t metadata_cutoff_ms) const {
 	auto &log = table_metadata.metadata_log;
 
 	optional_idx log_item_index;
 	for (idx_t i = log.size(); i-- > 0;) {
-		if (log[i].timestamp_ms <= transaction_start_ms) {
+		if (log[i].timestamp_ms <= metadata_cutoff_ms) {
 			log_item_index = i;
 			break;
 		}
@@ -756,8 +762,8 @@ IcebergTableMetadata IcebergTable::CreateMetadataFromLog(ClientContext &context,
 		auto timestamp = duckdb::Cast::Operation<timestamp_ms_t, timestamp_t>(transaction_start_ms);
 		throw InvalidConfigurationException(
 		    "Cannot reconstruct table '%s' at the transaction start (%s) because its metadata-log has no entry from "
-		    "that time or earlier. Set iceberg_use_metadata_log = false to accept the latest table state resolved by "
-		    "this transaction instead",
+		    "that time or earlier, including the clock-skew allowance. Set iceberg_use_metadata_log = false to accept "
+		    "the latest table state resolved by this transaction instead",
 		    GetTableKey(), Timestamp::ToString(timestamp));
 	}
 
@@ -774,12 +780,20 @@ IcebergTable IcebergTable::Copy(IcebergTransaction &iceberg_transaction) const {
 
 	auto ret = Copy();
 	auto transaction_start_ms = IcebergUtils::GetTransactionStartTimeMS(context);
+	auto clock_skew_ms = DEFAULT_METADATA_LOG_CLOCK_SKEW_MS;
+	Value val;
+	if (context.TryGetCurrentSetting(METADATA_LOG_CLOCK_SKEW_CONFIG_VARIABLE, val) && !val.IsNull()) {
+		clock_skew_ms = val.GetValue<int64_t>();
+	}
+	timestamp_ms_t metadata_cutoff_ms;
+	if (!TryAddOperator::Operation(transaction_start_ms.value, clock_skew_ms, metadata_cutoff_ms.value)) {
+		metadata_cutoff_ms.value = NumericLimits<int64_t>::Maximum();
+	}
 
-	if (table_metadata.last_updated_ms <= transaction_start_ms) {
+	if (table_metadata.last_updated_ms <= metadata_cutoff_ms) {
 		return ret;
 	}
 	bool use_metadata_log = true;
-	Value val;
 	if (context.TryGetCurrentSetting("iceberg_use_metadata_log", val)) {
 		if (!val.IsNull() && val.type().id() == LogicalTypeId::BOOLEAN) {
 			use_metadata_log = val.GetValue<bool>();
@@ -798,7 +812,7 @@ IcebergTable IcebergTable::Copy(IcebergTransaction &iceberg_transaction) const {
 	}
 
 	LoadCredentials(context);
-	ret.table_metadata = ret.CreateMetadataFromLog(context, transaction_start_ms);
+	ret.table_metadata = ret.CreateMetadataFromLog(context, transaction_start_ms, metadata_cutoff_ms);
 	return ret;
 }
 
@@ -833,11 +847,43 @@ IcebergTransactionData &IcebergTable::GetOrCreateTransactionData(IcebergTransact
 	return *transaction_data;
 }
 
-void IcebergTable::InitializeFromLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result) {
-	table_metadata = IcebergTableMetadata::FromTableMetadata(load_table_result.metadata);
+void IcebergTable::InitializeFromLoadTableResult(
+    const rest_api_objects::LoadTableResult &load_table_result,
+    optional_ptr<const rest_api_objects::TableMetadata> metadata_override) {
+	table_metadata =
+	    IcebergTableMetadata::FromTableMetadata(metadata_override ? *metadata_override : load_table_result.metadata);
 	SetLoadTableResult(load_table_result);
 	D_ASSERT(!table_metadata.GetSchemas().IsEmpty());
 	InitSchemaVersions();
+}
+
+void IcebergTable::InitializeFromCatalogResponse(ClientContext &context,
+                                                 const rest_api_objects::LoadTableResult &load_table_result) {
+	//! Some catalogs (e.g. AWS Glue's Iceberg REST endpoint) reconstruct the response metadata from their own
+	//! catalog state instead of returning the metadata file contents, which can lose nested field ids or
+	//! properties such as 'schema.name-mapping.default'. With 'use_metadata_location', the file at
+	//! 'metadata-location' is treated as authoritative instead. The IRC spec requires the embedded metadata to
+	//! match the metadata file, so this deviates from the spec and only happens when the option is set.
+	if (catalog.attach_options.use_metadata_location && load_table_result.metadata_location.has_value()) {
+		auto &metadata_location = *load_table_result.metadata_location;
+		unique_ptr<const rest_api_objects::TableMetadata> file_metadata;
+		try {
+			auto &fs = FileSystem::GetFileSystem(context);
+			auto caching_fs = make_shared_ptr<CachingFileSystemWrapper>(fs, *context.db);
+			file_metadata = make_uniq<const rest_api_objects::TableMetadata>(
+			    IcebergTableMetadata::Parse(metadata_location, *caching_fs, "none"));
+		} catch (std::exception &ex) {
+			DUCKDB_LOG(context, IcebergLogType,
+			           "Could not load table metadata from metadata-location '%s': %s - falling back to the "
+			           "metadata embedded in the catalog response",
+			           metadata_location, ex.what());
+		}
+		if (file_metadata) {
+			InitializeFromLoadTableResult(load_table_result, file_metadata.get());
+			return;
+		}
+	}
+	InitializeFromLoadTableResult(load_table_result);
 }
 
 void IcebergTable::SetLoadTableResult(const rest_api_objects::LoadTableResult &load_table_result) {

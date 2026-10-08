@@ -17,8 +17,8 @@ namespace {
 
 static bool HasMapParent(const vector<string> &column_names, const IcebergTableSchema &table_schema) {
 	vector<Identifier> path;
-	for (auto &name : column_names) {
-		path.emplace_back(name);
+	for (idx_t i = 0; i + 1 < column_names.size(); i++) {
+		path.emplace_back(column_names[i]);
 		auto column = table_schema.GetFromPath(path, nullptr);
 		if (column && column->type.id() == LogicalTypeId::MAP) {
 			return true;
@@ -101,7 +101,7 @@ void IcebergDataFileStats::PopulateFromReturnStats(ClientContext &context, Icebe
 	auto &ic_schema = table_metadata.GetSchemaFromId(table_current_schema_id);
 	auto &map_children = MapValue::GetChildren(column_stats);
 
-	//! Variant columns emit one stats entry per shredded leaf — accumulate them
+	//! Variant columns emit stats for shredded containers and leaves — accumulate them
 	//! per variant column and serialize bounds once all entries are seen.
 	unordered_map<int32_t, IcebergVariantBounds> variant_bounds;
 	auto default_metrics = GetDefaultMetricsConfig(table_metadata);
@@ -129,9 +129,10 @@ void IcebergDataFileStats::PopulateFromReturnStats(ClientContext &context, Icebe
 		auto &column_info = *column_info_p;
 		auto stats = IcebergColumnStats::ParseColumnStats(column_info.type, col_stats, context);
 
-		//! Map types cannot violate NOT NULL; empty maps look like null maps.
-		bool is_map = HasMapParent(column_names, ic_schema);
-		if (!is_map && column_info.required && stats.null_count && *stats.null_count > 0) {
+		//! Map descendants include placeholders for empty maps in their leaf null counts.
+		//! The map's own container counts distinguish empty maps from null maps.
+		const bool is_map_leaf = stats.column_size_bytes && HasMapParent(column_names, ic_schema);
+		if (!is_map_leaf && column_info.required && stats.null_count && *stats.null_count > 0) {
 			auto normalized_col_name = StringUtil::Join(column_names, ".");
 			throw ConstraintException("NOT NULL constraint failed: %s.%s", table_name, normalized_col_name);
 		}

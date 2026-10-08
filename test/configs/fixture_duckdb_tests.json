@@ -84,6 +84,10 @@
       "env_value": "true"
     },
     {
+      "env_name": "VIEW_SUPPORT",
+      "env_value": "true"
+    },
+    {
       "env_name": "SCAN_PLANNING_MODE",
       "env_value": "client"
     }
@@ -1306,6 +1310,7 @@
       "reason": "Iceberg catalog is case-sensitive on table names (DuckDB normalizes)",
       "paths": [
         "test/sql/aggregate/aggregates/test_aggregate_types.test",
+        "test/sql/catalog/drop_create_rollback.test",
         "test/sql/aggregate/distinct/issue2656.test",
         "test/sql/catalog/case_insensitive_binder.test",
         "test/sql/catalog/case_insensitive_caps.test",
@@ -1497,6 +1502,7 @@
         "test/sql/storage/metadata/full_table_metadata_reuse.test",
         "test/sql/storage/metadata/multi_table_metadata_reuse.test",
         "test/sql/subquery/scalar/correlated_missing_columns.test",
+        "test/sql/tpch/dbgen_reference_values.test",
         "test/sql/tpch/tpch_sf0.test",
         "test/sql/types/enum/test_5983.test",
         "test/sql/types/variant/tpch_test.test",
@@ -1740,6 +1746,47 @@
       ]
     },
     {
+      "reason": "New bump (3f59160bb2d74e22ea53b346afbf204ec1b3de4f -> 04de8943f0d1f9e079fb004bcb05ef729e2d5694)",
+      "paths": [
+        "test/sql/catalog/dependencies/alter_table_keeps_schema_dependency.test",
+        "test/sql/catalog/nested_schema/nested_view_attached.test",
+        "test/sql/create/create_schema_options.test",
+        "test/sql/select/test_select_qualified_view.test",
+        "test/sql/sql_export/aggregate_results.test",
+        "test/sql/sql_export/pushed_column_paths.test",
+        "test/sql/sql_export/source_names.test",
+        "test/sql/sql_export/statement_verification.test",
+        "test/sql/sql_export/table_row_number_sql_export.test",
+        "test/sql/storage/checkpoint/test_checkpoint_abort_truncate.test",
+        "test/sql/storage/wal/wal_torn_uncommitted_row_group.test",
+        "test/sql/storage/compression/chimp/chimp_corrupt_group_count.test",
+        "test/sql/storage/compression/chimp/chimp_corrupt_leading_zero_block_count.test",
+        "test/sql/storage/compression/chimp/chimp_corrupt_metadata_offset.test took",
+        "test/sql/storage/compression/dictionary/dictionary_corrupt_count.test",
+        "test/sql/storage/compression/dictionary/dictionary_corrupt_count_consistent.test",
+        "test/sql/storage/compression/dictionary/dictionary_corrupt_null_index.test",
+        "test/sql/storage/compression/dictionary/invalid_dictionary_metadata.test",
+        "test/sql/storage/compression/fsst/fsst_corrupt_decoded_length.test",
+        "test/sql/storage/compression/fsst/fsst_corrupt_escape_symbol_index.test took",
+        "test/sql/storage/compression/patas/patas_corrupt_data_offset_high.test",
+        "test/sql/storage/compression/patas/patas_corrupt_group_count.test",
+        "test/sql/storage/compression/patas/patas_corrupt_metadata_offset_low.test took",
+        "test/sql/storage/compression/string/string_corrupt_dict_end.test",
+        "test/sql/storage/compression/string/string_corrupt_dict_offset.test",
+        "test/sql/storage/compression/string/string_corrupt_int32_min.test",
+        "test/sql/storage/compression/string/string_corrupt_negative_marker.test",
+        "test/sql/storage/compression/string/string_corrupt_offset_nonmonotonic.test",
+        "test/sql/storage/compression/string/string_corrupt_overflow_block_id.test",
+        "test/sql/storage/compression/string/string_corrupt_overflow_continuation.test",
+        "test/sql/storage/compression/string/string_corrupt_overflow_offset.test",
+        "test/sql/storage/compression/string/string_corrupt_overflow_transient_block.test",
+        "test/sql/storage/temp_directory/test_runner_temp_directory.test",
+        "test/sql/storage/compression/chimp/chimp_corrupt_metadata_offset.test",
+        "test/sql/storage/compression/fsst/fsst_corrupt_escape_symbol_index.test",
+        "test/sql/storage/compression/patas/patas_corrupt_metadata_offset_low.test"
+      ]
+    },
+    {
       "reason": "Uses duckdb database in test_dir",
       "paths": [
         "test/sql/optimizer/in_list_row_group_pruning.test",
@@ -1878,6 +1925,37 @@
       "reason": "Test expects current_schema() to be main rather than the configured per-test Iceberg namespace",
       "paths": [
         "test/sql/storage/extensions/extension_views.test"
+      ]
+    },
+    {
+      "reason": "Native block-reclamation test expects DuckDB's missing struct-field error; Iceberg correctly rejects the dotted DROP COLUMN path with a different catalog error",
+      "paths": [
+        "test/sql/alter/drop_col/test_drop_col_dotted_name.test"
+      ]
+    },
+    {
+      "reason": "HTTP header assertions inspect all logged requests; fixture catalog traffic adds an Authorization header beyond the test's explicitly configured HTTP headers",
+      "paths": [
+        "test/sql/logging/http_request_log_redaction.test"
+      ]
+    },
+    {
+      "reason": "Requires native transaction-local tables and row IDs; creating a second table inside the transaction is rejected because the fixture cannot commit multiple CTAS operations atomically",
+      "paths": [
+        "test/sql/parallelism/intraquery/test_transaction_local_parallelism.test"
+      ]
+    },
+    {
+      "reason": "duckdb_columns exposes the unloaded Iceberg table's __ placeholder instead of the column names checked by this parser test",
+      "paths": [
+        "test/sql/parser/backtick_identifiers.test"
+      ]
+    },
+    {
+      "reason": "Assertions require native column compression segments in pragma_storage_info, which Iceberg's Parquet-backed tables do not expose",
+      "paths": [
+        "test/sql/storage/compression/constant/constant_negative_zero.test",
+        "test/sql/storage/compression/rle/rle_select_force_fetch_row.test"
       ]
     }
   ]

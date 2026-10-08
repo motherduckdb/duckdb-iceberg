@@ -36,7 +36,7 @@ public:
 private:
 	void ApplyListResult(IcebergListSchemasResult schemas) DUCKDB_REQUIRES(entry_lock);
 	annotated_mutex entry_lock;
-	case_insensitive_map_t<shared_ptr<IcebergSchemaEntry>> entries DUCKDB_GUARDED_BY(entry_lock);
+	unordered_map<string, shared_ptr<IcebergSchemaEntry>> entries DUCKDB_GUARDED_BY(entry_lock);
 };
 
 } // namespace duckdb

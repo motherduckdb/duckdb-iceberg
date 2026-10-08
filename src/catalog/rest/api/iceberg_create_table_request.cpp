@@ -132,6 +132,12 @@ IcebergCreateTableRequest::CreateIcebergColumn(const ColumnDefinition &column_de
                                                idx_t iceberg_version) {
 	const auto &name = column_def.Name();
 	const auto &logical_type = column_def.GetType();
+	auto minimum_version = IcebergTypeHelper::MinimumFormatVersion(logical_type);
+	if (static_cast<idx_t>(minimum_version) > iceberg_version) {
+		throw InvalidInputException("Column '%s' of type %s requires Iceberg format-version %d, the table uses %d",
+		                            name.GetIdentifierName(), logical_type.ToString(), minimum_version,
+		                            iceberg_version);
+	}
 
 	Value default_value;
 	if (column_def.HasDefaultValue()) {

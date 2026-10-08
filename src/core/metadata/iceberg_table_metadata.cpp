@@ -7,6 +7,7 @@
 #include "core/metadata/snapshot/iceberg_snapshot.hpp"
 #include "rest_catalog/objects/list.hpp"
 #include "catalog/rest/api/iceberg_create_table_request.hpp"
+#include "iceberg_options.hpp"
 
 namespace duckdb {
 
@@ -380,6 +381,10 @@ IcebergTableMetadata::IcebergTableMetadata(IcebergTableMetadataSchemas schemas) 
 }
 
 IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_objects::TableMetadata &table_metadata) {
+	if (table_metadata.format_version > MAX_ICEBERG_FORMAT_VERSION) {
+		throw NotImplementedException("Iceberg format-version %d is not supported, the highest supported version is %d",
+		                              table_metadata.format_version, MAX_ICEBERG_FORMAT_VERSION);
+	}
 	unordered_map<int32_t, shared_ptr<IcebergTableSchema>> schemas;
 	if (table_metadata.schemas) {
 		for (auto &schema : *table_metadata.schemas) {
@@ -420,7 +425,7 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_obje
 	if (table_metadata.partition_specs) {
 		for (auto &spec : *table_metadata.partition_specs) {
 			D_ASSERT(spec.spec_id);
-			res.partition_specs.emplace(*spec.spec_id, IcebergPartitionSpec::ParseFromJson(spec));
+			res.partition_specs.emplace(*spec.spec_id, IcebergPartitionSpec::ParseFromJson(spec, res.iceberg_version));
 		}
 	} else if (res.iceberg_version == 1 && table_metadata.partition_spec) {
 		rest_api_objects::PartitionSpec spec;
@@ -428,7 +433,7 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_obje
 		for (auto &field : *table_metadata.partition_spec) {
 			spec.fields.emplace_back(field.Copy());
 		}
-		res.partition_specs.emplace(0, IcebergPartitionSpec::ParseFromJson(spec));
+		res.partition_specs.emplace(0, IcebergPartitionSpec::ParseFromJson(spec, res.iceberg_version));
 	}
 	if (table_metadata.sort_orders) {
 		for (auto &sort_order : *table_metadata.sort_orders) {
@@ -565,22 +570,10 @@ string IcebergTableMetadata::GetTableProperty(string property_string) const {
 	return "";
 }
 
-bool IcebergTableMetadata::PropertiesAllowPositionalDeletes(IcebergSnapshotOperationType operation_type) const {
-	// first check write.delete.mode. If not present go to write.update.mode
-	switch (operation_type) {
-	case IcebergSnapshotOperationType::DELETE: {
-		auto delete_mode = GetTableProperty("write.delete.mode");
-		// if unset or merge-on-read, it supports positional deletes
-		return delete_mode == "merge-on-read" || delete_mode.empty();
-	}
-	case IcebergSnapshotOperationType::OVERWRITE: {
-		// if unset or merge-on-read, it supports positional deletes
-		auto update_mode = GetTableProperty("write.update.mode");
-		return update_mode == "merge-on-read" || update_mode.empty();
-	}
-	default:
-		throw NotImplementedException("Operation type not supported");
-	}
+bool IcebergTableMetadata::AllowsMergeOnRead(const string &write_mode_property) const {
+	auto mode = GetTableProperty(write_mode_property);
+	// if unset or merge-on-read, it supports positional deletes
+	return mode == "merge-on-read" || mode.empty();
 }
 
 JSONMutableValue IcebergTableMetadata::SchemasToJSON(JSONWriter &writer) const {
@@ -654,6 +647,10 @@ string IcebergTableMetadata::ToJSON() const {
 	root_obj.Add("format-version", writer.CreateSignedInteger(iceberg_version));
 	root_obj.AddString("table-uuid", table_uuid);
 	root_obj.AddString("location", location);
+	if (iceberg_version >= 2) {
+		// Required since v2; readers may reject v2+ metadata without it
+		root_obj.Add("last-sequence-number", writer.CreateSignedInteger(last_sequence_number));
+	}
 	root_obj.Add("last-updated-ms", writer.CreateSignedInteger(last_updated_ms.value));
 	root_obj.Add("last-column-id", writer.CreateSignedInteger(last_column_id.GetIndex()));
 	root_obj.Add("schemas", SchemasToJSON(writer));
@@ -669,6 +666,10 @@ string IcebergTableMetadata::ToJSON() const {
 	root_obj.Add("snapshot-log", SnapshotLogToJSON(writer));
 	root_obj.Add("sort-orders", SortOrdersToJSON(writer));
 	root_obj.Add("default-sort-order-id", writer.CreateSignedInteger(default_sort_order_id.GetIndex()));
+	if (iceberg_version >= 3) {
+		// Required since v3 (row lineage)
+		root_obj.Add("next-row-id", writer.CreateSignedInteger(next_row_id ? *next_row_id : 0));
+	}
 	return writer.ToString(JSONWriteFlags::ALLOW_INF_AND_NAN);
 }
 
@@ -684,14 +685,33 @@ void IcebergTableMetadata::WriteMetadata(ClientContext &context, const string &p
 	file->Close();
 }
 
-void IcebergTableMetadata::WriteVersionHint(ClientContext &context, const string &path,
+bool IcebergTableMetadata::WriteVersionHint(ClientContext &context, const string &path,
                                             const string &version_hint) const {
 	auto &fs = FileSystem::GetFileSystem(context);
 
-	// Write to file
-	auto file = fs.OpenFile(path, FileFlags::FILE_FLAGS_WRITE | FileFlags::FILE_FLAGS_FILE_CREATE);
+	// The hint is the commit point of a new table. Local file systems create it atomically (O_EXCL), so of two
+	// writers creating the same table only one succeeds; on others this is a check right before the write.
+	if (fs.FileExists(path)) {
+		return false;
+	}
+	auto flags = FileFlags::FILE_FLAGS_WRITE | FileFlags::FILE_FLAGS_FILE_CREATE |
+	             FileFlags::FILE_FLAGS_EXCLUSIVE_CREATE | FileFlags::FILE_FLAGS_NULL_IF_EXISTS;
+	unique_ptr<FileHandle> file;
+	try {
+		file = fs.OpenFile(path, flags);
+	} catch (std::exception &) {
+		// Not every file system returns NULL for an existing file
+		if (fs.FileExists(path)) {
+			return false;
+		}
+		throw;
+	}
+	if (!file) {
+		return false;
+	}
 	file->Write((void *)version_hint.c_str(), version_hint.size());
 	file->Close();
+	return true;
 }
 
 } // namespace duckdb

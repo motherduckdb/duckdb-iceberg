@@ -42,7 +42,7 @@ bool IcebergTableSet::FillEntry(ClientContext &context, IcebergTable &table) {
 	}
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	auto publication = ic_catalog.table_request_cache.BeginLoad(table.GetTableKey());
-	return ApplyLoadResult(table, IRCAPI::GetTable(context, ic_catalog, schema, table.name), *publication);
+	return ApplyLoadResult(context, table, IRCAPI::GetTable(context, ic_catalog, schema, table.name), *publication);
 }
 
 bool IcebergTableSet::TryFillEntryFromCache(ClientContext &context, IcebergTable &table) {
@@ -59,7 +59,7 @@ bool IcebergTableSet::TryFillEntryFromCache(ClientContext &context, IcebergTable
 		auto cache_hit = ic_catalog.table_request_cache.Get(
 		    context, table_key, [&](const rest_api_objects::LoadTableResult &cached_result) {
 			    // Use the cached result instead of making a new request
-			    table.InitializeFromLoadTableResult(cached_result);
+			    table.InitializeFromCatalogResponse(context, cached_result);
 		    });
 		if (cache_hit) {
 			return true;
@@ -69,8 +69,8 @@ bool IcebergTableSet::TryFillEntryFromCache(ClientContext &context, IcebergTable
 	return false;
 }
 
-bool IcebergTableSet::ApplyLoadResult(IcebergTable &table, IcebergLoadTableResult get_table_result,
-                                      LoadTableCachePublication &publication) {
+bool IcebergTableSet::ApplyLoadResult(ClientContext &context, IcebergTable &table,
+                                      IcebergLoadTableResult get_table_result, LoadTableCachePublication &publication) {
 	if (get_table_result.error_) {
 		if (get_table_result.status_ == HTTPStatusCode::NotFound_404) {
 			// Glue returns 404 when a table is not an Iceberg Table with the error message
@@ -89,7 +89,7 @@ bool IcebergTableSet::ApplyLoadResult(IcebergTable &table, IcebergLoadTableResul
 		                       EnumUtil::ToString(get_table_result.status_), get_table_result.error_->_error.message));
 	}
 	auto &load_table_result = *get_table_result.result_;
-	table.InitializeFromLoadTableResult(load_table_result);
+	table.InitializeFromCatalogResponse(context, load_table_result);
 	// Rejected payloads are destroyed; they must not remain as cache identities on the local table.
 	table.initialization_source = nullptr;
 	if (publication.TryPublish(std::move(get_table_result.result_))) {
@@ -154,7 +154,7 @@ void IcebergTableSet::ScanEagerEntries(ClientContext &context, const std::functi
 		pending.pop_front();
 		if (load->result) {
 			try {
-				ApplyLoadResult(load->table, executor.WaitAndTakeResult(*load->result), *load->publication);
+				ApplyLoadResult(context, load->table, executor.WaitAndTakeResult(*load->result), *load->publication);
 			} catch (std::exception &ex) {
 				ErrorData error(ex);
 				if (error.Type() == ExceptionType::INTERRUPT || executor.HasError()) {
@@ -294,7 +294,7 @@ void IcebergTableSet::ApplyListResult(IcebergListTablesResult tables) {
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	// A refused listing says nothing about which tables exist, so the cache is left untouched.
 	if (tables) {
-		case_insensitive_set_t listed;
+		unordered_set<string> listed;
 		for (auto &table : *tables) {
 			listed.insert(table.name);
 			entries.emplace(table.name, IcebergTable::CreatePlaceholder(ic_catalog, schema, table.name));
@@ -360,6 +360,9 @@ IcebergTable &IcebergTableSet::CreateNewEntry(ClientContext &context, IcebergCat
 		                      .GetValue<int32_t>();
 		if (iceberg_version.GetIndex() < 1) {
 			throw InvalidInputException("The lowest supported iceberg version is 1!");
+		}
+		if (iceberg_version.GetIndex() > MAX_ICEBERG_FORMAT_VERSION) {
+			throw InvalidInputException("The highest supported iceberg version is %d!", MAX_ICEBERG_FORMAT_VERSION);
 		}
 	} else {
 		Value default_version_value;
@@ -462,7 +465,7 @@ static bool EntryMissingFromListing(const optional<vector<rest_api_objects::Tabl
 		return false;
 	}
 	for (auto &entry : *listing) {
-		if (StringUtil::CIEquals(entry.name, name)) {
+		if (entry.name == name) {
 			return false;
 		}
 	}
@@ -519,7 +522,7 @@ optional_ptr<CatalogEntry> IcebergTableSet::GetEntry(ClientContext &context, con
 
 // ─── View operations ─────────────────────────────────────────────────────────
 
-const case_insensitive_set_t &IcebergTableSet::LoadViewEntries(ClientContext &context) {
+const unordered_set<string> &IcebergTableSet::LoadViewEntries(ClientContext &context) {
 	auto &transaction = IcebergTransaction::Get(context, catalog);
 	auto &schema_name = schema.name.GetIdentifierName();
 	auto existing = transaction.listed_views.find(schema_name);
@@ -537,10 +540,10 @@ const case_insensitive_set_t &IcebergTableSet::LoadViewEntries(ClientContext &co
 	return ApplyViewListResult(context, std::move(views));
 }
 
-const case_insensitive_set_t &IcebergTableSet::ApplyViewListResult(ClientContext &context,
-                                                                   IcebergListViewsResult views) {
+const unordered_set<string> &IcebergTableSet::ApplyViewListResult(ClientContext &context,
+                                                                  IcebergListViewsResult views) {
 	auto &transaction = IcebergTransaction::Get(context, catalog);
-	case_insensitive_set_t names;
+	unordered_set<string> names;
 	if (views) {
 		for (auto &view : *views) {
 			names.insert(view.name);
@@ -646,7 +649,7 @@ optional_ptr<CatalogEntry> IcebergTableSet::ApplyViewLoadResult(ClientContext &c
 	} else if (current_version->default_namespace.value != schema.namespace_items) {
 		unsupported_reason = "a different default namespace is not supported";
 	} else {
-		Parser parser;
+		Parser parser(context);
 		try {
 			parser.ParseQuery(view_sql);
 		} catch (const ParserException &ex) {

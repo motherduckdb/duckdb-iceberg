@@ -102,8 +102,8 @@ private:
 
 	IcebergAttachOptions &attach_options;
 	annotated_mutex lock;
-	case_insensitive_map_t<MetadataCacheValue> tables DUCKDB_GUARDED_BY(lock);
-	case_insensitive_map_t<PendingLoads> pending_loads DUCKDB_GUARDED_BY(lock);
+	unordered_map<string, MetadataCacheValue> tables DUCKDB_GUARDED_BY(lock);
+	unordered_map<string, PendingLoads> pending_loads DUCKDB_GUARDED_BY(lock);
 };
 
 class IcebergCatalog : public Catalog {
@@ -181,8 +181,9 @@ public:
 	//! Allow ATTACH OR REPLACE to actually re-attach when iceberg-specific options change
 	bool HasConflictingAttachOptions(const string &path, const AttachOptions &options) override;
 	void SetAttachOptions(const unordered_map<string, Value> &options);
-	static string GetOnlyMergeOnReadSupportedErrorMessage(const string &table_name, const string &property,
-	                                                      const string &property_value);
+	//! Throws if the write mode property doesn't allow merge-on-read delete files, which is all DuckDB-Iceberg writes
+	static void VerifyMergeOnRead(const IcebergTableMetadata &metadata, const string &table_name,
+	                              const string &write_mode_property);
 
 public:
 	AccessMode access_mode;

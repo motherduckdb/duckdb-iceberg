@@ -42,7 +42,8 @@ child_list_t<LogicalType> IcebergScanTaskCodec::Columns(const LogicalType &parti
 	        {"snapshot_id", LogicalType::BIGINT},
 	        {"schema_id", LogicalType::INTEGER},
 	        {"metadata", LogicalType::VARIANT()},
-	        {"schema", schema_type}};
+	        {"schema", schema_type},
+	        {"row_filter", LogicalType::VARCHAR}};
 }
 
 IcebergDeleteFile IcebergScanTaskCodec::ReadDeleteFile(const Value &descriptor) {
@@ -116,6 +117,10 @@ IcebergScanTaskCodec::BindInput(const LogicalType &task_type, vector<LogicalType
 	for (idx_t i = 0; i < expected.size(); i++) {
 		auto entry = indexes.find(expected[i].first.GetIdentifierName());
 		if (entry == indexes.end()) {
+			if (i == ROW_FILTER) {
+				result.columns.push_back(DConstants::INVALID_INDEX);
+				continue;
+			}
 			throw BinderException("iceberg_scan_tasks missing required input column '%s'",
 			                      expected[i].first.GetIdentifierName());
 		}
@@ -150,6 +155,9 @@ IcebergScanTaskCodec::BindInput(const LogicalType &task_type, vector<LogicalType
 }
 
 Value IcebergScanTaskCodec::ReadValue(const Value &input, const InputLayout &bind, Column column, bool nullable) {
+	if (column == ROW_FILTER && bind.columns[column] == DConstants::INVALID_INDEX) {
+		return Value(LogicalType::VARCHAR);
+	}
 	auto value = StructValue::GetChildren(input)[bind.columns[column]];
 	if (!nullable && value.IsNull()) {
 		throw InvalidInputException(

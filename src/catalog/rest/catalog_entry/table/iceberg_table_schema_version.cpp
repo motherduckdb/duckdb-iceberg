@@ -13,6 +13,7 @@
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
 #include "duckdb/planner/tableref/bound_at_clause.hpp"
+#include "duckdb/common/named_parameter_map.hpp"
 
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
@@ -90,7 +91,7 @@ TableFunction IcebergTableSchemaVersion::GetScanFunction(ClientContext &context,
 	}
 
 	iceberg_scan_function.function_info = scan_info;
-	named_parameter_map_t param_map;
+	named_argument_map_t param_map;
 	vector<LogicalType> return_types;
 	vector<Identifier> names;
 	TableFunctionRef empty_ref;
@@ -98,7 +99,8 @@ TableFunction IcebergTableSchemaVersion::GetScanFunction(ClientContext &context,
 	// Set the S3 path as input to table function
 	const auto &storage_location = metadata.location;
 	vector<Value> inputs = {storage_location};
-	TableFunctionBindInput bind_input(inputs, param_map, return_types, names, nullptr, nullptr, iceberg_scan_function,
+	BoundTableFunction bound_table_function(iceberg_scan_function);
+	TableFunctionBindInput bind_input(inputs, param_map, return_types, names, nullptr, nullptr, bound_table_function,
 	                                  empty_ref);
 	auto result = iceberg_scan_function.bind(context, bind_input, return_types, names);
 	bind_data = std::move(result);
@@ -115,17 +117,20 @@ TableFunction IcebergTableSchemaVersion::GetScanFunction(ClientContext &context,
 }
 
 virtual_column_map_t IcebergTableSchemaVersion::GetVirtualColumns() const {
-	return VirtualColumns();
+	return VirtualColumns(table_info.table_metadata.iceberg_version);
 }
 
-virtual_column_map_t IcebergTableSchemaVersion::VirtualColumns() {
+virtual_column_map_t IcebergTableSchemaVersion::VirtualColumns(int32_t iceberg_version) {
 	virtual_column_map_t result;
 	result.emplace(MultiFileReader::COLUMN_IDENTIFIER_FILENAME, TableColumn("filename", LogicalType::VARCHAR));
-	result.emplace(COLUMN_IDENTIFIER_ROW_ID, TableColumn("_row_id", LogicalType::BIGINT));
 	result.emplace(MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER,
 	               TableColumn("file_row_number", LogicalType::BIGINT));
-	result.emplace(IcebergMultiFileReader::COLUMN_IDENTIFIER_LAST_SEQUENCE_NUMBER,
-	               TableColumn("_last_updated_sequence_number", LogicalType::BIGINT));
+	//! Row lineage columns only exist for format version >= 3
+	if (iceberg_version >= 3) {
+		result.emplace(COLUMN_IDENTIFIER_ROW_ID, TableColumn("_row_id", LogicalType::BIGINT));
+		result.emplace(IcebergMultiFileReader::COLUMN_IDENTIFIER_LAST_SEQUENCE_NUMBER,
+		               TableColumn("_last_updated_sequence_number", LogicalType::BIGINT));
+	}
 	return result;
 }
 

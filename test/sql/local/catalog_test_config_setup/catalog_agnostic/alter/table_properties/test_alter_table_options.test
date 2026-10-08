@@ -26,6 +26,11 @@ ALTER TABLE my_datalake.default.alter_table_set_options SET ('format-version'=2)
 ----
 <REGEX>:.*Cannot downgrade format-version.*
 
+statement error
+ALTER TABLE my_datalake.default.alter_table_set_options SET ('format-version'=4);
+----
+<REGEX>:.*Cannot upgrade format-version to 4, the highest supported version is 3.*
+
 # test setting arbitrary table properties
 statement ok
 ALTER TABLE my_datalake.default.alter_table_set_options SET (

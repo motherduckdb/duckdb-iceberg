@@ -1008,6 +1008,9 @@ PhysicalOperator &IcebergCatalog::PlanInsert(ClientContext &context, PhysicalPla
 	auto &alter = irc_transaction.GetOrCreateAlter();
 	auto &updated_table = alter.GetOrInitializeTable(table_entry.table_info);
 	auto &table_metadata = updated_table.table_metadata;
+	if (table_metadata.iceberg_version < 2) {
+		throw NotImplementedException("Insert into Iceberg V%d tables", table_metadata.iceberg_version);
+	}
 	auto &schema = table_metadata.GetLatestSchema();
 	auto &updated_table_entry = *updated_table.schema_versions[schema.schema_id];
 
@@ -1044,6 +1047,9 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(ClientContext &
 			auto version = val.DefaultCastAs(LogicalType::INTEGER).GetValue<int32_t>();
 			if (version < 1) {
 				throw InvalidInputException("The lowest supported iceberg version is 1!");
+			}
+			if (version > MAX_ICEBERG_FORMAT_VERSION) {
+				throw InvalidInputException("The highest supported iceberg version is %d!", MAX_ICEBERG_FORMAT_VERSION);
 			}
 			metadata->iceberg_version = version;
 		}
@@ -1116,6 +1122,9 @@ PhysicalOperator &IcebergCatalog::PlanCreateTableAs(ClientContext &context, Phys
                                                     LogicalCreateTable &op, PhysicalOperator &plan_p) {
 	// create a fake local iceberg table with desired columns
 	auto placeholder_metadata = BuildPlaceholderMetadata(context, *op.info);
+	if (placeholder_metadata->iceberg_version < 2) {
+		throw NotImplementedException("Insert into Iceberg V%d tables", placeholder_metadata->iceberg_version);
+	}
 	auto &placeholder_schema = placeholder_metadata->GetLatestSchema();
 	auto &plan = CastCtasToIcebergStorageTypes(context, planner, plan_p, *placeholder_metadata);
 	IcebergCopyInput copy_input(context, *placeholder_metadata, placeholder_schema, std::move(op.info));

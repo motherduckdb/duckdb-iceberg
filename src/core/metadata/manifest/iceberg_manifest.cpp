@@ -415,30 +415,24 @@ optional<sequence_number_t> IcebergManifestEntry::ExplicitFileSequenceNumber() c
 	return file_sequence_number;
 }
 
-sequence_number_t IcebergManifestEntry::GetSequenceNumber(const IcebergManifestFile &manifest_file) const {
+sequence_number_t IcebergManifestEntry::GetSequenceNumber(const IcebergManifest &manifest_file) const {
 	if (!sequence_number) {
 		if (status != IcebergManifestEntryStatusType::ADDED) {
 			throw InvalidConfigurationException(
 			    "'manifest_entry.sequence_number' is only allowed to be NULL for ADDED entries");
 		}
-		if (!manifest_file.sequence_number) {
-			throw InvalidConfigurationException("'manifest_file.sequence_number' is not set");
-		}
-		return *manifest_file.sequence_number;
+		return manifest_file.sequence_number;
 	}
 	return *sequence_number;
 }
 
-sequence_number_t IcebergManifestEntry::GetFileSequenceNumber(const IcebergManifestFile &manifest_file) const {
+sequence_number_t IcebergManifestEntry::GetFileSequenceNumber(const IcebergManifest &manifest_file) const {
 	if (!file_sequence_number) {
 		if (status != IcebergManifestEntryStatusType::ADDED) {
 			throw InvalidConfigurationException(
 			    "'manifest_entry.file_sequence_number' is only allowed to be NULL for ADDED entries");
 		}
-		if (!manifest_file.sequence_number) {
-			throw InvalidConfigurationException("'manifest_file.sequence_number' is not set");
-		}
-		return *manifest_file.sequence_number;
+		return manifest_file.sequence_number;
 	}
 	return *file_sequence_number;
 }
@@ -454,6 +448,13 @@ bool IcebergManifestEntry::HasSnapshotId() const {
 int64_t IcebergManifestEntry::GetSnapshotId() const {
 	D_ASSERT(HasSnapshotId());
 	return *snapshot_id;
+}
+
+int64_t IcebergManifestEntry::GetSnapshotId(const IcebergManifestFile &manifest_file) const {
+	if (snapshot_id) {
+		return *snapshot_id;
+	}
+	return manifest_file.added_snapshot_id;
 }
 
 static Value CreateFieldID(int32_t field_id, bool nullable) {
@@ -610,11 +611,10 @@ static Value FieldIdsForList(int32_t list_field_id, int32_t element_field_id) {
 }
 
 idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManifestListEntry &manifest_entry,
-                  CopyFunction &copy, DatabaseInstance &db, ClientContext &context) {
-	auto &manifest_file = manifest_entry.file;
+                  const string &path, CopyFunction &copy, DatabaseInstance &db, ClientContext &context) {
+	auto &manifest_file = manifest_entry.GetManifest();
 	if (!manifest_entry.manifest_metadata) {
-		throw InternalException("Manifest entry for '%s' is missing typed manifest metadata",
-		                        manifest_file.manifest_path);
+		throw InternalException("Manifest entry for '%s' is missing typed manifest metadata", path);
 	}
 	auto &manifest_entries = manifest_entry.GetManifestEntries();
 	auto &entry_metadata = *manifest_entry.manifest_metadata;
@@ -623,7 +623,6 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	auto manifest_format_version = entry_metadata.format_version;
 	D_ASSERT(!manifest_entries.empty());
 	auto &allocator = db.GetBufferManager().GetBufferAllocator();
-	auto &path = manifest_file.manifest_path;
 
 	//! Create the types for the DataChunk
 
@@ -829,7 +828,6 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 		for (idx_t i = 0; i < chunk_count; i++) {
 			auto &manifest_entry = manifest_entries[offset + i];
 			status_writer.WriteValue(static_cast<int32_t>(manifest_entry.status));
-			//! FIXME: this is missing logic, needs to be looked into
 			//! SPEC: Snapshot id where the file was added, or deleted if status is 2. Inherited when null.
 			// snapshot_id: long
 			if (manifest_entry.HasSnapshotId()) {

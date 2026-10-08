@@ -2,11 +2,10 @@
 #include "common/iceberg_constants.hpp"
 
 #include "duckdb/common/string_util.hpp"
-#include "duckdb/common/extra_type_info.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/blob.hpp"
 #include "duckdb/parser/column_definition.hpp"
-
+#include "duckdb/common/types/geometry_crs.hpp"
 #include "rest_catalog/objects/list_type.hpp"
 #include "rest_catalog/objects/map_type.hpp"
 #include "rest_catalog/objects/struct_type.hpp"
@@ -243,6 +242,30 @@ rest_api_objects::PrimitiveTypeValue IcebergTypeHelper::PrimitiveTypeFromValue(c
 	}
 	default:
 		throw NotImplementedException("DEFAULT values for nested types (like %s) not implemented", type.ToString());
+	}
+}
+
+int32_t IcebergTypeHelper::MinimumFormatVersion(const LogicalType &type) {
+	switch (type.id()) {
+	case LogicalTypeId::TIMESTAMP_NS:
+	case LogicalTypeId::TIMESTAMP_TZ_NS:
+	case LogicalTypeId::VARIANT:
+	case LogicalTypeId::GEOMETRY:
+	case LogicalTypeId::SQLNULL:
+		return 3;
+	case LogicalTypeId::STRUCT: {
+		int32_t result = 1;
+		for (auto &child : StructType::GetChildTypes(type)) {
+			result = MaxValue(result, MinimumFormatVersion(child.second));
+		}
+		return result;
+	}
+	case LogicalTypeId::LIST:
+		return MinimumFormatVersion(ListType::GetChildType(type));
+	case LogicalTypeId::MAP:
+		return MaxValue(MinimumFormatVersion(MapType::KeyType(type)), MinimumFormatVersion(MapType::ValueType(type)));
+	default:
+		return 1;
 	}
 }
 

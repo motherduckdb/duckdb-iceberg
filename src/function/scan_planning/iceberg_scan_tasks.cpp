@@ -5,6 +5,7 @@
 #include "duckdb/parallel/thread_context.hpp"
 #include "function/scan_planning/iceberg_scan_task_codec.hpp"
 #include "execution/scan/iceberg_task_executor.hpp"
+#include "function/scan_planning/iceberg_row_filter.hpp"
 
 namespace duckdb {
 
@@ -16,6 +17,11 @@ struct IcebergScanTasksBindData : public TableFunctionData {
 };
 
 struct IcebergScanTasksGlobalState : public GlobalTableFunctionState {
+	explicit IcebergScanTasksGlobalState(vector<ColumnIndex> column_indexes_p)
+	    : column_indexes(std::move(column_indexes_p)) {
+	}
+
+	const vector<ColumnIndex> column_indexes;
 	mutex lock;
 	idx_t next_task = 0;
 	string metadata_json;
@@ -23,6 +29,8 @@ struct IcebergScanTasksGlobalState : public GlobalTableFunctionState {
 	Value snapshot_id;
 	shared_ptr<IcebergTaskExecutionContext> execution;
 	shared_ptr<IcebergTaskExecutor> active;
+	//! Cache bound filters by SQL text for this execution; all tasks share the same schema.
+	unordered_map<string, unique_ptr<Expression>> row_filters;
 
 	idx_t MaxThreads() const override {
 		return MAX_THREADS;
@@ -63,7 +71,20 @@ struct IcebergScanTasksGlobalState : public GlobalTableFunctionState {
 			snapshot_id = snapshot;
 		}
 		auto task = TaskCodec::ReadTask(descriptor, bind.layout, execution->metadata, execution->schema);
-		active = make_shared_ptr<IcebergTaskExecutor>(context, execution, std::move(task));
+		auto sql = TaskCodec::ReadValue(descriptor, bind.layout, TaskCodec::ROW_FILTER, true);
+		unique_ptr<Expression> filter;
+		if (!sql.IsNull()) {
+			auto &text = StringValue::Get(sql);
+			auto entry = row_filters.find(text);
+			if (entry == row_filters.end()) {
+				//! Parse and bind each distinct predicate once, even when many tasks carry it.
+				entry = row_filters.emplace(text, IcebergRowFilter::Bind(context, text, bind.layout.schema_type)).first;
+			}
+			//! The executor rewrites column references to scan positions, so preserve the cached expression.
+			filter = entry->second->Copy();
+		}
+		active = make_shared_ptr<IcebergTaskExecutor>(context, execution, std::move(task), column_indexes,
+		                                              std::move(filter));
 		next_task++;
 		return active;
 	}
@@ -124,14 +145,14 @@ static void IcebergScanTasksFunction(ClientContext &context, TableFunctionInput 
 
 TableFunctionSet IcebergFunctions::GetIcebergScanTasksFunction() {
 	TableFunction function("iceberg_scan_tasks", {LogicalType::ANY}, IcebergScanTasksFunction, IcebergScanTasksBind);
-	function.init_global = [](ClientContext &, TableFunctionInitInput &) -> unique_ptr<GlobalTableFunctionState> {
-		return make_uniq<IcebergScanTasksGlobalState>();
+	function.init_global = [](ClientContext &, TableFunctionInitInput &input) -> unique_ptr<GlobalTableFunctionState> {
+		return make_uniq<IcebergScanTasksGlobalState>(input.column_indexes);
 	};
 	function.init_local = [](ExecutionContext &, TableFunctionInitInput &,
 	                         GlobalTableFunctionState *) -> unique_ptr<LocalTableFunctionState> {
 		return make_uniq<IcebergScanTasksLocalState>();
 	};
-	function.projection_pushdown = false;
+	function.projection_pushdown = true;
 	function.filter_pushdown = false;
 	function.order_preservation_type = OrderPreservationType::NO_ORDER;
 	return TableFunctionSet(function);
