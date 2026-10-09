@@ -80,7 +80,7 @@ void IcebergSnapshotWriter::WriteManifest(const IcebergPendingManifest &pending)
 		first_row_id = next_row_id;
 	}
 	auto manifest = WriteManifestFile(pending.GetMetadata(), pending.GetEntries(), first_row_id);
-	snapshot.metrics.AddManifestListEntry(manifest);
+	snapshot.metrics.AddManifestEntries(manifest.GetFile().content, manifest.GetManifestEntries());
 	if (first_row_id) {
 		auto &counts = *manifest.GetFile().counts;
 		next_row_id += *counts.existing_rows_count + *counts.added_rows_count;

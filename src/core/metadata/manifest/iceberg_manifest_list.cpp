@@ -107,98 +107,6 @@ void IcebergManifest::SetCountsFromEntries(const vector<IcebergManifestEntry> &e
 	}
 }
 
-namespace {
-
-struct IcebergManifestEntryMetrics {
-public:
-	IcebergManifestEntryMetrics(int64_t &position_deletes, int64_t &deletion_vectors, int64_t &equality_deletes,
-	                            int64_t &position_delete_files, int64_t &equality_delete_files, int64_t &delete_files,
-	                            int64_t &data_files, int64_t &records, int64_t &files_size, idx_t &files_count,
-	                            idx_t &rows_count)
-	    : position_deletes(position_deletes), deletion_vectors(deletion_vectors), equality_deletes(equality_deletes),
-	      position_delete_files(position_delete_files), equality_delete_files(equality_delete_files),
-	      delete_files(delete_files), data_files(data_files), records(records), files_size(files_size),
-	      files_count(files_count), rows_count(rows_count) {
-	}
-
-public:
-	int64_t &position_deletes;      //! added|removed-position-deletes
-	int64_t &deletion_vectors;      //! added|removed-dvs
-	int64_t &equality_deletes;      //! added|removed-equality-deletes
-	int64_t &position_delete_files; //! added|removed-position-delete-files
-	int64_t &equality_delete_files; //! added|removed-equality-delete-files
-	int64_t &delete_files;          //! added|removed-delete-files
-	int64_t &data_files;            //! added|deleted-data-files
-	int64_t &records;               //! added|deleted-records
-	int64_t &files_size;            //! added|removed-files-size
-
-	idx_t &files_count;
-	idx_t &rows_count;
-};
-
-static IcebergManifestEntryMetrics GetManifestEntryMetrics(IcebergManifestMetrics &metrics,
-                                                           IcebergManifest &manifest_file,
-                                                           IcebergManifestEntryStatusType direction) {
-	D_ASSERT(direction != IcebergManifestEntryStatusType::EXISTING);
-	D_ASSERT(manifest_file.counts && manifest_file.counts->Complete());
-	auto &counts = *manifest_file.counts;
-	if (direction == IcebergManifestEntryStatusType::ADDED) {
-		return IcebergManifestEntryMetrics(metrics.added_position_deletes, metrics.added_deletion_vectors,
-		                                   metrics.added_equality_deletes, metrics.added_position_delete_files,
-		                                   metrics.added_equality_delete_files, metrics.added_delete_files,
-		                                   metrics.added_data_files, metrics.added_records, metrics.added_files_size,
-		                                   *counts.added_files_count, *counts.added_rows_count);
-	} else {
-		return IcebergManifestEntryMetrics(
-		    metrics.removed_position_deletes, metrics.removed_deletion_vectors, metrics.removed_equality_deletes,
-		    metrics.removed_position_delete_files, metrics.removed_equality_delete_files, metrics.removed_delete_files,
-		    metrics.deleted_data_files, metrics.deleted_records, metrics.removed_files_size,
-		    *counts.deleted_files_count, *counts.deleted_rows_count);
-	}
-}
-
-} // namespace
-
-static void CollectDeleteManifestMetrics(const IcebergManifestEntry &manifest_entry,
-                                         IcebergManifestEntryMetrics &metrics) {
-	auto &data_file = manifest_entry.data_file;
-	metrics.files_count++;
-	metrics.rows_count += data_file.record_count;
-	metrics.delete_files++;
-	switch (data_file.content) {
-	case IcebergManifestEntryContentType::EQUALITY_DELETES: {
-		metrics.equality_delete_files++;
-		metrics.equality_deletes += data_file.record_count;
-		break;
-	}
-	case IcebergManifestEntryContentType::POSITION_DELETES: {
-		metrics.position_deletes += data_file.record_count;
-		if (data_file.IsDeletionVector()) {
-			metrics.deletion_vectors++;
-		} else {
-			metrics.position_delete_files++;
-		}
-		break;
-	}
-	case IcebergManifestEntryContentType::DATA: {
-		throw InvalidConfigurationException("Encountered data_file.content == DATA in DELETE manifest");
-	}
-	}
-}
-
-static void CollectDataManifestMetrics(const IcebergManifestEntry &manifest_entry,
-                                       IcebergManifestEntryMetrics &metrics) {
-	auto &data_file = manifest_entry.data_file;
-	if (data_file.content != IcebergManifestEntryContentType::DATA) {
-		throw InvalidConfigurationException("Encountered data_file.content != DATA in DATA manifest");
-	}
-	metrics.files_count++;
-	metrics.rows_count += data_file.record_count;
-
-	metrics.data_files++;
-	metrics.records += data_file.record_count;
-}
-
 IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(sequence_number_t sequence_number,
                                                                      const IcebergTableMetadata &table_metadata,
                                                                      const IcebergManifestMetadata &manifest_metadata,
@@ -214,35 +122,18 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(sequence_nu
 		manifest_file.first_row_id = first_row_id;
 	}
 
-	manifest_file.counts = IcebergManifestCounts::Zero();
+	manifest_file.SetCountsFromEntries(manifest_entries);
 
-	manifest_list_entry.metrics.emplace();
-	auto &metrics = *manifest_list_entry.metrics;
-
-	//! Add the files to the manifest
-	for (auto &manifest_entry : manifest_entries) {
-		auto &data_file = manifest_entry.data_file;
-
-		do {
-			if (manifest_entry.status == IcebergManifestEntryStatusType::EXISTING) {
-				auto &counts = *manifest_file.counts;
-				(*counts.existing_files_count)++;
-				*counts.existing_rows_count += data_file.record_count;
-				break;
-			}
-			auto entry_metrics = GetManifestEntryMetrics(metrics, manifest_file, manifest_entry.status);
-
-			//! Gather 'added-files-size' and 'removed-files-size' metrics
-			auto new_files_size =
-			    IcebergUtils::AddFileSizeChecked(entry_metrics.files_size, data_file.GetContentSizeInBytes());
-			entry_metrics.files_size = new_files_size;
-
-			if (manifest_metadata.content == IcebergManifestContentType::DATA) {
-				CollectDataManifestMetrics(manifest_entry, entry_metrics);
-			} else {
-				CollectDeleteManifestMetrics(manifest_entry, entry_metrics);
-			}
-		} while (false);
+	for (const auto &manifest_entry : manifest_entries) {
+		const auto &data_file = manifest_entry.data_file;
+		if (manifest_content == IcebergManifestContentType::DATA &&
+		    data_file.content != IcebergManifestEntryContentType::DATA) {
+			throw InvalidConfigurationException("Encountered data_file.content != DATA in DATA manifest");
+		}
+		if (manifest_content == IcebergManifestContentType::DELETE &&
+		    data_file.content == IcebergManifestEntryContentType::DATA) {
+			throw InvalidConfigurationException("Encountered data_file.content == DATA in DELETE manifest");
+		}
 
 		auto entry_data_seq = manifest_entry.GetSequenceNumber(manifest_file);
 		if (!manifest_file.min_sequence_number || entry_data_seq < *manifest_file.min_sequence_number) {
