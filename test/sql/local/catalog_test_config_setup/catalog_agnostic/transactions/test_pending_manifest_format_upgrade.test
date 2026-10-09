@@ -1,0 +1,66 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_pending_manifest_format_upgrade.test
+# description: A manifest planned before an upgrade is serialized in the target table format.
+# group: [transactions]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require-env FORMAT_V3_SUPPORT
+
+require-env METADATA_FILE_READ_SUPPORT
+
+include test/sql/init_requires
+
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.pending_manifest_format_upgrade;
+
+statement ok
+CREATE TABLE my_datalake.default.pending_manifest_format_upgrade (id INTEGER) WITH ('format-version' = 2);
+
+statement ok
+BEGIN;
+
+statement ok
+INSERT INTO my_datalake.default.pending_manifest_format_upgrade VALUES (10);
+
+statement ok
+ALTER TABLE my_datalake.default.pending_manifest_format_upgrade SET ('format-version' = 3);
+
+statement ok
+INSERT INTO my_datalake.default.pending_manifest_format_upgrade VALUES (20);
+
+statement ok
+COMMIT;
+
+statement ok
+BEGIN;
+
+statement ok
+SET VARIABLE first_pending_manifest = (
+    SELECT manifest_path FROM iceberg_metadata(my_datalake.default.pending_manifest_format_upgrade)
+    ORDER BY manifest_sequence_number LIMIT 1
+);
+
+# The content was staged as V2, but the manifest is first written into a V3 table.
+query T
+SELECT value FROM avro_metadata(getvariable('first_pending_manifest')) WHERE key = 'format-version';
+----
+3
+
+query IIT
+SELECT sequence_number IS NULL, file_sequence_number IS NULL, typeof(data_file.first_row_id)
+FROM read_avro(getvariable('first_pending_manifest'));
+----
+true	true	BIGINT
+
+query III
+SELECT id, _row_id, _last_updated_sequence_number
+FROM my_datalake.default.pending_manifest_format_upgrade ORDER BY id;
+----
+10	0	1
+20	1	2
+
+statement ok
+COMMIT;
+
+statement ok
+DROP TABLE my_datalake.default.pending_manifest_format_upgrade;

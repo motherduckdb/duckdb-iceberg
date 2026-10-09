@@ -50,6 +50,11 @@ void IcebergSnapshotWriter::AddExistingManifest(IcebergManifestListEntry manifes
 	manifest_list.AddExistingManifestFile(std::move(manifest));
 }
 
+IcebergManifestMetadata IcebergSnapshotWriter::GetWriteMetadata(const IcebergManifestMetadata &source) const {
+	return IcebergManifestMetadata(source.schema_id, source.partition_spec_id,
+	                               NumericCast<int32_t>(table_metadata.iceberg_version), source.content);
+}
+
 void IcebergSnapshotWriter::WriteManifestFile(IcebergManifestListEntry &list_entry) {
 	if (list_entry.GetManifestEntries().empty()) {
 		throw InternalException("Cannot write an empty Iceberg manifest");
@@ -62,7 +67,9 @@ void IcebergSnapshotWriter::WriteManifestFile(IcebergManifestListEntry &list_ent
 		manifest.min_sequence_number = manifest.sequence_number;
 	}
 	created_metadata_files.push_back(path);
-	auto length = manifest_file::WriteToFile(table_metadata, list_entry, path, avro_copy, db, context);
+	D_ASSERT(list_entry.manifest_metadata);
+	auto length = manifest_file::WriteToFile(table_metadata, *list_entry.manifest_metadata,
+	                                         list_entry.GetManifestEntries(), path, avro_copy, db, context);
 	list_entry.SetFile(std::move(path), length, *snapshot.snapshot_id);
 }
 
@@ -72,8 +79,9 @@ void IcebergSnapshotWriter::WriteManifest(const IcebergPendingManifest &pending)
 		first_row_id = next_row_id;
 	}
 	auto entries = pending.GetEntries();
-	auto manifest = IcebergManifestListEntry::CreateFromEntries(
-	    *snapshot.sequence_number, table_metadata, pending.GetMetadata(), std::move(entries), first_row_id);
+	auto manifest = IcebergManifestListEntry::CreateFromEntries(*snapshot.sequence_number, table_metadata,
+	                                                            GetWriteMetadata(pending.GetMetadata()),
+	                                                            std::move(entries), first_row_id);
 	snapshot.metrics.AddManifestListEntry(manifest);
 	WriteManifestFile(manifest);
 	if (first_row_id) {
@@ -87,8 +95,8 @@ void IcebergSnapshotWriter::WriteManifest(const IcebergPendingManifest &pending)
 IcebergManifestListEntry IcebergSnapshotWriter::WriteReplacementManifest(const IcebergManifestMetadata &metadata,
                                                                          vector<IcebergManifestEntry> entries,
                                                                          optional<int64_t> first_row_id) {
-	auto manifest = IcebergManifestListEntry::CreateFromEntries(*snapshot.sequence_number, table_metadata, metadata,
-	                                                            std::move(entries), first_row_id);
+	auto manifest = IcebergManifestListEntry::CreateFromEntries(
+	    *snapshot.sequence_number, table_metadata, GetWriteMetadata(metadata), std::move(entries), first_row_id);
 	WriteManifestFile(manifest);
 	return manifest;
 }
