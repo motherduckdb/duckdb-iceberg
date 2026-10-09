@@ -43,9 +43,6 @@ IcebergSnapshotWriter::IcebergSnapshotWriter(ClientContext &context, const Icebe
 }
 
 void IcebergSnapshotWriter::AddExistingManifest(IcebergManifestListEntry manifest) {
-	if (!manifest.HasFile()) {
-		throw InternalException("Cannot carry forward unwritten manifest content");
-	}
 	manifest_list.AddExistingManifestFile(std::move(manifest));
 }
 
@@ -73,8 +70,8 @@ IcebergManifestListEntry IcebergSnapshotWriter::WriteManifestFile(const IcebergM
 	created_metadata_files.push_back(path);
 	auto length = manifest_file::WriteToFile(table_metadata, metadata, list_entry.GetManifestEntries(), path, avro_copy,
 	                                         db, context);
-	list_entry.SetFile(std::move(path), length, snapshot.snapshot_id);
-	return list_entry;
+	return IcebergManifestListEntry::CreateWritten(std::move(list_entry), std::move(path), length,
+	                                               snapshot.snapshot_id);
 }
 
 void IcebergSnapshotWriter::WriteManifest(const IcebergPendingManifest &pending) {
@@ -110,7 +107,7 @@ IcebergWrittenSnapshot IcebergWrittenSnapshot::Create(IcebergSnapshotWriter writ
 	writer.created_metadata_files.push_back(writer.snapshot.manifest_list);
 	manifest_list::WriteToFile(writer.table_metadata, writer.manifest_list, writer.avro_copy, writer.db,
 	                           writer.context);
-	return {std::move(writer.snapshot), writer.manifest_list.GetManifestListEntries(), writer.next_row_id};
+	return {std::move(writer.snapshot), writer.manifest_list.TakeManifestListEntries(), writer.next_row_id};
 }
 
 } // namespace duckdb
