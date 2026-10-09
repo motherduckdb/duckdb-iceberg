@@ -96,7 +96,7 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
                                       IcebergCommitState &commit_state) const {
 	auto &table_metadata = commit_state.table_info.table_metadata;
 	IcebergSnapshotWriter writer(context, table_metadata, schema_id, operation, commit_state.next_sequence_number++,
-	                             commit_state.next_row_id, commit_state.created_metadata_files,
+	                             commit_state.row_ids, commit_state.created_metadata_files,
 	                             commit_state.latest_snapshot);
 	// Repack the base manifests once per commit attempt, with this snapshot's identity.
 	if (commit_state.created_snapshots.empty()) {
@@ -111,7 +111,6 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 		writer.WriteManifest(manifest);
 	}
 	auto written = IcebergWrittenSnapshot::Create(std::move(writer));
-	commit_state.next_row_id = written.next_row_id;
 	commit_state.manifests = std::move(written.manifests);
 	commit_state.created_snapshots.push_back(std::move(written.snapshot));
 	commit_state.latest_snapshot = commit_state.created_snapshots.back();

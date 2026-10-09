@@ -2,6 +2,7 @@
 
 #include "core/metadata/manifest/iceberg_pending_manifest.hpp"
 #include "core/metadata/snapshot/iceberg_snapshot.hpp"
+#include "core/metadata/snapshot/iceberg_row_id_allocator.hpp"
 
 namespace duckdb {
 
@@ -14,7 +15,6 @@ struct IcebergWrittenSnapshot {
 
 	IcebergSnapshot snapshot;
 	vector<IcebergManifestListEntry> manifests;
-	int64_t next_row_id;
 };
 
 //! Assembles one snapshot in one commit attempt. Pending content remains reusable for retries.
@@ -24,7 +24,7 @@ class IcebergSnapshotWriter {
 public:
 	IcebergSnapshotWriter(ClientContext &context, const IcebergTableMetadata &table_metadata, int32_t schema_id,
 	                      IcebergSnapshotOperationType operation, sequence_number_t sequence_number,
-	                      int64_t next_row_id, vector<string> &created_metadata_files,
+	                      IcebergRowIdAllocator &row_ids, vector<string> &created_metadata_files,
 	                      optional_ptr<const IcebergSnapshot> parent = nullptr);
 	IcebergSnapshotWriter(IcebergSnapshotWriter &&) = default;
 	IcebergSnapshotWriter(const IcebergSnapshotWriter &) = delete;
@@ -54,7 +54,7 @@ private:
 	vector<string> &created_metadata_files;
 	IcebergSnapshot snapshot;
 	IcebergManifestList manifest_list;
-	int64_t next_row_id;
+	IcebergRowIdAllocator &row_ids;
 };
 
 } // namespace duckdb

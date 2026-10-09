@@ -93,7 +93,8 @@ vector<IcebergManifestEntry> IcebergManifestFile::PrepareEntriesForRewrite(vecto
 		entry.SetFileSequenceNumber(entry.GetFileSequenceNumber(*this));
 
 		auto &data_file = entry.data_file;
-		if (next_row_id && !data_file.HasFirstRowId()) {
+		//! Old V2 tombstones never received row IDs; only live files inherit a range.
+		if (next_row_id && entry.status != IcebergManifestEntryStatusType::DELETED && !data_file.HasFirstRowId()) {
 			int64_t following_row_id;
 			if (*next_row_id < 0 || data_file.record_count < 0 ||
 			    !TryAddOperator::Operation(*next_row_id, data_file.record_count, following_row_id)) {
