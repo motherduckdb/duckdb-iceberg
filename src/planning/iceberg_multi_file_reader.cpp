@@ -642,7 +642,8 @@ MultiFileReaderVirtualColumnBinding IcebergMultiFileReader::GetVirtualColumnExpr
 			throw InternalException("Missing extended info for data file");
 		}
 		auto &options = reader_data.file_to_be_opened.extended_info->options;
-		auto entry = options.find("sequence_number");
+		//! Like '_row_id', the sequence number is only inherited by data files that have a 'first_row_id'
+		auto entry = options.find("first_row_id") == options.end() ? options.end() : options.find("sequence_number");
 		for (idx_t i = 0; i < local_columns.size(); i++) {
 			auto &col = local_columns[i];
 			if (col.identifier.IsNull()) {
