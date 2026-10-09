@@ -66,6 +66,7 @@ private:
 
 public:
 	string initial_table_uuid;
+	int32_t initial_format_version;
 	int32_t initial_schema_id;
 	int32_t initial_default_spec_id = 0;
 	optional_idx initial_default_sort_order_id;
