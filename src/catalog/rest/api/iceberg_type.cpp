@@ -2,11 +2,10 @@
 #include "common/iceberg_constants.hpp"
 
 #include "duckdb/common/string_util.hpp"
-#include "duckdb/common/extra_type_info.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/blob.hpp"
 #include "duckdb/parser/column_definition.hpp"
-
+#include "duckdb/common/types/geometry_crs.hpp"
 #include "rest_catalog/objects/list_type.hpp"
 #include "rest_catalog/objects/map_type.hpp"
 #include "rest_catalog/objects/struct_type.hpp"
@@ -35,6 +34,11 @@ static string ConvertBlobDefault(const string_t &str) {
 
 string IcebergTypeHelper::LogicalTypeToIcebergType(const LogicalType &type) {
 	switch (type.id()) {
+	// Iceberg has no 8- or 16-bit integers; widen them losslessly, as other engines do
+	case LogicalTypeId::TINYINT:
+	case LogicalTypeId::SMALLINT:
+	case LogicalTypeId::UTINYINT:
+	case LogicalTypeId::USMALLINT:
 	case LogicalTypeId::INTEGER:
 		return "int";
 	case LogicalTypeId::BOOLEAN:
@@ -47,6 +51,7 @@ string IcebergTypeHelper::LogicalTypeToIcebergType(const LogicalType &type) {
 	}
 	case LogicalTypeId::DATE:
 		return "date";
+	case LogicalTypeId::UINTEGER:
 	case LogicalTypeId::BIGINT:
 		return "long";
 	case LogicalTypeId::HUGEINT:
@@ -167,11 +172,16 @@ rest_api_objects::PrimitiveTypeValue IcebergTypeHelper::PrimitiveTypeFromValue(c
 		result.boolean_type_value->value = value.GetValue<bool>();
 		return result;
 	}
+	case LogicalTypeId::TINYINT:
+	case LogicalTypeId::SMALLINT:
+	case LogicalTypeId::UTINYINT:
+	case LogicalTypeId::USMALLINT:
 	case LogicalTypeId::INTEGER: {
 		result.integer_type_value = rest_api_objects::IntegerTypeValue();
 		result.integer_type_value->value = value.GetValue<int32_t>();
 		return result;
 	}
+	case LogicalTypeId::UINTEGER:
 	case LogicalTypeId::BIGINT: {
 		result.long_type_value = rest_api_objects::LongTypeValue();
 		result.long_type_value->value = value.GetValue<int64_t>();
@@ -349,6 +359,10 @@ rest_api_objects::StructField IcebergTypeHelper::CreateIcebergRestType(const str
 	case LogicalTypeId::ARRAY: {
 		throw InvalidConfigurationException("Array type not supported in Iceberg type. Please cast to LIST");
 	}
+	case LogicalTypeId::VARIANT:
+		rest_type.variant_type.emplace();
+		rest_type.variant_type->value = "variant";
+		return result;
 	default:
 		rest_type.primitive_type = rest_api_objects::PrimitiveType();
 		rest_type.primitive_type->value = IcebergTypeHelper::LogicalTypeToIcebergType(type);
