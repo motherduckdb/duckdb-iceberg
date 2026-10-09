@@ -1,5 +1,5 @@
 # name: test/sql/local/catalog_test_config_setup/catalog_agnostic/maintenance/rewrite_manifest_inheritance_upgrade.test
-# description: Rewrites committed with a format upgrade materialize inherited row IDs for existing and deleted files.
+# description: Rewrites after a format upgrade materialize inherited row IDs for existing and deleted files.
 # group: [maintenance]
 
 require-env CATALOG_TEST_CONFIG_SETUP
@@ -28,14 +28,15 @@ INSERT INTO my_datalake.default.rewrite_manifest_inheritance_upgrade VALUES (3, 
 statement ok
 BEGIN;
 
-# Plan and execute the data rewrite while the table is V2. Only partition 'a' has two files.
+# The rewrite follows the upgrade in the same transaction, so its replacement is V3.
+statement ok
+ALTER TABLE my_datalake.default.rewrite_manifest_inheritance_upgrade SET ('format-version' = 3);
+
+# Only partition 'a' has two files.
 query III
 CALL iceberg_rewrite_data_files('my_datalake.default.rewrite_manifest_inheritance_upgrade', min_input_files => 2);
 ----
 2	1	<REGEX>:[1-9][0-9]*
-
-statement ok
-ALTER TABLE my_datalake.default.rewrite_manifest_inheritance_upgrade SET ('format-version' = 3);
 
 statement ok
 COMMIT;

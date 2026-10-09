@@ -21,14 +21,14 @@ bool IcebergAddSnapshot::IsRetryable() const {
 	return operation == IcebergSnapshotOperationType::APPEND || operation == IcebergSnapshotOperationType::DELETE;
 }
 
-static rest_api_objects::TableUpdate CreateAddSnapshotUpdate(const IcebergTable &table_info,
+static rest_api_objects::TableUpdate CreateAddSnapshotUpdate(const IcebergTableMetadata &table_metadata,
                                                              const IcebergSnapshot &snapshot) {
 	rest_api_objects::TableUpdate table_update;
 
 	table_update.add_snapshot_update = rest_api_objects::AddSnapshotUpdate();
 	auto &update = *table_update.add_snapshot_update;
 	update.base_update.action = "add-snapshot";
-	update.snapshot = snapshot.ToRESTObject(table_info.table_metadata);
+	update.snapshot = snapshot.ToRESTObject(table_metadata);
 	return table_update;
 }
 
@@ -94,7 +94,7 @@ static int64_t ReconstructTotalFilesSize(IcebergCommitState &commit_state, int32
 
 void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &context,
                                       IcebergCommitState &commit_state) const {
-	auto &table_metadata = commit_state.table_info.table_metadata;
+	auto &table_metadata = commit_state.GetTableMetadata();
 	IcebergSnapshotWriter writer(context, table_metadata, schema_id, operation, commit_state.next_sequence_number++,
 	                             commit_state.row_ids, commit_state.created_metadata_files,
 	                             commit_state.latest_snapshot);
@@ -115,8 +115,7 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 	commit_state.created_snapshots.push_back(std::move(written.snapshot));
 	commit_state.latest_snapshot = commit_state.created_snapshots.back();
 
-	commit_state.table_change.updates.push_back(
-	    CreateAddSnapshotUpdate(commit_state.table_info, *commit_state.latest_snapshot));
+	commit_state.table_change.updates.push_back(CreateAddSnapshotUpdate(table_metadata, *commit_state.latest_snapshot));
 }
 
 void IcebergAddSnapshot::AddPendingManifest(IcebergPendingManifest manifest) {

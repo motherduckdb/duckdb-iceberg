@@ -10,6 +10,7 @@ namespace duckdb {
 
 struct IcebergTable;
 struct IcebergTransactionData;
+struct IcebergTableMetadata;
 
 enum class IcebergTableUpdateType : uint8_t {
 	ASSIGN_UUID,
@@ -35,9 +36,17 @@ enum class IcebergTableUpdateType : uint8_t {
 };
 
 struct IcebergCommitState {
+private:
+	//! Only transactions with format updates need a mutable serialization view.
+	//! Other attempts use the refreshed catalog metadata directly, including retries.
+	unique_ptr<IcebergTableMetadata> format_metadata;
+
 public:
 	IcebergCommitState(const IcebergTable &table_info, ClientContext &context);
+	~IcebergCommitState();
 	void LoadExistingManifests(DatabaseInstance &db, vector<IcebergManifestListEntry> &&existing_manifests);
+	const IcebergTableMetadata &GetTableMetadata() const;
+	void SetFormatVersion(int32_t format_version);
 
 public:
 	const IcebergTable &table_info;

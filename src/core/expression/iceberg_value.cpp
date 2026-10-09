@@ -513,6 +513,12 @@ SerializeResult IcebergValue::SerializeValue(Value input_value, const LogicalTyp
 		auto serialized_val = Value::BLOB(serialized_const_data_ptr, sizeof(int64_t));
 		return SerializeResult(column_type, serialized_val);
 	}
+	case LogicalTypeId::TIME: {
+		//! Microseconds from midnight in an 8-byte little-endian long
+		int64_t micros_from_midnight = input_value.GetValue<dtime_t>().value;
+		auto serialized_val = Value::BLOB(const_data_ptr_cast<int64_t>(&micros_from_midnight), sizeof(int64_t));
+		return SerializeResult(column_type, serialized_val);
+	}
 	case LogicalTypeId::DECIMAL: {
 		auto decimal_as_string = input_value.GetValue<string>();
 		auto dec_pos = decimal_as_string.find(".");
