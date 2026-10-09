@@ -180,7 +180,7 @@ IcebergManifestListEntry IcebergManifestMerge::ScanManifestEntries(const Iceberg
 
 	IcebergOptions options;
 	auto &fs = FileSystem::GetFileSystem(commit_state.context);
-	auto &table_metadata = commit_state.table_info.table_metadata;
+	auto &table_metadata = commit_state.GetTableMetadata();
 
 	IcebergSnapshotScanInfo snapshot_info;
 	snapshot_info.snapshot = commit_state.latest_snapshot;
@@ -204,7 +204,7 @@ optional<IcebergManifestListEntry> MergeBin(const vector<IcebergManifestListEntr
                                             IcebergManifestContentType content, IcebergSnapshotWriter &writer,
                                             IcebergCommitState &commit_state, int32_t schema_id,
                                             int32_t partition_spec_id) {
-	auto &table_metadata = commit_state.table_info.table_metadata;
+	auto &table_metadata = commit_state.GetTableMetadata();
 	const bool is_v3 = table_metadata.iceberg_version >= 3;
 
 	//! Gather every entry from the bin's manifests, preserving status and historical sequence numbers.
@@ -327,8 +327,7 @@ IcebergManifestMerge::MergeManifests(vector<IcebergManifestListEntry> &&input, I
 
 void IcebergManifestMerge::MergeManifestList(vector<IcebergManifestListEntry> &manifests, int32_t current_schema_id,
                                              IcebergSnapshotWriter &writer, IcebergCommitState &commit_state) {
-	auto config =
-	    IcebergManifestMergeConfig::FromTableMetadata(commit_state.table_info.table_metadata, commit_state.context);
+	auto config = IcebergManifestMergeConfig::FromTableMetadata(commit_state.GetTableMetadata(), commit_state.context);
 	if (!config.enabled) {
 		return;
 	}

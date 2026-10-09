@@ -91,6 +91,7 @@ IcebergTransactionData::IcebergTransactionData(ClientContext &context, IcebergTr
                                                const IcebergTable &table_info)
     : context(context), transaction(transaction), table_info(table_info) {
 	initial_table_uuid = table_info.table_metadata.table_uuid;
+	initial_format_version = table_info.table_metadata.iceberg_version;
 	initial_schema_id = table_info.table_metadata.GetCurrentSchemaId();
 	initial_default_spec_id = table_info.table_metadata.default_spec_id;
 	if (table_info.table_metadata.HasSortOrder()) {
