@@ -123,6 +123,10 @@ struct IcebergManifestFile : public IcebergManifest {
 	      added_snapshot_id(snapshot_id) {
 	}
 
+	//! Resolve inherited identities against this file before moving entries into a replacement.
+	//! ADDED entries become EXISTING; explicit identities and previously DELETED entries are preserved.
+	vector<IcebergManifestEntry> PrepareEntriesForRewrite(vector<IcebergManifestEntry> entries) const;
+
 	string manifest_path;
 	int64_t manifest_length;
 	int64_t added_snapshot_id;
