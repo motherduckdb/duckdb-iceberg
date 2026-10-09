@@ -108,8 +108,6 @@ static ColumnIndex CreateColumnIndex(const MultiFileColumnPath &column_path) {
 
 IcebergMultiFileReader::IcebergMultiFileReader(shared_ptr<TableFunctionInfo> function_info)
     : function_info(function_info) {
-	row_id_column = make_uniq<MultiFileColumnDefinition>("_row_id", LogicalType::BIGINT);
-	row_id_column->identifier = Value::INTEGER(MultiFileReader::ROW_ID_FIELD_ID);
 	last_updated_sequence_number_column =
 	    make_uniq<MultiFileColumnDefinition>("_last_updated_sequence_number", LogicalType::BIGINT);
 	last_updated_sequence_number_column->identifier = Value::INTEGER(MultiFileReader::LAST_UPDATED_SEQUENCE_NUMBER_ID);
@@ -601,17 +599,16 @@ MultiFileReaderVirtualColumnBinding IcebergMultiFileReader::GetVirtualColumnExpr
 		}
 		auto &options = reader_data.file_to_be_opened.extended_info->options;
 		auto entry = options.find("first_row_id");
+		if (entry == options.end()) {
+			//! A data file without a 'first_row_id' reads NULL for '_row_id'
+			return MultiFileReaderVirtualColumnBinding(Value(LogicalType::BIGINT));
+		}
 		for (idx_t i = 0; i < local_columns.size(); i++) {
 			auto &col = local_columns[i];
 			if (col.identifier.IsNull()) {
 				continue;
 			}
 			if (col.identifier.GetValue<int32_t>() == MultiFileReader::ROW_ID_FIELD_ID) {
-				if (entry == options.end()) {
-					//! There is no parent 'first_row_id' to inherit, simply reference the existing column
-					return MultiFileReaderVirtualColumnBinding(*row_id_column.get());
-				}
-
 				auto computed_row_id =
 				    ConstructVirtualRowIdExpression(context, type, entry->second, local_idx.GetIndex() + 1);
 				// Create COALESCE(_row_id, computed_row_id)
@@ -626,10 +623,6 @@ MultiFileReaderVirtualColumnBinding IcebergMultiFileReader::GetVirtualColumnExpr
 				return MultiFileReaderVirtualColumnBinding(std::move(coalesce_expr), std::move(column_ids));
 			}
 		}
-		if (entry == options.end()) {
-			//! No first-row-id can be found, version must be <3, just return null
-			return MultiFileReaderVirtualColumnBinding(Value(LogicalType::BIGINT));
-		}
 
 		vector<idx_t> column_ids;
 		column_ids.push_back(MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER);
@@ -642,8 +635,11 @@ MultiFileReaderVirtualColumnBinding IcebergMultiFileReader::GetVirtualColumnExpr
 			throw InternalException("Missing extended info for data file");
 		}
 		auto &options = reader_data.file_to_be_opened.extended_info->options;
-		//! Like '_row_id', the sequence number is only inherited by data files that have a 'first_row_id'
-		auto entry = options.find("first_row_id") == options.end() ? options.end() : options.find("sequence_number");
+		if (options.find("first_row_id") == options.end()) {
+			//! A data file without a 'first_row_id' reads NULL for '_last_updated_sequence_number'
+			return MultiFileReaderVirtualColumnBinding(Value(LogicalType::BIGINT));
+		}
+		auto entry = options.find("sequence_number");
 		for (idx_t i = 0; i < local_columns.size(); i++) {
 			auto &col = local_columns[i];
 			if (col.identifier.IsNull()) {
