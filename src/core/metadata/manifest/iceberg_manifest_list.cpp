@@ -285,7 +285,10 @@ IcebergManifestListEntry IcebergPendingManifest::CreateScanEntry(const IcebergTa
 	                                                   std::move(copied_entries), first_row_id);
 }
 
+// Iceberg Java compares UUIDs as two signed longs; DuckDB compares unsigned bytes.
+// See https://github.com/apache/iceberg/issues/14216.
 static bool UUIDLessThanSigned(const Value &left, const Value &right) {
+	// Undo DuckDB's internal sign-bit flip before interpreting the UUID halves as signed.
 	auto left_bits = BaseUUID::ToUHugeint(left.GetValueUnsafe<hugeint_t>());
 	auto right_bits = BaseUUID::ToUHugeint(right.GetValueUnsafe<hugeint_t>());
 	auto left_upper = static_cast<int64_t>(left_bits.upper);
@@ -324,7 +327,7 @@ void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const Iceb
 	field_summary.resize(num_fields);
 	vector<Value> min_values(num_fields);
 	vector<Value> max_values(num_fields);
-	//! For UUID fields, the lowest and highest value when both 64-bit halves are compared as signed longs
+	// Track both UUID orders: matching extrema make the bounds safe for either reader.
 	vector<Value> signed_min_values(num_fields);
 	vector<Value> signed_max_values(num_fields);
 	vector<bool> initialized(num_fields, false);
@@ -395,9 +398,8 @@ void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const Iceb
 			continue;
 		}
 		if (min_values[i] != signed_min_values[i] || max_values[i] != signed_max_values[i]) {
-			//! The lowest and highest UUID differ between comparing the bytes in order and comparing both 64-bit
-			//! halves as signed longs, so any bounds would be wrong for readers that use the other order. Without
-			//! partition summaries, readers don't skip this manifest.
+			// Either differing extremum can cause false pruning. Omit the entire optional list:
+			// null field bounds mean all-null/NaN, and a partial list would lose field positions.
 			has_partitions = false;
 			field_summary.clear();
 			return;
@@ -437,7 +439,8 @@ void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const Iceb
 		SerializeResult lower_result = SerializeResult(min_values[i].type(), min_values[i]);
 		SerializeResult upper_result = SerializeResult(max_values[i].type(), max_values[i]);
 		if (min_values[i].type().id() == LogicalTypeId::UUID) {
-			//! Only partition summaries get UUID bounds; UUID data files still get none
+			// File metrics only provide unsigned extrema, so they cannot perform this compatibility check.
+			// Keep UUID serialization here, after checking both orders over all partition values.
 			lower_result = SerializeResult(min_values[i].type(), SerializeUUIDBound(min_values[i]));
 			upper_result = SerializeResult(max_values[i].type(), SerializeUUIDBound(max_values[i]));
 		} else if (min_values[i].type() != LogicalType::BLOB && max_values[i].type() != LogicalType::BLOB) {
