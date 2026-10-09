@@ -11,15 +11,14 @@ namespace duckdb {
 static IcebergSnapshot CreateSnapshot(ClientContext &context, const IcebergTableMetadata &metadata, int32_t schema_id,
                                       IcebergSnapshotOperationType operation, sequence_number_t sequence_number,
                                       int64_t next_row_id, optional_ptr<const IcebergSnapshot> parent) {
-	IcebergSnapshot snapshot(schema_id);
-	snapshot.snapshot_id = IcebergSnapshot::NewSnapshotId();
+	IcebergSnapshot snapshot(schema_id, IcebergSnapshot::NewSnapshotId());
 	snapshot.sequence_number = sequence_number;
 	snapshot.operation = operation;
 	snapshot.timestamp_ms = Timestamp::GetEpochMs(Timestamp::GetCurrentTimestamp());
 	auto &fs = FileSystem::GetFileSystem(context);
 	auto uuid = UUID::ToString(UUID::GenerateRandomUUID());
 	snapshot.manifest_list = fs.JoinPath(metadata.GetMetadataPath(fs),
-	                                     "snap-" + std::to_string(*snapshot.snapshot_id) + "-" + uuid + ".avro");
+	                                     "snap-" + std::to_string(snapshot.snapshot_id) + "-" + uuid + ".avro");
 	if (parent) {
 		snapshot.parent_snapshot_id = parent->snapshot_id;
 		snapshot.metrics = IcebergSnapshotMetrics(*parent);
@@ -74,7 +73,7 @@ IcebergManifestListEntry IcebergSnapshotWriter::WriteManifestFile(const IcebergM
 	created_metadata_files.push_back(path);
 	auto length = manifest_file::WriteToFile(table_metadata, metadata, list_entry.GetManifestEntries(), path, avro_copy,
 	                                         db, context);
-	list_entry.SetFile(std::move(path), length, *snapshot.snapshot_id);
+	list_entry.SetFile(std::move(path), length, snapshot.snapshot_id);
 	return list_entry;
 }
 

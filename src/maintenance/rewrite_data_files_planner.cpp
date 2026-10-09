@@ -284,13 +284,10 @@ RewritePlan PlanRewrite(ClientContext &context, RewriteDataFilesPlanInput input)
 		return plan;
 	}
 
-	if (!latest_snapshot->snapshot_id) {
-		throw InvalidConfigurationException("snapshot.snapshot_id is not set");
-	}
 	if (!latest_snapshot->sequence_number) {
 		throw InvalidConfigurationException("snapshot.sequence_number is not set");
 	}
-	plan.starting_snapshot_id = *latest_snapshot->snapshot_id;
+	plan.starting_snapshot_id = latest_snapshot->snapshot_id;
 	//! Rewritten files use the sequence number of the snapshot being compacted.
 	plan.starting_sequence_number = *latest_snapshot->sequence_number;
 

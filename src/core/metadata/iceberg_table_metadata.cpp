@@ -620,10 +620,7 @@ JSONMutableValue IcebergTableMetadata::SnapshotLogToJSON(JSONWriter &writer) con
 	for (auto &it : snapshots) {
 		auto &snapshot = it.second;
 		auto log_item = writer.CreateObject();
-		if (!snapshot.snapshot_id) {
-			throw InvalidConfigurationException("snapshot.snapshot_id is not set");
-		}
-		log_item.Add("snapshot-id", writer.CreateSignedInteger(*snapshot.snapshot_id));
+		log_item.Add("snapshot-id", writer.CreateSignedInteger(snapshot.snapshot_id));
 		log_item.Add("timestamp-ms", writer.CreateSignedInteger(snapshot.timestamp_ms.value));
 		log_array.Append(log_item);
 	}

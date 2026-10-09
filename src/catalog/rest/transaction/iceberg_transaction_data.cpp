@@ -388,10 +388,10 @@ void IcebergTransactionData::TableRollbackToSnapshot(int64_t snapshot_id) {
 	}
 
 	auto current = metadata.GetLatestSnapshot();
-	if (!current || !current->snapshot_id) {
+	if (!current) {
 		throw InvalidInputException("Cannot roll back table with no current snapshot");
 	}
-	auto current_snapshot_id = *current->snapshot_id;
+	auto current_snapshot_id = current->snapshot_id;
 	if (!IsAncestorOfCurrentSnapshot(metadata, snapshot_id, current_snapshot_id)) {
 		throw InvalidInputException("Cannot roll back to snapshot, not an ancestor of the current state: %lld",
 		                            snapshot_id);

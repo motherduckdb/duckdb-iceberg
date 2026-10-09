@@ -764,14 +764,11 @@ void IcebergManifestList::LoadManifestFiles(const IcebergSnapshotScanInfo &snaps
                                             vector<IcebergManifestListEntry> &result) {
 	auto &snapshot = *snapshot_info.snapshot;
 	if (!snapshot.manifests.empty()) {
-		if (!snapshot.snapshot_id) {
-			throw InvalidConfigurationException("snapshot.snapshot_id is not set");
-		}
 		result.reserve(result.size() + snapshot.manifests.size());
 		for (auto &manifest_path : snapshot.manifests) {
 			IcebergManifest manifest_file(metadata.default_spec_id, IcebergManifestContentType::DATA, 0);
 			manifest_file.min_sequence_number = 0;
-			result.emplace_back(IcebergManifestFile(manifest_path, 0, *snapshot.snapshot_id, std::move(manifest_file)));
+			result.emplace_back(IcebergManifestFile(manifest_path, 0, snapshot.snapshot_id, std::move(manifest_file)));
 		}
 		return;
 	}
@@ -791,9 +788,6 @@ unique_ptr<IcebergManifestList> IcebergManifestList::Load(const string &iceberg_
                                                           const IcebergSnapshotScanInfo &snapshot_info,
                                                           ClientContext &context, const IcebergOptions &options) {
 	auto &snapshot = *snapshot_info.snapshot;
-	if (!snapshot.snapshot_id) {
-		throw InvalidConfigurationException("snapshot.snapshot_id is not set");
-	}
 	if (!snapshot.sequence_number) {
 		throw InvalidConfigurationException("snapshot.sequence_number is not set");
 	}
