@@ -43,7 +43,8 @@ public:
 private:
 	//! Preserve the content's schema and spec, but serialize new manifests in the target table's format.
 	IcebergManifestMetadata GetWriteMetadata(const IcebergManifestMetadata &source) const;
-	void WriteManifestFile(IcebergManifestListEntry &manifest);
+	IcebergManifestListEntry WriteManifestFile(const IcebergManifestMetadata &source_metadata,
+	                                           vector<IcebergManifestEntry> entries, optional<int64_t> first_row_id);
 
 	ClientContext &context;
 	const IcebergTableMetadata &table_metadata;
