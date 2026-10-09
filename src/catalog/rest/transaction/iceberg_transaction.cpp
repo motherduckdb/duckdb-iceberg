@@ -249,11 +249,8 @@ static void VerifyDeleteRetryability(const IcebergTable &table_info,
 	if (!current_snapshot) {
 		return;
 	}
-	if (!current_snapshot->snapshot_id) {
-		throw InvalidConfigurationException("Committed snapshot is missing a snapshot_id");
-	}
 	auto scan_snapshot_id = *transaction_data.base_snapshot_id;
-	auto tip_snapshot_id = *current_snapshot->snapshot_id;
+	auto tip_snapshot_id = current_snapshot->snapshot_id;
 
 	//! Nothing to reconcile if the tip hasn't moved since we scanned (e.g. the first attempt).
 	if (scan_snapshot_id == tip_snapshot_id) {
@@ -307,10 +304,7 @@ static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, Iceb
 
 	if (!transaction_data.alters.empty()) {
 		auto &snapshot = *commit_state.latest_snapshot;
-		if (!snapshot.snapshot_id) {
-			throw InvalidConfigurationException("snapshot.snapshot_id is not set");
-		}
-		SetSnapshotRef set_snapshot_ref(*snapshot.snapshot_id);
+		SetSnapshotRef set_snapshot_ref(snapshot.snapshot_id);
 		set_snapshot_ref.CreateUpdate(db, context, commit_state);
 	}
 

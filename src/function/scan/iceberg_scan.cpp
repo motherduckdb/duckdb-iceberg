@@ -82,8 +82,8 @@ BindInfo IcebergBindInfo(const optional_ptr<FunctionData> bind_data) {
 	}
 	result.InsertOption("schema_id", Value::INTEGER(snapshot_info.schema_id));
 	// Omitted for empty tables, and when uncommitted transaction-local changes are also scanned
-	if (snapshot_info.snapshot && snapshot_info.snapshot->snapshot_id && !planner.HasTransactionData()) {
-		result.InsertOption("snapshot_id", Value::BIGINT(*snapshot_info.snapshot->snapshot_id));
+	if (snapshot_info.snapshot && !planner.HasTransactionData()) {
+		result.InsertOption("snapshot_id", Value::BIGINT(snapshot_info.snapshot->snapshot_id));
 	}
 	return result;
 }

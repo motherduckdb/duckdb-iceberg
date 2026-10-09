@@ -45,25 +45,71 @@ IcebergCommitState::IcebergCommitState(const IcebergTable &table_info, ClientCon
 	RefreshFromTable();
 }
 
+IcebergCommitState::~IcebergCommitState() = default;
+
+const IcebergTableMetadata &IcebergCommitState::GetTableMetadata() const {
+	return format_metadata ? *format_metadata : table_info.table_metadata;
+}
+
 void IcebergCommitState::RefreshFromTable() {
-	next_sequence_number = table_info.table_metadata.last_sequence_number + 1;
+	format_metadata.reset();
+	if (table_info.transaction_data) {
+		auto &transaction_data = *table_info.transaction_data;
+		for (auto &update : transaction_data.updates) {
+			if (update->type != IcebergTableUpdateType::UPGRADE_FORMAT_VERSION) {
+				continue;
+			}
+			// Replay local format changes where they occurred, rather than serializing
+			// earlier snapshots with the final version already stored on table_info.
+			format_metadata = make_uniq<IcebergTableMetadata>(table_info.table_metadata.Copy());
+			format_metadata->iceberg_version = transaction_data.initial_format_version;
+			if (format_metadata->iceberg_version < 3) {
+				format_metadata->next_row_id.reset();
+			}
+			break;
+		}
+	}
+	auto &metadata = GetTableMetadata();
+	next_sequence_number = metadata.last_sequence_number + 1;
 	next_row_id = 0;
-	if (table_info.table_metadata.next_row_id) {
-		next_row_id = *table_info.table_metadata.next_row_id;
+	if (metadata.next_row_id) {
+		next_row_id = *metadata.next_row_id;
+	}
+}
+
+void IcebergCommitState::SetFormatVersion(int32_t format_version) {
+	auto previous_version = GetTableMetadata().iceberg_version;
+	if (format_version < previous_version) {
+		throw InternalException("Cannot replay a format-version downgrade");
+	}
+	if (format_version == previous_version) {
+		return;
+	}
+	if (!format_metadata) {
+		format_metadata = make_uniq<IcebergTableMetadata>(table_info.table_metadata.Copy());
+	}
+	format_metadata->iceberg_version = format_version;
+	if (previous_version < 3 && format_version >= 3) {
+		next_row_id = 0;
+		// This also includes V2 manifests written by earlier snapshots in this
+		// attempt. Their first row IDs belong to the new V3 manifest list only.
+		AssignManifestFirstRowIds(*format_metadata, latest_snapshot, manifests, next_row_id);
+		format_metadata->next_row_id = next_row_id;
 	}
 }
 
 void IcebergCommitState::LoadExistingManifests(DatabaseInstance &db,
                                                vector<IcebergManifestListEntry> &&existing_manifests) {
 	manifests = std::move(existing_manifests);
-	auto current_snapshot = table_info.table_metadata.GetLatestSnapshot();
+	auto &metadata = GetTableMetadata();
+	auto current_snapshot = metadata.GetLatestSnapshot();
 	latest_snapshot = current_snapshot;
 	if (manifests.empty() && current_snapshot) {
 		IcebergSnapshotScanInfo snapshot_info;
 		snapshot_info.snapshot = current_snapshot;
-		snapshot_info.schema_id = table_info.table_metadata.GetCurrentSchemaId();
+		snapshot_info.schema_id = metadata.GetCurrentSchemaId();
 
-		IcebergManifestList::LoadManifestFiles(snapshot_info, table_info.table_metadata, context, manifests);
+		IcebergManifestList::LoadManifestFiles(snapshot_info, metadata, context, manifests);
 	}
 
 	//! In V1 the added/deleted/existing file counts were optional
@@ -74,15 +120,14 @@ void IcebergCommitState::LoadExistingManifests(DatabaseInstance &db,
 		if (counts && counts->Complete()) {
 			continue;
 		}
-		manifest =
-		    IcebergManifestMerge::ScanManifestEntries(manifest, *this, table_info.table_metadata.GetCurrentSchemaId());
+		manifest = IcebergManifestMerge::ScanManifestEntries(manifest, *this, metadata.GetCurrentSchemaId());
 	}
 
 	next_row_id = 0;
-	if (table_info.table_metadata.next_row_id) {
-		next_row_id = *table_info.table_metadata.next_row_id;
+	if (metadata.next_row_id) {
+		next_row_id = *metadata.next_row_id;
 	}
-	AssignManifestFirstRowIds(table_info.table_metadata, current_snapshot, manifests, next_row_id);
+	AssignManifestFirstRowIds(metadata, current_snapshot, manifests, next_row_id);
 }
 
 IcebergTableUpdate::IcebergTableUpdate(IcebergTableUpdateType type) : type(type) {

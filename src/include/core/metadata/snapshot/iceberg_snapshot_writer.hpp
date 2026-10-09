@@ -41,7 +41,10 @@ public:
 	void SetTotalFilesSize(int64_t total_files_size);
 
 private:
-	void WriteManifestFile(IcebergManifestListEntry &manifest);
+	//! Preserve the content's schema and spec, but serialize new manifests in the target table's format.
+	IcebergManifestMetadata GetWriteMetadata(const IcebergManifestMetadata &source) const;
+	IcebergManifestListEntry WriteManifestFile(const IcebergManifestMetadata &source_metadata,
+	                                           vector<IcebergManifestEntry> entries, optional<int64_t> first_row_id);
 
 	ClientContext &context;
 	const IcebergTableMetadata &table_metadata;
