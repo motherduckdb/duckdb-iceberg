@@ -165,11 +165,11 @@ IcebergSnapshotScanInfo IcebergTableMetadata::GetSnapshot(const IcebergSnapshotL
 		return snapshot_info;
 	case SnapshotSource::FROM_TIMESTAMP:
 		snapshot_info.snapshot = GetSnapshotByTimestampMS(lookup.GetSnapshotTimestamp());
-		if (snapshot_info.snapshot) {
-			snapshot_info.schema_id = snapshot_info.snapshot->GetSchemaId();
-		} else {
-			snapshot_info.schema_id = GetCurrentSchemaId();
+		if (!snapshot_info.snapshot) {
+			throw InvalidConfigurationException("Could not find snapshot at or before timestamp '%s'",
+			                                    Value::TIMESTAMPMS(lookup.GetSnapshotTimestamp()).ToString());
 		}
+		snapshot_info.schema_id = snapshot_info.snapshot->GetSchemaId();
 		return snapshot_info;
 	default:
 		throw InternalException("SnapshotSource type not implemented");
@@ -620,10 +620,7 @@ JSONMutableValue IcebergTableMetadata::SnapshotLogToJSON(JSONWriter &writer) con
 	for (auto &it : snapshots) {
 		auto &snapshot = it.second;
 		auto log_item = writer.CreateObject();
-		if (!snapshot.snapshot_id) {
-			throw InvalidConfigurationException("snapshot.snapshot_id is not set");
-		}
-		log_item.Add("snapshot-id", writer.CreateSignedInteger(*snapshot.snapshot_id));
+		log_item.Add("snapshot-id", writer.CreateSignedInteger(snapshot.snapshot_id));
 		log_item.Add("timestamp-ms", writer.CreateSignedInteger(snapshot.timestamp_ms.value));
 		log_array.Append(log_item);
 	}

@@ -8,6 +8,7 @@
 #include "duckdb/main/database.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/common/types/uuid.hpp"
+#include "duckdb/common/operator/add.hpp"
 
 #include "core/metadata/partition/iceberg_partition_spec.hpp"
 #include "core/expression/iceberg_value.hpp"
@@ -84,6 +85,32 @@ IcebergManifestCounts IcebergManifestCounts::Zero() {
 	return result;
 }
 
+vector<IcebergManifestEntry> IcebergManifestFile::PrepareEntriesForRewrite(vector<IcebergManifestEntry> entries) const {
+	auto next_row_id = content == IcebergManifestContentType::DATA ? first_row_id : nullopt;
+	for (auto &entry : entries) {
+		entry.SetSnapshotId(entry.GetSnapshotId(*this));
+		entry.SetSequenceNumber(entry.GetSequenceNumber(*this));
+		entry.SetFileSequenceNumber(entry.GetFileSequenceNumber(*this));
+
+		auto &data_file = entry.data_file;
+		//! Old V2 tombstones never received row IDs; only live files inherit a range.
+		if (next_row_id && entry.status != IcebergManifestEntryStatusType::DELETED && !data_file.HasFirstRowId()) {
+			int64_t following_row_id;
+			if (*next_row_id < 0 || data_file.record_count < 0 ||
+			    !TryAddOperator::Operation(*next_row_id, data_file.record_count, following_row_id)) {
+				throw InvalidConfigurationException("Cannot inherit row IDs from manifest '%s': invalid row ID range",
+				                                    manifest_path);
+			}
+			data_file.SetFirstRowId(*next_row_id);
+			next_row_id = following_row_id;
+		}
+		if (entry.status == IcebergManifestEntryStatusType::ADDED) {
+			entry.status = IcebergManifestEntryStatusType::EXISTING;
+		}
+	}
+	return entries;
+}
+
 void IcebergManifest::SetCountsFromEntries(const vector<IcebergManifestEntry> &entries) {
 	counts = IcebergManifestCounts::Zero();
 	auto &manifest_counts = *counts;
@@ -107,98 +134,6 @@ void IcebergManifest::SetCountsFromEntries(const vector<IcebergManifestEntry> &e
 	}
 }
 
-namespace {
-
-struct IcebergManifestEntryMetrics {
-public:
-	IcebergManifestEntryMetrics(int64_t &position_deletes, int64_t &deletion_vectors, int64_t &equality_deletes,
-	                            int64_t &position_delete_files, int64_t &equality_delete_files, int64_t &delete_files,
-	                            int64_t &data_files, int64_t &records, int64_t &files_size, idx_t &files_count,
-	                            idx_t &rows_count)
-	    : position_deletes(position_deletes), deletion_vectors(deletion_vectors), equality_deletes(equality_deletes),
-	      position_delete_files(position_delete_files), equality_delete_files(equality_delete_files),
-	      delete_files(delete_files), data_files(data_files), records(records), files_size(files_size),
-	      files_count(files_count), rows_count(rows_count) {
-	}
-
-public:
-	int64_t &position_deletes;      //! added|removed-position-deletes
-	int64_t &deletion_vectors;      //! added|removed-dvs
-	int64_t &equality_deletes;      //! added|removed-equality-deletes
-	int64_t &position_delete_files; //! added|removed-position-delete-files
-	int64_t &equality_delete_files; //! added|removed-equality-delete-files
-	int64_t &delete_files;          //! added|removed-delete-files
-	int64_t &data_files;            //! added|deleted-data-files
-	int64_t &records;               //! added|deleted-records
-	int64_t &files_size;            //! added|removed-files-size
-
-	idx_t &files_count;
-	idx_t &rows_count;
-};
-
-static IcebergManifestEntryMetrics GetManifestEntryMetrics(IcebergManifestMetrics &metrics,
-                                                           IcebergManifest &manifest_file,
-                                                           IcebergManifestEntryStatusType direction) {
-	D_ASSERT(direction != IcebergManifestEntryStatusType::EXISTING);
-	D_ASSERT(manifest_file.counts && manifest_file.counts->Complete());
-	auto &counts = *manifest_file.counts;
-	if (direction == IcebergManifestEntryStatusType::ADDED) {
-		return IcebergManifestEntryMetrics(metrics.added_position_deletes, metrics.added_deletion_vectors,
-		                                   metrics.added_equality_deletes, metrics.added_position_delete_files,
-		                                   metrics.added_equality_delete_files, metrics.added_delete_files,
-		                                   metrics.added_data_files, metrics.added_records, metrics.added_files_size,
-		                                   *counts.added_files_count, *counts.added_rows_count);
-	} else {
-		return IcebergManifestEntryMetrics(
-		    metrics.removed_position_deletes, metrics.removed_deletion_vectors, metrics.removed_equality_deletes,
-		    metrics.removed_position_delete_files, metrics.removed_equality_delete_files, metrics.removed_delete_files,
-		    metrics.deleted_data_files, metrics.deleted_records, metrics.removed_files_size,
-		    *counts.deleted_files_count, *counts.deleted_rows_count);
-	}
-}
-
-} // namespace
-
-static void CollectDeleteManifestMetrics(const IcebergManifestEntry &manifest_entry,
-                                         IcebergManifestEntryMetrics &metrics) {
-	auto &data_file = manifest_entry.data_file;
-	metrics.files_count++;
-	metrics.rows_count += data_file.record_count;
-	metrics.delete_files++;
-	switch (data_file.content) {
-	case IcebergManifestEntryContentType::EQUALITY_DELETES: {
-		metrics.equality_delete_files++;
-		metrics.equality_deletes += data_file.record_count;
-		break;
-	}
-	case IcebergManifestEntryContentType::POSITION_DELETES: {
-		metrics.position_deletes += data_file.record_count;
-		if (data_file.IsDeletionVector()) {
-			metrics.deletion_vectors++;
-		} else {
-			metrics.position_delete_files++;
-		}
-		break;
-	}
-	case IcebergManifestEntryContentType::DATA: {
-		throw InvalidConfigurationException("Encountered data_file.content == DATA in DELETE manifest");
-	}
-	}
-}
-
-static void CollectDataManifestMetrics(const IcebergManifestEntry &manifest_entry,
-                                       IcebergManifestEntryMetrics &metrics) {
-	auto &data_file = manifest_entry.data_file;
-	if (data_file.content != IcebergManifestEntryContentType::DATA) {
-		throw InvalidConfigurationException("Encountered data_file.content != DATA in DATA manifest");
-	}
-	metrics.files_count++;
-	metrics.rows_count += data_file.record_count;
-
-	metrics.data_files++;
-	metrics.records += data_file.record_count;
-}
-
 IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(sequence_number_t sequence_number,
                                                                      const IcebergTableMetadata &table_metadata,
                                                                      const IcebergManifestMetadata &manifest_metadata,
@@ -214,35 +149,18 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(sequence_nu
 		manifest_file.first_row_id = first_row_id;
 	}
 
-	manifest_file.counts = IcebergManifestCounts::Zero();
+	manifest_file.SetCountsFromEntries(manifest_entries);
 
-	manifest_list_entry.metrics.emplace();
-	auto &metrics = *manifest_list_entry.metrics;
-
-	//! Add the files to the manifest
-	for (auto &manifest_entry : manifest_entries) {
-		auto &data_file = manifest_entry.data_file;
-
-		do {
-			if (manifest_entry.status == IcebergManifestEntryStatusType::EXISTING) {
-				auto &counts = *manifest_file.counts;
-				(*counts.existing_files_count)++;
-				*counts.existing_rows_count += data_file.record_count;
-				break;
-			}
-			auto entry_metrics = GetManifestEntryMetrics(metrics, manifest_file, manifest_entry.status);
-
-			//! Gather 'added-files-size' and 'removed-files-size' metrics
-			auto new_files_size =
-			    IcebergUtils::AddFileSizeChecked(entry_metrics.files_size, data_file.GetContentSizeInBytes());
-			entry_metrics.files_size = new_files_size;
-
-			if (manifest_metadata.content == IcebergManifestContentType::DATA) {
-				CollectDataManifestMetrics(manifest_entry, entry_metrics);
-			} else {
-				CollectDeleteManifestMetrics(manifest_entry, entry_metrics);
-			}
-		} while (false);
+	for (const auto &manifest_entry : manifest_entries) {
+		const auto &data_file = manifest_entry.data_file;
+		if (manifest_content == IcebergManifestContentType::DATA &&
+		    data_file.content != IcebergManifestEntryContentType::DATA) {
+			throw InvalidConfigurationException("Encountered data_file.content != DATA in DATA manifest");
+		}
+		if (manifest_content == IcebergManifestContentType::DELETE &&
+		    data_file.content == IcebergManifestEntryContentType::DATA) {
+			throw InvalidConfigurationException("Encountered data_file.content == DATA in DELETE manifest");
+		}
 
 		auto entry_data_seq = manifest_entry.GetSequenceNumber(manifest_file);
 		if (!manifest_file.min_sequence_number || entry_data_seq < *manifest_file.min_sequence_number) {
@@ -285,6 +203,27 @@ IcebergManifestListEntry IcebergPendingManifest::CreateScanEntry(const IcebergTa
 	                                                   std::move(copied_entries), first_row_id);
 }
 
+// Iceberg Java compares UUIDs as two signed longs; DuckDB compares unsigned bytes.
+// See https://github.com/apache/iceberg/issues/14216.
+static bool UUIDLessThanSigned(const Value &left, const Value &right) {
+	// Undo DuckDB's internal sign-bit flip before interpreting the UUID halves as signed.
+	auto left_bits = BaseUUID::ToUHugeint(left.GetValueUnsafe<hugeint_t>());
+	auto right_bits = BaseUUID::ToUHugeint(right.GetValueUnsafe<hugeint_t>());
+	auto left_upper = static_cast<int64_t>(left_bits.upper);
+	auto right_upper = static_cast<int64_t>(right_bits.upper);
+	if (left_upper != right_upper) {
+		return left_upper < right_upper;
+	}
+	return static_cast<int64_t>(left_bits.lower) < static_cast<int64_t>(right_bits.lower);
+}
+
+//! A UUID bound is its 16 bytes in big-endian order
+static Value SerializeUUIDBound(const Value &uuid) {
+	data_t bytes[16];
+	BaseUUID::ToBlob(uuid.GetValueUnsafe<hugeint_t>(), bytes);
+	return Value::BLOB(bytes, sizeof(bytes));
+}
+
 void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const IcebergTableSchema &target_schema,
                                 const IcebergPartitionSpec &partition_spec,
                                 const vector<IcebergManifestEntry> &manifest_entries) {
@@ -306,6 +245,9 @@ void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const Iceb
 	field_summary.resize(num_fields);
 	vector<Value> min_values(num_fields);
 	vector<Value> max_values(num_fields);
+	// Track both UUID orders: matching extrema make the bounds safe for either reader.
+	vector<Value> signed_min_values(num_fields);
+	vector<Value> signed_max_values(num_fields);
 	vector<bool> initialized(num_fields, false);
 
 	for (auto &entry : manifest_entries) {
@@ -338,9 +280,17 @@ void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const Iceb
 			// values
 			auto typed_value = extended_partition_info.value.DefaultCastAs(serialized_type);
 
+			if ((serialized_type.id() == LogicalTypeId::FLOAT && Value::IsNan(typed_value.GetValue<float>())) ||
+			    (serialized_type.id() == LogicalTypeId::DOUBLE && Value::IsNan(typed_value.GetValue<double>()))) {
+				field_summary[i].contains_nan = true;
+				continue;
+			}
+
 			if (!initialized[i]) {
 				min_values[i] = typed_value;
 				max_values[i] = typed_value;
+				signed_min_values[i] = typed_value;
+				signed_max_values[i] = typed_value;
 				initialized[i] = true;
 			} else {
 				if (typed_value < min_values[i]) {
@@ -349,14 +299,35 @@ void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const Iceb
 				if (typed_value > max_values[i]) {
 					max_values[i] = typed_value;
 				}
+				if (typed_value.type().id() == LogicalTypeId::UUID) {
+					if (UUIDLessThanSigned(typed_value, signed_min_values[i])) {
+						signed_min_values[i] = typed_value;
+					}
+					if (UUIDLessThanSigned(signed_max_values[i], typed_value)) {
+						signed_max_values[i] = typed_value;
+					}
+				}
 			}
+		}
+	}
+
+	for (idx_t i = 0; i < num_fields; i++) {
+		if (!initialized[i] || min_values[i].type().id() != LogicalTypeId::UUID) {
+			continue;
+		}
+		if (min_values[i] != signed_min_values[i] || max_values[i] != signed_max_values[i]) {
+			// Either differing extremum can cause false pruning. Omit the entire optional list:
+			// null field bounds mean all-null/NaN, and a partial list would lose field positions.
+			has_partitions = false;
+			field_summary.clear();
+			return;
 		}
 	}
 
 	// Serialize the min/max values as bounds
 	for (idx_t i = 0; i < num_fields; i++) {
 		if (!initialized[i]) {
-			// All values for this field are null - set bounds to null BLOBs
+			// Bounds exclude nulls and NaNs. A field containing only those values has null bounds.
 			field_summary[i].lower_bound = Value(LogicalType::BLOB);
 			field_summary[i].upper_bound = Value(LogicalType::BLOB);
 			continue;
@@ -385,28 +356,29 @@ void ManifestPartitions::Create(const IcebergTableMetadata &metadata, const Iceb
 		// again unless they are blob, in which case we do not cast and serialize
 		SerializeResult lower_result = SerializeResult(min_values[i].type(), min_values[i]);
 		SerializeResult upper_result = SerializeResult(max_values[i].type(), max_values[i]);
-		if (min_values[i].type() != LogicalType::BLOB && max_values[i].type() != LogicalType::BLOB) {
+		if (min_values[i].type().id() == LogicalTypeId::UUID) {
+			// File metrics only provide unsigned extrema, so they cannot perform this compatibility check.
+			// Keep UUID serialization here, after checking both orders over all partition values.
+			lower_result = SerializeResult(min_values[i].type(), SerializeUUIDBound(min_values[i]));
+			upper_result = SerializeResult(max_values[i].type(), SerializeUUIDBound(max_values[i]));
+		} else if (min_values[i].type() != LogicalType::BLOB && max_values[i].type() != LogicalType::BLOB) {
 			lower_result = IcebergValue::SerializeValue(min_values[i].DefaultCastAs(LogicalType::VARCHAR),
 			                                            min_values[i].type(), SerializeBound::LOWER_BOUND);
 			upper_result = IcebergValue::SerializeValue(max_values[i].DefaultCastAs(LogicalType::VARCHAR),
 			                                            max_values[i].type(), SerializeBound::UPPER_BOUND);
 		}
 
-		if (lower_result.HasValue()) {
-			field_summary[i].lower_bound = lower_result.GetValue();
-		} else {
-			field_summary[i].lower_bound = Value(LogicalType::BLOB);
+		if (!lower_result.HasValue() || !upper_result.HasValue()) {
+			// Unlike data-file metrics, null partition bounds mean all values are null or NaN.
+			// If either bound is unavailable, omit the entire optional summary list so readers
+			// cannot prune a manifest containing ordinary values. Partial lists are not valid.
+			has_partitions = false;
+			field_summary.clear();
+			return;
 		}
-		if (upper_result.HasValue()) {
-			field_summary[i].upper_bound = upper_result.GetValue();
-		} else {
-			field_summary[i].upper_bound = Value(LogicalType::BLOB);
-		}
+		field_summary[i].lower_bound = lower_result.GetValue();
+		field_summary[i].upper_bound = upper_result.GetValue();
 	}
-}
-
-vector<IcebergManifestListEntry> &IcebergManifestList::GetManifestFilesMutable() {
-	return manifest_entries;
 }
 
 const vector<IcebergManifestListEntry> &IcebergManifestList::GetManifestFilesConst() const {
@@ -417,12 +389,7 @@ idx_t IcebergManifestList::GetManifestListEntriesCount() const {
 	return manifest_entries.size();
 }
 
-void IcebergManifestList::AddToManifestEntries(vector<IcebergManifestListEntry> &manifest_list_entries) {
-	manifest_entries.insert(manifest_entries.begin(), std::make_move_iterator(manifest_list_entries.begin()),
-	                        std::make_move_iterator(manifest_list_entries.end()));
-}
-
-vector<IcebergManifestListEntry> IcebergManifestList::GetManifestListEntries() {
+vector<IcebergManifestListEntry> IcebergManifestList::TakeManifestListEntries() {
 	return std::move(manifest_entries);
 }
 
@@ -758,14 +725,11 @@ void IcebergManifestList::LoadManifestFiles(const IcebergSnapshotScanInfo &snaps
                                             vector<IcebergManifestListEntry> &result) {
 	auto &snapshot = *snapshot_info.snapshot;
 	if (!snapshot.manifests.empty()) {
-		if (!snapshot.snapshot_id) {
-			throw InvalidConfigurationException("snapshot.snapshot_id is not set");
-		}
 		result.reserve(result.size() + snapshot.manifests.size());
 		for (auto &manifest_path : snapshot.manifests) {
 			IcebergManifest manifest_file(metadata.default_spec_id, IcebergManifestContentType::DATA, 0);
 			manifest_file.min_sequence_number = 0;
-			result.emplace_back(IcebergManifestFile(manifest_path, 0, *snapshot.snapshot_id, std::move(manifest_file)));
+			result.emplace_back(IcebergManifestFile(manifest_path, 0, snapshot.snapshot_id, std::move(manifest_file)));
 		}
 		return;
 	}
@@ -785,9 +749,6 @@ unique_ptr<IcebergManifestList> IcebergManifestList::Load(const string &iceberg_
                                                           const IcebergSnapshotScanInfo &snapshot_info,
                                                           ClientContext &context, const IcebergOptions &options) {
 	auto &snapshot = *snapshot_info.snapshot;
-	if (!snapshot.snapshot_id) {
-		throw InvalidConfigurationException("snapshot.snapshot_id is not set");
-	}
 	if (!snapshot.sequence_number) {
 		throw InvalidConfigurationException("snapshot.sequence_number is not set");
 	}

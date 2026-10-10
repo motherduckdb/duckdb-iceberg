@@ -21,14 +21,14 @@ bool IcebergAddSnapshot::IsRetryable() const {
 	return operation == IcebergSnapshotOperationType::APPEND || operation == IcebergSnapshotOperationType::DELETE;
 }
 
-static rest_api_objects::TableUpdate CreateAddSnapshotUpdate(const IcebergTable &table_info,
+static rest_api_objects::TableUpdate CreateAddSnapshotUpdate(const IcebergTableMetadata &table_metadata,
                                                              const IcebergSnapshot &snapshot) {
 	rest_api_objects::TableUpdate table_update;
 
 	table_update.add_snapshot_update = rest_api_objects::AddSnapshotUpdate();
 	auto &update = *table_update.add_snapshot_update;
 	update.base_update.action = "add-snapshot";
-	update.snapshot = snapshot.ToRESTObject(table_info.table_metadata);
+	update.snapshot = snapshot.ToRESTObject(table_metadata);
 	return table_update;
 }
 
@@ -40,22 +40,11 @@ static optional<IcebergManifestListEntry> RewriteManifestFile(const IcebergManif
 	                           ? list_entry
 	                           : IcebergManifestMerge::ScanManifestEntries(list_entry, commit_state, schema_id);
 	D_ASSERT(loaded_manifest.manifest_metadata);
-	auto &scanned_entries = loaded_manifest.GetManifestEntries();
 	const auto &file = loaded_manifest.GetFile();
 
-	vector<IcebergManifestEntry> rewritten_entries;
-	rewritten_entries.reserve(scanned_entries.size());
+	auto rewritten_entries = file.PrepareEntriesForRewrite(std::move(loaded_manifest.GetManifestEntries()));
 	bool removed_any_entries = false;
-	for (auto &manifest_entry : scanned_entries) {
-		auto sequence_number = manifest_entry.GetSequenceNumber(file);
-		auto file_sequence_number = manifest_entry.GetFileSequenceNumber(file);
-		manifest_entry.SetSequenceNumber(sequence_number);
-		manifest_entry.SetFileSequenceNumber(file_sequence_number);
-		//! The replacement manifest is added by this snapshot, so carried-over entries must keep their snapshot id
-		manifest_entry.SetSnapshotId(manifest_entry.GetSnapshotId(file));
-		if (manifest_entry.status == IcebergManifestEntryStatusType::ADDED) {
-			manifest_entry.status = IcebergManifestEntryStatusType::EXISTING;
-		}
+	for (auto &manifest_entry : rewritten_entries) {
 		if (manifest_entry.status != IcebergManifestEntryStatusType::DELETED &&
 		    deletes.IsInvalidated({manifest_entry.data_file.file_path, manifest_entry.data_file.content_offset})) {
 			writer.RemoveManifestEntry(manifest_entry);
@@ -64,7 +53,6 @@ static optional<IcebergManifestListEntry> RewriteManifestFile(const IcebergManif
 			manifest_entry.SetSnapshotId(nullopt);
 			removed_any_entries = true;
 		}
-		rewritten_entries.push_back(std::move(manifest_entry));
 	}
 	if (!removed_any_entries) {
 		return nullopt;
@@ -106,9 +94,9 @@ static int64_t ReconstructTotalFilesSize(IcebergCommitState &commit_state, int32
 
 void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &context,
                                       IcebergCommitState &commit_state) const {
-	auto &table_metadata = commit_state.table_info.table_metadata;
+	auto &table_metadata = commit_state.GetTableMetadata();
 	IcebergSnapshotWriter writer(context, table_metadata, schema_id, operation, commit_state.next_sequence_number++,
-	                             commit_state.next_row_id, commit_state.created_metadata_files,
+	                             commit_state.row_ids, commit_state.created_metadata_files,
 	                             commit_state.latest_snapshot);
 	// Repack the base manifests once per commit attempt, with this snapshot's identity.
 	if (commit_state.created_snapshots.empty()) {
@@ -123,13 +111,11 @@ void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &conte
 		writer.WriteManifest(manifest);
 	}
 	auto written = IcebergWrittenSnapshot::Create(std::move(writer));
-	commit_state.next_row_id = written.next_row_id;
 	commit_state.manifests = std::move(written.manifests);
 	commit_state.created_snapshots.push_back(std::move(written.snapshot));
 	commit_state.latest_snapshot = commit_state.created_snapshots.back();
 
-	commit_state.table_change.updates.push_back(
-	    CreateAddSnapshotUpdate(commit_state.table_info, *commit_state.latest_snapshot));
+	commit_state.table_change.updates.push_back(CreateAddSnapshotUpdate(table_metadata, *commit_state.latest_snapshot));
 }
 
 void IcebergAddSnapshot::AddPendingManifest(IcebergPendingManifest manifest) {
