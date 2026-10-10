@@ -83,6 +83,8 @@ python3 -m pytest -vv test/python \
 
 Sqllogictests use `.test`; expensive tests use `.test_slow`. Put behavior shared by all REST catalogs under `catalog_agnostic/` and catalog-only behavior under the existing `catalog_specifc/<catalog>/` tree. The directory name `catalog_specifc` is intentionally reproduced here because that is its current spelling; do not silently rename the tree.
 
+When inspecting REST-catalog table metadata directly (JSON metadata files, Avro manifest lists, or Avro manifests), wrap the catalog lookup that obtains the metadata paths and all subsequent file reads in the same explicit `BEGIN` / `COMMIT` transaction on the same connection. Start the transaction before calling functions such as `iceberg_metadata` or `iceberg_snapshots`, and commit after the `read_json`, `read_avro`, or `avro_metadata` assertions. Catalog-vended storage credentials are scoped to the transaction; saving a path in a variable does not retain its credentials after that transaction ends. Without this scope, catalogs such as Polaris can return HTTP 403 for direct metadata reads even when normal table queries succeed.
+
 Python tests outside `test/python/cloud/` require an active REST catalog. Cloud tests are only collected when requested explicitly. Use the existing `requires_spark`, `requires_capabilities`, and `spark_seed_tables` markers rather than open-coding environment checks.
 
 ## Catalog workflow and invariants

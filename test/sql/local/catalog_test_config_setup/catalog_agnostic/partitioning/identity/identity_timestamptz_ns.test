@@ -71,6 +71,10 @@ SELECT id FROM my_datalake.default.partition_identity_timestamptz_ns WHERE ts IS
 ----
 5
 
+# Keep catalog-vended credentials alive for the direct manifest reads.
+statement ok
+BEGIN;
+
 statement ok
 SET VARIABLE tsns_manifests = (
 	SELECT list(DISTINCT manifest_path)
@@ -109,6 +113,9 @@ SELECT field->>'$.type[1].type', field->>'$.type[1].logicalType', field->>'$.typ
 FROM partition_fields WHERE field->>'$.field-id' = '1000';
 ----
 long	timestamp-nanos	true
+
+statement ok
+COMMIT;
 
 statement ok
 SET TimeZone='Europe/Amsterdam';
