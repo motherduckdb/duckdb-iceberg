@@ -4,7 +4,6 @@
 
 #include "core/metadata/snapshot/iceberg_snapshot_writer.hpp"
 #include "catalog/rest/iceberg_table_set.hpp"
-#include "common/iceberg_utils.hpp"
 
 namespace duckdb {
 
@@ -19,17 +18,6 @@ IcebergAddSnapshot::IcebergAddSnapshot(const IcebergTable &table_info, IcebergSn
 bool IcebergAddSnapshot::IsRetryable() const {
 	//! DELETE-retry safety is enforced in StageSingleTableCommit.
 	return operation == IcebergSnapshotOperationType::APPEND || operation == IcebergSnapshotOperationType::DELETE;
-}
-
-static rest_api_objects::TableUpdate CreateAddSnapshotUpdate(const IcebergTableMetadata &table_metadata,
-                                                             const IcebergSnapshot &snapshot) {
-	rest_api_objects::TableUpdate table_update;
-
-	table_update.add_snapshot_update = rest_api_objects::AddSnapshotUpdate();
-	auto &update = *table_update.add_snapshot_update;
-	update.base_update.action = "add-snapshot";
-	update.snapshot = snapshot.ToRESTObject(table_metadata);
-	return table_update;
 }
 
 static optional<IcebergManifestListEntry> RewriteManifestFile(const IcebergManifestListEntry &list_entry,
@@ -75,47 +63,14 @@ void IcebergAddSnapshot::ConstructManifestList(IcebergSnapshotWriter &writer, Ic
 	commit_state.manifests.clear();
 }
 
-static int64_t ReconstructTotalFilesSize(IcebergCommitState &commit_state, int32_t schema_id) {
-	int64_t total_files_size = 0;
-	for (const auto &manifest : commit_state.manifests) {
-		auto loaded_manifest = manifest.HasManifestEntries()
-		                           ? manifest
-		                           : IcebergManifestMerge::ScanManifestEntries(manifest, commit_state, schema_id);
-		for (const auto &entry : loaded_manifest.GetManifestEntries()) {
-			if (entry.status == IcebergManifestEntryStatusType::DELETED) {
-				continue;
-			}
-			total_files_size =
-			    IcebergUtils::AddFileSizeChecked(total_files_size, entry.data_file.GetContentSizeInBytes());
-		}
-	}
-	return total_files_size;
-}
-
 void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &context,
                                       IcebergCommitState &commit_state) const {
-	auto &table_metadata = commit_state.GetTableMetadata();
-	IcebergSnapshotWriter writer(context, table_metadata, schema_id, operation, commit_state.next_sequence_number++,
-	                             commit_state.row_ids, commit_state.created_metadata_files,
-	                             commit_state.latest_snapshot);
-	// Repack the base manifests once per commit attempt, with this snapshot's identity.
-	if (commit_state.created_snapshots.empty()) {
-		IcebergManifestMerge::MergeManifestList(commit_state.manifests, table_metadata.GetCurrentSchemaId(), writer,
-		                                        commit_state);
-	}
-	if (commit_state.latest_snapshot && !commit_state.latest_snapshot->metrics.HasTotalFilesSize()) {
-		writer.SetTotalFilesSize(ReconstructTotalFilesSize(commit_state, schema_id));
-	}
+	auto writer = commit_state.CreateSnapshotWriter(schema_id, operation);
 	ConstructManifestList(writer, commit_state);
 	for (const auto &manifest : pending_manifests) {
 		writer.WriteManifest(manifest);
 	}
-	auto written = IcebergWrittenSnapshot::Create(std::move(writer));
-	commit_state.manifests = std::move(written.manifests);
-	commit_state.created_snapshots.push_back(std::move(written.snapshot));
-	commit_state.latest_snapshot = commit_state.created_snapshots.back();
-
-	commit_state.table_change.updates.push_back(CreateAddSnapshotUpdate(table_metadata, *commit_state.latest_snapshot));
+	commit_state.AddWrittenSnapshot(IcebergWrittenSnapshot::Create(std::move(writer)));
 }
 
 void IcebergAddSnapshot::AddPendingManifest(IcebergPendingManifest manifest) {
