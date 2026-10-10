@@ -8,14 +8,19 @@ other HTTP origins are rejected.
 HTTP filesystem sessions are rejected before HTTPFS consumes transport parameters;
 warehouse reads and writes use local files.
 
-Build first, then run the SQL suite serially:
+Build first, then run the standard test target:
 
 ```sh
 make reldebug
-make test_mock_native_reldebug
+make test_reldebug
 ```
 
-To focus the catalog suite:
+The standard `test_release`, `test_debug`, `test_reldebug`, and `test_relassert`
+targets run the native catalog suite before the delegated extension tests.
+`make test` selects `test_release`. `SKIP_TESTS=1` skips both phases, and `T`
+continues to select the delegated tests.
+
+To run or focus only the native catalog suite:
 
 ```sh
 make test_mock_native_reldebug \
@@ -84,30 +89,3 @@ Publication crosses the request's starting millisecond when necessary. This keep
 metadata timestamps distinguishable from transactions that began before the
 request, despite the in-process transport's speed. The clock remains real wall
 time; commits are never assigned future timestamps.
-
-## Core CI
-
-An already-built core binary with this Iceberg revision and matching dependencies
-can run the same SQL suite from the core checkout:
-
-```sh
-/path/to/core/build/reldebug/test/unittest \
-  --test-config /path/to/iceberg/test/configs/mock_native.json \
-  '*test/sql/local/catalog_test_config_setup/catalog_agnostic/*' \
-  'exclude:*.test_slow'
-```
-
-The leading `*` handles core's absolute extension test names. Config inheritance
-is relative to the config file, independent of the working directory. Apply this
-config only to the selected Iceberg tests.
-
-The companion core workflow `IcebergNativeCatalog.yml` accepts a full immutable
-Iceberg commit SHA. It checks out that revision, selects its extension config
-through `DUCKDB_ICEBERG_NATIVE_TEST_SOURCE_DIR`, and builds matching dependencies.
-Both API and SQL tests then run in an empty Linux network namespace. This avoids
-changing the ordinary core Iceberg pin before the native implementation has a
-published revision; the permanent pin update must use that published commit.
-
-Extension CI separately runs the native SQL suite without networking and retains
-the Python mock job for real HTTP coverage. Real catalogs remain the source of
-interoperability coverage.

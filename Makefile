@@ -7,9 +7,6 @@ REST_CATALOG_CODEGEN_PYTHON := $(PROJ_DIR)duckdb/.cache/format-venv/bin/python
 EXT_NAME=iceberg
 EXT_CONFIG=${PROJ_DIR}extension_config.cmake
 
-# We need this for testing
-CORE_EXTENSIONS='httpfs;parquet;tpch'
-
 ifeq (${EQUALITY_DELETE_WRITES_ENABLED}, 1)
 	EXT_FLAGS:=${EXT_FLAGS} -DICEBERG_ENABLE_EQUALITY_DELETE_WRITES=1
 endif
@@ -24,6 +21,16 @@ include make/catalogs/lakekeeper.mk
 include make/catalogs/nessie.mk
 include make/catalogs/polaris.mk
 include make/catalogs/mock.mk
+
+# The shared CI workflow calls these standard targets. Finish the native catalog
+# suite before the delegated test recipe, keeping its config scoped to that suite.
+test_release: test_mock_native_release
+test_debug: test_mock_native_debug
+test_reldebug: test_mock_native_reldebug
+
+.PHONY: test_relassert
+test_relassert: test_mock_native_relassert
+	$(call RUN_TEST,relassert)
 
 install_requirements:
 	python3 -m pip install -r scripts/requirements.txt

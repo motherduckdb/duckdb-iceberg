@@ -23,6 +23,8 @@ duckdb_extension_load(iceberg
 duckdb_extension_statically_link(parquet json iceberg)
 
 if (NOT EMSCRIPTEN)
+  # Use DuckDB's pinned HTTPFS configuration without relying on Make build flags.
+  include("${EXTENSION_CONFIG_BASE_DIR}/httpfs.cmake")
   duckdb_extension_load(tpch)
   duckdb_extension_load(icu)
   duckdb_extension_statically_link(tpch icu httpfs)
