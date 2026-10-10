@@ -183,7 +183,7 @@ IcebergManifestListEntry IcebergManifestMerge::ScanManifestEntries(const Iceberg
 	auto &table_metadata = commit_state.GetTableMetadata();
 
 	IcebergSnapshotScanInfo snapshot_info;
-	snapshot_info.snapshot = commit_state.latest_snapshot;
+	snapshot_info.snapshot = commit_state.GetLatestSnapshot();
 	snapshot_info.schema_id = schema_id;
 
 	auto manifest_scan =
