@@ -90,8 +90,7 @@ IcebergTaskExecutor::IcebergTaskExecutor(ClientContext &context, shared_ptr<Iceb
     : column_indexes(std::move(column_indexes_p)), row_filter(std::move(row_filter_p)) {
 	auto info = make_shared_ptr<IcebergTaskScanInfo>();
 	info->execution = std::move(execution);
-	info->file = IcebergMultiFileReader::FileInfo(task.file_path, task.file_format, task.file_size_in_bytes,
-	                                              task.first_row_id, task.sequence_number);
+	info->file = IcebergMultiFileReader::FileInfo(task);
 	info->task = std::move(task);
 	auto &entry = Catalog::GetEntry<TableFunctionCatalogEntry>(
 	    context, QualifiedName(SYSTEM_CATALOG, DEFAULT_SCHEMA, "parquet_scan"));

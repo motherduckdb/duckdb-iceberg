@@ -41,8 +41,7 @@ static void LoadMissingManifestCounts(ClientContext &context, const IcebergTable
 }
 
 static optional<int64_t> LoadExistingManifestList(ClientContext &context, const IcebergTableMetadata &metadata,
-                                                  vector<IcebergManifestListEntry> &existing_manifest_list,
-                                                  IcebergRowIdAllocator &row_ids) {
+                                                  vector<IcebergManifestListEntry> &existing_manifest_list) {
 	existing_manifest_list.clear();
 
 	auto current_snapshot = metadata.GetLatestSnapshot();
@@ -64,7 +63,7 @@ static optional<int64_t> LoadExistingManifestList(ClientContext &context, const 
 		return base_snapshot_id;
 	}
 
-	//! Deal with upgraded tables, if the snapshot originated from V2
+	//! Validate committed identities without assigning provisional IDs to upgraded manifests.
 	for (auto &manifest_list_entry : existing_manifest_list) {
 		auto &manifest_file = manifest_list_entry.GetManifest();
 		if (manifest_file.content != IcebergManifestContentType::DATA) {
@@ -75,7 +74,6 @@ static optional<int64_t> LoadExistingManifestList(ClientContext &context, const 
 			    "Table is corrupted, snapshot has 'first-row-id' but not all 'manifest_file' "
 			    "entries have a 'first_row_id'");
 		}
-		row_ids.AssignExistingManifest(manifest_file);
 	}
 	return base_snapshot_id;
 }
@@ -173,9 +171,7 @@ void IcebergTransactionData::CacheExistingManifestList(lock_guard<mutex> &guard,
 	if (!alters.empty()) {
 		return;
 	}
-	IcebergRowIdAllocator row_ids(metadata.iceberg_version >= 3 ? metadata.next_row_id.value_or(0) : 0);
-	base_snapshot_id = LoadExistingManifestList(context, metadata, existing_manifest_list, row_ids);
-	scan_first_row_id = row_ids.NextRowId();
+	base_snapshot_id = LoadExistingManifestList(context, metadata, existing_manifest_list);
 	scan_sequence_number = metadata.last_sequence_number + 1;
 }
 

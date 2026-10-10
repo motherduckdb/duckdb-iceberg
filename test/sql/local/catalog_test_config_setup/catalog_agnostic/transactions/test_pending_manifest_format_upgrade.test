@@ -28,6 +28,14 @@ ALTER TABLE my_datalake.default.pending_manifest_format_upgrade SET ('format-ver
 statement ok
 INSERT INTO my_datalake.default.pending_manifest_format_upgrade VALUES (20);
 
+# The earlier V2 pending file must not gain lineage merely because the table was upgraded.
+query III
+SELECT id, _row_id, _last_updated_sequence_number
+FROM my_datalake.default.pending_manifest_format_upgrade ORDER BY id;
+----
+10	NULL	NULL
+20	NULL	NULL
+
 statement ok
 COMMIT;
 

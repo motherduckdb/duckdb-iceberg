@@ -95,8 +95,7 @@ public:
 
 public:
 	static unique_ptr<MultiFileReader> CreateInstance(const BoundTableFunction &table);
-	static OpenFileInfo FileInfo(const string &path, const string &format, int64_t size, optional<int64_t> first_row_id,
-	                             optional<int64_t> sequence_number);
+	static OpenFileInfo FileInfo(const IcebergDataFileDescriptor &file);
 	static vector<PartitionStatistics> IcebergGetPartitionStats(ClientContext &context, GetPartitionStatsInput &input);
 
 public:

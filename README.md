@@ -7,6 +7,20 @@ This repository contains DuckDB's Apache Iceberg extension. It adds support for 
 
 User-facing documentation is available on the [Iceberg extension page](https://duckdb.org/docs/extensions/iceberg).
 
+## Row lineage inside transactions
+
+For format version 3 tables, rows inserted within a transaction have NULL `_row_id`
+and `_last_updated_sequence_number` until commit. An UPDATE preserves an already
+assigned `_row_id`, including through repeated updates in the same transaction,
+but its new `_last_updated_sequence_number` remains NULL until commit. Rows from
+before a v2-to-v3 upgrade also retain NULL lineage until a v3 snapshot assigns it.
+
+Each data-changing statement publishes a snapshot at commit. A row inserted and
+then updated within one transaction can receive a different `_row_id` in each
+of those snapshots: the updates cannot preserve an ID that has not been assigned
+yet. After commit, further updates preserve its assigned ID. Use a business key
+to identify pending rows, rather than relying on their nullable lineage columns.
+
 ## Development setup
 
 Clone the repository with its DuckDB and extension tooling submodules:

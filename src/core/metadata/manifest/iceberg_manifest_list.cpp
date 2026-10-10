@@ -187,20 +187,10 @@ IcebergManifestListEntry IcebergManifestListEntry::CreateFromEntries(sequence_nu
 }
 
 IcebergManifestListEntry IcebergPendingManifest::CreateScanEntry(const IcebergTableMetadata &table_metadata,
-                                                                 sequence_number_t sequence_number,
-                                                                 int64_t &next_row_id) const {
+                                                                 sequence_number_t sequence_number) const {
 	auto copied_entries = entries;
-	optional<int64_t> first_row_id;
-	if (metadata.format_version >= 3 && metadata.content == IcebergManifestContentType::DATA) {
-		first_row_id = next_row_id;
-	}
-	for (const auto &entry : entries) {
-		if (entry.data_file.content == IcebergManifestEntryContentType::DATA) {
-			next_row_id += entry.data_file.record_count;
-		}
-	}
 	return IcebergManifestListEntry::CreateFromEntries(sequence_number, table_metadata, metadata,
-	                                                   std::move(copied_entries), first_row_id);
+	                                                   std::move(copied_entries), nullopt);
 }
 
 // Iceberg Java compares UUIDs as two signed longs; DuckDB compares unsigned bytes.
