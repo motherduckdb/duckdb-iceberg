@@ -27,26 +27,27 @@
 
 namespace duckdb {
 
-OpenFileInfo IcebergMultiFileReader::FileInfo(const string &path, const string &format, int64_t size,
-                                              optional<int64_t> first_row_id, optional<int64_t> sequence_number) {
-	if (!StringUtil::CIEquals(format, "parquet")) {
-		throw NotImplementedException("File format '%s' not supported, only supports 'parquet' currently", format);
+OpenFileInfo IcebergMultiFileReader::FileInfo(const IcebergDataFileDescriptor &file) {
+	if (!StringUtil::CIEquals(file.file_format, "parquet")) {
+		throw NotImplementedException("File format '%s' not supported, only supports 'parquet' currently",
+		                              file.file_format);
 	}
-	if (path.empty() || size < 0) {
+	if (file.file_path.empty() || file.file_size_in_bytes < 0) {
 		throw InvalidInputException("Iceberg data file requires a path and nonnegative size");
 	}
-	OpenFileInfo result(path);
+	OpenFileInfo result(file.file_path);
 	result.extended_info = make_shared_ptr<ExtendedOpenFileInfo>();
 	auto &options = result.extended_info->options;
-	options["file_size"] = Value::UBIGINT(size);
+	options["file_size"] = Value::UBIGINT(file.file_size_in_bytes);
+	options["row_lineage_mode"] = Value::UTINYINT(static_cast<uint8_t>(file.row_lineage_mode));
 	options["validate_external_file_cache"] = Value::BOOLEAN(false);
 	options["etag"] = Value("");
 	options["last_modified"] = Value::TIMESTAMP(timestamp_t(0));
-	if (first_row_id) {
-		options["first_row_id"] = Value::BIGINT(*first_row_id);
+	if (file.first_row_id) {
+		options["first_row_id"] = Value::BIGINT(*file.first_row_id);
 	}
-	if (sequence_number) {
-		options["sequence_number"] = Value::BIGINT(*sequence_number);
+	if (file.sequence_number) {
+		options["sequence_number"] = Value::BIGINT(*file.sequence_number);
 	}
 	return result;
 }
@@ -589,6 +590,39 @@ static unique_ptr<Expression> ConstructVirtualRowIdExpression(ClientContext &con
 MultiFileReaderVirtualColumnBinding IcebergMultiFileReader::GetVirtualColumnExpression(
     ClientContext &context, MultiFileReaderData &reader_data, const vector<MultiFileColumnDefinition> &local_columns,
     const idx_t column_id, const LogicalType &type, MultiFileLocalIndex local_idx) {
+	if (column_id == COLUMN_IDENTIFIER_ROW_ID || column_id == COLUMN_IDENTIFIER_LAST_SEQUENCE_NUMBER) {
+		if (!reader_data.file_to_be_opened.extended_info) {
+			throw InternalException("Missing extended info for row lineage");
+		}
+		auto &options = reader_data.file_to_be_opened.extended_info->options;
+		auto mode_entry = options.find("row_lineage_mode");
+		if (mode_entry == options.end()) {
+			throw InternalException("Missing row lineage mode for data file");
+		}
+		auto mode = static_cast<IcebergRowLineageMode>(mode_entry->second.GetValue<uint8_t>());
+		switch (mode) {
+		case IcebergRowLineageMode::NONE:
+			return MultiFileReaderVirtualColumnBinding(Value(type));
+		case IcebergRowLineageMode::STORED_ONLY: {
+			//! A pending rewrite may store an assigned ID, but missing lineage stays unknown until commit.
+			auto field_id = column_id == COLUMN_IDENTIFIER_ROW_ID ? MultiFileReader::ROW_ID_FIELD_ID
+			                                                      : MultiFileReader::LAST_UPDATED_SEQUENCE_NUMBER_ID;
+			for (idx_t i = 0; i < local_columns.size(); i++) {
+				auto &column = local_columns[i];
+				if (!column.identifier.IsNull() && column.identifier.GetValue<int32_t>() == field_id) {
+					vector<idx_t> column_ids {i};
+					return MultiFileReaderVirtualColumnBinding(
+					    make_uniq<BoundReferenceExpression>(type, local_idx.GetIndex()), std::move(column_ids));
+				}
+			}
+			return MultiFileReaderVirtualColumnBinding(Value(type));
+		}
+		case IcebergRowLineageMode::COMMITTED:
+			break;
+		default:
+			throw InternalException("Invalid row lineage mode");
+		}
+	}
 	if (column_id == COLUMN_IDENTIFIER_ROW_ID) {
 		// row id column
 		// this is computed as row_id_start + file_row_number OR read from the file
