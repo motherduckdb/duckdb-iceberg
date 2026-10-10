@@ -10,7 +10,7 @@ namespace duckdb {
 
 static IcebergSnapshot CreateSnapshot(ClientContext &context, const IcebergTableMetadata &metadata, int32_t schema_id,
                                       IcebergSnapshotOperationType operation, sequence_number_t sequence_number,
-                                      int64_t next_row_id, optional_ptr<const IcebergSnapshot> parent) {
+                                      optional_ptr<const IcebergSnapshot> parent) {
 	IcebergSnapshot snapshot(schema_id, IcebergSnapshot::NewSnapshotId());
 	snapshot.sequence_number = sequence_number;
 	snapshot.operation = operation;
@@ -23,26 +23,25 @@ static IcebergSnapshot CreateSnapshot(ClientContext &context, const IcebergTable
 		snapshot.parent_snapshot_id = parent->snapshot_id;
 		snapshot.metrics = IcebergSnapshotMetrics(*parent);
 	}
-	if (metadata.iceberg_version >= 3) {
-		snapshot.first_row_id = next_row_id;
-		snapshot.added_rows = 0;
-	}
 	return snapshot;
 }
 
 IcebergSnapshotWriter::IcebergSnapshotWriter(ClientContext &context, const IcebergTableMetadata &table_metadata,
                                              int32_t schema_id, IcebergSnapshotOperationType operation,
-                                             sequence_number_t sequence_number, int64_t next_row_id,
+                                             sequence_number_t sequence_number, IcebergRowIdAllocator &row_ids,
                                              vector<string> &created_metadata_files,
                                              optional_ptr<const IcebergSnapshot> parent)
     : context(context), table_metadata(table_metadata), db(DatabaseInstance::GetDatabase(context)),
       avro_copy(IcebergUtils::GetCopyFunction(context, "avro").function),
       created_metadata_files(created_metadata_files),
-      snapshot(CreateSnapshot(context, table_metadata, schema_id, operation, sequence_number, next_row_id, parent)),
-      manifest_list(snapshot.manifest_list), next_row_id(next_row_id) {
+      snapshot(CreateSnapshot(context, table_metadata, schema_id, operation, sequence_number, parent)),
+      manifest_list(snapshot.manifest_list), row_ids(row_ids) {
 }
 
 void IcebergSnapshotWriter::AddExistingManifest(IcebergManifestListEntry manifest) {
+	if (table_metadata.iceberg_version >= 3) {
+		row_ids.AssignExistingManifest(manifest.GetManifest());
+	}
 	manifest_list.AddExistingManifestFile(std::move(manifest));
 }
 
@@ -76,17 +75,12 @@ IcebergManifestListEntry IcebergSnapshotWriter::WriteManifestFile(const IcebergM
 
 void IcebergSnapshotWriter::WriteManifest(const IcebergPendingManifest &pending) {
 	optional<int64_t> first_row_id;
-	if (table_metadata.iceberg_version >= 3 && pending.GetMetadata().content == IcebergManifestContentType::DATA) {
-		first_row_id = next_row_id;
+	if (table_metadata.iceberg_version >= 3) {
+		first_row_id = row_ids.AllocateManifest(pending);
 	}
 	auto manifest = WriteManifestFile(pending.GetMetadata(), pending.GetEntries(), first_row_id);
 	snapshot.metrics.AddManifestEntries(manifest.GetFile().content, manifest.GetManifestEntries());
-	if (first_row_id) {
-		auto &counts = *manifest.GetFile().counts;
-		next_row_id += *counts.existing_rows_count + *counts.added_rows_count;
-		*snapshot.added_rows += *counts.added_rows_count;
-	}
-	manifest_list.AddExistingManifestFile(std::move(manifest));
+	AddExistingManifest(std::move(manifest));
 }
 
 IcebergManifestListEntry IcebergSnapshotWriter::WriteReplacementManifest(const IcebergManifestMetadata &metadata,
@@ -107,7 +101,10 @@ IcebergWrittenSnapshot IcebergWrittenSnapshot::Create(IcebergSnapshotWriter writ
 	writer.created_metadata_files.push_back(writer.snapshot.manifest_list);
 	manifest_list::WriteToFile(writer.table_metadata, writer.manifest_list, writer.avro_copy, writer.db,
 	                           writer.context);
-	return {std::move(writer.snapshot), writer.manifest_list.TakeManifestListEntries(), writer.next_row_id};
+	if (writer.table_metadata.iceberg_version >= 3) {
+		writer.row_ids.CompleteSnapshot(writer.snapshot);
+	}
+	return {std::move(writer.snapshot), writer.manifest_list.TakeManifestListEntries()};
 }
 
 } // namespace duckdb

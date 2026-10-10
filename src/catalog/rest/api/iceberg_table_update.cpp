@@ -10,7 +10,8 @@ namespace duckdb {
 
 static void AssignManifestFirstRowIds(const IcebergTableMetadata &metadata,
                                       optional_ptr<const IcebergSnapshot> current_snapshot,
-                                      vector<IcebergManifestListEntry> &existing_manifest_list, int64_t &next_row_id) {
+                                      vector<IcebergManifestListEntry> &existing_manifest_list,
+                                      IcebergRowIdAllocator &row_ids) {
 	if (metadata.iceberg_version < 3) {
 		return;
 	}
@@ -19,40 +20,16 @@ static void AssignManifestFirstRowIds(const IcebergTableMetadata &metadata,
 		if (manifest_file.content != IcebergManifestContentType::DATA) {
 			continue;
 		}
-		if (manifest_file.first_row_id) {
-			D_ASSERT(manifest_file.counts && manifest_file.counts->added_rows_count &&
-			         manifest_file.counts->existing_rows_count);
-			next_row_id =
-			    MaxValue<int64_t>(next_row_id, *manifest_file.first_row_id + *manifest_file.counts->added_rows_count +
-			                                       *manifest_file.counts->existing_rows_count);
-			continue;
-		}
-		if (current_snapshot && current_snapshot->first_row_id) {
+		if (!manifest_file.first_row_id && current_snapshot && current_snapshot->first_row_id) {
 			throw InvalidConfigurationException(
 			    "Table is corrupted, snapshot has 'first-row-id' but not all 'manifest_file' "
 			    "entries have a 'first_row_id'");
 		}
-		D_ASSERT(manifest_file.counts && manifest_file.counts->added_rows_count &&
-		         manifest_file.counts->existing_rows_count);
-		manifest_file.first_row_id = next_row_id;
-		next_row_id += *manifest_file.counts->added_rows_count;
-		next_row_id += *manifest_file.counts->existing_rows_count;
+		row_ids.AssignExistingManifest(manifest_file);
 	}
 }
 
-IcebergCommitState::IcebergCommitState(const IcebergTable &table_info, ClientContext &context)
-    : table_info(table_info), context(context) {
-	RefreshFromTable();
-}
-
-IcebergCommitState::~IcebergCommitState() = default;
-
-const IcebergTableMetadata &IcebergCommitState::GetTableMetadata() const {
-	return format_metadata ? *format_metadata : table_info.table_metadata;
-}
-
-void IcebergCommitState::RefreshFromTable() {
-	format_metadata.reset();
+static unique_ptr<IcebergTableMetadata> CreateFormatMetadata(const IcebergTable &table_info) {
 	if (table_info.transaction_data) {
 		auto &transaction_data = *table_info.transaction_data;
 		for (auto &update : transaction_data.updates) {
@@ -61,20 +38,28 @@ void IcebergCommitState::RefreshFromTable() {
 			}
 			// Replay local format changes where they occurred, rather than serializing
 			// earlier snapshots with the final version already stored on table_info.
-			format_metadata = make_uniq<IcebergTableMetadata>(table_info.table_metadata.Copy());
+			auto format_metadata = make_uniq<IcebergTableMetadata>(table_info.table_metadata.Copy());
 			format_metadata->iceberg_version = transaction_data.initial_format_version;
 			if (format_metadata->iceberg_version < 3) {
 				format_metadata->next_row_id.reset();
 			}
-			break;
+			return format_metadata;
 		}
 	}
-	auto &metadata = GetTableMetadata();
-	next_sequence_number = metadata.last_sequence_number + 1;
-	next_row_id = 0;
-	if (metadata.next_row_id) {
-		next_row_id = *metadata.next_row_id;
-	}
+	return nullptr;
+}
+
+IcebergCommitState::IcebergCommitState(const IcebergTable &table_info, ClientContext &context)
+    : format_metadata(CreateFormatMetadata(table_info)), table_info(table_info),
+      next_sequence_number(GetTableMetadata().last_sequence_number + 1),
+      row_ids(GetTableMetadata().iceberg_version >= 3 ? GetTableMetadata().next_row_id.value_or(0) : 0),
+      context(context) {
+}
+
+IcebergCommitState::~IcebergCommitState() = default;
+
+const IcebergTableMetadata &IcebergCommitState::GetTableMetadata() const {
+	return format_metadata ? *format_metadata : table_info.table_metadata;
 }
 
 void IcebergCommitState::SetFormatVersion(int32_t format_version) {
@@ -90,11 +75,10 @@ void IcebergCommitState::SetFormatVersion(int32_t format_version) {
 	}
 	format_metadata->iceberg_version = format_version;
 	if (previous_version < 3 && format_version >= 3) {
-		next_row_id = 0;
 		// This also includes V2 manifests written by earlier snapshots in this
 		// attempt. Their first row IDs belong to the new V3 manifest list only.
-		AssignManifestFirstRowIds(*format_metadata, latest_snapshot, manifests, next_row_id);
-		format_metadata->next_row_id = next_row_id;
+		AssignManifestFirstRowIds(*format_metadata, latest_snapshot, manifests, row_ids);
+		format_metadata->next_row_id = row_ids.NextRowId();
 	}
 }
 
@@ -123,11 +107,7 @@ void IcebergCommitState::LoadExistingManifests(DatabaseInstance &db,
 		manifest = IcebergManifestMerge::ScanManifestEntries(manifest, *this, metadata.GetCurrentSchemaId());
 	}
 
-	next_row_id = 0;
-	if (metadata.next_row_id) {
-		next_row_id = *metadata.next_row_id;
-	}
-	AssignManifestFirstRowIds(metadata, current_snapshot, manifests, next_row_id);
+	AssignManifestFirstRowIds(metadata, current_snapshot, manifests, row_ids);
 }
 
 IcebergTableUpdate::IcebergTableUpdate(IcebergTableUpdateType type) : type(type) {
