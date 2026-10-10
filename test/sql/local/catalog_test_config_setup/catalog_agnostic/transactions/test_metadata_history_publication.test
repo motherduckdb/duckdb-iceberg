@@ -42,7 +42,7 @@ SET VARIABLE history_before = (
 
 statement ok
 SET VARIABLE history_content = (
-	SELECT content FROM read_text(getvariable('history_before').path)
+	SELECT content FROM read_blob(getvariable('history_before').path)
 );
 
 # This creates a metadata version without creating a new snapshot.
@@ -80,13 +80,24 @@ FROM iceberg_load_table_response(my_datalake.default.metadata_history_publicatio
 true	true	true	true
 
 # The historical file must still be readable and byte-for-byte unchanged.
-query II
-SELECT
-	content = getvariable('history_content'),
-	json_extract_string(content::JSON, '$.properties."history.probe"')
-FROM read_text(getvariable('history_before').path);
+query I
+SELECT content = getvariable('history_content')
+FROM read_blob(getvariable('history_before').path);
 ----
-true	before
+true
+
+# Detect gzip by its header, including Iceberg's .gz.metadata.json naming.
+query I
+SELECT json_extract_string(json, '$.properties."history.probe"')
+FROM read_json_objects(
+	getvariable('history_before').path,
+	compression = CASE
+		WHEN starts_with(hex(getvariable('history_content')), '1F8B') THEN 'gzip'
+		ELSE 'uncompressed'
+	END
+);
+----
+before
 
 statement ok
 commit
