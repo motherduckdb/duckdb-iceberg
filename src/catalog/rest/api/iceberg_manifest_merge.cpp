@@ -228,42 +228,8 @@ optional<IcebergManifestListEntry> MergeBin(const vector<IcebergManifestListEntr
 		auto loaded = member.HasManifestEntries()
 		                  ? member
 		                  : IcebergManifestMerge::ScanManifestEntries(member, commit_state, schema_id);
-		auto &loaded_entries = loaded.GetManifestEntries();
-		//! V3 row lineage: a data file's _row_id is derived from its data_file.first_row_id (+ row
-		//! position). That id is normally left null on disk and inherited at read time from the
-		//! manifest's first_row_id plus the record_count of preceding files that also lack one. Merging
-		//! rewrites these entries into a NEW manifest whose first_row_id is the min of the sources, so
-		//! the inherited ids would be re-derived against that new base. The Iceberg spec requires the
-		//! inherited value to be materialized into the data file metadata when creating existing/deleted
-		//! entries, so we compute each entry's first_row_id here -- against THIS source manifest's
-		//! first_row_id -- before the entries are moved into the merged manifest. That makes the merged
-		//! row ids independent of the merged layout. (DELETE manifests carry no first_row_id, so this
-		//! only applies to DATA content.)
-		//!
-		//! Note: with today's ordering invariants (carried-over manifests are prepended in first_row_id
-		//! order and are contiguous), reading back would recompute the same ids even without this step;
-		//! materializing is spec-compliant and keeps correctness independent of those invariants.
-		if (is_v3 && content == IcebergManifestContentType::DATA && file.first_row_id.has_value()) {
-			int64_t inherited_row_id = *file.first_row_id;
-			for (auto &entry : loaded_entries) {
-				if (!entry.data_file.HasFirstRowId()) {
-					entry.data_file.SetFirstRowId(inherited_row_id);
-					inherited_row_id += entry.data_file.record_count;
-				}
-			}
-		}
-		for (auto &entry : loaded_entries) {
-			//! The merged manifest is added by this snapshot, so entries must keep their snapshot id
-			entry.SetSnapshotId(entry.GetSnapshotId(file));
-			//! These are already-committed manifests. Any ADDED entry describes a file added by an
-			//! earlier snapshot and must be materialized as EXISTING in the replacement manifest.
-			if (entry.status == IcebergManifestEntryStatusType::ADDED) {
-				auto seq = entry.GetSequenceNumber(file);
-				auto file_seq = entry.GetFileSequenceNumber(file);
-				entry.SetSequenceNumber(seq);
-				entry.SetFileSequenceNumber(file_seq);
-				entry.status = IcebergManifestEntryStatusType::EXISTING;
-			}
+		auto prepared = loaded.GetFile().PrepareEntriesForRewrite(std::move(loaded.GetManifestEntries()));
+		for (auto &entry : prepared) {
 			merged_entries.push_back(std::move(entry));
 		}
 	}

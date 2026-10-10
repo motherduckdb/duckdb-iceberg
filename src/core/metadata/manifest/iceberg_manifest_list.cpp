@@ -8,6 +8,7 @@
 #include "duckdb/main/database.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/common/types/uuid.hpp"
+#include "duckdb/common/operator/add.hpp"
 
 #include "core/metadata/partition/iceberg_partition_spec.hpp"
 #include "core/expression/iceberg_value.hpp"
@@ -82,6 +83,31 @@ IcebergManifestCounts IcebergManifestCounts::Zero() {
 	result.existing_rows_count = 0;
 	result.deleted_rows_count = 0;
 	return result;
+}
+
+vector<IcebergManifestEntry> IcebergManifestFile::PrepareEntriesForRewrite(vector<IcebergManifestEntry> entries) const {
+	auto next_row_id = content == IcebergManifestContentType::DATA ? first_row_id : nullopt;
+	for (auto &entry : entries) {
+		entry.SetSnapshotId(entry.GetSnapshotId(*this));
+		entry.SetSequenceNumber(entry.GetSequenceNumber(*this));
+		entry.SetFileSequenceNumber(entry.GetFileSequenceNumber(*this));
+
+		auto &data_file = entry.data_file;
+		if (next_row_id && !data_file.HasFirstRowId()) {
+			int64_t following_row_id;
+			if (*next_row_id < 0 || data_file.record_count < 0 ||
+			    !TryAddOperator::Operation(*next_row_id, data_file.record_count, following_row_id)) {
+				throw InvalidConfigurationException("Cannot inherit row IDs from manifest '%s': invalid row ID range",
+				                                    manifest_path);
+			}
+			data_file.SetFirstRowId(*next_row_id);
+			next_row_id = following_row_id;
+		}
+		if (entry.status == IcebergManifestEntryStatusType::ADDED) {
+			entry.status = IcebergManifestEntryStatusType::EXISTING;
+		}
+	}
+	return entries;
 }
 
 void IcebergManifest::SetCountsFromEntries(const vector<IcebergManifestEntry> &entries) {
