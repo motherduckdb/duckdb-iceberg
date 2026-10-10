@@ -28,7 +28,8 @@ INSERT INTO my_datalake.default.rewrite_manifest_inheritance_upgrade VALUES (3, 
 statement ok
 BEGIN;
 
-# The rewrite follows the upgrade in the same transaction, so its replacement is V3.
+# Snapshots use the format active at their position in the transaction, so
+# upgrade before the rewrite to materialize the V2 files' inherited row IDs.
 statement ok
 ALTER TABLE my_datalake.default.rewrite_manifest_inheritance_upgrade SET ('format-version' = 3);
 
@@ -49,6 +50,11 @@ SET VARIABLE inherited_replacement = (
     SELECT DISTINCT manifest_path FROM iceberg_metadata(my_datalake.default.rewrite_manifest_inheritance_upgrade)
     WHERE status = 'EXISTING'
 );
+
+query T
+SELECT value FROM avro_metadata(getvariable('inherited_replacement')) WHERE key = 'format-version';
+----
+3
 
 # The replacement contains one existing file and one deleted file. Neither may
 # depend on the replacement's row-ID inheritance to retain its original identity.
