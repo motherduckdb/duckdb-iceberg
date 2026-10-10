@@ -87,10 +87,9 @@ public:
 	//! Snapshot this transaction is based on (the tip when the manifest list was first cached).
 	//! Drives the delete commit-retry safety check.
 	optional<int64_t> base_snapshot_id;
-	//! Starting identities for read-your-writes, captured with the base manifest list.
-	//! Commit attempts allocate their identities independently.
+	//! Starting sequence for transaction-local delete applicability, captured with the base manifest list.
+	//! This is not an assigned row lineage value.
 	sequence_number_t scan_sequence_number = 0;
-	int64_t scan_first_row_id = 0;
 
 	//! If we perform an update that relies on the current schema id staying unchanged
 	bool assert_schema_id = false;

@@ -174,15 +174,15 @@ DELETE FROM my_datalake.default.next_row_id_delete_insert WHERE id < 3;
 statement ok
 INSERT INTO my_datalake.default.next_row_id_delete_insert SELECT 100 + range FROM range(5);
 
-query I
-SELECT list(_row_id ORDER BY _row_id) FROM my_datalake.default.next_row_id_delete_insert WHERE id >= 100;
+query II
+SELECT count(*), count(_row_id) FROM my_datalake.default.next_row_id_delete_insert WHERE id >= 100;
 ----
-[10, 11, 12, 13, 14]
+5	0
 
 statement ok
 COMMIT;
 
-# The committed row IDs match the ones seen inside the transaction
+# Commit assigns the inserted rows their IDs without allocating for delete records.
 query I
 SELECT list(_row_id ORDER BY _row_id) FROM my_datalake.default.next_row_id_delete_insert WHERE id >= 100;
 ----
