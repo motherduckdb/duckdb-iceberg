@@ -38,6 +38,8 @@ jobs:
       extra_toolchains: 'python3'
       # Service-backed catalog tests run in BuildIceberg.yml's dedicated Linux jobs.
       # Keep distribution testing on the standard extension-ci-tools entry points.
+      # Slow tests run in the fixture catalog workflows.
+      test_config: '{"test_env_variables": {"T": "\"test/*\" \"exclude:*.test_slow\""}}'
 
   duckdb-stable-deploy:
     name: Deploy extension binaries
