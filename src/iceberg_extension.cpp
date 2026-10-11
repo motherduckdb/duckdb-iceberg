@@ -96,7 +96,6 @@ static void LoadRequiredExtension(DatabaseInstance &instance, const string &exte
 }
 
 static void LoadInternal(ExtensionLoader &loader) {
-	IcebergFixedType::Register(loader);
 	auto &instance = loader.GetDatabaseInstance();
 	LoadRequiredExtension(instance, "parquet");
 	LoadRequiredExtension(instance, "avro");
@@ -158,6 +157,9 @@ static void LoadInternal(ExtensionLoader &loader) {
 	    "equality-delete read path.",
 	    LogicalType::BOOLEAN, Value::BOOLEAN(false));
 #endif
+
+	// Iceberg Types
+	IcebergFixedType::Register(loader);
 
 	// Iceberg Table Functions
 	for (auto &fun : IcebergFunctions::GetTableFunctions(loader)) {

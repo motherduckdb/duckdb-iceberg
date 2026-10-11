@@ -100,44 +100,84 @@ SELECT NULL::ICEBERG_FIXED(2147483648);
 Error
 
 # Exercise non-constant vectors and string heap ownership.
-statement ok
-CREATE TABLE fixed_values AS SELECT repeat(chr(97 + (i % 2)::INTEGER), 32)::ICEBERG_FIXED(32) v FROM range(5000) t(i);
-
 query II
-SELECT count(*), min(octet_length(v)) FROM fixed_values WHERE v = repeat('a', 32)::BLOB;
+SELECT count(*), min(octet_length(v))
+FROM (SELECT repeat(chr(97 + (i % 2)::INTEGER), 32)::ICEBERG_FIXED(32) v FROM range(5000) t(i))
+WHERE v = repeat('a', 32)::BLOB;
 ----
 2500	32
 
-# The modifier must survive nested types and database serialization.
-statement ok
-ATTACH '{TEST_DIR}/iceberg_fixed.db' AS fixed_db;
-
-statement ok
-CREATE TABLE fixed_db.nested (f ICEBERG_FIXED(4), l ICEBERG_FIXED(2)[], s STRUCT(f ICEBERG_FIXED(3)), m MAP(ICEBERG_FIXED(1), ICEBERG_FIXED(2)));
-
-statement ok
-INSERT INTO fixed_db.nested VALUES ('abcd'::BLOB, ['xy'::BLOB], {'f': 'abc'::BLOB}, MAP(['k'::BLOB], ['vv'::BLOB]));
-
-statement ok
-DETACH fixed_db;
-
-statement ok
-ATTACH '{TEST_DIR}/iceberg_fixed.db' AS fixed_db;
-
+# The modifier must survive nested types.
 query TTTT
-SELECT typeof(f), typeof(l), typeof(s), typeof(m) FROM fixed_db.nested;
+SELECT typeof(f), typeof(l), typeof(s), typeof(m)
+FROM (
+	SELECT 'abcd'::BLOB::ICEBERG_FIXED(4) f, ['xy'::BLOB]::ICEBERG_FIXED(2)[] l,
+	       {'f': 'abc'::BLOB}::STRUCT(f ICEBERG_FIXED(3)) s,
+	       MAP(['k'::BLOB], ['vv'::BLOB])::MAP(ICEBERG_FIXED(1), ICEBERG_FIXED(2)) m
+);
 ----
 ICEBERG_FIXED(4)	ICEBERG_FIXED(2)[]	STRUCT(f ICEBERG_FIXED(3))	MAP(ICEBERG_FIXED(1), ICEBERG_FIXED(2))
 
-query TTTT
-SELECT f, l[1], s.f, m['k'::ICEBERG_FIXED(1)] FROM fixed_db.nested;
+statement error
+SELECT ['xyz'::BLOB]::ICEBERG_FIXED(2)[];
 ----
-abcd	xy	abc	vv
+Expected 2 bytes
+
+# ICEBERG_FIXED is only for Iceberg tables: it cannot be stored in DuckDB tables, in memory or in a database file.
+statement error
+CREATE TABLE fixed_table (f ICEBERG_FIXED(4));
+----
+ICEBERG_FIXED can only be used in Iceberg tables
 
 statement error
-INSERT INTO fixed_db.nested (f) VALUES ('abc'::BLOB);
+CREATE TABLE fixed_table (s STRUCT(l ICEBERG_FIXED(2)[]));
 ----
-Expected 4 bytes
+ICEBERG_FIXED can only be used in Iceberg tables
+
+statement error
+CREATE TABLE fixed_table AS SELECT 'abcd'::BLOB::ICEBERG_FIXED(4) f;
+----
+ICEBERG_FIXED can only be used in Iceberg tables
+
+statement error
+CREATE TYPE fixed_alias AS ICEBERG_FIXED(4);
+----
+ICEBERG_FIXED can only be used in Iceberg tables
+
+statement ok
+ATTACH '{TEST_DIR}/iceberg_fixed.db' AS fixed_db;
+
+statement error
+CREATE TABLE fixed_db.nested (m MAP(ICEBERG_FIXED(1), INTEGER));
+----
+ICEBERG_FIXED can only be used in Iceberg tables
+
+statement ok
+CREATE TABLE fixed_db.blobs (id INTEGER, s STRUCT(a INTEGER));
+
+statement error
+ALTER TABLE fixed_db.blobs ADD COLUMN f ICEBERG_FIXED(4);
+----
+ICEBERG_FIXED can only be used in Iceberg tables
+
+statement error
+ALTER TABLE fixed_db.blobs ADD COLUMN s.f ICEBERG_FIXED(4);
+----
+ICEBERG_FIXED can only be used in Iceberg tables
+
+statement error
+ALTER TABLE fixed_db.blobs ALTER COLUMN id TYPE ICEBERG_FIXED(4);
+----
+ICEBERG_FIXED can only be used in Iceberg tables
+
+# Casting to BLOB is the way to store the values.
+statement ok
+CREATE TABLE fixed_db.copied AS SELECT 'abcd'::BLOB::ICEBERG_FIXED(4)::BLOB f;
+
+query TT
+SELECT typeof(f), f FROM fixed_db.copied;
+----
+BLOB	abcd
 
 statement ok
 DETACH fixed_db;

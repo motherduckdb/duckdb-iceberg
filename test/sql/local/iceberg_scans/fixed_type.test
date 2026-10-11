@@ -11,7 +11,7 @@ FROM iceberg_scan('{WORKING_DIRECTORY}/data/persistent/partition_fixed_length_bi
 ICEBERG_FIXED(11)	11
 ICEBERG_FIXED(11)	11
 
-foreach fixed_type fixed fixed[] fixed[0] fixed[-1] fixed[abc] fixed[4 fixed[4]junk fixed[2147483648] fixed[999999999999999999999999]
+foreach fixed_type fixed fixed[] fixed[abc] fixed[4 fixed[4]junk fixed[+4] fixed[4.5] fixed[1_0] fixed[1e1] fixed[2147483648] fixed[999999999999999999999999]
 
 statement ok
 COPY (
@@ -23,5 +23,21 @@ statement error
 SELECT * FROM iceberg_scan('{TEST_DIR}/invalid_fixed.metadata.json');
 ----
 Invalid fixed type
+
+endloop
+
+# A zero or negative length is well-formed but rejected by the type itself.
+foreach fixed_type fixed[0] fixed[-1]
+
+statement ok
+COPY (
+	SELECT replace(content, '"timestamptz_ns"', '"{fixed_type}"')
+	FROM read_text('{WORKING_DIRECTORY}/data/persistent/timestamptz_ns/metadata/v1.metadata.json')
+) TO '{TEST_DIR}/invalid_fixed.metadata.json' (FORMAT CSV, HEADER false, QUOTE '', ESCAPE '');
+
+statement error
+SELECT * FROM iceberg_scan('{TEST_DIR}/invalid_fixed.metadata.json');
+----
+length must be a positive integer
 
 endloop
