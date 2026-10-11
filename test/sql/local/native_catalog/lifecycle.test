@@ -2,6 +2,8 @@
 # description: Native REST catalog activation, connection sharing, rollback and HTTP logging
 # group: [native_catalog]
 
+require-env CATALOG_TEST_CONFIG_SETUP mock
+
 include test/sql/init_requires
 
 statement ok

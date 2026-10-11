@@ -30,7 +30,6 @@
 #include "function/copy/iceberg_copy_function.hpp"
 #include "duckdb/planner/planner_extension.hpp"
 #include "planning/iceberg_planner.hpp"
-#include "testing/iceberg_test_catalog.hpp"
 
 namespace duckdb {
 
@@ -159,7 +158,6 @@ static void LoadInternal(ExtensionLoader &loader) {
 #endif
 
 	// Iceberg Table Functions
-	RegisterIcebergTestCatalog(loader);
 	for (auto &fun : IcebergFunctions::GetTableFunctions(loader)) {
 		loader.RegisterFunction(std::move(fun));
 	}

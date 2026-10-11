@@ -1,18 +1,31 @@
 # Native REST test catalog
 
-The native catalog implements the Python mock's REST contract inside DuckDB. It
-uses an `HTTPUtil` provider and `HTTPClient`, so Iceberg still constructs requests,
-serializes commits, parses responses, logs HTTP requests, and runs normal retry
-logic. Requests to `http://iceberg-mock.invalid` never open a socket. Once enabled,
+The native catalog implements the Python mock's REST contract in the separate
+`iceberg_mock` test extension. It uses an `HTTPUtil` provider and `HTTPClient`, so
+Iceberg still constructs requests, serializes commits, parses responses, logs
+HTTP requests, and runs normal retry logic.
+Requests to `http://iceberg-mock.invalid` never open a socket. Once enabled,
 other HTTP origins are rejected.
 HTTP filesystem sessions are rejected before HTTPFS consumes transport parameters;
 warehouse reads and writes use local files.
+
+The mock is built independently of Iceberg when `BUILD_UNITTESTS` is enabled
+(except for WebAssembly). Its sources and SQL helpers are not included in either
+Iceberg library. SQL tests load it from the build's local extension repository;
+the API executable links the mock, HTTPFS, and DuckDB's static library without
+linking Iceberg.
 
 Build first, then run the standard test target:
 
 ```sh
 make reldebug
 make test_reldebug
+```
+
+After configuring a test build, the mock can also be rebuilt on its own:
+
+```sh
+cmake --build build/reldebug --target iceberg_mock_loadable_extension
 ```
 
 The standard `test_release`, `test_debug`, `test_reldebug`, and `test_relassert`
@@ -43,10 +56,13 @@ cmake --build build/reldebug --target unittest_iceberg_native
 
 ## SQL test interfaces
 
-These interfaces are compiled into Iceberg but have no effect until invoked.
-They are test helpers, not a supported persistent catalog:
+Load the test extension before using its SQL helpers. The native test config
+does this automatically. These are test helpers, not a supported persistent
+catalog:
 
 ```sql
+LOAD iceberg_mock;
+
 CALL iceberg_test_catalog_init('/tmp/my-native-catalog-test');
 
 ATTACH '' AS my_datalake (

@@ -66,7 +66,3 @@ install(
   EXPORT "${DUCKDB_EXPORT_SET}"
   LIBRARY DESTINATION "${INSTALL_LIB_DIR}"
   ARCHIVE DESTINATION "${INSTALL_LIB_DIR}")
-
-if(BUILD_UNITTESTS AND NOT EMSCRIPTEN)
-  add_subdirectory(test/native_catalog)
-endif()

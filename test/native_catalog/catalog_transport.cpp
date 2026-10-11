@@ -1,4 +1,3 @@
-#include "testing/iceberg_test_catalog.hpp"
 #include "catalog_model.hpp"
 #include "duckdb/common/http_transport_manager.hpp"
 #include "duckdb/common/string_util.hpp"
@@ -242,13 +241,15 @@ static void Execute(ClientContext &context, TableFunctionInput &input, DataChunk
 }
 
 } // namespace iceberg_test
+} // namespace duckdb
 
-void RegisterIcebergTestCatalog(ExtensionLoader &loader) {
+extern "C" {
+DUCKDB_CPP_EXTENSION_ENTRY(iceberg_mock, loader) {
+	using namespace duckdb;
 	loader.RegisterFunction(TableFunction("iceberg_test_catalog_init", {LogicalType::VARCHAR}, iceberg_test::Execute,
 	                                      iceberg_test::Bind, iceberg_test::TestCatalogGlobalState::Init));
 	loader.RegisterFunction(TableFunction(
 	    "iceberg_test_catalog_request", {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
 	    iceberg_test::Execute, iceberg_test::Bind, iceberg_test::TestCatalogGlobalState::Init));
 }
-
-} // namespace duckdb
+}

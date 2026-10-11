@@ -105,6 +105,9 @@ TEST_CASE("Native catalog state belongs to the database, not its initializing co
 	auto root = TestRoot();
 	{
 		DuckDB database(nullptr);
+		// The mock must work independently of the Iceberg extension.
+		REQUIRE(database.ExtensionIsLoaded("iceberg_mock"));
+		REQUIRE_FALSE(database.ExtensionIsLoaded("iceberg"));
 		{
 			Connection initializer(database);
 			Query(initializer, "CALL iceberg_test_catalog_init('" + root + "')");
