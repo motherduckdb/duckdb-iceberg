@@ -1,0 +1,86 @@
+# name: test/sql/local/native_catalog/delete_filename_bounds.test
+# description: Positional-delete filename bounds preserve backslashes without interpreting BLOB escapes
+# group: [native_catalog]
+
+require-env CATALOG_TEST_CONFIG_SETUP mock
+
+include test/sql/init_requires
+
+# COPY normalizes these paths to the host's separators. On Windows, neither
+# invalid escapes nor hex-like path components may be interpreted as BLOB text.
+foreach version 2 3
+
+foreach escape invalid hex
+
+statement ok
+SET VARIABLE filename_bounds_path = '{TEMP_DIR}/filename_bounds_{version}_{escape}/'
+	|| CASE WHEN '{escape}' = 'invalid' THEN 'backslash\a' ELSE 'backslash\x41' END;
+
+statement ok
+CREATE TABLE my_datalake.default.delete_filename_bounds (id INTEGER) WITH (
+	'format-version' = '{version}',
+	'write.data.path' = getvariable('filename_bounds_path')
+);
+
+statement ok
+INSERT INTO my_datalake.default.delete_filename_bounds VALUES (1), (2), (3);
+
+statement ok
+SET VARIABLE original_data_path = (
+	SELECT file_path FROM iceberg_metadata(my_datalake.default.delete_filename_bounds)
+	WHERE content = 'DATA' AND status <> 'DELETED'
+);
+
+query I
+SELECT contains(getvariable('original_data_path'), chr(92))
+	= (SELECT platform LIKE 'windows%' FROM pragma_platform());
+----
+true
+
+statement ok
+DELETE FROM my_datalake.default.delete_filename_bounds WHERE id = 1;
+
+query I
+SELECT id FROM my_datalake.default.delete_filename_bounds ORDER BY id;
+----
+2
+3
+
+statement ok
+BEGIN;
+
+statement ok
+SET VARIABLE delete_manifests = (
+	SELECT list(DISTINCT manifest_path)
+	FROM iceberg_metadata(my_datalake.default.delete_filename_bounds)
+	WHERE manifest_content = 'DELETE'
+);
+
+# Filename metrics are the UTF-8 bytes of the referenced data path.
+query II
+SELECT
+	decode(data_file.lower_bounds[2147483646]) = getvariable('original_data_path'),
+	decode(data_file.upper_bounds[2147483646]) = getvariable('original_data_path')
+FROM read_avro(getvariable('delete_manifests'))
+WHERE status = 1;
+----
+true	true
+
+statement ok
+COMMIT;
+
+statement ok
+UPDATE my_datalake.default.delete_filename_bounds SET id = 20 WHERE id = 2;
+
+query I
+SELECT id FROM my_datalake.default.delete_filename_bounds ORDER BY id;
+----
+3
+20
+
+statement ok
+DROP TABLE my_datalake.default.delete_filename_bounds;
+
+endloop
+
+endloop
