@@ -1,5 +1,6 @@
 #include "function/iceberg_functions.hpp"
 
+#include "duckdb/common/multi_file/multi_file_reader.hpp"
 #include "duckdb/execution/execution_context.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/parallel/thread_context.hpp"
@@ -143,8 +144,19 @@ static void IcebergScanTasksFunction(ClientContext &context, TableFunctionInput 
 	}
 }
 
+//! The file virtual columns the reader can produce for any task: the data file's path as the task
+//! names it, and the row's position in that file -- the row id an Iceberg positional delete refers to.
+static virtual_column_map_t IcebergScanTasksVirtualColumns(ClientContext &, optional_ptr<FunctionData>) {
+	virtual_column_map_t result;
+	result.emplace(MultiFileReader::COLUMN_IDENTIFIER_FILENAME, TableColumn("filename", LogicalType::VARCHAR));
+	result.emplace(MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER,
+	               TableColumn("file_row_number", LogicalType::BIGINT));
+	return result;
+}
+
 TableFunctionSet IcebergFunctions::GetIcebergScanTasksFunction() {
 	TableFunction function("iceberg_scan_tasks", {LogicalType::ANY}, IcebergScanTasksFunction, IcebergScanTasksBind);
+	function.get_virtual_columns = IcebergScanTasksVirtualColumns;
 	function.init_global = [](ClientContext &, TableFunctionInitInput &input) -> unique_ptr<GlobalTableFunctionState> {
 		return make_uniq<IcebergScanTasksGlobalState>(input.column_indexes);
 	};

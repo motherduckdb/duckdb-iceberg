@@ -109,6 +109,12 @@ IcebergTaskExecutor::IcebergTaskExecutor(ClientContext &context, shared_ptr<Iceb
 	vector<LogicalType> types;
 	vector<Identifier> names;
 	bind = function.bind(context, bind_input, types, names);
+	//! The reader resolves a virtual column id through the bind data's map, as iceberg_scan's reader does
+	//! (IcebergTableSchemaVersion::GetScanFunction fills it the same way).
+	auto &multi_file_bind = bind->Cast<MultiFileBindData>();
+	MultiFileReader::GetVirtualColumns(context, multi_file_bind.reader_bind, multi_file_bind.virtual_columns);
+	multi_file_bind.virtual_columns.emplace(MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER,
+	                                        TableColumn("file_row_number", LogicalType::BIGINT));
 	for (idx_t i = 0; i < column_indexes.size(); i++) {
 		output_columns.push_back(i);
 	}
@@ -149,6 +155,15 @@ IcebergTaskExecutor::IcebergTaskExecutor(ClientContext &context, shared_ptr<Iceb
 		}
 	}
 	for (auto &column : column_indexes) {
+		if (column.IsVirtualColumn()) {
+			auto entry = multi_file_bind.virtual_columns.find(column.GetPrimaryIndex());
+			if (entry == multi_file_bind.virtual_columns.end()) {
+				throw InternalException("iceberg_scan_tasks: virtual column %llu is not one the reader produces",
+				                        column.GetPrimaryIndex());
+			}
+			scan_types.push_back(entry->second.type);
+			continue;
+		}
 		scan_types.push_back(types[column.GetPrimaryIndex()]);
 	}
 	TableFunctionInitInput init(bind.get(), column_indexes, {}, &filters);

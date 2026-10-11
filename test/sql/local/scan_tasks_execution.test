@@ -37,6 +37,15 @@ select id, value, nested.key, part, added from iceberg_scan_tasks(getvariable('s
 2	20	2	P	99
 3	30	3	P	99
 
+# The reader's file virtual columns: the data file as the task names it, and the row's position in it.
+query III
+select id, filename like '%task_data.parquet', file_row_number from iceberg_scan_tasks(getvariable('scan_task_list_1')) order by id;
+----
+0	true	0
+1	true	1
+2	true	2
+3	true	3
+
 # A physically empty file must also advance to the next task.
 statement ok
 copy (select 0::integer id where false) to '{TEST_DIR}/task_empty.parquet' (format parquet, field_ids {id:1});
