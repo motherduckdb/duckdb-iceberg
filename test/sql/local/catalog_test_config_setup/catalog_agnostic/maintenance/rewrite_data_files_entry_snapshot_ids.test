@@ -46,7 +46,8 @@ SET VARIABLE manifest_paths = (SELECT list(manifest_path) FROM manifests);
 # an entry's snapshot id, after inheriting from its manifest when null
 statement ok
 CREATE OR REPLACE TEMP TABLE entries AS
-SELECT e.status, coalesce(e.snapshot_id, m.added_snapshot_id) AS snapshot_id, e.data_file.file_path AS file_path,
+SELECT e.status, coalesce(e.snapshot_id, m.added_snapshot_id) AS snapshot_id,
+       replace(e.data_file.file_path, chr(92), '/') AS file_path,
        e.sequence_number, e.file_sequence_number
 FROM read_avro(getvariable('manifest_paths'), filename = true) e JOIN manifests m ON e.filename = m.manifest_path;
 
@@ -98,7 +99,8 @@ SET VARIABLE manifest_paths = (SELECT list(manifest_path) FROM manifests);
 
 statement ok
 CREATE OR REPLACE TEMP TABLE entries AS
-SELECT e.status, coalesce(e.snapshot_id, m.added_snapshot_id) AS snapshot_id, e.data_file.file_path AS file_path,
+SELECT e.status, coalesce(e.snapshot_id, m.added_snapshot_id) AS snapshot_id,
+       replace(e.data_file.file_path, chr(92), '/') AS file_path,
        e.sequence_number, e.file_sequence_number
 FROM read_avro(getvariable('manifest_paths'), filename = true) e JOIN manifests m ON e.filename = m.manifest_path;
 

@@ -27,7 +27,9 @@ test_mock:
 
 # The native backend owns its state inside each unittest DatabaseInstance.
 # It neither consults nor changes the active service catalog.
-MOCK_NATIVE_TEST_FILTER ?= *test/sql/local/catalog_test_config_setup/catalog_agnostic/*
+# LOAD_TESTS also registers absolute aliases. Select the repository-relative
+# tests once, matching the paths in the catalog config's skip list on every OS.
+MOCK_NATIVE_TEST_FILTER ?= test/sql/local/catalog_test_config_setup/catalog_agnostic/*
 .PHONY: test_mock_native test_mock_native_release test_mock_native_debug test_mock_native_reldebug test_mock_native_relassert
 test_mock_native_release test_mock_native_debug test_mock_native_reldebug test_mock_native_relassert:
 	$(MAKE) test_mock_native MOCK_TEST_BINARY="$(PROJ_DIR)build/$(patsubst test_mock_native_%,%,$@)/test/unittest"
@@ -37,7 +39,7 @@ test_mock_native:
 		echo "Native mock catalog tests are skipped."; \
 	else \
 		"$(MOCK_TEST_BINARY)" --test-config "$(PROJ_DIR)test/configs/mock_native.json" \
-			"*test/sql/local/native_catalog/*" && \
+			"test/sql/local/native_catalog/*" && \
 		"$(MOCK_TEST_BINARY)" --test-config "$(PROJ_DIR)test/configs/mock_native.json" \
 			"$(MOCK_NATIVE_TEST_FILTER)" "exclude:*.test_slow"; \
 	fi

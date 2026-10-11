@@ -37,7 +37,7 @@ To run or focus only the native catalog suite:
 
 ```sh
 make test_mock_native_reldebug \
-  MOCK_NATIVE_TEST_FILTER='*test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/*'
+  MOCK_NATIVE_TEST_FILTER='test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/*'
 ```
 
 The target also runs the native protocol and lifecycle SQL tests. It uses
@@ -45,6 +45,8 @@ The target also runs the native protocol and lifecycle SQL tests. It uses
 `.catalogs/.active_catalog` or start/stop services. The config inherits the Python
 mock's capabilities and explicit exclusions through a relative `extends` entry.
 Unlike the Python config, it does not skip unexpected unsupported errors.
+Filters use repository-relative paths so each test runs once and the config's
+relative skip paths also apply on Windows.
 
 The standalone API tests exercise independent database lifetimes and publication
 failure after completing the first file of a multi-table commit:
