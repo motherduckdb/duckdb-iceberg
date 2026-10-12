@@ -423,9 +423,9 @@ partitioned_manifest_entry_map_t IcebergDelete::GenerateDeleteManifestEntries(Ic
 			data_file.content_offset = delete_file.content_offset.GetIndex();
 		}
 
-		// set lower and upper bound for the filename column
-		data_file.lower_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB(data_file_name);
-		data_file.upper_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB(data_file_name);
+		// Filename bounds contain raw UTF-8 bytes, not escaped BLOB literals.
+		data_file.lower_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB_RAW(data_file_name);
+		data_file.upper_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB_RAW(data_file_name);
 		// set referenced_data_file
 		data_file.referenced_data_file = data_file_name;
 		// copy partition info from the data file being deleted

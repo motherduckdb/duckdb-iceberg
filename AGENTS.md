@@ -93,6 +93,8 @@ Supported REST catalog markers are `fixture`, `lakekeeper`, `nessie`, and `polar
 
 The test-only `mock` marker is also supported for SQL tests. `make mock` / `make mock-stop` manage a Python standard-library server without Docker, using the endpoint and skip policy in `test/configs/mock.json` and fresh run directories under `.catalogs/mock/`. CI runs the catalog-agnostic SQL suite excluding `.test_slow`; the mock has no Spark generator or Python integration profile. See `scripts/mock_rest_catalog/README.md`.
 
+`make test_mock_native_reldebug` runs the same supported catalog suite using an in-process C++ HTTP provider, without services or networking. `test/configs/mock_native.json` inherits the Python mock's capabilities and skips. Native targets do not change `.catalogs/.active_catalog`. Run `build/reldebug/test/unittest_iceberg_native` for database-lifetime and publication-failure API tests. See `test/native_catalog/README.md`.
+
 ```shell
 make fixture-data
 make lakekeeper-data

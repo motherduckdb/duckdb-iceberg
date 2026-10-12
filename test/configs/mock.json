@@ -29,6 +29,12 @@
 	],
 	"skip_tests": [
 		{
+			"reason": "Recreating the old identifier uses an explicit table location, which both mock backends reject; native protocol tests cover rename metadata preservation separately",
+			"paths": [
+				"test/sql/local/catalog_test_config_setup/catalog_agnostic/alter/rename_table/rename_preserves_metadata.test"
+			]
+		},
+		{
 			"reason": "The test hard-codes the fixture catalog's initial field-ID order; the mock preserves the client's valid field IDs",
 			"paths": [
 				"test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_unknown_type_omitted_from_data_files.test"

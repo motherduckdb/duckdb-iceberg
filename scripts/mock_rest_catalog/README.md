@@ -1,5 +1,10 @@
 # Mock REST catalog
 
+For tests without any external service, use
+[`make test_mock_native_reldebug`](../../test/native_catalog/README.md).
+The native backend runs inside DuckDB and shares this server's capability and
+skip policy. This Python backend remains available for testing over real HTTP.
+
 This test-only Python standard-library server exercises the real Iceberg HTTP client
 and local Parquet/Avro writes without Docker, Spark, or an object store.
 
@@ -33,12 +38,13 @@ make test_mock_reldebug \
 
 `test_mock_release`, `test_mock_debug`, and `test_mock_relassert` select the other
 build directories. `test_mock` accepts `MOCK_TEST_BINARY` for an already-built
-unittest executable, including a binary built in a separate core checkout.
+unittest executable.
 These targets follow `make mock`'s active-catalog switching behavior.
 
-The distribution workflow uses the standard `extension-ci-tools` test phase on
-each platform. It does not start the mock. The service-backed mock suite runs in
-the dedicated Linux `test-mock-catalog.yml` job, which invokes
+The distribution workflow uses the standard Make test targets to run the native
+catalog suite and the delegated extension tests. It does not start the Python
+mock. The service-backed mock suite runs in the dedicated Linux
+`test-mock-catalog.yml` job, which invokes
 `make test_mock_relassert` against the existing build artifact and retains failure
 diagnostics. Catalog files run serially against one server.
 
@@ -46,23 +52,8 @@ This follows DuckLake's split between its
 [distribution workflow](https://github.com/duckdb/ducklake/blob/main/.github/workflows/MainDistributionPipeline.yml)
 and dedicated Linux
 [catalog tests](https://github.com/duckdb/ducklake/blob/main/.github/workflows/Catalogs.yml).
-Native distribution tests remain enabled on all configured platforms; full mock
-catalog coverage is provided by the Linux job. The explicit `test_mock_*` targets
-remain available for local use, and `SKIP_TESTS=1` skips them.
-
-`LOAD_TESTS` registers extension tests; it does not start a catalog or select a
-test config. DuckDB's current `.github/config/extensions/iceberg.cmake` still
-comments out Iceberg's `LOAD_TESTS`. For core CI adoption, use an Iceberg revision
-containing this mock, enable its tests and dependencies, then invoke the same
-Make target from a dedicated Linux catalog-test step:
-
-```sh
-make -C /path/to/iceberg test_mock \
-  MOCK_TEST_BINARY=/path/to/duckdb/build/release/test/unittest
-```
-
-The core binary and loaded Iceberg/HTTPFS/Avro extensions must be built together.
-No separate test runner is required.
+The explicit `test_mock_*` targets remain available for local use, and
+`SKIP_TESTS=1` skips them.
 
 ## Catalog behavior
 
