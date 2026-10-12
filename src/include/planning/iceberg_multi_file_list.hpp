@@ -36,7 +36,7 @@ public:
 	optional_ptr<IcebergTableSchemaVersion> GetTable() const;
 	void Bind(vector<LogicalType> &return_types, vector<Identifier> &names);
 	shared_ptr<IcebergDeleteData> GetExistingPositionalDeleteData(const string &file_path) const;
-	IcebergDeletePlan ProcessDeletes(const IcebergScanTask &task) const;
+	IcebergDeletePlan ProcessDeletes(const IcebergFileScanTask &task) const;
 	IcebergScanPlanner &GetScanPlanner();
 	const IcebergScanPlanner &GetScanPlanner() const;
 

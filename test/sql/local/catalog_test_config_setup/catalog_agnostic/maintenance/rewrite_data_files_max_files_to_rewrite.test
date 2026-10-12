@@ -124,7 +124,7 @@ query I
 select count(*)
 from iceberg_metadata('my_datalake.default.rewrite_max_files_part')
 where content = 'DATA' and status <> 'DELETED'
-  and file_path like '%/category=a/%';
+  and replace(file_path, chr(92), '/') like '%/category=a/%';
 ----
 4
 
@@ -132,7 +132,7 @@ query I
 select count(*)
 from iceberg_metadata('my_datalake.default.rewrite_max_files_part')
 where content = 'DATA' and status <> 'DELETED'
-  and file_path like '%/category=b/%';
+  and replace(file_path, chr(92), '/') like '%/category=b/%';
 ----
 6
 

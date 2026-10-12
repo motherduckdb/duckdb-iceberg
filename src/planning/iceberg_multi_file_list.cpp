@@ -1,5 +1,5 @@
 #include "planning/iceberg_multi_file_list.hpp"
-#include "planning/scan_plan/iceberg_scan_task.hpp"
+#include "planning/iceberg_multi_file_reader.hpp"
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
@@ -81,8 +81,10 @@ shared_ptr<IcebergDeleteData> IcebergMultiFileList::GetExistingPositionalDeleteD
 	return delete_execution->GetExistingPositionalDeleteData(file_path);
 }
 
-IcebergDeletePlan IcebergMultiFileList::ProcessDeletes(const IcebergScanTask &task) const {
-	return delete_execution->ProcessDeletes(*planner, task);
+IcebergDeletePlan IcebergMultiFileList::ProcessDeletes(const IcebergFileScanTask &task) const {
+	IcebergDeleteExecutionContext execution {planner->GetContext(), FileSystem::GetFileSystem(planner->GetContext()),
+	                                         planner->GetPath(), planner->GetOptions(), planner->GetMetadata()};
+	return delete_execution->ProcessDeletes(execution, task.original_file_path, task.delete_files);
 }
 
 unique_ptr<IcebergMultiFileList>
@@ -122,7 +124,7 @@ IcebergMultiFileList::DynamicFilterPushdown(MultiFileDynamicPushdownInfo &pushdo
 		    ExpressionFilter::GetExpressionFilter(entry.Filter(), "IcebergMultiFileList::DynamicFilterPushdown");
 		auto column_id = column_indexes[entry.GetIndex().GetIndex()];
 		auto previous = planner->Filters().TryGetFilterByColumnIndex(column_id);
-		if (!previous || !filter.Equals(*previous)) {
+		if (!previous || !IcebergTableFilters::FiltersEqual(filter, *previous)) {
 			filters_changed = true;
 		}
 	}
@@ -148,21 +150,11 @@ unique_ptr<MultiFileList> IcebergMultiFileList::ComplexFilterPushdown(ClientCont
 }
 
 OpenFileInfo IcebergMultiFileList::GetFileInternal(idx_t file_id) const {
-	auto task = planner->GetDataFileTask(file_id);
+	auto task = planner->GetDataFileDescriptor(file_id);
 	if (!task) {
 		return OpenFileInfo();
 	}
-	auto &manifest_entry = task->manifest_entry;
-	auto &data_file = manifest_entry.entry.data_file;
-	sequence_number_t sequence_number;
-	planner->WithManifestFile(task->manifest_entry, IcebergManifestContentType::DATA,
-	                          [&sequence_number, &manifest_entry](const IcebergManifestFile &manifest) {
-		                          sequence_number = manifest_entry.entry.GetSequenceNumber(manifest);
-	                          });
-
-	return IcebergScanTaskFormat::FileInfo(
-	    task->file_path, data_file.file_format, data_file.file_size_in_bytes,
-	    manifest_entry.HasFirstRowId() ? optional<int64_t>(manifest_entry.GetFirstRowId()) : nullopt, sequence_number);
+	return IcebergMultiFileReader::FileInfo(*task);
 }
 
 vector<OpenFileInfo> IcebergMultiFileList::GetAllFiles() const {

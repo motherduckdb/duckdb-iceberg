@@ -20,7 +20,8 @@ namespace duckdb {
 static void LoadMissingManifestCounts(ClientContext &context, const IcebergTableMetadata &metadata,
                                       const IcebergSnapshotScanInfo &snapshot_info,
                                       IcebergManifestListEntry &manifest_list_entry) {
-	if (manifest_list_entry.file.counts && manifest_list_entry.file.counts->Complete()) {
+	auto &counts = manifest_list_entry.GetFile().counts;
+	if (counts && counts->Complete()) {
 		return;
 	}
 	vector<IcebergManifestListEntry> manifest_files;
@@ -36,12 +37,11 @@ static void LoadMissingManifestCounts(ClientContext &context, const IcebergTable
 	}
 
 	manifest_list_entry = std::move(manifest_files[0]);
-	manifest_list_entry.file.SetCountsFromEntries(manifest_list_entry.GetManifestEntries());
+	manifest_list_entry.GetManifest().SetCountsFromEntries(manifest_list_entry.GetManifestEntries());
 }
 
 static optional<int64_t> LoadExistingManifestList(ClientContext &context, const IcebergTableMetadata &metadata,
-                                                  vector<IcebergManifestListEntry> &existing_manifest_list,
-                                                  int64_t &next_row_id) {
+                                                  vector<IcebergManifestListEntry> &existing_manifest_list) {
 	existing_manifest_list.clear();
 
 	auto current_snapshot = metadata.GetLatestSnapshot();
@@ -63,25 +63,17 @@ static optional<int64_t> LoadExistingManifestList(ClientContext &context, const 
 		return base_snapshot_id;
 	}
 
-	//! Deal with upgraded tables, if the snapshot originated from V2
+	//! Validate committed identities without assigning provisional IDs to upgraded manifests.
 	for (auto &manifest_list_entry : existing_manifest_list) {
-		auto &manifest_file = manifest_list_entry.file;
+		auto &manifest_file = manifest_list_entry.GetManifest();
 		if (manifest_file.content != IcebergManifestContentType::DATA) {
 			continue;
 		}
-		if (manifest_file.first_row_id) {
-			continue;
-		}
-		if (current_snapshot->first_row_id) {
+		if (!manifest_file.first_row_id && current_snapshot->first_row_id) {
 			throw InvalidConfigurationException(
 			    "Table is corrupted, snapshot has 'first-row-id' but not all 'manifest_file' "
 			    "entries have a 'first_row_id'");
 		}
-		D_ASSERT(manifest_file.counts && manifest_file.counts->added_rows_count &&
-		         manifest_file.counts->existing_rows_count);
-		manifest_file.first_row_id = next_row_id;
-		next_row_id += *manifest_file.counts->added_rows_count;
-		next_row_id += *manifest_file.counts->existing_rows_count;
 	}
 	return base_snapshot_id;
 }
@@ -90,9 +82,7 @@ IcebergTransactionData::IcebergTransactionData(ClientContext &context, IcebergTr
                                                const IcebergTable &table_info)
     : context(context), transaction(transaction), table_info(table_info) {
 	initial_table_uuid = table_info.table_metadata.table_uuid;
-	if (table_info.table_metadata.next_row_id) {
-		next_row_id = *table_info.table_metadata.next_row_id;
-	}
+	initial_format_version = table_info.table_metadata.iceberg_version;
 	initial_schema_id = table_info.table_metadata.GetCurrentSchemaId();
 	initial_default_spec_id = table_info.table_metadata.default_spec_id;
 	if (table_info.table_metadata.HasSortOrder()) {
@@ -138,12 +128,12 @@ bool IcebergTransactionData::ContainsDelete() const {
 	return false;
 }
 
-bool IcebergTransactionData::IsFileInvalidated(const string &file_path) const {
-	return manifest_deletes.IsInvalidated(file_path);
+bool IcebergTransactionData::IsFileInvalidated(const IcebergFileIdentity &file) const {
+	return manifest_deletes.IsInvalidated(file);
 }
 
 bool IcebergTransactionData::SupportsAppendRetry() const {
-	if (!requirements.empty() || pending_current_schema_id.has_value()) {
+	if (!requirements.empty()) {
 		return false;
 	}
 	if (updates.empty()) {
@@ -181,21 +171,16 @@ void IcebergTransactionData::CacheExistingManifestList(lock_guard<mutex> &guard,
 	if (!alters.empty()) {
 		return;
 	}
-	int64_t loaded_next_row_id = 0;
-	if (metadata.next_row_id) {
-		loaded_next_row_id = *metadata.next_row_id;
-	}
-	base_snapshot_id = LoadExistingManifestList(context, metadata, existing_manifest_list, loaded_next_row_id);
-	next_row_id = loaded_next_row_id;
+	base_snapshot_id = LoadExistingManifestList(context, metadata, existing_manifest_list);
+	scan_sequence_number = metadata.last_sequence_number + 1;
 }
 
 void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
                                          vector<IcebergManifestEntry> &&data_files,
                                          IcebergManifestDeletes &&altered_manifests) {
-	//! NOTE: Lock has to be held to make sure the rows are assigned the correct row ids
+	//! Serialize snapshot operations so transaction scans retain their insertion order.
 	lock_guard<mutex> guard(lock);
 
-	//! Generate a new snapshot id
 	auto &table_metadata = table_info.table_metadata;
 	CacheExistingManifestList(guard, table_metadata);
 
@@ -211,15 +196,9 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 		                              static_cast<uint8_t>(operation));
 	};
 
-	auto temp_sequence_number = table_metadata.last_sequence_number + alters.size() + 1;
-
-	auto &fs = FileSystem::GetFileSystem(context);
 	auto manifest_metadata = IcebergManifestMetadata::FromTableMetadata(table_metadata, manifest_content_type);
-	auto manifest_file = IcebergManifestListEntry::CreateFromEntries(
-	    fs, temp_sequence_number, table_metadata, manifest_metadata, std::move(data_files), next_row_id);
-
 	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info, operation);
-	add_snapshot->AddManifestFile(std::move(manifest_file));
+	add_snapshot->AddPendingManifest(IcebergPendingManifest(manifest_metadata, std::move(data_files)));
 	// make sure we are still inserting into the current schema
 	if (table_metadata.current_snapshot_id) {
 		TableAddAssertCurrentSchemaId();
@@ -227,18 +206,15 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 	AddSnapshotUpdate(std::move(add_snapshot), std::move(altered_manifests));
 }
 
-void IcebergTransactionData::AddDeleteManifestFiles(IcebergAddSnapshot &add_snapshot,
-                                                    partitioned_manifest_entry_map_t &&delete_files,
-                                                    sequence_number_t sequence_number) {
+void IcebergTransactionData::AddPendingDeleteManifests(IcebergAddSnapshot &add_snapshot,
+                                                       partitioned_manifest_entry_map_t &&delete_files) {
 	auto &table_metadata = table_info.table_metadata;
-	auto &fs = FileSystem::GetFileSystem(context);
 	//! One manifest per partition spec: a manifest declares a single spec, and the entries it holds carry
 	//! partition values in that spec.
 	for (auto &entry : delete_files) {
 		auto manifest_metadata =
 		    IcebergManifestMetadata::FromTableMetadata(table_metadata, IcebergManifestContentType::DELETE, entry.first);
-		add_snapshot.AddManifestFile(IcebergManifestListEntry::CreateFromEntries(
-		    fs, sequence_number, table_metadata, manifest_metadata, std::move(entry.second), next_row_id));
+		add_snapshot.AddPendingManifest(IcebergPendingManifest(manifest_metadata, std::move(entry.second)));
 	}
 }
 
@@ -254,16 +230,14 @@ void IcebergTransactionData::AddSnapshotUpdate(unique_ptr<IcebergAddSnapshot> ad
 
 void IcebergTransactionData::AddDeleteSnapshot(partitioned_manifest_entry_map_t &&delete_files,
                                                IcebergManifestDeletes &&altered_manifests) {
-	//! NOTE: Lock has to be held to make sure the rows are assigned the correct row ids
+	//! Serialize snapshot operations so transaction scans retain their insertion order.
 	lock_guard<mutex> guard(lock);
 
 	auto &table_metadata = table_info.table_metadata;
 	CacheExistingManifestList(guard, table_metadata);
 
-	const auto sequence_number = table_metadata.last_sequence_number + alters.size() + 1;
-
 	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info, IcebergSnapshotOperationType::DELETE);
-	AddDeleteManifestFiles(*add_snapshot, std::move(delete_files), sequence_number);
+	AddPendingDeleteManifests(*add_snapshot, std::move(delete_files));
 	// make sure we are still inserting into the current schema
 	if (table_metadata.current_snapshot_id) {
 		TableAddAssertCurrentSchemaId();
@@ -274,26 +248,19 @@ void IcebergTransactionData::AddDeleteSnapshot(partitioned_manifest_entry_map_t 
 void IcebergTransactionData::AddUpdateSnapshot(partitioned_manifest_entry_map_t &&delete_files,
                                                vector<IcebergManifestEntry> &&data_files,
                                                IcebergManifestDeletes &&altered_manifests) {
-	//! NOTE: Lock has to be held to make sure the rows are assigned the correct row ids
+	//! Serialize snapshot operations so transaction scans retain their insertion order.
 	lock_guard<mutex> guard(lock);
 
-	//! Generate a new snapshot id
 	auto &table_metadata = table_info.table_metadata;
-	auto last_sequence_number = table_metadata.last_sequence_number;
 
 	CacheExistingManifestList(guard, table_metadata);
 
-	const auto sequence_number = last_sequence_number + alters.size() + 1;
-
-	auto &fs = FileSystem::GetFileSystem(context);
 	auto data_manifest_metadata =
 	    IcebergManifestMetadata::FromTableMetadata(table_metadata, IcebergManifestContentType::DATA);
 
 	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info);
-	AddDeleteManifestFiles(*add_snapshot, std::move(delete_files), sequence_number);
-	// Add a manifest_file for the new insert data
-	add_snapshot->AddManifestFile(IcebergManifestListEntry::CreateFromEntries(
-	    fs, sequence_number, table_metadata, data_manifest_metadata, std::move(data_files), next_row_id));
+	AddPendingDeleteManifests(*add_snapshot, std::move(delete_files));
+	add_snapshot->AddPendingManifest(IcebergPendingManifest(data_manifest_metadata, std::move(data_files)));
 	AddSnapshotUpdate(std::move(add_snapshot), std::move(altered_manifests));
 }
 
@@ -302,11 +269,12 @@ void IcebergTransactionData::TableAddSchema(int32_t schema_id) {
 	auto add_schema_update = make_uniq<AddSchemaUpdate>(schema.Copy(), table_info.table_metadata.last_column_id);
 	updates.push_back(std::move(add_schema_update));
 	assert_schema_id = true;
-	pending_current_schema_id = schema_id;
+	TableSetCurrentSchema(schema_id);
 }
 
 void IcebergTransactionData::TableSetCurrentSchema(int32_t schema_id) {
-	pending_current_schema_id = schema_id;
+	// Later specs and sort orders are validated against the schema current at this point in the transaction.
+	updates.push_back(make_uniq<SetCurrentSchema>(schema_id));
 }
 
 void IcebergTransactionData::TableAssignUUID() {
@@ -407,10 +375,10 @@ void IcebergTransactionData::TableRollbackToSnapshot(int64_t snapshot_id) {
 	}
 
 	auto current = metadata.GetLatestSnapshot();
-	if (!current || !current->snapshot_id) {
+	if (!current) {
 		throw InvalidInputException("Cannot roll back table with no current snapshot");
 	}
-	auto current_snapshot_id = *current->snapshot_id;
+	auto current_snapshot_id = current->snapshot_id;
 	if (!IsAncestorOfCurrentSnapshot(metadata, snapshot_id, current_snapshot_id)) {
 		throw InvalidInputException("Cannot roll back to snapshot, not an ancestor of the current state: %lld",
 		                            snapshot_id);

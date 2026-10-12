@@ -32,10 +32,20 @@ execute scan_plan_batches_query;
 ----
 2050	2050	2050	2050	true
 
+# Keep planning credentials alive until the task list has been consumed.
+statement ok
+begin;
+
+statement ok
+set variable scan_task_list_1 = (select list(task) from (select * from iceberg_scan_plan('my_datalake.default.scan_plan_batches')) task);
+
 query II
-select count(*), sum(id) from iceberg_scan_tasks((select * from iceberg_scan_plan('my_datalake.default.scan_plan_batches')));
+select count(*), sum(id) from iceberg_scan_tasks(getvariable('scan_task_list_1'));
 ----
 2050	2100225
+
+statement ok
+commit;
 
 statement ok
 drop table my_datalake.default.scan_plan_batches;

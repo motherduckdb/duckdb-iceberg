@@ -11,7 +11,7 @@ include test/sql/init_requires
 require json
 
 statement ok
-set unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=true;
+set __iceberg_unsafe_enable_equality_deletes=true;
 
 statement ok
 drop table if exists my_datalake.default.scan_plan_equality;
@@ -44,7 +44,7 @@ from (select unnest(delete_files) d from iceberg_scan_plan('my_datalake.default.
 2	PARQUET	[2]	true	true	true
 
 statement ok
-set unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=false;
+set __iceberg_unsafe_enable_equality_deletes=false;
 
 statement ok
 drop table my_datalake.default.scan_plan_equality;

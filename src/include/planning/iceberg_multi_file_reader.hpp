@@ -94,7 +94,8 @@ public:
 	IcebergMultiFileReader(shared_ptr<TableFunctionInfo> function_info);
 
 public:
-	static unique_ptr<MultiFileReader> CreateInstance(const TableFunction &table);
+	static unique_ptr<MultiFileReader> CreateInstance(const BoundTableFunction &table);
+	static OpenFileInfo FileInfo(const IcebergDataFileDescriptor &file);
 	static vector<PartitionStatistics> IcebergGetPartitionStats(ClientContext &context, GetPartitionStatsInput &input);
 
 public:
@@ -154,11 +155,6 @@ private:
 	AddEqualityDeleteColumn(const IcebergTableMetadataSchemas &schemas, int32_t field_id,
 	                        vector<MultiFileColumnDefinition> &scan_columns, vector<ColumnIndex> &scan_column_ids,
 	                        MultiFileReaderData &reader_data, ClientContext &context);
-	static unordered_map<int32_t, Value>
-	PartitionConstants(int32_t partition_spec_id, const BoundIcebergManifestEntry &bound_manifest_entry,
-	                   const unordered_map<int32_t, IcebergPartitionSpec> &partition_specs,
-	                   const IcebergTableMetadataSchemas &schemas,
-	                   const vector<MultiFileColumnDefinition> &global_columns, ClientContext &context);
 	static void ApplyPartitionConstants(const unordered_map<int32_t, Value> &constants,
 	                                    MultiFileReaderData &reader_data,
 	                                    const vector<MultiFileColumnDefinition> &global_columns,
@@ -169,7 +165,6 @@ public:
 	IcebergOptions options;
 
 private:
-	unique_ptr<MultiFileColumnDefinition> row_id_column;
 	unique_ptr<MultiFileColumnDefinition> last_updated_sequence_number_column;
 };
 

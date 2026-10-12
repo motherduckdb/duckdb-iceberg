@@ -16,6 +16,9 @@
 #include "duckdb/planner/expression_binder/table_function_binder.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 
+#include "duckdb/parser/parsed_data/create_view_info.hpp"
+#include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
+
 #include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
@@ -23,6 +26,7 @@
 #include "catalog/rest/api/iceberg_type.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
 #include "common/iceberg_default.hpp"
+#include "iceberg_options.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
 
 namespace duckdb {
@@ -69,7 +73,7 @@ bool IcebergSchemaEntry::HandleCreateConflict(CatalogTransaction &transaction, C
 	}
 	switch (on_conflict) {
 	case OnCreateConflict::ERROR_ON_CONFLICT:
-		throw CatalogException("%s with name \"%s\" already exists", CatalogTypeToString(existing_entry->type),
+		throw CatalogException("%s with name \"%s\" already exists!", CatalogTypeToString(existing_entry->type),
 		                       entry_name);
 	case OnCreateConflict::IGNORE_ON_CONFLICT: {
 		// ignore - skip without throwing an error
@@ -130,7 +134,66 @@ void IcebergSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {
 }
 
 void IcebergSchemaEntry::DropEntry(ClientContext &context, DropInfo &info, bool delete_entry) {
-	tables.DropEntry(context, info, delete_entry);
+	auto entry_name = info.GetQualifiedName().Name().GetIdentifierName();
+
+	// CASCADE is not part of the Iceberg REST spec — reject before any type-specific handling.
+	if (info.cascade) {
+		switch (info.type) {
+		case CatalogType::VIEW_ENTRY:
+			throw NotImplementedException("DROP VIEW <view_name> CASCADE is not supported for Iceberg views currently");
+		case CatalogType::TABLE_ENTRY:
+			throw NotImplementedException(
+			    "DROP TABLE <table_name> CASCADE is not supported for Iceberg tables currently");
+		default:
+			throw NotImplementedException("DROP %s CASCADE is not supported for Iceberg currently",
+			                              CatalogTypeToString(info.type));
+		}
+	}
+
+	switch (info.type) {
+	case CatalogType::VIEW_ENTRY: {
+		auto &transaction = IcebergTransaction::Get(context, catalog).Cast<IcebergTransaction>();
+		auto view_key = IcebergTable::GetTableKey(catalog.Cast<IcebergCatalog>(), namespace_items, entry_name);
+
+		// Check if view was created in this transaction — just remove from created_views
+		if (transaction.created_views.erase(view_key) > 0) {
+			transaction.InvalidateViewEntry(view_key);
+			return;
+		}
+
+		// Dropping a known view does not require permission to list the namespace.
+		if (!tables.GetViewEntry(context, entry_name)) {
+			EntryLookupInfo lookup(CatalogType::TABLE_ENTRY, QualifiedName(Identifier(entry_name)));
+			if (tables.GetEntry(context, lookup)) {
+				throw CatalogException("Existing object \"%s\" is of type Table, trying to drop type View", entry_name);
+			}
+			if (info.if_not_found == OnEntryNotFound::RETURN_NULL) {
+				return;
+			}
+			throw CatalogException("View %s does not exist", entry_name);
+		}
+
+		if (delete_entry) {
+			transaction.InvalidateViewEntry(view_key);
+		} else {
+			IcebergTransaction::DeletedViewInfo info;
+			info.namespace_items = namespace_items;
+			info.view_name = entry_name;
+			transaction.deleted_views.emplace(view_key, std::move(info));
+		}
+		return;
+	}
+	case CatalogType::TABLE_ENTRY: {
+		EntryLookupInfo lookup(CatalogType::TABLE_ENTRY, QualifiedName(Identifier(entry_name)));
+		if (!tables.GetEntry(context, lookup) && tables.GetViewEntry(context, entry_name)) {
+			throw CatalogException("Existing object \"%s\" is of type View, trying to drop type Table", entry_name);
+		}
+		tables.DropEntry(context, info, delete_entry);
+		return;
+	}
+	default:
+		throw NotImplementedException("DropEntry not implemented for CatalogType '%s'", CatalogTypeToString(info.type));
+	}
 }
 
 optional_ptr<CatalogEntry> IcebergSchemaEntry::CreateFunction(CatalogTransaction transaction,
@@ -154,7 +217,72 @@ optional_ptr<CatalogEntry> IcebergSchemaEntry::CreateIndex(CatalogTransaction tr
 }
 
 optional_ptr<CatalogEntry> IcebergSchemaEntry::CreateView(CatalogTransaction transaction, CreateViewInfo &info) {
-	throw NotImplementedException("Create View");
+	if (info.security_type != ViewSecurityType::REGULAR_VIEW) {
+		throw NotImplementedException("Secure views are not supported in Iceberg catalogs");
+	}
+	if (info.sql.empty() && !info.query) {
+		throw BinderException("Cannot create view in Iceberg without a query");
+	}
+	auto &context = transaction.GetContext();
+
+	if (info.on_conflict == OnCreateConflict::REPLACE_ON_CONFLICT) {
+		throw NotImplementedException(
+		    "CREATE OR REPLACE not supported in DuckDB-Iceberg. Please use separate Drop and Create Statements");
+	}
+
+	auto existing_entry = GetEntry(transaction, CatalogType::TABLE_ENTRY, info.GetViewName());
+	if (existing_entry) {
+		if (info.on_conflict == OnCreateConflict::IGNORE_ON_CONFLICT) {
+			// CREATE VIEW IF NOT EXISTS also ignores a table with the same name.
+			return existing_entry;
+		}
+		// ERROR_ON_CONFLICT
+		throw CatalogException("%s with name \"%s\" already exists!", CatalogTypeToString(existing_entry->type),
+		                       info.GetViewName().GetIdentifierName());
+	}
+
+	// The view is only sent at commit, so reject catalogs without a create view endpoint here.
+	const auto &ic_catalog = catalog.Cast<IcebergCatalog>();
+	if (!ic_catalog.supported_urls.count("POST /v1/{prefix}/namespaces/{namespace}/views")) {
+		throw NotImplementedException("This Iceberg REST catalog server does not support creating views");
+	}
+
+	// IF NOT EXISTS also skips binding when the view exists, so handle conflicts first.
+	if (info.binding_mode == CreateViewBindingMode::SKIP_BINDING) {
+		throw NotImplementedException("DEFER_BINDING is not supported for Iceberg views: an output schema is required");
+	}
+
+	// Generate default column names if the caller gave us types but no names.
+	if (info.names.empty() && !info.types.empty()) {
+		for (idx_t i = 0; i < info.types.size(); i++) {
+			if (i < info.aliases.size() && !info.aliases[i].GetIdentifierName().empty()) {
+				info.names.push_back(info.aliases[i]);
+			} else {
+				info.names.emplace_back("col" + to_string(i));
+			}
+		}
+	}
+
+	// Track the view in the transaction
+	auto &iceberg_transaction = GetICTransaction(transaction);
+	auto view_key = IcebergTable::GetTableKey(catalog.Cast<IcebergCatalog>(), namespace_items,
+	                                          info.GetViewName().GetIdentifierName());
+
+	auto view_info = unique_ptr_cast<CreateInfo, CreateViewInfo>(info.Copy());
+	// Preserve the SELECT SQL — ViewCatalogEntry::Initialize() will move the query out,
+	// so we need the SQL string available at commit time for the REST API request.
+	if (view_info->query) {
+		view_info->sql = view_info->query->ToString();
+	}
+
+	iceberg_transaction.created_views.erase(view_key);
+	iceberg_transaction.created_views.emplace(view_key, std::move(view_info));
+
+	// A DROP followed by CREATE can replace an entry already bound in this transaction.
+	iceberg_transaction.InvalidateViewEntry(view_key);
+
+	// Return a pointer to an owned entry (avoid dangling pointer)
+	return tables.GetViewEntry(transaction.GetContext(), info.GetViewName().GetIdentifierName());
 }
 
 optional_ptr<CatalogEntry> IcebergSchemaEntry::CreateType(CatalogTransaction transaction, CreateTypeInfo &info) {
@@ -257,14 +385,15 @@ static void VerifySchemaEvolution(const IcebergTableMetadata &table_metadata, co
 				    partition_field->GetPartitionSpecFieldName(), partition_field->partition_field_id);
 				break;
 			}
-			if (target_type.id() == LogicalTypeId::TIMESTAMP_NS) {
-				if (table_metadata.iceberg_version >= 3) {
-					return;
-				}
-				extra_info = " (DATE to TIMESTAMP_NS is a Iceberg V3 feature)";
-				break;
+			// Promotion of `date` to `timestamp` or `timestamp_ns` is only valid for
+			// format version 3 and later (see the Iceberg spec's type promotion table).
+			if (table_metadata.iceberg_version >= 3) {
+				return;
 			}
-			return;
+			extra_info =
+			    StringUtil::Format(" (DATE to %s is an Iceberg V3 feature)",
+			                       target_type.id() == LogicalTypeId::TIMESTAMP_NS ? "TIMESTAMP_NS" : "TIMESTAMP");
+			break;
 		}
 		break;
 	}
@@ -311,9 +440,9 @@ static void ThrowIfColumnReferencedBySortOrder(const IcebergTableMetadata &table
 
 void IntroduceNewSchema(IcebergTable &updated_table, IcebergTransactionData &transaction_data,
                         shared_ptr<IcebergTableSchema> new_schema) {
-	auto new_schema_id = new_schema->schema_id;
-
 	auto &schemas = updated_table.table_metadata.GetSchemasMutable();
+	auto new_schema_id = static_cast<int32_t>(updated_table.GetMaxSchemaId() + 1);
+	new_schema->schema_id = new_schema_id;
 	auto &result_schema = schemas.AddSchemaOrGetExisting(std::move(new_schema));
 	if (result_schema.schema_id == new_schema_id) {
 		// Update the Table Metadata to have our new schema
@@ -327,24 +456,31 @@ void IntroduceNewSchema(IcebergTable &updated_table, IcebergTransactionData &tra
 
 template <typename T>
 IcebergColumnDefinition &ResolveColumn(T &alter_table_info, const shared_ptr<IcebergTableSchema> &new_schema) {
-	auto &column_name = alter_table_info.column_name;
+	auto &column_path = alter_table_info.column_path;
 
-	auto column_p = new_schema->GetMutableFromPath({column_name}, nullptr);
+	auto column_p = new_schema->GetMutableFromPath(column_path, nullptr);
 	if (!column_p) {
 		throw BinderException("Binder Error: Table \"%s\" does not have a column with name \"%s\"",
-		                      alter_table_info.GetAlterEntryData().GetQualifiedName().ToString(), column_name);
+		                      alter_table_info.GetAlterEntryData().GetQualifiedName().ToString(),
+		                      column_path.back().GetIdentifierName());
 	}
 	auto &column = *column_p;
 	return column;
 }
 
 void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) {
+	if (info.type == AlterType::ALTER_VIEW) {
+		throw NotImplementedException("ALTER VIEW is not supported in Iceberg catalogs");
+	}
 	auto &irc_transaction = GetICTransaction(transaction);
 	auto &context = transaction.GetContext();
 
 	EntryLookupInfo lookup(CatalogType::TABLE_ENTRY, QualifiedName(info.GetQualifiedName().Name()));
 	auto catalog_entry = tables.GetEntry(context, lookup);
 	if (!catalog_entry) {
+		if (tables.GetViewEntry(context, info.GetQualifiedName().Name().GetIdentifierName())) {
+			throw NotImplementedException("ALTER VIEW is not supported in Iceberg catalogs");
+		}
 		throw CatalogException("Table with name \"%s\" does not exist!", info.GetQualifiedName().Name());
 	}
 	auto &table_entry = catalog_entry->Cast<IcebergTableSchemaVersion>();
@@ -383,7 +519,6 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		auto &comment_info = info.Cast<SetColumnCommentInfo>();
 
 		auto new_schema = current_schema.Copy();
-		new_schema->schema_id++;
 
 		auto column_p = new_schema->GetMutableFromPath({comment_info.column_name}, nullptr);
 		if (!column_p) {
@@ -409,6 +544,10 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 	switch (alter_table_info.alter_table_type) {
 	case AlterTableType::SET_PARTITIONED_BY: {
 		auto &partition_info = alter_table_info.Cast<SetPartitionedByInfo>();
+		if (updated_table.table_metadata.iceberg_version < 2) {
+			throw NotImplementedException("Partition evolution on Iceberg V%d tables",
+			                              updated_table.table_metadata.iceberg_version);
+		}
 
 		// Ensure schema is the same as current
 		transaction_data.TableAddAssertCurrentSchemaId();
@@ -446,8 +585,8 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 
 		auto &last_column_id = updated_table.table_metadata.last_column_id;
 		if (!last_column_id.IsValid()) {
-			throw InternalException("No last_column_id when trying to ADD COLUMN %s",
-			                        add_column_info.GetQualifiedName().Name());
+			throw InvalidConfigurationException("No last_column_id when trying to ADD COLUMN %s",
+			                                    add_column_info.GetQualifiedName().Name());
 		}
 		auto field_id = last_column_id.GetIndex() + 1;
 		auto next_field_id = [&field_id]() -> idx_t {
@@ -460,7 +599,6 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		last_column_id = field_id - 1;
 
 		auto new_schema = current_schema.Copy();
-		new_schema->schema_id++;
 		new_schema->columns.push_back(std::move(new_iceberg_column));
 
 		IntroduceNewSchema(updated_table, transaction_data, new_schema);
@@ -514,7 +652,6 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		auto &change_type_info = alter_table_info.Cast<ChangeColumnTypeInfo>();
 
 		auto new_schema = current_schema.Copy();
-		new_schema->schema_id++;
 
 		if (change_type_info.expression->GetExpressionType() != ExpressionType::OPERATOR_CAST) {
 			throw NotImplementedException("ALTER TYPE with a USING expression is not supported for Iceberg tables");
@@ -524,7 +661,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			throw NotImplementedException("ALTER TYPE with a USING expression is not supported for Iceberg tables");
 		}
 		auto &column_path = cast.Child().Cast<ColumnRefExpression>().ColumnNames();
-		if (column_path[0] != change_type_info.column_name) {
+		if (column_path != change_type_info.column_path) {
 			throw NotImplementedException("ALTER TYPE with a USING expression is not supported for Iceberg tables");
 		}
 		auto column_p = new_schema->GetMutableFromPath(column_path, nullptr);
@@ -539,7 +676,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			// Preserve the existing field ID, but allocate fresh IDs for any new nested fields.
 			auto &last_column_id = updated_table.table_metadata.last_column_id;
 			if (!last_column_id.IsValid()) {
-				throw InternalException("No last_column_id when evolving UNKNOWN column %s", column.name);
+				throw InvalidConfigurationException("No last_column_id when evolving UNKNOWN column %s", column.name);
 			}
 			auto field_id = last_column_id.GetIndex() + 1;
 			bool root = true;
@@ -580,7 +717,6 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		auto &drop_not_null_info = alter_table_info.Cast<DropNotNullInfo>();
 
 		auto new_schema = current_schema.Copy();
-		new_schema->schema_id++;
 
 		auto &column = ResolveColumn<DropNotNullInfo>(drop_not_null_info, new_schema);
 
@@ -595,7 +731,6 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		auto &new_name = rename_info.new_name;
 
 		auto new_schema = current_schema.Copy();
-		new_schema->schema_id++;
 
 		auto column_p = new_schema->GetMutableFromPath({column_name}, nullptr);
 		if (!column_p) {
@@ -611,18 +746,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		column.name = new_name.GetIdentifierName();
 		column.RewriteType();
 
-		auto new_schema_id = new_schema->schema_id;
-
-		auto &result_schema =
-		    updated_table.table_metadata.GetSchemasMutable().AddSchemaOrGetExisting(std::move(new_schema));
-		if (result_schema.schema_id == new_schema_id) {
-			// Update the Table Metadata to have our new schema
-			updated_table.CreateSchemaVersion(result_schema);
-			transaction_data.TableAddSchema(new_schema_id);
-		} else {
-			transaction_data.TableSetCurrentSchema(result_schema.schema_id);
-		}
-		updated_table.table_metadata.SetCurrentSchemaId(result_schema.schema_id);
+		IntroduceNewSchema(updated_table, transaction_data, new_schema);
 		return;
 	}
 	case AlterTableType::SET_TABLE_OPTIONS: {
@@ -667,6 +791,10 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 				throw InvalidInputException("Cannot downgrade format-version from %d to %d", current_version,
 				                            new_format_version.GetIndex());
 			}
+			if ((int32_t)new_format_version.GetIndex() > MAX_ICEBERG_FORMAT_VERSION) {
+				throw InvalidInputException("Cannot upgrade format-version to %d, the highest supported version is %d",
+				                            new_format_version.GetIndex(), MAX_ICEBERG_FORMAT_VERSION);
+			}
 			updated_table.table_metadata.iceberg_version = (int32_t)new_format_version.GetIndex();
 			transaction_data.TableAddUpradeFormatVersion();
 		}
@@ -695,16 +823,15 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 	}
 	case AlterTableType::SET_DEFAULT: {
 		auto &set_default_info = alter_table_info.Cast<SetDefaultInfo>();
-		auto &column_name = set_default_info.column_name;
+		auto &column_path = set_default_info.column_path;
 		auto &expression = set_default_info.expression;
 
 		auto new_schema = current_schema.Copy();
-		new_schema->schema_id++;
 
-		auto column_p = new_schema->GetMutableFromPath({column_name}, nullptr);
+		auto column_p = new_schema->GetMutableFromPath(column_path, nullptr);
 		if (!column_p) {
 			throw BinderException("Binder Error: Table \"%s\" does not have a column with name \"%s\"",
-			                      table_entry.name.GetIdentifierName(), column_name.GetIdentifierName());
+			                      table_entry.name.GetIdentifierName(), column_path.back().GetIdentifierName());
 		}
 		auto &column = *column_p;
 
@@ -712,18 +839,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		auto default_constant_value = binder.Evaluate(expression.get(), column.type);
 		column.SetWriteDefault(default_constant_value, updated_table.table_metadata.iceberg_version);
 
-		auto new_schema_id = new_schema->schema_id;
-
-		auto &result_schema =
-		    updated_table.table_metadata.GetSchemasMutable().AddSchemaOrGetExisting(std::move(new_schema));
-		if (result_schema.schema_id == new_schema_id) {
-			// Update the Table Metadata to have our new schema
-			updated_table.CreateSchemaVersion(result_schema);
-			transaction_data.TableAddSchema(new_schema_id);
-		} else {
-			transaction_data.TableSetCurrentSchema(result_schema.schema_id);
-		}
-		updated_table.table_metadata.SetCurrentSchemaId(result_schema.schema_id);
+		IntroduceNewSchema(updated_table, transaction_data, new_schema);
 		return;
 	}
 	case AlterTableType::ADD_FIELD: {
@@ -733,7 +849,6 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		auto &if_field_not_exists = add_field_info.if_field_not_exists;
 
 		auto new_schema = current_schema.Copy();
-		new_schema->schema_id++;
 
 		auto parent_path = column_path;
 		column_path.emplace_back(new_field.GetName());
@@ -764,8 +879,8 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 
 		auto &last_column_id = updated_table.table_metadata.last_column_id;
 		if (!last_column_id.IsValid()) {
-			throw InternalException("No last_column_id when trying to ADD COLUMN %s",
-			                        StringUtil::Join(IdentifiersToStrings(column_path), "."));
+			throw InvalidConfigurationException("No last_column_id when trying to ADD COLUMN %s",
+			                                    StringUtil::Join(IdentifiersToStrings(column_path), "."));
 		}
 		auto field_id = last_column_id.GetIndex() + 1;
 		auto next_field_id = [&field_id]() -> idx_t {
@@ -787,7 +902,6 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		auto &new_name = rename_field_info.new_name;
 
 		auto new_schema = current_schema.Copy();
-		new_schema->schema_id++;
 
 		auto column_p = new_schema->GetMutableFromPath(column_path, nullptr);
 		if (!column_p) {
@@ -826,7 +940,6 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		auto &if_column_exists = remove_field_info.if_column_exists;
 
 		auto new_schema = current_schema.Copy();
-		new_schema->schema_id++;
 
 		D_ASSERT(column_path.size() > 1);
 		auto parent_path = column_path;
@@ -890,6 +1003,10 @@ void IcebergSchemaEntry::Scan(ClientContext &context, CatalogType type,
 	if (!CatalogTypeIsSupported(type)) {
 		return;
 	}
+	if (type == CatalogType::VIEW_ENTRY) {
+		GetCatalogSet(type).ScanViews(context, callback);
+		return;
+	}
 	GetCatalogSet(type).Scan(context, callback);
 }
 void IcebergSchemaEntry::Scan(CatalogType type, const std::function<void(CatalogEntry &)> &callback) {
@@ -904,8 +1021,26 @@ optional_ptr<CatalogEntry> IcebergSchemaEntry::LookupEntry(CatalogTransaction tr
 	}
 	auto &context = transaction.GetContext();
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
+
+	// For VIEW_ENTRY, try the view path
+	if (type == CatalogType::VIEW_ENTRY) {
+		auto view_entry = GetCatalogSet(type).GetViewEntry(context, lookup_info.GetEntryName());
+		if (view_entry) {
+			return view_entry;
+		}
+		// Tables and views share a namespace; DROP must distinguish a wrong type
+		// from a missing entry, including when IF EXISTS was specified.
+		return GetCatalogSet(type).GetEntry(context, lookup_info);
+	}
+
+	// For TABLE_ENTRY, use the existing table lookup
 	auto table_entry = GetCatalogSet(type).GetEntry(context, lookup_info);
 	if (!table_entry) {
+		// Try looking up as a view — DuckDB sometimes looks up views as TABLE_ENTRY
+		auto view_entry = GetCatalogSet(type).GetViewEntry(context, lookup_info.GetEntryName());
+		if (view_entry) {
+			return view_entry;
+		}
 		// verify the schema exists
 		if (!IRCAPI::VerifySchemaExistence(context, ic_catalog, name.GetIdentifierName())) {
 			// set exists to false here

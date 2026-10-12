@@ -1,4 +1,6 @@
 #include "catalog/rest/iceberg_catalog.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
+#include "catalog/rest/transaction/iceberg_transaction.hpp"
 #include "duckdb/execution/physical_plan_generator.hpp"
 #include "duckdb/planner/operator/logical_merge_into.hpp"
 
@@ -19,7 +21,22 @@ PhysicalOperator &IcebergCatalog::PlanMergeInto(ClientContext &context, Physical
 	if (update_delete_count > 1) {
 		throw NotImplementedException("MERGE INTO with Iceberg only supports a single UPDATE/DELETE action currently");
 	}
-	return Catalog::PlanMergeInto(context, planner, op, plan);
+	auto &irc_transaction = IcebergTransaction::Get(context, *this);
+	// an insert-only MERGE writes no delete files
+	if (update_delete_count > 0) {
+		auto &table_entry = op.table.Cast<IcebergTableSchemaVersion>();
+		auto &updated_table = irc_transaction.GetOrCreateAlter().GetOrInitializeTable(table_entry.table_info);
+		VerifyMergeOnRead(updated_table.table_metadata, table_entry.name.GetIdentifierName(), WRITE_MERGE_MODE);
+	}
+	irc_transaction.planning_merge_into = true;
+	try {
+		auto &result = Catalog::PlanMergeInto(context, planner, op, plan);
+		irc_transaction.planning_merge_into = false;
+		return result;
+	} catch (...) {
+		irc_transaction.planning_merge_into = false;
+		throw;
+	}
 }
 
 } // namespace duckdb

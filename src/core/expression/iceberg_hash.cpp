@@ -1,6 +1,5 @@
 #include "core/expression/iceberg_hash.hpp"
 
-#include "utf8proc_wrapper.hpp"
 #include "common/iceberg_math.hpp"
 
 #include "duckdb/common/exception.hpp"
@@ -306,6 +305,20 @@ Value IcebergHash::BucketValue(const Value &v, int32_t num_buckets) {
 	return Value::INTEGER((h & 0x7FFFFFFF) % num_buckets);
 }
 
+//! Byte length of the first `width` code points
+idx_t IcebergHash::TruncatedStringLength(const char *data, idx_t size, idx_t width) {
+	idx_t code_points = 0;
+	for (idx_t i = 0; i < size; i++) {
+		if ((static_cast<unsigned char>(data[i]) & 0xC0) != 0x80) {
+			if (code_points == width) {
+				return i;
+			}
+			code_points++;
+		}
+	}
+	return size;
+}
+
 //! Canonical truncate computation shared by TruncateTransform::ApplyTransform and the scalar function.
 //! Input must not be null; throws for unsupported types.
 Value IcebergHash::TruncateValue(const Value &v, idx_t width) {
@@ -333,13 +346,11 @@ Value IcebergHash::TruncateValue(const Value &v, idx_t width) {
 	}
 	case LogicalTypeId::VARCHAR: {
 		auto s = v.GetValue<string>();
-		size_t num_chars = 0;
-		for (auto cluster : Utf8Proc::GraphemeClusters(s.data(), s.size())) {
-			if (++num_chars >= static_cast<size_t>(width)) {
-				return Value(s.substr(0, cluster.end));
-			}
+		auto length = TruncatedStringLength(s.data(), s.size(), width);
+		if (length == s.size()) {
+			return v;
 		}
-		return v;
+		return Value(s.substr(0, length));
 	}
 	default:
 		throw NotImplementedException("iceberg_truncate: unsupported type %s", v.type().ToString());

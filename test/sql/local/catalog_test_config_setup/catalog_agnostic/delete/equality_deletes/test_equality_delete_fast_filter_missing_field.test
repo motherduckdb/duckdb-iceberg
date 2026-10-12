@@ -12,7 +12,7 @@ statement ok
 set iceberg_use_server_side_scan_planning=false;
 
 statement ok
-set unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=true;
+set __iceberg_unsafe_enable_equality_deletes=true;
 
 statement ok
 drop table if exists my_datalake.default.eq_fast_missing;

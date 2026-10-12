@@ -19,7 +19,6 @@
 #include "iceberg_logging.hpp"
 #include "planning/iceberg_multi_file_list.hpp"
 #include "planning/pruning/iceberg_predicate.hpp"
-#include "core/expression/iceberg_value.hpp"
 #include "core/expression/iceberg_predicate_stats.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
 #include "duckdb/common/multi_file/multi_file_states.hpp"
@@ -27,6 +26,31 @@
 #include <cstdint>
 
 namespace duckdb {
+
+OpenFileInfo IcebergMultiFileReader::FileInfo(const IcebergDataFileDescriptor &file) {
+	if (!StringUtil::CIEquals(file.file_format, "parquet")) {
+		throw NotImplementedException("File format '%s' not supported, only supports 'parquet' currently",
+		                              file.file_format);
+	}
+	if (file.file_path.empty() || file.file_size_in_bytes < 0) {
+		throw InvalidInputException("Iceberg data file requires a path and nonnegative size");
+	}
+	OpenFileInfo result(file.file_path);
+	result.extended_info = make_shared_ptr<ExtendedOpenFileInfo>();
+	auto &options = result.extended_info->options;
+	options["file_size"] = Value::UBIGINT(file.file_size_in_bytes);
+	options["row_lineage_mode"] = Value::UTINYINT(static_cast<uint8_t>(file.row_lineage_mode));
+	options["validate_external_file_cache"] = Value::BOOLEAN(false);
+	options["etag"] = Value("");
+	options["last_modified"] = Value::TIMESTAMP(timestamp_t(0));
+	if (file.first_row_id) {
+		options["first_row_id"] = Value::BIGINT(*file.first_row_id);
+	}
+	if (file.sequence_number) {
+		options["sequence_number"] = Value::BIGINT(*file.sequence_number);
+	}
+	return result;
+}
 
 IcebergEqualityDeleteFastFilter::BuildResult IcebergMultiFileReaderGlobalState::GetOrCreateEqualityDeleteFastFilter(
     const vector<reference<const IcebergEqualityDeleteFile>> &delete_files,
@@ -85,14 +109,12 @@ static ColumnIndex CreateColumnIndex(const MultiFileColumnPath &column_path) {
 
 IcebergMultiFileReader::IcebergMultiFileReader(shared_ptr<TableFunctionInfo> function_info)
     : function_info(function_info) {
-	row_id_column = make_uniq<MultiFileColumnDefinition>("_row_id", LogicalType::BIGINT);
-	row_id_column->identifier = Value::INTEGER(MultiFileReader::ROW_ID_FIELD_ID);
 	last_updated_sequence_number_column =
 	    make_uniq<MultiFileColumnDefinition>("_last_updated_sequence_number", LogicalType::BIGINT);
 	last_updated_sequence_number_column->identifier = Value::INTEGER(MultiFileReader::LAST_UPDATED_SEQUENCE_NUMBER_ID);
 }
 
-unique_ptr<MultiFileReader> IcebergMultiFileReader::CreateInstance(const TableFunction &table) {
+unique_ptr<MultiFileReader> IcebergMultiFileReader::CreateInstance(const BoundTableFunction &table) {
 	return make_uniq<IcebergMultiFileReader>(table.function_info);
 }
 
@@ -143,6 +165,11 @@ IcebergMultiFileReader::InitializeGlobalState(ClientContext &context, const Mult
 	return make_uniq<IcebergMultiFileReaderGlobalState>(file_list);
 }
 
+// TODO: Audit equality-delete projection against Iceberg's normal projection rules, including name mapping.
+// Dropped delete columns must still be read; genuinely absent columns default to NULL. The physical-field
+// presence checks and NULL shortcuts below are not yet verified for all name-mapped files. In particular,
+// a field resolvable through name mapping must not be treated as absent. Cover both the expression and
+// fast-filter paths when addressing this limitation.
 IcebergEqualityDeleteReadColumn IcebergMultiFileReader::AddEqualityDeleteColumn(
     const IcebergTableMetadataSchemas &schemas, int32_t field_id, vector<MultiFileColumnDefinition> &scan_columns,
     vector<ColumnIndex> &scan_column_ids, MultiFileReaderData &reader_data, ClientContext &context) {
@@ -247,50 +274,6 @@ static void ApplyFieldMapping(MultiFileColumnDefinition &col, const vector<Icebe
 	}
 }
 
-unordered_map<int32_t, Value> IcebergMultiFileReader::PartitionConstants(
-    int32_t partition_spec_id, const BoundIcebergManifestEntry &bound_manifest_entry,
-    const unordered_map<int32_t, IcebergPartitionSpec> &partition_specs, const IcebergTableMetadataSchemas &schemas,
-    const vector<MultiFileColumnDefinition> &global_columns, ClientContext &context) {
-	auto spec = partition_specs.find(partition_spec_id);
-	if (spec == partition_specs.end()) {
-		throw InvalidConfigurationException("'partition_spec_id' %d doesn't exist in the metadata", partition_spec_id);
-	}
-	unordered_map<int32_t, idx_t> field_indexes;
-	for (idx_t i = 0; i < spec->second.fields.size(); i++) {
-		field_indexes[spec->second.fields[i].source_id] = i;
-	}
-	unordered_map<int32_t, Value> constants;
-	for (auto &item : field_indexes) {
-		auto &field = spec->second.fields[item.second];
-		if (field.transform != IcebergTransformType::IDENTITY) {
-			continue;
-		}
-		optional_ptr<const LogicalType> type;
-		for (auto &column : global_columns) {
-			if (!column.identifier.IsNull() && column.GetIdentifierFieldId() == item.first) {
-				type = column.type;
-				break;
-			}
-		}
-		if (!type) {
-			auto column = schemas.FindColumnByFieldId(item.first);
-			if (column) {
-				type = column->type;
-			}
-		}
-		if (!type) {
-			continue;
-		}
-		for (auto &partition : bound_manifest_entry.entry.data_file.partition_info) {
-			if (partition.field_id == field.partition_field_id && !partition.value.IsNull()) {
-				constants.emplace(item.first, IcebergValue::TransformPartitionValue(partition.value, *type));
-				break;
-			}
-		}
-	}
-	return constants;
-}
-
 void IcebergMultiFileReader::ApplyPartitionConstants(const unordered_map<int32_t, Value> &constants,
                                                      MultiFileReaderData &reader_data,
                                                      const vector<MultiFileColumnDefinition> &global_columns,
@@ -330,15 +313,9 @@ ReaderInitializeType IcebergMultiFileReader::InitializeReader(MultiFileReaderDat
 	if (!task) {
 		throw InternalException("Unable to find Iceberg scan task for file index %llu", file_id);
 	}
-	int32_t partition_spec_id;
-	planner.WithManifestFile(
-	    task->manifest_entry, IcebergManifestContentType::DATA,
-	    [&](const IcebergManifestFile &manifest) { partition_spec_id = manifest.partition_spec_id; });
-	auto constants = PartitionConstants(partition_spec_id, task->manifest_entry, metadata.partition_specs,
-	                                    metadata.GetSchemas(), global_columns, context);
 	return InitializeTaskReader(reader_data, bind_data, global_columns, global_column_ids, table_filters, context,
 	                            gstate, metadata.GetSchemas(), metadata.mappings, multi_file_list.ProcessDeletes(*task),
-	                            constants);
+	                            task->partition_constants);
 }
 
 ReaderInitializeType IcebergMultiFileReader::InitializeTaskReader(
@@ -558,7 +535,7 @@ bool IcebergMultiFileReader::ParseOption(const Identifier &key, const Value &val
 		return true;
 	}
 	if (key == "version") {
-		this->options.table_version = StringValue::Get(val);
+		this->options.table_version = StringValue::Get(val.DefaultCastAs(LogicalType::VARCHAR));
 		this->options.version_explicitly_set = true;
 		return true;
 	}
@@ -613,6 +590,39 @@ static unique_ptr<Expression> ConstructVirtualRowIdExpression(ClientContext &con
 MultiFileReaderVirtualColumnBinding IcebergMultiFileReader::GetVirtualColumnExpression(
     ClientContext &context, MultiFileReaderData &reader_data, const vector<MultiFileColumnDefinition> &local_columns,
     const idx_t column_id, const LogicalType &type, MultiFileLocalIndex local_idx) {
+	if (column_id == COLUMN_IDENTIFIER_ROW_ID || column_id == COLUMN_IDENTIFIER_LAST_SEQUENCE_NUMBER) {
+		if (!reader_data.file_to_be_opened.extended_info) {
+			throw InternalException("Missing extended info for row lineage");
+		}
+		auto &options = reader_data.file_to_be_opened.extended_info->options;
+		auto mode_entry = options.find("row_lineage_mode");
+		if (mode_entry == options.end()) {
+			throw InternalException("Missing row lineage mode for data file");
+		}
+		auto mode = static_cast<IcebergRowLineageMode>(mode_entry->second.GetValue<uint8_t>());
+		switch (mode) {
+		case IcebergRowLineageMode::NONE:
+			return MultiFileReaderVirtualColumnBinding(Value(type));
+		case IcebergRowLineageMode::STORED_ONLY: {
+			//! A pending rewrite may store an assigned ID, but missing lineage stays unknown until commit.
+			auto field_id = column_id == COLUMN_IDENTIFIER_ROW_ID ? MultiFileReader::ROW_ID_FIELD_ID
+			                                                      : MultiFileReader::LAST_UPDATED_SEQUENCE_NUMBER_ID;
+			for (idx_t i = 0; i < local_columns.size(); i++) {
+				auto &column = local_columns[i];
+				if (!column.identifier.IsNull() && column.identifier.GetValue<int32_t>() == field_id) {
+					vector<idx_t> column_ids {i};
+					return MultiFileReaderVirtualColumnBinding(
+					    make_uniq<BoundReferenceExpression>(type, local_idx.GetIndex()), std::move(column_ids));
+				}
+			}
+			return MultiFileReaderVirtualColumnBinding(Value(type));
+		}
+		case IcebergRowLineageMode::COMMITTED:
+			break;
+		default:
+			throw InternalException("Invalid row lineage mode");
+		}
+	}
 	if (column_id == COLUMN_IDENTIFIER_ROW_ID) {
 		// row id column
 		// this is computed as row_id_start + file_row_number OR read from the file
@@ -623,17 +633,16 @@ MultiFileReaderVirtualColumnBinding IcebergMultiFileReader::GetVirtualColumnExpr
 		}
 		auto &options = reader_data.file_to_be_opened.extended_info->options;
 		auto entry = options.find("first_row_id");
+		if (entry == options.end()) {
+			//! A data file without a 'first_row_id' reads NULL for '_row_id'
+			return MultiFileReaderVirtualColumnBinding(Value(LogicalType::BIGINT));
+		}
 		for (idx_t i = 0; i < local_columns.size(); i++) {
 			auto &col = local_columns[i];
 			if (col.identifier.IsNull()) {
 				continue;
 			}
 			if (col.identifier.GetValue<int32_t>() == MultiFileReader::ROW_ID_FIELD_ID) {
-				if (entry == options.end()) {
-					//! There is no parent 'first_row_id' to inherit, simply reference the existing column
-					return MultiFileReaderVirtualColumnBinding(*row_id_column.get());
-				}
-
 				auto computed_row_id =
 				    ConstructVirtualRowIdExpression(context, type, entry->second, local_idx.GetIndex() + 1);
 				// Create COALESCE(_row_id, computed_row_id)
@@ -648,10 +657,6 @@ MultiFileReaderVirtualColumnBinding IcebergMultiFileReader::GetVirtualColumnExpr
 				return MultiFileReaderVirtualColumnBinding(std::move(coalesce_expr), std::move(column_ids));
 			}
 		}
-		if (entry == options.end()) {
-			//! No first-row-id can be found, version must be <3, just return null
-			return MultiFileReaderVirtualColumnBinding(Value(LogicalType::BIGINT));
-		}
 
 		vector<idx_t> column_ids;
 		column_ids.push_back(MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER);
@@ -664,6 +669,10 @@ MultiFileReaderVirtualColumnBinding IcebergMultiFileReader::GetVirtualColumnExpr
 			throw InternalException("Missing extended info for data file");
 		}
 		auto &options = reader_data.file_to_be_opened.extended_info->options;
+		if (options.find("first_row_id") == options.end()) {
+			//! A data file without a 'first_row_id' reads NULL for '_last_updated_sequence_number'
+			return MultiFileReaderVirtualColumnBinding(Value(LogicalType::BIGINT));
+		}
 		auto entry = options.find("sequence_number");
 		for (idx_t i = 0; i < local_columns.size(); i++) {
 			auto &col = local_columns[i];

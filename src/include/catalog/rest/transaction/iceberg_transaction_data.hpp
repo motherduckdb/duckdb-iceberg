@@ -30,7 +30,7 @@ public:
 	bool RetryStateMatches(const IcebergTable &table_info) const;
 	//! Whether this transaction stages a DELETE snapshot; gates the commit-retry safety check.
 	bool ContainsDelete() const;
-	bool IsFileInvalidated(const string &file_path) const;
+	bool IsFileInvalidated(const IcebergFileIdentity &file) const;
 
 	void AddSnapshot(IcebergSnapshotOperationType operation, vector<IcebergManifestEntry> &&data_files,
 	                 IcebergManifestDeletes &&altered_manifests);
@@ -60,13 +60,13 @@ public:
 
 private:
 	void CacheExistingManifestList(lock_guard<mutex> &guard, const IcebergTableMetadata &metadata);
-	//! Writes one delete manifest per partition spec present in 'delete_files'.
-	void AddDeleteManifestFiles(IcebergAddSnapshot &add_snapshot, partitioned_manifest_entry_map_t &&delete_files,
-	                            sequence_number_t sequence_number);
+	//! Retains one pending delete manifest per partition spec present in 'delete_files'.
+	void AddPendingDeleteManifests(IcebergAddSnapshot &add_snapshot, partitioned_manifest_entry_map_t &&delete_files);
 	void AddSnapshotUpdate(unique_ptr<IcebergAddSnapshot> add_snapshot, IcebergManifestDeletes &&altered_manifests);
 
 public:
 	string initial_table_uuid;
+	int32_t initial_format_version;
 	int32_t initial_schema_id;
 	int32_t initial_default_spec_id = 0;
 	optional_idx initial_default_sort_order_id;
@@ -87,15 +87,14 @@ public:
 	//! Snapshot this transaction is based on (the tip when the manifest list was first cached).
 	//! Drives the delete commit-retry safety check.
 	optional<int64_t> base_snapshot_id;
-	//! Track the current row id for this transaction
-	int64_t next_row_id = 0;
+	//! Starting sequence for transaction-local delete applicability, captured with the base manifest list.
+	//! This is not an assigned row lineage value.
+	sequence_number_t scan_sequence_number = 0;
 
 	//! If we perform an update that relies on the current schema id staying unchanged
 	bool assert_schema_id = false;
 	//! Whether this transaction explicitly requires the table to be newly created.
 	bool has_assert_create = false;
-	//! The schema id that should become current when the commit is staged.
-	optional<int32_t> pending_current_schema_id;
 	mutex lock;
 };
 

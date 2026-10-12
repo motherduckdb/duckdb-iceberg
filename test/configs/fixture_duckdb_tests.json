@@ -14,6 +14,82 @@
     {
       "env_name": "CATALOG_TEST_CONFIG_SETUP",
       "env_value": "fixture"
+    },
+    {
+      "env_name": "FORMAT_V3_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "UNKNOWN_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "VARIANT_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "GEOMETRY_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "TIMESTAMP_NS_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "COLUMN_DEFAULT_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "TIMESTAMP_NS_DEFAULT_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "TIMESTAMPTZ_NS_DEFAULT_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "TIMETRAVEL_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "SNAPSHOT_HISTORY_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "METADATA_LOG_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "METADATA_FILE_READ_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "STAGED_CREATE_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "MULTI_TABLE_COMMIT_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "FILE_CLEANUP_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "NAMESPACE_PROPERTIES_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "CASE_SENSITIVE_TABLE_NAMES_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "VIEW_SUPPORT",
+      "env_value": "true"
+    },
+    {
+      "env_name": "SCAN_PLANNING_MODE",
+      "env_value": "client"
     }
   ],
   "skip_error_messages": [
@@ -37,6 +113,26 @@
     "file system operations are disabled by configuration"
   ],
   "skip_tests": [
+    {
+      "reason": "Iceberg views do not enforce DuckDB table/view dependency tracking",
+      "paths": [
+        "test/sql/catalog/view/test_view_schema_change_with_dependencies.test",
+        "test/sql/aggregate/qualify/test_qualify_view.test"
+      ]
+    },
+    {
+      "reason": "Iceberg view schemas persist all output names; duckdb_views reconstructs a full alias list rather than the original partial alias list",
+      "paths": [
+        "test/sql/catalog/view/test_view_sql.test"
+      ]
+    },
+    {
+      "reason": "Iceberg view metadata does not preserve DuckDB secure-view optimizer barriers; secure view creation is rejected",
+      "paths": [
+        "test/sql/catalog/view/secure_view.test",
+        "test/sql/catalog/view/secure_view_persistence.test"
+      ]
+    },
     {
       "reason": "Checks available databases/schemas",
       "paths": [
@@ -79,7 +175,12 @@
         "test/sql/types/nested/map/test_map_nested_keys.test",
         "test/sql/types/struct/nested_structs.test",
         "test/sql/types/struct/struct_updates.test",
+        "test/sql/function/list/aggregates/any_value.test",
         "test/sql/function/list/aggregates/entropy.test",
+        "test/sql/function/list/aggregates/first.test",
+        "test/sql/function/list/aggregates/last.test",
+        "test/sql/function/list/aggregates/max.test",
+        "test/sql/function/list/aggregates/min.test",
         "test/sql/function/list/list_unique.test",
         "test/sql/function/timestamp/test_icu_datediff.test",
         "test/sql/insert/test_insert_query.test",
@@ -194,7 +295,9 @@
         "test/sql/transactions/concurrent_drop_table.test",
         "test/sql/types/bignum/test_bignum_sum.test_slow",
         "test/sql/storage/extensions/extension_default.test",
-        "test/sql/function/string/regex_operators_v1_5_view.test"
+        "test/sql/function/string/regex_operators_v1_5_view.test",
+        "test/sql/pg_catalog/pg_views.test",
+        "test/sql/table_function/duckdb_views.test"
       ]
     },
     {
@@ -272,7 +375,6 @@
         "test/sql/update/test_stress_update_issue_19688.test",
         "test/sql/update/test_update_many_updaters.test",
         "test/sql/update/test_update_many_updaters_nulls.test",
-        "test/sql/types/geo/geometry_stats_prune_null.test",
         "test/sql/storage/overflow_strings/null_overflow_string_memory.test"
       ]
     },
@@ -320,8 +422,7 @@
     {
       "reason": "Schema visibility / concurrent schema creation in Iceberg differs from DuckDB",
       "paths": [
-        "test/sql/catalog/dependencies/test_concurrent_schema_creation.test",
-        "test/sql/select/test_select_qualified_view.test"
+        "test/sql/catalog/dependencies/test_concurrent_schema_creation.test"
       ]
     },
     {
@@ -462,6 +563,7 @@
       "reason": "Stats / memory_usage / transitive filter output reflects iceberg storage",
       "paths": [
         "test/sql/delete/in_memory_bulk_delete.test_slow",
+        "test/sql/transactions/test_commit_cleanup_oom.test",
         "test/sql/function/date/date_part_stats.test",
         "test/sql/function/time/test_extract_stats.test",
         "test/sql/function/generic/test_stats.test",
@@ -512,6 +614,12 @@
       "reason": "extension function error message differs",
       "paths": [
         "test/sql/error/extension_function_error.test"
+      ]
+    },
+    {
+      "reason": "Progress isn't being reported properly by ICEBERG_SCAN",
+      "paths": [
+        "test/sql/progress/test_verify_progress.test"
       ]
     },
     {
@@ -648,9 +756,31 @@
       ]
     },
     {
-      "reason": "HUGEINT extreme values cast to DECIMAL(38,0) on iceberg",
+      "reason": "HUGEINT extreme values exceed the range of the DECIMAL(38,0) type used by Iceberg",
       "paths": [
+        "test/sql/aggregate/group/group_by_limits.test",
+        "test/sql/function/numeric/test_bit_count.test",
+        "test/sql/join/inner/equality_join_limits.test",
         "test/sql/order/hugeint_order_by_extremes.test"
+      ]
+    },
+    {
+      "reason": "HUGEINT lists are stored as DECIMAL(38,0)[], so list_median cannot represent the fractional result expected for HUGEINT[]",
+      "paths": [
+        "test/sql/function/list/aggregates/median.test"
+      ]
+    },
+    {
+      "reason": "Iceberg widens TINYINT/SMALLINT columns to INTEGER, so arithmetic does not overflow at the native 8-bit or 16-bit bounds",
+      "paths": [
+        "test/sql/function/numeric/test_unary.test",
+        "test/sql/overflow/table_overflow.test"
+      ]
+    },
+    {
+      "reason": "Iceberg scans do not provide the table-wide min/max statistics required to bind BITSTRING_AGG(col) without explicit bounds",
+      "paths": [
+        "test/sql/aggregate/aggregates/test_bitstring_agg.test"
       ]
     },
     {
@@ -891,16 +1021,27 @@
       ]
     },
     {
+      "reason": "Native geometry EXPLAIN expectations: Iceberg adds a CRS cast and does not expose table-wide geometry stats for filter elimination; empty-geometry counts are absent from Iceberg metrics. Result coverage is in catalog_agnostic/reads/filtering/test_geometry_filter_correctness.test and file pruning in test_filtering_geometry_predicates.test.",
+      "paths": [
+        "test/sql/types/geo/geometry_intersection_filter.test_slow",
+        "test/sql/types/geo/geometry_stats_prune_null.test"
+      ]
+    },
+    {
+      "reason": "Uses native database ATTACH/USE/DETACH and geometry shredding; with fixture on_new_connection selecting its test namespace, CREATE TABLE fails resolving schema geoms. Iceberg coverage of the persisted polygon bbox regression is in catalog_agnostic/reads/filtering/test_geometry_filter_correctness.test.",
+      "paths": [
+        "test/sql/types/geo/geometry_stats_prune.test",
+        "test/sql/types/geo/geometry_stats_prune_shredded.test"
+      ]
+    },
+    {
       "reason": "Geometry type needs default 'format-version'=3 table property",
       "paths": [
         "test/sql/types/geo/geometry_compatability.test",
         "test/sql/types/geo/geometry_shred_fetch.test",
         "test/sql/types/geo/geometry_shred_limit.test",
-        "test/sql/types/geo/geometry_intersection_filter.test_slow",
         "test/sql/types/geo/geometry_shred_types.test_slow",
         "test/sql/types/geo/geometry_stats.test",
-        "test/sql/types/geo/geometry_stats_prune.test",
-        "test/sql/types/geo/geometry_stats_prune_shredded.test",
         "test/sql/types/geo/geometry_storage_version.test",
         "test/sql/types/geo/geometry_update.test",
         "test/sql/types/geo/geometry_shred.test",
@@ -1196,6 +1337,7 @@
       "reason": "Iceberg catalog is case-sensitive on table names (DuckDB normalizes)",
       "paths": [
         "test/sql/aggregate/aggregates/test_aggregate_types.test",
+        "test/sql/catalog/drop_create_rollback.test",
         "test/sql/aggregate/distinct/issue2656.test",
         "test/sql/catalog/case_insensitive_binder.test",
         "test/sql/catalog/case_insensitive_caps.test",
@@ -1204,7 +1346,8 @@
         "test/sql/function/string/test_left.test",
         "test/sql/function/string/test_right.test",
         "test/sql/pivot/pivot_in_boolean.test",
-        "test/sql/alter/rename_table/test_rename_table_case.test"
+        "test/sql/alter/rename_table/test_rename_table_case.test",
+        "test/sql/subquery/lateral/pg_lateral.test"
       ]
     },
     {
@@ -1387,6 +1530,7 @@
         "test/sql/storage/metadata/full_table_metadata_reuse.test",
         "test/sql/storage/metadata/multi_table_metadata_reuse.test",
         "test/sql/subquery/scalar/correlated_missing_columns.test",
+        "test/sql/tpch/dbgen_reference_values.test",
         "test/sql/tpch/tpch_sf0.test",
         "test/sql/types/enum/test_5983.test",
         "test/sql/types/variant/tpch_test.test",
@@ -1408,11 +1552,12 @@
       ]
     },
     {
-      "reason": "AGGREGATE_STATE columns cannot be stored in an Iceberg table",
+      "reason": "Iceberg stores aggregate-state values as ordinary types without the AGGREGATE_STATE alias and function metadata required by finalize/combine",
       "paths": [
         "test/sql/aggregate/aggregate_state_export/arg_min_max_export_state.test",
         "test/sql/aggregate/aggregate_state_export/first_last_export_state.test",
         "test/sql/aggregate/aggregate_state_export/list_export_state.test",
+        "test/sql/aggregate/aggregate_state_export/ordered_aggregate_export_state.test",
         "test/sql/aggregate/aggregate_state_export/test_state_export_quantile.test",
         "test/sql/aggregate/aggregates/lttb.test",
         "test/sql/aggregate/aggregate_state_export/test_state_export_string_agg.test"
@@ -1630,6 +1775,47 @@
       ]
     },
     {
+      "reason": "New bump (3f59160bb2d74e22ea53b346afbf204ec1b3de4f -> 04de8943f0d1f9e079fb004bcb05ef729e2d5694)",
+      "paths": [
+        "test/sql/catalog/dependencies/alter_table_keeps_schema_dependency.test",
+        "test/sql/catalog/nested_schema/nested_view_attached.test",
+        "test/sql/create/create_schema_options.test",
+        "test/sql/select/test_select_qualified_view.test",
+        "test/sql/sql_export/aggregate_results.test",
+        "test/sql/sql_export/pushed_column_paths.test",
+        "test/sql/sql_export/source_names.test",
+        "test/sql/sql_export/statement_verification.test",
+        "test/sql/sql_export/table_row_number_sql_export.test",
+        "test/sql/storage/checkpoint/test_checkpoint_abort_truncate.test",
+        "test/sql/storage/wal/wal_torn_uncommitted_row_group.test",
+        "test/sql/storage/compression/chimp/chimp_corrupt_group_count.test",
+        "test/sql/storage/compression/chimp/chimp_corrupt_leading_zero_block_count.test",
+        "test/sql/storage/compression/chimp/chimp_corrupt_metadata_offset.test took",
+        "test/sql/storage/compression/dictionary/dictionary_corrupt_count.test",
+        "test/sql/storage/compression/dictionary/dictionary_corrupt_count_consistent.test",
+        "test/sql/storage/compression/dictionary/dictionary_corrupt_null_index.test",
+        "test/sql/storage/compression/dictionary/invalid_dictionary_metadata.test",
+        "test/sql/storage/compression/fsst/fsst_corrupt_decoded_length.test",
+        "test/sql/storage/compression/fsst/fsst_corrupt_escape_symbol_index.test took",
+        "test/sql/storage/compression/patas/patas_corrupt_data_offset_high.test",
+        "test/sql/storage/compression/patas/patas_corrupt_group_count.test",
+        "test/sql/storage/compression/patas/patas_corrupt_metadata_offset_low.test took",
+        "test/sql/storage/compression/string/string_corrupt_dict_end.test",
+        "test/sql/storage/compression/string/string_corrupt_dict_offset.test",
+        "test/sql/storage/compression/string/string_corrupt_int32_min.test",
+        "test/sql/storage/compression/string/string_corrupt_negative_marker.test",
+        "test/sql/storage/compression/string/string_corrupt_offset_nonmonotonic.test",
+        "test/sql/storage/compression/string/string_corrupt_overflow_block_id.test",
+        "test/sql/storage/compression/string/string_corrupt_overflow_continuation.test",
+        "test/sql/storage/compression/string/string_corrupt_overflow_offset.test",
+        "test/sql/storage/compression/string/string_corrupt_overflow_transient_block.test",
+        "test/sql/storage/temp_directory/test_runner_temp_directory.test",
+        "test/sql/storage/compression/chimp/chimp_corrupt_metadata_offset.test",
+        "test/sql/storage/compression/fsst/fsst_corrupt_escape_symbol_index.test",
+        "test/sql/storage/compression/patas/patas_corrupt_metadata_offset_low.test"
+      ]
+    },
+    {
       "reason": "Uses duckdb database in test_dir",
       "paths": [
         "test/sql/optimizer/in_list_row_group_pruning.test",
@@ -1737,6 +1923,68 @@
         "test/sql/types/struct/struct_updates.test",
         "test/sql/update/test_string_update_null.test",
         "test/sql/update/test_update_mix.test"
+      ]
+    },
+    {
+      "reason": "ALTER VIEW is not supported in Iceberg catalogs",
+      "paths": [
+        "test/sql/alter/rename_view/test_rename_view_incorrect.test"
+      ]
+    },
+    {
+      "reason": "Native DuckDB storage versions and reopening a different database do not reset the remote Iceberg catalog",
+      "paths": [
+        "test/sql/pivot/pivot_star.test"
+      ]
+    },
+    {
+      "reason": "EXPLAIN and profiling assert native DuckDB row IDs and row group counts, not Iceberg scan behavior",
+      "paths": [
+        "test/sql/optimizer/topn_window_elimination_late_materialization.test",
+        "test/sql/pragma/profiling/test_custom_profiling_row_group_metrics_local_storage.test"
+      ]
+    },
+    {
+      "reason": "Test requires native table constraints and a fresh global test schema",
+      "paths": [
+        "test/sql/pragma/test_table_info.test"
+      ]
+    },
+    {
+      "reason": "Test expects current_schema() to be main rather than the configured per-test Iceberg namespace",
+      "paths": [
+        "test/sql/storage/extensions/extension_views.test"
+      ]
+    },
+    {
+      "reason": "Native block-reclamation test expects DuckDB's missing struct-field error; Iceberg correctly rejects the dotted DROP COLUMN path with a different catalog error",
+      "paths": [
+        "test/sql/alter/drop_col/test_drop_col_dotted_name.test"
+      ]
+    },
+    {
+      "reason": "HTTP header assertions inspect all logged requests; fixture catalog traffic adds an Authorization header beyond the test's explicitly configured HTTP headers",
+      "paths": [
+        "test/sql/logging/http_request_log_redaction.test"
+      ]
+    },
+    {
+      "reason": "Requires native transaction-local tables and row IDs; creating a second table inside the transaction is rejected because the fixture cannot commit multiple CTAS operations atomically",
+      "paths": [
+        "test/sql/parallelism/intraquery/test_transaction_local_parallelism.test"
+      ]
+    },
+    {
+      "reason": "duckdb_columns exposes the unloaded Iceberg table's __ placeholder instead of the column names checked by this parser test",
+      "paths": [
+        "test/sql/parser/backtick_identifiers.test"
+      ]
+    },
+    {
+      "reason": "Assertions require native column compression segments in pragma_storage_info, which Iceberg's Parquet-backed tables do not expose",
+      "paths": [
+        "test/sql/storage/compression/constant/constant_negative_zero.test",
+        "test/sql/storage/compression/rle/rle_select_force_fetch_row.test"
       ]
     }
   ]

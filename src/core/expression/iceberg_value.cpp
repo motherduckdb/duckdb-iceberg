@@ -1,4 +1,5 @@
 #include "core/expression/iceberg_value.hpp"
+#include "common/iceberg_fixed_type.hpp"
 
 #include "duckdb/common/helper.hpp"
 #include "duckdb/common/types/uuid.hpp"
@@ -33,6 +34,10 @@ Value IcebergValue::TransformPartitionValue(const Value &value, const LogicalTyp
 	// COPY's partition map contains textual values. VARCHAR and BLOB share a physical
 	// type, but only BLOB contains bytes that should be decoded as Iceberg values.
 	if (value.type().id() == LogicalTypeId::VARCHAR) {
+		if (IcebergFixedType::IsFixed(type)) {
+			auto blob = value.DefaultCastAs(LogicalType::BLOB);
+			return TransformPartitionValueFromBlob(blob.GetValueUnsafe<string_t>(), type);
+		}
 		return value.DefaultCastAs(type);
 	}
 	// DECIMAL partition values are already decoded as proper DuckDB DECIMALs by the Avro reader.
@@ -169,7 +174,8 @@ static DeserializeResult DeserializeUUID(const string_t &blob, const LogicalType
 
 //! FIXME: because of schema evolution, there are rules for inferring the correct type that we need to apply:
 //! See https://iceberg.apache.org/spec/#schema-evolution
-DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const LogicalType &type) {
+DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const LogicalType &type,
+                                                 optional<SerializeBound> bound) {
 	switch (type.id()) {
 	case LogicalTypeId::INTEGER: {
 		if (blob.GetSize() != sizeof(int32_t)) {
@@ -240,11 +246,40 @@ DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const Log
 		}
 	}
 	case LogicalTypeId::BLOB: {
-		return Value::BLOB((data_ptr_t)blob.GetData(), blob.GetSize());
+		if (!bound && IcebergFixedType::IsFixed(type) &&
+		    blob.GetSize() != NumericCast<idx_t>(IcebergFixedType::GetLength(type))) {
+			return DeserializeError(blob, type);
+		}
+		return Value::BLOB((data_ptr_t)blob.GetData(), blob.GetSize()).WithType(type);
 	}
 	case LogicalTypeId::VARCHAR: {
-		// Assume the bytes represent a UTF-8 string
-		return Value(blob);
+		auto data = blob.GetData();
+		auto size = blob.GetSize();
+		if (Utf8Proc::IsValid(data, size)) {
+			return Value(string(data, size));
+		}
+		if (!bound) {
+			return DeserializeError(blob, type);
+		}
+		// Previous versions of DuckDB-Iceberg truncated string metrics to N bytes,
+		// which could split a multi-byte character and produce invalid UTF-8.
+		// Repair the bound from its longest valid UTF-8 prefix.
+		idx_t len = size;
+		while (len > 0 && !Utf8Proc::IsValid(data, len)) {
+			len--;
+		}
+		if (len == 0) {
+			return DeserializeError(blob, type);
+		}
+		if (*bound == SerializeBound::LOWER_BOUND) {
+			return Value(string(data, len));
+		}
+		// The stored bytes continue past the prefix, so the prefix itself is too small.
+		string rounded;
+		if (!TruncateAndIncrementString(string(data, size), rounded, len)) {
+			return DeserializeError(blob, type);
+		}
+		return Value(std::move(rounded));
 	}
 	case LogicalTypeId::DECIMAL: {
 		return DeserializeDecimal(blob, type);
@@ -487,6 +522,12 @@ SerializeResult IcebergValue::SerializeValue(Value input_value, const LogicalTyp
 		auto serialized_val = Value::BLOB(serialized_const_data_ptr, sizeof(int64_t));
 		return SerializeResult(column_type, serialized_val);
 	}
+	case LogicalTypeId::TIME: {
+		//! Microseconds from midnight in an 8-byte little-endian long
+		int64_t micros_from_midnight = input_value.GetValue<dtime_t>().value;
+		auto serialized_val = Value::BLOB(const_data_ptr_cast<int64_t>(&micros_from_midnight), sizeof(int64_t));
+		return SerializeResult(column_type, serialized_val);
+	}
 	case LogicalTypeId::DECIMAL: {
 		auto decimal_as_string = input_value.GetValue<string>();
 		auto dec_pos = decimal_as_string.find(".");
@@ -549,7 +590,7 @@ SerializeResult IcebergValue::SerializeValue(Value input_value, const LogicalTyp
 	case LogicalTypeId::BLOB: {
 		// do not double serialize blob values.
 		if (input_value.type() != LogicalType::VARCHAR) {
-			return SerializeResult(column_type, input_value);
+			return SerializeResult(column_type, input_value.WithType(LogicalType::BLOB));
 		}
 		// get const data ptr for the string value
 		auto val = input_value.GetValue<string>();

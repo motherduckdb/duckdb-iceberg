@@ -304,14 +304,12 @@ void IcebergDelete::WritePositionalDeleteFile(ClientContext &context, IcebergDel
 	global_state.written_files.emplace(filename, std::move(delete_file));
 }
 
-static void PopulateAlteredManifests(const IcebergMultiFileList &multi_file_list, IcebergManifestDeletes &out,
-                                     IcebergDeleteData &delete_data) {
+static void PopulateAlteredManifests(IcebergManifestDeletes &out, const IcebergDeleteData &delete_data) {
 	if (delete_data.type != IcebergDeleteType::DELETION_VECTOR) {
 		return;
 	}
-	for (auto &bound_entry : delete_data.entries) {
-		auto &entry = bound_entry.entry;
-		out.InvalidateFile(entry.data_file.file_path);
+	for (auto &file : delete_data.source_files) {
+		out.InvalidateFile(file);
 	}
 }
 
@@ -342,7 +340,7 @@ void IcebergDelete::FlushDeletes(IcebergTransaction &transaction, ClientContext 
 			auto existing_delete = multi_file_list->GetExistingPositionalDeleteData(filename);
 			if (existing_delete) {
 				auto &delete_data = *existing_delete;
-				PopulateAlteredManifests(*multi_file_list, global_state.altered_manifests, delete_data);
+				PopulateAlteredManifests(global_state.altered_manifests, delete_data);
 				delete_data.ToSet(sorted_deletes);
 			}
 		}
@@ -425,9 +423,9 @@ partitioned_manifest_entry_map_t IcebergDelete::GenerateDeleteManifestEntries(Ic
 			data_file.content_offset = delete_file.content_offset.GetIndex();
 		}
 
-		// set lower and upper bound for the filename column
-		data_file.lower_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB(data_file_name);
-		data_file.upper_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB(data_file_name);
+		// Filename bounds contain raw UTF-8 bytes, not escaped BLOB literals.
+		data_file.lower_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB_RAW(data_file_name);
+		data_file.upper_bounds[MultiFileReader::FILENAME_FIELD_ID] = Value::BLOB_RAW(data_file_name);
 		// set referenced_data_file
 		data_file.referenced_data_file = data_file_name;
 		// copy partition info from the data file being deleted
@@ -559,23 +557,14 @@ PhysicalOperator &IcebergCatalog::PlanDeleteOperation(ClientContext &context, Ph
 	}
 
 	vector<idx_t> row_id_indexes;
-	// we only push 2 columns for positional deletes
-	idx_t column_offset = 0;
-	if (iceberg_version >= 3) {
-		//! The row ids of the table contain the _row_id column, which we're not interested in
-		column_offset = 1;
-	}
+	//! Positional deletes use filename and file row number, followed by unused lineage in V3.
 	for (idx_t i = 0; i < 2; i++) {
-		auto &bound_ref = op.expressions[column_offset + i]->Cast<BoundReferenceExpression>();
+		auto &bound_ref = op.expressions[i]->Cast<BoundReferenceExpression>();
 		row_id_indexes.push_back(bound_ref.Index());
 	}
 
-	auto allows_positional_deletes = metadata.PropertiesAllowPositionalDeletes(IcebergSnapshotOperationType::DELETE);
-	if (!allows_positional_deletes) {
-		auto delete_table_property = metadata.GetTableProperty(WRITE_DELETE_MODE);
-		auto error_message = IcebergCatalog::GetOnlyMergeOnReadSupportedErrorMessage(
-		    updated_table_entry.name.GetIdentifierName(), WRITE_DELETE_MODE, delete_table_property);
-		throw NotImplementedException(error_message);
+	if (!irc_transaction.planning_merge_into) {
+		VerifyMergeOnRead(metadata, updated_table_entry.name.GetIdentifierName(), WRITE_DELETE_MODE);
 	}
 
 	auto &iceberg_delete =
