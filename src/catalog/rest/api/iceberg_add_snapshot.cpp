@@ -21,7 +21,7 @@ bool IcebergAddSnapshot::IsRetryable() const {
 void IcebergAddSnapshot::CreateUpdate(DatabaseInstance &db, ClientContext &context,
                                       IcebergCommitState &commit_state) const {
 	auto writer =
-	    commit_state.CreateSnapshotWriter(schema_id, operation, manifest_deletes ? *manifest_deletes : nullptr);
+	    commit_state.CreateSnapshotWriter(schema_id, operation, manifest_deletes ? &*manifest_deletes : nullptr);
 	for (const auto &manifest : pending_manifests) {
 		writer.WriteManifest(manifest);
 	}
