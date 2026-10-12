@@ -10,12 +10,21 @@ require-env FORMAT_V3_SUPPORT
 
 include test/sql/init_requires
 
+require json
+
 statement ok
 DROP TABLE IF EXISTS my_datalake.default.fixed_default;
 
 statement error
 CREATE TABLE my_datalake.default.fixed_default_invalid (
 	f ICEBERG_FIXED(4) DEFAULT 'abc'::BLOB
+) WITH ('format-version'='3');
+----
+Expected 4 bytes
+
+statement error
+CREATE TABLE my_datalake.default.fixed_default_invalid (
+	f ICEBERG_FIXED(4) DEFAULT '123'::JSON
 ) WITH ('format-version'='3');
 ----
 Expected 4 bytes

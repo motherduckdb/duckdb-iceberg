@@ -135,8 +135,8 @@ void IcebergFixedType::Register(ExtensionLoader &loader) {
 	auto type = LogicalType(LogicalTypeId::BLOB).WithAlias(FIXED_TYPE_NAME);
 	loader.RegisterType(FIXED_TYPE_NAME, type, std::move(constructors));
 	loader.RegisterCastFunction(LogicalType::BLOB, type, BoundCastInfo(BlobToFixedCast));
-	for (auto &source :
-	     vector<LogicalType> {LogicalType::VARCHAR, LogicalType::UUID, LogicalType::BIT, LogicalType::VARIANT()}) {
+	for (auto &source : vector<LogicalType> {LogicalType::VARCHAR, LogicalType::JSON(), LogicalType::UUID,
+	                                         LogicalType::BIT, LogicalType::VARIANT()}) {
 		loader.RegisterCastFunction(source, type, BindToFixedCast);
 	}
 	loader.RegisterCastFunction(type, type, BoundCastInfo(BlobToFixedCast));
@@ -155,6 +155,10 @@ static void ThrowFixedTypeOutsideIceberg(const Identifier &name) {
 
 //! ICEBERG_FIXED is only for Iceberg tables, so reject it in any other catalog.
 void IcebergFixedType::RejectOutsideIceberg(ClientContext &context, LogicalOperator &op) {
+	// EXPLAIN ANALYZE executes the DDL in its child plan.
+	for (auto &child : op.children) {
+		RejectOutsideIceberg(context, *child);
+	}
 	switch (op.type) {
 	case LogicalOperatorType::LOGICAL_CREATE_TABLE: {
 		auto &create = op.Cast<LogicalCreateTable>();

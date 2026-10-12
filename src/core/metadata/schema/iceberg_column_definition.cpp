@@ -16,7 +16,9 @@ namespace duckdb {
 //! Hexadecimal values are given without the proper escape sequences, so we add them, for simplicity of conversion
 static string AddEscapesToBlob(const string &hexadecimal_string) {
 	string result;
-	D_ASSERT(hexadecimal_string.size() % 2 == 0);
+	if (hexadecimal_string.size() % 2 != 0) {
+		throw InvalidConfigurationException("Invalid hexadecimal default: expected an even number of digits");
+	}
 	for (idx_t i = 0; i < hexadecimal_string.size() / 2; i++) {
 		result += "\\x";
 		result += hexadecimal_string.substr(i * 2, 2);

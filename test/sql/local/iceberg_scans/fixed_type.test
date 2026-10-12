@@ -26,6 +26,35 @@ Invalid fixed type
 
 endloop
 
+# The defaults are hexadecimal bytes, not BLOB literals. An odd trailing digit
+# must not be silently dropped (or trip a debug assertion).
+foreach default_kind initial-default write-default
+
+statement ok
+COPY (
+	SELECT replace(content, '"timestamptz_ns"', '"fixed[2]", "{default_kind}": "6162F"')
+	FROM read_text('{WORKING_DIRECTORY}/data/persistent/timestamptz_ns/metadata/v1.metadata.json')
+) TO '{TEST_DIR}/invalid_fixed_default.metadata.json' (FORMAT CSV, HEADER false, QUOTE '', ESCAPE '');
+
+statement error
+SELECT * FROM iceberg_scan('{TEST_DIR}/invalid_fixed_default.metadata.json');
+----
+Invalid hexadecimal default
+
+# Valid hexadecimal still has to match the declared width.
+statement ok
+COPY (
+	SELECT replace(content, '"timestamptz_ns"', '"fixed[2]", "{default_kind}": "61"')
+	FROM read_text('{WORKING_DIRECTORY}/data/persistent/timestamptz_ns/metadata/v1.metadata.json')
+) TO '{TEST_DIR}/invalid_fixed_default.metadata.json' (FORMAT CSV, HEADER false, QUOTE '', ESCAPE '');
+
+statement error
+SELECT * FROM iceberg_scan('{TEST_DIR}/invalid_fixed_default.metadata.json');
+----
+Invalid default length
+
+endloop
+
 # A zero or negative length is well-formed but rejected by the type itself.
 foreach fixed_type fixed[0] fixed[-1]
 
