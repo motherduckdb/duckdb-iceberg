@@ -7,6 +7,16 @@ REST_CATALOG_CODEGEN_PYTHON := $(PROJ_DIR)duckdb/.cache/format-venv/bin/python
 EXT_NAME=iceberg
 EXT_CONFIG=${PROJ_DIR}extension_config.cmake
 
+# CI tools use DUCKDB_VERSION for the checkout/artifact revision. CMake treats
+# it as a version override, so let DuckDB derive its version when it is the
+# checkout SHA. Keep explicit version strings and OVERRIDE_GIT_DESCRIBE intact.
+ifneq ($(strip $(DUCKDB_VERSION)),)
+ICEBERG_DUCKDB_REVISION := $(shell git -C "$(PROJ_DIR)duckdb" rev-parse HEAD 2>/dev/null)
+ifeq ($(DUCKDB_VERSION),$(ICEBERG_DUCKDB_REVISION))
+unexport DUCKDB_VERSION
+endif
+endif
+
 ifeq (${EQUALITY_DELETE_WRITES_ENABLED}, 1)
 	EXT_FLAGS:=${EXT_FLAGS} -DICEBERG_ENABLE_EQUALITY_DELETE_WRITES=1
 endif
