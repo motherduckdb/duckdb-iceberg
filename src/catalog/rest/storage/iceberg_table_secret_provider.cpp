@@ -186,7 +186,12 @@ static CreateSecretInput ReVendVendedCredentials(ClientContext &context, CreateS
 		                                       EnumUtil::ToString(refreshed_credentials.status_),
 		                                       refreshed_credentials.error_->_error.message));
 	}
-	auto credentials = table_info.GetVendedCredentials(context, refreshed_credentials.result_->storage_credentials);
+	auto &response = refreshed_credentials.result_;
+	optional_ptr<const case_insensitive_map_t<string>> config_override;
+	if (response.config) {
+		config_override = *response.config;
+	}
+	auto credentials = table_info.GetVendedCredentials(context, response.storage_credentials, config_override);
 	auto log_table_name =
 	    IcebergLogType::Redact(context, StringUtil::Format("%s.%s.%s", catalog_name, schema_name, table_name));
 

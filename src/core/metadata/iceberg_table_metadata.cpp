@@ -385,6 +385,13 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_obje
 		throw NotImplementedException("Iceberg format-version %d is not supported, the highest supported version is %d",
 		                              table_metadata.format_version, MAX_ICEBERG_FORMAT_VERSION);
 	}
+	// Check before loading snapshots: empty encrypted tables must not accept plaintext writes either.
+	if (table_metadata.properties && table_metadata.properties->count("encryption.key-id")) {
+		throw NotImplementedException("Iceberg table encryption is not supported (encryption.key-id is set)");
+	}
+	if (table_metadata.encryption_keys && !table_metadata.encryption_keys->empty()) {
+		throw NotImplementedException("Iceberg table encryption is not supported (encryption-keys is not empty)");
+	}
 	unordered_map<int32_t, shared_ptr<IcebergTableSchema>> schemas;
 	if (table_metadata.schemas) {
 		for (auto &schema : *table_metadata.schemas) {
