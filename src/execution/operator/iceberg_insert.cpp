@@ -20,6 +20,7 @@
 #include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/common/type_visitor.hpp"
 
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
@@ -38,6 +39,7 @@
 #include "catalog/rest/api/iceberg_type.hpp"
 #include "catalog/rest/api/iceberg_create_table_request.hpp"
 #include "common/iceberg_utils.hpp"
+#include "common/iceberg_fixed_type.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
 #include "iceberg_logging.hpp"
 #include "iceberg_options.hpp"
@@ -955,9 +957,17 @@ static PhysicalOperator &CastToIcebergStorageTypes(ClientContext &context, Physi
 
 	// Virtual columns (e.g. _row_id on v3 updates) follow the schema columns and pass through unchanged.
 	vector<LogicalType> target_types = src_types;
+	vector<LogicalType> validation_types = src_types;
 	bool needs_cast = false;
 	for (idx_t i = 0; i < schema.columns.size(); i++) {
 		target_types[i] = schema.columns[i]->type;
+		validation_types[i] = target_types[i];
+		if (TypeVisitor::Contains(target_types[i], IcebergFixedType::IsFixed)) {
+			validation_types[i] = TypeVisitor::VisitReplace(target_types[i], [](const LogicalType &type) {
+				return IcebergFixedType::IsFixed(type) ? LogicalType::BLOB : type;
+			});
+			needs_cast = true;
+		}
 		needs_cast |= target_types[i] != src_types[i];
 	}
 	if (!needs_cast) {
@@ -975,6 +985,13 @@ static PhysicalOperator &CastToIcebergStorageTypes(ClientContext &context, Physi
 			// explicitly: the copy pipeline requires the exact storage type, including nested types.
 			auto bound_cast = cast_functions.GetCastFunction(src_types[i], target_types[i], cast_input);
 			expr = BoundCastExpression::Create(std::move(expr), target_types[i], std::move(bound_cast));
+		}
+		if (validation_types[i] != target_types[i]) {
+			// Nested JSON conversions can construct fixed-typed values without invoking the leaf casts.
+			// Strip the fixed aliases and cast back so every write validates the actual byte lengths,
+			// even when its input already has the declared storage type.
+			expr = BoundCastExpression::AddCastToType(context, std::move(expr), validation_types[i]);
+			expr = BoundCastExpression::AddCastToType(context, std::move(expr), target_types[i]);
 		}
 		expressions.push_back(std::move(expr));
 	}
