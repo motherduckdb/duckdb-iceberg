@@ -337,6 +337,9 @@ void IcebergTransactionData::TableSetDefaultSpec() {
 }
 
 void IcebergTransactionData::TableSetProperties(const case_insensitive_map_t<string> &properties) {
+	if (properties.count("encryption.key-id")) {
+		throw NotImplementedException("Iceberg table encryption is not supported (encryption.key-id is set)");
+	}
 	updates.push_back(make_uniq<SetProperties>(properties));
 }
 
