@@ -223,10 +223,30 @@ IcebergLoadTableResult IRCAPI::GetTable(ClientContext &context, IcebergCatalog &
 	return IcebergLoadTableRequest(schema.namespace_items, table_name).Execute(context, catalog);
 }
 
-APIResult<unique_ptr<const rest_api_objects::LoadCredentialsResponse>>
-IRCAPI::GetTableCredentials(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema,
-                            const string &table_name) {
-	auto ret = APIResult<unique_ptr<const rest_api_objects::LoadCredentialsResponse>>();
+APIResult<IRCAPICredentials> IRCAPI::GetTableCredentials(ClientContext &context, IcebergCatalog &catalog,
+                                                         const IcebergSchemaEntry &schema, const string &table_name) {
+	auto ret = APIResult<IRCAPICredentials>();
+	ret.status_ = HTTPStatusCode::OK_200;
+	if (catalog.supported_urls.find("GET /v1/{prefix}/namespaces/{namespace}/tables/{table}/credentials") ==
+	    catalog.supported_urls.end()) {
+		auto table_result = GetTable(context, catalog, schema, table_name);
+		if (table_result.error_) {
+			ret.status_ = table_result.status_;
+			ret.error_ = std::move(table_result.error_);
+			return ret;
+		}
+		auto &credentials = ret.result_;
+		if (table_result.result_->storage_credentials) {
+			for (auto &credential : *table_result.result_->storage_credentials) {
+				credentials.storage_credentials.push_back(credential.Copy());
+			}
+		}
+		credentials.config.emplace();
+		if (table_result.result_->config) {
+			*credentials.config = *table_result.result_->config;
+		}
+		return ret;
+	}
 	auto result = LoadCredentials(context, catalog, schema, table_name);
 	if (result->status != HTTPStatusCode::OK_200) {
 		unique_ptr<JSONDocument> out_doc;
@@ -240,8 +260,8 @@ IRCAPI::GetTableCredentials(ClientContext &context, IcebergCatalog &catalog, con
 	}
 	auto doc = ICUtils::APIResultToDoc(result->body);
 	auto metadata_root = doc->GetRoot();
-	ret.result_ = make_uniq<const rest_api_objects::LoadCredentialsResponse>(
-	    rest_api_objects::LoadCredentialsResponse::FromJSON(metadata_root));
+	auto credentials = rest_api_objects::LoadCredentialsResponse::FromJSON(metadata_root);
+	ret.result_.storage_credentials = std::move(credentials.storage_credentials);
 	return ret;
 }
 
