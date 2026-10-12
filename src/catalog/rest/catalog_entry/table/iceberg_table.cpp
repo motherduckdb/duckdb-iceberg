@@ -185,7 +185,8 @@ IRCAPITableCredentials IcebergTable::GetVendedCredentials(ClientContext &context
 
 IRCAPITableCredentials
 IcebergTable::GetVendedCredentials(ClientContext &context,
-                                   const vector<rest_api_objects::StorageCredential> &storage_credentials) const {
+                                   const vector<rest_api_objects::StorageCredential> &storage_credentials,
+                                   optional_ptr<const case_insensitive_map_t<string>> config_override) const {
 	IRCAPITableCredentials result;
 	auto schema_component = IRCPathComponent::NamespaceComponent(schema.namespace_items, catalog.namespace_separator);
 	auto secret_base_name = UUID::ToString(UUID::GenerateRandomUUID());
@@ -224,7 +225,7 @@ IcebergTable::GetVendedCredentials(ClientContext &context,
 	case_insensitive_map_t<Value> config_options;
 	//! TODO: apply the 'defaults' retrieved from the /v1/config endpoint
 	config_options.insert(user_defaults.begin(), user_defaults.end());
-	ParseConfigOptions(config, config_options, context, storage_type);
+	ParseConfigOptions(config_override ? *config_override : config, config_options, context, storage_type);
 
 	//! If there is only one credential listed, we don't really care about the prefix,
 	//! we can use the table_location instead.

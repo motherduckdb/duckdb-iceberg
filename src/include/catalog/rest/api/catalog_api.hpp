@@ -25,6 +25,13 @@ struct IRCAPISchema {
 	string catalog_name;
 };
 
+struct IRCAPICredentials {
+	vector<rest_api_objects::StorageCredential> storage_credentials;
+	//! Top-level config override used to build the refreshed secret; unset uses the existing table config.
+	//! The LoadTable fallback currently supplies an empty override when config is omitted.
+	optional<case_insensitive_map_t<string>> config;
+};
+
 enum class IRCEntryLookupStatus : uint8_t { EXISTS = 0, NOT_FOUND = 1, API_ERROR = 2 };
 
 // Some API responses have error messages that need to be checked before being raised
@@ -80,9 +87,8 @@ public:
 	                                                                               IcebergCatalog &catalog,
 	                                                                               const IcebergSchemaEntry &schema,
 	                                                                               const string &table_name);
-	static APIResult<unique_ptr<const rest_api_objects::LoadCredentialsResponse>>
-	GetTableCredentials(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema,
-	                    const string &table_name);
+	static APIResult<IRCAPICredentials> GetTableCredentials(ClientContext &context, IcebergCatalog &catalog,
+	                                                        const IcebergSchemaEntry &schema, const string &table_name);
 	static APIResult<unique_ptr<const rest_api_objects::GetNamespaceResponse>>
 	GetNamespace(ClientContext &context, IcebergCatalog &catalog, const IcebergSchemaEntry &schema);
 	static vector<IRCAPISchema> GetSchemas(ClientContext &context, IcebergCatalog &catalog,
