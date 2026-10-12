@@ -6,15 +6,23 @@ require-env CATALOG_TEST_CONFIG_SETUP mock
 
 include test/sql/init_requires
 
-# COPY normalizes these paths to the host's separators. On Windows, neither
-# invalid escapes nor hex-like path components may be interpreted as BLOB text.
+# Windows preserves the first separator in a path, so use backslashes throughout
+# the input to exercise BLOB escapes instead of normalizing them to forward slashes.
+statement ok
+SET VARIABLE filename_bounds_separator = (
+	SELECT CASE WHEN platform LIKE 'windows%' THEN chr(92) ELSE '/' END FROM pragma_platform()
+);
+
 foreach version 2 3
 
 foreach escape invalid hex
 
 statement ok
-SET VARIABLE filename_bounds_path = '{TEMP_DIR}/filename_bounds_{version}_{escape}/'
-	|| CASE WHEN '{escape}' = 'invalid' THEN 'backslash\a' ELSE 'backslash\x41' END;
+SET VARIABLE filename_bounds_path = replace(
+	'{TEMP_DIR}/filename_bounds_{version}_{escape}/'
+		|| CASE WHEN '{escape}' = 'invalid' THEN 'backslash\a' ELSE 'backslash\x41' END,
+	'/', getvariable('filename_bounds_separator')
+);
 
 statement ok
 CREATE TABLE my_datalake.default.delete_filename_bounds (id INTEGER) WITH (
@@ -32,8 +40,17 @@ SET VARIABLE original_data_path = (
 );
 
 query I
-SELECT contains(getvariable('original_data_path'), chr(92))
-	= (SELECT platform LIKE 'windows%' FROM pragma_platform());
+SELECT CASE WHEN contains(getvariable('original_data_path'), chr(92))
+	= (getvariable('filename_bounds_separator') = chr(92))
+THEN true::VARIANT ELSE {
+	'expected_has_backslash': getvariable('filename_bounds_separator') = chr(92),
+	'actual_has_backslash': contains(getvariable('original_data_path'), chr(92)),
+	'requested_data_path': getvariable('filename_bounds_path'),
+	'actual_data_path': getvariable('original_data_path'),
+	'platform': (SELECT platform FROM pragma_platform()),
+	'format_version': '{version}',
+	'escape_case': '{escape}'
+}::VARIANT END;
 ----
 true
 
@@ -59,8 +76,24 @@ SET VARIABLE delete_manifests = (
 # Filename metrics are the UTF-8 bytes of the referenced data path.
 query II
 SELECT
-	decode(data_file.lower_bounds[2147483646]) = getvariable('original_data_path'),
-	decode(data_file.upper_bounds[2147483646]) = getvariable('original_data_path')
+	CASE WHEN data_file.lower_bounds[2147483646] = encode(getvariable('original_data_path'))
+	THEN true::VARIANT ELSE {
+		'bound': 'lower',
+		'expected_hex': hex(encode(getvariable('original_data_path'))),
+		'actual_hex': hex(data_file.lower_bounds[2147483646]),
+		'data_file_path': getvariable('original_data_path'),
+		'format_version': '{version}',
+		'escape_case': '{escape}'
+	}::VARIANT END,
+	CASE WHEN data_file.upper_bounds[2147483646] = encode(getvariable('original_data_path'))
+	THEN true::VARIANT ELSE {
+		'bound': 'upper',
+		'expected_hex': hex(encode(getvariable('original_data_path'))),
+		'actual_hex': hex(data_file.upper_bounds[2147483646]),
+		'data_file_path': getvariable('original_data_path'),
+		'format_version': '{version}',
+		'escape_case': '{escape}'
+	}::VARIANT END
 FROM read_avro(getvariable('delete_manifests'))
 WHERE status = 1;
 ----
