@@ -6,6 +6,10 @@ include test/sql/init_requires
 
 require json
 
+# This parameterized type is not in core's extension autoload registry.
+statement ok
+LOAD iceberg;
+
 query TT
 SELECT typeof('abcd'::ICEBERG_FIXED(4)), typeof(NULL::ICEBERG_FIXED(16));
 ----
