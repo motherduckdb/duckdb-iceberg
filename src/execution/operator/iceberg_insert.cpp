@@ -810,6 +810,20 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 		info->options[mapping.parquet_option].emplace_back(it->second);
 	}
 
+	auto shred_variants = table_properties.find("write.parquet.shred-variants");
+	if (shred_variants != table_properties.end() &&
+	    !Value(shred_variants->second).DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>()) {
+		child_list_t<Value> shredding_types;
+		for (auto &column : layout.columns) {
+			if (column.type.id() == LogicalTypeId::VARIANT) {
+				shredding_types.emplace_back(column.name, Value("VARIANT"));
+			}
+		}
+		if (!shredding_types.empty()) {
+			info->options["shredding"] = {Value::STRUCT(std::move(shredding_types))};
+		}
+	}
+
 	// Always use native parquet geometry for writing
 	info->options["geoparquet_version"].emplace_back("NONE");
 
