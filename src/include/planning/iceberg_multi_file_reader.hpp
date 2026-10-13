@@ -160,7 +160,7 @@ private:
 	static void ApplyPartitionConstants(const unordered_map<int32_t, Value> &constants,
 	                                    MultiFileReaderData &reader_data,
 	                                    vector<MultiFileColumnDefinition> &scan_columns,
-	                                    const vector<ColumnIndex> &scan_column_ids);
+	                                    const vector<ColumnIndex> &scan_column_ids, ClientContext &context);
 
 public:
 	shared_ptr<TableFunctionInfo> function_info;

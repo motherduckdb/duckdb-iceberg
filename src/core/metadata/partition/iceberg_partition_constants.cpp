@@ -50,8 +50,10 @@ unordered_map<int32_t, Value> IcebergPartitionConstants::Resolve(int32_t spec_id
 			continue;
 		}
 		for (auto &partition : partition_values) {
-			if (partition.field_id == field.partition_field_id && !partition.value.IsNull()) {
-				constants.emplace(field.source_id, IcebergValue::TransformPartitionValue(partition.value, *type));
+			if (partition.field_id == field.partition_field_id) {
+				auto value = partition.value.IsNull() ? Value(*type)
+				                                      : IcebergValue::TransformPartitionValue(partition.value, *type);
+				constants.emplace(field.source_id, std::move(value));
 				break;
 			}
 		}
