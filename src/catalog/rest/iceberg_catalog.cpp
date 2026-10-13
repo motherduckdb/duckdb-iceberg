@@ -114,8 +114,8 @@ IcebergCatalog::IcebergCatalog(AttachedDatabase &db_p, AccessMode access_mode,
                                const optional<Identifier> &default_schema)
     : Catalog(db_p), access_mode(access_mode), auth_handler(std::move(auth_handler)),
       base_uri(attach_options_p.catalog_uri), version("v1"), attach_options(attach_options_p),
-      default_schema(default_schema), warehouse(attach_options.warehouse), schemas(*this),
-      table_request_cache(attach_options) {
+      default_schema(default_schema), attach_path(attach_options.warehouse), warehouse(attach_options.warehouse),
+      schemas(*this), table_request_cache(attach_options) {
 }
 
 IcebergCatalog::~IcebergCatalog() = default;
@@ -226,7 +226,7 @@ bool IcebergCatalog::InMemory() {
 }
 
 string IcebergCatalog::GetDBPath() {
-	return warehouse;
+	return attach_path;
 }
 
 DatabaseSize IcebergCatalog::GetDatabaseSize(ClientContext &context) {
@@ -416,71 +416,33 @@ void IcebergCatalog::AddGlueEndpoints() {
 }
 
 void IcebergCatalog::ParsePrefix() {
-	// save overrides and defaults.
-	// See https://iceberg.apache.org/docs/latest/configuration/#catalog-properties for sometimes used catalog
-	// properties
-	auto default_prefix_it = defaults.find("prefix");
-	auto override_prefix_it = overrides.find("prefix");
-
-	const string *prefix_property = nullptr;
-	if (default_prefix_it != defaults.end()) {
-		prefix_property = &default_prefix_it->second;
-	}
-	// Sometimes the prefix is in the overrides. Prefer the override prefix.
-	if (override_prefix_it != overrides.end()) {
-		prefix_property = &override_prefix_it->second;
-	}
-	if (!prefix_property) {
+	prefix.clear();
+	auto &prefix_property = attach_options.prefix;
+	if (prefix_property.empty()) {
 		return;
 	}
 
-	auto decoded_prefix = StringUtil::URLDecode(*prefix_property);
-	if (attach_options.encode_entire_prefix || !StringUtil::Equals(decoded_prefix, *prefix_property)) {
+	auto decoded_prefix = StringUtil::URLDecode(prefix_property);
+	if (attach_options.encode_entire_prefix || !StringUtil::Equals(decoded_prefix, prefix_property)) {
 		prefix.push_back(std::move(decoded_prefix));
 	} else {
 		prefix = StringUtil::Split(decoded_prefix, '/');
 	}
 }
 
-void IcebergCatalog::ParseNamespaceSeparator() {
-	auto default_namespace_separator_it = defaults.find("namespace-separator");
-	auto override_namespace_separator_it = overrides.find("namespace-separator");
-
-	const string *namespace_separator_property = nullptr;
-	if (default_namespace_separator_it != defaults.end()) {
-		namespace_separator_property = &default_namespace_separator_it->second;
+void IcebergCatalog::Configure(ClientContext &context, const rest_api_objects::CatalogConfig &catalog_config,
+                               IcebergEndpointType endpoint_type) {
+	base_uri = attach_options.catalog_uri;
+	StringUtil::RTrim(base_uri, "/");
+	if (base_uri.empty()) {
+		throw InvalidConfigurationException("Missing 'uri' option for Iceberg attach");
 	}
-	// Sometimes the namespace_separator is in the overrides. Prefer the override namespace_separator.
-	if (override_namespace_separator_it != overrides.end()) {
-		namespace_separator_property = &override_namespace_separator_it->second;
-	}
-	if (!namespace_separator_property) {
-		return;
-	}
-	namespace_separator = *namespace_separator_property;
-}
-
-void IcebergCatalog::GetConfig(ClientContext &context, IcebergEndpointType &endpoint_type) {
-	// set the prefix to be empty. To get the config endpoint,
-	// we cannot add a default prefix.
-	D_ASSERT(prefix.empty());
-
-	// For AWS Glue, ":" means "default account catalog" — omit the warehouse param
-	string effective_warehouse = warehouse;
-	if (endpoint_type == IcebergEndpointType::AWS_GLUE && warehouse == ":") {
-		effective_warehouse = "";
-	}
-	auto catalog_config = IRCAPI::GetCatalogConfig(context, *this, effective_warehouse);
-	overrides = catalog_config.overrides;
-	defaults = catalog_config.defaults;
-	auto uri_override_it = overrides.find("uri");
-	if (uri_override_it != overrides.end()) {
-		base_uri = uri_override_it->second;
-		StringUtil::RTrim(base_uri, "/");
-	}
+	attach_options.catalog_uri = base_uri;
+	warehouse = attach_options.warehouse;
 	ParsePrefix();
-	ParseNamespaceSeparator();
+	namespace_separator = attach_options.namespace_separator;
 
+	supported_urls.clear();
 	if (auto &endpoints = catalog_config.endpoints) {
 		for (auto &endpoint : *endpoints) {
 			supported_urls.insert(endpoint);

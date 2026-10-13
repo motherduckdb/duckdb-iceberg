@@ -19,6 +19,24 @@ static const vector<string> ENDPOINTS {"GET /v1/{prefix}/namespaces",
                                        "DELETE /v1/{prefix}/namespaces/{namespace}/tables/{table}"};
 
 Reply Catalog::Route(const string &method, const string &path, const Json &body) {
+	if (path == "/__test/response" && method == "POST") {
+		auto response_method = StringUtil::Upper(body.At("method").String());
+		auto response_path = body.At("path").String();
+		auto status = body.At("status").Integer();
+		if (response_path.empty() || response_path[0] != '/' || status < 200 || status > 599) {
+			Invalid("Scripted responses require an absolute path and an HTTP status from 200 to 599");
+		}
+		responses[response_method + " " + response_path] = {static_cast<int>(status), body.At("body")};
+		return {204, Json()};
+	}
+	if (path == "/__test/response" && method == "DELETE") {
+		responses.clear();
+		return {204, Json()};
+	}
+	auto response = responses.find(method + " " + path);
+	if (response != responses.end()) {
+		return response->second;
+	}
 	auto query_start = path.find('?');
 	auto parts = StringUtil::Split(path.substr(1, query_start == string::npos ? string::npos : query_start - 1), '/');
 	for (auto &part : parts) {
@@ -138,7 +156,8 @@ unique_ptr<HTTPResponse> Catalog::Request(const string &method, const string &pa
 		if (body_text.size() > 16 * 1024 * 1024) {
 			Invalid("Request body exceeds 16 MiB");
 		}
-		if (!body_text.empty()) {
+		// Scripted routes can model non-JSON protocols too (e.g. OAuth2 form bodies).
+		if (!body_text.empty() && !responses.count(method + " " + path)) {
 			body = Json::Parse(body_text);
 			if (!body.IsObject()) {
 				Invalid("Request body must be a JSON object");
