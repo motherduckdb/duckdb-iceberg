@@ -16,7 +16,6 @@
 namespace duckdb {
 
 struct IcebergTable;
-struct IcebergManifestList;
 
 struct IcebergAddSnapshot : public IcebergTableUpdate {
 	static constexpr const IcebergTableUpdateType TYPE = IcebergTableUpdateType::ADD_SNAPSHOT;
@@ -27,8 +26,6 @@ public:
 
 public:
 	bool IsRetryable() const override;
-	void ConstructManifestList(IcebergManifestList &manifest_list, CopyFunction &avro_copy, DatabaseInstance &db,
-	                           IcebergCommitState &commit_state, IcebergSnapshotMetrics &snapshot_metrics) const;
 	void CreateUpdate(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state) const override;
 	const vector<IcebergPendingManifest> &GetPendingManifests() const;
 	void AddPendingManifest(IcebergPendingManifest manifest);

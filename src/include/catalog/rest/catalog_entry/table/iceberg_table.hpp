@@ -64,8 +64,8 @@ public:
 	                                       const IcebergTableSchema &schema, int32_t sort_order_id);
 	IRCAPITableCredentials GetVendedCredentials(ClientContext &context) const;
 	IRCAPITableCredentials
-	GetVendedCredentials(ClientContext &context,
-	                     const vector<rest_api_objects::StorageCredential> &storage_credentials) const;
+	GetVendedCredentials(ClientContext &context, const vector<rest_api_objects::StorageCredential> &storage_credentials,
+	                     optional_ptr<const case_insensitive_map_t<string>> config_override = nullptr) const;
 	const string &BaseFilePath() const;
 	bool IsRenamed() const;
 

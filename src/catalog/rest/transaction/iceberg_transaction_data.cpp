@@ -20,7 +20,8 @@ namespace duckdb {
 static void LoadMissingManifestCounts(ClientContext &context, const IcebergTableMetadata &metadata,
                                       const IcebergSnapshotScanInfo &snapshot_info,
                                       IcebergManifestListEntry &manifest_list_entry) {
-	if (manifest_list_entry.file.counts && manifest_list_entry.file.counts->Complete()) {
+	auto &counts = manifest_list_entry.GetFile().counts;
+	if (counts && counts->Complete()) {
 		return;
 	}
 	vector<IcebergManifestListEntry> manifest_files;
@@ -36,12 +37,11 @@ static void LoadMissingManifestCounts(ClientContext &context, const IcebergTable
 	}
 
 	manifest_list_entry = std::move(manifest_files[0]);
-	manifest_list_entry.file.SetCountsFromEntries(manifest_list_entry.GetManifestEntries());
+	manifest_list_entry.GetManifest().SetCountsFromEntries(manifest_list_entry.GetManifestEntries());
 }
 
 static optional<int64_t> LoadExistingManifestList(ClientContext &context, const IcebergTableMetadata &metadata,
-                                                  vector<IcebergManifestListEntry> &existing_manifest_list,
-                                                  int64_t &next_row_id) {
+                                                  vector<IcebergManifestListEntry> &existing_manifest_list) {
 	existing_manifest_list.clear();
 
 	auto current_snapshot = metadata.GetLatestSnapshot();
@@ -63,25 +63,17 @@ static optional<int64_t> LoadExistingManifestList(ClientContext &context, const 
 		return base_snapshot_id;
 	}
 
-	//! Deal with upgraded tables, if the snapshot originated from V2
+	//! Validate committed identities without assigning provisional IDs to upgraded manifests.
 	for (auto &manifest_list_entry : existing_manifest_list) {
-		auto &manifest_file = manifest_list_entry.file;
+		auto &manifest_file = manifest_list_entry.GetManifest();
 		if (manifest_file.content != IcebergManifestContentType::DATA) {
 			continue;
 		}
-		if (manifest_file.first_row_id) {
-			continue;
-		}
-		if (current_snapshot->first_row_id) {
+		if (!manifest_file.first_row_id && current_snapshot->first_row_id) {
 			throw InvalidConfigurationException(
 			    "Table is corrupted, snapshot has 'first-row-id' but not all 'manifest_file' "
 			    "entries have a 'first_row_id'");
 		}
-		D_ASSERT(manifest_file.counts && manifest_file.counts->added_rows_count &&
-		         manifest_file.counts->existing_rows_count);
-		manifest_file.first_row_id = next_row_id;
-		next_row_id += *manifest_file.counts->added_rows_count;
-		next_row_id += *manifest_file.counts->existing_rows_count;
 	}
 	return base_snapshot_id;
 }
@@ -90,6 +82,7 @@ IcebergTransactionData::IcebergTransactionData(ClientContext &context, IcebergTr
                                                const IcebergTable &table_info)
     : context(context), transaction(transaction), table_info(table_info) {
 	initial_table_uuid = table_info.table_metadata.table_uuid;
+	initial_format_version = table_info.table_metadata.iceberg_version;
 	initial_schema_id = table_info.table_metadata.GetCurrentSchemaId();
 	initial_default_spec_id = table_info.table_metadata.default_spec_id;
 	if (table_info.table_metadata.HasSortOrder()) {
@@ -178,12 +171,7 @@ void IcebergTransactionData::CacheExistingManifestList(lock_guard<mutex> &guard,
 	if (!alters.empty()) {
 		return;
 	}
-	int64_t loaded_next_row_id = 0;
-	if (metadata.next_row_id) {
-		loaded_next_row_id = *metadata.next_row_id;
-	}
-	base_snapshot_id = LoadExistingManifestList(context, metadata, existing_manifest_list, loaded_next_row_id);
-	scan_first_row_id = loaded_next_row_id;
+	base_snapshot_id = LoadExistingManifestList(context, metadata, existing_manifest_list);
 	scan_sequence_number = metadata.last_sequence_number + 1;
 }
 
@@ -349,6 +337,9 @@ void IcebergTransactionData::TableSetDefaultSpec() {
 }
 
 void IcebergTransactionData::TableSetProperties(const case_insensitive_map_t<string> &properties) {
+	if (properties.count("encryption.key-id")) {
+		throw NotImplementedException("Iceberg table encryption is not supported (encryption.key-id is set)");
+	}
 	updates.push_back(make_uniq<SetProperties>(properties));
 }
 
@@ -387,10 +378,10 @@ void IcebergTransactionData::TableRollbackToSnapshot(int64_t snapshot_id) {
 	}
 
 	auto current = metadata.GetLatestSnapshot();
-	if (!current || !current->snapshot_id) {
+	if (!current) {
 		throw InvalidInputException("Cannot roll back table with no current snapshot");
 	}
-	auto current_snapshot_id = *current->snapshot_id;
+	auto current_snapshot_id = current->snapshot_id;
 	if (!IsAncestorOfCurrentSnapshot(metadata, snapshot_id, current_snapshot_id)) {
 		throw InvalidInputException("Cannot roll back to snapshot, not an ancestor of the current state: %lld",
 		                            snapshot_id);

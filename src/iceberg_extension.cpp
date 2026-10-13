@@ -27,6 +27,7 @@
 #include "iceberg_attach.hpp"
 #include "iceberg_options.hpp"
 #include "common/iceberg_default.hpp"
+#include "common/iceberg_fixed_type.hpp"
 #include "function/copy/iceberg_copy_function.hpp"
 #include "duckdb/planner/planner_extension.hpp"
 #include "planning/iceberg_planner.hpp"
@@ -156,6 +157,9 @@ static void LoadInternal(ExtensionLoader &loader) {
 	    "equality-delete read path.",
 	    LogicalType::BOOLEAN, Value::BOOLEAN(false));
 #endif
+
+	// Iceberg Types
+	IcebergFixedType::Register(loader);
 
 	// Iceberg Table Functions
 	for (auto &fun : IcebergFunctions::GetTableFunctions(loader)) {

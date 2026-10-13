@@ -53,7 +53,7 @@ query I
 select count(*)
 from iceberg_metadata('my_datalake.default.rewrite_partitioned')
 where content = 'DATA' and status <> 'DELETED'
-  and file_path like '%/category=%';
+  and replace(file_path, chr(92), '/') like '%/category=%';
 ----
 12
 

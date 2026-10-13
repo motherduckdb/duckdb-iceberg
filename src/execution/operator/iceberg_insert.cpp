@@ -12,6 +12,7 @@
 #include "duckdb/execution/operator/order/physical_order.hpp"
 #include "duckdb/execution/operator/projection/physical_projection.hpp"
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
+#include "duckdb/function/cast/cast_function_set.hpp"
 #include "duckdb/function/function_binder.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
@@ -19,6 +20,7 @@
 #include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/common/type_visitor.hpp"
 
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
@@ -37,6 +39,7 @@
 #include "catalog/rest/api/iceberg_type.hpp"
 #include "catalog/rest/api/iceberg_create_table_request.hpp"
 #include "common/iceberg_utils.hpp"
+#include "common/iceberg_fixed_type.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
 #include "iceberg_logging.hpp"
 #include "iceberg_options.hpp"
@@ -807,6 +810,20 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 		info->options[mapping.parquet_option].emplace_back(it->second);
 	}
 
+	auto shred_variants = table_properties.find("write.parquet.shred-variants");
+	if (shred_variants != table_properties.end() &&
+	    !Value(shred_variants->second).DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>()) {
+		child_list_t<Value> shredding_types;
+		for (auto &column : layout.columns) {
+			if (column.type.id() == LogicalTypeId::VARIANT) {
+				shredding_types.emplace_back(column.name, Value("VARIANT"));
+			}
+		}
+		if (!shredding_types.empty()) {
+			info->options["shredding"] = {Value::STRUCT(std::move(shredding_types))};
+		}
+	}
+
 	// Always use native parquet geometry for writing
 	info->options["geoparquet_version"].emplace_back("NONE");
 
@@ -945,10 +962,66 @@ static void GeneratePhysicalOrder(PhysicalPlanGenerator &planner, vector<BoundOr
 	plan = order;
 }
 
+// Every write must produce the schema's storage types before sorting, partitioning or writing to Parquet.
+// CTAS can widen integers, and INSERT/UPDATE/MERGE can retain aliases such as AGGREGATE_STATE on LISTs.
+static PhysicalOperator &CastToIcebergStorageTypes(ClientContext &context, PhysicalPlanGenerator &planner,
+                                                   const IcebergTableSchema &schema, PhysicalOperator &plan) {
+	auto &src_types = plan.GetTypes();
+	D_ASSERT(src_types.size() >= schema.columns.size());
+
+	// Virtual columns (e.g. _row_id on v3 updates) follow the schema columns and pass through unchanged.
+	vector<LogicalType> target_types = src_types;
+	vector<LogicalType> validation_types = src_types;
+	bool needs_cast = false;
+	for (idx_t i = 0; i < schema.columns.size(); i++) {
+		target_types[i] = schema.columns[i]->type;
+		validation_types[i] = target_types[i];
+		if (TypeVisitor::Contains(target_types[i], IcebergFixedType::IsFixed)) {
+			validation_types[i] = TypeVisitor::VisitReplace(target_types[i], [](const LogicalType &type) {
+				return IcebergFixedType::IsFixed(type) ? LogicalType::BLOB : type;
+			});
+			needs_cast = true;
+		}
+		needs_cast |= target_types[i] != src_types[i];
+	}
+	if (!needs_cast) {
+		return plan;
+	}
+
+	auto &cast_functions = CastFunctionSet::Get(context);
+	GetCastFunctionInput cast_input(context);
+	vector<unique_ptr<Expression>> expressions;
+	expressions.reserve(src_types.size());
+	for (idx_t i = 0; i < src_types.size(); i++) {
+		unique_ptr<Expression> expr = make_uniq<BoundReferenceExpression>(src_types[i], i);
+		if (target_types[i] != src_types[i]) {
+			// AddCastToType can elide LIST casts when only the outer alias differs. Build the cast
+			// explicitly: the copy pipeline requires the exact storage type, including nested types.
+			auto bound_cast = cast_functions.GetCastFunction(src_types[i], target_types[i], cast_input);
+			expr = BoundCastExpression::Create(std::move(expr), target_types[i], std::move(bound_cast));
+		}
+		if (validation_types[i] != target_types[i]) {
+			// Nested JSON conversions can construct fixed-typed values without invoking the leaf casts.
+			// Strip the fixed aliases and cast back so every write validates the actual byte lengths,
+			// even when its input already has the declared storage type.
+			expr = BoundCastExpression::AddCastToType(context, std::move(expr), validation_types[i]);
+			expr = BoundCastExpression::AddCastToType(context, std::move(expr), target_types[i]);
+		}
+		expressions.push_back(std::move(expr));
+	}
+	auto &proj =
+	    planner.Make<PhysicalProjection>(std::move(target_types), std::move(expressions), plan.estimated_cardinality);
+	proj.children.push_back(plan);
+	return proj;
+}
+
 IcebergCopyToFile &IcebergInsert::PlanCopyForInsert(ClientContext &context, PhysicalPlanGenerator &planner,
                                                     IcebergCopyInput &copy_input, optional_ptr<PhysicalOperator> plan) {
-	auto copy_options = GetCopyOptions(context, copy_input);
 	D_ASSERT(!plan || plan->GetTypes().size() == ChildColumnCount(copy_input));
+	if (plan) {
+		plan = CastToIcebergStorageTypes(context, planner, copy_input.schema, *plan);
+	}
+	auto copy_options = GetCopyOptions(context, copy_input);
 
 	// Sort expressions reference the child plan output, so order before the projection changes the layout.
 	// Partitioned writes are sorted per partition by the copy operator itself.
@@ -1080,44 +1153,6 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(ClientContext &
 	return metadata;
 }
 
-// CTAS stores columns using Iceberg storage types (e.g. HUGEINT -> DECIMAL(38,0)), which can differ from
-// the SELECT output. The write pipeline is typed with the storage types, so without a cast the append fails
-// with a type mismatch.
-static PhysicalOperator &CastCtasToIcebergStorageTypes(ClientContext &context, PhysicalPlanGenerator &planner,
-                                                       PhysicalOperator &plan, const IcebergTableMetadata &metadata) {
-	auto &storage_schema = metadata.GetLatestSchema();
-	auto &src_types = plan.types;
-	D_ASSERT(src_types.size() == storage_schema.columns.size());
-
-	bool needs_cast = false;
-	vector<LogicalType> target_types;
-	target_types.reserve(src_types.size());
-	for (idx_t i = 0; i < src_types.size(); i++) {
-		auto &target = storage_schema.columns[i]->type;
-		if (target != src_types[i]) {
-			needs_cast = true;
-		}
-		target_types.push_back(target);
-	}
-	if (!needs_cast) {
-		return plan;
-	}
-
-	vector<unique_ptr<Expression>> expressions;
-	expressions.reserve(src_types.size());
-	for (idx_t i = 0; i < src_types.size(); i++) {
-		unique_ptr<Expression> expr = make_uniq<BoundReferenceExpression>(src_types[i], i);
-		if (target_types[i] != src_types[i]) {
-			expr = BoundCastExpression::AddCastToType(context, std::move(expr), target_types[i]);
-		}
-		expressions.push_back(std::move(expr));
-	}
-	auto &proj =
-	    planner.Make<PhysicalProjection>(std::move(target_types), std::move(expressions), plan.estimated_cardinality);
-	proj.children.push_back(plan);
-	return proj;
-}
-
 PhysicalOperator &IcebergCatalog::PlanCreateTableAs(ClientContext &context, PhysicalPlanGenerator &planner,
                                                     LogicalCreateTable &op, PhysicalOperator &plan_p) {
 	// create a fake local iceberg table with desired columns
@@ -1126,9 +1161,8 @@ PhysicalOperator &IcebergCatalog::PlanCreateTableAs(ClientContext &context, Phys
 		throw NotImplementedException("Insert into Iceberg V%d tables", placeholder_metadata->iceberg_version);
 	}
 	auto &placeholder_schema = placeholder_metadata->GetLatestSchema();
-	auto &plan = CastCtasToIcebergStorageTypes(context, planner, plan_p, *placeholder_metadata);
 	IcebergCopyInput copy_input(context, *placeholder_metadata, placeholder_schema, std::move(op.info));
-	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, &plan);
+	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, plan_p);
 
 	auto &insert = planner.Make<IcebergInsert>(op).Cast<IcebergInsert>();
 	// the copy creates the table; the insert reads the resulting entry back out of it
