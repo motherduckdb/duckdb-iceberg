@@ -329,15 +329,8 @@ Value IcebergColumnDefinition::GetInitialDefault() const {
 }
 
 Value IcebergColumnDefinition::GetWriteDefault() const {
-	optional_ptr<Value> default_to_use;
-	if (write_default) {
-		//! Use write-default if it's set
-		default_to_use = write_default.get();
-	} else if (initial_default) {
-		//! If it's not set, use the initial-default (if that *is* set)
-		default_to_use = initial_default.get();
-	}
-	Value result = default_to_use ? *default_to_use : Value(type);
+	//! An omitted write-default is null - the initial-default only applies to rows written before the field existed
+	Value result = write_default ? *write_default : Value(type);
 	if (type.id() != LogicalTypeId::STRUCT || !result.IsNull() || !IcebergDefault::InterpretStructNullAsEmpty()) {
 		return result;
 	}
