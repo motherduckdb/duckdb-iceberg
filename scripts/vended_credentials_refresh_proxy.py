@@ -154,6 +154,9 @@ class VendedCredentialRefreshAddon:
             self._handle_s3_request(flow)
 
     def response(self, flow: http.HTTPFlow):
+        if flow.response:
+            # Tests look for this header in DuckDB's HTTP log to see which requests went through the proxy.
+            flow.response.headers["x-vended-credentials-proxy"] = "true"
         if flow.metadata.get("vended_config") and flow.response and flow.response.status_code == 200:
             response = json.loads(flow.response.content.decode())
             mode = self._credential_endpoint_mode(flow)
@@ -176,7 +179,7 @@ class VendedCredentialRefreshAddon:
             # multi-credential tests can select an exact matching scope.
             response["metadata"]["location"] = self._credentials_prefix(table)
         if table in TLS_TABLE_CONFIGS:
-            response["storage-credentials"] = [self._credentials_for_table(table)]
+            response["storage-credentials"] = [self._tls_credentials(table, response["metadata"]["location"])]
         else:
             self._set_storage_credentials(flow, table, response)
         flow.response.text = json.dumps(response)
@@ -523,17 +526,20 @@ class VendedCredentialRefreshAddon:
             return False
         return True
 
+    @staticmethod
+    def _tls_credentials(table, location):
+        # A single credential is scoped by its prefix, so the table's location gives each table its own secret.
+        return {
+            "prefix": location,
+            "config": {
+                "s3.access-key-id": TLS_KEY,
+                "s3.secret-access-key": f"{TLS_KEY}_SECRET",
+                "s3.region": "us-east-1",
+                **TLS_TABLE_CONFIGS[table],
+            },
+        }
+
     def _credentials_for_table(self, table):
-        if table in TLS_TABLE_CONFIGS:
-            return {
-                "prefix": "s3://warehouse/",
-                "config": {
-                    "s3.access-key-id": TLS_KEY,
-                    "s3.secret-access-key": f"{TLS_KEY}_SECRET",
-                    "s3.region": "us-east-1",
-                    **TLS_TABLE_CONFIGS[table],
-                },
-            }
         key_id = self._key_for_table(table)
         return {
             "prefix": self._credentials_prefix(table),
