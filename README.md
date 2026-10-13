@@ -7,9 +7,6 @@ This repository contains DuckDB's Apache Iceberg extension. It adds support for 
 
 User-facing documentation is available on the [Iceberg extension page](https://duckdb.org/docs/extensions/iceberg).
 
-See [ATTACH and REST catalog configuration](docs/attach-options.md) for supported
-property translations and `/config` defaults/overrides precedence.
-
 ## Row lineage inside transactions
 
 For format version 3 tables, rows inserted within a transaction have NULL `_row_id`
