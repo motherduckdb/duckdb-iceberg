@@ -76,20 +76,20 @@ SET VARIABLE delete_manifests = (
 # Filename metrics are the UTF-8 bytes of the referenced data path.
 query II
 SELECT
-	CASE WHEN data_file.lower_bounds[2147483646] = encode(getvariable('original_data_path'))
+	CASE WHEN data_file.lower_bounds[2147483546] = encode(getvariable('original_data_path'))
 	THEN true::VARIANT ELSE {
 		'bound': 'lower',
 		'expected_hex': hex(encode(getvariable('original_data_path'))),
-		'actual_hex': hex(data_file.lower_bounds[2147483646]),
+		'actual_hex': hex(data_file.lower_bounds[2147483546]),
 		'data_file_path': getvariable('original_data_path'),
 		'format_version': '{version}',
 		'escape_case': '{escape}'
 	}::VARIANT END,
-	CASE WHEN data_file.upper_bounds[2147483646] = encode(getvariable('original_data_path'))
+	CASE WHEN data_file.upper_bounds[2147483546] = encode(getvariable('original_data_path'))
 	THEN true::VARIANT ELSE {
 		'bound': 'upper',
 		'expected_hex': hex(encode(getvariable('original_data_path'))),
-		'actual_hex': hex(data_file.upper_bounds[2147483646]),
+		'actual_hex': hex(data_file.upper_bounds[2147483546]),
 		'data_file_path': getvariable('original_data_path'),
 		'format_version': '{version}',
 		'escape_case': '{escape}'
