@@ -95,35 +95,34 @@ static string BuildJsonPath(const vector<string> &field_names) {
 
 //! Serialize a bounds object (a struct keyed by JSON path) to the parquet-variant encoding by casting
 //! it to VARIANT and calling variant_to_parquet_variant, then concatenating the metadata and value blobs.
-static bool SerializeBoundsVariant(ClientContext &context, Value bounds_struct, string &out) {
-	Value variant_value;
-	if (!bounds_struct.DefaultTryCastAs(LogicalType::VARIANT(), variant_value, nullptr)) {
-		return false;
+static optional<string> SerializeBoundsVariant(ClientContext &context, Value bounds_struct) {
+	auto variant_value = bounds_struct.DefaultTryCastAs(LogicalType::VARIANT());
+	if (!variant_value) {
+		return std::nullopt;
 	}
 
 	vector<unique_ptr<Expression>> children;
-	children.push_back(make_uniq<BoundConstantExpression>(std::move(variant_value)));
+	children.push_back(make_uniq<BoundConstantExpression>(std::move(*variant_value)));
 
 	ErrorData error;
 	FunctionBinder binder(context);
 	auto expr = binder.BindScalarFunction(DEFAULT_SCHEMA, "variant_to_parquet_variant", std::move(children), error);
 	if (!expr) {
-		return false;
+		return std::nullopt;
 	}
 
 	Value result;
 	if (!ExpressionExecutor::TryEvaluateScalar(context, *expr, result) || result.IsNull()) {
-		return false;
+		return std::nullopt;
 	}
 
 	// parquet variant is STRUCT(metadata BLOB, value BLOB)
 	auto &result_children = StructValue::GetChildren(result);
 	if (result_children.size() < 2 || result_children[0].IsNull() || result_children[1].IsNull()) {
-		return false;
+		return std::nullopt;
 	}
 	// return metadata + value
-	out = StringValue::Get(result_children[0]) + StringValue::Get(result_children[1]);
-	return true;
+	return StringValue::Get(result_children[0]) + StringValue::Get(result_children[1]);
 }
 
 //===--------------------------------------------------------------------===//
@@ -141,70 +140,80 @@ void IcebergVariantBounds::AddStatsEntry(const vector<string> &full_path, idx_t 
 			auto &stat_children = StructValue::GetChildren(stat);
 			if (StringValue::Get(stat_children[0]) == "variant_type") {
 				variant_type_str = StringValue::Get(stat_children[1]);
-				has_variant_type = true;
 			}
 		}
 		return;
 	}
 
+	//! Even-length suffixes identify wrapper groups named after object fields or list elements.
+	if ((full_path.size() - variant_field_start) % 2 == 0) {
+		return;
+	}
+
 	// check leafs have values. That means path is not fully shredded
 	if (leaf == "value") {
-		bool has_null_count = false, has_num_values = false;
-		idx_t null_count = 0, num_values = 0;
+		optional<idx_t> null_count, num_values;
 		for (auto &child : col_stats) {
 			auto &child_children = StructValue::GetChildren(child);
 			if (StringValue::Get(child_children[0]) == "null_count") {
 				null_count = StringUtil::ToUnsigned(StringValue::Get(child_children[1]));
-				has_null_count = true;
 			}
 			if (StringValue::Get(child_children[0]) == "num_values") {
 				num_values = StringUtil::ToUnsigned(StringValue::Get(child_children[1]));
-				has_num_values = true;
 			}
 		}
-		if (!has_num_values || !has_null_count || (num_values - null_count) > 0) {
+		if (!num_values || !null_count || *num_values != *null_count) {
 			// be conservative: missing counts OR any non-null -> treat as partial
 			partial_paths.push_back(ExtractVariantFieldNames(full_path, variant_field_start));
 		}
 	}
-	// only "typed_value" leaves carry shredded bounds; ignore untyped "value" leaves for now
+	//! Typed entries carry either container counts or primitive bounds.
 	if (leaf != "typed_value") {
 		return;
 	}
 
 	FieldBound bound;
 	bound.field_names = ExtractVariantFieldNames(full_path, variant_field_start);
+	optional<idx_t> null_count;
+	optional<idx_t> num_values;
+	bool is_leaf = false;
 	for (auto &stat : col_stats) {
 		auto &stat_children = StructValue::GetChildren(stat);
 		auto &name = StringValue::Get(stat_children[0]);
 		if (name == "min") {
 			bound.min_value = StringValue::Get(stat_children[1]);
-			bound.has_min = true;
 		} else if (name == "max") {
 			bound.max_value = StringValue::Get(stat_children[1]);
-			bound.has_max = true;
+		} else if (name == "null_count") {
+			null_count = StringUtil::ToUnsigned(StringValue::Get(stat_children[1]));
+		} else if (name == "num_values") {
+			num_values = StringUtil::ToUnsigned(StringValue::Get(stat_children[1]));
+		} else if (name == "column_size_bytes") {
+			is_leaf = true;
 		}
 	}
-	if (bound.has_min || bound.has_max) {
+	//! Containers have no physical column size, and their counts exclude absent parents.
+	if (!is_leaf && num_values && null_count && *null_count == 0) {
+		non_null_containers.insert(bound.field_names);
+	}
+	if (bound.min_value || bound.max_value) {
 		fields.push_back(std::move(bound));
 	}
 }
 
 bool IcebergVariantBounds::HasBounds() const {
-	return has_variant_type && !fields.empty();
+	return variant_type_str && !fields.empty();
 }
 
-bool IcebergVariantBounds::Finalize(ClientContext &context, bool &has_lower, string &lower_blob, bool &has_upper,
-                                    string &upper_blob) {
-	has_lower = false;
-	has_upper = false;
+bool IcebergVariantBounds::Finalize(ClientContext &context, optional<string> &lower_blob,
+                                    optional<string> &upper_blob) {
 	if (!HasBounds()) {
 		return false;
 	}
 
 	LogicalType shredding_type;
 	try {
-		shredding_type = TransformStringToLogicalType(variant_type_str, context);
+		shredding_type = TransformStringToLogicalType(*variant_type_str, context);
 	} catch (...) {
 		return false;
 	}
@@ -212,19 +221,22 @@ bool IcebergVariantBounds::Finalize(ClientContext &context, bool &has_lower, str
 	child_list_t<Value> lower_children;
 	child_list_t<Value> upper_children;
 	for (auto &field : fields) {
-		bool drop_field = !partial_paths.empty();
+		bool drop_field = false;
 		for (auto &partial_path : partial_paths) {
+			//! A present typed container can have unshredded object fields without invalidating its children.
+			if (non_null_containers.count(partial_path) || partial_path.size() > field.field_names.size()) {
+				continue;
+			}
+			bool is_prefix = true;
 			for (idx_t i = 0; i < partial_path.size(); i++) {
-				if (i >= field.field_names.size()) {
-					// the partial path of an unshredded field is longer.
-					// i.e a.b.c.d (unshredded) is longer than a.b which is not possible
-					throw InternalException("Partial path length longer than field path length");
-				}
 				if (partial_path[i] != field.field_names[i]) {
-					// the paths deviate
-					drop_field = false;
+					is_prefix = false;
 					break;
 				}
+			}
+			if (is_prefix) {
+				drop_field = true;
+				break;
 			}
 		}
 		if (drop_field) {
@@ -240,16 +252,16 @@ bool IcebergVariantBounds::Finalize(ClientContext &context, bool &has_lower, str
 			// could not resolve this field in the first pass - skip it
 			continue;
 		}
-		if (field.has_min) {
-			Value typed;
-			if (Value(field.min_value).DefaultTryCastAs(leaf_type, typed, nullptr)) {
-				lower_children.emplace_back(json_path, std::move(typed));
+		if (field.min_value) {
+			auto typed = Value(*field.min_value).DefaultTryCastAs(leaf_type);
+			if (typed) {
+				lower_children.emplace_back(json_path, std::move(*typed));
 			}
 		}
-		if (field.has_max) {
-			Value typed;
-			if (Value(field.max_value).DefaultTryCastAs(leaf_type, typed, nullptr)) {
-				upper_children.emplace_back(json_path, std::move(typed));
+		if (field.max_value) {
+			auto typed = Value(*field.max_value).DefaultTryCastAs(leaf_type);
+			if (typed) {
+				upper_children.emplace_back(json_path, std::move(*typed));
 			}
 		}
 	}
@@ -258,12 +270,12 @@ bool IcebergVariantBounds::Finalize(ClientContext &context, bool &has_lower, str
 		return false;
 	}
 	if (!lower_children.empty()) {
-		has_lower = SerializeBoundsVariant(context, Value::STRUCT(std::move(lower_children)), lower_blob);
+		lower_blob = SerializeBoundsVariant(context, Value::STRUCT(std::move(lower_children)));
 	}
 	if (!upper_children.empty()) {
-		has_upper = SerializeBoundsVariant(context, Value::STRUCT(std::move(upper_children)), upper_blob);
+		upper_blob = SerializeBoundsVariant(context, Value::STRUCT(std::move(upper_children)));
 	}
-	return has_lower || has_upper;
+	return lower_blob || upper_blob;
 }
 
 //===--------------------------------------------------------------------===//
@@ -354,7 +366,8 @@ Value NodeToValue(const BoundNode &node) {
 
 } // namespace
 
-bool IcebergVariantBoundsReader::RekeyBoundsVariant(const Value &bounds_variant, Value &result) {
+bool IcebergVariantBoundsReader::RekeyBoundsVariant(const Value &bounds_variant, const vector<string> &path,
+                                                    Value &result) {
 	if (bounds_variant.IsNull() || bounds_variant.type().id() != LogicalTypeId::VARIANT) {
 		return false;
 	}
@@ -363,9 +376,9 @@ bool IcebergVariantBoundsReader::RekeyBoundsVariant(const Value &bounds_variant,
 	try {
 		// Convert the VARIANT into a regular nested Value: objects become STRUCTs keyed by the variant's object
 		// keys (the flat JSON paths "$['person']['address']['zip']", ...), with the leaf bounds as typed scalars.
-		Vector tmp(bounds_variant);
+		Vector tmp(bounds_variant, count_t(1));
 		RecursiveUnifiedVectorFormat format;
-		Vector::RecursiveToUnifiedFormat(tmp, 1, format);
+		Vector::RecursiveToUnifiedFormat(tmp, format);
 		UnifiedVariantVectorData variant_data(format);
 		struct_value = VariantUtils::ConvertVariantToValue(variant_data, 0, 0);
 	} catch (...) {
@@ -383,18 +396,33 @@ bool IcebergVariantBoundsReader::RekeyBoundsVariant(const Value &bounds_variant,
 	auto &child_values = StructValue::GetChildren(struct_value);
 	BoundNode root;
 	for (idx_t i = 0; i < child_types.size(); i++) {
-		InsertPath(root, ParseJsonPathSegments(child_types[i].first), child_values[i]);
+		InsertPath(root, ParseJsonPathSegments(child_types[i].first.GetIdentifierName()), child_values[i]);
 	}
 	if (root.children.empty()) {
 		return false;
 	}
+	//! The bounds of the requested path; a path without bounds means nothing is known about it
+	const BoundNode *node = &root;
+	for (auto &segment : path) {
+		const BoundNode *child = nullptr;
+		for (auto &entry : node->children) {
+			if (entry.first == segment) {
+				child = entry.second.get();
+				break;
+			}
+		}
+		if (!child) {
+			return false;
+		}
+		node = child;
+	}
 
-	Value nested_struct = NodeToValue(root);
-	Value variant_result;
-	if (!nested_struct.DefaultTryCastAs(LogicalType::VARIANT(), variant_result, nullptr)) {
+	Value nested_struct = NodeToValue(*node);
+	auto variant_result = nested_struct.DefaultTryCastAs(LogicalType::VARIANT());
+	if (!variant_result) {
 		return false;
 	}
-	result = std::move(variant_result);
+	result = std::move(*variant_result);
 	return true;
 }
 

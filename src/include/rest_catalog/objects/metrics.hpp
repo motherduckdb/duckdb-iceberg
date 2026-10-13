@@ -1,13 +1,12 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/metric_result.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -21,10 +20,16 @@ public:
 	Metrics &operator=(Metrics &&) = default;
 
 public:
-	static Metrics FromJSON(yyjson_val *obj);
+	// Deserialization
+	static Metrics FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Copy
+	Metrics Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	case_insensitive_map_t<MetricResult> additional_properties;

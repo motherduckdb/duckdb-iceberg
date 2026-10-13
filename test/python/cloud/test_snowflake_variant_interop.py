@@ -240,7 +240,7 @@ def duckdb_con():
             "  TYPE ICEBERG,"
             f"  CLIENT_ID '{os.getenv('ICEBERG_CATALOG_CLIENT_ID')}',"
             f"  CLIENT_SECRET '{os.getenv('ICEBERG_CATALOG_CLIENT_SECRET')}',"
-            f"  ENDPOINT '{os.getenv('ICEBERG_CATALOG_ENDPOINT')}'"
+            f"  URI '{os.getenv('ICEBERG_CATALOG_ENDPOINT')}'"
             ");"
         )
 
@@ -250,7 +250,7 @@ def duckdb_con():
             f"ATTACH '{CATALOG_NAME}' AS my_datalake ("
             "  TYPE ICEBERG,"
             f"{region_clause}"
-            f"  ENDPOINT '{os.getenv('ICEBERG_CATALOG_ENDPOINT')}'"
+            f"  URI '{os.getenv('ICEBERG_CATALOG_ENDPOINT')}'"
             ");"
         )
         db.query(f"CREATE SCHEMA IF NOT EXISTS my_datalake.{NAMESPACE};")
@@ -310,7 +310,7 @@ def duckdb_created_d2s_table(duckdb_con):
     populated by DuckDB and read by Snowflake.
     """
     duckdb_con.query(f"DROP TABLE IF EXISTS my_datalake.{NAMESPACE}.{D2S_TABLE};")
-    duckdb_con.query(f"CREATE TABLE my_datalake.{NAMESPACE}.{D2S_TABLE} (v VARIANT) " "WITH ('format-version'='3');")
+    duckdb_con.query(f"CREATE TABLE my_datalake.{NAMESPACE}.{D2S_TABLE} (v VARIANT) WITH ('format-version'=3);")
     yield D2S_TABLE
     duckdb_con.query(f"DROP TABLE IF EXISTS my_datalake.{NAMESPACE}.{D2S_TABLE};")
 
@@ -366,6 +366,9 @@ def test_snowflake_reads_duckdb_written_variant(duckdb_con, snowflake_session, d
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skip(
+    "Currently hooking into DuckDB C APIS in this hacky way does not work locally. Need to fix this once we get pytest working well"
+)
 def test_duckdb_reads_snowflake_written_variant(duckdb_con, snowflake_session, duckdb_created_d2s_table):
     # Snowflake would need to own/create the table to write it (illustrative).
     sf_table = D2S_TABLE

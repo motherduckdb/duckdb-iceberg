@@ -8,197 +8,117 @@
 #include "duckdb/execution/execution_context.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
-#include "duckdb/storage/caching_file_system.hpp"
+#include "duckdb/storage/external_file_cache/caching_file_system.hpp"
 #include "duckdb/common/types/blob.hpp"
+#include "duckdb/planner/expression_binder/constant_binder.hpp"
+#include "duckdb/planner/binder.hpp"
+#include "duckdb/execution/expression_executor.hpp"
 
 #include "catalog/rest/api/iceberg_add_snapshot.hpp"
 #include "core/metadata/partition/iceberg_partition_spec.hpp"
-#include "catalog/rest/iceberg_table_set.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
 #include "catalog/rest/api/iceberg_type.hpp"
 #include "common/iceberg_default.hpp"
 
-using namespace duckdb_yyjson;
 namespace duckdb {
 
-IcebergCreateTableRequest::IcebergCreateTableRequest(const IcebergTableInformation &table_info)
-    : table_info(table_info) {
+IcebergCreateTableRequest::IcebergCreateTableRequest(string name_p, shared_ptr<IcebergTableSchema> schema_p,
+                                                     IcebergPartitionSpec partition_spec_p,
+                                                     IcebergSortOrder sort_order_p, idx_t iceberg_version_p,
+                                                     case_insensitive_map_t<string> table_properties_p,
+                                                     string location_p)
+    : name(std::move(name_p)), schema(std::move(schema_p)), partition_spec(std::move(partition_spec_p)),
+      sort_order(std::move(sort_order_p)), iceberg_version(iceberg_version_p),
+      table_properties(std::move(table_properties_p)), location(std::move(location_p)) {
 }
 
-static string ConvertBlobDefault(const string_t &str) {
-	string result;
-	result.resize(str.GetSize() * 2);
-	idx_t str_idx = 0;
-	auto data = str.GetData();
-	auto len = str.GetSize();
-	for (idx_t i = 0; i < len; i++) {
-		auto byte_a = (data[i] >> 4) & 0x0F;
-		auto byte_b = data[i] & 0x0F;
-		D_ASSERT(byte_a >= 0 && byte_a < 16);
-		D_ASSERT(byte_b >= 0 && byte_b < 16);
-		// non-ascii characters are rendered as hexadecimal (e.g. \x00)
-		result[str_idx++] = Blob::HEX_TABLE[byte_a];
-		result[str_idx++] = Blob::HEX_TABLE[byte_b];
-	}
-	return result;
-}
+static void AddUnnamedField(JSONWriter &writer, JSONMutableValue field_obj, const IcebergColumnDefinition &column);
 
-static yyjson_mut_val *PrimitiveTypeFromValue(yyjson_mut_doc *doc, const Value &value) {
-	if (value.IsNull()) {
-		throw InternalException("Can't produce a PrimitiveTypeValue from NULL");
+static void AddNamedField(JSONWriter &writer, JSONMutableValue field_obj, const IcebergColumnDefinition &column) {
+	field_obj.AddString("name", column.name);
+	field_obj.Add("id", writer.CreateUnsignedInteger(column.id));
+	field_obj.Add("required", writer.CreateBoolean(column.required));
+	if (column.doc) {
+		field_obj.AddString("doc", *column.doc);
 	}
-	auto &type = value.type();
-	switch (type.id()) {
-	case LogicalTypeId::VARIANT: {
-		throw NotImplementedException("DEFAULT values for VARIANT are not supported yet");
-	}
-	//! BooleanTypeValue
-	case LogicalTypeId::BOOLEAN: {
-		auto val = value.GetValue<bool>();
-		return yyjson_mut_bool(doc, val);
-	}
-	//! IntegerTypeValue
-	case LogicalTypeId::INTEGER: {
-		auto val = value.GetValue<int32_t>();
-		return yyjson_mut_sint(doc, val);
-	}
-	//! LongTypeValue
-	case LogicalTypeId::BIGINT: {
-		auto val = value.GetValue<int64_t>();
-		return yyjson_mut_sint(doc, val);
-	}
-	//! FloatTypeValue
-	case LogicalTypeId::FLOAT: {
-		auto val = value.GetValue<float>();
-		return yyjson_mut_real(doc, val);
-	}
-	//! DoubleTypeValue
-	case LogicalTypeId::DOUBLE: {
-		auto val = value.GetValue<double>();
-		return yyjson_mut_real(doc, val);
-	}
-	//! DecimalTypeValue
-	case LogicalTypeId::DECIMAL: {
-		//! FIXME: Spec says scientific notation should be used for negative scale decimals
-		return yyjson_mut_strcpy(doc, value.ToString().c_str());
-	}
-	//! StringTypeValue
-	//! UUIDTypeValue
-	//! DateTypeValue
-	//! TimeTypeValue
-	//! TimestampTypeValue
-	//! TimestampTzTypeValue
-	//! TimestampNanoTypeValue
-	case LogicalTypeId::VARCHAR:
-	case LogicalTypeId::UUID:
-	case LogicalTypeId::DATE:
-	case LogicalTypeId::TIME: {
-		auto str = value.ToString();
-		return yyjson_mut_strcpy(doc, str.c_str());
-	}
-	case LogicalTypeId::TIMESTAMP:
-	case LogicalTypeId::TIMESTAMP_NS: {
-		auto raw = value.ToString();
-		auto splits = StringUtil::Split(raw, ' ');
-		D_ASSERT(splits.size() == 2);
-		auto str = StringUtil::Join(splits, "T");
-		return yyjson_mut_strcpy(doc, str.c_str());
-	}
-	case LogicalTypeId::TIMESTAMP_TZ: {
-		auto raw = value.ToString();
-		auto splits = StringUtil::Split(raw, ' ');
-		D_ASSERT(splits.size() == 2);
-		auto str = StringUtil::Join(splits, "T");
-		str += ":00";
-		return yyjson_mut_strcpy(doc, str.c_str());
-	}
-	//! FIXME: missing TimestampTzNanoTypeValue
-	//! FIXME: missing FixedTypeValue
-	//! BinaryTypeValue
-	case LogicalTypeId::BLOB: {
-		auto str = value.GetValueUnsafe<string_t>();
-		auto blob_str = ConvertBlobDefault(str);
-		return yyjson_mut_strncpy(doc, blob_str.c_str(), blob_str.size());
-	}
-	default:
-		throw InvalidConfigurationException("Type %s not supported for Iceberg tables", type.ToString());
-	}
-}
 
-static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, const IcebergColumnDefinition &column);
-
-static void AddNamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, const IcebergColumnDefinition &column) {
-	yyjson_mut_obj_add_strcpy(doc, field_obj, "name", column.name.c_str());
-	yyjson_mut_obj_add_uint(doc, field_obj, "id", column.id);
 	if (column.type.id() != LogicalTypeId::VARIANT && column.type.IsNested()) {
-		auto type_obj = yyjson_mut_obj_add_obj(doc, field_obj, "type");
-		AddUnnamedField(doc, type_obj, column);
-		yyjson_mut_obj_add_bool(doc, field_obj, "required", column.required);
-		if (column.initial_default) {
-			throw NotImplementedException("DEFAULT values for nested types (like %s) not implemented",
-			                              column.type.ToString());
+		auto type_obj = writer.CreateObject();
+		field_obj.Add("type", type_obj);
+		AddUnnamedField(writer, type_obj, column);
+		//! Add default as empty object: '{}'
+		if (column.initial_default && !column.initial_default->IsNull()) {
+			field_obj.Add("initial-default", writer.CreateObject());
+		}
+		if (column.write_default && !column.write_default->IsNull()) {
+			field_obj.Add("write-default", writer.CreateObject());
 		}
 		return;
 	}
-	yyjson_mut_obj_add_strcpy(doc, field_obj, "type", IcebergTypeHelper::LogicalTypeToIcebergType(column.type).c_str());
-	yyjson_mut_obj_add_bool(doc, field_obj, "required", column.required);
+
+	//! Write of non-struct type
+	field_obj.AddString("type", IcebergTypeHelper::LogicalTypeToIcebergType(column.type));
 	if (column.initial_default && !column.initial_default->IsNull()) {
-		yyjson_mut_obj_add_val(doc, field_obj, "initial-default", PrimitiveTypeFromValue(doc, *column.initial_default));
+		auto primitive_type_value = IcebergTypeHelper::PrimitiveTypeFromValue(*column.initial_default);
+		field_obj.Add("initial-default", IcebergTypeHelper::PrimitiveTypeValueToJSON(writer, primitive_type_value));
 	}
 	if (column.write_default && !column.write_default->IsNull()) {
-		yyjson_mut_obj_add_val(doc, field_obj, "write-default", PrimitiveTypeFromValue(doc, *column.write_default));
+		auto primitive_type_value = IcebergTypeHelper::PrimitiveTypeFromValue(*column.write_default);
+		field_obj.Add("write-default", IcebergTypeHelper::PrimitiveTypeValueToJSON(writer, primitive_type_value));
 	}
 }
 
-static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, const IcebergColumnDefinition &column) {
+static void AddUnnamedField(JSONWriter &writer, JSONMutableValue field_obj, const IcebergColumnDefinition &column) {
 	D_ASSERT(column.type.IsNested());
 	switch (column.type.id()) {
 	case LogicalTypeId::STRUCT: {
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "type", "struct");
-		auto nested_fields_arr = yyjson_mut_obj_add_arr(doc, field_obj, "fields");
-		for (auto &field : column.children) {
-			auto nested_field_obj = yyjson_mut_arr_add_obj(doc, nested_fields_arr);
-			AddNamedField(doc, nested_field_obj, *field);
+		field_obj.AddString("type", "struct");
+		auto nested_fields_arr = writer.CreateArray();
+		field_obj.Add("fields", nested_fields_arr);
+		for (idx_t i = 0; i < column.GetChildCount(); i++) {
+			auto field = column.GetChild(i);
+			auto nested_field_obj = writer.CreateObject();
+			nested_fields_arr.Append(nested_field_obj);
+			AddNamedField(writer, nested_field_obj, *field);
 		}
 		break;
 	}
 	case LogicalTypeId::LIST: {
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "type", "list");
-		D_ASSERT(column.children.size() == 1);
-		auto &list_type = column.children[0];
-		yyjson_mut_obj_add_uint(doc, field_obj, "element-id", list_type->id);
+		field_obj.AddString("type", "list");
+		D_ASSERT(column.GetChildCount() == 1);
+		auto list_type = column.GetChild("element");
+		field_obj.Add("element-id", writer.CreateUnsignedInteger(list_type->id));
 		if (list_type->IsIcebergPrimitiveType()) {
-			yyjson_mut_obj_add_strcpy(doc, field_obj, "element",
-			                          IcebergTypeHelper::LogicalTypeToIcebergType(list_type->type).c_str());
+			field_obj.AddString("element", IcebergTypeHelper::LogicalTypeToIcebergType(list_type->type));
 		} else {
-			auto list_type_obj = yyjson_mut_obj_add_obj(doc, field_obj, "element");
-			AddUnnamedField(doc, list_type_obj, *list_type);
+			auto list_type_obj = writer.CreateObject();
+			field_obj.Add("element", list_type_obj);
+			AddUnnamedField(writer, list_type_obj, *list_type);
 		}
-		yyjson_mut_obj_add_bool(doc, field_obj, "element-required", false);
+		field_obj.Add("element-required", writer.CreateBoolean(list_type->required));
 		return;
 	}
 	case LogicalTypeId::MAP: {
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "type", "map");
-		D_ASSERT(column.children.size() == 2);
-		auto &key_child = column.children[0];
+		field_obj.AddString("type", "map");
+		D_ASSERT(column.GetChildCount() == 2);
+		auto key_child = column.GetChild("key");
 		if (key_child->IsIcebergPrimitiveType()) {
-			yyjson_mut_obj_add_strcpy(doc, field_obj, "key",
-			                          IcebergTypeHelper::LogicalTypeToIcebergType(key_child->type).c_str());
+			field_obj.AddString("key", IcebergTypeHelper::LogicalTypeToIcebergType(key_child->type));
 		} else {
-			auto key_obj = yyjson_mut_obj_add_obj(doc, field_obj, "key");
-			AddUnnamedField(doc, key_obj, *key_child);
+			auto key_obj = writer.CreateObject();
+			field_obj.Add("key", key_obj);
+			AddUnnamedField(writer, key_obj, *key_child);
 		}
-		yyjson_mut_obj_add_uint(doc, field_obj, "key-id", key_child->id);
-		auto &val_child = column.children[1];
+		field_obj.Add("key-id", writer.CreateUnsignedInteger(key_child->id));
+		auto val_child = column.GetChild("value");
 		if (val_child->IsIcebergPrimitiveType()) {
-			yyjson_mut_obj_add_strcpy(doc, field_obj, "value",
-			                          IcebergTypeHelper::LogicalTypeToIcebergType(val_child->type).c_str());
+			field_obj.AddString("value", IcebergTypeHelper::LogicalTypeToIcebergType(val_child->type));
 		} else {
-			auto val_obj = yyjson_mut_obj_add_obj(doc, field_obj, "value");
-			AddUnnamedField(doc, val_obj, *val_child);
+			auto val_obj = writer.CreateObject();
+			field_obj.Add("value", val_obj);
+			AddUnnamedField(writer, val_obj, *val_child);
 		}
-		yyjson_mut_obj_add_uint(doc, field_obj, "value-id", val_child->id);
-		yyjson_mut_obj_add_bool(doc, field_obj, "value-required", false);
+		field_obj.Add("value-id", writer.CreateUnsignedInteger(val_child->id));
+		field_obj.Add("value-required", writer.CreateBoolean(val_child->required));
 		break;
 	}
 	default:
@@ -212,27 +132,25 @@ IcebergCreateTableRequest::CreateIcebergColumn(const ColumnDefinition &column_de
                                                idx_t iceberg_version) {
 	const auto &name = column_def.Name();
 	const auto &logical_type = column_def.GetType();
-	idx_t first_id = next_field_id();
-	rest_api_objects::Type type;
-	if (logical_type.IsNested()) {
-		type = IcebergTypeHelper::CreateIcebergRestType(logical_type, next_field_id);
-	} else {
-		type.has_primitive_type = true;
-		type.primitive_type = rest_api_objects::PrimitiveType();
-		type.primitive_type.value = IcebergTypeHelper::LogicalTypeToIcebergType(logical_type);
+	auto minimum_version = IcebergTypeHelper::MinimumFormatVersion(logical_type);
+	if (static_cast<idx_t>(minimum_version) > iceberg_version) {
+		throw InvalidInputException("Column '%s' of type %s requires Iceberg format-version %d, the table uses %d",
+		                            name.GetIdentifierName(), logical_type.ToString(), minimum_version,
+		                            iceberg_version);
 	}
-	auto iceberg_column_def = IcebergColumnDefinition::ParseType(name, first_id, required, type, "", nullptr);
+
+	Value default_value;
 	if (column_def.HasDefaultValue()) {
 		auto &default_expr = column_def.DefaultValue();
-		auto val = default_binder.Evaluate(default_expr, logical_type);
-		if (iceberg_version < 3 && !val.IsNull()) {
+		default_value = default_binder.Evaluate(default_expr, logical_type);
+		if (iceberg_version < 3 && !default_value.IsNull()) {
 			throw InvalidInputException("non-null DEFAULT values are not supported for <V3 tables");
 		}
-		iceberg_column_def->initial_default = make_uniq<Value>(val);
-		if (iceberg_version >= 3) {
-			iceberg_column_def->write_default = make_uniq<Value>(val);
-		}
 	}
+
+	auto rest_type = IcebergTypeHelper::CreateIcebergRestType(name.GetIdentifierName(), logical_type, required, "",
+	                                                          default_value, next_field_id, iceberg_version);
+	auto iceberg_column_def = IcebergColumnDefinition::ParseStructField(rest_type);
 	return iceberg_column_def;
 }
 
@@ -280,68 +198,73 @@ shared_ptr<IcebergTableSchema> IcebergCreateTableRequest::CreateIcebergSchema(
 	return schema;
 }
 
-void IcebergCreateTableRequest::PopulateSchema(yyjson_mut_doc *doc, yyjson_mut_val *schema_json,
+void IcebergCreateTableRequest::PopulateSchema(JSONWriter &writer, JSONMutableValue schema_json,
                                                const IcebergTableSchema &schema) {
-	yyjson_mut_obj_add_strcpy(doc, schema_json, "type", "struct");
-	auto fields_arr = yyjson_mut_obj_add_arr(doc, schema_json, "fields");
+	schema_json.AddString("type", "struct");
+	auto fields_arr = writer.CreateArray();
+	schema_json.Add("fields", fields_arr);
 
 	for (auto &field : schema.columns) {
-		auto field_obj = yyjson_mut_arr_add_obj(doc, fields_arr);
+		auto field_obj = writer.CreateObject();
+		fields_arr.Append(field_obj);
 		// top level fields are always named
-		AddNamedField(doc, field_obj, *field);
+		AddNamedField(writer, field_obj, *field);
 	}
 
-	yyjson_mut_obj_add_uint(doc, schema_json, "schema-id", schema.schema_id);
+	schema_json.Add("schema-id", writer.CreateUnsignedInteger(schema.schema_id));
+	if (!schema.identifier_field_ids.empty()) {
+		auto identifier_field_ids = writer.CreateArray();
+		schema_json.Add("identifier-field-ids", identifier_field_ids);
+		for (const auto field_id : schema.identifier_field_ids) {
+			identifier_field_ids.Append(writer.CreateSignedInteger(field_id));
+		}
+	}
 }
 
-string IcebergCreateTableRequest::CreateTableToJSON(std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p) {
-	auto doc = doc_p.get();
-	auto root_object = yyjson_mut_doc_get_root(doc);
+string IcebergCreateTableRequest::CreateTableToJSON(bool stage_create) const {
+	JSONWriter writer;
+	auto root_object = writer.CreateObject();
+	writer.SetRoot(root_object);
 
-	yyjson_mut_obj_add_strcpy(doc, root_object, "name", table_info.name.c_str());
-	auto schema_json = yyjson_mut_obj_add_obj(doc, root_object, "schema");
-
-	idx_t schema_id = table_info.table_metadata.GetCurrentSchemaId();
-	auto &schemas = table_info.table_metadata.GetSchemas();
-	auto initial_schema = schemas.find(schema_id);
-	if (initial_schema == schemas.end()) {
-		throw InternalException(
-		    "Attempted to create a CreateTableRequest referencing schema id %d, but it doesn't exist", schema_id);
+	// If stage create is supported, create the table with stage_create = true and the table update will
+	// commit the table.
+	root_object.Add("stage-create", writer.CreateBoolean(stage_create));
+	root_object.AddString("name", name);
+	auto schema_json = writer.CreateObject();
+	root_object.Add("schema", schema_json);
+	if (!schema) {
+		throw InternalException("Attempted to create a CreateTableRequest without a schema payload");
 	}
-	PopulateSchema(doc, schema_json, *initial_schema->second);
+	PopulateSchema(writer, schema_json, *schema);
 
-	auto partition_spec_json = yyjson_mut_obj_add_obj(doc, root_object, "partition-spec");
-	yyjson_mut_obj_add_uint(doc, partition_spec_json, "spec-id", 0);
-	yyjson_mut_obj_add_strcpy(doc, partition_spec_json, "type", "struct");
-	auto fields_arr = yyjson_mut_obj_add_arr(doc, partition_spec_json, "fields");
-
-	idx_t partition_spec_id = table_info.table_metadata.GetCurrentSchemaId();
-	auto partition_spec = table_info.table_metadata.partition_specs.find(partition_spec_id)->second;
+	auto partition_spec_json = writer.CreateObject();
+	root_object.Add("partition-spec", partition_spec_json);
+	partition_spec_json.Add("spec-id", writer.CreateUnsignedInteger(0));
+	partition_spec_json.AddString("type", "struct");
+	auto fields_arr = writer.CreateArray();
+	partition_spec_json.Add("fields", fields_arr);
 
 	for (auto &field : partition_spec.fields) {
-		auto field_obj = yyjson_mut_arr_add_obj(doc, fields_arr);
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "name", field.GetPartitionSpecFieldName().c_str());
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "transform", field.transform.RawType().c_str());
-		yyjson_mut_obj_add_int(doc, field_obj, "source-id", field.source_id);
-		yyjson_mut_obj_add_int(doc, field_obj, "field-id", field.partition_field_id);
+		auto field_obj = writer.CreateObject();
+		fields_arr.Append(field_obj);
+		field_obj.AddString("name", field.GetPartitionSpecFieldName());
+		field_obj.AddString("transform", field.transform.RawType());
+		field_obj.Add("source-id", writer.CreateSignedInteger(field.source_id));
+		field_obj.Add("field-id", writer.CreateSignedInteger(field.partition_field_id));
 	}
 
-	auto write_order = yyjson_mut_obj_add_obj(doc, root_object, "write-order");
-	yyjson_mut_obj_add_uint(doc, write_order, "order-id", 0);
-	// unused, but we want to add the objects
-	auto write_order_fields = yyjson_mut_obj_add_arr(doc, write_order, "fields");
-	(void)write_order_fields;
+	root_object.Add("write-order", sort_order.ToJSON(writer));
 
-	auto properties = yyjson_mut_obj_add_obj(doc, root_object, "properties");
-	yyjson_mut_obj_add_strcpy(doc, properties, "format-version",
-	                          std::to_string(table_info.table_metadata.iceberg_version).c_str());
-	for (auto &property : table_info.table_metadata.table_properties) {
-		yyjson_mut_obj_add_strcpy(doc, properties, property.first.c_str(), property.second.c_str());
+	auto properties = writer.CreateObject();
+	root_object.Add("properties", properties);
+	properties.AddString("format-version", std::to_string(iceberg_version));
+	for (auto &property : table_properties) {
+		properties.AddString(property.first, property.second);
 	}
-	if (!table_info.table_metadata.location.empty()) {
-		yyjson_mut_obj_add_str(doc, root_object, "location", table_info.table_metadata.location.c_str());
+	if (!location.empty()) {
+		root_object.AddString("location", location);
 	}
-	return ICUtils::JsonToString(std::move(doc_p));
+	return writer.ToString(JSONWriteFlags::ALLOW_INF_AND_NAN);
 }
 
 } // namespace duckdb

@@ -8,13 +8,7 @@ require-env AWS_ACCESS_KEY_ID
 
 require-env AWS_SECRET_ACCESS_KEY
 
-require avro
-
-require parquet
-
-require iceberg
-
-require httpfs
+include test/sql/init_requires
 
 require aws
 
@@ -23,8 +17,8 @@ set ignore_error_messages
 statement ok
 CREATE SECRET s1 (
       TYPE S3,
-      KEY_ID '${AWS_ACCESS_KEY_ID}',
-      SECRET '${AWS_SECRET_ACCESS_KEY}',
+      KEY_ID '{AWS_ACCESS_KEY_ID}',
+      SECRET '{AWS_SECRET_ACCESS_KEY}',
       REGION 'us-east-1'
 );
 

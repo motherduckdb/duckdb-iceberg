@@ -1,6 +1,10 @@
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/common/http_util.hpp"
 #include "duckdb/common/string.hpp"
+#include "duckdb/common/vector/string_vector.hpp"
+#include "duckdb/common/vector/struct_vector.hpp"
+#include "duckdb/common/vector/list_vector.hpp"
+#include "duckdb/common/vector/map_vector.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 
 #include "function/iceberg_functions.hpp"
@@ -10,20 +14,18 @@
 #include "catalog/rest/api/url_utils.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
 #include "rest_catalog/objects/list.hpp"
-#include "yyjson.hpp"
-
-using namespace duckdb_yyjson;
+#include "duckdb/common/json_document.hpp"
 
 namespace duckdb {
 
 struct IcebergLoadTableResponseBindData : public TableFunctionData {
-	IcebergTableEntry &table_entry;
+	IcebergTableSchemaVersion &table_entry;
 	IcebergCatalog &ic_catalog;
 	IcebergSchemaEntry &ic_schema;
 
-	IcebergLoadTableResponseBindData(IcebergTableEntry &table_entry, IcebergCatalog &ic_catalog,
+	IcebergLoadTableResponseBindData(IcebergTableSchemaVersion &table_entry, IcebergCatalog &ic_catalog,
 	                                 IcebergSchemaEntry &ic_schema)
 	    : table_entry(table_entry), ic_catalog(ic_catalog), ic_schema(ic_schema) {
 	}
@@ -43,11 +45,12 @@ static unique_ptr<HTTPResponse> MakeRequest(ClientContext &context, const Iceber
 	auto &ic_table_entry = bind_data.table_entry;
 
 	auto url_builder = ic_catalog.GetBaseUrl();
-	url_builder.AddPrefixComponent(ic_catalog.prefix, ic_catalog.prefix_is_one_component);
+	url_builder.AddPrefixComponents(ic_catalog.prefix);
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("namespaces"));
-	url_builder.AddPathComponent(IRCPathComponent::NamespaceComponent(ic_schema.namespace_items));
+	url_builder.AddPathComponent(
+	    IRCPathComponent::NamespaceComponent(ic_schema.namespace_items, ic_catalog.namespace_separator));
 	url_builder.AddPathComponent(IRCPathComponent::RegularComponent("tables"));
-	url_builder.AddPathComponent(IRCPathComponent::RegularComponent(ic_table_entry.name));
+	url_builder.AddPathComponent(IRCPathComponent::RegularComponent(ic_table_entry.name.GetIdentifierName()));
 
 	HTTPHeaders headers(*context.db);
 	if (ic_catalog.attach_options.access_mode == IRCAccessDelegationMode::VENDED_CREDENTIALS) {
@@ -63,7 +66,8 @@ static unique_ptr<HTTPResponse> MakeRequest(ClientContext &context, const Iceber
 }
 
 static unique_ptr<FunctionData> IcebergLoadTableResponseBind(ClientContext &context, TableFunctionBindInput &input,
-                                                             vector<LogicalType> &return_types, vector<string> &names) {
+                                                             vector<LogicalType> &return_types,
+                                                             vector<Identifier> &names) {
 	auto input_string = input.inputs[0].ToString();
 	auto qualified_name = QualifiedName::ParseComponents(input_string);
 
@@ -72,9 +76,9 @@ static unique_ptr<FunctionData> IcebergLoadTableResponseBind(ClientContext &cont
 		                            input_string);
 	}
 
-	EntryLookupInfo table_lookup(CatalogType::TABLE_ENTRY, qualified_name[2]);
-	auto catalog_entry = Catalog::GetEntry(context, qualified_name[0], qualified_name[1], table_lookup,
-	                                       OnEntryNotFound::THROW_EXCEPTION);
+	EntryLookupInfo table_lookup(CatalogType::TABLE_ENTRY,
+	                             QualifiedName(qualified_name[0], qualified_name[1], qualified_name[2]));
+	auto catalog_entry = Catalog::GetEntry(context, table_lookup, OnEntryNotFound::THROW_EXCEPTION);
 
 	if (catalog_entry->type != CatalogType::TABLE_ENTRY) {
 		throw InvalidInputException("'%s' is not a table", input_string);
@@ -84,7 +88,7 @@ static unique_ptr<FunctionData> IcebergLoadTableResponseBind(ClientContext &cont
 		throw InvalidInputException("Table '%s' is not an Iceberg REST catalog table", input_string);
 	}
 
-	auto &table_entry = catalog_entry->Cast<IcebergTableEntry>();
+	auto &table_entry = catalog_entry->Cast<IcebergTableSchemaVersion>();
 	auto &ic_catalog = table_entry.catalog.Cast<IcebergCatalog>();
 	auto &ic_schema = table_entry.schema.Cast<IcebergSchemaEntry>();
 
@@ -124,12 +128,14 @@ static void OutputMap(const case_insensitive_map_t<string> &config, Vector &conf
 	auto &config_val_vec = MapVector::GetValues(config_vec);
 	idx_t config_idx = 0;
 	for (auto &kv : config) {
-		FlatVector::GetData<string_t>(config_key_vec)[config_idx] = StringVector::AddString(config_key_vec, kv.first);
-		FlatVector::GetData<string_t>(config_val_vec)[config_idx] = StringVector::AddString(config_val_vec, kv.second);
+		FlatVector::GetDataMutable<string_t>(config_key_vec)[config_idx] =
+		    StringVector::AddString(config_key_vec, kv.first);
+		FlatVector::GetDataMutable<string_t>(config_val_vec)[config_idx] =
+		    StringVector::AddString(config_val_vec, kv.second);
 		config_idx++;
 	}
 	ListVector::SetListSize(config_vec, config_count);
-	auto &config_list_data = FlatVector::GetData<list_entry_t>(config_vec)[0];
+	auto &config_list_data = FlatVector::GetDataMutable<list_entry_t>(config_vec)[0];
 	config_list_data.offset = 0;
 	config_list_data.length = config_count;
 }
@@ -145,88 +151,101 @@ static void IcebergLoadTableResponseFunction(ClientContext &context, TableFuncti
 
 	auto response = MakeRequest(context, bind_data);
 
-	// Parse the response using yyjson
+	// Parse the response as JSON
 	auto doc = ICUtils::APIResultToDoc(response->body);
-	auto *root = yyjson_doc_get_root(doc.get());
+	auto root = doc->GetRoot();
 
-	auto load_result = rest_api_objects::LoadTableResult::FromJSON(root);
+	auto load_result = ICUtils::ParseLoadTableResult(root);
 
-	output.SetCardinality(1);
+	output.SetChildCardinality(1);
 
 	// metadata_location
 	auto &metadata_location_vector = output.data[0];
-	FlatVector::GetData<string_t>(metadata_location_vector)[0] =
-	    StringVector::AddString(metadata_location_vector, load_result.metadata_location);
+	if (load_result.metadata_location) {
+		FlatVector::GetDataMutable<string_t>(metadata_location_vector)[0] =
+		    StringVector::AddString(metadata_location_vector, *load_result.metadata_location);
+	} else {
+		FlatVector::ValidityMutable(metadata_location_vector).SetInvalid(0);
+	}
 
 	// metadata (VARIANT)
 	auto &metadata_vector = output.data[1];
 	{
-		auto *metadata_val = yyjson_obj_get(root, "metadata");
-		if (metadata_val) {
-			auto *json_str = yyjson_val_write(metadata_val, 0, nullptr);
-			if (json_str) {
-				Vector json_vec(LogicalType::JSON(), 1);
-				FlatVector::GetData<string_t>(json_vec)[0] = StringVector::AddString(json_vec, string(json_str));
-				free(json_str);
-				VectorOperations::Cast(context, json_vec, metadata_vector, 1);
-			}
+		auto metadata_val = root.GetMember("metadata");
+		if (metadata_val.IsValid()) {
+			Vector json_vec(LogicalType::JSON(), 1);
+			FlatVector::GetDataMutable<string_t>(json_vec)[0] =
+			    StringVector::AddString(json_vec, metadata_val.ToString());
+			VectorOperations::Cast(context, json_vec, metadata_vector, 1);
 		}
 	}
 
 	// config MAP(VARCHAR, VARCHAR)
 	auto &config_vector = output.data[2];
-	OutputMap(load_result.config, config_vector);
+	if (load_result.config) {
+		OutputMap(*load_result.config, config_vector);
+	} else {
+		FlatVector::ValidityMutable(config_vector).SetInvalid(0);
+	}
 
 	// storage_credentials LIST(STRUCT(prefix, config))
 	auto &storage_credentials_vector = output.data[3];
-	auto &storage_credentials = load_result.storage_credentials;
-	auto cred_count = storage_credentials.size();
-	ListVector::Reserve(storage_credentials_vector, cred_count);
-	auto &cred_entry = ListVector::GetEntry(storage_credentials_vector);
-	auto &prefix_vec = StructVector::GetEntries(cred_entry)[0];
-	auto &cred_config_vec = StructVector::GetEntries(cred_entry)[1];
 
-	for (idx_t struct_idx = 0; struct_idx < cred_count; struct_idx++) {
-		auto &cred = storage_credentials[struct_idx];
+	if (auto &credentials = load_result.storage_credentials) {
+		auto &storage_credentials = *credentials;
+		auto cred_count = storage_credentials.size();
+		ListVector::Reserve(storage_credentials_vector, cred_count);
+		auto &cred_entry = ListVector::GetChildMutable(storage_credentials_vector);
+		auto &prefix_vec = StructVector::GetEntries(cred_entry)[0];
+		auto &cred_config_vec = StructVector::GetEntries(cred_entry)[1];
 
-		// prefix
-		FlatVector::GetData<string_t>(*prefix_vec)[struct_idx] = StringVector::AddString(*prefix_vec, cred.prefix);
+		for (idx_t struct_idx = 0; struct_idx < cred_count; struct_idx++) {
+			auto &cred = storage_credentials[struct_idx];
 
-		// config map for this credential
-		OutputMap(cred.config, *cred_config_vec);
+			// prefix
+			FlatVector::GetDataMutable<string_t>(prefix_vec)[struct_idx] =
+			    StringVector::AddString(prefix_vec, cred.prefix);
 
-		auto inner_config_count = cred.config.size();
-		ListVector::Reserve(*cred_config_vec, inner_config_count);
-		auto &inner_key_vec = MapVector::GetKeys(*cred_config_vec);
-		auto &inner_val_vec = MapVector::GetValues(*cred_config_vec);
-		idx_t cred_config_idx = 0;
-		for (auto &kv : cred.config) {
-			FlatVector::GetData<string_t>(inner_key_vec)[cred_config_idx] =
-			    StringVector::AddString(inner_key_vec, kv.first);
-			FlatVector::GetData<string_t>(inner_val_vec)[cred_config_idx] =
-			    StringVector::AddString(inner_val_vec, kv.second);
-			cred_config_idx++;
+			// config map for this credential
+			OutputMap(cred.config, cred_config_vec);
+
+			auto inner_config_count = cred.config.size();
+			ListVector::Reserve(cred_config_vec, inner_config_count);
+			auto &inner_key_vec = MapVector::GetKeys(cred_config_vec);
+			auto &inner_val_vec = MapVector::GetValues(cred_config_vec);
+			idx_t cred_config_idx = 0;
+			for (auto &kv : cred.config) {
+				FlatVector::GetDataMutable<string_t>(inner_key_vec)[cred_config_idx] =
+				    StringVector::AddString(inner_key_vec, kv.first);
+				FlatVector::GetDataMutable<string_t>(inner_val_vec)[cred_config_idx] =
+				    StringVector::AddString(inner_val_vec, kv.second);
+				cred_config_idx++;
+			}
+			ListVector::SetListSize(cred_config_vec, inner_config_count);
+			auto &inner_list_data = FlatVector::GetDataMutable<list_entry_t>(cred_config_vec)[struct_idx];
+			inner_list_data.offset = 0;
+			inner_list_data.length = inner_config_count;
 		}
-		ListVector::SetListSize(*cred_config_vec, inner_config_count);
-		auto &inner_list_data = FlatVector::GetData<list_entry_t>(*cred_config_vec)[struct_idx];
-		inner_list_data.offset = 0;
-		inner_list_data.length = inner_config_count;
+		ListVector::SetListSize(storage_credentials_vector, cred_count);
+
+		auto &cred_list_data = FlatVector::GetDataMutable<list_entry_t>(storage_credentials_vector)[0];
+		cred_list_data.offset = 0;
+		cred_list_data.length = cred_count;
+	} else {
+		FlatVector::ValidityMutable(storage_credentials_vector).SetInvalid(0);
 	}
-	ListVector::SetListSize(storage_credentials_vector, cred_count);
-	auto &cred_list_data = FlatVector::GetData<list_entry_t>(storage_credentials_vector)[0];
-	cred_list_data.offset = 0;
-	cred_list_data.length = cred_count;
 
 	// request_url
 	auto &request_endpoint_vector = output.data[4];
-	FlatVector::GetData<string_t>(request_endpoint_vector)[0] =
+	FlatVector::GetDataMutable<string_t>(request_endpoint_vector)[0] =
 	    StringVector::AddString(request_endpoint_vector, response->url);
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergLoadTableResponseFunction() {
 	TableFunctionSet function_set("iceberg_load_table_response");
 
-	auto fun = TableFunction({LogicalType::VARCHAR}, IcebergLoadTableResponseFunction, IcebergLoadTableResponseBind,
+	auto fun = TableFunction(FunctionSignature().AddPositionalOnly("path", LogicalType::VARCHAR),
+	                         IcebergLoadTableResponseFunction, IcebergLoadTableResponseBind,
 	                         IcebergLoadTableResponseGlobalState::Init);
 	function_set.AddFunction(fun);
 

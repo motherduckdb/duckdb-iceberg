@@ -1,6 +1,7 @@
 #include "execution/operator/iceberg_insert.hpp"
 
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
+#include "duckdb/logging/logger.hpp"
 #include "duckdb/main/client_data.hpp"
 #include "duckdb/execution/physical_operator_states.hpp"
 #include "duckdb/planner/expression_binder/table_function_binder.hpp"
@@ -8,20 +9,23 @@
 #include "duckdb/planner/operator/logical_insert.hpp"
 #include "duckdb/planner/operator/logical_create_table.hpp"
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
+#include "duckdb/execution/operator/order/physical_order.hpp"
 #include "duckdb/execution/operator/projection/physical_projection.hpp"
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
+#include "duckdb/function/cast/cast_function_set.hpp"
 #include "duckdb/function/function_binder.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_cast_expression.hpp"
+#include "duckdb/planner/bound_result_modifier.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/common/type_visitor.hpp"
 
 #include "catalog/rest/iceberg_catalog.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
 #include "execution/operator/iceberg_delete.hpp"
-#include "execution/operator/physical_iceberg_create_table.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "core/metadata/schema/iceberg_column_definition.hpp"
 #include "core/metadata/schema/iceberg_table_schema.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
@@ -31,12 +35,14 @@
 #include "core/expression/iceberg_value.hpp"
 #include "core/expression/iceberg_metrics.hpp"
 #include "core/expression/iceberg_transform.hpp"
-#include "storage/statistics/iceberg_variant_statistics.hpp"
+#include "storage/statistics/iceberg_data_file_stats.hpp"
 #include "catalog/rest/api/iceberg_type.hpp"
 #include "catalog/rest/api/iceberg_create_table_request.hpp"
 #include "common/iceberg_utils.hpp"
+#include "common/iceberg_fixed_type.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
 #include "iceberg_logging.hpp"
+#include "iceberg_options.hpp"
 
 namespace duckdb {
 
@@ -52,18 +58,16 @@ static bool WriteSequenceNumber(IcebergInsertVirtualColumns virtual_columns) {
 
 IcebergInsert::IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op, TableCatalogEntry &table,
                              physical_index_vector_t<idx_t> column_index_map_p)
-    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, op.types, 1), table(&table), schema(nullptr),
+    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, op.types, 1), table(&table),
       column_index_map(std::move(column_index_map_p)) {
 }
 
-IcebergInsert::IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op, SchemaCatalogEntry &schema,
-                             unique_ptr<BoundCreateTableInfo> info)
-    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, op.types, 1), table(nullptr), schema(&schema),
-      info(std::move(info)) {
+IcebergInsert::IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op)
+    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, op.types, 1), table(nullptr) {
 }
 
 IcebergInsert::IcebergInsert(PhysicalPlan &physical_plan, const vector<LogicalType> &types, TableCatalogEntry &table)
-    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, types, 1), table(&table), schema(nullptr) {
+    : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, types, 1), table(&table) {
 }
 
 IcebergCopyOptions::IcebergCopyOptions(unique_ptr<CopyInfo> info_p, CopyFunction copy_function_p)
@@ -71,14 +75,15 @@ IcebergCopyOptions::IcebergCopyOptions(unique_ptr<CopyInfo> info_p, CopyFunction
 }
 
 IcebergCopyInput::IcebergCopyInput(ClientContext &context, const IcebergTableMetadata &table_metadata,
-                                   const IcebergTableSchema &schema)
-    : table_metadata(table_metadata), schema(schema) {
-	auto &fs = FileSystem::GetFileSystem(context);
-	data_path = table_metadata.GetDataPath(fs);
+                                   const IcebergTableSchema &schema, unique_ptr<BoundCreateTableInfo> ctas_info_p)
+    : table_metadata(table_metadata), schema(schema), ctas_info(std::move(ctas_info_p)) {
+	if (!ctas_info) {
+		auto &fs = FileSystem::GetFileSystem(context);
+		data_path = table_metadata.GetDataPath(fs);
+	}
 
 	// Get partition spec if the table is partitioned
-	auto &metadata = table_metadata;
-	if (metadata.GetLatestPartitionSpec().IsPartitioned()) {
+	if (table_metadata.GetLatestPartitionSpec().IsPartitioned()) {
 		partition_spec = table_metadata.FindPartitionSpecById(table_metadata.default_spec_id);
 	}
 }
@@ -103,85 +108,116 @@ unique_ptr<GlobalSinkState> IcebergInsert::GetGlobalSinkState(ClientContext &con
 // Sink
 //===--------------------------------------------------------------------===//
 
-static bool IsMapType(string col_name, IcebergTableSchema &table_schema) {
-	for (auto &col : table_schema.columns) {
-		if (col->name == col_name) {
-			if (col->type.id() == LogicalTypeId::MAP) {
-				return true;
+static vector<idx_t> GetColumnPath(const ColumnIndex &column_index) {
+	vector<idx_t> path;
+	path.reserve(column_index.ChildIndexCount());
+	for (auto &child_index : column_index.GetChildIndexes()) {
+		path.push_back(child_index.GetPrimaryIndex());
+	}
+	return path;
+}
+
+static ColumnIndex GetColumnIndexBySourceId(const IcebergTableSchema &schema, idx_t source_id) {
+	auto column_index = schema.TryGetColumnIndexByFieldId(source_id);
+	if (!column_index) {
+		throw InvalidInputException("Partition source column with id %d not found in schema", source_id);
+	}
+	return *column_index;
+}
+
+static bool IsTopLevelColumnSourceId(const IcebergTableSchema &schema, idx_t source_id) {
+	auto column_index = GetColumnIndexBySourceId(schema, source_id);
+	return column_index.ChildIndexCount() == 0;
+}
+
+static string GetColumnNameBySourceId(const IcebergTableSchema &schema, idx_t source_id) {
+	return schema.GetColumnByFieldId(source_id).name;
+}
+
+//! SPEC (Appendix A): `unknown` has no physical Parquet type and must be omitted from data files.
+static bool IsWrittenToDataFile(const LogicalType &type) {
+	return type.id() != LogicalTypeId::SQLNULL;
+}
+
+//! The type used to write a column, with the omitted fields left out. Parquet keeps nullness in the definition
+//! levels of a value's leaves, so a container left without any leaf cannot be written. `path` names the position
+//! of `type` in the column, so that an error points at the container that has no leaf left.
+static LogicalType GetWrittenType(const LogicalType &type, const string &path) {
+	D_ASSERT(IsWrittenToDataFile(type));
+	switch (type.id()) {
+	case LogicalTypeId::STRUCT: {
+		child_list_t<LogicalType> children;
+		for (auto &child : StructType::GetChildTypes(type)) {
+			if (!IsWrittenToDataFile(child.second)) {
+				continue;
 			}
+			children.emplace_back(child.first, GetWrittenType(child.second, path + "." + child.first));
 		}
+		if (children.empty()) {
+			throw NotImplementedException(
+			    "Cannot write \"%s\": a struct whose fields are all of type unknown has no data file representation",
+			    path);
+		}
+		return LogicalType::STRUCT(std::move(children));
 	}
-	return false;
+	case LogicalTypeId::LIST: {
+		auto &element = ListType::GetChildType(type);
+		if (!IsWrittenToDataFile(element)) {
+			throw NotImplementedException(
+			    "Cannot write \"%s\": a list element of type unknown has no data file representation", path);
+		}
+		return LogicalType::LIST(GetWrittenType(element, path + ".element"));
+	}
+	case LogicalTypeId::MAP: {
+		auto &key = MapType::KeyType(type);
+		auto &value = MapType::ValueType(type);
+		if (!IsWrittenToDataFile(key) || !IsWrittenToDataFile(value)) {
+			throw NotImplementedException(
+			    "Cannot write \"%s\": a map key or value of type unknown has no data file representation", path);
+		}
+		return LogicalType::MAP(GetWrittenType(key, path + ".key"), GetWrittenType(value, path + ".value"));
+	}
+	default:
+		return type;
+	}
 }
 
-static idx_t GetColumnIndexBySourceId(const vector<unique_ptr<IcebergColumnDefinition>> &columns, idx_t source_id) {
-	for (idx_t col_idx = 0; col_idx < columns.size(); col_idx++) {
-		if (columns[col_idx]->id == source_id) {
-			return col_idx;
-		}
+//! FIELD_IDS entry for a written column: its field id, or the ids of the fields it is written with.
+static Value GetWrittenFieldIdValue(const IcebergColumnDefinition &column) {
+	auto column_value = Value::BIGINT(column.id);
+	if (!column.GetChildCount()) {
+		return column_value;
 	}
-	throw InvalidInputException("Partition source column with id %d not found in schema", source_id);
+	child_list_t<Value> values;
+	values.emplace_back("__duckdb_field_id", std::move(column_value));
+	for (auto &child : column.GetChildren()) {
+		if (!IsWrittenToDataFile(child->type)) {
+			continue;
+		}
+		values.emplace_back(child->name, GetWrittenFieldIdValue(*child));
+	}
+	return Value::STRUCT(std::move(values));
 }
 
-static string GetColumnNameBySourceId(const vector<unique_ptr<IcebergColumnDefinition>> &columns, idx_t source_id) {
-	for (idx_t col_idx = 0; col_idx < columns.size(); col_idx++) {
-		if (columns[col_idx]->id == source_id) {
-			return columns[col_idx]->name;
-		}
-	}
-	throw InvalidInputException("Partition source column with id %d not found in schema", source_id);
-}
-
-//! Check if all partition fields use identity transforms
-static bool AllIdentityTransforms(const IcebergPartitionSpec &spec) {
+//! Whether every partition value is a top-level written column, so the copy operator can partition on the
+//! columns themselves. Transforms, nested sources and columns absent from the data file (unknown) need a
+//! computed partition value instead.
+static bool CanWriteIdentityPartitionsDirectly(const IcebergPartitionSpec &spec, const IcebergTableSchema &schema) {
 	for (auto &field : spec.fields) {
-		if (field.transform.Type() != IcebergTransformType::IDENTITY &&
-		    field.transform.Type() != IcebergTransformType::VOID) {
+		if (field.transform.Type() == IcebergTransformType::VOID) {
+			continue;
+		}
+		if (field.transform.Type() != IcebergTransformType::IDENTITY) {
+			return false;
+		}
+		if (!IsTopLevelColumnSourceId(schema, field.source_id)) {
+			return false;
+		}
+		if (!IsWrittenToDataFile(schema.GetColumnByFieldId(field.source_id).type)) {
 			return false;
 		}
 	}
 	return true;
-}
-
-static string ParseQuotedValue(const string &input, idx_t &pos) {
-	if (pos >= input.size() || input[pos] != '"') {
-		throw InvalidInputException("Failed to parse quoted value - expected a quote");
-	}
-	string result;
-	pos++;
-	for (; pos < input.size(); pos++) {
-		if (input[pos] == '"') {
-			pos++;
-			// check if this is an escaped quote
-			if (pos < input.size() && input[pos] == '"') {
-				// escaped quote
-				result += '"';
-				continue;
-			}
-			return result;
-		}
-		result += input[pos];
-	}
-	throw InvalidInputException("Failed to parse quoted value - unterminated quote");
-}
-
-static vector<string> ParseQuotedList(const string &input, char list_separator) {
-	vector<string> result;
-	if (input.empty()) {
-		return result;
-	}
-	idx_t pos = 0;
-	while (true) {
-		result.push_back(ParseQuotedValue(input, pos));
-		if (pos >= input.size()) {
-			break;
-		}
-		if (input[pos] != list_separator) {
-			throw InvalidInputException("Failed to parse list - expected a %s", string(1, list_separator));
-		}
-		pos++;
-	}
-	return result;
 }
 
 void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_name,
@@ -203,13 +239,12 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 
 		// extract the column stats
 		auto column_stats = chunk.GetValue(4, r);
-		auto &map_children = MapValue::GetChildren(column_stats);
 
 		// column 5 is stats, which we can also use for partition information
 		auto partition_values = chunk.GetValue(5, r);
 
 		auto table_current_schema_id = table_metadata.GetCurrentSchemaId();
-		auto &ic_schema = table_metadata.GetSchemas().at(table_current_schema_id);
+		auto &ic_schema = table_metadata.GetSchemaFromId(table_current_schema_id);
 
 		auto ic_partition_info = table_metadata.GetLatestPartitionSpec();
 
@@ -223,13 +258,13 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 		// But if there are only identity transforms, we don't add a projection to the insert, so we can just use
 		// regular column names. So here when we populate our map, if there are transforms present, we need to use our
 		// transform partition column names. If not, we should use the identify names.
-		if (!AllIdentityTransforms(ic_partition_info)) {
+		if (!CanWriteIdentityPartitionsDirectly(ic_partition_info, ic_schema)) {
 			for (auto &partition_field : ic_partition_info.fields) {
 				partition_colname_to_field.emplace(partition_field.GetPartitionSpecFieldName(), partition_field);
 			}
 		} else {
 			for (auto &partition_field : ic_partition_info.fields) {
-				auto actual_col_name = GetColumnNameBySourceId(ic_schema->columns, partition_field.source_id);
+				auto actual_col_name = GetColumnNameBySourceId(ic_schema, partition_field.source_id);
 				partition_colname_to_field.emplace(actual_col_name, partition_field);
 			}
 		}
@@ -244,7 +279,7 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 				auto field_it = partition_colname_to_field.find(partition_name);
 				D_ASSERT(field_it != partition_colname_to_field.end());
 				auto &partition_field = field_it->second.get();
-				auto source_type = ic_schema->GetColumnTypeFromFieldId(partition_field.source_id);
+				auto source_type = ic_schema.GetColumnTypeFromFieldId(partition_field.source_id);
 
 				IcebergPartitionInfo info;
 				info.field_id = partition_field.partition_field_id;
@@ -256,141 +291,21 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 				data_file.partition_info.push_back(std::move(info));
 			}
 		}
+		// Partitioning alone does not imply sorted data. Only advertise the explicit sort order
+		// enforced by PlanCopyForInsert (PhysicalOrder or the partitioned copy writer).
+		if (table_metadata.HasSortOrder()) {
+			auto &sort_order = table_metadata.GetLatestSortOrder();
+			if (sort_order.IsSorted()) {
+				data_file.sort_order_id = sort_order.sort_order_id;
+			}
+		}
 
 		insert_count += data_file.record_count;
 
-		// variant columns emit one stats entry per shredded leaf - accumulate them per variant column
-		// (keyed by field id) and serialize the lower/upper bound variants once all entries are seen
-		unordered_map<int32_t, IcebergVariantBounds> variant_bounds;
-
-		// Resolve the table-level metrics mode once; per-column overrides are resolved in the loop.
-		auto default_metrics = GetDefaultMetricsConfig(table_metadata);
-
-		for (idx_t col_idx = 0; col_idx < map_children.size(); col_idx++) {
-			auto &struct_children = StructValue::GetChildren(map_children[col_idx]);
-			auto &col_name = StringValue::Get(struct_children[0]);
-			auto &col_stats = MapValue::GetChildren(struct_children[1]);
-			auto column_names = ParseQuotedList(col_name, '.');
-			if (column_names[0] == "_row_id") {
-				continue;
-			}
-
-			optional_idx name_offset;
-			auto column_info_p = ic_schema->GetFromPath(column_names, &name_offset);
-			if (!column_info_p) {
-				auto normalized_col_name = StringUtil::Join(column_names, ".");
-				throw InternalException("Column '%s' can not be found in the schema, but returned by RETURN_STATS",
-				                        normalized_col_name);
-			}
-			if (name_offset.IsValid()) {
-				// stats path descends into a variant column - buffer it for bounds serialization
-				variant_bounds[column_info_p->id].AddStatsEntry(column_names, name_offset.GetIndex(), col_stats);
-				continue;
-			}
-			auto &column_info = *column_info_p;
-			auto stats = IcebergColumnStats::ParseColumnStats(column_info.type, col_stats, context);
-
-			// a map type cannot violate not null constraints.
-			// Null value counts can be off since an empty map is the same as a null map.
-			bool is_map = IsMapType(column_names[0], *ic_schema);
-			if (!is_map && column_info.required && stats.has_null_count && stats.null_count > 0) {
-				auto normalized_col_name = StringUtil::Join(column_names, ".");
-				throw ConstraintException("NOT NULL constraint failed: %s.%s", table_name, normalized_col_name);
-			}
-			// Resolve the metrics mode for this column: per-column override -> table default ->
-			// Iceberg's truncate(16) default.
-			auto metrics = GetColumnMetricsConfig(table_metadata, default_metrics, StringUtil::Join(column_names, "."));
-			if (metrics.mode == IcebergMetricsMode::NONE) {
-				// No metrics recorded for this column.
-				continue;
-			}
-			const bool write_bounds =
-			    metrics.mode == IcebergMetricsMode::TRUNCATE || metrics.mode == IcebergMetricsMode::FULL;
-
-			// go through stats and add upper and lower bounds
-			// Do serialization of values here in case we read transaction updates
-			if (write_bounds && stats.has_min) {
-				auto serialized_value =
-				    IcebergValue::SerializeValue(stats.min, column_info.type, SerializeBound::LOWER_BOUND, metrics);
-				if (serialized_value.HasError()) {
-					throw InvalidConfigurationException(serialized_value.GetError());
-				} else if (serialized_value.HasValue()) {
-					data_file.lower_bounds[column_info.id] = serialized_value.GetValue();
-				}
-			}
-			if (write_bounds && stats.has_max) {
-				auto serialized_value =
-				    IcebergValue::SerializeValue(stats.max, column_info.type, SerializeBound::UPPER_BOUND, metrics);
-				if (serialized_value.HasError()) {
-					throw InvalidConfigurationException(serialized_value.GetError());
-				} else if (serialized_value.HasValue()) {
-					data_file.upper_bounds[column_info.id] = serialized_value.GetValue();
-				}
-			}
-			// See Iceberg v3 (Appendix D) for geometry stats info
-			if (write_bounds && column_info.type.id() == LogicalTypeId::GEOMETRY && stats.has_bbox_xy) {
-				vector<double> lower {stats.bbox_xmin, stats.bbox_ymin};
-				vector<double> upper {stats.bbox_xmax, stats.bbox_ymax};
-				if (stats.has_bbox_z) {
-					lower.push_back(stats.bbox_zmin);
-					upper.push_back(stats.bbox_zmax);
-				} else if (stats.has_bbox_m) {
-					// Spark treats a 3-double bound as XYZ always, so for an
-					// XYM column we'd otherwise be misread as XYZ. Pad the Z slot with
-					// +infinity in both bounds so the encoding is unambiguously 4D and
-					// the M value lands in the right slot.
-					const auto z_max = GeometryExtent::UNKNOWN_MAX;
-					const auto z_min = GeometryExtent::UNKNOWN_MIN;
-					lower.push_back(z_min);
-					upper.push_back(z_max);
-				}
-				if (stats.has_bbox_m) {
-					lower.push_back(stats.bbox_mmin);
-					upper.push_back(stats.bbox_mmax);
-				}
-				const auto byte_count = lower.size() * sizeof(double);
-				data_file.lower_bounds[column_info.id] =
-				    Value::BLOB(const_data_ptr_cast<double>(lower.data()), byte_count);
-				data_file.upper_bounds[column_info.id] =
-				    Value::BLOB(const_data_ptr_cast<double>(upper.data()), byte_count);
-			}
-			if (stats.has_column_size_bytes) {
-				data_file.column_sizes[column_info.id] = stats.column_size_bytes;
-			}
-			if (stats.has_null_count) {
-				data_file.null_value_counts[column_info.id] = stats.null_count;
-			}
-
-			//! nan_value_counts won't work, we can only indicate if they exist.
-			//! TODO: revisit when duckdb/duckdb can record nan_value_counts
-		}
+		IcebergDataFileStats::PopulateFromReturnStats(context, data_file, column_stats, table_metadata, table_name);
 		DUCKDB_LOG(context, IcebergLogType,
 		           "Iceberg INSERT, wrote data_file '%s', record_count=%lld, file_size=%lld bytes", data_file.file_path,
 		           data_file.record_count, data_file.file_size_in_bytes);
-
-		// serialize the accumulated variant bounds into the data file's lower/upper bounds
-		for (auto &entry : variant_bounds) {
-			// Respect the column's metrics mode; skip bounds under none/counts.
-			auto variant_metrics = GetColumnMetricsConfig(table_metadata, default_metrics,
-			                                              GetColumnNameBySourceId(ic_schema->columns, entry.first));
-			if (variant_metrics.mode != IcebergMetricsMode::TRUNCATE &&
-			    variant_metrics.mode != IcebergMetricsMode::FULL) {
-				continue;
-			}
-			bool has_lower = false;
-			bool has_upper = false;
-			string lower_blob;
-			string upper_blob;
-			if (!entry.second.Finalize(context, has_lower, lower_blob, has_upper, upper_blob)) {
-				continue;
-			}
-			if (has_lower) {
-				data_file.lower_bounds[entry.first] = Value::BLOB_RAW(lower_blob);
-			}
-			if (has_upper) {
-				data_file.upper_bounds[entry.first] = Value::BLOB_RAW(upper_blob);
-			}
-		}
 
 		written_files.push_back(std::move(manifest_entry));
 	}
@@ -399,18 +314,18 @@ void IcebergInsertGlobalState::AddFiles(DataChunk &chunk, const string &table_na
 void IcebergInsert::AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &chunk,
                                     optional_ptr<TableCatalogEntry> table) {
 	D_ASSERT(table);
-	auto &ic_table = table->Cast<IcebergTableEntry>();
+	auto &ic_table = table->Cast<IcebergTableSchemaVersion>();
 	auto &table_metadata = ic_table.table_info.table_metadata;
-	global_state.AddFiles(chunk, ic_table.name, table_metadata);
+	global_state.AddFiles(chunk, ic_table.name.GetIdentifierName(), table_metadata);
 }
 
 optional_ptr<TableCatalogEntry> IcebergInsert::GetEffectiveTable() const {
 	if (table) {
 		return table;
 	}
-	if (create_state) {
-		lock_guard<mutex> guard(create_state->lock);
-		return create_state->table_entry ? create_state->table_entry.get() : nullptr;
+	if (ctas_copy_op) {
+		auto created_table = ctas_copy_op->GetCreatedTable();
+		return created_table ? created_table.get() : nullptr;
 	}
 	return nullptr;
 }
@@ -419,9 +334,9 @@ SinkResultType IcebergInsert::Sink(ExecutionContext &context, DataChunk &chunk, 
 	auto &global_state = input.global_state.Cast<IcebergInsertGlobalState>();
 
 	// For CTAS, `table` is null at planning time and the catalog entry is
-	// produced by an upstream PhysicalIcebergCreateTable on the first chunk.
-	// By the time Sink runs that upstream operator has already populated
-	// `create_state->table_entry`, so resolve the effective table here.
+	// produced by the IcebergCopyToFile below this insert. GetGlobalSinkState in
+	// IcebergCopyToFile will create the table, so we can resolve the effective
+	// table from there
 	auto effective_table = GetEffectiveTable();
 	AddWrittenFiles(global_state, chunk, effective_table);
 
@@ -435,8 +350,8 @@ SourceResultType IcebergInsert::GetDataInternal(ExecutionContext &context, DataC
                                                 OperatorSourceInput &input) const {
 	auto &global_state = sink_state->Cast<IcebergInsertGlobalState>();
 	auto value = Value::BIGINT(global_state.insert_count);
-	chunk.SetCardinality(1);
-	chunk.SetValue(0, 0, value);
+	chunk.data[0].Append(value);
+	chunk.SetChildCardinality(1);
 	return SourceResultType::FINISHED;
 }
 
@@ -452,7 +367,7 @@ SinkFinalizeType IcebergInsert::Finalize(Pipeline &pipeline, Event &event, Clien
 		// Table does not exist (INSERT INTO) or was not created in Physical Create Iceberg table (CTAS). Throw Error
 		throw InternalException("Table to insert into does not exist.");
 	}
-	auto &irc_table = effective_table->Cast<IcebergTableEntry>();
+	auto &irc_table = effective_table->Cast<IcebergTableSchemaVersion>();
 	auto &table_info = irc_table.table_info;
 	auto &transaction = IcebergTransaction::Get(context, effective_table->catalog);
 	auto &iceberg_transaction = transaction.Cast<IcebergTransaction>();
@@ -468,22 +383,16 @@ SinkFinalizeType IcebergInsert::Finalize(Pipeline &pipeline, Event &event, Clien
 		auto &delete_global_state = update_delete_op->sink_state->Cast<IcebergDeleteGlobalState>();
 		auto delete_manifest_entries = IcebergDelete::GenerateDeleteManifestEntries(delete_global_state);
 		if (!written_files.empty()) {
-			ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTableInformation &tbl) {
+			ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTable &tbl) {
 				auto &transaction_data = tbl.GetOrCreateTransactionData(iceberg_transaction);
 				transaction_data.AddUpdateSnapshot(std::move(delete_manifest_entries), std::move(written_files),
 				                                   std::move(delete_global_state.altered_manifests));
-				for (auto &entry : delete_global_state.written_files) {
-					auto &delete_file = entry.second;
-					if (table_info.table_metadata.iceberg_version >= 3) {
-						transaction_data.transactional_delete_files[delete_file.data_file_path] = delete_file.file_name;
-					}
-				}
 			});
 		}
 	} else {
 		// Regular insert: commit an append snapshot.
 		if (!written_files.empty()) {
-			ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTableInformation &tbl) {
+			ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTable &tbl) {
 				auto &transaction_data = tbl.GetOrCreateTransactionData(iceberg_transaction);
 				IcebergManifestDeletes empty_deletes;
 				transaction_data.AddSnapshot(IcebergSnapshotOperationType::APPEND, std::move(written_files),
@@ -504,243 +413,320 @@ string IcebergInsert::GetName() const {
 InsertionOrderPreservingMap<string> IcebergInsert::ParamsToString() const {
 	InsertionOrderPreservingMap<string> result;
 	if (table) {
-		result["Table Name"] = table->name;
-	} else if (info) {
-		result["Table Name"] = info->Base().table;
-	} else if (create_state) {
-		lock_guard<mutex> guard(create_state->lock);
-		if (create_state->table_entry) {
-			result["Table Name"] = create_state->table_entry->name;
+		result["Table Name"] = table->name.GetIdentifierName();
+	} else if (ctas_copy_op) {
+		auto created_table = ctas_copy_op->GetCreatedTable();
+		if (created_table) {
+			result["Table Name"] = created_table->name.GetIdentifierName();
 		}
 	}
 	return result;
 }
 
 //===--------------------------------------------------------------------===//
-// Plan
-//===--------------------------------------------------------------------===//
-static Value GetFieldIdValue(const IcebergColumnDefinition &column) {
-	auto column_value = Value::BIGINT(column.id);
-	if (column.children.empty()) {
-		// primitive type - return the field-id directly
-		return column_value;
-	}
-	// nested type - generate a struct and recurse into children
-	child_list_t<Value> values;
-	values.emplace_back("__duckdb_field_id", std::move(column_value));
-	for (auto &child : column.children) {
-		values.emplace_back(child->name, GetFieldIdValue(*child));
-	}
-	return Value::STRUCT(std::move(values));
-}
-
-static Value WrittenFieldIds(const IcebergCopyInput &copy_input) {
-	auto &schema = copy_input.schema;
-	auto &columns = schema.columns;
-
-	child_list_t<Value> values;
-	for (idx_t c_idx = 0; c_idx < columns.size(); c_idx++) {
-		auto &column = columns[c_idx];
-		values.emplace_back(column->name, GetFieldIdValue(*column));
-	}
-	if (WriteRowId(copy_input.virtual_columns)) {
-		values.emplace_back("_row_id", Value::BIGINT(MultiFileReader::ROW_ID_FIELD_ID));
-	}
-	return Value::STRUCT(std::move(values));
-}
-
-//===--------------------------------------------------------------------===//
 // Partition Expression Generation
 //===--------------------------------------------------------------------===//
 
-//! Get the logical type for a source column by source_id
-static LogicalType GetSourceColumnType(const IcebergCopyInput &copy_input, uint64_t source_id) {
-	auto &columns = copy_input.schema.columns;
-	for (auto &col : columns) {
-		if (col->id == static_cast<int32_t>(source_id)) {
-			return col->type;
+static unique_ptr<Expression> CreateSourceColumnReference(ClientContext &context, const IcebergCopyInput &copy_input,
+                                                          uint64_t source_id) {
+	auto column_index = GetColumnIndexBySourceId(copy_input.schema, source_id);
+	auto primary_index = column_index.GetPrimaryIndex();
+	auto &root_column = *copy_input.schema.columns[primary_index];
+	unique_ptr<Expression> result = make_uniq<BoundReferenceExpression>(root_column.type, primary_index);
+	for (auto &child_index : GetColumnPath(column_index)) {
+		vector<unique_ptr<Expression>> children;
+		children.push_back(std::move(result));
+		children.push_back(make_uniq<BoundConstantExpression>(Value::BIGINT(NumericCast<int64_t>(child_index + 1))));
+
+		ErrorData error;
+		FunctionBinder binder(context);
+		result = binder.BindScalarFunction(Identifier::DefaultSchema(), Identifier("struct_extract_at"),
+		                                   std::move(children), error, false);
+		if (!result) {
+			error.Throw();
 		}
 	}
-	throw InvalidInputException("Partition source column with id %d not found in schema", source_id);
+	return result;
 }
 
-//! Create a column reference expression for the given column index
-static unique_ptr<Expression> CreateColumnReference(const IcebergCopyInput &copy_input, const LogicalType &type,
-                                                    idx_t column_index) {
-	if (copy_input.get_table_index.IsValid()) {
-		// logical plan generation: generate a bound column ref
-		ColumnBinding column_binding(copy_input.get_table_index.GetIndex(), column_index);
-		return make_uniq<BoundColumnRefExpression>(type, column_binding);
+static unique_ptr<Expression> BindTransformFunction(ClientContext &context, const string &name,
+                                                    vector<unique_ptr<Expression>> children) {
+	ErrorData error;
+	FunctionBinder binder(context);
+	auto function =
+	    binder.BindScalarFunction(Identifier::DefaultSchema(), Identifier(name), std::move(children), error, false);
+	if (!function) {
+		error.Throw();
 	}
-	// physical plan generation: generate a reference directly
-	return make_uniq<BoundReferenceExpression>(type, column_index);
+	return function;
 }
 
-//! Get a date_diff function expression for temporal partition transforms
-//! Iceberg partition transforms for year/month/day/hour are defined as:
+//! Iceberg partition/sort transforms for year/month/day/hour are defined as:
 //! - years: date_diff('year', DATE '1970-01-01', source_column)
 //! - months: date_diff('month', DATE '1970-01-01', source_column)
 //! - days: date_diff('day', DATE '1970-01-01', source_column)
 //! - hours: date_diff('hour', TIMESTAMP '1970-01-01', source_column)
 static unique_ptr<Expression> GetDateDiffFunction(ClientContext &context, const IcebergCopyInput &copy_input,
                                                   const string &date_part, uint64_t source_id) {
-	auto col_idx = GetColumnIndexBySourceId(copy_input.schema.columns, source_id);
-	auto col_type = GetSourceColumnType(copy_input, source_id);
-
 	vector<unique_ptr<Expression>> children;
-	// First argument: the date part string (e.g., 'year', 'month', 'day', 'hour')
 	children.push_back(make_uniq<BoundConstantExpression>(Value(date_part)));
-	// Second argument: the epoch date/timestamp
 	if (date_part == "hour") {
 		children.push_back(make_uniq<BoundConstantExpression>(Value::TIMESTAMP(Timestamp::FromEpochSeconds(0))));
 	} else {
-		children.push_back(make_uniq<BoundConstantExpression>(Value::DATE(Date::FromDate(1970, 1, 1))));
+		children.push_back(make_uniq<BoundConstantExpression>(Value::DATE(Date::FromDate(Date::EPOCH_YEAR, 1, 1))));
 	}
-	// Third argument: the source column
-	children.push_back(CreateColumnReference(copy_input, col_type, col_idx));
 
-	ErrorData error;
-	FunctionBinder binder(context);
-	auto function = binder.BindScalarFunction(DEFAULT_SCHEMA, "date_diff", std::move(children), error, false);
-	if (!function) {
-		error.Throw();
+	auto source = CreateSourceColumnReference(context, copy_input, source_id);
+	auto source_type = source->GetReturnType().id();
+	auto target_type = source->GetReturnType();
+	if (source_type == LogicalTypeId::TIMESTAMP_TZ) {
+		target_type = LogicalType::TIMESTAMP;
 	}
-	return function;
+	if (source_type == LogicalTypeId::TIMESTAMP_TZ_NS) {
+		target_type = LogicalType::TIMESTAMP_NS;
+	}
+	source = BoundCastExpression::AddDefaultCastToType(std::move(source), target_type);
+	children.push_back(std::move(source));
+	return BindTransformFunction(context, "date_diff", std::move(children));
 }
 
-//! Get an iceberg_bucket(N, col) expression for bucket partition transforms
 static unique_ptr<Expression> GetBucketExpression(ClientContext &context, const IcebergCopyInput &copy_input,
-                                                  const IcebergPartitionSpecField &field) {
-	auto col_idx = GetColumnIndexBySourceId(copy_input.schema.columns, field.source_id);
-	auto col_type = GetSourceColumnType(copy_input, field.source_id);
-
+                                                  uint64_t source_id, const IcebergTransform &transform) {
 	vector<unique_ptr<Expression>> children;
 	children.push_back(
-	    make_uniq<BoundConstantExpression>(Value::INTEGER(static_cast<int32_t>(field.transform.GetBucketModulo()))));
-	children.push_back(CreateColumnReference(copy_input, col_type, col_idx));
-
-	ErrorData error;
-	FunctionBinder binder(context);
-	auto function = binder.BindScalarFunction(DEFAULT_SCHEMA, "iceberg_bucket", std::move(children), error, false);
-	if (!function) {
-		error.Throw();
-	}
-	return function;
+	    make_uniq<BoundConstantExpression>(Value::INTEGER(static_cast<int32_t>(transform.GetBucketModulo()))));
+	children.push_back(CreateSourceColumnReference(context, copy_input, source_id));
+	return BindTransformFunction(context, "iceberg_bucket", std::move(children));
 }
 
-//! Get an iceberg_truncate(W, col) expression for truncate partition transforms
 static unique_ptr<Expression> GetTruncateExpression(ClientContext &context, const IcebergCopyInput &copy_input,
-                                                    const IcebergPartitionSpecField &field) {
-	auto col_idx = GetColumnIndexBySourceId(copy_input.schema.columns, field.source_id);
-	auto col_type = GetSourceColumnType(copy_input, field.source_id);
-
+                                                    uint64_t source_id, const IcebergTransform &transform) {
 	vector<unique_ptr<Expression>> children;
 	children.push_back(
-	    make_uniq<BoundConstantExpression>(Value::INTEGER(static_cast<int32_t>(field.transform.GetTruncateWidth()))));
-	children.push_back(CreateColumnReference(copy_input, col_type, col_idx));
-
-	ErrorData error;
-	FunctionBinder binder(context);
-	auto function = binder.BindScalarFunction(DEFAULT_SCHEMA, "iceberg_truncate", std::move(children), error, false);
-	if (!function) {
-		error.Throw();
-	}
-	return function;
+	    make_uniq<BoundConstantExpression>(Value::INTEGER(static_cast<int32_t>(transform.GetTruncateWidth()))));
+	children.push_back(CreateSourceColumnReference(context, copy_input, source_id));
+	return BindTransformFunction(context, "iceberg_truncate", std::move(children));
 }
 
-//! Get the partition expression for a partition field based on its transform type
-static unique_ptr<Expression> GetPartitionExpression(ClientContext &context, const IcebergCopyInput &copy_input,
-                                                     const IcebergPartitionSpecField &field) {
-	switch (field.transform.Type()) {
+static unique_ptr<Expression> GetTransformExpression(ClientContext &context, const IcebergCopyInput &copy_input,
+                                                     uint64_t source_id, const IcebergTransform &transform,
+                                                     const char *usage) {
+	switch (transform.Type()) {
 	case IcebergTransformType::IDENTITY: {
-		auto col_idx = GetColumnIndexBySourceId(copy_input.schema.columns, field.source_id);
-		auto col_type = GetSourceColumnType(copy_input, field.source_id);
-		return CreateColumnReference(copy_input, col_type, col_idx);
+		return CreateSourceColumnReference(context, copy_input, source_id);
 	}
 	case IcebergTransformType::YEAR:
-		return GetDateDiffFunction(context, copy_input, "year", field.source_id);
+		return GetDateDiffFunction(context, copy_input, "year", source_id);
 	case IcebergTransformType::MONTH:
-		return GetDateDiffFunction(context, copy_input, "month", field.source_id);
+		return GetDateDiffFunction(context, copy_input, "month", source_id);
 	case IcebergTransformType::DAY:
-		return GetDateDiffFunction(context, copy_input, "day", field.source_id);
+		return GetDateDiffFunction(context, copy_input, "day", source_id);
 	case IcebergTransformType::HOUR:
-		return GetDateDiffFunction(context, copy_input, "hour", field.source_id);
+		return GetDateDiffFunction(context, copy_input, "hour", source_id);
 	case IcebergTransformType::BUCKET:
-		return GetBucketExpression(context, copy_input, field);
+		return GetBucketExpression(context, copy_input, source_id, transform);
 	case IcebergTransformType::TRUNCATE:
-		return GetTruncateExpression(context, copy_input, field);
+		return GetTruncateExpression(context, copy_input, source_id, transform);
 	case IcebergTransformType::VOID:
-		throw InvalidInputException("VOID partition transform should not be used for partitioning");
+		throw InvalidInputException("VOID partition transform should not be used for %s", usage);
 	default:
-		throw NotImplementedException("Unsupported partition transform type");
+		throw NotImplementedException("Unsupported %s transform type", usage);
 	}
 }
 
-//! Generate partition expressions and configure copy options for partitioned writes
-static void GeneratePartitionExpressions(ClientContext &context, const IcebergCopyInput &copy_input,
+static OrderType GetDuckDBOrderType(const string &direction) {
+	if (StringUtil::CIEquals(direction, "asc")) {
+		return OrderType::ASCENDING;
+	}
+	if (StringUtil::CIEquals(direction, "desc")) {
+		return OrderType::DESCENDING;
+	}
+	throw NotImplementedException("Unsupported Iceberg sort direction '%s'", direction);
+}
+
+static OrderByNullType GetDuckDBNullOrder(const string &null_order) {
+	if (StringUtil::CIEquals(null_order, "nulls-first")) {
+		return OrderByNullType::NULLS_FIRST;
+	}
+	if (StringUtil::CIEquals(null_order, "nulls-last")) {
+		return OrderByNullType::NULLS_LAST;
+	}
+	throw NotImplementedException("Unsupported Iceberg null order '%s'", null_order);
+}
+
+static void GenerateSortOrderExpressions(ClientContext &context, const IcebergCopyInput &copy_input,
                                          IcebergCopyOptions &result) {
-	D_ASSERT(copy_input.partition_spec);
+	if (!copy_input.table_metadata.HasSortOrder()) {
+		return;
+	}
+	auto &sort_order = copy_input.table_metadata.GetLatestSortOrder();
+	if (!sort_order.IsSorted()) {
+		return;
+	}
+	for (auto &field : sort_order.fields) {
+		auto expr = GetTransformExpression(context, copy_input, field.source_id, field.transform, "sorting");
+		result.order_columns.emplace_back(GetDuckDBOrderType(field.direction), GetDuckDBNullOrder(field.null_order),
+		                                  std::move(expr));
+	}
+}
+
+//===--------------------------------------------------------------------===//
+// Data file write layout
+//===--------------------------------------------------------------------===//
+
+namespace {
+
+//! One column of the chunk handed to the copy operator, and how to produce it from the child plan.
+struct IcebergWriteColumn {
+	string name;
+	LogicalType type;
+	//! Expression over the child plan output (a plain column reference, or a partition transform). Used as the
+	//! projection expression when one is needed, and to tell where the column comes from when it is not.
+	unique_ptr<Expression> source;
+	//! FIELD_IDS entry for the parquet writer; unset for columns that are not written to the file.
+	optional<Value> field_id;
+	//! Added only to route rows by a transformed partition value (e.g. day(ts)); not written to the file.
+	bool is_computed_partition_value = false;
+};
+
+//! The layout of the chunk that reaches the copy operator. Built once, so that the copy bind
+//! (names/types/FIELD_IDS), the projection and the partition column positions cannot disagree.
+struct IcebergWriteLayout {
+	vector<IcebergWriteColumn> columns;
+	//! Positions in `columns` used to partition the output.
+	vector<idx_t> partition_columns;
+
+	//! Identity partitioning routes by written columns, which stay in the file; transformed partition values
+	//! are computed columns that are stripped. PhysicalCopyToFile has a single flag, so they never mix.
+	bool WritePartitionColumns() const {
+		return partition_columns.empty() || !columns[partition_columns[0]].is_computed_partition_value;
+	}
+};
+
+} // namespace
+
+//! The child plan column a layout column passes through unchanged, if it is a plain reference.
+static optional_idx PassThroughIndex(const IcebergWriteColumn &column) {
+	if (column.source->GetExpressionType() != ExpressionType::BOUND_REF) {
+		return optional_idx();
+	}
+	return column.source->Cast<BoundReferenceExpression>().Index();
+}
+
+//! Position in the layout of the written column that passes through the given child plan column.
+static idx_t FindWrittenColumn(const IcebergWriteLayout &layout, idx_t child_idx) {
+	for (idx_t i = 0; i < layout.columns.size(); i++) {
+		auto &column = layout.columns[i];
+		if (!column.is_computed_partition_value && PassThroughIndex(column) == child_idx) {
+			return i;
+		}
+	}
+	throw InternalException("Child plan column %d is not written to the data file", child_idx);
+}
+
+//! Number of columns the child plan produces: the schema columns followed by the virtual columns.
+static idx_t ChildColumnCount(const IcebergCopyInput &copy_input) {
+	idx_t count = copy_input.schema.columns.size();
+	if (WriteRowId(copy_input.virtual_columns)) {
+		count++;
+	}
+	if (WriteSequenceNumber(copy_input.virtual_columns)) {
+		count++;
+	}
+	return count;
+}
+
+//! A projection is needed unless every column of the child plan output passes through unchanged.
+static bool NeedsProjection(const IcebergWriteLayout &layout, const IcebergCopyInput &copy_input) {
+	if (layout.columns.size() != ChildColumnCount(copy_input)) {
+		return true;
+	}
+	for (idx_t i = 0; i < layout.columns.size(); i++) {
+		if (PassThroughIndex(layout.columns[i]) != i) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static IcebergWriteLayout BuildWriteLayout(ClientContext &context, const IcebergCopyInput &copy_input) {
+	IcebergWriteLayout layout;
+	auto &schema = copy_input.schema;
+
+	// Physical columns, in schema order. The child plan produces every schema column, so the source
+	// index is the schema index even when earlier columns are omitted.
+	for (idx_t schema_idx = 0; schema_idx < schema.columns.size(); schema_idx++) {
+		auto &column = *schema.columns[schema_idx];
+		if (!IsWrittenToDataFile(column.type)) {
+			// e.g. unknown: the column stays in the schema but has no data file representation
+			continue;
+		}
+		IcebergWriteColumn write_column;
+		write_column.name = column.name;
+		write_column.type = GetWrittenType(column.type, column.name);
+		write_column.source = make_uniq<BoundReferenceExpression>(column.type, schema_idx);
+		if (write_column.type != column.type) {
+			// casting to the written type drops the omitted fields from the value
+			write_column.source =
+			    BoundCastExpression::AddCastToType(context, std::move(write_column.source), write_column.type);
+		}
+		write_column.field_id = GetWrittenFieldIdValue(column);
+		layout.columns.push_back(std::move(write_column));
+	}
+
+	// Virtual columns follow the schema columns in the child plan output.
+	idx_t child_idx = schema.columns.size();
+	if (WriteRowId(copy_input.virtual_columns)) {
+		IcebergWriteColumn write_column;
+		write_column.name = "_row_id";
+		write_column.type = LogicalType::BIGINT;
+		write_column.source = make_uniq<BoundReferenceExpression>(LogicalType::BIGINT, child_idx++);
+		write_column.field_id = Value::BIGINT(MultiFileReader::ROW_ID_FIELD_ID);
+		layout.columns.push_back(std::move(write_column));
+	}
+	if (WriteSequenceNumber(copy_input.virtual_columns)) {
+		IcebergWriteColumn write_column;
+		write_column.name = "_last_updated_sequence_number";
+		write_column.type = LogicalType::BIGINT;
+		write_column.source = make_uniq<BoundReferenceExpression>(LogicalType::BIGINT, child_idx++);
+		write_column.field_id = Value::BIGINT(MultiFileReader::LAST_UPDATED_SEQUENCE_NUMBER_ID);
+		layout.columns.push_back(std::move(write_column));
+	}
+	D_ASSERT(child_idx == ChildColumnCount(copy_input));
+
+	if (!copy_input.partition_spec) {
+		return layout;
+	}
 	auto &spec = *copy_input.partition_spec;
 
-	auto &partition_columns = result.partition_columns;
-	auto &projection_expressions = result.projection_list;
-	auto &projection_names = result.names;
-	auto &projection_types = result.expected_types;
-	auto &write_partition_columns = result.write_partition_columns;
-
-	if (AllIdentityTransforms(spec)) {
-		// All transforms are identity - we can partition on the columns directly
-		// Just set up the correct references to the partition columns
+	if (CanWriteIdentityPartitionsDirectly(spec, schema)) {
+		// All transforms are identity: partition on the written columns themselves.
 		for (auto &field : spec.fields) {
 			if (field.transform.Type() == IcebergTransformType::VOID) {
 				continue;
 			}
-			auto col_idx = GetColumnIndexBySourceId(copy_input.schema.columns, field.source_id);
-			partition_columns.push_back(col_idx);
+			auto schema_idx = GetColumnIndexBySourceId(schema, field.source_id).GetPrimaryIndex();
+			layout.partition_columns.push_back(FindWrittenColumn(layout, schema_idx));
 		}
-		write_partition_columns = true;
-		return;
+		return layout;
 	}
 
-	// If we have partition columns with non-identity transforms, we need to compute them separately
-	// and NOT write the computed partition columns to the data files.
-	// Virtual columns (e.g. _row_id) sit between physical and partition columns in the chunk:
-	//   [col0..colN-1, _row_id?, partition_val0..valK-1]
-	// result.names/expected_types already have physical + virtual prepended before this call.
-	idx_t virtual_column_count = 0;
-	if (WriteRowId(copy_input.virtual_columns)) {
-		virtual_column_count++;
-	}
-	if (WriteSequenceNumber(copy_input.virtual_columns)) {
-		virtual_column_count++;
-	}
-	idx_t partition_column_start = copy_input.schema.columns.size() + virtual_column_count;
-
-	// Pass-through projections for physical columns
-	idx_t col_idx = 0;
-	for (auto &col : copy_input.schema.columns) {
-		projection_expressions.push_back(CreateColumnReference(copy_input, col->type, col_idx++));
-	}
-	// Pass-through projections for virtual columns
-	for (idx_t v = 0; v < virtual_column_count; v++) {
-		projection_expressions.push_back(make_uniq<BoundReferenceExpression>(LogicalType::BIGINT, col_idx++));
-	}
-
-	// Partition transform expressions
+	// Otherwise every field, identity included, becomes a computed column at the end of the chunk: the copy
+	// operator routes rows by it and strips it before writing.
 	for (auto &field : spec.fields) {
 		if (field.transform.Type() == IcebergTransformType::VOID) {
 			continue;
 		}
-		partition_columns.push_back(partition_column_start++);
-
-		auto expr = GetPartitionExpression(context, copy_input, field);
-		projection_names.push_back(field.GetPartitionSpecFieldName());
-		projection_types.push_back(expr->return_type);
-		projection_expressions.push_back(std::move(expr));
+		IcebergWriteColumn write_column;
+		write_column.name = field.GetPartitionSpecFieldName();
+		write_column.source =
+		    GetTransformExpression(context, copy_input, field.source_id, field.transform, "partitioning");
+		write_column.type = write_column.source->GetReturnType();
+		write_column.is_computed_partition_value = true;
+		layout.partition_columns.push_back(layout.columns.size());
+		layout.columns.push_back(std::move(write_column));
 	}
-
-	D_ASSERT(projection_names.size() == projection_types.size());
-	write_partition_columns = false;
+	return layout;
 }
 
 vector<IcebergManifestEntry> IcebergInsert::GetInsertManifestEntries(IcebergInsertGlobalState &global_state) {
@@ -760,12 +746,12 @@ struct IcebergParquetOptionMapping {
 // to
 // https://github.com/duckdb/duckdb/blob/9cbb0656cd34fa3eb890963b9f961bbc8a221fa9/extension/parquet/parquet_extension.cpp#L121
 static const IcebergParquetOptionMapping ICEBERG_TABLE_PROPERTY_MAPPING[] = {
-    {"write.parquet.row-group-size-bytes", "row_group_size_bytes"},
     {"write.parquet.compression-codec", "codec"},
     {"write.parquet.compression-level", "compression_level"},
     {"write.parquet.dict-size-bytes", "string_dictionary_page_size_limit"},
+    {"write.parquet.page-size-bytes", "data_page_size_limit"},
+    {"write.parquet.row-group-size-bytes", "row_group_size_bytes"},
     {"write.parquet.row-group-size", "row_group_size"},
-    {"write.parquet.page-size-bytes", "chunk_size"},
     {"write.parquet.row-groups-per-file", "row_groups_per_file"}};
 
 static const idx_t ICEBERG_TABLE_PROPERTY_MAPPING_SIZE =
@@ -781,8 +767,18 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 	info->format = file_format;
 	info->is_from = false;
 
+	// Everything the copy operator is told about its input (bind names/types, FIELD_IDS, projection,
+	// partition column positions) is derived from this single layout so that they cannot disagree.
+	auto layout = BuildWriteLayout(context, copy_input);
+
+	child_list_t<Value> field_id_values;
+	for (auto &column : layout.columns) {
+		if (column.field_id) {
+			field_id_values.emplace_back(column.name, *column.field_id);
+		}
+	}
 	vector<Value> field_input;
-	field_input.push_back(WrittenFieldIds(copy_input));
+	field_input.push_back(Value::STRUCT(std::move(field_id_values)));
 	info->options["field_ids"] = std::move(field_input);
 	for (auto &option : copy_input.options) {
 		info->options[option.first] = option.second;
@@ -790,27 +786,36 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 
 	const auto &table_properties = copy_input.table_metadata.GetTableProperties();
 	// Map Iceberg write properties to DuckDB parquet copy options
+	optional_idx batch_size;
+	optional_idx batch_size_bytes;
 	// TODO: Iceberg properties for bloom filter are per column, duckdb's seems to be per table.
 	// write.parquet.bloom-filter-fpp.column.<col> -> bloom_filter_false_positive_ratio
 	// write.parquet.bloom-filter-enabled.column.<col> -> write_bloom_filter
 	for (idx_t i = 0; i < ICEBERG_TABLE_PROPERTY_MAPPING_SIZE; i++) {
 		auto &mapping = ICEBERG_TABLE_PROPERTY_MAPPING[i];
 		auto it = table_properties.find(mapping.iceberg_option);
-		if (it != table_properties.end()) {
-			if (StringUtil::CIEquals(mapping.parquet_option, "row_group_size_bytes") &&
-			    StringUtil::CharacterIsDigit(it->second.back())) {
-				info->options[mapping.parquet_option].emplace_back(Value::UBIGINT(StringUtil::ToUnsigned(it->second)));
-			} else {
-				info->options[mapping.parquet_option].emplace_back(it->second);
-			}
+		if (it == table_properties.end()) {
+			continue;
 		}
+		// DuckDB's parquet copy_to_bind ignores row_group_size(_bytes); the COPY binder resolves them into
+		// batch_size(_bytes) on the copy operator instead. Do the same here, since we bypass that binder.
+		if (StringUtil::CIEquals(mapping.parquet_option, "row_group_size_bytes")) {
+			batch_size_bytes = IcebergUtils::ParseByteSizeOptionallyFormatted(it->second);
+			continue;
+		}
+		if (StringUtil::CIEquals(mapping.parquet_option, "row_group_size")) {
+			batch_size = StringUtil::ToUnsigned(it->second);
+			continue;
+		}
+		info->options[mapping.parquet_option].emplace_back(it->second);
 	}
 
 	// Always use native parquet geometry for writing
 	info->options["geoparquet_version"].emplace_back("NONE");
 
 	auto &fs = FileSystem::GetFileSystem(context);
-	if (!fs.IsRemoteFile(copy_input.data_path)) {
+	// data_path is empty while a CTAS is being planned, because its table does not have a location yet
+	if (!copy_input.data_path.empty() && !fs.IsRemoteFile(copy_input.data_path)) {
 		// create data path if it does not yet exist
 		try {
 			fs.CreateDirectoriesRecursive(copy_input.data_path);
@@ -821,108 +826,90 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 	// Bind Copy Function
 	CopyFunctionBindInput bind_input(*info);
 
+	// copy_to_bind receives only the columns that end up in the file. Computed partition values are
+	// stripped by PhysicalCopyToFile before writing, so including them would cause a type mismatch.
 	vector<string> names_to_write;
 	vector<LogicalType> types_to_write;
-	copy_input.schema.GetColumnNamesAndTypes(names_to_write, types_to_write);
+	for (auto &column : layout.columns) {
+		if (column.is_computed_partition_value) {
+			continue;
+		}
+		names_to_write.push_back(column.name);
+		types_to_write.push_back(column.type);
+	}
+
+	if (names_to_write.empty()) {
+		throw NotImplementedException("Cannot write to a table where every column is of type unknown: unknown "
+		                              "columns are omitted from data files, leaving no columns to write");
+	}
 
 	// Get Parquet Copy function
-	auto &copy_fun = IcebergUtils::GetCopyFunction(context, file_format);
+	auto &copy_fun = IcebergUtils::GetCopyFunction(context, Identifier(file_format));
 	IcebergCopyOptions result(std::move(info), copy_fun.function);
+	GenerateSortOrderExpressions(context, copy_input, result);
 
-	result.use_tmp_file = false;
+	result.filename_pattern.SetFilenamePattern("{uuidv7}");
+	auto write_target_file_size = table_properties.find("write.target-file-size-bytes");
+	if (write_target_file_size != table_properties.end()) {
+		result.file_size_bytes = IcebergUtils::ParseByteSizeOptionallyFormatted(write_target_file_size->second);
+	}
 	if (copy_input.partition_spec) {
-		if (table_properties.find("write.target-file-size-bytes") != table_properties.end()) {
-			Value ignore_target_file_size_bytes_for_partitioned_tables;
-			if (!context.TryGetCurrentSetting("ignore_target_file_size_for_partitioned_tables",
-			                                  ignore_target_file_size_bytes_for_partitioned_tables) ||
-			    !ignore_target_file_size_bytes_for_partitioned_tables.GetValue<bool>()) {
-				throw InvalidInputException("Table property target-file-size-bytes is currently not supported for "
-				                            "partitioned tables.\nTo ignore this error "
-				                            "run \"SET ignore_target_file_size_for_partitioned_tables=true\"");
-			}
-		}
-		if (table_properties.find("write.parquet.row-group-size-bytes") != table_properties.end()) {
-			Value ignore_row_group_size_bytes_for_partitioned_tables;
-			if (!context.TryGetCurrentSetting("ignore_row_group_size_for_partitioned_tables",
-			                                  ignore_row_group_size_bytes_for_partitioned_tables) ||
-			    !ignore_row_group_size_bytes_for_partitioned_tables.GetValue<bool>()) {
-				throw InvalidInputException("Table property row-group-size-bytes is currently not supported for "
-				                            "partitioned tables.\nTo ignore this error "
-				                            "run \"SET ignore_row_group_size_for_partitioned_tables=true\"");
-			}
-		}
-		result.filename_pattern.SetFilenamePattern("{uuidv7}");
 		result.partition_output = true;
 		result.write_empty_file = true;
-		result.rotate = false;
 	} else {
-		result.filename_pattern.SetFilenamePattern("{uuidv7}");
 		result.partition_output = false;
 		result.write_empty_file = false;
-		// file_size_bytes is currently only supported for unpartitioned writes
-		auto write_target_file_size = table_properties.find("write.target-file-size-bytes");
-		bool target_file_size_set = false;
-		if (write_target_file_size != table_properties.end()) {
-			try {
-				result.file_size_bytes = context.db->config.ParseMemoryLimit(write_target_file_size->second.c_str());
-				target_file_size_set = true;
-			} catch (ParserException &e) {
-				DUCKDB_LOG_INFO(context,
-				                "table property write.target-file-size-bytes = %s could not be parsed by "
-				                "ParseMemoryLimit(). Reason %s",
-				                write_target_file_size->second, e.what());
-			}
-			if (!target_file_size_set) {
-				try {
-					result.file_size_bytes = std::stoll(write_target_file_size->second);
-					target_file_size_set = true;
-				} catch (std::invalid_argument const &e) {
-					DUCKDB_LOG_INFO(
-					    context,
-					    "table property write.target-file-size-bytes = %s could not be parsed by std::stoll. Reason %s",
-					    write_target_file_size->second, e.what());
-				}
-			}
-			if (!target_file_size_set) {
-				throw InvalidInputException("Table property write.target-file-size-bytes is not a valid number");
-			}
-		}
-		if (!target_file_size_set) {
-			result.file_size_bytes = IcebergCatalog::DEFAULT_TARGET_FILE_SIZE;
-		}
-		result.rotate = true;
 	}
 
 	result.file_path = copy_input.data_path;
-	StripTrailingSeparator(fs, result.file_path);
+	// A filesystem can throw if it has been disabled, so skip if the path is empty (namely for CTAS)
+	if (!result.file_path.empty()) {
+		StripTrailingSeparator(fs, result.file_path);
+	}
 	result.file_extension = file_format;
 	result.overwrite_mode = CopyOverwriteMode::COPY_OVERWRITE_OR_IGNORE;
 	result.per_thread_output = false;
-	result.write_partition_columns = true;
+	result.write_partition_columns = layout.WritePartitionColumns();
+	result.partition_columns = std::move(layout.partition_columns);
 	result.return_type = CopyFunctionReturnType::WRITTEN_FILE_STATISTICS;
-	// Virtual columns come before partition columns, matching the chunk layout:
-	//   [physical_cols..., _row_id, partition_vals...]
-	if (WriteRowId(copy_input.virtual_columns)) {
-		names_to_write.push_back("_row_id");
-		types_to_write.push_back(LogicalType::BIGINT);
-	}
-	if (WriteSequenceNumber(copy_input.virtual_columns)) {
-		names_to_write.push_back("_last_updated_sequence_number");
-		types_to_write.push_back(LogicalType::BIGINT);
+
+	auto partitioned_paths = table_properties.find("write.object-storage.partitioned-paths");
+	if (partitioned_paths != table_properties.end()) {
+		result.partitioned_paths =
+		    Value(partitioned_paths->second).DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>();
 	}
 
-	// copy_to_bind receives physical + virtual only (partition routing columns are stripped
-	// by PhysicalCopyToFile before writing, so including them causes a type mismatch).
-	auto function_data = copy_fun.function.copy_to_bind(context, bind_input, names_to_write, types_to_write);
+	auto function_data =
+	    copy_fun.function.copy_to_bind(context, bind_input, StringsToIdentifiers(names_to_write), types_to_write);
 	result.bind_data = std::move(function_data);
 
-	result.names = names_to_write;
-	result.expected_types = types_to_write;
+	// Mirrors Binder::BindCopyTo: without any batch size the copy operator flushes every chunk, producing
+	// one row group per vector (2048 rows). Table properties override the Iceberg defaults.
+	if (batch_size.IsValid()) {
+		result.batch_size = batch_size;
+	}
+	if (batch_size_bytes.IsValid()) {
+		result.batch_size_bytes = batch_size_bytes;
+	}
+	if (!result.batch_size.IsValid() && !result.batch_size_bytes.IsValid() && copy_fun.function.desired_batch_size) {
+		result.batch_size = copy_fun.function.desired_batch_size(context, *result.bind_data);
+	}
 
-	if (copy_input.partition_spec) {
-		// Partition expressions are appended after physical + virtual.
-		// GeneratePartitionExpressions accounts for virtual_column_count when computing partition_column_start.
-		GeneratePartitionExpressions(context, copy_input, result);
+	// A file can never be smaller than a single row group, and rotation to honor
+	// write.target-file-size-bytes only happens at row-group boundaries. If the row-group size exceeds the
+	// target file size, rotation can never split the output, so cap it to the target file size.
+	if (result.batch_size_bytes.IsValid() && result.batch_size_bytes.GetIndex() > result.file_size_bytes) {
+		result.batch_size_bytes = result.file_size_bytes;
+	}
+
+	// The chunk that reaches the copy operator: written columns followed by any computed partition values.
+	const bool needs_projection = NeedsProjection(layout, copy_input);
+	for (auto &column : layout.columns) {
+		result.names.emplace_back(column.name);
+		result.expected_types.push_back(column.type);
+		if (needs_projection) {
+			result.projection_list.push_back(std::move(column.source));
+		}
 	}
 
 	return result;
@@ -933,11 +920,13 @@ static void GenerateProjection(ClientContext &context, PhysicalPlanGenerator &pl
 	// push the projection
 	vector<LogicalType> types;
 	for (auto &expr : expressions) {
-		auto &type = expr->return_type;
+		auto &type = expr->GetReturnType();
 		if (type.id() == LogicalTypeId::HUGEINT) {
-			type = LogicalType::DECIMAL(38, 0);
+			expr->SetReturnType(LogicalType::DECIMAL(38, 0));
+			types.push_back(expr->GetReturnType());
+		} else {
+			types.push_back(type);
 		}
-		types.push_back(type);
 	}
 	auto &proj =
 	    planner.Make<PhysicalProjection>(std::move(types), std::move(expressions), plan->estimated_cardinality);
@@ -945,41 +934,102 @@ static void GenerateProjection(ClientContext &context, PhysicalPlanGenerator &pl
 	plan = proj;
 }
 
-PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, PhysicalPlanGenerator &planner,
-                                                   const IcebergCopyInput &copy_input,
-                                                   optional_ptr<PhysicalOperator> plan) {
+static void GeneratePhysicalOrder(PhysicalPlanGenerator &planner, vector<BoundOrderByNode> &orders,
+                                  optional_ptr<PhysicalOperator> &plan) {
+	D_ASSERT(plan);
+	vector<idx_t> projections;
+	projections.reserve(plan->GetTypes().size());
+	for (idx_t i = 0; i < plan->GetTypes().size(); i++) {
+		projections.push_back(i);
+	}
+	auto &order = planner.Make<PhysicalOrder>(plan->GetTypes(), std::move(orders), std::move(projections),
+	                                          plan->estimated_cardinality);
+	order.children.push_back(*plan);
+	plan = order;
+}
+
+// Every write must produce the schema's storage types before sorting, partitioning or writing to Parquet.
+// CTAS can widen integers, and INSERT/UPDATE/MERGE can retain aliases such as AGGREGATE_STATE on LISTs.
+static PhysicalOperator &CastToIcebergStorageTypes(ClientContext &context, PhysicalPlanGenerator &planner,
+                                                   const IcebergTableSchema &schema, PhysicalOperator &plan) {
+	auto &src_types = plan.GetTypes();
+	D_ASSERT(src_types.size() >= schema.columns.size());
+
+	// Virtual columns (e.g. _row_id on v3 updates) follow the schema columns and pass through unchanged.
+	vector<LogicalType> target_types = src_types;
+	vector<LogicalType> validation_types = src_types;
+	bool needs_cast = false;
+	for (idx_t i = 0; i < schema.columns.size(); i++) {
+		target_types[i] = schema.columns[i]->type;
+		validation_types[i] = target_types[i];
+		if (TypeVisitor::Contains(target_types[i], IcebergFixedType::IsFixed)) {
+			validation_types[i] = TypeVisitor::VisitReplace(target_types[i], [](const LogicalType &type) {
+				return IcebergFixedType::IsFixed(type) ? LogicalType::BLOB : type;
+			});
+			needs_cast = true;
+		}
+		needs_cast |= target_types[i] != src_types[i];
+	}
+	if (!needs_cast) {
+		return plan;
+	}
+
+	auto &cast_functions = CastFunctionSet::Get(context);
+	GetCastFunctionInput cast_input(context);
+	vector<unique_ptr<Expression>> expressions;
+	expressions.reserve(src_types.size());
+	for (idx_t i = 0; i < src_types.size(); i++) {
+		unique_ptr<Expression> expr = make_uniq<BoundReferenceExpression>(src_types[i], i);
+		if (target_types[i] != src_types[i]) {
+			// AddCastToType can elide LIST casts when only the outer alias differs. Build the cast
+			// explicitly: the copy pipeline requires the exact storage type, including nested types.
+			auto bound_cast = cast_functions.GetCastFunction(src_types[i], target_types[i], cast_input);
+			expr = BoundCastExpression::Create(std::move(expr), target_types[i], std::move(bound_cast));
+		}
+		if (validation_types[i] != target_types[i]) {
+			// Nested JSON conversions can construct fixed-typed values without invoking the leaf casts.
+			// Strip the fixed aliases and cast back so every write validates the actual byte lengths,
+			// even when its input already has the declared storage type.
+			expr = BoundCastExpression::AddCastToType(context, std::move(expr), validation_types[i]);
+			expr = BoundCastExpression::AddCastToType(context, std::move(expr), target_types[i]);
+		}
+		expressions.push_back(std::move(expr));
+	}
+	auto &proj =
+	    planner.Make<PhysicalProjection>(std::move(target_types), std::move(expressions), plan.estimated_cardinality);
+	proj.children.push_back(plan);
+	return proj;
+}
+
+IcebergCopyToFile &IcebergInsert::PlanCopyForInsert(ClientContext &context, PhysicalPlanGenerator &planner,
+                                                    IcebergCopyInput &copy_input, optional_ptr<PhysicalOperator> plan) {
+	D_ASSERT(!plan || plan->GetTypes().size() == ChildColumnCount(copy_input));
+	if (plan) {
+		plan = CastToIcebergStorageTypes(context, planner, copy_input.schema, *plan);
+	}
 	auto copy_options = GetCopyOptions(context, copy_input);
 
-	// If there are partition transform expressions (non-identity partitions), push a projection
-	// that computes them on top of the child plan.
+	// Sort expressions reference the child plan output, so order before the projection changes the layout.
+	// Partitioned writes are sorted per partition by the copy operator itself.
+	if (!copy_input.partition_spec && !copy_options.order_columns.empty() && plan) {
+		GeneratePhysicalOrder(planner, copy_options.order_columns, plan);
+	}
+
+	// Produce the data file layout: drops columns that are not written (unknown) and computes
+	// non-identity partition transforms.
 	if (!copy_options.projection_list.empty() && plan) {
 		GenerateProjection(context, planner, copy_options.projection_list, plan);
 	}
 
 	auto copy_return_types = GetCopyFunctionReturnLogicalTypes(CopyFunctionReturnType::WRITTEN_FILE_STATISTICS);
+	// For CTAS the table does not exist yet, so the options resolved above are based on placeholder metadata
+	// without a location. The copy creates the table and re-resolves them before it needs a path.
 	auto &physical_copy = planner
-	                          .Make<PhysicalCopyToFile>(copy_return_types, std::move(copy_options.copy_function),
-	                                                    std::move(copy_options.bind_data), 1)
-	                          .Cast<PhysicalCopyToFile>();
+	                          .Make<IcebergCopyToFile>(copy_return_types, std::move(copy_options.copy_function),
+	                                                   nullptr, 1, std::move(copy_input.ctas_info))
+	                          .Cast<IcebergCopyToFile>();
 
-	physical_copy.file_path = std::move(copy_options.file_path);
-	physical_copy.use_tmp_file = copy_options.use_tmp_file;
-	physical_copy.filename_pattern = std::move(copy_options.filename_pattern);
-	physical_copy.file_extension = std::move(copy_options.file_extension);
-	physical_copy.overwrite_mode = copy_options.overwrite_mode;
-	physical_copy.per_thread_output = copy_options.per_thread_output;
-	physical_copy.file_size_bytes = copy_options.file_size_bytes;
-	physical_copy.rotate = copy_options.rotate;
-	physical_copy.return_type = copy_options.return_type;
-
-	physical_copy.partition_output = copy_options.partition_output;
-	physical_copy.write_partition_columns = copy_options.write_partition_columns;
-	physical_copy.write_empty_file = copy_options.write_empty_file;
-	physical_copy.partition_columns = std::move(copy_options.partition_columns);
-	physical_copy.names = std::move(copy_options.names);
-	physical_copy.expected_types = std::move(copy_options.expected_types);
-	physical_copy.parallel = true;
-	physical_copy.hive_file_pattern = true;
+	physical_copy.ApplyCopyOptions(copy_options);
 	if (plan) {
 		physical_copy.children.push_back(*plan);
 	}
@@ -987,19 +1037,8 @@ PhysicalOperator &IcebergInsert::PlanCopyForInsert(ClientContext &context, Physi
 	return physical_copy;
 }
 
-void VerifyDirectInsertionOrder(LogicalInsert &op) {
-	idx_t column_index = 0;
-	for (auto &mapping : op.column_index_map) {
-		if (mapping == DConstants::INVALID_INDEX || mapping != column_index) {
-			//! See issue#444
-			throw NotImplementedException("Iceberg inserts don't support targeted inserts yet (i.e tbl(col1,col2))");
-		}
-		column_index++;
-	}
-}
-
 PhysicalOperator &IcebergInsert::PlanInsert(ClientContext &context, PhysicalPlanGenerator &planner,
-                                            IcebergTableEntry &table) {
+                                            IcebergTableSchemaVersion &table) {
 	optional_idx partition_id;
 	vector<LogicalType> return_types;
 	// the one return value is how many rows we are inserting
@@ -1020,60 +1059,40 @@ PhysicalOperator &IcebergCatalog::PlanInsert(ClientContext &context, PhysicalPla
 	if (!op.column_index_map.empty()) {
 		plan = planner.ResolveDefaultsProjection(op, *plan);
 	}
-	auto &table_entry = op.table.Cast<IcebergTableEntry>();
+	auto &table_entry = op.table.Cast<IcebergTableSchemaVersion>();
 	table_entry.PrepareIcebergScanFromEntry(context);
 
 	auto &irc_transaction = IcebergTransaction::Get(context, *this);
+
 	auto &alter = irc_transaction.GetOrCreateAlter();
 	auto &updated_table = alter.GetOrInitializeTable(table_entry.table_info);
 	auto &table_metadata = updated_table.table_metadata;
+	if (table_metadata.iceberg_version < 2) {
+		throw NotImplementedException("Insert into Iceberg V%d tables", table_metadata.iceberg_version);
+	}
 	auto &schema = table_metadata.GetLatestSchema();
 	auto &updated_table_entry = *updated_table.schema_versions[schema.schema_id];
 
-	if (table_metadata.HasSortOrder()) {
-		auto &sort_spec = table_metadata.GetLatestSortOrder();
-		if (sort_spec.IsSorted()) {
-			Value unsafe_ignore_sort_order;
-			if (!context.TryGetCurrentSetting("unsafe_iceberg_ignore_sort_order", unsafe_ignore_sort_order) ||
-			    !unsafe_ignore_sort_order.GetValue<bool>()) {
-				throw NotImplementedException(
-				    "INSERT into a sorted iceberg table is not supported yet.\nTo bypass this guard and "
-				    "write without applying the table's declared sort order, "
-				    "run \"SET unsafe_iceberg_ignore_sort_order=true\"");
-			}
-		}
-	}
-
 	// Create Copy Info
-	IcebergCopyInput info(context, table_metadata, schema);
+	IcebergCopyInput copy_input(context, table_metadata, schema);
 	auto &insert = planner.Make<IcebergInsert>(op, updated_table_entry, op.column_index_map);
-	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, info, plan);
+	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, plan);
 	insert.children.push_back(physical_copy);
 
 	return insert;
 }
 
 static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(ClientContext &context, BoundCreateTableInfo &info) {
-	auto metadata = make_uniq<IcebergTableMetadata>();
-	metadata->iceberg_version = 2;
+	auto metadata = make_uniq<IcebergTableMetadata>(IcebergTableMetadataSchemas {});
+	metadata->iceberg_version = DEFAULT_ICEBERG_FORMAT_VERSION;
 	metadata->default_spec_id = 0;
-
-	auto schema = make_shared_ptr<IcebergTableSchema>();
-	schema->schema_id = 0;
-	int32_t next_field_id = 1;
-	auto &create_info = info.Base().Cast<CreateTableInfo>();
-	for (auto &col : create_info.columns.Logical()) {
-		auto col_def = make_uniq<IcebergColumnDefinition>();
-		col_def->id = next_field_id++;
-		col_def->name = col.Name();
-		col_def->type = col.Type();
-		col_def->required = false;
-		schema->columns.push_back(std::move(col_def));
-	}
-	schema->last_column_id = static_cast<idx_t>(next_field_id - 1);
-	metadata->AddSchemaOrGetExisting(schema);
 	metadata->SetCurrentSchemaId(0);
 
+	Value default_version;
+	if (context.TryGetCurrentSetting(DEFAULT_FORMAT_VERSION_CONFIG_VARIABLE, default_version)) {
+		metadata->iceberg_version = default_version.GetValue<uint64_t>();
+	}
+	auto &create_info = info.Base().Cast<CreateTableInfo>();
 	auto binder = Binder::CreateBinder(context);
 	TableFunctionBinder property_binder(*binder, context, "format-version");
 	for (auto &option : create_info.options) {
@@ -1083,89 +1102,57 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(ClientContext &
 			throw ParameterNotResolvedException();
 		}
 		auto val = ExpressionExecutor::EvaluateScalar(context, *bound_expr, true);
+		if (option.first == "format-version") {
+			auto version = val.DefaultCastAs(LogicalType::INTEGER).GetValue<int32_t>();
+			if (version < 1) {
+				throw InvalidInputException("The lowest supported iceberg version is 1!");
+			}
+			if (version > MAX_ICEBERG_FORMAT_VERSION) {
+				throw InvalidInputException("The highest supported iceberg version is %d!", MAX_ICEBERG_FORMAT_VERSION);
+			}
+			metadata->iceberg_version = version;
+		}
 		metadata->table_properties[option.first] = val.GetValue<string>();
 	}
 
+	// Resolve nested field IDs and storage types exactly as table creation does.
+	int32_t last_column_id;
+	auto schema = IcebergCreateTableRequest::CreateIcebergSchema(context, *metadata, create_info.columns,
+	                                                             &create_info.constraints, last_column_id);
+	metadata->last_column_id = last_column_id;
+	metadata->GetSchemasMutable().AddSchemaOrGetExisting(schema);
+
 	// Build a placeholder partition spec from the parsed PARTITIONED BY clause so that
 	// PlanCopyForInsert appends the partition projection at plan time. The real spec is
-	// applied during PhysicalIcebergCreateTable::MakeCreateTableRequest, but the projection
+	// applied when IcebergCopyToFile creates the table, but the projection
 	// indices are derived from the same partition_keys/schema and so remain consistent.
-	auto placeholder_spec = IcebergTableInformation::BuildPartitionSpec(create_info.partition_keys, *schema, 0, 1000);
+	auto placeholder_spec = IcebergTable::BuildPartitionSpec(create_info.partition_keys, *schema, 0, 1000);
 	metadata->partition_specs.emplace(0, std::move(placeholder_spec));
+
+	// Same for the SORTED BY clause: the ordering has to be part of the plan, so the placeholder metadata
+	// carries the sort order that the created table will end up with.
+	auto placeholder_sort_order_id = create_info.sort_keys.empty() ? UNSORTED_SORT_ORDER_ID : INITIAL_SORT_ORDER_ID;
+	auto placeholder_sort_order =
+	    IcebergTable::BuildSortOrder(context, create_info.sort_keys, *schema, placeholder_sort_order_id);
+	metadata->sort_specs.emplace(placeholder_sort_order_id, std::move(placeholder_sort_order));
+	metadata->default_sort_order_id = placeholder_sort_order_id;
 	return metadata;
-}
-
-// CTAS stores columns using Iceberg storage types (e.g. HUGEINT -> DECIMAL(38,0)), which can differ from
-// the SELECT output. The write pipeline is typed with the storage types, so without a cast the append fails
-// with a type mismatch.
-static PhysicalOperator &CastCtasToIcebergStorageTypes(ClientContext &context, PhysicalPlanGenerator &planner,
-                                                       PhysicalOperator &plan, BoundCreateTableInfo &info,
-                                                       const IcebergTableMetadata &metadata) {
-	auto &create_info = info.Base().Cast<CreateTableInfo>();
-	int32_t last_column_id = 0;
-	auto storage_schema = IcebergCreateTableRequest::CreateIcebergSchema(context, metadata, create_info.columns,
-	                                                                     &create_info.constraints, last_column_id);
-	auto &src_types = plan.types;
-	D_ASSERT(src_types.size() == storage_schema->columns.size());
-
-	bool needs_cast = false;
-	vector<LogicalType> target_types;
-	target_types.reserve(src_types.size());
-	for (idx_t i = 0; i < src_types.size(); i++) {
-		auto &target = storage_schema->columns[i]->type;
-		if (target != src_types[i]) {
-			needs_cast = true;
-		}
-		target_types.push_back(target);
-	}
-	if (!needs_cast) {
-		return plan;
-	}
-
-	vector<unique_ptr<Expression>> expressions;
-	expressions.reserve(src_types.size());
-	for (idx_t i = 0; i < src_types.size(); i++) {
-		unique_ptr<Expression> expr = make_uniq<BoundReferenceExpression>(src_types[i], i);
-		if (target_types[i] != src_types[i]) {
-			expr = BoundCastExpression::AddCastToType(context, std::move(expr), target_types[i]);
-		}
-		expressions.push_back(std::move(expr));
-	}
-	auto &proj =
-	    planner.Make<PhysicalProjection>(std::move(target_types), std::move(expressions), plan.estimated_cardinality);
-	proj.children.push_back(plan);
-	return proj;
 }
 
 PhysicalOperator &IcebergCatalog::PlanCreateTableAs(ClientContext &context, PhysicalPlanGenerator &planner,
                                                     LogicalCreateTable &op, PhysicalOperator &plan_p) {
-	auto &schema = op.schema;
-	auto &ic_schema_entry = schema.Cast<IcebergSchemaEntry>();
-
 	// create a fake local iceberg table with desired columns
 	auto placeholder_metadata = BuildPlaceholderMetadata(context, *op.info);
+	if (placeholder_metadata->iceberg_version < 2) {
+		throw NotImplementedException("Insert into Iceberg V%d tables", placeholder_metadata->iceberg_version);
+	}
 	auto &placeholder_schema = placeholder_metadata->GetLatestSchema();
-	auto &plan = CastCtasToIcebergStorageTypes(context, planner, plan_p, *op.info, *placeholder_metadata);
-	IcebergCopyInput copy_input(context, *placeholder_metadata, placeholder_schema);
-	auto &physical_copy_op = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, &plan);
-	auto &physical_copy = physical_copy_op.Cast<PhysicalCopyToFile>();
+	IcebergCopyInput copy_input(context, *placeholder_metadata, placeholder_schema, std::move(op.info));
+	auto &physical_copy = IcebergInsert::PlanCopyForInsert(context, planner, copy_input, plan_p);
 
-	D_ASSERT(physical_copy.children.size() == 1);
-	auto &upstream = physical_copy.children[0].get();
-	auto upstream_types = upstream.types;
-	auto upstream_card = upstream.estimated_cardinality;
-
-	// create shared state to be used between IcebergTableCreate and IcebergInsert
-	auto create_state = make_shared_ptr<IcebergCTASCreateState>();
-	// create a pass through IcebergCTASCreateStatement operator to make the
-	// CreateTable API call when the operator is executed.
-	auto &create_op = planner.Make<PhysicalIcebergCreateTable>(ic_schema_entry, std::move(op.info), create_state,
-	                                                           physical_copy, std::move(upstream_types), upstream_card);
-	create_op.children.push_back(upstream);
-	physical_copy.children[0] = create_op;
-
-	auto &insert = planner.Make<IcebergInsert>(op, schema, unique_ptr<BoundCreateTableInfo>()).Cast<IcebergInsert>();
-	insert.create_state = std::move(create_state);
+	auto &insert = planner.Make<IcebergInsert>(op).Cast<IcebergInsert>();
+	// the copy creates the table; the insert reads the resulting entry back out of it
+	insert.ctas_copy_op = physical_copy;
 	insert.children.push_back(physical_copy);
 	return insert;
 }

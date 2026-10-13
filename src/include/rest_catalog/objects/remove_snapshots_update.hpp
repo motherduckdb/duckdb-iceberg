@@ -1,13 +1,12 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/base_update.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -21,16 +20,20 @@ public:
 	RemoveSnapshotsUpdate &operator=(RemoveSnapshotsUpdate &&) = default;
 
 public:
-	static RemoveSnapshotsUpdate FromJSON(yyjson_val *obj);
+	// Deserialization
+	static RemoveSnapshotsUpdate FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Copy
+	RemoveSnapshotsUpdate Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	BaseUpdate base_update;
 	vector<int64_t> snapshot_ids;
-	string action;
-	bool has_action = false;
 };
 
 } // namespace rest_api_objects

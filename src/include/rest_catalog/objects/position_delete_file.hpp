@@ -1,13 +1,12 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/content_file.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -21,18 +20,21 @@ public:
 	PositionDeleteFile &operator=(PositionDeleteFile &&) = default;
 
 public:
-	static PositionDeleteFile FromJSON(yyjson_val *obj);
+	// Deserialization
+	static PositionDeleteFile FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Copy
+	PositionDeleteFile Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	ContentFile content_file;
-	string content;
-	int64_t content_offset;
-	bool has_content_offset = false;
-	int64_t content_size_in_bytes;
-	bool has_content_size_in_bytes = false;
+	optional<int64_t> content_offset;
+	optional<int64_t> content_size_in_bytes;
 };
 
 } // namespace rest_api_objects

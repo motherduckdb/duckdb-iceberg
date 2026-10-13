@@ -3,20 +3,15 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
+require-env SCAN_PLANNING_MODE client
 
-require parquet
-
-require iceberg
-
-require httpfs
+include test/sql/init_requires
 
 require icu
 
-require ducklake
+statement ok
+SET default_transaction_invalidation_policy='SYNTACTIC_ERRORS_DO_NOT_INVALIDATE';
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 set threads=1;

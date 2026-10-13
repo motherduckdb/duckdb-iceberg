@@ -1,13 +1,9 @@
 # name: test/sql/local/version_name_format_error.test
 # group: [local]
 
-require avro 
-
-require parquet
-
-require iceberg
+include test/sql/init_requires
 
 statement error
-select * from iceberg_scan('__WORKING_DIRECTORY__/data/persistent/iceberg/lineitem_iceberg', version_name_format='%s') limit 10
+select * from iceberg_scan('{WORKING_DIRECTORY}/data/persistent/iceberg/lineitem_iceberg', version_name_format='%s') limit 10
 ----
 Invalid Input Error: 'version_name_format' has to contain two occurrences of '%s' in it, found 1

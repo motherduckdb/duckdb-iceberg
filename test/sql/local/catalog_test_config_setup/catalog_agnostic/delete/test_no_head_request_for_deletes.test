@@ -4,16 +4,10 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
+require-env SCAN_PLANNING_MODE client
 
-require parquet
+include test/sql/init_requires
 
-require iceberg
-
-require httpfs
-
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 set logging_level='debug'

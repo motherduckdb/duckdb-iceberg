@@ -1,12 +1,11 @@
 #include "core/deletes/iceberg_deletion_vector.hpp"
 
-#include "duckdb/storage/caching_file_system.hpp"
+#include "duckdb/common/allocator.hpp"
 #include "duckdb/common/bswap.hpp"
-
-#include "planning/iceberg_multi_file_list.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
-#include "catalog/rest/api/catalog_utils.hpp"
-#include "iceberg_options.hpp"
+#include "duckdb/common/file_system.hpp"
+#include "duckdb/common/string_util.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/vector_operations/unary_executor.hpp"
 
 namespace duckdb {
 
@@ -67,7 +66,7 @@ bool CRC32::table_initialized = false;
 
 } // namespace
 
-shared_ptr<IcebergDeletionVectorData> IcebergDeletionVectorData::FromBlob(const BoundIcebergManifestEntry &entry,
+shared_ptr<IcebergDeletionVectorData> IcebergDeletionVectorData::FromBlob(const IcebergFileIdentity &file,
                                                                           data_ptr_t blob_start, idx_t blob_length) {
 	//! https://iceberg.apache.org/puffin-spec/#deletion-vector-v1-blob-type
 
@@ -100,7 +99,7 @@ shared_ptr<IcebergDeletionVectorData> IcebergDeletionVectorData::FromBlob(const 
 	vector_size -= sizeof(int64_t);
 	D_ASSERT(blob_start < blob_end);
 
-	auto result_p = make_shared_ptr<IcebergDeletionVectorData>(entry);
+	auto result_p = make_shared_ptr<IcebergDeletionVectorData>(file);
 	auto &result = *result_p;
 	result.bitmaps.reserve(amount_of_bitmaps);
 	for (int64_t i = 0; i < amount_of_bitmaps; i++) {
@@ -134,112 +133,6 @@ shared_ptr<IcebergDeletionVectorData> IcebergDeletionVectorData::FromBlob(const 
 	return result_p;
 }
 
-//! Verify a deletion-vector file is a structurally-valid Puffin container before reading it. The
-//! footer payload must be uncompressed (checked unconditionally): the Puffin spec permits an
-//! LZ4-compressed footer, but a deletion-vector footer must be plain so any reader walking the
-//! footer can parse the FileMetadata without a decompressor. In debug builds we additionally parse
-//! the whole container -- leading/footer/trailing magic, the footer JSON, and that the single
-//! blob's offset/length agree with the manifest content_offset/content_size_in_bytes used below.
-static void VerifyPuffinDeletionVector(CachingFileHandle &handle, int64_t content_offset, int64_t content_size) {
-	constexpr data_t PUFFIN_MAGIC[4] = {0x50, 0x46, 0x41, 0x31}; //! "PFA1"
-	//! Footer trailer layout: FooterPayloadSize (4) | Flags (4) | Magic (4)
-	constexpr idx_t FOOTER_TRAILER_SIZE = sizeof(int32_t) + sizeof(uint32_t) + sizeof(PUFFIN_MAGIC);
-
-	auto file_size = handle.GetFileSize();
-	if (file_size < 2 * sizeof(PUFFIN_MAGIC) + FOOTER_TRAILER_SIZE) {
-		throw InvalidConfigurationException(
-		    "Deletion vector file is too small to be a valid Puffin file. Older versions of DuckDB wrote deletion "
-		    "vector files as bare blobs. To read those files, run \"SET %s = true\"",
-		    SKIP_PUFFIN_VERIFICATION_CONFIG_VARIABLE);
-	}
-
-	//! Read the footer trailer: validate the trailing magic and that the footer payload is uncompressed.
-	data_ptr_t trailer_ptr = nullptr;
-	auto trailer_buffer = handle.Read(trailer_ptr, FOOTER_TRAILER_SIZE, file_size - FOOTER_TRAILER_SIZE);
-	if (memcmp(trailer_ptr + sizeof(int32_t) + sizeof(uint32_t), PUFFIN_MAGIC, sizeof(PUFFIN_MAGIC)) != 0) {
-		throw InvalidConfigurationException(
-		    "Deletion vector file is not a valid Puffin file (bad trailing magic). Older versions of DuckDB wrote "
-		    "deletion vector files as bare blobs. To read those files, run \"SET %s = true\"",
-		    SKIP_PUFFIN_VERIFICATION_CONFIG_VARIABLE);
-	}
-	//! Flags: bit 0 of the first byte set => FooterPayload is compressed (per the Puffin spec).
-	auto flags = Load<uint32_t>(trailer_ptr + sizeof(int32_t));
-	if (flags & 0x1) {
-		throw InvalidConfigurationException(
-		    "Deletion vector Puffin footer payload is compressed; only uncompressed footers are supported. "
-		    "Verification can be disabled by running \"SET %s = true\"",
-		    SKIP_PUFFIN_VERIFICATION_CONFIG_VARIABLE);
-	}
-
-#ifdef DEBUG
-	//! Parse the full container and assert it round-trips with the manifest content_offset/size.
-	auto payload_size = Load<int32_t>(trailer_ptr);
-	D_ASSERT(payload_size > 0);
-	data_ptr_t file_ptr = nullptr;
-	auto file_buffer = handle.Read(file_ptr, file_size, 0);
-	D_ASSERT(memcmp(file_ptr, PUFFIN_MAGIC, sizeof(PUFFIN_MAGIC)) == 0); //! leading magic
-	idx_t payload_start = file_size - FOOTER_TRAILER_SIZE - static_cast<idx_t>(payload_size);
-	D_ASSERT(payload_start >= sizeof(PUFFIN_MAGIC));
-	//! footer leading magic precedes the payload
-	D_ASSERT(memcmp(file_ptr + payload_start - sizeof(PUFFIN_MAGIC), PUFFIN_MAGIC, sizeof(PUFFIN_MAGIC)) == 0);
-	auto doc = std::unique_ptr<yyjson_doc, YyjsonDocDeleter>(
-	    yyjson_read(reinterpret_cast<const char *>(file_ptr + payload_start), static_cast<size_t>(payload_size), 0));
-	D_ASSERT(doc);
-	auto blobs = yyjson_obj_get(yyjson_doc_get_root(doc.get()), "blobs");
-	D_ASSERT(blobs && yyjson_is_arr(blobs));
-	auto blob = yyjson_arr_get_first(blobs);
-	D_ASSERT(blob);
-	D_ASSERT(yyjson_equals_str(yyjson_obj_get(blob, "type"), "deletion-vector-v1"));
-#else
-	(void)content_offset;
-	(void)content_size;
-#endif
-}
-
-void IcebergMultiFileList::ScanPuffinFile(const BoundIcebergManifestEntry &bound_entry) const {
-	auto &entry = bound_entry.entry;
-	auto &data_file = entry.data_file;
-	auto &table_metadata = GetMetadata();
-	auto iceberg_version = table_metadata.iceberg_version;
-	if (iceberg_version < 3) {
-		throw InvalidConfigurationException("DeletionVector not supported in Iceberg V%d", iceberg_version);
-	}
-	auto file_path = data_file.file_path;
-	D_ASSERT(!data_file.referenced_data_file.empty());
-
-	auto caching_file_system = CachingFileSystem::Get(context);
-
-	auto caching_file_handle = caching_file_system.OpenFile(file_path, FileOpenFlags::FILE_FLAGS_READ);
-	data_ptr_t data = nullptr;
-
-	D_ASSERT(!data_file.content_offset.IsNull());
-	D_ASSERT(!data_file.content_size_in_bytes.IsNull());
-
-	auto offset = data_file.content_offset.GetValue<int64_t>();
-	auto length = data_file.content_size_in_bytes.GetValue<int64_t>();
-
-	Value skip_verification;
-	if (!context.TryGetCurrentSetting(SKIP_PUFFIN_VERIFICATION_CONFIG_VARIABLE, skip_verification) ||
-	    !skip_verification.GetValue<bool>()) {
-		VerifyPuffinDeletionVector(*caching_file_handle, offset, length);
-	}
-
-	auto buf_handle = caching_file_handle->Read(data, length, offset);
-
-	auto it = shared_state->positional_delete_data.find(data_file.referenced_data_file);
-	if (it != shared_state->positional_delete_data.end()) {
-		//! Another delete already exists for this table
-		auto &existing_delete = *it->second;
-		if (existing_delete.type == IcebergDeleteType::DELETION_VECTOR) {
-			throw InvalidConfigurationException(
-			    "Table is corrupt, two or more deletion vectors exist for the same referenced_data_file");
-		}
-	}
-	//! NOTE: assign, don't emplace, deletion vectors take priority over any remaining positional delete files
-	shared_state->positional_delete_data[data_file.referenced_data_file] =
-	    IcebergDeletionVectorData::FromBlob(bound_entry, data, length);
-}
-
 idx_t IcebergDeletionVector::Filter(row_t start_row_index, idx_t count, SelectionVector &result_sel) {
 	if (count == 0) {
 		return 0;
@@ -259,7 +152,7 @@ idx_t IcebergDeletionVector::Filter(row_t start_row_index, idx_t count, Selectio
 
 		lock_guard<mutex> guard(lock);
 		//! Update the state
-		if (!has_current_high || current_high != high) {
+		if (!current_high || *current_high != high) {
 			auto it = bitmaps.find(high);
 			if (it == bitmaps.end()) {
 				current_bitmap = nullptr;
@@ -268,7 +161,6 @@ idx_t IcebergDeletionVector::Filter(row_t start_row_index, idx_t count, Selectio
 				bulk_context = roaring::BulkContext();
 			}
 			current_high = high;
-			has_current_high = true;
 		}
 
 		if (!current_bitmap) {
@@ -383,25 +275,24 @@ vector<data_t> IcebergDeletionVectorData::ToPuffinFile(const vector<data_t> &blo
 	//! Build the FooterPayload (FileMetadata). Per the spec, for `deletion-vector-v1` the blob's
 	//! `snapshot-id` and `sequence-number` must be -1, and it must carry the `referenced-data-file`
 	//! and `cardinality` properties. The blob is not compressed (no `compression-codec`).
-	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-	auto doc = doc_p.get();
-	auto root = yyjson_mut_obj(doc);
-	yyjson_mut_doc_set_root(doc, root);
-	auto blobs = yyjson_mut_arr(doc);
-	yyjson_mut_obj_add_val(doc, root, "blobs", blobs);
-	auto blob_meta = yyjson_mut_obj(doc);
-	yyjson_mut_arr_add_val(blobs, blob_meta);
-	yyjson_mut_obj_add_val(doc, blob_meta, "type", yyjson_mut_str(doc, "deletion-vector-v1"));
-	yyjson_mut_obj_add_val(doc, blob_meta, "fields", yyjson_mut_arr(doc));
-	yyjson_mut_obj_add_val(doc, blob_meta, "snapshot-id", yyjson_mut_int(doc, -1));
-	yyjson_mut_obj_add_val(doc, blob_meta, "sequence-number", yyjson_mut_int(doc, -1));
-	yyjson_mut_obj_add_val(doc, blob_meta, "offset", yyjson_mut_int(doc, static_cast<int64_t>(blob_offset)));
-	yyjson_mut_obj_add_val(doc, blob_meta, "length", yyjson_mut_int(doc, static_cast<int64_t>(blob.size())));
-	auto props = yyjson_mut_obj(doc);
-	yyjson_mut_obj_add_val(doc, blob_meta, "properties", props);
-	yyjson_mut_obj_add_strcpy(doc, props, "referenced-data-file", referenced_data_file.c_str());
-	yyjson_mut_obj_add_strcpy(doc, props, "cardinality", std::to_string(cardinality).c_str());
-	auto footer_payload = ICUtils::JsonToString(std::move(doc_p));
+	JSONWriter writer;
+	auto root = writer.CreateObject();
+	writer.SetRoot(root);
+	auto blobs = writer.CreateArray();
+	root.Add("blobs", blobs);
+	auto blob_meta = writer.CreateObject();
+	blobs.Append(blob_meta);
+	blob_meta.AddString("type", "deletion-vector-v1");
+	blob_meta.Add("fields", writer.CreateArray());
+	blob_meta.Add("snapshot-id", writer.CreateSignedInteger(-1));
+	blob_meta.Add("sequence-number", writer.CreateSignedInteger(-1));
+	blob_meta.Add("offset", writer.CreateSignedInteger(static_cast<int64_t>(blob_offset)));
+	blob_meta.Add("length", writer.CreateSignedInteger(static_cast<int64_t>(blob.size())));
+	auto props = writer.CreateObject();
+	blob_meta.Add("properties", props);
+	props.AddString("referenced-data-file", referenced_data_file);
+	props.AddString("cardinality", std::to_string(cardinality));
+	auto footer_payload = writer.ToString(JSONWriteFlags::ALLOW_INF_AND_NAN);
 
 	const idx_t footer_payload_size = footer_payload.size();
 	const idx_t total_size = blob_offset + blob.size() + sizeof(PUFFIN_MAGIC) + footer_payload_size +

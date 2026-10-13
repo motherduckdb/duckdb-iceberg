@@ -3,141 +3,37 @@ import os
 import datetime
 from decimal import Decimal
 from math import inf
-from dataclasses import dataclass
-from packaging.version import Version
-from packaging.specifiers import SpecifierSet
 
-from conftest import *
+from conftest import is_active_catalog
 
 from pprint import pprint
 
 SCRIPT_DIR = os.path.dirname(__file__)
 
+pyspark = pytest.importorskip("pyspark")
 pyspark_sql = pytest.importorskip("pyspark.sql")
 SparkSession = pyspark_sql.SparkSession
 SparkContext = pyspark.SparkContext
 Row = pyspark_sql.Row
 
-
-@dataclass
-class IcebergRuntimeConfig:
-    spark_version: Version
-    scala_binary_version: str
-    iceberg_library_version: str
-
-
-# uses {spark}_{scala}-{iceberg}
-def generate_jar_location(config: IcebergRuntimeConfig) -> str:
-    return f"iceberg-spark-runtime-{config.spark_version}_{config.scala_binary_version}-{config.iceberg_library_version}.jar"
-
-
-# uses {spark}_{scala}:{iceberg}
-def generate_package(config: IcebergRuntimeConfig) -> str:
-    return f"org.apache.iceberg:iceberg-spark-runtime-{config.spark_version}_{config.scala_binary_version}:{config.iceberg_library_version}"
-
-
-# List of runtimes you want to test
-ICEBERG_RUNTIMES = [
-    IcebergRuntimeConfig(
-        spark_version=Version("3.5"),
-        scala_binary_version="2.12",
-        iceberg_library_version="1.4.1",
-    ),
-    IcebergRuntimeConfig(
-        spark_version=Version("3.5"),
-        scala_binary_version="2.12",
-        iceberg_library_version="1.9.0",
-    ),
-    IcebergRuntimeConfig(
-        spark_version=Version("3.5"),
-        scala_binary_version="2.13",
-        iceberg_library_version="1.9.1",
-    ),
-    IcebergRuntimeConfig(
-        spark_version=Version("4.0"),
-        scala_binary_version="2.13",
-        iceberg_library_version="1.10.0",
-    ),
-]
-
-
-@pytest.fixture(params=ICEBERG_RUNTIMES, scope="session")
-def spark_con(request):
-    runtime_config = request.param
-    if runtime_config.spark_version.major != PYSPARK_VERSION.major:
-        pytest.skip(
-            f"Skipping Iceberg runtime "
-            f"(Spark {runtime_config.spark_version}, Scala {runtime_config.scala_binary_version}, "
-            f"Iceberg {runtime_config.iceberg_library_version}) "
-            f"because current PySpark version is {PYSPARK_VERSION}"
-        )
-
-    runtime_jar = generate_jar_location(runtime_config)
-    runtime_pkg = generate_package(runtime_config)
-    runtime_path = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", "scripts", "data_generators", runtime_jar))
-
-    os.environ["PYSPARK_SUBMIT_ARGS"] = (
-        f"--packages {runtime_pkg},org.apache.iceberg:iceberg-aws-bundle:{runtime_config.iceberg_library_version} pyspark-shell"
-    )
-    os.environ["AWS_REGION"] = "us-east-1"
-    os.environ["AWS_ACCESS_KEY_ID"] = "admin"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "password"
-
-    spark = (
-        SparkSession.builder.appName(f"DuckDB REST Integration tes")
-        .config(
-            "spark.sql.extensions",
-            "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
-        )
-        .config("spark.sql.catalog.demo", "org.apache.iceberg.spark.SparkCatalog")
-        .config("spark.sql.catalog.demo.type", "rest")
-        .config("spark.sql.catalog.demo.uri", "http://127.0.0.1:8181")
-        .config("spark.sql.catalog.demo.warehouse", "s3://warehouse/wh/")
-        .config("spark.sql.catalog.demo.s3.endpoint", "http://127.0.0.1:9000")
-        .config("spark.sql.catalog.demo.s3.path-style-access", "true")
-        .config("spark.driver.memory", "10g")
-        .config("spark.jars", runtime_path)
-        .config("spark.sql.catalogImplementation", "in-memory")
-        .config("spark.sql.catalog.demo.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
-        .getOrCreate()
-    )
-    spark.sql("USE demo")
-    spark.sql("CREATE NAMESPACE IF NOT EXISTS default")
-    spark.sql("USE NAMESPACE default")
-    return spark
-
-
-requires_iceberg_server = pytest.mark.skipif(
-    os.getenv("FIXTURE_SERVER_AVAILABLE", None) is None,
-    reason="Test data wasn't generated, run tests in test/sql/local/irc first (and set 'export FIXTURE_SERVER_AVAILABLE=1')",
-)
-
-
 requires_equality_deletes_available = pytest.mark.skipif(
     (os.getenv("EQUALITY_DELETE_WRITES_ENABLED", None) is None)
     or (os.getenv("EQUALITY_DELETE_WRITES_ENABLED", '0') == '0'),
-    reason="Test data wasn't generated, run tests in test/sql/local/irc first (and set 'export EQUALITY_DELETE_WRITES_ENABLED=1')",
+    reason="Requires an equality-delete-enabled build and EQUALITY_DELETE_WRITES_ENABLED=1",
 )
 
 
-@requires_iceberg_server
 class TestSparkRead:
-    def test_spark_read_insert_test(self, spark_con):
-        df = spark_con.sql(
-            """
-            select * from default.insert_test order by col1, col2, col3
-        """
-        )
-        res = df.collect()
-        assert res == [
-            Row(col1=datetime.date(2010, 6, 11), col2=42, col3="test"),
-            Row(col1=datetime.date(2020, 8, 12), col2=45345, col3="inserted by con1"),
-            Row(col1=datetime.date(2020, 8, 13), col2=1, col3="insert 1"),
-            Row(col1=datetime.date(2020, 8, 14), col2=2, col3="insert 2"),
-            Row(col1=datetime.date(2020, 8, 15), col2=3, col3="insert 3"),
-            Row(col1=datetime.date(2020, 8, 16), col2=4, col3="insert 4"),
-        ]
+    @pytest.mark.requires_spark(">=4.0")
+    @pytest.mark.requires_capabilities("format_v3")
+    @pytest.mark.duckdb_setup_tests(
+        "catalog_agnostic/insert/partitions/null_values/test_unknown_partition_avro_schema.test"
+    )
+    def test_spark_read_duckdb_unknown_partition(self, spark_con):
+        res = spark_con.sql("SELECT * FROM default.unknown_partition_avro_schema ORDER BY id").collect()
+        assert res == [Row(id=1, u=None), Row(id=2, u=None)]
 
+    @pytest.mark.duckdb_setup_tests("catalog_interop/other_engines/test_create_table_then_read_with_other_engine.test")
     def test_spark_read_duckdb_table(self, spark_con):
         df = spark_con.sql(
             """
@@ -158,6 +54,7 @@ class TestSparkRead:
             Row(a=9),
         ]
 
+    @pytest.mark.duckdb_setup_tests("catalog_interop/delete/test_spark_can_read_duckdb_table.test")
     def test_spark_read_table_with_deletes(self, spark_con):
         df = spark_con.sql(
             """
@@ -178,6 +75,52 @@ class TestSparkRead:
             Row(a=59),
         ]
 
+    @pytest.mark.duckdb_setup_tests("catalog_interop/maintenance/rewrite_data_files_spark_mor_residual_deletes.test")
+    @pytest.mark.spark_seed_tables("spark_rewrite_mor_residual_deletes")
+    def test_spark_read_duckdb_compacted_spark_rewrite_mor_residual_deletes(self, spark_con):
+        df = spark_con.sql(
+            """
+            select * from default.spark_rewrite_mor_residual_deletes order by id
+            """
+        )
+        res = df.collect()
+        assert res == [
+            Row(id=1, category="compact", payload="c1"),
+            Row(id=2, category="compact", payload="c2_u"),
+            Row(id=4, category="compact", payload="c4"),
+            Row(id=5, category="compact", payload="c5"),
+            Row(id=6, category="compact", payload="c6"),
+            Row(id=100, category="residual", payload="r100"),
+            Row(id=101, category="residual", payload="r101_u"),
+        ]
+
+    @pytest.mark.requires_spark(">=4.0")
+    @pytest.mark.requires_capabilities("format_v3")
+    @pytest.mark.xfail(
+        raises=Exception,
+        reason="Cannot convert unsupported type to Spark: timestamptz_ns",
+        strict=True,
+    )
+    @pytest.mark.duckdb_setup_tests("catalog_interop/other_engines/test_spark_can_read_duckdb_timestamptz_ns.test")
+    def test_spark_read_duckdb_timestamptz_ns(self, spark_con):
+        df = spark_con.sql(
+            """
+            select id, val
+            from default.duckdb_timestamptz_ns_for_other_engines
+            order by id
+            """
+        )
+        res = df.collect()
+        assert res == [
+            Row(id=1, val=datetime.datetime(2020, 1, 15, 8, 30, 0, 123456)),
+            Row(id=2, val=datetime.datetime(2021, 6, 20, 14, 45, 0, 987654)),
+        ]
+
+    @pytest.mark.skipif(
+        is_active_catalog('polaris'), reason="Polaris does not currently support this Spark bounds read test"
+    )
+    @pytest.mark.skipif(is_active_catalog('lakekeeper'), reason="Lakekeeper writes bounds differently for some reason")
+    @pytest.mark.duckdb_setup_tests("catalog_interop/other_engines/test_create_bounds.test")
     def test_spark_read_upper_and_lower_bounds(self, spark_con):
         df = spark_con.sql(
             """
@@ -225,6 +168,7 @@ class TestSparkRead:
             ),
         ]
 
+    @pytest.mark.duckdb_setup_tests("catalog_agnostic/insert/test_write_infinity_timestamp.test")
     def test_spark_read_infinities(self, spark_con):
         df = spark_con.sql(
             """
@@ -238,6 +182,7 @@ class TestSparkRead:
             Row(float_type=-inf, double_type=-inf),
         ]
 
+    @pytest.mark.duckdb_setup_tests("catalog_agnostic/insert/test_write_upper_lower_bounds_nested_types.test")
     def test_duckdb_written_nested_types(self, spark_con):
         df = spark_con.sql(
             """
@@ -257,8 +202,9 @@ class TestSparkRead:
         ]
 
     @pytest.mark.requires_spark(">=4.0")
+    @pytest.mark.requires_capabilities("format_v3", "allows_cleanup")
+    @pytest.mark.duckdb_setup_tests("catalog_agnostic/delete/test_delete_consolidation_transactional.test")
     def test_duckdb_written_deletion_vectors(self, spark_con):
-        # requires test_delete_consolidation_transactional.test to run
         res = spark_con.sql(
             """
             select * from default.write_v3_update_and_delete order by all
@@ -270,6 +216,8 @@ class TestSparkRead:
         )
 
     @pytest.mark.requires_spark(">=4.0")
+    @pytest.mark.requires_capabilities("format_v3")
+    @pytest.mark.duckdb_setup_tests("catalog_interop/other_engines/test_create_variant.test")
     def test_spark_read_duckdb_created_variant(self, spark_con):
         VariantVal = pyspark.sql.VariantVal
 
@@ -299,6 +247,8 @@ class TestSparkRead:
         )
 
     @pytest.mark.requires_spark(">=4.0")
+    @pytest.mark.requires_capabilities("row_lineage", "format_v3")
+    @pytest.mark.duckdb_setup_tests("catalog_agnostic/test_row_lineage_write.test")
     def test_duckdb_written_row_lineage(self, spark_con):
         df = spark_con.sql(
             """
@@ -355,6 +305,7 @@ class TestSparkReadEqualityDeletes:
     @pytest.mark.skip(
         reason="Spark errors when reading tables with a column that has an equality delete applied and the column has been dropped"
     )
+    @pytest.mark.duckdb_setup_tests("catalog_agnostic/delete/equality_deletes/test_equality_delete_reads.test")
     def test_spark_read_equality_deletes_with_dropped_column(self, spark_con):
         df = spark_con.sql(
             """
@@ -388,6 +339,9 @@ class TestSparkReadEqualityDeletes:
             Row(a=105, c=105),
         ]
 
+    @pytest.mark.duckdb_setup_tests(
+        "catalog_agnostic/delete/equality_deletes/test_equality_deletes_apply_only_to_prev_sequence_numbers.test"
+    )
     def test_spark_read_equality_deletes(self, spark_con):
         df = spark_con.sql(
             """

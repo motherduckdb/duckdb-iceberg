@@ -1,14 +1,13 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/namespace.hpp"
 #include "rest_catalog/objects/page_token.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -22,16 +21,20 @@ public:
 	ListNamespacesResponse &operator=(ListNamespacesResponse &&) = default;
 
 public:
-	static ListNamespacesResponse FromJSON(yyjson_val *obj);
+	// Deserialization
+	static ListNamespacesResponse FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
+
+	// Copy
+	ListNamespacesResponse Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
-	string TryFromJSON(yyjson_val *obj);
-
-public:
-	PageToken next_page_token;
-	bool has_next_page_token = false;
-	vector<Namespace> namespaces;
-	bool has_namespaces = false;
+	optional<PageToken> next_page_token;
+	optional<vector<Namespace>> namespaces;
 };
 
 } // namespace rest_api_objects

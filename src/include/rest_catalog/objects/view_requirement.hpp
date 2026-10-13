@@ -1,13 +1,12 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/assert_view_uuid.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -21,14 +20,19 @@ public:
 	ViewRequirement &operator=(ViewRequirement &&) = default;
 
 public:
-	static ViewRequirement FromJSON(yyjson_val *obj);
+	// Deserialization
+	static ViewRequirement FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
+
+	// Copy
+	ViewRequirement Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
-	string TryFromJSON(yyjson_val *obj);
-
-public:
-	AssertViewUUID assert_view_uuid;
-	bool has_assert_view_uuid = false;
+	optional<AssertViewUUID> assert_view_uuid;
 };
 
 } // namespace rest_api_objects

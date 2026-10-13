@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/storage_credential.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 StorageCredential::StorageCredential() {
 }
 
-StorageCredential StorageCredential::FromJSON(yyjson_val *obj) {
+StorageCredential StorageCredential::FromJSON(JSONValue obj) {
 	StorageCredential res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -24,43 +22,76 @@ StorageCredential StorageCredential::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string StorageCredential::TryFromJSON(yyjson_val *obj) {
+StorageCredential StorageCredential::Copy() const {
+	StorageCredential res;
+	res.prefix = prefix;
+	for (auto &entry : config) {
+		res.config.emplace(entry.first, entry.second);
+	}
+	return res;
+}
+
+string StorageCredential::TryFromJSON(JSONValue obj) {
 	string error;
-	auto prefix_val = yyjson_obj_get(obj, "prefix");
-	if (!prefix_val) {
+	auto prefix_val = obj.GetMember("prefix");
+	if (!prefix_val.IsValid()) {
 		return "StorageCredential required property 'prefix' is missing";
 	} else {
-		if (yyjson_is_str(prefix_val)) {
-			prefix = yyjson_get_str(prefix_val);
+		if (json_utils::IsString(prefix_val)) {
+			prefix = json_utils::GetString(prefix_val);
 		} else {
-			return StringUtil::Format("StorageCredential property 'prefix' is not of type 'string', found '%s' instead",
-			                          yyjson_get_type_desc(prefix_val));
+			return StringUtil::Format("StorageCredential property 'prefix' is not of type 'string', found %s instead",
+			                          json_utils::GetTypeDescription(prefix_val).c_str());
 		}
 	}
-	auto config_val = yyjson_obj_get(obj, "config");
-	if (!config_val) {
+	auto config_val = obj.GetMember("config");
+	if (!config_val.IsValid()) {
 		return "StorageCredential required property 'config' is missing";
 	} else {
-		if (yyjson_is_obj(config_val)) {
-			size_t idx, max;
-			yyjson_val *key, *val;
-			yyjson_obj_foreach(config_val, idx, max, key, val) {
-				auto key_str = yyjson_get_str(key);
+		if (config_val.IsObject()) {
+			config_val.IterateObject([&](const string &key_str, JSONValue val) {
+				if (!error.empty()) {
+					return;
+				}
 				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
+				if (json_utils::IsString(val)) {
+					tmp = json_utils::GetString(val);
 				} else {
-					return StringUtil::Format(
-					    "StorageCredential property 'tmp' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(val));
+					error =
+					    StringUtil::Format("StorageCredential property 'tmp' is not of type 'string', found %s instead",
+					                       json_utils::GetTypeDescription(val).c_str());
+					return;
 				}
 				config.emplace(key_str, std::move(tmp));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return "StorageCredential property 'config' is not of type 'object'";
 		}
 	}
-	return string();
+	return "";
+}
+
+void StorageCredential::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
+	// Serialize: prefix
+	auto prefix_json = writer.CreateString(prefix);
+	obj.Add("prefix", prefix_json);
+
+	// Serialize: config
+	auto config_json = writer.CreateObject();
+	for (const auto &[config_json_key, config_json_value] : config) {
+		auto config_json_value_json = writer.CreateString(config_json_value);
+		config_json.Add(config_json_key, config_json_value_json);
+	}
+	obj.Add("config", config_json);
+}
+
+JSONMutableValue StorageCredential::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

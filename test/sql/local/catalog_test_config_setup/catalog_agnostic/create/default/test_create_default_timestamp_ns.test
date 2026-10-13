@@ -1,20 +1,18 @@
 # name: test/sql/local/catalog_test_config_setup/catalog_agnostic/create/default/test_create_default_timestamp_ns.test
 # group: [default]
 
-# Skipped for Polaris/Lakekeeper due to missing support
-
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
+require-env COLUMN_DEFAULT_SUPPORT
 
-require parquet
+require-env FORMAT_V3_SUPPORT
 
-require iceberg
+require-env TIMESTAMP_NS_DEFAULT_SUPPORT
 
-require httpfs
+require-env TIMESTAMP_NS_SUPPORT
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
+include test/sql/init_requires
+
 
 statement ok
 set enable_logging=true

@@ -4,82 +4,22 @@ import datetime
 from decimal import Decimal
 from math import inf
 
+from conftest import is_active_catalog
+
 pyice = pytest.importorskip("pyiceberg")
 pa = pytest.importorskip("pyarrow")
-pyice_rest = pytest.importorskip("pyiceberg.catalog.rest")
 
 
-@pytest.fixture()
-def bearer_token():
-    if hasattr(bearer_token, "cached_token"):
-        return bearer_token.cached_token
-
-    import requests
-
-    CATALOG_HOST = "http://127.0.0.1:8181"
-
-    CLIENT_ID = "admin"
-    CLIENT_SECRET = "password"
-
-    token_url = f"{CATALOG_HOST}/v1/oauth/tokens"
-    payload = {
-        "grant_type": "client_credentials",
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
-        "scope": "PRINCIPAL_ROLE:ALL",
-    }
-
-    response = requests.post(token_url, data=payload)
-
-    assert response.status_code == 200
-    access_token = response.json().get("access_token")
-    print("Token:", access_token)
-    bearer_token.cached_token = access_token
-    return access_token
+def arrow_column_values(table: pa.Table, name: str):
+    column = table.column(name).combine_chunks()
+    if pa.types.is_timestamp(column.type) and column.type.unit == "ns":
+        return [column[idx].value if column[idx].is_valid else None for idx in range(len(column))]
+    return column.to_pylist()
 
 
-@pytest.fixture()
-def rest_catalog(bearer_token):
-    catalog = pyice_rest.RestCatalog(
-        "rest",
-        **{
-            "uri": "http://127.0.0.1:8181",
-            "token": bearer_token,
-            "warehouse": '',
-            "s3.endpoint": "http://127.0.0.1:9000",
-            "s3.access-key-id": "admin",
-            "s3.secret-access-key": "password",
-            "s3.path-style-access": "true",
-            "s3.ssl.enabled": "false",
-        },
-    )
-    return catalog
-
-
-@pytest.mark.skipif(
-    os.getenv('FIXTURE_SERVER_AVAILABLE', None) == None, reason="Test data wasn't generated, run 'make data' first"
-)
 class TestPyIcebergRead:
-    def test_pyiceberg_read(self, rest_catalog):
-        table = rest_catalog.load_table("default.insert_test")
-        arrow_table: pa.Table = table.scan().to_arrow()
-        res = arrow_table.to_pylist()
-        assert len(res) == 6
-        assert res == [
-            {'col1': datetime.date(2010, 6, 11), 'col2': 42, 'col3': 'test'},
-            {'col1': datetime.date(2020, 8, 12), 'col2': 45345, 'col3': 'inserted by con1'},
-            {'col1': datetime.date(2020, 8, 13), 'col2': 1, 'col3': 'insert 1'},
-            {'col1': datetime.date(2020, 8, 14), 'col2': 2, 'col3': 'insert 2'},
-            {'col1': datetime.date(2020, 8, 15), 'col2': 3, 'col3': 'insert 3'},
-            {'col1': datetime.date(2020, 8, 16), 'col2': 4, 'col3': 'insert 4'},
-        ]
-
-
-@pytest.mark.skipif(
-    os.getenv('FIXTURE_SERVER_AVAILABLE', None) == None, reason="Test data wasn't generated, run 'make data' first"
-)
-class TestPyIcebergRead:
-    def test_pyiceberg_read(self, rest_catalog):
+    @pytest.mark.duckdb_setup_tests("catalog_interop/delete/test_spark_can_read_duckdb_table.test")
+    def test_pyiceberg_read_deletes(self, rest_catalog):
         table = rest_catalog.load_table("default.duckdb_deletes_for_other_engines")
         arrow_table: pa.Table = table.scan().to_arrow()
         res = arrow_table.to_pylist()
@@ -97,12 +37,8 @@ class TestPyIcebergRead:
             {'a': 59},
         ]
 
-
-@pytest.mark.skipif(
-    os.getenv('FIXTURE_SERVER_AVAILABLE', None) == None, reason="Test data wasn't generated, run 'make data' first"
-)
-class TestPyIcebergRead:
-    def test_pyiceberg_read(self, rest_catalog):
+    @pytest.mark.duckdb_setup_tests("catalog_interop/update/test_spark_can_read_duckdb_updates.test")
+    def test_pyiceberg_read_updates(self, rest_catalog):
         table = rest_catalog.load_table("default.duckdb_updates_for_other_engines")
         arrow_table: pa.Table = table.scan().to_arrow()
         res = arrow_table.to_pylist()
@@ -130,11 +66,19 @@ class TestPyIcebergRead:
             {'a': 100},
         ]
 
+    @pytest.mark.requires_capabilities("format_v3")
+    @pytest.mark.duckdb_setup_tests("catalog_interop/other_engines/test_spark_can_read_duckdb_timestamptz_ns.test")
+    def test_pyiceberg_read_duckdb_timestamptz_ns(self, rest_catalog):
+        table = rest_catalog.load_table("default.duckdb_timestamptz_ns_for_other_engines")
+        arrow_table: pa.Table = table.scan().to_arrow()
+        rows = sorted(zip(arrow_column_values(arrow_table, "id"), arrow_column_values(arrow_table, "val")))
 
-@pytest.mark.skipif(
-    os.getenv('FIXTURE_SERVER_AVAILABLE', None) == None, reason="Test data wasn't generated, run 'make data' first"
-)
-class TestPyIcebergRead:
+        assert rows == [
+            (1, 1579077000123456789),
+            (2, 1624200300987654321),
+        ]
+
+    @pytest.mark.duckdb_setup_tests("catalog_interop/insert/test_metadata_for_pyiceberg.test")
     def test_pyiceberg_read(self, rest_catalog):
         tbl = rest_catalog.load_table("default.test_metadata_for_pyiceberg")
         scan = tbl.scan(row_filter=pyice.expressions.EqualTo("a", 350))
@@ -143,11 +87,15 @@ class TestPyIcebergRead:
         # only 1 data file should match the filter
         assert len(matched_files) == 1
 
-
-@pytest.mark.skipif(
-    os.getenv('FIXTURE_SERVER_AVAILABLE', None) == None, reason="Test data wasn't generated, run 'make data' first"
-)
-class TestPyIcebergRead:
+    @pytest.mark.skipif(
+        is_active_catalog('polaris'),
+        reason="Polaris skips the bounds setup table in this suite",
+    )
+    @pytest.mark.skipif(
+        is_active_catalog('lakekeeper'),
+        reason="Lakekeeper skips the bounds setup table in this suite",
+    )
+    @pytest.mark.duckdb_setup_tests("catalog_interop/other_engines/test_create_bounds.test")
     def test_pyiceberg_read_duckdb_upper_lower_bounds(self, rest_catalog):
         tbl = rest_catalog.load_table("default.lower_upper_bounds_test")
         arrow_table: pa.Table = tbl.scan().to_arrow()
@@ -192,11 +140,7 @@ class TestPyIcebergRead:
             },
         ]
 
-
-@pytest.mark.skipif(
-    os.getenv('FIXTURE_SERVER_AVAILABLE', None) == None, reason="Test data wasn't generated, run 'make data' first"
-)
-class TestPyIcebergRead:
+    @pytest.mark.duckdb_setup_tests("catalog_agnostic/insert/test_write_infinity_timestamp.test")
     def test_pyiceberg_read_duckdb_infinities(self, rest_catalog):
         tbl = rest_catalog.load_table("default.test_infinities")
         arrow_table: pa.Table = tbl.scan().to_arrow()
@@ -204,11 +148,7 @@ class TestPyIcebergRead:
         assert len(res) == 2
         assert res == [{'float_type': inf, 'double_type': inf}, {'float_type': -inf, 'double_type': -inf}]
 
-
-@pytest.mark.skipif(
-    os.getenv('FIXTURE_SERVER_AVAILABLE', None) == None, reason="Test data wasn't generated, run 'make data' first"
-)
-class TestPyIcebergReadDuckDBNestedTypes:
+    @pytest.mark.duckdb_setup_tests("catalog_agnostic/insert/test_write_upper_lower_bounds_nested_types.test")
     def test_pyiceberg_read_duckdb_nested_types(self, rest_catalog):
         tbl = rest_catalog.load_table("default.duckdb_nested_types")
         arrow_table: pa.Table = tbl.scan().to_arrow()
@@ -226,13 +166,11 @@ class TestPyIcebergReadDuckDBNestedTypes:
 
 
 @pytest.mark.skipif(
-    os.getenv('FIXTURE_SERVER_AVAILABLE', None) == None, reason="Test data wasn't generated, run 'make data' first"
-)
-@pytest.mark.skipif(
     os.getenv('EQUALITY_DELETE_WRITES_ENABLED', None) == None, reason="Equality deletes must be turned on for DuckDB"
 )
 class TestPyIcebergReadEqualityDeletes:
     @pytest.mark.skip(reason="PyIceberg does not support equality deletes")
+    @pytest.mark.duckdb_setup_tests("catalog_agnostic/delete/equality_deletes/test_equality_delete_reads.test")
     def test_pyiceberg_read_duckdb_equality_delete_with_deleted_column(self, rest_catalog):
         tbl = rest_catalog.load_table("default.equality_delete_table_1")
         arrow_table: pa.Table = tbl.scan().to_arrow()
@@ -265,6 +203,9 @@ class TestPyIcebergReadEqualityDeletes:
         ]
 
     @pytest.mark.skip(reason="PyIceberg does not support equality deletes")
+    @pytest.mark.duckdb_setup_tests(
+        "catalog_agnostic/delete/equality_deletes/test_equality_deletes_apply_only_to_prev_sequence_numbers.test"
+    )
     def test_pyiceberg_read_duckdb_equality_delete(self, rest_catalog):
         tbl = rest_catalog.load_table("default.equality_delete_table_test_multiple_equality_deletes")
         arrow_table: pa.Table = tbl.scan().to_arrow()

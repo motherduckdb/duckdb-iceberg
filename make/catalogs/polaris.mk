@@ -4,7 +4,7 @@ polaris-clone:
 	@if [ ! -d ".catalogs/polaris" ]; then \
 		echo "Cloning Polaris repository..."; \
 		mkdir -p .catalogs && git clone https://github.com/apache/polaris.git .catalogs/polaris; \
-		cd .catalogs/polaris && git checkout release/1.4.x; \
+		cd .catalogs/polaris && git checkout c6a42c47007f1515308ff63cc3c4da392a2c7c7d; \
 	else \
 		echo "Polaris repository exists."; \
 	fi
@@ -20,7 +20,7 @@ polaris-stop:
 polaris: polaris-clone polaris-stop
 	$(call stop_active_catalog)
 	@echo "Starting Polaris catalog..."
-	(cd .catalogs/polaris/site/content/guides/rustfs && docker compose up -d)
+	(cd .catalogs/polaris/site/content/guides/rustfs && docker compose -f docker-compose.yml -f "$(CURDIR)/scripts/polaris-compose.override.yml" up -d)
 	$(call set_active_catalog,polaris)
 
 polaris-data: polaris
@@ -29,4 +29,4 @@ polaris-data: polaris
 	. .venv-spark4/bin/activate && \
 	python3 -m pip install -r scripts/requirements.txt && \
 	if [ -f "$(POLARIS_ENV_FILE)" ]; then echo "Loading env from $(POLARIS_ENV_FILE)"; set -a; . ./$(POLARIS_ENV_FILE); set +a; fi && \
-	python3 -m scripts.data_generators.generate_data polaris $(if $(TEST),--test $(TEST))
+	python3 -m pytest scripts/data_generators/test_generate_data.py $(if $(TEST),-k $(TEST)) -vv

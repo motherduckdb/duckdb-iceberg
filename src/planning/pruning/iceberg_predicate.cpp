@@ -1,10 +1,13 @@
 #include "planning/pruning/iceberg_predicate.hpp"
-#include "duckdb/common/printer.hpp"
-#include "duckdb/planner/expression/bound_operator_expression.hpp"
+
+#include "duckdb/common/types/variant_iterator.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
+#include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
+#include "duckdb/planner/expression/bound_operator_expression.hpp"
+#include "duckdb/planner/filter/table_filter_functions.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/filter/null_filter.hpp"
@@ -26,10 +29,10 @@ public:
 
 public:
 	unique_ptr<Expression> VisitReplace(BoundReferenceExpression &expr, unique_ptr<Expression> *expr_ptr) override {
-		if (expr.index != 0) {
+		if (expr.Index() != 0) {
 			return nullptr;
 		}
-		auto &return_type = expr.return_type;
+		auto &return_type = expr.GetReturnType();
 		return make_uniq<BoundConstantExpression>(val.DefaultCastAs(return_type, true));
 	}
 
@@ -39,18 +42,45 @@ public:
 
 } // namespace
 
-template <class TRANSFORM>
-bool MatchBoundsTemplated(ClientContext &context, const TableFilter &filter, const IcebergPredicateStats &stats,
-                          const IcebergTransform &transform);
+static bool IsNaN(const Value &value) {
+	switch (value.type().id()) {
+	case LogicalTypeId::FLOAT:
+		return Value::IsNan(value.GetValue<float>());
+	case LogicalTypeId::DOUBLE:
+		return Value::IsNan(value.GetValue<double>());
+	default:
+		return false;
+	}
+}
+
+static bool NaNMayMatch(const Value &constant, ExpressionType comparison_type, const IcebergPredicateStats &stats) {
+	auto type_id = constant.type().id();
+	if ((stats.has_nan && !*stats.has_nan) || (type_id != LogicalTypeId::FLOAT && type_id != LogicalTypeId::DOUBLE)) {
+		return false;
+	}
+	switch (comparison_type) {
+	case ExpressionType::COMPARE_GREATERTHAN:
+	case ExpressionType::COMPARE_GREATERTHANOREQUALTO:
+		return true;
+	case ExpressionType::COMPARE_EQUAL:
+		return IsNaN(constant);
+	default:
+		return false;
+	}
+}
 
 template <class TRANSFORM>
-static bool MatchBoundsConstant(const Value &constant, ExpressionType comparison_type,
-                                const IcebergPredicateStats &stats, const IcebergTransform &transform) {
+static bool MatchBoundsConstantTemplated(const Value &constant, ExpressionType comparison_type,
+                                         const IcebergPredicateStats &stats, const IcebergTransform &transform) {
 	auto constant_value = TRANSFORM::ApplyTransform(constant, transform);
+	if (constant_value.IsNull()) {
+		//! Comparison with NULL is never true here
+		return false;
+	}
 
 	if (stats.BoundsAreNull()) {
 		// bounds are actually null, expression is not a null comparison expression
-		// those are handled in MatchBoundsTemplated
+		// those are handled in MatchBoundsExpression
 		// So we can return false since no remaining expression type will match a null value
 		D_ASSERT(comparison_type != ExpressionType::OPERATOR_IS_NOT_NULL);
 		D_ASSERT(comparison_type != ExpressionType::OPERATOR_IS_NULL);
@@ -59,8 +89,21 @@ static bool MatchBoundsConstant(const Value &constant, ExpressionType comparison
 		return false;
 	}
 
-	if (!stats.has_upper_bounds || !stats.has_lower_bounds) {
+	if (!stats.has_not_null && comparison_type != ExpressionType::COMPARE_DISTINCT_FROM &&
+	    comparison_type != ExpressionType::COMPARE_NOT_DISTINCT_FROM) {
+		// has_not_null is false when every row of this column is NULL. Ordinary comparisons
+		// against a constant cannot match NULL so the file can be pruned. IS [NOT] DISTINCT FROM
+		// must consider NULL so cannot be pruned.
+		return false;
+	}
+
+	if (!stats.upper_bound || !stats.lower_bound) {
 		// we do not have upper or lower bounds, assume the file matches.
+		return true;
+	}
+
+	if (NaNMayMatch(constant_value, comparison_type, stats)) {
+		// bounds exclude NaN, but the file may hold NaN rows that match the comparison.
 		return true;
 	}
 
@@ -81,31 +124,118 @@ static bool MatchBoundsConstant(const Value &constant, ExpressionType comparison
 	}
 }
 
-template <class TRANSFORM>
-static bool MatchBoundsConstantFilter(const ConstantFilter &constant_filter, const IcebergPredicateStats &stats,
-                                      const IcebergTransform &transform) {
-	return MatchBoundsConstant<TRANSFORM>(constant_filter.constant, constant_filter.comparison_type, stats, transform);
+static bool MatchBoundsConstant(const Value &constant, ExpressionType comparison_type,
+                                const IcebergPredicateStats &stats, const IcebergTransform &transform) {
+	switch (transform.Type()) {
+	case IcebergTransformType::IDENTITY:
+		return MatchBoundsConstantTemplated<IdentityTransform>(constant, comparison_type, stats, transform);
+	case IcebergTransformType::BUCKET:
+		return MatchBoundsConstantTemplated<BucketTransform>(constant, comparison_type, stats, transform);
+	case IcebergTransformType::TRUNCATE:
+		return MatchBoundsConstantTemplated<TruncateTransform>(constant, comparison_type, stats, transform);
+	case IcebergTransformType::YEAR:
+		return MatchBoundsConstantTemplated<YearTransform>(constant, comparison_type, stats, transform);
+	case IcebergTransformType::MONTH:
+		return MatchBoundsConstantTemplated<MonthTransform>(constant, comparison_type, stats, transform);
+	case IcebergTransformType::DAY:
+		return MatchBoundsConstantTemplated<DayTransform>(constant, comparison_type, stats, transform);
+	case IcebergTransformType::HOUR:
+		return MatchBoundsConstantTemplated<HourTransform>(constant, comparison_type, stats, transform);
+	case IcebergTransformType::VOID:
+		return true;
+	default:
+		throw InvalidConfigurationException("Transform '%s' not implemented", transform.RawType());
+	}
 }
 
-template <class TRANSFORM>
-static bool MatchBoundsIsNullFilter(const IcebergPredicateStats &stats, const IcebergTransform &transform) {
+static bool MatchBoundsIsNullFilter(const IcebergPredicateStats &stats) {
 	return stats.has_null == true;
 }
 
-template <class TRANSFORM>
-static bool MatchBoundsIsNotNullFilter(const IcebergPredicateStats &stats, const IcebergTransform &transform) {
+static bool MatchBoundsIsNotNullFilter(const IcebergPredicateStats &stats) {
 	return stats.has_not_null == true;
 }
 
-template <class TRANSFORM>
-static bool MatchBoundsConjunctionAndFilter(ClientContext &context, const ConjunctionAndFilter &conjunction_and,
-                                            const IcebergPredicateStats &stats, const IcebergTransform &transform) {
-	for (auto &child : conjunction_and.child_filters) {
-		if (!MatchBoundsTemplated<TRANSFORM>(context, *child, stats, transform)) {
-			return false;
-		}
+//! variant_comparator keys start with a byte that ranks the value's type (all numbers share one rank)
+static bool SameVariantTypeRank(const Value &key, const Value &other_key) {
+	if (key.type().id() != LogicalTypeId::BLOB || other_key.type().id() != LogicalTypeId::BLOB) {
+		return true;
 	}
-	return true;
+	auto &a = StringValue::Get(key);
+	auto &b = StringValue::Get(other_key);
+	return !a.empty() && !b.empty() && a[0] == b[0];
+}
+
+static bool TryEvaluateVariantScalarBound(ClientContext &context, const Expression &expr, Value &result) {
+	auto &comparator = expr.Cast<BoundFunctionExpression>();
+	D_ASSERT(comparator.Function().GetName() == "variant_comparator");
+	D_ASSERT(comparator.GetChildren().size() == 1);
+
+	Value bound;
+	if (!ExpressionExecutor::TryEvaluateScalar(context, *comparator.GetChildren()[0], bound) || bound.IsNull()) {
+		return false;
+	}
+	D_ASSERT(bound.type().id() == LogicalTypeId::VARIANT);
+	Vector bound_vector(bound, count_t(1));
+	VariantIterator iterator(bound_vector);
+	switch (iterator.Root(0).GetTypeId()) {
+	case VariantLogicalType::VARIANT_NULL:
+	case VariantLogicalType::OBJECT:
+	case VariantLogicalType::ARRAY:
+		// Missing fields and reconstructed containers are not scalar bounds.
+		return false;
+	default:
+		return ExpressionExecutor::TryEvaluateScalar(context, expr, result);
+	}
+}
+
+bool MatchVariantBounds(ClientContext &context, ExpressionType comparison_type, const Expression &left,
+                        const Expression &right, const IcebergPredicateStats &stats,
+                        const IcebergTransform &transform) {
+	if (comparison_type == ExpressionType::COMPARE_GREATERTHAN ||
+	    comparison_type == ExpressionType::COMPARE_GREATERTHANOREQUALTO) {
+		// Iceberg uses the same primitive bounds for a scalar and for the elements of an array.
+		// An ARRAY variant sorts after every primitive, so it may match even when its elements do not.
+		// Without the field's actual type, these bounds cannot rule out either comparison.
+		return true;
+	}
+	if (!stats.lower_bound || !stats.upper_bound) {
+		return true;
+	}
+	BoundExpressionReplacer lower_replacer(*stats.lower_bound);
+	BoundExpressionReplacer upper_replacer(*stats.upper_bound);
+	auto lower_copy = left.Copy();
+	auto upper_copy = left.Copy();
+	lower_replacer.VisitExpression(&lower_copy);
+	upper_replacer.VisitExpression(&upper_copy);
+
+	Value right_constant;
+	if (!ExpressionExecutor::TryEvaluateScalar(context, right, right_constant)) {
+		return true;
+	}
+
+	Value transformed_lower_bound;
+	Value transformed_upper_bound;
+	if (!TryEvaluateVariantScalarBound(context, *lower_copy, transformed_lower_bound)) {
+		return true;
+	}
+	if (!TryEvaluateVariantScalarBound(context, *upper_copy, transformed_upper_bound)) {
+		return true;
+	}
+	if (transformed_lower_bound.IsNull() || transformed_upper_bound.IsNull()) {
+		//! The bounds have no entry for this path, so nothing is known about its values
+		return true;
+	}
+	if (!SameVariantTypeRank(transformed_lower_bound, right_constant) ||
+	    !SameVariantTypeRank(transformed_upper_bound, right_constant)) {
+		//! Bounds of another type say nothing about values of the filtered type
+		return true;
+	}
+	IcebergPredicateStats transformed_stats(stats);
+	transformed_stats.lower_bound = transformed_lower_bound;
+	transformed_stats.upper_bound = transformed_upper_bound;
+
+	return MatchBoundsConstant(right_constant, comparison_type, transformed_stats, transform);
 }
 
 static bool IsDirectReference(const Expression &expr) {
@@ -124,10 +254,10 @@ static bool IsVariantExtract(const Expression &expr) {
 		return false;
 	}
 	auto &variant_extract = expr.Cast<BoundFunctionExpression>();
-	if (variant_extract.function.name != "variant_extract") {
+	if (variant_extract.Function().GetName() != "variant_extract") {
 		return false;
 	}
-	if (variant_extract.children.empty()) {
+	if (variant_extract.GetChildren().empty()) {
 		return false;
 	}
 	return true;
@@ -137,174 +267,137 @@ static bool IsVariantReference(const Expression &expr) {
 	if (expr.GetExpressionClass() != ExpressionClass::BOUND_FUNCTION) {
 		return false;
 	}
-	auto &variant_normalize_func = expr.Cast<BoundFunctionExpression>();
-	if (variant_normalize_func.function.name != "variant_normalize") {
+	auto &variant_comparator_func = expr.Cast<BoundFunctionExpression>();
+	if (variant_comparator_func.Function().GetName() != "variant_comparator") {
 		return false;
 	}
-	if (variant_normalize_func.children.size() != 1) {
+	if (variant_comparator_func.GetChildren().size() != 1) {
 		return false;
 	}
 
-	reference<const Expression> current_expr(*variant_normalize_func.children[0]);
+	reference<const Expression> current_expr(*variant_comparator_func.GetChildren()[0]);
 	while (IsVariantExtract(current_expr)) {
 		auto &func = current_expr.get().Cast<BoundFunctionExpression>();
-		current_expr = *func.children[0];
+		current_expr = *func.GetChildren()[0];
 	}
 	return IsDirectReference(current_expr);
 }
 
-template <class TRANSFORM>
-bool MatchTransformedBounds(ClientContext &context, ExpressionType comparison_type, const Expression &left,
-                            const Expression &right, const IcebergPredicateStats &stats,
-                            const IcebergTransform &transform) {
-	BoundExpressionReplacer lower_replacer(stats.lower_bound);
-	BoundExpressionReplacer upper_replacer(stats.upper_bound);
-	auto lower_copy = left.Copy();
-	auto upper_copy = left.Copy();
-	lower_replacer.VisitExpression(&lower_copy);
-	upper_replacer.VisitExpression(&upper_copy);
+static bool MatchBoundsExpression(ClientContext &context, const unique_ptr<Expression> &expr_p,
+                                  const IcebergPredicateStats &stats, const IcebergTransform &transform) {
+	auto &expr = *expr_p;
+	if (BoundComparisonExpression::IsComparison(expr)) {
+		auto &compare_expr = expr.Cast<BoundFunctionExpression>();
+		auto comparison_type = compare_expr.GetExpressionType();
+		auto &left = BoundComparisonExpression::Left(compare_expr);
+		auto &right = BoundComparisonExpression::Right(compare_expr);
+		const bool right_is_const = right.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT;
+		const bool left_is_const = left.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT;
 
-	Value right_constant;
-	if (!ExpressionExecutor::TryEvaluateScalar(context, right, right_constant)) {
-		return true;
-	}
+		const bool left_is_ref = IsDirectReference(left);
+		const bool right_is_ref = IsDirectReference(right);
 
-	Value transformed_lower_bound;
-	Value transformed_upper_bound;
-	if (!ExpressionExecutor::TryEvaluateScalar(context, *lower_copy, transformed_lower_bound)) {
-		return true;
-	}
-	if (!ExpressionExecutor::TryEvaluateScalar(context, *upper_copy, transformed_upper_bound)) {
-		return true;
-	}
-	IcebergPredicateStats transformed_stats(stats);
-	transformed_stats.lower_bound = transformed_lower_bound;
-	transformed_stats.upper_bound = transformed_upper_bound;
+		const bool is_identity = transform.Type() == IcebergTransformType::IDENTITY;
 
-	return MatchBoundsConstant<TRANSFORM>(right_constant, comparison_type, transformed_stats, transform);
-}
-
-template <class TRANSFORM>
-bool MatchBoundsTemplated(ClientContext &context, const TableFilter &filter, const IcebergPredicateStats &stats,
-                          const IcebergTransform &transform) {
-	//! TODO: support more filter types
-	switch (filter.filter_type) {
-	case TableFilterType::CONSTANT_COMPARISON: {
-		auto &constant_filter = filter.Cast<ConstantFilter>();
-		return MatchBoundsConstantFilter<TRANSFORM>(constant_filter, stats, transform);
-	}
-	case TableFilterType::CONJUNCTION_AND: {
-		auto &conjunction_and_filter = filter.Cast<ConjunctionAndFilter>();
-		return MatchBoundsConjunctionAndFilter<TRANSFORM>(context, conjunction_and_filter, stats, transform);
-	}
-	case TableFilterType::IS_NULL: {
-		//! FIXME: these are never hit, because it goes through ExpressionFilter instead?
-		return MatchBoundsIsNullFilter<TRANSFORM>(stats, transform);
-	}
-	case TableFilterType::IS_NOT_NULL: {
-		//! FIXME: these are never hit, because it goes through ExpressionFilter instead?
-		return MatchBoundsIsNotNullFilter<TRANSFORM>(stats, transform);
-	}
-	case TableFilterType::OPTIONAL_FILTER: {
-		auto &optional_filter = filter.Cast<OptionalFilter>();
-		if (optional_filter.child_filter) {
-			return MatchBoundsTemplated<TRANSFORM>(context, *optional_filter.child_filter, stats, transform);
-		}
-		//! child filter wasn't populated (yet?) for some reason, just be conservative
-		return true;
-	}
-	case TableFilterType::IN_FILTER: {
-		auto &in_filter = filter.Cast<InFilter>();
-		D_ASSERT(!in_filter.values.empty());
-		for (auto &value : in_filter.values) {
-			if (MatchBoundsConstant<TRANSFORM>(value, ExpressionType::COMPARE_EQUAL, stats, transform)) {
-				return true;
+		if (right_is_const && left_is_const) {
+			return true;
+		} else if (right_is_const) {
+			if (left_is_ref) {
+				return MatchBoundsConstant(right.Cast<BoundConstantExpression>().GetValue(), comparison_type, stats,
+				                           transform);
+			} else if (is_identity && IsVariantReference(left)) {
+				return MatchVariantBounds(context, comparison_type, left, right, stats, transform);
+			}
+		} else if (left_is_const) {
+			if (right_is_ref) {
+				return MatchBoundsConstant(left.Cast<BoundConstantExpression>().GetValue(),
+				                           FlipComparisonExpression(comparison_type), stats, transform);
+			} else if (is_identity && IsVariantReference(right)) {
+				return MatchVariantBounds(context, FlipComparisonExpression(comparison_type), right, left, stats,
+				                          transform);
 			}
 		}
-		return false;
+		return true;
 	}
-	case TableFilterType::EXPRESSION_FILTER: {
-		//! Expressions can be arbitrarily complex, and we currently only support IS NULL/IS NOT NULL checks against the
-		//! column itself, i.e. where the expression is a BOUND_OPERATOR with type OPERATOR_IS_NULL/_IS_NOT_NULL with a
-		//! single child expression of type BOUND_REF.
-		//!
-		//! See duckdb/duckdb-iceberg#464
-		auto &expression_filter = filter.Cast<ExpressionFilter>();
 
-		//! Spatial predicates on a geometry column (e.g. ST_Intersects, which the spatial
-		//! optimizer rewrites into a `geom && <const>` / st_intersects_extent bbox pre-filter)
-		//! arrive here as an ExpressionFilter. Delegate to GeometryStats::CheckZonemap, which
-		//! whitelists the bbox-prunable predicates and does the intersect/contain math against
-		//! the file's bounding-box extent. Only prune when the result is provably empty.
-		if (stats.geometry_stats) {
-			auto result = GeometryStats::CheckZonemap(*stats.geometry_stats, expression_filter.expr);
-			return result != FilterPropagateResult::FILTER_ALWAYS_FALSE;
-		}
-
-		auto &expr = *expression_filter.expr;
-
-		switch (expr.type) {
-		case ExpressionType::COMPARE_GREATERTHAN:
-		case ExpressionType::COMPARE_GREATERTHANOREQUALTO:
-		case ExpressionType::COMPARE_LESSTHAN:
-		case ExpressionType::COMPARE_LESSTHANOREQUALTO:
-		case ExpressionType::COMPARE_EQUAL: {
-			auto &compare_expr = expr.Cast<BoundComparisonExpression>();
-			auto comparison_type = compare_expr.GetExpressionType();
-			auto &left = *compare_expr.left;
-			auto &right = *compare_expr.right;
-
-			const bool right_is_const = right.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT;
-			const bool left_is_const = left.GetExpressionClass() == ExpressionClass::BOUND_CONSTANT;
-
-			const bool left_is_ref = IsDirectReference(left);
-			const bool right_is_ref = IsDirectReference(right);
-
-			const bool is_identity = transform.Type() == IcebergTransformType::IDENTITY;
-
-			if (right_is_const && left_is_const) {
-				return true;
-			} else if (right_is_const) {
-				if (left_is_ref) {
-					return MatchBoundsConstant<TRANSFORM>(right.Cast<BoundConstantExpression>().value, comparison_type,
-					                                      stats, transform);
-				} else if (is_identity && IsVariantReference(left)) {
-					return MatchTransformedBounds<TRANSFORM>(context, expr.type, left, right, stats, transform);
-					;
-				}
-			} else if (left_is_const) {
-				if (right_is_ref) {
-					return MatchBoundsConstant<TRANSFORM>(left.Cast<BoundConstantExpression>().value,
-					                                      FlipComparisonExpression(comparison_type), stats, transform);
-				} else if (is_identity && IsVariantReference(right)) {
-					return MatchTransformedBounds<TRANSFORM>(context, expr.type, right, left, stats, transform);
-				}
-			}
+	switch (expr.GetExpressionClass()) {
+	case ExpressionClass::BOUND_CONJUNCTION: {
+		auto &conjunction = expr.Cast<BoundConjunctionExpression>();
+		if (conjunction.GetExpressionType() != ExpressionType::CONJUNCTION_AND) {
 			return true;
 		}
+		for (auto &child : conjunction.GetChildren()) {
+			if (!MatchBoundsExpression(context, child, stats, transform)) {
+				return false;
+			}
+		}
+		return true;
+	}
+	case ExpressionClass::BOUND_OPERATOR: {
+		auto &bound_operator_expr = expr.Cast<BoundOperatorExpression>();
+		switch (expr.GetExpressionType()) {
 		case ExpressionType::OPERATOR_IS_NULL:
 		case ExpressionType::OPERATOR_IS_NOT_NULL: {
-			D_ASSERT(expr.GetExpressionClass() == ExpressionClass::BOUND_OPERATOR);
-			auto &bound_operator_expr = expr.Cast<BoundOperatorExpression>();
-
-			D_ASSERT(bound_operator_expr.children.size() == 1);
-			auto &child_expr = bound_operator_expr.children[0];
-			if (child_expr->type != ExpressionType::BOUND_REF) {
+			//! Expressions can be arbitrarily complex, and we currently only support IS NULL/IS NOT NULL checks against
+			//! the column itself, i.e. where the expression is a BOUND_OPERATOR with type OPERATOR_IS_NULL/_IS_NOT_NULL
+			//! with a single child expression of type BOUND_REF.
+			//!
+			//! See duckdb/duckdb-iceberg#464
+			if (bound_operator_expr.GetChildren().size() != 1 ||
+			    !IsDirectReference(*bound_operator_expr.GetChildren()[0])) {
 				//! We can't evaluate expressions that aren't direct column references
 				return true;
 			}
-
-			if (expr.type == ExpressionType::OPERATOR_IS_NULL) {
-				return MatchBoundsIsNullFilter<TRANSFORM>(stats, transform);
+			if (expr.GetExpressionType() == ExpressionType::OPERATOR_IS_NULL) {
+				return MatchBoundsIsNullFilter(stats);
 			}
-			D_ASSERT(expr.type == ExpressionType::OPERATOR_IS_NOT_NULL);
-			return MatchBoundsIsNotNullFilter<TRANSFORM>(stats, transform);
+			D_ASSERT(expr.GetExpressionType() == ExpressionType::OPERATOR_IS_NOT_NULL);
+			return MatchBoundsIsNotNullFilter(stats);
 		}
-		// TODO: Implement ExpressionType::BOUND_BETWEEN and COMPARE_IN.
-		// https://github.com/duckdblabs/duckdb-internal/issues/8497
+		case ExpressionType::COMPARE_IN: {
+			if (bound_operator_expr.GetChildren().empty() ||
+			    !IsDirectReference(*bound_operator_expr.GetChildren()[0])) {
+				return true;
+			}
+			for (idx_t i = 1; i < bound_operator_expr.GetChildren().size(); i++) {
+				if (bound_operator_expr.GetChildren()[i]->GetExpressionClass() != ExpressionClass::BOUND_CONSTANT) {
+					return true;
+				}
+				auto &value = bound_operator_expr.GetChildren()[i]->Cast<BoundConstantExpression>().GetValue();
+				if (MatchBoundsConstant(value, ExpressionType::COMPARE_EQUAL, stats, transform)) {
+					return true;
+				}
+			}
+			return false;
+		}
 		default:
 			return true;
 		}
+	}
+	case ExpressionClass::BOUND_FUNCTION: {
+		if (stats.geometry_stats) {
+			auto result = ExpressionFilter::CheckExpressionStatistics(expr, *stats.geometry_stats);
+			return result != FilterPropagateResult::FILTER_ALWAYS_FALSE;
+		}
+
+		auto &func = expr.Cast<BoundFunctionExpression>();
+		if (func.Function().GetName() == OptionalFilterScalarFun::NAME && func.BindInfo()) {
+			auto &data = func.BindInfo()->Cast<OptionalFilterFunctionData>();
+			if (data.child_filter_expr) {
+				return MatchBoundsExpression(context, data.child_filter_expr, stats, transform);
+			}
+			//! child filter wasn't populated (yet?) for some reason, just be conservative
+			return true;
+		}
+		if (func.Function().GetName() == SelectivityOptionalFilterScalarFun::NAME && func.BindInfo()) {
+			auto &data = func.BindInfo()->Cast<SelectivityOptionalFilterFunctionData>();
+			if (data.child_filter_expr) {
+				return MatchBoundsExpression(context, data.child_filter_expr, stats, transform);
+			}
+			//! child filter wasn't populated (yet?) for some reason, just be conservative
+			return true;
+		}
+		return true;
 	}
 	default:
 		//! Conservative approach: we don't know what this is, just say it doesn't filter anything
@@ -312,28 +405,9 @@ bool MatchBoundsTemplated(ClientContext &context, const TableFilter &filter, con
 	}
 }
 
-bool IcebergPredicate::MatchBounds(ClientContext &context, const TableFilter &filter,
+bool IcebergPredicate::MatchBounds(ClientContext &context, const ExpressionFilter &filter,
                                    const IcebergPredicateStats &stats, const IcebergTransform &transform) {
-	switch (transform.Type()) {
-	case IcebergTransformType::IDENTITY:
-		return MatchBoundsTemplated<IdentityTransform>(context, filter, stats, transform);
-	case IcebergTransformType::BUCKET:
-		return MatchBoundsTemplated<BucketTransform>(context, filter, stats, transform);
-	case IcebergTransformType::TRUNCATE:
-		return MatchBoundsTemplated<TruncateTransform>(context, filter, stats, transform);
-	case IcebergTransformType::YEAR:
-		return MatchBoundsTemplated<YearTransform>(context, filter, stats, transform);
-	case IcebergTransformType::MONTH:
-		return MatchBoundsTemplated<MonthTransform>(context, filter, stats, transform);
-	case IcebergTransformType::DAY:
-		return MatchBoundsTemplated<DayTransform>(context, filter, stats, transform);
-	case IcebergTransformType::HOUR:
-		return MatchBoundsTemplated<HourTransform>(context, filter, stats, transform);
-	case IcebergTransformType::VOID:
-		return true;
-	default:
-		throw InvalidConfigurationException("Transform '%s' not implemented", transform.RawType());
-	}
+	return MatchBoundsExpression(context, filter.expr, stats, transform);
 }
 
 } // namespace duckdb

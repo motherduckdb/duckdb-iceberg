@@ -1,14 +1,13 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/counter_result.hpp"
 #include "rest_catalog/objects/timer_result.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -22,16 +21,20 @@ public:
 	MetricResult &operator=(MetricResult &&) = default;
 
 public:
-	static MetricResult FromJSON(yyjson_val *obj);
+	// Deserialization
+	static MetricResult FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
+
+	// Copy
+	MetricResult Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
-	string TryFromJSON(yyjson_val *obj);
-
-public:
-	CounterResult counter_result;
-	bool has_counter_result = false;
-	TimerResult timer_result;
-	bool has_timer_result = false;
+	optional<CounterResult> counter_result;
+	optional<TimerResult> timer_result;
 };
 
 } // namespace rest_api_objects

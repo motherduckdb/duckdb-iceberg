@@ -3,16 +3,8 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
+include test/sql/init_requires
 
-require parquet
-
-require iceberg
-
-require httpfs
-
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 create schema if not exists my_datalake.default;
@@ -104,6 +96,10 @@ select count(*) from my_datalake.default.test_identity_hugeint_large where val =
 ----
 2
 
+# Start transaction to keep necessary credentials in scope
+statement ok
+begin
+
 # check that partition values in the manifest are stored as DECIMAL(38,0)
 statement ok
 set variable manifest_path_large = (select manifest_path from iceberg_metadata(my_datalake.default.test_identity_hugeint_large) order by manifest_sequence_number desc limit 1);
@@ -114,3 +110,6 @@ select typeof(partition.identity_val_2) from (select unnest(data_file) from read
 DECIMAL(38,0)
 DECIMAL(38,0)
 DECIMAL(38,0)
+
+statement ok
+commit

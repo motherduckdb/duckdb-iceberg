@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/partition_spec.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 PartitionSpec::PartitionSpec() {
 }
 
-PartitionSpec PartitionSpec::FromJSON(yyjson_val *obj) {
+PartitionSpec PartitionSpec::FromJSON(JSONValue obj) {
 	PartitionSpec res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -24,39 +22,80 @@ PartitionSpec PartitionSpec::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string PartitionSpec::TryFromJSON(yyjson_val *obj) {
+PartitionSpec PartitionSpec::Copy() const {
+	PartitionSpec res;
+	res.fields.reserve(fields.size());
+	for (auto &item : fields) {
+		res.fields.emplace_back(item.Copy());
+	}
+	if (spec_id.has_value()) {
+		res.spec_id.emplace();
+		(*res.spec_id) = (*spec_id);
+	}
+	return res;
+}
+
+string PartitionSpec::TryFromJSON(JSONValue obj) {
 	string error;
-	auto fields_val = yyjson_obj_get(obj, "fields");
-	if (!fields_val) {
+	auto fields_val = obj.GetMember("fields");
+	if (!fields_val.IsValid()) {
 		return "PartitionSpec required property 'fields' is missing";
 	} else {
-		if (yyjson_is_arr(fields_val)) {
-			size_t idx, max;
-			yyjson_val *val;
-			yyjson_arr_foreach(fields_val, idx, max, val) {
-				PartitionField tmp;
-				error = tmp.TryFromJSON(val);
+		if (fields_val.IsArray()) {
+			fields_val.IterateArray([&](JSONValue fields_item_val) {
 				if (!error.empty()) {
-					return error;
+					return;
 				}
-				fields.emplace_back(std::move(tmp));
+				PartitionField fields_item;
+				error = fields_item.TryFromJSON(fields_item_val);
+				if (!error.empty()) {
+					return;
+				}
+				fields.emplace_back(std::move(fields_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
-			return StringUtil::Format("PartitionSpec property 'fields' is not of type 'array', found '%s' instead",
-			                          yyjson_get_type_desc(fields_val));
+			return StringUtil::Format("PartitionSpec property 'fields' is not of type 'array', found %s instead",
+			                          json_utils::GetTypeDescription(fields_val).c_str());
 		}
 	}
-	auto spec_id_val = yyjson_obj_get(obj, "spec-id");
-	if (spec_id_val && !yyjson_is_null(spec_id_val)) {
-		has_spec_id = true;
-		if (yyjson_is_int(spec_id_val)) {
-			spec_id = yyjson_get_int(spec_id_val);
+	auto spec_id_val = obj.GetMember("spec-id");
+	if (spec_id_val.IsValid()) {
+		int32_t spec_id_tmp;
+		if (json_utils::IsInteger(spec_id_val)) {
+			spec_id_tmp = json_utils::GetSignedInteger(spec_id_val);
 		} else {
-			return StringUtil::Format("PartitionSpec property 'spec_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(spec_id_val));
+			return StringUtil::Format("PartitionSpec property 'spec_id_tmp' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(spec_id_val).c_str());
 		}
+		spec_id = std::move(spec_id_tmp);
 	}
-	return string();
+	return "";
+}
+
+void PartitionSpec::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
+	// Serialize: fields
+	auto fields_json = writer.CreateArray();
+	for (const auto &fields_json_item : fields) {
+		auto fields_json_item_json = fields_json_item.ToJSON(writer);
+		fields_json.Append(fields_json_item_json);
+	}
+	obj.Add("fields", fields_json);
+
+	// Serialize: spec-id
+	if (spec_id.has_value()) {
+		auto &spec_id_value = *spec_id;
+		auto spec_id_json = writer.CreateSignedInteger(spec_id_value);
+		obj.Add("spec-id", spec_id_json);
+	}
+}
+
+JSONMutableValue PartitionSpec::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

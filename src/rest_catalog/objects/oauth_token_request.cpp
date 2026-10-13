@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/oauth_token_request.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 OAuthTokenRequest::OAuthTokenRequest() {
 }
 
-OAuthTokenRequest OAuthTokenRequest::FromJSON(yyjson_val *obj) {
+OAuthTokenRequest OAuthTokenRequest::FromJSON(JSONValue obj) {
 	OAuthTokenRequest res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -24,20 +22,51 @@ OAuthTokenRequest OAuthTokenRequest::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string OAuthTokenRequest::TryFromJSON(yyjson_val *obj) {
+OAuthTokenRequest OAuthTokenRequest::Copy() const {
+	OAuthTokenRequest res;
+	if (oauth_client_credentials_request.has_value()) {
+		res.oauth_client_credentials_request.emplace();
+		(*res.oauth_client_credentials_request) = (*oauth_client_credentials_request).Copy();
+	}
+	if (oauth_token_exchange_request.has_value()) {
+		res.oauth_token_exchange_request.emplace();
+		(*res.oauth_token_exchange_request) = (*oauth_token_exchange_request).Copy();
+	}
+	return res;
+}
+
+string OAuthTokenRequest::TryFromJSON(JSONValue obj) {
 	string error;
-	error = oauth_client_credentials_request.TryFromJSON(obj);
+	oauth_client_credentials_request.emplace();
+	error = oauth_client_credentials_request->TryFromJSON(obj);
 	if (error.empty()) {
-		has_oauth_client_credentials_request = true;
+	} else {
+		oauth_client_credentials_request = nullopt;
 	}
-	error = oauth_token_exchange_request.TryFromJSON(obj);
+	oauth_token_exchange_request.emplace();
+	error = oauth_token_exchange_request->TryFromJSON(obj);
 	if (error.empty()) {
-		has_oauth_token_exchange_request = true;
+	} else {
+		oauth_token_exchange_request = nullopt;
 	}
-	if (!has_oauth_client_credentials_request && !has_oauth_token_exchange_request) {
+	if (!(oauth_client_credentials_request.has_value()) && !(oauth_token_exchange_request.has_value())) {
 		return "OAuthTokenRequest failed to parse, none of the anyOf candidates matched";
 	}
-	return string();
+	return "";
+}
+
+void OAuthTokenRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
+	if (oauth_client_credentials_request.has_value()) {
+		oauth_client_credentials_request->PopulateJSON(writer, obj);
+	} else if (oauth_token_exchange_request.has_value()) {
+		oauth_token_exchange_request->PopulateJSON(writer, obj);
+	}
+}
+
+JSONMutableValue OAuthTokenRequest::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

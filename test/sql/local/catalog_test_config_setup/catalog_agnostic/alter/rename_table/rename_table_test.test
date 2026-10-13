@@ -3,18 +3,11 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
+include test/sql/init_requires
 
-require parquet
+statement ok
+SET default_transaction_invalidation_policy='SYNTACTIC_ERRORS_DO_NOT_INVALIDATE';
 
-require iceberg
-
-require httpfs
-
-require ducklake
-
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 set enable_logging=true
@@ -105,26 +98,31 @@ begin transaction
 statement ok
 alter table my_datalake.default.renamed_table2 rename to renamed_table3
 
-statement ok
+statement error
 alter table my_datalake.default.renamed_table3 rename to renamed_table1
+----
+TransactionContext Error: Iceberg REST Catalog cannot commit this transaction atomically because it mixes table updates with rename/drop requests
 
 statement ok
-commit
+rollback
 
 query I
-select * from my_datalake.default.renamed_table1 order by i
+select * from my_datalake.default.renamed_table2 order by i
 ----
 1
 2
 3
 
 statement error
-select * from my_datalake.default.renamed_table2
+select * from my_datalake.default.renamed_table3
 ----
 
 # Test 4: Rename to existing table name (should fail)
 statement ok
-create table my_datalake.default.renamed_table2(i INTEGER);
+create table my_datalake.default.renamed_table1(i INTEGER);
+
+statement ok
+insert into my_datalake.default.renamed_table1 values (1), (2), (3);
 
 statement error
 alter table my_datalake.default.renamed_table1 rename to renamed_table2
@@ -226,7 +224,7 @@ select * from my_datalake.default.renamed_table1 order by i
 statement error
 alter table my_datalake.default.renamed_table1 rename to renamed_table2
 ----
-Catalog Error: This table (renamed_table1) was modified already, can't be renamed!
+TransactionContext Error: Iceberg REST Catalog cannot commit this transaction atomically because it mixes table updates with rename/drop requests
 
 statement ok
 commit
@@ -241,31 +239,26 @@ query I
 select * from my_datalake.default.renamed_table2 order by i
 ----
 10
-20
 
-statement ok
+statement error
 insert into my_datalake.default.renamed_table2 values (30);
-
-query I
-select * from my_datalake.default.renamed_table2 order by i
 ----
-10
-20
-30
+TransactionContext Error: Iceberg REST Catalog cannot commit this transaction atomically because it mixes table updates with rename/drop requests
 
 statement ok
-commit
+rollback
 
 query I
-select * from my_datalake.default.renamed_table2 order by i
+select * from my_datalake.default.renamed_table1 order by i
 ----
 10
-20
-30
 
 # Test 7: Two concurrent transactions - isolation
 statement ok
 drop table if exists my_datalake.default.renamed_table2;
+
+statement ok
+drop table if exists my_datalake.default.renamed_table1;
 
 statement ok
 create table my_datalake.default.renamed_table1(i INTEGER);
@@ -338,24 +331,28 @@ begin transaction
 statement ok
 drop table my_datalake.default.renamed_table2;
 
-statement ok
-alter table my_datalake.default.renamed_table1 rename to renamed_table2;
-
-query I
-select * from my_datalake.default.renamed_table2 order by i
-----
-1
-2
-
-statement ok
-commit
-
-query I
-select * from my_datalake.default.renamed_table2 order by i
-----
-1
-2
-
 statement error
-select * from my_datalake.default.renamed_table1
+alter table my_datalake.default.renamed_table1 rename to renamed_table2;
 ----
+TransactionContext Error: Iceberg REST Catalog cannot commit this transaction atomically because it mixes table updates with rename/drop requests
+
+statement ok
+rollback
+
+query I
+select * from my_datalake.default.renamed_table1 order by i
+----
+1
+2
+
+query I
+select * from my_datalake.default.renamed_table2 order by i
+----
+a
+b
+
+query I
+select * from my_datalake.default.renamed_table1 order by i
+----
+1
+2

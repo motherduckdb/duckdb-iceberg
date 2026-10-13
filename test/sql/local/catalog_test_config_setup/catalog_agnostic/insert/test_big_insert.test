@@ -3,16 +3,8 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
+include test/sql/init_requires
 
-require parquet
-
-require iceberg
-
-require httpfs
-
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 set enable_logging=true
@@ -20,8 +12,21 @@ set enable_logging=true
 statement ok
 set logging_level='debug'
 
-# Default TARGET_FILE_SIZE = 8.4MB
-# We create ~18MB of data, which spreads out over 3 files
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.insert_test_big;
+
+statement ok
+CREATE TABLE my_datalake.default.insert_test_big (
+	col1 INTEGER,
+	col2 VARCHAR(17)
+) WITH (
+    'format-version'='2',
+    'write.update.mode'='merge-on-read',
+    'write.parquet.compression-codec'='snappy'
+);
+
+# Default TARGET_FILE_SIZE = 500MB
+# We create ~18MB of data
 query I
 INSERT INTO my_datalake.default.insert_test_big SELECT i, concat('thisisalongstring', i) FROM range(2000000) t(i)
 ----
@@ -30,4 +35,4 @@ INSERT INTO my_datalake.default.insert_test_big SELECT i, concat('thisisalongstr
 query II
 explain analyze select * from my_datalake.default.insert_test_big
 ----
-analyzed_plan	<REGEX>:.*Total Files Read: 3.*
+analyzed_plan	<REGEX>:.*Total Files Read: 1.*

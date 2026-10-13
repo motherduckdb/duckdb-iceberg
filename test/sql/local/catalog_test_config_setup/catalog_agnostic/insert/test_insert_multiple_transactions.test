@@ -3,16 +3,8 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
+include test/sql/init_requires
 
-require parquet
-
-require iceberg
-
-require httpfs
-
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 set enable_logging=true
@@ -28,11 +20,15 @@ statement ok
 drop table if exists my_datalake.default.multi_transaction_insert;
 
 statement ok
-create table my_datalake.default.multi_transaction_insert (a int, b int);
+create table my_datalake.default.multi_transaction_insert (
+	a int,
+	b int
+);
 
 # make sure the table has a snapshot id to start
 statement ok
-insert into my_datalake.default.multi_transaction_insert select 0, 0;
+insert into my_datalake.default.multi_transaction_insert VALUES
+	(0, 0);
 
 # Perform an insert into the same table from two separate transactions
 
@@ -43,10 +39,12 @@ statement ok con2
 begin
 
 statement ok con1
-insert into my_datalake.default.multi_transaction_insert select 1, 1;
+insert into my_datalake.default.multi_transaction_insert VALUES
+	(1, 1);
 
 statement ok con2
-insert into my_datalake.default.multi_transaction_insert select 2, 2;
+insert into my_datalake.default.multi_transaction_insert VALUES
+	(2, 2);
 
 statement ok con1
 commit
@@ -58,14 +56,13 @@ select * from my_datalake.default.multi_transaction_insert order by all;
 0	0
 2	2
 
-# The second commit failed because both transactions tried to add sequence number: 2
-statement error con2
+# The second commit refreshes and retries against the newer snapshot
+statement ok con2
 commit
-----
-<REGEX>:.*TransactionContext Error.*Conflict_409.*
 
 query II
-select * from my_datalake.default.multi_transaction_insert;
+select * from my_datalake.default.multi_transaction_insert order by all;
 ----
 0	0
 1	1
+2	2

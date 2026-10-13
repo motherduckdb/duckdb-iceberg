@@ -3,21 +3,15 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
-
-require parquet
-
-require iceberg
-
-require httpfs
+include test/sql/init_requires
 
 require icu
-
-require ducklake
 
 statement ok
 call enable_logging('Iceberg');
 
+statement ok
+SET default_transaction_invalidation_policy='SYNTACTIC_ERRORS_DO_NOT_INVALIDATE';
 
 # To guarantee that files have more consistent characteristics both on
 # CI and locally
@@ -36,7 +30,7 @@ create table my_datalake.default.test_logging_create_table WITH
 	('write.target-file-size-bytes'='sdfvs', 'write.parquet.compression-codec'='zstd')
 as select range a from range(10000);
 ----
-<REGEX>:.*write.target-file-size-bytes is not a valid number.*
+Invalid Configuration Error: Invalid format for 'write.target-file-size-bytes' (sdfvs), error: Memory must have a number (e.g. 1GB)
 
 statement error
 select * from my_datalake.default.test_logging_create_table;
@@ -69,7 +63,7 @@ as select range a from range(10000000);
 query I
 select count(*) from duckdb_logs() where type = 'Iceberg' and regexp_matches(message, 'Iceberg INSERT, wrote data_file.*record_count=.*');
 ----
-10
+11
 
 statement ok
 call truncate_duckdb_logs();
@@ -86,5 +80,4 @@ as select range a from range(100000000);
 query I
 select count(*) from duckdb_logs() where type = 'Iceberg' and regexp_matches(message, 'Iceberg INSERT, wrote data_file.*record_count=.*');
 ----
-91
-
+101

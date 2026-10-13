@@ -1,12 +1,11 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -20,17 +19,22 @@ public:
 	OAuthClientCredentialsRequest &operator=(OAuthClientCredentialsRequest &&) = default;
 
 public:
-	static OAuthClientCredentialsRequest FromJSON(yyjson_val *obj);
+	// Deserialization
+	static OAuthClientCredentialsRequest FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Copy
+	OAuthClientCredentialsRequest Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	string grant_type;
 	string client_id;
 	string client_secret;
-	string scope;
-	bool has_scope = false;
+	optional<string> scope;
 };
 
 } // namespace rest_api_objects

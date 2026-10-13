@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/assert_last_assigned_partition_id.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 AssertLastAssignedPartitionId::AssertLastAssignedPartitionId() {
 }
 
-AssertLastAssignedPartitionId AssertLastAssignedPartitionId::FromJSON(yyjson_val *obj) {
+AssertLastAssignedPartitionId AssertLastAssignedPartitionId::FromJSON(JSONValue obj) {
 	AssertLastAssignedPartitionId res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -24,30 +22,59 @@ AssertLastAssignedPartitionId AssertLastAssignedPartitionId::FromJSON(yyjson_val
 	return res;
 }
 
-string AssertLastAssignedPartitionId::TryFromJSON(yyjson_val *obj) {
+AssertLastAssignedPartitionId AssertLastAssignedPartitionId::Copy() const {
+	AssertLastAssignedPartitionId res;
+	res.type = type;
+	res.last_assigned_partition_id = last_assigned_partition_id;
+	return res;
+}
+
+string AssertLastAssignedPartitionId::TryFromJSON(JSONValue obj) {
 	string error;
-	auto type_val = yyjson_obj_get(obj, "type");
-	if (!type_val) {
+	auto type_val = obj.GetMember("type");
+	if (!type_val.IsValid()) {
 		return "AssertLastAssignedPartitionId required property 'type' is missing";
 	} else {
-		error = type.TryFromJSON(type_val);
-		if (!error.empty()) {
-			return error;
+		if (json_utils::IsString(type_val)) {
+			type = json_utils::GetString(type_val);
+		} else {
+			return StringUtil::Format(
+			    "AssertLastAssignedPartitionId property 'type' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(type_val).c_str());
+		}
+		if (!type_val.IsNull() && type != "assert-last-assigned-partition-id") {
+			return "AssertLastAssignedPartitionId property 'type' does not match its required const value";
 		}
 	}
-	auto last_assigned_partition_id_val = yyjson_obj_get(obj, "last-assigned-partition-id");
-	if (!last_assigned_partition_id_val) {
+	auto last_assigned_partition_id_val = obj.GetMember("last-assigned-partition-id");
+	if (!last_assigned_partition_id_val.IsValid()) {
 		return "AssertLastAssignedPartitionId required property 'last-assigned-partition-id' is missing";
 	} else {
-		if (yyjson_is_int(last_assigned_partition_id_val)) {
-			last_assigned_partition_id = yyjson_get_int(last_assigned_partition_id_val);
+		if (json_utils::IsInteger(last_assigned_partition_id_val)) {
+			last_assigned_partition_id = json_utils::GetSignedInteger(last_assigned_partition_id_val);
 		} else {
 			return StringUtil::Format("AssertLastAssignedPartitionId property 'last_assigned_partition_id' is not of "
-			                          "type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(last_assigned_partition_id_val));
+			                          "type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(last_assigned_partition_id_val).c_str());
 		}
 	}
-	return string();
+	return "";
+}
+
+void AssertLastAssignedPartitionId::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
+	// Serialize: type
+	auto type_json = writer.CreateString(type);
+	obj.Add("type", type_json);
+
+	// Serialize: last-assigned-partition-id
+	auto last_assigned_partition_id_json = writer.CreateSignedInteger(last_assigned_partition_id);
+	obj.Add("last-assigned-partition-id", last_assigned_partition_id_json);
+}
+
+JSONMutableValue AssertLastAssignedPartitionId::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

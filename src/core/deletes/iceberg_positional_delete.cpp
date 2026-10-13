@@ -1,5 +1,4 @@
 #include "core/deletes/iceberg_positional_delete.hpp"
-#include "planning/iceberg_multi_file_list.hpp"
 
 namespace duckdb {
 
@@ -8,52 +7,48 @@ unique_ptr<DeleteFilter> IcebergPositionalDeleteData::ToFilter() const {
 }
 
 void IcebergPositionalDeleteData::ToSet(set<idx_t> &out) const {
-	out.insert(invalid_rows.begin(), invalid_rows.end());
+	roaring::api::roaring64_bitmap_iterate(
+	    invalid_rows.get(),
+	    [](uint64_t row, void *context) {
+		    static_cast<set<idx_t> *>(context)->insert(row);
+		    return true;
+	    },
+	    &out);
 }
 
-static optional_ptr<IcebergPositionalDeleteData>
-TryGetOrCreate(case_insensitive_map_t<shared_ptr<IcebergDeleteData>> &deletes, const BoundIcebergManifestEntry &entry,
-               const string &file_path) {
-	auto it = deletes.find(file_path);
-	if (it == deletes.end()) {
-		it = deletes.emplace(file_path, make_shared_ptr<IcebergPositionalDeleteData>(entry)).first;
-	} else if (it->second->type == IcebergDeleteType::POSITIONAL_DELETE) {
-		it->second->entries.push_back(entry);
-	}
-	if (it->second->type != IcebergDeleteType::POSITIONAL_DELETE) {
-		return nullptr;
-	}
-	return reinterpret_cast<IcebergPositionalDeleteData &>(*it->second);
-}
-
-void IcebergMultiFileList::ScanPositionalDeleteFile(const BoundIcebergManifestEntry &bound_entry,
-                                                    DataChunk &result) const {
-	//! FIXME: might want to check the 'columns' of the 'reader' to check, field-ids are:
-	auto names = FlatVector::GetData<string_t>(result.data[0]);  //! 2147483546
-	auto row_ids = FlatVector::GetData<int64_t>(result.data[1]); //! 2147483545
-
-	auto count = result.size();
+idx_t IcebergPositionalDeleteFilter::Filter(row_t start_row_index, idx_t count, SelectionVector &result_sel) {
 	if (count == 0) {
-		return;
+		return 0;
 	}
-	reference<string_t> current_file_path = names[0];
-	auto initial_key = current_file_path.get().GetString();
-	auto deletes = TryGetOrCreate(shared_state->positional_delete_data, bound_entry, initial_key);
-
-	for (idx_t i = 0; i < count; i++) {
-		auto &name = names[i];
-		auto &row_id = row_ids[i];
-
-		if (name != current_file_path.get()) {
-			current_file_path = name;
-			auto key = current_file_path.get().GetString();
-			deletes = TryGetOrCreate(shared_state->positional_delete_data, bound_entry, key);
-		}
-		if (!deletes) {
-			continue;
-		}
-		deletes->AddRow(row_id);
+	result_sel.Initialize(count);
+	idx_t selection_idx = 0;
+	idx_t offset = 0;
+	const auto start = static_cast<uint64_t>(start_row_index);
+	// Seek independently for each range: filters can be consumed out of order or
+	// concurrently, while the shared bitmap remains immutable.
+	using namespace roaring::api;
+	unique_ptr<roaring64_iterator_t, decltype(&roaring64_iterator_free)> deleted(
+	    roaring64_iterator_create(data->invalid_rows.get()), roaring64_iterator_free);
+	if (!deleted) {
+		throw OutOfMemoryException("Failed to allocate Iceberg positional delete iterator");
 	}
+	roaring64_iterator_move_equalorlarger(deleted.get(), start);
+	constexpr idx_t BATCH_SIZE = 256;
+	uint64_t positions[BATCH_SIZE];
+	while (roaring64_iterator_has_value(deleted.get()) && roaring64_iterator_value(deleted.get()) - start < count) {
+		const auto read = roaring64_iterator_read(deleted.get(), positions, BATCH_SIZE);
+		for (idx_t i = 0; i < read && positions[i] - start < count; ++i) {
+			const auto deleted_offset = positions[i] - start;
+			while (offset < deleted_offset) {
+				result_sel.set_index(selection_idx++, offset++);
+			}
+			offset = deleted_offset + 1;
+		}
+	}
+	while (offset < count) {
+		result_sel.set_index(selection_idx++, offset++);
+	}
+	return selection_idx;
 }
 
 } // namespace duckdb

@@ -1,13 +1,12 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/token_type.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -21,22 +20,24 @@ public:
 	OAuthTokenResponse &operator=(OAuthTokenResponse &&) = default;
 
 public:
-	static OAuthTokenResponse FromJSON(yyjson_val *obj);
+	// Deserialization
+	static OAuthTokenResponse FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Copy
+	OAuthTokenResponse Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	string access_token;
 	string token_type;
-	int32_t expires_in;
-	bool has_expires_in = false;
-	TokenType issued_token_type;
-	bool has_issued_token_type = false;
-	string refresh_token;
-	bool has_refresh_token = false;
-	string scope;
-	bool has_scope = false;
+	optional<int32_t> expires_in;
+	optional<TokenType> issued_token_type;
+	optional<string> refresh_token;
+	optional<string> scope;
 };
 
 } // namespace rest_api_objects

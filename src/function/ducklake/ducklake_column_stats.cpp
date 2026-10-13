@@ -13,15 +13,16 @@ void DuckLakeColumnStats::AddStats(IcebergPredicateStats &stats) {
 	if (stats.has_null) {
 		contains_null = true;
 	}
-	if (stats.has_nan) {
+	//! DuckLake's boolean stats conservatively include unknown NaN presence.
+	if (!stats.has_nan || *stats.has_nan) {
 		contains_nan = true;
 	}
 
-	if (!stats.lower_bound.IsNull() && (min_value.IsNull() || stats.lower_bound < min_value)) {
-		min_value = stats.lower_bound;
+	if ((stats.lower_bound && !stats.lower_bound->IsNull()) && (min_value.IsNull() || *stats.lower_bound < min_value)) {
+		min_value = *stats.lower_bound;
 	}
-	if (!stats.upper_bound.IsNull() && (max_value.IsNull() || stats.upper_bound > max_value)) {
-		max_value = stats.upper_bound;
+	if ((stats.upper_bound && !stats.upper_bound->IsNull()) && (max_value.IsNull() || *stats.upper_bound > max_value)) {
+		max_value = *stats.upper_bound;
 	}
 }
 

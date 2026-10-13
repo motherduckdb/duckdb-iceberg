@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/commit_table_request.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 CommitTableRequest::CommitTableRequest() {
 }
 
-CommitTableRequest CommitTableRequest::FromJSON(yyjson_val *obj) {
+CommitTableRequest CommitTableRequest::FromJSON(JSONValue obj) {
 	CommitTableRequest res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -24,59 +22,115 @@ CommitTableRequest CommitTableRequest::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string CommitTableRequest::TryFromJSON(yyjson_val *obj) {
+CommitTableRequest CommitTableRequest::Copy() const {
+	CommitTableRequest res;
+	res.requirements.reserve(requirements.size());
+	for (auto &item : requirements) {
+		res.requirements.emplace_back(item.Copy());
+	}
+	res.updates.reserve(updates.size());
+	for (auto &item : updates) {
+		res.updates.emplace_back(item.Copy());
+	}
+	if (identifier.has_value()) {
+		res.identifier.emplace();
+		(*res.identifier) = (*identifier).Copy();
+	}
+	return res;
+}
+
+string CommitTableRequest::TryFromJSON(JSONValue obj) {
 	string error;
-	auto requirements_val = yyjson_obj_get(obj, "requirements");
-	if (!requirements_val) {
+	auto requirements_val = obj.GetMember("requirements");
+	if (!requirements_val.IsValid()) {
 		return "CommitTableRequest required property 'requirements' is missing";
 	} else {
-		if (yyjson_is_arr(requirements_val)) {
-			size_t idx, max;
-			yyjson_val *val;
-			yyjson_arr_foreach(requirements_val, idx, max, val) {
-				TableRequirement tmp;
-				error = tmp.TryFromJSON(val);
+		if (requirements_val.IsArray()) {
+			requirements_val.IterateArray([&](JSONValue requirements_item_val) {
 				if (!error.empty()) {
-					return error;
+					return;
 				}
-				requirements.emplace_back(std::move(tmp));
+				TableRequirement requirements_item;
+				error = requirements_item.TryFromJSON(requirements_item_val);
+				if (!error.empty()) {
+					return;
+				}
+				requirements.emplace_back(std::move(requirements_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "CommitTableRequest property 'requirements' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(requirements_val));
+			    "CommitTableRequest property 'requirements' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(requirements_val).c_str());
 		}
 	}
-	auto updates_val = yyjson_obj_get(obj, "updates");
-	if (!updates_val) {
+	auto updates_val = obj.GetMember("updates");
+	if (!updates_val.IsValid()) {
 		return "CommitTableRequest required property 'updates' is missing";
 	} else {
-		if (yyjson_is_arr(updates_val)) {
-			size_t idx, max;
-			yyjson_val *val;
-			yyjson_arr_foreach(updates_val, idx, max, val) {
-				TableUpdate tmp;
-				error = tmp.TryFromJSON(val);
+		if (updates_val.IsArray()) {
+			updates_val.IterateArray([&](JSONValue updates_item_val) {
 				if (!error.empty()) {
-					return error;
+					return;
 				}
-				updates.emplace_back(std::move(tmp));
+				TableUpdate updates_item;
+				error = updates_item.TryFromJSON(updates_item_val);
+				if (!error.empty()) {
+					return;
+				}
+				updates.emplace_back(std::move(updates_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
-			return StringUtil::Format(
-			    "CommitTableRequest property 'updates' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(updates_val));
+			return StringUtil::Format("CommitTableRequest property 'updates' is not of type 'array', found %s instead",
+			                          json_utils::GetTypeDescription(updates_val).c_str());
 		}
 	}
-	auto identifier_val = yyjson_obj_get(obj, "identifier");
-	if (identifier_val && !yyjson_is_null(identifier_val)) {
-		has_identifier = true;
-		error = identifier.TryFromJSON(identifier_val);
+	auto identifier_val = obj.GetMember("identifier");
+	if (identifier_val.IsValid()) {
+		TableIdentifier identifier_tmp;
+		error = identifier_tmp.TryFromJSON(identifier_val);
 		if (!error.empty()) {
 			return error;
 		}
+		identifier = std::move(identifier_tmp);
 	}
-	return string();
+	return "";
+}
+
+void CommitTableRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
+	// Serialize: requirements
+	auto requirements_json = writer.CreateArray();
+	for (const auto &requirements_json_item : requirements) {
+		auto requirements_json_item_json = requirements_json_item.ToJSON(writer);
+		requirements_json.Append(requirements_json_item_json);
+	}
+	obj.Add("requirements", requirements_json);
+
+	// Serialize: updates
+	auto updates_json = writer.CreateArray();
+	for (const auto &updates_json_item : updates) {
+		auto updates_json_item_json = updates_json_item.ToJSON(writer);
+		updates_json.Append(updates_json_item_json);
+	}
+	obj.Add("updates", updates_json);
+
+	// Serialize: identifier
+	if (identifier.has_value()) {
+		auto &identifier_value = *identifier;
+		auto identifier_json = identifier_value.ToJSON(writer);
+		obj.Add("identifier", identifier_json);
+	}
+}
+
+JSONMutableValue CommitTableRequest::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

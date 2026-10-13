@@ -1,5 +1,6 @@
 #pragma once
 
+#include "duckdb/common/optional.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/function/copy_function.hpp"
 
@@ -16,21 +17,29 @@
 
 namespace duckdb {
 
-struct IcebergTableInformation;
+struct IcebergTable;
 struct IcebergCreateTableRequest;
 
 struct IcebergTransactionData {
 public:
-	IcebergTransactionData(ClientContext &context, const IcebergTableInformation &table_info);
+	IcebergTransactionData(ClientContext &context, IcebergTransaction &transaction, const IcebergTable &table_info);
 
 public:
+	int64_t GetCommitRetryCount() const;
+	bool SupportsAppendRetry() const;
+	bool RetryStateMatches(const IcebergTable &table_info) const;
+	//! Whether this transaction stages a DELETE snapshot; gates the commit-retry safety check.
+	bool ContainsDelete() const;
+	bool IsFileInvalidated(const IcebergFileIdentity &file) const;
+
 	void AddSnapshot(IcebergSnapshotOperationType operation, vector<IcebergManifestEntry> &&data_files,
 	                 IcebergManifestDeletes &&altered_manifests);
-	void AddUpdateSnapshot(vector<IcebergManifestEntry> &&delete_files, vector<IcebergManifestEntry> &&data_files,
+	void AddDeleteSnapshot(partitioned_manifest_entry_map_t &&delete_files, IcebergManifestDeletes &&altered_manifests);
+	void AddUpdateSnapshot(partitioned_manifest_entry_map_t &&delete_files, vector<IcebergManifestEntry> &&data_files,
 	                       IcebergManifestDeletes &&altered_manifests);
 	// add a schema update for a table
 	void TableAddSchema(int32_t schema_id);
-	void TableSetCurrentSchema();
+	void TableSetCurrentSchema(int32_t schema_id);
 	void TableAddAssertCreate();
 	void TableAddAssertUUID();
 	void TableAddAssertCurrentSchemaId();
@@ -46,15 +55,27 @@ public:
 	void TableSetProperties(const case_insensitive_map_t<string> &properties);
 	void TableRemoveProperties(const vector<string> &properties);
 	void TableSetLocation();
+	//! Roll main back to an ancestor snapshot (Spark rollback_to_snapshot semantics).
+	void TableRollbackToSnapshot(int64_t snapshot_id);
 
 private:
 	void CacheExistingManifestList(lock_guard<mutex> &guard, const IcebergTableMetadata &metadata);
+	//! Retains one pending delete manifest per partition spec present in 'delete_files'.
+	void AddPendingDeleteManifests(IcebergAddSnapshot &add_snapshot, partitioned_manifest_entry_map_t &&delete_files);
+	void AddSnapshotUpdate(unique_ptr<IcebergAddSnapshot> add_snapshot, IcebergManifestDeletes &&altered_manifests);
 
 public:
+	string initial_table_uuid;
+	int32_t initial_format_version;
 	int32_t initial_schema_id;
+	int32_t initial_default_spec_id = 0;
+	optional_idx initial_default_sort_order_id;
 
 	ClientContext &context;
-	const IcebergTableInformation &table_info;
+	IcebergTransaction &transaction;
+	const IcebergTable &table_info;
+	//! Transaction-wide invalidated file paths, tagged with the alter that first invalidated them
+	IcebergManifestDeletes manifest_deletes;
 	//! schema updates etc.
 	vector<unique_ptr<IcebergTableUpdate>> updates;
 	vector<unique_ptr<IcebergTableRequirement>> requirements;
@@ -63,15 +84,17 @@ public:
 
 	//! Every insert/update/delete creates an alter of the table data
 	vector<reference<IcebergAddSnapshot>> alters;
-	//! The 'referenced_data_file' -> 'data_file.file_path' of the currently active transaction-local deletes
-	case_insensitive_map_t<string> transactional_delete_files;
-	//! Track the current row id for this transaction
-	int64_t next_row_id = 0;
+	//! Snapshot this transaction is based on (the tip when the manifest list was first cached).
+	//! Drives the delete commit-retry safety check.
+	optional<int64_t> base_snapshot_id;
+	//! Starting sequence for transaction-local delete applicability, captured with the base manifest list.
+	//! This is not an assigned row lineage value.
+	sequence_number_t scan_sequence_number = 0;
 
 	//! If we perform an update that relies on the current schema id staying unchanged
 	bool assert_schema_id = false;
-	//! Whether the current schema of the table should be updated
-	bool set_schema_id = false;
+	//! Whether this transaction explicitly requires the table to be newly created.
+	bool has_assert_create = false;
 	mutex lock;
 };
 

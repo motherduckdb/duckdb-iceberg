@@ -1,6 +1,7 @@
 #include "duckdb/common/file_opener.hpp"
+#include "duckdb/main/client_context.hpp"
 #include "duckdb/common/file_system.hpp"
-#include "duckdb/storage/caching_file_system_wrapper.hpp"
+#include "duckdb/storage/external_file_cache/caching_file_system_wrapper.hpp"
 
 #include "function/iceberg_functions.hpp"
 #include "iceberg_options.hpp"
@@ -29,43 +30,37 @@ static string SnapshotOperationToString(IcebergSnapshotOperationType type) {
 
 struct IcebergSnaphotsBindData : public TableFunctionData {
 	IcebergSnaphotsBindData() {};
-	string filename;
-	IcebergOptions options;
+	IcebergTableMetadata metadata {IcebergTableMetadataSchemas {}};
 };
 
 struct IcebergSnapshotGlobalTableFunctionState : public GlobalTableFunctionState {
 public:
 	static unique_ptr<GlobalTableFunctionState> Init(ClientContext &context, TableFunctionInitInput &input) {
-		auto bind_data = input.bind_data->Cast<IcebergSnaphotsBindData>();
+		auto &bind_data = input.bind_data->Cast<IcebergSnaphotsBindData>();
 		auto global_state = make_uniq<IcebergSnapshotGlobalTableFunctionState>();
 
-		auto &fs = FileSystem::GetFileSystem(context);
-		auto caching_fs = make_shared_ptr<CachingFileSystemWrapper>(fs, *context.db);
-
-		auto iceberg_meta_path =
-		    IcebergTableMetadata::GetMetaDataPath(context, bind_data.filename, fs, bind_data.options);
-		auto table_metadata =
-		    IcebergTableMetadata::Parse(iceberg_meta_path, *caching_fs, bind_data.options.metadata_compression_codec);
-		global_state->metadata = IcebergTableMetadata::FromTableMetadata(table_metadata);
+		global_state->metadata = bind_data.metadata.Copy();
 
 		auto &info = global_state->metadata;
 		global_state->snapshot_it = info.snapshots.begin();
 		return std::move(global_state);
 	}
 
-	IcebergTableMetadata metadata;
+	IcebergTableMetadata metadata {IcebergTableMetadataSchemas {}};
 	unordered_map<int64_t, IcebergSnapshot>::iterator snapshot_it;
 };
 
 static unique_ptr<FunctionData> IcebergSnapshotsBind(ClientContext &context, TableFunctionBindInput &input,
-                                                     vector<LogicalType> &return_types, vector<string> &names) {
+                                                     vector<LogicalType> &return_types, vector<Identifier> &names) {
 	auto bind_data = make_uniq<IcebergSnaphotsBindData>();
+	IcebergOptions options;
 	for (auto &kv : input.named_parameters) {
-		auto loption = StringUtil::Lower(kv.first);
+		auto loption = StringUtil::Lower(kv.first.GetIdentifierName());
 		if (loption == "metadata_compression_codec") {
-			bind_data->options.metadata_compression_codec = StringValue::Get(kv.second);
+			options.metadata_compression_codec = StringValue::Get(kv.second);
 		} else if (loption == "version") {
-			bind_data->options.table_version = StringValue::Get(kv.second);
+			options.table_version = StringValue::Get(kv.second.DefaultCastAs(LogicalType::VARCHAR));
+			options.version_explicitly_set = true;
 		} else if (loption == "version_name_format") {
 			auto value = StringValue::Get(kv.second);
 			auto string_substitutions = IcebergUtils::CountOccurrences(value, "%s");
@@ -74,11 +69,11 @@ static unique_ptr<FunctionData> IcebergSnapshotsBind(ClientContext &context, Tab
 				    "'version_name_format' has to contain two occurrences of '%%s' in it, found %d",
 				    string_substitutions);
 			}
-			bind_data->options.version_name_format = value;
+			options.version_name_format = value;
 		}
 	}
 	auto input_string = input.inputs[0].ToString();
-	bind_data->filename = IcebergUtils::GetStorageLocation(context, input_string);
+	bind_data->metadata = std::move(IcebergUtils::ResolveTableMetadata(context, input_string, options).metadata);
 
 	names.emplace_back("sequence_number");
 	return_types.emplace_back(LogicalType::UBIGINT);
@@ -87,7 +82,7 @@ static unique_ptr<FunctionData> IcebergSnapshotsBind(ClientContext &context, Tab
 	return_types.emplace_back(LogicalType::UBIGINT);
 
 	names.emplace_back("timestamp_ms");
-	return_types.emplace_back(LogicalType::TIMESTAMP);
+	return_types.emplace_back(LogicalType::TIMESTAMP_MS);
 
 	names.emplace_back("manifest_list");
 	return_types.emplace_back(LogicalType::VARCHAR);
@@ -110,25 +105,37 @@ static void IcebergSnapshotsFunction(ClientContext &context, TableFunctionInput 
 		}
 
 		auto &snapshot = it->second;
-		FlatVector::GetData<uint64_t>(output.data[0])[i] = snapshot.sequence_number;
-		FlatVector::GetData<uint64_t>(output.data[1])[i] = snapshot.snapshot_id;
-		FlatVector::GetData<timestamp_t>(output.data[2])[i] = snapshot.timestamp_ms;
-		string_t manifest_string_t = StringVector::AddString(output.data[3], string_t(snapshot.manifest_list));
-		FlatVector::GetData<string_t>(output.data[3])[i] = manifest_string_t;
+
+		if (!snapshot.sequence_number) {
+			throw InvalidConfigurationException("snapshot.sequence_number is not set");
+		}
+		FlatVector::GetDataMutable<uint64_t>(output.data[0])[i] = *snapshot.sequence_number;
+		FlatVector::GetDataMutable<uint64_t>(output.data[1])[i] = snapshot.snapshot_id;
+		FlatVector::GetDataMutable<timestamp_ms_t>(output.data[2])[i] = snapshot.timestamp_ms;
+		if (snapshot.manifest_list.empty()) {
+			FlatVector::SetNull(output.data[3], i, true);
+		} else {
+			string_t manifest_string_t = StringVector::AddString(output.data[3], string_t(snapshot.manifest_list));
+			FlatVector::GetDataMutable<string_t>(output.data[3])[i] = manifest_string_t;
+		}
 		auto operation_str = SnapshotOperationToString(snapshot.operation);
-		FlatVector::GetData<string_t>(output.data[4])[i] = StringVector::AddString(output.data[4], operation_str);
+		FlatVector::GetDataMutable<string_t>(output.data[4])[i] =
+		    StringVector::AddString(output.data[4], operation_str);
 		i++;
 	}
-	output.SetCardinality(i);
+	output.SetChildCardinality(i);
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergSnapshotsFunction() {
 	TableFunctionSet function_set("iceberg_snapshots");
-	TableFunction table_function({LogicalType::VARCHAR}, IcebergSnapshotsFunction, IcebergSnapshotsBind,
+	TableFunction table_function(FunctionSignature().AddPositionalOnly("path", LogicalType::VARCHAR),
+	                             IcebergSnapshotsFunction, IcebergSnapshotsBind,
 	                             IcebergSnapshotGlobalTableFunctionState::Init);
-	table_function.named_parameters["metadata_compression_codec"] = LogicalType::VARCHAR;
-	table_function.named_parameters["version"] = LogicalType::VARCHAR;
-	table_function.named_parameters["version_name_format"] = LogicalType::VARCHAR;
+	table_function.GetSignature().WithTypedKwargs("options", [&](TypedKwargs &options) {
+		options.Add("metadata_compression_codec", LogicalType::VARCHAR)
+		    .Add("version", LogicalType::ANY)
+		    .Add("version_name_format", LogicalType::VARCHAR);
+	});
 	function_set.AddFunction(table_function);
 	return function_set;
 }

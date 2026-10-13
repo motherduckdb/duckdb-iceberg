@@ -1,18 +1,17 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/metrics.hpp"
 
-using namespace duckdb_yyjson;
-
 namespace duckdb {
 namespace rest_api_objects {
 
-class Expression;
+class Predicate;
 
 class ScanReport {
 public:
@@ -23,21 +22,26 @@ public:
 	ScanReport &operator=(ScanReport &&) = default;
 
 public:
-	static ScanReport FromJSON(yyjson_val *obj);
+	// Deserialization
+	static ScanReport FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Copy
+	ScanReport Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	string table_name;
 	int64_t snapshot_id;
-	unique_ptr<Expression> filter;
+	unique_ptr<Predicate> filter;
 	int32_t schema_id;
 	vector<int32_t> projected_field_ids;
 	vector<string> projected_field_names;
 	Metrics metrics;
-	case_insensitive_map_t<string> metadata;
-	bool has_metadata = false;
+	optional<case_insensitive_map_t<string>> metadata;
 };
 
 } // namespace rest_api_objects

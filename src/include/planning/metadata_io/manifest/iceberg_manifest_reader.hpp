@@ -4,9 +4,21 @@
 
 namespace duckdb {
 
+struct IcebergManifestReaderInput {
+public:
+	IcebergManifestReaderInput(const IcebergManifestMetadata &metadata, const IcebergPartitionSpec &partition_spec,
+	                           int32_t table_format_version)
+	    : metadata(metadata), partition_spec(partition_spec), table_format_version(table_format_version) {
+	}
+
+public:
+	const IcebergManifestMetadata &metadata;
+	const IcebergPartitionSpec &partition_spec;
+	const int32_t table_format_version;
+};
+
 namespace manifest_file {
 
-//! Produces IcebergManifestEntries read, from the 'manifest_file'
 class ManifestReader : public BaseManifestReader {
 public:
 	ManifestReader(const AvroScan &scan);
@@ -17,7 +29,7 @@ public:
 
 public:
 	static void ReadChunk(DataChunk &chunk, const map<idx_t, LogicalType> &partition_field_id_to_type,
-	                      const IcebergTableMetadata &table_metadata, vector<IcebergManifestEntry> &result);
+	                      IcebergManifestReaderInput &reader_input, vector<IcebergManifestEntry> &result);
 };
 
 } // namespace manifest_file

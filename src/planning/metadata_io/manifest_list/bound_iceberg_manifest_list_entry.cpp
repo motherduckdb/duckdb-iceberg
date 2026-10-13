@@ -3,13 +3,10 @@
 
 namespace duckdb {
 
-BoundIcebergManifestListEntry::BoundIcebergManifestListEntry(idx_t index, const IcebergManifestListEntry &entry)
-    : entry(entry), index(index) {
-	has_next_row_id = entry.file.has_first_row_id;
-	if (has_next_row_id) {
-		//! 'first_row_id' is NULL for pre-V3 manifests
-		next_row_id = entry.file.first_row_id;
-	}
+BoundIcebergManifestListEntry::BoundIcebergManifestListEntry(idx_t index, const IcebergManifestListEntry &entry,
+                                                             IcebergRowLineageMode row_lineage_mode)
+    : entry(entry), row_lineage_mode(row_lineage_mode), index(index) {
+	next_row_id = entry.GetManifest().first_row_id;
 }
 
 BoundIcebergManifestEntry BoundIcebergManifestListEntry::BindEntry(const IcebergManifestEntry &entry) const {
@@ -17,9 +14,9 @@ BoundIcebergManifestEntry BoundIcebergManifestListEntry::BindEntry(const Iceberg
 	if (data_file.HasFirstRowId()) {
 		return BoundIcebergManifestEntry(index, entry, data_file.GetFirstRowId());
 	}
-	if (has_next_row_id) {
-		auto res = BoundIcebergManifestEntry(index, entry, next_row_id);
-		next_row_id += data_file.record_count;
+	if (next_row_id) {
+		auto res = BoundIcebergManifestEntry(index, entry, *next_row_id);
+		*next_row_id += data_file.record_count;
 		return res;
 	}
 	return BoundIcebergManifestEntry(index, entry);

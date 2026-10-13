@@ -1,14 +1,13 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/base_update.hpp"
 #include "rest_catalog/objects/schema.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -22,18 +21,21 @@ public:
 	AddSchemaUpdate &operator=(AddSchemaUpdate &&) = default;
 
 public:
-	static AddSchemaUpdate FromJSON(yyjson_val *obj);
+	// Deserialization
+	static AddSchemaUpdate FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Copy
+	AddSchemaUpdate Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	BaseUpdate base_update;
 	Schema schema;
-	string action;
-	bool has_action = false;
-	int32_t last_column_id;
-	bool has_last_column_id = false;
+	optional<int32_t> last_column_id;
 };
 
 } // namespace rest_api_objects

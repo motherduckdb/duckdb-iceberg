@@ -2,32 +2,24 @@
 # description: Test time travel using both snapshot id and timestamp
 # group: [fixture]
 
-require avro
-
-require parquet
-
-require iceberg
-
-require httpfs
+include test/sql/init_requires
 
 require-env CATALOG_TEST_CONFIG_SETUP fixture
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 # Retrieve the (snapshot_id + timestamp_ms) pairs, using offset and limit
 
 loop i 0 4
 
 statement ok
-set variable snapshot${i} = (
+set variable snapshot{i} = (
 	select {
 		'snapshot_id': snapshot_id,
 		'timestamp_ms': timestamp_ms
 	} from iceberg_snapshots(
 		my_datalake.default.filtering_on_bounds
 	) order by timestamp_ms
-	offset ${i} limit 1
+	offset {i} limit 1
 );
 
 endloop
@@ -64,9 +56,9 @@ foreach component snapshot_id timestamp_ms
 
 query I
 select * from query(
-	getvariable('time_travel_${component}').replace(
+	getvariable('time_travel_{component}').replace(
 		'COMPONENT'::VARCHAR,
-		getvariable('snapshot0').${component}::VARCHAR
+		getvariable('snapshot0').{component}::VARCHAR
 	)
 )
 ----
@@ -74,9 +66,9 @@ select * from query(
 
 query I
 select * from query(
-	getvariable('time_travel_${component}').replace(
+	getvariable('time_travel_{component}').replace(
 		'COMPONENT'::VARCHAR,
-		getvariable('snapshot1').${component}::VARCHAR
+		getvariable('snapshot1').{component}::VARCHAR
 	)
 )
 ----
@@ -84,9 +76,9 @@ select * from query(
 
 query I
 select * from query(
-	getvariable('time_travel_${component}').replace(
+	getvariable('time_travel_{component}').replace(
 		'COMPONENT'::VARCHAR,
-		getvariable('snapshot2').${component}::VARCHAR
+		getvariable('snapshot2').{component}::VARCHAR
 	)
 )
 ----
@@ -94,9 +86,9 @@ select * from query(
 
 query I
 select * from query(
-	getvariable('time_travel_${component}').replace(
+	getvariable('time_travel_{component}').replace(
 		'COMPONENT'::VARCHAR,
-		getvariable('snapshot3').${component}::VARCHAR
+		getvariable('snapshot3').{component}::VARCHAR
 	)
 )
 ----

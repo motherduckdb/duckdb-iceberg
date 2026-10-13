@@ -1,14 +1,13 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
-#include "rest_catalog/objects/reference.hpp"
+#include "rest_catalog/objects/term_reference.hpp"
 #include "rest_catalog/objects/transform_term.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -22,16 +21,19 @@ public:
 	Term &operator=(Term &&) = default;
 
 public:
-	static Term FromJSON(yyjson_val *obj);
+	// Deserialization
+	static Term FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
+
+	// Copy
+	Term Copy() const;
+
+	// Serialization
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
-	string TryFromJSON(yyjson_val *obj);
-
-public:
-	Reference reference;
-	bool has_reference = false;
-	TransformTerm transform_term;
-	bool has_transform_term = false;
+	optional<TermReference> term_reference;
+	optional<TransformTerm> transform_term;
 };
 
 } // namespace rest_api_objects

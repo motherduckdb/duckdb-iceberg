@@ -24,12 +24,14 @@ public:
 private:
 	static ScalarFunctionSet GetIcebergBucketFunction();
 	static ScalarFunctionSet GetIcebergTruncateFunction();
-	static ScalarFunctionSet GetVerifyEqualityDeletesFunction();
 
+	static TableFunctionSet GetIcebergScanPlanFunction();
+	static TableFunctionSet GetIcebergScanTasksFunction();
 	static TableFunctionSet GetIcebergSnapshotsFunction();
 	static TableFunctionSet GetIcebergScanFunction(ExtensionLoader &loader);
 	static TableFunctionSet GetIcebergMetadataFunction();
 	static TableFunctionSet GetIcebergLoadTableResponseFunction();
+	static TableFunctionSet GetIcebergViewMetadataFunction();
 	static TableFunctionSet GetIcebergColumnStatsFunction();
 	static TableFunctionSet GetIcebergPartitionStatsFunction();
 	static TableFunctionSet GetIcebergToDuckLakeFunction();
@@ -39,6 +41,8 @@ private:
 	static TableFunctionSet GetIcebergSchemaPropertiesFunctions();
 	static TableFunctionSet SetIcebergSchemaPropertiesFunctions();
 	static TableFunctionSet RemoveIcebergSchemaPropertiesFunctions();
+	static TableFunctionSet GetIcebergRewriteDataFilesFunction();
+	static TableFunctionSet GetIcebergRollbackToSnapshotFunction();
 };
 
 } // namespace duckdb

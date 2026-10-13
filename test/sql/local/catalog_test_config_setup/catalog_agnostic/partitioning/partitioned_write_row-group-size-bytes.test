@@ -3,36 +3,96 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-statement ok
-drop table if exists my_datalake.default.my_table;
+include test/sql/init_requires
 
 statement ok
-CREATE TABLE my_datalake.default.my_table (
-  user_id INT
-) PARTITIONED BY (user_id) WITH (
-  'write.parquet.row-group-size-bytes' = '134217728'
-);
-
-query II
-SELECT log_level, message FROM duckdb_logs
-----
-
-statement error
-INSERT INTO my_datalake.default.my_table SELECT * FROM range(1000);
-----
-Invalid Input Error: Table property row-group-size-bytes is currently not supported for partitioned tables.
-To ignore this error run "SET ignore_row_group_size_for_partitioned_tables=true"
-
-statement ok
-SET ignore_row_group_size_for_partitioned_tables=true
-
-statement error
-INSERT INTO my_datalake.default.my_table SELECT * FROM range(1000);
-----
-Binder Error: ROW_GROUP_SIZE_BYTES does not work while preserving insertion order. Use "SET preserve_insertion_order=false;" to disable preserving insertion order.
+SET threads=1;
 
 statement ok
 SET preserve_insertion_order=false;
 
 statement ok
-INSERT INTO my_datalake.default.my_table SELECT * FROM range(1000);
+drop table if exists my_datalake.default.my_table;
+
+statement ok
+CREATE TABLE my_datalake.default.my_table (
+  user_id INT,
+  partition_id INT
+) PARTITIONED BY (partition_id) WITH (
+  'write.parquet.row-group-size-bytes' = '200000'
+);
+
+query II
+SELECT * FROM iceberg_table_properties(my_datalake.default.my_table)
+WHERE key = 'write.parquet.row-group-size-bytes';
+----
+write.parquet.row-group-size-bytes	200000
+
+statement ok
+INSERT INTO my_datalake.default.my_table
+SELECT i, i % 10
+FROM range(100_000) t(i);
+
+# Start transaction to keep necessary credentials in scope
+statement ok
+begin
+
+statement ok
+SET VARIABLE parquet_filepath = (
+  SELECT file_path
+  FROM iceberg_metadata(my_datalake.default.my_table)
+  LIMIT 1
+);
+
+query I
+SELECT count(row_group_bytes)
+FROM parquet_metadata(getvariable('parquet_filepath'));
+----
+2
+
+statement ok
+commit
+
+# Now test with human-readable format
+statement ok
+drop table if exists my_datalake.default.my_table;
+
+statement ok
+CREATE TABLE my_datalake.default.my_table (
+  user_id INT,
+  partition_id INT
+) PARTITIONED BY (partition_id) WITH (
+  'write.parquet.row-group-size-bytes' = '200KB'
+);
+
+# FIXME: to be good citizens, we should probably transform to a non-human-readable representation (not formatted with KB)
+query II
+SELECT * FROM iceberg_table_properties(my_datalake.default.my_table)
+WHERE key = 'write.parquet.row-group-size-bytes';
+----
+write.parquet.row-group-size-bytes	200KB
+
+statement ok
+INSERT INTO my_datalake.default.my_table
+SELECT i, i % 10
+FROM range(100_000) t(i);
+
+# Start transaction to keep necessary credentials in scope
+statement ok
+begin
+
+statement ok
+SET VARIABLE parquet_filepath = (
+  SELECT file_path
+  FROM iceberg_metadata(my_datalake.default.my_table)
+  LIMIT 1
+);
+
+query I
+SELECT count(row_group_bytes)
+FROM parquet_metadata(getvariable('parquet_filepath'));
+----
+2
+
+statement ok
+commit

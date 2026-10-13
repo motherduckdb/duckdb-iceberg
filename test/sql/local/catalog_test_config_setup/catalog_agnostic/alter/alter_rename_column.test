@@ -3,18 +3,18 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
+require-env METADATA_FILE_READ_SUPPORT
 
-require parquet
+require-env METADATA_LOG_SUPPORT
 
-require iceberg
+include test/sql/init_requires
 
-require httpfs
+statement ok
+SET default_transaction_invalidation_policy='SYNTACTIC_ERRORS_DO_NOT_INVALIDATE';
 
-require ducklake
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
+statement ok
+set iceberg_use_metadata_log = true;
 
 statement ok
 set enable_logging=true
@@ -52,7 +52,8 @@ statement ok con1
 ALTER TABLE my_datalake.default.tbl RENAME a TO c;
 
 statement ok con1
-insert into my_datalake.default.tbl VALUES ('second insert', false);
+insert into my_datalake.default.tbl VALUES
+	('second insert', false);
 
 query II con1
 select * from my_datalake.default.tbl order by all
@@ -112,7 +113,8 @@ create table my_datalake.default.tbl(
 );
 
 statement ok
-insert into my_datalake.default.tbl VALUES ('hello world', true);
+insert into my_datalake.default.tbl VALUES
+	('hello world', true);
 
 statement ok con1
 begin transaction
@@ -142,7 +144,7 @@ a	c
 statement error con2
 commit
 ----
-<REGEX>:.*TransactionContext Error: Failed to commit.*
+<REGEX>:.*Failed to commit.*
 
 # Rename to previously existing name
 

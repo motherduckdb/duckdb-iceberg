@@ -1,91 +1,59 @@
 #pragma once
 
+#include <variant>
+
 #include "duckdb/common/constants.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 
 namespace duckdb {
 
 class IcebergTransaction;
 
-enum class IcebergTransactionUpdateType : uint8_t { ALTER, DELETE, RENAME };
-
-struct IcebergTransactionUpdate {
+//! Update a table with a regular alter
+struct IcebergTransactionAlterUpdate {
 public:
-	IcebergTransactionUpdate(IcebergTransaction &transaction, IcebergTransactionUpdateType type);
-	virtual ~IcebergTransactionUpdate();
+	IcebergTransactionAlterUpdate(IcebergTransaction &transaction);
+	~IcebergTransactionAlterUpdate();
 
 public:
-	template <class TARGET>
-	TARGET &Cast() {
-		if (type != TARGET::TYPE) {
-			throw InternalException(
-			    "Failed to cast IcebergTransactionUpdate to type - IcebergTransactionUpdate type mismatch");
-		}
-		return reinterpret_cast<TARGET &>(*this);
-	}
-
-	template <class TARGET>
-	const TARGET &Cast() const {
-		if (type != TARGET::TYPE) {
-			throw InternalException(
-			    "Failed to cast IcebergTransactionUpdate to type - IcebergTransactionUpdate type mismatch");
-		}
-		return reinterpret_cast<const TARGET &>(*this);
-	}
+	IcebergTable &CreateTable(const string &table_key, IcebergTable &&table);
+	IcebergTable &GetOrInitializeTable(const IcebergTable &table);
+	bool HasUpdates() const;
 
 public:
 	IcebergTransaction &transaction;
-	IcebergTransactionUpdateType type;
-};
-
-//! Update a table with a regular alter
-struct IcebergTransactionAlterUpdate : public IcebergTransactionUpdate {
-public:
-	static constexpr const IcebergTransactionUpdateType TYPE = IcebergTransactionUpdateType::ALTER;
-
-public:
-	IcebergTransactionAlterUpdate(IcebergTransaction &transaction);
-	virtual ~IcebergTransactionAlterUpdate() override;
-
-public:
-	IcebergTableInformation &CreateTable(const string &table_key, IcebergTableInformation &&table);
-	IcebergTableInformation &GetOrInitializeTable(const IcebergTableInformation &table);
-	bool HasUpdates() const;
 	//! All the tables touched in this atomic block
-	case_insensitive_map_t<IcebergTableInformation> updated_tables;
-	//! The tables successively committed (used if multi-table commit isn't available)
-	case_insensitive_set_t committed_tables;
+	unordered_map<string, reference<IcebergTable>> updated_tables;
 };
 
 //! Drop a table
-struct IcebergTransactionDeleteUpdate : public IcebergTransactionUpdate {
+struct IcebergTransactionDeleteUpdate {
 public:
-	static constexpr const IcebergTransactionUpdateType TYPE = IcebergTransactionUpdateType::DELETE;
+	IcebergTransactionDeleteUpdate(IcebergTransaction &transaction, IcebergTable &table);
+	~IcebergTransactionDeleteUpdate();
 
 public:
-	IcebergTransactionDeleteUpdate(IcebergTransaction &transaction, const IcebergTableInformation &table);
-	virtual ~IcebergTransactionDeleteUpdate() override;
-
-public:
-	IcebergTableInformation deleted_table;
+	IcebergTransaction &transaction;
+	reference<IcebergTable> deleted_table;
 };
 
 //! Rename a table
-struct IcebergTransactionRenameUpdate : public IcebergTransactionUpdate {
+struct IcebergTransactionRenameUpdate {
 public:
-	static constexpr const IcebergTransactionUpdateType TYPE = IcebergTransactionUpdateType::RENAME;
-
-public:
-	IcebergTransactionRenameUpdate(IcebergTransaction &transaction, const IcebergTableInformation &table,
+	IcebergTransactionRenameUpdate(IcebergTransaction &transaction, IcebergTable &table, IcebergTable &new_table,
 	                               const string &new_name);
-	virtual ~IcebergTransactionRenameUpdate() override;
+	~IcebergTransactionRenameUpdate();
 
 public:
-	const IcebergTableInformation &table;
-	IcebergTableInformation new_table;
+	IcebergTransaction &transaction;
+	reference<IcebergTable> table;
+	reference<IcebergTable> new_table;
 	string new_name;
 };
+
+using IcebergTransactionUpdate = std::variant<std::monostate, IcebergTransactionAlterUpdate,
+                                              IcebergTransactionDeleteUpdate, IcebergTransactionRenameUpdate>;
 
 } // namespace duckdb

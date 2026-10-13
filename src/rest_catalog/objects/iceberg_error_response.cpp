@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/iceberg_error_response.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 IcebergErrorResponse::IcebergErrorResponse() {
 }
 
-IcebergErrorResponse IcebergErrorResponse::FromJSON(yyjson_val *obj) {
+IcebergErrorResponse IcebergErrorResponse::FromJSON(JSONValue obj) {
 	IcebergErrorResponse res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -24,10 +22,16 @@ IcebergErrorResponse IcebergErrorResponse::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string IcebergErrorResponse::TryFromJSON(yyjson_val *obj) {
+IcebergErrorResponse IcebergErrorResponse::Copy() const {
+	IcebergErrorResponse res;
+	res._error = _error.Copy();
+	return res;
+}
+
+string IcebergErrorResponse::TryFromJSON(JSONValue obj) {
 	string error;
-	auto _error_val = yyjson_obj_get(obj, "error");
-	if (!_error_val) {
+	auto _error_val = obj.GetMember("error");
+	if (!_error_val.IsValid()) {
 		return "IcebergErrorResponse required property 'error' is missing";
 	} else {
 		error = _error.TryFromJSON(_error_val);
@@ -35,7 +39,19 @@ string IcebergErrorResponse::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+void IcebergErrorResponse::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
+	// Serialize: error
+	auto _error_json = _error.ToJSON(writer);
+	obj.Add("error", _error_json);
+}
+
+JSONMutableValue IcebergErrorResponse::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

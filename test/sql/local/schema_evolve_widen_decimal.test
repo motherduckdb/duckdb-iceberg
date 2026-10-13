@@ -1,18 +1,12 @@
 # name: test/sql/local/schema_evolve_widen_decimal.test
 # group: [local]
 
-require avro
-
-require parquet
-
-require iceberg
-
-require httpfs
+include test/sql/init_requires
 
 require-env DUCKDB_ICEBERG_HAVE_GENERATED_DATA
 
 query I
-select * from ICEBERG_SCAN('__WORKING_DIRECTORY__/data/generated/iceberg/spark-local/default/schema_evolve_widen_decimal') order by all;
+select * from ICEBERG_SCAN('{WORKING_DIRECTORY}/data/generated/iceberg/spark-local/default/schema_evolve_widen_decimal') order by all;
 ----
 12.12345678
 123.12345678

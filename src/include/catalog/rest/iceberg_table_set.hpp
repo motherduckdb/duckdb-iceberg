@@ -2,15 +2,21 @@
 #pragma once
 
 #include "duckdb/catalog/catalog_entry.hpp"
+#include "duckdb/common/mutex.hpp"
+#include "duckdb/common/thread_annotation.hpp"
+#include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
+#include "duckdb/parser/parsed_data/create_view_info.hpp"
 
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_data.hpp"
 
 namespace duckdb {
 struct CreateTableInfo;
+struct DropInfo;
 class IcebergSchemaEntry;
 class IcebergTransaction;
+class LoadTableCachePublication;
 
 class IcebergTableSet {
 public:
@@ -19,28 +25,48 @@ public:
 public:
 	optional_ptr<CatalogEntry> GetEntry(ClientContext &context, const EntryLookupInfo &lookup);
 	void Scan(ClientContext &context, const std::function<void(CatalogEntry &)> &callback);
-	static IcebergTableInformation &CreateNewEntry(ClientContext &context, IcebergCatalog &catalog,
-	                                               IcebergSchemaEntry &schema, CreateTableInfo &info);
-	shared_ptr<IcebergTableInformation> CreateEntryInternal(lock_guard<mutex> &guard, const string &name,
-	                                                        IcebergTableInformation &&table,
-	                                                        shared_ptr<IcebergTableInformation> &old_entry);
-	const case_insensitive_map_t<shared_ptr<IcebergTableInformation>> &GetEntries();
-	case_insensitive_map_t<shared_ptr<IcebergTableInformation>> &GetEntriesMutable();
-	mutex &GetEntryLock();
+	void ScanTables(ClientContext &context, const std::function<void(IcebergTable &)> &callback);
+	void DropEntry(ClientContext &context, DropInfo &info, bool delete_entry);
+	void RenameEntry(const string &name, const string &new_name, IcebergTable &&new_table);
+	static IcebergTable &CreateNewEntry(ClientContext &context, IcebergCatalog &catalog, IcebergSchemaEntry &schema,
+	                                    CreateTableInfo &info);
+
+private:
+	bool TryFillEntryFromCache(ClientContext &context, IcebergTable &table);
+	void ScanEagerEntries(ClientContext &context, const std::function<void(CatalogEntry &)> &callback)
+	    DUCKDB_REQUIRES(entry_lock);
+	bool ApplyLoadResult(ClientContext &context, IcebergTable &table, IcebergLoadTableResult result,
+	                     LoadTableCachePublication &publication);
+	CatalogEntry &GetScanEntry(IcebergTable &table_info) const DUCKDB_REQUIRES(entry_lock);
+	IcebergTableSchemaVersion &GetOrCreateDummy(IcebergTable &table_info) const DUCKDB_REQUIRES(entry_lock);
+	void LoadEntriesInternal(ClientContext &context) DUCKDB_REQUIRES(entry_lock);
+	void ApplyListResult(IcebergListTablesResult tables) DUCKDB_REQUIRES(entry_lock);
+	shared_ptr<IcebergTable> CreateEntryInternal(const string &name, IcebergTable &&table,
+	                                             shared_ptr<IcebergTable> &old_entry) DUCKDB_REQUIRES(entry_lock);
 
 public:
-	void LoadEntries(ClientContext &context);
 	//! return true if request to LoadTableInformation was successful and entry has been filled
 	//! or if entry is already filled. Returns False otherwise
-	bool FillEntry(ClientContext &context, IcebergTableInformation &table);
+	bool FillEntry(ClientContext &context, IcebergTable &table);
+
+	//! View operations
+	optional_ptr<CatalogEntry> GetViewEntry(ClientContext &context, const string &view_name);
+	void ScanViews(ClientContext &context, const std::function<void(CatalogEntry &)> &callback);
 
 public:
 	IcebergSchemaEntry &schema;
 	Catalog &catalog;
 
 private:
-	case_insensitive_map_t<shared_ptr<IcebergTableInformation>> entries;
-	mutex entry_lock;
+	const unordered_set<string> &LoadViewEntries(ClientContext &context);
+	//! True when transaction-local state decides the lookup, including a deleted view with a null entry.
+	bool TryGetLocalViewEntry(ClientContext &context, const string &view_name, optional_ptr<CatalogEntry> &entry);
+	const unordered_set<string> &ApplyViewListResult(ClientContext &context, IcebergListViewsResult views);
+	optional_ptr<CatalogEntry> ApplyViewLoadResult(ClientContext &context, const string &view_name,
+	                                               IcebergLoadViewResult result);
+
+	annotated_mutex entry_lock;
+	unordered_map<string, shared_ptr<IcebergTable>> entries DUCKDB_GUARDED_BY(entry_lock);
 };
 
 } // namespace duckdb

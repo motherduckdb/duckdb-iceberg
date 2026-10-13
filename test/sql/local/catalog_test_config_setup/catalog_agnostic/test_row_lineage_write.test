@@ -4,16 +4,10 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
+require-env FORMAT_V3_SUPPORT
 
-require parquet
+include test/sql/init_requires
 
-require iceberg
-
-require httpfs
-
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 set enable_logging=true
@@ -39,6 +33,29 @@ insert into my_datalake.default.duckdb_row_lineage values
 	(3, 'c'),
 	(4, 'd'),
 	(5, 'e');
+
+# Start transaction to keep necessary credentials in scope
+statement ok
+begin
+
+statement ok
+SET VARIABLE row_lineage_manifest = (
+	SELECT manifest_path FROM iceberg_metadata(my_datalake.default.duckdb_row_lineage)
+	ORDER BY manifest_sequence_number DESC LIMIT 1
+);
+
+query IIII
+SELECT
+	first_row_id IS NULL, -- Left NULL for inheritance purposes (OCC reasons)
+	referenced_data_file IS NULL,
+	content_offset IS NULL,
+	content_size_in_bytes IS NULL
+FROM (SELECT unnest(data_file) FROM read_avro(getvariable('row_lineage_manifest')));
+----
+true	true	true	true
+
+statement ok
+commit
 
 query IIII
 select _last_updated_sequence_number, _row_id, id, data from my_datalake.default.duckdb_row_lineage order by _row_id;
@@ -126,3 +143,63 @@ select _last_updated_sequence_number, _row_id, id, data from my_datalake.default
 2	3	4	d_u1
 5	7	6	replaced
 7	11	7	g_new
+
+# Start transaction to keep necessary credentials in scope
+statement ok
+begin
+
+# The manifest list only assigns 'first_row_id' to data manifests, deletes manifests leave it null
+statement ok
+SET VARIABLE row_lineage_manifest_list = (
+	SELECT manifest_list FROM iceberg_snapshots(my_datalake.default.duckdb_row_lineage)
+	ORDER BY sequence_number DESC LIMIT 1
+);
+
+query III
+SELECT
+	count(*) FILTER (WHERE content = 1) > 0,
+	count(*) FILTER (WHERE content = 1 AND first_row_id IS NOT NULL),
+	count(*) FILTER (WHERE content = 0 AND first_row_id IS NULL)
+FROM read_avro(getvariable('row_lineage_manifest_list'));
+----
+true	0	0
+
+statement ok
+commit
+
+# Scalar subqueries are still separate bound plans when scan restrictions are applied.
+# Keep this regression separate from duckdb_row_lineage, which Spark reads afterward.
+statement ok
+drop table if exists my_datalake.default.row_lineage_scalar_subquery;
+
+statement ok
+create table my_datalake.default.row_lineage_scalar_subquery (
+	id INTEGER,
+	data VARCHAR
+) WITH (
+	'format-version' = 3
+);
+
+statement ok
+insert into my_datalake.default.row_lineage_scalar_subquery values (1, 'source'), (2, 'target');
+
+statement ok
+UPDATE my_datalake.default.row_lineage_scalar_subquery
+SET data = (SELECT data FROM my_datalake.default.row_lineage_scalar_subquery WHERE id = 1)
+WHERE id = 2;
+
+query ITII
+SELECT id, data, _row_id, _last_updated_sequence_number
+FROM my_datalake.default.row_lineage_scalar_subquery ORDER BY id;
+----
+1	source	0	1
+2	source	1	2
+
+query I
+SELECT (SELECT _last_updated_sequence_number
+        FROM my_datalake.default.row_lineage_scalar_subquery WHERE id = 2);
+----
+2
+
+statement ok
+drop table my_datalake.default.row_lineage_scalar_subquery;

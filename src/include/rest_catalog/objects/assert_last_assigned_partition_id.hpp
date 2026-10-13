@@ -1,13 +1,11 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
-#include "rest_catalog/objects/table_requirement_type.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -21,13 +19,19 @@ public:
 	AssertLastAssignedPartitionId &operator=(AssertLastAssignedPartitionId &&) = default;
 
 public:
-	static AssertLastAssignedPartitionId FromJSON(yyjson_val *obj);
+	// Deserialization
+	static AssertLastAssignedPartitionId FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
+
+	// Copy
+	AssertLastAssignedPartitionId Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
-	string TryFromJSON(yyjson_val *obj);
-
-public:
-	TableRequirementType type;
+	string type;
 	int32_t last_assigned_partition_id;
 };
 

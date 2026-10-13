@@ -3,16 +3,8 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
+include test/sql/init_requires
 
-require parquet
-
-require iceberg
-
-require httpfs
-
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 CREATE SCHEMA IF NOT EXISTS my_datalake.default;
@@ -43,7 +35,7 @@ statement ok
 INSERT INTO my_datalake.default.my_table VALUES (NULL);
 
 query I
-FROM my_datalake.default.my_table;
+FROM my_datalake.default.my_table ORDER BY ALL;
 ----
 42
 NULL

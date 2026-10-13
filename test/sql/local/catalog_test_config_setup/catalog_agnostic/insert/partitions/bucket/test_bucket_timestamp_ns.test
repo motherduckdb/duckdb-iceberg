@@ -4,16 +4,12 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
+require-env FORMAT_V3_SUPPORT
 
-require parquet
+require-env TIMESTAMP_NS_SUPPORT
 
-require iceberg
+include test/sql/init_requires
 
-require httpfs
-
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 create schema if not exists my_datalake.default;

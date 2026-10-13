@@ -6,22 +6,14 @@ require-env CATALOG_TEST_CONFIG_SETUP
 
 require-env EQUALITY_DELETE_WRITES_ENABLED 1
 
-require avro
+include test/sql/init_requires
 
-require parquet
-
-require iceberg
-
-require httpfs
-
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 use my_datalake.default;
 
 statement ok
-set unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=true;
+set __iceberg_unsafe_enable_equality_deletes=true;
 
 statement ok
 drop table if exists test_equality_delete_metadata;
@@ -38,6 +30,10 @@ select count(*) from iceberg_metadata(my_datalake.default.test_equality_delete_m
 ----
 2
 
+# Start transaction to keep necessary credentials in scope
+statement ok
+begin
+
 # 1 data file and 1 delete file.
 statement ok
 set variable avro_file = (select manifest_path from iceberg_metadata(my_datalake.default.test_equality_delete_metadata)where manifest_content = 'DELETE' limit 1);
@@ -52,3 +48,5 @@ select unnest(equality_ids) from (select unnest(data_file) from read_avro(getvar
 query I nosort manifest_equality_ids
 select field_id from parquet_schema(getvariable('parquet_file_path')) where name = 'b' order by all;
 
+statement ok
+commit

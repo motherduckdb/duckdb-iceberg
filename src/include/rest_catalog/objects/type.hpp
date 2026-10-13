@@ -1,7 +1,8 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
@@ -9,8 +10,7 @@
 #include "rest_catalog/objects/map_type.hpp"
 #include "rest_catalog/objects/primitive_type.hpp"
 #include "rest_catalog/objects/struct_type.hpp"
-
-using namespace duckdb_yyjson;
+#include "rest_catalog/objects/variant_type.hpp"
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -24,20 +24,22 @@ public:
 	Type &operator=(Type &&) = default;
 
 public:
-	static Type FromJSON(yyjson_val *obj);
+	// Deserialization
+	static Type FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
+
+	// Copy
+	Type Copy() const;
+
+	// Serialization
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
-	string TryFromJSON(yyjson_val *obj);
-
-public:
-	PrimitiveType primitive_type;
-	bool has_primitive_type = false;
-	StructType struct_type;
-	bool has_struct_type = false;
-	ListType list_type;
-	bool has_list_type = false;
-	MapType map_type;
-	bool has_map_type = false;
+	optional<VariantType> variant_type;
+	optional<PrimitiveType> primitive_type;
+	optional<StructType> struct_type;
+	optional<ListType> list_type;
+	optional<MapType> map_type;
 };
 
 } // namespace rest_api_objects

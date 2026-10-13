@@ -1,0 +1,109 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/partitioning/hour/hour_nested_struct_timestamp.test
+# group: [hour]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+include test/sql/init_requires
+
+statement ok
+set threads=1;
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS my_datalake.default;
+
+statement ok
+drop table if exists my_datalake.default.partition_hour_timestamp_nested_struct_field;
+
+statement ok
+create table my_datalake.default.partition_hour_timestamp_nested_struct_field (
+	id int,
+	nested STRUCT(
+		filler VARCHAR,
+		deeper STRUCT (
+			even_deeper STRUCT (
+				deepest STRUCT(
+					partition_col timestamp
+				)
+			)
+		)
+	)
+);
+
+statement ok
+alter table my_datalake.default.partition_hour_timestamp_nested_struct_field set partitioned by (
+	nested.deeper.even_deeper.deepest.partition_col
+);
+
+statement ok
+insert into my_datalake.default.partition_hour_timestamp_nested_struct_field values
+	(4, {
+		'deeper': {
+			'even_deeper': {
+				'deepest': {
+					'partition_col': '2020-02-02 10:45:00'
+				}
+			}
+		}
+	}),
+	(2, {
+		'deeper': {
+			'even_deeper': {
+				'deepest': {
+					'partition_col': '2020-02-02 09:30:00'
+				}
+			}
+		}
+	}),
+	(3, {
+		'deeper': {
+			'even_deeper': {
+				'deepest': {
+					'partition_col': '2020-02-02 10:15:00'
+				}
+			}
+		}
+	}),
+	(1, {
+		'deeper': {
+			'even_deeper': {
+				'deepest': {
+					'partition_col': '2020-02-02 08:00:00'
+				}
+			}
+		}
+	});
+
+# Start transaction to keep necessary credentials in scope
+statement ok
+begin
+
+statement ok
+set variable latest_manifest_sequence = (select max(manifest_sequence_number) from iceberg_metadata(my_datalake.default.partition_hour_timestamp_nested_struct_field));
+
+# Read manifest paths directly: vended credentials may not permit S3 listing.
+statement ok
+set variable latest_files = (
+	select list(distinct file_path)
+	from iceberg_metadata(my_datalake.default.partition_hour_timestamp_nested_struct_field)
+	where manifest_sequence_number = cast(getvariable('latest_manifest_sequence') as bigint)
+	and manifest_content = 'DATA'
+	and status = 'ADDED'
+);
+
+# Verify that each written file contains only 1 distinct value
+query I
+with file_partition_counts as (
+	select filename, count(distinct nested.deeper.even_deeper.deepest.partition_col) as partition_count
+	from read_parquet(getvariable('latest_files'), filename=true)
+	group by filename
+)
+select
+	(select count(*) from file_partition_counts where partition_count != 1) = 0
+----
+1
+
+statement ok
+drop table my_datalake.default.partition_hour_timestamp_nested_struct_field;
+
+statement ok
+commit

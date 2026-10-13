@@ -22,6 +22,8 @@
 #include "duckdb/common/types/uuid.hpp"
 #include "duckdb/common/numeric_utils.hpp"
 #include "duckdb/common/printer.hpp"
+#include "duckdb/common/sql_identifier.hpp"
+#include "duckdb/common/operator/cast_operators.hpp"
 
 #include "function/iceberg_functions.hpp"
 #include "common/iceberg_utils.hpp"
@@ -30,8 +32,8 @@
 #include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
 #include "catalog/rest/iceberg_schema_set.hpp"
 #include "catalog/rest/iceberg_table_set.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 
 #include "core/metadata/iceberg_table_metadata.hpp"
 
@@ -69,11 +71,10 @@ static void SchemaToColumnsInternal(const vector<unique_ptr<IcebergColumnDefinit
 	for (idx_t i = 0; i < columns.size(); i++) {
 		auto &column = *columns[i];
 		result.emplace(column.id, DuckLakeColumn(column, i, parent));
-		if (column.children.empty()) {
+		if (!column.GetChildCount()) {
 			continue;
 		}
-		auto &children = column.children;
-		SchemaToColumnsInternal(children, result, column);
+		SchemaToColumnsInternal(column.GetChildren(), result, column);
 	}
 }
 
@@ -97,7 +98,7 @@ public:
 	}
 
 public:
-	void AddTable(IcebergTableInformation &table_info, ClientContext &context, const IcebergOptions &options) {
+	void AddTable(IcebergTable &table_info, ClientContext &context, const IcebergOptions &options) {
 		auto &metadata = table_info.table_metadata;
 		if (table_names_to_skip.count(table_info.name)) {
 			//! FIXME: perhaps log that the table was skipped
@@ -110,18 +111,19 @@ public:
 
 		map<timestamp_t, reference<IcebergSnapshot>> snapshots;
 		for (auto &it : metadata.snapshots) {
-			snapshots.emplace(it.second.timestamp_ms, it.second);
+			auto timestamp = duckdb::Cast::Operation<timestamp_ms_t, timestamp_t>(it.second.timestamp_ms);
+			snapshots.emplace(timestamp, it.second);
 		}
 
 		auto &schema_entry = table_info.schema;
-		auto &schema = GetSchema(schema_entry.name);
+		auto &schema = GetSchema(schema_entry.name.GetIdentifierName());
 
 		auto &table = GetTable(table_info);
 		schema.tables.push_back(table.table_uuid);
 		table.schema_name = schema.schema_name;
 
 		//! Current schema state
-		optional_ptr<IcebergTableSchema> last_schema;
+		optional_ptr<const IcebergTableSchema> last_schema;
 
 		//! Current partition state
 		optional_idx current_partition_spec_id;
@@ -142,7 +144,7 @@ public:
 			}
 
 			//! Process the schema changes
-			auto &current_schema = *metadata.GetSchemaFromId(snapshot.GetSchemaId());
+			auto &current_schema = metadata.GetSchemaFromId(snapshot.GetSchemaId());
 			auto current_columns = SchemaToColumns(current_schema);
 			vector<DuckLakeColumn> added_columns;
 			vector<int64_t> dropped_columns;
@@ -193,8 +195,8 @@ public:
 			vector<DuckLakeDeleteFile> new_delete_files;
 			vector<string> deleted_delete_files;
 			for (auto &entry : iceberg_manifest_list->GetManifestFilesConst()) {
-				auto &manifest = entry.file;
-				auto &entries = entry.manifest_entries;
+				auto &manifest = entry.GetFile();
+				auto &entries = entry.GetManifestEntries();
 
 				if (manifest.added_snapshot_id != snapshot.snapshot_id) {
 					//! This is essentially an "EXISTING" manifest
@@ -489,8 +491,8 @@ public:
 					}
 
 					//! Transform the stats stored in the iceberg metadata
-					auto stats = IcebergPredicateStats::DeserializeBounds(context, lower_bound, upper_bound, column.column_name,
-					                                                      logical_type);
+					auto stats = IcebergPredicateStats::DeserializeBounds(context, lower_bound, upper_bound,
+					                                                      column.column_name, logical_type);
 					auto null_counts_it = iceberg_data_file.null_value_counts.find(column.column_id);
 					if (null_counts_it != iceberg_data_file.null_value_counts.end()) {
 						null_count = null_counts_it->second;
@@ -502,9 +504,13 @@ public:
 						stats.has_nan = nan_count != 0;
 					}
 
-					auto contains_nan = stats.has_nan ? "true" : "false";
-					auto min_value = stats.lower_bound.IsNull() ? "NULL" : "'" + stats.lower_bound.ToString() + "'";
-					auto max_value = stats.upper_bound.IsNull() ? "NULL" : "'" + stats.upper_bound.ToString() + "'";
+					auto contains_nan = (!stats.has_nan || *stats.has_nan) ? "true" : "false";
+					auto min_value = !stats.lower_bound || stats.lower_bound->IsNull()
+					                     ? "NULL"
+					                     : "'" + stats.lower_bound->ToString() + "'";
+					auto max_value = !stats.upper_bound || stats.upper_bound->IsNull()
+					                     ? "NULL"
+					                     : "'" + stats.upper_bound->ToString() + "'";
 
 					auto insert_statement = StringUtil::Format(FILE_COLUMN_STATS_SQL,
 					                                           // data_file_id
@@ -672,7 +678,7 @@ public:
 
 			vector<string> changes;
 			for (auto &schema_name : snapshot.created_schema) {
-				auto escaped_name = KeywordHelper::WriteQuoted(schema_name, '"');
+				auto escaped_name = SQLString::ToString(schema_name);
 
 				changes.push_back(StringUtil::Format("created_schema:%s", escaped_name));
 			}
@@ -680,8 +686,8 @@ public:
 			for (auto &table_uuid : snapshot.created_table) {
 				auto &table = tables.at(table_uuid);
 
-				auto schema_name = KeywordHelper::WriteQuoted(table.schema_name, '"');
-				auto table_name = KeywordHelper::WriteQuoted(table.table_name, '"');
+				auto schema_name = SQLString::ToString(table.schema_name);
+				auto table_name = SQLString::ToString(table.table_name);
 
 				changes.push_back(StringUtil::Format("created_table:%s.%s", schema_name, table_name));
 			}
@@ -755,7 +761,7 @@ private:
 		return res.first->second;
 	}
 
-	DuckLakeTable &GetTable(const IcebergTableInformation &table_info) {
+	DuckLakeTable &GetTable(const IcebergTable &table_info) {
 		auto &metadata = table_info.table_metadata;
 		auto table_uuid = metadata.table_uuid;
 		auto it = tables.find(table_uuid);
@@ -794,12 +800,12 @@ public:
 };
 
 static unique_ptr<FunctionData> IcebergToDuckLakeBind(ClientContext &context, TableFunctionBindInput &input,
-                                                      vector<LogicalType> &return_types, vector<string> &names) {
+                                                      vector<LogicalType> &return_types, vector<Identifier> &names) {
 	auto ret = make_uniq<IcebergToDuckLakeBindData>();
 	auto input_string = input.inputs[0].ToString();
 	ret->ducklake_catalog = input.inputs[1].ToString();
 
-	auto &catalog = Catalog::GetCatalog(context, input_string);
+	auto &catalog = Catalog::GetCatalog(context, Identifier(input_string));
 	auto catalog_type = catalog.GetCatalogType();
 	if (catalog_type != "iceberg") {
 		throw InvalidInputException("First parameter must be the name of an attached Iceberg catalog");
@@ -807,26 +813,11 @@ static unique_ptr<FunctionData> IcebergToDuckLakeBind(ClientContext &context, Ta
 	auto &iceberg_catalog = catalog.Cast<IcebergCatalog>();
 	auto &schema_set = iceberg_catalog.GetSchemas();
 
-	IcebergOptions options;
+	IcebergOptions options(input.named_parameters);
 	for (auto &kv : input.named_parameters) {
-		auto loption = StringUtil::Lower(kv.first);
+		auto loption = StringUtil::Lower(kv.first.GetIdentifierName());
 		auto &val = kv.second;
-		if (loption == "allow_moved_paths") {
-			options.allow_moved_paths = BooleanValue::Get(val);
-		} else if (loption == "metadata_compression_codec") {
-			options.metadata_compression_codec = StringValue::Get(val);
-		} else if (loption == "version") {
-			options.table_version = StringValue::Get(val);
-		} else if (loption == "version_name_format") {
-			auto value = StringValue::Get(kv.second);
-			int string_substitutions = IcebergUtils::CountOccurrences(value, "%s");
-			if (string_substitutions != 2) {
-				throw InvalidInputException(
-				    "'version_name_format' has to contain two occurrences of '%%s' in it, found %d",
-				    string_substitutions);
-			}
-			options.version_name_format = value;
-		} else if (loption == "skip_tables") {
+		if (loption == "skip_tables") {
 			auto &type = kv.second.type();
 			if (kv.second.IsNull() || type.id() != LogicalTypeId::LIST) {
 				throw InvalidInputException("'skip_tables' has to be provided as a list of strings");
@@ -842,16 +833,14 @@ static unique_ptr<FunctionData> IcebergToDuckLakeBind(ClientContext &context, Ta
 		}
 	}
 
-	schema_set.LoadEntries(context);
-	for (auto &it : schema_set.GetEntries()) {
-		auto &schema_entry = it.second->Cast<IcebergSchemaEntry>();
+	auto schema_entries = schema_set.GetEntries(context);
+	for (auto &schema_entry_ptr : schema_entries) {
+		auto &schema_entry = *schema_entry_ptr;
 		auto &tables = schema_entry.tables;
-		tables.LoadEntries(context);
-		for (auto &it : tables.GetEntriesMutable()) {
-			auto &table = it.second;
-			tables.FillEntry(context, *table);
-			ret->AddTable(*table, context, options);
-		}
+		tables.ScanTables(context, [&](IcebergTable &table) {
+			tables.FillEntry(context, table);
+			ret->AddTable(table, context, options);
+		});
 	}
 
 	ret->AssignSchemaBeginSnapshots();
@@ -939,7 +928,7 @@ public:
 		auto &bind_data = input.bind_data->Cast<iceberg::ducklake::IcebergToDuckLakeBindData>();
 		auto &input_string = bind_data.ducklake_catalog;
 
-		auto &catalog = Catalog::GetCatalog(context, input_string);
+		auto &catalog = Catalog::GetCatalog(context, Identifier(input_string));
 		auto catalog_type = catalog.GetCatalogType();
 		if (catalog_type != "ducklake") {
 			throw InvalidInputException("Second parameter must be the name of an attached DuckLake catalog");
@@ -947,7 +936,7 @@ public:
 
 		auto metadata_catalog = StringUtil::Format("__ducklake_metadata_%s", input_string);
 		//! Verify the existence of the metadata catalog and that it's attached as well.
-		(void)Catalog::GetCatalog(context, metadata_catalog);
+		(void)Catalog::GetCatalog(context, Identifier(metadata_catalog));
 
 		auto &db = DatabaseInstance::GetDatabase(context);
 		auto connection = make_uniq<Connection>(db);
@@ -977,15 +966,20 @@ static void IcebergToDuckLakeFunction(ClientContext &context, TableFunctionInput
 		result->ThrowError("'iceberg_to_ducklake' failed to commit to the DuckLake metadata catalog: ");
 	}
 
-	output.SetCardinality(0);
+	output.SetChildCardinality(0);
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergToDuckLakeFunction() {
 	TableFunctionSet function_set("iceberg_to_ducklake");
 
-	auto fun = TableFunction({LogicalType::VARCHAR, LogicalType::VARCHAR}, IcebergToDuckLakeFunction,
-	                         iceberg::ducklake::IcebergToDuckLakeBind, IcebergToDuckLakeGlobalTableFunctionState::Init);
-	fun.named_parameters.emplace("skip_tables", LogicalType::LIST(LogicalTypeId::VARCHAR));
+	auto fun = TableFunction(FunctionSignature()
+	                             .AddPositionalOnly("iceberg_catalog", LogicalType::VARCHAR)
+	                             .AddPositionalOnly("ducklake_catalog", LogicalType::VARCHAR),
+	                         IcebergToDuckLakeFunction, iceberg::ducklake::IcebergToDuckLakeBind,
+	                         IcebergToDuckLakeGlobalTableFunctionState::Init);
+	fun.GetSignature().WithTypedKwargs("options", [&](TypedKwargs &options) {
+		options.Add("skip_tables", LogicalType::LIST(LogicalTypeId::VARCHAR));
+	});
 	function_set.AddFunction(fun);
 
 	return function_set;

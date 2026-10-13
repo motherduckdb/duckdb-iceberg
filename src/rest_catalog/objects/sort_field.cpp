@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/sort_field.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 SortField::SortField() {
 }
 
-SortField SortField::FromJSON(yyjson_val *obj) {
+SortField SortField::FromJSON(JSONValue obj) {
 	SortField res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -24,21 +22,30 @@ SortField SortField::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string SortField::TryFromJSON(yyjson_val *obj) {
+SortField SortField::Copy() const {
+	SortField res;
+	res.source_id = source_id;
+	res.transform = transform.Copy();
+	res.direction = direction.Copy();
+	res.null_order = null_order.Copy();
+	return res;
+}
+
+string SortField::TryFromJSON(JSONValue obj) {
 	string error;
-	auto source_id_val = yyjson_obj_get(obj, "source-id");
-	if (!source_id_val) {
+	auto source_id_val = obj.GetMember("source-id");
+	if (!source_id_val.IsValid()) {
 		return "SortField required property 'source-id' is missing";
 	} else {
-		if (yyjson_is_int(source_id_val)) {
-			source_id = yyjson_get_int(source_id_val);
+		if (json_utils::IsInteger(source_id_val)) {
+			source_id = json_utils::GetSignedInteger(source_id_val);
 		} else {
-			return StringUtil::Format("SortField property 'source_id' is not of type 'integer', found '%s' instead",
-			                          yyjson_get_type_desc(source_id_val));
+			return StringUtil::Format("SortField property 'source_id' is not of type 'integer', found %s instead",
+			                          json_utils::GetTypeDescription(source_id_val).c_str());
 		}
 	}
-	auto transform_val = yyjson_obj_get(obj, "transform");
-	if (!transform_val) {
+	auto transform_val = obj.GetMember("transform");
+	if (!transform_val.IsValid()) {
 		return "SortField required property 'transform' is missing";
 	} else {
 		error = transform.TryFromJSON(transform_val);
@@ -46,8 +53,8 @@ string SortField::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto direction_val = yyjson_obj_get(obj, "direction");
-	if (!direction_val) {
+	auto direction_val = obj.GetMember("direction");
+	if (!direction_val.IsValid()) {
 		return "SortField required property 'direction' is missing";
 	} else {
 		error = direction.TryFromJSON(direction_val);
@@ -55,8 +62,8 @@ string SortField::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	auto null_order_val = yyjson_obj_get(obj, "null-order");
-	if (!null_order_val) {
+	auto null_order_val = obj.GetMember("null-order");
+	if (!null_order_val.IsValid()) {
 		return "SortField required property 'null-order' is missing";
 	} else {
 		error = null_order.TryFromJSON(null_order_val);
@@ -64,7 +71,31 @@ string SortField::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+void SortField::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
+	// Serialize: source-id
+	auto source_id_json = writer.CreateSignedInteger(source_id);
+	obj.Add("source-id", source_id_json);
+
+	// Serialize: transform
+	auto transform_json = transform.ToJSON(writer);
+	obj.Add("transform", transform_json);
+
+	// Serialize: direction
+	auto direction_json = direction.ToJSON(writer);
+	obj.Add("direction", direction_json);
+
+	// Serialize: null-order
+	auto null_order_json = null_order.ToJSON(writer);
+	obj.Add("null-order", null_order_json);
+}
+
+JSONMutableValue SortField::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

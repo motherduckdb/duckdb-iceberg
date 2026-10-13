@@ -1,19 +1,53 @@
 #include "core/metadata/schema/iceberg_table_schema.hpp"
 
+#include "catalog/rest/api/iceberg_create_table_request.hpp"
 #include "duckdb/common/exception.hpp"
 #include "common/iceberg_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
+#include "catalog/rest/api/iceberg_type.hpp"
 
 namespace duckdb {
 
+namespace {
+
+static Value GetFieldIdValue(const IcebergColumnDefinition &column) {
+	auto column_value = Value::BIGINT(column.id);
+	if (!column.GetChildCount()) {
+		return column_value;
+	}
+	child_list_t<Value> values;
+	values.emplace_back("__duckdb_field_id", std::move(column_value));
+	for (idx_t i = 0; i < column.GetChildCount(); i++) {
+		auto child = column.GetChild(i);
+		values.emplace_back(child->name, GetFieldIdValue(*child));
+	}
+	return Value::STRUCT(std::move(values));
+}
+
+} // namespace
+
 shared_ptr<IcebergTableSchema> IcebergTableSchema::ParseSchema(const rest_api_objects::Schema &schema) {
 	auto res = make_shared_ptr<IcebergTableSchema>();
-	res->schema_id = schema.object_1.schema_id;
+	D_ASSERT(schema.object_1.schema_id);
+	res->schema_id = *schema.object_1.schema_id;
 	for (auto &field : schema.struct_type.fields) {
 		res->columns.push_back(IcebergColumnDefinition::ParseStructField(*field));
 	}
-	res->identifier_field_ids = schema.object_1.identifier_field_ids;
+	if (auto &identifier_field_ids = schema.object_1.identifier_field_ids) {
+		res->identifier_field_ids = *identifier_field_ids;
+	}
 	return res;
+}
+
+rest_api_objects::Schema IcebergTableSchema::ToRESTObject() const {
+	JSONWriter writer;
+	auto root_object = writer.CreateObject();
+	writer.SetRoot(root_object);
+	IcebergCreateTableRequest::PopulateSchema(writer, root_object, *this);
+	auto schema_json = writer.ToString(JSONWriteFlags::ALLOW_INF_AND_NAN);
+
+	auto parsed_doc = JSONDocument::Parse(schema_json.c_str(), schema_json.size());
+	return rest_api_objects::Schema::FromJSON(parsed_doc->GetRoot());
 }
 
 void IcebergTableSchema::PopulateSourceIdMap(unordered_map<uint64_t, ColumnIndex> &source_to_column_id,
@@ -32,7 +66,7 @@ void IcebergTableSchema::PopulateSourceIdMap(unordered_map<uint64_t, ColumnIndex
 			new_index = ColumnIndex(i);
 		}
 
-		PopulateSourceIdMap(source_to_column_id, column->children, new_index);
+		PopulateSourceIdMap(source_to_column_id, column->GetChildren(), new_index);
 		source_to_column_id.emplace(static_cast<uint64_t>(column->id), std::move(new_index));
 	}
 }
@@ -52,33 +86,56 @@ IcebergTableSchema::GetFromColumnIndex(const vector<unique_ptr<IcebergColumnDefi
 	if (depth == child_indexes.size()) {
 		return *column;
 	}
-	if (column->children.empty()) {
+	if (!column->GetChildCount()) {
 		throw InvalidConfigurationException(
 		    "Expected column to have children, ColumnIndex has a depth of %d, we reached only %d",
 		    column_index.ChildIndexCount(), depth);
 	}
-	return GetFromColumnIndex(column->children, column_index, depth + 1);
+	return GetFromColumnIndex(column->GetChildren(), column_index, depth + 1);
 }
 
-static optional_ptr<const IcebergColumnDefinition> GetColumnChild(const IcebergColumnDefinition &column,
-                                                                  const string &child_name) {
-	for (auto &child_p : column.children) {
-		auto &child = *child_p;
-		if (StringUtil::CIEquals(child.name, child_name)) {
-			return child;
-		}
+const unordered_map<uint64_t, ColumnIndex> &IcebergTableSchema::GetSourceIdMap() const {
+	lock_guard<mutex> guard(source_id_map_lock);
+	if (!source_id_map_populated) {
+		PopulateSourceIdMap(source_to_column_id, columns, nullptr);
+		source_id_map_populated = true;
 	}
-	return nullptr;
+	return source_to_column_id;
+}
+
+optional<ColumnIndex> IcebergTableSchema::TryGetColumnIndexByFieldId(idx_t field_id) const {
+	auto &source_to_column_id = GetSourceIdMap();
+	auto it = source_to_column_id.find(field_id);
+	if (it == source_to_column_id.end()) {
+		return std::nullopt;
+	}
+	return it->second;
+}
+
+optional_ptr<const IcebergColumnDefinition> IcebergTableSchema::TryGetColumnByFieldId(idx_t field_id) const {
+	auto column_index = TryGetColumnIndexByFieldId(field_id);
+	if (!column_index) {
+		return nullptr;
+	}
+	return GetFromColumnIndex(columns, *column_index, 0);
+}
+
+const IcebergColumnDefinition &IcebergTableSchema::GetColumnByFieldId(idx_t field_id) const {
+	auto column = TryGetColumnByFieldId(field_id);
+	if (!column) {
+		throw InvalidInputException("Field id %d does not exist in schema with id %d", field_id, schema_id);
+	}
+	return *column;
 }
 
 optional_ptr<const IcebergColumnDefinition>
-IcebergTableSchema::GetFromPath(const vector<string> &path, optional_ptr<optional_idx> name_offset) const {
+IcebergTableSchema::GetFromPath(const vector<Identifier> &path, optional_ptr<optional_idx> name_offset) const {
 	D_ASSERT(!path.empty());
 
 	optional_ptr<const IcebergColumnDefinition> result;
 	for (idx_t i = 0; i < columns.size(); i++) {
 		auto &column = *columns[i];
-		if (!StringUtil::CIEquals(column.name, path[0])) {
+		if (column.name != path[0]) {
 			continue;
 		}
 		result = column;
@@ -96,9 +153,9 @@ IcebergTableSchema::GetFromPath(const vector<string> &path, optional_ptr<optiona
 			}
 			throw InvalidInputException(
 			    "Column path %s points to child of variant column %s - but no name_offset is provided",
-			    StringUtil::Join(path, "."), res.get().name);
+			    StringUtil::Join(IdentifiersToStrings(path), "."), res.get().name);
 		}
-		auto next_child = GetColumnChild(column, path[i]);
+		auto next_child = column.GetChild(path[i].GetIdentifierName());
 		if (!next_child) {
 			return nullptr;
 		}
@@ -107,151 +164,28 @@ IcebergTableSchema::GetFromPath(const vector<string> &path, optional_ptr<optiona
 	return res.get();
 }
 
-optional_ptr<IcebergColumnDefinition> IcebergTableSchema::GetMutableFromPath(const vector<string> &path,
+optional_ptr<IcebergColumnDefinition> IcebergTableSchema::GetMutableFromPath(const vector<Identifier> &path,
                                                                              optional_ptr<optional_idx> names_offset) {
 	auto res = GetFromPath(path, names_offset);
 	if (!res) {
 		return nullptr;
 	}
+	InvalidateSourceIdMap();
 	auto &col = *res;
 	return const_cast<IcebergColumnDefinition &>(col);
 }
 
-static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, const rest_api_objects::Type &column);
-
-static yyjson_mut_val *PrimitiveTypeValueToJSON(yyjson_mut_doc *doc,
-                                                const rest_api_objects::PrimitiveTypeValue &value) {
-	if (value.has_boolean_type_value) {
-		return yyjson_mut_bool(doc, value.boolean_type_value.value);
-	} else if (value.has_long_type_value) {
-		return yyjson_mut_int(doc, value.long_type_value.value);
-	} else if (value.has_integer_type_value) {
-		return yyjson_mut_int(doc, value.integer_type_value.value);
-	} else if (value.has_double_type_value) {
-		return yyjson_mut_real(doc, value.double_type_value.value);
-	} else if (value.has_float_type_value) {
-		return yyjson_mut_real(doc, value.float_type_value.value);
-	} else if (value.has_decimal_type_value) {
-		auto &str = value.decimal_type_value.value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else if (value.has_string_type_value) {
-		auto &str = value.string_type_value.value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else if (value.has_uuidtype_value) {
-		auto &str = value.uuidtype_value.value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else if (value.has_date_type_value) {
-		auto &str = value.date_type_value.value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else if (value.has_time_type_value) {
-		auto &str = value.time_type_value.value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else if (value.has_timestamp_type_value) {
-		auto &str = value.timestamp_type_value.value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else if (value.has_timestamp_tz_type_value) {
-		auto &str = value.timestamp_tz_type_value.value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else if (value.has_timestamp_nano_type_value) {
-		auto &str = value.timestamp_nano_type_value.value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else if (value.has_timestamp_tz_nano_type_value) {
-		auto &str = value.timestamp_tz_nano_type_value.value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else if (value.has_fixed_type_value) {
-		auto &str = value.fixed_type_value.value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else if (value.has_binary_type_value) {
-		auto &str = value.binary_type_value.value;
-		return yyjson_mut_strncpy(doc, str.c_str(), str.size());
-	} else {
-		return yyjson_mut_null(doc);
-	}
-}
-
-static void AddStructField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj,
-                           const rest_api_objects::StructField &column) {
-	yyjson_mut_obj_add_uint(doc, field_obj, "id", column.id);
-	yyjson_mut_obj_add_strcpy(doc, field_obj, "name", column.name.c_str());
-	yyjson_mut_obj_add_bool(doc, field_obj, "required", column.required);
-	if (!column.type->has_primitive_type) {
-		auto type_obj = yyjson_mut_obj_add_obj(doc, field_obj, "type");
-		AddUnnamedField(doc, type_obj, *column.type);
-		return;
-	}
-	yyjson_mut_obj_add_strcpy(doc, field_obj, "type", column.type->primitive_type.value.c_str());
-	if (column.has_initial_default) {
-		yyjson_mut_obj_add_val(doc, field_obj, "initial-default",
-		                       PrimitiveTypeValueToJSON(doc, column.initial_default));
-	}
-	if (column.has_write_default) {
-		yyjson_mut_obj_add_val(doc, field_obj, "write-default", PrimitiveTypeValueToJSON(doc, column.write_default));
-	}
-}
-
-static void AddUnnamedField(yyjson_mut_doc *doc, yyjson_mut_val *field_obj, const rest_api_objects::Type &column) {
-	if (column.has_struct_type) {
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "type", "struct");
-		auto nested_fields_arr = yyjson_mut_obj_add_arr(doc, field_obj, "fields");
-		for (auto &field : column.struct_type.fields) {
-			auto nested_field_obj = yyjson_mut_arr_add_obj(doc, nested_fields_arr);
-			AddStructField(doc, nested_field_obj, *field);
-		}
-	} else if (column.has_list_type) {
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "type", "list");
-		auto &list_type = column.list_type;
-		yyjson_mut_obj_add_uint(doc, field_obj, "element-id", list_type.element_id);
-		if (list_type.element->has_primitive_type) {
-			yyjson_mut_obj_add_strcpy(doc, field_obj, "element", list_type.element->primitive_type.value.c_str());
-		} else {
-			auto list_type_obj = yyjson_mut_obj_add_obj(doc, field_obj, "element");
-			AddUnnamedField(doc, list_type_obj, *list_type.element);
-		}
-		yyjson_mut_obj_add_bool(doc, field_obj, "element-required", false);
-	} else if (column.has_map_type) {
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "type", "map");
-		yyjson_mut_obj_add_uint(doc, field_obj, "key-id", column.map_type.key_id);
-		auto &key_child = column.map_type.key;
-		if (key_child->has_primitive_type) {
-			yyjson_mut_obj_add_strcpy(doc, field_obj, "key", key_child->primitive_type.value.c_str());
-		} else {
-			auto key_type_obj = yyjson_mut_obj_add_obj(doc, field_obj, "key");
-			AddUnnamedField(doc, key_type_obj, *key_child);
-		}
-
-		auto &val_child = column.map_type.value;
-		yyjson_mut_obj_add_uint(doc, field_obj, "value-id", column.map_type.value_id);
-		yyjson_mut_obj_add_bool(doc, field_obj, "value-required", false);
-		if (val_child->has_primitive_type) {
-			yyjson_mut_obj_add_strcpy(doc, field_obj, "value", val_child->primitive_type.value.c_str());
-		} else {
-			auto value_type_obj = yyjson_mut_obj_add_obj(doc, field_obj, "value");
-			AddUnnamedField(doc, value_type_obj, *val_child);
-		}
-	} else {
-		throw NotImplementedException("Unrecognized nested type");
-	}
-}
-
-void IcebergTableSchema::SchemaToJson(yyjson_mut_doc *doc, yyjson_mut_val *root_object,
-                                      const rest_api_objects::Schema &schema) {
-	yyjson_mut_obj_add_strcpy(doc, root_object, "type", "struct");
-	D_ASSERT(schema.object_1.has_schema_id);
-	yyjson_mut_obj_add_uint(doc, root_object, "schema-id", schema.object_1.schema_id);
-	auto fields_arr = yyjson_mut_obj_add_arr(doc, root_object, "fields");
-	// populate the fields
-	for (auto &field : schema.struct_type.fields) {
-		auto field_obj = yyjson_mut_arr_add_obj(doc, fields_arr);
-		// add name and id for top level items immediately
-		AddStructField(doc, field_obj, *field);
-	}
-	yyjson_mut_obj_add_arr(doc, root_object, "identifier-field-ids");
+void IcebergTableSchema::InvalidateSourceIdMap() {
+	lock_guard<mutex> guard(source_id_map_lock);
+	source_to_column_id.clear();
+	source_id_map_populated = false;
 }
 
 shared_ptr<IcebergTableSchema> IcebergTableSchema::Copy() const {
 	auto res = make_shared_ptr<IcebergTableSchema>();
 	res->schema_id = schema_id;
 	res->last_column_id = last_column_id;
+	res->identifier_field_ids = identifier_field_ids;
 	for (auto &column : columns) {
 		res->columns.push_back(column->Copy());
 	}
@@ -260,8 +194,9 @@ shared_ptr<IcebergTableSchema> IcebergTableSchema::Copy() const {
 
 shared_ptr<IcebergTableSchema> IcebergTableSchema::RemoveColumn(const string &name, optional_idx &column_id) const {
 	auto res = make_shared_ptr<IcebergTableSchema>();
-	res->schema_id = schema_id + 1;
+	res->schema_id = schema_id;
 	res->last_column_id = last_column_id;
+	res->identifier_field_ids = identifier_field_ids;
 	for (auto &column : columns) {
 		if (column->name == name) {
 			column_id = column->id;
@@ -273,13 +208,7 @@ shared_ptr<IcebergTableSchema> IcebergTableSchema::RemoveColumn(const string &na
 }
 
 const LogicalType &IcebergTableSchema::GetColumnTypeFromFieldId(idx_t field_id) const {
-	for (auto &column : columns) {
-		if (column->id == field_id) {
-			return column->type;
-		}
-	}
-	throw InvalidInputException("GetColumnTypeFromFieldId:: field id %d does not exist in schema with id %d", field_id,
-	                            schema_id);
+	return GetColumnByFieldId(field_id).type;
 }
 
 void IcebergTableSchema::GetColumnNamesAndTypes(vector<string> &names, vector<LogicalType> &types) const {
@@ -290,6 +219,18 @@ void IcebergTableSchema::GetColumnNamesAndTypes(vector<string> &names, vector<Lo
 		names.push_back(column.name);
 		types.push_back(column.type);
 	}
+}
+
+void IcebergTableSchema::GetFieldIdValues(child_list_t<Value> &values) const {
+	for (auto &column : columns) {
+		values.emplace_back(column->name, GetFieldIdValue(*column));
+	}
+}
+
+Value IcebergTableSchema::GetFieldIds() const {
+	child_list_t<Value> values;
+	GetFieldIdValues(values);
+	return Value::STRUCT(std::move(values));
 }
 
 bool IcebergTableSchema::Equals(const IcebergTableSchema &other) const {

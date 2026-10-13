@@ -12,7 +12,7 @@ require iceberg
 # The valid prefix is {"name":"John O. Rounding the last code point up yields {"name":"John P.
 query III
 SELECT column_name, lower_bound, upper_bound
-FROM iceberg_column_stats('__WORKING_DIRECTORY__/data/persistent/utf8_trunc_bounds')
+FROM iceberg_column_stats('{WORKING_DIRECTORY}/data/persistent/utf8_trunc_bounds')
 ORDER BY column_name;
 ----
 id	1	3
@@ -21,7 +21,7 @@ value	{"name":"John O	{"name":"John P
 # 'foo' is below the repaired lower bound, so the file is pruned.
 query II
 SELECT id, value
-FROM iceberg_scan('__WORKING_DIRECTORY__/data/persistent/utf8_trunc_bounds')
+FROM iceberg_scan('{WORKING_DIRECTORY}/data/persistent/utf8_trunc_bounds')
 WHERE value = 'foo'
 ORDER BY id;
 ----

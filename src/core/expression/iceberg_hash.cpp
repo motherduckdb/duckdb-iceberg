@@ -1,11 +1,11 @@
 #include "core/expression/iceberg_hash.hpp"
 
-#include "utf8proc_wrapper.hpp"
 #include "common/iceberg_math.hpp"
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/types/hugeint.hpp"
 #include "duckdb/common/types/timestamp.hpp"
+#include "duckdb/common/types/uuid.hpp"
 
 namespace duckdb {
 
@@ -206,24 +206,25 @@ int32_t IcebergHash::HashDecimalHugeInt(hugeint_t unscaled) {
 
 //! Hash time value (Iceberg spec: int64 microseconds from midnight)
 int32_t IcebergHash::HashTime(dtime_t t) {
-	return HashInt64(t.micros);
-}
-
-//! Hash timestamp_ns value (Iceberg spec: int64 nanoseconds from epoch)
-int32_t IcebergHash::HashTimestampNs(timestamp_ns_t t) {
 	return HashInt64(t.value);
 }
 
+//! Hash timestamp_ns bucket values as microseconds from epoch.
+int32_t IcebergHash::HashTimestampNs(timestamp_ns_t t) {
+	return HashInt64(IcebergNanosToMicrosFloor(t.value));
+}
+
+//! Hash timestamptz_ns bucket values as microseconds from epoch.
+int32_t IcebergHash::HashTimestampTzNs(timestamp_tz_ns_t t) {
+	return HashInt64(IcebergNanosToMicrosFloor(t.value));
+}
+
 //! Hash UUID value (Iceberg spec: 16 big-endian bytes, MSB first)
-//! DuckDB stores UUID as hugeint_t: upper (int64, most-significant) + lower (uint64, least-significant)
 int32_t IcebergHash::HashUUID(hugeint_t uuid) {
 	uint8_t bytes[16];
-	for (int i = 0; i < 8; i++) {
-		bytes[i] = static_cast<uint8_t>(uuid.upper >> (56 - i * 8));
-	}
-	for (int i = 0; i < 8; i++) {
-		bytes[8 + i] = static_cast<uint8_t>(uuid.lower >> (56 - i * 8));
-	}
+	// BaseUUID::ToBlob converts DuckDB's internal representation (MSB flipped for hugeint_t ordering) back to the RFC
+	// 4122 big-endian byte layout required by the Iceberg spec.
+	BaseUUID::ToBlob(uuid, bytes);
 	return Murmur3Hash32(bytes, 16, SEED);
 }
 
@@ -264,7 +265,9 @@ int32_t IcebergHash::HashValue(const Value &value) {
 		return HashTime(value.GetValue<dtime_t>());
 	// timestamp_ns: Iceberg buckets nanos as micros first (BucketTimestampNano in Java)
 	case LogicalTypeId::TIMESTAMP_NS:
-		return HashInt64(IcebergNanosToMicrosFloor(value.GetValue<timestamp_ns_t>().value));
+		return HashTimestampNs(value.GetValue<timestamp_ns_t>());
+	case LogicalTypeId::TIMESTAMP_TZ_NS:
+		return HashTimestampTzNs(value.GetValue<timestamp_tz_ns_t>());
 	// uuid: 16 big-endian bytes
 	case LogicalTypeId::UUID:
 		return HashUUID(value.GetValueUnsafe<hugeint_t>());
@@ -289,6 +292,7 @@ Value IcebergHash::BucketValue(const Value &v, int32_t num_buckets) {
 	case LogicalTypeId::TIMESTAMP:
 	case LogicalTypeId::TIMESTAMP_TZ:
 	case LogicalTypeId::TIMESTAMP_NS:
+	case LogicalTypeId::TIMESTAMP_TZ_NS:
 	case LogicalTypeId::UUID:
 	case LogicalTypeId::VARCHAR:
 	case LogicalTypeId::BLOB:
@@ -299,6 +303,20 @@ Value IcebergHash::BucketValue(const Value &v, int32_t num_buckets) {
 	}
 	int32_t h = HashValue(v);
 	return Value::INTEGER((h & 0x7FFFFFFF) % num_buckets);
+}
+
+//! Byte length of the first `width` code points
+idx_t IcebergHash::TruncatedStringLength(const char *data, idx_t size, idx_t width) {
+	idx_t code_points = 0;
+	for (idx_t i = 0; i < size; i++) {
+		if ((static_cast<unsigned char>(data[i]) & 0xC0) != 0x80) {
+			if (code_points == width) {
+				return i;
+			}
+			code_points++;
+		}
+	}
+	return size;
 }
 
 //! Canonical truncate computation shared by TruncateTransform::ApplyTransform and the scalar function.
@@ -316,8 +334,7 @@ Value IcebergHash::TruncateValue(const Value &v, idx_t width) {
 	}
 	case LogicalTypeId::DECIMAL: {
 		// Truncate the unscaled integer value, preserving type (scale/precision)
-		auto scaled = v.Copy();
-		scaled.Reinterpret(LogicalType::BIGINT);
+		auto scaled = v.WithType(LogicalType::BIGINT);
 		auto val = scaled.GetValue<int64_t>();
 		auto result = val - (((val % W) + W) % W);
 		return Value::DECIMAL(result, DecimalType::GetWidth(v.type()), DecimalType::GetScale(v.type()));
@@ -329,13 +346,11 @@ Value IcebergHash::TruncateValue(const Value &v, idx_t width) {
 	}
 	case LogicalTypeId::VARCHAR: {
 		auto s = v.GetValue<string>();
-		size_t num_chars = 0;
-		for (auto cluster : Utf8Proc::GraphemeClusters(s.data(), s.size())) {
-			if (++num_chars >= static_cast<size_t>(width)) {
-				return Value(s.substr(0, cluster.end));
-			}
+		auto length = TruncatedStringLength(s.data(), s.size(), width);
+		if (length == s.size()) {
+			return v;
 		}
-		return v;
+		return Value(s.substr(0, length));
 	}
 	default:
 		throw NotImplementedException("iceberg_truncate: unsupported type %s", v.type().ToString());

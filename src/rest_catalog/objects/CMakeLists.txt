@@ -8,24 +8,34 @@ add_library(
   namespace.cpp
   page_token.cpp
   table_identifier.cpp
+  catalog_object_identifier.cpp
   primitive_type.cpp
+  variant_type.cpp
   struct_field.cpp
   struct_type.cpp
   list_type.cpp
   map_type.cpp
   type.cpp
   schema.cpp
-  expression.cpp
+  predicate.cpp
   expression_type.cpp
+  value_expression.cpp
   true_expression.cpp
   false_expression.cpp
-  and_or_expression.cpp
-  not_expression.cpp
-  unary_expression.cpp
-  literal_expression.cpp
-  set_expression.cpp
-  term.cpp
+  and_or_predicate.cpp
+  not_predicate.cpp
+  unary_predicate.cpp
+  comparison_predicate.cpp
+  set_predicate.cpp
+  literal.cpp
+  literals.cpp
   reference.cpp
+  id_reference.cpp
+  named_reference.cpp
+  apply.cpp
+  function_argument.cpp
+  term.cpp
+  term_reference.cpp
   transform_term.cpp
   transform.cpp
   partition_field.cpp
@@ -74,7 +84,6 @@ add_library(
   remove_encryption_key_update.cpp
   table_update.cpp
   view_update.cpp
-  table_requirement_type.cpp
   table_requirement.cpp
   assert_create.cpp
   assert_table_uuid.cpp
@@ -87,7 +96,21 @@ add_library(
   view_requirement.cpp
   assert_view_uuid.cpp
   storage_credential.cpp
+  read_restrictions.cpp
+  action.cpp
+  mask_alphanum.cpp
+  mask_to_fixed_value.cpp
+  replace_with_null.cpp
+  show_first_4.cpp
+  show_last_4.cpp
+  truncate_to_year.cpp
+  truncate_to_month.cpp
+  sha_256global.cpp
+  sha_256query_local.cpp
   load_credentials_response.cpp
+  catalog_object_labels.cpp
+  field_labels.cpp
+  labels.cpp
   load_table_result.cpp
   scan_tasks.cpp
   completed_planning_result.cpp
@@ -104,6 +127,7 @@ add_library(
   commit_transaction_request.cpp
   create_table_request.cpp
   register_table_request.cpp
+  unregister_table_result.cpp
   create_view_request.cpp
   load_view_result.cpp
   register_view_request.cpp
@@ -124,12 +148,28 @@ add_library(
   create_namespace_response.cpp
   get_namespace_response.cpp
   list_tables_response.cpp
+  list_functions_response.cpp
   list_namespaces_response.cpp
+  load_function_result.cpp
+  function_metadata.cpp
+  function_definition.cpp
+  function_parameter.cpp
+  function_data_type.cpp
+  function_list_type.cpp
+  function_map_type.cpp
+  function_struct_type.cpp
+  function_struct_field.cpp
+  function_definition_version.cpp
+  function_representation.cpp
+  function_sqlrepresentation.cpp
+  function_definition_log_entry.cpp
+  function_definition_version_ref.cpp
   update_namespace_properties_response.cpp
   commit_table_response.cpp
   statistics_file.cpp
   blob_metadata.cpp
   partition_statistics_file.cpp
+  null_type_value.cpp
   boolean_type_value.cpp
   integer_type_value.cpp
   long_type_value.cpp
@@ -147,6 +187,7 @@ add_library(
   fixed_type_value.cpp
   binary_type_value.cpp
   count_map.cpp
+  field_statistics.cpp
   value_map.cpp
   primitive_type_value.cpp
   file_format.cpp
@@ -159,7 +200,11 @@ add_library(
   field_name.cpp
   fetch_scan_tasks_request.cpp
   plan_task.cpp
-  file_scan_task.cpp)
+  file_scan_task.cpp
+  multi_valued_map.cpp
+  remote_sign_request.cpp
+  remote_sign_result.cpp
+  remote_signing_config.cpp)
 
 set(ALL_OBJECT_FILES
     ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:rest_catalog_objects>

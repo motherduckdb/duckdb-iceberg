@@ -16,8 +16,9 @@
 
 namespace duckdb {
 
-struct IcebergTableInformation;
+struct IcebergTable;
 struct IcebergManifestFile;
+struct IcebergManifest;
 
 using sequence_number_t = int64_t;
 
@@ -65,10 +66,14 @@ struct IcebergPartitionInfo {
 	}
 };
 
-struct IcebergDataFile {
-public:
-	Value ToValue(const IcebergTableMetadata &table_metadata, const LogicalType &type) const;
+//! The partition a file belongs to: the per-field values, plus the spec they were produced with.
+//! Partition values are only meaningful together with their spec, so the two travel as a pair.
+struct IcebergPartition {
+	int32_t partition_spec_id = 0;
+	vector<IcebergPartitionInfo> fields;
+};
 
+struct IcebergDataFile {
 public:
 	static map<idx_t, LogicalType> GetFieldIdToTypeMapping(const IcebergSnapshotScanInfo &snapshot_info,
 	                                                       const IcebergTableMetadata &metadata,
@@ -79,12 +84,16 @@ public:
 	// struct {partition_name: val} (with partition field id for the struct key.
 	// extended partition info returns extra information about these partitions
 	// like source column id, source type, transform, and partition value.
-	const vector<IcebergExtendedPartitionInfo> GetExtendedPartitionInfo(const IcebergTableMetadata &metadata) const;
+	// Resolve source types in target_schema, falling back to historical schemas for dropped columns.
+	const vector<IcebergExtendedPartitionInfo> GetExtendedPartitionInfo(const IcebergTableMetadata &metadata,
+	                                                                    const IcebergTableSchema &target_schema) const;
 
 public:
-	void SetFirstRowId(int64_t first_row_id);
+	void SetFirstRowId(optional<int64_t> first_row_id);
 	bool HasFirstRowId() const;
 	int64_t GetFirstRowId() const;
+	bool IsDeletionVector() const;
+	int64_t GetContentSizeInBytes() const;
 
 public:
 	IcebergManifestEntryContentType content;
@@ -106,16 +115,14 @@ public:
 	vector<int32_t> equality_ids;
 	vector<int64_t> split_offsets;
 
-	bool has_sort_order_id = false;
-	int32_t sort_order_id;
+	optional<int32_t> sort_order_id;
 
-	string referenced_data_file;
-	Value content_offset;
-	Value content_size_in_bytes;
+	optional<string> referenced_data_file;
+	optional<int64_t> content_offset;
+	optional<int64_t> content_size_in_bytes;
 
 private:
-	bool has_first_row_id = false;
-	int64_t first_row_id = 0xDEADBEEF;
+	optional<int64_t> first_row_id;
 };
 
 //! An entry in a manifest file
@@ -125,26 +132,33 @@ public:
 	IcebergDataFile data_file;
 
 public:
-	void SetSnapshotId(int64_t snapshot_id);
+	void SetSnapshotId(optional<int64_t> snapshot_id);
 	bool HasSnapshotId() const;
 	int64_t GetSnapshotId() const;
-	void SetSequenceNumber(sequence_number_t value);
-	void SetFileSequenceNumber(sequence_number_t value);
-	sequence_number_t GetSequenceNumber(const IcebergManifestFile &manifest_file) const;
-	sequence_number_t GetFileSequenceNumber(const IcebergManifestFile &manifest_file) const;
+	//! The explicit snapshot id, or the one inherited from the manifest that holds this entry
+	int64_t GetSnapshotId(const IcebergManifestFile &manifest_file) const;
+	void SetSequenceNumber(optional<sequence_number_t> value);
+	void SetFileSequenceNumber(optional<sequence_number_t> value);
+	sequence_number_t GetSequenceNumber(const IcebergManifest &manifest_file) const;
+	sequence_number_t GetFileSequenceNumber(const IcebergManifest &manifest_file) const;
+	optional<sequence_number_t> ExplicitSequenceNumber() const;
+	optional<sequence_number_t> ExplicitFileSequenceNumber() const;
 
 private:
-	bool has_snapshot_id = false;
-	int64_t snapshot_id;
-
-	bool has_sequence_number = false;
-	sequence_number_t sequence_number;
-
-	bool has_file_sequence_number = false;
-	sequence_number_t file_sequence_number;
+	optional<int64_t> snapshot_id;
+	optional<sequence_number_t> sequence_number;
+	optional<sequence_number_t> file_sequence_number;
 };
 
+//! Manifest entries grouped by partition spec id, so each group can be written into a manifest declaring
+//! that spec.
+using partitioned_manifest_entry_map_t = map<int32_t, vector<IcebergManifestEntry>>;
+
+//! A file's partition values looked up by partition field id.
+using partition_value_map_t = unordered_map<uint64_t, reference<const Value>>;
+
 struct IcebergManifestListEntry;
+struct IcebergManifestMetadata;
 
 namespace manifest_file {
 
@@ -193,9 +207,10 @@ static constexpr const int32_t REFERENCED_DATA_FILE = 143;
 static constexpr const int32_t CONTENT_OFFSET = 144;
 static constexpr const int32_t CONTENT_SIZE_IN_BYTES = 145;
 
-idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManifestFile &manifest_file,
-                  const vector<IcebergManifestEntry> &entries, CopyFunction &copy_function, DatabaseInstance &db,
-                  ClientContext &context);
+//! Serialize content without a resolved manifest sequence number. ADDED entries may inherit it later.
+idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManifestMetadata &manifest_metadata,
+                  const vector<IcebergManifestEntry> &manifest_entries, const string &path, CopyFunction &copy_function,
+                  DatabaseInstance &db, ClientContext &context);
 
 } // namespace manifest_file
 

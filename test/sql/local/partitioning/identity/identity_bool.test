@@ -1,21 +1,15 @@
 # name: test/sql/local/partitioning/identity/identity_bool.test
 # group: [identity]
 
-require avro
-
-require parquet
-
-require iceberg
-
-require httpfs
+include test/sql/init_requires
 
 query III
-select * from ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/partition_bool');
+select * from ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/partition_bool');
 ----
 1	12345	click
 0	67890	purchase
 
 query I
-select user_id from ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/partition_bool') WHERE partition_col = True;
+select user_id from ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/partition_bool') WHERE partition_col = True;
 ----
 12345

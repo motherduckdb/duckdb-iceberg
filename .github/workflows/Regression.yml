@@ -1,0 +1,208 @@
+name: Regression
+on:
+  workflow_call:
+    inputs:
+      git_ref:
+        type: string
+      base_hash:
+        type: string
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: 'Git ref to test for current release'
+        type: string
+      base_hash:
+        description: 'Base hash'
+        type: string
+  repository_dispatch:
+  push:
+    branches-ignore:
+      - 'main'
+  pull_request:
+    types: [opened, reopened, ready_for_review, converted_to_draft, synchronize]
+
+concurrency:
+  group: regression-${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref || '' }}-${{ github.base_ref || '' }}-${{ github.ref != 'refs/heads/main' || github.sha }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GIT_REF: ${{ inputs.git_ref != '' && inputs.git_ref || github.sha }}
+  BASE_BRANCH: ${{ github.base_ref || 'main' }}
+  BASE_HASH: ${{ inputs.base_hash }}
+
+jobs:
+  check-draft:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Preliminary checks on CI 
+        run: echo "Event name is ${{ github.event_name }}"
+      
+  regression-test-benchmark-runner:
+    name: Regression Tests
+    needs: check-draft
+    runs-on: ${{ github.repository_owner == 'duckdb' && 'namespace-profile-linux-x64' || 'ubuntu-latest' }}
+    env:
+      GEN: ninja
+      CC: clang-20
+      CXX: clang++-20
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ env.GIT_REF }}
+          submodules: 'true'
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install tools
+        run: python3 duckdb/scripts/ci/retry.py -- make -C duckdb toolsci
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Ccache
+        uses: hendrikmuhs/ccache-action@main
+        with:
+          key: ${{ github.job }}
+          save: ${{ github.ref == 'refs/heads/main' || github.repository != 'duckdb/duckdb' }}
+
+      - name: Build Benchmark (release)
+        uses: duckdb/duckdb-ci/build-duckdb@main
+        env:
+          STATIC_LIBCPP: 1
+          ENABLE_EXTENSION_AUTOLOADING: 1
+          ENABLE_EXTENSION_AUTOINSTALL: 1
+          BUILD_BENCHMARK: 1
+          EXT_FLAGS: -DICEBERG_ENABLE_EQUALITY_DELETE_WRITES=1
+        with:
+          build-type: release
+          build: python3 duckdb/scripts/ci/retry.py -- make release
+          vcpkg-commit: cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3 # Release 2026.06.24
+
+      - name: Set up Docker Compose
+        uses: docker/setup-compose-action@v1
+
+      - name: Install fixture catalog dependencies
+        run: |
+          sudo apt update -y -qq
+          sudo apt install -y -qq python3-venv tar pkg-config
+
+      - name: Select base ref
+        run: |
+          git fetch origin "${BASE_BRANCH}:refs/remotes/origin/${BASE_BRANCH}"
+          if [[ -n "${BASE_HASH}" ]]; then
+            BASE_REF="${BASE_HASH}"
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_REF="$(git merge-base "${GIT_REF}" "origin/${BASE_BRANCH}")"
+            if [[ -z "${BASE_REF}" ]]; then
+              echo "Failed to compute merge base between ${GIT_REF} and origin/${BASE_BRANCH}"
+              exit 1
+            fi
+          else
+            BASE_REF="$(git rev-parse "origin/${BASE_BRANCH}")"
+          fi
+          echo "Selected base ref: ${BASE_REF}"
+          echo "BASE_REF=${BASE_REF}" >> "$GITHUB_ENV"
+
+      - name: Setup fixture
+        run: |
+          make fixture-data
+
+      - name: Setup metadata late materialization benchmark
+        run: |
+          .venv-spark4/bin/python -m pytest -vv \
+            test/python/benchmark/test_metadata_late_materialization.py \
+            --unittest-binary build/release/test/unittest \
+            --test-python-verbosity verbose
+
+      - name: Checkout Base Branch
+        run: |
+          rm -rf base
+          git clone . base
+          cd base
+          git checkout "${BASE_REF}"
+          git submodule update --init --recursive
+
+      - name: Build Base Benchmark (release)
+        uses: duckdb/duckdb-ci/build-duckdb@main
+        env:
+          STATIC_LIBCPP: 1
+          ENABLE_EXTENSION_AUTOLOADING: 1
+          ENABLE_EXTENSION_AUTOINSTALL: 1
+          BUILD_BENCHMARK: 1
+          EXT_FLAGS: -DICEBERG_ENABLE_EQUALITY_DELETE_WRITES=1
+        with:
+          build-type: release
+          build: python3 duckdb/scripts/ci/retry.py -- make -C base release
+          vcpkg-commit: cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3 # Release 2026.06.24
+
+      - name: Regression Test TPCH
+        run: |
+          python duckdb/scripts/regression/test_runner.py --old base/build/release/benchmark/benchmark_runner --new build/release/benchmark/benchmark_runner --benchmarks .github/regression/tpch.csv --verbose --threads 2
+
+      - name: Regression Test Metadata Late Materialization
+        run: |
+          python duckdb/scripts/regression/test_runner.py --old base/build/release/benchmark/benchmark_runner --new build/release/benchmark/benchmark_runner --benchmarks .github/regression/metadata_late_materialization.csv --verbose --threads 2
+
+      - name: Regression Test File Pruning Benchmarks
+        run: |
+          ls benchmark/file_pruning_benchmarks/*.benchmark > .github/regression/file_pruning_benchmarks.csv
+          python duckdb/scripts/regression/test_runner.py --old base/build/release/benchmark/benchmark_runner --new build/release/benchmark/benchmark_runner --benchmarks .github/regression/file_pruning_benchmarks.csv --verbose --threads 2
+
+      - name: Regression Test Rewrite Data Files Benchmarks
+        run: |
+          ls benchmark/rewrite_data_files/*.benchmark > .github/regression/rewrite_data_files.csv
+          python duckdb/scripts/regression/test_runner.py --old base/build/release/benchmark/benchmark_runner --new build/release/benchmark/benchmark_runner --benchmarks .github/regression/rewrite_data_files.csv --verbose --threads 2
+
+      - name: Regression Test General Performance Benchmarks
+        run: |
+          ls benchmark/performance/*.benchmark > .github/regression/performance.csv
+          python duckdb/scripts/regression/test_runner.py --old base/build/release/benchmark/benchmark_runner --new build/release/benchmark/benchmark_runner --benchmarks .github/regression/performance.csv --verbose --threads 2
+
+      - name: Regression Test Scan Tasks Benchmarks
+        # Each benchmark sets its own thread count to compare one and eight threads.
+        run: |
+          ls benchmark/scan_tasks/*.benchmark > .github/regression/scan_tasks.csv
+          python duckdb/scripts/regression/test_runner.py --old base/build/release/benchmark/benchmark_runner --new build/release/benchmark/benchmark_runner --benchmarks .github/regression/scan_tasks.csv --verbose
+
+      # Runs last on purpose. These benchmarks create 119 tables in the fixture's 'default'
+      # namespace, which would grow every ListTables response the steps above make and add noise to
+      # timings that are compared against the base build.
+      # toxiproxy fronts the fixture catalog on 8182 with a fixed per-response latency. The catalog
+      - name: Regression Test Table Resolution Benchmarks
+        run: |
+          set -euo pipefail
+          trap 'pkill -f toxiproxy-server || true' EXIT
+
+          curl -sSLf -o /tmp/toxiproxy.deb \
+            https://github.com/Shopify/toxiproxy/releases/download/v2.12.0/toxiproxy_2.12.0_linux_amd64.deb
+          sudo dpkg -i /tmp/toxiproxy.deb
+
+          toxiproxy-server > /tmp/toxiproxy.log 2>&1 &
+          ready=
+          for _ in $(seq 1 30); do
+            if curl -sSf -o /dev/null http://127.0.0.1:8474/version; then ready=1; break; fi
+            sleep 1
+          done
+          if [[ -z "${ready}" ]]; then
+            echo "::error::toxiproxy did not come up"
+            cat /tmp/toxiproxy.log
+            exit 1
+          fi
+          toxiproxy-cli create --listen 127.0.0.1:8182 --upstream 127.0.0.1:8181 iceberg-catalog
+          toxiproxy-cli toxic add --type latency --attribute latency=50 --attribute jitter=5 iceberg-catalog
+
+          ls benchmark/table_resolution/*.benchmark > .github/regression/table_resolution.csv
+          python duckdb/scripts/regression/test_runner.py --old base/build/release/benchmark/benchmark_runner --new build/release/benchmark/benchmark_runner --benchmarks .github/regression/table_resolution.csv --verbose --threads 2

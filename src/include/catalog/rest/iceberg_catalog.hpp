@@ -1,37 +1,58 @@
 #pragma once
 
 #include "duckdb/catalog/catalog.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/common/enums/access_mode.hpp"
+#include "duckdb/common/mutex.hpp"
 #include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/parser/parsed_data/attach_info.hpp"
 #include "duckdb/storage/storage_extension.hpp"
 #include "duckdb/common/http_util.hpp"
-#include "duckdb/transaction/meta_transaction.hpp"
 
 #include "catalog/rest/api/url_utils.hpp"
 #include "catalog/rest/iceberg_schema_set.hpp"
 #include "rest_catalog/objects/load_table_result.hpp"
 #include "catalog/rest/storage/iceberg_authorization.hpp"
+#include "common/iceberg_utils.hpp"
 
 namespace duckdb {
 
 class IcebergSchemaEntry;
+struct IcebergTable;
 
 class MetadataCacheValue {
 public:
-	MetadataCacheValue(transaction_t creator, timestamp_t expire_timestamp,
+	MetadataCacheValue(timestamp_ms_t expire_timestamp_ms,
 	                   unique_ptr<const rest_api_objects::LoadTableResult> load_table_result)
-	    : creator(creator), expire_timestamp(expire_timestamp), load_table_result(std::move(load_table_result)) {
+	    : expire_timestamp_ms(expire_timestamp_ms), load_table_result(std::move(load_table_result)) {
 	}
 
 public:
-	//! Store the id of the transaction that added the entry
-	transaction_t creator;
 	//! The timestamp until when this entry is valid
-	timestamp_t expire_timestamp;
+	timestamp_ms_t expire_timestamp_ms;
 	//! The payload of the cache entry
 	unique_ptr<const rest_api_objects::LoadTableResult> load_table_result;
+};
+
+class LoadTableResultCache;
+
+//! Caller-owned state controlling whether a fetched result can enter the cache.
+//! The cache must outlive this state, which is kept separate from worker requests.
+class LoadTableCachePublication {
+public:
+	~LoadTableCachePublication();
+	bool TryPublish(unique_ptr<const rest_api_objects::LoadTableResult> result);
+
+private:
+	friend class LoadTableResultCache;
+	explicit LoadTableCachePublication(string table_key) : table_key(std::move(table_key)) {
+	}
+	LoadTableCachePublication(const LoadTableCachePublication &) = delete;
+	LoadTableCachePublication &operator=(const LoadTableCachePublication &) = delete;
+
+	optional_ptr<LoadTableResultCache> cache;
+	string table_key;
 };
 
 class LoadTableResultCache {
@@ -40,88 +61,56 @@ public:
 	}
 
 public:
-	mutex &Lock() {
-		return lock;
-	}
-
-	//! NOTE: lock needs to be held by the caller until the result goes out of scope
-	optional_ptr<MetadataCacheValue> Get(ClientContext &context, const string &table_key, lock_guard<mutex> &lock,
-	                                     bool validate_cache = true) {
-		(void)lock;
+	bool Get(ClientContext &context, const string &table_key,
+	         const std::function<void(const rest_api_objects::LoadTableResult &)> &callback,
+	         bool validate_cache = true) {
+		annotated_lock_guard<annotated_mutex> guard(lock);
 		auto it = tables.find(table_key);
 		if (it == tables.end()) {
-			return nullptr;
+			return false;
 		}
 
-		auto &meta_transaction = MetaTransaction::Get(context);
-		auto transaction_start = meta_transaction.GetCurrentTransactionStartTimestamp();
+		auto transaction_start_ms = IcebergUtils::GetTransactionStartTimeMS(context);
 
 		auto &entry = it->second;
-		if (validate_cache && transaction_start > entry.expire_timestamp) {
+		if (validate_cache && transaction_start_ms > entry.expire_timestamp_ms) {
 			// cached value has expired
-			return nullptr;
+			return false;
 		}
-		return entry;
+		callback(*entry.load_table_result);
+		return true;
 	}
-	void SetOrOverwriteInternal(lock_guard<mutex> &guard, ClientContext &context, const string &table_key,
-	                            timestamp_t expire_timestamp,
-	                            unique_ptr<const rest_api_objects::LoadTableResult> load_table_result) {
-		// erase load table result if it exists.
-		tables.erase(table_key);
-		auto &meta_transaction = MetaTransaction::Get(context);
+	//! Create publication state before fetching. A later fetch supersedes earlier loads for the same key.
+	unique_ptr<LoadTableCachePublication> BeginLoad(const string &table_key);
+	//! Authoritative publication (e.g. staged creation) also invalidates outstanding fetches.
+	void SetOrOverwrite(const string &table_key, unique_ptr<const rest_api_objects::LoadTableResult> load_table_result);
 
-		tables.emplace(table_key, MetadataCacheValue(meta_transaction.global_transaction_id, expire_timestamp,
-		                                             std::move(load_table_result)));
-	}
-	void SetOrOverwrite(ClientContext &context, const string &table_key,
-	                    unique_ptr<const rest_api_objects::LoadTableResult> load_table_result) {
-		lock_guard<mutex> guard(lock);
-		// If max_table_staleness_minutes is not set, use a time in the past so cache is always expired
-		system_clock::time_point expires_at;
-		if (attach_options.max_table_staleness_micros.IsValid()) {
-			expires_at =
-			    system_clock::now() + std::chrono::microseconds(attach_options.max_table_staleness_micros.GetIndex());
-		} else {
-			expires_at = system_clock::time_point::min();
-		}
-		auto epoch_micros = duration_cast<microseconds>(expires_at.time_since_epoch()).count();
-		auto expire_timestamp = Timestamp::FromEpochMicroSeconds(epoch_micros);
-		SetOrOverwriteInternal(guard, context, table_key, expire_timestamp, std::move(load_table_result));
-	}
-	void ExpireInternal(lock_guard<mutex> &guard, ClientContext &context, const string &table_key) {
-		auto &meta_transaction = MetaTransaction::Get(context);
-		tables.erase(table_key);
-		auto it = tables.find(table_key);
-		if (it == tables.end()) {
-			//! Entry doesn't exist anymore
-			return;
-		}
-		auto &entry = it->second;
-		if (entry.creator != meta_transaction.global_transaction_id) {
-			//! The entry we made is no longer the latest version, can't expire
-			return;
-		}
-	}
-	void Expire(ClientContext &context, const string &table_key) {
-		lock_guard<mutex> guard(lock);
-		ExpireInternal(guard, context, table_key);
-	}
+	//! Evict only if the table was initialized from the result that is still cached for its key.
+	void EvictIfCurrent(const IcebergTable &table);
 
 private:
+	friend class LoadTableCachePublication;
+	struct PendingLoads {
+		optional_ptr<LoadTableCachePublication> latest;
+		idx_t count = 0;
+	};
+	bool TryPublish(LoadTableCachePublication &publication, unique_ptr<const rest_api_objects::LoadTableResult> result);
+	void Release(LoadTableCachePublication &publication);
+	void InvalidateLoads(const string &table_key) DUCKDB_REQUIRES(lock);
+	void Store(const string &table_key, unique_ptr<const rest_api_objects::LoadTableResult> result)
+	    DUCKDB_REQUIRES(lock);
+
 	IcebergAttachOptions &attach_options;
-	mutex lock;
-	case_insensitive_map_t<MetadataCacheValue> tables;
+	annotated_mutex lock;
+	unordered_map<string, MetadataCacheValue> tables DUCKDB_GUARDED_BY(lock);
+	unordered_map<string, PendingLoads> pending_loads DUCKDB_GUARDED_BY(lock);
 };
 
 class IcebergCatalog : public Catalog {
 public:
-	// default target file size: 8.4MB
-	static constexpr const idx_t DEFAULT_TARGET_FILE_SIZE = 1 << 23;
-
-public:
 	explicit IcebergCatalog(AttachedDatabase &db_p, AccessMode access_mode,
 	                        unique_ptr<IcebergAuthorization> auth_handler, IcebergAttachOptions &attach_options,
-	                        const string &default_schema);
+	                        const optional<Identifier> &default_schema);
 	~IcebergCatalog() override;
 
 public:
@@ -129,13 +118,12 @@ public:
 	static unique_ptr<SecretEntry> GetIcebergSecret(ClientContext &context, const string &secret_name);
 	static unique_ptr<SecretEntry> GetHTTPSecret(ClientContext &context, const string &secret_name);
 	void ParsePrefix();
+	void ParseNamespaceSeparator();
 	void GetConfig(ClientContext &context, IcebergEndpointType &endpoint_type);
 	IRCEndpointBuilder GetBaseUrl() const;
 	string GetWarehouse() const {
 		return warehouse;
 	}
-	static void SetAWSCatalogOptions(IcebergAttachOptions &attach_options,
-	                                 case_insensitive_set_t &set_by_attach_options);
 	//! Whether or not this catalog should search a specific type with the standard priority
 	CatalogLookupBehavior CatalogTypeLookupRule(CatalogType type) const override {
 		switch (type) {
@@ -147,18 +135,11 @@ public:
 			return CatalogLookupBehavior::STANDARD;
 		}
 	}
-	bool CheckAmbiguousCatalogOrSchema(ClientContext &context, const string &schema) override {
+	bool CheckAmbiguousCatalogOrSchema(ClientContext &context, const Identifier &schema) override {
 		return false;
 	}
-	string GetDefaultSchema() const override {
-		return default_schema;
-	}
+	optional<Identifier> GetDefaultSchema() const override;
 	ErrorData SupportsCreateTable(BoundCreateTableInfo &info) override;
-
-public:
-	static unique_ptr<Catalog> Attach(optional_ptr<StorageExtensionInfo> storage_info, ClientContext &context,
-	                                  AttachedDatabase &db, const string &name, AttachInfo &info,
-	                                  AttachOptions &options);
 
 public:
 	void Initialize(bool load_builtin) override;
@@ -180,6 +161,10 @@ public:
 	                                    PhysicalOperator &plan) override;
 	PhysicalOperator &PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,
 	                             PhysicalOperator &plan) override;
+	//! Shared delete-planning body both PlanDelete and MERGE build on; only PlanDelete additionally opts the
+	//! standalone DELETE into metadata-only deletes, so MERGE must plan its delete action through here directly.
+	PhysicalOperator &PlanDeleteOperation(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,
+	                                      PhysicalOperator &plan);
 	PhysicalOperator &PlanUpdate(ClientContext &context, PhysicalPlanGenerator &planner, LogicalUpdate &op,
 	                             PhysicalOperator &plan) override;
 	PhysicalOperator &PlanMergeInto(ClientContext &context, PhysicalPlanGenerator &planner, LogicalMergeInto &op,
@@ -195,22 +180,25 @@ public:
 	string GetDBPath() override;
 	//! Allow ATTACH OR REPLACE to actually re-attach when iceberg-specific options change
 	bool HasConflictingAttachOptions(const string &path, const AttachOptions &options) override;
-	static string GetOnlyMergeOnReadSupportedErrorMessage(const string &table_name, const string &property,
-	                                                      const string &property_value);
+	void SetAttachOptions(const unordered_map<string, Value> &options);
+	//! Throws if the write mode property doesn't allow merge-on-read delete files, which is all DuckDB-Iceberg writes
+	static void VerifyMergeOnRead(const IcebergTableMetadata &metadata, const string &table_name,
+	                              const string &write_mode_property);
 
 public:
 	AccessMode access_mode;
 	unique_ptr<IcebergAuthorization> auth_handler;
-	//! host of the REST catalog
-	string uri;
+	//! Base URI of the REST catalog
+	string base_uri;
 	//! version
 	const string version;
-	//! optional prefix
-	string prefix;
-	bool prefix_is_one_component = true;
+	//! optional prefix path components
+	vector<string> prefix;
+	string namespace_separator = "\x1f";
 	//! attach options
 	IcebergAttachOptions attach_options;
-	string default_schema;
+	//! Optionally (user-)provided default schema to use
+	optional<Identifier> default_schema;
 
 private:
 	//! warehouse
@@ -218,8 +206,8 @@ private:
 	// defaults and overrides provided by a catalog.
 	case_insensitive_map_t<string> defaults;
 	case_insensitive_map_t<string> overrides;
-	//! raw attach options (after core stripping) used to detect a conflicting ATTACH OR REPLACE
-	case_insensitive_map_t<Value> raw_attach_options;
+	//! Normalized attach options (after core stripping) used to detect a conflicting ATTACH OR REPLACE
+	unordered_map<string, Value> normalized_attach_options;
 
 public:
 	unordered_set<string> supported_urls;

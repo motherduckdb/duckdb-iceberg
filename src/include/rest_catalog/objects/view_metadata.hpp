@@ -1,15 +1,14 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/schema.hpp"
 #include "rest_catalog/objects/view_history_entry.hpp"
 #include "rest_catalog/objects/view_version.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -23,10 +22,16 @@ public:
 	ViewMetadata &operator=(ViewMetadata &&) = default;
 
 public:
-	static ViewMetadata FromJSON(yyjson_val *obj);
+	// Deserialization
+	static ViewMetadata FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Copy
+	ViewMetadata Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	string view_uuid;
@@ -36,8 +41,7 @@ public:
 	vector<ViewVersion> versions;
 	vector<ViewHistoryEntry> version_log;
 	vector<Schema> schemas;
-	case_insensitive_map_t<string> properties;
-	bool has_properties = false;
+	optional<case_insensitive_map_t<string>> properties;
 };
 
 } // namespace rest_api_objects

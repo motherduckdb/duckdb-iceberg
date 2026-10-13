@@ -1,15 +1,14 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/plan_status.hpp"
 #include "rest_catalog/objects/scan_tasks.hpp"
 #include "rest_catalog/objects/storage_credential.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -21,35 +20,46 @@ public:
 	CompletedPlanningResult &operator=(const CompletedPlanningResult &) = delete;
 	CompletedPlanningResult(CompletedPlanningResult &&) = default;
 	CompletedPlanningResult &operator=(CompletedPlanningResult &&) = default;
-	class Object5 {
+	class Object10 {
 	public:
-		Object5();
-		Object5(const Object5 &) = delete;
-		Object5 &operator=(const Object5 &) = delete;
-		Object5(Object5 &&) = default;
-		Object5 &operator=(Object5 &&) = default;
+		Object10();
+		Object10(const Object10 &) = delete;
+		Object10 &operator=(const Object10 &) = delete;
+		Object10(Object10 &&) = default;
+		Object10 &operator=(Object10 &&) = default;
 
 	public:
-		static Object5 FromJSON(yyjson_val *obj);
+		// Deserialization
+		static Object10 FromJSON(JSONValue obj);
+		string TryFromJSON(JSONValue obj);
 
-	public:
-		string TryFromJSON(yyjson_val *obj);
+		// Copy
+		Object10 Copy() const;
+
+		// Serialization
+		void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+		JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 	public:
 		PlanStatus status;
-		vector<StorageCredential> storage_credentials;
-		bool has_storage_credentials = false;
+		optional<vector<StorageCredential>> storage_credentials;
 	};
 
 public:
-	static CompletedPlanningResult FromJSON(yyjson_val *obj);
+	// Deserialization
+	static CompletedPlanningResult FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Copy
+	CompletedPlanningResult Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	ScanTasks scan_tasks;
-	Object5 object_5;
+	Object10 object_10;
 };
 
 } // namespace rest_api_objects

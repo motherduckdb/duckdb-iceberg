@@ -6,9 +6,8 @@ import importlib
 # --- Dynamic importing logic to auto-register all tests ---
 def _import_all_submodules():
     package_dir = os.path.dirname(__file__)
-    for finder, name, ispkg in pkgutil.iter_modules([package_dir]):
-        if ispkg:
-            importlib.import_module(f".{name}", __name__)
+    for _, name, _ in pkgutil.walk_packages([package_dir], prefix=f"{__name__}."):
+        importlib.import_module(name)
 
 
 _import_all_submodules()

@@ -3,18 +3,17 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
+require-env COLUMN_DEFAULT_SUPPORT
 
-require parquet
+require-env FORMAT_V3_SUPPORT
 
-require iceberg
+require-env STAGED_CREATE_SUPPORT
 
-require httpfs
+include test/sql/init_requires
 
-require ducklake
+statement ok
+SET default_transaction_invalidation_policy='SYNTACTIC_ERRORS_DO_NOT_INVALIDATE';
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 set enable_logging=true
@@ -92,9 +91,46 @@ ALTER TABLE my_datalake.default.drop_default ALTER COLUMN b DROP DEFAULT;
 statement ok
 insert into my_datalake.default.drop_default(a) VALUES ('not null')
 
+# without a 'write-default' new rows are NULL, the 'initial-default' only applies to rows written before 'b' existed
 query II
-select a, b from my_datalake.default.drop_default order by all
+select a, b::BOOLEAN from my_datalake.default.drop_default order by all
 ----
 hello world	false
 not null	NULL
 test	true
+
+statement ok
+drop table if exists my_datalake.default.drop_create_default;
+
+statement ok
+create table my_datalake.default.drop_create_default(
+	id INT,
+	c INT DEFAULT 5
+) WITH (
+	'format-version'='3'
+);
+
+statement ok
+insert into my_datalake.default.drop_create_default (id) VALUES (1)
+
+statement ok
+ALTER TABLE my_datalake.default.drop_create_default ALTER COLUMN c DROP DEFAULT;
+
+statement ok
+insert into my_datalake.default.drop_create_default (id) VALUES (2)
+
+statement ok
+begin transaction
+
+statement ok
+insert into my_datalake.default.drop_create_default (id) VALUES (3)
+
+statement ok
+commit
+
+query II
+select * from my_datalake.default.drop_create_default order by id
+----
+1	5
+2	NULL
+3	NULL

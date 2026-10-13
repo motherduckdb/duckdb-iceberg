@@ -1,14 +1,13 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/integer_type_value.hpp"
 #include "rest_catalog/objects/long_type_value.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -22,16 +21,20 @@ public:
 	CountMap &operator=(CountMap &&) = default;
 
 public:
-	static CountMap FromJSON(yyjson_val *obj);
+	// Deserialization
+	static CountMap FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
+
+	// Copy
+	CountMap Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
-	string TryFromJSON(yyjson_val *obj);
-
-public:
-	vector<IntegerTypeValue> keys;
-	bool has_keys = false;
-	vector<LongTypeValue> values;
-	bool has_values = false;
+	optional<vector<IntegerTypeValue>> keys;
+	optional<vector<LongTypeValue>> values;
 };
 
 } // namespace rest_api_objects

@@ -4,16 +4,24 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
+include test/sql/init_requires
 
-require parquet
+# Reset this small fixture for each test.
 
-require iceberg
+statement ok
+DROP TABLE IF EXISTS my_datalake.default.column_doc_comment;
 
-require httpfs
+statement ok
+CREATE TABLE my_datalake.default.column_doc_comment (id BIGINT, population BIGINT, name VARCHAR);
 
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
+statement ok
+COMMENT ON COLUMN my_datalake.default.column_doc_comment.id IS 'Primary identifier';
+
+statement ok
+COMMENT ON COLUMN my_datalake.default.column_doc_comment.population IS 'Resident count, 2024 census';
+
+statement ok
+INSERT INTO my_datalake.default.column_doc_comment VALUES (1, 1000, 'alpha'), (2, 2000, 'beta');
 
 statement ok
 set enable_logging=true

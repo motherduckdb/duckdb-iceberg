@@ -3,6 +3,7 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP fixture
 
+
 statement ok
 drop table if exists my_datalake."my.nested.namespace".table1;
 

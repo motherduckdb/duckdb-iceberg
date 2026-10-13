@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/fetch_scan_tasks_request.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 FetchScanTasksRequest::FetchScanTasksRequest() {
 }
 
-FetchScanTasksRequest FetchScanTasksRequest::FromJSON(yyjson_val *obj) {
+FetchScanTasksRequest FetchScanTasksRequest::FromJSON(JSONValue obj) {
 	FetchScanTasksRequest res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -24,10 +22,16 @@ FetchScanTasksRequest FetchScanTasksRequest::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string FetchScanTasksRequest::TryFromJSON(yyjson_val *obj) {
+FetchScanTasksRequest FetchScanTasksRequest::Copy() const {
+	FetchScanTasksRequest res;
+	res.plan_task = plan_task.Copy();
+	return res;
+}
+
+string FetchScanTasksRequest::TryFromJSON(JSONValue obj) {
 	string error;
-	auto plan_task_val = yyjson_obj_get(obj, "plan-task");
-	if (!plan_task_val) {
+	auto plan_task_val = obj.GetMember("plan-task");
+	if (!plan_task_val.IsValid()) {
 		return "FetchScanTasksRequest required property 'plan-task' is missing";
 	} else {
 		error = plan_task.TryFromJSON(plan_task_val);
@@ -35,7 +39,19 @@ string FetchScanTasksRequest::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+void FetchScanTasksRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
+	// Serialize: plan-task
+	auto plan_task_json = plan_task.ToJSON(writer);
+	obj.Add("plan-task", plan_task_json);
+}
+
+JSONMutableValue FetchScanTasksRequest::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

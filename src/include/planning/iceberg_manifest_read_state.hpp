@@ -21,10 +21,18 @@ public:
 	idx_t end_index;
 };
 
+struct IcebergDataViewCursor {
+	idx_t next_batch_idx = 0;
+	bool has_current_batch = false;
+	ManifestReadBatch current_batch;
+	idx_t current_batch_offset = 0;
+};
+
 struct ManifestEntryReadState {
 public:
 	void PushBatch(ManifestReadBatch &&batch);
 	bool GetBatch(idx_t batch_idx, ManifestReadBatch &result) const;
+	bool TryReadBatch(IcebergDataViewCursor &cursor) const;
 
 private:
 	//! Lock guarding the batches against concurrent access

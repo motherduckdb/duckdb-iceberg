@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/remove_snapshot_ref_update.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 RemoveSnapshotRefUpdate::RemoveSnapshotRefUpdate() {
 }
 
-RemoveSnapshotRefUpdate RemoveSnapshotRefUpdate::FromJSON(yyjson_val *obj) {
+RemoveSnapshotRefUpdate RemoveSnapshotRefUpdate::FromJSON(JSONValue obj) {
 	RemoveSnapshotRefUpdate res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -24,36 +22,63 @@ RemoveSnapshotRefUpdate RemoveSnapshotRefUpdate::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string RemoveSnapshotRefUpdate::TryFromJSON(yyjson_val *obj) {
+RemoveSnapshotRefUpdate RemoveSnapshotRefUpdate::Copy() const {
+	RemoveSnapshotRefUpdate res;
+	res.base_update = base_update.Copy();
+	res.ref_name = ref_name;
+	return res;
+}
+
+string RemoveSnapshotRefUpdate::TryFromJSON(JSONValue obj) {
 	string error;
 	error = base_update.TryFromJSON(obj);
 	if (!error.empty()) {
 		return error;
 	}
-	auto ref_name_val = yyjson_obj_get(obj, "ref-name");
-	if (!ref_name_val) {
+	auto action_refinement_val = obj.GetMember("action");
+	if (action_refinement_val.IsValid()) {
+		string action_refinement;
+		if (json_utils::IsString(action_refinement_val)) {
+			action_refinement = json_utils::GetString(action_refinement_val);
+		} else {
+			return StringUtil::Format(
+			    "RemoveSnapshotRefUpdate property 'action_refinement' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(action_refinement_val).c_str());
+		}
+		if (!action_refinement_val.IsNull() && action_refinement != "remove-snapshot-ref") {
+			return "RemoveSnapshotRefUpdate property 'action_refinement' does not match its required const value";
+		}
+	} else {
+		return "RemoveSnapshotRefUpdate required property 'action' is missing";
+	}
+	auto ref_name_val = obj.GetMember("ref-name");
+	if (!ref_name_val.IsValid()) {
 		return "RemoveSnapshotRefUpdate required property 'ref-name' is missing";
 	} else {
-		if (yyjson_is_str(ref_name_val)) {
-			ref_name = yyjson_get_str(ref_name_val);
+		if (json_utils::IsString(ref_name_val)) {
+			ref_name = json_utils::GetString(ref_name_val);
 		} else {
 			return StringUtil::Format(
-			    "RemoveSnapshotRefUpdate property 'ref_name' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(ref_name_val));
+			    "RemoveSnapshotRefUpdate property 'ref_name' is not of type 'string', found %s instead",
+			    json_utils::GetTypeDescription(ref_name_val).c_str());
 		}
 	}
-	auto action_val = yyjson_obj_get(obj, "action");
-	if (action_val && !yyjson_is_null(action_val)) {
-		has_action = true;
-		if (yyjson_is_str(action_val)) {
-			action = yyjson_get_str(action_val);
-		} else {
-			return StringUtil::Format(
-			    "RemoveSnapshotRefUpdate property 'action' is not of type 'string', found '%s' instead",
-			    yyjson_get_type_desc(action_val));
-		}
-	}
-	return string();
+	return "";
+}
+
+void RemoveSnapshotRefUpdate::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
+	// Serialize base class: BaseUpdate
+	base_update.PopulateJSON(writer, obj);
+
+	// Serialize: ref-name
+	auto ref_name_json = writer.CreateString(ref_name);
+	obj.Add("ref-name", ref_name_json);
+}
+
+JSONMutableValue RemoveSnapshotRefUpdate::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

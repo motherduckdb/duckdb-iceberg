@@ -1,13 +1,12 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/namespace.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -21,15 +20,20 @@ public:
 	CreateNamespaceResponse &operator=(CreateNamespaceResponse &&) = default;
 
 public:
-	static CreateNamespaceResponse FromJSON(yyjson_val *obj);
+	// Deserialization
+	static CreateNamespaceResponse FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Copy
+	CreateNamespaceResponse Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	Namespace _namespace;
-	case_insensitive_map_t<string> properties;
-	bool has_properties = false;
+	optional<case_insensitive_map_t<string>> properties;
 };
 
 } // namespace rest_api_objects

@@ -1,12 +1,11 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -20,20 +19,23 @@ public:
 	SnapshotReference &operator=(SnapshotReference &&) = default;
 
 public:
-	static SnapshotReference FromJSON(yyjson_val *obj);
+	// Deserialization
+	static SnapshotReference FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Copy
+	SnapshotReference Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	string type;
 	int64_t snapshot_id;
-	int64_t max_ref_age_ms;
-	bool has_max_ref_age_ms = false;
-	int64_t max_snapshot_age_ms;
-	bool has_max_snapshot_age_ms = false;
-	int32_t min_snapshots_to_keep;
-	bool has_min_snapshots_to_keep = false;
+	optional<int64_t> max_ref_age_ms;
+	optional<int64_t> max_snapshot_age_ms;
+	optional<int32_t> min_snapshots_to_keep;
 };
 
 } // namespace rest_api_objects

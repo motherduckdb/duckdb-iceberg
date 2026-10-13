@@ -5,19 +5,21 @@
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
+#include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 
 #include "execution/operator/iceberg_delete.hpp"
 #include "execution/operator/iceberg_insert.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
+#include "planning/iceberg_multi_file_list.hpp"
 
 namespace duckdb {
 
-IcebergUpdate::IcebergUpdate(PhysicalPlan &physical_plan, IcebergTableEntry &table, vector<PhysicalIndex> columns_p,
-                             PhysicalOperator &child, PhysicalOperator &delete_op_p,
+IcebergUpdate::IcebergUpdate(PhysicalPlan &physical_plan, IcebergTableSchemaVersion &table,
+                             vector<PhysicalIndex> columns_p, PhysicalOperator &child, PhysicalOperator &delete_op_p,
                              vector<unique_ptr<Expression>> expressions_p,
                              vector<unique_ptr<Expression>> bound_defaults)
     : PhysicalOperator(physical_plan, PhysicalOperatorType::EXTENSION, {}, 1), table(table),
@@ -34,7 +36,7 @@ IcebergUpdate::IcebergUpdate(PhysicalPlan &physical_plan, IcebergTableEntry &tab
 		D_ASSERT(bound_defaults.size() == expressions.size());
 		for (idx_t i = 0; i < expressions.size(); i++) {
 			auto &expr = expressions[i];
-			if (expr->type == ExpressionType::VALUE_DEFAULT) {
+			if (expr->GetExpressionType() == ExpressionType::VALUE_DEFAULT) {
 				expr = bound_defaults[i]->Copy();
 			}
 		}
@@ -42,23 +44,9 @@ IcebergUpdate::IcebergUpdate(PhysicalPlan &physical_plan, IcebergTableEntry &tab
 }
 
 IcebergUpdate &IcebergUpdate::PlanUpdateOperator(ClientContext &context, PhysicalPlanGenerator &planner,
-                                                 IcebergTableEntry &table, LogicalUpdate &op,
+                                                 IcebergTableSchemaVersion &table, LogicalUpdate &op,
                                                  PhysicalOperator &child_plan, IcebergCopyInput &copy_input) {
 	auto &table_metadata = table.table_info.table_metadata;
-
-	if (table_metadata.HasSortOrder()) {
-		auto &sort_spec = table_metadata.GetLatestSortOrder();
-		if (sort_spec.IsSorted()) {
-			Value unsafe_ignore_sort_order;
-			if (!context.TryGetCurrentSetting("unsafe_iceberg_ignore_sort_order", unsafe_ignore_sort_order) ||
-			    !unsafe_ignore_sort_order.GetValue<bool>()) {
-				throw NotImplementedException(
-				    "Update on a sorted iceberg table is not supported yet.\nTo bypass this guard and "
-				    "write without applying the table's declared sort order, "
-				    "run \"SET unsafe_iceberg_ignore_sort_order=true\"");
-			}
-		}
-	}
 	if (table_metadata.iceberg_version < 2) {
 		throw NotImplementedException("Update Iceberg V%d tables", table_metadata.iceberg_version);
 	}
@@ -85,7 +73,7 @@ IcebergUpdate &IcebergUpdate::PlanUpdateOperator(ClientContext &context, Physica
 	// Set output types: physical columns + optional _row_id for v3
 	vector<LogicalType> update_output_types;
 	for (auto &expr : update_op.expressions) {
-		update_output_types.push_back(expr->return_type);
+		update_output_types.push_back(expr->GetReturnType());
 	}
 	if (table_metadata.iceberg_version >= 3) {
 		update_output_types.push_back(LogicalType::BIGINT); // _row_id
@@ -129,7 +117,7 @@ unique_ptr<OperatorState> IcebergUpdate::GetOperatorState(ExecutionContext &cont
 	vector<LogicalType> expression_types;
 	result->expression_executor = make_uniq<ExpressionExecutor>(context.client, expressions);
 	for (auto &expr : result->expression_executor->expressions) {
-		expression_types.push_back(expr->return_type);
+		expression_types.push_back(expr->GetReturnType());
 	}
 
 	result->update_expression_chunk.Initialize(context.client, expression_types);
@@ -152,9 +140,11 @@ OperatorResultType IcebergUpdate::Execute(ExecutionContext &context, DataChunk &
 	// evaluate update expressions
 	auto &update_expression_chunk = lstate.update_expression_chunk;
 	auto &insert_chunk = lstate.insert_chunk;
+	auto &delete_chunk = lstate.delete_chunk;
 
-	update_expression_chunk.SetCardinality(input.size());
-	insert_chunk.SetCardinality(input.size());
+	update_expression_chunk.Reset();
+	insert_chunk.Reset();
+	delete_chunk.Reset();
 	lstate.expression_executor->Execute(input, update_expression_chunk);
 
 	// build output, physical columns + row_id
@@ -163,21 +153,19 @@ OperatorResultType IcebergUpdate::Execute(ExecutionContext &context, DataChunk &
 		insert_chunk.data[i].Reference(update_expression_chunk.data[i]);
 	}
 	if (row_id_index.IsValid()) {
-		// _row_id is the 3rd column from the end in the scan output:
-		// [..., _row_id, file_path, seq_row_id]
-		auto index = input.ColumnCount() - 3;
+		// V3 scan output ends in [file_path, file_row_number, _row_id].
+		auto index = input.ColumnCount() - 1;
 		insert_chunk.data[physical_column_count].Reference(input.data[index]);
 	}
 
 	chunk.Reference(insert_chunk);
 
-	// Sink the delete tracking columns (last 2 columns: file_path, row_id)
-	auto &delete_chunk = lstate.delete_chunk;
-	delete_chunk.SetCardinality(input.size());
-	idx_t delete_idx_start = input.ColumnCount() - 2;
+	// Physical delete identity precedes the optional V3 lineage column.
+	idx_t delete_idx_start = input.ColumnCount() - (row_id_index.IsValid() ? 3 : 2);
 	for (idx_t i = 0; i < 2; i++) {
 		delete_chunk.data[i].Reference(input.data[delete_idx_start + i]);
 	}
+	delete_chunk.SetChildCardinality(input.size());
 
 	InterruptState interrupt_state;
 	OperatorSinkInput delete_input {*delete_op.sink_state, *lstate.delete_local_state, interrupt_state};
@@ -226,7 +214,7 @@ string IcebergUpdate::GetName() const {
 
 InsertionOrderPreservingMap<string> IcebergUpdate::ParamsToString() const {
 	InsertionOrderPreservingMap<string> result;
-	result["Table Name"] = table.name;
+	result["Table Name"] = table.name.GetIdentifierName();
 	return result;
 }
 
@@ -236,7 +224,7 @@ PhysicalOperator &IcebergCatalog::PlanUpdate(ClientContext &context, PhysicalPla
 		throw BinderException("RETURNING clause not yet supported for updates of a Iceberg table");
 	}
 
-	auto &table_entry = op.table.Cast<IcebergTableEntry>();
+	auto &table_entry = op.table.Cast<IcebergTableSchemaVersion>();
 	table_entry.PrepareIcebergScanFromEntry(context);
 
 	auto &irc_transaction = IcebergTransaction::Get(context, *this);
@@ -245,6 +233,9 @@ PhysicalOperator &IcebergCatalog::PlanUpdate(ClientContext &context, PhysicalPla
 	auto &table_metadata = updated_table.table_metadata;
 	auto &schema = table_metadata.GetLatestSchema();
 	auto &updated_table_entry = *updated_table.schema_versions[schema.schema_id];
+	if (!irc_transaction.planning_merge_into) {
+		VerifyMergeOnRead(table_metadata, updated_table_entry.name.GetIdentifierName(), WRITE_UPDATE_MODE);
+	}
 
 	// Plan the copy operator with update_op as child.
 	// PlanCopyForInsert will add a partition projection on top if needed.
@@ -265,8 +256,8 @@ PhysicalOperator &IcebergCatalog::PlanUpdate(ClientContext &context, PhysicalPla
 	return insert_op;
 }
 
-void IcebergTableEntry::BindUpdateConstraints(Binder &binder, LogicalGet &get, LogicalProjection &proj,
-                                              LogicalUpdate &update, ClientContext &context) {
+void IcebergTableSchemaVersion::BindUpdateConstraints(Binder &binder, LogicalGet &get, LogicalProjection &proj,
+                                                      LogicalUpdate &update, ClientContext &context) {
 	// all updates in DuckDB-Iceberg are deletes + inserts
 	update.update_is_del_and_insert = true;
 
@@ -301,9 +292,9 @@ void IcebergTableEntry::BindUpdateConstraints(Binder &binder, LogicalGet &get, L
 		}
 		// column is not projected yet: project it by adding the clause "i=i" to the set of updated columns
 		update.expressions.push_back(make_uniq<BoundColumnRefExpression>(
-		    column.Type(), ColumnBinding(proj.table_index, proj.expressions.size())));
+		    column.Type(), ColumnBinding(proj.table_index, ProjectionIndex(proj.expressions.size()))));
 		proj.expressions.push_back(make_uniq<BoundColumnRefExpression>(
-		    column.Type(), ColumnBinding(get.table_index, column_id_index.GetIndex())));
+		    column.Type(), ColumnBinding(get.table_index, ProjectionIndex(column_id_index.GetIndex()))));
 		get.AddColumnId(physical_index.index);
 		update.columns.push_back(physical_index);
 	}

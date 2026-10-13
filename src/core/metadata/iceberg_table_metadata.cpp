@@ -7,8 +7,38 @@
 #include "core/metadata/snapshot/iceberg_snapshot.hpp"
 #include "rest_catalog/objects/list.hpp"
 #include "catalog/rest/api/iceberg_create_table_request.hpp"
+#include "iceberg_options.hpp"
 
 namespace duckdb {
+
+optional_ptr<const IcebergColumnDefinition> IcebergTableMetadataSchemas::FindColumnByFieldId(int32_t field_id) const {
+	for (auto &schema_entry : schemas) {
+		auto &schema = *schema_entry.second;
+		auto column = schema.TryGetColumnByFieldId(field_id);
+		if (column) {
+			return column;
+		}
+	}
+	return nullptr;
+}
+
+const IcebergTableSchema &IcebergTableMetadataSchemas::GetSchemaFromId(int32_t schema_id) const {
+	auto it = schemas.find(schema_id);
+	if (it == schemas.end()) {
+		throw InvalidConfigurationException("Schema id %d not found in Iceberg metadata", schema_id);
+	}
+	return *it->second;
+}
+
+void IcebergTableMetadataSchemas::ForEachSchema(const std::function<void(const IcebergTableSchema &)> &callback) const {
+	for (auto &entry : schemas) {
+		callback(*entry.second);
+	}
+}
+
+bool IcebergTableMetadataSchemas::IsEmpty() const {
+	return schemas.empty();
+}
 
 //! ----------- Select Snapshot -----------
 
@@ -20,20 +50,19 @@ optional_ptr<const IcebergSnapshot> IcebergTableMetadata::FindSnapshotByIdIntern
 	return it->second;
 }
 
-optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetSnapshotByTimestamp(timestamp_t timestamp) const {
+optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetSnapshotByTimestampMS(timestamp_ms_t timestamp) const {
 	// Per Iceberg spec, point-in-time resolution should use snapshot-log (the
 	// history of refs.main). Searching the global snapshots map would incorrectly
 	// pick side-branch tips - see duckdb-iceberg#969.
 	//
 	// All comparisons below are in raw epoch-millis: snapshot_log stores ms, and
 	// we convert the incoming lookup timestamp to ms once here.
-	auto target_ms = Timestamp::GetEpochMs(timestamp);
 	if (!snapshot_log.empty()) {
 		// snapshot_log is sorted ascending by timestamp_ms; walk newest-first and
 		// return the first entry whose snapshot still exists in the snapshots map
 		// (spec allows expired snapshots to leave dangling log entries).
 		for (auto it = snapshot_log.rbegin(); it != snapshot_log.rend(); ++it) {
-			if (it->second <= target_ms) {
+			if (it->second <= timestamp) {
 				if (auto snap = FindSnapshotByIdInternal(it->first)) {
 					return snap;
 				}
@@ -41,25 +70,24 @@ optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetSnapshotByTimestamp
 		}
 		return nullptr;
 	}
-	// snapshot-log is optional per spec. Fall back to the pre-#969 behavior:
+
 	// scan all snapshots for the largest timestamp_ms <= target.
-	uint64_t max_millis = NumericLimits<uint64_t>::Minimum();
 	optional_ptr<const IcebergSnapshot> max_snapshot = nullptr;
 	for (auto &it : snapshots) {
 		auto &snapshot = it.second;
-		auto curr_millis = Timestamp::GetEpochMs(snapshot.timestamp_ms);
-		if (curr_millis <= target_ms && static_cast<uint64_t>(curr_millis) >= max_millis) {
+		const bool can_be_seen_by_transaction = snapshot.timestamp_ms <= timestamp;
+		if (!can_be_seen_by_transaction) {
+			continue;
+		}
+		if (!max_snapshot || snapshot.timestamp_ms >= max_snapshot->timestamp_ms) {
 			max_snapshot = snapshot;
-			max_millis = curr_millis;
 		}
 	}
 	return max_snapshot;
 }
 
-shared_ptr<IcebergTableSchema> IcebergTableMetadata::GetSchemaFromId(int32_t schema_id) const {
-	auto it = schemas.find(schema_id);
-	D_ASSERT(it != schemas.end());
-	return it->second;
+const IcebergTableSchema &IcebergTableMetadata::GetSchemaFromId(int32_t schema_id) const {
+	return schemas.GetSchemaFromId(schema_id);
 }
 
 optional_ptr<const IcebergPartitionSpec> IcebergTableMetadata::FindPartitionSpecById(int32_t spec_id) const {
@@ -83,16 +111,14 @@ const unordered_map<int32_t, IcebergPartitionSpec> &IcebergTableMetadata::GetPar
 }
 
 optional_ptr<const IcebergSnapshot> IcebergTableMetadata::GetLatestSnapshot() const {
-	if (!has_current_snapshot) {
+	if (!current_snapshot_id) {
 		return nullptr;
 	}
-	return GetSnapshotById(current_snapshot_id);
+	return GetSnapshotById(*current_snapshot_id);
 }
 
 const IcebergTableSchema &IcebergTableMetadata::GetLatestSchema() const {
-	auto res = GetSchemaFromId(current_schema_id);
-	D_ASSERT(res);
-	return *res;
+	return GetSchemaFromId(current_schema_id);
 }
 
 bool IcebergTableMetadata::HasPartitionSpec() const {
@@ -134,16 +160,16 @@ IcebergSnapshotScanInfo IcebergTableMetadata::GetSnapshot(const IcebergSnapshotL
 		snapshot_info.schema_id = GetCurrentSchemaId();
 		return snapshot_info;
 	case SnapshotSource::FROM_ID:
-		snapshot_info.snapshot = GetSnapshotById(lookup.snapshot_id);
+		snapshot_info.snapshot = GetSnapshotById(lookup.GetSnapshotId());
 		snapshot_info.schema_id = snapshot_info.snapshot->GetSchemaId();
 		return snapshot_info;
 	case SnapshotSource::FROM_TIMESTAMP:
-		snapshot_info.snapshot = GetSnapshotByTimestamp(lookup.snapshot_timestamp);
-		if (snapshot_info.snapshot) {
-			snapshot_info.schema_id = snapshot_info.snapshot->GetSchemaId();
-		} else {
-			snapshot_info.schema_id = GetCurrentSchemaId();
+		snapshot_info.snapshot = GetSnapshotByTimestampMS(lookup.GetSnapshotTimestamp());
+		if (!snapshot_info.snapshot) {
+			throw InvalidConfigurationException("Could not find snapshot at or before timestamp '%s'",
+			                                    Value::TIMESTAMPMS(lookup.GetSnapshotTimestamp()).ToString());
 		}
+		snapshot_info.schema_id = snapshot_info.snapshot->GetSchemaId();
 		return snapshot_info;
 	default:
 		throw InternalException("SnapshotSource type not implemented");
@@ -268,7 +294,7 @@ string IcebergTableMetadata::GetMetaDataPath(ClientContext &context, const strin
 		version_hint = GetTableVersionFromHint(meta_path, fs, DEFAULT_VERSION_HINT_FILE);
 		return GenerateMetaDataUrl(fs, meta_path, version_hint, options);
 	}
-	if (!UnsafeVersionGuessingEnabled(context)) {
+	if (!options.version_explicitly_set && !UnsafeVersionGuessingEnabled(context)) {
 		// Make sure we're allowed to guess versions
 		throw InvalidConfigurationException(
 		    "Failed to read iceberg table. No version was provided and no version-hint could be found, globbing the "
@@ -297,18 +323,15 @@ int32_t IcebergTableMetadata::GetCurrentSchemaId() const {
 	return current_schema_id;
 }
 
-IcebergTableSchema &IcebergTableMetadata::AddSchemaOrGetExisting(shared_ptr<IcebergTableSchema> schema) {
-	optional_ptr<IcebergTableSchema> existing_schema;
+IcebergTableSchema &IcebergTableMetadataSchemas::AddSchemaOrGetExisting(shared_ptr<IcebergTableSchema> schema) {
+	if (!schema) {
+		throw InternalException("Can't add NULL schema");
+	}
 	for (auto &it : schemas) {
 		auto &item = *it.second;
-
 		if (schema->Equals(item)) {
-			existing_schema = item;
-			break;
+			return item;
 		}
-	}
-	if (existing_schema) {
-		return *existing_schema;
 	}
 	auto new_schema_id = schema->schema_id;
 	auto res = schemas.emplace(new_schema_id, std::move(schema));
@@ -319,20 +342,16 @@ IcebergTableSchema &IcebergTableMetadata::AddSchemaOrGetExisting(shared_ptr<Iceb
 	return *res.first->second;
 }
 
-const unordered_map<int32_t, shared_ptr<IcebergTableSchema>> &IcebergTableMetadata::GetSchemas() const {
+const IcebergTableMetadataSchemas &IcebergTableMetadata::GetSchemas() const {
 	return schemas;
 }
 
-// TODO: this should also recursively check struct, map, and list columns
+IcebergTableMetadataSchemas &IcebergTableMetadata::GetSchemasMutable() {
+	return schemas;
+}
+
 optional_ptr<const IcebergColumnDefinition> IcebergTableMetadata::FindColumnByFieldId(int32_t field_id) const {
-	for (auto &schema_entry : schemas) {
-		for (auto &column : schema_entry.second->columns) {
-			if (column->id == field_id) {
-				return *column;
-			}
-		}
-	}
-	return nullptr;
+	return schemas.FindColumnByFieldId(field_id);
 }
 
 bool IcebergTableMetadata::HasLastPartitionId() const {
@@ -354,104 +373,172 @@ rest_api_objects::TableMetadata IcebergTableMetadata::Parse(const string &path, 
 	} else {
 		json_content = IcebergUtils::FileToString(path, fs);
 	}
-	auto doc = std::unique_ptr<yyjson_doc, YyjsonDocDeleter>(yyjson_read(json_content.c_str(), json_content.size(), 0));
-	if (!doc) {
-		throw InvalidInputException("Fails to parse iceberg metadata from %s", path);
-	}
+	auto doc = JSONDocument::Parse(json_content.c_str(), json_content.size());
+	return rest_api_objects::TableMetadata::FromJSON(doc->GetRoot());
+}
 
-	auto root = yyjson_doc_get_root(doc.get());
-	return rest_api_objects::TableMetadata::FromJSON(root);
+IcebergTableMetadata::IcebergTableMetadata(IcebergTableMetadataSchemas schemas) : schemas(std::move(schemas)) {
 }
 
 IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_objects::TableMetadata &table_metadata) {
-	IcebergTableMetadata res;
+	if (table_metadata.format_version > MAX_ICEBERG_FORMAT_VERSION) {
+		throw NotImplementedException("Iceberg format-version %d is not supported, the highest supported version is %d",
+		                              table_metadata.format_version, MAX_ICEBERG_FORMAT_VERSION);
+	}
+	// Check before loading snapshots: empty encrypted tables must not accept plaintext writes either.
+	if (table_metadata.properties && table_metadata.properties->count("encryption.key-id")) {
+		throw NotImplementedException("Iceberg table encryption is not supported (encryption.key-id is set)");
+	}
+	if (table_metadata.encryption_keys && !table_metadata.encryption_keys->empty()) {
+		throw NotImplementedException("Iceberg table encryption is not supported (encryption-keys is not empty)");
+	}
+	unordered_map<int32_t, shared_ptr<IcebergTableSchema>> schemas;
+	if (table_metadata.schemas) {
+		for (auto &schema : *table_metadata.schemas) {
+			D_ASSERT(schema.object_1.schema_id);
+			schemas.emplace(*schema.object_1.schema_id, IcebergTableSchema::ParseSchema(schema));
+		}
+	} else if (table_metadata.format_version == 1 && table_metadata.schema) {
+		auto schema = table_metadata.schema->Copy();
+		if (!schema.object_1.schema_id) {
+			schema.object_1.schema_id = 0;
+		}
+		schemas.emplace(*schema.object_1.schema_id, IcebergTableSchema::ParseSchema(schema));
+	}
+	IcebergTableMetadata res(IcebergTableMetadataSchemas(std::move(schemas)));
 
 	res.table_uuid = table_metadata.table_uuid;
-	res.location = table_metadata.location;
+	D_ASSERT(table_metadata.location);
+	res.location = *table_metadata.location;
 	res.iceberg_version = table_metadata.format_version;
-	res.last_updated_ms = timestamp_t(table_metadata.last_updated_ms);
-	for (auto &schema : table_metadata.schemas) {
-		res.schemas.emplace(schema.object_1.schema_id, IcebergTableSchema::ParseSchema(schema));
+	D_ASSERT(table_metadata.last_updated_ms);
+	res.last_updated_ms = timestamp_ms_t(*table_metadata.last_updated_ms);
+
+	if (table_metadata.snapshots) {
+		for (auto &snapshot : *table_metadata.snapshots) {
+			res.snapshots.emplace(snapshot.snapshot_id, IcebergSnapshot::ParseSnapshot(snapshot, res));
+		}
 	}
-	for (auto &snapshot : table_metadata.snapshots) {
-		res.snapshots.emplace(snapshot.snapshot_id, IcebergSnapshot::ParseSnapshot(snapshot, res));
-	}
-	if (table_metadata.has_snapshot_log) {
-		res.snapshot_log.reserve(table_metadata.snapshot_log.value.size());
-		for (auto &entry : table_metadata.snapshot_log.value) {
+	if (table_metadata.snapshot_log) {
+		res.snapshot_log.reserve(table_metadata.snapshot_log->value.size());
+		for (auto &entry : table_metadata.snapshot_log->value) {
 			res.snapshot_log.emplace_back(entry.snapshot_id, entry.timestamp_ms);
 		}
 		std::sort(res.snapshot_log.begin(), res.snapshot_log.end(),
-		          [](const pair<int64_t, int64_t> &a, const pair<int64_t, int64_t> &b) { return a.second < b.second; });
+		          [](const pair<int64_t, timestamp_ms_t> &a, const pair<int64_t, timestamp_ms_t> &b) {
+			          return a.second < b.second;
+		          });
 	}
-	for (auto &spec : table_metadata.partition_specs) {
-		res.partition_specs.emplace(spec.spec_id, IcebergPartitionSpec::ParseFromJson(spec));
-	}
-	for (auto &sort_order : table_metadata.sort_orders) {
-		res.sort_specs.emplace(sort_order.order_id, IcebergSortOrder::ParseFromJson(sort_order));
-	}
-	if (!table_metadata.has_current_schema_id) {
-		if (res.iceberg_version == 1) {
-			throw NotImplementedException("Reading of the V1 'schema' field is not currently supported");
+	if (table_metadata.partition_specs) {
+		for (auto &spec : *table_metadata.partition_specs) {
+			D_ASSERT(spec.spec_id);
+			res.partition_specs.emplace(*spec.spec_id, IcebergPartitionSpec::ParseFromJson(spec, res.iceberg_version));
 		}
-		throw InvalidConfigurationException("'current_schema_id' field is missing from the metadata.json file");
+	} else if (res.iceberg_version == 1 && table_metadata.partition_spec) {
+		rest_api_objects::PartitionSpec spec;
+		spec.spec_id = 0;
+		for (auto &field : *table_metadata.partition_spec) {
+			spec.fields.emplace_back(field.Copy());
+		}
+		res.partition_specs.emplace(0, IcebergPartitionSpec::ParseFromJson(spec, res.iceberg_version));
 	}
-	res.current_schema_id = table_metadata.current_schema_id;
-	if (table_metadata.has_next_row_id) {
-		res.has_next_row_id = true;
-		res.next_row_id = table_metadata.next_row_id;
+	if (table_metadata.sort_orders) {
+		for (auto &sort_order : *table_metadata.sort_orders) {
+			res.sort_specs.emplace(sort_order.order_id, IcebergSortOrder::ParseFromJson(sort_order));
+		}
 	}
-
-	if (table_metadata.has_current_snapshot_id && table_metadata.current_snapshot_id != -1) {
-		res.has_current_snapshot = true;
-		res.current_snapshot_id = table_metadata.current_snapshot_id;
+	if (!table_metadata.current_schema_id) {
+		if (res.iceberg_version == 1 && table_metadata.schema) {
+			res.current_schema_id = table_metadata.schema->object_1.schema_id.value_or(0);
+		} else {
+			throw InvalidConfigurationException("'current_schema_id' field is missing from the metadata.json file");
+		}
 	} else {
-		res.has_current_snapshot = false;
+		res.current_schema_id = *table_metadata.current_schema_id;
+	}
+	if (table_metadata.next_row_id) {
+		res.next_row_id = *table_metadata.next_row_id;
 	}
 
-	if (table_metadata.has_last_sequence_number) {
-		res.last_sequence_number = table_metadata.last_sequence_number;
+	if (table_metadata.current_snapshot_id && *table_metadata.current_snapshot_id != -1) {
+		res.current_snapshot_id = *table_metadata.current_snapshot_id;
+	}
+
+	if (table_metadata.last_sequence_number) {
+		res.last_sequence_number = *table_metadata.last_sequence_number;
 	} else {
 		//! SPEC: Table metadata field last-sequence-number must default to 0
 		res.last_sequence_number = 0;
 	}
 
-	res.default_spec_id = table_metadata.default_spec_id;
-	if (table_metadata.has_default_sort_order_id) {
-		res.default_sort_order_id = table_metadata.default_sort_order_id;
+	if (table_metadata.default_spec_id) {
+		res.default_spec_id = *table_metadata.default_spec_id;
+	} else if (res.iceberg_version == 1 && table_metadata.partition_spec) {
+		res.default_spec_id = 0;
+	} else {
+		throw InvalidConfigurationException("'default-spec-id' field is missing from the metadata.json file");
+	}
+	if (table_metadata.default_sort_order_id) {
+		res.default_sort_order_id = *table_metadata.default_sort_order_id;
 	}
 
-	auto &properties = table_metadata.properties;
-	auto name_mapping = properties.find("schema.name-mapping.default");
-	if (name_mapping != properties.end()) {
-		auto doc = std::unique_ptr<yyjson_doc, YyjsonDocDeleter>(
-		    yyjson_read(name_mapping->second.c_str(), name_mapping->second.size(), 0));
-		if (doc == nullptr) {
-			throw InvalidInputException("Fails to parse iceberg metadata 'schema.name-mapping.default' property");
+	if (table_metadata.properties) {
+		auto &properties = *table_metadata.properties;
+		auto name_mapping = properties.find("schema.name-mapping.default");
+		if (name_mapping != properties.end()) {
+			auto doc = JSONDocument::Parse(name_mapping->second.c_str(), name_mapping->second.size());
+			auto root = doc->GetRoot();
+			idx_t mapping_index = 0;
+			res.mappings.emplace_back();
+			mapping_index++;
+			IcebergFieldMapping::ParseFieldMappings(root, res.mappings, mapping_index, 0);
 		}
-		auto root = yyjson_doc_get_root(doc.get());
-		idx_t mapping_index = 0;
-		res.mappings.emplace_back();
-		mapping_index++;
-		IcebergFieldMapping::ParseFieldMappings(root, res.mappings, mapping_index, 0);
+
+		// parse all table properties
+		for (auto &property : properties) {
+			res.table_properties.emplace(property.first, property.second);
+		}
 	}
 
-	// parse all table properties
-	for (auto &property : properties) {
-		res.table_properties.emplace(property.first, property.second);
+	if (table_metadata.last_column_id) {
+		res.last_column_id = *table_metadata.last_column_id;
 	}
 
-	if (table_metadata.has_last_column_id) {
-		res.last_column_id = table_metadata.last_column_id;
+	if (table_metadata.last_partition_id) {
+		res.last_partition_field_id = *table_metadata.last_partition_id;
 	}
 
-	if (table_metadata.has_last_partition_id) {
-		res.last_partition_field_id = table_metadata.last_partition_id;
+	if (table_metadata.metadata_log) {
+		for (auto &item : table_metadata.metadata_log->value) {
+			res.metadata_log.emplace_back(item.metadata_file, timestamp_ms_t(item.timestamp_ms));
+		}
 	}
+	return res;
+}
 
-	for (auto &item : table_metadata.metadata_log.value) {
-		res.metadata_log.emplace_back(item.metadata_file, item.timestamp_ms);
-	}
+IcebergTableMetadata IcebergTableMetadata::Copy() const {
+	IcebergTableMetadata res(schemas);
+	res.table_uuid = table_uuid;
+	res.location = location;
+	res.iceberg_version = iceberg_version;
+	res.default_spec_id = default_spec_id;
+	res.next_row_id = next_row_id;
+	res.default_sort_order_id = default_sort_order_id;
+	res.current_snapshot_id = current_snapshot_id;
+	res.last_sequence_number = last_sequence_number;
+	res.last_updated_ms = last_updated_ms;
+	res.last_column_id = last_column_id;
+	res.last_partition_field_id = last_partition_field_id;
+	res.partition_specs = partition_specs;
+	res.sort_specs = sort_specs;
+	res.snapshots = snapshots;
+	res.snapshot_log = snapshot_log;
+	res.mappings = mappings;
+	res.write_data_path = write_data_path;
+	res.write_metadata_path = write_metadata_path;
+	res.table_properties = table_properties;
+	res.metadata_log = metadata_log;
+	res.current_schema_id = current_schema_id;
 	return res;
 }
 
@@ -490,119 +577,104 @@ string IcebergTableMetadata::GetTableProperty(string property_string) const {
 	return "";
 }
 
-bool IcebergTableMetadata::PropertiesAllowPositionalDeletes(IcebergSnapshotOperationType operation_type) const {
-	// first check write.delete.mode. If not present go to write.update.mode
-	switch (operation_type) {
-	case IcebergSnapshotOperationType::DELETE: {
-		auto delete_mode = GetTableProperty("write.delete.mode");
-		// if unset or merge-on-read, it supports positional deletes
-		return delete_mode == "merge-on-read" || delete_mode.empty();
-	}
-	case IcebergSnapshotOperationType::OVERWRITE: {
-		// if unset or merge-on-read, it supports positional deletes
-		auto update_mode = GetTableProperty("write.update.mode");
-		return update_mode == "merge-on-read" || update_mode.empty();
-	}
-	default:
-		throw NotImplementedException("Operation type not supported");
-	}
+bool IcebergTableMetadata::AllowsMergeOnRead(const string &write_mode_property) const {
+	auto mode = GetTableProperty(write_mode_property);
+	// if unset or merge-on-read, it supports positional deletes
+	return mode == "merge-on-read" || mode.empty();
 }
 
-yyjson_mut_val *IcebergTableMetadata::SchemasToJSON(yyjson_mut_doc *doc) const {
-	auto schemas_array = yyjson_mut_arr(doc);
-	for (auto &it : schemas) {
-		auto &schema = *it.second;
-		auto schema_obj = yyjson_mut_obj(doc);
-		IcebergCreateTableRequest::PopulateSchema(doc, schema_obj, schema);
-		yyjson_mut_arr_add_val(schemas_array, schema_obj);
-	}
+JSONMutableValue IcebergTableMetadata::SchemasToJSON(JSONWriter &writer) const {
+	auto schemas_array = writer.CreateArray();
+	schemas.ForEachSchema([&](const IcebergTableSchema &schema) {
+		auto schema_obj = writer.CreateObject();
+		IcebergCreateTableRequest::PopulateSchema(writer, schema_obj, schema);
+		schemas_array.Append(schema_obj);
+	});
 	return schemas_array;
 }
 
-yyjson_mut_val *IcebergTableMetadata::PartitionsToJSON(yyjson_mut_doc *doc) const {
-	auto partitions_array = yyjson_mut_arr(doc);
+JSONMutableValue IcebergTableMetadata::PartitionsToJSON(JSONWriter &writer) const {
+	auto partitions_array = writer.CreateArray();
 	for (auto &it : partition_specs) {
 		auto &partition_spec = it.second;
-		auto partition_obj = partition_spec.ToJSON(doc);
-		yyjson_mut_arr_add_val(partitions_array, partition_obj);
+		partitions_array.Append(partition_spec.ToJSON(writer));
 	}
 	return partitions_array;
 }
 
-yyjson_mut_val *IcebergTableMetadata::TablePropertiesToJSON(yyjson_mut_doc *doc) const {
-	auto properties_obj = yyjson_mut_obj(doc);
+JSONMutableValue IcebergTableMetadata::TablePropertiesToJSON(JSONWriter &writer) const {
+	auto properties_obj = writer.CreateObject();
 	for (auto &property : table_properties) {
 		auto &key = property.first;
 		auto &val = property.second;
-		//! Register the string as part of the document, to ensure lifetime correctness
-		auto key_val = unsafe_yyjson_mut_strncpy(doc, key.c_str(), key.size());
-		yyjson_mut_obj_add_strncpy(doc, properties_obj, key_val, val.c_str(), val.size());
+		properties_obj.AddString(key, val);
 	}
 	return properties_obj;
 }
 
-yyjson_mut_val *IcebergTableMetadata::SnapshotsToJSON(yyjson_mut_doc *doc) const {
-	auto snapshots_array = yyjson_mut_arr(doc);
+JSONMutableValue IcebergTableMetadata::SnapshotsToJSON(JSONWriter &writer) const {
+	auto snapshots_array = writer.CreateArray();
 	for (auto &it : snapshots) {
 		auto &snapshot = it.second;
 		auto snapshot_rest_object = snapshot.ToRESTObject(*this);
-		auto snapshot_obj = IcebergSnapshot::ToJSON(snapshot_rest_object, doc);
-		yyjson_mut_arr_add_val(snapshots_array, snapshot_obj);
+		snapshots_array.Append(snapshot_rest_object.ToJSON(writer));
 	}
 	return snapshots_array;
 }
 
-yyjson_mut_val *IcebergTableMetadata::SnapshotLogToJSON(yyjson_mut_doc *doc) const {
-	auto log_array = yyjson_mut_arr(doc);
+JSONMutableValue IcebergTableMetadata::SnapshotLogToJSON(JSONWriter &writer) const {
+	auto log_array = writer.CreateArray();
 	for (auto &it : snapshots) {
 		auto &snapshot = it.second;
-		auto log_item = yyjson_mut_obj(doc);
-		yyjson_mut_obj_add_int(doc, log_item, "snapshot-id", snapshot.snapshot_id);
-		yyjson_mut_obj_add_int(doc, log_item, "timestamp-ms", snapshot.timestamp_ms.value);
-		yyjson_mut_arr_add_val(log_array, log_item);
+		auto log_item = writer.CreateObject();
+		log_item.Add("snapshot-id", writer.CreateSignedInteger(snapshot.snapshot_id));
+		log_item.Add("timestamp-ms", writer.CreateSignedInteger(snapshot.timestamp_ms.value));
+		log_array.Append(log_item);
 	}
 	return log_array;
 }
 
-yyjson_mut_val *IcebergTableMetadata::SortOrdersToJSON(yyjson_mut_doc *doc) const {
-	auto sort_orders_array = yyjson_mut_arr(doc);
+JSONMutableValue IcebergTableMetadata::SortOrdersToJSON(JSONWriter &writer) const {
+	auto sort_orders_array = writer.CreateArray();
 	for (auto &it : sort_specs) {
 		auto &sort_order = it.second;
-		auto sort_order_obj = sort_order.ToJSON(doc);
-		yyjson_mut_arr_add_val(sort_orders_array, sort_order_obj);
+		sort_orders_array.Append(sort_order.ToJSON(writer));
 	}
 	return sort_orders_array;
 }
 
 string IcebergTableMetadata::ToJSON() const {
-	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-	auto doc = doc_p.get();
-	auto root_obj = yyjson_mut_obj(doc);
-	yyjson_mut_doc_set_root(doc, root_obj);
+	JSONWriter writer;
+	auto root_obj = writer.CreateObject();
+	writer.SetRoot(root_obj);
 
-	yyjson_mut_obj_add_val(doc, root_obj, "format-version", yyjson_mut_int(doc, iceberg_version));
-	yyjson_mut_obj_add_val(doc, root_obj, "table-uuid", yyjson_mut_str(doc, table_uuid.c_str()));
-	yyjson_mut_obj_add_val(doc, root_obj, "location", yyjson_mut_str(doc, location.c_str()));
-	yyjson_mut_obj_add_val(doc, root_obj, "last-updated-ms", yyjson_mut_int(doc, last_updated_ms.value));
-	yyjson_mut_obj_add_val(doc, root_obj, "last-column-id", yyjson_mut_int(doc, last_column_id.GetIndex()));
-	yyjson_mut_obj_add_val(doc, root_obj, "schemas", SchemasToJSON(doc));
-	yyjson_mut_obj_add_val(doc, root_obj, "current-schema-id", yyjson_mut_int(doc, current_schema_id));
-	yyjson_mut_obj_add_val(doc, root_obj, "partition-specs", PartitionsToJSON(doc));
-	yyjson_mut_obj_add_val(doc, root_obj, "default-spec-id", yyjson_mut_int(doc, default_spec_id));
-	yyjson_mut_obj_add_val(doc, root_obj, "last-partition-id", yyjson_mut_int(doc, last_partition_field_id.GetIndex()));
-	yyjson_mut_obj_add_val(doc, root_obj, "properties", TablePropertiesToJSON(doc));
-	if (has_current_snapshot) {
-		yyjson_mut_obj_add_val(doc, root_obj, "current-snapshot-id", yyjson_mut_int(doc, current_snapshot_id));
+	root_obj.Add("format-version", writer.CreateSignedInteger(iceberg_version));
+	root_obj.AddString("table-uuid", table_uuid);
+	root_obj.AddString("location", location);
+	if (iceberg_version >= 2) {
+		// Required since v2; readers may reject v2+ metadata without it
+		root_obj.Add("last-sequence-number", writer.CreateSignedInteger(last_sequence_number));
 	}
-	yyjson_mut_obj_add_val(doc, root_obj, "snapshots", SnapshotsToJSON(doc));
-	yyjson_mut_obj_add_val(doc, root_obj, "snapshot-log", SnapshotLogToJSON(doc));
-	// yyjson_mut_obj_add_val(doc, root_obj, "metadata-log", MetadataLogToJSON(doc));
-	yyjson_mut_obj_add_val(doc, root_obj, "sort-orders", SortOrdersToJSON(doc));
-	yyjson_mut_obj_add_val(doc, root_obj, "default-sort-order-id",
-	                       yyjson_mut_int(doc, default_sort_order_id.GetIndex()));
-	// yyjson_mut_obj_add_val(doc, root_obj, "refs", RefToJSON(doc));
-	// yyjson_mut_obj_add_val(doc, root_obj, "encryption-keys", EncryptionKeyToJSON(doc));
-	return ICUtils::JsonToString(std::move(doc_p));
+	root_obj.Add("last-updated-ms", writer.CreateSignedInteger(last_updated_ms.value));
+	root_obj.Add("last-column-id", writer.CreateSignedInteger(last_column_id.GetIndex()));
+	root_obj.Add("schemas", SchemasToJSON(writer));
+	root_obj.Add("current-schema-id", writer.CreateSignedInteger(current_schema_id));
+	root_obj.Add("partition-specs", PartitionsToJSON(writer));
+	root_obj.Add("default-spec-id", writer.CreateSignedInteger(default_spec_id));
+	root_obj.Add("last-partition-id", writer.CreateSignedInteger(last_partition_field_id.GetIndex()));
+	root_obj.Add("properties", TablePropertiesToJSON(writer));
+	if (current_snapshot_id) {
+		root_obj.Add("current-snapshot-id", writer.CreateSignedInteger(*current_snapshot_id));
+	}
+	root_obj.Add("snapshots", SnapshotsToJSON(writer));
+	root_obj.Add("snapshot-log", SnapshotLogToJSON(writer));
+	root_obj.Add("sort-orders", SortOrdersToJSON(writer));
+	root_obj.Add("default-sort-order-id", writer.CreateSignedInteger(default_sort_order_id.GetIndex()));
+	if (iceberg_version >= 3) {
+		// Required since v3 (row lineage)
+		root_obj.Add("next-row-id", writer.CreateSignedInteger(next_row_id ? *next_row_id : 0));
+	}
+	return writer.ToString(JSONWriteFlags::ALLOW_INF_AND_NAN);
 }
 
 void IcebergTableMetadata::WriteMetadata(ClientContext &context, const string &path) const {
@@ -617,14 +689,33 @@ void IcebergTableMetadata::WriteMetadata(ClientContext &context, const string &p
 	file->Close();
 }
 
-void IcebergTableMetadata::WriteVersionHint(ClientContext &context, const string &path,
+bool IcebergTableMetadata::WriteVersionHint(ClientContext &context, const string &path,
                                             const string &version_hint) const {
 	auto &fs = FileSystem::GetFileSystem(context);
 
-	// Write to file
-	auto file = fs.OpenFile(path, FileFlags::FILE_FLAGS_WRITE | FileFlags::FILE_FLAGS_FILE_CREATE);
+	// The hint is the commit point of a new table. Local file systems create it atomically (O_EXCL), so of two
+	// writers creating the same table only one succeeds; on others this is a check right before the write.
+	if (fs.FileExists(path)) {
+		return false;
+	}
+	auto flags = FileFlags::FILE_FLAGS_WRITE | FileFlags::FILE_FLAGS_FILE_CREATE |
+	             FileFlags::FILE_FLAGS_EXCLUSIVE_CREATE | FileFlags::FILE_FLAGS_NULL_IF_EXISTS;
+	unique_ptr<FileHandle> file;
+	try {
+		file = fs.OpenFile(path, flags);
+	} catch (std::exception &) {
+		// Not every file system returns NULL for an existing file
+		if (fs.FileExists(path)) {
+			return false;
+		}
+		throw;
+	}
+	if (!file) {
+		return false;
+	}
 	file->Write((void *)version_hint.c_str(), version_hint.size());
 	file->Close();
+	return true;
 }
 
 } // namespace duckdb

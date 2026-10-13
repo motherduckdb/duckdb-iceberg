@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/empty_planning_result.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 EmptyPlanningResult::EmptyPlanningResult() {
 }
 
-EmptyPlanningResult EmptyPlanningResult::FromJSON(yyjson_val *obj) {
+EmptyPlanningResult EmptyPlanningResult::FromJSON(JSONValue obj) {
 	EmptyPlanningResult res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -24,10 +22,16 @@ EmptyPlanningResult EmptyPlanningResult::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string EmptyPlanningResult::TryFromJSON(yyjson_val *obj) {
+EmptyPlanningResult EmptyPlanningResult::Copy() const {
+	EmptyPlanningResult res;
+	res.status = status.Copy();
+	return res;
+}
+
+string EmptyPlanningResult::TryFromJSON(JSONValue obj) {
 	string error;
-	auto status_val = yyjson_obj_get(obj, "status");
-	if (!status_val) {
+	auto status_val = obj.GetMember("status");
+	if (!status_val.IsValid()) {
 		return "EmptyPlanningResult required property 'status' is missing";
 	} else {
 		error = status.TryFromJSON(status_val);
@@ -35,7 +39,19 @@ string EmptyPlanningResult::TryFromJSON(yyjson_val *obj) {
 			return error;
 		}
 	}
-	return string();
+	return "";
+}
+
+void EmptyPlanningResult::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
+	// Serialize: status
+	auto status_json = status.ToJSON(writer);
+	obj.Add("status", status_json);
+}
+
+JSONMutableValue EmptyPlanningResult::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

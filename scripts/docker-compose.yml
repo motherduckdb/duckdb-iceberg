@@ -1,6 +1,8 @@
+name: duckdb-iceberg
+
 services:
   rest:
-    image: apache/iceberg-rest-fixture:1.10.1
+    image: ${ICEBERG_REST_FIXTURE_IMAGE:-apache/iceberg-rest-fixture:1.10.1}
     container_name: iceberg-rest
     depends_on:
       s3-init:

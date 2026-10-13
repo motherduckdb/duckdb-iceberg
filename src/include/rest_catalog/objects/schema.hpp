@@ -1,13 +1,12 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/struct_type.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -28,23 +27,33 @@ public:
 		Object1 &operator=(Object1 &&) = default;
 
 	public:
-		static Object1 FromJSON(yyjson_val *obj);
+		// Deserialization
+		static Object1 FromJSON(JSONValue obj);
+		string TryFromJSON(JSONValue obj);
+
+		// Copy
+		Object1 Copy() const;
+
+		// Serialization
+		void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+		JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 	public:
-		string TryFromJSON(yyjson_val *obj);
-
-	public:
-		int32_t schema_id;
-		bool has_schema_id = false;
-		vector<int32_t> identifier_field_ids;
-		bool has_identifier_field_ids = false;
+		optional<int32_t> schema_id;
+		optional<vector<int32_t>> identifier_field_ids;
 	};
 
 public:
-	static Schema FromJSON(yyjson_val *obj);
+	// Deserialization
+	static Schema FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Copy
+	Schema Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	StructType struct_type;

@@ -10,8 +10,8 @@
 
 #include "function/iceberg_functions.hpp"
 #include "common/iceberg_utils.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "catalog/rest/iceberg_catalog.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_data.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
@@ -22,7 +22,7 @@
 namespace duckdb {
 
 struct SetIcebergTablePropertiesBindData : public TableFunctionData {
-	optional_ptr<IcebergTableEntry> iceberg_table;
+	optional_ptr<IcebergTableSchemaVersion> iceberg_table;
 	case_insensitive_map_t<string> properties;
 	vector<string> remove_properties;
 };
@@ -68,9 +68,30 @@ static void VerifyInputIsNotAFile(ClientContext &context, string &input_string, 
 	}
 }
 
+//! Iceberg derives these from table state; stored as plain properties they are wrong or misleading for other engines
+static const case_insensitive_set_t RESERVED_TABLE_PROPERTIES = {
+    "format-version",           "uuid",
+    "snapshot-count",           "current-snapshot-id",
+    "current-snapshot-summary", "current-snapshot-timestamp-ms",
+    "current-schema",           "default-partition-spec",
+    "default-sort-order"};
+
+static void VerifyNotReservedProperty(const string &key, const string &function_name) {
+	if (RESERVED_TABLE_PROPERTIES.find(key) == RESERVED_TABLE_PROPERTIES.end()) {
+		return;
+	}
+	if (StringUtil::CIEquals(key, "format-version")) {
+		throw InvalidInputException("Cannot change 'format-version' with %s(), use ALTER TABLE ... SET "
+		                            "('format-version' = ...) to upgrade the table",
+		                            function_name);
+	}
+	throw InvalidInputException("'%s' is a reserved Iceberg table property and can't be changed with %s()", key,
+	                            function_name);
+}
+
 static unique_ptr<FunctionData> SetIcebergTablePropertiesBind(ClientContext &context, TableFunctionBindInput &input,
                                                               vector<LogicalType> &return_types,
-                                                              vector<string> &names) {
+                                                              vector<Identifier> &names) {
 	// return a TableRef that contains the scans for the
 	auto ret = make_uniq<SetIcebergTablePropertiesBindData>();
 
@@ -80,7 +101,7 @@ static unique_ptr<FunctionData> SetIcebergTablePropertiesBind(ClientContext &con
 	if (!CheckTableIsIcebergTable(iceberg_table)) {
 		throw InvalidInputException("Cannot call set_iceberg_table_properties on non-iceberg table");
 	}
-	ret->iceberg_table = iceberg_table->Cast<IcebergTableEntry>();
+	ret->iceberg_table = iceberg_table->Cast<IcebergTableSchemaVersion>();
 	// This mutates the catalog: declare the modification so the statement is treated as a write (e.g. so it
 	// is rejected against a read-only transaction, and so catalog-version tracking observes the change).
 	if (input.binder) {
@@ -95,17 +116,18 @@ static unique_ptr<FunctionData> SetIcebergTablePropertiesBind(ClientContext &con
 		auto &struct_children = StructValue::GetChildren(map_children[col_idx]);
 		auto &key = StringValue::Get(struct_children[0]);
 		auto &val = StringValue::Get(struct_children[1]);
+		VerifyNotReservedProperty(key, "set_iceberg_table_properties");
 		ret->properties.emplace(key, val);
 	}
 
 	return_types.insert(return_types.end(), LogicalType::BIGINT);
-	names.insert(names.end(), string("Success"));
+	names.emplace_back("Success");
 	return std::move(ret);
 }
 
 static unique_ptr<FunctionData> RemoveIcebergTablePropertiesBind(ClientContext &context, TableFunctionBindInput &input,
                                                                  vector<LogicalType> &return_types,
-                                                                 vector<string> &names) {
+                                                                 vector<Identifier> &names) {
 	// return a TableRef that contains the scans for the
 	auto ret = make_uniq<SetIcebergTablePropertiesBindData>();
 	auto input_string = input.inputs[0].ToString();
@@ -114,7 +136,7 @@ static unique_ptr<FunctionData> RemoveIcebergTablePropertiesBind(ClientContext &
 	if (!CheckTableIsIcebergTable(iceberg_table)) {
 		throw InvalidInputException("Cannot call set_iceberg_table_properties on non-iceberg table");
 	}
-	ret->iceberg_table = iceberg_table->Cast<IcebergTableEntry>();
+	ret->iceberg_table = iceberg_table->Cast<IcebergTableSchemaVersion>();
 	// This mutates the catalog: declare the modification so the statement is treated as a write (e.g. so it
 	// is rejected against a read-only transaction, and so catalog-version tracking observes the change).
 	if (input.binder) {
@@ -126,18 +148,19 @@ static unique_ptr<FunctionData> RemoveIcebergTablePropertiesBind(ClientContext &
 	auto &remove_values = input.inputs[1];
 	auto &list_children = ListValue::GetChildren(remove_values);
 	for (idx_t col_idx = 0; col_idx < list_children.size(); col_idx++) {
-		auto &remove_property = StringValue::Get(list_children[0]);
+		auto &remove_property = StringValue::Get(list_children[col_idx]);
+		VerifyNotReservedProperty(remove_property, "remove_iceberg_table_properties");
 		ret->remove_properties.push_back(remove_property);
 	}
 
 	return_types.insert(return_types.end(), LogicalType::BIGINT);
-	names.insert(names.end(), string("Success"));
+	names.emplace_back("Success");
 	return std::move(ret);
 }
 
 static unique_ptr<FunctionData> GetIcebergTablePropertiesBind(ClientContext &context, TableFunctionBindInput &input,
                                                               vector<LogicalType> &return_types,
-                                                              vector<string> &names) {
+                                                              vector<Identifier> &names) {
 	// return a TableRef that contains the scans for the
 	auto ret = make_uniq<SetIcebergTablePropertiesBindData>();
 	auto input_string = input.inputs[0].ToString();
@@ -146,17 +169,17 @@ static unique_ptr<FunctionData> GetIcebergTablePropertiesBind(ClientContext &con
 	if (!CheckTableIsIcebergTable(iceberg_table)) {
 		throw InvalidInputException("Cannot call set_iceberg_table_properties on non-iceberg table");
 	}
-	ret->iceberg_table = iceberg_table->Cast<IcebergTableEntry>();
+	ret->iceberg_table = iceberg_table->Cast<IcebergTableSchemaVersion>();
 
 	return_types.insert(return_types.end(), LogicalType::VARCHAR);
 	return_types.insert(return_types.end(), LogicalType::VARCHAR);
-	names.insert(names.end(), string("key"));
-	names.insert(names.end(), string("value"));
+	names.emplace_back("key");
+	names.emplace_back("value");
 	return std::move(ret);
 }
 
 static void AddString(Vector &vec, idx_t index, string_t &&str) {
-	FlatVector::GetData<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
+	FlatVector::GetDataMutable<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
 }
 
 static void SetIcebergTablePropertiesFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
@@ -168,7 +191,7 @@ static void SetIcebergTablePropertiesFunction(ClientContext &context, TableFunct
 		return;
 	}
 	if (global_state.properties_set) {
-		output.SetCardinality(0);
+		output.SetChildCardinality(0);
 		return;
 	}
 
@@ -176,7 +199,7 @@ static void SetIcebergTablePropertiesFunction(ClientContext &context, TableFunct
 	auto &table_info = iceberg_table->table_info;
 
 	auto &iceberg_transaction = IcebergTransaction::Get(context, iceberg_table->catalog);
-	ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTableInformation &tbl) {
+	ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTable &tbl) {
 		auto &transaction_data = tbl.GetOrCreateTransactionData(iceberg_transaction);
 		transaction_data.TableSetProperties(bind_data.properties);
 	});
@@ -185,8 +208,8 @@ static void SetIcebergTablePropertiesFunction(ClientContext &context, TableFunct
 	auto table_name = iceberg_table->name;
 	global_state.properties_set = true;
 	// set success output, failure happens during transaction commit.
-	FlatVector::GetData<int64_t>(output.data[0])[0] = bind_data.properties.size();
-	output.SetCardinality(1);
+	FlatVector::GetDataMutable<int64_t>(output.data[0])[0] = bind_data.properties.size();
+	output.SetChildCardinality(1);
 }
 
 static void RemoveIcebergTablePropertiesFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
@@ -198,14 +221,14 @@ static void RemoveIcebergTablePropertiesFunction(ClientContext &context, TableFu
 		return;
 	}
 	if (global_state.properties_removed) {
-		output.SetCardinality(0);
+		output.SetChildCardinality(0);
 		return;
 	}
 
 	auto iceberg_table = bind_data.iceberg_table;
 	auto &table_info = iceberg_table->table_info;
 	auto &iceberg_transaction = IcebergTransaction::Get(context, iceberg_table->catalog);
-	ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTableInformation &tbl) {
+	ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTable &tbl) {
 		auto &transaction_data = tbl.GetOrCreateTransactionData(iceberg_transaction);
 		transaction_data.TableRemoveProperties(bind_data.remove_properties);
 	});
@@ -214,8 +237,8 @@ static void RemoveIcebergTablePropertiesFunction(ClientContext &context, TableFu
 	auto table_name = iceberg_table->name;
 	global_state.properties_removed = true;
 	// set success output, failure happens during transaction commit.
-	FlatVector::GetData<int64_t>(output.data[0])[0] = table_info.table_metadata.table_properties.size();
-	output.SetCardinality(1);
+	FlatVector::GetDataMutable<int64_t>(output.data[0])[0] = table_info.table_metadata.table_properties.size();
+	output.SetChildCardinality(1);
 }
 
 static void GetIcebergTablePropertiesFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
@@ -231,12 +254,11 @@ static void GetIcebergTablePropertiesFunction(ClientContext &context, TableFunct
 	auto &iceberg_transaction = IcebergTransaction::Get(context, iceberg_table->catalog);
 	auto table_key = iceberg_table->table_info.GetTableKey();
 	auto table_txn_state = iceberg_transaction.GetLatestTableState(table_key);
-	const IcebergTableInformation &txn_table_info =
-	    table_txn_state ? table_txn_state->GetInfo() : iceberg_table->table_info;
+	const IcebergTable &txn_table_info = table_txn_state ? table_txn_state->GetInfo() : iceberg_table->table_info;
 
 	const auto &properties = txn_table_info.table_metadata.GetTableProperties();
 	if (properties.empty()) {
-		output.SetCardinality(0);
+		output.SetChildCardinality(0);
 		return;
 	}
 	if (!global_state.all_properties_initialized) {
@@ -247,7 +269,7 @@ static void GetIcebergTablePropertiesFunction(ClientContext &context, TableFunct
 	}
 	// if we have already returned all properties.
 	if (global_state.property_count >= global_state.all_properties.size()) {
-		output.SetCardinality(0);
+		output.SetChildCardinality(0);
 		return;
 	}
 
@@ -263,14 +285,17 @@ static void GetIcebergTablePropertiesFunction(ClientContext &context, TableFunct
 		}
 	}
 	global_state.property_count += row_number;
-	output.SetCardinality(row_number);
+	output.SetChildCardinality(row_number);
 }
 
 TableFunctionSet IcebergFunctions::SetIcebergTablePropertiesFunctions() {
 	TableFunctionSet function_set("set_iceberg_table_properties");
 
-	auto fun = TableFunction({LogicalType::VARCHAR, LogicalType::ANY}, SetIcebergTablePropertiesFunction,
-	                         SetIcebergTablePropertiesBind, SetIcebergTablePropertiesGlobalTableFunctionState::Init);
+	auto fun = TableFunction(FunctionSignature()
+	                             .AddPositionalOnly("table_name", LogicalType::VARCHAR)
+	                             .AddPositionalOnly("properties", LogicalType::ANY),
+	                         SetIcebergTablePropertiesFunction, SetIcebergTablePropertiesBind,
+	                         SetIcebergTablePropertiesGlobalTableFunctionState::Init);
 	function_set.AddFunction(fun);
 
 	return function_set;
@@ -279,7 +304,9 @@ TableFunctionSet IcebergFunctions::SetIcebergTablePropertiesFunctions() {
 TableFunctionSet IcebergFunctions::RemoveIcebergTablePropertiesFunctions() {
 	TableFunctionSet function_set("remove_iceberg_table_properties");
 
-	auto fun = TableFunction({LogicalType::VARCHAR, LogicalType::LIST(LogicalType::VARCHAR)},
+	auto fun = TableFunction(FunctionSignature()
+	                             .AddPositionalOnly("table_name", LogicalType::VARCHAR)
+	                             .AddPositionalOnly("property_names", LogicalType::LIST(LogicalType::VARCHAR)),
 	                         RemoveIcebergTablePropertiesFunction, RemoveIcebergTablePropertiesBind,
 	                         SetIcebergTablePropertiesGlobalTableFunctionState::Init);
 	function_set.AddFunction(fun);
@@ -290,7 +317,8 @@ TableFunctionSet IcebergFunctions::RemoveIcebergTablePropertiesFunctions() {
 TableFunctionSet IcebergFunctions::GetIcebergTablePropertiesFunctions() {
 	TableFunctionSet function_set("iceberg_table_properties");
 
-	auto fun = TableFunction({LogicalType::VARCHAR}, GetIcebergTablePropertiesFunction, GetIcebergTablePropertiesBind,
+	auto fun = TableFunction(FunctionSignature().AddPositionalOnly("table_name", LogicalType::VARCHAR),
+	                         GetIcebergTablePropertiesFunction, GetIcebergTablePropertiesBind,
 	                         SetIcebergTablePropertiesGlobalTableFunctionState::Init);
 	function_set.AddFunction(fun);
 

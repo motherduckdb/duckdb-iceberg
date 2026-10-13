@@ -1,12 +1,11 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -20,18 +19,23 @@ public:
 	BlobMetadata &operator=(BlobMetadata &&) = default;
 
 public:
-	static BlobMetadata FromJSON(yyjson_val *obj);
+	// Deserialization
+	static BlobMetadata FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Copy
+	BlobMetadata Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	string type;
 	int64_t snapshot_id;
 	int64_t sequence_number;
 	vector<int32_t> fields;
-	case_insensitive_map_t<string> properties;
-	bool has_properties = false;
+	optional<case_insensitive_map_t<string>> properties;
 };
 
 } // namespace rest_api_objects

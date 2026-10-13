@@ -8,26 +8,20 @@ require-env ICEBERG_REMOTE_INSERT_READY
 
 require-env R2_TOKEN
 
-require avro
-
-require parquet
-
-require iceberg
-
-require httpfs
+include test/sql/init_requires
 
 require aws
 
 statement ok
 CREATE SECRET r2_secret (
     TYPE ICEBERG,
-    TOKEN '${R2_TOKEN}'
+    TOKEN '{R2_TOKEN}'
 );
 
 statement ok
 attach '6b17833f308abc1e1cc343c552b51f51_iceberg-catalog-test' AS my_datalake (
     TYPE ICEBERG,
-    ENDPOINT 'https://catalog.cloudflarestorage.com/6b17833f308abc1e1cc343c552b51f51/iceberg-catalog-test',
+    URI 'https://catalog.cloudflarestorage.com/6b17833f308abc1e1cc343c552b51f51/iceberg-catalog-test',
     support_nested_namespaces true
 );
 

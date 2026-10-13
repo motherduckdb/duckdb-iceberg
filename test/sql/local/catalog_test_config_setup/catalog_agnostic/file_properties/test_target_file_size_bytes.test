@@ -1,0 +1,102 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/file_properties/test_target_file_size_bytes.test
+# group: [file_properties]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+include test/sql/init_requires
+
+# With 'target-file-size-bytes' set, 500_000 rows -> 4-6 files
+statement ok
+drop table if exists my_datalake.default.my_table;
+
+statement ok
+CREATE TABLE my_datalake.default.my_table (
+  user_id INT,
+  data VARCHAR,
+  partition_id INT
+) PARTITIONED BY (partition_id) WITH (
+  'write.target-file-size-bytes' = '1048576',
+  'write.parquet.compression-codec' = 'snappy'
+);
+
+query II
+SELECT * FROM iceberg_table_properties(my_datalake.default.my_table)
+WHERE key = 'write.target-file-size-bytes';
+----
+write.target-file-size-bytes	1048576
+
+query I
+INSERT INTO my_datalake.default.my_table
+SELECT i, concat('thisisalongstring', i), 1
+FROM range(500_000) t(i);
+----
+500000
+
+query II
+EXPLAIN ANALYZE SELECT * FROM my_datalake.default.my_table
+----
+analyzed_plan	<REGEX>:.*Total Files Read: [4-6].*
+
+# Verify with a "human-readable" format for bytes
+statement ok
+drop table if exists my_datalake.default.my_table;
+
+statement ok
+CREATE TABLE my_datalake.default.my_table (
+  user_id INT,
+  data VARCHAR,
+  partition_id INT
+) PARTITIONED BY (partition_id) WITH (
+  'write.target-file-size-bytes' = '1024KB',
+  'write.parquet.compression-codec' = 'snappy'
+);
+
+# FIXME: to be good citizens, we should probably transform to a non-human-readable representation (not formatted with KB)
+query II
+SELECT * FROM iceberg_table_properties(my_datalake.default.my_table)
+WHERE key = 'write.target-file-size-bytes';
+----
+write.target-file-size-bytes	1024KB
+
+query I
+INSERT INTO my_datalake.default.my_table
+SELECT i, concat('thisisalongstring', i), 1
+FROM range(500_000) t(i);
+----
+500000
+
+query II
+EXPLAIN ANALYZE SELECT * FROM my_datalake.default.my_table
+----
+analyzed_plan	<REGEX>:.*Total Files Read: [4-6].*
+
+# Without 'target-file-size-bytes' set, 500_000 rows -> 1 file
+statement ok
+drop table if exists my_datalake.default.my_table;
+
+statement ok
+CREATE TABLE my_datalake.default.my_table (
+  user_id INT,
+  data VARCHAR,
+  partition_id INT
+) PARTITIONED BY (partition_id) WITH (
+  'write.parquet.compression-codec' = 'snappy'
+);
+
+# Verify that it's not set
+query II
+SELECT * FROM iceberg_table_properties(my_datalake.default.my_table)
+WHERE key = 'write.target-file-size-bytes';
+----
+
+query I
+INSERT INTO my_datalake.default.my_table
+SELECT i, concat('thisisalongstring', i), 1
+FROM range(500_000) t(i);
+----
+500000
+
+query II
+EXPLAIN ANALYZE SELECT * FROM my_datalake.default.my_table
+----
+analyzed_plan	<REGEX>:.*Total Files Read: 1.*

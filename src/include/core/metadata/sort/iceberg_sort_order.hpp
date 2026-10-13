@@ -6,14 +6,17 @@
 #include "rest_catalog/objects/sort_order.hpp"
 #include "rest_catalog/objects/sort_field.hpp"
 
-using namespace duckdb_yyjson;
-
 namespace duckdb {
+
+//! The Iceberg spec reserves sort order id 0 for the unsorted order
+static constexpr int32_t UNSORTED_SORT_ORDER_ID = 0;
+//! The first sort order id assigned to a table that is created sorted
+static constexpr int32_t INITIAL_SORT_ORDER_ID = 1;
 
 struct IcebergSortOrderField {
 public:
 	static IcebergSortOrderField ParseFromJson(const rest_api_objects::SortField &field);
-	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	//! the source id of the field (field_id)
@@ -30,9 +33,14 @@ public:
 
 struct IcebergSortOrder {
 public:
+	IcebergSortOrder(int32_t sort_order_id) : sort_order_id(sort_order_id) {
+	}
+
+public:
 	static IcebergSortOrder ParseFromJson(const rest_api_objects::SortOrder &sort_order_spec);
 	bool IsSorted() const;
-	yyjson_mut_val *ToJSON(yyjson_mut_doc *doc) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
+	bool Equals(const IcebergSortOrder &other) const;
 
 public:
 	int32_t sort_order_id;

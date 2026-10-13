@@ -21,9 +21,6 @@ string AddHttpHostIfMissing(const string &url);
 string StripScheme(const string &url);
 
 struct IRCPathComponent {
-public:
-	static constexpr const char *DEFAULT_NAMESPACE_SEPARATOR = "\x1f";
-
 private:
 	IRCPathComponent(const string &raw, const string &encoded) : raw(raw), encoded(encoded) {
 	}
@@ -32,8 +29,7 @@ public:
 	static IRCPathComponent RegularComponent(const string &raw) {
 		return IRCPathComponent(raw, StringUtil::URLEncode(raw));
 	}
-	static IRCPathComponent NamespaceComponent(const vector<string> &items,
-	                                           const string &namespace_separator = DEFAULT_NAMESPACE_SEPARATOR) {
+	static IRCPathComponent NamespaceComponent(const vector<string> &items, const string &namespace_separator) {
 		auto raw = StringUtil::Join(items, items.size(), namespace_separator, [](const string &item) { return item; });
 		auto encoded = StringUtil::Join(items, items.size(), namespace_separator,
 		                                [](const string &item) { return StringUtil::URLEncode(item); });
@@ -49,7 +45,7 @@ class IRCEndpointBuilder {
 public:
 	IRCEndpointBuilder();
 	void AddPathComponent(IRCPathComponent &&component);
-	void AddPrefixComponent(const string &component, const bool &prefix_is_one_component);
+	void AddPrefixComponents(const vector<string> &components);
 
 	void SetHost(const string &host);
 	string GetHost() const;

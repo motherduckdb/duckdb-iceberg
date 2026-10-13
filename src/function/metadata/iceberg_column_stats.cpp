@@ -17,8 +17,8 @@ namespace duckdb {
 struct IcebergColumnStatsBindData : public TableFunctionData {
 	unique_ptr<IcebergManifestList> iceberg_table;
 	IcebergSnapshotScanInfo snapshot_to_scan;
-	IcebergTableMetadata metadata;
-	shared_ptr<IcebergTableSchema> schema;
+	IcebergTableMetadata metadata {IcebergTableMetadataSchemas {}};
+	optional_ptr<const IcebergTableSchema> schema;
 	unordered_map<uint64_t, ColumnIndex> source_to_column_id;
 };
 
@@ -57,67 +57,23 @@ static string GeometryBoundJson(const GeometryExtent &extent, bool lower_corner)
 }
 
 static unique_ptr<FunctionData> IcebergColumnStatsBind(ClientContext &context, TableFunctionBindInput &input,
-                                                       vector<LogicalType> &return_types, vector<string> &names) {
+                                                       vector<LogicalType> &return_types, vector<Identifier> &names) {
 	// return a TableRef that contains the scans for the
 	auto ret = make_uniq<IcebergColumnStatsBindData>();
 
-	auto &fs = FileSystem::GetFileSystem(context);
-	auto caching_fs = make_shared_ptr<CachingFileSystemWrapper>(FileSystem::GetFileSystem(context), *context.db);
 	auto input_string = input.inputs[0].ToString();
-	auto filename = IcebergUtils::GetStorageLocation(context, input_string);
+	IcebergOptions options(input.named_parameters);
+	auto resolved_metadata = IcebergUtils::ResolveTableMetadata(context, input_string, options);
+	ret->metadata = std::move(resolved_metadata.metadata);
 
-	IcebergOptions options;
-	auto &snapshot_lookup = options.snapshot_lookup;
-
-	for (auto &kv : input.named_parameters) {
-		auto loption = StringUtil::Lower(kv.first);
-		auto &val = kv.second;
-		if (loption == "allow_moved_paths") {
-			options.allow_moved_paths = BooleanValue::Get(val);
-		} else if (loption == "metadata_compression_codec") {
-			options.metadata_compression_codec = StringValue::Get(val);
-		} else if (loption == "version") {
-			options.table_version = StringValue::Get(val);
-		} else if (loption == "version_name_format") {
-			auto value = StringValue::Get(kv.second);
-			auto string_substitutions = IcebergUtils::CountOccurrences(value, "%s");
-			if (string_substitutions != 2) {
-				throw InvalidInputException(
-				    "'version_name_format' has to contain two occurrences of '%%s' in it, found %d",
-				    string_substitutions);
-			}
-			options.version_name_format = value;
-		} else if (loption == "snapshot_from_id") {
-			if (snapshot_lookup.GetSource() != SnapshotSource::LATEST) {
-				throw InvalidInputException(
-				    "Can't use 'snapshot_from_id' in combination with 'snapshot_from_timestamp'");
-			}
-			snapshot_lookup.SetSource(SnapshotSource::FROM_ID);
-			snapshot_lookup.snapshot_id = val.GetValue<uint64_t>();
-		} else if (loption == "snapshot_from_timestamp") {
-			if (snapshot_lookup.GetSource() != SnapshotSource::LATEST) {
-				throw InvalidInputException(
-				    "Can't use 'snapshot_from_id' in combination with 'snapshot_from_timestamp'");
-			}
-			snapshot_lookup.SetSource(SnapshotSource::FROM_TIMESTAMP);
-			snapshot_lookup.snapshot_timestamp = val.GetValue<timestamp_t>();
-		}
-	}
-
-	auto iceberg_meta_path = IcebergTableMetadata::GetMetaDataPath(context, filename, fs, options);
-	auto table_metadata =
-	    IcebergTableMetadata::Parse(iceberg_meta_path, *caching_fs, options.metadata_compression_codec);
-	ret->metadata = IcebergTableMetadata::FromTableMetadata(table_metadata);
-
-	ret->snapshot_to_scan = ret->metadata.GetSnapshot(options.snapshot_lookup);
+	ret->snapshot_to_scan = ret->metadata.GetSnapshot(*options.snapshot_lookup);
 
 	if (ret->snapshot_to_scan.snapshot) {
-		ret->iceberg_table =
-		    IcebergManifestList::Load(filename, ret->metadata, ret->snapshot_to_scan, context, options);
+		ret->iceberg_table = IcebergManifestList::Load(resolved_metadata.table_location, ret->metadata,
+		                                               ret->snapshot_to_scan, context, options);
 		ret->schema = ret->metadata.GetSchemaFromId(ret->snapshot_to_scan.schema_id);
 
-		auto &schema = ret->schema->columns;
-		IcebergTableSchema::PopulateSourceIdMap(ret->source_to_column_id, schema, nullptr);
+		ret->source_to_column_id = ret->schema->GetSourceIdMap();
 	}
 
 	names.emplace_back("status");
@@ -127,6 +83,9 @@ static unique_ptr<FunctionData> IcebergColumnStatsBind(ClientContext &context, T
 	return_types.emplace_back(LogicalType::VARCHAR);
 
 	names.emplace_back("file_path");
+	return_types.emplace_back(LogicalType::VARCHAR);
+
+	names.emplace_back("partition");
 	return_types.emplace_back(LogicalType::VARCHAR);
 
 	names.emplace_back("column_name");
@@ -153,11 +112,14 @@ static unique_ptr<FunctionData> IcebergColumnStatsBind(ClientContext &context, T
 	names.emplace_back("nan_value_count");
 	return_types.emplace_back(LogicalType::BIGINT);
 
+	names.emplace_back("file_sequence_number");
+	return_types.emplace_back(LogicalType::BIGINT);
+
 	return std::move(ret);
 }
 
 static void AddString(Vector &vec, idx_t index, string_t &&str) {
-	FlatVector::GetData<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
+	FlatVector::GetDataMutable<string_t>(vec)[index] = StringVector::AddString(vec, std::move(str));
 }
 
 static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
@@ -174,14 +136,20 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 	auto &table_entries = bind_data.iceberg_table->GetManifestFilesConst();
 	for (; global_state.current_manifest_idx < table_entries.size(); global_state.current_manifest_idx++) {
 		auto &table_entry = table_entries[global_state.current_manifest_idx];
-		auto &entries = table_entry.manifest_entries;
+		auto &entries = table_entry.GetManifestEntries();
 		for (; global_state.current_manifest_entry_idx < entries.size(); global_state.current_manifest_entry_idx++) {
 			auto &manifest_entry = entries[global_state.current_manifest_entry_idx];
 			auto &data_file = manifest_entry.data_file;
+			child_list_t<Value> partition_fields;
+			for (idx_t partition_idx = 0; partition_idx < data_file.partition_info.size(); partition_idx++) {
+				auto &entry = data_file.partition_info[partition_idx];
+				partition_fields.emplace_back(StringUtil::Format("r%d", partition_idx), entry.value);
+			}
+			auto partition_value = Value::STRUCT(std::move(partition_fields));
 
 			for (; global_state.column_it != bind_data.source_to_column_id.end(); global_state.column_it++) {
 				if (out >= STANDARD_VECTOR_SIZE) {
-					output.SetCardinality(out);
+					output.SetChildCardinality(out);
 					return;
 				}
 				idx_t col = 0;
@@ -193,6 +161,8 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 				          string_t(IcebergManifestEntryContentTypeToString(data_file.content)));
 				//! file_path
 				AddString(output.data[col++], out, string_t(data_file.file_path));
+				//! partition
+				output.data[col++].SetValue(out, partition_value);
 
 				auto &entry = global_state.column_it;
 				auto &source_id = entry->first;
@@ -236,8 +206,8 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 				//! column_type
 				AddString(output.data[col++], out, string_t(column.type.ToString()));
 
-				string lower_bound_str;
-				string upper_bound_str;
+				optional<string> lower_bound_str;
+				optional<string> upper_bound_str;
 				if (column.type.id() == LogicalTypeId::VARIANT) {
 					//! VARIANT lower/upper bounds are stored as a binary Variant value (an object keyed by JSON
 					//! path); decode them into a readable VARIANT instead of attempting a scalar deserialization.
@@ -265,15 +235,28 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 						lower_bound_str = GeometryBoundJson(extent, true);
 						upper_bound_str = GeometryBoundJson(extent, false);
 					} else {
-						lower_bound_str = stats.lower_bound.ToString();
-						upper_bound_str = stats.upper_bound.ToString();
+						if (stats.lower_bound) {
+							lower_bound_str = stats.lower_bound->ToString();
+						}
+						if (stats.upper_bound) {
+							upper_bound_str = stats.upper_bound->ToString();
+						}
 					}
 				}
 
 				//! lower_bound
-				AddString(output.data[col++], out, string_t(lower_bound_str));
+				if (lower_bound_str) {
+					AddString(output.data[col++], out, string_t(*lower_bound_str));
+				} else {
+					output.data[col++].SetValue(out, Value(LogicalType::VARCHAR));
+				}
+
 				//! upper_bound
-				AddString(output.data[col++], out, string_t(upper_bound_str));
+				if (upper_bound_str) {
+					AddString(output.data[col++], out, string_t(*upper_bound_str));
+				} else {
+					output.data[col++].SetValue(out, Value(LogicalType::VARCHAR));
+				}
 				// column_size
 				output.data[col++].SetValue(out, column_size);
 				// value_count
@@ -282,26 +265,30 @@ static void IcebergColumnStatsFunction(ClientContext &context, TableFunctionInpu
 				output.data[col++].SetValue(out, null_value_count);
 				// nan_value_count
 				output.data[col++].SetValue(out, nan_value_count);
+				// file_sequence_number
+				output.data[col++].SetValue(out, manifest_entry.GetFileSequenceNumber(table_entry.GetFile()));
 				out++;
 			}
 			global_state.column_it = bind_data.source_to_column_id.begin();
 		}
 		global_state.current_manifest_entry_idx = 0;
 	}
-	output.SetCardinality(out);
+	output.SetChildCardinality(out);
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergColumnStatsFunction() {
 	TableFunctionSet function_set("iceberg_column_stats");
-	TableFunction fun({LogicalType::VARCHAR}, IcebergColumnStatsFunction, IcebergColumnStatsBind,
-	                  IcebergColumnStatsGlobalTableFunctionState::Init);
+	TableFunction fun(FunctionSignature().AddPositionalOnly("path", LogicalType::VARCHAR), IcebergColumnStatsFunction,
+	                  IcebergColumnStatsBind, IcebergColumnStatsGlobalTableFunctionState::Init);
 
-	fun.named_parameters["allow_moved_paths"] = LogicalType::BOOLEAN;
-	fun.named_parameters["metadata_compression_codec"] = LogicalType::VARCHAR;
-	fun.named_parameters["version"] = LogicalType::VARCHAR;
-	fun.named_parameters["version_name_format"] = LogicalType::VARCHAR;
-	fun.named_parameters["snapshot_from_timestamp"] = LogicalType::TIMESTAMP;
-	fun.named_parameters["snapshot_from_id"] = LogicalType::UBIGINT;
+	fun.GetSignature().WithTypedKwargs("options", [&](TypedKwargs &options) {
+		options.Add("allow_moved_paths", LogicalType::BOOLEAN)
+		    .Add("metadata_compression_codec", LogicalType::VARCHAR)
+		    .Add("version", LogicalType::ANY)
+		    .Add("version_name_format", LogicalType::VARCHAR)
+		    .Add("snapshot_from_timestamp", LogicalType::ANY)
+		    .Add("snapshot_from_id", LogicalType::UBIGINT);
+	});
 	function_set.AddFunction(fun);
 	return function_set;
 }

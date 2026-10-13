@@ -13,9 +13,7 @@ IcebergSortOrderField IcebergSortOrderField::ParseFromJson(const rest_api_object
 }
 
 IcebergSortOrder IcebergSortOrder::ParseFromJson(const rest_api_objects::SortOrder &sort_order_spec) {
-	IcebergSortOrder result;
-
-	result.sort_order_id = sort_order_spec.order_id;
+	IcebergSortOrder result(sort_order_spec.order_id);
 	for (auto &field : sort_order_spec.fields) {
 		result.fields.push_back(IcebergSortOrderField::ParseFromJson(field));
 	}
@@ -23,28 +21,52 @@ IcebergSortOrder IcebergSortOrder::ParseFromJson(const rest_api_objects::SortOrd
 	return result;
 }
 
+bool IcebergSortOrder::Equals(const IcebergSortOrder &other) const {
+	if (other.fields.size() != fields.size()) {
+		return false;
+	}
+	for (idx_t i = 0; i < other.fields.size(); i++) {
+		//! Compare source ids
+		if (other.fields[i].source_id != fields[i].source_id) {
+			return false;
+		}
+		//! Compare transforms
+		if (other.fields[i].transform.RawType() != fields[i].transform.RawType()) {
+			return false;
+		}
+		//! Compare transforms
+		if (other.fields[i].direction != fields[i].direction) {
+			return false;
+		}
+		if (other.fields[i].null_order != fields[i].null_order) {
+			return false;
+		}
+	}
+	return true;
+}
+
 bool IcebergSortOrder::IsSorted() const {
 	return !fields.empty();
 }
 
-yyjson_mut_val *IcebergSortOrderField::ToJSON(yyjson_mut_doc *doc) const {
-	auto res = yyjson_mut_obj(doc);
-	yyjson_mut_obj_add_strcpy(doc, res, "transform", transform.RawType().c_str());
+JSONMutableValue IcebergSortOrderField::ToJSON(JSONWriter &writer) const {
+	auto res = writer.CreateObject();
+	res.AddString("transform", transform.RawType());
 	//! FIXME: 'source-ids' (array) if >= V3
-	yyjson_mut_obj_add_int(doc, res, "source-id", source_id);
-	yyjson_mut_obj_add_strcpy(doc, res, "direction", direction.c_str());
-	yyjson_mut_obj_add_strcpy(doc, res, "null-order", null_order.c_str());
+	res.Add("source-id", writer.CreateSignedInteger(source_id));
+	res.AddString("direction", direction);
+	res.AddString("null-order", null_order);
 	return res;
 }
 
-yyjson_mut_val *IcebergSortOrder::ToJSON(yyjson_mut_doc *doc) const {
-	auto res = yyjson_mut_obj(doc);
-	yyjson_mut_obj_add_val(doc, res, "order-id", yyjson_mut_int(doc, sort_order_id));
-	auto fields_arr = yyjson_mut_arr(doc);
+JSONMutableValue IcebergSortOrder::ToJSON(JSONWriter &writer) const {
+	auto res = writer.CreateObject();
+	res.Add("order-id", writer.CreateSignedInteger(sort_order_id));
+	auto fields_arr = writer.CreateArray();
 	for (auto &field : fields) {
-		yyjson_mut_arr_add_val(fields_arr, field.ToJSON(doc));
+		fields_arr.Append(field.ToJSON(writer));
 	}
-	yyjson_mut_obj_add_val(doc, res, "fields", fields_arr);
+	res.Add("fields", fields_arr);
 	return res;
 }
 

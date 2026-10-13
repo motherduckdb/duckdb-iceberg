@@ -10,6 +10,8 @@
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/common/vector.hpp"
+#include "duckdb/common/optional.hpp"
+#include "duckdb/common/set.hpp"
 
 namespace duckdb {
 class ClientContext;
@@ -31,20 +33,19 @@ public:
 
 	//! Build the serialized parquet-variant bounds blobs (metadata + value concatenated) for the
 	//! lower and upper bounds.
-	bool Finalize(ClientContext &context, bool &has_lower, string &lower_blob, bool &has_upper, string &upper_blob);
+	bool Finalize(ClientContext &context, optional<string> &lower_blob, optional<string> &upper_blob);
 
 private:
 	struct FieldBound {
 		vector<string> field_names; // empty == variant root ("$")
-		bool has_min = false;
-		string min_value;
-		bool has_max = false;
-		string max_value;
+		optional<string> min_value;
+		optional<string> max_value;
 	};
 
-	bool has_variant_type = false;
-	string variant_type_str;
+	optional<string> variant_type_str;
 	vector<FieldBound> fields;
+	//! Typed containers with no nulls cover every present parent, even when an object has excess fields in value.
+	set<vector<string>> non_null_containers;
 	// path of partially shredded variant values.
 	// we do not record stats for partially shredded values since the types may be different
 	vector<vector<string>> partial_paths;
@@ -61,7 +62,7 @@ struct IcebergVariantBoundsReader {
 
 	//! Re-key a decoded bounds VARIANT (whose object keys are JSON paths like "$['age']") to the plain field
 	//! names used at the call site ("age", "person.age"), returning a VARIANT Value with the renamed keys.
-	static bool RekeyBoundsVariant(const Value &bounds_variant, Value &result);
+	static bool RekeyBoundsVariant(const Value &bounds_variant, const vector<string> &path, Value &result);
 };
 
 } // namespace duckdb

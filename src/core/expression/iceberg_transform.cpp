@@ -1,8 +1,15 @@
 #include "core/expression/iceberg_transform.hpp"
 
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/parser/expression/columnref_expression.hpp"
+#include "duckdb/parser/expression/function_expression.hpp"
+#include "duckdb/parser/expression/constant_expression.hpp"
+#include "duckdb/parser/expression/operator_expression.hpp"
+
 #include "utf8proc_wrapper.hpp"
 #include "core/expression/iceberg_hash.hpp"
+#include "core/metadata/schema/iceberg_table_schema.hpp"
+#include "core/metadata/schema/iceberg_column_definition.hpp"
 
 namespace duckdb {
 
@@ -16,6 +23,111 @@ bool IcebergTransform::TransformFunctionSupported(const string &transform_name) 
 		return true;
 	}
 	return false;
+}
+
+IcebergTransform IcebergTransform::FromExpression(const ParsedExpression &expr, const IcebergTableSchema &schema,
+                                                  vector<reference<const IcebergColumnDefinition>> &source_columns) {
+	auto expr_type = expr.GetExpressionType();
+	switch (expr_type) {
+	case ExpressionType::COLUMN_REF: {
+		auto &colref = expr.Cast<ColumnRefExpression>();
+		auto column_lookup = schema.GetFromPath(colref.ColumnNames(), nullptr);
+		if (!column_lookup) {
+			auto column_name = StringUtil::Join(colref.ColumnNames(), ".");
+			throw InvalidInputException("No column by the name '%s' exists in the current schema (id: %d)", column_name,
+			                            schema.schema_id);
+		}
+		source_columns.push_back(*column_lookup);
+		return IcebergTransform("identity");
+	}
+	case ExpressionType::STRUCT_EXTRACT: {
+		auto &struct_extract = expr.Cast<OperatorExpression>();
+		auto &children = struct_extract.GetChildren();
+		if (children.size() != 2) {
+			break;
+		}
+		auto &base = children[0];
+		auto &remaining_fields = children[1];
+		if (base->GetExpressionType() != ExpressionType::COLUMN_REF) {
+			break;
+		}
+		if (remaining_fields->GetExpressionType() != ExpressionType::VALUE_CONSTANT) {
+			break;
+		}
+		auto &base_column = base->Cast<ColumnRefExpression>();
+		auto &fields_literal = remaining_fields->Cast<ConstantExpression>().GetLiteral();
+		if (fields_literal.kind != LiteralKind::STRING) {
+			break;
+		}
+		auto fields = base_column.ColumnNames();
+		auto parsed_fields = QualifiedName::ParseComponents(fields_literal.text);
+		for (auto &parsed_field : parsed_fields) {
+			fields.push_back(std::move(parsed_field));
+		}
+		auto column_lookup = schema.GetFromPath(fields, nullptr);
+		if (!column_lookup) {
+			auto column_name = StringUtil::Join(fields, ".");
+			throw InvalidInputException("No column by the name '%s' exists in the current schema (id: %d)", column_name,
+			                            schema.schema_id);
+		}
+		source_columns.push_back(*column_lookup);
+		return IcebergTransform("identity");
+	}
+	case ExpressionType::FUNCTION: {
+		auto &funcexpr = expr.Cast<FunctionExpression>();
+		auto transform = funcexpr.FunctionName().GetIdentifierName();
+		if (funcexpr.GetArguments().empty()) {
+			throw NotImplementedException("Unrecognized transform ('%s')", transform);
+		} else if (!IcebergTransform::TransformFunctionSupported(transform)) {
+			throw NotImplementedException("Unrecognized transform ('%s')", transform);
+		}
+
+		auto &arguments = funcexpr.GetArguments();
+		idx_t source_columns_offset = 0;
+		idx_t constant_value;
+		if (transform == "bucket" || transform == "truncate") {
+			// Spark-compatible syntax: bucket(N, col) / truncate(W, col)
+			if (arguments.size() < 2) {
+				throw InvalidInputException("%s requires two arguments, e.g. %s(16, col)", transform, transform);
+			}
+			auto &param_expr = arguments[0].GetExpression();
+			if (param_expr.GetExpressionType() != ExpressionType::VALUE_CONSTANT) {
+				throw InvalidInputException("%s first argument must be a constant integer", transform);
+			}
+			auto &const_literal = param_expr.Cast<ConstantExpression>().GetLiteral();
+			int64_t raw_val;
+			if (!const_literal.TryGetInt64(raw_val)) {
+				throw InvalidInputException("%s first argument must be a constant integer", transform);
+			}
+			if (raw_val <= 0) {
+				throw InvalidInputException("%s requires a positive integer argument, got %d", transform, raw_val);
+			}
+			constant_value = NumericCast<idx_t>(raw_val);
+			transform = StringUtil::Format("%s[%d]", transform, constant_value);
+			//! Source columns start behind the constant argument
+			source_columns_offset = 1;
+		}
+
+		//! Figure out the source id(s) of the transforms
+		for (idx_t i = source_columns_offset; i < arguments.size(); i++) {
+			auto &func_expr = arguments[i].GetExpression();
+			auto tmp = FromExpression(func_expr, schema, source_columns);
+			if (tmp.Type() != IcebergTransformType::IDENTITY) {
+				throw InvalidInputException("Encountered a non-column source for the transform (%s)",
+				                            func_expr.ToString());
+			}
+		}
+
+		auto res = IcebergTransform(transform);
+		if (res.Type() == IcebergTransformType::BUCKET || res.Type() == IcebergTransformType::TRUNCATE) {
+			res.SetBucketOrTruncateValue(constant_value);
+		}
+		return res;
+	}
+	default:
+		break;
+	}
+	throw NotImplementedException("Unsupported partition key type: %s", expr.ToString());
 }
 
 IcebergTransform::IcebergTransform(const string &transform) : raw_transform(transform) {
@@ -96,6 +208,33 @@ LogicalType IcebergTransform::GetSerializedType(const LogicalType &input) const 
 	}
 }
 
+Value IcebergTransform::ApplyTransform(const Value &value) const {
+	if (value.IsNull()) {
+		return Value(GetSerializedType(value.type()));
+	}
+
+	switch (type) {
+	case IcebergTransformType::IDENTITY:
+		return IdentityTransform::ApplyTransform(value, *this);
+	case IcebergTransformType::BUCKET:
+		return BucketTransform::ApplyTransform(value, *this);
+	case IcebergTransformType::TRUNCATE:
+		return TruncateTransform::ApplyTransform(value, *this);
+	case IcebergTransformType::YEAR:
+		return YearTransform::ApplyTransform(value, *this);
+	case IcebergTransformType::MONTH:
+		return MonthTransform::ApplyTransform(value, *this);
+	case IcebergTransformType::DAY:
+		return DayTransform::ApplyTransform(value, *this);
+	case IcebergTransformType::HOUR:
+		return HourTransform::ApplyTransform(value, *this);
+	case IcebergTransformType::VOID:
+		return Value(GetSerializedType(value.type()));
+	default:
+		throw InvalidConfigurationException("Transform '%s' not implemented", RawType());
+	}
+}
+
 string IcebergTransform::PartitionValueToString(const Value &partition_value) const {
 	if (partition_value.IsNull()) {
 		return "NULL";
@@ -109,12 +248,12 @@ string IcebergTransform::PartitionValueToString(const Value &partition_value) co
 	case IcebergTransformType::MONTH: {
 		int32_t m = partition_value.GetValue<int32_t>();
 		// Floor-divide to correctly handle months before 1970
-		int32_t year = 1970 + (m >= 0 ? m : m - 11) / 12;
+		int32_t year = Date::EPOCH_YEAR + (m >= 0 ? m : m - 11) / 12;
 		int32_t month = ((m % 12) + 12) % 12 + 1;
 		return StringUtil::Format("%04d-%02d", year, month);
 	}
 	case IcebergTransformType::YEAR: {
-		return std::to_string(1970 + partition_value.GetValue<int32_t>());
+		return std::to_string(Date::EPOCH_YEAR + partition_value.GetValue<int32_t>());
 	}
 	case IcebergTransformType::HOUR: {
 		int64_t hours = partition_value.GetValue<int32_t>();

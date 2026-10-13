@@ -1,13 +1,12 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/primitive_type_value.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -23,22 +22,25 @@ public:
 	StructField &operator=(StructField &&) = default;
 
 public:
-	static StructField FromJSON(yyjson_val *obj);
+	// Deserialization
+	static StructField FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Copy
+	StructField Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	int32_t id;
 	string name;
 	unique_ptr<Type> type;
 	bool required;
-	string doc;
-	bool has_doc = false;
-	PrimitiveTypeValue initial_default;
-	bool has_initial_default = false;
-	PrimitiveTypeValue write_default;
-	bool has_write_default = false;
+	optional<string> _doc;
+	optional<PrimitiveTypeValue> initial_default;
+	optional<PrimitiveTypeValue> write_default;
 };
 
 } // namespace rest_api_objects

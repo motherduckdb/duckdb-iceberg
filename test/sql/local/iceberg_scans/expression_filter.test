@@ -3,11 +3,7 @@
 
 require-env DUCKDB_ICEBERG_HAVE_GENERATED_DATA
 
-require avro
-
-require parquet
-
-require iceberg
+include test/sql/init_requires
 
 statement ok
 attach ':memory:' as my_datalake;
@@ -16,7 +12,7 @@ statement ok
 create schema my_datalake.default;
 
 statement ok
-create view my_datalake.default.expression_filter as select * from ICEBERG_SCAN('__WORKING_DIRECTORY__/data/persistent/expression_filter');
+create view my_datalake.default.expression_filter as select * from ICEBERG_SCAN('{WORKING_DIRECTORY}/data/persistent/expression_filter');
 
 # baseline: select all rows
 query II

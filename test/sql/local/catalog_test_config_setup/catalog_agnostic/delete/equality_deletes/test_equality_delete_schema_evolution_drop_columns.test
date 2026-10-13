@@ -1,0 +1,164 @@
+# name: test/sql/local/catalog_test_config_setup/catalog_agnostic/delete/equality_deletes/test_equality_delete_schema_evolution_drop_columns.test
+# description: Multi-column equality deletes remain valid after their target columns evolve and are dropped
+# group: [equality_deletes]
+
+require-env CATALOG_TEST_CONFIG_SETUP
+
+require-env EQUALITY_DELETE_WRITES_ENABLED 1
+
+include test/sql/init_requires
+
+
+statement ok
+use my_datalake.default;
+
+# server-side scan planning has a bug on the server side currently
+statement ok
+set iceberg_use_server_side_scan_planning=false;
+
+statement ok
+set __iceberg_unsafe_enable_equality_deletes=true;
+
+statement ok
+set iceberg_equality_delete_fast_filter=true;
+
+statement ok
+call enable_logging('Iceberg');
+
+statement ok
+drop table if exists my_datalake.default.equality_delete_evolve_then_drop_columns;
+
+statement ok
+create table my_datalake.default.equality_delete_evolve_then_drop_columns (
+	id integer,
+	float_key float,
+	number_key integer,
+	marker varchar
+);
+
+statement ok
+insert into my_datalake.default.equality_delete_evolve_then_drop_columns values
+	(1, 1.5::float, 10, 'delete-before-evolution'),
+	(2, 1.5::float, 11, 'keep-same-float'),
+	(3, 2.5::float, 10, 'keep-same-number'),
+	(4, 2.5::float, 20, 'delete-after-evolution-old-file'),
+	(5, 3.5::float, 30, 'keep-old');
+
+# This delete file stores both equality fields using their original types.
+statement ok
+delete from my_datalake.default.equality_delete_evolve_then_drop_columns
+where float_key = 1.5::float and number_key = 10;
+
+# Both fields are evolved before either equality-delete target is removed.
+statement ok
+alter table my_datalake.default.equality_delete_evolve_then_drop_columns alter column float_key set type double;
+
+statement ok
+alter table my_datalake.default.equality_delete_evolve_then_drop_columns alter column number_key set type bigint;
+
+# An equality field introduced after the first data file exercises field-id mapping
+# independently of physical column position.
+statement ok
+alter table my_datalake.default.equality_delete_evolve_then_drop_columns add column added_key varchar;
+
+statement ok
+insert into my_datalake.default.equality_delete_evolve_then_drop_columns values
+	(6, 1.5::double, 10, 'old-delete-does-not-apply-to-new-file', NULL),
+	(7, 2.5::double, 20, 'delete-after-evolution-new-file', NULL),
+	(8, 1e300::double, 5000000000, 'delete-promoted-values', NULL),
+	(9, 5.75::double, 6000000000, 'keep-new', 'keep-added-key'),
+	(10, 6.125::double, 7000000000, 'delete-added-column', 'delete-added-key');
+
+# This promoted-type delete applies to a matching tuple in both old and new data files.
+statement ok
+delete from my_datalake.default.equality_delete_evolve_then_drop_columns
+where float_key = 2.5::double and number_key = 20;
+
+statement ok
+delete from my_datalake.default.equality_delete_evolve_then_drop_columns
+where float_key = 1e300::double and number_key = 5000000000;
+
+statement ok
+delete from my_datalake.default.equality_delete_evolve_then_drop_columns
+where added_key = 'delete-added-key';
+
+query II
+select count(*), sum(record_count)
+from iceberg_metadata(my_datalake.default.equality_delete_evolve_then_drop_columns)
+where content = 'EQUALITY_DELETES' and status != 'DELETED';
+----
+4	4
+
+statement ok
+call truncate_duckdb_logs();
+
+query I
+select count(*)
+from my_datalake.default.equality_delete_evolve_then_drop_columns;
+----
+5
+
+# At least one evolved primitive layout must use the hash path rather than merely
+# obtaining the right answer through the expression fallback.
+query I
+select count(*) > 0
+from duckdb_logs()
+where type = 'Iceberg'
+  and message like 'Accelerated % equality-delete files using a hash filter'
+  and message not like 'Accelerated 0 of %';
+----
+true
+
+# One equality field is now historical while the other remains in the current schema.
+statement ok
+alter table my_datalake.default.equality_delete_evolve_then_drop_columns drop column float_key;
+
+query III
+select id, number_key, marker
+from my_datalake.default.equality_delete_evolve_then_drop_columns
+order by id;
+----
+2	11	keep-same-float
+3	10	keep-same-number
+5	30	keep-old
+6	10	old-delete-does-not-apply-to-new-file
+9	6000000000	keep-new
+
+# Both equality fields are now historical and must be scanned privately by field id.
+statement ok
+alter table my_datalake.default.equality_delete_evolve_then_drop_columns drop column number_key;
+
+# The newly added equality field is historical as well; dropping it exercises
+# private field-id projection without changing the visible result schema below.
+statement ok
+alter table my_datalake.default.equality_delete_evolve_then_drop_columns drop column added_key;
+
+query II
+select *
+from my_datalake.default.equality_delete_evolve_then_drop_columns
+order by id;
+----
+2	keep-same-float
+3	keep-same-number
+5	keep-old
+6	old-delete-does-not-apply-to-new-file
+9	keep-new
+
+statement ok
+insert into my_datalake.default.equality_delete_evolve_then_drop_columns values
+	(11, 'keep-after-all-drops');
+
+query II
+select *
+from my_datalake.default.equality_delete_evolve_then_drop_columns
+order by id;
+----
+2	keep-same-float
+3	keep-same-number
+5	keep-old
+6	old-delete-does-not-apply-to-new-file
+9	keep-new
+11	keep-after-all-drops
+
+statement ok
+drop table my_datalake.default.equality_delete_evolve_then_drop_columns;

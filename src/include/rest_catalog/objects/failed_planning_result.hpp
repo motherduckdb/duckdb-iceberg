@@ -1,14 +1,13 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/iceberg_error_response.hpp"
 #include "rest_catalog/objects/plan_status.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -20,33 +19,45 @@ public:
 	FailedPlanningResult &operator=(const FailedPlanningResult &) = delete;
 	FailedPlanningResult(FailedPlanningResult &&) = default;
 	FailedPlanningResult &operator=(FailedPlanningResult &&) = default;
-	class Object7 {
+	class Object12 {
 	public:
-		Object7();
-		Object7(const Object7 &) = delete;
-		Object7 &operator=(const Object7 &) = delete;
-		Object7(Object7 &&) = default;
-		Object7 &operator=(Object7 &&) = default;
+		Object12();
+		Object12(const Object12 &) = delete;
+		Object12 &operator=(const Object12 &) = delete;
+		Object12(Object12 &&) = default;
+		Object12 &operator=(Object12 &&) = default;
 
 	public:
-		static Object7 FromJSON(yyjson_val *obj);
+		// Deserialization
+		static Object12 FromJSON(JSONValue obj);
+		string TryFromJSON(JSONValue obj);
 
-	public:
-		string TryFromJSON(yyjson_val *obj);
+		// Copy
+		Object12 Copy() const;
+
+		// Serialization
+		void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+		JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 	public:
 		PlanStatus status;
 	};
 
 public:
-	static FailedPlanningResult FromJSON(yyjson_val *obj);
+	// Deserialization
+	static FailedPlanningResult FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Copy
+	FailedPlanningResult Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	IcebergErrorResponse iceberg_error_response;
-	Object7 object_7;
+	Object12 object_12;
 };
 
 } // namespace rest_api_objects

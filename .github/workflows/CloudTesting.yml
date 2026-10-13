@@ -1,0 +1,222 @@
+name: Cloud functional tests
+on:
+  schedule:
+    - cron:  '0 3 * * *' # runs at 3am every night
+  workflow_dispatch:
+    inputs:
+      duckdb_ref:
+        description: 'DuckDB submodule branch name or commit hash. Leave empty to use submodule in the branch'
+        required: false
+        default: ''
+      httpfs_fork:
+        description: 'URL of a duckdb-httpfs fork. Leave empty to use default duckdb/duckdb-httpfs.'
+        required: false
+        default: 'https://github.com/duckdb/duckdb-httpfs'
+      httpfs_ref:
+        description: 'Commit hash or branch of the httpfs fork. Leave empty to use default.'
+        required: false
+        default: ''
+      pr_number:
+        description: 'Pull request number (e.g. 1501) to test instead of the selected branch. Leave empty to use the branch'
+        required: false
+        default: ''
+  workflow_call:
+    # Callers must use `secrets: inherit`; no secrets are declared here so the
+    # list can't drift out of sync with the ones the steps below actually read.
+    inputs:
+      duckdb_ref:
+        description: 'DuckDB submodule branch name or commit hash. Leave empty to use submodule in the branch'
+        required: false
+        default: ''
+        type: string
+      httpfs_fork:
+        description: 'URL of a duckdb-httpfs fork. Leave empty to use default duckdb/duckdb-httpfs.'
+        required: false
+        default: 'https://github.com/duckdb/duckdb-httpfs'
+        type: string
+      httpfs_ref:
+        description: 'Commit hash or branch of the httpfs fork. Leave empty to use default.'
+        required: false
+        default: ''
+        type: string
+      pr_number:
+        description: 'Pull request number (e.g. 1501) to test instead of the selected branch. Leave empty to use the branch'
+        required: false
+        default: ''
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-pr${{ inputs.pr_number || '' }}-${{ github.head_ref || '' }}-${{ github.base_ref || '' }}-${{ github.ref != 'refs/heads/main' || github.sha }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  s3tables:
+    name: Test against a throwaway S3 Tables catalog
+    uses: ./.github/workflows/test-s3tables-catalog.yml
+    with:
+      duckdb_ref: ${{ inputs.duckdb_ref || '' }}
+      httpfs_fork: ${{ inputs.httpfs_fork || 'https://github.com/duckdb/duckdb-httpfs' }}
+      httpfs_ref: ${{ inputs.httpfs_ref || '' }}
+      pr_number: ${{ inputs.pr_number || '' }}
+    secrets: inherit
+
+  rest:
+    name: Test against remote cloud catalogs
+    runs-on: ubuntu-latest
+    env:
+      VCPKG_TARGET_TRIPLET: 'x64-linux-release'
+      GEN: ninja
+      VCPKG_FEATURE_FLAGS: "-binarycaching"
+      VCPKG_TOOLCHAIN_PATH: ${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+      PIP_BREAK_SYSTEM_PACKAGES: 1
+      HTTP_PROXY_PUBLIC: http://localhost:8878
+      # On a scheduled run the inputs context is empty, so these fall back to the
+      # same values the scheduled workflow used to pass explicitly.
+      DUCKDB_REF: ${{ inputs.duckdb_ref || '' }}
+      HTTPFS_FORK: ${{ inputs.httpfs_fork || 'https://github.com/duckdb/duckdb-httpfs' }}
+      HTTPFS_REF: ${{ inputs.httpfs_ref || '' }}
+
+    steps:
+      - name: Install required ubuntu packages
+        run: |
+          sudo apt-get update -y -qq && sudo apt-get install -y -qq ninja-build
+
+      # refs/pull/<n>/head is the PR's head commit, including PRs from forks.
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.pr_number && format('refs/pull/{0}/head', inputs.pr_number) || github.ref }}
+          fetch-depth: 0
+          submodules: 'true'
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11.1
+        with:
+          vcpkgGitCommitId: cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3 # Release 2026.06.24
+
+      - name: Setup Ccache
+        uses: hendrikmuhs/ccache-action@main
+        continue-on-error: true
+
+      - name: Checkout DuckDB
+        if: ${{ env.DUCKDB_REF != '' }}
+        run: |
+          cd duckdb
+          git fetch
+          git checkout "$DUCKDB_REF"
+
+      - name: Checkout selected httpfs
+        if: ${{ env.HTTPFS_REF != '' }}
+        run: |
+          cat > duckdb/.github/config/extensions/httpfs.cmake << EOF
+          duckdb_extension_load(httpfs
+            LOAD_TESTS
+            GIT_URL ${HTTPFS_FORK}
+            GIT_TAG ${HTTPFS_REF}
+          )
+          EOF
+
+      - name: Build extension
+        env:
+          GEN: ninja
+          STATIC_LIBCPP: 1
+        run: |
+          make release
+
+      - name: install python packages
+        run: |
+          python3 -m pip install -r scripts/requirements.txt
+
+      - name: Run mitmproxy
+        shell: bash
+        run: |
+          mitmdump --mode regular@8878 --flow-detail 2 > mitmproxy.log 2>&1 &
+
+      - name: Test with rest catalog
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_ICEBERG_TEST_USER_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_ICEBERG_TEST_USER_SECRET }}
+          AWS_DEFAULT_REGION: ${{ secrets.S3_ICEBERG_TEST_USER_REGION }}
+          SNOWFLAKE_KEY_ID_GCS: ${{ secrets.SNOWFLAKE_KEY_ID_GCS }}
+          SNOWFLAKE_SECRET_KEY_GCS: ${{ secrets.SNOWFLAKE_SECRET_KEY_GCS }}
+          SNOWFLAKE_KEY_ID_S3: ${{ secrets.SNOWFLAKE_KEY_ID_S3 }}
+          SNOWFLAKE_SECRET_KEY_S3: ${{ secrets.SNOWFLAKE_SECRET_KEY_S3 }}
+          SNOWFLAKE_CATALOG_URI_GCS: ${{ secrets.SNOWFLAKE_CATALOG_URI_GCS }}
+          R2_TOKEN: ${{ secrets.r2_token }}
+          ICEBERG_REMOTE_INSERT_READY: 1
+          ICEBERG_AWS_REMOTE_AVAILABLE: 1
+          ICEBERG_SNOWFLAKE_REMOTE_AVAILABLE: 1
+        run: |
+          ./build/release/test/unittest --order lex "test/sql/cloud/gcloud/*" "exclude:*.test_slow"
+          ./build/release/test/unittest --order lex "test/sql/cloud/r2_catalog/*" "exclude:*.test_slow"
+          ./build/release/test/unittest --order lex "test/sql/cloud/snowflake/*" "exclude:*.test_slow"
+
+      - name: Test python cloud tests
+        env:
+          ICEBERG_CATALOG_CLIENT_ID: ${{ secrets.SNOWFLAKE_KEY_ID_S3 }}
+          ICEBERG_CATALOG_CLIENT_SECRET: ${{ secrets.SNOWFLAKE_SECRET_KEY_S3 }}
+          ICEBERG_CATALOG_ENDPOINT: ${{ secrets.SNOWFLAKE_CATALOG_URI_GCS }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+          SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          ICEBERG_CATALOG_NAME: 's3-catalog'
+          ICEBERG_CATALOG_REGION: 'eu-west-2'
+          SNOWFLAKE_PAT: ${{ secrets.SNOWFLAKE_PAT }}
+          ICEBERG_SNOWFLAKE_REMOTE_AVAILABLE: 1
+        run: |
+          python3 -m pytest test/python/cloud/
+
+      - name: Test with no region set
+        env:
+          SNOWFLAKE_KEY_ID_S3: ${{secrets.SNOWFLAKE_KEY_ID_S3}}
+          SNOWFLAKE_SECRET_KEY_S3: ${{secrets.SNOWFLAKE_SECRET_KEY_S3}}
+          SNOWFLAKE_CATALOG_URI_GCS: ${{secrets.SNOWFLAKE_CATALOG_URI_GCS}}
+          NO_REGION_SET: 1
+        run: |
+          ./build/release/test/unittest --order lex test/sql/cloud/snowflake/no_vended_credentials_region.test
+
+  file-issue:
+    name: File an issue on failure
+    runs-on: ubuntu-latest
+    needs: [rest, s3tables]
+    # always() so the job still runs after a needed job failed; the rest of the
+    # condition keeps it to genuine failures on main (not cancelled or skipped,
+    # and not a manual run against a PR).
+    if: ${{ always() && contains(github.ref_name, 'main') && !inputs.pr_number && (needs.rest.result == 'failure' || needs.s3tables.result == 'failure') }}
+    permissions:
+      issues: write
+    steps:
+      - name: File issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REST_RESULT: ${{ needs.rest.result }}
+          S3TABLES_RESULT: ${{ needs.s3tables.result }}
+          RUN_URL: https://github.com/duckdb/duckdb-iceberg/actions/runs/${{ github.run_id }}
+          ISSUE_REPO: duckdb/duckdb-iceberg
+          ISSUE_TITLE: Cloud Test Failures
+        run: |
+          {
+            echo "Cloud tests failed. see [Run Link](${RUN_URL})"
+            echo
+            echo "- Remote cloud catalogs: ${REST_RESULT}"
+            echo "- S3 Tables catalog: ${S3TABLES_RESULT}"
+          } > report.txt
+
+          # Narrow with --search, then match the title exactly: search is fuzzy
+          # and would also return issues that merely mention these words.
+          existing="$(gh issue list --repo "$ISSUE_REPO" --state open --limit 100 \
+            --search "\"${ISSUE_TITLE}\" in:title" --json number,title \
+            --jq "map(select(.title == \"${ISSUE_TITLE}\")) | first | .number // empty")"
+
+          if [[ -n $existing ]]; then
+            echo "Commenting on existing issue #${existing}"
+            gh issue comment "$existing" --repo "$ISSUE_REPO" --body-file report.txt
+          else
+            echo "No open '${ISSUE_TITLE}' issue, creating one"
+            gh issue create --repo "$ISSUE_REPO" --title "$ISSUE_TITLE" --body-file report.txt
+          fi

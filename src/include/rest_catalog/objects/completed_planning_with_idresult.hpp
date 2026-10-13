@@ -1,13 +1,12 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/completed_planning_result.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -19,33 +18,45 @@ public:
 	CompletedPlanningWithIDResult &operator=(const CompletedPlanningWithIDResult &) = delete;
 	CompletedPlanningWithIDResult(CompletedPlanningWithIDResult &&) = default;
 	CompletedPlanningWithIDResult &operator=(CompletedPlanningWithIDResult &&) = default;
-	class Object6 {
+	class Object11 {
 	public:
-		Object6();
-		Object6(const Object6 &) = delete;
-		Object6 &operator=(const Object6 &) = delete;
-		Object6(Object6 &&) = default;
-		Object6 &operator=(Object6 &&) = default;
+		Object11();
+		Object11(const Object11 &) = delete;
+		Object11 &operator=(const Object11 &) = delete;
+		Object11(Object11 &&) = default;
+		Object11 &operator=(Object11 &&) = default;
 
 	public:
-		static Object6 FromJSON(yyjson_val *obj);
+		// Deserialization
+		static Object11 FromJSON(JSONValue obj);
+		string TryFromJSON(JSONValue obj);
 
-	public:
-		string TryFromJSON(yyjson_val *obj);
+		// Copy
+		Object11 Copy() const;
+
+		// Serialization
+		void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+		JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 	public:
 		string plan_id;
 	};
 
 public:
-	static CompletedPlanningWithIDResult FromJSON(yyjson_val *obj);
+	// Deserialization
+	static CompletedPlanningWithIDResult FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Copy
+	CompletedPlanningWithIDResult Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	CompletedPlanningResult completed_planning_result;
-	Object6 object_6;
+	Object11 object_11;
 };
 
 } // namespace rest_api_objects

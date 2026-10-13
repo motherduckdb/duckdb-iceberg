@@ -1,12 +1,13 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
-
-using namespace duckdb_yyjson;
+#include "rest_catalog/objects/id_reference.hpp"
+#include "rest_catalog/objects/named_reference.hpp"
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -20,13 +21,20 @@ public:
 	Reference &operator=(Reference &&) = default;
 
 public:
-	static Reference FromJSON(yyjson_val *obj);
+	// Deserialization
+	static Reference FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
+
+	// Copy
+	Reference Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
-	string TryFromJSON(yyjson_val *obj);
-
-public:
-	string value;
+	optional<IdReference> id_reference;
+	optional<NamedReference> named_reference;
 };
 
 } // namespace rest_api_objects

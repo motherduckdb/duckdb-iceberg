@@ -7,6 +7,10 @@
 
 namespace duckdb {
 
+struct IcebergDefault {
+	static bool &InterpretStructNullAsEmpty();
+};
+
 class IcebergDefaultBinder {
 public:
 	IcebergDefaultBinder(ClientContext &context);
@@ -18,6 +22,12 @@ private:
 	ClientContext &context;
 	shared_ptr<Binder> binder;
 	ConstantBinder constant_binder;
+};
+
+struct IcebergDefaultProjectionResolver {
+	static unique_ptr<Expression> ResolveDefault(ClientContext &context, const LogicalType &input_type,
+	                                             const LogicalType &result_type, ColumnBinding binding,
+	                                             const Expression &default_expr);
 };
 
 } // namespace duckdb

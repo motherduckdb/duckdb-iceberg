@@ -1,6 +1,6 @@
 #pragma once
 
-#include "duckdb/planner/table_filter.hpp"
+#include "duckdb/planner/filter/expression_filter.hpp"
 
 #include "core/expression/iceberg_transform.hpp"
 #include "core/expression/iceberg_predicate_stats.hpp"
@@ -12,7 +12,7 @@ public:
 	IcebergPredicate() = delete;
 
 public:
-	static bool MatchBounds(ClientContext &context, const TableFilter &filter, const IcebergPredicateStats &stats,
+	static bool MatchBounds(ClientContext &context, const ExpressionFilter &filter, const IcebergPredicateStats &stats,
 	                        const IcebergTransform &transform);
 };
 

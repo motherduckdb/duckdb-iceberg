@@ -3,22 +3,66 @@
 
 namespace duckdb {
 
-IcebergPartitionSpecField IcebergPartitionSpecField::ParseFromJson(const rest_api_objects::PartitionField &field) {
+IcebergPartitionSpecField IcebergPartitionSpecField::ParseFromJson(const rest_api_objects::PartitionField &field,
+                                                                   optional_idx assigned_field_id) {
 	IcebergPartitionSpecField result;
 
 	result.name = field.name;
 	result.transform = field.transform.value;
 	result.source_id = field.source_id;
-	D_ASSERT(field.has_field_id);
-	result.partition_field_id = field.field_id;
+	if (assigned_field_id.IsValid()) {
+		result.partition_field_id = assigned_field_id.GetIndex();
+	} else {
+		if (!field.field_id) {
+			throw InvalidConfigurationException("Partition field '%s' is missing 'field-id'", field.name);
+		}
+		result.partition_field_id = *field.field_id;
+	}
 	return result;
 }
 
-IcebergPartitionSpec IcebergPartitionSpec::ParseFromJson(const rest_api_objects::PartitionSpec &partition_spec) {
-	D_ASSERT(partition_spec.has_spec_id);
-	IcebergPartitionSpec result(partition_spec.spec_id);
-	for (auto &field : partition_spec.fields) {
-		result.fields.push_back(IcebergPartitionSpecField::ParseFromJson(field));
+bool IcebergPartitionSpecField::Equals(const IcebergPartitionSpecField &other) const {
+	return source_id == other.source_id && transform.RawType() == other.transform.RawType();
+}
+
+bool IcebergPartitionSpec::Equals(const IcebergPartitionSpec &other) const {
+	if (fields.size() != other.fields.size()) {
+		return false;
+	}
+	for (idx_t i = 0; i < fields.size(); i++) {
+		if (!fields[i].Equals(other.fields[i]) ||
+		    fields[i].GetPartitionSpecFieldName() != other.fields[i].GetPartitionSpecFieldName()) {
+			return false;
+		}
+	}
+	return true;
+}
+
+IcebergPartitionSpec IcebergPartitionSpec::ParseFromJson(const rest_api_objects::PartitionSpec &partition_spec,
+                                                         int32_t iceberg_version) {
+	D_ASSERT(partition_spec.spec_id);
+	IcebergPartitionSpec result(*partition_spec.spec_id);
+	auto &fields = partition_spec.fields;
+	idx_t missing_field_ids = 0;
+	for (auto &field : fields) {
+		if (!field.field_id) {
+			missing_field_ids++;
+		}
+	}
+	//! v1 partition field ids are optional and default to 1000 + position in the spec
+	bool assign_field_ids = iceberg_version == 1 && missing_field_ids > 0;
+	if (assign_field_ids && missing_field_ids != fields.size()) {
+		// ids assigned by position could collide with the ones that are set
+		throw InvalidConfigurationException(
+		    "Cannot parse partition spec %d with missing field IDs: %d missing of %d fields", result.spec_id,
+		    missing_field_ids, fields.size());
+	}
+	for (idx_t i = 0; i < fields.size(); i++) {
+		optional_idx assigned_field_id;
+		if (assign_field_ids) {
+			assigned_field_id = 1000 + i;
+		}
+		result.fields.push_back(IcebergPartitionSpecField::ParseFromJson(fields[i], assigned_field_id));
 	}
 	return result;
 }
@@ -80,49 +124,30 @@ const IcebergPartitionSpecField &IcebergPartitionSpec::GetFieldBySourceId(idx_t 
 	return *res;
 }
 
-yyjson_mut_val *IcebergPartitionSpec::FieldsToJSON(yyjson_mut_doc *doc) const {
-	auto fields_array = yyjson_mut_arr(doc);
+JSONMutableValue IcebergPartitionSpec::FieldsToJSON(JSONWriter &writer) const {
+	auto fields_array = writer.CreateArray();
 	for (auto &field : fields) {
-		auto field_obj = yyjson_mut_arr_add_obj(doc, fields_array);
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "name", field.GetPartitionSpecFieldName().c_str());
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "transform", field.transform.RawType().c_str());
-		yyjson_mut_obj_add_uint(doc, field_obj, "source-id", field.source_id);
-		yyjson_mut_obj_add_uint(doc, field_obj, "field-id", field.partition_field_id);
+		auto field_obj = writer.CreateObject();
+		fields_array.Append(field_obj);
+		field_obj.AddString("name", field.GetPartitionSpecFieldName());
+		field_obj.AddString("transform", field.transform.RawType());
+		field_obj.Add("source-id", writer.CreateUnsignedInteger(field.source_id));
+		field_obj.Add("field-id", writer.CreateUnsignedInteger(field.partition_field_id));
 	}
 	return fields_array;
 }
 
 string IcebergPartitionSpec::FieldsToJSONString() const {
-	std::unique_ptr<yyjson_mut_doc, YyjsonDocDeleter> doc_p(yyjson_mut_doc_new(nullptr));
-	auto doc = doc_p.get();
-	auto root_arr = FieldsToJSON(doc);
-	yyjson_mut_doc_set_root(doc, root_arr);
-	return ICUtils::JsonToString(std::move(doc_p));
+	JSONWriter writer;
+	writer.SetRoot(FieldsToJSON(writer));
+	return writer.ToString(JSONWriteFlags::ALLOW_INF_AND_NAN);
 }
 
-yyjson_mut_val *IcebergPartitionSpec::ToJSON(yyjson_mut_doc *doc) const {
-	auto partition_obj = yyjson_mut_obj(doc);
-	yyjson_mut_obj_add_val(doc, partition_obj, "spec-id", yyjson_mut_int(doc, spec_id));
-	yyjson_mut_obj_add_val(doc, partition_obj, "fields", FieldsToJSON(doc));
+JSONMutableValue IcebergPartitionSpec::ToJSON(JSONWriter &writer) const {
+	auto partition_obj = writer.CreateObject();
+	partition_obj.Add("spec-id", writer.CreateSignedInteger(spec_id));
+	partition_obj.Add("fields", FieldsToJSON(writer));
 	return partition_obj;
-}
-
-yyjson_mut_val *IcebergPartitionSpec::ToJSON(yyjson_mut_doc *doc, const rest_api_objects::PartitionSpec &spec) {
-	auto res = yyjson_mut_obj(doc);
-	yyjson_mut_obj_add_int(doc, res, "spec-id", spec.spec_id);
-	auto &fields = spec.fields;
-	auto fields_array = yyjson_mut_arr(doc);
-
-	for (auto &field : fields) {
-		auto field_obj = yyjson_mut_obj(doc);
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "name", field.name.c_str());
-		yyjson_mut_obj_add_strcpy(doc, field_obj, "transform", field.transform.value.c_str());
-		yyjson_mut_obj_add_int(doc, field_obj, "source-id", field.source_id);
-		yyjson_mut_obj_add_int(doc, field_obj, "field-id", field.field_id);
-		yyjson_mut_arr_add_val(fields_array, field_obj);
-	}
-	yyjson_mut_obj_add_val(doc, res, "fields", fields_array);
-	return res;
 }
 
 } // namespace duckdb

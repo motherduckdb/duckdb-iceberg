@@ -1,4 +1,5 @@
 #include "core/expression/iceberg_value.hpp"
+#include "common/iceberg_fixed_type.hpp"
 
 #include "duckdb/common/helper.hpp"
 #include "duckdb/common/types/uuid.hpp"
@@ -12,6 +13,67 @@
 #include "utf8proc_wrapper.hpp"
 
 namespace duckdb {
+
+static Value TransformPartitionValueFromBlob(const string_t &blob, const LogicalType &type) {
+	auto result = IcebergValue::DeserializeValue(blob, type);
+	if (result.HasError()) {
+		throw InvalidConfigurationException(result.GetError());
+	}
+	return result.GetValue();
+}
+
+template <class T>
+static Value TransformPartitionValueTemplated(const Value &value, const LogicalType &type) {
+	T val = value.GetValue<T>();
+	string_t blob((const char *)&val, sizeof(T));
+	return TransformPartitionValueFromBlob(blob, type);
+}
+
+Value IcebergValue::TransformPartitionValue(const Value &value, const LogicalType &type) {
+	D_ASSERT(!value.type().IsNested());
+	// COPY's partition map contains textual values. VARCHAR and BLOB share a physical
+	// type, but only BLOB contains bytes that should be decoded as Iceberg values.
+	if (value.type().id() == LogicalTypeId::VARCHAR) {
+		if (IcebergFixedType::IsFixed(type)) {
+			auto blob = value.DefaultCastAs(LogicalType::BLOB);
+			return TransformPartitionValueFromBlob(blob.GetValueUnsafe<string_t>(), type);
+		}
+		return value.DefaultCastAs(type);
+	}
+	// DECIMAL partition values are already decoded as proper DuckDB DECIMALs by the Avro reader.
+	// The blob round-trip below misinterprets the little-endian internal representation as
+	// big-endian Iceberg bytes, producing garbage. Return directly (or cast if params differ).
+	if (value.type().id() == LogicalTypeId::DECIMAL) {
+		if (value.type() == type) {
+			return value;
+		}
+		return value.DefaultCastAs(type);
+	}
+	switch (value.type().InternalType()) {
+	case PhysicalType::BOOL:
+		return TransformPartitionValueTemplated<bool>(value, type);
+	case PhysicalType::INT8:
+		return TransformPartitionValueTemplated<int8_t>(value, type);
+	case PhysicalType::INT16:
+		return TransformPartitionValueTemplated<int16_t>(value, type);
+	case PhysicalType::INT32:
+		return TransformPartitionValueTemplated<int32_t>(value, type);
+	case PhysicalType::INT64:
+		return TransformPartitionValueTemplated<int64_t>(value, type);
+	case PhysicalType::INT128:
+		return TransformPartitionValueTemplated<hugeint_t>(value, type);
+	case PhysicalType::FLOAT:
+		return TransformPartitionValueTemplated<float>(value, type);
+	case PhysicalType::DOUBLE:
+		return TransformPartitionValueTemplated<double>(value, type);
+	case PhysicalType::VARCHAR: {
+		return TransformPartitionValueFromBlob(value.GetValueUnsafe<string_t>(), type);
+	}
+	default:
+		throw NotImplementedException("TransformPartitionValue: Value: '%s' -> '%s'", value.ToString(),
+		                              type.ToString());
+	}
+}
 
 static DeserializeResult DeserializeError(const string_t &blob, const LogicalType &type) {
 	return DeserializeResult(
@@ -47,28 +109,22 @@ static Value DeserializeDecimalTemplated(const string_t &blob, uint8_t width, ui
 }
 
 static Value DeserializeHugeintDecimal(const string_t &blob, uint8_t width, uint8_t scale) {
-	hugeint_t ret;
-
 	//! The blob has to be smaller or equal to the size of the type
 	D_ASSERT(blob.GetSize() <= sizeof(hugeint_t));
 
-	// Convert from big-endian to host byte order
-	// read all bytes into a single 128-bit value
 	const uint8_t *src = reinterpret_cast<const uint8_t *>(blob.GetData());
 	bool is_negative = blob.GetSize() > 0 && (src[0] & 0x80);
 
-	// sign extension: 0 for positive, -1 for negative
-	int64_t upper_val = is_negative ? -1 : 0;
+	// use unsigned integers for shifting
+	uint64_t upper_val = is_negative ? ~uint64_t(0) : 0;
 	uint64_t lower_val = is_negative ? ~uint64_t(0) : 0;
 
-	// then split into upper/lower, by shifting each byte from MSB to LSB
 	for (idx_t i = 0; i < blob.GetSize(); i++) {
-		// shift the entire 128 bit value left by 8 bits
-		upper_val = (upper_val << 8) | static_cast<int64_t>(static_cast<uint64_t>(lower_val) >> 56);
+		upper_val = (upper_val << 8) | (lower_val >> 56);
 		lower_val = (lower_val << 8) | src[i];
 	}
 
-	ret = hugeint_t(upper_val, lower_val);
+	hugeint_t ret(static_cast<int64_t>(upper_val), lower_val);
 	return Value::DECIMAL(ret, width, scale);
 }
 
@@ -119,7 +175,7 @@ static DeserializeResult DeserializeUUID(const string_t &blob, const LogicalType
 //! FIXME: because of schema evolution, there are rules for inferring the correct type that we need to apply:
 //! See https://iceberg.apache.org/spec/#schema-evolution
 DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const LogicalType &type,
-                                                 optional_ptr<const SerializeBound> bound) {
+                                                 optional<SerializeBound> bound) {
 	switch (type.id()) {
 	case LogicalTypeId::INTEGER: {
 		if (blob.GetSize() != sizeof(int32_t)) {
@@ -190,7 +246,11 @@ DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const Log
 		}
 	}
 	case LogicalTypeId::BLOB: {
-		return Value::BLOB((data_ptr_t)blob.GetData(), blob.GetSize());
+		if (!bound && IcebergFixedType::IsFixed(type) &&
+		    blob.GetSize() != NumericCast<idx_t>(IcebergFixedType::GetLength(type))) {
+			return DeserializeError(blob, type);
+		}
+		return Value::BLOB((data_ptr_t)blob.GetData(), blob.GetSize()).WithType(type);
 	}
 	case LogicalTypeId::VARCHAR: {
 		auto data = blob.GetData();
@@ -245,7 +305,7 @@ DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const Log
 		}
 		//! bound stores microseconds since midnight
 		dtime_t val;
-		std::memcpy(&val.micros, blob.GetData(), sizeof(int64_t));
+		std::memcpy(&val.value, blob.GetData(), sizeof(int64_t));
 		return Value::TIME(val);
 	}
 	case LogicalTypeId::TIMESTAMP_NS:
@@ -262,6 +322,14 @@ DeserializeResult IcebergValue::DeserializeValue(const string_t &blob, const Log
 		} else {
 			return DeserializeError(blob, type);
 		}
+	case LogicalTypeId::TIMESTAMP_TZ_NS: {
+		if (blob.GetSize() != sizeof(int64_t)) {
+			return DeserializeError(blob, type);
+		}
+		int64_t nanos_since_epoch;
+		std::memcpy(&nanos_since_epoch, blob.GetData(), sizeof(int64_t));
+		return Value::TIMESTAMPTZNS(timestamp_tz_ns_t(nanos_since_epoch));
+	}
 	case LogicalTypeId::UUID:
 		return DeserializeUUID(blob, type);
 	default:
@@ -316,7 +384,7 @@ bool IcebergValue::TruncateAndIncrementString(const string &input, string &resul
 			last_start--;
 		}
 		int cp_size;
-		int32_t codepoint = Utf8Proc::UTF8ToCodepoint(input.c_str() + last_start, cp_size) + 1;
+		int32_t codepoint = Utf8Proc::UTF8ToCodepoint(input.c_str() + last_start, cp_size, input.size()) + 1;
 		if (codepoint >= 0xD800 && codepoint <= 0xDFFF) {
 			// skip the surrogate range to the next valid scalar value
 			codepoint = 0xE000;
@@ -444,6 +512,22 @@ SerializeResult IcebergValue::SerializeValue(Value input_value, const LogicalTyp
 		auto serialized_val = Value::BLOB(serialized_const_data_ptr, sizeof(int64_t));
 		return SerializeResult(column_type, serialized_val);
 	}
+	case LogicalTypeId::TIMESTAMP_TZ_NS: {
+		timestamp_tz_ns_t val = input_value.GetValue<timestamp_tz_ns_t>();
+		if (!Value::IsFinite(val)) {
+			throw ConversionException("Cannot write infinity/-infinity for timestamptz_ns type");
+		}
+		int64_t nanos_since_epoch = val.value;
+		auto serialized_const_data_ptr = const_data_ptr_cast<int64_t>(&nanos_since_epoch);
+		auto serialized_val = Value::BLOB(serialized_const_data_ptr, sizeof(int64_t));
+		return SerializeResult(column_type, serialized_val);
+	}
+	case LogicalTypeId::TIME: {
+		//! Microseconds from midnight in an 8-byte little-endian long
+		int64_t micros_from_midnight = input_value.GetValue<dtime_t>().value;
+		auto serialized_val = Value::BLOB(const_data_ptr_cast<int64_t>(&micros_from_midnight), sizeof(int64_t));
+		return SerializeResult(column_type, serialized_val);
+	}
 	case LogicalTypeId::DECIMAL: {
 		auto decimal_as_string = input_value.GetValue<string>();
 		auto dec_pos = decimal_as_string.find(".");
@@ -506,7 +590,7 @@ SerializeResult IcebergValue::SerializeValue(Value input_value, const LogicalTyp
 	case LogicalTypeId::BLOB: {
 		// do not double serialize blob values.
 		if (input_value.type() != LogicalType::VARCHAR) {
-			return SerializeResult(column_type, input_value);
+			return SerializeResult(column_type, input_value.WithType(LogicalType::BLOB));
 		}
 		// get const data ptr for the string value
 		auto val = input_value.GetValue<string>();
@@ -517,13 +601,21 @@ SerializeResult IcebergValue::SerializeValue(Value input_value, const LogicalTyp
 		auto ret = SerializeResult(column_type, ret_val);
 		return ret;
 	}
+	case LogicalTypeId::BOOLEAN: {
+		//! Iceberg serializes boolean bounds as a single byte: 0x00 = false, 0x01 = true.
+		//! The value arrives as a string ("0"/"1" from parquet RETURN_STATS column stats —
+		//! proper since duckdb#20222 — or "true"/"false" from the partition-value VARCHAR
+		//! cast in the manifest-list writer); the BOOLEAN cast accepts both forms.
+		const uint8_t val = input_value.DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>() ? 1 : 0;
+		auto serialized_val = Value::BLOB(const_data_ptr_cast(&val), sizeof(uint8_t));
+		auto ret = SerializeResult(column_type, serialized_val);
+		return ret;
+	}
 		// GEOMETRY and VARIANT bounds are not produced via this string-Value path;
 		// they require multi-double / variant-binary encodings built inline at the
 		// stats-collection site (see IcebergInsertGlobalState::AddFiles).
 	case LogicalTypeId::GEOMETRY:
 	case LogicalTypeId::VARIANT:
-		// boolean does not yet return proper values so we skip
-	case LogicalTypeId::BOOLEAN:
 	default:
 		break;
 	}

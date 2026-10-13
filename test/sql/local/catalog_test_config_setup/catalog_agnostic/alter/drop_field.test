@@ -3,18 +3,11 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
+include test/sql/init_requires
 
-require parquet
+statement ok
+SET default_transaction_invalidation_policy='SYNTACTIC_ERRORS_DO_NOT_INVALIDATE';
 
-require iceberg
-
-require httpfs
-
-require ducklake
-
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 set enable_logging=true
@@ -90,7 +83,7 @@ STRUCT(a VARCHAR, nested STRUCT(d DATE), also_nested STRUCT(e VARCHAR, f BIGINT)
 
 statement ok
 insert into my_datalake.default.drop_struct_field VALUES (
-	{'a': 'hello world', 'b': NULL, 'c': '1934/5/21'::DATE, 'nested': {'d': '1982/2/12'::DATE}}, true
+	{'a': 'hello world', 'nested': {'d': '1982/2/12'::DATE}}, true
 )
 
 query II
@@ -119,11 +112,8 @@ statement ok
 insert into my_datalake.default.drop_struct_field VALUES (
 	{
 		'a': 'hello world',
-		'b': NULL,
-		'c': '1934/5/21'::DATE,
 		'nested': {
-			'd': '1982/2/12'::DATE,
-			'prim': 'this is a long string'
+			'd': '1982/2/12'::DATE
 		}
 	},
 	true
@@ -147,14 +137,7 @@ STRUCT(a VARCHAR, also_nested STRUCT(f BIGINT))
 statement ok
 insert into my_datalake.default.drop_struct_field VALUES (
 	{
-		'a': 'hello world',
-		'b': NULL,
-		'another_struct': {
-			'col': {
-				'inception': true
-			}
-		},
-		'c': '1934/5/21'::DATE
+		'a': 'hello world'
 	},
 	true
 );

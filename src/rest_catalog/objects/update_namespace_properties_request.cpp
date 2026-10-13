@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/update_namespace_properties_request.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 UpdateNamespacePropertiesRequest::UpdateNamespacePropertiesRequest() {
 }
 
-UpdateNamespacePropertiesRequest UpdateNamespacePropertiesRequest::FromJSON(yyjson_val *obj) {
+UpdateNamespacePropertiesRequest UpdateNamespacePropertiesRequest::FromJSON(JSONValue obj) {
 	UpdateNamespacePropertiesRequest res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -24,54 +22,113 @@ UpdateNamespacePropertiesRequest UpdateNamespacePropertiesRequest::FromJSON(yyjs
 	return res;
 }
 
-string UpdateNamespacePropertiesRequest::TryFromJSON(yyjson_val *obj) {
+UpdateNamespacePropertiesRequest UpdateNamespacePropertiesRequest::Copy() const {
+	UpdateNamespacePropertiesRequest res;
+	if (removals.has_value()) {
+		res.removals.emplace();
+		(*res.removals).reserve((*removals).size());
+		for (auto &item : (*removals)) {
+			(*res.removals).emplace_back(item);
+		}
+	}
+	if (updates.has_value()) {
+		res.updates.emplace();
+		for (auto &entry : (*updates)) {
+			(*res.updates).emplace(entry.first, entry.second);
+		}
+	}
+	return res;
+}
+
+string UpdateNamespacePropertiesRequest::TryFromJSON(JSONValue obj) {
 	string error;
-	auto removals_val = yyjson_obj_get(obj, "removals");
-	if (removals_val && !yyjson_is_null(removals_val)) {
-		has_removals = true;
-		if (yyjson_is_arr(removals_val)) {
-			size_t idx, max;
-			yyjson_val *val;
-			yyjson_arr_foreach(removals_val, idx, max, val) {
-				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
-				} else {
-					return StringUtil::Format(
-					    "UpdateNamespacePropertiesRequest property 'tmp' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(val));
+	auto removals_val = obj.GetMember("removals");
+	if (removals_val.IsValid()) {
+		vector<string> removals_tmp;
+		if (removals_val.IsArray()) {
+			removals_val.IterateArray([&](JSONValue removals_tmp_item_val) {
+				if (!error.empty()) {
+					return;
 				}
-				removals.emplace_back(std::move(tmp));
+				string removals_tmp_item;
+				if (json_utils::IsString(removals_tmp_item_val)) {
+					removals_tmp_item = json_utils::GetString(removals_tmp_item_val);
+				} else {
+					error = StringUtil::Format("UpdateNamespacePropertiesRequest property 'removals_tmp_item' is not "
+					                           "of type 'string', found %s instead",
+					                           json_utils::GetTypeDescription(removals_tmp_item_val).c_str());
+					return;
+				}
+				removals_tmp.emplace_back(std::move(removals_tmp_item));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
 			return StringUtil::Format(
-			    "UpdateNamespacePropertiesRequest property 'removals' is not of type 'array', found '%s' instead",
-			    yyjson_get_type_desc(removals_val));
+			    "UpdateNamespacePropertiesRequest property 'removals_tmp' is not of type 'array', found %s instead",
+			    json_utils::GetTypeDescription(removals_val).c_str());
 		}
+		removals = std::move(removals_tmp);
 	}
-	auto updates_val = yyjson_obj_get(obj, "updates");
-	if (updates_val && !yyjson_is_null(updates_val)) {
-		has_updates = true;
-		if (yyjson_is_obj(updates_val)) {
-			size_t idx, max;
-			yyjson_val *key, *val;
-			yyjson_obj_foreach(updates_val, idx, max, key, val) {
-				auto key_str = yyjson_get_str(key);
-				string tmp;
-				if (yyjson_is_str(val)) {
-					tmp = yyjson_get_str(val);
-				} else {
-					return StringUtil::Format(
-					    "UpdateNamespacePropertiesRequest property 'tmp' is not of type 'string', found '%s' instead",
-					    yyjson_get_type_desc(val));
+	auto updates_val = obj.GetMember("updates");
+	if (updates_val.IsValid()) {
+		case_insensitive_map_t<string> updates_tmp;
+		if (updates_val.IsObject()) {
+			updates_val.IterateObject([&](const string &key_str, JSONValue val) {
+				if (!error.empty()) {
+					return;
 				}
-				updates.emplace(key_str, std::move(tmp));
+				string tmp;
+				if (json_utils::IsString(val)) {
+					tmp = json_utils::GetString(val);
+				} else {
+					error = StringUtil::Format(
+					    "UpdateNamespacePropertiesRequest property 'tmp' is not of type 'string', found %s instead",
+					    json_utils::GetTypeDescription(val).c_str());
+					return;
+				}
+				updates_tmp.emplace(key_str, std::move(tmp));
+			});
+			if (!error.empty()) {
+				return error;
 			}
 		} else {
-			return "UpdateNamespacePropertiesRequest property 'updates' is not of type 'object'";
+			return "UpdateNamespacePropertiesRequest property 'updates_tmp' is not of type 'object'";
 		}
+		updates = std::move(updates_tmp);
 	}
-	return string();
+	return "";
+}
+
+void UpdateNamespacePropertiesRequest::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
+	// Serialize: removals
+	if (removals.has_value()) {
+		auto &removals_value = *removals;
+		auto removals_json = writer.CreateArray();
+		for (const auto &removals_json_item : removals_value) {
+			auto removals_json_item_json = writer.CreateString(removals_json_item);
+			removals_json.Append(removals_json_item_json);
+		}
+		obj.Add("removals", removals_json);
+	}
+
+	// Serialize: updates
+	if (updates.has_value()) {
+		auto &updates_value = *updates;
+		auto updates_json = writer.CreateObject();
+		for (const auto &[updates_json_key, updates_json_value] : updates_value) {
+			auto updates_json_value_json = writer.CreateString(updates_json_value);
+			updates_json.Add(updates_json_key, updates_json_value_json);
+		}
+		obj.Add("updates", updates_json);
+	}
+}
+
+JSONMutableValue UpdateNamespacePropertiesRequest::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

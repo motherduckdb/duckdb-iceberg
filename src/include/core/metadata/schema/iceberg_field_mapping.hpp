@@ -2,15 +2,13 @@
 
 #include "duckdb/common/limits.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
-#include "yyjson.hpp"
-
-using namespace duckdb_yyjson; // NOLINT
+#include "duckdb/common/json_document.hpp"
 
 namespace duckdb {
 
 struct IcebergFieldMapping {
 public:
-	static void ParseFieldMappings(yyjson_val *obj, vector<IcebergFieldMapping> &mappings, idx_t &mapping_index,
+	static void ParseFieldMappings(JSONValue obj, vector<IcebergFieldMapping> &mappings, idx_t &mapping_index,
 	                               idx_t parent_mapping_index);
 
 public:

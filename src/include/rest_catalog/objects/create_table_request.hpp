@@ -1,15 +1,14 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/partition_spec.hpp"
 #include "rest_catalog/objects/schema.hpp"
 #include "rest_catalog/objects/sort_order.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -23,24 +22,25 @@ public:
 	CreateTableRequest &operator=(CreateTableRequest &&) = default;
 
 public:
-	static CreateTableRequest FromJSON(yyjson_val *obj);
+	// Deserialization
+	static CreateTableRequest FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Copy
+	CreateTableRequest Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	string name;
 	Schema schema;
-	string location;
-	bool has_location = false;
-	PartitionSpec partition_spec;
-	bool has_partition_spec = false;
-	SortOrder write_order;
-	bool has_write_order = false;
-	bool stage_create;
-	bool has_stage_create = false;
-	case_insensitive_map_t<string> properties;
-	bool has_properties = false;
+	optional<string> location;
+	optional<PartitionSpec> partition_spec;
+	optional<SortOrder> write_order;
+	optional<bool> stage_create;
+	optional<case_insensitive_map_t<string>> properties;
 };
 
 } // namespace rest_api_objects

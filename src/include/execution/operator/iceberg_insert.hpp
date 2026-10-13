@@ -13,31 +13,33 @@
 #include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/common/index_vector.hpp"
 
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
 #include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
 #include "core/metadata/partition/iceberg_partition_spec.hpp"
 #include "core/metadata/schema/iceberg_table_schema.hpp"
-#include "execution/operator/physical_iceberg_create_table.hpp"
+#include "execution/operator/iceberg_copy_to_file.hpp"
 
 namespace duckdb {
 
 enum class IcebergInsertVirtualColumns { NONE, WRITE_ROW_ID, WRITE_SEQUENCE_NUMBER, WRITE_ROW_ID_AND_SEQUENCE_NUMBER };
 
 struct IcebergCopyInput {
+	//! For a CTAS, IcebergCopyToFile will send the create table request during Pipeline setup and then
+	//! Initialize copy options when field id and table location information is known.
 	explicit IcebergCopyInput(ClientContext &context, const IcebergTableMetadata &table_metadata,
-	                          const IcebergTableSchema &schema);
+	                          const IcebergTableSchema &schema, unique_ptr<BoundCreateTableInfo> ctas_info = nullptr);
 
 public:
 	const IcebergTableMetadata &table_metadata;
 	const IcebergTableSchema &schema;
 	string data_path;
 	//! Set of (key, value) options
-	case_insensitive_map_t<vector<Value>> options;
+	identifier_map_t<vector<Value>> options;
 	//! Partition specification for the table (if partitioned)
 	optional_ptr<const IcebergPartitionSpec> partition_spec;
-	//! Table index for logical plan generation (used when generating partition expressions)
-	optional_idx get_table_index;
 	IcebergInsertVirtualColumns virtual_columns = IcebergInsertVirtualColumns::NONE;
+	//! For CREATE TABLE AS: what to create, and (via its `schema`) where.
+	unique_ptr<BoundCreateTableInfo> ctas_info;
 };
 
 struct IcebergCopyOptions {
@@ -50,23 +52,30 @@ public:
 	unique_ptr<FunctionData> bind_data;
 
 	string file_path;
-	bool use_tmp_file;
 	FilenamePattern filename_pattern;
 	string file_extension;
 	CopyOverwriteMode overwrite_mode;
 	bool per_thread_output;
-	optional_idx file_size_bytes;
-	bool rotate;
+	//! default target file size: 512MB, per the Iceberg spec default for write.target-file-size-bytes
+	idx_t file_size_bytes = 512ULL * 1024 * 1024;
+	//! Row group sizing. DuckDB's parquet copy function ignores the row_group_size(_bytes) copy options;
+	//! they are resolved by the COPY binder into these fields on the LogicalCopyToFile instead.
+	//! Row groups are flushed when either threshold is hit. Iceberg only defines a byte default
+	//! (write.parquet.row-group-size-bytes = 128MB), so we leave batch_size unset unless the table
+	//! sets write.parquet.row-group-size - otherwise DuckDB's 122880 row default would always win.
+	optional_idx batch_size;
+	optional_idx batch_size_bytes = 128ULL * 1024 * 1024;
 	CopyFunctionReturnType return_type;
-	bool hive_file_pattern;
 
 	//! Partitioning
-	bool partition_output;
-	bool write_partition_columns;
+	bool partition_output = false;
+	bool write_partition_columns = true;
 	bool write_empty_file = true;
 	vector<idx_t> partition_columns;
-	vector<string> names;
+	vector<BoundOrderByNode> order_columns;
+	vector<Identifier> names;
 	vector<LogicalType> expected_types;
+	bool partitioned_paths = true;
 
 	//! Set of projection columns to execute prior to inserting (if any)
 	vector<unique_ptr<Expression>> projection_list;
@@ -93,27 +102,20 @@ public:
 	              physical_index_vector_t<idx_t> column_index_map);
 	IcebergInsert(PhysicalPlan &physical_plan, const vector<LogicalType> &types, TableCatalogEntry &table);
 
-	//! CREATE TABLE AS
-	IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op, SchemaCatalogEntry &schema,
-	              unique_ptr<BoundCreateTableInfo> info);
+	//! CREATE TABLE AS. The table itself is created by the IcebergCopyToFile below this insert,
+	//! which owns the BoundCreateTableInfo; see `ctas_copy_op`.
+	IcebergInsert(PhysicalPlan &physical_plan, LogicalOperator &op);
 
 	//! The table to insert into
 	optional_ptr<TableCatalogEntry> table;
-	//! Table schema, in case of CREATE TABLE AS
-	optional_ptr<SchemaCatalogEntry> schema;
-	//! Create table info, in case of CREATE TABLE AS
-	unique_ptr<BoundCreateTableInfo> info;
 	//! column_index_map
 	physical_index_vector_t<idx_t> column_index_map;
-	//! The physical copy used internally by this insert
-	unique_ptr<PhysicalOperator> physical_copy_to_file;
 	//! When set, this insert is part of an UPDATE: points to the delete operator so Finalize
 	//! can call AddUpdateSnapshot instead of AddSnapshot.
 	optional_ptr<PhysicalOperator> update_delete_op;
-	//! When set, this insert is a CTAS whose table is created lazily by an
-	//! upstream PhysicalIcebergCreateTable. Sink/Finalize resolve the
-	//! TableCatalogEntry through this shared state instead of `table`.
-	shared_ptr<IcebergCTASCreateState> create_state;
+	//! When set, this insert is a CTAS whose table is created lazily by this copy operator (its child).
+	//! Sink/Finalize resolve the TableCatalogEntry through it instead of through `table`.
+	optional_ptr<IcebergCopyToFile> ctas_copy_op;
 
 public:
 	// Source interface
@@ -130,19 +132,19 @@ public:
 	SinkFinalizeType Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
 	                          OperatorSinkFinalizeInput &input) const override;
 	unique_ptr<GlobalSinkState> GetGlobalSinkState(ClientContext &context) const override;
-	static PhysicalOperator &PlanCopyForInsert(ClientContext &context, PhysicalPlanGenerator &planner,
-	                                           const IcebergCopyInput &copy_input, optional_ptr<PhysicalOperator> plan);
+	static IcebergCopyToFile &PlanCopyForInsert(ClientContext &context, PhysicalPlanGenerator &planner,
+	                                            IcebergCopyInput &copy_input, optional_ptr<PhysicalOperator> plan);
 	static IcebergCopyOptions GetCopyOptions(ClientContext &context, const IcebergCopyInput &copy_input);
 
 	static PhysicalOperator &PlanInsert(ClientContext &context, PhysicalPlanGenerator &planner,
-	                                    IcebergTableEntry &table);
+	                                    IcebergTableSchemaVersion &table);
 	static vector<IcebergManifestEntry> GetInsertManifestEntries(IcebergInsertGlobalState &global_state);
 	static void AddWrittenFiles(IcebergInsertGlobalState &global_state, DataChunk &chunk,
 	                            optional_ptr<TableCatalogEntry> table);
 
 	//! Resolve the catalog entry this insert is targeting. For INSERT INTO this
-	//! is just `this->table`; for CTAS the table is created lazily by an
-	//! upstream PhysicalIcebergCreateTable, so we read it from `create_state`.
+	//! is just `this->table`; for CTAS the table is created lazily by the
+	//! IcebergCopyToFile below it, so we read it from `ctas_copy_op`.
 	optional_ptr<TableCatalogEntry> GetEffectiveTable() const;
 
 	bool IsSink() const override {

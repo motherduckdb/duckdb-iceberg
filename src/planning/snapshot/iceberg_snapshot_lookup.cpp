@@ -2,10 +2,22 @@
 
 namespace duckdb {
 
+IcebergSnapshotLookup IcebergSnapshotLookup::FromTimestamp(timestamp_ms_t snapshot_timestamp) {
+	//! Throw if the timestamp is in the future.
+	auto now = Value::TIMESTAMP(Timestamp::GetCurrentTimestamp())
+	               .DefaultCastAs(LogicalType::TIMESTAMP_MS)
+	               .GetValue<timestamp_ms_t>();
+	if (snapshot_timestamp > now) {
+		throw InvalidInputException(
+		    "Can not time travel to '%s', it lies in the future (the current timestamp is '%s')",
+		    Value::TIMESTAMPMS(snapshot_timestamp).ToString(), Value::TIMESTAMPMS(now).ToString());
+	}
+	return IcebergSnapshotLookup(SnapshotFromTimestamp(snapshot_timestamp));
+}
+
 IcebergSnapshotLookup IcebergSnapshotLookup::FromAtClause(optional_ptr<BoundAtClause> at) {
-	IcebergSnapshotLookup result;
 	if (!at) {
-		return result;
+		return FromLatest();
 	}
 
 	auto &unit = at->Unit();
@@ -14,17 +26,15 @@ IcebergSnapshotLookup IcebergSnapshotLookup::FromAtClause(optional_ptr<BoundAtCl
 	if (value.IsNull()) {
 		throw InvalidInputException("NULL values can not be used as the 'unit' of a time travel clause");
 	}
-	if (StringUtil::CIEquals(unit, "version")) {
-		result.snapshot_source = SnapshotSource::FROM_ID;
-		result.snapshot_id = value.DefaultCastAs(LogicalType::BIGINT).GetValue<int64_t>();
-	} else if (StringUtil::CIEquals(unit, "timestamp")) {
-		result.snapshot_source = SnapshotSource::FROM_TIMESTAMP;
-		result.snapshot_timestamp = value.DefaultCastAs(LogicalType::TIMESTAMP).GetValue<timestamp_t>();
+	if (unit == "version") {
+		return FromSnapshotId(value.DefaultCastAs(LogicalType::BIGINT).GetValue<int64_t>());
+	} else if (unit == "timestamp") {
+		return FromTimestamp(value.DefaultCastAs(LogicalType::TIMESTAMP_MS).GetValue<timestamp_ms_t>());
 	} else {
 		throw InvalidInputException(
-		    "Unit '%s' for time travel is not valid, supported options are 'version' and 'timestamp'", unit);
+		    "Unit '%s' for time travel is not valid, supported options are 'version' and 'timestamp'",
+		    unit.GetIdentifierName());
 	}
-	return result;
 }
 
 } // namespace duckdb

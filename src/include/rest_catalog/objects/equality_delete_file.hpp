@@ -1,13 +1,12 @@
 
 #pragma once
 
-#include "yyjson.hpp"
+#include "duckdb/common/json_document.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
 #include "rest_catalog/objects/content_file.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -21,16 +20,20 @@ public:
 	EqualityDeleteFile &operator=(EqualityDeleteFile &&) = default;
 
 public:
-	static EqualityDeleteFile FromJSON(yyjson_val *obj);
+	// Deserialization
+	static EqualityDeleteFile FromJSON(JSONValue obj);
+	string TryFromJSON(JSONValue obj);
 
-public:
-	string TryFromJSON(yyjson_val *obj);
+	// Copy
+	EqualityDeleteFile Copy() const;
+
+	// Serialization
+	void PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const;
+	JSONMutableValue ToJSON(JSONWriter &writer) const;
 
 public:
 	ContentFile content_file;
-	string content;
-	vector<int32_t> equality_ids;
-	bool has_equality_ids = false;
+	optional<vector<int32_t>> equality_ids;
 };
 
 } // namespace rest_api_objects

@@ -4,16 +4,8 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
+include test/sql/init_requires
 
-require parquet
-
-require iceberg
-
-require httpfs
-
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 drop table if exists my_datalake.default.metrics_mode_test;
@@ -34,6 +26,10 @@ WITH (
 statement ok
 insert into my_datalake.default.metrics_mode_test values
     ('abcdefghijklmnop', 'abcdefghijklmnop', 'abcdefghijklmnop', 'abcdefghijklmnop', 'abcdefghijklmnop');
+
+# Start transaction to keep necessary credentials in scope
+statement ok
+begin
 
 statement ok
 set variable mp = (select manifest_path from iceberg_metadata(my_datalake.default.metrics_mode_test) order by manifest_sequence_number desc limit 1);
@@ -72,7 +68,7 @@ select octet_length(ub) from (
 ----
 16
 
-# c (field 3): counts mode writes no bounds.
+# c (field 3): counts mode writes no bound...
 query I
 select count(*) from (
     select unnest(map_keys(lower_bounds)) k
@@ -81,10 +77,27 @@ select count(*) from (
 ----
 0
 
-# d (field 4): none mode writes no bounds.
+# ...but still writes value_counts.
+query I
+select count(*) from (
+    select unnest(map_keys(value_counts)) k
+    from (select unnest(data_file) from read_avro(getvariable('mp')))
+) where k = 3;
+----
+1
+
+# d (field 4): none mode writes no bound and no counts.
 query I
 select count(*) from (
     select unnest(map_keys(lower_bounds)) k
+    from (select unnest(data_file) from read_avro(getvariable('mp')))
+) where k = 4;
+----
+0
+
+query I
+select count(*) from (
+    select unnest(map_keys(value_counts)) k
     from (select unnest(data_file) from read_avro(getvariable('mp')))
 ) where k = 4;
 ----
@@ -99,6 +112,9 @@ select octet_length(lb) from (
 ----
 4
 
+statement ok
+commit
+
 # --- Default when the property is unset: Iceberg's truncate(16) ---
 
 statement ok
@@ -111,6 +127,10 @@ create table my_datalake.default.metrics_default_test (s varchar);
 statement ok
 insert into my_datalake.default.metrics_default_test values ('abcdefghijklmnopqrst');
 
+# Start transaction to keep necessary credentials in scope
+statement ok
+begin
+
 statement ok
 set variable mp2 = (select manifest_path from iceberg_metadata(my_datalake.default.metrics_default_test) order by manifest_sequence_number desc limit 1);
 
@@ -121,6 +141,9 @@ select octet_length(lb) from (
 ) where k = 1;
 ----
 16
+
+statement ok
+commit
 
 # --- Invalid metrics modes are rejected at write time ---
 

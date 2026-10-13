@@ -1,37 +1,81 @@
 #include "common/iceberg_utils.hpp"
 
 #include "duckdb.hpp"
+#include "duckdb/common/exception.hpp"
 #include "duckdb/common/gzip_file_system.hpp"
+#include "duckdb/main/database_manager.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/copy_function_catalog_entry.hpp"
 #include "duckdb/main/extension_helper.hpp"
+#include "duckdb/transaction/meta_transaction.hpp"
+#include "duckdb/common/operator/add.hpp"
 
-#include "catalog/rest/catalog_entry/table/iceberg_table_entry.hpp"
-#include "catalog/rest/catalog_entry/table/iceberg_table_information.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
+#include "catalog/rest/catalog_entry/table/iceberg_table.hpp"
 #include "core/metadata/iceberg_table_metadata.hpp"
 #include "duckdb/catalog/catalog_entry_retriever.hpp"
 
 namespace duckdb {
 
-CopyFunctionCatalogEntry &IcebergUtils::GetCopyFunction(ClientContext &context, const string &name) {
+bool IcebergUtils::IsIcebergCatalog(Catalog &catalog) {
+	return catalog.GetCatalogType() == "iceberg";
+}
+
+int64_t IcebergUtils::AddFileSizeChecked(int64_t total, int64_t file_size_in_bytes) {
+	if (file_size_in_bytes < 0) {
+		throw InvalidConfigurationException("Iceberg content file has negative 'file_size_in_bytes': %lld",
+		                                    file_size_in_bytes);
+	}
+	int64_t updated;
+	if (!TryAddOperator::Operation(total, file_size_in_bytes, updated)) {
+		throw InvalidConfigurationException("Iceberg content file sizes exceed the supported BIGINT range");
+	}
+	return updated;
+}
+
+timestamp_ms_t IcebergUtils::GetTransactionStartTimeMS(ClientContext &context) {
+	auto &meta_transaction = MetaTransaction::Get(context);
+	auto transaction_start = meta_transaction.GetCurrentTransactionStartTimestamp();
+	return timestamp_ms_t(Timestamp::GetEpochMs(transaction_start));
+}
+
+idx_t IcebergUtils::ParseByteSizeOptionallyFormatted(const string &input) {
+	idx_t result;
+	auto error = StringUtil::TryParseFormattedBytes(input, result);
+	if (error.empty()) {
+		return result;
+	}
+
+	try {
+		auto parsed = std::stoll(input);
+		return parsed;
+	} catch (...) {
+		throw InvalidConfigurationException("Invalid format for 'write.target-file-size-bytes' (%s), error: %s", input,
+		                                    error);
+	}
+}
+
+CopyFunctionCatalogEntry &IcebergUtils::GetCopyFunction(ClientContext &context, const Identifier &name) {
 	// Logic is partially duplicated from Catalog::AutoLoadExtensionByCatalogEntry(db, CatalogType::COPY_FUNCTION_ENTRY,
 	// name), but that do not offer enough control
 	auto &db = *context.db;
 	string extension_name = ExtensionHelper::FindExtensionInEntries(name, EXTENSION_COPY_FUNCTIONS);
 	if (!extension_name.empty() && Settings::Get<AutoloadKnownExtensionsSetting>(context) &&
-	    ExtensionHelper::CanAutoloadExtension(extension_name)) {
+	    ExtensionHelper::CanAutoloadExtension(db, extension_name)) {
 		// This will either succeed or throw
 		ExtensionHelper::AutoLoadExtension(db, extension_name);
 	}
 	D_ASSERT(!name.empty());
 	auto &system_catalog = Catalog::GetSystemCatalog(db);
 
-	auto entry =
-	    system_catalog.GetEntry<CopyFunctionCatalogEntry>(context, DEFAULT_SCHEMA, name, OnEntryNotFound::RETURN_NULL);
+	auto entry = system_catalog.GetEntry<CopyFunctionCatalogEntry>(
+	    context, QualifiedName(system_catalog.GetName(), Identifier::DefaultSchema(), name),
+	    OnEntryNotFound::RETURN_NULL);
 	if (!entry) {
 		throw MissingExtensionException(
-		    "Could not load the copy function for \"%s\". Try explicitly loading the \"%s\" extension", name, name);
+		    "Could not load the copy function for \"%s\". Try explicitly loading the \"%s\" extension",
+		    name.GetIdentifierName(), name.GetIdentifierName());
 	}
 	return *entry;
 }
@@ -97,23 +141,28 @@ static string ExtractIcebergScanPath(const string &sql) {
 optional_ptr<CatalogEntry> IcebergUtils::GetTableEntry(ClientContext &context, string &input_string) {
 	auto qualified_name = QualifiedName::ParseComponents(input_string);
 	auto default_db = DatabaseManager::GetDefaultDatabase(context);
-	auto &catalog = Catalog::GetCatalog(context, default_db);
+	auto &catalog = Catalog::GetCatalog(context, Identifier(default_db));
 	switch (qualified_name.size()) {
 	case 3: {
-		auto lookup_info = EntryLookupInfo(CatalogType::TABLE_ENTRY, qualified_name[2]);
-		auto table = Catalog::GetEntry(context, qualified_name[0], qualified_name[1], lookup_info,
-		                               OnEntryNotFound::THROW_EXCEPTION);
+		auto lookup_info = EntryLookupInfo(CatalogType::TABLE_ENTRY,
+		                                   QualifiedName(qualified_name[0], qualified_name[1], qualified_name[2]));
+		auto table = Catalog::GetEntry(context, lookup_info, OnEntryNotFound::THROW_EXCEPTION);
 		return table;
 	}
 	case 2: {
 		// make sure default catalog is iceberg
-		auto table_entry = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, qualified_name[0], qualified_name[1],
-		                                    OnEntryNotFound::THROW_EXCEPTION);
+		auto table_entry = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, Identifier(qualified_name[0]),
+		                                    Identifier(qualified_name[1]), OnEntryNotFound::THROW_EXCEPTION);
 		return table_entry;
 	}
 	case 1: {
 		auto schema = catalog.GetDefaultSchema();
-		auto table_entry = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, schema, qualified_name[0],
+		if (!schema) {
+			throw InvalidInputException(
+			    "Cannot resolve table name %s - catalog %s has no default schema, qualify the name with a schema",
+			    input_string, catalog.GetName());
+		}
+		auto table_entry = catalog.GetEntry(context, CatalogType::TABLE_ENTRY, *schema, Identifier(qualified_name[0]),
 		                                    OnEntryNotFound::THROW_EXCEPTION);
 		return table_entry;
 	}
@@ -130,17 +179,18 @@ optional_ptr<SchemaCatalogEntry> IcebergUtils::GetSchemaEntry(ClientContext &con
 	case 1: {
 		// input: schema
 		// we assume the catalog from context
-		auto &catalog = Catalog::GetCatalog(context, default_db);
-		return catalog.GetSchema(context, qualified_name[0], OnEntryNotFound::THROW_EXCEPTION);
+		auto &catalog = Catalog::GetCatalog(context, Identifier(default_db));
+		return catalog.GetSchema(context, Identifier(qualified_name[0]), OnEntryNotFound::THROW_EXCEPTION);
 	}
 	default: {
 		// input: catalog.schema (schema may contain dots for nested namespaces)
 		auto catalog_name = qualified_name[0];
 		vector<string> schema_parts(qualified_name.begin() + 1, qualified_name.end());
 		auto schema_name = StringUtil::Join(schema_parts, ".");
-		auto lookup_info = EntryLookupInfo(CatalogType::SCHEMA_ENTRY, schema_name);
+		auto lookup_info = EntryLookupInfo(CatalogType::SCHEMA_ENTRY,
+		                                   QualifiedName(catalog_name, Identifier(), Identifier(schema_name)));
 		auto retriever = CatalogEntryRetriever(context);
-		return retriever.GetSchema(catalog_name, lookup_info, OnEntryNotFound::THROW_EXCEPTION);
+		return retriever.GetSchema(lookup_info, OnEntryNotFound::THROW_EXCEPTION);
 	}
 	}
 }
@@ -154,9 +204,9 @@ string IcebergUtils::GetStorageLocation(ClientContext &context, const string &in
 			break;
 		}
 		//! Fully qualified table reference, let's do a lookup
-		EntryLookupInfo table_info(CatalogType::TABLE_ENTRY, qualified_name[2]);
-		auto catalog_entry =
-		    Catalog::GetEntry(context, qualified_name[0], qualified_name[1], table_info, OnEntryNotFound::RETURN_NULL);
+		EntryLookupInfo table_info(CatalogType::TABLE_ENTRY,
+		                           QualifiedName(qualified_name[0], qualified_name[1], qualified_name[2]));
+		auto catalog_entry = Catalog::GetEntry(context, table_info, OnEntryNotFound::RETURN_NULL);
 		if (!catalog_entry) {
 			break;
 		}
@@ -173,14 +223,43 @@ string IcebergUtils::GetStorageLocation(ClientContext &context, const string &in
 			if (table.catalog.GetCatalogType() != "iceberg") {
 				throw InvalidInputException("Table %s is not an Iceberg table", input);
 			}
-			auto &table_entry = catalog_entry->Cast<IcebergTableEntry>();
-			storage_location = table_entry.table_info.latest_metadata_json;
+			auto &table_entry = catalog_entry->Cast<IcebergTableSchemaVersion>();
+			storage_location = table_entry.table_info.table_metadata.GetLocation();
 			// Prepare Iceberg Scan from entry will create the secret needed to access the table
 			table_entry.PrepareIcebergScanFromEntry(context);
 			break;
 		}
 	} while (false);
 	return storage_location;
+}
+
+IcebergResolvedMetadata IcebergUtils::ResolveTableMetadata(ClientContext &context, const string &input,
+                                                           const IcebergOptions &options) {
+	auto qualified_name = QualifiedName::ParseComponents(input);
+	if (qualified_name.size() == 3) {
+		auto table_name =
+		    QualifiedName(Identifier(qualified_name[0]), Identifier(qualified_name[1]), Identifier(qualified_name[2]));
+		EntryLookupInfo table_info(CatalogType::TABLE_ENTRY, std::move(table_name));
+		auto catalog_entry = Catalog::GetEntry(context, table_info, OnEntryNotFound::RETURN_NULL);
+		if (catalog_entry && catalog_entry->type == CatalogType::TABLE_ENTRY) {
+			auto &table = catalog_entry->Cast<TableCatalogEntry>();
+			if (table.catalog.GetCatalogType() != "iceberg") {
+				throw InvalidInputException("Table %s is not an Iceberg table", input);
+			}
+
+			auto &iceberg_table = catalog_entry->Cast<IcebergTableSchemaVersion>();
+			iceberg_table.PrepareIcebergScanFromEntry(context);
+			auto &metadata = iceberg_table.table_info.table_metadata;
+			return IcebergResolvedMetadata(metadata.GetLocation(), metadata.Copy());
+		}
+	}
+
+	auto table_location = GetStorageLocation(context, input);
+	auto &fs = FileSystem::GetFileSystem(context);
+	auto caching_fs = make_shared_ptr<CachingFileSystemWrapper>(fs, *context.db);
+	auto metadata_path = IcebergTableMetadata::GetMetaDataPath(context, table_location, fs, options);
+	auto table_metadata = IcebergTableMetadata::Parse(metadata_path, *caching_fs, options.metadata_compression_codec);
+	return IcebergResolvedMetadata(std::move(table_location), IcebergTableMetadata::FromTableMetadata(table_metadata));
 }
 
 // Function to decompress a gz file content string

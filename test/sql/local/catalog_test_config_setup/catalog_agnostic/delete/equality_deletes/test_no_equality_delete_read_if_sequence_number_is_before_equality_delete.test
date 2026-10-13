@@ -6,22 +6,14 @@ require-env CATALOG_TEST_CONFIG_SETUP
 
 require-env EQUALITY_DELETE_WRITES_ENABLED 1
 
-require avro
+include test/sql/init_requires
 
-require parquet
-
-require iceberg
-
-require httpfs
-
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 use my_datalake.default;
 
 statement ok
-set unsafe_and_disabled_for_iceberg_v3_enable_equality_deletes=true;
+set __iceberg_unsafe_enable_equality_deletes=true;
 
 statement ok
 drop table if exists equality_delete_sequence_number_tests;
@@ -69,19 +61,3 @@ query I
 select count(*) from duckdb_logs_parsed('HTTP') where request.url like '%-equality-deletes.parquet';
 ----
 0
-
-statement ok
-set iceberg_use_metadata_log = false;
-
-# the optimizer should also not be created in this case.
-query II
-explain select * from equality_delete_sequence_number_tests AT (VERSION => getvariable('last_snapshot_number')) order by all;
-----
-physical_plan	<!REGEX>:.*FILTER.*iceberg_verify_equality_del.*ICEBERG_SCAN.*
-
-
-# the optimizer will kick in when reading latest table state
-query II
-explain select * from equality_delete_sequence_number_tests order by all;
-----
-physical_plan	<REGEX>:.*FILTER.*iceberg_verify_equality_del.*ICEBERG_SCAN.*

@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/view_representation.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 ViewRepresentation::ViewRepresentation() {
 }
 
-ViewRepresentation ViewRepresentation::FromJSON(yyjson_val *obj) {
+ViewRepresentation ViewRepresentation::FromJSON(JSONValue obj) {
 	ViewRepresentation res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -24,17 +22,40 @@ ViewRepresentation ViewRepresentation::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string ViewRepresentation::TryFromJSON(yyjson_val *obj) {
+ViewRepresentation ViewRepresentation::Copy() const {
+	ViewRepresentation res;
+	if (sqlview_representation.has_value()) {
+		res.sqlview_representation.emplace();
+		(*res.sqlview_representation) = (*sqlview_representation).Copy();
+	}
+	return res;
+}
+
+string ViewRepresentation::TryFromJSON(JSONValue obj) {
 	string error;
 	do {
-		error = sqlview_representation.TryFromJSON(obj);
+		sqlview_representation.emplace();
+		error = sqlview_representation->TryFromJSON(obj);
 		if (error.empty()) {
-			has_sqlview_representation = true;
 			break;
+		} else {
+			sqlview_representation = nullopt;
 		}
 		return "ViewRepresentation failed to parse, none of the oneOf candidates matched";
 	} while (false);
-	return string();
+	return "";
+}
+
+void ViewRepresentation::PopulateJSON(JSONWriter &writer, JSONMutableValue obj) const {
+	if (sqlview_representation.has_value()) {
+		sqlview_representation->PopulateJSON(writer, obj);
+	}
+}
+
+JSONMutableValue ViewRepresentation::ToJSON(JSONWriter &writer) const {
+	auto obj = writer.CreateObject();
+	PopulateJSON(writer, obj);
+	return obj;
 }
 
 } // namespace rest_api_objects

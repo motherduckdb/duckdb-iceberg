@@ -12,22 +12,78 @@
 #include "duckdb/common/types/batched_data_collection.hpp"
 #include "duckdb/common/multi_file/multi_file_data.hpp"
 #include "duckdb/common/list.hpp"
+#include "duckdb/common/mutex.hpp"
 #include "duckdb/common/unordered_map.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/filter/null_filter.hpp"
 #include "duckdb/planner/table_filter.hpp"
 
 #include "planning/iceberg_multi_file_list.hpp"
+#include "planning/deletes/iceberg_equality_delete_fast_filter.hpp"
 #include "common/iceberg_utils.hpp"
 #include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
 
 namespace duckdb {
 
+struct IcebergEqualityDeleteReadColumn {
+	int32_t field_id;
+	idx_t expression_index;
+	LogicalType type;
+};
+
+struct IcebergEqualityDeleteReadState {
+	explicit IcebergEqualityDeleteReadState(vector<IcebergEqualityDeleteReadColumn> columns_p)
+	    : columns(std::move(columns_p)) {
+		for (idx_t i = 0; i < columns.size(); i++) {
+			field_indexes.emplace(columns[i].field_id, i);
+			types.push_back(columns[i].type);
+		}
+	}
+
+	vector<IcebergEqualityDeleteReadColumn> columns;
+	vector<LogicalType> types;
+	unordered_map<int32_t, idx_t> field_indexes;
+	unique_ptr<Expression> expression;
+	shared_ptr<const IcebergEqualityDeleteFastFilter> fast_filter;
+};
+
 struct IcebergMultiFileReaderGlobalState : public MultiFileReaderGlobalState {
 public:
-	IcebergMultiFileReaderGlobalState(vector<LogicalType> extra_columns_p, const MultiFileList &file_list_p)
-	    : MultiFileReaderGlobalState(std::move(extra_columns_p), file_list_p) {
+	explicit IcebergMultiFileReaderGlobalState(const MultiFileList &file_list_p)
+	    : MultiFileReaderGlobalState({}, file_list_p, true) {
 	}
+
+	void CacheEqualityDeleteReadState(idx_t file_list_idx, unique_ptr<IcebergEqualityDeleteReadState> read_state) {
+		lock_guard<mutex> guard(equality_delete_read_state_lock);
+		auto &cached_state = equality_delete_read_states[file_list_idx];
+		if (cached_state) {
+			throw InternalException("Equality-delete state was initialized twice for file-list index %llu",
+			                        file_list_idx);
+		}
+		cached_state = std::move(read_state);
+	}
+
+	const IcebergEqualityDeleteReadState &GetEqualityDeleteReadState(idx_t file_list_idx) const {
+		lock_guard<mutex> guard(equality_delete_read_state_lock);
+		auto entry = equality_delete_read_states.find(file_list_idx);
+		if (entry == equality_delete_read_states.end()) {
+			throw InternalException("Equality-delete state was not initialized for file-list index %llu",
+			                        file_list_idx);
+		}
+		return *entry->second;
+	}
+
+	IcebergEqualityDeleteFastFilter::BuildResult
+	GetOrCreateEqualityDeleteFastFilter(const vector<reference<const IcebergEqualityDeleteFile>> &delete_files,
+	                                    const IcebergEqualityDeleteReadState &read_state,
+	                                    const set<int32_t> &local_field_ids, ClientContext &context,
+	                                    Allocator &allocator);
+
+private:
+	mutable mutex equality_delete_read_state_lock;
+	//! The values are heap allocated so references remain stable while other files are initialized in parallel.
+	unordered_map<idx_t, unique_ptr<IcebergEqualityDeleteReadState>> equality_delete_read_states;
+	IcebergEqualityDeleteFastFilterCache equality_delete_fast_filter_cache;
 };
 
 struct IcebergMultiFileReader : public MultiFileReader {
@@ -38,16 +94,17 @@ public:
 	IcebergMultiFileReader(shared_ptr<TableFunctionInfo> function_info);
 
 public:
-	static unique_ptr<MultiFileReader> CreateInstance(const TableFunction &table);
+	static unique_ptr<MultiFileReader> CreateInstance(const BoundTableFunction &table);
+	static OpenFileInfo FileInfo(const IcebergDataFileDescriptor &file);
 	static vector<PartitionStatistics> IcebergGetPartitionStats(ClientContext &context, GetPartitionStatsInput &input);
 
 public:
 	shared_ptr<MultiFileList> CreateFileList(ClientContext &context, const vector<string> &paths,
 	                                         const FileGlobInput &glob_input) override;
-	bool Bind(MultiFileOptions &options, MultiFileList &files, vector<LogicalType> &return_types, vector<string> &names,
-	          MultiFileReaderBindData &bind_data) override;
+	bool Bind(MultiFileOptions &options, MultiFileList &files, vector<LogicalType> &return_types,
+	          vector<Identifier> &names, MultiFileReaderBindData &bind_data) override;
 	void BindOptions(MultiFileOptions &options, MultiFileList &files, vector<LogicalType> &return_types,
-	                 vector<string> &names, MultiFileReaderBindData &bind_data) override;
+	                 vector<Identifier> &names, MultiFileReaderBindData &bind_data) override;
 	unique_ptr<MultiFileReaderGlobalState>
 	InitializeGlobalState(ClientContext &context, const MultiFileOptions &file_options,
 	                      const MultiFileReaderBindData &bind_data, const MultiFileList &file_list,
@@ -61,32 +118,53 @@ public:
 	void FinalizeBind(MultiFileReaderData &reader_data, const MultiFileOptions &file_options,
 	                  const MultiFileReaderBindData &options, const vector<MultiFileColumnDefinition> &global_columns,
 	                  const vector<ColumnIndex> &global_column_ids, ClientContext &context,
-	                  MultiFileGlobalState &gstate);
-	void FinalizeBind(MultiFileReaderData &reader_data, const MultiFileOptions &file_options,
-	                  const MultiFileReaderBindData &options, const vector<MultiFileColumnDefinition> &global_columns,
-	                  const vector<ColumnIndex> &global_column_ids, ClientContext &context,
 	                  optional_ptr<MultiFileReaderGlobalState> global_state) override;
 	void FinalizeChunk(ClientContext &context, const MultiFileBindData &bind_data, BaseFileReader &reader,
 	                   const MultiFileReaderData &reader_data, DataChunk &input_chunk, DataChunk &output_chunk,
 	                   ExpressionExecutor &executor, optional_ptr<MultiFileReaderGlobalState> global_state) override;
-	void ApplyEqualityDeletes(ClientContext &context, DataChunk &output_chunk,
-	                          const IcebergMultiFileList &multi_file_list,
-	                          const BoundIcebergManifestEntry &manifest_entry,
-	                          const vector<MultiFileColumnDefinition> &local_columns);
-	bool ParseOption(const string &key, const Value &val, MultiFileOptions &options, ClientContext &context) override;
+	bool ParseOption(const Identifier &key, const Value &val, MultiFileOptions &options,
+	                 ClientContext &context) override;
 
-	unique_ptr<Expression>
+	MultiFileReaderVirtualColumnBinding
 	GetVirtualColumnExpression(ClientContext &context, MultiFileReaderData &reader_data,
-	                           const vector<MultiFileColumnDefinition> &local_columns, idx_t &column_id,
-	                           const LogicalType &type, MultiFileLocalIndex local_idx,
-	                           optional_ptr<MultiFileColumnDefinition> &global_column_reference) override;
+	                           const vector<MultiFileColumnDefinition> &local_columns, const idx_t column_id,
+	                           const LogicalType &type, MultiFileLocalIndex local_idx) override;
+
+protected:
+	ReaderInitializeType InitializeTaskReader(MultiFileReaderData &reader_data, const MultiFileBindData &bind_data,
+	                                          const vector<MultiFileColumnDefinition> &global_columns,
+	                                          const vector<ColumnIndex> &global_column_ids,
+	                                          optional_ptr<TableFilterSet> table_filters, ClientContext &context,
+	                                          MultiFileGlobalState &gstate, const IcebergTableMetadataSchemas &schemas,
+	                                          const vector<IcebergFieldMapping> &mappings,
+	                                          IcebergDeletePlan delete_plan,
+	                                          const unordered_map<int32_t, Value> &partition_constants);
+
+private:
+	static unique_ptr<Expression>
+	CreateEqualityDeleteExpression(const vector<reference<const IcebergEqualityDeleteFile>> &delete_files,
+	                               const vector<MultiFileColumnDefinition> &local_columns,
+	                               const IcebergEqualityDeleteReadState &read_state,
+	                               const vector<bool> &accelerated_files);
+	static vector<IcebergEqualityDeleteReadColumn>
+	AddEqualityDeleteColumns(const IcebergTableMetadataSchemas &schemas,
+	                         const vector<reference<const IcebergEqualityDeleteFile>> &delete_files,
+	                         vector<MultiFileColumnDefinition> &scan_columns, vector<ColumnIndex> &scan_column_ids,
+	                         MultiFileReaderData &reader_data, ClientContext &context);
+	static IcebergEqualityDeleteReadColumn
+	AddEqualityDeleteColumn(const IcebergTableMetadataSchemas &schemas, int32_t field_id,
+	                        vector<MultiFileColumnDefinition> &scan_columns, vector<ColumnIndex> &scan_column_ids,
+	                        MultiFileReaderData &reader_data, ClientContext &context);
+	static void ApplyPartitionConstants(const unordered_map<int32_t, Value> &constants,
+	                                    MultiFileReaderData &reader_data,
+	                                    const vector<MultiFileColumnDefinition> &global_columns,
+	                                    const vector<ColumnIndex> &global_column_ids);
 
 public:
 	shared_ptr<TableFunctionInfo> function_info;
 	IcebergOptions options;
 
 private:
-	unique_ptr<MultiFileColumnDefinition> row_id_column;
 	unique_ptr<MultiFileColumnDefinition> last_updated_sequence_number_column;
 };
 

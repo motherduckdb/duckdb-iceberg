@@ -4,16 +4,10 @@
 
 require-env CATALOG_TEST_CONFIG_SETUP
 
-require avro
+require-env STAGED_CREATE_SUPPORT
 
-require parquet
+include test/sql/init_requires
 
-require iceberg
-
-require httpfs
-
-# Do not ignore 'HTTP' error messages!
-set ignore_error_messages
 
 statement ok
 CALL enable_logging('HTTP');
@@ -136,7 +130,7 @@ loop i 1 15
 
 # creates a second snapshot update
 statement ok
-insert into create_table_t4 select range d, range::VARCHAR e from range((${i} * 100), (${i} + 1) * 100);
+insert into create_table_t4 select range d, range::VARCHAR e from range(({i} * 100), ({i} + 1) * 100);
 
 endloop
 

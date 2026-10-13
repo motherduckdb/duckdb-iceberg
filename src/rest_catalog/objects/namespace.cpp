@@ -1,13 +1,11 @@
 
 #include "rest_catalog/objects/namespace.hpp"
 
-#include "yyjson.hpp"
 #include "duckdb/common/string.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/case_insensitive_map.hpp"
+#include "rest_catalog/objects/json_utils.hpp"
 #include "rest_catalog/objects/list.hpp"
-
-using namespace duckdb_yyjson;
 
 namespace duckdb {
 namespace rest_api_objects {
@@ -15,7 +13,7 @@ namespace rest_api_objects {
 Namespace::Namespace() {
 }
 
-Namespace Namespace::FromJSON(yyjson_val *obj) {
+Namespace Namespace::FromJSON(JSONValue obj) {
 	Namespace res;
 	auto error = res.TryFromJSON(obj);
 	if (!error.empty()) {
@@ -24,26 +22,49 @@ Namespace Namespace::FromJSON(yyjson_val *obj) {
 	return res;
 }
 
-string Namespace::TryFromJSON(yyjson_val *obj) {
+Namespace Namespace::Copy() const {
+	Namespace res;
+	res.value.reserve(value.size());
+	for (auto &item : value) {
+		res.value.emplace_back(item);
+	}
+	return res;
+}
+
+string Namespace::TryFromJSON(JSONValue obj) {
 	string error;
-	if (yyjson_is_arr(obj)) {
-		size_t idx, max;
-		yyjson_val *val;
-		yyjson_arr_foreach(obj, idx, max, val) {
-			string tmp;
-			if (yyjson_is_str(val)) {
-				tmp = yyjson_get_str(val);
-			} else {
-				return StringUtil::Format("Namespace property 'tmp' is not of type 'string', found '%s' instead",
-				                          yyjson_get_type_desc(val));
+	if (obj.IsArray()) {
+		obj.IterateArray([&](JSONValue value_item_val) {
+			if (!error.empty()) {
+				return;
 			}
-			value.emplace_back(std::move(tmp));
+			string value_item;
+			if (json_utils::IsString(value_item_val)) {
+				value_item = json_utils::GetString(value_item_val);
+			} else {
+				error = StringUtil::Format("Namespace property 'value_item' is not of type 'string', found %s instead",
+				                           json_utils::GetTypeDescription(value_item_val).c_str());
+				return;
+			}
+			value.emplace_back(std::move(value_item));
+		});
+		if (!error.empty()) {
+			return error;
 		}
 	} else {
-		return StringUtil::Format("Namespace property 'value' is not of type 'array', found '%s' instead",
-		                          yyjson_get_type_desc(obj));
+		return StringUtil::Format("Namespace property 'value' is not of type 'array', found %s instead",
+		                          json_utils::GetTypeDescription(obj).c_str());
 	}
-	return string();
+	return "";
+}
+
+JSONMutableValue Namespace::ToJSON(JSONWriter &writer) const {
+	auto result = writer.CreateArray();
+	for (const auto &result_item : value) {
+		auto result_item_json = writer.CreateString(result_item);
+		result.Append(result_item_json);
+	}
+	return result;
 }
 
 } // namespace rest_api_objects
