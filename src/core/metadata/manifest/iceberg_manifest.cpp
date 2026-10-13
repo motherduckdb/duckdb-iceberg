@@ -682,7 +682,10 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	partition.emplace_back("__duckdb_field_id", Value::INTEGER(PARTITION));
 	partition.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
 	for (auto &entry : extended_partition_info) {
-		partition.emplace_back(entry.name, Value::INTEGER(static_cast<int32_t>(entry.field_id)));
+		//! SQLNULL is already Avro "null"; a nullable union would contain "null" twice.
+		auto partition_type = entry.transform.GetBoundsType(entry.source_type);
+		partition.emplace_back(entry.name, CreateFieldID(static_cast<int32_t>(entry.field_id),
+		                                                 partition_type.id() != LogicalTypeId::SQLNULL));
 	}
 	data_file_field_ids.emplace_back("partition", Value::STRUCT(partition));
 
