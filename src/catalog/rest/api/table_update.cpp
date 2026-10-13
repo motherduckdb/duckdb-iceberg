@@ -141,6 +141,7 @@ UpgradeFormatVersion::UpgradeFormatVersion(int32_t format_version)
 
 void UpgradeFormatVersion::CreateUpdate(DatabaseInstance &db, ClientContext &context,
                                         IcebergCommitState &commit_state) const {
+	commit_state.SetFormatVersion(format_version);
 	commit_state.table_change.updates.push_back(rest_api_objects::TableUpdate());
 	auto &req = commit_state.table_change.updates.back();
 	req.upgrade_format_version_update = rest_api_objects::UpgradeFormatVersionUpdate();

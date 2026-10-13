@@ -175,7 +175,12 @@
         "test/sql/types/nested/map/test_map_nested_keys.test",
         "test/sql/types/struct/nested_structs.test",
         "test/sql/types/struct/struct_updates.test",
+        "test/sql/function/list/aggregates/any_value.test",
         "test/sql/function/list/aggregates/entropy.test",
+        "test/sql/function/list/aggregates/first.test",
+        "test/sql/function/list/aggregates/last.test",
+        "test/sql/function/list/aggregates/max.test",
+        "test/sql/function/list/aggregates/min.test",
         "test/sql/function/list/list_unique.test",
         "test/sql/function/timestamp/test_icu_datediff.test",
         "test/sql/insert/test_insert_query.test",
@@ -244,13 +249,17 @@
         "test/sql/secrets/create_secret_hffs_autoload.test",
         "test/sql/secrets/create_secret_persistence_no_client_context.test",
         "test/sql/secrets/secret_autoloading_errors.test",
+        "test/sql/secrets/persistent_secret_map_value.test",
         "test/sql/settings/setting_preserve_identifier_case.test",
+        "test/sql/settings/test_disabled_file_systems.test",
         "test/sql/show_select/test_describe_all.test",
         "test/sql/storage/compression/zstd/reclaim_space_column.test_slow",
         "test/sql/storage/compression/zstd/reclaim_space_table.test_slow",
         "test/sql/storage/large_delete_wal.test_slow",
+        "test/sql/storage/distinct_statistics_sample.test",
         "test/sql/storage/many_checkpoints_leak.test_slow",
         "test/sql/storage/optimistic_write/optimistic_write.test_slow",
+        "test/sql/storage/adaptive_segment_rollback.test",
         "test/sql/storage/optimistic_write/optimistic_write_abort.test_slow",
         "test/sql/storage/optimistic_write/optimistic_write_alter_type.test_slow",
         "test/sql/storage/optimistic_write/optimistic_write_drop_column.test_slow",
@@ -547,6 +556,7 @@
         "test/sql/optimizer/test_common_subplan_table_filters.test",
         "test/sql/explain/test_explain_table_scan.test",
         "test/sql/function/numeric/test_is_nan.test",
+        "test/sql/optimizer/null_check_statistics_propagation.test",
         "test/sql/merge/merge_into_explain_analyze.test",
         "test/sql/cte/materialized/materialized_cte_order_preservation.test",
         "test/sql/optimizer/multiple_column_stats_pruning.test",
@@ -751,9 +761,31 @@
       ]
     },
     {
-      "reason": "HUGEINT extreme values cast to DECIMAL(38,0) on iceberg",
+      "reason": "HUGEINT extreme values exceed the range of the DECIMAL(38,0) type used by Iceberg",
       "paths": [
+        "test/sql/aggregate/group/group_by_limits.test",
+        "test/sql/function/numeric/test_bit_count.test",
+        "test/sql/join/inner/equality_join_limits.test",
         "test/sql/order/hugeint_order_by_extremes.test"
+      ]
+    },
+    {
+      "reason": "HUGEINT lists are stored as DECIMAL(38,0)[], so list_median cannot represent the fractional result expected for HUGEINT[]",
+      "paths": [
+        "test/sql/function/list/aggregates/median.test"
+      ]
+    },
+    {
+      "reason": "Iceberg widens TINYINT/SMALLINT columns to INTEGER, so arithmetic does not overflow at the native 8-bit or 16-bit bounds",
+      "paths": [
+        "test/sql/function/numeric/test_unary.test",
+        "test/sql/overflow/table_overflow.test"
+      ]
+    },
+    {
+      "reason": "Iceberg scans do not provide the table-wide min/max statistics required to bind BITSTRING_AGG(col) without explicit bounds",
+      "paths": [
+        "test/sql/aggregate/aggregates/test_bitstring_agg.test"
       ]
     },
     {
@@ -1319,7 +1351,8 @@
         "test/sql/function/string/test_left.test",
         "test/sql/function/string/test_right.test",
         "test/sql/pivot/pivot_in_boolean.test",
-        "test/sql/alter/rename_table/test_rename_table_case.test"
+        "test/sql/alter/rename_table/test_rename_table_case.test",
+        "test/sql/subquery/lateral/pg_lateral.test"
       ]
     },
     {
@@ -1366,8 +1399,10 @@
         "test/sql/attach/attach_foreign_key.test",
         "test/sql/attach/attach_index.test",
         "test/sql/attach/attach_issue7567.test",
+        "test/sql/attach/attach_fsspec.test",
         "test/sql/attach/attach_issue7711.test",
         "test/sql/attach/attach_issue_7660.test",
+        "test/sql/attach/attach_hidden.test",
         "test/sql/attach/attach_macros.test",
         "test/sql/attach/attach_serialize_dependency.test",
         "test/sql/attach/attach_show_table.test",
@@ -1407,6 +1442,7 @@
       "paths": [
         "test/sql/binder/test_duplicate_in_set_operation.test",
         "test/sql/insert/insert_by_name.test",
+        "test/sql/catalog/identifier_embedded_nul.test",
         "test/sql/setops/test_except.test",
         "test/sql/setops/test_pg_union.test",
         "test/sql/show_select/test_summarize.test"
@@ -1502,6 +1538,7 @@
         "test/sql/storage/metadata/full_table_metadata_reuse.test",
         "test/sql/storage/metadata/multi_table_metadata_reuse.test",
         "test/sql/subquery/scalar/correlated_missing_columns.test",
+        "test/sql/tpch/dbgen_reference_values.test",
         "test/sql/tpch/tpch_sf0.test",
         "test/sql/types/enum/test_5983.test",
         "test/sql/types/variant/tpch_test.test",
@@ -1523,11 +1560,12 @@
       ]
     },
     {
-      "reason": "AGGREGATE_STATE columns cannot be stored in an Iceberg table",
+      "reason": "Iceberg stores aggregate-state values as ordinary types without the AGGREGATE_STATE alias and function metadata required by finalize/combine",
       "paths": [
         "test/sql/aggregate/aggregate_state_export/arg_min_max_export_state.test",
         "test/sql/aggregate/aggregate_state_export/first_last_export_state.test",
         "test/sql/aggregate/aggregate_state_export/list_export_state.test",
+        "test/sql/aggregate/aggregate_state_export/ordered_aggregate_export_state.test",
         "test/sql/aggregate/aggregate_state_export/test_state_export_quantile.test",
         "test/sql/aggregate/aggregates/lttb.test",
         "test/sql/aggregate/aggregate_state_export/test_state_export_string_agg.test"
@@ -1619,6 +1657,7 @@
       "reason": "Tables already exist / Schema does not exist / already exists",
       "paths": [
         "test/sql/storage/wal/wal_replay_unbound_index_create_index_during_wal.test",
+        "test/sql/function/generic/null_constant_return_type.test",
         "test/sql/trigger/trigger_after_update_old_new_wal.test",
         "test/sql/catalog/sequence/test_sequence_google_fuzz.test",
         "test/sql/catalog/nested_schema/nested_table_persist.test",
@@ -1904,7 +1943,8 @@
     {
       "reason": "Native DuckDB storage versions and reopening a different database do not reset the remote Iceberg catalog",
       "paths": [
-        "test/sql/pivot/pivot_star.test"
+        "test/sql/pivot/pivot_star.test",
+        "test/sql/pivot/pivot_empty_string_value.test"
       ]
     },
     {
@@ -1924,6 +1964,37 @@
       "reason": "Test expects current_schema() to be main rather than the configured per-test Iceberg namespace",
       "paths": [
         "test/sql/storage/extensions/extension_views.test"
+      ]
+    },
+    {
+      "reason": "Native block-reclamation test expects DuckDB's missing struct-field error; Iceberg correctly rejects the dotted DROP COLUMN path with a different catalog error",
+      "paths": [
+        "test/sql/alter/drop_col/test_drop_col_dotted_name.test"
+      ]
+    },
+    {
+      "reason": "HTTP header assertions inspect all logged requests; fixture catalog traffic adds an Authorization header beyond the test's explicitly configured HTTP headers",
+      "paths": [
+        "test/sql/logging/http_request_log_redaction.test"
+      ]
+    },
+    {
+      "reason": "Requires native transaction-local tables and row IDs; creating a second table inside the transaction is rejected because the fixture cannot commit multiple CTAS operations atomically",
+      "paths": [
+        "test/sql/parallelism/intraquery/test_transaction_local_parallelism.test"
+      ]
+    },
+    {
+      "reason": "duckdb_columns exposes the unloaded Iceberg table's __ placeholder instead of the column names checked by this parser test",
+      "paths": [
+        "test/sql/parser/backtick_identifiers.test"
+      ]
+    },
+    {
+      "reason": "Assertions require native column compression segments in pragma_storage_info, which Iceberg's Parquet-backed tables do not expose",
+      "paths": [
+        "test/sql/storage/compression/constant/constant_negative_zero.test",
+        "test/sql/storage/compression/rle/rle_select_force_fetch_row.test"
       ]
     }
   ]

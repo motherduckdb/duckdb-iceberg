@@ -14,7 +14,7 @@ public:
 	IcebergTableSchemaVersion(IcebergTable &table_info, Catalog &catalog, SchemaCatalogEntry &schema,
 	                          CreateTableInfo &info, optional_idx schema_id);
 
-	static virtual_column_map_t VirtualColumns();
+	static virtual_column_map_t VirtualColumns(int32_t iceberg_version);
 	virtual_column_map_t GetVirtualColumns() const override;
 	vector<column_t> GetRowIdColumns() const override;
 
