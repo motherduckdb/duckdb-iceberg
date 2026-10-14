@@ -15,10 +15,12 @@
 #include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
 #include "catalog/rest/catalog_entry/schema/iceberg_schema_entry.hpp"
 #include "core/metadata/manifest/iceberg_manifest.hpp"
+#include "execution/operator/iceberg_pending_deletes.hpp"
 
 namespace duckdb {
 
 class PhysicalTableScan;
+class IcebergMergeDeleteCollector;
 struct IcebergMultiFileList;
 
 struct WrittenColumnInfo {
@@ -49,16 +51,6 @@ class IcebergDeleteLocalState : public LocalSinkState {
 public:
 	string current_file_name;
 	vector<idx_t> file_row_numbers;
-};
-
-//! Newly selected positions, before adding existing deletes or writing any files.
-//! Keep duplicates until materialization so duplicate UPDATE matches are still rejected.
-struct IcebergPendingDeletes {
-	unordered_map<string, vector<idx_t>> rows_by_file;
-
-	bool IsEmpty() const {
-		return rows_by_file.empty();
-	}
 };
 
 struct IcebergDeleteFileInfo {
@@ -104,6 +96,8 @@ public:
 	mutex lock;
 	IcebergPendingDeletes pending_deletes;
 	IcebergDeleteWriteResult write_result;
+	//! Shared by the delete-producing actions of this execution, never by planned operators.
+	shared_ptr<IcebergMergeDeleteCollector> merge_deletes;
 	unordered_map<string, WrittenColumnInfo> written_columns;
 	atomic<idx_t> total_deleted_count;
 	//! Guards the one-time write of the equality-delete file (Sink runs in parallel)
@@ -169,6 +163,9 @@ public:
 
 	//! Contribute this action's files to the active MERGE's snapshot.
 	bool merge_action = false;
+	//! Immutable participant information assigned by MERGE planning.
+	optional_idx merge_delete_action_index;
+	idx_t merge_delete_action_count = 0;
 
 	vector<IcebergEqualityDeletePredicate> equality_predicates;
 
@@ -213,6 +210,8 @@ public:
 	InsertionOrderPreservingMap<string> ParamsToString() const override;
 	//! Drain this action's collected positions and materialize them at the existing finalization point.
 	void FlushDeletes(ClientContext &context, IcebergDeleteGlobalState &global_state) const;
+	//! Contribute this action's positions, materializing and staging deletes only for the last participant.
+	void FinalizeMergeDeletes(ClientContext &context, IcebergDeleteGlobalState &global_state) const;
 	//! Materialize a collected batch using the target scan's existing deletes and partition metadata.
 	//! All new positions for a data file must be collected before calling this writer.
 	void WriteDeletes(ClientContext &context, const IcebergPendingDeletes &pending_deletes,

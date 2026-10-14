@@ -11,7 +11,7 @@ namespace duckdb {
 
 PhysicalOperator &IcebergCatalog::PlanMergeInto(ClientContext &context, PhysicalPlanGenerator &planner,
                                                 LogicalMergeInto &op, PhysicalOperator &plan) {
-	// Iceberg writes a deletion file per data file, so it can apply at most one UPDATE/DELETE to a given row
+	// Each delete-producing action participates in the shared collector, including actions that select no rows.
 	idx_t update_delete_count = 0;
 	for (auto &entry : op.actions) {
 		for (auto &action : entry.second) {
@@ -20,9 +20,6 @@ PhysicalOperator &IcebergCatalog::PlanMergeInto(ClientContext &context, Physical
 				update_delete_count++;
 			}
 		}
-	}
-	if (update_delete_count > 1) {
-		throw NotImplementedException("MERGE INTO with Iceberg only supports a single UPDATE/DELETE action currently");
 	}
 	auto &irc_transaction = IcebergTransaction::Get(context, *this);
 	// an insert-only MERGE writes no delete files
@@ -35,21 +32,33 @@ PhysicalOperator &IcebergCatalog::PlanMergeInto(ClientContext &context, Physical
 	try {
 		auto &result = Catalog::PlanMergeInto(context, planner, op, plan);
 		irc_transaction.planning_merge_into = false;
+		idx_t delete_action_index = 0;
+		auto register_delete = [&](IcebergDelete &delete_op) {
+			delete_op.merge_action = true;
+			delete_op.merge_delete_action_index = delete_action_index++;
+			delete_op.merge_delete_action_count = update_delete_count;
+		};
 		// Retain MERGE membership on the sinks: the planning flag is no longer set when they finalize.
 		for (auto &action : result.Cast<PhysicalMergeInto>().actions) {
 			switch (action->action_type) {
 			case MergeActionType::MERGE_INSERT:
-			case MergeActionType::MERGE_UPDATE:
-				// UPDATE also ends in an insert sink, which stages its deletes and replacement rows together.
 				action->op->Cast<IcebergInsert>().merge_action = true;
 				break;
+			case MergeActionType::MERGE_UPDATE: {
+				// The UPDATE's insert sink reports completion after its replacement files have been staged.
+				auto &insert = action->op->Cast<IcebergInsert>();
+				insert.merge_action = true;
+				register_delete(insert.update_delete_op->Cast<IcebergDelete>());
+				break;
+			}
 			case MergeActionType::MERGE_DELETE:
-				action->op->Cast<IcebergDelete>().merge_action = true;
+				register_delete(action->op->Cast<IcebergDelete>());
 				break;
 			default:
 				break;
 			}
 		}
+		D_ASSERT(delete_action_index == update_delete_count);
 		return result;
 	} catch (...) {
 		irc_transaction.planning_merge_into = false;
