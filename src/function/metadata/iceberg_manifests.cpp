@@ -183,7 +183,7 @@ static void IcebergManifestsFunction(ClientContext &context, TableFunctionInput 
 		output.SetValue(col++, out, GetPartitionSummaries(context, bind_data, manifest));
 		out++;
 	}
-	output.SetCardinality(out);
+	output.SetChildCardinality(out);
 }
 
 TableFunctionSet IcebergFunctions::GetIcebergManifestsFunction() {
