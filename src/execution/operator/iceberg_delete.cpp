@@ -1,5 +1,6 @@
 #include "duckdb/execution/operator/persistent/physical_merge_into.hpp"
 #include "execution/operator/iceberg_delete.hpp"
+#include "execution/operator/merge_into/iceberg_merge_delete_collector.hpp"
 
 #include "iceberg_logging.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
@@ -94,7 +95,13 @@ IcebergDelete::IcebergDelete(PhysicalPlan &physical_plan, IcebergTableSchemaVers
 }
 
 unique_ptr<GlobalSinkState> IcebergDelete::GetGlobalSinkState(ClientContext &context) const {
-	return make_uniq<IcebergDeleteGlobalState>();
+	auto result = make_uniq<IcebergDeleteGlobalState>();
+	if (merge_delete_action_index.IsValid()) {
+		auto &transaction = IcebergTransaction::Get(context, table.catalog);
+		auto &transaction_data = table.table_info.GetOrCreateTransactionData(transaction);
+		result->merge_deletes = transaction_data.GetMergeDeleteCollector(merge_delete_action_count);
+	}
+	return std::move(result);
 }
 
 unique_ptr<LocalSinkState> IcebergDelete::GetLocalSinkState(ExecutionContext &context) const {
@@ -319,6 +326,26 @@ void IcebergDelete::FlushDeletes(ClientContext &context, IcebergDeleteGlobalStat
 	WriteDeletes(context, pending_deletes, global_state.write_result);
 }
 
+void IcebergDelete::FinalizeMergeDeletes(ClientContext &context, IcebergDeleteGlobalState &global_state) const {
+	D_ASSERT(global_state.merge_deletes);
+	D_ASSERT(!is_equality_delete);
+	auto pending_deletes = global_state.merge_deletes->CompleteAction(merge_delete_action_index.GetIndex(),
+	                                                                  global_state.TakePendingDeletes());
+	if (!pending_deletes || pending_deletes->IsEmpty()) {
+		return;
+	}
+
+	// All contributors scan the same MERGE target. No action writes a vector before this batch is complete.
+	WriteDeletes(context, *pending_deletes, global_state.write_result);
+	auto manifest_entries = GenerateDeleteManifestEntries(global_state);
+	auto &transaction = IcebergTransaction::Get(context, table.catalog);
+	ApplyTableUpdate(table.table_info, transaction, [&](IcebergTable &tbl) {
+		auto &transaction_data = tbl.GetOrCreateTransactionData(transaction);
+		transaction_data.AddDeleteSnapshot(std::move(manifest_entries),
+		                                   std::move(global_state.write_result.altered_manifests), true);
+	});
+}
+
 void IcebergDelete::WriteDeletes(ClientContext &context, const IcebergPendingDeletes &pending_deletes,
                                  IcebergDeleteWriteResult &result) const {
 	bool write_deletion_vector = table.table_info.table_metadata.iceberg_version >= 3;
@@ -451,6 +478,12 @@ SinkFinalizeType IcebergDelete::Finalize(Pipeline &pipeline, Event &event, Clien
                                          OperatorSinkFinalizeInput &input) const {
 	auto &global_state = input.global_state.Cast<IcebergDeleteGlobalState>();
 
+	if (global_state.merge_deletes) {
+		// Empty actions must also report completion, so an empty final branch cannot strand collected deletes.
+		FinalizeMergeDeletes(context, global_state);
+		return SinkFinalizeType::READY;
+	}
+
 	if (is_equality_delete) {
 		//! Ensure the equality-delete file is written even if Sink never ran (e.g. zero matching rows).
 		bool should_write = false;
@@ -531,7 +564,9 @@ PhysicalOperator &IcebergDelete::PlanDelete(ClientContext &context, PhysicalPlan
 
 #ifdef ICEBERG_ENABLE_EQUALITY_DELETE_WRITES
 	vector<IcebergEqualityDeletePredicate> equality_predicates;
-	bool is_equality_delete = TryGetEqualityDeletePredicates(context, table, child_plan, equality_predicates);
+	// MERGE deletes only the rows selected by its action conditions, not a broader target-scan predicate.
+	bool is_equality_delete = !IcebergTransaction::Get(context, table.catalog).planning_merge_into &&
+	                          TryGetEqualityDeletePredicates(context, table, child_plan, equality_predicates);
 	return planner.Make<IcebergDelete>(table, multi_file_list, child_plan, std::move(row_id_indexes),
 	                                   is_equality_delete, std::move(equality_predicates));
 #else

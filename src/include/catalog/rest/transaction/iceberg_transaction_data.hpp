@@ -19,6 +19,7 @@ namespace duckdb {
 
 struct IcebergTable;
 struct IcebergCreateTableRequest;
+class IcebergMergeDeleteCollector;
 
 struct IcebergTransactionData {
 public:
@@ -31,6 +32,8 @@ public:
 	//! Whether this transaction stages a DELETE snapshot; gates the commit-retry safety check.
 	bool ContainsDelete() const;
 	bool IsFileInvalidated(const IcebergFileIdentity &file) const;
+	shared_ptr<IcebergMergeDeleteCollector> GetMergeDeleteCollector(idx_t action_count);
+	void VerifyMergeDeletesComplete() const;
 
 	void AddSnapshot(IcebergSnapshotOperationType operation, vector<IcebergManifestEntry> &&data_files,
 	                 IcebergManifestDeletes &&altered_manifests, bool merge_action = false);
@@ -71,6 +74,9 @@ private:
 	optional<transaction_t> merge_query_id;
 	//! Index in alters shared by the current MERGE's manifests and file invalidations.
 	idx_t merge_alter_index = 0;
+	//! The collector is per table and execution, independently of whether the MERGE writes a snapshot.
+	optional<transaction_t> merge_delete_query_id;
+	shared_ptr<IcebergMergeDeleteCollector> merge_delete_collector;
 
 public:
 	string initial_table_uuid;

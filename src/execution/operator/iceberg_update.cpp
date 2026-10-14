@@ -200,7 +200,9 @@ OperatorFinalResultType IcebergUpdate::OperatorFinalize(Pipeline &pipeline, Even
                                                         OperatorFinalizeInput &input) const {
 	auto &iceberg_delete = delete_op.Cast<IcebergDelete>();
 	auto &delete_global_state = delete_op.sink_state->Cast<IcebergDeleteGlobalState>();
-	iceberg_delete.FlushDeletes(context, delete_global_state);
+	if (!delete_global_state.merge_deletes) {
+		iceberg_delete.FlushDeletes(context, delete_global_state);
+	}
 	return OperatorFinalResultType::FINISHED;
 }
 

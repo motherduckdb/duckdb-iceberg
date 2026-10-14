@@ -14,6 +14,7 @@
 #include "planning/metadata_io/avro/avro_scan.hpp"
 #include "planning/metadata_io/manifest/iceberg_manifest_reader.hpp"
 #include "planning/metadata_io/manifest_list/iceberg_manifest_list_reader.hpp"
+#include "execution/operator/merge_into/iceberg_merge_delete_collector.hpp"
 
 namespace duckdb {
 
@@ -130,6 +131,25 @@ bool IcebergTransactionData::ContainsDelete() const {
 
 bool IcebergTransactionData::IsFileInvalidated(const IcebergFileIdentity &file) const {
 	return manifest_deletes.IsInvalidated(file);
+}
+
+shared_ptr<IcebergMergeDeleteCollector> IcebergTransactionData::GetMergeDeleteCollector(idx_t action_count) {
+	lock_guard<mutex> guard(lock);
+	auto query_id = transaction.active_query.load();
+	if (!merge_delete_query_id || *merge_delete_query_id != query_id) {
+		VerifyMergeDeletesComplete();
+		merge_delete_collector = make_shared_ptr<IcebergMergeDeleteCollector>(action_count);
+		merge_delete_query_id = query_id;
+	} else if (merge_delete_collector->ActionCount() != action_count) {
+		throw InternalException("MERGE delete actions disagree on their participant count");
+	}
+	return merge_delete_collector;
+}
+
+void IcebergTransactionData::VerifyMergeDeletesComplete() const {
+	if (merge_delete_collector && !merge_delete_collector->IsComplete()) {
+		throw InternalException("MERGE delete actions have not all completed");
+	}
 }
 
 bool IcebergTransactionData::SupportsAppendRetry() const {
