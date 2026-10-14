@@ -9,6 +9,7 @@ add_library(
   iceberg_rollback_to_snapshot.cpp
   iceberg_schema_properties_functions.cpp
   iceberg_snapshots.cpp
+  iceberg_manifests.cpp
   iceberg_table_properties_functions.cpp)
 set(ALL_OBJECT_FILES
     ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:iceberg_function_metadata>
