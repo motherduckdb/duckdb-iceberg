@@ -104,11 +104,12 @@ class IcebergListTablesRequest {
 public:
 	using Result = IcebergListTablesResult;
 
-	explicit IcebergListTablesRequest(vector<string> namespace_items);
+	explicit IcebergListTablesRequest(vector<string> namespace_items, bool allow_forbidden = true);
 	IcebergListTablesResult Execute(ClientContext &context, IcebergCatalog &catalog) const;
 
 private:
 	vector<string> namespace_items;
+	bool allow_forbidden;
 };
 
 //! Owns the parent namespace; execution includes pagination and configured nested-namespace traversal.

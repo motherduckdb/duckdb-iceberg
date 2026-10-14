@@ -281,10 +281,15 @@ void IcebergTableSet::LoadEntriesInternal(ClientContext &context) {
 	auto &ic_catalog = catalog.Cast<IcebergCatalog>();
 	// The request owns its namespace; workers never access or mutate this table set.
 	IcebergRequestExecutor executor(context, ic_catalog);
-	auto result = executor.Schedule(IcebergListTablesRequest(schema.namespace_items));
+	bool allow_forbidden = !iceberg_transaction.looked_up_entries.count(schema.name.GetIdentifierName());
+	auto result = executor.Schedule(IcebergListTablesRequest(schema.namespace_items, allow_forbidden));
 	auto tables = executor.WaitAndTakeResult(*result);
 	if (context.IsInterrupted()) {
 		throw InterruptException();
+	}
+	if (!tables) {
+		// A later explicit lookup in this transaction must retry and report the permission error.
+		return;
 	}
 	ApplyListResult(std::move(tables));
 	iceberg_transaction.listed_schemas.insert(schema.name.GetIdentifierName());
