@@ -215,11 +215,9 @@ IcebergTable::GetVendedCredentials(ClientContext &context,
 		if (!sigv4_auth.sigv4_region.empty()) {
 			user_defaults.emplace("region", Value(sigv4_auth.sigv4_region));
 		}
-	} else if (catalog.auth_handler->type == IcebergAuthorizationType::OAUTH2) {
-		auto &oauth2_auth = catalog.auth_handler->Cast<OAuth2Authorization>();
-		if (!oauth2_auth.default_region.empty()) {
-			user_defaults["region"] = oauth2_auth.default_region;
-		}
+	}
+	if (!catalog.attach_options.default_region.empty()) {
+		user_defaults["region"] = catalog.attach_options.default_region;
 	}
 
 	// Detect storage type from metadata location

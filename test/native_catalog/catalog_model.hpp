@@ -47,6 +47,8 @@ private:
 	map<Namespace, Json> namespaces;
 	map<Identifier, Json> tables;
 	map<string, std::pair<Identifier, Json>> staged;
+	//! Exact, test-supplied responses for exercising client protocol handling.
+	map<string, Reply> responses;
 };
 
 Namespace ParseNamespace(const Json &value);
