@@ -153,11 +153,6 @@ SELECT count(*) FROM ICEBERG_HISTORY('{WORKING_DIRECTORY}/data/persistent/iceber
 ----
 1
 
-statement error
-select * from iceberg_history(memory.main.t1);
-----
-<REGEX>:.*Invalid Input Error.*t1 is not an Iceberg table.*
-
 statement ok
 SET unsafe_enable_version_guessing = true;
 
@@ -204,5 +199,10 @@ select * from iceberg_metadata(memory.main.t1);
 
 statement error
 select * from iceberg_manifests(memory.main.t1);
+----
+<REGEX>:.*Invalid Input Error.*t1 is not an Iceberg table.*
+
+statement error
+select * from iceberg_history(memory.main.t1);
 ----
 <REGEX>:.*Invalid Input Error.*t1 is not an Iceberg table.*
