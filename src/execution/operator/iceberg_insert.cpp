@@ -811,7 +811,8 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 	}
 
 	auto shred_variants = table_properties.find("write.parquet.shred-variants");
-	if (shred_variants != table_properties.end() &&
+	// Iceberg defaults to no shredding when the property is absent.
+	if (shred_variants == table_properties.end() ||
 	    !Value(shred_variants->second).DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>()) {
 		child_list_t<Value> shredding_types;
 		for (auto &column : layout.columns) {
@@ -1128,6 +1129,8 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(ClientContext &
 		}
 		metadata->table_properties[option.first] = val.GetValue<string>();
 	}
+	// Match the default persisted by CreateNewEntry when planning the first CTAS write.
+	metadata->table_properties.emplace("write.parquet.shred-variants", "true");
 
 	// Resolve nested field IDs and storage types exactly as table creation does.
 	int32_t last_column_id;

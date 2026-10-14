@@ -29,6 +29,12 @@ CREATE TABLE my_datalake.default.parquet_shred_variants
 WITH ('format-version'='3', 'write.parquet.shred-variants'='{shred}')
 AS FROM variant_shredding_input;
 
+query I
+SELECT value = '{shred}' FROM iceberg_table_properties(my_datalake.default.parquet_shred_variants)
+WHERE key = 'write.parquet.shred-variants';
+----
+true
+
 statement ok
 INSERT INTO my_datalake.default.parquet_shred_variants
 SELECT id + 3, "mixed value", object_value, null_value FROM variant_shredding_input;
@@ -75,10 +81,46 @@ DROP TABLE my_datalake.default.parquet_shred_variants;
 
 endloop
 
-# An omitted property preserves automatic shredding.
+# CTAS explicitly enables shredding by default, including when planning its first write.
+statement ok
+CREATE TABLE my_datalake.default.parquet_shred_variants
+WITH ('format-version'='3') AS SELECT 1 AS id, 1::VARIANT AS v;
+
+query I
+SELECT value FROM iceberg_table_properties(my_datalake.default.parquet_shred_variants)
+WHERE key = 'write.parquet.shred-variants';
+----
+true
+
+statement ok
+BEGIN;
+
+statement ok
+SET VARIABLE ctas_variant_file = (
+	SELECT file_path FROM iceberg_metadata('my_datalake.default.parquet_shred_variants') LIMIT 1
+);
+
+query I
+SELECT count(*) FROM parquet_schema(getvariable('ctas_variant_file')) WHERE name = 'typed_value';
+----
+1
+
+statement ok
+COMMIT;
+
+statement ok
+DROP TABLE my_datalake.default.parquet_shred_variants;
+
+# CREATE TABLE also persists the default before any rows are written.
 statement ok
 CREATE TABLE my_datalake.default.parquet_shred_variants (id INTEGER, v VARIANT)
 WITH ('format-version'='3');
+
+query I
+SELECT value FROM iceberg_table_properties(my_datalake.default.parquet_shred_variants)
+WHERE key = 'write.parquet.shred-variants';
+----
+true
 
 statement ok
 INSERT INTO my_datalake.default.parquet_shred_variants VALUES (1, 1::VARIANT);
@@ -134,8 +176,15 @@ WHERE file_name = getvariable('original_variant_file') AND name = 'typed_value';
 statement ok
 COMMIT;
 
+# A missing property uses Iceberg's false default, including after RESET.
 statement ok
 ALTER TABLE my_datalake.default.parquet_shred_variants RESET ('write.parquet.shred-variants');
+
+query I
+SELECT count(*) FROM iceberg_table_properties(my_datalake.default.parquet_shred_variants)
+WHERE key = 'write.parquet.shred-variants';
+----
+0
 
 statement ok
 INSERT INTO my_datalake.default.parquet_shred_variants VALUES (3, 3::VARIANT);
@@ -152,7 +201,7 @@ SET VARIABLE reset_variant_file = (
 query I
 SELECT count(*) FROM parquet_schema(getvariable('reset_variant_file')) WHERE name = 'typed_value';
 ----
-1
+0
 
 statement ok
 COMMIT;
@@ -171,6 +220,19 @@ statement error
 INSERT INTO my_datalake.default.parquet_shred_variants VALUES (4, 4::VARIANT);
 ----
 Could not convert string 'invalid' to BOOL
+
+statement ok
+DROP TABLE my_datalake.default.parquet_shred_variants;
+
+# The creation default is persisted even without VARIANT columns.
+statement ok
+CREATE TABLE my_datalake.default.parquet_shred_variants (id INTEGER);
+
+query I
+SELECT value FROM iceberg_table_properties(my_datalake.default.parquet_shred_variants)
+WHERE key = 'write.parquet.shred-variants';
+----
+true
 
 statement ok
 DROP TABLE my_datalake.default.parquet_shred_variants;

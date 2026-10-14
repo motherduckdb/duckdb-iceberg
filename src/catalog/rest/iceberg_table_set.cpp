@@ -412,6 +412,8 @@ IcebergTable &IcebergTableSet::CreateNewEntry(ClientContext &context, IcebergCat
 		        .GetValue<string>();
 		bootstrap_metadata.table_properties.emplace(option.first, option_val);
 	}
+	// Explicitly enable shredding for new DuckDB tables, while preserving an explicit override.
+	bootstrap_metadata.table_properties.emplace("write.parquet.shred-variants", "true");
 
 	auto initial_partition_spec = IcebergTable::BuildPartitionSpec(info.partition_keys, *new_schema, 0, 1000);
 	//! Sort order id 0 is reserved for the unsorted order, so a table created with SORTED BY starts at 1
