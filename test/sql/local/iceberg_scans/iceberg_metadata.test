@@ -137,6 +137,27 @@ ORDER BY added_snapshot_id;
 554549470069664013	[{'contains_null': false, 'contains_nan': false, 'lower_bound': 2026-01-02, 'upper_bound': 2026-01-02}]
 8792170059756986233	[{'contains_null': false, 'contains_nan': false, 'lower_bound': 2026-01-01, 'upper_bound': 2026-01-01}]
 
+query IIII
+SELECT * FROM ICEBERG_HISTORY('{WORKING_DIRECTORY}/data/persistent/iceberg/lineitem_iceberg') ORDER BY made_current_at;
+----
+2025-05-02 12:21:19.06	7817332053627255703	NULL	true
+2025-05-02 12:21:20.005	2354745328521181395	7817332053627255703	true
+
+query IIII
+SELECT * FROM ICEBERG_HISTORY('{WORKING_DIRECTORY}/data/persistent/iceberg/lineitem_iceberg', version='1');
+----
+2025-05-02 12:21:19.06	7817332053627255703	NULL	true
+
+query I
+SELECT count(*) FROM ICEBERG_HISTORY('{WORKING_DIRECTORY}/data/persistent/iceberg/lineitem_iceberg_gz', METADATA_COMPRESSION_CODEC='gzip');
+----
+1
+
+statement error
+select * from iceberg_history(memory.main.t1);
+----
+<REGEX>:.*Invalid Input Error.*t1 is not an Iceberg table.*
+
 statement ok
 SET unsafe_enable_version_guessing = true;
 
