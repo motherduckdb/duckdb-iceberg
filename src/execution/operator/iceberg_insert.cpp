@@ -379,24 +379,24 @@ SinkFinalizeType IcebergInsert::Finalize(Pipeline &pipeline, Event &event, Clien
 	}
 
 	if (update_delete_op) {
-		// This insert is part of an UPDATE: commit a combined delete+insert snapshot.
+		// Stage the UPDATE's deletes and replacement rows together, possibly within a shared MERGE snapshot.
 		auto &delete_global_state = update_delete_op->sink_state->Cast<IcebergDeleteGlobalState>();
 		auto delete_manifest_entries = IcebergDelete::GenerateDeleteManifestEntries(delete_global_state);
 		if (!written_files.empty()) {
 			ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTable &tbl) {
 				auto &transaction_data = tbl.GetOrCreateTransactionData(iceberg_transaction);
 				transaction_data.AddUpdateSnapshot(std::move(delete_manifest_entries), std::move(written_files),
-				                                   std::move(delete_global_state.altered_manifests));
+				                                   std::move(delete_global_state.altered_manifests), merge_action);
 			});
 		}
 	} else {
-		// Regular insert: commit an append snapshot.
+		// Stage an INSERT statement or a MERGE insert action; the latter may join an overwrite snapshot.
 		if (!written_files.empty()) {
 			ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTable &tbl) {
 				auto &transaction_data = tbl.GetOrCreateTransactionData(iceberg_transaction);
 				IcebergManifestDeletes empty_deletes;
 				transaction_data.AddSnapshot(IcebergSnapshotOperationType::APPEND, std::move(written_files),
-				                             std::move(empty_deletes));
+				                             std::move(empty_deletes), merge_action);
 			});
 		}
 	}

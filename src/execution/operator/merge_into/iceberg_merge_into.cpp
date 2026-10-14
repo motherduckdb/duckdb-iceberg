@@ -2,7 +2,10 @@
 #include "catalog/rest/catalog_entry/table/iceberg_table_schema_version.hpp"
 #include "catalog/rest/transaction/iceberg_transaction.hpp"
 #include "duckdb/execution/physical_plan_generator.hpp"
+#include "duckdb/execution/operator/persistent/physical_merge_into.hpp"
 #include "duckdb/planner/operator/logical_merge_into.hpp"
+#include "execution/operator/iceberg_delete.hpp"
+#include "execution/operator/iceberg_insert.hpp"
 
 namespace duckdb {
 
@@ -32,6 +35,21 @@ PhysicalOperator &IcebergCatalog::PlanMergeInto(ClientContext &context, Physical
 	try {
 		auto &result = Catalog::PlanMergeInto(context, planner, op, plan);
 		irc_transaction.planning_merge_into = false;
+		// Retain MERGE membership on the sinks: the planning flag is no longer set when they finalize.
+		for (auto &action : result.Cast<PhysicalMergeInto>().actions) {
+			switch (action->action_type) {
+			case MergeActionType::MERGE_INSERT:
+			case MergeActionType::MERGE_UPDATE:
+				// UPDATE also ends in an insert sink, which stages its deletes and replacement rows together.
+				action->op->Cast<IcebergInsert>().merge_action = true;
+				break;
+			case MergeActionType::MERGE_DELETE:
+				action->op->Cast<IcebergDelete>().merge_action = true;
+				break;
+			default:
+				break;
+			}
+		}
 		return result;
 	} catch (...) {
 		irc_transaction.planning_merge_into = false;

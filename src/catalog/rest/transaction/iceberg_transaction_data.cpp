@@ -177,7 +177,7 @@ void IcebergTransactionData::CacheExistingManifestList(lock_guard<mutex> &guard,
 
 void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
                                          vector<IcebergManifestEntry> &&data_files,
-                                         IcebergManifestDeletes &&altered_manifests) {
+                                         IcebergManifestDeletes &&altered_manifests, bool merge_action) {
 	//! Serialize snapshot operations so transaction scans retain their insertion order.
 	lock_guard<mutex> guard(lock);
 
@@ -203,7 +203,7 @@ void IcebergTransactionData::AddSnapshot(IcebergSnapshotOperationType operation,
 	if (table_metadata.current_snapshot_id) {
 		TableAddAssertCurrentSchemaId();
 	}
-	AddSnapshotUpdate(std::move(add_snapshot), std::move(altered_manifests));
+	AddSnapshotUpdate(std::move(add_snapshot), std::move(altered_manifests), merge_action);
 }
 
 void IcebergTransactionData::AddPendingDeleteManifests(IcebergAddSnapshot &add_snapshot,
@@ -219,17 +219,36 @@ void IcebergTransactionData::AddPendingDeleteManifests(IcebergAddSnapshot &add_s
 }
 
 void IcebergTransactionData::AddSnapshotUpdate(unique_ptr<IcebergAddSnapshot> add_snapshot,
-                                               IcebergManifestDeletes &&altered_manifests) {
+                                               IcebergManifestDeletes &&altered_manifests, bool merge_action) {
+	// All action sinks share this execution's query ID; a later statement gets a different ID.
+	auto query_id = transaction.active_query.load();
+	if (merge_action && merge_query_id && *merge_query_id == query_id) {
+		// Keeping one alter gives every action the same transaction-local sequence number.
+		auto &snapshot = alters[merge_alter_index].get();
+		snapshot.Merge(*add_snapshot);
+		// Invalidation versions must identify the shared snapshot that removes these files.
+		auto versioned_deletes = manifest_deletes.AtVersion(merge_alter_index);
+		if (versioned_deletes.Merge(std::move(altered_manifests))) {
+			snapshot.SetManifestDeletes(std::move(versioned_deletes));
+		}
+		return;
+	}
+
 	auto versioned_deletes = manifest_deletes.AtVersion(alters.size());
 	if (versioned_deletes.Merge(std::move(altered_manifests))) {
 		add_snapshot->SetManifestDeletes(std::move(versioned_deletes));
+	}
+	if (merge_action) {
+		// The first action that writes files establishes the snapshot, regardless of finalization order.
+		merge_query_id = query_id;
+		merge_alter_index = alters.size();
 	}
 	alters.push_back(*add_snapshot);
 	updates.push_back(std::move(add_snapshot));
 }
 
 void IcebergTransactionData::AddDeleteSnapshot(partitioned_manifest_entry_map_t &&delete_files,
-                                               IcebergManifestDeletes &&altered_manifests) {
+                                               IcebergManifestDeletes &&altered_manifests, bool merge_action) {
 	//! Serialize snapshot operations so transaction scans retain their insertion order.
 	lock_guard<mutex> guard(lock);
 
@@ -242,12 +261,12 @@ void IcebergTransactionData::AddDeleteSnapshot(partitioned_manifest_entry_map_t 
 	if (table_metadata.current_snapshot_id) {
 		TableAddAssertCurrentSchemaId();
 	}
-	AddSnapshotUpdate(std::move(add_snapshot), std::move(altered_manifests));
+	AddSnapshotUpdate(std::move(add_snapshot), std::move(altered_manifests), merge_action);
 }
 
 void IcebergTransactionData::AddUpdateSnapshot(partitioned_manifest_entry_map_t &&delete_files,
                                                vector<IcebergManifestEntry> &&data_files,
-                                               IcebergManifestDeletes &&altered_manifests) {
+                                               IcebergManifestDeletes &&altered_manifests, bool merge_action) {
 	//! Serialize snapshot operations so transaction scans retain their insertion order.
 	lock_guard<mutex> guard(lock);
 
@@ -261,7 +280,7 @@ void IcebergTransactionData::AddUpdateSnapshot(partitioned_manifest_entry_map_t 
 	auto add_snapshot = make_uniq<IcebergAddSnapshot>(table_info);
 	AddPendingDeleteManifests(*add_snapshot, std::move(delete_files));
 	add_snapshot->AddPendingManifest(IcebergPendingManifest(data_manifest_metadata, std::move(data_files)));
-	AddSnapshotUpdate(std::move(add_snapshot), std::move(altered_manifests));
+	AddSnapshotUpdate(std::move(add_snapshot), std::move(altered_manifests), merge_action);
 }
 
 void IcebergTransactionData::TableAddSchema(int32_t schema_id) {

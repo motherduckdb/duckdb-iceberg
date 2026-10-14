@@ -143,6 +143,9 @@ public:
 	//! The column indexes for the relevant row-id columns
 	vector<idx_t> row_id_indexes;
 
+	//! Contribute this action's files to the active MERGE's snapshot.
+	bool merge_action = false;
+
 	vector<IcebergEqualityDeletePredicate> equality_predicates;
 
 public:

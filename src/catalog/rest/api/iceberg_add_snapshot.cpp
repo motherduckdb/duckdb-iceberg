@@ -32,6 +32,28 @@ void IcebergAddSnapshot::AddPendingManifest(IcebergPendingManifest manifest) {
 	pending_manifests.push_back(std::move(manifest));
 }
 
+void IcebergAddSnapshot::Merge(IcebergAddSnapshot &other) {
+	if (schema_id != other.schema_id) {
+		throw InternalException("Cannot combine MERGE actions with different schemas");
+	}
+	// REPLACE describes maintenance, not a row-changing MERGE action.
+	D_ASSERT(operation == IcebergSnapshotOperationType::APPEND || operation == IcebergSnapshotOperationType::DELETE ||
+	         operation == IcebergSnapshotOperationType::OVERWRITE);
+	D_ASSERT(other.operation == IcebergSnapshotOperationType::APPEND ||
+	         other.operation == IcebergSnapshotOperationType::DELETE ||
+	         other.operation == IcebergSnapshotOperationType::OVERWRITE);
+	// AddSnapshotUpdate attaches file invalidations after assigning the shared alter index.
+	// The incoming action must not already have versioned invalidations; it may still contain delete manifests.
+	D_ASSERT(!other.manifest_deletes);
+	// Mixed actions use overwrite semantics, including the conservative overwrite retry policy.
+	if (operation != other.operation) {
+		operation = IcebergSnapshotOperationType::OVERWRITE;
+	}
+	for (auto &manifest : other.pending_manifests) {
+		AddPendingManifest(std::move(manifest));
+	}
+}
+
 void IcebergAddSnapshot::SetManifestDeletes(VersionedIcebergManifestDeletes manifest_deletes_p) {
 	manifest_deletes.emplace(std::move(manifest_deletes_p));
 }
