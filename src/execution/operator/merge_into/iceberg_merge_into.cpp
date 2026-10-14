@@ -11,7 +11,7 @@ namespace duckdb {
 
 PhysicalOperator &IcebergCatalog::PlanMergeInto(ClientContext &context, PhysicalPlanGenerator &planner,
                                                 LogicalMergeInto &op, PhysicalOperator &plan) {
-	// Iceberg writes a deletion file per data file, so it can apply at most one UPDATE/DELETE to a given row
+	// Each delete-producing action participates in the shared collector, including actions that select no rows.
 	idx_t update_delete_count = 0;
 	for (auto &entry : op.actions) {
 		for (auto &action : entry.second) {
@@ -20,9 +20,6 @@ PhysicalOperator &IcebergCatalog::PlanMergeInto(ClientContext &context, Physical
 				update_delete_count++;
 			}
 		}
-	}
-	if (update_delete_count > 1) {
-		throw NotImplementedException("MERGE INTO with Iceberg only supports a single UPDATE/DELETE action currently");
 	}
 	auto &irc_transaction = IcebergTransaction::Get(context, *this);
 	// an insert-only MERGE writes no delete files
