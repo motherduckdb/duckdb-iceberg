@@ -33,10 +33,11 @@ public:
 	bool IsFileInvalidated(const IcebergFileIdentity &file) const;
 
 	void AddSnapshot(IcebergSnapshotOperationType operation, vector<IcebergManifestEntry> &&data_files,
-	                 IcebergManifestDeletes &&altered_manifests);
-	void AddDeleteSnapshot(partitioned_manifest_entry_map_t &&delete_files, IcebergManifestDeletes &&altered_manifests);
+	                 IcebergManifestDeletes &&altered_manifests, bool merge_action = false);
+	void AddDeleteSnapshot(partitioned_manifest_entry_map_t &&delete_files, IcebergManifestDeletes &&altered_manifests,
+	                       bool merge_action = false);
 	void AddUpdateSnapshot(partitioned_manifest_entry_map_t &&delete_files, vector<IcebergManifestEntry> &&data_files,
-	                       IcebergManifestDeletes &&altered_manifests);
+	                       IcebergManifestDeletes &&altered_manifests, bool merge_action = false);
 	// add a schema update for a table
 	void TableAddSchema(int32_t schema_id);
 	void TableSetCurrentSchema(int32_t schema_id);
@@ -62,7 +63,12 @@ private:
 	void CacheExistingManifestList(lock_guard<mutex> &guard, const IcebergTableMetadata &metadata);
 	//! Retains one pending delete manifest per partition spec present in 'delete_files'.
 	void AddPendingDeleteManifests(IcebergAddSnapshot &add_snapshot, partitioned_manifest_entry_map_t &&delete_files);
-	void AddSnapshotUpdate(unique_ptr<IcebergAddSnapshot> add_snapshot, IcebergManifestDeletes &&altered_manifests);
+	void AddSnapshotUpdate(unique_ptr<IcebergAddSnapshot> add_snapshot, IcebergManifestDeletes &&altered_manifests,
+	                       bool merge_action);
+
+	//! Query IDs distinguish MERGE executions within the same transaction.
+	optional<transaction_t> merge_query_id;
+	idx_t merge_alter_index = 0;
 
 public:
 	string initial_table_uuid;
@@ -82,7 +88,7 @@ public:
 	//! Cached manifest list from the source snapshot
 	vector<IcebergManifestListEntry> existing_manifest_list;
 
-	//! Every insert/update/delete creates an alter of the table data
+	//! Each statement creates an alter; the actions of one MERGE share an alter.
 	vector<reference<IcebergAddSnapshot>> alters;
 	//! Snapshot this transaction is based on (the tip when the manifest list was first cached).
 	//! Drives the delete commit-retry safety check.

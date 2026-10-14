@@ -29,6 +29,7 @@ public:
 	void CreateUpdate(DatabaseInstance &db, ClientContext &context, IcebergCommitState &commit_state) const override;
 	const vector<IcebergPendingManifest> &GetPendingManifests() const;
 	void AddPendingManifest(IcebergPendingManifest manifest);
+	void Merge(IcebergAddSnapshot &other);
 	void SetManifestDeletes(VersionedIcebergManifestDeletes manifest_deletes);
 	IcebergSnapshotOperationType GetOperation() const {
 		return operation;

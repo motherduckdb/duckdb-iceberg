@@ -32,6 +32,24 @@ void IcebergAddSnapshot::AddPendingManifest(IcebergPendingManifest manifest) {
 	pending_manifests.push_back(std::move(manifest));
 }
 
+void IcebergAddSnapshot::Merge(IcebergAddSnapshot &other) {
+	if (schema_id != other.schema_id) {
+		throw InternalException("Cannot combine MERGE actions with different schemas");
+	}
+	D_ASSERT(operation == IcebergSnapshotOperationType::APPEND || operation == IcebergSnapshotOperationType::DELETE ||
+	         operation == IcebergSnapshotOperationType::OVERWRITE);
+	D_ASSERT(other.operation == IcebergSnapshotOperationType::APPEND ||
+	         other.operation == IcebergSnapshotOperationType::DELETE ||
+	         other.operation == IcebergSnapshotOperationType::OVERWRITE);
+	D_ASSERT(!other.manifest_deletes);
+	if (operation != other.operation) {
+		operation = IcebergSnapshotOperationType::OVERWRITE;
+	}
+	for (auto &manifest : other.pending_manifests) {
+		AddPendingManifest(std::move(manifest));
+	}
+}
+
 void IcebergAddSnapshot::SetManifestDeletes(VersionedIcebergManifestDeletes manifest_deletes_p) {
 	manifest_deletes.emplace(std::move(manifest_deletes_p));
 }
