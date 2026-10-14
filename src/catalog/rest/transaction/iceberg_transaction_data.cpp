@@ -220,10 +220,13 @@ void IcebergTransactionData::AddPendingDeleteManifests(IcebergAddSnapshot &add_s
 
 void IcebergTransactionData::AddSnapshotUpdate(unique_ptr<IcebergAddSnapshot> add_snapshot,
                                                IcebergManifestDeletes &&altered_manifests, bool merge_action) {
+	// All action sinks share this execution's query ID; a later statement gets a different ID.
 	auto query_id = transaction.active_query.load();
 	if (merge_action && merge_query_id && *merge_query_id == query_id) {
+		// Keeping one alter gives every action the same transaction-local sequence number.
 		auto &snapshot = alters[merge_alter_index].get();
 		snapshot.Merge(*add_snapshot);
+		// Invalidation versions must identify the shared snapshot that removes these files.
 		auto versioned_deletes = manifest_deletes.AtVersion(merge_alter_index);
 		if (versioned_deletes.Merge(std::move(altered_manifests))) {
 			snapshot.SetManifestDeletes(std::move(versioned_deletes));
@@ -236,6 +239,7 @@ void IcebergTransactionData::AddSnapshotUpdate(unique_ptr<IcebergAddSnapshot> ad
 		add_snapshot->SetManifestDeletes(std::move(versioned_deletes));
 	}
 	if (merge_action) {
+		// The first action that writes files establishes the snapshot, regardless of finalization order.
 		merge_query_id = query_id;
 		merge_alter_index = alters.size();
 	}

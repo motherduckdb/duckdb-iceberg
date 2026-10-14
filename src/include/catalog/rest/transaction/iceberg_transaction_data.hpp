@@ -63,11 +63,13 @@ private:
 	void CacheExistingManifestList(lock_guard<mutex> &guard, const IcebergTableMetadata &metadata);
 	//! Retains one pending delete manifest per partition spec present in 'delete_files'.
 	void AddPendingDeleteManifests(IcebergAddSnapshot &add_snapshot, partitioned_manifest_entry_map_t &&delete_files);
+	//! Called with lock held, since MERGE action pipelines may finalize concurrently.
 	void AddSnapshotUpdate(unique_ptr<IcebergAddSnapshot> add_snapshot, IcebergManifestDeletes &&altered_manifests,
 	                       bool merge_action);
 
 	//! Query IDs distinguish MERGE executions within the same transaction.
 	optional<transaction_t> merge_query_id;
+	//! Index in alters shared by the current MERGE's manifests and file invalidations.
 	idx_t merge_alter_index = 0;
 
 public:
@@ -88,7 +90,7 @@ public:
 	//! Cached manifest list from the source snapshot
 	vector<IcebergManifestListEntry> existing_manifest_list;
 
-	//! Each statement creates an alter; the actions of one MERGE share an alter.
+	//! Each data-changing statement creates an alter; the actions of one MERGE share an alter.
 	vector<reference<IcebergAddSnapshot>> alters;
 	//! Snapshot this transaction is based on (the tip when the manifest list was first cached).
 	//! Drives the delete commit-retry safety check.

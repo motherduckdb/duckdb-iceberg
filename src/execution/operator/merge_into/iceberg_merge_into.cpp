@@ -35,10 +35,12 @@ PhysicalOperator &IcebergCatalog::PlanMergeInto(ClientContext &context, Physical
 	try {
 		auto &result = Catalog::PlanMergeInto(context, planner, op, plan);
 		irc_transaction.planning_merge_into = false;
+		// Retain MERGE membership on the sinks: the planning flag is no longer set when they finalize.
 		for (auto &action : result.Cast<PhysicalMergeInto>().actions) {
 			switch (action->action_type) {
 			case MergeActionType::MERGE_INSERT:
 			case MergeActionType::MERGE_UPDATE:
+				// UPDATE also ends in an insert sink, which stages its deletes and replacement rows together.
 				action->op->Cast<IcebergInsert>().merge_action = true;
 				break;
 			case MergeActionType::MERGE_DELETE:
