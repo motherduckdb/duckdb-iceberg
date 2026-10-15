@@ -82,7 +82,8 @@ bool BucketQualifies(const RewriteBucket &bucket, const RewriteDataFilesPlanInpu
 	if (bucket.eligible_count >= input.min_input_files) {
 		return true;
 	}
-	return bucket.eligible_count >= 2 && bucket.eligible_bytes >= target_file_size_bytes;
+	//! Spark enoughContent uses a strict greater-than comparison against the target.
+	return bucket.eligible_count >= 2 && bucket.eligible_bytes > target_file_size_bytes;
 }
 
 void ConsiderCandidate(RewriteBucket &bucket, RewriteCandidate cand, const RewriteDataFilesPlanInput &input) {
