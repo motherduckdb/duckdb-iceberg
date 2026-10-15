@@ -121,10 +121,10 @@ select count(*) from my_datalake.default.rewrite_partition_spec_evolution;
 query III
 select a, b, payload from my_datalake.default.rewrite_partition_spec_evolution order by payload;
 ----
-1	10	old1
-1	20	old2
 2	10	new1
 3	30	new2
+1	10	old1
+1	20	old2
 
 query II
 select b, count(*) from my_datalake.default.rewrite_partition_spec_evolution group by b order by b;
