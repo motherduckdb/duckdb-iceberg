@@ -111,6 +111,39 @@ http://iceberg-mock.invalid/relocated/v1/override%2Fprefix/namespaces/parent%3Ac
 statement ok
 DETACH config_override;
 
+# Nessie prefix encoding (issue #375): raw and already-encoded pipes must both
+# reach the server as %7C, without double encoding or interpreting nessie.prefix-pattern.
+query I
+SELECT * FROM namespace_response('/v1/main%7Cmy-bucket/namespaces/default');
+----
+204
+
+foreach prefix main|my-bucket main%7Cmy-bucket
+
+query I
+SELECT * FROM config_response('{"prefix":"{prefix}","default_schema":"default"}',
+	'{"nessie.prefix-pattern":"{ref}|{warehouse}"}');
+----
+204
+
+statement ok
+CALL truncate_duckdb_logs();
+
+statement ok
+ATTACH '' AS config_nessie (TYPE ICEBERG, URI 'http://iceberg-mock.invalid',
+	AUTHORIZATION_TYPE 'none');
+
+query I
+SELECT request.url FROM duckdb_logs_parsed('HTTP') ORDER BY timestamp;
+----
+http://iceberg-mock.invalid/v1/config
+http://iceberg-mock.invalid/v1/main%7Cmy-bucket/namespaces/default
+
+statement ok
+DETACH config_nessie;
+
+endloop
+
 # Empty client values are explicit, rather than falling back to the server value.
 query I
 SELECT * FROM config_response('{"prefix":"unused","default_schema":"absent"}', '{}');
