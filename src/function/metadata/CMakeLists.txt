@@ -5,6 +5,7 @@ add_library(
   iceberg_view_metadata.cpp
   iceberg_metadata.cpp
   iceberg_partition_stats.cpp
+  iceberg_refs.cpp
   iceberg_rewrite_data_files.cpp
   iceberg_rollback_to_snapshot.cpp
   iceberg_schema_properties_functions.cpp
