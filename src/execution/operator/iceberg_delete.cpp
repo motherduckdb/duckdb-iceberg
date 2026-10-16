@@ -322,6 +322,10 @@ static void PopulateAlteredManifests(IcebergManifestDeletes &out, const IcebergD
 
 void IcebergDelete::FlushDeletes(ClientContext &context, IcebergDeleteGlobalState &global_state) const {
 	auto pending_deletes = global_state.TakePendingDeletes();
+	if (pending_deletes.IsEmpty()) {
+		// An empty UPDATE may have no source scan after optimization.
+		return;
+	}
 	lock_guard<mutex> guard(global_state.lock);
 	WriteDeletes(context, pending_deletes, global_state.write_result);
 }
