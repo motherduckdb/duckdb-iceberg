@@ -136,15 +136,10 @@ idx_t RemainingRewriteCap(const RewriteDataFilesPlanInput &input, bool &capped) 
 	return NumericLimits<idx_t>::Maximum();
 }
 
-void SelectCandidates(RewritePlan &plan, const RewriteDataFilesPlanInput &input, RewriteBucket &bucket,
-                      RewriteBucket &other_specs) {
+void SelectCandidates(RewritePlan &plan, const RewriteDataFilesPlanInput &input, RewriteBucket &bucket) {
 	bool capped;
 	idx_t remaining = RemainingRewriteCap(input, capped);
 	SelectFromBucket(plan, bucket, input, remaining, capped);
-	if (capped && remaining == 0) {
-		return;
-	}
-	SelectFromBucket(plan, other_specs, input, remaining, capped);
 }
 
 void SelectCandidates(RewritePlan &plan, const RewriteDataFilesPlanInput &input,
@@ -205,16 +200,12 @@ optional<RewriteCandidate> TryMakeRewriteCandidate(const IcebergManifestEntry &e
 	return cand;
 }
 
-void CollectUnpartitionedCandidates(RewriteBucket &current_spec, RewriteBucket &other_specs,
-                                    const vector<IcebergManifestListEntry> &manifest_files,
-                                    const RewriteDataFilesPlanInput &input, int32_t output_spec_id,
-                                    int64_t target_file_size_bytes) {
+void CollectUnpartitionedCandidates(RewriteBucket &bucket, const vector<IcebergManifestListEntry> &manifest_files,
+                                    const RewriteDataFilesPlanInput &input, int64_t target_file_size_bytes) {
 	for (const auto &list_entry : manifest_files) {
 		if (list_entry.GetFile().content != IcebergManifestContentType::DATA) {
 			continue;
 		}
-		//! Files not on the output spec share one group. Completeness of one group does not skip the other.
-		auto &bucket = list_entry.GetFile().partition_spec_id == output_spec_id ? current_spec : other_specs;
 		if (UnpartitionedCollectionComplete(bucket, input, target_file_size_bytes)) {
 			continue;
 		}
@@ -341,16 +332,17 @@ RewritePlan PlanRewrite(ClientContext &context, RewriteDataFilesPlanInput input)
 		return plan;
 	}
 
-	//! Files already on the output spec keep per-partition gating. Every other spec shares one group,
-	//! then the existing COPY rewrites both with the current spec (which partitions output files).
-	RewriteBucket other_specs;
 	const bool unpartitioned = !table_metadata.HasPartitionSpec();
 	if (unpartitioned) {
+		//! All files share the same output partition, including files written before partitioning was removed.
+		//! Apply size/count gating and the rewrite cap to that single group.
 		RewriteBucket bucket;
-		CollectUnpartitionedCandidates(bucket, other_specs, manifest_files, input, output_spec_id,
-		                               plan.target_file_size_bytes);
-		SelectCandidates(plan, input, bucket, other_specs);
+		CollectUnpartitionedCandidates(bucket, manifest_files, input, plan.target_file_size_bytes);
+		SelectCandidates(plan, input, bucket);
 	} else {
+		//! Files already on the output spec keep per-partition gating. Every other spec shares one group,
+		//! then the existing COPY rewrites both with the current spec (which partitions output files).
+		RewriteBucket other_specs;
 		std::map<string, RewriteBucket> per_partition;
 		CollectPartitionedCandidates(per_partition, other_specs, manifest_files, input, output_spec_id);
 		SelectCandidates(plan, input, per_partition, other_specs);
