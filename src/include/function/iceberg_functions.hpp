@@ -30,6 +30,7 @@ private:
 	static TableFunctionSet GetIcebergSnapshotsFunction();
 	static TableFunctionSet GetIcebergHistoryFunction();
 	static TableFunctionSet GetIcebergRefsFunction();
+	static TableFunctionSet GetIcebergPartitionSpecsFunction();
 	static TableFunctionSet GetIcebergScanFunction(ExtensionLoader &loader);
 	static TableFunctionSet GetIcebergMetadataFunction();
 	static TableFunctionSet GetIcebergLoadTableResponseFunction();
@@ -37,6 +38,7 @@ private:
 	static TableFunctionSet GetIcebergColumnStatsFunction();
 	static TableFunctionSet GetIcebergPartitionStatsFunction();
 	static TableFunctionSet GetIcebergManifestsFunction();
+	static TableFunctionSet GetIcebergFilesFunction();
 	static TableFunctionSet GetIcebergToDuckLakeFunction();
 	static TableFunctionSet GetIcebergTablePropertiesFunctions();
 	static TableFunctionSet SetIcebergTablePropertiesFunctions();
