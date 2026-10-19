@@ -379,24 +379,29 @@ SinkFinalizeType IcebergInsert::Finalize(Pipeline &pipeline, Event &event, Clien
 	}
 
 	if (update_delete_op) {
-		// This insert is part of an UPDATE: commit a combined delete+insert snapshot.
+		// Stage the UPDATE's deletes and replacement rows together, possibly within a shared MERGE snapshot.
 		auto &delete_global_state = update_delete_op->sink_state->Cast<IcebergDeleteGlobalState>();
 		auto delete_manifest_entries = IcebergDelete::GenerateDeleteManifestEntries(delete_global_state);
 		if (!written_files.empty()) {
 			ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTable &tbl) {
 				auto &transaction_data = tbl.GetOrCreateTransactionData(iceberg_transaction);
 				transaction_data.AddUpdateSnapshot(std::move(delete_manifest_entries), std::move(written_files),
-				                                   std::move(delete_global_state.altered_manifests));
+				                                   std::move(delete_global_state.write_result.altered_manifests),
+				                                   merge_action);
 			});
 		}
+		if (delete_global_state.merge_deletes) {
+			// Replacement files are now staged; even an empty UPDATE must complete its collector participant.
+			update_delete_op->Cast<IcebergDelete>().FinalizeMergeDeletes(context, delete_global_state);
+		}
 	} else {
-		// Regular insert: commit an append snapshot.
+		// Stage an INSERT statement or a MERGE insert action; the latter may join an overwrite snapshot.
 		if (!written_files.empty()) {
 			ApplyTableUpdate(table_info, iceberg_transaction, [&](IcebergTable &tbl) {
 				auto &transaction_data = tbl.GetOrCreateTransactionData(iceberg_transaction);
 				IcebergManifestDeletes empty_deletes;
 				transaction_data.AddSnapshot(IcebergSnapshotOperationType::APPEND, std::move(written_files),
-				                             std::move(empty_deletes));
+				                             std::move(empty_deletes), merge_action);
 			});
 		}
 	}
@@ -810,6 +815,21 @@ IcebergCopyOptions IcebergInsert::GetCopyOptions(ClientContext &context, const I
 		info->options[mapping.parquet_option].emplace_back(it->second);
 	}
 
+	auto shred_variants = table_properties.find("write.parquet.shred-variants");
+	// Iceberg defaults to no shredding when the property is absent.
+	if (shred_variants == table_properties.end() ||
+	    !Value(shred_variants->second).DefaultCastAs(LogicalType::BOOLEAN).GetValue<bool>()) {
+		child_list_t<Value> shredding_types;
+		for (auto &column : layout.columns) {
+			if (column.type.id() == LogicalTypeId::VARIANT) {
+				shredding_types.emplace_back(column.name, Value("VARIANT"));
+			}
+		}
+		if (!shredding_types.empty()) {
+			info->options["shredding"] = {Value::STRUCT(std::move(shredding_types))};
+		}
+	}
+
 	// Always use native parquet geometry for writing
 	info->options["geoparquet_version"].emplace_back("NONE");
 
@@ -1114,6 +1134,8 @@ static unique_ptr<IcebergTableMetadata> BuildPlaceholderMetadata(ClientContext &
 		}
 		metadata->table_properties[option.first] = val.GetValue<string>();
 	}
+	// Match the default persisted by CreateNewEntry when planning the first CTAS write.
+	metadata->table_properties.emplace("write.parquet.shred-variants", "true");
 
 	// Resolve nested field IDs and storage types exactly as table creation does.
 	int32_t last_column_id;

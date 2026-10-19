@@ -96,6 +96,13 @@ GET, POST, HEAD, DELETE, PUT, and OPTIONS are accepted; unsupported routes retur
 the same REST error envelope as the server. Mutations occur during execution,
 not during binding or EXPLAIN.
 
+Client protocol tests can install an exact response with
+`POST /__test/response`, supplying a JSON object with `method`, `path`, `status`,
+and `body`. The path includes the query string. The response replaces that route
+until overwritten or cleared with `DELETE /__test/response`, which clears all
+scripted responses. This permits config and auth tests without external servers;
+the normal catalog model handles all other routes.
+
 Supported behavior and exclusions follow the
 [Python mock documentation](../../scripts/mock_rest_catalog/README.md).
 The C++ model validates requirements against published metadata and applies

@@ -18,6 +18,10 @@
 
 namespace duckdb {
 
+namespace rest_api_objects {
+class CatalogConfig;
+}
+
 class IcebergSchemaEntry;
 struct IcebergTable;
 
@@ -118,8 +122,8 @@ public:
 	static unique_ptr<SecretEntry> GetIcebergSecret(ClientContext &context, const string &secret_name);
 	static unique_ptr<SecretEntry> GetHTTPSecret(ClientContext &context, const string &secret_name);
 	void ParsePrefix();
-	void ParseNamespaceSeparator();
-	void GetConfig(ClientContext &context, IcebergEndpointType &endpoint_type);
+	void Configure(ClientContext &context, const rest_api_objects::CatalogConfig &config,
+	               IcebergEndpointType endpoint_type);
 	IRCEndpointBuilder GetBaseUrl() const;
 	string GetWarehouse() const {
 		return warehouse;
@@ -201,11 +205,10 @@ public:
 	optional<Identifier> default_schema;
 
 private:
+	//! Original client selector, used for ATTACH OR REPLACE comparisons.
+	const string attach_path;
 	//! warehouse
 	string warehouse;
-	// defaults and overrides provided by a catalog.
-	case_insensitive_map_t<string> defaults;
-	case_insensitive_map_t<string> overrides;
 	//! Normalized attach options (after core stripping) used to detect a conflicting ATTACH OR REPLACE
 	unordered_map<string, Value> normalized_attach_options;
 

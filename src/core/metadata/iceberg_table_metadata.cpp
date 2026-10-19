@@ -419,6 +419,9 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_obje
 			res.snapshots.emplace(snapshot.snapshot_id, IcebergSnapshot::ParseSnapshot(snapshot, res));
 		}
 	}
+	if (table_metadata.refs) {
+		res.refs = table_metadata.refs->Copy();
+	}
 	if (table_metadata.snapshot_log) {
 		res.snapshot_log.reserve(table_metadata.snapshot_log->value.size());
 		for (auto &entry : table_metadata.snapshot_log->value) {
@@ -532,6 +535,9 @@ IcebergTableMetadata IcebergTableMetadata::Copy() const {
 	res.partition_specs = partition_specs;
 	res.sort_specs = sort_specs;
 	res.snapshots = snapshots;
+	if (refs) {
+		res.refs = refs->Copy();
+	}
 	res.snapshot_log = snapshot_log;
 	res.mappings = mappings;
 	res.write_data_path = write_data_path;
@@ -667,6 +673,9 @@ string IcebergTableMetadata::ToJSON() const {
 		root_obj.Add("current-snapshot-id", writer.CreateSignedInteger(*current_snapshot_id));
 	}
 	root_obj.Add("snapshots", SnapshotsToJSON(writer));
+	if (refs) {
+		root_obj.Add("refs", refs->ToJSON(writer));
+	}
 	root_obj.Add("snapshot-log", SnapshotLogToJSON(writer));
 	root_obj.Add("sort-orders", SortOrdersToJSON(writer));
 	root_obj.Add("default-sort-order-id", writer.CreateSignedInteger(default_sort_order_id.GetIndex()));

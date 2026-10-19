@@ -286,6 +286,7 @@ static SingleTableStagedCommit StageSingleTableCommit(DatabaseInstance &db, Iceb
 	auto &metadata = commit_state.table_info.table_metadata;
 	auto current_snapshot = metadata.GetLatestSnapshot();
 	auto &transaction_data = *commit_state.table_info.transaction_data;
+	transaction_data.VerifyMergeDeletesComplete();
 	info.retryable = transaction_data.SupportsAppendRetry();
 	info.retry_config = IcebergRetryConfig::FromTableMetadata(metadata);
 	if (!transaction_data.alters.empty()) {
