@@ -104,6 +104,21 @@ FROM ICEBERG_SNAPSHOTS(
 ----
 2
 
+query IIII
+SELECT snapshot_id, parent_id, operation, summary
+FROM ICEBERG_SNAPSHOTS('{WORKING_DIRECTORY}/data/persistent/iceberg/lineitem_iceberg')
+ORDER BY sequence_number;
+----
+7817332053627255703	NULL	append	{added-data-files=1, added-files-size=1406875, added-records=60175, changed-partition-count=1, spark.app.id=local-1746188475876, total-data-files=1, total-delete-files=0, total-equality-deletes=0, total-files-size=1406875, total-position-deletes=0, total-records=60175}
+2354745328521181395	7817332053627255703	overwrite	{added-data-files=1, added-files-size=1225526, added-records=51793, changed-partition-count=1, deleted-data-files=1, deleted-records=60175, removed-files-size=1406875, spark.app.id=local-1746188475876, total-data-files=1, total-delete-files=0, total-equality-deletes=0, total-files-size=1225526, total-position-deletes=0, total-records=51793}
+
+query I
+SELECT summary['total-records'] FROM ICEBERG_SNAPSHOTS('{WORKING_DIRECTORY}/data/persistent/iceberg/lineitem_iceberg')
+ORDER BY sequence_number;
+----
+60175
+51793
+
 query IIIIIIIIIIII
 SELECT * FROM ICEBERG_MANIFESTS('{WORKING_DIRECTORY}/data/persistent/iceberg/lineitem_iceberg', ALLOW_MOVED_PATHS=TRUE) ORDER BY path;
 ----
