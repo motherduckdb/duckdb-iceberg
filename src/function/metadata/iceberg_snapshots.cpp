@@ -30,14 +30,14 @@ static string SnapshotOperationToString(IcebergSnapshotOperationType type) {
 }
 
 static Value SummaryValue(const case_insensitive_map_t<string> &summary) {
-  map<string, string> sorted(summary.begin(), summary.end());
-  vector<Value> keys;
-  vector<Value> values;
-  for (auto &entry : sorted) {
-    keys.emplace_back(entry.first);
-    values.emplace_back(entry.second);
-  }
-  return Value::MAP(LogicalType::VARCHAR, LogicalType::VARCHAR, std::move(keys), std::move(values));
+	map<string, string> sorted(summary.begin(), summary.end());
+	vector<Value> keys;
+	vector<Value> values;
+	for (auto &entry : sorted) {
+		keys.emplace_back(entry.first);
+		values.emplace_back(entry.second);
+	}
+	return Value::MAP(LogicalType::VARCHAR, LogicalType::VARCHAR, std::move(keys), std::move(values));
 }
 
 struct IcebergSnaphotsBindData : public TableFunctionData {
